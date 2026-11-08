@@ -11,7 +11,7 @@
 ╭─ [1;7m 1 Activity [m  2 Boa[1m│[m   [1menter[m  open a line (once: in place; twice: the full text)              [1m│[ments · filter: none ─╮
 │    time   from      [1m│[m   [1mu[m      the next unread line for you                                    [1m│[m                     │
 │  ── Mon 2026-10-26 -[1m│[m   [1mR[m      where was I? the recap since your last visit                    [1m│[m─────────────────────│
-│    14:24  architect [1m│[m   [1mP[m      the batch's plan                                                [1m│[m                     │
+│    14:24  architect [1m│[m   [1mp P[m    the plan, in a drawer (d shows what is done)                    [1m│[m                     │
 │    14:50  ♙ Charlie [1m│[m   [1m/[m      filter Activity                                                 [1m│[m                     │
 │    14:51  coder     [1m│[m   [1m+ -[m    Requests: a tracked request's priority; agents take high first  [1m│[m                     │
 │  ○ 14:52  master    [1m│[m   [1mF1 ?[m   help, every key                                                 [1m│[m                     │

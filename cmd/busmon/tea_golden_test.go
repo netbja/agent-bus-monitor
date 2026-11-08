@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/plan"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,7 +59,7 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings"}
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "plantab"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -86,6 +87,18 @@ func inState(t testing.TB, m Model, state string) Model {
 			map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
 		m = stepCmd(t, m, tea.KeyPressMsg(tea.Key{Code: 'C', Text: "C"}))
 		return keys(t, m, kEnter, kDown, kDown) // into Display's keys, then Icons
+	case "plan", "plantab": // home-inbox-drawer §4: the drawer (p) and the Plan tab, the second task selected
+		snap := shellFixture(shellNow)
+		snap.planState = goldenPlan()
+		m = step(t, m, pollMsg{snap: snap, at: shellNow})
+		if state == "plan" {
+			return keys(t, m, 'p', 'j')
+		}
+		tab := rune('4')
+		if m.layout.Tier == TierNarrow {
+			tab = '6'
+		}
+		return keys(t, m, tab, 'j', 'j')
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")
@@ -200,4 +213,19 @@ func TestShellWideAgentsKeepTheMessage(t *testing.T) {
 			}
 		}
 	}
+}
+
+// goldenPlan is the plan the plan goldens show: every section, one task in
+// review with its PR, DONE folded.
+func goldenPlan() planState {
+	p := boardPlan(
+		boardRow("notes", plan.Waiting, plan.Person),
+		boardRow("strip", plan.InReview, "coder"),
+		boardRow("drawer", plan.InProgress, "coder"),
+		boardRow("requests", plan.Upcoming, "coder"),
+		boardRow("tag", plan.Upcoming, plan.Person, "requests"),
+		boardRow("triage", plan.Done, "coder"),
+	)
+	p.rows[1].Verdict, p.rows[1].PR, p.rows[1].Reason = "approved", 338, "merge PR 338"
+	return p
 }

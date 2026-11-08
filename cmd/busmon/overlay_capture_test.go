@@ -82,7 +82,7 @@ func overlayCaptures(t *testing.T) map[string]string {
 	_, reqBody, _ := requestDetail(reqs[0], capNow)
 
 	p := hostilePlan(capNow)
-	planBody, _, _ := planOverlay(p, 0, true, capNow, 100)
+	planBody := planBoard(p, 0, true, capNow, 100, TierWide, false).lines
 	_, planTask, _ := planTaskDetail(p, p.rows[0].Task.ID, capNow)
 
 	b := bus.BudgetSnapshot{Windows: []bus.BudgetWindow{

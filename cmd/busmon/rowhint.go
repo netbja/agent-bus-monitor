@@ -71,11 +71,8 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 			return "task", true
 		}
 	case PanelPlan:
-		switch {
-		case has("task:"):
+		if has("task:") { // DONE is d's, no row (home-inbox-drawer §8)
 			return "task", true
-		case key == "toggle":
-			return "expand", true
 		}
 	}
 	return "", false

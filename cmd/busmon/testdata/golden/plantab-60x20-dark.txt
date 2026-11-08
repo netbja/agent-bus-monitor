@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙3  ●2  15:04:05 
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you   2 Agents   3 Act   4 Board   5 Req   6 Plan    
+╭─ Plan ───────────────────────────────────────────────────╮
+│  1/6 16%                                                 ▲
+│                                                          ┃
+│  NOW  3                                                  ┃
+│  ♙ title notes  ♙ person  waiting for you                ┃
+│▶ ○ title strip  coder  #338 · approved · merge PR 338    ┃
+│  ● title drawer  coder  in progress                      ┃
+│                                                          ┃
+│  NEXT  1                                                 ┃
+│  ○ title requests  coder  upcoming                       ┃
+│                                                          ┃
+│  LATER  1                                                ┃
+│  ○ title tag  ♙ person  waiting on requests              ┃
+│                                                          │
+│  DONE  1   d shows                                       ▼
+╰──────────────────────────────────────────────────────────╯
+ enter task   T triage   p P plan   F1 help   F5 health     

@@ -17,4 +17,4 @@
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
- T triage   tab focus   1-6 view   F1 help   F5 health      
+ T triage   p P plan   tab focus   F1 help   F5 health      

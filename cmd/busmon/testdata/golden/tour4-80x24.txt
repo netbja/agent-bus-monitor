@@ -7,7 +7,7 @@
 │  ◆│   enter  open a line (once: in place; twice: the full text)          │   │
 ╰───│   u      the next unread line for you                                │───╯
 ╭─ A│   R      where was I? the recap since your last visit                │ …─╮
-│▶ ♙│   P      the batch's plan                                            │le ▲
+│▶ ♙│   p P    the plan, in a drawer (d shows what is done)                │le ▲
 │  ♙│   /      filter Activity                                             │   ┃
 │  ♙│   + -    Requests: a tracked request's priority; agents take high    │   ▼
 ╰───│          first                                                       │───╯

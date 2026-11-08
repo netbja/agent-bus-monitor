@@ -21,4 +21,4 @@
 │  ○ 14:52 master   → charl… directive please look at the plan                 ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- enter full text   T triage   tab focus   1-4 tabs   F1 help   F5 health        
+ enter full text   T triage   p P plan   tab focus   F1 help   F5 health        

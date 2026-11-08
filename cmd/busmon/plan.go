@@ -243,99 +243,10 @@ func planLook(s plan.State) (string, Role) {
 	return GlyphIdle, RoleMuted
 }
 
-// planItem is a selectable line of the overlay: a task, or the done group's
-// toggle.
+// planItem is a selectable line of the plan board: a task, by its line.
 type planItem struct {
-	task   string
-	toggle bool
-	line   int // its line in the body, for scrolling
-}
-
-// planOverlay renders the Plan overlay: the goal, commit and age, then the
-// tasks grouped by state in plan.Order, done collapsed to a count unless
-// expanded. sel is the selected item (-1: none). width is the inner width;
-// below 80 the owner, PR and verdict fold under the title.
-func planOverlay(p planState, sel int, expanded bool, now time.Time, width int) (lines []Line, plain string, items []planItem) {
-	var pl strings.Builder
-	emit := func(l Line, text string) {
-		lines = append(lines, l)
-		pl.WriteString(text + "\n")
-	}
-	sp := S(RoleText, " ")
-	age := plan.Age(p.rec.LoadedAt, now)
-	head := fmt.Sprintf("%s %s %s %s loaded %s ago (%s)", p.file.Plan, GlyphNone, p.file.Goal, GlyphNone, age, short7(p.rec.Commit))
-	headLine := Line{S(RoleText, Preview(p.file.Plan)), sp, S(RoleMuted, GlyphNone+" "+Preview(p.file.Goal)+" "+GlyphNone+" loaded "+age+" ago ("+short7(p.rec.Commit)+")")}
-	if now.Sub(time.UnixMilli(p.rec.LoadedAt)) > plan.StaleAfter {
-		headLine = append(headLine, sp, S(RoleMuted, "stale "+GlyphNone+" master: agentbus plan load"))
-		head += " stale"
-	}
-	if p.partial {
-		headLine = append(headLine, sp, S(RoleMuted, "? a read failed: values kept"))
-		head += " ?"
-	}
-	emit(headLine, head)
-	narrow := width < 80
-	for _, s := range plan.Order {
-		var group []plan.Row
-		for _, r := range p.rows {
-			if r.State == s {
-				group = append(group, r)
-			}
-		}
-		if len(group) == 0 {
-			continue
-		}
-		glyph, role := planLook(s)
-		emit(nil, "")
-		title := fmt.Sprintf("%s (%d)", plan.Label(s), len(group))
-		if s == plan.Done && !expanded {
-			idx := len(items)
-			items = append(items, planItem{toggle: true, line: len(lines)})
-			emit(append(planMark(idx == sel), S(role, glyph+" "+title), sp, S(RoleMuted, "enter expands")), title)
-			continue
-		}
-		emit(Line{S(role, glyph+" "+title)}, title)
-		for _, r := range group {
-			idx := len(items)
-			items = append(items, planItem{task: r.Task.ID, line: len(lines)})
-			details := planRowDetails(r, now)
-			owner := r.Task.Owner
-			if owner == plan.Person {
-				owner = GlyphHuman + " " + owner
-			}
-			idw := 18
-			titleW := max(8, width-idw-4)
-			if !narrow {
-				titleW = max(8, width-idw-4-len([]rune(owner))-2-min(40, len([]rune(details))))
-			}
-			rowTitle := clip(Preview(r.Task.Title), titleW)
-			id := pad(clip(Preview(r.Task.ID), idw-2), idw) // clip adds its …: one space is left before the title
-			text := "  " + id + rowTitle
-			row := append(planMark(idx == sel), S(role, glyph), sp, S(RoleText, id), S(RoleText, rowTitle))
-			kept := ""
-			if p.kept(r) {
-				kept = " ?" // derived from a value kept after a failed read
-			}
-			// The separator is added after the cut: clip trims the edges of
-			// what it cuts, which glued the owner to the title (plan-view).
-			rest := owner
-			if details != "" {
-				rest += "  " + details
-			}
-			if narrow {
-				emit(row, text)
-				sub := "    " + clip(rest, max(0, width-4-len(kept)))
-				emit(Line{S(RoleMuted, sub+kept)}, sub+kept)
-				continue
-			}
-			tail := ""
-			if room := width - idw - 4 - len([]rune(rowTitle)) - len(kept) - 2; room > 0 {
-				tail = "  " + clip(rest, room)
-			}
-			emit(append(row, S(RoleMuted, tail+kept)), text+tail+kept)
-		}
-	}
-	return append(lines, nil), pl.String(), items // the tagged text ended with "\n": an empty last line
+	task string
+	line int // its line in the body, for scrolling
 }
 
 func planMark(selected bool) Line {
@@ -546,31 +457,4 @@ func planRecapSection(in recapInput, add func(recapRow), section func(string)) {
 	if n == 0 {
 		add(recapRow{Section: "Plan", Title: "no task changed since your last visit"})
 	}
-}
-
-// planTabItems is the Plan tab (A11): planOverlay's lines as a list, the
-// tasks and the done group's toggle selectable (the list draws the
-// selection, so the overlay's own mark column is dropped).
-func planTabItems(p planState, expanded bool, now time.Time, width int) []ListItem {
-	if !p.loaded {
-		return []ListItem{{Line: FitLine(Line{{Text: "no plan loaded (master: agentbus plan load <path>@<commit>)", Role: RoleMuted}}, width)}}
-	}
-	lines, _, items := planOverlay(p, -1, expanded, now, width)
-	keys := make(map[int]string, len(items))
-	for _, it := range items {
-		if it.toggle {
-			keys[it.line] = "toggle"
-		} else {
-			keys[it.line] = "task:" + it.task
-		}
-	}
-	out := make([]ListItem, 0, len(lines))
-	for i, l := range lines {
-		key, ok := keys[i]
-		if ok && len(l) > 0 && l[0].Text == "  " {
-			l = l[1:]
-		}
-		out = append(out, ListItem{Key: key, Line: FitLine(l, width), Selectable: ok})
-	}
-	return out
 }

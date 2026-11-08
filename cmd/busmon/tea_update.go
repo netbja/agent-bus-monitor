@@ -145,6 +145,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:
 		cmd = m.pushPlan()
+	case ActShowDone: // the Plan tab: show or fold DONE
+		m.ui.planExpanded = !m.ui.planExpanded
 	case ActTokens:
 		cmd = m.push(page{kind: ovTokens})
 	case ActSettings:
@@ -245,11 +247,6 @@ func (m *Model) open(p PanelID) tea.Cmd {
 			return m.push(page{kind: ovTask, key: key})
 		}
 	case PanelPlan:
-		if key == "toggle" {
-			m.ui.planExpanded = true
-			m.refresh()
-			return nil
-		}
 		if task, ok := strings.CutPrefix(key, "task:"); ok {
 			return m.push(page{kind: ovPlanTask, key: task})
 		}
