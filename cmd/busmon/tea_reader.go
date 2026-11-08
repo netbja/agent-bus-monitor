@@ -66,6 +66,8 @@ type page struct {
 	recapLine  int         // ovRecap: the body line of the cursor's row
 	recapOlder bool        // ovRecap: o shows the For you items older than a day
 
+	proj       *adminView // ovProjects: the page's read (projects_admin.go)
+	plines     []int      // ovProjects: each row's first body line
 	hist       *histView  // ovHistory: what the load read
 	histFilter feedFilter // ovHistory: / and t narrow it
 	fromHist   bool       // ovMessage opened from History: n/p step through it
@@ -525,6 +527,11 @@ func (m *Model) buildPage() bool {
 			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
 		}
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
+	case ovProjects:
+		if p.proj != nil {
+			p.title = projectsTitle(*p.proj, now)
+			p.body, p.plines = projectsBody(*p.proj, p.sel, m.layout.Tier, width, now)
+		}
 	case ovNotifySetup:
 		p.title, p.body = notifySetupTitle(p.ns), notifySetupBody(p.ns, width, m.readerRows(), m.layout.Tier, m.width, m.height)
 	case ovAbout:
@@ -749,6 +756,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.recapKey(k)
 	case ovSettings:
 		return m.settingsKey(act, k)
+	case ovProjects:
+		return m.projectsKey(act, k)
 	case ovNotifySetup:
 		if act == ActHelp && !p.ns.editing {
 			break

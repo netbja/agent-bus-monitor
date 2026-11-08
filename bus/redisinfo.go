@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // RedisInfo is what busmon's Services page says about the broker itself
@@ -120,24 +122,34 @@ func (b *Bus) RedisDetail(ctx context.Context) (RedisDetail, error) {
 		return d, nil
 	}
 	for _, p := range projects {
-		row := ProjectRedis{Project: p.Project, Streams: map[string]int64{}}
-		keys, err := ProjectKeys(ctx, b.r, p.Project)
+		row, err := ProjectFootprint(ctx, b.r, p.Project)
 		if err != nil {
 			d.Projects, d.ProjectsErr = nil, err.Error() // no partial rows beside the ?
 			return d, nil
 		}
-		row.Keys = len(keys)
-		for _, s := range detailStreams {
-			n, err := b.r.XLen(ctx, p.Project+":"+s).Result()
-			if err != nil {
-				d.Projects, d.ProjectsErr = nil, err.Error()
-				return d, nil
-			}
-			row.Streams[s] = n
-		}
 		d.Projects = append(d.Projects, row)
 	}
 	return d, nil
+}
+
+// ProjectFootprint is one project's keys and its streams' lengths (the Redis
+// page's row, the Projects page's keys): an invalid name is refused by
+// ProjectKeys before any glob.
+func ProjectFootprint(ctx context.Context, r *redis.Client, project string) (ProjectRedis, error) {
+	row := ProjectRedis{Project: project, Streams: map[string]int64{}}
+	keys, err := ProjectKeys(ctx, r, project)
+	if err != nil {
+		return row, err
+	}
+	row.Keys = len(keys)
+	for _, s := range detailStreams {
+		n, err := r.XLen(ctx, project+":"+s).Result()
+		if err != nil {
+			return row, err
+		}
+		row.Streams[s] = n
+	}
+	return row, nil
 }
 
 // DetailStreams are the stream kinds RedisDetail measures, in display order.

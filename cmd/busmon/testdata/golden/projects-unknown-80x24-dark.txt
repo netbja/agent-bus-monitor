@@ -1,0 +1,24 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  ● ask    master    review lot 1? (2 questions)                            4m│
+│  ♙ wait   foureyes  need a decision on the width rule                      6m│
+│  ♙ wait   sentinel  pane prompt                                            1m│
+│  ◆ gate   coder     by charlie  look at b1                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ♙ sentinel  waiting  30m  —   prompt      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Projects · 3 · read just now ──────────────────────────────────── esc back ─╮
+│ broker: connection refused (its columns read ?)                              ▲
+│ services: no service manager                                                 ┃
+│ herdr: not read                                                              ┃
+│ services and herdr: this machine (vdr); — means not here                     ┃
+│                                                                              ┃
+│   PROJECT                STATE      AGENTS  SERVICES               LAST      ┃
+│ ▶ agent-bus-monitor ◂    ?          ?       ?                      ?         │
+│   demo                   ?          ?       ?                      ?         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k move   enter detail   R read again   esc back   q quit   F1 help        

@@ -44,18 +44,20 @@ const (
 	ovHealth
 	ovHelp
 	ovAsk
-	ovPlan        // the batch's plan (P)
-	ovPlanTask    // one task of the plan; Esc returns to the plan
-	ovNotices     // a Requests notice group: its notices, one line each
-	ovServiceLog  // a service's log tail, opened from its F3 card
-	ovRedis       // the Redis card's page (busmon-redis-detail), opened from F3
-	ovTokens      // tokens (U): account windows, projects side by side, the open project by agent
-	ovHistory     // history (H): the archive, then the live streams, newest first
-	ovSettings    // settings (C): the registry's keys by group, changed in place (settings_ui.go)
-	ovAbout       // about (A): the versions and the bus line (about.go)
-	ovMerge       // a change waiting for the person's merge (merge-queue), its key the head
-	ovNotifySetup // the guided notifications setup (notify-guided-setup §5), or a target's page
-	ovTriageEnd   // the triage walk's end page (busmon-queue-triage §4.4), its key the next plan task
+	ovPlan          // the batch's plan (P)
+	ovPlanTask      // one task of the plan; Esc returns to the plan
+	ovNotices       // a Requests notice group: its notices, one line each
+	ovServiceLog    // a service's log tail, opened from its F3 card
+	ovRedis         // the Redis card's page (busmon-redis-detail), opened from F3
+	ovTokens        // tokens (U): account windows, projects side by side, the open project by agent
+	ovHistory       // history (H): the archive, then the live streams, newest first
+	ovSettings      // settings (C): the registry's keys by group, changed in place (settings_ui.go)
+	ovAbout         // about (A): the versions and the bus line (about.go)
+	ovMerge         // a change waiting for the person's merge (merge-queue), its key the head
+	ovNotifySetup   // the guided notifications setup (notify-guided-setup §5), or a target's page
+	ovProjects      // projects (M): every project of this host, read once (projects_admin.go)
+	ovProjectDetail // one project of the Projects page: every column, read only
+	ovTriageEnd     // the triage walk's end page (busmon-queue-triage §4.4), its key the next plan task
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
