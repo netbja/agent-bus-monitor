@@ -112,12 +112,15 @@ Under each task in hand, one muted line:
 ### 3.2 The usual length, and when to say `estimate`
 
 - **The pace:** the median of `responded_at − accepted_at` over the last 10 requests of the same
-  owner that reached `done` on the board. `done` is the delivery (the work, before review), so
+  owner that reached `done` and are still on the board. `done` is the delivery (the work, before review), so
   the review's wait is not counted. The median keeps one long night from skewing it.
-- **One request per task:** a board entry is per task name, and a re-request replaces its request,
-  so a task re-sent after a reject counts once, from its latest acceptance (foureyes). The pace
-  therefore measures the last round of a task, not its whole history; for an estimate of the task
-  in hand, which is timed from its own latest acceptance too, that is the matching measure.
+- **Only what the board still holds (reviewer-codex):** a board entry is one per task name, and
+  `agentbus request` refuses a task name whose entry exists (`board task already exists`). A task
+  is sent again only after `agentbus board drop <task>`, and the drop deletes the earlier round's
+  entry, its `accepted_at` and `responded_at` with it. So the pace is the owner's last 10 `done`
+  entries **still on the board**: a dropped round never counts, and the board keeps no history of
+  rounds. A fix round sent under a new task name (`settings-duration-input-2`) is its own entry and
+  counts like any other.
 - **Thin data:** with fewer than 5 such requests, the line says `estimate ~22:58` instead of
   `ends ~22:58`, and the bar has no share (`━━━━━━━━━━  estimate`, all muted).
 - **No data:** no done request for that owner: `started 22:12  ·  no estimate yet`.
