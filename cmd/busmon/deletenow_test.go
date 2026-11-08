@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -84,10 +85,39 @@ func TestDeleteProjectNowRefusesALiveProject(t *testing.T) {
 	if n, _, _, err := deleteProjectNow(ctx, c, project, nil); !errors.As(err, &r) || n != 0 {
 		t.Fatalf("live: %d %v", n, err)
 	}
+	// foureyes: a refusal after the units were removed says so.
+	_, kinds, _, err := deleteProjectNow(ctx, c, project, func(string) ([]string, error) { return []string{"dispatch"}, nil })
+	if err == nil || !strings.Contains(err.Error(), "nothing deleted") || !strings.Contains(err.Error(), "its dispatch service here was removed") || len(kinds) != 1 {
+		t.Fatalf("refusal after removal: %v %v", kinds, err)
+	}
 	if ok, _ := b.ServicesInstalled(ctx); !ok {
 		t.Fatal("a refused delete deleted keys")
 	}
 	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), nil); err == nil || !strings.Contains(err.Error(), "dispatch holds its lease") {
 		t.Fatalf("--delete on a live project: %v", err)
+	}
+}
+
+// foureyes: each outcome in its own words; once the script deleted, never
+// "nothing deleted".
+func TestDeleteErr(t *testing.T) {
+	gone := []string{"dispatch"}
+	for _, c := range []struct {
+		err       error
+		n         int64
+		has, hasn string
+	}{
+		{&bus.RescanError{Deleted: 12, Err: errors.New("i/o timeout")}, 12, "deleted 12 keys of demo, then could not scan again: i/o timeout", "nothing deleted"},
+		{fmt.Errorf("%w: EOF", bus.ErrOutcomeUnknown), 0, "outcome is unknown: EOF; busmon --list shows what remains; its dispatch service here was removed", "nothing deleted"},
+		{&bus.DeleteRefusal{What: "conductor"}, 0, "demo: a conductor holds its lease (nothing deleted; its dispatch service here was removed)", ""},
+		{errors.New("connection refused"), 0, "demo: connection refused (nothing deleted; its dispatch service here was removed)", ""},
+	} {
+		got := deleteErr("demo", c.n, gone, c.err).Error()
+		if !strings.Contains(got, c.has) || (c.hasn != "" && strings.Contains(got, c.hasn)) {
+			t.Errorf("%v: %q", c.err, got)
+		}
+	}
+	if deleteErr("demo", 3, nil, nil) != nil {
+		t.Error("no error became one")
 	}
 }

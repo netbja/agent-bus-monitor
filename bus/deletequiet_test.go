@@ -127,3 +127,24 @@ func TestDeleteProjectIfQuietRaces(t *testing.T) {
 		t.Fatalf("came back: %d %v %v", n, left, err)
 	}
 }
+
+// foureyes: after the script deleted, a failed re-scan is never "nothing
+// deleted": the count comes back with a RescanError. A record named
+// "installed" is the install marker, never a service; gave-up is not live.
+func TestDeleteProjectIfQuietAfterTheScript(t *testing.T) {
+	c, p, ctx := quietWorld(t)
+	now, _ := c.Time(ctx).Result()
+	c.HSet(ctx, ServicesKey(p), ServicesInstalledField, `{"kinds":["dispatch"],"at":`+strconv.FormatInt(now.UnixMilli(), 10)+`}`,
+		"missions", `{"state":"gave-up","host":"vdr","at":`+strconv.FormatInt(now.UnixMilli(), 10)+`}`)
+	if err := ProjectQuiet(ctx, c, p); err != nil {
+		t.Fatalf("an install marker or a gave-up service read as running: %v", err)
+	}
+	all := keysOf(t, ctx, c, p)
+	cctx, cancel := context.WithCancel(ctx)
+	afterQuietScript = cancel // the re-scan fails: its context is gone
+	n, left, err := DeleteProjectIfQuiet(cctx, c, p)
+	var re *RescanError
+	if !errors.As(err, &re) || n != int64(len(all)) || re.Deleted != n || left != nil {
+		t.Fatalf("re-scan failure: n %d of %d, left %v, err %v", n, len(all), left, err)
+	}
+}

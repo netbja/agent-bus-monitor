@@ -186,6 +186,8 @@ func TestProjectsDeleteOutcomes(t *testing.T) {
 		{deleteResult{keys: 12, services: []string{"dispatch"}}, "deleted 12 keys of old; removed the dispatch service here"},
 		{deleteResult{keys: 12, left: []string{"old:status"}}, "but 1 key came back (old:status)"},
 		{deleteResult{err: errors.New("old: a dispatch holds its lease (nothing deleted)")}, "nothing deleted"},
+		// foureyes: once the script deleted, never "nothing deleted".
+		{deleteResult{keys: 12, err: errors.New("deleted 12 keys of old, then could not scan again: i/o timeout")}, "deleted 12 keys of old, then could not scan again"},
 	} {
 		w := newDeleteWorld(t)
 		w.result = c.res
@@ -195,7 +197,7 @@ func TestProjectsDeleteOutcomes(t *testing.T) {
 		w.press(t, 'n')
 		w.typeName(t, "old")
 		w.press(t, tea.Key{Code: tea.KeyEnter})
-		if !noticeHas(w.m, c.want) || w.reads != reads+1 || w.quit {
+		if !noticeHas(w.m, c.want) || w.reads != reads+1 || w.quit || (c.res.keys > 0 && c.res.err != nil && noticeHas(w.m, "nothing deleted")) {
 			t.Errorf("%+v: notices %v reads %d->%d quit %v", c.res, w.m.notice.queue, reads, w.reads, w.quit)
 		}
 	}
@@ -260,5 +262,36 @@ func TestProjectsDeleteWaitsForARun(t *testing.T) {
 	want := "deleted 1204 keys of demo, but 4 keys came back (demo:status, demo:dispatch, demo:agents): something of demo still runs; stop it, then delete again"
 	if got != want {
 		t.Fatalf("cameBack:\n%s\nwant\n%s", got, want)
+	}
+}
+
+// master on foureyes' P2: a host without /proc says its agents are not
+// checked, never quietly passes; a check that errs refuses (foureyes: the
+// core of "unknown is never quiet").
+func TestProjectsDeleteUnknowns(t *testing.T) {
+	w := newDeleteWorld(t)
+	src := *w.m.cfg.admin
+	src.procAgents = func() bool { return false }
+	src.quiet = func(context.Context, string) (string, error) { return "", errors.New("connection refused") }
+	w.m.cfg.admin = &src
+	w.pressAdmin(t, 'R')
+	w.selectRow(t, "old")
+	w.press(t, 'd')
+	if w.m.ui.del != nil || !strings.Contains(w.m.ui.flash, "cannot check that old is quiet (connection refused)") {
+		t.Fatalf("an unreadable check: panel %v flash %q", w.m.ui.del != nil, w.m.ui.flash)
+	}
+	src.quiet = func(context.Context, string) (string, error) { return "", nil }
+	w.m.cfg.admin = &src
+	w.press(t, 'd')
+	if w.m.ui.del == nil || !strings.Contains(w.m.grid().plain(), "agents: not checkable on this host") {
+		t.Fatalf("no /proc: panel %v\n%s", w.m.ui.del != nil, w.m.grid().plain())
+	}
+	w.press(t, tea.Key{Code: tea.KeyEscape})
+	src.procAgents = func() bool { return true }
+	w.m.cfg.admin = &src
+	w.pressAdmin(t, 'R')
+	w.press(t, 'd')
+	if w.m.ui.del == nil || strings.Contains(w.m.grid().plain(), "not checkable") {
+		t.Fatal("the line shows with /proc")
 	}
 }

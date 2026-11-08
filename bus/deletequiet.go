@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,6 +33,23 @@ func (e *DeleteRefusal) Error() string {
 	}
 	return "its " + e.What + " service runs"
 }
+
+// RescanError: the script deleted Deleted keys, then the scan for keys that
+// came back failed. Never "nothing deleted" (foureyes).
+type RescanError struct {
+	Deleted int64
+	Err     error
+}
+
+func (e *RescanError) Error() string {
+	return fmt.Sprintf("deleted %d keys, then could not scan again: %v", e.Deleted, e.Err)
+}
+
+func (e *RescanError) Unwrap() error { return e.Err }
+
+// ErrOutcomeUnknown: the delete script's call failed in a way that does not
+// say whether it ran (a connection lost after the call was sent).
+var ErrOutcomeUnknown = errors.New("the delete's outcome is unknown")
 
 // quietCheck is the shared check, KEYS[1..3] = dispatch, conductor, services,
 // ARGV[1] = the freshness in ms: nil when quiet, else {what, host}.
@@ -121,7 +139,7 @@ func DeleteProjectIfQuiet(ctx context.Context, r *redis.Client, project string) 
 	}
 	res, err := deleteIfQuiet.Run(ctx, r, all, ServiceFreshFor.Milliseconds()).Slice()
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, fmt.Errorf("%w: %v", ErrOutcomeUnknown, err)
 	}
 	if len(res) == 3 {
 		what, _ := res[1].(string)
@@ -133,5 +151,8 @@ func DeleteProjectIfQuiet(ctx context.Context, r *redis.Client, project string) 
 		afterQuietScript()
 	}
 	left, err := ProjectKeys(ctx, r, project)
-	return n, left, err
+	if err != nil {
+		return n, nil, &RescanError{Deleted: n, Err: err}
+	}
+	return n, left, nil
 }

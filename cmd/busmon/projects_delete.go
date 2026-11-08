@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -44,11 +45,12 @@ const (
 
 // deletePanel is the confirmation over the page.
 type deletePanel struct {
-	row    adminRow
-	step   int
-	backup string // the archive, or "no backup"
-	field  string
-	note   string // does not match, a failed backup
+	row       adminRow
+	unchecked bool // no /proc here: this host's agents are not checked
+	step      int
+	backup    string // the archive, or "no backup"
+	field     string
+	note      string // does not match, a failed backup
 }
 
 type deleteCheckMsg struct {
@@ -113,7 +115,7 @@ func (m *Model) gotDeleteCheck(msg deleteCheckMsg) {
 		m.ui.flash, m.ui.flashErr = msg.reason, true
 		return
 	}
-	m.ui.del = &deletePanel{row: p.proj.rows[p.sel]}
+	m.ui.del = &deletePanel{row: p.proj.rows[p.sel], unchecked: p.proj.agentsUnchecked}
 }
 
 // deleteKey is a key on the panel: its own table; on the name step every
@@ -208,12 +210,8 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 	switch {
 	case msg.became != "":
 		m.notice.push(notice{text: "became live: " + msg.became + "; nothing deleted", level: noticeAttention})
-	case r.err != nil:
-		text := r.err.Error()
-		if !strings.Contains(text, "nothing deleted") {
-			text += " (nothing deleted)"
-		}
-		m.notice.push(notice{text: text, level: noticeAttention})
+	case r.err != nil: // deleteProjectNow's words: what was and was not deleted
+		m.notice.push(notice{text: r.err.Error(), level: noticeAttention})
 	case len(r.left) > 0:
 		m.notice.push(notice{text: cameBack(r.project, r.keys, r.left), level: noticeAttention})
 	default:
@@ -246,9 +244,14 @@ func (m Model) deletePanelLines(w int) []Line {
 	lines := []Line{
 		muted(fmt.Sprintf("%d %s %s %d agents (%d live) %s last activity %s %s %s %s %s",
 			r.keys, plural(r.keys, "key"), GlyphNone, r.total, r.live, GlyphNone, adminLast(r, m.now), GlyphNone, svc, GlyphNone, herdr)),
+	}
+	if d.unchecked {
+		lines = append(lines, Line{{Text: "agents: not checkable on this host (no /proc): only the leases, the services' records and the scan after the delete see them", Role: RoleAttention}})
+	}
+	lines = append(lines, []Line{
 		{{Text: "This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot and gate leases all go. The template and the worktrees stay.", Role: RoleText}},
 		nil,
-	}
+	}...)
 	key := func(k, what string) Line {
 		return Line{{Text: k, Role: RoleAccent, Bold: true}, {Text: " " + what, Role: RoleMuted}}
 	}
@@ -388,10 +391,18 @@ func realQuiet(client *redis.Client, getenv func(string) string) func(ctx contex
 			return "", err
 		}
 		live := 0
-		for _, s := range snaps {
-			if s.PID != 0 && s.PIDStart != 0 {
-				if start, err := dispatch.ProcStart(s.PID); err == nil && start == s.PIDStart {
+		if hasProc() { // without /proc the limit is stated in the panel (master, §5.1)
+			for _, s := range snaps {
+				if s.PID == 0 || s.PIDStart == 0 {
+					continue
+				}
+				start, err := dispatch.ProcStart(s.PID)
+				switch {
+				case err == nil && start == s.PIDStart:
 					live++
+				case err == nil, errors.Is(err, dispatch.ErrNoProcess): // gone, or another process now
+				default: // unknown is never quiet (foureyes)
+					return "", fmt.Errorf("agent pid %d: %w", s.PID, err)
 				}
 			}
 		}
@@ -418,4 +429,11 @@ func realRemove(client *redis.Client) func(ctx context.Context, p string) delete
 		n, kinds, left, err := deleteProjectNow(ctx, client, p, localServices)
 		return deleteResult{project: p, keys: n, services: kinds, left: left, err: err}
 	}
+}
+
+// hasProc: this host has /proc, where an agent's verified process can be
+// checked (Linux); macOS has none.
+func hasProc() bool {
+	_, err := os.Stat("/proc/self/stat")
+	return err == nil
 }

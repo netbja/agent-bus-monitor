@@ -175,10 +175,33 @@ func deleteProjectNow(ctx context.Context, client *redis.Client, project string,
 	}
 	// The last check and the DEL in one script; then the keys that came back.
 	n, left, err := bus.DeleteProjectIfQuiet(ctx, client, project)
-	if err != nil {
-		err = fmt.Errorf("%s: %w (nothing deleted)", project, err)
+	return n, kinds, left, deleteErr(project, n, kinds, err)
+}
+
+// deleteErr says what a failed delete did and did not do: never "nothing
+// deleted" once the script deleted (foureyes), and the units removed before.
+func deleteErr(project string, n int64, kinds []string, err error) error {
+	var refused *bus.DeleteRefusal
+	var rescan *bus.RescanError
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &rescan): // the keys are gone
+		return fmt.Errorf("deleted %d %s of %s, then could not scan again: %v", n, plural(int(n), "key"), project, rescan.Err)
+	case errors.Is(err, bus.ErrOutcomeUnknown):
+		return fmt.Errorf("%s: %w; busmon --list shows what remains%s", project, err, removedNote(kinds))
+	case errors.As(err, &refused):
+		return fmt.Errorf("%s: %w (nothing deleted%s)", project, err, removedNote(kinds))
 	}
-	return n, kinds, left, err
+	return fmt.Errorf("%s: %w (nothing deleted%s)", project, err, removedNote(kinds)) // the scan before the script: nothing sent
+}
+
+// removedNote names the units removed before a delete that did not happen.
+func removedNote(kinds []string) string {
+	if len(kinds) == 0 {
+		return ""
+	}
+	return "; its " + strings.Join(kinds, " and ") + " " + plural(len(kinds), "service") + " here was removed"
 }
 
 // removeLocalServices stops and removes the project's services on this
