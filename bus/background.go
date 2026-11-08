@@ -57,8 +57,8 @@ func (b *Bus) SetBackground(ctx context.Context, agent, text, by string, d time.
 		return errors.New("empty background text: say what runs, or use --clear")
 	case strings.ContainsFunc(text, unicode.IsControl):
 		return errors.New("the background text is one line, with no control characters")
-	case d <= 0:
-		return fmt.Errorf("--for %v: give how long it may run (above 0)", d)
+	case d < time.Millisecond: // PEXPIRE takes whole ms: 0 would expire it at once (reviewer-codex)
+		return fmt.Errorf("--for %v: give how long it may run (at least 1ms)", d)
 	case d > BackgroundMaxFor:
 		return fmt.Errorf("--for %v: at most 24h", d)
 	}

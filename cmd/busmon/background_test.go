@@ -29,12 +29,25 @@ func TestPollReadsTheBackground(t *testing.T) {
 	if b := st.agents["master"].bg; b == nil || b.Text != "2 checks running" || st.agents["coder"].bg != nil {
 		t.Fatalf("master %+v coder %+v", b, st.agents["coder"].bg)
 	}
+	// reviewer-codex, spec §4.3: a failed read shows nothing of the old work,
+	// and the row's read marker says the read failed.
 	f.backgroundErr = errors.New("timeout")
 	poll()
-	if b := st.agents["master"].bg; b == nil {
-		t.Fatal("a failed read dropped it")
+	if a := st.agents["master"]; a.bg != nil || !a.bgFailed {
+		t.Fatalf("after a failed read: %+v failed=%v", a.bg, a.bgFailed)
 	}
-	f.backgroundErr, f.backgrounds = nil, nil
+	if got := backgroundText(st.agents["master"], time.Now()); got != GlyphEllipsis+" ?" {
+		t.Fatalf("the row's marker %q", got)
+	}
+	if got := backgroundChip(st.agents, "master"); got != "" {
+		t.Fatalf("the header shows a failed read: %q", got)
+	}
+	f.backgroundErr = nil
+	poll()
+	if a := st.agents["master"]; a.bg == nil || a.bgFailed {
+		t.Fatalf("a good read after: %+v failed=%v", a.bg, a.bgFailed)
+	}
+	f.backgrounds = nil
 	poll()
 	if b := st.agents["master"].bg; b != nil {
 		t.Fatalf("an expired record kept: %+v", b)
@@ -121,6 +134,10 @@ func TestIdleTeamShowsBackground(t *testing.T) {
 	}
 	if !found || len(after.team) != len(before.team)+1 {
 		t.Fatalf("team %d rows (was %d), %s not shown with its work", len(after.team), len(before.team), idle)
+	}
+	m.snap.agents[idle].bg, m.snap.agents[idle].bgFailed = nil, true
+	if failed := m.idleData(); len(failed.team) != len(before.team) {
+		t.Fatalf("a failed read added a team row: %d (was %d)", len(failed.team), len(before.team))
 	}
 }
 

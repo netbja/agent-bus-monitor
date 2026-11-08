@@ -80,6 +80,8 @@ func TestBackgroundRefuses(t *testing.T) {
 		{"master", strings.Repeat("x", 61), time.Minute, "60"},
 		{"master", "two\nlines", time.Minute, "one line"},
 		{"master", "x", 0, "for"},
+		{"master", "x", time.Nanosecond, "1ms"}, // reviewer-codex: PEXPIRE 0 would expire it at once
+		{"master", "x", 999 * time.Microsecond, "1ms"},
 		{"master", "x", 25 * time.Hour, "24h"},
 	} {
 		if err := b.SetBackground(ctx, c.agent, c.text, "master", c.d); err == nil || !strings.Contains(err.Error(), c.want) {

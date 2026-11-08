@@ -416,9 +416,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 				a.model = &v
 			}
 		}
-		if bgsErr == nil { // a failed read keeps the last one; an expired one is gone
-			a.bg = nil
-			if v, ok := bgs[n]; ok {
+		if bgsErr != errNotPolled { // a failed read shows none, and says so (spec §4.3); an expired one is gone
+			a.bg, a.bgFailed = nil, bgsErr != nil
+			if v, ok := bgs[n]; ok && bgsErr == nil {
 				a.bg = &v
 			}
 		}

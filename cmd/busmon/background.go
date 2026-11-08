@@ -16,8 +16,12 @@ type backgroundReader interface {
 }
 
 // backgroundText is an agent's background work as its row shows it:
-// "… 2 checks running 4m"; "" when it has none.
+// "… 2 checks running 4m"; "… ?" when its latest read failed; "" when it
+// has none.
 func backgroundText(a *agentState, now time.Time) string {
+	if a != nil && a.bgFailed {
+		return GlyphEllipsis + " ?"
+	}
 	if a == nil || a.bg == nil {
 		return ""
 	}
