@@ -199,7 +199,7 @@ func TestHealthLoopCallsTheStallHookAfterTeamStall(t *testing.T) {
 }
 
 // The stall guard's wakes (chain-reliability): after a stored clear-stall,
-// quiet-agent or review-queue record the loop hands the lease token to StallWake with the
+// quiet-agent, review-queue or idle-implementer record the loop hands the lease token to StallWake with the
 // check's id; another check never calls it.
 func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
 	b, _ := dialRun(t)
@@ -211,7 +211,7 @@ func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	var checks []HealthCheck
-	for _, id := range []string{"clear-stall", "quiet-agent", "review-queue", "redis-version"} {
+	for _, id := range []string{"clear-stall", "quiet-agent", "review-queue", "idle-implementer", "redis-version"} {
 		d, ok := health.ByID(id)
 		if !ok {
 			t.Fatalf("no definition %s", id)
@@ -234,7 +234,8 @@ func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
 	cancel()
 	mu.Lock()
 	defer mu.Unlock()
-	if called["clear-stall"] != "wake-holder" || called["quiet-agent"] != "wake-holder" || called["review-queue"] != "wake-holder" || len(called) != 3 {
+	if called["clear-stall"] != "wake-holder" || called["quiet-agent"] != "wake-holder" || called["review-queue"] != "wake-holder" ||
+		called["idle-implementer"] != "wake-holder" || len(called) != 4 {
 		t.Fatalf("StallWake calls %v", called)
 	}
 }

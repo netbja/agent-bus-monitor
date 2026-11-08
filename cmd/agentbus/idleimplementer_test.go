@@ -46,6 +46,36 @@ func TestIdleImplementerReadsALiveProject(t *testing.T) {
 	}
 }
 
+// An implementer its provider's limit holds is not passed over: the reader
+// maps the quota hold of its provider to the agent (foureyes, after PR 362),
+// and no wake goes to master; the hold lifted, the warn comes back.
+func TestIdleImplementerQuotaHeld(t *testing.T) {
+	w := newStallWorld(t)
+	w.s.implementers = func() ([]string, error) { return []string{"coder"}, nil }
+	ctx := context.Background()
+	if _, err := w.b.Request(ctx, "agy-client-impl", "master", "coder", "", "implement agy", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.b.FencedQuotaSet(ctx, "stall-holder", "hold:anthropic", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.idleImplementer); out.Status != health.OK || out.Detail != "coder held by its quota" {
+		t.Fatalf("held: %+v", out)
+	}
+	if err := w.s.stallWake(ctx, "stall-holder", "idle-implementer"); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.dispatchDirectives("master"); len(got) != 0 {
+		t.Fatalf("master woken for a held implementer: %q", got)
+	}
+	if err := w.b.FencedQuotaDel(ctx, "stall-holder", "hold:anthropic"); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.idleImplementer); out.Status != health.Warn {
+		t.Fatalf("hold lifted: %+v", out)
+	}
+}
+
 // The person's answer 2: an implementer is a role with the implement skill;
 // in the shipped manifest, coder and coder2.
 func TestShippedImplementers(t *testing.T) {
