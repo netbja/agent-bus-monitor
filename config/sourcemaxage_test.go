@@ -30,3 +30,16 @@ func TestModelsSourceMaxAge(t *testing.T) {
 		}
 	}
 }
+
+// reviewer-codex: a day count large enough to overflow the duration is
+// refused, never wrapped into a small accepted value.
+func TestParseAgeOverflow(t *testing.T) {
+	for _, raw := range []string{"213504d", "366d", "9223372036854775807d", "106752d"} {
+		if d, ok := parseAge(raw); ok {
+			t.Errorf("%q accepted as %v", raw, d)
+		}
+	}
+	if d, ok := parseAge("365d"); !ok || d != 365*24*time.Hour {
+		t.Fatalf("365d: %v %v", d, ok)
+	}
+}

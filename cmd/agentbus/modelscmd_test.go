@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"os"
@@ -478,5 +479,32 @@ model = "gpt-6-sol"
 	runModels(context.Background(), []string{"check"}, env, cache, "", manifest, now, &out, &errw)
 	if !strings.Contains(out.String(), "ds         deepseek") || strings.Contains(out.String(), "deepseek-v4                        unknown") {
 		t.Fatalf("the adapter's profile is not judged against its rows:\n%s", out.String())
+	}
+}
+
+// reviewer-codex: a tier profile on a source older than models.source_max_age
+// is unknown, never ok, and that provider's untiered rows are not counted.
+func TestModelsCheckTierOldSource(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	cache, manifest := checkFixture(t, now)
+	tbl, _ := models.Load(cache)
+	tbl.Providers["openai"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	tbl.Providers["moonshot"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	if err := tbl.Save(cache); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	runModels(context.Background(), []string{"check", "--json"}, noEnv(), cache, "", manifest, now, &out, &errw)
+	var rep checkReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatalf("%v\n%s", err, out.String())
+	}
+	for _, r := range rep.Profiles {
+		if r.Profile == "spare" && (r.Verdict != "unknown" || !strings.Contains(r.Why, "openai's catalogue is 12 days old")) {
+			t.Fatalf("tier profile on an old source: %+v", r)
+		}
+	}
+	if len(rep.Untiered) != 0 {
+		t.Fatalf("an old source's untiered rows counted: %+v", rep.Untiered)
 	}
 }

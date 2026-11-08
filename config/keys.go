@@ -610,7 +610,7 @@ func parseAge(raw string) (time.Duration, bool) {
 	var d time.Duration
 	if n, ok := strings.CutSuffix(raw, "d"); ok {
 		days, err := strconv.Atoi(n)
-		if err != nil {
+		if err != nil || days <= 0 || days > 365 { // before multiplying: a huge count would wrap (reviewer-codex)
 			return 0, false
 		}
 		d = time.Duration(days) * 24 * time.Hour

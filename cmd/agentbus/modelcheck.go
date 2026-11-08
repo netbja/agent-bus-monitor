@@ -53,7 +53,7 @@ func modelsCheckReport(tbl *models.Table, cfg models.Config, m *rolecfg.Manifest
 	var rows []checkRow
 	add := func(r checkRow) {
 		if r.Tier != "" {
-			r = judgeTier(tbl, r, now)
+			r = judgeTier(tbl, cfg, r, now)
 		} else {
 			j := judgeModel(tbl, cfg, now, r.Provider, r.Model)
 			r.Verdict, r.Why, r.Candidate = j.Verdict, j.Why, j.Candidate
@@ -89,7 +89,7 @@ func modelsCheckReport(tbl *models.Table, cfg models.Config, m *rolecfg.Manifest
 	sort.Strings(names)
 	for _, name := range names {
 		p, fresh := tbl.Fresh(name, now)
-		if !fresh {
+		if _, old := sourceTooOld(p, cfg, now, name); !fresh || old {
 			continue
 		}
 		n := 0
@@ -105,11 +105,16 @@ func modelsCheckReport(tbl *models.Table, cfg models.Config, m *rolecfg.Manifest
 	return report
 }
 
-// judgeTier: a tier profile is ok when its provider's fresh table resolves
+// judgeTier: a tier profile is ok when its provider's fresh table (its source
+// within models.source_max_age) resolves
 // the tier, untiered when it has no row of that tier (§3.7).
-func judgeTier(tbl *models.Table, r checkRow, now time.Time) checkRow {
+func judgeTier(tbl *models.Table, cfg models.Config, r checkRow, now time.Time) checkRow {
 	if tbl != nil {
-		if _, fresh := tbl.Fresh(r.Provider, now); fresh {
+		if p, fresh := tbl.Fresh(r.Provider, now); fresh {
+			if why, old := sourceTooOld(p, cfg, now, r.Provider); old { // reviewer-codex
+				r.Verdict, r.Why = "unknown", why
+				return r
+			}
 			if row, ok := tbl.Resolve(r.Provider, r.Tier, now); ok {
 				r.Verdict, r.Resolved = "ok", row.ID
 				return r

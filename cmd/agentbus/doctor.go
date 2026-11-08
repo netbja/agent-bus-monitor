@@ -340,6 +340,20 @@ func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) 
 // doctorFails: the verdicts that make roles doctor exit 3 (health's one list).
 func doctorFails(verdict string) bool { return health.ModelVerdictFails(verdict) }
 
+// sourceTooOld: p's source is older than models.source_max_age (§3.2); an
+// unknown source age (0) is never too old. Every verdict and summary that
+// trusts p's rows asks it first.
+func sourceTooOld(p *models.Provider, cfg models.Config, now time.Time, provider string) (string, bool) {
+	if p == nil || p.SourceAt <= 0 || cfg.SourceMaxAge <= 0 {
+		return "", false
+	}
+	age := now.Sub(time.UnixMilli(p.SourceAt))
+	if age <= cfg.SourceMaxAge {
+		return "", false
+	}
+	return fmt.Sprintf("%s's catalogue is %s old (models.source_max_age %s)", provider, ageWords(age), ageWords(cfg.SourceMaxAge)), true
+}
+
 // ageWords is a catalogue age: whole days from 2 days, else hours.
 func ageWords(d time.Duration) string {
 	if d >= 48*time.Hour {
@@ -376,8 +390,8 @@ func judgeModel(tbl *models.Table, cfg models.Config, now time.Time, provider, i
 		}
 		return judgement{Verdict: "unknown", Why: why}
 	}
-	if age := now.Sub(time.UnixMilli(p.SourceAt)); p.SourceAt > 0 && cfg.SourceMaxAge > 0 && age > cfg.SourceMaxAge {
-		return judgement{Verdict: "unknown", Why: fmt.Sprintf("%s's catalogue is %s old (models.source_max_age %s)", provider, ageWords(age), ageWords(cfg.SourceMaxAge))}
+	if why, old := sourceTooOld(p, cfg, now, provider); old {
+		return judgement{Verdict: "unknown", Why: why}
 	}
 	row, found := p.Find(id)
 	if !found && p.Partial {
