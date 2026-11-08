@@ -22,7 +22,7 @@ import (
 )
 
 // builtinBinary is the executable each builtin client runs.
-var builtinBinary = map[string]string{"claude-code": "claude", "codex": "codex", "kimi-cli": "kimi", "grok": "grok"}
+var builtinBinary = map[string]string{"claude-code": "claude", "codex": "codex", "kimi-cli": "kimi", "grok": "grok", "agy": "agy"}
 
 // repoRoot is the agent-bus-monitor checkout that holds the default skills
 // and role prompts (Python's REPO): AGENTBUS_REPO, set by the scripts, else
@@ -357,6 +357,19 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 			return append(cmd, "--rules", "<role prompt and skill paths>"), nil
 		}
 		return append(cmd, "--rules", prompt), nil
+	case "agy":
+		// The role prompt is the initial user turn (-i), as for Codex: agy has no
+		// flag that appends to its system prompt (agy-client spec §4.3).
+		cmd := append([]string{"agy", "--model", model}, agyArgs(p)...)
+		if dry {
+			return append(cmd, "--settings", "<generated agy settings>", "-i", "<role prompt and skill paths>"), nil
+		}
+		text, _ := agySettings(rules)
+		file, err := cacheFile(env, text, ".json")
+		if err != nil {
+			return nil, err
+		}
+		return append(cmd, "--settings", file, "-i", prompt), nil
 	}
 	file := "<resolved launch.json>"
 	if !dry {
@@ -387,9 +400,21 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, "--help")
 	cmd.Env = e.list()
-	out, err := cmd.Output()
+	output := cmd.Output
+	if p.Client == "agy" { // agy prints its --help on stderr
+		output = cmd.CombinedOutput
+	}
+	out, err := output()
 	if err != nil {
 		return fmt.Errorf("%s --help failed", binary)
+	}
+	if p.Client == "agy" {
+		for _, flag := range agyNeeded(p) {
+			if !agyHelpHas(string(out), flag) {
+				return fmt.Errorf("%s lacks required launch flags; inspect its version/help", binary)
+			}
+		}
+		return nil
 	}
 	needed := map[string][]string{
 		"claude-code": {"--model", "--append-system-prompt", "--name"},
@@ -525,7 +550,11 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 			fmt.Fprintln(cfg.Stderr, note)
 		}
 	}
-	if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: Codex and Kimi have no such rules; their own approval mode applies
+	if p.Client == "agy" { // its session settings carry the denies that have a command form (agy-client §4.4)
+		if u := agyUnenforced(rules); u != "" { // roles doctor names it in the same words (LaunchRisk)
+			fmt.Fprintln(cfg.Stderr, "agy: "+u)
+		}
+	} else if p.Client != "claude-code" && !rules.Empty() { // v0.17 §6: Codex and Kimi have no such rules; their own approval mode applies
 		fmt.Fprintf(cfg.Stderr, "note: tool_rules not applied for %s\n", p.Client)
 		rules = ToolRules{}
 	}
@@ -962,7 +991,8 @@ func pyFloat(f float64) string {
 
 // elevated names the builtin options that take a client out of its safe
 // defaults ("" when none): Claude without permission prompts, Codex with full
-// disk access or no approvals, Kimi in yolo or auto mode, Grok without permission prompts.
+// disk access or no approvals, Kimi in yolo or auto mode, Grok without permission prompts,
+// agy in skip or auto mode.
 func elevated(p Profile, rules ToolRules) string {
 	var parts []string
 	switch p.Client {
@@ -987,6 +1017,13 @@ func elevated(p Profile, rules ToolRules) string {
 	case "grok":
 		if perm := p.Options["permission"]; perm == "bypassPermissions" || perm == "dontAsk" {
 			parts = append(parts, "permission="+perm)
+		}
+	case "agy": // skip auto-approves every tool; auto lets agy decide; skip without the sandbox too
+		if perm := p.Options["permission"]; perm == "skip" || perm == "auto" {
+			parts = append(parts, "permission="+perm)
+			if perm == "skip" && p.Options["sandbox"] != "true" {
+				parts = append(parts, "sandbox=false")
+			}
 		}
 	}
 	return strings.Join(parts, " ")

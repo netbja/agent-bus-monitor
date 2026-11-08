@@ -50,7 +50,9 @@ func (a AgyReader) Read(ctx context.Context) (Reading, error) {
 		year, _ := strconv.Atoi(date[:4])
 		fileMonth, _ := strconv.Atoi(date[4:6])
 		for _, line := range tailLines(f, 256<<10) {
-			if !bytes.Contains(line, []byte("RESOURCE_EXHAUSTED")) {
+			// A capacity error is a server shortage agy retries, never the
+			// account's quota, whatever it states (agy-client spec §6).
+			if !bytes.Contains(line, []byte("RESOURCE_EXHAUSTED")) || bytes.Contains(line, []byte("CAPACITY")) {
 				continue
 			}
 			m := agyStamp.FindSubmatch(line)

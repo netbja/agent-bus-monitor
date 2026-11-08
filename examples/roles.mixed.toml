@@ -29,6 +29,17 @@ client = "kimi-cli"
 provider = "moonshot"
 model = "your-kimi-model-alias"
 
+# agy (Antigravity CLI, Google): a reviewer or panelist from another maker. permission stays
+# default: the session pins toolPermission=request-review and empties your agy allows
+# (agy-client spec §4.4). Keep a Gemini model: a claude-* row agy also serves would review
+# Anthropic's work with Anthropic's model. Sign in once with `agy` by hand first.
+[profiles.agy-review]
+client = "agy"
+provider = "google"
+model = "gemini-3.8-flash-high"   # an id as `agy models` prints it
+[profiles.agy-review.options]
+sandbox = true
+
 [roles.master]
 tier = "boot"
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]

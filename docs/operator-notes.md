@@ -248,7 +248,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   the repository's local `info/exclude` (never a `.gitignore`; escaped as a gitignore literal, a line break refused,
   confirmed by `git check-ignore --no-index`); a failure only warns; Grok runs it once the person answers its own folder-trust
   dialog (never `--trust`); its hooks run as children of the `grok` process, so the bound pid is in their chain, and
-  `subagentType` events are ignored. Kimi has no hooks. `Bus.TurnState` (`bus/turnstate.go`) flips idle/working in the `{p}:agents`
+  `subagentType` events are ignored. Kimi has no hooks, and neither has agy: its `--settings` refuses every hooks key
+  (agy 1.5.3), and a `.agents/hooks.json` in the worktree would collide with the repository's own, so an agy role
+  declares its state itself. An agy launch (`rolecfg/agy.go`) passes `--settings` with a session file in the launch cache:
+  `toolPermission = request-review` always written (an omitted key inherits the person's own, which may be
+  `always-proceed`), `allowNonWorkspaceAccess = false`, `permissions.allow = []` (a session list replaces the person's),
+  and `permissions.deny` only when a deny translates (an empty one would drop the person's own denies). Only `Bash`
+  prefix denies have an agy form (`command(<prefix>)`); `Read`/`Edit` rules and a `*` inside a pattern (the project's
+  `--host *` deliver spellings among them) are not enforced, and the launch names them on one line; `roles doctor` names
+  them and the elevated options on a `risk:` line (`Manifest.LaunchRisk`, the launch's own logic, agy roles only). agy prints its
+  `--help` on stderr, and preflight matches whole flags: `--mode` is inside `--model`. `Bus.TurnState` (`bus/turnstate.go`) flips idle/working in the `{p}:agents`
   snapshot only, never a status entry (`auto: "turn"`, the message kept, only from idle or working, only for the stored
   verified pid and start); a declaration clears `auto` and wins over a flip whatever their times (`mergeSnapshot`).
   `bus.EffectiveState` reads a flip's working as idle once a fresh observation has seen the pane ready for `staleAfter`,

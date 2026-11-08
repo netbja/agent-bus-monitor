@@ -121,7 +121,8 @@ sans risque.
 - **Git** et **curl**.
 - **herdr** 0.9.0 ou plus récent ; `--install-herdr` l'installe s'il manque.
 - **Au moins un CLI d'agent**, que vous installez : Claude Code (`claude`), Codex CLI (`codex`),
-  Kimi Code CLI (`kimi`) ou Grok Build (`grok`). L'installation n'échoue jamais sans : elle indique
+  Kimi Code CLI (`kimi`), Grok Build (`grok`) ou Antigravity CLI (`agy` ; connectez-vous une fois
+  avec `agy` à la main, ce qui fait aussi son premier lancement). L'installation n'échoue jamais sans : elle indique
   où trouver chacun, et le bus et busmon fonctionnent en attendant. `agentbus up` sans aucun des CLI
   de l'équipe ne lance rien et dit quoi installer ; s'il en manque seulement certains, il lance tous
   les onglets et avertit en les nommant.
@@ -418,7 +419,9 @@ noms d'onglets et d'agents, sans modèle de projet) :
     cycle` n'annonce pas de durée et n'est jamais retenue). Un `Individual quota reached … Resets in
     …` d'agy retient jusqu'à la réinitialisation qu'il annonce ; rien ne l'arrête plus tôt, et le
     quota peut être celui d'un seul modèle : s'il retient des agents qui pourraient encore
-    travailler, désactivez-le avec `[providers.google] kind = "off"` dans `quota.toml`.
+    travailler, désactivez-le avec `[providers.google] kind = "off"` dans `quota.toml`. Une erreur de
+    capacité (`MODEL_CAPACITY…`, une pénurie du serveur qu'agy relance lui-même) n'est jamais lue
+    comme un quota.
   - **Toute autre IA** : décrivez sa source dans `~/.config/agentbus/quota.toml` — un fichier et ses
     champs (`kind = "json"` ou `"jsonl-last"`), ou un script qui imprime le relevé en JSON
     (`kind = "command"`), ou `kind = "unlimited"` pour un modèle local. Seuils :

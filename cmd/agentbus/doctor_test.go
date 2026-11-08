@@ -217,3 +217,55 @@ func TestDoctorReadsTheTemplatesProfile(t *testing.T) {
 		t.Fatalf("rows = %+v, %v; want foureyes ok on alt", rows, err)
 	}
 }
+
+// agy-client §4.2, §4.4 (reviewer-codex): roles doctor names an agy role's
+// elevated options and the denies agy cannot enforce, in the launch's words;
+// a role on another client has none, and the exit code does not change.
+func TestDoctorNamesAgyRisks(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()) })
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	manifest := doctorManifest + "[profiles.agy]\nclient = \"agy\"\nprovider = \"google\"\nmodel = \"gemini-3.8-flash-high\"\noptions = { permission = \"skip\" }\n"
+	manifest = strings.Replace(manifest, "[roles.foureyes]\ntier = \"boot\"\n",
+		"[roles.foureyes]\ntier = \"boot\"\nprofile = \"agy\"\n[roles.foureyes.tool_rules]\ndeny = [\"Read(**/.env)\"]\n", 1)
+	if err := os.WriteFile(path, []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for agent, id := range map[string]bus.AgentIdent{
+		"foureyes": {Pane: "p1", PID: 12, PIDStart: 1, Model: "gemini-3.8-flash-high", Client: "agy", Provider: "google"},
+		"coder":    {Pane: "p2", PID: 11, PIDStart: 1, Model: "claude-opus-5-5", Client: "claude-code", Provider: "anthropic"},
+	} {
+		if _, err := b.Status(ctx, agent, "idle", "", id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := doctorDeps{
+		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
+		ProcStart:  func(int) (uint64, error) { return 1, nil },
+		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
+		Transcript: func(string) (usage.UsedModel, error) { return usage.UsedModel{}, errors.New("none") },
+		Now:        time.Now,
+	}
+	want := "elevated permission=skip sandbox=false; 1 tool rule has no agy form and is not enforced: Read(**/.env)"
+	rows, err := doctorRows(ctx, b, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.Agent == "foureyes" && (row.Risk != want || row.Verdict != "ok") || row.Agent == "coder" && row.Risk != "" {
+			t.Errorf("%s: %+v", row.Agent, row)
+		}
+	}
+	var out, errw bytes.Buffer
+	if code := runDoctor(ctx, b, d, nil, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "\n             risk: "+want+"\n") || strings.Count(out.String(), "risk: ") != 1 {
+		t.Fatalf("text:\n%s", out.String())
+	}
+	out.Reset()
+	if runDoctor(ctx, b, d, []string{"--json"}, &out, &errw) != 0 || !strings.Contains(out.String(), `"risk": "`+want+`"`) {
+		t.Fatalf("json:\n%s", out.String())
+	}
+}

@@ -64,7 +64,7 @@ que ce que le code et ses tests montrent.
 | Courtier Redis | Docker avec Compose (`redis:8-alpine`) | Docker avec Compose | — |
 
 Chaque agent tourne dans son propre panneau herdr, quel que soit son client. Le lanceur connaît
-quatre clients :
+cinq clients :
 
 | Client | Reprise de session | État travail/repos automatique | Fenêtres d'usage lues dans |
 |---|---|---|---|
@@ -72,6 +72,7 @@ quatre clients :
 | Codex CLI (`codex`) | non | oui, par ses hooks | `codex app-server`, ses journaux de session en repli |
 | Grok Build (`grok`, bêta) | non | oui, par ses hooks | sa ligne de journal de facturation |
 | Kimi Code CLI (`kimi`) | non | non | son journal, seulement les limites atteintes (Kimi n'indique pas de réinitialisation) |
+| Antigravity CLI (`agy`, Google) | non | non : l'agent le déclare | son journal, seulement les limites atteintes (une fenêtre pour tous les modèles) |
 
 Le remplissage du contexte en pourcentage et le décompte des jetons ne viennent que de Claude
 Code. Le [guide de démarrage en cinq minutes](docs/quickstart.md) (en anglais) est écrit pour
@@ -86,7 +87,7 @@ arrêté, avec la sortie réelle de chaque étape.
 Il vous faut Linux ou macOS, Go (la version de `go.mod`), Docker avec Compose, Git et curl.
 herdr (0.9.0 ou plus récent) est installé pour vous avec `--install-herdr`. Il faut aussi au
 moins un client d'agent, que vous installez vous-même : Claude Code (`claude`), Codex CLI
-(`codex`), Kimi Code CLI (`kimi`) ou Grok Build (`grok`).
+(`codex`), Kimi Code CLI (`kimi`), Grok Build (`grok`) ou Antigravity CLI (`agy`).
 
 ```bash
 git clone https://github.com/netbja/agent-bus-monitor && cd agent-bus-monitor

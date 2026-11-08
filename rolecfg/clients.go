@@ -16,6 +16,7 @@ var Clients = []ClientInfo{
 	{Client: "codex", Exe: "codex", Name: "Codex CLI", Install: "https://github.com/openai/codex"},
 	{Client: "kimi-cli", Exe: "kimi", Name: "Kimi Code CLI", Install: "https://github.com/MoonshotAI/kimi-code"}, // the successor of the archived kimi-cli (reviewer-codex)
 	{Client: "grok", Exe: "grok", Name: "Grok Build (xAI, beta)", Install: "https://x.ai/cli"},
+	{Client: "agy", Exe: "agy", Name: "Antigravity CLI (Google)", Install: "https://antigravity.google/docs/cli/reference"}, // the page agy's own bundled docs name
 }
 
 // ClientGuidance is one line per client: its name, executable and install
