@@ -527,10 +527,10 @@ func TestNotifySetupRefusesGlobalFlags(t *testing.T) {
 }
 
 // A short global flag after the command is no global flag there: it is the
-// subcommand's word, a usage error, and nothing runs.
+// subcommand's word, a usage error (exit 1, never 2: foureyes), and nothing runs.
 func TestNotifySetupShortFlagAfterTheCommand(t *testing.T) {
 	w := newNotifyWorld(t)
-	if r := w.setup(t, &fakeTerm{}, "", "-p", "", "setup"); r.code != 2 || w.file(t).Exists {
+	if r := w.setup(t, &fakeTerm{}, "", "-p", "", "setup"); r.code != 1 || w.file(t).Exists {
 		t.Fatalf("exit %d", r.code)
 	}
 }

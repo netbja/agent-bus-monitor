@@ -90,7 +90,7 @@ func runNotifications(ctx context.Context, args []string, d notificationsDeps, o
 		return notificationsTest(ctx, target, d, out, errw)
 	}
 	fmt.Fprintln(errw, notificationsUsage)
-	return 2
+	return 1 // nothing ran: 2 is a written target whose test failed (notify-guided-setup §6, foureyes)
 }
 
 // notifyStateDir is <state> = $XDG_STATE_HOME/agentbus, else

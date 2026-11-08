@@ -226,7 +226,7 @@ func TestNotificationsStatusOffAndMissing(t *testing.T) {
 func TestNotificationsUsage(t *testing.T) {
 	w := newNotifyWorld(t)
 	for _, args := range [][]string{nil, {"bogus"}, {"status", "x"}, {"test", "a", "b"}} {
-		if _, _, code := w.run(t, args...); code != 2 {
+		if _, _, code := w.run(t, args...); code != 1 { // nothing ran; 2 means written, test failed (§6)
 			t.Errorf("%q: exit %d", args, code)
 		}
 	}
