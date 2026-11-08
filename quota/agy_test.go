@@ -121,3 +121,18 @@ func TestAgyBuiltin(t *testing.T) {
 		t.Fatalf("readers %v", rs)
 	}
 }
+
+// A capacity error is a server-side shortage agy retries itself, never an
+// account quota (agy-client spec §6): no form of it holds the window, not
+// even one that states a reset.
+func TestAgyCapacityIsNotAQuota(t *testing.T) {
+	dir := t.TempDir()
+	at := t0.Add(-10 * time.Minute)
+	agyLog(t, dir, t0.Add(-time.Hour), t0,
+		agyLine("E", at, "errorreport.go:224] agent executor error: UNAVAILABLE (code 503): MODEL_CAPACITY_EXHAUSTED: no capacity for this model."),
+		agyLine("E", at, "errorreport.go:224] agent executor error: RESOURCE_EXHAUSTED (code 429): No capacity available for this model (MODEL_CAPACITY_EXHAUSTED)."),
+		agyLine("E", at, "errorreport.go:224] agent executor error: RESOURCE_EXHAUSTED (code 429): MODEL_CAPACITY_EXHAUSTED. Resets in 5h0m0s."))
+	if r := readAgy(t, dir, t0); !r.Unknown || len(r.Windows) != 0 {
+		t.Fatalf("a capacity line held the window: %+v", r)
+	}
+}

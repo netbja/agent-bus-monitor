@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -386,6 +387,12 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 	}
 	if isBuiltin(client) {
 		for key, value := range optionMap {
+			if client == "agy" && key == "sandbox" { // a boolean (agy-client §4.2), made text below
+				if _, ok := value.(bool); !ok {
+					return Profile{}, fmt.Errorf("agy option sandbox must be true or false")
+				}
+				continue
+			}
 			if _, ok := checkedString(value, client+" option "+key); !ok {
 				return Profile{}, fmt.Errorf("%s option %s must be a non-empty string without control characters", client, key)
 			}
@@ -438,6 +445,8 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 	for key, value := range optionMap {
 		if text, ok := value.(string); ok {
 			resolved.Options[key] = text
+		} else if b, ok := value.(bool); ok && client == "agy" && key == "sandbox" {
+			resolved.Options[key] = strconv.FormatBool(b)
 		} else if isBuiltin(client) {
 			// Builtin option types have already been rejected above.
 			return Profile{}, fmt.Errorf("%s option %s must be a non-empty string without control characters", client, key)
@@ -511,6 +520,16 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 		if reasoning != "" {
 			return Profile{}, fmt.Errorf("grok adapter has no verified reasoning levels (--help lists none); omit reasoning")
+		}
+	} else if client == "agy" { // Antigravity CLI: the values agy 1.5.3's --help lists (agy-client §4.2)
+		if err := checkKeys(optionMap, set("permission", "sandbox"), "agy options"); err != nil {
+			return Profile{}, err
+		}
+		if v, exists := optionMap["permission"]; exists && !contains(agyPermissions, v.(string)) {
+			return Profile{}, fmt.Errorf("unsupported agy permission")
+		}
+		if reasoning != "" && !contains(agyEfforts, reasoning) {
+			return Profile{}, fmt.Errorf("unsupported agy reasoning level")
 		}
 	} else {
 		adapters, exists := m.rawAdapters()
@@ -769,7 +788,7 @@ func claudePermissionMissing(who string) error {
 }
 
 func isBuiltin(client string) bool {
-	return client == "claude-code" || client == "codex" || client == "kimi-cli" || client == "grok"
+	return client == "claude-code" || client == "codex" || client == "kimi-cli" || client == "grok" || client == "agy"
 }
 
 func contains(values []string, sought string) bool {

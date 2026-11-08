@@ -41,6 +41,9 @@ func TestSignatures(t *testing.T) {
 		{"agy", "agy-empty", true, false},
 		{"agy", "agy-typed", false, false},
 		{"agy", "agy-approval", false, false},
+		{"agy", "agy153-empty", true, false}, // agy 1.5.3, the agy-client probe (2026-11-07)
+		{"agy", "agy153-typed", false, false},
+		{"agy", "agy153-approval", false, false},
 		// Only the CURRENT (last) input box counts: an old empty box higher in
 		// scrollback must not make a typed current box look ready, and an old
 		// typed box must not veto an empty current one. DERIVED fixtures.
