@@ -628,8 +628,18 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   and mtime compared at the rename (`ErrChanged`); a 0600 temp file renamed over it, the folder synced; loaded again,
   and the old bytes put back (or a new file removed) when an added or renamed target does not load. `notify.Explain`
   turns a send's `SendError` into the setup's plain sentence (a TLS failure is the reason `certificate`), and
-  `internal/agentcaller` is the agent-caller rule both binaries share. Until the setup surfaces ship (steps 2, 3),
-  nothing calls it, and the rest of this note holds: no command writes the file yet; every role denies its
+  `internal/agentcaller` is the agent-caller rule both binaries share. Its CLI callers (step 2,
+  `cmd/agentbus/notifysetup.go`): `notifications setup` (questions on `/dev/tty`, refused when stdin is no terminal),
+  `add ntfy|discord|desktop` (a drawn topic, `notify.DrawTopic`; a token or webhook from a file, `-` or
+  `--webhook-stdin`, never an argument, and an unknown flag is a usage error that echoes nothing; `http` only with
+  `--insecure`), `remove` (asks on the terminal, or `--yes`; `notify.on` goes off only on the person's yes), `rename`
+  (the header, `notify.targets` and the `notify-last.json` record, `Last.Rename`) and `show-topic`; `add` turns
+  `notify.on` on and lists the target, then tests it (exit 0 delivered, 2 written but failed, 1 nothing written). A
+  topic, its link and its QR (`notify.QR`, half blocks drawn black on white, rsc.io/qr, L, up to version 6) go only
+  to `/dev/tty`: without one, stdout says to run `show-topic` on a terminal. All five refuse an agent first
+  (`refuseAgent`: `AGENT_BUS_AGENT`, an agent ancestor, an unreadable broker) and every role denies them
+  (`rolecfg.NotifyWriteDenies` in the shared rules and a drafted role's own; the launch adds the `--project`/`-p`
+  spellings, `NotifyProjectDenies`, not the `--host` ones). Every role also denies its
   Read/Edit and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
   command refuses `AGENT_BUS_AGENT` or a process under a registered agent's verified pid in any project (so on Linux
   it needs the broker); a backup secret. The settings are `notify.*` (group Notifications, config.toml only, list keys

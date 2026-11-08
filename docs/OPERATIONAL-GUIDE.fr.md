@@ -661,14 +661,18 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   arrêt de l'équipe, une vérification de santé en échec, un avis que vous seul pouvez traiter, un
   volet bloqué sur l'invite de son client ; un avertissement « pour vous » seulement si vous
   ajoutez `for-you` à `notify.events`. Les cibles sont dans `~/.config/agentbus/notify.toml`, que
-  vous écrivez vous-même (agentbus jamais), en mode `0600` dans un dossier que personne d'autre ne
+  `agentbus notifications setup` écrit pour vous sur un terminal (ou `add ntfy`, `add discord
+  --webhook-file F`, `add desktop` ; puis `remove`, `rename`, `show-topic` pour un second téléphone),
+  jamais un agent ; en mode `0600` dans un dossier que personne d'autre ne
   peut écrire : un topic, un jeton ou un webhook est un secret, il ne va donc jamais dans
   `config.toml`, sur le bus ni dans un journal, et aucun agent ne peut lire ce fichier. La page C
   de busmon, groupe Notifications, se termine par un assistant par type de cible (`Set up ntfy`,
   `Set up Discord`, `Set up the desktop`) : Entrée montre les étapes, l'état du fichier (noms et
   types des cibles, jamais un topic ni une URL), une table à copier avec `y` (pour ntfy un topic
   tiré sur le moment, gardé nulle part) et le dernier test de chaque cible ; vous la collez
-  vous-même dans le fichier.
+  vous-même dans le fichier si vous préférez. `setup` et `add ntfy` tirent le topic et l'affichent,
+  avec son lien et un code QR à scanner, sur votre terminal seulement, jamais dans un journal ; ils
+  activent `notify.on`, listent la cible et envoient un test (`--no-test` l'évite).
 
   ```toml
   [ntfy.phone]

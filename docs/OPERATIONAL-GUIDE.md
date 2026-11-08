@@ -620,13 +620,17 @@ to watch a pane.
   (an open question, an agent declared `waiting`, a plan task for you), a team stall, a health
   check that fails, a notice only you can act on, a pane stuck on its client's prompt; a for-you
   warning only if you add `for-you` to `notify.events`. The targets live in
-  `~/.config/agentbus/notify.toml`, which you write yourself (agentbus never does), mode `0600` in a
+  `~/.config/agentbus/notify.toml`, which `agentbus notifications setup` writes for you on a
+  terminal (or `add ntfy`, `add discord --webhook-file F`, `add desktop`; then `remove`, `rename`,
+  `show-topic` for a second phone), never an agent; mode `0600` in a
   folder no one else can write: a topic, a token or a webhook is a secret, so it never goes in
   `config.toml`, on the bus or in a log, and no agent may read the file. busmon's C page, group
   Notifications, ends with an assistant per kind (`Set up ntfy`, `Set up Discord`, `Set up the
   desktop`): Enter shows the steps, the file's state (target names and kinds, never a topic or a
   URL), a table to copy with `y` (for ntfy a topic drawn on the spot, kept nowhere) and each
-  target's last test; you still paste it into the file yourself.
+  target's last test; you may still paste it into the file yourself. `setup` and `add ntfy` draw the
+  topic and show it, its link and a QR code to scan on your terminal only, never in a log; they turn
+  `notify.on` on, list the target and send a test (`--no-test` skips it).
 
   ```toml
   [ntfy.phone]
