@@ -77,7 +77,7 @@ func inState(t testing.TB, m Model, state string) Model {
 		return m
 	case "idle": // the idle view, layout A (busmon idle view spec)
 		m.cfg.settings.IdleView = time.Minute
-		return pollAt(t, m, time.Hour)
+		return pollAt(t, pollAt(t, m, time.Hour), time.Hour+20*time.Second) // the thread 20 cells in (idle-animation)
 	case "projects", "projects-detail", "projects-unknown": // the Projects page (M, projects-admin §9)
 		src := adminFixture(shellNow)
 		if state == "projects-unknown" {

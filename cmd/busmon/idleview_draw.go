@@ -311,13 +311,41 @@ func idleStripLine(s stripParts, w int) Line {
 	return FitLine(build(false, false), w)
 }
 
+// idleThreadLen is the thread's length in cells.
+const idleThreadLen = 3
+
+// idleThread is the row above the strip (§4, the person's animation A): a
+// dotted line w cells wide with a thread sliding one cell right per step; it
+// enters at the left edge and leaves at the right, so over a pass (w plus its
+// length) every cell carries it. Never a blink: only its place changes.
+func idleThread(w, step int) Line {
+	if w <= 0 {
+		return nil
+	}
+	pass := w + idleThreadLen
+	start := (step%pass+pass)%pass - idleThreadLen // -len .. w-1
+	a, b := max(start, 0), min(start+idleThreadLen, w)
+	var l Line
+	if a > 0 {
+		l = append(l, Seg{Text: strings.Repeat(GlyphNone, min(a, w)), Role: RoleDim})
+	}
+	if b > a {
+		l = append(l, Seg{Text: strings.Repeat(GlyphThinBar, b-a), Role: RoleAccent})
+	}
+	if rest := w - max(a, b); rest > 0 {
+		l = append(l, Seg{Text: strings.Repeat(GlyphNone, rest), Role: RoleDim})
+	}
+	return l
+}
+
 // idleGrid paints the idle view: the frames side by side when they fit,
 // stacked when they do not, one line each on a narrow screen; the block
-// drifts a cell a minute, the strip up to 4 cells sideways.
+// drifts a cell a minute, the strip up to 4 cells sideways, and the thread
+// above the strip slides a cell a second.
 func (m Model) idleGrid() *grid {
 	g := newGrid(m.width, m.height)
 	d := m.idleData()
-	W, H := m.width, m.height-1 // the strip has the last row
+	W, H := m.width, m.height-2 // the thread and the strip have the last two rows
 	k := int(max(0, m.now.Sub(m.ui.idleSince)) / time.Minute)
 	seed := int(m.sig.started.Unix() % 97)
 	place := func(bw, bh int) (int, int) {
@@ -326,6 +354,7 @@ func (m Model) idleGrid() *grid {
 	}
 	shift := bounce(k+seed, min(4, max(W-8, 0)))
 	drawLine(g, shift, m.height-1, W-4, idleStripLine(d.strip, W-4), false)
+	drawLine(g, 0, m.height-2, W, idleThread(W, int(max(0, m.now.Sub(m.ui.idleSince))/time.Second)), false)
 
 	nb := nextBox(d)
 	// Side by side: you left, team over next right.
