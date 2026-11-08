@@ -508,6 +508,17 @@ type step struct {
 	x      Input
 }
 
+// ages sets the step's times from now: since its wake, and the oldest owed
+// entry's age, each saturated, never wrapped (CodeQL, reviewer-codex).
+func (s *step) ages(now time.Time) {
+	if s.exists && s.w.At != 0 {
+		s.x.SinceWake = ageSince(now, s.w.At)
+	}
+	if ms, ok := idMillis(s.o.OldestID); ok && s.o.OldestID != "" {
+		s.x.OldestAge = ageSince(now, ms)
+	}
+}
+
 func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot, hasGroup, isTarget bool) error {
 	if !hasGroup && isTarget {
 		if err := l.b.FencedEnsureGroup(ctx, l.token, agent, l.cfg.Horizon); err != nil {
@@ -545,13 +556,8 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 	s.x = Input{Obligation: o, Armed: armed, Snap: snap}
 	if exists {
 		s.x.Wake = &s.w
-		if w.At != 0 {
-			s.x.SinceWake = time.Duration(now.UnixMilli()-w.At) * time.Millisecond
-		}
 	}
-	if ms, _, ok := parseID(o.OldestID); ok && o.OldestID != "" {
-		s.x.OldestAge = time.Duration(now.UnixMilli()-int64(ms)) * time.Millisecond
-	}
+	s.ages(now)
 
 	// Rules 1–6 never look at the pane; inspect only when Decide gets past them,
 	// or first when an escalation caused by the pane's state may have ended

@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -336,5 +337,68 @@ func TestNewMessageReopensAnEscalatedWake(t *testing.T) {
 	x.Wake = mark(3, "true", 1)
 	if d := Decide(testPolicy, x); d.Action != ActNone || d.Rule != 3 {
 		t.Fatalf("no high id recorded: %+v", d)
+	}
+}
+
+// CodeQL go/incorrect-integer-conversion (alert 1): a stream id's time past
+// math.MaxInt64 is no time at all, never a negative one.
+func TestIDMillis(t *testing.T) {
+	for id, want := range map[string]int64{"1794125199070-0": 1794125199070, "5": 5, "9223372036854775807-3": math.MaxInt64} {
+		if got, ok := idMillis(id); !ok || got != want {
+			t.Errorf("%s: %d %v", id, got, ok)
+		}
+	}
+	for _, id := range []string{"18446744073709551615-0", "9223372036854775808-0", "", "x-1", "-5"} {
+		if got, ok := idMillis(id); ok {
+			t.Errorf("%s: %d accepted", id, got)
+		}
+	}
+}
+
+// reviewer-codex: an id the bound accepts (MaxInt64 ms) is still in the far
+// future: its age never wraps into a positive one that would escalate. A
+// past id's age is exact; a future one's is zero.
+func TestAgeSince(t *testing.T) {
+	now := time.UnixMilli(1794125199070)
+	if got := ageSince(now, 1794125199070-90_000); got != 90*time.Second {
+		t.Errorf("past: %v", got)
+	}
+	for _, ms := range []int64{math.MaxInt64, 1794125199070 + 1, math.MaxInt64 / 2} {
+		if got := ageSince(now, ms); got != 0 {
+			t.Errorf("future %d: age %v", ms, got)
+		}
+	}
+	if got := ageSince(now, math.MinInt64); got <= 0 {
+		t.Errorf("far past: %v, want a saturated positive age", got)
+	}
+}
+
+// The loop's own computation (step.ages): a far-future oldest id, MaxInt64
+// milliseconds included, is no age, so Decide never escalates on it; a
+// past one is its true age, and a wake in the future is no time since.
+func TestStepAges(t *testing.T) {
+	now := time.UnixMilli(1794125199070)
+	for id, want := range map[string]time.Duration{
+		"9223372036854775807-3":  0,
+		"18446744073709551615-0": 0,
+		"1794125199070-0":        0,
+		"1794125139070-5":        time.Minute,
+		"":                       0,
+	} {
+		s := &step{o: bus.Obligation{OldestID: id}}
+		s.ages(now)
+		if s.x.OldestAge != want {
+			t.Errorf("%q: OldestAge %v, want %v", id, s.x.OldestAge, want)
+		}
+	}
+	s := &step{exists: true, w: bus.WakeRecord{At: math.MaxInt64}}
+	s.ages(now)
+	if s.x.SinceWake != 0 {
+		t.Errorf("SinceWake %v for a wake in the future", s.x.SinceWake)
+	}
+	s = &step{exists: true, w: bus.WakeRecord{At: 1794125199070 - 30_000}}
+	s.ages(now)
+	if s.x.SinceWake != 30*time.Second {
+		t.Errorf("SinceWake %v", s.x.SinceWake)
 	}
 }

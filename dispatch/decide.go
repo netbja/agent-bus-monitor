@@ -3,6 +3,7 @@
 package dispatch
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -308,6 +309,24 @@ func idAfter(a, b string) bool {
 		return am > bm
 	}
 	return as > bs
+}
+
+// idMillis is a stream id's time in milliseconds, as a time takes it: an id
+// whose time passes math.MaxInt64 is refused, never wrapped negative
+// (CodeQL go/incorrect-integer-conversion).
+func idMillis(id string) (int64, bool) {
+	ms, _, ok := parseID(id)
+	if !ok || ms > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(ms), true
+}
+
+// ageSince is the time from ms (Unix milliseconds) to now, saturated by
+// time.Time.Sub instead of wrapping (reviewer-codex): a moment after now is
+// no age at all, never a large positive one.
+func ageSince(now time.Time, ms int64) time.Duration {
+	return max(now.Sub(time.UnixMilli(ms)), 0)
 }
 
 func parseID(id string) (ms, seq uint64, ok bool) {
