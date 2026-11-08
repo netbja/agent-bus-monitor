@@ -79,3 +79,30 @@ func TestRefreshedAt(t *testing.T) {
 		t.Fatal(tbl.RefreshedAt())
 	}
 }
+
+// reviewer-codex: with a background context, a reader that ignores its own
+// deadline is abandoned at that deadline (`agentbus models --refresh`).
+func TestRefreshAbandonsAtTheReadersOwnDeadline(t *testing.T) {
+	defer func(d time.Duration) { ReaderTimeout = d }(ReaderTimeout)
+	ReaderTimeout = 100 * time.Millisecond
+	tbl := &Table{Providers: map[string]*Provider{}}
+	block := make(chan struct{})
+	defer close(block)
+	readers := []Reader{{Provider: "xai", Read: func(context.Context) ([]Row, string, error) { <-block; return nil, "", nil }}}
+	done := make(chan map[string]string, 1)
+	go func() { done <- tbl.Refresh(context.Background(), readers, nil, time.Now()) }()
+	select {
+	case failed := <-done:
+		if failed["xai"] == "" {
+			t.Fatalf("failures %v", failed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Refresh waited past the reader's own deadline")
+	}
+}
+
+func TestReaderTimeoutIs20s(t *testing.T) {
+	if ReaderTimeout != 20*time.Second {
+		t.Fatalf("ReaderTimeout %v: an explicit --refresh keeps 20 s per reader (§3.5)", ReaderTimeout)
+	}
+}

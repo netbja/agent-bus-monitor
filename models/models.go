@@ -206,10 +206,13 @@ type Reader struct {
 	SourceAt func(now time.Time) int64
 }
 
+// ReaderTimeout is each reader's own deadline (a test shortens it).
+var ReaderTimeout = 20 * time.Second
+
 // Refresh runs every reader and merges the outcome into t: a provider whose
 // read fails keeps its previous rows and records the error (§12.2). The
-// readers run side by side, each under ctx and its own 20 s: one that
-// ignores its deadline is abandoned there, never waited for (§3.5). It
+// readers run side by side, each under ctx and its own ReaderTimeout: one
+// that ignores its deadline is abandoned there, never waited for (§3.5). It
 // returns the providers whose read failed, with the reason.
 func (t *Table) Refresh(ctx context.Context, readers []Reader, tiers TierMap, now time.Time) map[string]string {
 	type result struct {
@@ -218,14 +221,16 @@ func (t *Table) Refresh(ctx context.Context, readers []Reader, tiers TierMap, no
 		err  error
 	}
 	results := make([]chan result, len(readers))
+	rctxs := make([]context.Context, len(readers))
 	for i, r := range readers {
 		results[i] = make(chan result, 1) // buffered: an abandoned reader never blocks
-		go func(r Reader, out chan<- result) {
-			rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-			defer cancel()
+		var cancel context.CancelFunc
+		rctxs[i], cancel = context.WithTimeout(ctx, ReaderTimeout)
+		defer cancel()
+		go func(r Reader, rctx context.Context, out chan<- result) {
 			rows, home, err := r.Read(rctx)
 			out <- result{rows, home, err}
-		}(r, results[i])
+		}(r, rctxs[i], results[i])
 	}
 	failed := map[string]string{}
 	for i, r := range readers {
@@ -237,11 +242,11 @@ func (t *Table) Refresh(ctx context.Context, readers []Reader, tiers TierMap, no
 		var res result
 		select {
 		case res = <-results[i]:
-		case <-ctx.Done():
+		case <-rctxs[i].Done(): // its own deadline, or ctx's (reviewer-codex)
 			select { // a reader that finished just now still counts
 			case res = <-results[i]:
 			default:
-				res.err = ctx.Err()
+				res.err = rctxs[i].Err()
 			}
 		}
 		p.At = now.UnixMilli()
