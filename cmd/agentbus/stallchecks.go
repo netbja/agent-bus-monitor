@@ -23,12 +23,12 @@ import (
 // unknown, never ok and never a stall.
 
 // stallSettings are the three thresholds, read once per pass (0 = off).
-type stallSettings struct{ stall, clear, quiet, turnStale time.Duration }
+type stallSettings struct{ stall, clear, quiet, turnStale, idle time.Duration }
 
 func readStallSettings(getenv func(string) string) stallSettings {
 	r := config.Machine(getenv)
 	return stallSettings{r.Duration("dispatch.stall_after"), r.Duration("dispatch.clear_stall_after"), r.Duration("dispatch.quiet_after"),
-		r.Duration("dispatch.turn_stale_after")}
+		r.Duration("dispatch.turn_stale_after"), r.Duration("dispatch.idle_after")}
 }
 
 // stallReader holds what the checks keep between passes: the verdict ledger,
@@ -53,6 +53,10 @@ type stallReader struct {
 	lastClear  *health.ClearStallInput
 	lastQuiet  *health.QuietAgentInput
 	lastReview *health.ReviewQueueInput
+	lastIdle   *health.IdleImplementerInput
+	// implementers are the roles with the implement skill (idle-implementer);
+	// nil reads them from the role manifest.
+	implementers func() ([]string, error)
 }
 
 func newStallReader(b *bus.Bus, getenv func(string) string, clear dispatch.ClearConfig, master *string) *stallReader {
@@ -486,6 +490,8 @@ func (s *stallReader) stallWake(ctx context.Context, token, check string) error 
 		wakes = health.QuietAgentWakes(*s.lastQuiet)
 	case check == "review-queue" && s.lastReview != nil:
 		wakes = health.ReviewQueueWakes(*s.lastReview, s.escalateTo())
+	case check == "idle-implementer" && s.lastIdle != nil:
+		wakes = health.IdleImplementerWakes(*s.lastIdle, s.escalateTo())
 	}
 	s.mu.Unlock()
 	for _, w := range wakes {
@@ -507,6 +513,7 @@ func stallChecks(s *stallReader) []dispatch.HealthCheck {
 		healthOutcomeTask("clear-stall", s.clearStall),
 		healthOutcomeTask("team-stall", s.teamStall),
 		healthOutcomeTask("review-queue", s.reviewQueue),
+		healthOutcomeTask("idle-implementer", s.idleImplementer),
 	}
 }
 

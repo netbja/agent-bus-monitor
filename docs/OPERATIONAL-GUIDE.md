@@ -542,7 +542,10 @@ to watch a pane.
   master cannot act (held, or blocked on a prompt), or if the stall lasts twice the threshold.
   `clear-stall` warns when a hand-off was not cleared, with the dispatcher's reason (when it is your
   focused pane, switch away). `quiet-agent` warns when an agent received work and wrote nothing
-  since. Panes must be observed: where they are not (macOS), `team-stall` reads `unknown`.
+  since. `idle-implementer` (`dispatch.idle_after`, 15 minutes) warns when an implementer, a role
+  with the `implement` skill, has been idle that long while a request addressed to it waits, not
+  accepted: it wakes master once per implementer and set of requests, to dispatch the next
+  independent item. Panes must be observed: where they are not (macOS), `team-stall` reads `unknown`.
 - **History archive.** The dispatch service appends every stream (`cmd`, `report`, `status`,
   `notify`, `verdicts`, `health:log`, `swaps`) each minute to one JSONL file per UTC day in the
   project's state directory, `history/YYYY-MM-DD.jsonl` (0600 in 0700), so a thread outlives the
