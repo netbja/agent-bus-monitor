@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -194,4 +196,72 @@ func derefNotice(n *notice) []notice {
 		return nil
 	}
 	return []notice{*n}
+}
+
+// reviewer-codex: a backup that exits before the first one-second read of
+// its log still names its archive: the log's last line is read at the exit.
+func TestProjectsFastBackupNamesTheArchive(t *testing.T) {
+	w := newAdminWorld(t)
+	log := filepath.Join(t.TempDir(), "suspend.log")
+	if err := os.WriteFile(log, []byte("--- agentbus backup --project demo\nwrote /backups/agentbus-demo.tar.zst\n/backups/agentbus-demo.tar.zst\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.m.cfg.sleepLog = func(string) string { return log }
+	w.selectRow(t, "demo")
+	next, cmd := w.m.Update(tea.KeyPressMsg(tea.Key{Code: 'b', Text: "b"}))
+	w.m = next.(Model)
+	started := cmd().(sleepStartedMsg)
+	w.done <- nil // it has already exited
+	next, cmd = w.m.Update(started)
+	w.m = next.(Model)
+	var done sleepDoneMsg
+	for _, c := range cmd().(tea.BatchMsg) { // the exit's waiter, not the tick
+		if d, ok := c().(sleepDoneMsg); ok {
+			done = d
+			break
+		}
+	}
+	if w.m.ui.sleepRun == nil || !strings.HasPrefix(w.m.ui.sleepRun.last, "starting") {
+		t.Fatalf("the log was read before the exit: %+v", w.m.ui.sleepRun)
+	}
+	next, _ = w.m.Update(done)
+	w.m = next.(Model)
+	if !noticeHas(w.m, "backup of demo done: /backups/agentbus-demo.tar.zst") {
+		t.Fatalf("notices %v", w.m.notice.queue)
+	}
+}
+
+func noticeHas(m Model, s string) bool {
+	for _, n := range append(m.notice.queue, derefNotice(m.notice.cur)...) {
+		if strings.Contains(n.text, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// foureyes P3: unknown is never none: with the broker or the services
+// unread, Z and x say so; the runner's header line is no archive.
+func TestProjectsActionsOnUnknowns(t *testing.T) {
+	w := newAdminWorld(t)
+	p := w.m.rd.top()
+	for i := range p.proj.rows {
+		p.proj.rows[i].brokerKnown, p.proj.rows[i].svcKnown = false, false
+	}
+	w.selectRow(t, "old")
+	w.pressAdmin(t, 'Z')
+	if !strings.Contains(w.m.ui.flash, "state is unknown") || w.m.ui.sleepAsk != nil {
+		t.Fatalf("Z: %q", w.m.ui.flash)
+	}
+	w.pressAdmin(t, 'x')
+	if !strings.Contains(w.m.ui.flash, "services of old here are unknown") || w.m.ui.sleepAsk != nil {
+		t.Fatalf("x: %q", w.m.ui.flash)
+	}
+	w.pressAdmin(t, 'b')
+	r := w.m.ui.sleepRun
+	next, _ := w.m.Update(sleepDoneMsg{id: r.id, last: "--- 2026-10-26T16:04:05Z agentbus backup --project old"})
+	w.m = next.(Model)
+	if !noticeHas(w.m, "backup of old done") || noticeHas(w.m, "done: ---") {
+		t.Fatalf("notices %v", w.m.notice.queue)
+	}
 }

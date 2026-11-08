@@ -60,8 +60,9 @@ type sleepLineMsg struct {
 
 // sleepDoneMsg: the child exited.
 type sleepDoneMsg struct {
-	id  int
-	err error
+	id   int
+	err  error
+	last string // the log's last line at the exit: a run shorter than one tick names its result too (reviewer-codex)
 }
 
 // sleepEvery is how often the log's last line is read.
@@ -197,7 +198,11 @@ func (m *Model) gotSleepStarted(msg sleepStartedMsg) tea.Cmd {
 	}
 	done := msg.done
 	id := msg.id
-	return tea.Batch(func() tea.Msg { return sleepDoneMsg{id: id, err: <-done} }, sleepTick(id, msg.log))
+	log := msg.log
+	return tea.Batch(func() tea.Msg {
+		err := <-done
+		return sleepDoneMsg{id: id, err: err, last: lastLine(log)}
+	}, sleepTick(id, log))
 }
 
 func sleepTick(id int, log string) tea.Cmd {
@@ -224,6 +229,9 @@ func (m *Model) gotSleepDone(msg sleepDoneMsg) tea.Cmd {
 		return nil
 	}
 	m.ui.sleepRun = nil
+	if msg.last != "" && !strings.HasPrefix(msg.last, "--- ") { // not the runner's own header: the child said nothing
+		r.last = msg.last
+	}
 	m.markProjectsDirty()
 	var reread tea.Cmd
 	if r.verb == "backup" && m.settingsPageOpen() != nil {

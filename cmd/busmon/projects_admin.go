@@ -766,6 +766,10 @@ func (m *Model) projectAction(act Action, r adminRow) tea.Cmd {
 		if r.open { // the open project's row is the shell's Z
 			return m.sleepKey()
 		}
+		if !r.brokerKnown { // foureyes: unknown is not none
+			m.ui.flash, m.ui.flashErr = "the broker was not read: "+r.name+"'s state is unknown (R reads again)", true
+			return nil
+		}
 		if !r.onBroker {
 			m.ui.flash, m.ui.flashErr = r.name+" is a template only: nothing runs to put to sleep", true
 			return nil
@@ -775,6 +779,10 @@ func (m *Model) projectAction(act Action, r adminRow) tea.Cmd {
 		active := false
 		for _, on := range r.svc {
 			active = active || on
+		}
+		if !r.svcKnown {
+			m.ui.flash, m.ui.flashErr = "the services of "+r.name+" here are unknown (R reads again)", true
+			return nil
 		}
 		if !active {
 			m.ui.flash, m.ui.flashErr = "no active service of "+r.name+" on this machine: nothing to stop", true
