@@ -368,6 +368,13 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   count in 5-row digits), team (agents not idle, then the idle count) and next (the plan's task in hand, then the
   first upcoming) side by side, else stacked, else one line each; the block drifts one cell a minute
   (`idleDrift`, a diagonal bounce), the strip up to 4 cells.
+- **master runs in Claude Code's auto mode** (`claude-sonnet-auto`, the person, 2026-11-08: they
+  switched it by hand at every start); every other role keeps its profile (`bypassPermissions` for
+  the workers). Checked against Claude Code's permission-modes page before the change: in auto mode
+  an explicit ask rule still prompts (master's `agent-spawn deploy` and `infra`, the person's
+  approval) and deny rules block in every mode; broad allow rules are dropped on entering it, and
+  master's are narrow. rolecfg refuses ask rules only with `bypassPermissions`, where nothing prompts.
+  `TestMasterStartsInAutoMode` holds master alone in auto, its ask rules kept.
 - **`agentbus mem` needs no project and no broker.** It works on files under the repository
   root (`memory/` package: `check`, `new`, `sync`), so its block in `main()` sits above the
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
