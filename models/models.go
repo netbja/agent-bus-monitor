@@ -236,7 +236,9 @@ func (t *Table) Refresh(ctx context.Context, readers []Reader, tiers TierMap, no
 // previous read is fresh too; default when the source's default moved.
 func (t *Table) remember(provider string, p *Provider, rows []Row, partial bool, now time.Time) {
 	at := now.UnixMilli()
-	hadRead := p.ReadAt != 0
+	// A table from before Seen existed has reads but no Seen: its first
+	// refresh fills Seen silently too, never an event per listed id (foureyes).
+	hadRead := p.ReadAt != 0 && len(p.Seen) > 0
 	prevFresh := hadRead && now.Sub(time.UnixMilli(p.ReadAt)) <= MaxAge
 	if p.Seen == nil {
 		p.Seen = map[string]Seen{}

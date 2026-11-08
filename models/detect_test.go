@@ -230,6 +230,10 @@ func TestListedNewer(t *testing.T) {
 	if got, ok := p.ListedNewer("grok-4.6"); !ok || got != "grok-4.7" {
 		t.Errorf("ListedNewer = %q %v, want the highest listed: grok-4.7", got, ok)
 	}
+	p2 := &Provider{Rows: []Row{{ID: "grok-4.6.1"}, {ID: "grok-4.7"}}} // low then high: the highest wins, not the first
+	if got, _ := p2.ListedNewer("grok-4.6"); got != "grok-4.7" {
+		t.Errorf("ListedNewer low-then-high = %q", got)
+	}
 	if got, ok := p.ListedNewer("grok-4.7"); ok {
 		t.Errorf("ListedNewer(grok-4.7) = %q", got)
 	}
@@ -263,5 +267,23 @@ func TestAliasPerProvider(t *testing.T) {
 	}
 	if tbl.Aliases["anthropic"]["opus"].ID != "claude-opus-5" || tbl.Aliases["moonshot"]["opus"].ID != "kimi-opus" {
 		t.Fatalf("%+v", tbl.Aliases)
+	}
+}
+
+// foureyes: a table from before Seen existed (reads, no Seen) fills Seen
+// silently on its first refresh: no added, no removed for what it lists.
+func TestUpgradedTableNoFlood(t *testing.T) {
+	tbl := &Table{Providers: map[string]*Provider{"xai": {OK: true, ReadAt: detNow.Add(-time.Hour).UnixMilli(),
+		Rows: []Row{{Provider: "xai", ID: "a", Default: true}, {Provider: "xai", ID: "b"}, {Provider: "xai", ID: "c"}}}}}
+	ids := []string{"a", "b", "c"}
+	var fail error
+	tbl.Refresh(context.Background(), []Reader{listing("xai", false, &ids, &fail)}, nil, detNow)
+	if len(tbl.Events) != 0 || len(tbl.Providers["xai"].Seen) != 3 {
+		t.Fatalf("upgrade: events %q, seen %d", kinds(tbl.Events), len(tbl.Providers["xai"].Seen))
+	}
+	ids = []string{"a", "b", "c", "d"}
+	tbl.Refresh(context.Background(), []Reader{listing("xai", false, &ids, &fail)}, nil, detNow.Add(time.Hour))
+	if got := kinds(tbl.Events); got != "added xai d" {
+		t.Fatalf("after the upgrade: %q", got)
 	}
 }
