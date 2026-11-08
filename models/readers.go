@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -21,12 +22,22 @@ type Env struct {
 	Read   func(path string) ([]byte, error)
 	// Run runs a client's own listing command (fixed argv) and returns stdout.
 	Run func(ctx context.Context, name string, args ...string) ([]byte, error)
+	// Stat is a file's modification time (Kimi's catalogue age, §3.2); nil =
+	// unknown.
+	Stat func(path string) (time.Time, error)
 }
 
 // RealEnv is the machine's.
 func RealEnv() Env {
 	home, _ := os.UserHomeDir()
 	return Env{Getenv: os.Getenv, Home: home, Read: os.ReadFile,
+		Stat: func(path string) (time.Time, error) {
+			st, err := os.Stat(path)
+			if err != nil {
+				return time.Time{}, err
+			}
+			return st.ModTime(), nil
+		},
 		Run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			if _, err := exec.LookPath(name); err != nil {
 				return nil, err
@@ -41,19 +52,35 @@ func RealEnv() Env {
 // file: they read only the catalogue files named here, or the client's own
 // listing command.
 func Readers(e Env) []Reader {
+	var codexAt int64                                            // the last read's fetched_at
+	live := func(now time.Time) int64 { return now.UnixMilli() } // asked of the server at the read
 	return []Reader{
-		{Provider: "openai", Read: func(ctx context.Context) ([]Row, string, error) { return readCodex(e) }},
-		{Provider: "anthropic", Partial: true, Read: func(ctx context.Context) ([]Row, string, error) { return readClaude(e) }},
-		{Provider: "xai", Read: func(ctx context.Context) ([]Row, string, error) { return readGrok(ctx, e) }},
-		{Provider: "moonshot", Read: func(ctx context.Context) ([]Row, string, error) { return readKimi(e) }},
-		{Provider: "google", Read: func(ctx context.Context) ([]Row, string, error) { return readAgy(ctx, e) }},
+		{Provider: "openai", Read: func(ctx context.Context) ([]Row, string, error) {
+			rows, home, at, err := readCodexAt(e)
+			codexAt = at
+			return rows, home, err
+		}, SourceAt: func(time.Time) int64 { return codexAt }},
+		{Provider: "anthropic", Partial: true, Read: func(ctx context.Context) ([]Row, string, error) { return readClaude(e) }}, // its file changes for other reasons: age unknown
+		{Provider: "xai", Read: func(ctx context.Context) ([]Row, string, error) { return readGrok(ctx, e) }, SourceAt: live},
+		{Provider: "moonshot", Read: func(ctx context.Context) ([]Row, string, error) { return readKimi(e) }, SourceAt: func(time.Time) int64 {
+			if e.Stat == nil {
+				return 0
+			}
+			mt, err := e.Stat(kimiPath(e))
+			if err != nil {
+				return 0
+			}
+			return mt.UnixMilli()
+		}},
+		{Provider: "google", Read: func(ctx context.Context) ([]Row, string, error) { return readAgy(ctx, e) }, SourceAt: live},
 	}
 }
 
 // --- Codex: $CODEX_HOME/models_cache.json, refreshed by Codex itself.
 
 type codexCache struct {
-	Models []struct {
+	FetchedAt string `json:"fetched_at"` // when Codex itself last fetched the list
+	Models    []struct {
 		Slug        string          `json:"slug"`
 		DisplayName string          `json:"display_name"`
 		Description string          `json:"description"`
@@ -64,17 +91,23 @@ type codexCache struct {
 }
 
 func readCodex(e Env) ([]Row, string, error) {
+	rows, home, _, err := readCodexAt(e)
+	return rows, home, err
+}
+
+// readCodexAt is readCodex and the cache's fetched_at (Unix ms, 0 = absent).
+func readCodexAt(e Env) ([]Row, string, int64, error) {
 	home := e.Getenv("CODEX_HOME")
 	if home == "" {
 		home = filepath.Join(e.Home, ".codex")
 	}
 	b, err := e.Read(filepath.Join(home, "models_cache.json"))
 	if err != nil {
-		return nil, home, err
+		return nil, home, 0, err
 	}
 	var c codexCache
 	if err := json.Unmarshal(b, &c); err != nil {
-		return nil, home, err
+		return nil, home, 0, err
 	}
 	sort.SliceStable(c.Models, func(i, j int) bool { return c.Models[i].Priority < c.Models[j].Priority })
 	var rows []Row
@@ -86,7 +119,11 @@ func readCodex(e Env) ([]Row, string, error) {
 			Newer: upgradeTarget(m.Upgrade)}
 		rows = append(rows, r)
 	}
-	return rows, home, nil
+	var at int64
+	if ts, err := time.Parse(time.RFC3339Nano, c.FetchedAt); err == nil {
+		at = ts.UnixMilli()
+	}
+	return rows, home, at, nil
 }
 
 // upgradeTarget reads Codex's "upgrade": a model id, or an object naming one.
@@ -195,11 +232,16 @@ func readGrok(ctx context.Context, e Env) ([]Row, string, error) {
 // --- Kimi: ~/.kimi-code/config.toml (models and default_model; the oauth
 // tables are never read).
 
-func readKimi(e Env) ([]Row, string, error) {
-	path := filepath.Join(e.Home, ".kimi-code", "config.toml")
+// kimiPath is Kimi Code's config.toml.
+func kimiPath(e Env) string {
 	if d := e.Getenv("KIMI_CODE_HOME"); d != "" {
-		path = filepath.Join(d, "config.toml")
+		return filepath.Join(d, "config.toml")
 	}
+	return filepath.Join(e.Home, ".kimi-code", "config.toml")
+}
+
+func readKimi(e Env) ([]Row, string, error) {
+	path := kimiPath(e)
 	b, err := e.Read(path)
 	if err != nil {
 		return nil, path, err
