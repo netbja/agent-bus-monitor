@@ -7,13 +7,13 @@
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
 │  Display  how busmon looks; theme, icons and fade apply… ┃
 │                                                          ┃
-│      Fade and slide            ● on                      ┃
-│    • Theme                     ‹ dark ›                  ┃
-│  ▶ • Icons                     ‹ nerd ›                  ┃
+│      Fade and slide                  ● on                ┃
+│    • Theme                           ‹ dark ›            ┃
+│  ▶ • Icons                           ‹ nerd ›            ┃
 │     off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font               ┃
-│      Activity lines at start   25                        │
-│      Idle? hint after          10m                       │
-│      Idle view after           off                       │
+│      Activity lines at start         25                  │
+│      Idle? hint after                10m                 │
+│      Screensaver (idle view) after   off                 │
 │                                                          │
 │  ──────────────────────────────────────────────────────  ▼
 ╰──────────────────────────────────────────────────────────╯

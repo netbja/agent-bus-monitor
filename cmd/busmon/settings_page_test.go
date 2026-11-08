@@ -74,7 +74,7 @@ func TestSettingsRows(t *testing.T) {
 		{"waiting.bell", fromDefault, false, "Bell", "on", "default", true},
 		{"updates.check", fromElsewhere, false, "Update check", "off", "env AGENT_BUS_NO_UPDATE_CHECK", false},
 		{"identity.as", fromFile, true, "Your name", "charlie", "config.toml", true},
-		{"display.idle_view_after", fromDefault, false, "Idle view after", "off", "default", true},
+		{"display.idle_view_after", fromDefault, false, "Screensaver (idle view) after", "off", "default", true},
 	} {
 		r := settingRowOf(t, groups, c.key)
 		if r.From != c.from || r.Set != c.set || r.Label != c.label || r.Value != c.value || r.Source != c.source || r.Editable != c.editable {
@@ -530,7 +530,7 @@ func TestSettingsControls(t *testing.T) {
 		}
 	}
 	labelW := settingsLabelCol(display)
-	if labelW != Width("Activity lines at start") {
+	if labelW != Width("Screensaver (idle view) after") { // the Display group's longest (settings-duration-input)
 		t.Fatalf("label column %d", labelW)
 	}
 	col := -1
