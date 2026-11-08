@@ -137,16 +137,27 @@ func EvaluateLaunch(e LaunchEvidence) Outcome {
 	return Outcome{Status: OK, Detail: "launcher and identity evidence is present"}
 }
 
+// ModelVerdictFails: the roles doctor verdicts that fail it (exit 3), warn
+// model-drift and mark the agent in busmon. newer? is a hint and never fails
+// (model-detection §3.3). The one list, so the three never disagree.
+func ModelVerdictFails(verdict string) bool {
+	switch verdict {
+	case "drift", "unknown model", "gone", "newer":
+		return true
+	}
+	return false
+}
+
 func EvaluateModelDrift(verdicts []string, known bool) Outcome {
 	if !known {
 		return Outcome{Status: Unknown, Detail: "model catalogue or doctor result unavailable"}
 	}
 	incomplete := false
 	for _, v := range verdicts {
-		switch v {
-		case "drift", "unknown model", "gone", "newer":
+		switch {
+		case ModelVerdictFails(v):
 			return Outcome{Status: Warn, Detail: "roles doctor reports model drift"}
-		case "not reported", "unknown":
+		case v == "not reported" || v == "unknown":
 			incomplete = true
 		}
 	}

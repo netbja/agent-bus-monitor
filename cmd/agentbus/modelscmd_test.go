@@ -319,3 +319,68 @@ func TestModelsAutoRefreshSkipsAHeldLock(t *testing.T) {
 		t.Fatalf("out:\n%s\nerr:\n%s", out.String(), errw.String())
 	}
 }
+
+// foureyes (step 2, P2): a budget overrun still saves what was read: the
+// providers that answered keep their new rows, and the attempt time moves,
+// so the next `agentbus models` does not pay the budget again.
+func TestRefreshTableSavesWhatWasReadOnOverrun(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	age(t, cache, 25*time.Hour)
+	block := make(chan struct{})
+	defer close(block)
+	readers := []models.Reader{
+		{Provider: "xai", Read: func(context.Context) ([]models.Row, string, error) { <-block; return nil, "", nil }},
+		{Provider: "openai", Read: func(context.Context) ([]models.Row, string, error) {
+			return []models.Row{{Provider: "openai", ID: "gpt-7-sol"}}, "codex", nil
+		}},
+	}
+	failed, held, err := refreshTable(context.Background(), cache, nil, readers, now, 100*time.Millisecond)
+	if err != nil || held || failed["xai"] == "" {
+		t.Fatalf("failed %v held %v err %v", failed, held, err)
+	}
+	tbl, err := models.Load(cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := tbl.Providers["openai"]; p.Rows[0].ID != "gpt-7-sol" || p.ReadAt != now.UnixMilli() {
+		t.Fatalf("the answered provider was not saved: %+v", p)
+	}
+	if tbl.RefreshedAt() != now.UnixMilli() {
+		t.Fatalf("attempt time %d, want %d", tbl.RefreshedAt(), now.UnixMilli())
+	}
+}
+
+// foureyes (step 2, P3): a table dated in the future (a clock moved back) is
+// refreshed, never trusted as young.
+func TestModelsAutoRefreshFutureTable(t *testing.T) {
+	now := time.Now()
+	cache, manifest := checkFixture(t, now)
+	age(t, cache, -2*time.Hour)
+	calls := 0
+	var out, errw bytes.Buffer
+	if code := runModels(context.Background(), []string{"--provider", "xai"}, countingEnv(&calls, nil), cache, "", manifest, now, &out, &errw); code != 0 || calls != 1 {
+		t.Fatalf("a future-dated table was not refreshed: exit %d, calls %d", code, calls)
+	}
+}
+
+// foureyes (step 2, P3): the usage errors.
+func TestModelsUsageRefusals(t *testing.T) {
+	now := time.Now()
+	cache, manifest := checkFixture(t, now)
+	for _, args := range [][]string{
+		{"check", "--refresh"}, {"check", "--changes"}, {"check", "--provider", "xai"}, {"check", "--since", "7d"},
+		{"--since", "7d"}, {"stray"},
+	} {
+		var out, errw bytes.Buffer
+		if code := runModels(context.Background(), args, noEnv(), cache, "", manifest, now, &out, &errw); code != 2 || !strings.Contains(errw.String(), "usage:") {
+			t.Errorf("%v: exit %d %q", args, code, errw.String())
+		}
+	}
+	for _, since := range []string{"0d", "-1d", "0s", "xd"} {
+		var out, errw bytes.Buffer
+		if code := runModels(context.Background(), []string{"--changes", "--since", since}, noEnv(), cache, "", manifest, now, &out, &errw); code != 1 {
+			t.Errorf("--since %s: exit %d", since, code)
+		}
+	}
+}

@@ -25,7 +25,7 @@ type checkRow struct {
 	Candidate string   `json:"candidate,omitempty"`
 }
 
-// untieredNote: a provider some profile uses whose rows lack a tier (§3.7).
+// untieredNote: a provider a tier profile uses whose rows lack a tier (§3.7).
 type untieredNote struct {
 	Provider string `json:"provider"`
 	Count    int    `json:"count"`
@@ -76,9 +76,11 @@ func modelsCheckReport(tbl *models.Table, cfg models.Config, m *rolecfg.Manifest
 		}
 	}
 	report := checkReport{Profiles: rows}
-	providers := map[string]bool{}
+	providers := map[string]bool{} // only where a tier profile must resolve (foureyes)
 	for _, r := range rows {
-		providers[r.Provider] = true
+		if r.Tier != "" {
+			providers[r.Provider] = true
+		}
 	}
 	names := make([]string, 0, len(providers))
 	for p := range providers {

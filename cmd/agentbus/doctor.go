@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/usage"
@@ -333,15 +334,8 @@ func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) 
 	return "", ""
 }
 
-// doctorFails: the verdicts that make roles doctor exit 3 (and model-drift
-// warn). newer? is a hint and never fails (model-detection §3.3).
-func doctorFails(verdict string) bool {
-	switch verdict {
-	case "drift", "unknown model", "gone", "newer":
-		return true
-	}
-	return false
-}
+// doctorFails: the verdicts that make roles doctor exit 3 (health's one list).
+func doctorFails(verdict string) bool { return health.ModelVerdictFails(verdict) }
 
 // judgement is the model table's verdict on one model id, shared by roles
 // doctor (what runs) and models check (what is configured), so the two never
