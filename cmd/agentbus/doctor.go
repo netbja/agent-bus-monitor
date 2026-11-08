@@ -138,6 +138,11 @@ func argModel(argv []string) string {
 	return ""
 }
 
+// launchRisk is rolecfg's LaunchRisk (a test replaces it).
+var launchRisk = func(m *rolecfg.Manifest, role, project, profile string) (string, error) {
+	return m.LaunchRisk(role, project, profile)
+}
+
 func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, error) {
 	m, err := d.Manifest()
 	if err != nil {
@@ -178,7 +183,9 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 			}
 		}
 		r.Profile, r.Configured = cur.Profile, cur.Model
-		if risk, err := m.LaunchRisk(n, b.Project(), cur.Profile); err == nil {
+		if risk, err := launchRisk(m, n, b.Project(), cur.Profile); err != nil {
+			r.Risk = "not judged: " + err.Error() // never silent (foureyes): the launch would fail the same way
+		} else {
 			r.Risk = risk
 		}
 		if cur.Tier != "" { // the model the tier stands for now (§10.3)
