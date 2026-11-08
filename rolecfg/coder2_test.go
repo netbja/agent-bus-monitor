@@ -71,3 +71,37 @@ func TestCoder2Role(t *testing.T) {
 		}
 	}
 }
+
+// The person's rule (2026-11-08, every project): a step that waits on an
+// unmerged PR never leaves the implementer idle; master dispatches the next
+// independent item, the implementer takes it and says which. Each place
+// that tells an implementer or master how to hold says so.
+func TestNeverIdleOnAnUnmergedPR(t *testing.T) {
+	for _, f := range []string{"roles/coder.md", "roles/coder2.md", "roles/master.md",
+		"skills/agent-bus/SKILL.md", "skills/agent-bus-master/SKILL.md"} {
+		b, err := os.ReadFile(repoPath(t, f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := strings.Join(strings.Fields(string(b)), " ")
+		for _, want := range []string{"unmerged PR never leaves", "independent", "never", "origin/main"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s lacks %q", f, want)
+			}
+		}
+		// foureyes: no surface may call work in review "in flight" or "in hand".
+		for _, bad := range []string{"no package in flight", "touches no package in flight"} {
+			if strings.Contains(text, bad) {
+				t.Errorf("%s calls the work in review in flight: %q", f, bad)
+			}
+		}
+		if f == "skills/agent-bus-master/SKILL.md" || f == "roles/master.md" || strings.HasPrefix(f, "roles/coder") {
+			if !strings.Contains(text, "review is not in") {
+				t.Errorf("%s does not say work in review is not in hand or in flight", f)
+			}
+		}
+		if !strings.Contains(text, `means "wait"`) && !strings.Contains(text, `never means "wait`) && !strings.Contains(text, `not "wait`) && !strings.Contains(text, `never "wait`) {
+			t.Errorf("%s does not say no-stacked-PRs is not a wait", f)
+		}
+	}
+}

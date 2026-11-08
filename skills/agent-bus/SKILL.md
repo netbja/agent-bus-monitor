@@ -301,6 +301,11 @@ agentbus request next                       # which one to take next (exit 64: n
   (`finish first`): nothing overtakes work in hand. A delivered request in review does not hold
   you. You never set a priority: `request priority` is the person's, and it refuses an agent.
 
+- **An unmerged PR never leaves you idle.** When your next step depends on a PR that is not merged
+  yet, take the next independent request (`agentbus request next`), accept it and tell master
+  which one you took. One PR per step, each from `origin/main` ("no stacked PRs") never means
+  "wait".
+
 - Only the **target** agent can accept, block or complete its own request.
 - `block` does not require a prior `accept` — you may refuse work you never took, with a
   reason. After a block, `accept` again before you can complete it.
