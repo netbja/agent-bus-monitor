@@ -1,4 +1,4 @@
-                  │ focus: groups · → or tab: the keys                                          
+ ━━━━━━━━━━━━━━━━ │ focus: groups · → or tab: the keys                                          
  › Display        │ Display  how busmon looks; theme, icons and fade apply at once              
    Attention      │                                                                             
    Identity       │     Fade and slide            ● on                                          

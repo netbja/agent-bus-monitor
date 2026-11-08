@@ -317,6 +317,7 @@ const (
 	GlyphUp        = "↑"
 	GlyphDownArrow = "↓"
 	GlyphEllipsis  = "…"
+	GlyphFocusBar  = "━" // settings-focus-bar: heavy, unlike the light rules
 	GlyphDash      = "—"
 	GlyphBarFull   = "█"
 	GlyphBarEmpty  = "░"

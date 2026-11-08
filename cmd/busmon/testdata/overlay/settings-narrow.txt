@@ -1,4 +1,4 @@
- focus: tabs · ↓ or tab: the keys
+ focus: tabs · ↓ or tab: the keys ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  Display   Attention   Identity   Notifications   Services   Backup   
 
  Attention  how busmon calls you; bell and reminder timings apply at …
