@@ -14,6 +14,9 @@ func (m Model) View() tea.View {
 	v := tea.NewView(m.grid().render(m.paint))
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	if m.ui.idle { // any motion, or coming back to the window, wakes it (idle view §3)
+		v.MouseMode, v.ReportFocus = tea.MouseModeAllMotion, true
+	}
 	return v
 }
 
