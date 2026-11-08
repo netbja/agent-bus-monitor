@@ -102,7 +102,7 @@ func (m *Model) animated() bool {
 
 // scheduleFade schedules the next fade frame while one is due and none is.
 func (m *Model) scheduleFade() tea.Cmd {
-	if !m.animated() || m.sig.fading {
+	if !m.animated() || m.sig.fading || m.ui.idle { // no fade frame under the idle view (§6)
 		return nil
 	}
 	m.sig.fading = true

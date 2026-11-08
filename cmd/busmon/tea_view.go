@@ -14,6 +14,9 @@ func (m Model) View() tea.View {
 	v := tea.NewView(m.grid().render(m.paint))
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	if m.ui.idle { // any motion, or coming back to the window, wakes it (idle view §3)
+		v.MouseMode, v.ReportFocus = tea.MouseModeAllMotion, true
+	}
 	return v
 }
 
@@ -25,6 +28,9 @@ func (m Model) grid() *grid {
 		msg := fmt.Sprintf("terminal too small (%dx%d)", m.width, m.height)
 		drawLine(g, 0, m.height/2, m.width, Line{{Text: strings.Repeat(" ", max(0, (m.width-Width(msg))/2)) + msg, Role: RoleAttention}}, false)
 		return g
+	}
+	if m.ui.idle { // the idle view instead of the dashboard (idleview_draw.go)
+		return m.idleGrid()
 	}
 	header := headerRows(m.headerData(), m.width, l.Tier, l.Header.H)
 	for i := 0; i < l.Header.H && i < len(header); i++ {

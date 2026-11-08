@@ -131,6 +131,10 @@ var Keys = []*Key{
 	// hint after a working agent's pane is seen ready this long; 0 turns it off.
 	{Name: "display.idle_hint_after", Env: "AGENT_BUS_IDLE_HINT_AFTER", Kind: Duration, Default: 10 * time.Minute, ReadBy: "busmon",
 		env: envStallDuration, file: fileDuration(true)},
+	// busmon's idle view (spec 2026-11-08-busmon-idle-view-design.md §2): a
+	// calm screen after this long without input; 0 (the default) is off.
+	{Name: "display.idle_view_after", Env: "AGENT_BUS_IDLE_VIEW_AFTER", Kind: Duration, Default: time.Duration(0), ReadBy: "busmon",
+		env: envIdleView, file: fileIdleView},
 	{Name: "identity.as", Env: "AGENT_BUS_HUMAN", Kind: String, Default: "", ReadBy: "busmon, agentbus identity, ask, plugin", Legacy: true,
 		Flag: "busmon --as", Invalid: "busmon refuses to start",
 		env: func(raw string) (any, envResult) {
@@ -516,6 +520,33 @@ func envStallDuration(raw string) (any, envResult) {
 		return d, envUse
 	}
 	return nil, envSkip
+}
+
+// idleViewOK: the idle view's delay is 0 (off) or from 1m to 24h; a few
+// seconds would cover the dashboard while the person still reads it.
+func idleViewOK(d time.Duration) bool { return d == 0 || (d >= time.Minute && d <= 24*time.Hour) }
+
+// envIdleView: whole seconds or a Go duration, 0 or from 1m to 24h; anything
+// else is skipped, so the file's value or the default (off) applies.
+func envIdleView(raw string) (any, envResult) {
+	if v, res := envStallDuration(raw); res == envUse && idleViewOK(v.(time.Duration)) {
+		return v, envUse
+	}
+	return nil, envSkip
+}
+
+// fileIdleView: "0" or a Go duration from 1m to 24h; the settings page uses
+// the same rule.
+func fileIdleView(v any) (any, string) {
+	if s, ok := v.(string); ok {
+		if s == "0" {
+			return time.Duration(0), ""
+		}
+		if d, err := time.ParseDuration(s); err == nil && idleViewOK(d) {
+			return d, ""
+		}
+	}
+	return nil, "want 0 (off) or a duration from 1m to 24h, such as \"10m\""
 }
 
 // envPositiveFloat: today a value <= 0 (or none that parses) is the

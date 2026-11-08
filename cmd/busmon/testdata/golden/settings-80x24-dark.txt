@@ -11,7 +11,7 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ♙ sentinel  waiting  30m  —   prompt      health ok                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 21 default ──── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 22 default ──── esc back ─╮
 │  focus: keys · ← or tab: the tabs                                            ▲
 │  Display   Attention   Identity   Notifications   Services   Backup          ┃
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃

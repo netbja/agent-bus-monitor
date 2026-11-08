@@ -117,6 +117,12 @@ type uiState struct {
 	summary        bool                    // the recap's summary confirmation is open
 	summarySent    bool                    // the summary request is in flight: its success closes the recap
 	tour           *tourState              // the first-launch tour, when open (tour.go)
+	// The idle view (idleview.go): shown after display.idle_view_after with
+	// no input; lastInput is the last input's poll time (the first poll's
+	// until then), idleSince when the view was entered.
+	idle                 bool
+	idleBlurred          bool // the window was left while the view is shown: the next focus wakes it
+	lastInput, idleSince time.Time
 }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is
@@ -212,6 +218,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) update(msg tea.Msg) tea.Cmd {
+	if m.ui.idle && m.idleFocus(msg) {
+		return nil
+	}
+	if isInput(msg) {
+		if m.ui.idle { // the waking input does nothing else (idle view §3)
+			m.leaveIdle()
+			return nil
+		}
+		m.ui.lastInput = m.now
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -220,6 +236,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.layoutCompose()
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
+		if m.ui.lastInput.IsZero() { // a busmon left alone counts from its first poll (reviewer-codex)
+			m.ui.lastInput = msg.at
+		}
+		m.enterIdle()
 		m.endPriorityOverrides(msg.snap.requestsReadAt) // only a successful board read begun after the write
 		m.notice.fromPoll(msg.snap, m.cfg.self, msg.swaps, msg.swapLost)
 		if m.sig.started.IsZero() {

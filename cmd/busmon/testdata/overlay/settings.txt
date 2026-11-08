@@ -7,6 +7,7 @@
    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font                                   
                   │     Activity lines at start   25                                            
                   │     Idle? hint after          10m                                           
+                  │     Idle view after           off                                           
                   │                                                                             
                   │ ─────────────────────────────────────────────────────────────────────────── 
                   │ Icons · display.icons · from config.toml (default: off) · read by busmon    

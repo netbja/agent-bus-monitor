@@ -190,6 +190,9 @@ func (m *Model) applySettings(key string) string {
 	case "display.icons": // busmon-icons: drawn from the next frame on
 		cur.Icons = ns.Icons
 		return "icons applied and saved"
+	case "display.idle_view_after": // idle view §2: counted from the next poll on
+		cur.IdleView = ns.IdleView
+		return "applied and saved"
 	case "waiting.bell", "waiting.fade", "waiting.popup_after", "waiting.snooze", "recap.auto_after":
 		return "applied and saved"
 	}
@@ -962,6 +965,7 @@ var settingHelps = map[string]string{
 	"display.icons":           "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":           "Activity lines replayed when busmon starts; 0 or below: all history",
 	"display.idle_hint_after": "flags idle? on a working agent whose pane looks ready this long; 0 is off",
+	"display.idle_view_after": "a calm screen after this long without input; 0 = off",
 	"waiting.fade":            "fades a waiting agent in and out and slides the gauges (true colour only)",
 	"waiting.popup_after":     "the reminder opens once a decision has waited this long",
 	"waiting.snooze":          "how long a dismissed reminder stays away",

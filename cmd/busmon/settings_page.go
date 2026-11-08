@@ -55,7 +55,7 @@ type settingGroup struct {
 
 // settingLabels are the page's words for a key; one missing reads as the key.
 var settingLabels = map[string]string{
-	"display.theme": "Theme", "display.icons": "Icons", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after",
+	"display.theme": "Theme", "display.icons": "Icons", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after", "display.idle_view_after": "Idle view after",
 	"waiting.fade": "Fade and slide", "waiting.popup_after": "Reminder after", "waiting.snooze": "Reminder snooze",
 	"waiting.bell": "Bell", "dispatch.focus_notice": "Focused pane notice after", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "start.team": "Default team",
 	"sentinel.reload": "Auto-restart on update",
