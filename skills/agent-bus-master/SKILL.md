@@ -605,7 +605,11 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    task's full text; peers already have the file, pasting wastes tokens and drifts from the source
    of truth if the plan changes.
 2. **One task in flight at a time.** Don't dispatch N+1 until N clears BOTH: worker reports done,
-   AND the reviewer reports approve. An unreviewed "done" isn't done.
+   AND the reviewer reports approve. An unreviewed "done" isn't done. **But an unmerged PR never
+   leaves the implementer idle:** when N+1 depends on a PR still waiting for its merge, dispatch
+   the next *independent* board item instead (one that touches no package in flight); the
+   implementer takes it and tells you which. "No stacked PRs" means one PR per step from
+   `origin/main`, never "wait for the merge".
 3. **`agentbus reports --json` entries carry the full text in `.Full`** — no separate lookup needed,
    the plain-text tail view is the one that truncates.
 4. **If you poll `agentbus reports --json` yourself (e.g. from a background watcher), track the last

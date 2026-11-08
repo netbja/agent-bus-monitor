@@ -31,6 +31,13 @@ start the next task until master dispatches it. If a decision blocks you: a pers
 `waiting` (tell master, who asks the person); while master or another agent owes you something
 you are `idle`; `blocked` only while a 4-eyes gate on you is open.
 
+**An unmerged PR never leaves you idle.** When your next step depends on a PR that is not merged
+yet (`git merge-base --is-ancestor <its head> origin/main` fails), do not wait for it: take the next
+independent item master dispatched or the board holds for you (`agentbus request next`), accept it,
+and tell master which one you took. "No stacked PRs" means one PR per step, each from
+`origin/main`; it never means "wait". One task in hand at a time still holds: work in review is not
+in hand.
+
 **Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
 reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
 hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even

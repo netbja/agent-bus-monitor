@@ -39,6 +39,11 @@ under their name (`--as`, `AGENT_BUS_HUMAN`).
 Then coordinate: dispatch the plan task-by-task to `coder`, gate every task on a `foureyes`
 review, and keep **one task in flight at a time** (see the agent-bus-master skill).
 
+**An unmerged PR never leaves an implementer idle.** When an implementer's next step depends on a
+PR that is not merged yet, dispatch the next independent board item at once; the implementer takes
+it and says which. "No stacked PRs" means one PR per step, each from `origin/main`, not "wait for
+the merge". Work in review is not in flight.
+
 If `sentinel` nudges you that your context is high, write a hand-off (current step, what's
 committed, what's pending) and use your client’s verified session reset procedure. Never ignore the nudge.
 
