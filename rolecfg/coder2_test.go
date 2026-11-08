@@ -89,6 +89,17 @@ func TestNeverIdleOnAnUnmergedPR(t *testing.T) {
 				t.Errorf("%s lacks %q", f, want)
 			}
 		}
+		// foureyes: no surface may call work in review "in flight" or "in hand".
+		for _, bad := range []string{"no package in flight", "touches no package in flight"} {
+			if strings.Contains(text, bad) {
+				t.Errorf("%s calls the work in review in flight: %q", f, bad)
+			}
+		}
+		if f == "skills/agent-bus-master/SKILL.md" || f == "roles/master.md" || strings.HasPrefix(f, "roles/coder") {
+			if !strings.Contains(text, "review is not in") {
+				t.Errorf("%s does not say work in review is not in hand or in flight", f)
+			}
+		}
 		if !strings.Contains(text, `means "wait"`) && !strings.Contains(text, `never means "wait`) && !strings.Contains(text, `not "wait`) && !strings.Contains(text, `never "wait`) {
 			t.Errorf("%s does not say no-stacked-PRs is not a wait", f)
 		}
