@@ -39,22 +39,23 @@ func usageRefresh(b *bus.Bus) func(context.Context, string) error {
 	}
 }
 
-func modelsRefresh(b *bus.Bus) func(context.Context) error {
-	return func(ctx context.Context) error {
-		installed, err := b.ServicesInstalled(ctx)
-		if err != nil || !installed {
-			return err
-		}
-		return refreshModelsDaily(ctx)
-	}
+// modelsRefresh is the dispatcher's daily model refresh. G7 (model-detection
+// §3.5): it no longer waits for the project's services, so a dispatcher run
+// by hand refreshes too; the table is the machine's, not the project's.
+func modelsRefresh() func(context.Context) error {
+	return func(ctx context.Context) error { return dailyModelsRefresh(ctx) }
 }
 
+// dailyModelsRefresh is refreshModelsDaily (a test replaces it).
+var dailyModelsRefresh = refreshModelsDaily
+
 func refreshModelsDaily(ctx context.Context) error {
-	cfg, err := models.LoadConfig(models.ConfigPath())
+	cfg, err := loadModelsConfig(models.ConfigPath())
 	if err != nil {
 		return err
 	}
-	return refreshModelsUnderLock(ctx, models.CachePath(), cfg.Tiers, models.Readers(models.RealEnv()), time.Now())
+	// The dispatcher's: built-in readers only, never an adapter (repository code).
+	return refreshModelsUnderLock(ctx, models.CachePath(), cfg.Tiers, dispatcherModelReaders(), time.Now())
 }
 
 func refreshModelsUnderLock(ctx context.Context, path string, tiers models.TierMap, readers []models.Reader, now time.Time) error {
@@ -69,21 +70,11 @@ func refreshModelsUnderLock(ctx context.Context, path string, tiers models.TierM
 // reader still running then keeps its provider's rows and is a failure, and
 // the rest is saved. failed: the providers whose read failed, with why.
 func refreshTable(ctx context.Context, path string, tiers models.TierMap, readers []models.Reader, now time.Time, budget time.Duration) (failed map[string]string, held bool, err error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, false, err
+	unlock, held, err := lockTable(path)
+	if err != nil || held {
+		return nil, held, err
 	}
-	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, false, err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, true, nil
-		}
-		return nil, false, err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer unlock()
 	table, err := models.Load(path)
 	if err != nil {
 		return nil, false, err
@@ -102,4 +93,24 @@ func refreshTable(ctx context.Context, path string, tiers models.TierMap, reader
 		return failed, false, ctx.Err()
 	}
 	return failed, false, table.Save(path)
+}
+
+// lockTable takes the model table's lock without waiting: held when another
+// process has it (nothing to do then).
+func lockTable(path string) (unlock func(), held bool, err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, false, err
+	}
+	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		lock.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, true, nil
+		}
+		return nil, false, err
+	}
+	return func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); lock.Close() }, false, nil
 }

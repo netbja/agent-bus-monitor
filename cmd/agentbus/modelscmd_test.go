@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"os"
@@ -91,6 +92,7 @@ profile = "sol"
 func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*rolecfg.Manifest, error)) {
 	t.Helper()
 	dir := t.TempDir()
+	isolateModelSettings(t, dir, "")
 	cache = filepath.Join(dir, "models.json")
 	at := now.UnixMilli()
 	tbl := &models.Table{Providers: map[string]*models.Provider{
@@ -111,6 +113,50 @@ func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*
 		t.Fatal(err)
 	}
 	return cache, func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+}
+
+// isolateModelSettings: the settings come from an empty home, with
+// AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
+func isolateModelSettings(t *testing.T, dir, maxAge string) {
+	t.Helper()
+	old := modelsGetenv
+	t.Cleanup(func() { modelsGetenv = old })
+	modelsGetenv = func(k string) string {
+		switch k {
+		case "HOME", "XDG_CONFIG_HOME":
+			return dir
+		case "AGENT_BUS_MODELS_SOURCE_MAX_AGE":
+			return maxAge
+		}
+		return ""
+	}
+}
+
+// §3.2: the listing prints the source's own age; models check says unknown
+// for a source older than models.source_max_age.
+func TestModelsSourceAge(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	cache, manifest := checkFixture(t, now)
+	tbl, _ := models.Load(cache)
+	tbl.Providers["xai"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	if err := tbl.Save(cache); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	if code := runModels(context.Background(), []string{"--provider", "xai"}, noEnv(), cache, "", manifest, now, &out, &errw); code != 0 || !strings.Contains(out.String(), "source 12 days old") {
+		t.Fatalf("exit %d:\n%s", code, out.String())
+	}
+	out.Reset()
+	runModels(context.Background(), []string{"check"}, noEnv(), cache, "", manifest, now, &out, &errw)
+	if !strings.Contains(out.String(), "xai's catalogue is 12 days old (models.source_max_age 7 days)") {
+		t.Fatalf("default 7d not applied:\n%s", out.String())
+	}
+	isolateModelSettings(t, t.TempDir(), "30d")
+	out.Reset()
+	runModels(context.Background(), []string{"check"}, noEnv(), cache, "", manifest, now, &out, &errw)
+	if strings.Contains(out.String(), "catalogue is 12 days old") || !strings.Contains(out.String(), "newer?") {
+		t.Fatalf("models.source_max_age 30d not read:\n%s", out.String())
+	}
 }
 
 // noEnv: a client is never called (a test reads no real client).
@@ -317,5 +363,148 @@ func TestModelsAutoRefreshSkipsAHeldLock(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "grok-4.6") || !strings.Contains(errw.String(), "another refresh") {
 		t.Fatalf("out:\n%s\nerr:\n%s", out.String(), errw.String())
+	}
+}
+
+// foureyes (step 2, P2): a budget overrun still saves what was read: the
+// providers that answered keep their new rows, and the attempt time moves,
+// so the next `agentbus models` does not pay the budget again.
+func TestRefreshTableSavesWhatWasReadOnOverrun(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	age(t, cache, 25*time.Hour)
+	block := make(chan struct{})
+	defer close(block)
+	readers := []models.Reader{
+		{Provider: "xai", Read: func(context.Context) ([]models.Row, string, error) { <-block; return nil, "", nil }},
+		{Provider: "openai", Read: func(context.Context) ([]models.Row, string, error) {
+			return []models.Row{{Provider: "openai", ID: "gpt-7-sol"}}, "codex", nil
+		}},
+	}
+	failed, held, err := refreshTable(context.Background(), cache, nil, readers, now, 100*time.Millisecond)
+	if err != nil || held || failed["xai"] == "" {
+		t.Fatalf("failed %v held %v err %v", failed, held, err)
+	}
+	tbl, err := models.Load(cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := tbl.Providers["openai"]; p.Rows[0].ID != "gpt-7-sol" || p.ReadAt != now.UnixMilli() {
+		t.Fatalf("the answered provider was not saved: %+v", p)
+	}
+	if tbl.RefreshedAt() != now.UnixMilli() {
+		t.Fatalf("attempt time %d, want %d", tbl.RefreshedAt(), now.UnixMilli())
+	}
+}
+
+// foureyes (step 2, P3): a table dated in the future (a clock moved back) is
+// refreshed, never trusted as young.
+func TestModelsAutoRefreshFutureTable(t *testing.T) {
+	now := time.Now()
+	cache, manifest := checkFixture(t, now)
+	age(t, cache, -2*time.Hour)
+	calls := 0
+	var out, errw bytes.Buffer
+	if code := runModels(context.Background(), []string{"--provider", "xai"}, countingEnv(&calls, nil), cache, "", manifest, now, &out, &errw); code != 0 || calls != 1 {
+		t.Fatalf("a future-dated table was not refreshed: exit %d, calls %d", code, calls)
+	}
+}
+
+// foureyes (step 2, P3): the usage errors.
+func TestModelsUsageRefusals(t *testing.T) {
+	now := time.Now()
+	cache, manifest := checkFixture(t, now)
+	for _, args := range [][]string{
+		{"check", "--refresh"}, {"check", "--changes"}, {"check", "--provider", "xai"}, {"check", "--since", "7d"},
+		{"--since", "7d"}, {"stray"},
+	} {
+		var out, errw bytes.Buffer
+		if code := runModels(context.Background(), args, noEnv(), cache, "", manifest, now, &out, &errw); code != 2 || !strings.Contains(errw.String(), "usage:") {
+			t.Errorf("%v: exit %d %q", args, code, errw.String())
+		}
+	}
+	for _, since := range []string{"0d", "-1d", "0s", "xd"} {
+		var out, errw bytes.Buffer
+		if code := runModels(context.Background(), []string{"--changes", "--since", since}, noEnv(), cache, "", manifest, now, &out, &errw); code != 1 {
+			t.Errorf("--since %s: exit %d", since, code)
+		}
+	}
+}
+
+// §3.9: an adapter with a models argv in roles.toml is read with the
+// built-in clients: its rows appear under its profiles' provider. One that
+// claims a built-in provider is refused, by name.
+func TestModelsAdapterReader(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "roles.toml")
+	m := checkManifest + `[adapters.deep]
+executable = "./deep"
+models = ["./deep-models", "--list"]
+[adapters.fake]
+executable = "./fake"
+models = ["./fake-models"]
+[profiles.ds]
+client = "deep"
+provider = "deepseek"
+model = "deepseek-v4"
+[profiles.fk]
+client = "fake"
+provider = "openai"
+model = "gpt-6-sol"
+`
+	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+	env := noEnv()
+	env.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name == filepath.Join(dir, "deep-models") && len(args) == 1 && args[0] == "--list" {
+			return []byte("deepseek-v4\tDeepSeek V4\n"), nil
+		}
+		return nil, errors.New("not installed")
+	}
+	var out, errw bytes.Buffer
+	if code := runModels(context.Background(), []string{"--refresh", "--provider", "deepseek"}, env, cache, "", manifest, now, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "deepseek-v4") {
+		t.Fatalf("the adapter's rows are missing:\n%s\n%s", out.String(), errw.String())
+	}
+	if !strings.Contains(errw.String(), "adapter fake: provider openai has a built-in reader") {
+		t.Fatalf("a built-in provider was not refused:\n%s", errw.String())
+	}
+	out.Reset()
+	runModels(context.Background(), []string{"check"}, env, cache, "", manifest, now, &out, &errw)
+	if !strings.Contains(out.String(), "ds         deepseek") || strings.Contains(out.String(), "deepseek-v4                        unknown") {
+		t.Fatalf("the adapter's profile is not judged against its rows:\n%s", out.String())
+	}
+}
+
+// reviewer-codex: a tier profile on a source older than models.source_max_age
+// is unknown, never ok, and that provider's untiered rows are not counted.
+func TestModelsCheckTierOldSource(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	cache, manifest := checkFixture(t, now)
+	tbl, _ := models.Load(cache)
+	tbl.Providers["openai"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	tbl.Providers["moonshot"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	if err := tbl.Save(cache); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	runModels(context.Background(), []string{"check", "--json"}, noEnv(), cache, "", manifest, now, &out, &errw)
+	var rep checkReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatalf("%v\n%s", err, out.String())
+	}
+	for _, r := range rep.Profiles {
+		if r.Profile == "spare" && (r.Verdict != "unknown" || !strings.Contains(r.Why, "openai's catalogue is 12 days old")) {
+			t.Fatalf("tier profile on an old source: %+v", r)
+		}
+	}
+	if len(rep.Untiered) != 0 {
+		t.Fatalf("an old source's untiered rows counted: %+v", rep.Untiered)
 	}
 }

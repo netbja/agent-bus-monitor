@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -104,5 +105,40 @@ func TestRefreshAbandonsAtTheReadersOwnDeadline(t *testing.T) {
 func TestReaderTimeoutIs20s(t *testing.T) {
 	if ReaderTimeout != 20*time.Second {
 		t.Fatalf("ReaderTimeout %v: an explicit --refresh keeps 20 s per reader (§3.5)", ReaderTimeout)
+	}
+}
+
+// Each built-in client's provider (a client update refreshes it, §3.5).
+func TestProviderOfClient(t *testing.T) {
+	for c, p := range map[string]string{"claude-code": "anthropic", "codex": "openai", "grok": "xai", "kimi-cli": "moonshot", "agy": "google", "other": ""} {
+		if got := ProviderOfClient(c); got != p {
+			t.Errorf("%s: %q", c, got)
+		}
+	}
+}
+
+// §3.9: an adapter's listing is agy's format, id<TAB>label lines, run from a
+// fixed argv; its source is live.
+func TestAdapterReader(t *testing.T) {
+	var ran []string
+	e := Env{Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		ran = append([]string{name}, args...)
+		return []byte("Listing...\ndeepseek-v4\tDeepSeek V4\ndeepseek-v3.2\tDeepSeek V3.2\n\n"), nil
+	}}
+	r := AdapterReader("deepseek", "deep", []string{"/a/deep-models", "--list"}, e)
+	rows, home, err := r.Read(context.Background())
+	if err != nil || len(rows) != 2 || rows[0].ID != "deepseek-v4" || rows[0].Label != "DeepSeek V4" || rows[0].Provider != "deepseek" || rows[0].Client != "deep" {
+		t.Fatalf("rows %+v %v", rows, err)
+	}
+	if strings.Join(ran, " ") != "/a/deep-models --list" || home != "/a/deep-models --list" {
+		t.Fatalf("ran %v, home %q", ran, home)
+	}
+	now := time.Now()
+	if r.SourceAt(now) != now.UnixMilli() {
+		t.Fatal("an adapter's source is its live answer")
+	}
+	e.Run = func(context.Context, string, ...string) ([]byte, error) { return []byte("no tab here\n"), nil }
+	if _, _, err := AdapterReader("deepseek", "deep", []string{"/a/x"}, e).Read(context.Background()); err == nil {
+		t.Fatal("a listing with no id<TAB>label line was accepted")
 	}
 }

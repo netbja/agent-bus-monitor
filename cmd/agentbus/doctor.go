@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/usage"
@@ -39,6 +40,9 @@ type doctorRow struct {
 	// Risk is an agy role's elevated options and the denies agy cannot
 	// enforce, in its launch's words (agy-client §4.2, §4.4); never a verdict.
 	Risk string `json:"risk,omitempty"`
+	// usedAt is when the transcript last showed Used (Unix ms; 0 = none):
+	// recordAliases trusts only a fresh one.
+	usedAt int64
 }
 
 type doctorDeps struct {
@@ -101,7 +105,7 @@ func doctorTable() *models.Table {
 }
 
 func doctorConfig() models.Config {
-	c, _ := models.LoadConfig(models.ConfigPath())
+	c, _ := loadModelsConfig(models.ConfigPath())
 	return c
 }
 
@@ -215,7 +219,7 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 				used = u
 			}
 		}
-		r.Used = used.Model
+		r.Used, r.usedAt = used.Model, used.TS
 		stale := false
 		if used.TS > 0 {
 			age := d.Now().Sub(time.UnixMilli(used.TS))
@@ -333,14 +337,29 @@ func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) 
 	return "", ""
 }
 
-// doctorFails: the verdicts that make roles doctor exit 3 (and model-drift
-// warn). newer? is a hint and never fails (model-detection §3.3).
-func doctorFails(verdict string) bool {
-	switch verdict {
-	case "drift", "unknown model", "gone", "newer":
-		return true
+// doctorFails: the verdicts that make roles doctor exit 3 (health's one list).
+func doctorFails(verdict string) bool { return health.ModelVerdictFails(verdict) }
+
+// sourceTooOld: p's source is older than models.source_max_age (§3.2); an
+// unknown source age (0) is never too old. Every verdict and summary that
+// trusts p's rows asks it first.
+func sourceTooOld(p *models.Provider, cfg models.Config, now time.Time, provider string) (string, bool) {
+	if p == nil || p.SourceAt <= 0 || cfg.SourceMaxAge <= 0 {
+		return "", false
 	}
-	return false
+	age := now.Sub(time.UnixMilli(p.SourceAt))
+	if age <= cfg.SourceMaxAge {
+		return "", false
+	}
+	return fmt.Sprintf("%s's catalogue is %s old (models.source_max_age %s)", provider, ageWords(age), ageWords(cfg.SourceMaxAge)), true
+}
+
+// ageWords is a catalogue age: whole days from 2 days, else hours.
+func ageWords(d time.Duration) string {
+	if d >= 48*time.Hour {
+		return fmt.Sprintf("%d days", int(d/(24*time.Hour)))
+	}
+	return fmt.Sprintf("%dh", int(d/time.Hour))
 }
 
 // judgement is the model table's verdict on one model id, shared by roles
@@ -358,7 +377,7 @@ type judgement struct {
 // family order in models.toml), naming a model the same catalogue lists;
 // "newer?" when the catalogue lists a higher version of the same stem and
 // suffix and no family order speaks for id (§3.3); "unknown" when there is
-// no fresh read.
+// no fresh read, or its source is older than cfg.SourceMaxAge.
 func judgeModel(tbl *models.Table, cfg models.Config, now time.Time, provider, id string) judgement {
 	if tbl == nil {
 		return judgement{Verdict: "unknown", Why: "no model table: agentbus models --refresh"}
@@ -369,6 +388,9 @@ func judgeModel(tbl *models.Table, cfg models.Config, now time.Time, provider, i
 		if p != nil && p.Error != "" {
 			why += " (last read failed: " + p.Error + ")"
 		}
+		return judgement{Verdict: "unknown", Why: why}
+	}
+	if why, old := sourceTooOld(p, cfg, now, provider); old {
 		return judgement{Verdict: "unknown", Why: why}
 	}
 	row, found := p.Find(id)

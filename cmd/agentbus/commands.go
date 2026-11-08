@@ -560,7 +560,7 @@ var commands = []cli.Command{
 		Flags: []cli.Flag{
 			{Long: "refresh", Short: 'r', Help: "read every client's catalogue again (20 s per reader)"},
 			{Long: "provider", Short: 'P', Arg: "<p>", Help: "only this provider"},
-			{Long: "changes", Help: "the table's events, oldest first"},
+			{Long: "changes", Help: "the table's events, newest first"},
 			{Long: "since", Arg: "<7d|24h>", Help: "changes: only this far back"},
 			fJSON,
 		},

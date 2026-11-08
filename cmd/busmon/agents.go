@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	healthcheck "github.com/netbja/agent-bus-monitor/health"
 )
 
 // parseCtx reads UsageSnapshot.Ctx as a token count: an optional trailing
@@ -89,7 +90,7 @@ func busyUndeclared(a *agentState, now time.Time) bool {
 // not run the model roles.toml configures, or its model was refused. A
 // verdict about another pid (the agent was relaunched since) says nothing.
 func modelDrift(a *agentState) bool {
-	return a.model != nil && (a.model.Verdict == "drift" || a.model.Verdict == "unknown model" || a.model.Verdict == "gone" || a.model.Verdict == "newer") &&
+	return a.model != nil && healthcheck.ModelVerdictFails(a.model.Verdict) &&
 		a.model.PID != 0 && a.model.PID == a.pid
 }
 

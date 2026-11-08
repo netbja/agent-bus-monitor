@@ -865,6 +865,28 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   setup.sh refreshes the table at the end of an install (`AGENTBUS_SETUP_NO_MODELS=1` skips it; the
   installer tests set it); the sentinel refreshes it daily. busmon shows a gauge per provider and `held`. `refresh` no longer reads ccstatusline
   nor writes `{p}:budget` (the service replaces that hash as a whole).
+  Model detection (spec 2026-11-08-model-detection-design.md): the table remembers (`seen`,
+  `events` capped at 200, `aliases` per provider, `source_at`, `clients`); `agentbus models
+  --changes [--since 7d]` lists the events newest first; `agentbus models check [--json]` judges
+  every roles.toml profile and fallback, used or not (`ok`, `gone`, `newer`, `newer?` = a listed
+  higher version not stated as a successor and never a failure, `not listed (partial)`,
+  `untiered`, `unknown`; exit 3 on gone, newer, untiered); `roles doctor --agent <name>` shows one
+  row. Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
+  the table's lock (skipped when held), 10 s in all, a late reader keeping its rows and named in
+  `refresh incomplete: <provider> <reason>`. The daily refresh no longer waits for services. A
+  source older than `models.source_max_age` (7 d) withholds every verdict. The `model-catalogue`
+  health check (hourly, handler sentinel) warns on a configured model gone, newer or newer?, an
+  old source (with how to refresh it) or a read failing for more than 2 days, for the providers a
+  profile uses; ok, its detail is the last 24 h's news (`new: xai grok-4.7 (2h) · anthropic opus
+  now claude-opus-5-5`). The doctor task records Claude alias moves from fresh transcripts; a
+  client update forces its provider's refresh once per installed version. An adapter may list its
+  models (`models = [argv]` in `[adapters.<client>]`, `id<TAB>label` lines, docs/AGENT-PROFILES.md):
+  only `agentbus models` (refresh, auto-refresh, check), run by a person or an agent, reads it.
+  The dispatcher's model readers (the model-catalogue check, the daily refresh) are the built-in
+  clients only (`dispatcherModelReaders`, `TestDispatcherReadsNoAdapter`): the argv is relative to
+  roles.toml in the repository, and the dispatcher never runs repository code. An adapter's old
+  source is named with `agentbus models --refresh` as its hint.
+  Nothing writes roles.toml on its own (`TestNoProfileWriter`; `roles adopt` is the person's act).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
   one Lua script (`askCreate`, `askAnswer`, `askWithdraw`); the id is the stream id of the `ask` cmd
