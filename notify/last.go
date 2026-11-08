@@ -255,3 +255,16 @@ func writeLast(path string, l Last) error {
 	}
 	return os.Rename(tmp.Name(), path)
 }
+
+// Rename moves target old's record to name (notify-guided-setup §3: its last
+// test stays). A record already under name is a removed target's, stale
+// (notify.toml holds name free): it is replaced (foureyes). Nothing moves
+// when old has none.
+func (l *Last) Rename(old, name string) {
+	r, ok := l.Targets[old]
+	if !ok {
+		return
+	}
+	l.Targets[name] = r
+	delete(l.Targets, old)
+}

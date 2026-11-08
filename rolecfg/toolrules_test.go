@@ -220,6 +220,9 @@ var reloadAsDeny = []string{"Bash(agentbus reload *--as*)", "Bash(agentbus * rel
 var configDeny = []string{"Edit(~/.config/agentbus/config.toml)",
 	"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
 	"Bash(agentbus notifications test*)",
+	// notify-guided-setup §2: the subcommands that write notify.toml or show a topic.
+	"Bash(agentbus notifications add*)", "Bash(agentbus notifications remove*)", "Bash(agentbus notifications rename*)",
+	"Bash(agentbus notifications setup*)", "Bash(agentbus notifications show-topic*)",
 	// suspend spec §4: plain forms only, the commands refuse agent callers.
 	"Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
 	// request-priority §4: the plain form only, the command refuses agent callers.
@@ -464,5 +467,49 @@ func TestDeliversField(t *testing.T) {
 		if _, err := Load(writeConfig(t, c.body)); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want %q", name, err, c.want)
 		}
+	}
+}
+
+// notify-guided-setup §2: a role whose rules deny the writing subcommands
+// also denies them after the project's global flag, at launch; status and
+// test stay as they are, and nothing denies prose ("* notifications").
+func TestNotifyProjectDenies(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := NotifyProjectDenies("demo")
+	if len(d) != 15 {
+		t.Fatalf("%d project spellings: %q", len(d), d)
+	}
+	for _, want := range []string{"Bash(agentbus --project demo notifications add*)", "Bash(agentbus --project=demo notifications show-topic*)",
+		"Bash(agentbus -p demo notifications setup*)"} {
+		if !slices.Contains(d, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	for _, role := range m.roleOrder {
+		r, err := m.ProjectLaunchRules(role, "demo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range append(append([]string{}, NotifyWriteDenies...), d...) {
+			if !slices.Contains(r.Deny, want) {
+				t.Errorf("%s does not deny %s", role, want)
+			}
+		}
+		for _, rule := range r.Deny {
+			if strings.Contains(rule, "notifications status") || strings.Contains(rule, "* notifications") {
+				t.Errorf("%s denies %s", role, rule)
+			}
+		}
+	}
+	// A manifest without the shared denies gains no project spelling.
+	bare, err := Load(writeConfig(t, "[roles.coder]\nmodel = \"sonnet\"\npermission = \"manual\"\ntier = \"boot\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := bare.ProjectLaunchRules("coder", "demo"); len(r.Deny) != 0 {
+		t.Errorf("bare manifest denies %q", r.Deny)
 	}
 }

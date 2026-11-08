@@ -36,11 +36,21 @@ type notificationsDeps struct {
 	// AgentCaller names the registered agent this process descends from
 	// ("" = none); errNoAncestry off Linux, where the env rule alone applies.
 	AgentCaller func(ctx context.Context) (string, error)
+	// Term opens the controlling terminal (nil, or an error: none); the
+	// only place a topic is shown (notify-guided-setup §4).
+	Term          func() (notifyTerm, func(), error)
+	Stdin         io.Reader // --webhook-stdin, a "-" file
+	StdinTerminal bool      // setup asks its questions only then
+	// GlobalFlags: --project or --host came before the command. The writing
+	// and revealing subcommands refuse it (reviewer-codex): their plain deny
+	// then covers every spelling that runs.
+	GlobalFlags bool
 }
 
 func realNotificationsDeps() notificationsDeps {
 	return notificationsDeps{Getenv: os.Getenv, Now: time.Now, Hostname: os.Hostname,
-		Desktop: desktopRun(exec.LookPath, runQuiet), AgentCaller: agentAncestor}
+		Desktop: desktopRun(exec.LookPath, runQuiet), AgentCaller: agentAncestor,
+		Term: openTTY, Stdin: os.Stdin, StdinTerminal: stdinIsTerminal()}
 }
 
 // errNoAncestry and agentAncestor are the shared rule (internal/agentcaller),
@@ -63,9 +73,12 @@ func desktopRun(lookPath func(string) (string, error), run func(ctx context.Cont
 	}
 }
 
-const notificationsUsage = "usage: agentbus notifications status | test [<target>]"
+const notificationsUsage = "usage: agentbus notifications status | test [<target>] | setup | add | remove | rename | show-topic"
 
 func runNotifications(ctx context.Context, args []string, d notificationsDeps, out, errw io.Writer) int {
+	if code, ok := runNotifySetup(ctx, args, d, out, errw); ok {
+		return code
+	}
 	switch {
 	case len(args) == 1 && args[0] == "status":
 		return notificationsStatus(d, out, errw)
@@ -77,7 +90,7 @@ func runNotifications(ctx context.Context, args []string, d notificationsDeps, o
 		return notificationsTest(ctx, target, d, out, errw)
 	}
 	fmt.Fprintln(errw, notificationsUsage)
-	return 2
+	return 1 // nothing ran: 2 is a written target whose test failed (notify-guided-setup §6, foureyes)
 }
 
 // notifyStateDir is <state> = $XDG_STATE_HOME/agentbus, else
@@ -182,7 +195,7 @@ func notificationsStatus(d notificationsDeps, out, errw io.Writer) int {
 	f := notify.Load(notify.Path(d.Getenv))
 	switch {
 	case !f.Exists:
-		fmt.Fprintln(out, "notify.toml: none (copy a table from the guide; agentbus never writes it)")
+		fmt.Fprintln(out, "notify.toml: none (agentbus notifications setup writes it)")
 	case f.Refused != "":
 		fmt.Fprintln(out, "notify.toml: refused:", f.Refused)
 	default:

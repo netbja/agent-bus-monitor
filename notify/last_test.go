@@ -182,3 +182,30 @@ func TestReserveAndUnreserve(t *testing.T) {
 		t.Fatal("unreserved")
 	}
 }
+
+// notify-guided-setup §3: a rename moves the target's record, so its last
+// test stays; an absent record or a taken name moves nothing.
+func TestLastRename(t *testing.T) {
+	now := time.Now()
+	var l Last
+	l.Add("phone", Outcome{At: now, OK: true, Test: true}, true)
+	l.Add("team", Outcome{At: now, OK: false}, false)
+	l.Rename("phone", "mobile")
+	if _, ok := l.Latest("phone"); ok {
+		t.Error("the old name keeps its record")
+	}
+	if o, ok := l.Latest("mobile"); !ok || !o.OK || !o.Test || l.SentInHour("mobile", now) != 1 {
+		t.Errorf("mobile: %+v %v", o, ok)
+	}
+	l.Rename("nothing", "x")
+	if _, ok := l.Latest("x"); ok {
+		t.Error("an absent record made one")
+	}
+	l.Rename("mobile", "team") // team's record is a removed target's: stale, replaced
+	if o, _ := l.Latest("team"); !o.OK || !o.Test {
+		t.Error("a stale record under the new name was kept")
+	}
+	if _, ok := l.Latest("mobile"); ok {
+		t.Error("the old name keeps its record")
+	}
+}

@@ -108,6 +108,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 			} else {
 				wantO.Deny = append(append(wantO.Deny, DeliverDeny...), DeliverProjectDenies("demo")...)
 			}
+			wantO.Deny = append(wantO.Deny, NotifyProjectDenies("demo")...)
 			if !reflect.DeepEqual(wantO, o2) {
 				t.Fatalf("%s's rules %+v, want %+v", role, o2, wantO)
 			}

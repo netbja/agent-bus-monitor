@@ -882,7 +882,8 @@ The dispatch service can tell you, away from the desk, what waits for you: a dec
 stall, a failing health check, a notice only you can act on, a pane stuck on its client's prompt
 ([spec](docs/superpowers/specs/2026-11-03-notifications-design.md)). Targets are ntfy (ntfy.sh by
 default, or your own server), Discord and the desktop (`notify-send`), each a table in
-`~/.config/agentbus/notify.toml`, a file you write yourself, `0600`, never read by an agent: its
+`~/.config/agentbus/notify.toml`, `0600`, never read by an agent, which `agentbus notifications setup`
+writes for you on a terminal (or `notifications add ntfy|discord|desktop`): its
 topics, tokens and webhooks are secrets. `notify.on`, `notify.targets` and the rest are settings
 (`config.toml` or busmon's C page). A summary is sent by default, no agent's text; `detail =
 "full"` reaches only the desktop or a ntfy server you mark `self_hosted = true`. Each event is sent

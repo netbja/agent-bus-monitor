@@ -53,8 +53,11 @@ func envOr(key, def string) string {
 func main() {
 	// Short flags become long ones (the table in commands.go), so every
 	// parser below sees only the long forms it always read.
-	args := expandArgs(os.Args[1:])
-	args, host, project := globalArgs(args)
+	raw := expandArgs(os.Args[1:])
+	args, host, project := globalArgs(raw)
+	// globalSeen: a global flag was given, anywhere and whatever its value
+	// ("--host ''" too): the notifications setup refuses one (reviewer-codex).
+	globalSeen := len(args) != len(raw)
 	explicitProject := project // named on the command line, not inherited from AGENT_BUS_PROJECT
 	if project == "" {
 		project = os.Getenv("AGENT_BUS_PROJECT")
@@ -97,7 +100,9 @@ func main() {
 	// and the person's test send; no project. status needs no broker; test
 	// reads the broker's agents to refuse an agent's process (on Linux).
 	if len(args) >= 1 && args[0] == "notifications" {
-		os.Exit(runNotifications(context.Background(), args[1:], realNotificationsDeps(), os.Stdout, os.Stderr))
+		d := realNotificationsDeps()
+		d.GlobalFlags = globalSeen
+		os.Exit(runNotifications(context.Background(), args[1:], d, os.Stdout, os.Stderr))
 	}
 	// identity is the person's name in config.toml, else the legacy busmon.toml: no project, no broker.
 	if len(args) >= 1 && args[0] == "identity" {
