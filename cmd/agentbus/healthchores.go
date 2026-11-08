@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -50,11 +51,12 @@ func modelsRefresh() func(context.Context) error {
 var dailyModelsRefresh = refreshModelsDaily
 
 func refreshModelsDaily(ctx context.Context) error {
-	cfg, err := models.LoadConfig(models.ConfigPath())
+	cfg, err := loadModelsConfig(models.ConfigPath())
 	if err != nil {
 		return err
 	}
-	return refreshModelsUnderLock(ctx, models.CachePath(), cfg.Tiers, models.Readers(models.RealEnv()), time.Now())
+	readers := modelReaders(models.RealEnv(), manifestFromEnv, io.Discard) // §3.9: adapters too
+	return refreshModelsUnderLock(ctx, models.CachePath(), cfg.Tiers, readers, time.Now())
 }
 
 func refreshModelsUnderLock(ctx context.Context, path string, tiers models.TierMap, readers []models.Reader, now time.Time) error {

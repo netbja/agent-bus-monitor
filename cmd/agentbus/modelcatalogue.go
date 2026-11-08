@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"sort"
 	"time"
@@ -32,18 +33,22 @@ type catalogueReader struct {
 	config   string // models.toml
 	manifest func() (*rolecfg.Manifest, error)
 	readers  []models.Reader
+	env      *models.Env // set: the readers are modelReaders' (built-in and adapters), read at each pass
 	now      func() time.Time
 }
 
 func realCatalogueReader() catalogueReader {
-	return catalogueReader{cache: models.CachePath(), config: models.ConfigPath(), readers: models.Readers(models.RealEnv()), now: time.Now,
-		manifest: func() (*rolecfg.Manifest, error) {
-			path, err := manifestPath(os.Environ())
-			if err != nil {
-				return nil, err
-			}
-			return rolecfg.Load(path)
-		}}
+	env := models.RealEnv()
+	return catalogueReader{cache: models.CachePath(), config: models.ConfigPath(), env: &env, now: time.Now, manifest: manifestFromEnv}
+}
+
+// manifestFromEnv is roles.toml as the launcher finds it.
+func manifestFromEnv() (*rolecfg.Manifest, error) {
+	path, err := manifestPath(os.Environ())
+	if err != nil {
+		return nil, err
+	}
+	return rolecfg.Load(path)
 }
 
 func (r catalogueReader) run(ctx context.Context) (health.Outcome, error) {
@@ -59,7 +64,11 @@ func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 		return in
 	}
 	// G7: no service needed; a held lock or a failed reader keeps the table as it is.
-	_, _, _ = refreshTable(ctx, r.cache, cfg.Tiers, r.readers, now, catalogueRefreshBudget)
+	readers := r.readers
+	if r.env != nil {
+		readers = modelReaders(*r.env, r.manifest, io.Discard)
+	}
+	_, _, _ = refreshTable(ctx, r.cache, cfg.Tiers, readers, now, catalogueRefreshBudget)
 	tbl, err := models.Load(r.cache)
 	if err != nil {
 		in.ReadErr = "model table unreadable"

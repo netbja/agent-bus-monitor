@@ -62,13 +62,13 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		if err != nil {
 			fmt.Fprintf(errw, "models: %v (starting a new table)\n", err)
 		}
-		reportIncomplete(errw, tbl.Refresh(ctx, models.Readers(env), cfg.Tiers, now))
+		reportIncomplete(errw, tbl.Refresh(ctx, modelReaders(env, manifest, errw), cfg.Tiers, now))
 		if err := tbl.Save(cachePath); err != nil {
 			fmt.Fprintf(errw, "models: saving %s: %v\n", cachePath, err)
 			return 1
 		}
 	} else { // G7: any form refreshes a table over 24 h old, bounded, never blocking
-		failed, held, err := refreshTable(ctx, cachePath, cfg.Tiers, models.Readers(env), now, autoRefreshBudget)
+		failed, held, err := refreshTable(ctx, cachePath, cfg.Tiers, modelReaders(env, manifest, errw), now, autoRefreshBudget)
 		switch {
 		case err != nil:
 			fmt.Fprintf(errw, "models: automatic refresh: %v\n", err)
@@ -135,6 +135,37 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		}
 	}
 	return 0
+}
+
+// modelReaders are the built-in readers and, model-detection §3.9, one per
+// adapter of roles.toml that names a models argv. An adapter on a built-in
+// provider, or on two providers, is skipped and named on errw; an
+// unreadable manifest gives the built-in readers only.
+func modelReaders(env models.Env, manifest func() (*rolecfg.Manifest, error), errw io.Writer) []models.Reader {
+	readers := models.Readers(env)
+	if manifest == nil {
+		return readers
+	}
+	m, err := manifest()
+	if err != nil {
+		return readers
+	}
+	builtin := map[string]bool{}
+	for _, r := range readers {
+		builtin[r.Provider] = true
+	}
+	list, errs := m.AdapterModels()
+	for _, err := range errs {
+		fmt.Fprintf(errw, "models: %v\n", err)
+	}
+	for _, a := range list {
+		if builtin[a.Provider] {
+			fmt.Fprintf(errw, "models: adapter %s: provider %s has a built-in reader; its models listing is not read\n", a.Client, a.Provider)
+			continue
+		}
+		readers = append(readers, models.AdapterReader(a.Provider, a.Client, a.Argv, env))
+	}
+	return readers
 }
 
 // modelsGetenv reads models.source_max_age (a test replaces it).

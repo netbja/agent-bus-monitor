@@ -209,6 +209,14 @@ func Load(path string) (*Manifest, error) {
 		}
 		if adapters, exists := raw["adapters"]; exists {
 			m.Adapters, _ = asTable(adapters)
+			for client, a := range m.Adapters { // a models listing is checked used or not (model-detection §3.9)
+				t, _ := asTable(a)
+				if raw, has := t["models"]; has {
+					if argv, ok := stringArray(raw); !ok || len(argv) == 0 || !validArgv(argv) {
+						return nil, fmt.Errorf("adapter %s: models must be a non-empty array of strings (the argv that lists its models)", client)
+					}
+				}
+			}
 		}
 		for _, role := range m.roleOrder {
 			if _, err := m.Resolve(role); err != nil {
@@ -568,8 +576,13 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		if !ok {
 			return Profile{}, fmt.Errorf("adapter %s must be a table", client)
 		}
-		if err := checkKeys(adapter, set("executable"), "adapter "+client); err != nil {
+		if err := checkKeys(adapter, set("executable", "models"), "adapter "+client); err != nil {
 			return Profile{}, err
+		}
+		if raw, exists := adapter["models"]; exists { // model-detection §3.9: its listing's fixed argv
+			if argv, ok := stringArray(raw); !ok || len(argv) == 0 || !validArgv(argv) {
+				return Profile{}, fmt.Errorf("adapter %s: models must be a non-empty array of strings (the argv that lists its models)", client)
+			}
 		}
 		executable, ok := checkedString(adapter["executable"], "executable")
 		if !ok {
@@ -586,6 +599,92 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		resolved.Adapter = adapterPath
 	}
 	return resolved, nil
+}
+
+// stringArray is a TOML array of strings, any text (an argv), unlike
+// stringNames.
+func stringArray(value interface{}) ([]string, bool) {
+	raw, ok := value.([]interface{})
+	if !ok {
+		return nil, false
+	}
+	out := make([]string, len(raw))
+	for i, v := range raw {
+		if out[i], ok = v.(string); !ok {
+			return nil, false
+		}
+	}
+	return out, true
+}
+
+// validArgv: every element a non-empty string without control characters.
+func validArgv(argv []string) bool {
+	for _, a := range argv {
+		if _, ok := checkedString(a, "models"); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// AdapterModels is an adapter client's model listing (model-detection §3.9):
+// the provider its profiles name and the argv, its executable resolved
+// against the manifest as executable is.
+type AdapterModels struct {
+	Client, Provider string
+	Argv             []string
+}
+
+// AdapterModels are the adapters with a models argv that some profile uses,
+// sorted by client; an adapter whose profiles name two providers is an
+// error (whose models would it list?).
+func (m *Manifest) AdapterModels() ([]AdapterModels, []error) {
+	providers := map[string]map[string]bool{}
+	for _, name := range m.ProfileNames() {
+		p, ok := asTable(m.Profiles[name])
+		if !ok {
+			continue
+		}
+		client, _ := p["client"].(string)
+		provider, _ := p["provider"].(string)
+		if providers[client] == nil {
+			providers[client] = map[string]bool{}
+		}
+		providers[client][provider] = true
+	}
+	clients := make([]string, 0, len(m.Adapters))
+	for c := range m.Adapters {
+		clients = append(clients, c)
+	}
+	sort.Strings(clients)
+	var out []AdapterModels
+	var errs []error
+	for _, client := range clients {
+		a, _ := asTable(m.Adapters[client])
+		argv, ok := stringArray(a["models"])
+		if !ok || len(argv) == 0 || !validArgv(argv) || len(providers[client]) == 0 {
+			continue
+		}
+		if len(providers[client]) > 1 {
+			names := make([]string, 0, len(providers[client]))
+			for p := range providers[client] {
+				names = append(names, p)
+			}
+			sort.Strings(names)
+			errs = append(errs, fmt.Errorf("adapter %s: its profiles name %s: one provider per models listing", client, strings.Join(names, " and ")))
+			continue
+		}
+		var provider string
+		for p := range providers[client] {
+			provider = p
+		}
+		exe := argv[0]
+		if !filepath.IsAbs(exe) {
+			exe = filepath.Clean(filepath.Join(filepath.Dir(m.manifestPath), exe))
+		}
+		out = append(out, AdapterModels{Client: client, Provider: provider, Argv: append([]string{exe}, argv[1:]...)})
+	}
+	return out, errs
 }
 
 // RoleTier is the role's tier in the manifest ("boot" or "pop"; Load

@@ -429,3 +429,54 @@ func TestModelsUsageRefusals(t *testing.T) {
 		}
 	}
 }
+
+// §3.9: an adapter with a models argv in roles.toml is read with the
+// built-in clients: its rows appear under its profiles' provider. One that
+// claims a built-in provider is refused, by name.
+func TestModelsAdapterReader(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "roles.toml")
+	m := checkManifest + `[adapters.deep]
+executable = "./deep"
+models = ["./deep-models", "--list"]
+[adapters.fake]
+executable = "./fake"
+models = ["./fake-models"]
+[profiles.ds]
+client = "deep"
+provider = "deepseek"
+model = "deepseek-v4"
+[profiles.fk]
+client = "fake"
+provider = "openai"
+model = "gpt-6-sol"
+`
+	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+	env := noEnv()
+	env.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name == filepath.Join(dir, "deep-models") && len(args) == 1 && args[0] == "--list" {
+			return []byte("deepseek-v4\tDeepSeek V4\n"), nil
+		}
+		return nil, errors.New("not installed")
+	}
+	var out, errw bytes.Buffer
+	if code := runModels(context.Background(), []string{"--refresh", "--provider", "deepseek"}, env, cache, "", manifest, now, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "deepseek-v4") {
+		t.Fatalf("the adapter's rows are missing:\n%s\n%s", out.String(), errw.String())
+	}
+	if !strings.Contains(errw.String(), "adapter fake: provider openai has a built-in reader") {
+		t.Fatalf("a built-in provider was not refused:\n%s", errw.String())
+	}
+	out.Reset()
+	runModels(context.Background(), []string{"check"}, env, cache, "", manifest, now, &out, &errw)
+	if !strings.Contains(out.String(), "ds         deepseek") || strings.Contains(out.String(), "deepseek-v4                        unknown") {
+		t.Fatalf("the adapter's profile is not judged against its rows:\n%s", out.String())
+	}
+}

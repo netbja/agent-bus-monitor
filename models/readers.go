@@ -286,6 +286,24 @@ func readAgy(ctx context.Context, e Env) ([]Row, string, error) {
 	if err != nil {
 		return nil, "agy models", err
 	}
+	rows := idLabelRows(out, "google", "agy")
+	for i := range rows {
+		switch id := rows[i].ID; {
+		case strings.HasPrefix(id, "claude-"):
+			rows[i].Family = "anthropic"
+		case strings.HasPrefix(id, "gpt-"):
+			rows[i].Family = "openai"
+		}
+	}
+	if len(rows) == 0 {
+		return nil, "agy models", errors.New("agy listed no model")
+	}
+	return rows, "agy models", nil
+}
+
+// idLabelRows parses "id<TAB>label" lines (agy's format, an adapter's too);
+// a line without a tab is not a row.
+func idLabelRows(out []byte, provider, client string) []Row {
 	var rows []Row
 	sc := bufio.NewScanner(strings.NewReader(string(out)))
 	for sc.Scan() {
@@ -294,17 +312,28 @@ func readAgy(ctx context.Context, e Env) ([]Row, string, error) {
 		if !ok || id == "" {
 			continue
 		}
-		r := Row{Provider: "google", Client: "agy", ID: id, Label: strings.TrimSpace(label)}
-		switch {
-		case strings.HasPrefix(id, "claude-"):
-			r.Family = "anthropic"
-		case strings.HasPrefix(id, "gpt-"):
-			r.Family = "openai"
-		}
-		rows = append(rows, r)
+		rows = append(rows, Row{Provider: provider, Client: client, ID: id, Label: strings.TrimSpace(label)})
 	}
-	if len(rows) == 0 {
-		return nil, "agy models", errors.New("agy listed no model")
-	}
-	return rows, "agy models", nil
+	return rows
+}
+
+// AdapterReader (model-detection §3.9) reads an adapter client's models
+// from the fixed argv its [adapters.<client>] table names in roles.toml (a
+// trusted local file, never the bus): run without a shell, "id<TAB>label"
+// lines out. It asks live, so its source is the read's time.
+func AdapterReader(provider, client string, argv []string, e Env) Reader {
+	cmd := strings.Join(argv, " ")
+	return Reader{Provider: provider,
+		Read: func(ctx context.Context) ([]Row, string, error) {
+			out, err := e.Run(ctx, argv[0], argv[1:]...)
+			if err != nil {
+				return nil, cmd, err
+			}
+			rows := idLabelRows(out, provider, client)
+			if len(rows) == 0 {
+				return nil, cmd, errors.New(client + " listed no model (want id<TAB>label lines)")
+			}
+			return rows, cmd, nil
+		},
+		SourceAt: func(now time.Time) int64 { return now.UnixMilli() }}
 }

@@ -172,6 +172,22 @@ provider = "my-provider"
 model = "my-model"
 ```
 
+An adapter may also say how to list its models (model-detection §3.9), so
+`agentbus models`, `models check` and the `model-catalogue` health check read
+its catalogue next to the built-in clients':
+
+```toml
+[adapters.my-client]
+executable = "./adapters/my-client"
+models = ["./adapters/my-client", "models"]   # a fixed argv, run without a shell
+```
+
+The command prints one `id<TAB>label` line per model (the format of `agy models`);
+other lines are ignored. Its executable is relative to the manifest, like
+`executable`. The rows go under the provider its profiles name: one provider per
+adapter, and never a provider a built-in client already reads (anthropic,
+openai, xai, moonshot, google). Its answer is live, so its source age is the read's.
+
 The executable path is relative to the manifest. The launcher calls it directly,
 without a shell, with `--spec-file <path>`. The JSON contains `client`, `provider`,
 `model`, `role`, `project`, `profile`, `prompt`, `prompt_path`, `skills`, `options`,
