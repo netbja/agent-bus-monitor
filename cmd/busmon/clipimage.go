@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -160,25 +162,82 @@ func attachmentsDir() string {
 	return filepath.Join(dir, "agentbus", "attachments")
 }
 
-// pastedImageMsg is a paste's outcome: the saved file's path, or why none.
+// pastedImageMsg is a paste's outcome: the saved file's path (the image's
+// hash, dup when that image was saved before), or the clipboard's text when
+// it holds no image, or why none.
 type pastedImageMsg struct {
-	path string
-	err  error
+	path, hash string
+	dup        bool
+	text       string
+	err        error
 }
 
-// pasteImageCmd reads and saves the clipboard's image off the update loop.
-func pasteImageCmd(tools clipTools, dir string) tea.Cmd {
+// clipTextMax bounds a pasted text: the compose window's limit cuts it
+// further.
+const clipTextMax = 1 << 20
+
+// clipboardText is the clipboard's text through the session's own reader
+// (the person: speech-to-text tools such as Murmure or Handy paste by
+// sending Ctrl+V with text in the clipboard).
+func clipboardText(t clipTools) (string, error) {
+	if t.look == nil || t.out == nil || t.env == nil {
+		t = realClipTools()
+	}
+	has := func(name string) bool { _, err := t.look(name); return err == nil }
+	var data []byte
+	var err error
+	switch {
+	case t.env("WAYLAND_DISPLAY") != "" && has("wl-paste"):
+		types, terr := t.out("wl-paste", "--list-types")
+		if terr != nil || !strings.Contains(string(types), "text/plain") && !strings.Contains(string(types), "UTF8_STRING") {
+			return "", errNoClipImage
+		}
+		data, err = t.out("wl-paste", "--no-newline", "--type", "text")
+	case t.env("DISPLAY") != "" && has("xclip"):
+		types, terr := t.out("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
+		if terr != nil || !strings.Contains(string(types), "UTF8_STRING") && !strings.Contains(string(types), "text/plain") && !strings.Contains(string(types), "STRING") {
+			return "", errNoClipImage
+		}
+		data, err = t.out("xclip", "-selection", "clipboard", "-o")
+	case t.goos == "darwin" && has("pbpaste"):
+		data, err = t.out("pbpaste")
+	default:
+		return "", errNoClipTool
+	}
+	if err != nil || len(bytes.TrimSpace(data)) == 0 || !utf8.Valid(data) {
+		return "", errNoClipImage
+	}
+	if len(data) > clipTextMax {
+		return "", errors.New("the clipboard's text is larger than 1 MiB")
+	}
+	return string(data), nil
+}
+
+// pasteImageCmd reads the clipboard off the update loop: its image, saved
+// (an image saved before, still on disk, is never saved twice: known is
+// hash -> path), else its text.
+func pasteImageCmd(tools clipTools, dir string, known map[string]string) tea.Cmd {
 	return func() tea.Msg {
+		data, err := clipboardImage(tools)
+		if err != nil {
+			if text, terr := clipboardText(tools); terr == nil {
+				return pastedImageMsg{text: text}
+			}
+			return pastedImageMsg{err: err}
+		}
 		if dir == "" {
 			return pastedImageMsg{err: errors.New("no cache directory for the image")}
 		}
-		data, err := clipboardImage(tools)
-		if err != nil {
-			return pastedImageMsg{err: err}
+		sum := sha256.Sum256(data)
+		hash := hex.EncodeToString(sum[:])
+		if p, ok := known[hash]; ok {
+			if _, err := os.Stat(p); err == nil {
+				return pastedImageMsg{path: p, hash: hash, dup: true}
+			}
 		}
 		pruneAttachments(dir, time.Now())
 		path, err := saveAttachment(dir, data)
-		return pastedImageMsg{path: path, err: err}
+		return pastedImageMsg{path: path, hash: hash, err: err}
 	}
 }
 
@@ -191,8 +250,25 @@ func (m *Model) gotPastedImage(msg pastedImageMsg) {
 		return
 	}
 	c := m.ui.compose
+	if msg.text != "" { // no image: the clipboard's text, as a terminal paste
+		if c != nil {
+			m.ui.flash, m.ui.flashErr = "", false
+			m.pasteCompose(msg.text)
+		}
+		return
+	}
+	if msg.hash != "" {
+		if m.ui.pastedImages == nil {
+			m.ui.pastedImages = map[string]string{}
+		}
+		m.ui.pastedImages[msg.hash] = msg.path
+	}
 	if c == nil {
 		m.ui.flash, m.ui.flashErr = "image saved: "+msg.path, false
+		return
+	}
+	if msg.dup && strings.Contains(c.area.value(), msg.path) { // the person: never the same link twice
+		m.ui.flash, m.ui.flashErr = "this image is already in the message: "+msg.path, true
 		return
 	}
 	dropped := 0

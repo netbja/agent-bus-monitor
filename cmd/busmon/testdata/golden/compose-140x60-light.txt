@@ -34,7 +34,7 @@
 │                   │                                                                                                  │                   │
 │                   │                                                                                                  │                   │
 │                   │                                                                                                  │                   │
-│                   │ ^S send   tab recipient   esc close (draft kept)                                      67 / 65536 │                   │
+│                   │ Ctrl+S send   tab recipient   esc close (draft kept)                                  67 / 65536 │                   │
 │                   ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯                   │
 │                                                                                                                                          │
 │                                                                                                                                          │
@@ -57,4 +57,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- ^S send   tab recipient   esc close (draft kept)                                                                                           
+ Ctrl+S send   tab recipient   esc close (draft kept)                                                                                       

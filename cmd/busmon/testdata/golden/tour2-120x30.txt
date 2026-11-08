@@ -12,7 +12,7 @@
 │    time   from      │ woken and reads it. @all reaches every agent; tab completes a name.      │                     │
 │  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
 │    14:24  architect │   i     the line: @coder please rebase                                   │                     │
-│    14:50  ♙ Charlie │   I ^O  the compose window, several lines; ^S sends                      │                     │
+│    14:50  ♙ Charlie │   I ^O  the compose window, several lines; Ctrl+S sends                  │                     │
 │    14:51  coder     │                                                                          │                     │
 │  ○ 14:52  master    │ Text without @name is a broadcast nobody reads: busmon asks for a second │                     │
 │  ● 14:56  dispatch  │ enter before it sends one.                                               │                     │
