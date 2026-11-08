@@ -106,10 +106,16 @@ func TestIdleViewWaitsForModals(t *testing.T) {
 		"walk":     func(m *Model) { m.ui.walk = &walk{} },
 	} {
 		m := idleShell(t, 140, 40, time.Minute)
+		m.now = shellNow.Add(time.Hour) // long past the delay: only the modal holds it back
 		set(&m)
 		if m.enterIdle(); m.ui.idle {
 			t.Errorf("%s: entered over it", name)
 		}
+	}
+	free := idleShell(t, 140, 40, time.Minute)
+	free.now = shellNow.Add(time.Hour)
+	if free.enterIdle(); !free.ui.idle {
+		t.Fatal("not entered with nothing open")
 	}
 	m := idleShell(t, 30, 5, time.Minute)
 	if m = pollAt(t, m, time.Hour); m.ui.idle {

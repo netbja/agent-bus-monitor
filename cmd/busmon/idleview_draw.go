@@ -47,11 +47,11 @@ func bigCount(n int) []string {
 
 // idleData is what the frames show, computed from the model.
 type idleData struct {
-	need   int        // decide + merge: the header chips' count
-	parts  Line       // "♙ 2 decide   ◆ 1 merge"
-	team   []Line     // the agents not idle, attention first
-	idle   int        // the agents counted as idle (idle, answered, done, none)
-	counts []string   // "3 waiting", "1 working", "4 idle"… (narrow), the idle one at idleAt
+	need   int      // decide + merge: the header chips' count
+	parts  Line     // "♙ 2 decide   ◆ 1 merge"
+	team   []Line   // the agents not idle, attention first
+	idle   int      // the agents counted as idle (idle, answered, done, none)
+	counts []string // "3 waiting", "1 working", "4 idle"… (narrow), the idle one at idleAt
 	idleAt int
 	next   []Line     // the plan's current task, then "then: <next>"
 	strip  stripParts // the bottom row
@@ -141,8 +141,8 @@ func idleNext(p planState) []Line {
 	if cur >= 0 {
 		out = append(out, task(p.rows[cur], ""))
 	}
-	for i, r := range p.rows {
-		if i != cur && r.State == plan.Upcoming {
+	for _, r := range p.rows { // the task in hand is never upcoming
+		if r.State == plan.Upcoming {
 			lead := ""
 			if len(out) > 0 {
 				lead = "then: "

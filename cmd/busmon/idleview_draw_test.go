@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // idleAt is the fixture shell in the idle view at w x h, entered at shellNow+1h.
@@ -130,4 +132,60 @@ func TestIdleViewNoColorGolden(t *testing.T) {
 	m := idleAt(t, 140, 40)
 	m.paint = newPainter(th)
 	checkGolden(t, "idle-140x40-nocolor.ansi", m.View().Content+"\n")
+}
+
+// The next frame: the task in hand (in progress or in review first, then one
+// waiting or blocked), then the first upcoming one; the strip names the plan.
+func TestIdleViewNext(t *testing.T) {
+	row := func(id string, st plan.State) plan.Row {
+		return plan.Row{Task: plan.Task{ID: id, Title: "task " + id, Owner: "coder"}, State: st}
+	}
+	cases := []struct {
+		rows []plan.Row
+		want []string
+	}{
+		{[]plan.Row{row("a", plan.Done), row("b", plan.Upcoming), row("c", plan.Blocked), row("d", plan.InReview), row("e", plan.Upcoming)},
+			[]string{"task d " + GlyphNone + " coder", "then: task b " + GlyphNone + " coder"}},
+		{[]plan.Row{row("a", plan.Upcoming), row("b", plan.Waiting), row("c", plan.Upcoming)},
+			[]string{"task b " + GlyphNone + " coder", "then: task a " + GlyphNone + " coder"}},
+		{[]plan.Row{row("a", plan.Upcoming), row("b", plan.Upcoming)}, []string{"task a " + GlyphNone + " coder"}},
+		{[]plan.Row{row("a", plan.Done)}, []string{"every task is done"}},
+	}
+	for i, c := range cases {
+		var got []string
+		for _, l := range idleNext(planState{loaded: true, rows: c.rows}) {
+			got = append(got, l.text())
+		}
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("case %d: %q, want %q", i, got, c.want)
+		}
+	}
+	if got := idleNext(planState{}); len(got) != 1 || got[0].text() != "no plan loaded" {
+		t.Errorf("no plan: %v", got)
+	}
+	pinLocal(t)
+	m := idleAt(t, 140, 40)
+	m.snap.planState = planState{loaded: true, file: plan.File{Plan: "v0.29"}, rows: []plan.Row{row("a", plan.Done), row("b", plan.InProgress), row("c", plan.Upcoming)}}
+	got := m.grid().plain()
+	for _, want := range []string{"plan v0.29 1/3 33%", "task b", "then: task c"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q:\n%s", want, got)
+		}
+	}
+	if l := idleStripLine(stripParts{tokens: "anthropic 62% 5h", planName: "v0.29", planCount: "1/3 33%", clock: "16:04"}, 30); l.text() != "anthropic 62% 5h · 1/3 33%" {
+		t.Errorf("narrow strip %q", l.text())
+	}
+	if l := idleStripLine(stripParts{tokens: "anthropic 62% 5h", planName: "v0.29", planCount: "1/3 33%", clock: "16:04"}, 39); l.text() != "anthropic 62% 5h · plan v0.29 1/3 33%" {
+		t.Errorf("no room for the clock, room for the name: %q", l.text())
+	}
+}
+
+// Wide but short: the frames side by side would not fit in height, nor
+// stacked: one line each, never a frame cut at the bottom.
+func TestIdleViewWideButShort(t *testing.T) {
+	pinLocal(t)
+	got := idleAt(t, 140, 12).grid().plain()
+	if strings.Contains(got, "╭─ you") || !strings.Contains(got, " need you") {
+		t.Fatalf("140x12:\n%s", got)
+	}
 }
