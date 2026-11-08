@@ -106,3 +106,12 @@ func TestReaderTimeoutIs20s(t *testing.T) {
 		t.Fatalf("ReaderTimeout %v: an explicit --refresh keeps 20 s per reader (§3.5)", ReaderTimeout)
 	}
 }
+
+// Each built-in client's provider (a client update refreshes it, §3.5).
+func TestProviderOfClient(t *testing.T) {
+	for c, p := range map[string]string{"claude-code": "anthropic", "codex": "openai", "grok": "xai", "kimi-cli": "moonshot", "agy": "google", "other": ""} {
+		if got := ProviderOfClient(c); got != p {
+			t.Errorf("%s: %q", c, got)
+		}
+	}
+}

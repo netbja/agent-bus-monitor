@@ -25,6 +25,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -259,7 +260,9 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err != nil {
 				return health.Unknown, "pane observations unavailable", err
 			}
-			out := health.EvaluateClientUpdates(clientEvidence(snaps, observed, now.UnixMilli()))
+			ev := clientEvidence(snaps, observed, now.UnixMilli())
+			clientUpdateRefresh(ctx, ev)
+			out := health.EvaluateClientUpdates(ev)
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("context", func(ctx context.Context) (health.Status, string, error) {
@@ -927,6 +930,31 @@ func clientEvidence(snaps map[string]bus.AgentSnapshot, obs map[string]bus.Obser
 		ev = append(ev, e)
 	}
 	return ev
+}
+
+// clientUpdateRefresh: an updated client forces its provider's model
+// refresh, once per installed version (model-detection §3.5), inside the
+// check's own deadline. A failure is the next pass's to retry; it never
+// changes the check's outcome.
+var clientUpdateRefresh = func(ctx context.Context, ev []health.ClientEvidence) {
+	updates := clientUpdates(ev)
+	if len(updates) == 0 {
+		return
+	}
+	cfg, _ := loadModelsConfig(models.ConfigPath())
+	_, _ = refreshForClients(ctx, models.CachePath(), cfg.Tiers, models.Readers(models.RealEnv()), updates, time.Now())
+}
+
+// clientUpdates are the installed versions of the clients agents run
+// outdated, by client.
+func clientUpdates(ev []health.ClientEvidence) map[string]string {
+	out := map[string]string{}
+	for _, e := range ev {
+		if e.Outdated && e.Client != "" && e.Installed != "" {
+			out[e.Client] = e.Installed
+		}
+	}
+	return out
 }
 
 // contextEvidence is the context check's evidence: one entry per published

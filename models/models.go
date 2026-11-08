@@ -101,6 +101,14 @@ type Table struct {
 	// Aliases: provider -> its client alias -> the id it resolves to (Claude's
 	// opus). Per provider: an alias name is the provider's own (reviewer-codex).
 	Aliases map[string]map[string]AliasAt `json:"aliases,omitempty"`
+	// Clients: provider -> the installed client version a refresh followed
+	// (§3.5: a client update forces its provider's refresh, once).
+	Clients map[string]string `json:"clients,omitempty"`
+}
+
+// ProviderOfClient is a built-in client's provider, "" for another.
+func ProviderOfClient(client string) string {
+	return map[string]string{"claude-code": "anthropic", "codex": "openai", "grok": "xai", "kimi-cli": "moonshot", "agy": "google"}[client]
 }
 
 // addEvent appends e, keeping the newest MaxEvents.

@@ -111,3 +111,49 @@ func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 	}
 	return in
 }
+
+// refreshForClients refreshes, under the table's lock, the provider of each
+// updated client (client -> its installed version) whose catalogue was not
+// read since that version (§3.5: a new client brings a new catalogue). A
+// held lock skips; a failed read is not recorded, so the next pass tries
+// again. It returns the providers read.
+func refreshForClients(ctx context.Context, path string, tiers models.TierMap, readers []models.Reader, updates map[string]string, now time.Time) ([]string, error) {
+	unlock, held, err := lockTable(path)
+	if err != nil || held {
+		return nil, err
+	}
+	defer unlock()
+	tbl, err := models.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	want := map[string]string{} // provider -> version
+	for client, version := range updates {
+		if p := models.ProviderOfClient(client); p != "" && version != "" && tbl.Clients[p] != version {
+			want[p] = version
+		}
+	}
+	var pick []models.Reader
+	for _, r := range readers {
+		if _, ok := want[r.Provider]; ok {
+			pick = append(pick, r)
+		}
+	}
+	if len(pick) == 0 {
+		return nil, nil
+	}
+	failed := tbl.Refresh(ctx, pick, tiers, now)
+	var done []string
+	for _, r := range pick {
+		if _, bad := failed[r.Provider]; bad {
+			continue
+		}
+		if tbl.Clients == nil {
+			tbl.Clients = map[string]string{}
+		}
+		tbl.Clients[r.Provider] = want[r.Provider]
+		done = append(done, r.Provider)
+	}
+	sort.Strings(done)
+	return done, tbl.Save(path)
+}

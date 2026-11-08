@@ -77,3 +77,60 @@ func TestModelCatalogueRefreshesFirst(t *testing.T) {
 		t.Fatalf("a young table was refreshed again: %d", calls)
 	}
 }
+
+// §3.5: a client update forces its provider's refresh, once per installed
+// version; a failed read is tried again at the next pass.
+func TestRefreshForClientUpdates(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	reads := map[string]int{}
+	fail := false
+	reader := func(p, id string) models.Reader {
+		return models.Reader{Provider: p, Read: func(context.Context) ([]models.Row, string, error) {
+			reads[p]++
+			if fail {
+				return nil, "", errors.New("timeout")
+			}
+			return []models.Row{{Provider: p, ID: id}}, "", nil
+		}}
+	}
+	readers := []models.Reader{reader("xai", "grok-5"), reader("openai", "gpt-7")}
+	refresh := func(updates map[string]string) []string {
+		got, err := refreshForClients(context.Background(), cache, nil, readers, updates, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := refresh(map[string]string{"grok": "1.2.0"}); len(got) != 1 || got[0] != "xai" || reads["xai"] != 1 || reads["openai"] != 0 {
+		t.Fatalf("refreshed %v, reads %v", got, reads)
+	}
+	if tbl, _ := models.Load(cache); tbl.Providers["xai"].Rows[0].ID != "grok-5" || tbl.Clients["xai"] != "1.2.0" {
+		t.Fatalf("table %+v %v", tbl.Providers["xai"], tbl.Clients)
+	}
+	if got := refresh(map[string]string{"grok": "1.2.0"}); len(got) != 0 || reads["xai"] != 1 {
+		t.Fatalf("the same version refreshed again: %v", got)
+	}
+	fail = true
+	refresh(map[string]string{"codex": "0.9"})
+	if tbl, _ := models.Load(cache); tbl.Clients["openai"] != "" {
+		t.Fatal("a failed read was recorded as done")
+	}
+	fail = false
+	if got := refresh(map[string]string{"codex": "0.9", "unknown-client": "1"}); len(got) != 1 || got[0] != "openai" {
+		t.Fatalf("retry: %v", got)
+	}
+}
+
+// The client-updates evidence names the clients to refresh: outdated ones
+// with an installed version only.
+func TestClientUpdates(t *testing.T) {
+	got := clientUpdates([]health.ClientEvidence{
+		{Agent: "a", Outdated: true, Client: "grok", Installed: "1.2.0"},
+		{Agent: "b", Outdated: false, Client: "codex", Installed: "0.9"},
+		{Agent: "c", Outdated: true, Client: "kimi-cli"},
+	})
+	if len(got) != 1 || got["grok"] != "1.2.0" {
+		t.Fatalf("%v", got)
+	}
+}
