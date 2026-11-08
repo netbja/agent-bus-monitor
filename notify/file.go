@@ -185,6 +185,15 @@ func Load(path string) *File {
 		f.Refused = "over 64 KiB"
 		return f
 	}
+	parsed := parse(data)
+	parsed.Exists = true
+	return parsed
+}
+
+// parse is the file's content judged by the read rules, from its bytes (Load
+// once the file passed its checks; Edit before it writes).
+func parse(data []byte) *File {
+	f := &File{}
 	var raw map[string]any
 	if _, err := toml.Decode(string(data), &raw); err != nil {
 		f.Refused = "does not parse"

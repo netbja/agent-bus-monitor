@@ -3,6 +3,8 @@ package notify
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"io"
 	"net/http"
@@ -161,6 +163,13 @@ func transportReason(err error) string {
 	var te interface{ Timeout() bool }
 	if errors.As(err, &te) && te.Timeout() {
 		return "timeout"
+	}
+	var cv *tls.CertificateVerificationError
+	var ua x509.UnknownAuthorityError
+	var he x509.HostnameError
+	var ci x509.CertificateInvalidError
+	if errors.As(err, &cv) || errors.As(err, &ua) || errors.As(err, &he) || errors.As(err, &ci) {
+		return "certificate" // the setup says so in words (Explain)
 	}
 	return "no connection"
 }

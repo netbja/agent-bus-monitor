@@ -3,6 +3,8 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -86,7 +88,12 @@ func (s *desktop) Send(ctx context.Context, m Message) error {
 	}
 	urgency := map[Priority]string{Low: "low", Default: "normal", High: "critical"}[m.Priority]
 	if err := s.run(ctx, m.Title, capBytes(m.body(), MaxBytes), urgency); err != nil {
-		return &SendError{Target: s.name, Reason: "notify-send failed"}
+		reason := "notify-send failed"
+		var ee interface{ ExitCode() int }
+		if errors.As(err, &ee) && ee.ExitCode() > 0 {
+			reason += fmt.Sprintf(" (exit %d)", ee.ExitCode())
+		}
+		return &SendError{Target: s.name, Reason: reason}
 	}
 	return nil
 }
