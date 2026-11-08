@@ -21,19 +21,27 @@ import (
 // stops or starts a service itself: it runs the CLI as a child, its output
 // in the project's suspend.log, whose last line is the notice until it exits.
 
-// sleepAsk is Z waiting for its y.
-type sleepAsk struct{ resume bool }
+// sleepAsk is Z (or the Projects page's x) waiting for its y: on project
+// ("" = the open one); args set, the run is that agentbus command.
+type sleepAsk struct {
+	resume  bool
+	project string
+	verb    string
+	args    []string
+}
 
 // sleepRun is the child running: what it does, its log, its last line.
 type sleepRun struct {
 	id              int // which run: a message of an earlier one is ignored (reviewer-codex)
 	verb, log, last string
+	project         string // the project a Projects page action runs on ("" = the open one)
 }
 
 // sleepAskMsg opens the confirmation once suspend.wait is read.
 type sleepAskMsg struct {
-	resume bool
-	wait   time.Duration
+	resume  bool
+	wait    time.Duration
+	project string // "" = the open one
 }
 
 // sleepStartedMsg: the child started (done is its exit), or did not (err).
@@ -52,8 +60,9 @@ type sleepLineMsg struct {
 
 // sleepDoneMsg: the child exited.
 type sleepDoneMsg struct {
-	id  int
-	err error
+	id   int
+	err  error
+	last string // the log's last line at the exit: a run shorter than one tick names its result too (reviewer-codex)
 }
 
 // sleepEvery is how often the log's last line is read.
@@ -62,18 +71,22 @@ const sleepEvery = time.Second
 // sleepKey is Z: the confirmation by the pause's kind, read off the update
 // path with suspend.wait; a second Z while a run goes says so.
 func (m *Model) sleepKey() tea.Cmd {
+	if m.snap.pauseFailed && m.ui.sleepRun == nil {
+		m.ui.flash, m.ui.flashErr = "the pause could not be read: nothing done", true
+		return nil
+	}
+	return m.sleepKeyFor("", m.snap.pause != nil && m.snap.pause.Suspended())
+}
+
+// sleepKeyFor is Z on project ("" = the open one), suspended or not.
+func (m *Model) sleepKeyFor(project string, resume bool) tea.Cmd {
 	if r := m.ui.sleepRun; r != nil {
 		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
 		return nil
 	}
-	if m.snap.pauseFailed {
-		m.ui.flash, m.ui.flashErr = "the pause could not be read: nothing done", true
-		return nil
-	}
-	resume := m.snap.pause != nil && m.snap.pause.Suspended()
 	wait := m.cfg.sleepWait
 	return func() tea.Msg {
-		msg := sleepAskMsg{resume: resume}
+		msg := sleepAskMsg{resume: resume, project: project}
 		if !resume && wait != nil {
 			msg.wait = wait()
 		}
@@ -83,8 +96,8 @@ func (m *Model) sleepKey() tea.Cmd {
 
 // gotSleepAsk shows the question; y runs it, any other key cancels.
 func (m *Model) gotSleepAsk(msg sleepAskMsg) {
-	p := m.cfg.project
-	m.ui.sleepAsk = &sleepAsk{resume: msg.resume}
+	p := or(msg.project, m.cfg.project)
+	m.ui.sleepAsk = &sleepAsk{resume: msg.resume, project: msg.project}
 	if msg.resume {
 		m.ui.flash = "Resume " + p + "? Services, missing agents, then the pause lifted. y / n"
 	} else {
@@ -103,17 +116,23 @@ func (m *Model) sleepConfirm(k Key) tea.Cmd {
 		return nil
 	}
 	m.ui.flash, m.ui.flashErr = "", false
-	return m.startSleep(a.resume)
+	if a.args != nil {
+		return m.startRunFor(a.project, a.verb, a.args)
+	}
+	return m.startSleepOf(or(a.project, m.cfg.project), a.resume)
 }
 
 // startSleep runs agentbus suspend or resume for the open project, in a
 // command: the child is started off the update path.
-func (m *Model) startSleep(resume bool) tea.Cmd {
+func (m *Model) startSleep(resume bool) tea.Cmd { return m.startSleepOf(m.cfg.project, resume) }
+
+// startSleepOf is startSleep on project p.
+func (m *Model) startSleepOf(p string, resume bool) tea.Cmd {
 	if r := m.ui.sleepRun; r != nil { // one run at a time, whichever way it was asked for (foureyes)
 		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
 		return nil
 	}
-	logOf, p := m.cfg.sleepLog, m.cfg.project
+	logOf := m.cfg.sleepLog
 	verb := "suspend"
 	if resume {
 		verb = "resume"
@@ -122,7 +141,24 @@ func (m *Model) startSleep(resume bool) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "no agentbus to run "+verb+" with", true
 		return nil
 	}
-	return m.startRun(verb, []string{"--project", p, verb, "--yes"}, logOf(p))
+	cmd := m.startRun(verb, []string{"--project", p, verb, "--yes"}, logOf(p))
+	if r := m.ui.sleepRun; r != nil && p != m.cfg.project {
+		r.project = p
+	}
+	return cmd
+}
+
+// startRunFor is a Projects page run on project p, its output in p's log.
+func (m *Model) startRunFor(p, verb string, args []string) tea.Cmd {
+	if m.cfg.sleepLog == nil {
+		m.ui.flash, m.ui.flashErr = "no agentbus to run "+verb+" with", true
+		return nil
+	}
+	cmd := m.startRun(verb, args, m.cfg.sleepLog(p))
+	if r := m.ui.sleepRun; r != nil && cmd != nil {
+		r.project = p
+	}
+	return cmd
 }
 
 // startRun runs `agentbus args...` as a child, its output appended to log,
@@ -141,6 +177,7 @@ func (m *Model) startRun(verb string, args []string, log string) tea.Cmd {
 	m.ui.sleepSeq++
 	id := m.ui.sleepSeq
 	m.ui.sleepRun = &sleepRun{id: id, verb: verb, log: log, last: "starting" + GlyphEllipsis}
+	m.markProjectsDirty()
 	return func() tea.Msg {
 		done, err := run(args, log)
 		return sleepStartedMsg{id: id, verb: verb, log: log, done: done, err: err}
@@ -155,12 +192,17 @@ func (m *Model) gotSleepStarted(msg sleepStartedMsg) tea.Cmd {
 	}
 	if msg.err != nil {
 		m.ui.sleepRun = nil
+		m.markProjectsDirty()
 		m.notice.push(notice{text: msg.verb + " not started: " + Preview(msg.err.Error()), level: noticeAttention})
 		return nil
 	}
 	done := msg.done
 	id := msg.id
-	return tea.Batch(func() tea.Msg { return sleepDoneMsg{id: id, err: <-done} }, sleepTick(id, msg.log))
+	log := msg.log
+	return tea.Batch(func() tea.Msg {
+		err := <-done
+		return sleepDoneMsg{id: id, err: err, last: lastLine(log)}
+	}, sleepTick(id, log))
 }
 
 func sleepTick(id int, log string) tea.Cmd {
@@ -187,12 +229,26 @@ func (m *Model) gotSleepDone(msg sleepDoneMsg) tea.Cmd {
 		return nil
 	}
 	m.ui.sleepRun = nil
+	if msg.last != "" && !strings.HasPrefix(msg.last, "--- ") { // not the runner's own header: the child said nothing
+		r.last = msg.last
+	}
+	m.markProjectsDirty()
 	var reread tea.Cmd
 	if r.verb == "backup" && m.settingsPageOpen() != nil {
 		reread = m.settingsCmd(func() error { return nil })
 	}
+	if p := m.projectsPageOpen(); p != nil { // the list after the action (projects-admin §3.3)
+		reread = tea.Batch(reread, m.projectsCmd(p.serial))
+	}
 	if msg.err == nil {
-		m.notice.push(notice{text: r.verb + " done", level: noticeDone})
+		text := r.verb + " done"
+		if r.project != "" {
+			text = r.verb + " of " + r.project + " done"
+			if r.verb == "backup" && r.last != "" && !strings.HasPrefix(r.last, "starting") { // its last line is the archive (§4)
+				text += ": " + Preview(r.last)
+			}
+		}
+		m.notice.push(notice{text: text, level: noticeDone})
 		return reread
 	}
 	why := r.last

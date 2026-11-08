@@ -151,6 +151,9 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 // and no unit is left to start a project that no longer exists), then every
 // {p}:* key. A removal that fails deletes nothing.
 func deleteProjectNow(ctx context.Context, client *redis.Client, project string, removeServices func(string) ([]string, error)) (int64, []string, error) {
+	if !bus.ValidName(project) { // before any removal: the services' env file is a path built from the name (reviewer-codex)
+		return 0, nil, fmt.Errorf("invalid project name %q", project)
+	}
 	kinds, err := removeLocalServices(project, removeServices)
 	if err != nil {
 		return 0, nil, err
@@ -521,7 +524,8 @@ func main() {
 		getenv: os.Getenv, flags: flags, retheme: func(name string) (*Theme, error) { // as at the start, with the page's choice
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 		},
-		sleepRunner: realSleepRunner(agentbusBeside()), sleepLog: realSleepLog(os.Getenv), sleepWait: realSleepWait(os.Getenv)})
+		sleepRunner: realSleepRunner(agentbusBeside()), sleepLog: realSleepLog(os.Getenv), sleepWait: realSleepWait(os.Getenv),
+		admin: adminSourceFor(client, os.Getenv)})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up

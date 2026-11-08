@@ -32,6 +32,8 @@ func (m *Model) mode() Mode {
 		return ModeSettings
 	case m.rd.open() && m.rd.top().kind == ovNotifySetup:
 		return ModeNotifySetup
+	case m.rd.open() && m.rd.top().kind == ovProjects:
+		return ModeProjects
 	case m.rd.open():
 		return ModeOverlay
 	}
@@ -153,6 +155,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.push(page{kind: ovTokens})
 	case ActSettings:
 		cmd = m.openSettings()
+	case ActProjects:
+		cmd = m.openProjects()
 	case ActHistory:
 		cmd = m.openHistory()
 	case ActAbout:

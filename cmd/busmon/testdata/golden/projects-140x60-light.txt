@@ -1,0 +1,60 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ─╮
+│  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    │
+│  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…│
+│  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask │
+│  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  │
+│                                                      ││  ✓ architect done      40m     —        —         escalating · busy   spec merged│
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…│
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…│
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…│
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
+│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
+│                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─ Projects · 5 · read just now ──────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
+│ services and herdr: this machine (vdr); — means not here                                                                                 │
+│                                                                                                                                          │
+│   PROJECT                            STATE       AGENTS  KEYS    SERVICES               HERDR            LAST     TEMPLATE               │
+│ ▶ agent-bus-monitor ◂ open           live        3/7     1204    dispatch ● missions ○  open (6 panes)   1m ago                          │
+│   trading                            paused      1/5     800     —                      —                2h ago                          │
+│   demo                               suspended   0/4     310     —                      —                3d ago   ✓                      │
+│   old                                stopped     0/2     12      dispatch ○             —                40d ago                         │
+│   newone                             template    —       —       —                      —                —        ✓                      │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k move   enter detail   Z sleep   x stop   b back up   R read again   esc back   q quit   F1 help                                     

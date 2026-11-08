@@ -74,6 +74,8 @@ type shellConfig struct {
 	sleepRunner func(args []string, log string) (<-chan error, error)
 	sleepLog    func(project string) string
 	sleepWait   func() time.Duration
+	// admin is the Projects page's sources (M); nil = every part unknown.
+	admin *adminSource
 }
 
 // uiState is the person's place on the screen.
@@ -302,6 +304,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotRecap(msg)
 	case settingsMsg:
 		m.gotSettings(msg)
+	case projectsMsg:
+		return m.gotProjects(msg)
 	case notifyAssistMsg:
 		if m.settingsPageOpen() != nil { // the page it was asked from is still open
 			return m.push(notifyAssistPage(msg.kind, msg.f))

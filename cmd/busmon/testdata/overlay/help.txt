@@ -35,6 +35,7 @@ KEYS
   d                    the Plan tab: show or fold the done tasks
   U                    tokens: the account windows, every project side by side, this project by agent
   C                    settings: display, attention and your name, changed in config.toml
+  M                    projects: every project of this host, its state, agents, keys, services and herdr workspace; sleep, stop or back one up
   H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
   A                    about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work
   F1 ?                 help
@@ -92,6 +93,19 @@ KEYS
   d                    remove the selected key from config.toml (y confirms): what applies next is named
   D                    remove every key of the group set in config.toml (y confirms); your own backup.after_* stay
   esc q                back
+  ^C                   quit (everywhere)
+  the projects page (M)
+  ↑↓ j k               move
+  pgup pgdn            a page up or down
+  home end             the first or the last project
+  enter                the selected project: every column, its streams, its pause or suspend record, its template and workspace
+  Z                    put the selected project to sleep (agentbus suspend), or wake it when it is suspended (resume); asks first
+  x                    stop the selected project's services on this machine (agentbus down; deletes nothing); asks first
+  b                    back the selected project up now (agentbus backup --project); the archive is the notice
+  R                    read every project again (the page is never polled)
+  esc                  back
+  F1 ?                 help
+  q                    quit
   ^C                   quit (everywhere)
   the notifications setup
   enter                the next step, or confirm the choice; on a field: edit it

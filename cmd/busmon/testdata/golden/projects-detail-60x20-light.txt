@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you   2 Agents   3 Act   4 Board   5 Req   6 Plan    
+╭─ Project trading ───────────────────────────── esc back ─╮
+│ state       paused                                       │
+│ agents      1 live of 5 recorded (heard from within 1d)  │
+│ keys        800                                          │
+│ streams     —                                            │
+│ last        2h ago                                       │
+│ leases      none held                                    │
+│ pause       paused by charlie (10m ago)                  │
+│ services    — (this machine, vdr)                        │
+│ herdr       —                                            │
+│ template    —                                            │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   esc q close    
