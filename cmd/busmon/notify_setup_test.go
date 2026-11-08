@@ -504,3 +504,28 @@ func TestNotifySetupBadAddress(t *testing.T) {
 		t.Fatalf("step %d:\n%s", s.step, w.body())
 	}
 }
+
+// reviewer-codex: a remove that leaves the list empty asks even when the
+// removed target was not listed; with notifications off it asks nothing.
+func TestNotifySetupRemoveUnlistedAsksOff(t *testing.T) {
+	for _, on := range []bool{true, false} {
+		w := newSetupWorld(t, "[ntfy.phone]\ntopic = \""+goldenTopic+"\"\n")
+		if err := config.Set(config.Path(w.getenv), "notify.on", on); err != nil {
+			t.Fatal(err)
+		}
+		w.key(t, 'C')
+		w.m = showGroup(t, w.m, config.GroupNotifications)
+		w.m.rd.top().set.keys = true
+		w.open(t, len(notifyAssistKinds))
+		w.key(t, 'x', 'y')
+		if asked := strings.Contains(w.body(), "turn notifications off too? y/n"); asked != on {
+			t.Fatalf("on %v: asked %v\n%s", on, asked, w.body())
+		}
+		if on {
+			w.key(t, 'y')
+			if got, _ := w.targets(); got {
+				t.Fatal("y kept notifications on")
+			}
+		}
+	}
+}

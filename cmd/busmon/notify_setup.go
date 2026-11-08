@@ -330,13 +330,16 @@ func nsRemove(getenv func(string) string, serial int, name string) tea.Cmd {
 		path := config.Path(getenv)
 		r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(path, "config.toml")}}
 		listed := config.SplitList(r.String("notify.targets"))
-		if slices.Contains(listed, name) {
-			left := slices.DeleteFunc(slices.Clone(listed), func(n string) bool { return n == name })
+		left := slices.DeleteFunc(slices.Clone(listed), func(n string) bool { return n == name })
+		if len(left) != len(listed) {
 			if err := config.Set(path, "notify.targets", left); err != nil {
 				done.writeErr = "config.toml was not changed: " + err.Error()
+				return done
 			}
-			done.lastListed = len(left) == 0
 		}
+		// No target listed after the remove, whether or not it was listed
+		// (reviewer-codex), while notifications are on: ask (§3).
+		done.lastListed = len(left) == 0 && r.Bool("notify.on")
 		return done
 	}
 }
