@@ -440,8 +440,9 @@ agent names, no project template):
   `Delete`), then `y`: same as `agentbus --project myapp agents forget <name>`. An agent that is
   listening, or declared a status in the last 10 minutes, is refused.
 - **Requests: who owes whom an answer.** The Requests tab (`3`) groups threads by what they
-  wait for: owed by you, waited on by you, tracked requests, reviews still gated, directives
-  between agents, notices. Answered threads and those older than 24 hours are folded (`o` shows
+  wait for, in three sections, each heading with its count: **Owed by you**, **You wait on**,
+  and **Between agents** (tracked requests, reviews still gated, directives, then the notices
+  line). Answered threads and those older than 24 hours are folded (`o` shows
   them): an older unanswered directive wakes nobody. Enter expands a group or opens a thread;
   `d` then `y` closes a thread with a reply from you, its history stays. A tracked request is
   closed by its owner (`agentbus request done`). The header carries the same counts: what you owe

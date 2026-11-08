@@ -413,7 +413,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   (`Bus.HumanClose`). The Requests tab answers who owes whom an answer (spec
   `docs/superpowers/specs/2026-10-28-requests-view-design.md`; `requests_view.go` pure, `requests_rows.go`
   rows): a thread is the unit, a row a group (section, sender, target, kind); sections owed by you, you wait on,
-  tracked requests, reviews still gated, directives between agents, notices (report notices by
+  tracked requests, reviews still gated, directives between agents, notices, drawn under three headings with
+  their counts since home-inbox-drawer §5 (`Owed by you`, `You wait on`, `Between agents` for the next three and
+  the notices line; the title's directive count reads `directives`) (report notices by
   `reportNotice`'s exact prefix, `from = dispatch`, `wake=no`), then answered or older than 7 days folded
   (`o`; `reqFoldAfter`, the person's answer, was 24 h). Since busmon pages step 2 it is the one list pattern: short
   section names, one line per group (`◆` owed or gated, `●`/`○` unread/read, `you` for the person, the kind short
