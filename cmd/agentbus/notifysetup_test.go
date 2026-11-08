@@ -489,6 +489,15 @@ func TestNotifySetupRefusesGlobalFlags(t *testing.T) {
 		{"-p", "other", "notifications", "add", "ntfy"},
 		{"--project", "other", "--host", "x", "notifications", "remove", "phone", "--yes"},
 		{"--project=other", "notifications", "rename", "a", "b"},
+		// reviewer-codex: an empty value is still a flag, and a flag after the
+		// command name is read as a global one too.
+		{"--host", "", "notifications", "add", "desktop"},
+		{"-H", "", "notifications", "add", "desktop"},
+		{"--project", "", "notifications", "add", "desktop"},
+		{"-p", "", "notifications", "show-topic", "phone"},
+		{"--host=", "notifications", "add", "desktop"},
+		{"notifications", "--host", "x", "add", "desktop"},
+		{"notifications", "--project", "", "setup"},
 	} {
 		cmd := exec.Command(bin, args...)
 		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home, "REDIS_HOST=127.0.0.1", "REDIS_PORT=1"}
@@ -514,5 +523,14 @@ func TestNotifySetupRefusesGlobalFlags(t *testing.T) {
 	}
 	if code := runNotifications(context.Background(), []string{"status"}, d, &out, &errw); code != 0 {
 		t.Fatalf("status with a global flag: exit %d", code)
+	}
+}
+
+// A short global flag after the command is no global flag there: it is the
+// subcommand's word, a usage error, and nothing runs.
+func TestNotifySetupShortFlagAfterTheCommand(t *testing.T) {
+	w := newNotifyWorld(t)
+	if r := w.setup(t, &fakeTerm{}, "", "-p", "", "setup"); r.code != 2 || w.file(t).Exists {
+		t.Fatalf("exit %d", r.code)
 	}
 }

@@ -639,7 +639,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   to `/dev/tty`: without one, stdout says to run `show-topic` on a terminal. All five refuse an agent first
   (`refuseAgent`: `AGENT_BUS_AGENT`, an agent ancestor, an unreadable broker) and every role denies them
   (`rolecfg.NotifyWriteDenies` in the shared rules and a drafted role's own; the launch adds the `--project`/`-p`
-  spellings, `NotifyProjectDenies`). They also refuse any global `--project` or `--host` before `notifications`
+  spellings, `NotifyProjectDenies`). They also refuse any global `--project` or `--host`, before or after `notifications`, an empty value included (main
+  compares the arguments before and after `globalArgs`)
   (reviewer-codex: `agentbus --host x notifications add …` would escape the plain deny), so the plain deny covers
   every spelling that runs; `status` and `test` keep accepting them. Every role also denies its
   Read/Edit and `Bash(agentbus notifications test*)` (no wildcard before the words: it would deny prose), and the
