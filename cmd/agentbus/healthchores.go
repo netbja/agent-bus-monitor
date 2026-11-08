@@ -39,15 +39,15 @@ func usageRefresh(b *bus.Bus) func(context.Context, string) error {
 	}
 }
 
-func modelsRefresh(b *bus.Bus) func(context.Context) error {
-	return func(ctx context.Context) error {
-		installed, err := b.ServicesInstalled(ctx)
-		if err != nil || !installed {
-			return err
-		}
-		return refreshModelsDaily(ctx)
-	}
+// modelsRefresh is the dispatcher's daily model refresh. G7 (model-detection
+// §3.5): it no longer waits for the project's services, so a dispatcher run
+// by hand refreshes too; the table is the machine's, not the project's.
+func modelsRefresh() func(context.Context) error {
+	return func(ctx context.Context) error { return dailyModelsRefresh(ctx) }
 }
+
+// dailyModelsRefresh is refreshModelsDaily (a test replaces it).
+var dailyModelsRefresh = refreshModelsDaily
 
 func refreshModelsDaily(ctx context.Context) error {
 	cfg, err := models.LoadConfig(models.ConfigPath())

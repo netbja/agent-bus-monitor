@@ -45,8 +45,9 @@ func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths, clea
 	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 	stall := newStallReader(b, os.Getenv, clear, escalateTo)
 	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
+	checks = append(checks, healthOutcomeTask("model-catalogue", realCatalogueReader().run)) // model-detection §3.5
 	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify, StallWake: stall.stallWake,
-		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(b), RedisRefresh: redisRefresh(b)}
+		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(), RedisRefresh: redisRefresh(b)}
 }
 
 func healthTask(id string, run func(context.Context) (health.Status, string, error)) dispatch.HealthCheck {
