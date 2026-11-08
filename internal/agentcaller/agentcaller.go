@@ -8,6 +8,7 @@ package agentcaller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"slices"
@@ -62,4 +63,26 @@ func Ancestor(ctx context.Context) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// Refuse is the refusal of an agent caller before the person's act what
+// (run as command from the person's shell), "" for the person: AGENT_BUS_AGENT
+// set, or a registered agent among the ancestors (ancestor, nil = not
+// checked). An ancestry that cannot be read refuses, except on a host with
+// none (ErrNoAncestry), where the env rule alone applies.
+func Refuse(ctx context.Context, getenv func(string) string, ancestor func(context.Context) (string, error), what, command string) string {
+	if self := getenv("AGENT_BUS_AGENT"); self != "" {
+		return fmt.Sprintf("%s is the person's act, not %s's (run %s from your own shell)", what, self, command)
+	}
+	if ancestor == nil {
+		return ""
+	}
+	switch caller, err := ancestor(ctx); {
+	case errors.Is(err, ErrNoAncestry):
+	case err != nil:
+		return fmt.Sprintf("cannot check that no registered agent runs this (%v)", err)
+	case caller != "":
+		return what + " is the person's act, and this runs under the agent " + caller
+	}
+	return ""
 }

@@ -46,7 +46,9 @@ import (
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/redis/go-redis/v9"
 )
 
 // streamKinds are the four streams busmon tails into the ACTIVITY feed and that
@@ -134,12 +136,8 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 		return nil
 	}
 
-	// Its services first: stopped, they write nothing more, and no unit is
-	// left to start a project that no longer exists.
-	if err := reportRemovedServices(project, removeServices); err != nil {
-		return err
-	}
-	n, err := bus.DeleteProject(ctx, client, project)
+	n, kinds, err := deleteProjectNow(ctx, client, project, removeServices)
+	printRemovedServices(project, kinds)
 	if err != nil {
 		return err
 	}
@@ -147,20 +145,48 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 	return nil
 }
 
-// reportRemovedServices stops and removes the project's services on this
+// deleteProjectNow is --delete's core with no terminal I/O (projects-admin
+// §5.3), the one path busmon --delete and the Projects page share: the
+// project's services on this machine first (stopped, they write nothing more,
+// and no unit is left to start a project that no longer exists), then every
+// {p}:* key. A removal that fails deletes nothing.
+func deleteProjectNow(ctx context.Context, client *redis.Client, project string, removeServices func(string) ([]string, error)) (int64, []string, error) {
+	kinds, err := removeLocalServices(project, removeServices)
+	if err != nil {
+		return 0, nil, err
+	}
+	n, err := bus.DeleteProject(ctx, client, project)
+	return n, kinds, err
+}
+
+// removeLocalServices stops and removes the project's services on this
 // machine (units and environment file; logs and data stay).
-func reportRemovedServices(project string, removeServices func(string) ([]string, error)) error {
+func removeLocalServices(project string, removeServices func(string) ([]string, error)) ([]string, error) {
 	if removeServices == nil {
-		return nil
+		return nil, nil
 	}
 	kinds, err := removeServices(project)
 	if err != nil {
-		return fmt.Errorf("removing the services of %s: %w (nothing deleted; agentbus --project %s service remove)", project, err, project)
+		return nil, fmt.Errorf("removing the services of %s: %w (nothing deleted; agentbus --project %s service remove)", project, err, project)
 	}
+	return kinds, nil
+}
+
+// reportRemovedServices removes the services and says so (a project with no
+// keys left still has its units removed).
+func reportRemovedServices(project string, removeServices func(string) ([]string, error)) error {
+	kinds, err := removeLocalServices(project, removeServices)
+	if err != nil {
+		return err
+	}
+	printRemovedServices(project, kinds)
+	return nil
+}
+
+func printRemovedServices(project string, kinds []string) {
 	if len(kinds) > 0 {
 		fmt.Printf("Stopped and removed the %s %s of '%s' on this machine.\n", strings.Join(kinds, " and "), plural(len(kinds), "service"), project)
 	}
-	return nil
 }
 
 // localServices removes a project's units under this machine's manager.
@@ -395,6 +421,10 @@ func main() {
 	// --delete names its own target, so like --list it must not require --project.
 	// It also sits above --reset: purging a project's history on the way to
 	// deleting the project would be work done twice and a confirmation asked twice.
+	if why := refuseDestructive(context.Background(), opts, os.Getenv, agentcaller.Ancestor); why != "" {
+		fmt.Fprintf(os.Stderr, "error: %s\n", why)
+		os.Exit(1)
+	}
 	if opts.delete != "" {
 		if err := deleteProject(opts.host, opts.delete, opts.yes, os.Stdin, time.Now(), localServices); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -567,4 +597,18 @@ func noProjectText() string {
 	return "error: no project: busmon --project <p> (or AGENT_BUS_PROJECT)\n" +
 		"  busmon --list   the broker's projects\n" +
 		"  busmon --pick   choose one and open it\n"
+}
+
+// refuseDestructive refuses --delete and --reset to an agent caller
+// (projects-admin §5.4): the shared rule agentbus suspend and resume run.
+// Defence in depth, not a boundary: a double fork with the variable cleared
+// escapes it.
+func refuseDestructive(ctx context.Context, o busmonOpts, getenv func(string) string, ancestor func(context.Context) (string, error)) string {
+	switch {
+	case o.delete != "":
+		return agentcaller.Refuse(ctx, getenv, ancestor, "deleting a project", "busmon")
+	case o.reset:
+		return agentcaller.Refuse(ctx, getenv, ancestor, "purging a project's streams", "busmon")
+	}
+	return ""
 }

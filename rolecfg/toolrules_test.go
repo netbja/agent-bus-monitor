@@ -226,7 +226,10 @@ var configDeny = []string{"Edit(~/.config/agentbus/config.toml)",
 	// suspend spec §4: plain forms only, the commands refuse agent callers.
 	"Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
 	// request-priority §4: the plain form only, the command refuses agent callers.
-	"Bash(agentbus request priority*)"}
+	"Bash(agentbus request priority*)",
+	// projects-admin §5.4: busmon --delete and --reset, every spelling.
+	"Bash(busmon *-delete*)", "Bash(busmon *-d *)", "Bash(busmon *-d=*)", "Bash(busmon -d *)",
+	"Bash(busmon *-reset*)", "Bash(busmon *-r)", "Bash(busmon *-r *)", "Bash(busmon *-r=*)", "Bash(busmon -r*)"}
 
 // masterUpRules are master's own rules in the shipped manifest (Charlie,
 // 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
@@ -511,5 +514,40 @@ func TestNotifyProjectDenies(t *testing.T) {
 	}
 	if r, _ := bare.ProjectLaunchRules("coder", "demo"); len(r.Deny) != 0 {
 		t.Errorf("bare manifest denies %q", r.Deny)
+	}
+}
+
+// projects-admin §5.4: the shared denies catch busmon --delete and --reset in
+// every spelling Go's flag package takes, after any other flag, for every
+// role; busmon's other starts stay free.
+func TestBusmonDestructiveDenies(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range m.roleOrder {
+		r, err := m.ProjectLaunchRules(role, "p")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, cmd := range []string{
+			"busmon --delete demo", "busmon -delete demo", "busmon -d demo", "busmon -d=demo", "busmon --d demo",
+			"busmon --d=demo", "busmon --yes --delete demo", "busmon -p x -d demo", "busmon -H h --delete=demo",
+			"busmon --delete demo --yes", "busmon -y -d demo",
+			"busmon --reset", "busmon -reset", "busmon -r", "busmon --r", "busmon -p x -r", "busmon -p x --reset --yes",
+			"busmon -r=true -p x", "busmon --reset=true", "busmon -H h -p x -r -y",
+		} {
+			if decide(r, cmd) != "deny" {
+				t.Errorf("%s: not denied: %s", role, cmd)
+			}
+		}
+		for _, cmd := range []string{
+			"busmon --list", "busmon -p x", "busmon --project agent-bus-monitor", "busmon --pick",
+			"busmon -p x --theme dark", "busmon --host h -p x", "busmon -p x --limit 50", "busmon --version",
+		} {
+			if decide(r, cmd) == "deny" {
+				t.Errorf("%s: denied: %s", role, cmd)
+			}
+		}
 	}
 }
