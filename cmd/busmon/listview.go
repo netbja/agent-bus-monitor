@@ -34,6 +34,7 @@ type listState struct {
 	tail, live   bool
 	keep         int // rows after the selection kept in view with it (the shell's expansion), in every mode
 	onChange     func(key string, live bool)
+	lastSeen     string // the last item drawn while live (holdSelection)
 	onOpen       func(key string)
 }
 
@@ -212,6 +213,34 @@ func (l *listState) setSel(i int) {
 	}
 }
 
+// outsideLive: a live tail list whose item i is above its live window, the
+// last rows. Live pins that window, so a selection there would be hidden and
+// the list's first rows would never show (activity-scroll-bug, the person,
+// 2026-11-07): it leaves live, as a wheel-up does. A selection inside the
+// window keeps it live (charm spec: selecting keeps it live).
+func (l *listState) outsideLive(i int) bool {
+	return l.Live() && i >= 0 && i < max(0, len(l.items)-l.rows())
+}
+
+// holdSelection leaves live when the selection is above the live window,
+// whatever put it there: a key (Up, Home, g, u), a click, new items or a
+// smaller frame (foureyes, reviewer-codex). The fill calls it after the
+// list's items and frame are set, so it is the one place that decides. It
+// returns the key of the last item drawn while live: what came after it is
+// counted as new.
+//
+// An open expansion (open) keeps live: viewport holds it in view while live
+// (keep), and Esc returns to the tail (charm spec: in auto-scroll the open
+// expansion stays in view).
+func (l *listState) holdSelection(open bool) (lastSeen string, left bool) {
+	if open || !l.outsideLive(l.index(l.sel)) {
+		return "", false
+	}
+	l.live = false
+	l.changed()
+	return l.lastSeen, true
+}
+
 func (l *listState) setAnchor() {
 	l.anchor, l.anchorOff = "", 0
 	for i := l.top; i >= 0 && i < len(l.items); i-- {
@@ -293,7 +322,12 @@ func (l *listState) viewport() {
 	default:
 		if i := l.index(l.sel); i >= 0 && rows > 0 {
 			if i < l.top {
+				// The rows no one selects right above it (a day separator,
+				// the first rows of the list) come into view with it.
 				l.top = i
+				for l.top > 0 && !l.items[l.top-1].Selectable && i-(l.top-1) < rows {
+					l.top--
+				}
 			} else if i >= l.top+rows {
 				l.top = i - rows + 1
 			}
@@ -309,6 +343,15 @@ func (l *listState) viewport() {
 		l.top = min(l.top, i)
 	}
 	l.top = clamp(l.top, 0, maxTop)
+	if l.Live() { // where a later hold starts counting: the last line in view once every adjustment is made (reviewer-codex)
+		l.lastSeen = ""
+		for i := min(n, l.top+rows) - 1; i >= l.top; i-- {
+			if k := l.items[i].Key; k != "" && !isExpandKey(k) {
+				l.lastSeen = k
+				break
+			}
+		}
+	}
 }
 
 // draw draws the frame, the header and the visible rows inside rect.
