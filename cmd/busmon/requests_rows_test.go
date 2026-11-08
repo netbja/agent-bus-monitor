@@ -171,3 +171,17 @@ func TestRequestRowsExpandedThreadsKeepTheirMarkers(t *testing.T) {
 		t.Errorf("expanded threads: %d unread, %d read; want 1 and 5", unread, read)
 	}
 }
+
+// Nothing between agents but notices: no Between agents heading (its count
+// leaves the notices out), the notices line still drawn.
+func TestRequestRowsNoBetweenHeadingWhenEmpty(t *testing.T) {
+	now := time.Unix(10_000_000, 0)
+	v := requestGroups(reqFixture(now))
+	for _, s := range reqBetween {
+		delete(v.groups, s)
+	}
+	text := reqRowsText(requestRows(v, reqOpen{}, now, 136))
+	if strings.Contains(text, "Between agents") || !strings.Contains(text, "nobody owes an answer") {
+		t.Fatalf("rows:\n%s", text)
+	}
+}

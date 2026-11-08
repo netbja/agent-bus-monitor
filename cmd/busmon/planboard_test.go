@@ -282,3 +282,68 @@ func TestPlanDrawerClickOnForYouCloses(t *testing.T) {
 		t.Fatalf("after a click on For you: reader open %v, focus %v", m.rd.open(), m.ui.focus)
 	}
 }
+
+// foureyes on step 2 (plan-board): a section with no row draws no heading.
+func TestPlanBoardEmptySectionNotDrawn(t *testing.T) {
+	p := boardPlan(boardRow("n", plan.Upcoming, "coder"), boardRow("d", plan.Done, "coder"))
+	v := planBoard(p, 0, true, shellNow, 120, TierWide, true)
+	for _, l := range v.lines {
+		for _, h := range []string{"NOW", "LATER"} {
+			if strings.HasPrefix(l.text(), h+"  ") {
+				t.Errorf("empty %s drawn:\n%s", h, v.plain)
+			}
+		}
+	}
+	if sectionOf(v, "n") != "NEXT" || sectionOf(v, "d") != "DONE" {
+		t.Errorf("sections:\n%s", v.plain)
+	}
+}
+
+// foureyes on step 2: the drawer's side panel never leaves the list under
+// planListMin cells; without that room there is none.
+func TestPlanDrawerSideKeepsTheList(t *testing.T) {
+	sides := 0
+	for w := 120; w <= 220; w += 4 {
+		m := keys(t, planShell(t, w, 40), 'p')
+		list, side := m.planDrawerWidths()
+		room := m.readerWidth() >= planListMin+planSideWidth+1
+		if side != room || side && list < planListMin {
+			t.Errorf("width %d: reader %d, list %d, side %v", w, m.readerWidth(), list, side)
+		}
+		if side {
+			sides++
+		}
+	}
+	if sides == 0 {
+		t.Fatal("no wide width gave the drawer a side panel")
+	}
+	m := keys(t, planShell(t, 100, 40), 'p') // medium: never a side panel
+	if _, side := m.planDrawerWidths(); side {
+		t.Error("a drawer side panel at the medium tier")
+	}
+	// The wide tier's own drawer is 80 cells at least; the rule itself, on a
+	// frame one cell short of a list of planListMin beside the panel.
+	m.layout.Tier = TierWide
+	if r := m.readerWidth(); r >= planListMin+planSideWidth+1 {
+		t.Fatalf("fixture: reader %d leaves room", r)
+	}
+	if _, side := m.planDrawerWidths(); side {
+		t.Errorf("a side panel leaving the list %d cells", m.readerWidth()-planSideWidth-1)
+	}
+}
+
+// foureyes on step 2: the person's done task asks nothing of them.
+func TestPlanSideForYouOnAPersonsDoneTask(t *testing.T) {
+	found := false
+	for _, l := range planSide(boardRow("d", plan.Done, plan.Person), shellNow) {
+		if strings.HasPrefix(l.text(), "for you") {
+			found = true
+			if strings.TrimRight(l.text(), " ") != "for you  nothing" {
+				t.Fatalf("for you on a done task: %q", l.text())
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no for you field")
+	}
+}

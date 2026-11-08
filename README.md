@@ -550,8 +550,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     step to the next or previous one). It scrolls live; `f` or a wheel scroll up stops it, `End`
     resumes it. `/` filters (`@agent`, a thread id, words), `u` jumps to the next unread line.
   - **Board** — the shared task board: `task · owner · state · age`; Enter opens a task.
-  - **Requests** — who owes whom an answer, by thread: owed by you, waited on by you, tracked
-    requests, reviews still gated, directives between agents, notices; answered threads and
+  - **Requests** — who owes whom an answer, by thread, in three sections with their counts:
+    **Owed by you**, **You wait on**, and **Between agents** (tracked requests, reviews still
+    gated, directives, then the notices line); answered threads and
     those older than 24 h are folded (`o`). Enter expands a group or opens a thread; `d` then `y`
     closes a thread with a reply from you.
   - **Plan** — the batch's plan (`agentbus plan load`) as a board: the progress (`v0.29  6/11 done`,
