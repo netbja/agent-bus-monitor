@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // statFields is what process identity needs from /proc/<pid>/stat.
@@ -124,4 +126,33 @@ func ancestors(self int, statOf func(int) (statFields, error)) []ProcID {
 		out = append(out, ProcID{PID: pid, Start: f.start})
 	}
 	return out
+}
+
+// procAgent is pid's "<project>/<agent>" from /proc/<pid>/environ ("" when
+// unreadable, as on macOS, or not an agent's): a process of the same user,
+// read only, never trusted for more than a restart in place.
+func procAgent(pid int) string {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ")
+	if err != nil {
+		return ""
+	}
+	return agentFromEnviron(b)
+}
+
+// agentFromEnviron reads AGENT_BUS_PROJECT and AGENT_BUS_AGENT from a
+// NUL-separated environment: both, valid names, else "".
+func agentFromEnviron(b []byte) string {
+	var project, agent string
+	for _, kv := range strings.Split(string(b), "\x00") {
+		if v, ok := strings.CutPrefix(kv, "AGENT_BUS_PROJECT="); ok {
+			project = v
+		}
+		if v, ok := strings.CutPrefix(kv, "AGENT_BUS_AGENT="); ok {
+			agent = v
+		}
+	}
+	if !bus.ValidName(project) || !bus.ValidName(agent) {
+		return ""
+	}
+	return project + "/" + agent
 }

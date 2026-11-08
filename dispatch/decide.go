@@ -13,11 +13,15 @@ import (
 
 // Inspection is what herdr says about an agent's pane at one instant.
 type Inspection struct {
-	State      string // idle|working|blocked|done|unknown
-	Client     string
-	Focused    bool
-	PIDs       []int
-	Starts     map[int]uint64
+	State   string // idle|working|blocked|done|unknown
+	Client  string
+	Focused bool
+	PIDs    []int
+	Starts  map[int]uint64
+	// Env is each foreground process's "<project>/<agent>" from its own
+	// AGENT_BUS_PROJECT and AGENT_BUS_AGENT ("" or absent: unknown), read
+	// to tell an agent restarted in place from another one (codex-identity-recovery).
+	Env        map[int]string
 	Ready      bool   // the client's ready signature matched on a settled screen
 	Busy       bool   // the client's busy signature matched
 	ScreenHash string // opaque hash of a stable screen; the text itself is never retained
@@ -84,6 +88,7 @@ type Input struct {
 	Wake       *bus.WakeRecord
 	OldestAge  time.Duration // age of the oldest obligation entry, from its id
 	SinceWake  time.Duration
+	Who        string // "<project>/<agent>": whom a restarted process must name itself
 }
 
 // workingFactor: an agent herdr reports as working never escalates before
@@ -191,8 +196,12 @@ func Decide(p Policy, x Input) Decision {
 	case !p.Supported[in.Client]:
 		return wait(7, "client unsupported", T)
 	}
+	restarted := false
 	if !identityOK(x.Snap, in) {
-		return wait(6, "identity mismatch", T)
+		if !restartedInPlace(x.Who, in) {
+			return wait(6, "identity mismatch", T)
+		}
+		restarted = true
 	}
 
 	switch {
@@ -207,7 +216,31 @@ func Decide(p Policy, x Input) Decision {
 	case in.Focused:
 		return wait(8, "pane focused", T)
 	}
+	if restarted {
+		return d(ActPrompt, 9, "ready; restarted in place")
+	}
 	return d(ActPrompt, 9, "ready")
+}
+
+// restartedInPlace: the registered process is gone from the pane, but one of
+// its foreground processes names itself as this very agent of this project
+// (its own AGENT_BUS_PROJECT and AGENT_BUS_AGENT): herdr restored the agent
+// after a reboot, a new process not proved yet (codex-identity-recovery).
+// The dispatcher may wake it with the fixed line, and its next turn proves
+// the new pid (status, the turn hooks); nothing else trusts it before then
+// (/clear, the observation, a pop's end keep the strict identity). Another
+// agent's process, or one whose environment cannot be read, is still a
+// mismatch.
+func restartedInPlace(who string, in Inspection) bool {
+	if who == "" {
+		return false
+	}
+	for _, pid := range in.PIDs {
+		if in.Env[pid] == who {
+			return true
+		}
+	}
+	return false
 }
 
 // paneCauses are the reasons of rules 7–8, the pane states an escalation can

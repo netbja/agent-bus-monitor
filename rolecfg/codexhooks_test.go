@@ -16,7 +16,7 @@ func TestCodexHookArgsAreTOML(t *testing.T) {
 	for _, bin := range []string{"/usr/local/bin/agentbus", "/opt/agent bus/agentbus", `/tmp/a"b\c/agentbus`, "/tmp/tab\there/agentbus", "/tmp/esc\x1b/agentbus", "/tmp/del\x7f/agentbus", "/home/zoé/agentbus", "/tmp/\U0001F600/agentbus"} {
 		h := claudeHooks{TurnStart: ShellJoin([]string{bin, "roles", "turn", "start"}), TurnEnd: ShellJoin([]string{bin, "roles", "turn", "end"})}
 		args := codexHookArgs(h)
-		if len(args) != 6 || args[0] != "-c" || args[2] != "-c" || args[4] != "-c" {
+		if len(args) != 8 || args[0] != "-c" || args[2] != "-c" || args[4] != "-c" || args[6] != "-c" {
 			t.Fatalf("%q: args %q", bin, args)
 		}
 		var got struct {
@@ -25,7 +25,7 @@ func TestCodexHookArgsAreTOML(t *testing.T) {
 				Hooks []map[string]any
 			}
 		}
-		for _, v := range []string{args[1], args[3], args[5]} {
+		for _, v := range []string{args[1], args[3], args[5], args[7]} {
 			if _, err := toml.Decode(v, &got); err != nil {
 				t.Fatalf("%q: %s does not parse: %v", bin, v, err)
 			}
@@ -33,14 +33,16 @@ func TestCodexHookArgsAreTOML(t *testing.T) {
 		if !got.Features.Hooks {
 			t.Errorf("%q: features.hooks not on", bin)
 		}
-		for event, want := range map[string]string{"UserPromptSubmit": h.TurnStart, "Stop": h.TurnEnd} {
+		// codex-identity-recovery: SessionStart (startup, resume) ends a turn,
+		// which proves the new process's identity, as Claude Code's does.
+		for event, want := range map[string]string{"UserPromptSubmit": h.TurnStart, "Stop": h.TurnEnd, "SessionStart": h.TurnEnd} {
 			m := got.Hooks[event]
 			if len(m) != 1 || len(m[0].Hooks) != 1 || m[0].Hooks[0]["type"] != "command" || m[0].Hooks[0]["command"] != want || len(m[0].Hooks[0]) != 2 {
 				t.Errorf("%q: %s = %+v, want the one command %q", bin, event, m, want)
 			}
 		}
-		if len(got.Hooks) != 2 {
-			t.Errorf("%q: hooks %v, want only UserPromptSubmit and Stop", bin, got.Hooks)
+		if len(got.Hooks) != 3 {
+			t.Errorf("%q: hooks %v, want only UserPromptSubmit, Stop and SessionStart", bin, got.Hooks)
 		}
 		if strings.Contains(strings.Join(args, " "), `\ud`) {
 			t.Errorf("%q: a surrogate escape: %q", bin, args)
@@ -60,6 +62,7 @@ func TestCodexDryRunCarriesTheTurnHooks(t *testing.T) {
 		` -c features.hooks=true` +
 		` -c 'hooks.UserPromptSubmit=[{hooks=[{type="command",command="/opt/bus/agentbus roles turn start"}]}]'` +
 		` -c 'hooks.Stop=[{hooks=[{type="command",command="/opt/bus/agentbus roles turn end"}]}]'` +
+		` -c 'hooks.SessionStart=[{hooks=[{type="command",command="/opt/bus/agentbus roles turn end"}]}]'` +
 		" '<role prompt and skill paths>'\n"
 	if err != nil || !strings.Contains(out, want) {
 		t.Fatalf("dry run = %q %v, want the line %q", out, err, want)

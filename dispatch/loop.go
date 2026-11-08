@@ -553,7 +553,7 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 		return err
 	}
 	s := &step{agent: agent, snap: snap, o: o, w: w, exists: exists}
-	s.x = Input{Obligation: o, Armed: armed, Snap: snap}
+	s.x = Input{Obligation: o, Armed: armed, Snap: snap, Who: l.b.Project() + "/" + agent}
 	if exists {
 		s.x.Wake = &s.w
 	}
