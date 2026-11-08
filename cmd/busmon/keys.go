@@ -359,7 +359,7 @@ var (
 		{Keys: GlyphArrowL + GlyphArrowR, Hint: "panel", Help: GlyphArrowR + " into the keys, " + GlyphArrowL + " back to the groups (a narrow page: they step the tabs); on an open choice they change its value", Act: ActGroupNext, match: keyIs(keyRight)},
 		{Keys: GlyphArrowL, Act: ActGroupPrev, match: keyIs(keyLeft)},
 		{Keys: "tab", Hint: "focus", Help: "move the focus between the groups and the keys", Act: ActFocusToggle, match: either(keyIs(keyTab), keyIs(keyBacktab))},
-		{Keys: "enter", Hint: "edit", Help: "on a group: go to its keys; on a key: flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is)", Act: ActOpen, match: either(keyIs(keyEnter), runeIs(' '))},
+		{Keys: "enter", Hint: "edit", Help: "on a group: go to its keys; on a key: flip an on/off, open a choice or the line editor (enter writes, esc leaves the file as it is; a number or a duration takes only its digits and units, + and - step it)", Act: ActOpen, match: either(keyIs(keyEnter), runeIs(' '))},
 		{Keys: "d", Hint: "reset", Help: "remove the selected key from config.toml (y confirms): what applies next is named", Act: ActReset, match: runeIs('d')},
 		{Keys: "D", Hint: "reset group", Help: "remove every key of the group set in config.toml (y confirms); your own backup.after_* stay", Act: ActResetGroup, match: runeIs('D')},
 		{Keys: "esc q", Hint: "back", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},

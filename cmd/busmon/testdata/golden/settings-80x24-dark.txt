@@ -17,8 +17,8 @@
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
 │  Display  how busmon looks; theme, icons and fade apply at once              │
 │                                                                              │
-│      Fade and slide            ● on                                          │
-│    • Theme                     ‹ dark ›                                      │
-│  ▶ • Icons                     ‹ nerd ›                                      ▼
+│      Fade and slide                  ● on                                    │
+│    • Theme                           ‹ dark ›                                │
+│  ▶ • Icons                           ‹ nerd ›                                ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k move   ←→ panel   tab focus   enter edit   d reset   D reset group      

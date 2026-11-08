@@ -679,3 +679,14 @@ func fileDuration(zeroOK bool) func(any) (any, string) {
 }
 
 var filePositiveDuration = fileDuration(false)
+
+// Valid says whether v, as the file decodes it (a string for a duration, an
+// int64, a float64, a bool), passes the key's own file rule: the settings
+// page asks it which characters a field may take (a negative, a day count).
+func (k *Key) Valid(v any) bool {
+	if k.file == nil {
+		return true
+	}
+	_, why := k.file(v)
+	return why == ""
+}

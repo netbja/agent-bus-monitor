@@ -437,7 +437,8 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 			s.text = string(r[:len(r)-1])
 		}
 	case k.Code == keyRune:
-		s.text += string(k.Rune)
+		key, _ := config.Lookup(s.edit)
+		s.text, _ = settingFieldRune(key, s.text, k.Rune)
 	case k.Code == keyEnter:
 		key, _ := config.Lookup(s.edit)
 		v, why := parseSetting(key, s.text)
@@ -547,7 +548,7 @@ func settingsTitle(s *settingsPage) string {
 const (
 	settingsSideW   = 18
 	settingsSideMin = 92
-	settingsLabelW  = 26
+	settingsLabelW  = 30
 	settingsValueW  = 28 // a longer value is cut, with its ellipsis
 )
 
@@ -965,7 +966,7 @@ var settingHelps = map[string]string{
 	"display.icons":           "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":           "Activity lines replayed when busmon starts; 0 or below: all history",
 	"display.idle_hint_after": "flags idle? on a working agent whose pane looks ready this long; 0 is off",
-	"display.idle_view_after": "a calm screen after this long without input; 0 = off",
+	"display.idle_view_after": "the screensaver: a calm screen after this long without input; 0 = off",
 	"waiting.fade":            "fades a waiting agent in and out and slides the gauges (true colour only)",
 	"waiting.popup_after":     "the reminder opens once a decision has waited this long",
 	"waiting.snooze":          "how long a dismissed reminder stays away",
@@ -1037,4 +1038,134 @@ func iconSample(width int) Line {
 		l = append(l, p)
 	}
 	return l
+}
+
+// settingNegative: k's own rule takes a value below zero.
+func settingNegative(k *config.Key) bool {
+	switch k.Kind {
+	case config.Int:
+		return k.Valid(int64(-1))
+	case config.Float:
+		return k.Valid(-1.0)
+	case config.Duration:
+		return k.Valid("-1m")
+	}
+	return false
+}
+
+// settingFieldRune is a typed key on the line editor of k (the person,
+// settings-duration-input): a number or a duration takes only what can form
+// its value (digits; '.' for a decimal or a duration; h m s, and d where the
+// rule takes days; '-' first where it takes a negative); + and - step it
+// by its own unit; any other key is not typed. Other kinds take every key.
+// stepped says the key stepped the value.
+func settingFieldRune(k *config.Key, text string, r rune) (string, bool) {
+	numeric := k.Kind == config.Int || k.Kind == config.Float || k.Kind == config.Duration
+	if !numeric || k.List {
+		return text + string(r), false
+	}
+	var last rune
+	if rs := []rune(text); len(rs) > 0 {
+		last = rs[len(rs)-1]
+	}
+	digit := func(c rune) bool { return c >= '0' && c <= '9' }
+	// the number being typed: the text after the last unit letter
+	number := text[strings.LastIndexAny(text, "hmsd")+1:]
+	switch {
+	case r == '-' && text == "" && settingNegative(k):
+		return "-", false
+	case r == '-' && text == "": // nothing to step down from
+		return text, false
+	case r == '+' || r == '-':
+		return stepSetting(k, text, r == '+'), true
+	case digit(r):
+		return text + string(r), false
+	case r == '.' && k.Kind != config.Int && digit(last) && !strings.Contains(number, "."):
+		return text + string(r), false
+	case k.Kind == config.Duration && strings.ContainsRune("hms", r) && (digit(last) || r == 's' && last == 'm'):
+		return text + string(r), false
+	case k.Kind == config.Duration && r == 'd' && digit(last) && k.Valid("1d"):
+		return text + string(r), false
+	}
+	return text, false
+}
+
+// stepSetting moves text by one of its own unit (a duration's last unit, a
+// minute from 0), never below 0 where k takes no negative; text that does
+// not read is left as it is.
+func stepSetting(k *config.Key, text string, up bool) string {
+	sign := 1
+	if !up {
+		sign = -1
+	}
+	floor := !settingNegative(k)
+	switch k.Kind {
+	case config.Int:
+		n, err := strconv.Atoi(strings.TrimSpace(or(text, "0")))
+		if err != nil {
+			return text
+		}
+		n += sign
+		if floor && n < 0 {
+			n = 0
+		}
+		return strconv.Itoa(n)
+	case config.Float:
+		f, err := strconv.ParseFloat(strings.TrimSpace(or(text, "0")), 64)
+		if err != nil {
+			return text
+		}
+		f += float64(sign)
+		if floor && f < 0 {
+			f = 0
+		}
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	case config.Duration:
+		t := strings.TrimSpace(or(text, "0"))
+		var d time.Duration
+		unit := time.Minute
+		switch {
+		case t == "0":
+		case strings.HasSuffix(t, "d"):
+			n, err := strconv.Atoi(strings.TrimSuffix(t, "d"))
+			if err != nil {
+				return text
+			}
+			d, unit = time.Duration(n)*24*time.Hour, 24*time.Hour
+		default:
+			var err error
+			if d, err = time.ParseDuration(t); err != nil {
+				return text
+			}
+			switch t[len(t)-1] {
+			case 'h':
+				unit = time.Hour
+			case 's':
+				unit = time.Second
+			}
+		}
+		d += time.Duration(sign) * unit
+		if floor && d < 0 {
+			d = 0
+		}
+		return formatStep(d, unit)
+	}
+	return text
+}
+
+// formatStep writes d in the unit it was stepped by: "8d", "11m", "91s".
+func formatStep(d, unit time.Duration) string {
+	switch {
+	case d == 0:
+		return "0"
+	case unit == 24*time.Hour && d%unit == 0:
+		return strconv.FormatInt(int64(d/unit), 10) + "d"
+	case d%time.Hour == 0:
+		return strconv.FormatInt(int64(d/time.Hour), 10) + "h"
+	case d%time.Minute == 0:
+		return strconv.FormatInt(int64(d/time.Minute), 10) + "m"
+	case d%time.Second == 0:
+		return strconv.FormatInt(int64(d/time.Second), 10) + "s"
+	}
+	return d.String()
 }
