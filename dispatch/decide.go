@@ -322,6 +322,13 @@ func idMillis(id string) (int64, bool) {
 	return int64(ms), true
 }
 
+// ageSince is the time from ms (Unix milliseconds) to now, saturated by
+// time.Time.Sub instead of wrapping (reviewer-codex): a moment after now is
+// no age at all, never a large positive one.
+func ageSince(now time.Time, ms int64) time.Duration {
+	return max(now.Sub(time.UnixMilli(ms)), 0)
+}
+
 func parseID(id string) (ms, seq uint64, ok bool) {
 	head, tail, found := strings.Cut(id, "-")
 	ms, err := strconv.ParseUint(head, 10, 64)
