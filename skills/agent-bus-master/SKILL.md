@@ -285,6 +285,20 @@ Then:
 Never swap without the person's yes, and never swap yourself: when **your own** provider is out
 for long, the dispatcher tells the person in busmon how to swap you from a terminal.
 
+## Show your background work: `agentbus background`
+
+When you send a long run to the background (checks before a PR, a build) and keep reading the
+bus, say so where the person looks: busmon shows it on your row, in the header and in the idle
+view.
+
+```bash
+agentbus background master "2 checks running" --for 20m   # when the run starts; --for = its bound
+agentbus background master --clear                         # when you are notified it ended
+```
+
+It is its own record, not your status message (your turn hooks rewrite that at every turn), and
+it disappears by itself once `--for` runs out (30m by default, at most 24h). Any agent may use it.
+
 ## Write reports people can read
 
 busmon renders reports as Markdown, and the person reads yours most. Use this shape (busmon's

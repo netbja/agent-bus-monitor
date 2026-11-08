@@ -57,6 +57,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo reload coder --reason \"client update\"", "agentbus -p demo reload coder -n"},
 	},
 	{
+		Name: "background", Usage: []string{"background <agent> <text...> [--for <duration>]", "background <agent> --clear"},
+		Summary: "show an agent's background work in busmon (\"2 checks running\") until cleared or its time runs out",
+		Flags: []cli.Flag{
+			{Long: "for", Short: 'f', Arg: "<duration>", Help: "how long it may run: 30m by default, at most 24h; it disappears after"},
+			{Long: "clear", Short: 'c', Help: "the work ended: remove it"},
+		},
+		Examples: []string{"agentbus -p demo background master \"2 checks running\" --for 20m", "agentbus -p demo background master --clear"},
+	},
+	{
 		Name: "handoff", Usage: []string{"handoff [--json]", "handoff <self> --report <id>"},
 		Summary: "list declared hand-offs, or declare your own (its report id); declaring sets you idle",
 		Flags: []cli.Flag{

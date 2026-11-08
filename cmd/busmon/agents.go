@@ -507,6 +507,9 @@ func agentRow(icons, name string, a *agentState, pilot bool, tier Tier, width in
 	} else {
 		l = append(l, Seg{Text: Preview(a.message), Role: RoleText})
 	}
+	if t := backgroundText(a, now); t != "" {
+		l = append(l, Seg{Text: "  " + t, Role: RoleMuted})
+	}
 	return FitLine(l, width)
 }
 

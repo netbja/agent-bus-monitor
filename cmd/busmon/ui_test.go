@@ -165,6 +165,10 @@ type fakeReader struct {
 	asks       []bus.Ask
 	pauseErr   error // returned by Pause when set
 	contexts   map[string]bus.ContextFill
+	// backgrounds is each agent's background work (progress-line §4);
+	// backgroundErr fails its read.
+	backgrounds   map[string]bus.Background
+	backgroundErr error
 	contextErr error                        // returned by Context when set
 	gates      map[string]map[string]string // OpenChallenges by gated name, when set
 }
@@ -323,6 +327,17 @@ func (f *fakeReader) Pause(context.Context) (*bus.PauseRecord, error) {
 		return nil, f.pauseErr
 	}
 	return f.pause, nil
+}
+
+func (f *fakeReader) Backgrounds(_ context.Context, agents []string) (map[string]bus.Background, error) {
+	f.n("Backgrounds")
+	out := map[string]bus.Background{}
+	for _, a := range agents {
+		if v, ok := f.backgrounds[a]; ok {
+			out[a] = v
+		}
+	}
+	return out, f.backgroundErr
 }
 
 func (f *fakeReader) Context(context.Context) (map[string]bus.ContextFill, error) {
