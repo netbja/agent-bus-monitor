@@ -411,6 +411,23 @@ var Keys = []*Key{
 	{Name: "health.runaway.context_growth", Env: "AGENTBUS_HEALTH_RUNAWAY_CONTEXT_GROWTH", Kind: Int, Default: 100000, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
 	{Name: "health.runaway.growth_span", Env: "AGENTBUS_HEALTH_RUNAWAY_GROWTH_SPAN", Kind: Duration, Default: 10 * time.Minute, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayDuration, file: filePositiveDuration},
 	{Name: "health.runaway.screen_repeats", Env: "AGENTBUS_HEALTH_RUNAWAY_SCREEN_REPEATS", Kind: Int, Default: 4, ReadBy: "dispatch (health)", Invalid: runawayInvalid, env: envRunawayInt, file: filePositiveInt},
+	// model-detection §3.2: a catalogue whose source is older than this
+	// withholds gone and newer, and the model-catalogue check names it.
+	{Name: "models.source_max_age", Env: "AGENT_BUS_MODELS_SOURCE_MAX_AGE", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "agentbus models, roles doctor, dispatch (health)",
+		env: func(raw string) (any, envResult) {
+			if d, ok := parseAge(raw); ok {
+				return d, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok {
+				if d, ok := parseAge(s); ok {
+					return d, ""
+				}
+			}
+			return nil, "want days such as \"7d\", or a duration such as \"36h\", above 0 and at most 365d"
+		}},
 }
 
 // fileTeam is start.team's rule: "" or role[:profile] items, comma-separated,
@@ -587,6 +604,25 @@ var filePositiveInt = fileInt(func(n int) bool { return n > 0 }, "want a whole n
 
 // fileDuration is a Go duration string ("90s", "5m"); zeroOK lets "0" mean off
 // (or immediately), as busmon.toml always has.
+// parseAge is whole days ("7d") or a Go duration, above 0, at most 365 days.
+func parseAge(raw string) (time.Duration, bool) {
+	raw = strings.TrimSpace(raw)
+	var d time.Duration
+	if n, ok := strings.CutSuffix(raw, "d"); ok {
+		days, err := strconv.Atoi(n)
+		if err != nil {
+			return 0, false
+		}
+		d = time.Duration(days) * 24 * time.Hour
+	} else {
+		var err error
+		if d, err = time.ParseDuration(raw); err != nil {
+			return 0, false
+		}
+	}
+	return d, d > 0 && d <= 365*24*time.Hour
+}
+
 func fileDuration(zeroOK bool) func(any) (any, string) {
 	return func(v any) (any, string) {
 		want := "want a duration above 0, such as \"30m\""

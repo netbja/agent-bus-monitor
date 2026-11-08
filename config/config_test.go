@@ -31,7 +31,7 @@ func TestRegistryRows(t *testing.T) {
 		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.idle_after", "dispatch.turn_stale_after", "dispatch.pop_retire", "dispatch.pop_retire_after", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "suspend.wait", "suspend.auto_resume", "delivery.forge", "delivery.base", "backup.schedule", "backup.dir", "backup.keep", "backup.warn_after", "backup.age_recipient", "backup.after_command", "backup.after_env", "backup.after_timeout", "notify.on", "notify.targets", "notify.events", "notify.detail", "notify.delay", "notify.max_per_hour", "notify.quiet", "notify.quiet_exempt", "bus.report_max", "bus.report_full_max", "bus.verdict_max",
 		"health.disk_warn_pct", "health.disk_warn_gib", "health.disk_fail_pct", "health.disk_fail_gib",
 		"health.runaway.silent_after", "health.runaway.context_growth", "health.runaway.growth_span",
-		"health.runaway.screen_repeats",
+		"health.runaway.screen_repeats", "models.source_max_age",
 	}
 	if len(Keys) != len(want) {
 		t.Fatalf("registry has %d rows, want %d", len(Keys), len(want))
