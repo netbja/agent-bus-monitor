@@ -386,7 +386,7 @@ func TestSettingsPageNotifications(t *testing.T) {
 	if indexOfGroup(order, config.GroupIdentity) < 0 || indexOfGroup(order, config.GroupNotifications) != indexOfGroup(order, config.GroupIdentity)+1 {
 		t.Fatalf("Notifications not after Identity: %v", order)
 	}
-	for _, s := range []string{"Send notifications", "Targets", "Quiet hours", "phone", "ntfy", "team", "discord", "not listed", "edit it yourself"} {
+	for _, s := range []string{"Send notifications", "Targets", "Quiet hours", "phone", "ntfy", "team", "discord", "not listed"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("page lacks %q:\n%s", s, body)
 		}

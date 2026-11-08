@@ -23,6 +23,9 @@ const (
 	ModeShellAsk // the shell's reader on an ask: ModeAsk's table, where a digit answers
 	ModeTour     // the first-launch tour (tour.go): its pages own the keyboard
 	ModeSettings // the settings page (C): its groups and their keys (settings_ui.go)
+	// ModeNotifySetup is the guided notifications setup (notify_setup.go): its
+	// own table, so q, t, s and r mean nothing of another page's there.
+	ModeNotifySetup
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -80,6 +83,15 @@ const (
 	ActTab5         // the shell's narrow tier: the fifth view
 	ActTab6         // the shell's narrow tier: the sixth view (Plan)
 	ActTabNext      // the lower panel's next tab, wrapping (busmon-keys)
+	ActFieldNext    // the notifications setup: the next field (tab)
+	ActFieldPrev    // the notifications setup: the field before (shift-tab)
+	ActShowCode     // the notifications setup: the code alone, until any key (c)
+	ActTestAgain    // the notifications setup: send the test again (t)
+	ActEditSetup    // the notifications setup: back to the first step, values kept (e)
+	ActRemoveTarget // a target's page: remove it, y/n (x)
+	ActRenameTarget // a target's page: rename it (n)
+	ActShowTopic    // an ntfy target's page: its topic and code (s)
+	ActShowFormat   // the setup's first screen: the file's format, to write it by hand (?)
 	ActTabPrev      // the lower panel's previous tab, wrapping
 	ActAskOrWrite   // w: the open question, or with none the compose window to master
 	ActSleep        // Z: suspend the open project, or resume it when it is suspended (agentbus suspend/resume)
@@ -352,6 +364,26 @@ var (
 		{Keys: "D", Hint: "reset group", Help: "remove every key of the group set in config.toml (y confirms); your own backup.after_* stay", Act: ActResetGroup, match: runeIs('D')},
 		{Keys: "esc q", Hint: "back", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 	}
+	// notifySetupBindings: the guided setup (notify-guided-setup §5.2). A field
+	// being edited takes every key but tab, enter and esc (notifyFieldKey).
+	notifySetupBindings = []binding{
+		{Keys: "enter", Hint: "next", Help: "the next step, or confirm the choice; on a field: edit it", Act: ActOpen, match: keyIs(keyEnter)},
+		{Keys: "esc", Hint: "back", Help: "back one step; on step 1 or a target's page, close (nothing is written before the write step)", Act: ActClose, match: keyIs(keyEscape)},
+		{Keys: arrows, Hint: "choose", Help: "between choices, or between fields", Act: ActUp, match: keyIs(keyUp)},
+		{Keys: GlyphDownArrow, Act: ActDown, match: keyIs(keyDown)},
+		{Keys: "tab", Hint: "field", Help: "the next field (shift-tab the one before), edited at once", Act: ActFieldNext, match: keyIs(keyTab)},
+		{Keys: "shift-tab", Act: ActFieldPrev, match: keyIs(keyBacktab)},
+		{Keys: "y", Hint: "copy topic", Help: "ntfy: copy the topic (the subscribe step, a target's page)", Act: ActCopy, match: runeIs('y')},
+		{Keys: "Y", Help: "ntfy: copy the subscribe link", Act: ActCopyThread, match: runeIs('Y')},
+		{Keys: "c", Hint: "code", Help: "ntfy: the code alone, full screen, until any key", Act: ActShowCode, match: runeIs('c')},
+		{Keys: "t", Hint: "test", Help: "send the test again (after the write, a target's page)", Act: ActTestAgain, match: runeIs('t')},
+		{Keys: "e", Hint: "edit", Help: "back to the first step, values kept", Act: ActEditSetup, match: runeIs('e')},
+		{Keys: "x", Hint: "remove", Help: "a target's page: remove it (y/n; no other key while it asks)", Act: ActRemoveTarget, match: runeIs('x')},
+		{Keys: "n", Hint: "rename", Help: "a target's page: rename it (enter writes)", Act: ActRenameTarget, match: runeIs('n')},
+		{Keys: "s", Hint: "topic", Help: "an ntfy target's page: its topic and code, until any key", Act: ActShowTopic, match: runeIs('s')},
+		{Keys: "?", Hint: "format", Help: "the first step: notify.toml's format and a table to copy, to write the file by hand", Act: ActShowFormat, match: runeIs('?')},
+		{Keys: "F1", Hint: "help", Act: ActHelp, match: keyIs(keyF1)},
+	}
 	tourBindings = []binding{
 		{Keys: "enter", Hint: "next", Alt: GlyphArrowR, Act: ActNextItem, match: either(keyIs(keyEnter), keyIs(keyRight))},
 		{Keys: GlyphArrowL, Hint: "back", Act: ActPrevItem, match: keyIs(keyLeft)},
@@ -421,6 +453,8 @@ func bindings(m Mode) []binding {
 		bs = tourBindings
 	case ModeSettings:
 		bs = settingsBindings
+	case ModeNotifySetup:
+		bs = notifySetupBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }

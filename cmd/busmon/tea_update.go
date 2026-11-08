@@ -30,6 +30,8 @@ func (m *Model) mode() Mode {
 		return ModeShellAsk
 	case m.rd.open() && m.rd.top().kind == ovSettings:
 		return ModeSettings
+	case m.rd.open() && m.rd.top().kind == ovNotifySetup:
+		return ModeNotifySetup
 	case m.rd.open():
 		return ModeOverlay
 	}

@@ -30,9 +30,10 @@ var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttenti
 // the selected group's keys on the right; page.sel is the row in that group).
 type settingsPage struct {
 	groups  []settingGroup
-	group   int      // the selected group
-	keys    bool     // the focus is on the keys (else on the groups: settings-focus)
-	targets []string // notify.toml's targets under the Notifications rows
+	group   int               // the selected group
+	keys    bool              // the focus is on the keys (else on the groups: settings-focus)
+	targets []string          // notify.toml's targets under the Notifications rows
+	refs    []notifyTargetRef // the target each of those lines shows (selectable after the set-up lines)
 	loaded  bool
 	edit    string   // the key being edited ("" = none)
 	text    string   // the editor's text
@@ -58,7 +59,7 @@ func (s *settingsPage) selectable() int {
 		case config.GroupBackup:
 			n += backupItems(s.backup)
 		case config.GroupNotifications:
-			n += len(notifyAssistKinds)
+			n += len(notifyAssistKinds) + len(s.refs)
 		}
 	}
 	return n
@@ -76,6 +77,7 @@ var settingChoices = map[string][]string{"display.theme": themeChoices, "display
 type settingsMsg struct {
 	groups  []settingGroup
 	targets []string // notify.toml's targets, one line each, never a URL
+	refs    []notifyTargetRef
 	backup  *backupFacts
 	keys    []string // the keys written or unset (none = an open)
 	err     error
@@ -122,7 +124,8 @@ func (m *Model) settingsCmd(write func() error, keys ...string) tea.Cmd {
 		err := write()
 		host, _ := os.Hostname()
 		f := readBackupFacts(getenv, host)
-		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: notifyTargetLines(getenv), backup: &f, keys: keys, err: err}
+		lines, refs := notifyTargets(getenv)
+		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: lines, refs: refs, backup: &f, keys: keys, err: err}
 	}
 }
 
@@ -144,7 +147,7 @@ func (m *Model) gotSettings(msg settingsMsg) {
 		return
 	}
 	s := p.set
-	s.groups, s.targets, s.backup, s.loaded, s.busy, p.dirty = msg.groups, msg.targets, msg.backup, true, false, true
+	s.groups, s.targets, s.refs, s.backup, s.loaded, s.busy, p.dirty = msg.groups, msg.targets, msg.refs, msg.backup, true, false, true
 	var refused *config.RefusedError
 	switch {
 	case msg.err != nil && errors.As(msg.err, &refused):
@@ -304,8 +307,12 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 		return nil
 	}
 	if p.sel >= len(rows) && act == ActOpen && s.groups[s.group].Group == config.GroupNotifications {
-		if i := p.sel - len(rows); i < len(notifyAssistKinds) {
-			return m.notifyAssistOpen(notifyAssistKinds[i].kind)
+		i := p.sel - len(rows)
+		if i < len(notifyAssistKinds) { // the guided setup (notify-guided-setup §5.1)
+			return m.notifySetupOpen(notifyAssistKinds[i].kind, "")
+		}
+		if j := i - len(notifyAssistKinds); j < len(s.refs) { // a target's own page
+			return m.notifySetupOpen(s.refs[j].kind, s.refs[j].name)
 		}
 		return nil
 	}
@@ -712,20 +719,31 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 		}
 	}
 	if g.Group == config.GroupNotifications {
-		for _, l := range s.targets {
-			b.seg(RoleMuted, "    "+Preview(l)).text("\n")
-			n++
-		}
 		lines, at := notifyAssistLines(s, len(g.Rows), sel, width)
 		if at >= 0 {
 			selLine = n + at
 		}
 		for _, l := range lines {
 			b.segs(l...).text("\n")
+			n++
+		}
+		// One line per target, below the set-up lines, each opening its page
+		// (notify-guided-setup §5.1): never a topic or a URL.
+		first := len(g.Rows) + len(notifyAssistKinds)
+		for i, l := range s.targets {
+			if i < len(s.refs) {
+				if first+i == sel {
+					selLine = n
+				}
+				b.segs(FitLine(append(settingsItemMark(s, first+i, sel), S(RoleText, Preview(l))), width)...).text("\n")
+			} else {
+				b.seg(RoleMuted, "    "+Preview(l)).text("\n")
+			}
+			n++
 		}
 		if sel >= len(g.Rows) {
 			b.text("\n").text(" ").seg(RoleLine, strings.Repeat(glyphHorizontal, max(0, width-2))).text("\n")
-			b.join(wrapSpans([]mdSpan{{text: "enter: the steps, a template to copy and the last test; busmon never writes notify.toml", role: RoleMuted}}, width-1, " ", " ")).text("\n")
+			b.join(wrapSpans([]mdSpan{{text: "enter: a set-up line asks what is needed and writes notify.toml for you; a target opens its page (test, rename, remove)", role: RoleMuted}}, width-1, " ", " ")).text("\n")
 			return b.Lines(), selLine
 		}
 	}

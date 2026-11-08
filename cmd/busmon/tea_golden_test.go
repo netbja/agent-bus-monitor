@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 var updateGoldens = flag.Bool("update", false, "rewrite testdata/golden/*")
@@ -59,7 +60,8 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "plantab"}
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "plantab",
+	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -99,6 +101,8 @@ func inState(t testing.TB, m Model, state string) Model {
 			tab = '6'
 		}
 		return keys(t, m, tab, 'j', 'j')
+	case "notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets":
+		return notifyGolden(t, m, state)
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")
@@ -228,4 +232,59 @@ func goldenPlan() planState {
 	)
 	p.rows[1].Verdict, p.rows[1].PR, p.rows[1].Reason = "approved", 338, "merge PR 338"
 	return p
+}
+
+// notifyGolden is the guided setup in a golden state (notify-guided-setup
+// §5.4): a fixed fake topic and webhook, neither a secret.
+func notifyGolden(t testing.TB, m Model, state string) Model {
+	t.Helper()
+	toml := ""
+	if state == "notify-targets" {
+		toml = "[ntfy.phone]\ntopic = \"" + goldenTopic + "\"\n[discord.team]\nwebhook = \"https://discord.com/api/webhooks/1/goldenhook\"\n"
+	}
+	getenv := settingsEnv(t, "[notify]\non = true\ntargets = [\"phone\"]\n", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1", "XDG_STATE_HOME": t.TempDir()})
+	if toml != "" {
+		if err := os.WriteFile(filepath.Join(filepath.Dir(config.Path(getenv)), "notify.toml"), []byte(toml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m.cfg.getenv = getenv
+	m = stepCmd(t, m, tea.KeyPressMsg(tea.Key{Code: 'C', Text: "C"}))
+	p := m.rd.top()
+	for i, g := range p.set.groups {
+		if g.Group == config.GroupNotifications {
+			p.set.group, p.set.keys = i, true
+		}
+	}
+	if state == "notify-targets" { // page C: the set-up lines, then a line per target, phone selected
+		p.sel, p.dirty = len(p.set.rows())+len(notifyAssistKinds), true
+		m.refresh()
+		return m
+	}
+	kind := "ntfy"
+	switch state {
+	case "notify-discord":
+		kind = "discord"
+	case "notify-desktop":
+		kind = "desktop"
+	}
+	s := newNotifySetup(kind, nil, nil, state != "notify-desktop")
+	s.topic = goldenTopic
+	switch state {
+	case "notify-subscribe":
+		s.step = 3
+	case "notify-qr":
+		s.step, s.showCode = 3, true
+	case "notify-discord": // the webhook just pasted: masked
+		s.field("webhook").val = []rune("https://discord.com/api/webhooks/1/goldenhook")
+	case "notify-desktop":
+		s.err = "install libnotify (notify-send) first"
+	case "notify-result":
+		s.step, s.written, s.result, s.resultOK = 4, "phone", "delivered: check your phone", true
+	case "notify-failed":
+		s.step, s.written, s.result = 4, "phone", "the server refused the token (or this topic needs one)"
+	}
+	m.push(page{kind: ovNotifySetup, ns: s})
+	m.refresh()
+	return m
 }
