@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -28,19 +28,7 @@ const resumeAllUsage = "usage: agentbus resume --all [--dry-run] [--partial] [--
 // refuseAgentCaller: waking a project is the person's act (spec §4), so an
 // agent caller is refused whatever its command line. "" = the person.
 func refuseAgentCaller(ctx context.Context, d resumeDeps) string {
-	if self := d.Getenv("AGENT_BUS_AGENT"); self != "" {
-		return fmt.Sprintf("waking a project is the person's act, not %s's (run agentbus resume from your own shell)", self)
-	}
-	if d.AgentCaller != nil {
-		switch caller, err := d.AgentCaller(ctx); {
-		case errors.Is(err, errNoAncestry):
-		case err != nil:
-			return fmt.Sprintf("cannot check that no registered agent runs this (%v)", err)
-		case caller != "":
-			return "waking a project is the person's act, and this runs under the agent " + caller
-		}
-	}
-	return ""
+	return agentcaller.Refuse(ctx, d.Getenv, d.AgentCaller, "waking a project", "agentbus resume")
 }
 
 func runResumeAll(ctx context.Context, args []string, d resumeDeps, out, errw io.Writer) int {

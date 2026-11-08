@@ -150,6 +150,13 @@ deny = [
   # --project *) would deny every message that mentions one; the command
   # refuses an agent caller itself, whatever the spelling.
   "Bash(agentbus request priority*)",
+  # Deleting a project and purging its streams are the person's acts
+  # (projects-admin §5.4). busmon refuses an agent caller itself; these echo
+  # it for the spellings Go's flag package takes (one or two dashes, =value,
+  # after any other flag). busmon takes no message text, so a wildcard here
+  # denies no prose. Residuals: a full path, go run, an env prefix, an alias.
+  "Bash(busmon *-delete*)", "Bash(busmon *-d *)", "Bash(busmon *-d=*)", "Bash(busmon -d *)",
+  "Bash(busmon *-reset*)", "Bash(busmon *-r)", "Bash(busmon *-r *)", "Bash(busmon *-r=*)", "Bash(busmon -r*)",
 ]
 
 [roles.master]
