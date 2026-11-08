@@ -1,6 +1,7 @@
 package rolecfg
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -76,6 +77,11 @@ func TestDraftRole(t *testing.T) {
 	snip, prompt, err := DraftRole(v1, "payments", "Investigate the payment service.", skills)
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, d := range NotifyWriteDenies { // notify-guided-setup §2: a drafted role carries them
+		if !strings.Contains(snip, fmt.Sprintf("%q", d)) {
+			t.Fatalf("snippet lacks %s:\n%s", d, snip)
+		}
 	}
 	for _, want := range []string{"[roles.payments]", `model = "sonnet"`, `permission = "manual"`, `tier = "pop"`, `approval = "person"`, `skills = ["agent-bus", "diagnosing-bugs"]`} {
 		if !strings.Contains(snip, want) {

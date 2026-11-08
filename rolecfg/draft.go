@@ -167,9 +167,10 @@ func DraftRole(m *Manifest, role, task string, skills []ScoredSkill) (snippet, p
 	}
 	fmt.Fprintf(&sb, "tier = \"pop\"\napproval = \"person\"\nskills = [%s]\n", strings.Join(names, ", "))
 	// Only master and docs deliver (forge-delivery); adopt refuses a role without these.
-	quoted := make([]string, len(DeliverDeny))
-	for i, d := range DeliverDeny {
-		quoted[i] = fmt.Sprintf("%q", d)
+	// notify-guided-setup §2: nor do they write notify.toml or show a topic.
+	var quoted []string
+	for _, d := range append(append([]string{}, DeliverDeny...), NotifyWriteDenies...) {
+		quoted = append(quoted, fmt.Sprintf("%q", d))
 	}
 	fmt.Fprintf(&sb, "[roles.%s.tool_rules]\ndeny = [%s]\n", role, strings.Join(quoted, ", "))
 	var skillList []string

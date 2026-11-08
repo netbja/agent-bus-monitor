@@ -122,6 +122,12 @@ deny = [
   # any message; the command refuses an agent caller itself.
   "Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
   "Bash(agentbus notifications test*)",
+  # notify-guided-setup §2: the subcommands that write notify.toml or show a
+  # topic (an agent could add its own webhook, or read the topic). The launch
+  # adds their spellings after --project/-p. Plain forms only, as above.
+  "Bash(agentbus notifications add*)", "Bash(agentbus notifications remove*)",
+  "Bash(agentbus notifications rename*)", "Bash(agentbus notifications setup*)",
+  "Bash(agentbus notifications show-topic*)",
   # Suspending the team and waking a whole host are the person's acts
   # (suspend spec §4). Only the plain forms: "agentbus * suspend*" would
   # deny every message that mentions a suspend; the commands refuse an agent

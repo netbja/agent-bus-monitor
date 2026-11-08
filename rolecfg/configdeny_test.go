@@ -23,7 +23,8 @@ func TestShippedManifestDeniesTheConfigFile(t *testing.T) {
 		}
 		for _, want := range []string{"Edit(~/.config/agentbus/config.toml)",
 			"Read(~/.config/agentbus/notify.toml)", "Edit(~/.config/agentbus/notify.toml)",
-			"Bash(agentbus notifications test*)"} {
+			"Bash(agentbus notifications test*)", "Bash(agentbus notifications add*)", "Bash(agentbus notifications remove*)",
+			"Bash(agentbus notifications rename*)", "Bash(agentbus notifications setup*)", "Bash(agentbus notifications show-topic*)"} {
 			if !slices.Contains(r.Deny, want) {
 				t.Errorf("%s does not deny %s", role, want)
 			}

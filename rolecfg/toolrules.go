@@ -62,6 +62,39 @@ func checkDelivers(role string, info map[string]interface{}, own ToolRules) erro
 }
 
 // HoldsDeliverDeny: r denies agentbus deliver.
+// NotifyWriteDenies are the shared denies of the notifications subcommands
+// that write notify.toml or show a topic (notify-guided-setup §2): every
+// role's, in the shared [tool_rules], and a drafted role's own. Plain forms
+// only: "agentbus * notifications" would deny a message that mentions them;
+// the commands refuse an agent caller themselves. status and test are not
+// here (test has its own deny, status reveals no secret).
+var NotifyWriteDenies = []string{"Bash(agentbus notifications add*)", "Bash(agentbus notifications remove*)",
+	"Bash(agentbus notifications rename*)", "Bash(agentbus notifications setup*)", "Bash(agentbus notifications show-topic*)"}
+
+// NotifyProjectDenies are those subcommands after project's own global flag,
+// added at launch to a role that holds NotifyWriteDenies (as deliver's). The
+// --host spellings are not added: notifications takes no broker, and 45 more
+// rules per launch would buy only that residual.
+func NotifyProjectDenies(project string) []string {
+	var out []string
+	for _, d := range NotifyWriteDenies {
+		rest := strings.TrimPrefix(d, "Bash(agentbus ")
+		for _, p := range []string{"--project " + project, "--project=" + project, "-p " + project} {
+			out = append(out, "Bash(agentbus "+p+" "+rest)
+		}
+	}
+	return out
+}
+
+func holdsAll(r ToolRules, rules []string) bool {
+	for _, d := range rules {
+		if !slices.Contains(r.Deny, d) {
+			return false
+		}
+	}
+	return true
+}
+
 func HoldsDeliverDeny(r ToolRules) bool {
 	for _, d := range DeliverDeny {
 		if !slices.Contains(r.Deny, d) {
@@ -282,10 +315,17 @@ func (m *Manifest) MayDeliver(role string) bool {
 // with the project's name (DeliverProjectDenies).
 func (m *Manifest) ProjectLaunchRules(role, project string) (ToolRules, error) {
 	r, err := m.LaunchRules(role)
-	if err != nil || !HoldsDeliverDeny(r) {
+	if err != nil {
 		return r, err
 	}
-	for _, d := range DeliverProjectDenies(project) {
+	var add []string
+	if HoldsDeliverDeny(r) {
+		add = append(add, DeliverProjectDenies(project)...)
+	}
+	if holdsAll(r, NotifyWriteDenies) {
+		add = append(add, NotifyProjectDenies(project)...)
+	}
+	for _, d := range add {
 		if !slices.Contains(r.Deny, d) {
 			r.Deny = append(r.Deny, d)
 		}

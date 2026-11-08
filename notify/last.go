@@ -255,3 +255,17 @@ func writeLast(path string, l Last) error {
 	}
 	return os.Rename(tmp.Name(), path)
 }
+
+// Rename moves target old's record to name (notify-guided-setup §3: its last
+// test stays). Nothing moves when old has none or name already has one.
+func (l *Last) Rename(old, name string) {
+	r, ok := l.Targets[old]
+	if !ok {
+		return
+	}
+	if _, taken := l.Targets[name]; taken {
+		return
+	}
+	l.Targets[name] = r
+	delete(l.Targets, old)
+}

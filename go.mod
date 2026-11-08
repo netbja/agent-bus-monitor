@@ -14,6 +14,7 @@ require (
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/sys v0.47.0
+	rsc.io/qr v0.2.0
 )
 
 require (

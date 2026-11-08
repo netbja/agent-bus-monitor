@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -65,24 +64,8 @@ func readNotifyAssist(getenv func(string) string, kind string) notifyAssistFacts
 	return f
 }
 
-// drawTopic is a new ntfy topic: agentbus- and 20 letters or digits from
-// the system's random source (on a public server its name is its only lock).
-func drawTopic() string {
-	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-	out := make([]byte, 0, 20)
-	buf := make([]byte, 32)
-	for len(out) < 20 {
-		if _, err := rand.Read(buf); err != nil {
-			panic(err) // crypto/rand does not fail on a supported system
-		}
-		for _, c := range buf {
-			if c < 252 && len(out) < 20 { // 252 = 7*36: no letter drawn more often
-				out = append(out, chars[int(c)%len(chars)])
-			}
-		}
-	}
-	return "agentbus-" + string(out)
-}
+// drawTopic is a new ntfy topic, drawn as the CLI draws it (notify.DrawTopic).
+func drawTopic() string { return notify.DrawTopic() }
 
 // notifyAssistName is the template's name: the kind's usual one, numbered
 // when notify.toml already holds a table of that name.
