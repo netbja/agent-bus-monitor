@@ -489,7 +489,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   never proved read, a group skipping trimmed entries: not judged, unknown when nothing is owed); or a subject approved
   within 72 h (fixed) and not done in the plan, where a reviewer who engaged with it (a verdict on it, an open gate on
   it, or a challenge under a ref a verdict on it carries) has no approve of the deciding head; the `StallWake` hook
-  wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. busmon shows the health pill, F5
+  wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. `idle-implementer`
+  (spec `docs/superpowers/specs/2026-11-08-idle-implementer-design.md`; `health/idleimplementer.go` pure,
+  `cmd/agentbus/idleimplementer.go` the reader; `dispatch.idle_after`, 15 min, 0 = off) warns (master) for each
+  implementer (a manifest role with the `implement` skill, `rolesWithSkill`) idle past the threshold, its pane not busy,
+  its provider not held, with a board request addressed to it in state `requested`; it needs no idle team. Its clock is
+  the `{p}:agents` state time, which a turn end restarts where turn hooks run (a short turn answering a wake restarts
+  it: intended). It wakes master once per implementer and requested set (mark `stall-implementer:<agent>`, one
+  `{p}:quota` field each, so two implementers never alternate one field; episode a hash of the name and the sorted ids):
+  idle, working, then idle again on the same set wakes nobody twice. Requests only, never ready plan tasks
+  (`team-stall` names those). busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check

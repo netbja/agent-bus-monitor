@@ -579,8 +579,11 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   agir (bloqué par son quota ou par une invite), ou si le blocage dure deux fois le seuil.
   `clear-stall` avertit quand une passation n'a pas été suivie d'un `/clear`, avec la raison du
   dispatcher (si c'est votre volet actif, passez sur un autre). `quiet-agent` avertit quand un agent
-  a reçu du travail et n'a rien écrit depuis. Les volets doivent être observés : là où ils ne le
-  sont pas (macOS), `team-stall` reste `unknown`.
+  a reçu du travail et n'a rien écrit depuis. `idle-implementer` (`dispatch.idle_after`, 15 minutes)
+  avertit quand un implémenteur, un rôle qui a la compétence `implement`, est inactif depuis ce
+  délai alors qu'une requête qui lui est adressée attend, non acceptée : il réveille master une fois
+  par implémenteur et par ensemble de requêtes, pour qu'il donne l'élément indépendant suivant. Les
+  volets doivent être observés : là où ils ne le sont pas (macOS), `team-stall` reste `unknown`.
 - **Archive de l'historique.** Le service dispatch ajoute chaque minute tous les flux (`cmd`,
   `report`, `status`, `notify`, `verdicts`, `health:log`, `swaps`) à un fichier JSONL par jour UTC
   dans le répertoire d'état du projet, `history/AAAA-MM-JJ.jsonl` (0600 dans 0700) : un fil survit
