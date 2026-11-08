@@ -41,6 +41,10 @@ type notificationsDeps struct {
 	Term          func() (notifyTerm, func(), error)
 	Stdin         io.Reader // --webhook-stdin, a "-" file
 	StdinTerminal bool      // setup asks its questions only then
+	// GlobalFlags: --project or --host came before the command. The writing
+	// and revealing subcommands refuse it (reviewer-codex): their plain deny
+	// then covers every spelling that runs.
+	GlobalFlags bool
 }
 
 func realNotificationsDeps() notificationsDeps {

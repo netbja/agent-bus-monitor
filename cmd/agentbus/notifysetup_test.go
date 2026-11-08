@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -467,5 +468,51 @@ func TestSetupEdges(t *testing.T) {
 	}
 	if tg, _ := w.file(t).Target("two"); tg.Token != "tk_first" {
 		t.Fatalf("token %q", tg.Token)
+	}
+}
+
+// reviewer-codex: a global flag before the command ("agentbus --host x
+// notifications add …", "-p other notifications show-topic …") would escape
+// the plain denies. The writing and revealing subcommands take none: they
+// refuse one before anything, so a deny of the plain form covers every
+// spelling that runs. status and test are unchanged.
+func TestNotifySetupRefusesGlobalFlags(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := runOut("go", "build", "-o", bin, "."); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	home := t.TempDir()
+	for _, args := range [][]string{
+		{"--host", "ignored", "notifications", "add", "desktop"},
+		{"-H", "ignored", "notifications", "show-topic", "phone"},
+		{"--host=ignored", "notifications", "setup"},
+		{"-p", "other", "notifications", "add", "ntfy"},
+		{"--project", "other", "--host", "x", "notifications", "remove", "phone", "--yes"},
+		{"--project=other", "notifications", "rename", "a", "b"},
+	} {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home, "REDIS_HOST=127.0.0.1", "REDIS_PORT=1"}
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) || ee.ExitCode() != 1 || !strings.Contains(stderr.String(), "takes no --project or --host") {
+			t.Errorf("%q: %v %q", args, err, stderr.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "agentbus", "notify.toml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a refused command wrote notify.toml: %v", err)
+	}
+	// The deps' own rule, before the agent check.
+	w := newNotifyWorld(t)
+	d := w.deps()
+	d.GlobalFlags = true
+	d.AgentCaller = func(context.Context) (string, error) { t.Fatal("checked the agent first"); return "", nil }
+	var out, errw bytes.Buffer
+	if code := runNotifications(context.Background(), []string{"add", "desktop"}, d, &out, &errw); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if code := runNotifications(context.Background(), []string{"status"}, d, &out, &errw); code != 0 {
+		t.Fatalf("status with a global flag: exit %d", code)
 	}
 }

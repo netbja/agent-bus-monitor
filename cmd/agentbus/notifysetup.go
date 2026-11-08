@@ -106,6 +106,10 @@ func runNotifySetup(ctx context.Context, args []string, d notificationsDeps, out
 	if len(args) == 0 || !slices.Contains([]string{"setup", "add", "remove", "rename", "show-topic"}, args[0]) {
 		return 0, false
 	}
+	if d.GlobalFlags { // notifications takes no project nor broker host
+		fmt.Fprintf(errw, "agentbus notifications %s takes no --project or --host: run it as agentbus notifications %s …\n", args[0], args[0])
+		return 1, true
+	}
 	if refuseAgent(ctx, d, errw) {
 		return 1, true
 	}

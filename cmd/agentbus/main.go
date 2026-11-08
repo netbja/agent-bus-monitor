@@ -97,7 +97,9 @@ func main() {
 	// and the person's test send; no project. status needs no broker; test
 	// reads the broker's agents to refuse an agent's process (on Linux).
 	if len(args) >= 1 && args[0] == "notifications" {
-		os.Exit(runNotifications(context.Background(), args[1:], realNotificationsDeps(), os.Stdout, os.Stderr))
+		d := realNotificationsDeps()
+		d.GlobalFlags = host != "" || explicitProject != ""
+		os.Exit(runNotifications(context.Background(), args[1:], d, os.Stdout, os.Stderr))
 	}
 	// identity is the person's name in config.toml, else the legacy busmon.toml: no project, no broker.
 	if len(args) >= 1 && args[0] == "identity" {
