@@ -276,8 +276,12 @@ func TestShippedManifestRules(t *testing.T) {
 		t.Fatalf("master allow = %v, want one per role but master and the person-approved ones (%d), then %v, then %v", r.Allow, others, retire, masterUpRules)
 	}
 	for _, rule := range r.Allow {
-		if strings.Contains(rule, "retire") && (strings.Contains(rule, "--now") || strings.Contains(rule, "master") ||
-			strings.Contains(rule, "coder") || strings.Contains(rule, "foureyes") || strings.Contains(rule, "sentinel")) {
+		role, isRetire := strings.CutPrefix(rule, "Bash(agentbus retire ")
+		if !isRetire && !strings.Contains(rule, "retire") {
+			continue
+		}
+		role, _, _ = strings.Cut(role, " ") // the retired role's exact name: coder2 is a pop, coder is not
+		if !isRetire || strings.Contains(rule, "--now") || m.RoleTier(role) != "pop" || role == "master" {
 			t.Fatalf("a retire rule beyond a pop's end: %s", rule)
 		}
 	}

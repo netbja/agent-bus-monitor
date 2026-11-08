@@ -72,7 +72,7 @@ func TestRolesUsing(t *testing.T) {
 		t.Fatalf("agent-bus-sentinel: %v", got)
 	}
 	got := m.RolesUsing([]string{"tdd", "agent-bus-master"})
-	if !slices.Equal(got, []string{"master", "coder"}) {
+	if !slices.Equal(got, []string{"master", "coder", "coder2"}) {
 		t.Fatalf("tdd, agent-bus-master: %v", got)
 	}
 	if got := m.RolesUsing([]string{"nope"}); len(got) != 0 {

@@ -949,6 +949,7 @@ through each with its settings.
 | `coder` | boot | implements changes and tests |
 | `foureyes` | boot | reviews correctness, regressions and maintainability |
 | `sentinel` | boot | daily review and context/budget notifications |
+| `coder2` | pop | a second implementer for parallel work: coder's profile and rules, its own worktree per task, never a package another task has in flight |
 | `architect` | pop | design and specifications |
 | `deploy` | pop | deployment and target monitoring |
 | `security` | pop | repository security review and proposed corrections |
