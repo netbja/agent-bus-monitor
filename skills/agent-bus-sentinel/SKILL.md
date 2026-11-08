@@ -123,9 +123,45 @@ run `swap` or `retire`.
 
 Master reloads **you** (`agentbus reload sentinel`): never reload yourself.
 
+## Model catalogue: propose, never change
+
+`model-catalogue` warns (it never fails, so it does not wake you) when a model a profile
+configures is `gone`, `newer` or `newer?`, when a provider's catalogue is older than
+`models.source_max_age`, or when a provider's read has failed for over 2 days. You handle it in
+the daily review. **You never edit `roles.toml`** and never swap or relaunch anyone: you propose,
+master asks the person, and the change is an ordinary reviewed step.
+
+1. Read `agentbus health detail model-catalogue` (its `sentinel note` line is your previous note) and
+   `agentbus models check --json`.
+2. Each row whose `verdict` is `gone`, `newer` or `newer?` is a finding. Its key is
+   `profile|field|model|verdict|candidate`: `field` is `tier` and `model` the tier when the row has a
+   `tier`, else `model` and the row's `model`; `candidate` may be empty. Example:
+   `grok|model|grok-4.6|newer?|grok-4.7`. An old source is `<provider>|source||old|`, a failing
+   read `<provider>|source||failing|`: those two come from the health detail's warn line
+   (`<provider>'s catalogue is … old`, `<provider>'s read has failed for …`), not from `check --json`. The key is the finding, never an event: these are derived
+   again on every pass.
+3. For each finding whose key is **not** in your previous note, send master one report, with
+   the exact line to change and the evidence (`agentbus models --changes --provider <p>`, the provider name: `xai` for grok):
+
+   ```bash
+   agentbus report sentinel --to master "profile grok: model grok-4.6 → grok-4.7? (grok models lists grok-4.7 since 2026-11-05, not stated as a successor; grok's own default is still grok-4.6)"
+   ```
+
+   A `gone` model on a role in use comes first and says so: `URGENT: profile <p>: model <m> is
+   gone; <role>'s next launch will fail`. For an old source, quote the check's hint (how to
+   refresh it) as the person's action. Run `agentbus models --refresh` yourself only when the read
+   failed and the client is installed. Send nothing for `ok`.
+4. Write the note with the keys still present, and only those:
+   `agentbus health note model-catalogue "reported: <key>; <key>"` (one line, 600 characters at
+   most). A finding that is gone (the profile was changed) drops out, so if it comes back it is
+   reported again. Nothing found: `agentbus health note model-catalogue "reported: none"`.
+
+The info line (`new: …`) is busmon's to show; it needs no report.
+
 ## Daily review
 
-On the daily directive, review `agentbus health list` and `agentbus health log`, then read
+On the daily directive, review `agentbus health list` and `agentbus health log` (a `model-catalogue`
+warn: see "Model catalogue" above), then read
 [`docs/memory/INDEX.md`](../../docs/memory/INDEX.md) and the project's `STATUS` file if present. Mention only requests that remain
 requested, blocked, or past deadline; do not chase them. List the popped roles (tier `pop` in
 `roles.toml`) idle for more than 2 h with no accepted task, in one `agentbus cmd master` line, so

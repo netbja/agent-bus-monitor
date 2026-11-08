@@ -886,7 +886,13 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   clients only (`dispatcherModelReaders`, `TestDispatcherReadsNoAdapter`): the argv is relative to
   roles.toml in the repository, and the dispatcher never runs repository code. An adapter's old
   source is named with `agentbus models --refresh` as its hint.
-  Nothing writes roles.toml on its own (`TestNoProfileWriter`; `roles adopt` is the person's act).
+  Nothing writes roles.toml on its own (`TestNoProfileWriter`; `roles adopt` is the person's act). The
+  chain on a `model-catalogue` warn is in the skills: sentinel reports each finding once to master
+  (its de-duplication key `profile|field|model|verdict|candidate` lives in its health note, rewritten
+  each daily review with the keys still present, so a finding that returns is reported again),
+  master turns it into an ask with the diff (`gone` on a role in use first, as urgent), and on a yes
+  coder changes the line as a reviewed step. Agents read models from `agentbus models --json`, never
+  from memory (AGENT-BUS-GUIDE, "Which models exist").
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
   one Lua script (`askCreate`, `askAnswer`, `askWithdraw`); the id is the stream id of the `ask` cmd
