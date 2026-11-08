@@ -213,3 +213,24 @@ func TestDetect(t *testing.T) {
 		t.Fatal("an unknown system got a manager")
 	}
 }
+
+// Local is the manager a check may trust: nil without an error only when the
+// person chose none; a manager that cannot be reached is an error, never "no
+// unit here" (reviewer-codex: a delete went through with a unit running).
+func TestLocal(t *testing.T) {
+	ok := &fakeRun{}
+	if m, err := Local("linux", ok.run, func(string) string { return "" }); err != nil || m == nil {
+		t.Fatalf("linux with a user manager = %v, %v", m, err)
+	}
+	if m, err := Local("linux", ok.run, func(k string) string { return map[string]string{"AGENTBUS_SERVICE_MANAGER": "none"}[k] }); err != nil || m != nil {
+		t.Fatalf("forced none = %v, %v", m, err)
+	}
+	down := &fakeRun{fails: map[string]bool{"--user": true}}
+	if m, err := Local("linux", down.run, func(string) string { return "" }); err == nil || m != nil ||
+		!strings.Contains(err.Error(), "systemd --user") || !strings.Contains(err.Error(), "=none") {
+		t.Fatalf("linux without a user manager = %v, %v", m, err)
+	}
+	if m, err := Local("freebsd", ok.run, func(string) string { return "" }); err == nil || m != nil {
+		t.Fatalf("an unknown system = %v, %v", m, err)
+	}
+}

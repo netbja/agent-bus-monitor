@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -361,20 +360,7 @@ func realQuiet(client *redis.Client, getenv func(string) string) func(ctx contex
 			return "", err
 		}
 		active, err := withDeadline(ctx, func() (bool, error) {
-			m, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, getenv)), getenv)
-			if m == nil {
-				return false, nil // no manager: no unit here
-			}
-			for _, k := range service.Kinds {
-				st, err := m.State(p, k)
-				if err != nil {
-					return false, err
-				}
-				if st.Active {
-					return true, nil
-				}
-			}
-			return false, nil
+			return servicesActive(p, func() (service.Manager, error) { return localManager(getenv) })
 		})
 		if err != nil {
 			return "", err
@@ -421,6 +407,26 @@ func realQuiet(client *redis.Client, getenv func(string) string) func(ctx contex
 		}
 		return "", nil
 	}
+}
+
+// servicesActive says whether a unit of p runs under detect's manager; a
+// manager that cannot be checked is an error, so the delete is refused
+// (reviewer-codex); only an explicit none has no unit here.
+func servicesActive(p string, detect func() (service.Manager, error)) (bool, error) {
+	m, err := detect()
+	if err != nil || m == nil {
+		return false, err
+	}
+	for _, k := range service.Kinds {
+		st, err := m.State(p, k)
+		if err != nil {
+			return false, err
+		}
+		if st.Active {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // realRemove is the delete: deleteProjectNow, this machine's units removed.

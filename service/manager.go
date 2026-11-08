@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -97,6 +98,21 @@ func Detect(goos string, run Runner, getenv func(string) string) (m Manager, why
 		return Launchd{Run: run, Paths: paths, UID: uid}, ""
 	}
 	return nil, "no supported service manager on " + goos
+}
+
+// Local is the manager a check may trust (reviewer-codex): nil without an
+// error only when the person chose none (AGENTBUS_SERVICE_MANAGER=none); a
+// manager that cannot be reached, or a system with none, is an error, never
+// "no unit here".
+func Local(goos string, run Runner, getenv func(string) string) (Manager, error) {
+	m, why := Detect(goos, run, getenv)
+	switch {
+	case m != nil:
+		return m, nil
+	case getenv("AGENTBUS_SERVICE_MANAGER") == "none":
+		return nil, nil
+	}
+	return nil, errors.New(why + "; AGENTBUS_SERVICE_MANAGER=none says this machine runs no services")
 }
 
 // ManagerBin is the CLI Detect's runner should call on goos.

@@ -236,7 +236,23 @@ func printRemovedServices(project string, kinds []string) {
 
 // localServices removes a project's units under this machine's manager.
 func localServices(project string) ([]string, error) {
-	m, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
+	return removeUnits(project, os.Getenv, func() (service.Manager, error) { return localManager(os.Getenv) })
+}
+
+// localManager is this machine's service manager: nil without an error only
+// when the person chose none (service.Local).
+func localManager(getenv func(string) string) (service.Manager, error) {
+	return service.Local(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, getenv)), getenv)
+}
+
+// removeUnits removes project's units under detect's manager, then its
+// environment file; a manager that cannot be checked is an error, so the
+// delete stops with nothing deleted (reviewer-codex).
+func removeUnits(project string, getenv func(string) string, detect func() (service.Manager, error)) ([]string, error) {
+	m, err := detect()
+	if err != nil {
+		return nil, fmt.Errorf("cannot check the services of %s on this machine (%w)", project, err)
+	}
 	if m == nil {
 		return nil, nil
 	}
@@ -244,7 +260,7 @@ func localServices(project string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	paths, err := service.PathsFrom(os.Getenv)
+	paths, err := service.PathsFrom(getenv)
 	if err != nil {
 		return nil, err
 	}
