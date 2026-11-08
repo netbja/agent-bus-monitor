@@ -51,6 +51,7 @@ type notifySetup struct {
 	result     string // the test's outcome, in plain words (§7)
 	resultOK   bool
 	removeAsk  bool // x waits for y or n (modal)
+	offAsk     bool // the last listed target removed: "turn notifications off too?" waits for y or n (modal)
 	removed    bool
 	showCode   bool // c, s: the code alone until any key
 	showTopic  bool // s: the topic and its code on a target's page
@@ -151,6 +152,7 @@ type notifySetupDone struct {
 	testOK          bool
 	explained       string
 	removed, rename bool
+	lastListed      bool // the remove left no target listed (§3: ask whether to turn notifications off)
 }
 
 // nsAgentCaller names the registered agent busmon runs under ("" none): a
@@ -333,6 +335,7 @@ func nsRemove(getenv func(string) string, serial int, name string) tea.Cmd {
 			if err := config.Set(path, "notify.targets", left); err != nil {
 				done.writeErr = "config.toml was not changed: " + err.Error()
 			}
+			done.lastListed = len(left) == 0
 		}
 		return done
 	}
@@ -379,7 +382,7 @@ func (m *Model) notifySetupResult(msg notifySetupDone) {
 		case msg.writeErr != "":
 			s.err = msg.writeErr
 		case msg.removed:
-			s.removed = true
+			s.removed, s.offAsk = true, msg.lastListed
 		case msg.rename:
 			s.target, s.written = msg.name, msg.name
 			s.field("name").val = []rune(msg.name)
@@ -417,6 +420,14 @@ func (m *Model) notifySetupKey(act Action, k Key) tea.Cmd {
 	s := p.ns
 	p.dirty = true
 	defer m.refresh()
+	if s.offAsk { // modal: only the person's y turns notifications off (§9); any other key keeps them on
+		s.offAsk = false
+		if k.Code == keyRune && k.Rune == 'y' {
+			path := config.Path(m.settingsGetenv())
+			return m.settingsCmd(func() error { return config.Set(path, "notify.on", false) }, "notify.on")
+		}
+		return nil
+	}
 	if s.refused != "" || s.removed {
 		if act == ActClose || k.Code == keyEnter {
 			m.pop()
@@ -567,10 +578,17 @@ func (m *Model) notifyFieldKey(s *notifySetup, k Key) tea.Cmd {
 // ends the field (§5.2).
 func (m *Model) notifyPaste(text string) {
 	p := m.rd.top()
-	if p == nil || p.ns == nil || !p.ns.editing {
+	if p == nil || p.ns == nil {
 		return
 	}
 	s := p.ns
+	if !s.editing && !s.busy && s.refused == "" && len(s.stepFields()) == 1 && !(s.target != "" && s.step == 0) {
+		s.focus = 0 // a step with one field takes a paste into it (§3: paste the webhook)
+		s.startEdit()
+	}
+	if !s.editing {
+		return
+	}
 	line, rest, nl := strings.Cut(text, "\n")
 	f := s.field(s.stepFields()[s.focus])
 	f.val = append(f.val, []rune(strings.TrimRight(line, "\r"))...)
@@ -706,6 +724,11 @@ func notifySetupBody(s *notifySetup, width, rows int, tier Tier, screenW, screen
 	if s.removed {
 		blank()
 		text(RoleOK, s.target+" removed from notify.toml and Targets.")
+		if s.offAsk {
+			blank()
+			text(RoleAttention, "no target is listed now: turn notifications off too? y/n")
+			return b.Lines()
+		}
 		text(RoleMuted, "enter or esc closes")
 		return b.Lines()
 	}

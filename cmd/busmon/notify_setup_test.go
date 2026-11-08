@@ -442,3 +442,65 @@ func TestNotifySetupDiscordNeedsTheWebhook(t *testing.T) {
 		t.Fatalf("step %d:\n%s", s.step, w.body())
 	}
 }
+
+// foureyes: removing the last listed target asks whether to turn
+// notifications off; only y does, any other key keeps them on.
+func TestNotifySetupRemoveLastAsksOff(t *testing.T) {
+	for _, answer := range []rune{'y', 'n'} {
+		w := newSetupWorld(t, "[ntfy.phone]\ntopic = \""+goldenTopic+"\"\n")
+		if err := config.Set(config.Path(w.getenv), "notify.targets", []string{"phone"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := config.Set(config.Path(w.getenv), "notify.on", true); err != nil {
+			t.Fatal(err)
+		}
+		w.key(t, 'C')
+		w.m = showGroup(t, w.m, config.GroupNotifications)
+		w.m.rd.top().set.keys = true
+		w.open(t, len(notifyAssistKinds))
+		w.key(t, 'x', 'y')
+		if !strings.Contains(w.body(), "turn notifications off too? y/n") {
+			t.Fatalf("no question:\n%s", w.body())
+		}
+		w.key(t, answer)
+		if on, targets := w.targets(); on != (answer != 'y') || len(targets) != 0 {
+			t.Fatalf("answer %c: on %v targets %q", answer, on, targets)
+		}
+	}
+}
+
+// foureyes: Discord's step 1 takes a paste without a tab first.
+func TestNotifySetupDiscordPasteWithoutTab(t *testing.T) {
+	w := newSetupWorld(t, "")
+	s := w.open(t, 1)
+	hook := "https://discord.com/api/webhooks/42/pasted-secret"
+	w.run(t, tea.PasteMsg{Content: hook + "\n"})
+	if s.value("webhook") != hook || s.editing || s.focus != -1 {
+		t.Fatalf("paste without tab: %q editing %v focus %d", s.value("webhook"), s.editing, s.focus)
+	}
+}
+
+// The key that ends the code view does nothing else ("until any key").
+func TestNotifySetupCodeViewKeyIsConsumed(t *testing.T) {
+	w := newSetupWorld(t, "[ntfy.phone]\ntopic = \""+goldenTopic+"\"\n")
+	w.key(t, 'C')
+	w.m = showGroup(t, w.m, config.GroupNotifications)
+	w.m.rd.top().set.keys = true
+	s := w.open(t, len(notifyAssistKinds))
+	w.key(t, 's', 't')
+	if s.showTopic || len(w.sent) != 0 {
+		t.Fatalf("t after s: showTopic %v, %d sent", s.showTopic, len(w.sent))
+	}
+}
+
+// An address that is no address stays on step 2, said, nothing written.
+func TestNotifySetupBadAddress(t *testing.T) {
+	w := newSetupWorld(t, "")
+	s := w.open(t, 0)
+	w.key(t, tea.Key{Code: tea.KeyDown}, kEnter, kTab)
+	w.typeText(t, "ftp://x")
+	w.key(t, kEnter, kEnter)
+	if s.step != 2 || !strings.Contains(w.body(), "the address: https://") || w.file(t).Exists {
+		t.Fatalf("step %d:\n%s", s.step, w.body())
+	}
+}

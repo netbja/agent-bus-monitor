@@ -682,7 +682,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   (esc puts its value back); a paste goes whole into it, a newline ends it; masked fields draw `••••` and a count. The
   code is `notify.QR` in cells drawn black on white (`Seg.QR`; reverse under NO_COLOR), beside the steps when the
   page has 26 rows and is not narrow, else on `c`. A target line opens its page: `t`, `n` (rename, the record moves),
-  `x` (modal y/n), `s` (the topic and code until any key). `?` on step 1 opens the old read-only template page
+  `x` (modal y/n; when that leaves no target listed, a second modal asks to turn `notify.on` off, which only y does),
+  `s` (the topic and code until any key, that key consumed). A step with one field takes a paste without a tab first. `?` on step 1 opens the old read-only template page
   (`settings_notify_assist.go`). The page refuses an agent: `AGENT_BUS_AGENT`, an agent ancestor, or agents that
   cannot be read (`nsAgentCaller`, `internal/agentcaller`; busmon's tests stub it in `TestMain`, never the broker). One HTTP client: no redirect, no proxy, 10 s, a 429 waited once (seconds
   or a date, at most 60 s), a 5xx retried twice; errors name the target and status, never the URL or body.
