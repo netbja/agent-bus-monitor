@@ -29,6 +29,9 @@ func (m Model) grid() *grid {
 		drawLine(g, 0, m.height/2, m.width, Line{{Text: strings.Repeat(" ", max(0, (m.width-Width(msg))/2)) + msg, Role: RoleAttention}}, false)
 		return g
 	}
+	if m.ui.idle { // the idle view instead of the dashboard (idleview_draw.go)
+		return m.idleGrid()
+	}
 	header := headerRows(m.headerData(), m.width, l.Tier, l.Header.H)
 	for i := 0; i < l.Header.H && i < len(header); i++ {
 		drawLine(g, 0, l.Header.Y+i, m.width, header[i], false)

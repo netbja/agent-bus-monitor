@@ -1,0 +1,60 @@
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                         ╭─ you ────────────────────────╮  ╭─ team ────────────────────────────────────────────────────╮                    
+                         │                              │  │ ♙ foureyes   waiting  need a decision on the width rule   │                    
+                         │                              │  │ ♙ master     waiting  see my ask                          │                    
+                         │                              │  │ ♙ sentinel   waiting  health ok                           │                    
+                         │            █   █             │  │ ○ coder      paused   busmon-charm-b: b1 shell            │                    
+                         │            █   █             │  │ ▲ docs       blocked  waiting for the PR                  │                    
+                         │            █████             │  │ ▲ qa         blocked  out of quota                        │                    
+                         │                █             │  │ ○ ui-grok    quota    reviewed                            │                    
+                         │                █             │  │ ● release    working  tagging                             │                    
+                         │                              │  │ ○ ui-kimi    paused   charlie: your call on the tabs      │                    
+                         │          ♙ 4 decide          │  │ ○ 1 idle                                                  │                    
+                         │                              │  ╰───────────────────────────────────────────────────────────╯                    
+                         │                              │  ╭─ next ────────────────────────────────────────────────────╮                    
+                         │                              │  │ no plan loaded                                            │                    
+                         ╰──────────────────────────────╯  ╰───────────────────────────────────────────────────────────╯                    
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+                                                                                                                                            
+ anthropic 62% 5h · xai held 40m                                                                                                    16:04   
