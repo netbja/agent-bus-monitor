@@ -27,7 +27,22 @@ func (m *Model) enterIdle() {
 		m.width == 0 || m.layout.Tier == TierTooSmall || m.busyForModal() {
 		return
 	}
-	m.ui.idle, m.ui.idleSince = true, m.now
+	m.ui.idle, m.ui.idleSince, m.ui.idleBlurred = true, m.now, false
+}
+
+// idleFocus handles the focus reports while the view is shown, and says
+// whether it took msg. A terminal reports the current focus as soon as the
+// reports are turned on (Ghostty, foureyes), so a focus is the person only
+// after a blur: they left the window and came back.
+func (m *Model) idleFocus(msg tea.Msg) bool {
+	switch msg.(type) {
+	case tea.BlurMsg:
+		m.ui.idleBlurred = true
+		return true
+	case tea.FocusMsg:
+		return !m.ui.idleBlurred // the initial report: nothing; after a blur, isInput wakes the view
+	}
+	return false
 }
 
 // leaveIdle returns to the dashboard as the person left it.

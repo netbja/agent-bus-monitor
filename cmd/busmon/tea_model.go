@@ -121,6 +121,7 @@ type uiState struct {
 	// no input; lastInput is the last input's poll time (the first poll's
 	// until then), idleSince when the view was entered.
 	idle                 bool
+	idleBlurred          bool // the window was left while the view is shown: the next focus wakes it
 	lastInput, idleSince time.Time
 }
 
@@ -217,6 +218,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) update(msg tea.Msg) tea.Cmd {
+	if m.ui.idle && m.idleFocus(msg) {
+		return nil
+	}
 	if isInput(msg) {
 		if m.ui.idle { // the waking input does nothing else (idle view §3)
 			m.leaveIdle()

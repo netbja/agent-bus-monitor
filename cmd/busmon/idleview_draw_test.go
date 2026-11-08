@@ -189,3 +189,14 @@ func TestIdleViewWideButShort(t *testing.T) {
 		t.Fatalf("140x12:\n%s", got)
 	}
 }
+
+// foureyes P3: the big count is decide + merge, as the header chips.
+func TestIdleViewCountsMerges(t *testing.T) {
+	m := idleAt(t, 140, 40)
+	q := stripOf(m.forYou)
+	m.forYou = append(m.forYou, attentionItem{Rank: rankMerge, Key: "merge:abc123", Agent: "you", Text: "merge PR 7"})
+	d := m.idleData()
+	if d.need != q.decide+1 || !strings.Contains(d.parts.text(), GlyphGate+" 1 merge") {
+		t.Fatalf("need %d parts %q, want %d and 1 merge", d.need, d.parts.text(), q.decide+1)
+	}
+}

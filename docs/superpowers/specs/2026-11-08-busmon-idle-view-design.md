@@ -61,7 +61,12 @@ it never runs as a command.
   button held. In the idle view, `View()` sets `MouseModeAllMotion` and `ReportFocus = true`,
   so a bare movement, or coming back to the terminal window, arrives as a message. Back on the
   dashboard, the mode returns to `CellMotion`. This avoids a flood of motion messages while the
-  person works (§8 Q4 asks whether bare motion should also count on the dashboard).
+  person works (§8 Q4: bare motion does not count on the dashboard).
+- **Focus reports (foureyes).** A terminal reports the current focus as soon as the reports are
+  turned on (Ghostty sends it at once), so the view's first frame brings a `tea.FocusMsg`. While
+  the view is shown, a focus wakes it only after a `tea.BlurMsg` seen during that showing: the
+  person left the window and came back. A blur alone does nothing, and each entry starts with
+  no blur seen.
 - **Leaving.** In the idle view, the first input message:
   1. sets `idle = false` and `lastInput = m.now`;
   2. **returns without dispatching it.** `q`, `enter`, a digit, a click on a panel, a wheel turn:
@@ -135,7 +140,8 @@ the palette's accent and grey apply as elsewhere.
 4. **Bare mouse motion on the dashboard:** not counted (the recommendation): keys, clicks, wheel
    and focus reset the delay; motion is reported only while the view is shown, and wakes it.
 5. **Leaving the terminal window** (`tea.BlurMsg`): no answer was asked for; the view comes only
-   after the delay. A blur is not input and changes nothing.
+   after the delay, and a blur never brings it on. While the view is shown, a blur makes the next
+   focus wake it (§3, focus reports).
 
 ## 9. Tests (for the implementation)
 
@@ -152,8 +158,9 @@ the palette's accent and grey apply as elsewhere.
     the tour, the walk), nor at TooSmall;
   - a reminder due while the view is shown does not open; it opens on the first tick after the
     view is left. The same holds for a pending recap.
-- Leaving: `q`, `enter`, a click, a wheel turn, a motion and a focus message each wake the view
-  and do nothing else. The model is unchanged except `idle` and `lastInput`, and busmon does not
+- Leaving: `q`, `enter`, a click, a wheel turn, a motion, a paste and a focus after a blur each
+  wake the view and do nothing else. The terminal's initial focus report keeps the view, and so
+  does a blur; a blur from an earlier showing does not carry over. The model is unchanged except `idle` and `lastInput`, and busmon does not
   quit on `q`.
 - `View()` sets `MouseModeAllMotion` and `ReportFocus` only while the view is shown.
 - Layout A: the three frames and the strip side by side (140x40), stacked (80x24, 60x20, with

@@ -133,12 +133,15 @@ func TestIdleViewWakeIsDropped(t *testing.T) {
 		"click":  tea.MouseClickMsg(tea.Mouse{X: 70, Y: 20, Button: tea.MouseLeft}),
 		"wheel":  tea.MouseWheelMsg(tea.Mouse{X: 70, Y: 20, Button: tea.MouseWheelDown}),
 		"motion": tea.MouseMotionMsg(tea.Mouse{X: 3, Y: 3}),
-		"focus":  tea.FocusMsg{},
+		"focus":  tea.FocusMsg{}, // after a blur: the window was left, then came back
 		"paste":  tea.PasteMsg{Content: "pasted"},
 	} {
 		m := pollAt(t, idleShell(t, 140, 40, time.Minute), time.Hour)
 		if !m.ui.idle {
 			t.Fatalf("%s: not idle", name)
+		}
+		if name == "focus" {
+			m = step(t, m, tea.BlurMsg{})
 		}
 		before := m.ui
 		if cmd := m.update(msg); cmd != nil {
@@ -194,5 +197,27 @@ func TestIdleViewNoFade(t *testing.T) {
 	}
 	if !m.noticeHeld() {
 		t.Fatal("a notice would run its time under the idle view")
+	}
+}
+
+// foureyes: a terminal reports the current focus as soon as focus reports
+// are turned on (Ghostty), so the view's first frame brings a FocusMsg. It
+// must not wake the view; a blur then a focus (the person left the window and
+// came back) does.
+func TestIdleViewInitialFocusReport(t *testing.T) {
+	m := pollAt(t, idleShell(t, 140, 40, time.Minute), time.Hour)
+	if m = step(t, m, tea.FocusMsg{}); !m.ui.idle {
+		t.Fatal("the initial focus report woke the view")
+	}
+	if m = step(t, m, tea.BlurMsg{}); !m.ui.idle {
+		t.Fatal("a blur woke the view")
+	}
+	if m = step(t, m, tea.FocusMsg{}); m.ui.idle {
+		t.Fatal("coming back to the window did not wake the view")
+	}
+	// The next entry starts again: its own initial report does not wake it.
+	m = pollAt(t, m, 2*time.Hour)
+	if m = step(t, m, tea.FocusMsg{}); !m.ui.idle {
+		t.Fatal("a blur from the last episode woke the next one")
 	}
 }
