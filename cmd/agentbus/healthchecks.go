@@ -240,6 +240,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err != nil {
 				return health.Unknown, "roles doctor could not complete", err
 			}
+			_ = recordAliases(models.CachePath(), rows, time.Now()) // G5: news, never the verdict
 			verdicts := make([]string, 0, len(rows))
 			for _, row := range rows {
 				verdicts = append(verdicts, row.Verdict)

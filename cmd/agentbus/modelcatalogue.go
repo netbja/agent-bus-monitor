@@ -157,3 +157,47 @@ func refreshForClients(ctx context.Context, path string, tiers models.TierMap, r
 	sort.Strings(done)
 	return done, tbl.Save(path)
 }
+
+// recordAliases (§3.1, G5): each running Claude alias and the id its
+// transcript shows it used become the table's alias record, a move an
+// alias event. Under the table's lock; a held lock skips.
+func recordAliases(path string, rows []doctorRow, now time.Time) error {
+	unlock, held, err := lockTable(path)
+	if err != nil || held {
+		return err
+	}
+	defer unlock()
+	tbl, err := models.Load(path)
+	if err != nil {
+		return err
+	}
+	// The newest fresh use per alias: an older transcript never moves an
+	// alias back (two agents on opus, one not used since the move).
+	newest := map[string]doctorRow{}
+	for _, r := range rows {
+		if !claudeAlias.MatchString(r.Configured) || r.Used == "" || r.usedAt == 0 || now.Sub(time.UnixMilli(r.usedAt)) > 24*time.Hour {
+			continue
+		}
+		if cur, ok := newest[r.Configured]; !ok || r.usedAt > cur.usedAt {
+			newest[r.Configured] = r
+		}
+	}
+	aliases := make([]string, 0, len(newest))
+	for a := range newest {
+		aliases = append(aliases, a)
+	}
+	sort.Strings(aliases)
+	changed := false
+	for _, alias := range aliases {
+		id := models.BaseID(newest[alias].Used)
+		if cur, ok := tbl.Aliases["anthropic"][alias]; ok && cur.ID == id {
+			continue
+		}
+		tbl.RecordAlias("anthropic", alias, id, now)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return tbl.Save(path)
+}

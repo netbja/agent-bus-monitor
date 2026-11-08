@@ -134,3 +134,35 @@ func TestClientUpdates(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// §3.1, G5: the doctor task records what a Claude alias resolves to, from
+// the used model of the transcripts; a move writes one alias event; a held
+// lock skips.
+func TestRecordAliases(t *testing.T) {
+	now := time.Now()
+	cache, _ := checkFixture(t, now)
+	fresh := now.Add(-time.Hour).UnixMilli()
+	rows := []doctorRow{
+		{Agent: "coder", Configured: "opus", Used: "claude-opus-5-5-20261001", usedAt: fresh},
+		{Agent: "master", Configured: "sonnet", Used: "claude-sonnet-5-5", usedAt: fresh},
+		{Agent: "ui", Configured: "gpt-6-sol", Used: "gpt-6-sol", usedAt: fresh},                                    // not an alias
+		{Agent: "docs", Configured: "haiku"},                                                                        // no used model
+		{Agent: "old", Configured: "haiku", Used: "claude-haiku-4-5", usedAt: now.Add(-48 * time.Hour).UnixMilli()}, // stale
+	}
+	if err := recordAliases(cache, rows, now); err != nil {
+		t.Fatal(err)
+	}
+	tbl, _ := models.Load(cache)
+	if a := tbl.Aliases["anthropic"]; a["opus"].ID != "claude-opus-5-5" || a["sonnet"].ID != "claude-sonnet-5-5" || len(a) != 2 || len(tbl.Events) != 0 { // haiku: stale, unrecorded
+		t.Fatalf("first resolution, silent: %+v %+v", a, tbl.Events)
+	}
+	rows[0].Used, rows[0].usedAt = "claude-opus-5-6", now.Add(30*time.Minute).UnixMilli()
+	rows = append(rows, doctorRow{Agent: "arch", Configured: "opus", Used: "claude-opus-5-5", usedAt: fresh}) // older use: never moves it back
+	if err := recordAliases(cache, rows, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	tbl, _ = models.Load(cache)
+	if len(tbl.Events) != 1 || tbl.Events[0].Kind != "alias" || tbl.Events[0].From != "claude-opus-5-5" || tbl.Events[0].To != "claude-opus-5-6" {
+		t.Fatalf("events %+v", tbl.Events)
+	}
+}

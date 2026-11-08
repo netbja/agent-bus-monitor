@@ -40,6 +40,9 @@ type doctorRow struct {
 	// Risk is an agy role's elevated options and the denies agy cannot
 	// enforce, in its launch's words (agy-client §4.2, §4.4); never a verdict.
 	Risk string `json:"risk,omitempty"`
+	// usedAt is when the transcript last showed Used (Unix ms; 0 = none):
+	// recordAliases trusts only a fresh one.
+	usedAt int64
 }
 
 type doctorDeps struct {
@@ -216,7 +219,7 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 				used = u
 			}
 		}
-		r.Used = used.Model
+		r.Used, r.usedAt = used.Model, used.TS
 		stale := false
 		if used.TS > 0 {
 			age := d.Now().Sub(time.UnixMilli(used.TS))
