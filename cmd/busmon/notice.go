@@ -225,6 +225,27 @@ func healthNotices(prev, cur map[string]guardian.Record, notes map[string]guardi
 	return out
 }
 
+// catalogueNewsNotice (model-detection §3.5, §3.6) is the model-catalogue
+// check's news as a notice, once: the "new: …" part of its detail (the whole
+// ok detail, or after a warn's findings), when it differs from the last
+// read's. Information, not a decision: For you is not involved.
+func catalogueNewsNotice(prevDetail, curDetail string) (notice, bool) {
+	news := func(d string) string {
+		if rest, ok := strings.CutPrefix(d, "new: "); ok {
+			return rest
+		}
+		if _, rest, ok := strings.Cut(d, "; new: "); ok {
+			return rest
+		}
+		return ""
+	}
+	cur := news(curDetail)
+	if cur == "" || cur == news(prevDetail) {
+		return notice{}, false
+	}
+	return notice{text: "models: " + Preview(cur) + " (agentbus models --changes)", level: noticeInfo}, true
+}
+
 // swapNotice is a ledger entry's line; the entries the spec names, no other.
 func swapNotice(e bus.SwapEvent) (notice, bool) {
 	role, reason := Preview(e.Role), ""
