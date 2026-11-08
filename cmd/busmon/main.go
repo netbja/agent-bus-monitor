@@ -136,30 +136,49 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 		return nil
 	}
 
-	n, kinds, err := deleteProjectNow(ctx, client, project, removeServices)
+	n, kinds, left, err := deleteProjectNow(ctx, client, project, removeServices)
 	printRemovedServices(project, kinds)
 	if err != nil {
 		return err
 	}
+	if len(left) > 0 {
+		return fmt.Errorf("%s", cameBack(project, n, left))
+	}
 	fmt.Printf("Deleted %d %s for project '%s'.\n", n, plural(int(n), "key"), project)
 	return nil
+}
+
+// cameBack is the delete's truth when keys were written after its script
+// (projects-admin §5.3): never reported clean.
+func cameBack(project string, n int64, left []string) string {
+	shown := left
+	if len(shown) > 3 {
+		shown = shown[:3]
+	}
+	return fmt.Sprintf("deleted %d %s of %s, but %d %s came back (%s): something of %s still runs; stop it, then delete again",
+		n, plural(int(n), "key"), project, len(left), plural(len(left), "key"), strings.Join(shown, ", "), project)
 }
 
 // deleteProjectNow is --delete's core with no terminal I/O (projects-admin
 // §5.3), the one path busmon --delete and the Projects page share: the
 // project's services on this machine first (stopped, they write nothing more,
 // and no unit is left to start a project that no longer exists), then every
-// {p}:* key. A removal that fails deletes nothing.
-func deleteProjectNow(ctx context.Context, client *redis.Client, project string, removeServices func(string) ([]string, error)) (int64, []string, error) {
+// {p}:* key in the script that refuses a live project (bus.DeleteProjectIfQuiet),
+// then the keys written meanwhile. A removal that fails deletes nothing.
+func deleteProjectNow(ctx context.Context, client *redis.Client, project string, removeServices func(string) ([]string, error)) (int64, []string, []string, error) {
 	if !bus.ValidName(project) { // before any removal: the services' env file is a path built from the name (reviewer-codex)
-		return 0, nil, fmt.Errorf("invalid project name %q", project)
+		return 0, nil, nil, fmt.Errorf("invalid project name %q", project)
 	}
 	kinds, err := removeLocalServices(project, removeServices)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
-	n, err := bus.DeleteProject(ctx, client, project)
-	return n, kinds, err
+	// The last check and the DEL in one script; then the keys that came back.
+	n, left, err := bus.DeleteProjectIfQuiet(ctx, client, project)
+	if err != nil {
+		err = fmt.Errorf("%s: %w (nothing deleted)", project, err)
+	}
+	return n, kinds, left, err
 }
 
 // removeLocalServices stops and removes the project's services on this
@@ -575,9 +594,13 @@ func main() {
 		}
 	}()
 
-	if _, err := prog.Run(); err != nil {
+	final, err := prog.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+	if fm, ok := final.(Model); ok && fm.exitNote != "" { // the open project deleted (projects-admin §5.2.3)
+		fmt.Println(fm.exitNote)
 	}
 }
 

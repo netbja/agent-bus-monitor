@@ -329,7 +329,7 @@ func takeSwapNews(st *shared) ([]bus.SwapEvent, bool) {
 func (m *Model) noticeHeld() bool {
 	u := m.ui
 	return u.flash != "" || u.compose != nil || u.pausePopup != nil || u.reminder != nil || u.summary ||
-		u.tour != nil || u.confirm != nil || u.askChoose != nil || u.sleepAsk != nil || u.idle
+		u.tour != nil || u.confirm != nil || u.askChoose != nil || u.sleepAsk != nil || u.idle || u.del != nil
 }
 
 // noticeLine is the notice on screen, at most width cells, blended out over

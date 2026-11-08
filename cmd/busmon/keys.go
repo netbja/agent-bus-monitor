@@ -28,6 +28,9 @@ const (
 	ModeNotifySetup
 	// ModeProjects is the Projects page (M, projects_admin.go): its own table.
 	ModeProjects
+	// ModeProjectDelete is the Projects page's delete confirmation
+	// (projects_delete.go): its own small table, the name field's keys.
+	ModeProjectDelete
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -402,10 +405,21 @@ var (
 		{Keys: "Z", Hint: "sleep", Help: "put the selected project to sleep (agentbus suspend), or wake it when it is suspended (resume); asks first", Act: ActSleep, match: runeIs('Z')},
 		{Keys: "x", Hint: "stop", Help: "stop the selected project's services on this machine (agentbus down; deletes nothing); asks first", Act: ActStopServices, match: runeIs('x')},
 		{Keys: "b", Hint: "back up", Help: "back the selected project up now (agentbus backup --project); the archive is the notice", Act: ActBackupNow, match: runeIs('b')},
+		{Keys: "d del", Hint: "delete", Help: "delete the selected project's keys (refused while it is live; a backup offered first, its name typed)", Act: ActDelete, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "R", Hint: "read again", Help: "read every project again (the page is never polled)", Act: ActRecap, match: runeIs('R')},
 		{Keys: "esc", Hint: "back", Act: ActClose, match: keyIs(keyEscape)},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},
 		{Keys: "q", Hint: "quit", Act: ActQuit, match: runeIs('q')},
+	}
+	// deleteBindings: the delete confirmation (projects-admin §5.2, §7). The
+	// name step takes every printable key into its field (deleteKey), so a d
+	// typed there is a letter.
+	deleteBindings = []binding{
+		{Keys: "b", Hint: "back up", Help: "the first step: back the project up, then go on (only when it succeeds)", Act: ActBackupNow, match: runeIs('b')},
+		{Keys: "n", Hint: "no backup", Help: "the first step: go on without a backup", Act: ActNone, match: runeIs('n')},
+		{Keys: "enter", Hint: "confirm", Help: "the name step: delete when the field is the project's name, byte for byte", Act: ActOpen, match: keyIs(keyEnter)},
+		{Keys: "y", Hint: "delete", Help: "the open project: the second confirmation; busmon exits after the delete", Act: ActConfirm, match: runeIs('y')},
+		{Keys: "esc", Hint: "cancel", Help: "cancel at every step; nothing is written", Act: ActClose, match: keyIs(keyEscape)},
 	}
 	tourBindings = []binding{
 		{Keys: "enter", Hint: "next", Alt: GlyphArrowR, Act: ActNextItem, match: either(keyIs(keyEnter), keyIs(keyRight))},
@@ -480,6 +494,8 @@ func bindings(m Mode) []binding {
 		bs = notifySetupBindings
 	case ModeProjects:
 		bs = projectsBindings
+	case ModeProjectDelete:
+		bs = deleteBindings
 	}
 	return append(append([]binding{}, bs...), quitBinding)
 }

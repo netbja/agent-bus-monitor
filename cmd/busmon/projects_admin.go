@@ -54,6 +54,9 @@ type adminSource struct {
 	services  func(ctx context.Context) (map[string]map[string]bool, error) // project -> kind -> active, this machine
 	herdr     func(ctx context.Context) (map[string]adminWorkspace, error)  // project -> its workspace, this machine
 	host      string                                                        // this machine's name
+	// quiet is §5.1's live check ("" = quiet), remove the delete (§5.3).
+	quiet  func(ctx context.Context, project string) (string, error)
+	remove func(ctx context.Context, project string) deleteResult
 }
 
 // adminRow is one row of the page.
@@ -223,6 +226,7 @@ func realAdminSource(client *redis.Client, getenv func(string) string) adminSour
 			return readAdminHerdr(ctx, herdrRunner(getenv))
 		},
 	}
+	src.quiet, src.remove = realQuiet(client, getenv), realRemove(client)
 	// The manager is found and asked inside the page's read, never at
 	// busmon's start, and within its deadline (reviewer-codex).
 	src.services = func(ctx context.Context) (map[string]map[string]bool, error) {
@@ -728,6 +732,10 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 		}
 	case ActRecap: // R: read again
 		return m.projectsCmd(p.serial)
+	case ActDelete:
+		if p.sel < len(p.proj.rows) {
+			return m.projectDelete(p.proj.rows[p.sel])
+		}
 	case ActSleep, ActStopServices, ActBackupNow:
 		if p.sel < len(p.proj.rows) {
 			return m.projectAction(act, p.proj.rows[p.sel])

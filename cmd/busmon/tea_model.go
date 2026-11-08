@@ -120,6 +120,7 @@ type uiState struct {
 	summarySent    bool                    // the summary request is in flight: its success closes the recap
 	tour           *tourState              // the first-launch tour, when open (tour.go)
 	pastedImages   map[string]string       // an image pasted in compose: its hash -> the file saved (never saved twice)
+	del            *deletePanel            // the Projects page's delete confirmation (projects_delete.go)
 	// The idle view (idleview.go): shown after display.idle_view_after with
 	// no input; lastInput is the last input's poll time (the first poll's
 	// until then), idleSince when the view was entered.
@@ -176,6 +177,9 @@ type Model struct {
 	sig     *signalState        // bells, fade, recap, reminder (tea_signals.go)
 	bars    map[string]barSlide // the account gauges' slides (bars.go)
 	notice  *noticeState        // the quiet line for automatic actions (notice.go)
+	// exitNote is printed once busmon has left the screen (the open
+	// project deleted, projects-admin §5.2.3).
+	exitNote string
 }
 
 // newShell is the shell before its first poll and size.
@@ -307,6 +311,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotSettings(msg)
 	case projectsMsg:
 		return m.gotProjects(msg)
+	case deleteCheckMsg:
+		m.gotDeleteCheck(msg)
+		m.refresh()
+	case deleteDoneMsg:
+		cmd := m.gotDeleteDone(msg)
+		m.refresh()
+		return cmd
 	case notifyAssistMsg:
 		if m.settingsPageOpen() != nil { // the page it was asked from is still open
 			return m.push(notifyAssistPage(msg.kind, msg.f))

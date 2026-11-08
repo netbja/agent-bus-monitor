@@ -233,6 +233,7 @@ func (m *Model) gotSleepDone(msg sleepDoneMsg) tea.Cmd {
 		r.last = msg.last
 	}
 	m.markProjectsDirty()
+	m.deleteBackupDone(r, msg.err) // the delete panel's backup (projects-admin §5.2)
 	var reread tea.Cmd
 	if r.verb == "backup" && m.settingsPageOpen() != nil {
 		reread = m.settingsCmd(func() error { return nil })
