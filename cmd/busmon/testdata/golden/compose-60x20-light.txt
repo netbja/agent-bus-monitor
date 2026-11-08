@@ -16,5 +16,5 @@
 │                                                          │
 │                                                          │
 │                                                          │
-│ ^S send   tab recipient   esc close (draft k… 67 / 65536 │
+│ Ctrl+S send   tab recipient   esc close (dra… 67 / 65536 │
 ╰──────────────────────────────────────────────────────────╯

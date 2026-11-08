@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -624,7 +625,7 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 		return m.composeSend()
 	case ActPasteImage:
 		m.ui.flash, m.ui.flashErr = "reading the clipboard"+GlyphEllipsis, false
-		return pasteImageCmd(m.cfg.clip, m.cfg.attachDir)
+		return pasteImageCmd(m.cfg.clip, m.cfg.attachDir, maps.Clone(m.ui.pastedImages))
 	case ActUndo, ActRedo:
 		moved := field.undoStep
 		if act == ActRedo {
@@ -842,12 +843,20 @@ func (m *Model) answerToMessage(c *composeState) {
 // composeClick: on the recipient row it focuses the field, in the text it
 // focuses it and moves the cursor there; a click outside the window closes it
 // (the draft kept).
-func (m *Model) composeClick(x, y int) {
+func (m *Model) composeClick(x, y int) tea.Cmd {
 	c := m.ui.compose
 	f, tr := m.composeRects()
 	switch {
 	case !f.contains(x, y):
 		m.closeCompose()
+	case y == f.Y+f.H-2: // the hint row: a hint is a button
+		counter := fmt.Sprintf("%d / %d", utf8.RuneCountInString(c.area.value()), c.area.limit)
+		_, hits := m.composeFoot(max(0, f.W-4-Width(counter)-1))
+		for _, h := range hits {
+			if x >= f.X+2+h.x && x < f.X+2+h.x+h.w {
+				return m.composeKey(h.act, Key{})
+			}
+		}
 	case y == f.Y+1 && c.kind == composeMessage:
 		c.onTo = true
 		c.area.unmark() // a focus-changing click ends a selection in either field (reviewer-codex)
@@ -857,6 +866,7 @@ func (m *Model) composeClick(x, y int) {
 		c.to.unmark()
 		c.area.clickAt(tr.W, x-tr.X, y-tr.Y)
 	}
+	return nil
 }
 
 // kindWord is the message's kind after its recipient.
@@ -929,25 +939,43 @@ func (m Model) drawCompose(g *grid) {
 	if n >= c.area.limit {
 		crole = RoleAttention
 	}
-	var foot Line
+	foot, _ := m.composeFoot(max(0, iw-Width(counter)-1))
+	foot = append(foot, Seg{Text: strings.Repeat(" ", max(1, iw-foot.Width()-Width(counter)))}, Seg{Text: counter, Role: crole})
+	drawLine(g, f.X+2, f.Y+f.H-2, iw, foot, false)
+}
+
+// footHit is a hint's cells on the compose window's last row: a click there
+// does its key (the person: Ctrl+S send is a button).
+type footHit struct {
+	x, w int // from the row's first cell
+	act  Action
+}
+
+// composeFoot is the window's hint row in w cells (or the flash), and where
+// each hint that fits sits.
+func (m Model) composeFoot(w int) (Line, []footHit) {
+	c := m.ui.compose
 	if m.ui.flash != "" {
 		role := RoleOK
 		if m.ui.flashErr {
 			role = RoleError
 		}
-		foot = Line{{Text: m.ui.flash, Role: role}}
-	} else {
-		for _, b := range bindings(ModeCompose) {
-			if b.Hint == "" || (b.Act == ActComposeField && c.kind != composeMessage) {
-				continue
-			}
-			if len(foot) > 0 {
-				foot = append(foot, Seg{Text: "   "})
-			}
-			foot = append(foot, Seg{Text: b.Keys, Role: RoleAccent, Bold: true}, Seg{Text: " " + b.Hint, Role: RoleMuted})
+		return FitLine(Line{{Text: m.ui.flash, Role: role}}, w), nil
+	}
+	var foot Line
+	var hits []footHit
+	for _, b := range bindings(ModeCompose) {
+		if b.Hint == "" || (b.Act == ActComposeField && c.kind != composeMessage) {
+			continue
+		}
+		if len(foot) > 0 {
+			foot = append(foot, Seg{Text: "   "})
+		}
+		x := foot.Width()
+		foot = append(foot, Seg{Text: b.Keys, Role: RoleAccent, Bold: true}, Seg{Text: " " + b.Hint, Role: RoleMuted})
+		if foot.Width() <= w {
+			hits = append(hits, footHit{x: x, w: foot.Width() - x, act: b.Act})
 		}
 	}
-	foot = FitLine(foot, max(0, iw-Width(counter)-1))
-	foot = append(foot, Seg{Text: strings.Repeat(" ", max(1, iw-foot.Width()-Width(counter)))}, Seg{Text: counter, Role: crole})
-	drawLine(g, f.X+2, f.Y+f.H-2, iw, foot, false)
+	return FitLine(foot, w), hits
 }

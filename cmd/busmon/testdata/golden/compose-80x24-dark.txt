@@ -16,9 +16,9 @@
 │ │                                                                          │ │
 │ │                                                                          │ │
 │ │                                                                          │ ┃
-│ │ ^S send   tab recipient   esc close (draft kept)              67 / 65536 │ ┃
+│ │ Ctrl+S send   tab recipient   esc close (draft kept)          67 / 65536 │ ┃
 │ ╰──────────────────────────────────────────────────────────────────────────╯…┃
 │    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- ^S send   tab recipient   esc close (draft kept)                               
+ Ctrl+S send   tab recipient   esc close (draft kept)                           

@@ -119,6 +119,7 @@ type uiState struct {
 	summary        bool                    // the recap's summary confirmation is open
 	summarySent    bool                    // the summary request is in flight: its success closes the recap
 	tour           *tourState              // the first-launch tour, when open (tour.go)
+	pastedImages   map[string]string       // an image pasted in compose: its hash -> the file saved (never saved twice)
 	// The idle view (idleview.go): shown after display.idle_view_after with
 	// no input; lastInput is the last input's poll time (the first poll's
 	// until then), idleSince when the view was entered.

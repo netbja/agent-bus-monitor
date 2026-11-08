@@ -10,7 +10,7 @@
 │▶ ♙│ a name.                                                              │le ▲
 │  ♙│                                                                      │   ┃
 │  ♙│   i     the line: @coder please rebase                               │   ▼
-╰───│   I ^O  the compose window, several lines; ^S sends                  │───╯
+╰───│   I ^O  the compose window, several lines; Ctrl+S sends              │───╯
 ╭─  │                                                                      │·…─╮
 │   │ Text without @name is a broadcast nobody reads: busmon asks for a    │   ▲
 │   │ second enter before it sends one.                                    │   │

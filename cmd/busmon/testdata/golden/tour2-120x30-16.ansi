@@ -12,7 +12,7 @@
 [38;5;8m│[m  [38;5;8m  time   from      [m[38;5;6m│[m woken and reads it. @all reaches every agent;[1;38;5;6m tab[m completes a name.      [38;5;6m│[m[38;5;8m                     [m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m── Mon 2026-10-26 -[m[38;5;6m│[m                                                                          [38;5;6m│[m[38;5;7m─────────────────────[m[38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [1;38;5;6mi[m     the line: @coder please rebase                                   [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;7m  14:50  [m♙ Charlie [38;5;6m│[m   [1;38;5;6mI[m [1;38;5;6m^O[m  the compose window, several lines;[1;38;5;6m ^S[m sends                      [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  14:50  [m♙ Charlie [38;5;6m│[m   [1;38;5;6mI[m [1;38;5;6m^O[m  the compose window, several lines;[1;38;5;6m Ctrl+S[m sends                  [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:51  [mcoder     [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m○ 14:52  [mmaster    [38;5;6m│[m Text without @name is a broadcast nobody reads: busmon asks for a second [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;3m● [m[38;5;7m14:56  [mdispatch  [38;5;6m│[m [1;38;5;6menter[m before it sends one.                                               [38;5;6m│[m                     [38;5;8m│[m

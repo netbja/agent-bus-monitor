@@ -24,6 +24,21 @@ type fakeClip struct {
 	out   map[string][]byte
 	err   map[string]error
 	ran   []string
+	// endless is a command whose output never ends, read through the bound
+	// the caller asks for; read counts the bytes taken from it.
+	endless string
+	read    int
+}
+
+// countingReader is an endless output that counts what is read of it.
+type countingReader struct{ n *int }
+
+func (r countingReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'a'
+	}
+	*r.n += len(p)
+	return len(p), nil
 }
 
 func (f *fakeClip) tool() clipTools {
@@ -40,9 +55,12 @@ func (f *fakeClip) tool() clipTools {
 			}
 			return "", errors.New("not found")
 		},
-		out: func(name string, args ...string) ([]byte, error) {
+		out: func(max int, name string, args ...string) ([]byte, error) {
 			key := strings.Join(append([]string{name}, args...), " ")
 			f.ran = append(f.ran, key)
+			if key == f.endless {
+				return boundedRead(countingReader{&f.read}, max)
+			}
 			return f.out[key], f.err[key]
 		},
 	}
@@ -238,5 +256,27 @@ func TestPruneAttachments(t *testing.T) {
 		if (err == nil) != want {
 			t.Errorf("%s: exists %v, want %v", filepath.Base(p), err == nil, want)
 		}
+	}
+}
+
+// reviewer-codex: a text past clipTextMax is refused after reading about
+// clipTextMax, never the image's 20 MiB, and the paste says why.
+func TestClipboardTextRefusesALongTextWithoutReadingItAll(t *testing.T) {
+	f := &fakeClip{env: map[string]string{"WAYLAND_DISPLAY": "wayland-0"}, tools: map[string]bool{"wl-paste": true},
+		out:     map[string][]byte{"wl-paste --list-types": []byte("text/plain\n")},
+		endless: "wl-paste --no-newline --type text"}
+	if _, err := clipboardText(f.tool()); !errors.Is(err, errClipTooLarge) {
+		t.Fatalf("a long text: %v, want too large", err)
+	}
+	if f.read > 2*clipTextMax {
+		t.Fatalf("read %d bytes of the text, want at most about %d", f.read, clipTextMax+1)
+	}
+	f.read = 0
+	msg := pasteImageCmd(f.tool(), t.TempDir(), nil)().(pastedImageMsg)
+	if msg.text != "" || !errors.Is(msg.err, errClipTooLarge) || !strings.Contains(msg.err.Error(), "1 MiB") {
+		t.Fatalf("the paste of a long text: %+v", msg)
+	}
+	if f.read > 2*clipTextMax {
+		t.Fatalf("the paste read %d bytes of the text", f.read)
 	}
 }

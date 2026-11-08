@@ -570,9 +570,9 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	case m.ui.reminder != nil || m.ui.summary:
 		return nil
 	case m.ui.compose != nil:
-		m.composeClick(ms.X, ms.Y)
+		cmd := m.composeClick(ms.X, ms.Y)
 		m.refresh()
-		return nil
+		return cmd
 	}
 	if m.rd.open() {
 		if m.readerRect().contains(ms.X, ms.Y) {
