@@ -529,3 +529,19 @@ func TestNotifySetupRemoveUnlistedAsksOff(t *testing.T) {
 		}
 	}
 }
+
+// foureyes: a paste into a step's one field, not being edited, replaces the
+// prefilled default rather than appending to it; esc still puts it back.
+func TestNotifySetupPasteReplacesTheDefault(t *testing.T) {
+	w := newSetupWorld(t, "")
+	s := w.open(t, 2) // the desktop: step 2 is the name, default "here"
+	w.key(t, kEnter)
+	w.run(t, tea.PasteMsg{Content: "laptop"})
+	if got := s.value("name"); got != "laptop" {
+		t.Fatalf("name %q", got)
+	}
+	w.key(t, kEsc)
+	if got := s.value("name"); got != "here" {
+		t.Fatalf("esc kept %q", got)
+	}
+}

@@ -588,6 +588,7 @@ func (m *Model) notifyPaste(text string) {
 	if !s.editing && !s.busy && s.refused == "" && len(s.stepFields()) == 1 && !(s.target != "" && s.step == 0) {
 		s.focus = 0 // a step with one field takes a paste into it (§3: paste the webhook)
 		s.startEdit()
+		s.field(s.stepFields()[0]).val = nil // the paste replaces the value (a default name), never appends to it
 	}
 	if !s.editing {
 		return
