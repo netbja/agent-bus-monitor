@@ -14,7 +14,7 @@
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 21 default ──────────────────────────────────────────────────────────────── esc back ─╮
-│                   │ focus: keys · ← or tab: the groups                                                                                   │
+│                   │ focus: keys · ← or tab: the groups ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
 │    Identity       │     Fade and slide            ● on                                                                                   │

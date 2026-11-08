@@ -14,7 +14,7 @@
 ╭─ Settings · 2 set here · 1 elsewhere · 22 default ──────────────── esc back ─╮
 │  focus: keys · ← or tab: the tabs                                            ▲
 │  Display   Attention   Identity   Notifications   Services   Backup          ┃
-│                                                                              ┃
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
 │  Notifications  what reaches your phone or desktop; targets in notify.toml   │
 │                                                                              │
 │    • Send notifications    ● on                                              │

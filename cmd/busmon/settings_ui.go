@@ -582,8 +582,14 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 	var lines []Line
 	selLine++
 	if side {
-		margin := Line{S(RoleText, strings.Repeat(" ", settingsSideW)), S(RoleLine, glyphVertical)}
-		lines = append(lines, FitLine(append(margin, settingsFocusLine(s.keys, true, panelW)...), width))
+		// settings-focus-bar: the bar on the focused panel's top edge, the
+		// sidebar's part of this row or the keys' column.
+		margin := Line{S(RoleText, strings.Repeat(" ", settingsSideW))}
+		if !s.keys {
+			margin = Line{S(RoleText, " "), focusBar(settingsSideW - 2), S(RoleText, " ")}
+		}
+		margin = append(margin, S(RoleLine, glyphVertical))
+		lines = append(lines, FitLine(append(margin, settingsFocusLine(s.keys, true, s.keys, panelW)...), width))
 		for i := 0; i < max(len(right), len(s.groups)); i++ {
 			l := Line{}
 			if i < len(s.groups) {
@@ -597,7 +603,13 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 			lines = append(lines, FitLine(l, width))
 		}
 	} else {
-		lines = append(lines, settingsFocusLine(s.keys, false, width), FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), Line{})
+		// settings-focus-bar: above the tabs (row 0, behind the text) or
+		// above the keys (row 2, the full width).
+		below := Line{}
+		if s.keys {
+			below = Line{focusBar(width)}
+		}
+		lines = append(lines, settingsFocusLine(s.keys, false, !s.keys, width), FitLine(settingsTabs(s.groups, s.group, width, !s.keys), width), below)
 		selLine += 2
 		for _, l := range right {
 			lines = append(lines, FitLine(l, width))
@@ -610,8 +622,10 @@ func settingsBody(s *settingsPage, sel, width int) []Line {
 // settingsFocusLine says in words where the focus is and which key moves it
 // (settings-focus-line), in width cells, one cell in: muted, the focused
 // panel's word plain and bold, so it reads the same without colour. On a
-// narrow column the hint goes first, then "focus:"; the word stays.
-func settingsFocusLine(keys, side bool, width int) Line {
+// narrow column the hint goes first, then "focus:"; the word stays. With
+// bar, the text fits in what leaves the bar 2 cells, and the bar fills the
+// rest of the width (settings-focus-bar).
+func settingsFocusLine(keys, side, bar bool, width int) Line {
 	word, hint := "groups", GlyphArrowR+" or tab: the keys"
 	switch {
 	case keys && side:
@@ -621,17 +635,35 @@ func settingsFocusLine(keys, side bool, width int) Line {
 	case !side:
 		word, hint = "tabs", GlyphDownArrow+" or tab: the keys"
 	}
+	room := width
+	if bar {
+		room = width - 3 // " " and a bar of at least 2
+	}
 	focused := Seg{Text: word, Role: RoleText, Bold: true}
+	text := FitLine(Line{focused}, max(room, 0))
 	for _, l := range []Line{
 		{S(RoleMuted, " focus: "), focused, S(RoleMuted, " "+GlyphNone+" "+hint)},
 		{S(RoleMuted, " focus: "), focused},
 		{S(RoleMuted, " "), focused},
 	} {
-		if l.Width() <= width {
-			return l
+		if l.Width() <= room {
+			text = l
+			break
 		}
 	}
-	return FitLine(Line{focused}, width)
+	if !bar {
+		return text
+	}
+	if fill := width - text.Width() - 1; fill > 0 {
+		text = append(text, S(RoleText, " "), focusBar(fill))
+	}
+	return FitLine(text, width)
+}
+
+// focusBar is the settings page's focus bar, n cells: heavy, accent, bold,
+// so it shows without colour by its stroke and its place.
+func focusBar(n int) Seg {
+	return Seg{Text: strings.Repeat(GlyphFocusBar, max(n, 0)), Role: RoleAccent, Bold: true}
 }
 
 // settingsSideRow is a group in the sidebar: the selected one marked, in the

@@ -44,7 +44,7 @@ func TestSettingsFocusLineTexts(t *testing.T) {
 				if s.Role != RoleText || !s.Bold {
 					t.Fatalf("%d: the focused word %q is %v bold=%v", c.width, s.Text, s.Role, s.Bold)
 				}
-			case strings.TrimSpace(s.Text) == "" || s.Text == glyphVertical:
+			case strings.TrimSpace(s.Text) == "" || s.Text == glyphVertical || strings.Trim(s.Text, GlyphFocusBar) == "": // the bar: settings_focusbar_test
 			default:
 				if s.Role != RoleMuted || s.Bold {
 					t.Fatalf("%d: %q is %v bold=%v, want muted", c.width, s.Text, s.Role, s.Bold)
@@ -67,7 +67,7 @@ func TestSettingsFocusLineFit(t *testing.T) {
 		{true, false, 10, "keys", "focus:"},
 		{false, true, 8, "groups", "focus:"},
 	} {
-		got := settingsFocusLine(c.keys, c.side, c.width)
+		got := settingsFocusLine(c.keys, c.side, false, c.width)
 		if got.Width() > c.width {
 			t.Fatalf("%+v: %d cells", c, got.Width())
 		}

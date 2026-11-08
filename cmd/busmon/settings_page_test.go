@@ -446,7 +446,8 @@ func TestSettingsPanelsLayout(t *testing.T) {
 	wide := settingsBody(set, 0, 96)
 	// about-trim: one row of top margin, the sidebar's rule through it; it
 	// carries the focus line only (settings-focus-line).
-	if margin := strings.ReplaceAll(wide[0].text(), glyphVertical, ""); strings.TrimSpace(margin) != settingsFocusLine(false, true, 96).text()[1:] || !strings.Contains(wide[0].text(), glyphVertical) {
+	// settings-focus-bar: with the groups focused, the bar is in the sidebar's part.
+	if margin := strings.ReplaceAll(wide[0].text(), glyphVertical, ""); strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(margin), GlyphFocusBar)) != settingsFocusLine(false, true, false, 96).text()[1:] || !strings.Contains(wide[0].text(), glyphVertical) {
 		t.Fatalf("no top margin on the wide page: %q", wide[0].text())
 	}
 	wide = wide[1:]
@@ -461,7 +462,7 @@ func TestSettingsPanelsLayout(t *testing.T) {
 	for _, w := range []int{91, 70, 40, 24} {
 		set.group = 3 // Notifications
 		lines := settingsBody(set, 0, w)
-		if lines[0].text() != settingsFocusLine(false, false, w).text() {
+		if lines[0].text() != settingsFocusLine(false, false, true, w).text() {
 			t.Fatalf("%d: the top margin is not the focus line alone: %q", w, lines[0].text())
 		}
 		tabs := lines[1]

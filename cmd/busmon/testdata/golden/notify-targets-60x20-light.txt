@@ -4,7 +4,7 @@
 ╭─ Settings · 2 set here · 1 elsewhere · 22 default ─ esc…─╮
 │  focus: keys · ← or tab: the tabs                        ▲
 │ …  Identity   Notifications   Services   Backup          ┃
-│                                                          ┃
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
 │  Notifications  what reaches your phone or desktop; tar… ┃
 │                                                          ┃
 │    • Send notifications    ● on                          ┃
