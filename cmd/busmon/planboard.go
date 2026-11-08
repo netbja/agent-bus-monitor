@@ -75,7 +75,7 @@ func planSections(rows []plan.Row) (secs []planSection, unknownOnly bool) {
 // planBoard renders the board for width cells at tier. sel is the selected
 // item; wide asks for the side panel's lines (the caller gives the list its
 // width beside it). The narrow tier keeps the progress's count only (§6).
-func planBoard(p planState, sel int, showDone bool, now time.Time, width int, tier Tier, wide bool) planBoardView {
+func planBoard(p planState, sel int, showDone bool, now time.Time, width int, tier Tier, wide bool, reqs []request) planBoardView {
 	var v planBoardView
 	var pl strings.Builder
 	emit := func(l Line) {
@@ -86,6 +86,7 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 	if tier != TierNarrow { // the plan's goal, when it was loaded and from which commit, as the P page said
 		emit(planHead(p, now))
 	}
+	paces := ownerPaces(reqs)
 	secs, unknownOnly := planSections(p.rows)
 	if unknownOnly {
 		emit(nil)
@@ -112,6 +113,9 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 				selRow = &r
 			}
 			emit(planBoardRow(p, r, idx == sel, now, width))
+			if l, ok := planProgressLine(r, reqs, paces, now); ok { // progress-line §3: not a row
+				emit(FitLine(append(Line{{Text: "      ", Role: RoleDim}}, l...), width))
+			}
 		}
 	}
 	v.lines = append(v.lines, nil)
@@ -348,4 +352,18 @@ func planLinkLine(links map[string]planLink, task string) (Line, bool) {
 		return nil, false
 	}
 	return Line{S(RoleMuted, "plan  "), S(RoleText, "#"+Preview(pl.id)+" "+Preview(pl.title)), S(RoleMuted, " ("+plan.Label(pl.state)+")")}, true
+}
+
+// planProgressLine is the progress line under a task in progress whose
+// board request (its board field) was accepted.
+func planProgressLine(r plan.Row, reqs []request, paces map[string]pace, now time.Time) (Line, bool) {
+	if r.State != plan.InProgress || r.Task.Board == "" {
+		return nil, false
+	}
+	for _, q := range reqs {
+		if q.Task == r.Task.Board && q.Tracked && q.State == "accepted" {
+			return progressLine(q, paces[reqOwner(q)], now)
+		}
+	}
+	return nil, false
 }

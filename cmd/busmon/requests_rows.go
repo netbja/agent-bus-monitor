@@ -199,7 +199,13 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 	}
 	groupRow := func(g reqGroup) []ListItem {
 		if len(g.Threads) == 1 {
-			return []ListItem{threadRow(g.Threads[0], false)}
+			items := []ListItem{threadRow(g.Threads[0], false)}
+			if q := g.Threads[0].Request; q != nil && q.Tracked && q.State == "accepted" { // progress-line §3: not a row
+				if l, ok := progressLine(*q, v.paces[reqOwner(*q)], now); ok {
+					items = append(items, ListItem{Line: fit(append(Line{{Text: "     ", Role: RoleDim}}, l...))})
+				}
+			}
+			return items
 		}
 		subject := g.Threads[len(g.Threads)-1].Subject
 		if g.Kind == kindChallenge {

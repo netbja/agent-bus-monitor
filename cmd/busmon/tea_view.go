@@ -271,7 +271,7 @@ func (m *Model) fillLists() {
 		if wide {
 			lw = lower - planSideWidth - 1
 		}
-		v := planBoard(s.planState, -1, m.ui.planExpanded, now, lw, l.Tier, false)
+		v := planBoard(s.planState, -1, m.ui.planExpanded, now, lw, l.Tier, false, s.requests)
 		pl.SetItems(planBoardItems(v, lw))
 		if task, ok := strings.CutPrefix(pl.Selected(), "task:"); ok && wide {
 			for _, r := range s.planState.rows {
