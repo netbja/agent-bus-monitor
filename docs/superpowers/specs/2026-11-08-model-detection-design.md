@@ -70,7 +70,8 @@ All additive JSON, so an older table still loads:
 
 - Codex: `fetched_at` in `models_cache.json`.
 - grok and agy: the time of the read, because they ask their server live.
-- Kimi: the `config.toml` mtime (through a new `Env.Stat`).
+- Kimi: the read's time (the person, §6 Q5: its list is read daily with the others). The first
+  draft used `config.toml`'s mtime, which Kimi Code rewrites only on its own update.
 - Claude: unknown. Its options cache lives in a file that changes for many other reasons, so the
   file's mtime proves nothing.
 
@@ -252,8 +253,14 @@ client file or calls a client.
 2. **Should `newer?` exist?** It flags `grok-4.6 → grok-4.7` today, which only a version
    comparison sees. The recommendation is yes, and it never fails a check.
 3. **Kimi tiers.** Which of `k3`, `k3.1-pro`, `k3-256k`, `kimi-for-coding` and the highspeed ones
-   are frontier, workhorse and fast for you?
+   are frontier, workhorse and fast for you? **Answered (the person, 2026-11-08): one tier per
+   family, the highspeed variants not told apart.** Every Kimi id is `frontier`
+   (`DefaultTiers`), and a tier profile on moonshot resolves to the family's default,
+   `kimi-code/kimi-for-coding`, the non-highspeed coding model (`models.FamilyDefault`), before
+   Kimi's own `default_model`. `newer?` does not compare Kimi's variants with each other.
 4. **Adapter readers (§3.9)** now, or later?
 5. **Kimi's catalogue** was last written 2026-10-26. Does Kimi Code refresh it at each start, at
    login, or only on update? If you know, the health check can say how to refresh it; otherwise
-   it says "open kimi once" and we measure.
+   it says "open kimi once" and we measure. **Answered (the person, 2026-11-08): it refreshes
+   daily with the others.** Kimi's `source_at` is the daily read's time, as grok's and agy's
+   (§3.2 no longer uses `config.toml`'s mtime); its hint is `agentbus models --refresh`.

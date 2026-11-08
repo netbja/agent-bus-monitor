@@ -24,7 +24,7 @@ const catalogueRefreshBudget = 10 * time.Second
 // old; the providers whose readers ask their server live are never old.
 var sourceHints = map[string]string{
 	"openai":   "open codex once: it rewrites models_cache.json",
-	"moonshot": "open kimi once, or update Kimi Code",
+	"moonshot": "agentbus models --refresh (Kimi's list is read daily; an old one means the reads fail)",
 }
 
 type catalogueReader struct {

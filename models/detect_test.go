@@ -151,9 +151,8 @@ func TestOldTableLoads(t *testing.T) {
 	}
 }
 
-// §3.2 the source's own age: Codex's fetched_at, Kimi's file mtime through
-// Env.Stat, grok and agy the read itself (they ask their server live),
-// Claude unknown.
+// §3.2 the source's own age: Codex's fetched_at; grok, agy and Kimi the read
+// itself (Kimi's list is read daily, the person §6 Q5); Claude unknown.
 func TestSourceAt(t *testing.T) {
 	fetched := "2026-11-07T22:26:01.5Z"
 	e := fakeEnv(map[string]string{
@@ -161,17 +160,10 @@ func TestSourceAt(t *testing.T) {
 		"/h/.kimi-code/config.toml":   "default_model = \"k3\"\n[models.k3]\nmodel = \"k3\"\n",
 		"/h/.claude.json":             `{}`,
 	}, map[string]string{"grok": grokSample, "agy": agySample})
-	kimiAt := time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC)
-	e.Stat = func(path string) (time.Time, error) {
-		if path == "/h/.kimi-code/config.toml" {
-			return kimiAt, nil
-		}
-		return time.Time{}, os.ErrNotExist
-	}
 	tbl := &Table{Providers: map[string]*Provider{}}
 	tbl.Refresh(context.Background(), Readers(e), DefaultTiers(), detNow)
 	want := map[string]int64{"openai": time.Date(2026, 11, 7, 22, 26, 1, 500000000, time.UTC).UnixMilli(),
-		"moonshot": kimiAt.UnixMilli(), "xai": detNow.UnixMilli(), "google": detNow.UnixMilli(), "anthropic": 0}
+		"moonshot": detNow.UnixMilli(), "xai": detNow.UnixMilli(), "google": detNow.UnixMilli(), "anthropic": 0}
 	for prov, at := range want {
 		p := tbl.Providers[prov]
 		if p == nil || !p.OK {
@@ -181,13 +173,6 @@ func TestSourceAt(t *testing.T) {
 		if p.SourceAt != at {
 			t.Errorf("%s source_at %d, want %d", prov, p.SourceAt, at)
 		}
-	}
-	// No Stat (an older caller): Kimi's age is unknown, never the read time.
-	e.Stat = nil
-	tbl = &Table{Providers: map[string]*Provider{}}
-	tbl.Refresh(context.Background(), Readers(e), DefaultTiers(), detNow)
-	if at := tbl.Providers["moonshot"].SourceAt; at != 0 {
-		t.Errorf("kimi without Stat: %d", at)
 	}
 }
 

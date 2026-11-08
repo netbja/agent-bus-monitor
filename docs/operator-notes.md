@@ -929,7 +929,10 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   clients only (`dispatcherModelReaders`, `TestDispatcherReadsNoAdapter`): the argv is relative to
   roles.toml in the repository, and the dispatcher never runs repository code. An adapter's old
   source is named with `agentbus models --refresh` as its hint.
-  Nothing writes roles.toml on its own (`TestNoProfileWriter`; `roles adopt` is the person's act). The
+  Nothing writes roles.toml on its own (`TestNoProfileWriter`; `roles adopt` is the person's act). Kimi
+  (the person, §6 Q3/Q5): every Kimi id is one tier (`frontier`, highspeed not told apart) and a tier
+  profile on moonshot gets `kimi-code/kimi-for-coding` (`models.FamilyDefault`, before Kimi's own
+  default); Kimi's `source_at` is the daily read's time, not `config.toml`'s mtime (`Env.Stat` is gone). The
   chain on a `model-catalogue` warn is in the skills: sentinel reports each finding once to master
   (its de-duplication key `profile|field|model|verdict|candidate` lives in its health note, rewritten
   each daily review with the keys still present, so a finding that returns is reported again),
