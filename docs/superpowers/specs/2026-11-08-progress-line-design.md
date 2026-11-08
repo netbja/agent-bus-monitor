@@ -114,6 +114,10 @@ Under each task in hand, one muted line:
 - **The pace:** the median of `responded_at − accepted_at` over the last 10 requests of the same
   owner that reached `done` on the board. `done` is the delivery (the work, before review), so
   the review's wait is not counted. The median keeps one long night from skewing it.
+- **One request per task:** a board entry is per task name, and a re-request replaces its request,
+  so a task re-sent after a reject counts once, from its latest acceptance (foureyes). The pace
+  therefore measures the last round of a task, not its whole history; for an estimate of the task
+  in hand, which is timed from its own latest acceptance too, that is the matching measure.
 - **Thin data:** with fewer than 5 such requests, the line says `estimate ~22:58` instead of
   `ends ~22:58`, and the bar has no share (`━━━━━━━━━━  estimate`, all muted).
 - **No data:** no done request for that owner: `started 22:12  ·  no estimate yet`.
@@ -136,9 +140,11 @@ needs its own record, which a status leaves alone.
 
 ### 4.2 The record and the command
 
-- **Key:** `{p}:background:<agent>`, a hash with `text`, `since` (Unix ms) and `by`. It expires on
-  its own: `PEXPIREAT` at `since + for`, both from Redis `TIME`. A check that ends without master
-  clearing it leaves no stale indicator past its time.
+- **Key:** `{p}:background:<agent>`, a hash with `text`, `since` (Unix ms) and `by`. One Lua script
+  reads `since` from Redis `TIME`, writes the hash and sets `PEXPIRE` to the `--for` duration (the
+  Redis clock, no client clock). A check that ends without master clearing it leaves no stale
+  indicator past its time. The key falls under `{p}:*`, so `busmon --delete` and the backup cover
+  it (foureyes).
 - **Command:**
 
   ```
@@ -156,8 +162,12 @@ needs its own record, which a status leaves alone.
 
 - **Agents panel:** after the agent's status message, `… 2 checks running` muted, with its age at
   the wide width (`… 2 checks running 4m`).
-- **Header:** when master has one, the master chip gains ` · 2 checks` (the text's first two words
-  when it starts with a number, else `…`). The person sees master is busy without opening a panel.
+- **Header:** a new chip, `… master: 2 checks running` (muted), on the header's second row after the
+  `pilot <name>` / `autonomous` segment (foureyes: there is no master chip today). It names the
+  agent, so it works for any agent with a record; with several, the pilot's first, then
+  `+N` (`… master: 2 checks running +1`). It is admitted last (`add`'s lowest rank), so a narrow
+  header drops it before anything it shows today. The person sees master is busy without opening a
+  panel.
 - **Idle view:** the `team` frame shows master's row even when master is idle, with the text.
 - **Read:** one `HGETALL` per agent of the snapshot, pipelined in the existing poll. No `SCAN`.
 - A missing or expired key shows nothing. A read error shows nothing too, and the panel's read
@@ -182,7 +192,8 @@ ended. Other agents may use it too; the skill says so, no role needs it.
   and `longer than usual` past it; a task with no request has no line; a folded group has none.
 - Background: the command's limits (`--for` 0, 25h, a 61-character text, an invalid agent are
   refused); `--clear`; the key's expiry is set from Redis `TIME` (disposable Redis); busmon shows
-  it in the panel, the header and the idle view, and nothing once it expired.
+  it in the panel, the header chip (named, `+N`, dropped first when narrow) and the idle view, and
+  nothing once it expired.
 
 ## 6. Size
 
