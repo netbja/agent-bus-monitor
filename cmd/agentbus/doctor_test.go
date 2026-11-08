@@ -268,4 +268,17 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 	if runDoctor(ctx, b, d, []string{"--json"}, &out, &errw) != 0 || !strings.Contains(out.String(), `"risk": "`+want+`"`) {
 		t.Fatalf("json:\n%s", out.String())
 	}
+	// foureyes: a risk that cannot be judged says so, never nothing.
+	old := launchRisk
+	t.Cleanup(func() { launchRisk = old })
+	launchRisk = func(*rolecfg.Manifest, string, string, string) (string, error) { return "", errors.New("rules do not resolve") }
+	rows, err = doctorRows(ctx, b, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.Risk != "not judged: rules do not resolve" {
+			t.Errorf("%s: risk %q", row.Agent, row.Risk)
+		}
+	}
 }
