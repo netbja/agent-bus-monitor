@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -48,7 +50,7 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		}
 		window = d
 	}
-	cfg, err := models.LoadConfig(configPath)
+	cfg, err := loadModelsConfig(configPath)
 	if err != nil {
 		fmt.Fprintf(errw, "models: %v\n", err)
 		if refresh || check {
@@ -112,7 +114,11 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		if pr.ReadAt > 0 {
 			read = now.Sub(time.UnixMilli(pr.ReadAt)).Round(time.Minute).String() + " ago"
 		}
-		fmt.Fprintf(out, "%s  (%s; rows read %s from %s)\n", p, state, read, dash(pr.Home))
+		source := ""
+		if pr.SourceAt > 0 { // §3.2: the source's own age, beside our read's
+			source = "; source " + ageWords(now.Sub(time.UnixMilli(pr.SourceAt))) + " old"
+		}
+		fmt.Fprintf(out, "%s  (%s; rows read %s from %s%s)\n", p, state, read, dash(pr.Home), source)
 		for _, r := range pr.Rows {
 			mark := " "
 			if r.Default {
@@ -129,6 +135,17 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		}
 	}
 	return 0
+}
+
+// modelsGetenv reads models.source_max_age (a test replaces it).
+var modelsGetenv = os.Getenv
+
+// loadModelsConfig is models.toml with models.source_max_age from the
+// settings (config.toml or its env).
+func loadModelsConfig(path string) (models.Config, error) {
+	cfg, err := models.LoadConfig(path)
+	cfg.SourceMaxAge = config.Machine(modelsGetenv).Duration("models.source_max_age")
+	return cfg, err
 }
 
 // reportIncomplete names each provider a refresh could not read: its rows
@@ -160,10 +177,11 @@ func parseSince(s string) (time.Duration, error) {
 	return d, err
 }
 
-// printChanges is the table's events (§3.1), oldest first.
+// printChanges is the table's events, newest first (§3.1).
 func printChanges(tbl *models.Table, provider string, window time.Duration, now time.Time, asJSON bool, out, errw io.Writer) int {
 	events := []models.Event{}
-	for _, e := range tbl.Events {
+	for i := len(tbl.Events) - 1; i >= 0; i-- {
+		e := tbl.Events[i]
 		if provider != "" && e.Provider != provider {
 			continue
 		}

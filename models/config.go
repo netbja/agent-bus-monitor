@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -30,6 +31,9 @@ func ConfigPath() string {
 type Config struct {
 	Tiers    TierMap
 	Families map[string][]string
+	// SourceMaxAge is models.source_max_age (config.toml, not models.toml):
+	// a source older than this withholds every verdict (§3.2); 0 = no limit.
+	SourceMaxAge time.Duration
 }
 
 // LoadConfig reads models.toml; a missing file is the built-in rules only.

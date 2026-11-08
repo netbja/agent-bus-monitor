@@ -91,6 +91,7 @@ profile = "sol"
 func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*rolecfg.Manifest, error)) {
 	t.Helper()
 	dir := t.TempDir()
+	isolateModelSettings(t, dir, "")
 	cache = filepath.Join(dir, "models.json")
 	at := now.UnixMilli()
 	tbl := &models.Table{Providers: map[string]*models.Provider{
@@ -111,6 +112,50 @@ func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*
 		t.Fatal(err)
 	}
 	return cache, func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+}
+
+// isolateModelSettings: the settings come from an empty home, with
+// AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
+func isolateModelSettings(t *testing.T, dir, maxAge string) {
+	t.Helper()
+	old := modelsGetenv
+	t.Cleanup(func() { modelsGetenv = old })
+	modelsGetenv = func(k string) string {
+		switch k {
+		case "HOME", "XDG_CONFIG_HOME":
+			return dir
+		case "AGENT_BUS_MODELS_SOURCE_MAX_AGE":
+			return maxAge
+		}
+		return ""
+	}
+}
+
+// §3.2: the listing prints the source's own age; models check says unknown
+// for a source older than models.source_max_age.
+func TestModelsSourceAge(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	cache, manifest := checkFixture(t, now)
+	tbl, _ := models.Load(cache)
+	tbl.Providers["xai"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	if err := tbl.Save(cache); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	if code := runModels(context.Background(), []string{"--provider", "xai"}, noEnv(), cache, "", manifest, now, &out, &errw); code != 0 || !strings.Contains(out.String(), "source 12 days old") {
+		t.Fatalf("exit %d:\n%s", code, out.String())
+	}
+	out.Reset()
+	runModels(context.Background(), []string{"check"}, noEnv(), cache, "", manifest, now, &out, &errw)
+	if !strings.Contains(out.String(), "xai's catalogue is 12 days old (models.source_max_age 7 days)") {
+		t.Fatalf("default 7d not applied:\n%s", out.String())
+	}
+	isolateModelSettings(t, t.TempDir(), "30d")
+	out.Reset()
+	runModels(context.Background(), []string{"check"}, noEnv(), cache, "", manifest, now, &out, &errw)
+	if strings.Contains(out.String(), "catalogue is 12 days old") || !strings.Contains(out.String(), "newer?") {
+		t.Fatalf("models.source_max_age 30d not read:\n%s", out.String())
+	}
 }
 
 // noEnv: a client is never called (a test reads no real client).

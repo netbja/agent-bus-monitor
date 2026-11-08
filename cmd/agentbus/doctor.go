@@ -102,7 +102,7 @@ func doctorTable() *models.Table {
 }
 
 func doctorConfig() models.Config {
-	c, _ := models.LoadConfig(models.ConfigPath())
+	c, _ := loadModelsConfig(models.ConfigPath())
 	return c
 }
 
@@ -337,6 +337,14 @@ func catalogueVerdict(d doctorDeps, provider, launched string) (string, string) 
 // doctorFails: the verdicts that make roles doctor exit 3 (health's one list).
 func doctorFails(verdict string) bool { return health.ModelVerdictFails(verdict) }
 
+// ageWords is a catalogue age: whole days from 2 days, else hours.
+func ageWords(d time.Duration) string {
+	if d >= 48*time.Hour {
+		return fmt.Sprintf("%d days", int(d/(24*time.Hour)))
+	}
+	return fmt.Sprintf("%dh", int(d/time.Hour))
+}
+
 // judgement is the model table's verdict on one model id, shared by roles
 // doctor (what runs) and models check (what is configured), so the two never
 // disagree on a model (model-detection §3.4).
@@ -352,7 +360,7 @@ type judgement struct {
 // family order in models.toml), naming a model the same catalogue lists;
 // "newer?" when the catalogue lists a higher version of the same stem and
 // suffix and no family order speaks for id (§3.3); "unknown" when there is
-// no fresh read.
+// no fresh read, or its source is older than cfg.SourceMaxAge.
 func judgeModel(tbl *models.Table, cfg models.Config, now time.Time, provider, id string) judgement {
 	if tbl == nil {
 		return judgement{Verdict: "unknown", Why: "no model table: agentbus models --refresh"}
@@ -364,6 +372,9 @@ func judgeModel(tbl *models.Table, cfg models.Config, now time.Time, provider, i
 			why += " (last read failed: " + p.Error + ")"
 		}
 		return judgement{Verdict: "unknown", Why: why}
+	}
+	if age := now.Sub(time.UnixMilli(p.SourceAt)); p.SourceAt > 0 && cfg.SourceMaxAge > 0 && age > cfg.SourceMaxAge {
+		return judgement{Verdict: "unknown", Why: fmt.Sprintf("%s's catalogue is %s old (models.source_max_age %s)", provider, ageWords(age), ageWords(cfg.SourceMaxAge))}
 	}
 	row, found := p.Find(id)
 	if !found && p.Partial {

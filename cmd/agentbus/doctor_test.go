@@ -271,7 +271,9 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 	// foureyes: a risk that cannot be judged says so, never nothing.
 	old := launchRisk
 	t.Cleanup(func() { launchRisk = old })
-	launchRisk = func(*rolecfg.Manifest, string, string, string) (string, error) { return "", errors.New("rules do not resolve") }
+	launchRisk = func(*rolecfg.Manifest, string, string, string) (string, error) {
+		return "", errors.New("rules do not resolve")
+	}
 	rows, err = doctorRows(ctx, b, d)
 	if err != nil {
 		t.Fatal(err)
@@ -351,5 +353,31 @@ func TestDoctorAgentFilter(t *testing.T) {
 	out.Reset()
 	if code := runDoctor(ctx, b, d, []string{"--agent", "ghost"}, &out, &errw); code != 1 || !strings.Contains(errw.String(), "ghost") {
 		t.Fatalf("unknown agent: exit %d %q", code, errw.String())
+	}
+}
+
+// model-detection §3.2: a source older than models.source_max_age withholds
+// every verdict (unknown in models check, nothing in roles doctor); an
+// unknown source age (0) withholds nothing.
+func TestJudgeModelOldSource(t *testing.T) {
+	now := time.Now()
+	tbl := &models.Table{Providers: map[string]*models.Provider{
+		"moonshot":  {OK: true, ReadAt: now.UnixMilli(), SourceAt: now.Add(-12 * 24 * time.Hour).UnixMilli(), Rows: []models.Row{{ID: "kimi-code/k3"}}},
+		"anthropic": {OK: true, ReadAt: now.UnixMilli(), Partial: true, Rows: []models.Row{{ID: "opus", Alias: true}}},
+	}}
+	cfg := models.Config{SourceMaxAge: 7 * 24 * time.Hour}
+	j := judgeModel(tbl, cfg, now, "moonshot", "kimi-code/gone")
+	if j.Verdict != "unknown" || !strings.Contains(j.Why, "12 days old") || !strings.Contains(j.Why, "models.source_max_age") {
+		t.Fatalf("old source: %+v", j)
+	}
+	if v, _ := catalogueVerdict(doctorDeps{Table: tbl, Config: cfg, Now: func() time.Time { return now }}, "moonshot", "kimi-code/gone"); v != "" {
+		t.Fatalf("doctor judged an old source: %q", v)
+	}
+	cfg.SourceMaxAge = 14 * 24 * time.Hour
+	if j := judgeModel(tbl, cfg, now, "moonshot", "kimi-code/gone"); j.Verdict != "gone" {
+		t.Fatalf("a source within its max age: %+v", j)
+	}
+	if j := judgeModel(tbl, models.Config{SourceMaxAge: time.Hour}, now, "anthropic", "opus"); j.Verdict != "ok" {
+		t.Fatalf("an unknown source age withheld: %+v", j)
 	}
 }
