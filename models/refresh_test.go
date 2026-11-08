@@ -1,0 +1,81 @@
+package models
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+// §3.5: a reader that ignores its deadline never holds the refresh past it;
+// its provider keeps the previous rows and is named as a failure.
+func TestRefreshAbandonsAHungReader(t *testing.T) {
+	tbl := &Table{Providers: map[string]*Provider{"xai": {OK: true, ReadAt: 1, Rows: []Row{{Provider: "xai", ID: "grok-4.6"}}}}}
+	block := make(chan struct{})
+	defer close(block)
+	readers := []Reader{
+		{Provider: "xai", Read: func(context.Context) ([]Row, string, error) { <-block; return nil, "", nil }},
+		{Provider: "openai", Read: func(context.Context) ([]Row, string, error) {
+			return []Row{{Provider: "openai", ID: "gpt-6.1-sol"}}, "codex", nil
+		}},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	failed := tbl.Refresh(ctx, readers, nil, time.Now())
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("refresh waited %v for a hung reader", d)
+	}
+	if failed["xai"] == "" || len(failed) != 1 {
+		t.Fatalf("failures %v, want xai only", failed)
+	}
+	if p := tbl.Providers["xai"]; len(p.Rows) != 1 || p.Rows[0].ID != "grok-4.6" || p.OK {
+		t.Fatalf("hung provider %+v", p)
+	}
+	if p := tbl.Providers["openai"]; !p.OK || p.Rows[0].ID != "gpt-6.1-sol" {
+		t.Fatalf("the other reader was not read: %+v", p)
+	}
+}
+
+// Every reader runs under the same deadline: a slow first reader does not
+// spend the next one's time.
+func TestRefreshReadersShareTheDeadline(t *testing.T) {
+	tbl := &Table{Providers: map[string]*Provider{}}
+	block := make(chan struct{})
+	defer close(block)
+	readers := []Reader{
+		{Provider: "a", Read: func(context.Context) ([]Row, string, error) { <-block; return nil, "", nil }},
+		{Provider: "b", Read: func(ctx context.Context) ([]Row, string, error) {
+			select {
+			case <-time.After(50 * time.Millisecond):
+				return []Row{{ID: "b-1"}}, "", nil
+			case <-ctx.Done():
+				return nil, "", ctx.Err()
+			}
+		}},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	failed := tbl.Refresh(ctx, readers, nil, time.Now())
+	if _, bad := failed["b"]; bad || !tbl.Providers["b"].OK {
+		t.Fatalf("b waited behind a: %v %+v", failed, tbl.Providers["b"])
+	}
+}
+
+// §3.3: a family order in models.toml is the evidence; the hint is not asked.
+func TestInFamily(t *testing.T) {
+	c := Config{Families: map[string][]string{"grok": {"grok-4.7", "grok-4.6"}}}
+	if !c.InFamily("grok-4.6") || !c.InFamily("grok-4.7[1m]") || c.InFamily("grok-4.5") {
+		t.Fatal("InFamily")
+	}
+}
+
+// The table's age is its newest refresh attempt; an empty table has none.
+func TestRefreshedAt(t *testing.T) {
+	if (&Table{Providers: map[string]*Provider{}}).RefreshedAt() != 0 {
+		t.Fatal("empty")
+	}
+	tbl := &Table{Providers: map[string]*Provider{"a": {At: 5}, "b": {At: 9}, "c": {At: 2}}}
+	if tbl.RefreshedAt() != 9 {
+		t.Fatal(tbl.RefreshedAt())
+	}
+}

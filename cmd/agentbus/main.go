@@ -26,6 +26,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/models"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/setup"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
@@ -85,7 +86,14 @@ func main() {
 	// broker. launch replaces this process with the client.
 	// models is the machine's model table (v0.15.2): no project, no broker.
 	if len(args) >= 1 && args[0] == "models" {
-		os.Exit(runModels(context.Background(), args[1:], models.RealEnv(), models.CachePath(), models.ConfigPath(), time.Now(), os.Stdout, os.Stderr))
+		manifest := func() (*rolecfg.Manifest, error) {
+			path, err := manifestPath(os.Environ())
+			if err != nil {
+				return nil, err
+			}
+			return rolecfg.Load(path)
+		}
+		os.Exit(runModels(context.Background(), args[1:], models.RealEnv(), models.CachePath(), models.ConfigPath(), manifest, time.Now(), os.Stdout, os.Stderr))
 	}
 	// doctor and adopt need the project's bus: they go through the switch below.
 	if len(args) >= 1 && args[0] == "roles" && !(len(args) >= 2 && (args[1] == "doctor" || args[1] == "adopt")) {

@@ -238,6 +238,34 @@ func (m *Manifest) ResolveWith(role, profile string) (Profile, error) {
 	return m.resolve(role, profile)
 }
 
+// RoleNames is the manifest's roles in declaration order.
+func (m *Manifest) RoleNames() []string { return append([]string(nil), m.roleOrder...) }
+
+// ProfileNames is the manifest's profiles in declaration order (none in a
+// schema 1 manifest, whose roles carry their model).
+func (m *Manifest) ProfileNames() []string {
+	if m.SchemaVersion == 1 {
+		return nil
+	}
+	return append([]string(nil), m.profileOrder...)
+}
+
+// ProfileModel is a profile's provider and its model or tier, as declared
+// (models check judges every profile, used or not: model-detection §3.4).
+func (m *Manifest) ProfileModel(name string) (provider, model, tier string, ok bool) {
+	if m.SchemaVersion == 1 {
+		return "", "", "", false
+	}
+	p, isTable := asTable(m.Profiles[name])
+	if !isTable {
+		return "", "", "", false
+	}
+	provider, _ = p["provider"].(string)
+	model, _ = p["model"].(string)
+	tier, _ = p["tier"].(string)
+	return provider, model, tier, true
+}
+
 // MaxFallbacks bounds fallback_profiles: an ask question (six options at
 // most) must hold them plus "Wait for the reset".
 const MaxFallbacks = 3
