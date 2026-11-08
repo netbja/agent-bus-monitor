@@ -55,7 +55,12 @@ func TestDeleteProjectNow(t *testing.T) {
 	if keys, _ := bus.ProjectKeys(ctx, c, sibling); len(keys) == 0 {
 		t.Fatal("the sibling project lost its keys")
 	}
-	if _, _, err := deleteProjectNow(ctx, c, "Bad*", nil); err == nil {
-		t.Fatal("an invalid name was accepted")
+	// reviewer-codex: an invalid name reaches no callback (the services' env
+	// file is a path built from the name) and no key.
+	for _, bad := range []string{"Bad*", "../../victim", "", "demo/x"} {
+		called := false
+		if _, _, err := deleteProjectNow(ctx, c, bad, func(string) ([]string, error) { called = true; return nil, nil }); err == nil || called {
+			t.Fatalf("%q: err %v, removal called %v", bad, err, called)
+		}
 	}
 }
