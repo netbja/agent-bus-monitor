@@ -430,9 +430,13 @@ func (h Herdr) Inspect(ctx context.Context, pane string) Inspection {
 	}
 	in.PIDs = pids
 	in.Starts = make(map[int]uint64, len(pids))
+	in.Env = make(map[int]string, len(pids))
 	for _, pid := range pids {
 		if s, err := ProcStart(pid); err == nil {
 			in.Starts[pid] = s
+		}
+		if who := procAgent(pid); who != "" {
+			in.Env[pid] = who
 		}
 	}
 

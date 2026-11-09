@@ -48,14 +48,18 @@ func launchHooks(e *envMap) claudeHooks {
 
 // codexHookArgs are the turn hooks of a Codex launch (auto-state step 5,
 // route a): -c overrides for this launch only, never ~/.codex, the hooks
-// feature on, turn start on UserPromptSubmit and turn end on Stop. Codex
-// lists them from its session flags and asks once to trust them; the same
-// command on every launch keeps that trust.
+// feature on, turn start on UserPromptSubmit and turn end on Stop and on
+// SessionStart (startup and resume, codex-identity-recovery): a session
+// herdr restored after a reboot proves its new process at once, as Claude
+// Code's SessionStart does, instead of waiting for a turn nobody wakes it
+// for. Codex lists them from its session flags and asks once to trust them;
+// the same command on every launch keeps that trust.
 func codexHookArgs(h claudeHooks) []string {
 	hook := func(event, command string) string {
 		return "hooks." + event + `=[{hooks=[{type="command",command=` + tomlString(command) + `}]}]`
 	}
-	return []string{"-c", "features.hooks=true", "-c", hook("UserPromptSubmit", h.TurnStart), "-c", hook("Stop", h.TurnEnd)}
+	return []string{"-c", "features.hooks=true", "-c", hook("UserPromptSubmit", h.TurnStart), "-c", hook("Stop", h.TurnEnd),
+		"-c", hook("SessionStart", h.TurnEnd)}
 }
 
 // tomlString is s as a TOML basic string: Codex parses a -c value as TOML
