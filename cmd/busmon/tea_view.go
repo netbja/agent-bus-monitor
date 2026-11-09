@@ -87,6 +87,9 @@ func (m Model) grid() *grid {
 	if m.ui.tour != nil {
 		m.drawTour(g)
 	}
+	if m.ui.del != nil {
+		m.drawDeletePanel(g)
+	}
 	if d := m.ui.pausePopup; d != nil {
 		drawPausePopup(g, m.pauseDialogRect(), d.rec, d.sel, m.now)
 	}

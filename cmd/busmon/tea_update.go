@@ -20,6 +20,8 @@ func (m *Model) mode() Mode {
 	switch {
 	case m.ui.tour != nil:
 		return ModeTour
+	case m.ui.del != nil:
+		return ModeProjectDelete
 	case m.ui.compose != nil:
 		return ModeCompose
 	case m.ui.line == lineFilter || m.ui.line == lineHistFilter:
@@ -66,6 +68,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.confirmKey(k)
 	case m.ui.sleepAsk != nil:
 		cmd = m.sleepConfirm(k)
+	case m.ui.del != nil:
+		cmd = m.deleteKey(k)
 	default:
 		cmd = m.modeKey(k)
 	}

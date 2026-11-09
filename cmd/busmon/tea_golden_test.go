@@ -64,7 +64,7 @@ func checkGolden(t *testing.T, name, got string) {
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
 var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "plantab",
-	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets", "projects", "projects-detail", "projects-unknown", "idle"}
+	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets", "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name", "idle"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -78,8 +78,9 @@ func inState(t testing.TB, m Model, state string) Model {
 	case "idle": // the idle view, layout A (busmon idle view spec)
 		m.cfg.settings.IdleView = time.Minute
 		return pollAt(t, pollAt(t, m, time.Hour), time.Hour+20*time.Second) // the thread 20 cells in (idle-animation)
-	case "projects", "projects-detail", "projects-unknown": // the Projects page (M, projects-admin §9)
+	case "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name": // the Projects page (M, projects-admin §9)
 		src := adminFixture(shellNow)
+		src.quiet = func(context.Context, string) (string, error) { return "", nil }
 		if state == "projects-unknown" {
 			src = adminSource{templates: src.templates, host: "vdr",
 				broker: func(context.Context) ([]adminFacts, error) { return nil, errors.New("connection refused") }}
@@ -91,6 +92,14 @@ func inState(t testing.TB, m Model, state string) Model {
 			m = keys(t, m, 'j')
 			m, cmd = pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
 			m = run(t, m, cmd)
+		}
+		if strings.HasPrefix(state, "projects-delete") { // the delete panel on old (§5.2)
+			m = keys(t, m, 'j', 'j', 'j')
+			m, cmd = pressCmd(t, m, 'd')
+			m = run(t, m, cmd)
+			if state == "projects-delete-name" {
+				m = keys(t, m, 'n', 'o', 'l')
+			}
 		}
 		return m
 	case "notice": // sentinel reloaded coder: the notice at the footer's right end (busmon-notice)

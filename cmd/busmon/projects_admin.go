@@ -54,6 +54,13 @@ type adminSource struct {
 	services  func(ctx context.Context) (map[string]map[string]bool, error) // project -> kind -> active, this machine
 	herdr     func(ctx context.Context) (map[string]adminWorkspace, error)  // project -> its workspace, this machine
 	host      string                                                        // this machine's name
+	// quiet is §5.1's live check ("" = quiet), remove the delete (§5.3).
+	quiet  func(ctx context.Context, project string) (string, error)
+	remove func(ctx context.Context, project string) deleteResult
+	// procAgents: this host can tell a verified agent's process alive
+	// (/proc); nil = it can. Without it the delete says so (master: §5.1's
+	// limit stated, never refused).
+	procAgents func() bool
 }
 
 // adminRow is one row of the page.
@@ -81,6 +88,7 @@ type adminRow struct {
 // adminView is the page's read: its rows and what failed.
 type adminView struct {
 	rows                                 []adminRow
+	agentsUnchecked                      bool // no /proc here: the delete cannot see this host's agents
 	readAt                               time.Time
 	brokerErr, svcErr, herdrErr, tmplErr string
 	host                                 string
@@ -91,7 +99,7 @@ type adminView struct {
 func gatherAdmin(ctx context.Context, src adminSource, open string, now time.Time) adminView {
 	c, cancel := context.WithTimeout(ctx, adminReadTimeout)
 	defer cancel()
-	v := adminView{readAt: now, host: src.host}
+	v := adminView{readAt: now, host: src.host, agentsUnchecked: src.procAgents != nil && !src.procAgents()}
 	var facts []adminFacts
 	brokerOK := false
 	if src.broker == nil {
@@ -223,6 +231,8 @@ func realAdminSource(client *redis.Client, getenv func(string) string) adminSour
 			return readAdminHerdr(ctx, herdrRunner(getenv))
 		},
 	}
+	src.quiet, src.remove = realQuiet(client, getenv), realRemove(client)
+	src.procAgents = hasProc
 	// The manager is found and asked inside the page's read, never at
 	// busmon's start, and within its deadline (reviewer-codex).
 	src.services = func(ctx context.Context) (map[string]map[string]bool, error) {
@@ -728,6 +738,10 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 		}
 	case ActRecap: // R: read again
 		return m.projectsCmd(p.serial)
+	case ActDelete:
+		if p.sel < len(p.proj.rows) {
+			return m.projectDelete(p.proj.rows[p.sel])
+		}
 	case ActSleep, ActStopServices, ActBackupNow:
 		if p.sel < len(p.proj.rows) {
 			return m.projectAction(act, p.proj.rows[p.sel])

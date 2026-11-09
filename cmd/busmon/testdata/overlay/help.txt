@@ -102,10 +102,18 @@ KEYS
   Z                    put the selected project to sleep (agentbus suspend), or wake it when it is suspended (resume); asks first
   x                    stop the selected project's services on this machine (agentbus down; deletes nothing); asks first
   b                    back the selected project up now (agentbus backup --project); the archive is the notice
+  d del                delete the selected project's keys (refused while it is live; a backup offered first, its name typed)
   R                    read every project again (the page is never polled)
   esc                  back
   F1 ?                 help
   q                    quit
+  ^C                   quit (everywhere)
+  a project's delete (d on M)
+  b                    the first step: back the project up, then go on (only when it succeeds)
+  n                    the first step: go on without a backup
+  enter                the name step: delete when the field is the project's name, byte for byte
+  y                    the open project: the second confirmation; busmon exits after the delete
+  esc                  cancel at every step; nothing is written
   ^C                   quit (everywhere)
   the notifications setup
   enter                the next step, or confirm the choice; on a field: edit it
