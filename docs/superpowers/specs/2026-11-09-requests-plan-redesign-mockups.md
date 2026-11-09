@@ -24,6 +24,10 @@ The common question, "who must act next, on what", has no page of its own: the p
 are a count and a pointer, the asks and merges are rows of For you, the requests owed are a section
 of another tab.
 
+**Keys in every layout** (master, 2026-11-10): the footer shows the request-priority keys
+`+ -` (raise or lower a tracked request's priority, request-priority §6), as today's Requests
+footer does; they act on the rows that are tracked requests.
+
 ## 2. The blocks every layout shows
 
 - **For you** (a section of the new page, not the For you panel): everything that waits on the
@@ -75,6 +79,7 @@ page's order.
 │  ── between agents · 9 reviews, 11 directives, nobody waits on you  (enter shows them) ──                                                                    │
 │  ── done · 14 this week  (d shows them) ──                                                                                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ select  enter open  + - priority  a answer  ·  between agents and done: enter on their line                                                                 
 ```
 
 At 80 columns the same sections, with the progress line on its own row:
@@ -104,6 +109,7 @@ At 80 columns the same sections, with the progress line on its own row:
 │  ◇ DeepSeek ideas      3, waiting for you                                    │
 │  ── between agents 20 · done 14  (enter) ──                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ select  enter open  + - priority  a answer                                  
 ```
 
 **Replaces**:
@@ -140,7 +146,7 @@ become a 2×2 grid, each column cut to its first rows (enter opens a column full
 │                                      ││                                      ││                                      ││                                      │
 │                                      ││                                      ││                                      ││                                      │
 ╰──────────────────────────────────────╯╰──────────────────────────────────────╯╰──────────────────────────────────────╯╰──────────────────────────────────────╯
- ←→ column  ↑↓ item  enter open  m merge  a answer   ·   between agents 20 (b)   done 14 (d)                                                                    
+ ←→ column  ↑↓ item  enter open  + - priority  a answer   ·   between agents 20 (b)   done 14 (d)                                                               
 ```
 
 ```
@@ -158,7 +164,7 @@ become a 2×2 grid, each column cut to its first rows (enter opens a column full
 │○ v0.29 tag  ♙ you                    ││◇ DeepSeek ideas                      │
 │○ kimi-quota (req)                    ││                                      │
 ╰──────────────────────────────────────╯╰──────────────────────────────────────╯
- ←→ column  ↑↓ item  enter open  b agents  d done                               
+ ←→ column  ↑↓ item  enter  + - priority  b agents  d done                      
 ```
 
 **Replaces**: the Requests and Plan tabs, by one tab, Board. The For you panel becomes the board's
@@ -201,6 +207,7 @@ traffic between agents.
 │                                                                                                                                                              │
 │  DONE  6   d shows      ·      messages between agents: the Log tab (3)                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ select  enter open  + - priority  d done  ·  messages between agents: the Log tab                                                                           
 ```
 
 ```
@@ -224,6 +231,7 @@ traffic between agents.
 │  IDEAS  ◇ DeepSeek (3)  ◇ notif. order                                       │
 │  DONE 6 (d)  ·  messages: Log tab (3)                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ select  enter  + - priority  d done                                         
 ```
 
 **Replaces**:
