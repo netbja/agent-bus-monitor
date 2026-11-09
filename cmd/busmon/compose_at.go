@@ -38,14 +38,11 @@ func atToken(text []rune, cur int) (query string, start int, ok bool) {
 const atQuoted = " \t()[]{}<>\"'"
 
 // atPathText is the text the pick of rel inserts (§5, the person's answers):
-// the absolute path under root (form "absolute", the default) or rel itself
-// (form "relative"), a path under home always absolute; a directory ends
+// the absolute path under root (any form but "relative": absolute is the
+// default) or rel itself (form "relative"), a path under home always absolute; a directory ends
 // with the separator; backticks around a path that needs them. A path that
 // holds a backtick is never inserted: why says so.
 func atPathText(root, home, rel string, dir, fromHome bool, form string) (text, why string) {
-	if strings.ContainsRune(rel, '`') {
-		return "", "unusual name: type it yourself"
-	}
 	p := filepath.FromSlash(rel)
 	switch {
 	case fromHome:
@@ -55,6 +52,9 @@ func atPathText(root, home, rel string, dir, fromHome bool, form string) (text, 
 	}
 	if dir {
 		p += string(filepath.Separator)
+	}
+	if strings.ContainsRune(p, '`') { // the whole path, root and home included (reviewer-codex, foureyes)
+		return "", "unusual name: type it yourself"
 	}
 	if strings.ContainsAny(p, atQuoted) {
 		p = "`" + p + "`"

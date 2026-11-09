@@ -64,11 +64,26 @@ func TestAtPathText(t *testing.T) {
 		{"docs/my notes.md", false, false, "absolute", "`" + filepath.Join(root, "docs", "my notes.md") + "`", ""},
 		{"docs/a(1).md", false, false, "relative", "`" + filepath.Join("docs", "a(1).md") + "`", ""},
 		{"we`ird.md", false, false, "absolute", "", "unusual name: type it yourself"},
+		{"docs/say \"hi\".md", false, false, "relative", "`" + filepath.Join("docs", "say \"hi\".md") + "`", ""},
+		{"docs/it's.md", false, false, "relative", "`" + filepath.Join("docs", "it's.md") + "`", ""},
+		{"a.go", false, false, "", filepath.Join(root, "a.go"), ""},      // an empty form: the default
+		{"a.go", false, false, "bogus", filepath.Join(root, "a.go"), ""}, // an unknown one too
 	} {
 		got, why := atPathText(root, home, c.rel, c.dir, c.fromHome, c.form)
 		if got != c.want || why != c.why {
 			t.Errorf("%q (%s): got %q %q, want %q %q", c.rel, c.form, got, why, c.want, c.why)
 		}
+	}
+	// a backtick in the root or the home itself: the whole path is checked
+	tick := filepath.FromSlash("/data/p`x")
+	if got, why := atPathText(tick, home, "src/a.go", false, false, "absolute"); why == "" {
+		t.Errorf("a root with a backtick: inserted %q", got)
+	}
+	if got, why := atPathText(root, tick, "a.md", false, true, "absolute"); why == "" {
+		t.Errorf("a home with a backtick: inserted %q", got)
+	}
+	if got, why := atPathText(tick, home, "src/a.go", false, false, "relative"); why != "" || got != filepath.Join("src", "a.go") {
+		t.Errorf("relative, the root not in the text: %q %q", got, why)
 	}
 }
 
@@ -115,6 +130,19 @@ func TestAtReplace(t *testing.T) {
 	if ta.replaceAt(4, 8, "/p/tea_compose.go") || ta.value() != "see @tea" {
 		t.Fatalf("over the cap: %q", ta.value())
 	}
+	// a pick that fits only because the @query it replaces goes away
+	ta = textArea{limit: 12}
+	ta.set("@longquery")                                                   // 10 runes
+	if !ta.replaceAt(0, 10, "/p/abcdefg") || ta.value() != "/p/abcdefg " { // 11
+		t.Fatalf("fits once the query is replaced: %q", ta.value())
+	}
+	// an active selection is ended by the insert
+	ta = textArea{limit: 100}
+	ta.set("x @a")
+	ta.anchor, ta.mark = 0, true
+	if !ta.replaceAt(2, 4, "/p/a") || ta.mark {
+		t.Fatalf("selection still marked after the insert: %+v", ta.mark)
+	}
 }
 
 // §5: compose.at_path is registered, absolute by default, and takes only
@@ -128,5 +156,15 @@ func TestAtPathSetting(t *testing.T) {
 		if k.Valid(v) != ok {
 			t.Errorf("%q: valid %v, want %v", v, !ok, ok)
 		}
+	}
+}
+
+// A cursor out of range is clamped, never a panic (foureyes, minor).
+func TestAtTokenClamps(t *testing.T) {
+	if _, _, ok := atToken([]rune("@x"), -3); ok {
+		t.Error("a negative cursor opened a query")
+	}
+	if q, _, ok := atToken([]rune("@x"), 99); !ok || q != "x" {
+		t.Errorf("a cursor past the end: %q %v", q, ok)
 	}
 }
