@@ -12,29 +12,30 @@ import (
 
 // headerData is everything the header reports (spec §3.2).
 type headerData struct {
-	project  string
-	health   health
-	guardian guardianSummary
-	dispatch string            // "", "up", "down", or a service state (serviceFact)
-	missions string            // the same; shown only when not ""
-	pilot    string            // pilot-lease driver, "" = autonomous
-	self     string            // the person busmon writes as (humanLabel); "" = not shown
-	update   string            // a newer release tag ("" = none): the last, lowest-priority item
-	note     string            // non-fatal local settings note
-	waiting  string            // owedText: what the Requests view says is owed to the person, "" when nothing
-	between  int               // the Requests view's threads between agents: muted, no age
-	asks     int               // agents in state waiting: decisions a person owes
-	strip    queueStrip        // the shell's queue strip (busmon-queue-triage §3), shown instead of asks
-	shell    bool              // the shell's header: badges first (compact under 120 columns), the pause on row 2
-	unread   int               // Activity entries for the person not opened yet (unread.go)
-	pause    *bus.PauseRecord  // the project pause, nil when not paused
-	holds    map[string]int64  // provider → quota hold reset
-	pace     map[string]string // provider → "~25m"
-	budgets  map[string]bus.BudgetSnapshot
-	bars     barView      // the gauges as they slide
-	plan     *planSummary // the batch's plan (P); nil when none is loaded
-	icons    string       // display.icons: a gauge's provider icon, the first thing to go for room (busmon-icons)
-	now      time.Time
+	project    string
+	health     health
+	guardian   guardianSummary
+	dispatch   string            // "", "up", "down", or a service state (serviceFact)
+	missions   string            // the same; shown only when not ""
+	pilot      string            // pilot-lease driver, "" = autonomous
+	self       string            // the person busmon writes as (humanLabel); "" = not shown
+	update     string            // a newer release tag ("" = none): the last, lowest-priority item
+	note       string            // non-fatal local settings note
+	waiting    string            // owedText: what the Requests view says is owed to the person, "" when nothing
+	background string            // backgroundChip: agents' background work, "" when none (progress-line §4.3)
+	between    int               // the Requests view's threads between agents: muted, no age
+	asks       int               // agents in state waiting: decisions a person owes
+	strip      queueStrip        // the shell's queue strip (busmon-queue-triage §3), shown instead of asks
+	shell      bool              // the shell's header: badges first (compact under 120 columns), the pause on row 2
+	unread     int               // Activity entries for the person not opened yet (unread.go)
+	pause      *bus.PauseRecord  // the project pause, nil when not paused
+	holds      map[string]int64  // provider → quota hold reset
+	pace       map[string]string // provider → "~25m"
+	budgets    map[string]bus.BudgetSnapshot
+	bars       barView      // the gauges as they slide
+	plan       *planSummary // the batch's plan (P); nil when none is loaded
+	icons      string       // display.icons: a gauge's provider icon, the first thing to go for room (busmon-icons)
+	now        time.Time
 }
 
 // hItem is one header element. Elements are admitted by prio (1 first) while
@@ -124,6 +125,9 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 		add(Line{{Text: "pilot ", Role: RoleMuted}, {Text: Preview(d.pilot), Role: RoleText}}, 4, second)
 	} else if d.pilot == "" {
 		add(Line{{Text: "autonomous", Role: RoleMuted}}, 4, second)
+	}
+	if d.background != "" { // admitted last: a narrow header drops it before anything else (progress-line §4.3)
+		add(Line{{Text: Preview(d.background), Role: RoleMuted}}, 102, second)
 	}
 	if d.waiting != "" {
 		add(Line{{Text: Preview(d.waiting), Role: RoleAttention}}, 5, second)

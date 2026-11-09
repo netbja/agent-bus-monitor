@@ -155,6 +155,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	observedErr := errNotPolled
 	var fills map[string]bus.ContextFill
 	fillsErr := errNotPolled
+	var bgs map[string]bus.Background
+	bgsErr := errNotPolled
 	var swaps map[string]bus.SwapIntent
 	swapsErr := errNotPolled
 	var handoffs map[string]bus.Handoff
@@ -167,6 +169,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		marks, marksErr = b.QuotaMarks(pollCtx)
 		observed, observedErr = b.Observed(pollCtx)
 		fills, fillsErr = b.Context(pollCtx)
+		if br, ok := b.(backgroundReader); ok {
+			bgs, bgsErr = br.Backgrounds(pollCtx, names)
+		}
 		swaps, swapsErr = b.SwapIntents(pollCtx)
 		handoffs, handoffsErr = b.Handoffs(pollCtx)
 		fallbacks, fallbacksErr = b.Fallbacks(pollCtx)
@@ -409,6 +414,12 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a.model = nil
 			if v, ok := verdicts[n]; ok {
 				a.model = &v
+			}
+		}
+		if bgsErr != errNotPolled { // a failed read shows none, and says so (spec §4.3); an expired one is gone
+			a.bg, a.bgFailed = nil, bgsErr != nil
+			if v, ok := bgs[n]; ok && bgsErr == nil {
+				a.bg = &v
 			}
 		}
 		if fillsErr == nil { // a failed read keeps the last fill

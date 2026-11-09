@@ -357,6 +357,8 @@ type agentState struct {
 	queueAt       time.Time           // time of the last successful Obligation read
 	ctxRaw        string              // UsageSnapshot.Ctx exactly as read
 	ctxFill       *bus.ContextFill    // {p}:context, nil when not published (unknown)
+	bg            *bus.Background     // its background work (progress-line §4), nil when none
+	bgFailed      bool                // the latest read of it failed: the row says "… ?"
 	registered    bool                // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider      string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
 	client        string              // its client (claude, codex, kimi…), from the launcher

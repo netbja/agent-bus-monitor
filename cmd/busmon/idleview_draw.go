@@ -79,6 +79,9 @@ func (m Model) idleData() idleData {
 		glyph, word, role, group := stateLook(a)
 		if group > 3 && role != RoleAttention {
 			d.idle++
+			if bg := backgroundText(a, m.now); a.bg != nil { // shown with its work, still counted idle (progress-line §4.3); a failed read adds no row
+				d.team = append(d.team, Line{{Text: glyph, Role: role}, {Text: " " + padRight(n, 10) + " " + padRight(word, 8), Role: RoleMuted}, {Text: " " + bg, Role: RoleDim}})
+			}
 			continue
 		}
 		if byWord[word] == 0 {
