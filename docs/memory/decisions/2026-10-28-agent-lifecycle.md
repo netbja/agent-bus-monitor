@@ -49,7 +49,10 @@ person at the keyboard, once per agent.
 
 The services' dispatcher (`agentbus up`), on Linux (verified identities read `/proc`). Reloads are
 the other half of the decision: `agentbus reload`, run by sentinel on a client update, master
-reloading sentinel (lifecycle part C); reload types nothing.
+reloading sentinel (lifecycle part C); reload types nothing. Amended 2026-11-09
+([self-repair pane writer](2026-11-09-self-repair-pane-writer.md), decided, not built): reload
+stays sentinel's; the dispatcher's self-repair relaunches an agent whose process is already gone,
+without a kill, in a new pane.
 
 ## Evidence
 

@@ -90,3 +90,6 @@ pane, or to the `{p}:dispatch` / `{p}:wake:{agent}` keys and the `wake=no` / `es
   signature that matches the wrong screen would type into a busy pane.
 - If a second automated pane writer appears, or the dispatcher starts typing message content, the
   rule above has been broken, not extended.
+- **Amended 2026-11-09** ([self-repair pane writer](2026-11-09-self-repair-pane-writer.md),
+  decided, not built): the dispatcher's self-repair may run a role's template command in a pane
+  it has just created; it still never types into an existing pane, and never types message text.

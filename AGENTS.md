@@ -26,6 +26,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [The dispatcher's self-repair may relaunch a dead agent in a new pane; services may start at login (option); decided, not built (active)](docs/memory/decisions/2026-11-09-self-repair-pane-writer.md)
 - [Only master and docs deliver, push included, with the 4-eyes proof bound to the head (active)](docs/memory/decisions/2026-11-02-forge-delivery.md)
 - [agent-bus is developed as an agent-bus project: worktrees, installed release, 4-eyes on the bus (active)](docs/memory/decisions/2026-10-20-dogfood-team.md)
 - [agent-bus as a herdr plugin: linked, Go, own templates, the picker never provisions (active)](docs/memory/decisions/2026-10-19-herdr-plugin.md)

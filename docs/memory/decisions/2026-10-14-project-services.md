@@ -30,7 +30,9 @@ Shape of the decision, each part with its reason:
   `agentbus --project <p> service run <kind>`.
 - **Never at login.** The systemd unit has no `[Install]` section and is never enabled. The
   launchd plist lives outside `~/Library/LaunchAgents`. Only `agentbus up` or `service start`
-  starts a project.
+  starts a project. *Amended 2026-11-09* ([self-repair pane writer](2026-11-09-self-repair-pane-writer.md),
+  decided, not built): starting at login becomes an option, off by default, one backend per
+  platform, never with linger.
 - **An explicit fallback, never a hidden process.** Without a usable manager, `up` says why and
   opens herdr tabs, as before. `--tabs` forces that. It never starts a `nohup` process.
 - **Exit 0 is final, 1 is restarted.** The cases that are not restarted:

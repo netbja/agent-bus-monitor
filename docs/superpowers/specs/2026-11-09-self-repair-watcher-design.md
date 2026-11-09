@@ -1,9 +1,11 @@
 # Self-repair watcher: dead agents relaunched without an AI (design, for the person's review)
 
-Status: **draft, not built.** The person asked on 2026-11-09, through master (task
+Status: **answered, not built.** The person asked on 2026-11-09, through master (task
 `reload-failure-cause`), for a watcher that repairs the system, its tabs and its network losses
-and relaunches agents, with no AI in the loop. This spec proposes one. Part 8 lists the decisions
-that are the person's; nothing here is to be built before those answers.
+and relaunches agents, with no AI in the loop. They answered part 8 the same day (task
+`self-repair-answers`); the text below follows the answers, and part 7 is the build order. The
+new authority is recorded as a decision:
+[self-repair pane writer](../../memory/decisions/2026-11-09-self-repair-pane-writer.md).
 
 ## 1. Why
 
@@ -59,7 +61,9 @@ other case it reports.
 ### 4.1 R1: an agent's process is gone (the main repair)
 
 **Trigger.** For one agent of the template, `snapLife` reads **dead** for its whole grace period
-(default 60 s, measured by Redis `TIME`), on at least three reads.
+(default 60 s, measured by Redis `TIME`), on at least three reads. `snapLife` has one life rule
+with reload, restore and pop-retire: a pid is gone only by `pidListedNoMore` (PR 388), and
+`TestSnapLifeReadsAGonePidDead` guards it against the real `ProcStart` on a reaped pid (part 6).
 
 **Preconditions.** All must hold, each read again right before acting:
 
@@ -77,9 +81,11 @@ other case it reports.
    local model: `llm-endpoint` is ok), and the
    provider is not held by the quota coordinator. A relaunch into a dead network or a held quota
    just dies again.
-5. **A session to resume, or permission to start fresh.** Claude Code resumes its proved session
-   (`--resume <id>`). A client with no resumable session (Codex today) is relaunched fresh **only
-   if the person allowed it** (part 8, Q4): its conversation is lost.
+5. **A session to resume.** Every client is relaunched **resuming** its proved session (the
+   person, Q4): Claude Code (`--resume <id>`, as today), and Codex, Kimi and Gemini once their
+   session ids are captured and proved (part 7, step 5). Never a fresh start. A client with no
+   resume at all (Grok, to be verified in step 5) is only reported to master; the watcher never
+   relaunches it.
 6. **Budget left** (4.5).
 
 **One relauncher at a time.** Before anything else, R1 takes the role's intent: `BeginSwap` with a
@@ -122,22 +128,27 @@ today too; closing it (the launcher recording its profile in the snapshot) is a 
 part of this spec. Then a ledger entry `self-repair relaunched <agent>: pid A -> B,
 pane P -> Q`, one line to master, and the ordinary wake for any message waiting.
 
-**Failure.** No proof in 60 s: one escalation to master, and to the person if part 8, Q7 allows
-it,
+**Failure.** No proof in 60 s: one escalation to master, and a desktop notification to the
+person (Q7),
 with the recovery line reload prints today (`agent-launch <role> <p> --resume <id> in pane …`).
 No retry for that episode.
 
-**Master.** Proposed: master is relaunched like any other agent, first when several are dead, as it
-is the one that could otherwise recover the rest. The relaunched master does not inherit the pilot
-lease the dead one held; it takes it the usual way once the old lease expires. This is a new
-authority: part 8, Q6.
+**Master.** Relaunched **first** when several are dead (the person, Q6: the system must run on its
+own), since it is the one that could otherwise recover the rest. The relaunched master does not
+inherit the pilot lease the dead one held; it takes it the usual way once the old lease expires.
 
 ### 4.2 R2: a template tab is missing
 
 The tab of a template role was closed (a person's click, a herdr crash restoring the workspace
-without it). With R1's preconditions, `judgeTab` reads `create`, and the watcher creates the tab
-and relaunches into it, exactly as `up --resume` does. A tab the person closed **on purpose** is
-indistinguishable from an accident; that is part 8, Q3.
+without it). For a **required** role (the person, Q3), with R1's preconditions, `judgeTab` reads
+`create`, and the watcher creates the tab and relaunches into it, exactly as `up --resume` does.
+For an optional role, it only reports the missing tab to master.
+
+- **Required** is a new key of a role in `roles.toml`, `required = true` (absent: false). `roles
+  doctor` shows it, and `required` on a pop is refused (a pop comes back through master only).
+  The shipped templates mark the project's standing roles required.
+- **A required agent is stopped on purpose by `retire` or `suspend`**, never by closing its tab:
+  those declare the departure (precondition 1), closing a tab does not.
 
 ### 4.3 R3: network lost, then back
 
@@ -153,35 +164,71 @@ so nothing watches until the person runs `agentbus up <p>` (which relaunches the
 `service start`. R4 then covers only what follows a start:
 
 - **started with the workspace closed** (`service start` alone): relaunch nothing, and say once
-  that the workspace is not open (`run agentbus up <p> --resume`), through the channels Q7 allows;
+  that the workspace is not open (`run agentbus up <p> --resume`), to master on the bus (Q7);
 - **workspace open** (herdr restored it): R1 and R2 apply as usual. Panes herdr restored with a
   live client are recovered by the dispatcher's existing rule (codex-identity-recovery), not
   relaunched.
 
-Whether the services should start at login, so the watcher covers a reboot, is the person's
-decision: part 8, Q8. It would reverse "never at login".
+**Start at login** (the person, Q8) is an option, `services.start_at_login` (off by default),
+settable in `config.toml` and busmon's settings screen (`C`). With it on, the project's services
+start when the person logs in, and the watcher covers a reboot as soon as herdr opens the
+workspace. **No linger**: without a session, herdr and the workspace are not open, so there would
+be nothing to relaunch into. It goes through one Go interface, one backend per platform:
+
+```go
+// LoginStart enables or disables a project's services at the person's login.
+type LoginStart interface {
+	Enable(project string) error
+	Disable(project string) error
+	Enabled(project string) (bool, error)
+}
+```
+
+- **Linux with systemd:** the units gain `[Install] WantedBy=default.target` only while the
+  option is on, and `systemctl --user enable`; `disable` when it goes off.
+- **macOS:** a LaunchAgent in `~/Library/LaunchAgents` with `RunAtLoad`. macOS has no `/proc`, so
+  the watcher relaunches nothing there until a process identity exists for it (part 6).
+- **Linux without systemd** (OpenRC, runit, …): an XDG autostart entry in
+  `~/.config/autostart`, which starts `agentbus service start <p>` with the desktop session,
+  whatever the init system.
+- **Windows:** not covered. One lead is WSL2 with systemd, woken by a scheduled task at logon.
+  This is an open question for the person (part 8).
+
+This amends the project services decision's "never at login" (see the decision note).
 
 On a resume from suspend (a monotonic jump, the same boot id), R1's grace restarts from the resume,
 so a long sleep never counts as an agent "dead for an hour".
 
 ### 4.5 Budgets and the kill switch
 
-- **Per agent:** one relaunch per 30 min, three per 24 h. A fourth death in a day is a crash loop:
-  escalate it, relaunch nothing more for it until the person or master clears it
-  (`agentbus self-repair reset <agent>`). Giving master that power is part 8, Q5.
+- **Per agent:** one relaunch per 30 min, three per 24 h by default (the person, Q5). A fourth
+  death in a day is a crash loop: escalate it, and relaunch nothing more for it until the person
+  or master clears it with `agentbus self-repair reset <agent>`. Other agents are refused.
+- **Settable:** `dispatch.self_repair_every` (30m) and `dispatch.self_repair_per_day` (3), in
+  `config.toml` and busmon's settings screen (`C`).
 - **Per project:** at most one relaunch in flight, then a 2-min pause before the next agent.
-- **Switch:** `dispatch.self_repair = off | shadow | on` in `config.toml`, overridable with
-  `AGENT_BUS_SELF_REPAIR`; both are registered in `config/keys.go`, the one settings registry, like
-  every other setting (so is the budget, `dispatch.self_repair_budget`). **`shadow`** records what it would do (health check `self-repair`, a
-  `would relaunch …` ledger line) and acts on nothing. Part 8, Q1 asks for the default.
+- **Switch:** `dispatch.self_repair = on | off`, **default `on`** (the person, Q1), overridable
+  with `AGENT_BUS_SELF_REPAIR`, and shown on the settings screen.
+- **`shadow`** records what the watcher would do (health check `self-repair`, a `would relaunch …`
+  ledger line) and acts on nothing. It is allowed **only in development mode**. Outside it,
+  config validation refuses `shadow` with the key named, and the settings screen does not offer
+  it.
+- **Development mode** (the project has none today): `AGENT_BUS_DEV=1` in the environment, or
+  `dev = true` in `config.toml`. It is one boolean registered in `config/keys.go`, read once at
+  start, and only ever unlocks extra values such as `shadow`. It never weakens a check. busmon
+  shows `dev` in its header while it is on.
+
+Every key above is registered in `config/keys.go`, the one settings registry, and appears on
+busmon's settings screen (the person: the mode, the budgets and the login option all belong
+there).
 
 ## 5. What the person and the team see
 
-- **Notifications** (the person's choice of channels and events, part 8, Q7). Today the dispatcher
-  rings the desktop only for an agent blocked on its client's prompt (prompt-notify decision) and
-  for a `/clear` without proof (agent-lifecycle decision). The watcher would add: a relaunch that
-  failed its proof, a spent budget, the workspace not open after a start, and relaunches held by a
-  lost network. Proposed: master on the bus for each; the desktop only for the first two.
+- **Notifications** (the person, Q7: as recommended). Today the dispatcher rings the desktop only
+  for an agent blocked on its client's prompt (prompt-notify decision) and for a `/clear` without
+  proof (agent-lifecycle decision). The watcher adds four events: a relaunch that failed its proof,
+  a spent budget, the workspace not open after a start, and relaunches held by a lost network.
+  Each goes to master on the bus; the desktop rings only for the first two.
 - **health `self-repair`:** `ok`; `warn` while R1 is held (network, quota, a tab not settling) or
   in shadow mode with a would-be action; `fail` on a failed proof or a spent budget, which wakes
   sentinel as any fail does. Sentinel only annotates it and tells master; it never retries.
@@ -193,10 +240,12 @@ so a long sleep never counts as an agent "dead for an hour".
 
 ## 6. Correctness rules it must follow (learned the hard way)
 
-- **One life rule.** "Dead" is `pidListedNoMore`, the rule reload, restore and pop-retire use.
-  The 2026-11-09 failure came from a second, drifted rule (`snapLife` matched `os.ErrNotExist`,
-  which `ProcStart` stopped returning on 2026-11-03; fixed in `fix/relaunch-dead-pid`). Tests fake
-  the error `ProcStart` really returns, and one test runs the real `ProcStart`.
+- **One life rule.** "Dead" is `pidListedNoMore`, the rule reload, restore and pop-retire use, and
+  `snapLife` (R1's trigger) delegates to it. The 2026-11-09 failure came from a second, drifted
+  rule: `snapLife` matched `os.ErrNotExist`, which `ProcStart` stopped returning on 2026-11-03.
+  PR 388 fixed it. Since then `snapLife` reads a gone pid through `pidListedNoMore`;
+  `TestSnapLifeReadsAGonePidDead` runs the real `ProcStart` on a reaped pid, and the settle tests
+  fake the error `ProcStart` really returns. The watcher adds no rule of its own.
 - **Dead and gone are different from unknown.** No `/proc` (macOS), a failed read, a pid with no
   start time: unknown, and unknown never relaunches. On macOS the watcher therefore relaunches
   nothing until a process identity exists there.
@@ -205,7 +254,10 @@ so a long sleep never counts as an agent "dead for an hour".
 - **Every decision is a pure function** (`decideRepair(facts) -> action`), tested by table, the
   way `Decide` and `decideRelaunch` are. The loop only gathers facts and applies the action.
 
-## 7. Delivery, in steps (after the person's answers)
+## 7. Delivery, in steps
+
+Each step is its own PR from `origin/main`, reviewed by both reviewers. The order puts what is
+useful alone first, and nothing acts before step 7.
 
 1. **Split the relaunch code**: its core (`judgeTab`, `decideRelaunch`, the settle loop, the
    split and run, `replaced`, the close) into a package; the CLI entry keeps `HERDR_ENV=1` and
@@ -214,49 +266,48 @@ so a long sleep never counts as an agent "dead for an hour".
 2. **The intent:** the fenced `self-repair` kind of `BeginSwap`/`EndSwap` (lease token and nonce),
    and `up --resume` skipping a role whose intent is held. Useful alone: today two people (or a
    person and master) running `up --resume` at once can already race.
-3. **Shadow mode:** facts, `decideRepair`, health `self-repair`, ledger `would relaunch`. Run it a
-   week on this project and compare with what master did by hand.
-4. **R1 and R2 on,** with budgets and the proof. Live check: kill an idle agent's client
-   (SIGTERM) and watch it come back in a new pane.
-5. **R3 and R4** (hold on network loss, the reboot notice).
+3. **The settings:** development mode (`AGENT_BUS_DEV`, `dev`); `dispatch.self_repair` (`on` |
+   `off`, `shadow` only in dev, refused otherwise); the two budgets; `services.start_at_login`
+   (stored only, no backend yet). All in `config/keys.go` and on busmon's settings screen.
+4. **`required` in `roles.toml`:** the key, its validation (refused on a pop), `roles doctor`, the
+   shipped templates.
+5. **Every client resumes:** capture and prove the session id of Codex, Kimi and Gemini, as Claude
+   Code's is today (the launcher's resume flag for each, the `SessionStart`-style proof); verify
+   whether Grok has a resume at all. This is useful alone: `reload` and `up --resume` gain it too.
+6. **Facts and decision, acting on nothing:** `decideRepair(facts)` as a pure function, health
+   `self-repair`, and the ledger's `would relaunch`. In development mode, `shadow` runs it
+   against this project for a while.
+7. **R1 and R2 on** (default `on`): the relaunch, the proof, budgets and `self-repair reset`,
+   master first, required tabs recreated and optional ones reported, the notifications. Live
+   check: kill an idle agent's client (SIGTERM) and watch it come back, resumed, in a new pane.
+8. **R3 and R4:** hold relaunches while the network is lost; the notice when the workspace is not
+   open after a start.
+9. **Start at login:** the `LoginStart` interface and its backends (systemd, macOS LaunchAgent,
+   XDG autostart), wired to the step 3 option.
+10. **macOS process identity** (later), so R1 can act where there is no `/proc`.
 
-## 8. Questions for the person
+## 8. The person's answers (2026-11-09)
 
-1. **Default mode.** `shadow` first, then `on` after a week of matching master's own actions
-   (recommended), or `on` at once, or `off` until asked?
-2. **A new pane writer.** Today the dispatcher types only the wake line and `/clear`. R1 runs the
-   template command in a **new pane it creates** (as `up` and `reload` do when a person or sentinel
-   runs them). It never types into an existing pane. This touches three decisions, each to be
-   amended in writing, not worked around:
-   - the [event-driven dispatch decision](../../memory/decisions/2026-10-10-event-driven-dispatch.md),
-     whose revisit clause says that a second automated pane writer *breaks* its rule rather than
-     extending it: the watcher is not a second writer (it is the dispatcher), but the dispatcher
-     would write a third thing;
-   - the [agent lifecycle decision](../../memory/decisions/2026-10-28-agent-lifecycle.md), which
-     makes reload sentinel's job: a self-repair is a relaunch without a kill, by the dispatcher;
-   - the project rule in `CLAUDE.md` ("types only the fixed wake line and `/clear`").
+1. **Default mode:** `on`. `shadow` only in development mode, refused outside it (4.5).
+2. **A new pane writer:** accepted. It is a written decision amending the event-driven dispatch
+   decision, the agent lifecycle decision and `CLAUDE.md`'s rule
+   ([self-repair pane writer](../../memory/decisions/2026-11-09-self-repair-pane-writer.md)).
+3. **A closed tab:** a required agent (`required = true`) is recreated, an optional one only
+   reported; a required agent is stopped by `retire` or `suspend` (4.2).
+4. **Clients and resume:** every client resumes, with its session id captured and proved; a
+   client with no resume (Grok, to verify) is only reported (4.1, precondition 5; step 5).
+5. **Budgets:** 1 per 30 min and 3 per 24 h by default, settable in `config.toml` and busmon's
+   settings screen; master may reset a spent budget (4.5).
+6. **Master:** relaunched first (4.1).
+7. **Notifications:** as recommended (part 5).
+8. **Start at login:** an option, off by default, one backend per platform, no linger (4.4).
 
-   Do you accept this as a third exception, recorded as a decision? If not, the watcher can only
-   *propose* (shadow mode forever), and the person or master runs the relaunch.
-3. **A tab closed on purpose.** Should a missing tab be recreated (R2), or only reported? Closing a
-   tab is also how a person stops an agent, so recommended: report only, unless the agent's
-   snapshot still says it is expected (not retired, not suspended).
-4. **Clients that cannot resume** (Codex, Grok today): relaunch fresh (the conversation is lost,
-   its board task and messages remain), or report only (recommended)?
-5. **Budgets:** are one per 30 min and three per day per agent right? And may **master** clear a
-   spent budget (`agentbus self-repair reset <agent>`), or only the person (`--as <person>`, like a
-   reload under `propose`)?
-6. **Master relaunched by the watcher.** Should a dead master be relaunched first (recommended: it
-   recovers everything else), or always left to the person, since master holds the pilot lease and
-   drives the other panes?
+The person also noted that R1's trigger used `snapLife` while part 6 required one life rule. The
+two now agree: `snapLife` delegates to `pidListedNoMore` (PR 388), and a test guards it (4.1,
+part 6).
 
-7. **Notifications.** Which of the watcher's events may reach the person, and how (part 5): the
-   desktop for a failed proof and a spent budget, the bus to master for all four (recommended)?
-   This is a new notification decision; prompt-notify covers only a client's prompt.
-8. **Start at login.** Today the services never start at login, so the watcher does nothing after a
-   reboot until you run `agentbus up`. Should a project you enrol start its services at login
-   (reversing that rule), or stay as it is (recommended: `up` after a reboot already relaunches
-   everything)?
+**Still open, for the person:** start at login on **Windows** (4.4). The lead is WSL2 with
+systemd, woken by a scheduled task at logon.
 
 ## 9. Not in this spec
 
