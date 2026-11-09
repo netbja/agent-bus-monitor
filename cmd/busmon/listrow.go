@@ -25,6 +25,7 @@ type listRow struct {
 	// of that list keeps its kind in one column (request-priority §6).
 	Mark    Seg
 	HasMark bool
+	MarkW   int // the mark's cells: 0 is 1 (progress-line §2.1: a word at the wide width)
 }
 
 // listAgeW is the age column: "59s", "23h", "120d".
@@ -50,9 +51,9 @@ func (r listRow) cells(width, nameW, noteW int) Line {
 		stateW -= noteW + 2
 	}
 	l := Line{S(r.Role, r.Sym), S(RoleText, " "+Fit(Preview(r.Name), nameW)+"  ")}
-	if r.HasMark && stateW > 2 {
-		l = append(l, S(r.Mark.Role, Fit(r.Mark.Text, 1)), S(RoleText, " "))
-		stateW -= 2
+	if markW := max(r.MarkW, 1); r.HasMark && stateW > markW+1 {
+		l = append(l, S(r.Mark.Role, Fit(r.Mark.Text, markW)), S(RoleText, " "))
+		stateW -= markW + 1
 	}
 	l = append(l, S(RoleText, Fit(Preview(r.State), max(0, stateW))))
 	if noteW > 0 {

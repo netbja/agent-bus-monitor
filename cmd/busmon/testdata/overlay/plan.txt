@@ -1,4 +1,4 @@
-v0.22-xxxxxxxxxxxxxxxxxxxx  2/9? done  ━━━━━━━━━━━━━━━━  22%
+v0.22-xxxxxxxxxxxxxxxxxxxx  2 of 9? done  ━━━━━━━━━━━━━━━━  22%
 goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] goal [x] go · loaded 8d ago (abababa) · stale: master, agentbus plan load · ? a read failed: values kept
 
 NOW  5

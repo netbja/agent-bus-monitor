@@ -130,26 +130,16 @@ func idleNext(p planState) []Line {
 		return l
 	}
 	var out []Line
-	cur := -1
-	for _, states := range [][]plan.State{{plan.InProgress, plan.InReview}, {plan.Waiting, plan.Answered, plan.Blocked}} {
-		for i, r := range p.rows {
-			if cur < 0 && indexOfState(states, r.State) >= 0 {
-				cur = i
-			}
-		}
+	now, next, _ := planInHand(p)
+	if now != nil {
+		out = append(out, task(*now, ""))
 	}
-	if cur >= 0 {
-		out = append(out, task(p.rows[cur], ""))
-	}
-	for _, r := range p.rows { // the task in hand is never upcoming
-		if r.State == plan.Upcoming {
-			lead := ""
-			if len(out) > 0 {
-				lead = "then: "
-			}
-			out = append(out, task(r, lead))
-			break
+	if next != nil {
+		lead := ""
+		if len(out) > 0 {
+			lead = "then: "
 		}
+		out = append(out, task(*next, lead))
 	}
 	if len(out) == 0 {
 		return []Line{{{Text: "every task is done", Role: RoleDim}}}

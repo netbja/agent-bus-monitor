@@ -271,8 +271,12 @@ func TestRequestsPriorityGoldens(t *testing.T) {
 			m.refresh()
 			m.paint = newPainter(th)
 			plain := m.grid().plain()
-			if !strings.Contains(plain, GlyphUp+" req") || !strings.Contains(plain, GlyphDownArrow+" req") {
-				t.Fatalf("marks missing:\n%s", plain)
+			high, low := GlyphUp+" req", GlyphDownArrow+" req"
+			if sz[0] >= 120 { // the word column at the wide width (progress-line §2.1)
+				high, low = "high req", "low  req"
+			}
+			if !strings.Contains(plain, high) || !strings.Contains(plain, low) {
+				t.Fatalf("marks missing (%q, %q):\n%s", high, low, plain)
 			}
 			checkGolden(t, fmt.Sprintf("requests-priority-%dx%d.txt", sz[0], sz[1]), plain+"\n")
 		})

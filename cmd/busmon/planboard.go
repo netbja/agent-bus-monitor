@@ -122,8 +122,36 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 	return v
 }
 
-// planProgress is the line above the sections: the plan, done/total, a bar
-// of thin cells (never animated) and the share; narrow: "6/11 55%" only.
+// planInHand is the plan's task in hand (the first in progress or in
+// review, else the first waiting for the person, else the first blocked;
+// an answered one is master's to record, not in hand: reviewer-codex) and
+// the first upcoming one; nil when there is none. ok says a plan is loaded.
+// The idle view's next frame, the Plan header and its highlight read it
+// (progress-line §2.3).
+func planInHand(p planState) (now, next *plan.Row, ok bool) {
+	if !p.loaded {
+		return nil, nil, false
+	}
+	for _, states := range [][]plan.State{{plan.InProgress, plan.InReview}, {plan.Waiting}, {plan.Blocked}} {
+		for i := range p.rows {
+			if now == nil && indexOfState(states, p.rows[i].State) >= 0 {
+				now = &p.rows[i]
+			}
+		}
+	}
+	for i := range p.rows { // the task in hand is never upcoming
+		if p.rows[i].State == plan.Upcoming {
+			next = &p.rows[i]
+			break
+		}
+	}
+	return now, next, true
+}
+
+// planProgress is the line above the sections: the plan, "N of M done", a
+// bar of thin cells (never animated), the share, then the task in hand and
+// the next one (progress-line §2.3), next dropped first, then now, when the
+// width is short; narrow: "6/11 55%" only.
 func planProgress(p planState, width int, tier Tier) Line {
 	done, total := plan.Count(p.rows)
 	pct := 0
@@ -137,6 +165,10 @@ func planProgress(p planState, width int, tier Tier) Line {
 	if tier == TierNarrow {
 		return Line{{Text: fmt.Sprintf("%s %d%%", count, pct), Role: RoleMuted}}
 	}
+	count = fmt.Sprintf("%d of %d", done, total)
+	if p.partial {
+		count += "?"
+	}
 	l := Line{{Text: Preview(p.file.Plan), Role: RoleText}, {Text: "  " + count + " done  ", Role: RoleMuted}}
 	barW := clamp(width/6, 6, 20)
 	fill := 0
@@ -144,7 +176,37 @@ func planProgress(p planState, width int, tier Tier) Line {
 		fill = done * barW / total
 	}
 	l = append(l, Seg{Text: strings.Repeat(GlyphThinBar, fill), Role: RoleDone}, Seg{Text: strings.Repeat(GlyphThinBar, barW-fill), Role: RoleMuted}) // the gauges' thin cells
-	return append(l, Seg{Text: fmt.Sprintf("  %d%%", pct), Role: RoleMuted})
+	l = append(l, Seg{Text: fmt.Sprintf("  %d%%", pct), Role: RoleMuted})
+	sep := Seg{Text: "  " + GlyphNone + "  ", Role: RoleMuted}
+	now, next, _ := planInHand(p)
+	if now == nil && next == nil && total > 0 && done == total {
+		return append(l, sep, Seg{Text: "every task is done", Role: RoleMuted})
+	}
+	var parts []Line
+	if now != nil {
+		parts = append(parts, Line{{Text: "now: ", Role: RoleMuted}, {Text: Preview(now.Task.Title), Role: RoleText}, {Text: inHandOwner(*now), Role: RoleMuted}})
+	}
+	if next != nil {
+		parts = append(parts, Line{{Text: "next: ", Role: RoleMuted}, {Text: Preview(next.Task.Title), Role: RoleMuted}})
+	}
+	for n := len(parts); n >= 0; n-- { // too wide: next goes first, then now
+		try := append(Line(nil), l...)
+		for _, part := range parts[:n] {
+			try = append(append(try, sep), part...)
+		}
+		if try.Width() <= width {
+			return try
+		}
+	}
+	return l
+}
+
+// inHandOwner is " (owner)", or "" with no owner.
+func inHandOwner(r plan.Row) string {
+	if r.Task.Owner == "" {
+		return ""
+	}
+	return " (" + Preview(r.Task.Owner) + ")"
 }
 
 // planHead is the muted line under the progress: the goal, the load's age
@@ -178,7 +240,11 @@ func planBoardRow(p planState, r plan.Row, selected bool, now time.Time, width i
 	head := append(planMark(selected), Seg{Text: glyph + " ", Role: role})
 	tail := Line{{Text: "  " + clip(owner, 14), Role: RoleMuted}, {Text: "  " + why, Role: RoleMuted}}
 	titleW := max(8, width-head.Width()-min(tail.Width(), width/2))
-	l := append(head, Seg{Text: clip(Preview(r.Task.Title), titleW), Role: RoleText})
+	title := Seg{Text: clip(Preview(r.Task.Title), titleW), Role: RoleText}
+	if now, _, _ := planInHand(p); now != nil && now.Task.ID == r.Task.ID { // the task in hand (progress-line §2.4)
+		title.Role, title.Bold = RoleAccent, true
+	}
+	l := append(head, title)
 	return FitLine(append(l, tail...), width)
 }
 
@@ -251,4 +317,35 @@ func drawPlanSide(g cellSink, r Rect, side []Line) {
 		}
 		drawLine(g, x+2, r.Y+2+i, planSideWidth-4, l, false)
 	}
+}
+
+// planLink is the plan task that names a board task (its board field).
+type planLink struct {
+	id, title string
+	state     plan.State
+}
+
+// planLinks maps each board task a plan task names to that plan task
+// (progress-line §2.2); empty without a plan.
+func planLinks(p planState) map[string]planLink {
+	out := map[string]planLink{}
+	if !p.loaded {
+		return out
+	}
+	for _, r := range p.rows {
+		if r.Task.Board != "" {
+			out[r.Task.Board] = planLink{id: r.Task.ID, title: r.Task.Title, state: r.State}
+		}
+	}
+	return out
+}
+
+// planLinkLine is a request page's plan line: "plan  #t4 the title (in
+// progress)"; ok false when no plan task names the request.
+func planLinkLine(links map[string]planLink, task string) (Line, bool) {
+	pl, ok := links[task]
+	if !ok {
+		return nil, false
+	}
+	return Line{S(RoleMuted, "plan  "), S(RoleText, "#"+Preview(pl.id)+" "+Preview(pl.title)), S(RoleMuted, " ("+plan.Label(pl.state)+")")}, true
 }
