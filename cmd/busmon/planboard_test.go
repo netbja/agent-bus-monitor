@@ -58,7 +58,7 @@ func TestPlanBoardSections(t *testing.T) {
 		boardRow("u", plan.Unknown, "coder"),
 		boardRow("d", plan.Done, "coder"),
 	)
-	v := planBoard(p, -1, true, shellNow, 120, TierWide, false)
+	v := planBoard(p, -1, true, shellNow, 120, TierWide, false, nil)
 	for id, want := range map[string]string{"w": "NOW", "a": "NOW", "b": "NOW", "r": "NOW", "i": "NOW",
 		"up-ready": "NEXT", "up-later": "LATER", "u": "LATER", "d": "DONE"} {
 		if got := sectionOf(v, id); got != want {
@@ -75,7 +75,7 @@ func TestPlanBoardSections(t *testing.T) {
 	if strings.Join(now, " ") != "w a b r i" {
 		t.Errorf("NOW order %v", now)
 	}
-	folded := planBoard(p, -1, false, shellNow, 120, TierWide, false)
+	folded := planBoard(p, -1, false, shellNow, 120, TierWide, false, nil)
 	if !strings.Contains(folded.plain, "DONE  1   d shows") || sectionOf(folded, "d") != "" {
 		t.Errorf("DONE not folded:\n%s", folded.plain)
 	}
@@ -83,7 +83,7 @@ func TestPlanBoardSections(t *testing.T) {
 	if l := v.lines[0].text(); !strings.HasPrefix(l, "v0.29  1 of 9 done  ") || !strings.Contains(l, "  11%  ") || !strings.Contains(l, GlyphThinBar) { // progress-line §2.3: N of M, then now and next
 		t.Errorf("progress %q", l)
 	}
-	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false).lines[0].text(); strings.TrimRight(l, " ") != "1/9 11%" {
+	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); strings.TrimRight(l, " ") != "1/9 11%" {
 		t.Errorf("narrow progress %q", l)
 	}
 }
@@ -92,7 +92,7 @@ func TestPlanBoardSections(t *testing.T) {
 // one muted line, those tasks in file order, then DONE.
 func TestPlanBoardAllUnknown(t *testing.T) {
 	p := boardPlan(boardRow("x", plan.Unknown, "coder"), boardRow("d", plan.Done, "coder"), boardRow("y", plan.Unknown, plan.Person))
-	v := planBoard(p, -1, true, shellNow, 120, TierWide, false)
+	v := planBoard(p, -1, true, shellNow, 120, TierWide, false, nil)
 	for _, h := range []string{"NOW  ", "NEXT  ", "LATER  "} {
 		if strings.Contains(v.plain, h) {
 			t.Errorf("a section %q with every state unknown:\n%s", h, v.plain)
@@ -286,7 +286,7 @@ func TestPlanDrawerClickOnForYouCloses(t *testing.T) {
 // foureyes on step 2 (plan-board): a section with no row draws no heading.
 func TestPlanBoardEmptySectionNotDrawn(t *testing.T) {
 	p := boardPlan(boardRow("n", plan.Upcoming, "coder"), boardRow("d", plan.Done, "coder"))
-	v := planBoard(p, 0, true, shellNow, 120, TierWide, true)
+	v := planBoard(p, 0, true, shellNow, 120, TierWide, true, nil)
 	for _, l := range v.lines {
 		for _, h := range []string{"NOW", "LATER"} {
 			if strings.HasPrefix(l.text(), h+"  ") {

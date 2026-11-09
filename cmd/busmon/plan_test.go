@@ -161,7 +161,7 @@ func TestPlanOverlayGroupsInOrder(t *testing.T) {
 	f.fakeReader.asks = []bus.Ask{{ID: "9-0", From: "master", Title: "Tag now?", Task: "release", State: "open"}}
 	st := newPlanShared()
 	pollOnce(context.Background(), f, st, 1)
-	v := planBoard(st.plan, -1, false, time.Now(), 100, TierWide, false)
+	v := planBoard(st.plan, -1, false, time.Now(), 100, TierWide, false, nil)
 	body, plain := v.lines, v.plain
 	order := []string{"NOW  ", "DONE  1   d shows"}
 	last := -1
@@ -175,7 +175,7 @@ func TestPlanOverlayGroupsInOrder(t *testing.T) {
 	if strings.Contains(plain, "merged (recorded") {
 		t.Fatalf("done is collapsed to a count:\n%s", plain)
 	}
-	plain = planBoard(st.plan, -1, true, time.Now(), 100, TierWide, false).plain
+	plain = planBoard(st.plan, -1, true, time.Now(), 100, TierWide, false, nil).plain
 	if !strings.Contains(plain, "merged (recorded 2h ago)") || !strings.Contains(plain, "#102") {
 		t.Fatalf("expanded done:\n%s", plain)
 	}
@@ -294,12 +294,12 @@ func TestPlanRowsFromKeptValuesAreMarked(t *testing.T) {
 	f := newPlanFake(true)
 	st := newPlanShared()
 	pollOnce(context.Background(), f, st, 1)
-	plain := planBoard(st.plan, -1, true, time.Now(), 120, TierWide, false).plain
+	plain := planBoard(st.plan, -1, true, time.Now(), 120, TierWide, false, nil).plain
 	if strings.Contains(plain, " ?\n") {
 		t.Fatalf("a fresh read marks nothing:\n%s", plain)
 	}
 	st.plan.failed["missions"] = true // the missions read failed, values kept
-	plain = planBoard(st.plan, -1, true, time.Now(), 120, TierWide, false).plain
+	plain = planBoard(st.plan, -1, true, time.Now(), 120, TierWide, false, nil).plain
 	for _, l := range strings.Split(plain, "\n") {
 		if strings.Contains(l, "Deploy") != strings.HasSuffix(l, " ?") {
 			t.Errorf("only the mission task is marked: %q", l)
@@ -334,7 +334,7 @@ func TestPlanVerdictsUnknownUntilTheLedgerCaughtUp(t *testing.T) {
 func TestPlanTitleNeverTouchesTheOwner(t *testing.T) {
 	p := hostilePlan(time.Now())
 	for width := 60; width <= 200; width++ {
-		plain := planBoard(p, -1, true, time.Now(), width, TierWide, false).plain
+		plain := planBoard(p, -1, true, time.Now(), width, TierWide, false, nil).plain
 		for _, l := range strings.Split(plain, "\n") {
 			if strings.Contains(l, "wTi[red]") || strings.Contains(l, "…Ti[red]") {
 				t.Fatalf("width %d: the id touches the title: %q", width, l)

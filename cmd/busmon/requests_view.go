@@ -146,6 +146,7 @@ type reqView struct {
 	questions int
 	asks      []reqAsk
 	plans     map[string]planLink
+	paces     map[string]pace // each owner's usual task length (progress-line §3.2)
 	self      string
 }
 
@@ -217,7 +218,7 @@ func reportSubject(msg string) (subject, id string, ok bool) {
 
 // requestGroups computes the view.
 func requestGroups(in reqInput) reqView {
-	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, plans: in.plans, self: in.self}
+	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, plans: in.plans, paces: ownerPaces(in.reqs), self: in.self}
 	horizon := in.now.Add(-reqFoldAfter)
 	known := map[string]bool{}
 	var threads []reqThread

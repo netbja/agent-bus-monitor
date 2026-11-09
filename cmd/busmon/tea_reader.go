@@ -506,10 +506,10 @@ func (m *Model) buildPage() bool {
 		p.title, p.body = helpTitle(), helpText()
 	case ovPlan:
 		lw, wide := m.planDrawerWidths()
-		v := planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide)
+		v := planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide, s.requests)
 		if p.sel >= len(v.items) {
 			p.sel = max(0, len(v.items)-1)
-			v = planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide)
+			v = planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide, s.requests)
 		}
 		p.body, p.plain, p.items, p.side = v.lines, v.plain, v.items, v.side
 		p.title = "Plan"

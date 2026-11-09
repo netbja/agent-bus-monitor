@@ -136,7 +136,7 @@ func TestPlanTabCopyAndEnd(t *testing.T) {
 	if !strings.Contains(m.ui.flash, "task copied") {
 		t.Fatalf("y on a task: flash %q", m.ui.flash)
 	}
-	for _, it := range planBoardItems(planBoard(st.plan, -1, false, shellNow, 120, TierWide, false), 120) {
+	for _, it := range planBoardItems(planBoard(st.plan, -1, false, shellNow, 120, TierWide, false, nil), 120) {
 		if it.Selectable && strings.HasPrefix(it.Line.text(), "  ") {
 			t.Fatalf("plan row keeps the overlay's mark column: %q", it.Line.text())
 		}
