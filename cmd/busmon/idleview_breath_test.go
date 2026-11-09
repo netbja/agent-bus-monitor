@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // breathCell is the breathing cell of l: its index, glyph and role; -1 when
@@ -113,6 +115,18 @@ func TestIdleViewBreathesWhenAllIdle(t *testing.T) {
 		}
 		if lit == 0 {
 			t.Fatalf("no-colour=%v: the cell never brightened over a cycle", noColor)
+		}
+		// background work adds a team row but is still idle (progress-line
+		// §4.3): the team still breathes (foureyes)
+		for _, a := range m.snap.agents {
+			a.bg = &bus.Background{Text: "2 checks running", Since: m.now.Add(-time.Minute)}
+			break
+		}
+		if d := m.idleData(); !d.allIdle || len(d.team) == 0 {
+			t.Fatalf("no-colour=%v: an idle agent with background work: allIdle=%v, %d team rows", noColor, d.allIdle, len(d.team))
+		}
+		if r := row(m); strings.Contains(r, GlyphThinBar) {
+			t.Fatalf("no-colour=%v: the thread for background work: %q", noColor, r)
 		}
 	}
 }
