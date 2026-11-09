@@ -21,8 +21,13 @@ marks, and each answer's thread. Part 8 holds the questions, each with a recomme
   the directive it answers.
 - **Unread marks** live in busmon's local read cache (`feed.unread`: the entries meant for the
   person, the ones they opened). Activity already shows them.
-- **Retention:** each stream keeps its last 1000 entries (`streamMaxLen`). Older entries are in
-  the history archive (`agentbus history`).
+- **Retention:** each stream is trimmed to **about** its last 1000 entries (`streamMaxLen`, an
+  approximate `MAXLEN ~`, so the live window is not an exact count). Older entries survive only
+  in the **history archive**, and only when it is kept: the dispatch service writes it
+  (`agentbus history`, `history.keep_days` above 0), on **its own host**, under that host's state
+  directory (`history.Dir`), and records a gap line wherever entries were missed or trimmed before
+  it read them. It can therefore be absent (no service, no `keep_days`, busmon on another
+  machine) or incomplete.
 - **Compose** (the window, `^O`, and the one-line input `i`) already writes a human directive,
   with the recipient and a draft.
 
@@ -40,16 +45,29 @@ The conversation is a **filter** over what busmon already reads. Nothing new is 
    (`Tue 11-10`) is drawn when the day changes.
 4. **Threads:** a master entry that answers one of the person's entries gets a second line,
    `answers your 09:12 '<first words>'`. `enter` on any row opens the existing reader on its
-   thread (`Bus.Thread`), as Activity does. **This needs one addition** (part 8, Q7), since
-   `report --to` names only its report today: `agentbus report master --to <person> --re <entry>`
-   records the entry it answers, as an extra field `re` on the notice (additive, `subscribe` v1
-   unchanged), and master's skill says to pass it. Without `--re`, the row has no thread line;
-   it is never guessed from time order.
+   thread (`Bus.Thread`), as Activity does. **This needs two additions** (part 8, Q7), since
+   `report --to` names only its report today:
+   - `agentbus report master --to <person> --re <entry>` records the entry it answers, as an
+     extra field `re` on the notice (additive, `subscribe` v1 unchanged), and master's skill says
+     to pass it;
+   - `Bus.Thread` also counts an entry whose `re` names the thread's root or one of its entries
+     (reviewer-codex). Today it keeps only `ref` = the thread, the root's own id, and the bare-ms
+     form, and a report notice's `ref` is the report's id, so `re` alone would leave the notice
+     out of the thread the person opens. Additive: an entry without `re` is read exactly as
+     before. Tested with the person's directive, master's report notice carrying `re`, and a reply
+     on the directive: the directive's thread holds all three, in time order.
+
+   Without `--re`, the row has no thread line; it is never guessed from time order.
 5. **Unread:** the same read cache as Activity. A master entry the person has not opened is marked
    (`●`); opening it in the pane marks it read everywhere, and the frame counts what is left
    (`2 unread`).
-6. **History:** the live window first, then on scrolling past its top, older entries from the
-   history archive, read in a command (part 8, Q5).
+6. **History:** the live window first. On scrolling past its top, older entries come from the
+   history archive, read in a command (part 8, Q5), and only as far as it holds them. The pane
+   says what it cannot show instead of implying a complete past:
+   - no archive on this machine: `older messages are not kept here (history.keep_days, on the
+     dispatch's host)`;
+   - a gap line in the archive: `── messages missed between 14:02 and 14:40 ──`, at its place;
+   - the archive's start: `── the history kept here starts on Mon 11-02 ──`.
 
 ## 3. The key and the layout
 
@@ -148,13 +166,16 @@ At 80 columns:
    shared read marks, `enter` to the reader; goldens at 80, 120 and 160 columns.
 3. **Writing from it:** the compose line fixed to `@master`, `i` and `^O`; `Bus.HumanReply` and
    `r` as a thread reply.
-4. **The thread line:** `report --re <entry>`, its `re` field, master's skill updated to pass it,
-   and the pane's `answers your …` line (Q7).
+4. **The thread line:** `report --re <entry>`, its `re` field, `Bus.Thread` following `re`,
+   master's skill updated to pass it, and the pane's `answers your …` line (Q7).
 5. **History** past the live window, if the person wants it (Q5).
 
 ## 8. Questions for the person
 
-1. **The key:** `m` (recommended; `M` stays the Projects page), or another letter?
+1. **The key:** `m` (recommended; `M` stays the Projects page), or another letter? Note that the
+   Requests/Plan mock-ups (layout A, their Q4) also propose `m`, there to merge an approved PR
+   from its row. If you want both, one of them needs another letter: the recommendation is `m` for
+   this pane, and the merge key on the Work page another one (or none, as their Q4 allows).
 2. **Floating or full screen** at the wide tier: floating, with For you and Agents visible beside
    it (recommended), or always full screen like the reader?
 3. **Only master**, or also the other agents' messages to you (`report coder --to <you>`)? The
@@ -162,8 +183,10 @@ At 80 columns:
    stays one conversation.
 4. **Reports in full:** the headline in the row and the full text on `enter` (recommended), or the
    whole report inline in the conversation?
-5. **History:** only what the streams keep (their last 1000 entries), or older entries from the
-   history archive when you scroll past the top (recommended)?
+5. **History:** only what the streams keep (about their last 1000 entries), or older entries from
+   the history archive when you scroll past the top (recommended), knowing the archive exists only
+   where the dispatch service keeps it (`history.keep_days`) and may have gaps, which the pane
+   names?
 6. **Read marks shared with Activity** (recommended: one read is one read), or separate?
 7. **Which report answers which message:** add `report --re <entry>`, so master says which of your
    messages a report answers and the pane shows it (recommended), or keep plain time order with
