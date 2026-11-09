@@ -99,6 +99,19 @@ No new read, and no new key in Redis. The three frames show together; nothing ta
   provider not held, `anthropic 42% 5h`, and each held provider with its time left,
   `openai held 1h20m`); then the plan's name and progress (`plan v0.29 6/11 55%`), left out with no
   plan; joined by ` · `, and the clock (`HH:MM`) on the right.
+- **The thread** (idle-animation, the person's animation A): the row above the strip is a dotted
+  line across the whole screen width, with a 3-cell thread sliding along it, one cell to the right
+  per second:
+
+  ```
+  ·································━━━·······························································
+  anthropic 62% 5h · xai held 1h20m · plan v0.29 6/11 55%                                  16:04
+  ```
+
+  The thread enters at the left edge, leaves at the right one, and enters again: over one pass
+  (the width plus 3 seconds) every cell of the row carries it. The dots are `RoleDim`, the thread
+  `RoleAccent`. Its step is the whole seconds since the view was entered, read from `m.now`, so it
+  moves with the 1 s poll and needs no clock of its own.
 - **A decision while idle** (§8 Q1, the person: stay): the view stays, the count changes at the
   next poll, and the bell rings as on the dashboard.
 
@@ -111,6 +124,8 @@ No new read, and no new key in Redis. The three frames show together; nothing ta
 - **One line per frame** when even that does not fit: `2 need you  ♙ 2 decide`, the state counts
   (`3 waiting · 1 working · 4 idle`, the last ones dropped first, never the idle count), and
   `next: <task>`. The strip drops the clock, then the plan's name.
+- **The thread row** is kept at every size the view is shown at; the frames' free area ends above
+  it.
 - **TooSmall**: the idle view is not entered. The dashboard's own "too small" screen stays.
 
 ## 6. Burn-in
@@ -121,6 +136,10 @@ No new read, and no new key in Redis. The three frames show together; nothing ta
 - **Dim roles.** Frames are `RoleDim`, text `RoleMuted` or `RoleDim`, except the count, which is
   `RoleAccent`, and each team row's one-cell state glyph, which keeps its state's colour. There are
   no reverse-video pills and no bars at full intensity.
+- **The thread** (§4) is the one motion at the poll's pace: a step a second, one cell at a time,
+  never a blink (the thread is always drawn; only its place changes), and it crosses the whole
+  width, so it marks no cell for long. The dots under it are the view's one static row; they are
+  drawn dim.
 - **No fast animation.** The drift (60 s) and the 1 s poll are the only clocks. The waiting fade (`fadeMsg`) is not scheduled while the view is shown, which also saves
   CPU on an unattended screen.
 
@@ -128,7 +147,9 @@ No new read, and no new key in Redis. The three frames show together; nothing ta
 
 The frames carry their meaning in words and digits, never in colour alone. Under `NO_COLOR`, the
 roles fall back to the terminal's colour. The count is bold, and the states are words, so they
-still read. The block digits are made of `█` and space, which need no colour. With 16 colours,
+still read. The block digits are made of `█` and space, which need no colour. The thread keeps
+moving under `NO_COLOR`: `━` on `·` reads without colour, and the burn-in reason holds without it;
+no colour is never a reason to blink it or to stop it. With 16 colours,
 the palette's accent and grey apply as elsewhere.
 
 ## 8. The person's answers
@@ -167,5 +188,9 @@ the palette's accent and grey apply as elsewhere.
   `+N more`), one line each (40x12, the idle count kept); "nothing needs you" with no digit.
 - Goldens: the idle view at 60x20, 80x24, 140x40 and 140x60, dark and light, and 140x40 NO_COLOR,
   with the fixture's fixed seed.
+- The thread: for a width, each step draws the row w cells wide with `━` on the cells it covers
+  (3, fewer at the edges) and `·` elsewhere, `RoleAccent` and `RoleDim`; one step moves it one cell
+  right; over a pass every cell carries it. On screen, it stays put between two polls in the same
+  second and moves one cell at the next second, at 140x40, 40x12 and under `NO_COLOR`.
 - Drift: over two hours the walk stays in the free area, moves at most one cell a step, and
   visits many places; on screen, the frame stays put within a minute and moves after it.

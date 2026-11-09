@@ -36,7 +36,7 @@ func TestIdleViewLayoutA(t *testing.T) {
 		if size[0] == 140 && (!strings.Contains(got, "release    working  tagging") || !strings.Contains(got, "1 idle")) {
 			t.Errorf("140x40: not every agent not idle:\n%s", got)
 		}
-		if size[0] == 60 && !strings.Contains(got, "+5 more") {
+		if size[0] == 60 && !strings.Contains(got, "+6 more") { // the thread row takes one (idle-animation)
 			t.Errorf("60x20: the cut team does not say so:\n%s", got)
 		}
 		if strings.Contains(got, "Activity") || strings.Contains(got, "For you") {
@@ -129,7 +129,7 @@ func absInt(n int) int {
 func TestIdleViewNoColorGolden(t *testing.T) {
 	pinLocal(t)
 	withPalette(t, "dark", true, 1<<24)
-	m := idleAt(t, 140, 40)
+	m := pollAt(t, idleAt(t, 140, 40), time.Hour+20*time.Second) // the thread 20 cells in (idle-animation)
 	m.paint = newPainter(th)
 	checkGolden(t, "idle-140x40-nocolor.ansi", m.View().Content+"\n")
 }
