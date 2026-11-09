@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,7 +23,11 @@ import (
 	"github.com/netbja/agent-bus-monitor/internal/secretpath"
 )
 
-// Entry is one path offered: relative to the root, slash-separated.
+// Entry is one path offered: relative to the root, slash-separated, the form
+// git's ignore patterns and the popup use on every system. Every path that
+// reaches the file system is built from it with path/filepath (FromSlash,
+// Join), never by hand, so nothing assumes a '/' separator there (the person
+// asked to keep Windows possible).
 type Entry struct {
 	Path string
 	Dir  bool
@@ -159,10 +164,7 @@ func (w *walker) dir(rel string, depth int, rules ignoreSet) error {
 			return errStop
 		}
 		name := e.Name()
-		child := name
-		if rel != "" {
-			child = rel + "/" + name
-		}
+		child := path.Join(rel, name) // the slash form; w.abs makes it a file-system path
 		switch t := e.Type(); {
 		case name == ".git":
 			continue
