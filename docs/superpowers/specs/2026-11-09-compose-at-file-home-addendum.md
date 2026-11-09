@@ -31,9 +31,11 @@ The home directory is not the project:
   `no home directory` and offers nothing. The rule is the same as `peer.NewDenyMatcher`, which
   fails closed on a home that is not absolute.
 - **The query stays inside home, as written and as resolved** (foureyes, reviewer-codex). The
-  path after `~/` is split on `/`. Any `.` or `..` segment, an empty segment (`~//x`), or a
-  backslash refuses it with `type the path yourself`, and nothing is listed. So
-  `@~/Documents/../.ssh/` and `@~/../` never list anything. Every rule below is then judged on
+  path after `~/` is split on `/`. One trailing `/` is the directory marker and is allowed:
+  `@~/` (an empty path, the top of home) and `@~/Documents/` (list `Documents`, as `tab` makes
+  it). Any other empty segment (`~//x`, `~/a//b`, a repeated trailing `~/a//`), any `.` or `..`
+  segment, or a backslash refuses the query with `type the path yourself`, and nothing is
+  listed. So `@~/Documents/../.ssh/` and `@~/../` never list anything. Every rule below is then judged on
   that path, which is already clean, never on the raw text.
 - **The directory to list is resolved before it is read.** Its path is resolved with
   `filepath.EvalSymlinks` and must lie inside the resolved home (a symlinked home included).
@@ -126,7 +128,8 @@ Following the person's answer to §8 Q1 (absolute paths), and part 6, Q2:
 - One level only: `@~/Documents/` lists `Documents`' entries and nothing deeper. A directory of
   60 000 entries says `list incomplete`, and with a stubbed clock the read stops at the deadline
   inside that one directory, having read fewer than all of its entries (batched reads).
-- Traversal: `@~/Documents/../.ssh/`, `@~/../`, `@~/./.aws/`, `@~//x` and a backslash are
+- The trailing slash: `@~/` and `@~/Documents/` list; `@~/Documents//` does not.
+- Traversal: `@~/Documents/../.ssh/`, `@~/../`, `@~/./.aws/`, `@~//x`, `@~/a//b` and a backslash are
   refused with `type the path yourself`, and nothing is read.
 - Links on the typed path: `~/docs -> ~/.ssh`, `~/etc -> /etc` and `~/a/b` with `a -> ~/.aws`
   are refused (`not offered`); `~/proj -> ~/Projects/x` lists `x`'s entries.
