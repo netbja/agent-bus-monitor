@@ -12,17 +12,17 @@
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Projects · 5 · read just now ──────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
-│ services and herdr: ╭─ Delete project 'old' ───────────────────────────────────────────────────────────────────────╮                     │
-│                     │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
-│   PROJECT           │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │MPLATE               │
-│   agent-bus-monitor │ and gate leases all go. The template and the worktrees stay.                                 │                     │
-│   trading           │                                                                                              │                     │
-│   demo              │ backup: no backup                                                                            │                     │
-│ ▶ old               │ type old to delete:                                                                          │                     │
-│   newone            │ ol▏                                                                                          │                     │
+╭─ Projects · 5 · read╭─ Delete project 'old' ───────────────────────────────────────────────────────────────────────╮────────── esc back ─╮
+│ services and herdr: │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
+│                     │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │                     │
+│   PROJECT           │ and gate leases all go. The template and the worktrees stay.                                 │MPLATE               │
+│   agent-bus-monitor │ units stay installed on: box2 (dispatch, missions)                                           │                     │
+│   trading           │ remove them there: agentbus --project old service remove                                     │                     │
+│   demo              │                                                                                              │                     │
+│ ▶ old               │ backup: no backup                                                                            │                     │
+│   newone            │ type old to delete:                                                                          │                     │
+│                     │ ol▏                                                                                          │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────────────────────────╯                     │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
