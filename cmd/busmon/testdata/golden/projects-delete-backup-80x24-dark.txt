@@ -4,17 +4,17 @@
 │  ● ask    master    review lot 1? (2 questions)                            4m│
 │  ♙ wait   foureyes  need a decision on the width rule                      6m│
 │  ♙ wait   sentinel  pane prompt                                            1m│
-│  ◆ gate   coder     by charlie  look at b1                                   │
-╰╭─ Delete project 'old' ─────────────────────────────────────────────────────╮╯
-╭│ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch   │╮
-││ ○ here · herdr: —                                                          │▲
-││ This is a DEL, not a reset: streams, consumer groups,                      │┃
-││ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │▼
-╰│ and the worktrees stay.                                                    │╯
-╭│                                                                            │╮
+│╭─ Delete project 'old' ─────────────────────────────────────────────────────╮│
+╰│ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch   │╯
+╭│ ○ here · herdr: —                                                          │╮
+││ This is a DEL, not a reset: streams, consumer groups,                      │▲
+││ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │┃
+││ and the worktrees stay.                                                    │▼
+╰│ units stay installed on: box2 (dispatch, missions)                         │╯
+╭│ remove them there: agentbus --project old service remove                   │╮
+││                                                                            ││
 ││ A backup first?  b back up, then continue · n no backup · esc cancel       ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│   PROJECT               STATE       AGENTS  SERVICES               LAST      │
 │   agent-bus-monitor ◂   live        3/7     dispatch ● missions ○  1m ago    │
 │   trading               paused      1/5     —                      2h ago    │
 │   demo                  suspended   0/4     —                      3d ago    │

@@ -61,6 +61,9 @@ type adminSource struct {
 	// (/proc); nil = it can. Without it the delete says so (master: §5.1's
 	// limit stated, never refused).
 	procAgents func() bool
+	// unitHosts reads the other hosts where the project's units remain
+	// (§5.2); nil: not shown.
+	unitHosts func(ctx context.Context, project string) ([]unitHosts, error)
 }
 
 // adminRow is one row of the page.
@@ -232,6 +235,17 @@ func realAdminSource(client *redis.Client, getenv func(string) string) adminSour
 		},
 	}
 	src.quiet, src.remove = realQuiet(client, getenv), realRemove(client)
+	src.unitHosts = func(ctx context.Context, p string) ([]unitHosts, error) {
+		b, err := bus.Open(client, p)
+		if err != nil {
+			return nil, err
+		}
+		inst, recs, err := b.ServiceStates(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return remoteUnitHosts(inst, recs, host), nil
+	}
 	src.procAgents = hasProc
 	// The manager is found and asked inside the page's read, never at
 	// busmon's start, and within its deadline (reviewer-codex).

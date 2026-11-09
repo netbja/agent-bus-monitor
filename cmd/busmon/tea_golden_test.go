@@ -81,6 +81,9 @@ func inState(t testing.TB, m Model, state string) Model {
 	case "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name": // the Projects page (M, projects-admin §9)
 		src := adminFixture(shellNow)
 		src.quiet = func(context.Context, string) (string, error) { return "", nil }
+		src.unitHosts = func(context.Context, string) ([]unitHosts, error) { // units left on another host (§5.2)
+			return []unitHosts{{host: "box2", kinds: []string{"dispatch", "missions"}}}, nil
+		}
 		if state == "projects-unknown" {
 			src = adminSource{templates: src.templates, host: "vdr",
 				broker: func(context.Context) ([]adminFacts, error) { return nil, errors.New("connection refused") }}
