@@ -193,3 +193,64 @@ func TestProgressLineCapAndThreshold(t *testing.T) {
 		t.Errorf("%d done is thin: %q", paceSure-1, l.text())
 	}
 }
+
+// foureyes P3: a thin estimate already past, from another day, names its day:
+// a bare "estimate ~10:00" would read as today.
+func TestProgressLineOverdueEstimateNamesTheDay(t *testing.T) {
+	pinLocal(t)
+	old := inHandReq("y", "coder", 30*time.Hour)
+	end := old.Accepted.Add(time.Hour)
+	l, _ := progressLine(old, pace{usual: time.Hour, n: 3}, shellNow)
+	if want := "estimate ~" + end.Local().Format("Mon 15:04"); !strings.Contains(l.text(), want) {
+		t.Errorf("overdue estimate: %q, want %q", l.text(), want)
+	}
+	today := inHandReq("z", "coder", 2*time.Hour) // past, but today: the clock alone
+	if want := "estimate ~" + today.Accepted.Add(time.Hour).Local().Format("15:04"); !strings.Contains(thinLineText(today), want) {
+		t.Errorf("overdue today: %q, want %q", thinLineText(today), want)
+	}
+}
+
+// thinLineText is the line of r against a thin pace of an hour.
+func thinLineText(r request) string {
+	l, _ := progressLine(r, pace{usual: time.Hour, n: 3}, shellNow)
+	return l.text()
+}
+
+// foureyes P3: a request is with its target before its board owner.
+func TestReqOwnerTargetFirst(t *testing.T) {
+	if got := reqOwner(request{Target: "coder", Owner: "master"}); got != "coder" {
+		t.Errorf("target and owner: %q", got)
+	}
+	if got := reqOwner(request{Owner: "master"}); got != "master" {
+		t.Errorf("owner only: %q", got)
+	}
+}
+
+// foureyes P3: only an accepted request has a line; one accepted then
+// blocked keeps its acceptance time but has none, in Requests and in the Plan.
+func TestProgressLineOnlyWhileAccepted(t *testing.T) {
+	pinLocal(t)
+	stuck := inHandReq("stuck", "coder", 10*time.Minute)
+	stuck.State = "blocked"
+	items := requestRows(requestGroups(reqInput{now: shellNow, self: "charlie", reqs: []request{stuck}}), reqOpen{}, shellNow, 140)
+	seen := false
+	for i, it := range items {
+		if strings.Contains(it.Line.text(), "stuck") {
+			seen = true
+			if i+1 < len(items) && strings.Contains(items[i+1].Line.text(), "started") {
+				t.Errorf("a line under a blocked request: %q", items[i+1].Line.text())
+			}
+		}
+	}
+	if !seen {
+		t.Fatal("no row for the blocked request")
+	}
+	row := plan.Row{Task: plan.Task{ID: "b", Title: "title b", Owner: "coder", Board: "stuck"}, State: plan.InProgress}
+	if l, ok := planProgressLine(row, []request{stuck}, nil, shellNow); ok {
+		t.Errorf("a plan line for a blocked request: %q", l.text())
+	}
+	stuck.State = "accepted"
+	if _, ok := planProgressLine(row, []request{stuck}, nil, shellNow); !ok {
+		t.Error("no plan line once accepted")
+	}
+}

@@ -91,6 +91,9 @@ func progressLine(r request, p pace, now time.Time) (Line, bool) {
 	}
 	switch {
 	case p.n < paceSure: // thin: no share, the end an estimate
+		if at := r.Accepted.Add(p.usual); !at.After(now) { // already past: its day when not today (foureyes)
+			end = startClock(at, now)
+		}
 		l = append(l, bar(0, RoleMuted)...)
 		return append(l, Seg{Text: "estimate ~" + end, Role: RoleDim}), true
 	case used >= p.usual: // past the usual length: held at the cap, muted
