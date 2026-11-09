@@ -21,7 +21,7 @@ func TestEvaluateModelCatalogue(t *testing.T) {
 		"gone":    {ModelCatalogueInput{Findings: []CatalogueFinding{{Profile: "old", Field: "model", Model: "gpt-5-old", Verdict: "gone"}}}, "profile old: gpt-5-old gone"},
 		"newer":   {ModelCatalogueInput{Findings: []CatalogueFinding{{Profile: "sol", Field: "model", Model: "gpt-6-sol", Verdict: "newer", Candidate: "gpt-6.1-sol"}}}, "profile sol: gpt-6-sol newer gpt-6.1-sol"},
 		"newer?":  {ModelCatalogueInput{Findings: []CatalogueFinding{{Profile: "grok", Field: "model", Model: "grok-4.6", Verdict: "newer?", Candidate: "grok-4.7"}}}, "profile grok: grok-4.6 newer? grok-4.7"},
-		"old":     {ModelCatalogueInput{OldSources: []OldSource{{Provider: "moonshot", Age: 12 * 24 * time.Hour, Hint: "open kimi once"}}}, "moonshot's catalogue is 12 days old: open kimi once"},
+		"old":     {ModelCatalogueInput{OldSources: []OldSource{{Provider: "openai", Age: 12 * 24 * time.Hour, Hint: "open codex once: it rewrites models_cache.json"}}}, "openai's catalogue is 12 days old: open codex once: it rewrites models_cache.json"},
 		"failing": {ModelCatalogueInput{FailedReads: []FailedRead{{Provider: "google", For: 3 * 24 * time.Hour, Error: "timeout"}}}, "google's read has failed for 3 days (timeout)"},
 	} {
 		in := c.in
