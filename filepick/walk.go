@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -101,12 +102,14 @@ func List(ctx context.Context, o Options) (Result, error) {
 	}
 	w.deadline = nowFunc().Add(w.timeout)
 	var rules ignoreSet
-	exclude, err := readIgnore(filepath.Join(root, ".git", "info", "exclude"))
-	if err != nil { // its rules apply everywhere: nothing can be offered without them
-		w.res.Incomplete = ".git/info/exclude " + err.Error()
-		return w.res, nil
+	if p := excludePath(root); p != "" {
+		exclude, err := readIgnore(p)
+		if err != nil { // its rules apply everywhere: nothing can be offered without them
+			w.res.Incomplete = "info/exclude " + err.Error()
+			return w.res, nil
+		}
+		rules = rules.with("", exclude)
 	}
-	rules = rules.with("", exclude)
 	start := ""
 	if o.Sub != "" {
 		sub, err := w.validSub(o.Sub, rules)
@@ -340,6 +343,45 @@ func SubFor(entries []Entry, query string) (string, bool) {
 	return "", false
 }
 
+// excludePath is the info/exclude file git uses for the checkout at root:
+// .git/info/exclude when .git is a directory; for a linked worktree, whose
+// .git is a file naming its gitdir, the common directory's (gitdir's
+// commondir, else gitdir itself), as git reads it (reviewer-codex). Both
+// files are read as text, never by running git. "" when there is none to
+// read (no .git, or a .git file that names nothing): no exclude rules.
+func excludePath(root string) string {
+	dotgit := filepath.Join(root, ".git")
+	st, err := os.Lstat(dotgit)
+	switch {
+	case err != nil:
+		return ""
+	case st.IsDir():
+		return filepath.Join(dotgit, "info", "exclude")
+	case !st.Mode().IsRegular():
+		return ""
+	}
+	text, err := readIgnore(dotgit)
+	if err != nil {
+		return ""
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(strings.SplitN(text, "\n", 2)[0]), "gitdir:")
+	if gitdir = strings.TrimSpace(gitdir); !ok || gitdir == "" {
+		return ""
+	}
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(root, gitdir)
+	}
+	common := gitdir
+	if c, err := readIgnore(filepath.Join(gitdir, "commondir")); err == nil && strings.TrimSpace(c) != "" {
+		if c = strings.TrimSpace(c); filepath.IsAbs(c) {
+			common = c
+		} else {
+			common = filepath.Join(gitdir, c)
+		}
+	}
+	return filepath.Join(common, "info", "exclude")
+}
+
 // readIgnore reads an ignore file: "" when there is none; an error when one
 // exists but cannot be read in full (not a regular file, a link, over
 // maxIgnoreFile, a failed read). The caller fails closed on it, never
@@ -347,7 +389,7 @@ func SubFor(entries []Entry, query string) (string, bool) {
 func readIgnore(abs string) (string, error) {
 	st, err := os.Lstat(abs)
 	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR): // no such file, or a parent that is not a directory
 		return "", nil
 	case err != nil:
 		return "", errors.New("cannot be read")

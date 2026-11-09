@@ -394,3 +394,42 @@ func TestIgnoreSiblingsDoNotShare(t *testing.T) {
 		t.Fatalf("siblings share rules: x(x/px)=%v x(y/py)=%v y(y/py)=%v", x.ignored("x/px", false), x.ignored("y/py", false), y.ignored("y/py", false))
 	}
 }
+
+// reviewer-codex: a linked worktree as the root has a .git FILE (gitdir: …).
+// Its listing works, and the exclude file git uses for it (the common
+// directory's info/exclude, found by reading gitdir and commondir as text)
+// applies; a .git file that names nothing readable means no exclude rules.
+func TestListWorktreeRoot(t *testing.T) {
+	base := t.TempDir()
+	common, root := filepath.Join(base, "main/.git"), filepath.Join(base, "wt")
+	write(t, common, "info/exclude", "secret-notes.txt\n")
+	write(t, common, "worktrees/wt/commondir", "../..\n")
+	write(t, root, ".git", "gitdir: "+filepath.Join(common, "worktrees/wt")+"\n")
+	write(t, root, "a.go", "")
+	write(t, root, "secret-notes.txt", "")
+	res, err := List(context.Background(), Options{Root: root})
+	if err != nil || res.Incomplete != "" {
+		t.Fatalf("a worktree root: %v, incomplete %q", err, res.Incomplete)
+	}
+	if got := paths(res.Entries); !slices.Equal(got, []string{"a.go"}) {
+		t.Fatalf("listed %q, want a.go only (info/exclude of the common dir applied)", got)
+	}
+	write(t, root, ".git", "gitdir: "+filepath.Join(base, "nowhere")+"\n")
+	res, err = List(context.Background(), Options{Root: root})
+	if err != nil || res.Incomplete != "" || !slices.Contains(paths(res.Entries), "a.go") {
+		t.Fatalf("a gitdir that names nothing: %v %q %q", err, paths(res.Entries), res.Incomplete)
+	}
+	gd := filepath.Join(base, "gd") // a gitdir with no commondir: its own info/exclude
+	write(t, gd, "info/exclude", "a.go\n")
+	write(t, root, ".git", "gitdir: "+gd+"\n")
+	res, err = List(context.Background(), Options{Root: root})
+	if err != nil || slices.Contains(paths(res.Entries), "a.go") || !slices.Contains(paths(res.Entries), "secret-notes.txt") {
+		t.Fatalf("a gitdir with no commondir: %v %q", err, paths(res.Entries))
+	}
+	write(t, base, "plain-file", "")
+	write(t, root, ".git", "gitdir: "+filepath.Join(base, "plain-file")+"\n") // a parent that is not a directory
+	res, err = List(context.Background(), Options{Root: root})
+	if err != nil || res.Incomplete != "" || !slices.Contains(paths(res.Entries), "a.go") {
+		t.Fatalf("a gitdir that is a file: %v %q %q", err, paths(res.Entries), res.Incomplete)
+	}
+}
