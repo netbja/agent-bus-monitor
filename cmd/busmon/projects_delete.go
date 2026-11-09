@@ -288,7 +288,7 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 			for _, h := range msg.hosts {
 				names = append(names, h.host)
 			}
-			text += "; units stay on " + strings.Join(names, ", ") + ": agentbus --project " + r.project + " service remove there"
+			text += "; units reported on " + strings.Join(names, ", ") + ": agentbus --project " + r.project + " service remove there"
 		}
 		if msg.open {
 			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --pick to open another project", r.project, r.keys, plural(int(r.keys), "key"))
@@ -306,14 +306,18 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 // where they stay, and the command that removes them there.
 func (m Model) unitHostsLines() []Line {
 	d := m.ui.del
+	// The broker reports only the last up's marker and each kind's last
+	// record: a host that fell silent leaves no trace (reviewer-codex), so
+	// the panel never claims to name them all.
+	caveat := Line{{Text: "other hosts may keep units the broker no longer records: agentbus service list there", Role: RoleMuted}}
 	switch {
 	case d.hostsErr != nil:
-		return []Line{{{Text: "units on other hosts: ? (" + Preview(d.hostsErr.Error()) + ")", Role: RoleAttention}}}
+		return []Line{{{Text: "units on other hosts: ? (" + Preview(d.hostsErr.Error()) + ")", Role: RoleAttention}}, caveat}
 	case len(d.hosts) == 0:
-		return []Line{{{Text: "units: this machine only", Role: RoleMuted}}}
+		return []Line{{{Text: "units reported: this machine only", Role: RoleMuted}}, caveat}
 	}
-	return []Line{{{Text: "units stay installed on: " + unitHostsText(d.hosts), Role: RoleAttention}},
-		{{Text: "remove them there: agentbus --project " + d.row.name + " service remove", Role: RoleMuted}}}
+	return []Line{{{Text: "units reported on: " + unitHostsText(d.hosts), Role: RoleAttention}},
+		{{Text: "remove them there: agentbus --project " + d.row.name + " service remove", Role: RoleMuted}}, caveat}
 }
 
 // deletePanelLines is the panel's body at width w.

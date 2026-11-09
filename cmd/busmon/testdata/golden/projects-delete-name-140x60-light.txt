@@ -26,14 +26,14 @@
 │                     │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
 │                     │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │                     │
 │                     │ and gate leases all go. The template and the worktrees stay.                                 │                     │
-│                     │ units stay installed on: box2 (dispatch, missions)                                           │                     │
+│                     │ units reported on: box2 (dispatch, missions)                                                 │                     │
 │                     │ remove them there: agentbus --project old service remove                                     │                     │
+│                     │ other hosts may keep units the broker no longer records: agentbus service list there         │                     │
 │                     │                                                                                              │                     │
 │                     │ backup: no backup                                                                            │                     │
 │                     │ type old to delete:                                                                          │                     │
 │                     │ ol▏                                                                                          │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────────────────────────╯                     │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
