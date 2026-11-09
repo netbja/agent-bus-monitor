@@ -7,31 +7,35 @@ several) before anything is built. The figures are invented for the mock-up.
 ## 1. The problem
 
 The person: "I cannot tell what is expected of whom", and the decisions in waiting (the plan's
-`Decide:` tasks), the open asks and the plan's tasks are never in one place. Today they are spread
-over four places:
+tasks owned by the person, titled `Decide: …` by habit), the open asks and the plan's tasks are
+not on one page. Each is shown today, but in a different place:
 
 | What | Where it shows today |
 |---|---|
 | Asks, waits, gates for the person | the **For you** panel (top left), one line each |
 | Merges waiting for the person | For you, and the plan's task line (`merge PR N`) |
-| Requests and reviews between agents | the **Requests** tab (3): by direction (*You wait on*, *Between agents*), not by who must act |
+| Requests and reviews | the **Requests** tab (3), in sections by direction: *Owed by you*, *You wait on*, *Between agents*; For you's empty state names the *Owed by you* count |
 | The plan's tasks and the progress line | the **Plan** tab (4): NOW / NEXT / LATER / DONE, and the header's progress line |
-| `Decide:` tasks (ideas to decide) | the Plan tab, as ordinary NOW/LATER rows owned by `♙ person` |
+| The plan's tasks owned by the person (`Decide: …` is only a title habit; the code reads the owner, `♙ person`) | **not** For you rows since the person's choice of 2026-11-07 (home-inbox-drawer, `nextPlanTask`): counted in the header's plan item (`♙ N`), with one muted pointer in For you, `Next for you: <task>`, and every one listed as a row of the Plan tab |
 | What each agent is doing | the **Agents** panel's message column (free text) |
 | Ideas recorded in docs | nowhere in busmon (`docs/memory/open-questions/`, specs' questions) |
 
-The common question, "who must act next, on what", has no page of its own.
+The common question, "who must act next, on what", has no page of its own: the person's plan tasks
+are a count and a pointer, the asks and merges are rows of For you, the requests owed are a section
+of another tab.
 
 ## 2. The blocks every layout shows
 
-- **For you**: everything that waits on the person. An open ask (answer), an approved PR (merge),
-  a `Decide:` plan task (choose), and a gate that concerns the person. Each row says **why** it
-  waits on the person.
+- **For you** (a section of the new page, not the For you panel): everything that waits on the
+  person. An open ask (answer), an approved PR (merge), a plan task owned by the person (choose),
+  and a gate that concerns the person. Each row says **why** it waits on the person. The For you
+  **panel** keeps the rule of 2026-11-07 in layouts A and C (plan tasks a count and one pointer, not
+  rows); the page lists them as rows, which is what the person now asks for. Part 8, Q5.
 - **In progress, by whom**: each agent at work, its task in hand (the request it accepted, linked
   to its plan task), and the **progress line** (`started 14:12 ━━━━━━──── ~60% · ends ~15:20`,
   PR 384's). Reviews in flight show the reviewer and how long the gate has been open.
 - **Next**: the plan's next tasks, then the requests not in the plan, each with its owner.
-- **Ideas not decided**: the `Decide:` tasks and the open questions recorded in the repository
+- **Ideas not decided**: the person's plan tasks not yet due, and the open questions recorded in the repository
   (`docs/memory/open-questions/`). A specs' unanswered questions could join later.
 - **Folded lines**: the traffic between agents that waits on nobody, and what is done.
 
@@ -42,7 +46,7 @@ its progress line), then **NEXT**, then **IDEAS**. The question "what is expecte
 page's order.
 
 ```
- agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 3 decide · 2 merge                                                                   15:04:05 
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 1 decide · 2 merge                                                                   15:04:05 
  plan v0.29  6 of 11 done  ━━━━━━━━━━━━──────────  55%  ·  now: compose-at-file (coder)  ·  next: requests-plan                                                 
 ╭─ Work   (3) who owes what ──────────────────────────────────────────────────────────────────────────────────────── 5 for you · 4 at work · 3 next · 2 ideas ─╮
 │  YOU  5                                                                                    why it waits on you                                               │
@@ -76,7 +80,7 @@ page's order.
 At 80 columns the same sections, with the progress line on its own row:
 
 ```
- agent-bus-monitor  ● bus  ● dispatch  ● missions  ♙ 3 decide · 2 merge   15:04 
+ agent-bus-monitor  ● bus  ● dispatch  ● missions  ♙ 1 decide · 2 merge   15:04 
  v0.29  6/11  ━━━━━━──── 55%  ·  now: compose-at-file (coder)                   
 ╭─ Work  (3) ────────────────────────────────────────────────── 5 · 4 · 3 · 2 ─╮
 │  YOU  5                                                                      │
@@ -118,7 +122,7 @@ At 80 columns the same sections, with the progress line on its own row:
 become a 2×2 grid, each column cut to its first rows (enter opens a column full-screen).
 
 ```
- agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 3 decide · 2 merge                                                                   15:04:05 
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 1 decide · 2 merge                                                                   15:04:05 
  plan v0.29  6 of 11 done  ━━━━━━━━━━━━──────────  55%  ·  now: compose-at-file (coder)  ·  next: requests-plan                                                 
 ╭─ For you  5 ─────────────────────────╮╭─ In progress  4 ─────────────────────╮╭─ Next  3 ────────────────────────────╮╭─ Ideas  2 ───────────────────────────╮
 │♙ decide · master          4m         ││● coder · compose-at-file 2           ││○ requests-plan redesign              ││◇ ~ in compose (@~/)                  │
@@ -140,7 +144,7 @@ become a 2×2 grid, each column cut to its first rows (enter opens a column full
 ```
 
 ```
- agent-bus-monitor  ● bus  ● dispatch  ● missions  ♙ 3 decide · 2 merge   15:04 
+ agent-bus-monitor  ● bus  ● dispatch  ● missions  ♙ 1 decide · 2 merge   15:04 
  v0.29  6/11  ━━━━━━──── 55%  ·  now: compose-at-file (coder)                   
 ╭─ For you  5 ─────────────────────────╮╭─ In progress  4 ─────────────────────╮
 │♙ decide master  4m                   ││● coder  compose 2                    │
@@ -158,7 +162,8 @@ become a 2×2 grid, each column cut to its first rows (enter opens a column full
 ```
 
 **Replaces**: the Requests and Plan tabs, by one tab, Board. The For you panel becomes the board's
-first column, and the top-left panel gives its room to Agents.
+first column, and the top-left panel gives its room to Agents. That **reverses the choice of
+2026-11-07**: the person's plan tasks would be For you rows again (part 8, Q5).
 
 - **For it**: the four answers are at one glance, and it reads well on a wide screen.
 - **Against it**: titles are cut at 38 cells, at 80 columns each column shows about 3 rows, and
@@ -172,7 +177,7 @@ the plan does not name gets its own section, then ideas. The Requests tab become
 traffic between agents.
 
 ```
- agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 3 decide · 2 merge                                                                   15:04:05 
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 1 decide · 2 merge                                                                   15:04:05 
  plan v0.29  6 of 11 done  ━━━━━━━━━━━━──────────  55%  ·  now: compose-at-file (coder)  ·  next: requests-plan                                                 
 ╭─ Plan  v0.29   6 of 11 done   ━━━━━━━━━━━━──────────  55% ────────────────────────────────────────────────────────────── you: 2 merge · 2 decide · 1 answer ─╮
 │  NOW                                                                                                                                                         │
@@ -199,7 +204,7 @@ traffic between agents.
 ```
 
 ```
- agent-bus-monitor  ● bus  ● dispatch  ● missions  ♙ 3 decide · 2 merge   15:04 
+ agent-bus-monitor  ● bus  ● dispatch  ● missions  ♙ 1 decide · 2 merge   15:04 
  v0.29  6/11  ━━━━━━──── 55%  ·  now: compose-at-file (coder)                   
 ╭─ Plan v0.29  6/11  55% ───────────────────────────────────────────── you: 5 ─╮
 │  NOW                                                                         │
@@ -257,5 +262,11 @@ if every piece of work goes through a loaded plan, which today it does not.
 2. **Ideas from the repository**: show `docs/memory/open-questions/` notes in IDEAS (read-only,
    one line each), or the plan's `Decide:` tasks only?
 3. **The Projects page counts** (part 6): yes or no?
-4. **Keys**: in A, `m` merges an approved PR from its row and `a` answers an ask. Or keep
-   today's way, opening the reader and acting there?
+4. **Keys**: in A, `a` answers an ask from its row (the reader's answer, opened in place). A merge
+   key would be **new behaviour**: busmon merges nothing today, and master pushes and merges under
+   the forge-delivery decision, so `m` would only send master a directive (`merge PR N`). Add
+   `m` on that basis, or keep today's way, opening the reader and acting there?
+5. **The person's plan tasks as rows**: since 2026-11-07 they are a header count and one pointer
+   in For you, not rows. The new page's YOU section lists them as rows (layouts A and C), and the
+   For you panel keeps the pointer; layout B makes them For you rows again. Is that what you want
+   now?
