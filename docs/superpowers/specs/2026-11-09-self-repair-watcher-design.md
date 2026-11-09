@@ -27,10 +27,12 @@ other case it reports.
 - **One loop of the dispatch service** (the project's runner, later the host dispatcher's), not a
   new daemon. The services decision ([2026-10-14](../../memory/decisions/2026-10-14-project-services.md))
   rules out a supervisor of our own. systemd or launchd already keeps the dispatcher alive and
-  restarts it on a crash (its restart budget), so the watcher inherits that supervision. The same
-  decision says **never at login**: the unit is not enabled, and only `agentbus up` or `service
-  start` starts a project. So the watcher runs only while the person has started the project; after
-  a reboot it does nothing until then (4.4).
+  restarts it on a crash (its restart budget), so the watcher inherits that supervision. **Today**
+  the units are never enabled, and only `agentbus up` or `service start` starts a project, so the
+  watcher runs only once the person has started it. The person's answer (Q8) amends that decision:
+  starting at login becomes an **option**, off by default, for systemd and launchd, without
+  linger. It is decided but not built (part 7, step 9). Until it is built, or while the option is
+  off, the watcher does nothing after a reboot until the project is started (4.4).
 - **Fenced like every dispatcher write.** It acts only while its runner holds the `{p}:dispatch`
   lease. Every record it writes goes through a Lua script that checks the token, with Redis `TIME`.
   herdr actions (split a pane, run the command) cannot be fenced: what keeps two relaunchers apart
@@ -198,7 +200,8 @@ type LoginStart interface {
 - **Windows:** not covered. One lead is WSL2 with systemd, woken by a scheduled task at logon.
   This is an open question for the person (part 8).
 
-This amends the project services decision's "never at login" (see the decision note).
+This amends the project services decision's former "never at login" into an option (see the
+decision note); its "never a hidden process" rule stands.
 
 On a resume from suspend (a monotonic jump, the same boot id), R1's grace restarts from the resume,
 so a long sleep never counts as an agent "dead for an hour".
