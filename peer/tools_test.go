@@ -567,3 +567,39 @@ func TestGitAndDeniesIgnoreCase(t *testing.T) {
 		}
 	}
 }
+
+// compose-at-file §3: busmon's @ picker hides what no agent may read, which
+// is the shared [tool_rules] Read denies alone (a role's own are not every
+// agent's), compiled with the same glob meaning.
+func TestSharedReadDenies(t *testing.T) {
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "roles.toml")
+	body := "schema_version = 2\n[defaults]\nprofile = \"p\"\n[profiles.p]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m\"\n" +
+		"[tool_rules]\ndeny = [\"Read(**/secrets/**)\", \"Bash(rm *)\", \"Read(*.pfx)\"]\n" +
+		"[roles.local]\ntier = \"pop\"\n[roles.local.tool_rules]\ndeny = [\"Read(docs/**)\"]\n"
+	if err := os.WriteFile(manifest, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := rolecfg.Load(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := SharedReadDenies(m)
+	if err != nil || strings.Join(got, ",") != "**/secrets/**,*.pfx" {
+		t.Fatalf("shared read denies %q, %v; want the two shared Read patterns only", got, err)
+	}
+	root := filepath.Join(dir, "proj")
+	deny, err := NewDenyMatcher(got, root, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]bool{"secrets/a.txt": true, "x/secrets/b": true, "cert.PFX": true, "docs/a.md": false, "README.md": false} {
+		if deny.Denied(filepath.Join(root, p)) != want {
+			t.Errorf("%s: denied %v, want %v", p, !want, want)
+		}
+	}
+	m.SharedToolRules.Deny = append(m.SharedToolRules.Deny, "Read(**/broken")
+	if _, err := SharedReadDenies(m); err == nil {
+		t.Fatal("a malformed shared Read rule was accepted")
+	}
+}

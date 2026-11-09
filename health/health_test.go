@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/secretpath"
 )
 
 func TestEffectiveStatusUnknownForMissingAndStaleRecords(t *testing.T) {
@@ -128,9 +130,9 @@ func TestSecretPathMatchingAndVersionOutcomes(t *testing.T) {
 		{".env", true}, {".env.production", true}, {".env.example", false}, {"id_ed25519.pub", true},
 		{"wallet-main.json", true}, {"keypair.json", true}, {"README.md", false},
 	} {
-		_, got := IsSecretLikePath(tc.path)
+		_, got := secretpath.Is(tc.path) // moved from health (compose-at-file §3)
 		if got != tc.secret {
-			t.Errorf("IsSecretLikePath(%q) = %v", tc.path, got)
+			t.Errorf("secretpath.Is(%q) = %v", tc.path, got)
 		}
 	}
 	if got := EvaluateSecretPaths([]string{"docs/.env.production"}, true).Status; got != Fail {
