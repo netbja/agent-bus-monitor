@@ -1,6 +1,8 @@
 # @ in the compose window inserts a file's path (compose-at-file)
 
-Status: spec for review (subject `compose-at-file-spec`), v0.29 chantier 5. No code on this branch.
+Status: merged (PR 350); being implemented (subjects `compose-at-file-1` …). The person answered
+§8 on 2026-11-09 (through master); §4.3, §4.4 and §5 follow the answers. `~` (a path under the home
+directory) was asked for the same day and is a separate addendum, not part of this text.
 Base `origin/main`. coder is rewriting parts of `cmd/busmon`. This spec names functions and seams,
 not line numbers.
 
@@ -145,10 +147,11 @@ there is no room below:
 
 - A path too wide for the row is cut **on the left** (`…/busmon/tea_compose.go`), using the
   existing `truncLeft`.
-- The selected row is a pill in `RoleAccent`. Directories end with `/`, and choosing one descends
-  into it (the query becomes `dir/`, and the popup stays open).
+- The selected row is a pill in `RoleAccent`. Directories end with `/`. A directory is a pick like
+  a file (§8 Q5): `enter` inserts it (`cmd/busmon/`), and `tab` descends into it instead (the query
+  becomes `dir/`, and the popup stays open), as a shell completes a directory.
 - The popup's own footer line replaces the window's while it is open:
-  `↑↓ choose · tab/enter insert · esc keep text`, plus `N files` or the state (§2).
+  `↑↓ choose · enter insert · tab open folder · esc keep text`, plus `N files` or the state (§2).
 - **Mouse:** a click on a row inserts it, and the wheel scrolls the list. The window's existing
   click-to-place-cursor keeps working outside the popup.
 
@@ -161,12 +164,13 @@ the handler, the footer and the help all read (the pattern `settingsBindings` us
 |---|---|
 | `↑` `↓` | move the selection |
 | `pgup` `pgdn` | a popup page |
-| `tab`, `enter` | insert the selected path (a directory: descend) |
+| `enter` | insert the selected path, a file or a directory |
+| `tab` | a directory: descend into it; a file: insert it |
 | `esc` | close the popup only; the typed `@query` stays, and a second `esc` closes the window as before |
 | any other key | goes to the text, and the query follows it |
 
-While the popup is open, `enter` inserts and does not add a new line, and `tab` inserts and does
-not switch fields. Once it is closed, both mean what they mean today. `keys_test.go`'s checks
+While the popup is open, `enter` inserts and does not add a new line, and `tab` descends or inserts
+and does not switch fields. Once it is closed, both mean what they mean today. `keys_test.go`'s checks
 (footer == table, no key advertised twice) cover the new table.
 
 ## 5. What is inserted
@@ -222,6 +226,23 @@ today.
 
 ## 8. Questions for the person
 
+**Answered by the person on 2026-11-09** (through master's directives of that day):
+
+1. **Absolute** paths by default; `compose.at_path` keeps the switch.
+2. **The `@` is dropped** from the inserted text.
+3. **The compose window only** in v1, not the one-line input.
+4. **Worktrees on demand only** (§2.2).
+5. **Directories are a pick** too: inserting the directory itself (`cmd/busmon/`); `tab` descends
+   (§4.3, §4.4).
+
+Also asked: **`~`**, a path relative to the home directory. The listing above covers the project's
+root only, so `~` is a spec change: its own addendum, reviewed before any of it is built.
+
+Paths: the list keeps the slash form (git's, and the popup's); every path that reaches the file
+system or the text is built with `path/filepath` (the person keeps Windows possible).
+
+The questions as they were put:
+
 1. **Absolute or relative path by default?** The recommendation is absolute (§5), with
    `compose.at_path` to switch. Know this when choosing: an absolute path names the main
    checkout's copy, not the recipient agent's branch. A relative path is read in each agent's own
@@ -269,8 +290,9 @@ compose tests use. No test runs git on the real repository.
   - one undo step restores `@query`;
   - the cap refuses an insert;
   - two files in one message.
-- **Keys:** with the popup open, `enter` inserts and adds no new line, `tab` inserts and does not
-  switch fields, and `esc` closes the popup and then the window. `@` in the `to` field still
+- **Keys:** with the popup open, `enter` inserts (a file or a directory) and adds no new line,
+  `tab` descends into a directory or inserts a file and does not switch fields, and `esc` closes
+  the popup and then the window. `@` in the `to` field still
   lists agents. A line opened with `@coder fix` still splits.
 - **Goldens** at the existing sizes (60×20, 80×24, 140×40): the popup below, the popup flipped
   above, the narrow popup, `reading the file list…`, `outside the project`, `list incomplete`.

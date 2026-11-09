@@ -64,6 +64,18 @@ input reads `?`. busmon reads the plan every `requestPoll` tick through the opti
 narrow tier's sixth view; Enter opens a task or expands done). Spec:
 `docs/superpowers/specs/2026-10-22-plan-view-design.md`.
 
+**`filepick/`** (compose-at-file) lists a project's files for busmon's `@` in the compose window:
+a walk in Go that runs **no program** (git's config can make git run one: `core.fsmonitor`), reads
+the `.gitignore` files and `.git/info/exclude` as text, skips `.git`, `node_modules`, `.venv` and
+`vendor`, lists a directory holding a `.git` entry (a worktree) as one entry walked on demand
+(`SubFor`), never follows a directory link, and offers a file link only when its resolved target is
+a regular file inside the root that passes every filter. Bounded (depth 12, 50 000 entries, 2 s),
+it says why a list is incomplete. Nothing that looks like a secret (`internal/secretpath`, the rule
+health's `tracked-secrets` check shares) or that roles.toml's shared `Read` denies
+(`peer.SharedReadDenies`) is offered; `Refused` says why for the popup. `Rank` orders matches (name
+prefix, segment prefix, substring, subsequence). Spec:
+`docs/superpowers/specs/2026-11-08-compose-at-file-design.md`.
+
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
 *before* you know a project name. `Open` already demands a valid project, so a method there would be

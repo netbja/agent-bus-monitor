@@ -18,8 +18,20 @@ func ReadDenies(m *rolecfg.Manifest, role string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return readPatterns(rules.Deny)
+}
+
+// SharedReadDenies is the shared [tool_rules] Read(…) denies alone, what no
+// agent may read whatever its role: busmon's @ picker never offers those
+// paths (compose-at-file §3). A rule it cannot read is an error, as above.
+func SharedReadDenies(m *rolecfg.Manifest) ([]string, error) {
+	return readPatterns(m.SharedToolRules.Deny)
+}
+
+// readPatterns is the Read(…) patterns of deny rules; a bare Read is "**".
+func readPatterns(deny []string) ([]string, error) {
 	var out []string
-	for _, r := range rules.Deny {
+	for _, r := range deny {
 		if r == "Read" {
 			out = append(out, "**") // a bare Read denies every read
 			continue

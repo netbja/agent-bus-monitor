@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/secretpath"
 )
 
 const (
@@ -223,36 +225,12 @@ func EvaluateQuotaFreshness(expected bool, known bool, observedAt int64, now tim
 
 type SecretPath struct{ Path, Kind string }
 
-func IsSecretLikePath(path string) (string, bool) {
-	base := filepath.Base(path)
-	lower := strings.ToLower(base)
-	if lower == ".env" || strings.HasPrefix(lower, ".env.") && lower != ".env.example" {
-		return "environment file", true
-	}
-	if strings.HasSuffix(lower, ".pem") {
-		return "private-key file", true
-	}
-	if strings.HasSuffix(lower, ".key") {
-		return "key file", true
-	}
-	if strings.HasPrefix(lower, "id_rsa") || strings.HasPrefix(lower, "id_ed25519") {
-		return "SSH private-key file", true
-	}
-	if strings.Contains(lower, "keypair") && strings.HasSuffix(lower, ".json") {
-		return "keypair JSON", true
-	}
-	if strings.HasPrefix(lower, "wallet") && strings.HasSuffix(lower, ".json") {
-		return "wallet JSON", true
-	}
-	return "", false
-}
-
 func EvaluateSecretPaths(paths []string, known bool) Outcome {
 	if !known {
 		return Outcome{Status: Unknown, Detail: "tracked file paths could not be read"}
 	}
 	for _, path := range paths {
-		if kind, ok := IsSecretLikePath(path); ok {
+		if kind, ok := secretpath.Is(path); ok { // the one rule, shared with busmon's @ picker (compose-at-file §3)
 			return Outcome{Status: Fail, Detail: fmt.Sprintf("tracked %s path: %s", kind, filepath.ToSlash(path))}
 		}
 	}
