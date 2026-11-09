@@ -25,7 +25,10 @@ other case it reports.
 - **One loop of the dispatch service** (the project's runner, later the host dispatcher's), not a
   new daemon. The services decision ([2026-10-14](../../memory/decisions/2026-10-14-project-services.md))
   rules out a supervisor of our own. systemd or launchd already keeps the dispatcher alive and
-  restarts it on a crash (its restart budget), so the watcher inherits that supervision.
+  restarts it on a crash (its restart budget), so the watcher inherits that supervision. The same
+  decision says **never at login**: the unit is not enabled, and only `agentbus up` or `service
+  start` starts a project. So the watcher runs only while the person has started the project; after
+  a reboot it does nothing until then (4.4).
 - **Fenced like every dispatcher write.** It acts only while its runner holds the `{p}:dispatch`
   lease. Every record it writes goes through a Lua script that checks the token, with Redis `TIME`.
   herdr actions (split a pane, run the command) cannot be fenced: what keeps two relaunchers apart
@@ -94,16 +97,33 @@ spec therefore also changes them: `up --resume` skips a role whose intent is hel
 (`ErrSwapInProgress`). The dispatcher's existing rules for an intent (no prompt, no clear) apply to
 a self-repair unchanged.
 
-**Action.** The same code `agentbus reload` uses after its kill: `relaunchRole` (the template
-command, in a **new pane** split from the tab's pane; the old pane is closed once the new agent is
-proven). That code moves from `cmd/agentbus` into a package the dispatcher can import. Nothing is
-typed into an existing pane.
+**Action.** The core of what `agentbus reload` runs after its kill (`relaunchRole`): judge the tab,
+split a **new pane** from the tab's pane, run the template command in it, and close the old pane
+once the new agent is proven. Nothing is typed into an existing pane.
 
-**Proof.** A new pid, alive, in the new pane, on the same client, provider and profile, within
-60 s (`replaced`, reload's rule). Then a ledger entry `self-repair relaunched <agent>: pid A -> B,
+`relaunchRole` cannot be called from the service as it is: it first refuses to run outside a herdr
+pane (`HERDR_ENV=1`), and the dispatch service is a systemd or launchd unit, not a pane. The split
+is therefore:
+
+- **a core** in a package (template tab, `judgeTab`, the settle loop, the split, the run, the
+  proof, the close), taking its herdr runner and its lock as arguments, with no environment check;
+- **the CLI entry** (`reload`, `up --resume`), which keeps the `HERDR_ENV=1` guard and `up`'s lock,
+  then calls the core;
+- **the service entry**, which reaches herdr the way the dispatcher already does (`dispatch.Herdr`,
+  the herdr binary on the session named by `HERDR_SESSION` / `HERDR_SOCKET_PATH` from the services'
+  env file, `service/env.go`), takes `up`'s project lock too (so it never splits a tab while an `up`
+  runs), and calls the core. It refuses when the env file names no herdr session.
+
+**Proof.** A new pid, alive, in a new pane, on the same client and provider, within 60 s
+(`replaced`, reload's rule). That is all `replaced` proves: the snapshot carries the model but not
+the profile's name, so two profiles of one client and provider are not told apart. The watcher
+relaunches the role's own profile from `roles.toml` (it never picks one), and the gap is reload's
+today too; closing it (the launcher recording its profile in the snapshot) is a separate step, not
+part of this spec. Then a ledger entry `self-repair relaunched <agent>: pid A -> B,
 pane P -> Q`, one line to master, and the ordinary wake for any message waiting.
 
-**Failure.** No proof in 60 s: one escalation to master and the person (desktop notification),
+**Failure.** No proof in 60 s: one escalation to master, and to the person if part 8, Q7 allows
+it,
 with the recovery line reload prints today (`agent-launch <role> <p> --resume <id> in pane …`).
 No retry for that episode.
 
@@ -128,15 +148,18 @@ died meanwhile go through R1 then, oldest first, one at a time.
 
 ### 4.4 R4: after a reboot or a resume from suspend
 
-On a new boot id the dispatcher starts under systemd at login, but herdr and its workspace need
-the person's terminal. The watcher:
+**After a reboot the watcher is not running.** The services are never started at login (part 2),
+so nothing watches until the person runs `agentbus up <p>` (which relaunches the agents itself) or
+`service start`. R4 then covers only what follows a start:
 
-- **workspace not open:** relaunches nothing, and posts one notice: `agent-bus-monitor: the
-  workspace is not open; run agentbus up agent-bus-monitor --resume` (desktop, plus the person's
-  inbox in busmon);
+- **started with the workspace closed** (`service start` alone): relaunch nothing, and say once
+  that the workspace is not open (`run agentbus up <p> --resume`), through the channels Q7 allows;
 - **workspace open** (herdr restored it): R1 and R2 apply as usual. Panes herdr restored with a
   live client are recovered by the dispatcher's existing rule (codex-identity-recovery), not
   relaunched.
+
+Whether the services should start at login, so the watcher covers a reboot, is the person's
+decision: part 8, Q8. It would reverse "never at login".
 
 On a resume from suspend (a monotonic jump, the same boot id), R1's grace restarts from the resume,
 so a long sleep never counts as an agent "dead for an hour".
@@ -154,6 +177,11 @@ so a long sleep never counts as an agent "dead for an hour".
 
 ## 5. What the person and the team see
 
+- **Notifications** (the person's choice of channels and events, part 8, Q7). Today the dispatcher
+  rings the desktop only for an agent blocked on its client's prompt (prompt-notify decision) and
+  for a `/clear` without proof (agent-lifecycle decision). The watcher would add: a relaunch that
+  failed its proof, a spent budget, the workspace not open after a start, and relaunches held by a
+  lost network. Proposed: master on the bus for each; the desktop only for the first two.
 - **health `self-repair`:** `ok`; `warn` while R1 is held (network, quota, a tab not settling) or
   in shadow mode with a would-be action; `fail` on a failed proof or a spent budget, which wakes
   sentinel as any fail does. Sentinel only annotates it and tells master; it never retries.
@@ -179,8 +207,10 @@ so a long sleep never counts as an agent "dead for an hour".
 
 ## 7. Delivery, in steps (after the person's answers)
 
-1. **Move the relaunch code** (`relaunchRole`, `judgeTab`, `decideRelaunch`, `replaced`) from
-   `cmd/agentbus` into a package. No behaviour change; `reload` and `up` use it from there.
+1. **Split the relaunch code**: its core (`judgeTab`, `decideRelaunch`, the settle loop, the
+   split and run, `replaced`, the close) into a package; the CLI entry keeps `HERDR_ENV=1` and
+   `up`'s lock; a service entry reaches herdr through the services' env file (4.1). No behaviour
+   change for `reload` and `up`.
 2. **The intent:** the fenced `self-repair` kind of `BeginSwap`/`EndSwap` (lease token and nonce),
    and `up --resume` skipping a role whose intent is held. Useful alone: today two people (or a
    person and master) running `up --resume` at once can already race.
@@ -219,6 +249,14 @@ so a long sleep never counts as an agent "dead for an hour".
 6. **Master relaunched by the watcher.** Should a dead master be relaunched first (recommended: it
    recovers everything else), or always left to the person, since master holds the pilot lease and
    drives the other panes?
+
+7. **Notifications.** Which of the watcher's events may reach the person, and how (part 5): the
+   desktop for a failed proof and a spent budget, the bus to master for all four (recommended)?
+   This is a new notification decision; prompt-notify covers only a client's prompt.
+8. **Start at login.** Today the services never start at login, so the watcher does nothing after a
+   reboot until you run `agentbus up`. Should a project you enrol start its services at login
+   (reversing that rule), or stay as it is (recommended: `up` after a reboot already relaunches
+   everything)?
 
 ## 9. Not in this spec
 
