@@ -118,10 +118,11 @@ func TestIdleViewBreathesWhenAllIdle(t *testing.T) {
 		}
 		// background work adds a team row but is still idle (progress-line
 		// §4.3): the team still breathes (foureyes)
-		for _, a := range m.snap.agents {
-			a.bg = &bus.Background{Text: "2 checks running", Since: m.now.Add(-time.Minute)}
-			break
+		shown, _ := visibleAgents(m.snap.agents, m.snap.pilot, false, m.now) // an agent the view shows, not a dormant one (foureyes)
+		if len(shown) == 0 {
+			t.Fatalf("no-colour=%v: no visible agent in the fixture", noColor)
 		}
+		m.snap.agents[shown[0]].bg = &bus.Background{Text: "2 checks running", Since: m.now.Add(-time.Minute)}
 		if d := m.idleData(); !d.allIdle || len(d.team) == 0 {
 			t.Fatalf("no-colour=%v: an idle agent with background work: allIdle=%v, %d team rows", noColor, d.allIdle, len(d.team))
 		}
