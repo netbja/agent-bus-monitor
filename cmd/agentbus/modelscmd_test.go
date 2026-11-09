@@ -74,6 +74,10 @@ model = "grok-4.6"
 client = "kimi-cli"
 provider = "moonshot"
 tier = "frontier"
+[profiles.grokfast]
+client = "grok"
+provider = "xai"
+tier = "fast"
 [profiles.gem]
 client = "agy"
 provider = "google"
@@ -101,9 +105,11 @@ func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*
 			{ID: "gpt-6.1-sol", Tier: models.Workhorse, Default: true},
 			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-6.1-sol"},
 		}},
-		"xai":      {OK: true, At: at, ReadAt: at, Rows: []models.Row{{ID: "grok-4.7", Default: true, Tier: models.Frontier}, {ID: "grok-4.6"}}},
-		"moonshot": {OK: true, At: at, ReadAt: at, Rows: []models.Row{{ID: "kimi-code/k3", Default: true}, {ID: "kimi-code/kimi-for-coding"}}},
-		"google":   {OK: false, At: at, Error: "timeout", ReadAt: now.Add(-9 * 24 * time.Hour).UnixMilli(), Rows: []models.Row{{ID: "gemini-3.8-flash-high"}}},
+		"xai": {OK: true, At: at, ReadAt: at, Rows: []models.Row{{ID: "grok-4.7", Default: true, Tier: models.Frontier}, {ID: "grok-4.6"}}},
+		// Kimi: one tier for the family (§6 Q3); a tier profile gets kimi-for-coding.
+		"moonshot": {OK: true, At: at, ReadAt: at, Rows: []models.Row{{ID: "kimi-code/k3", Default: true, Tier: models.Frontier},
+			{ID: "kimi-code/kimi-for-coding-highspeed", Tier: models.Frontier}, {ID: "kimi-code/kimi-for-coding", Tier: models.Frontier}}},
+		"google": {OK: false, At: at, Error: "timeout", ReadAt: now.Add(-9 * 24 * time.Hour).UnixMilli(), Rows: []models.Row{{ID: "gemini-3.8-flash-high"}}},
 	}}
 	if err := tbl.Save(cache); err != nil {
 		t.Fatal(err)
@@ -209,7 +215,7 @@ func TestModelsCheckUntieredAloneFails(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	cache, _ := checkFixture(t, now)
 	path := filepath.Join(t.TempDir(), "roles.toml")
-	m := "schema_version = 2\n[defaults]\nprofile = \"kimi\"\n[profiles.kimi]\nclient = \"kimi-cli\"\nprovider = \"moonshot\"\ntier = \"frontier\"\n[roles.coder]\ntier = \"boot\"\n"
+	m := "schema_version = 2\n[defaults]\nprofile = \"gf\"\n[profiles.gf]\nclient = \"grok\"\nprovider = \"xai\"\ntier = \"fast\"\n[roles.coder]\ntier = \"boot\"\n"
 	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +495,7 @@ func TestModelsCheckTierOldSource(t *testing.T) {
 	cache, manifest := checkFixture(t, now)
 	tbl, _ := models.Load(cache)
 	tbl.Providers["openai"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
-	tbl.Providers["moonshot"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
+	tbl.Providers["xai"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli() // xai holds the fixture's untiered row
 	if err := tbl.Save(cache); err != nil {
 		t.Fatal(err)
 	}

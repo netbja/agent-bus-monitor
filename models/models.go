@@ -377,16 +377,33 @@ func DefaultTiers() TierMap {
 		rule(`-fast$|flash-low$|-mini$`, Fast),
 		rule(`flash`, Workhorse),
 		rule(`^grok-\d`, Frontier),
+		// Kimi is one family with one tier, its highspeed variants not told
+		// apart (the person, model-detection §6 Q3); FamilyDefault picks
+		// the model a tier profile gets.
+		rule(`^(kimi-code/)?(k\d|kimi-for-coding)`, Frontier),
 	}
 }
 
-// Resolve is the model a tier stands for at provider: the source's default
-// row when it is in that tier, else the first row of that tier in source
-// order (§12.1). ok is false when the table cannot say.
+// FamilyDefault is the model a tier profile gets at a provider whose family
+// has one tier (§6 Q3): Kimi's non-highspeed coding model. It wins over the
+// client's own default when it is listed in that tier.
+var FamilyDefault = map[string][]string{"moonshot": {"kimi-code/kimi-for-coding", "kimi-for-coding"}}
+
+// Resolve is the model a tier stands for at provider: the family's default
+// (FamilyDefault) when listed in that tier, else the source's default row
+// when it is in that tier, else the first row of that tier in source order
+// (§12.1). ok is false when the table cannot say.
 func (t *Table) Resolve(provider, tier string, now time.Time) (Row, bool) {
 	p, fresh := t.Fresh(provider, now)
 	if !fresh {
 		return Row{}, false
+	}
+	for _, id := range FamilyDefault[provider] {
+		for _, r := range p.Rows {
+			if r.ID == id && r.Tier == tier {
+				return r, true
+			}
+		}
 	}
 	var first *Row
 	for i := range p.Rows {

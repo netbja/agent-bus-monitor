@@ -23,22 +23,12 @@ type Env struct {
 	Read   func(path string) ([]byte, error)
 	// Run runs a client's own listing command (fixed argv) and returns stdout.
 	Run func(ctx context.Context, name string, args ...string) ([]byte, error)
-	// Stat is a file's modification time (Kimi's catalogue age, §3.2); nil =
-	// unknown.
-	Stat func(path string) (time.Time, error)
 }
 
 // RealEnv is the machine's.
 func RealEnv() Env {
 	home, _ := os.UserHomeDir()
 	return Env{Getenv: os.Getenv, Home: home, Read: os.ReadFile,
-		Stat: func(path string) (time.Time, error) {
-			st, err := os.Stat(path)
-			if err != nil {
-				return time.Time{}, err
-			}
-			return st.ModTime(), nil
-		},
 		Run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			if _, err := exec.LookPath(name); err != nil {
 				return nil, err
@@ -63,16 +53,10 @@ func Readers(e Env) []Reader {
 		}, SourceAt: func(time.Time) int64 { return codexAt.Load() }},
 		{Provider: "anthropic", Partial: true, Read: func(ctx context.Context) ([]Row, string, error) { return readClaude(e) }}, // its file changes for other reasons: age unknown
 		{Provider: "xai", Read: func(ctx context.Context) ([]Row, string, error) { return readGrok(ctx, e) }, SourceAt: live},
-		{Provider: "moonshot", Read: func(ctx context.Context) ([]Row, string, error) { return readKimi(e) }, SourceAt: func(time.Time) int64 {
-			if e.Stat == nil {
-				return 0
-			}
-			mt, err := e.Stat(kimiPath(e))
-			if err != nil {
-				return 0
-			}
-			return mt.UnixMilli()
-		}},
+		// Kimi's list is read with the others each day (the person, §6 Q5):
+		// its age is the read's, never config.toml's mtime, which Kimi
+		// Code rewrites only on its own update.
+		{Provider: "moonshot", Read: func(ctx context.Context) ([]Row, string, error) { return readKimi(e) }, SourceAt: live},
 		{Provider: "google", Read: func(ctx context.Context) ([]Row, string, error) { return readAgy(ctx, e) }, SourceAt: live},
 	}
 }
