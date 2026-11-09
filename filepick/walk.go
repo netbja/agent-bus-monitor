@@ -58,9 +58,16 @@ var ErrNoCheckout = errors.New("no checkout on this machine")
 // skipDirs are never walked: too big to be useful.
 var skipDirs = map[string]bool{"node_modules": true, ".venv": true, "vendor": true}
 
-const maxIgnoreFile = 1 << 20 // a .gitignore larger than this is not read
+const maxIgnoreFile = 1 << 20 // a .gitignore larger than this is not read: its directory is left out
+
+// readBatch is how many entries a directory read returns at a time, so the
+// cap and the deadline hold inside one huge directory (reviewer-codex).
+const readBatch = 256
 
 var errStop = errors.New("stop")
+
+// nowFunc is the clock; tests replace it.
+var nowFunc = time.Now
 
 type walker struct {
 	ctx      context.Context
@@ -92,17 +99,21 @@ func List(ctx context.Context, o Options) (Result, error) {
 	if w.timeout <= 0 {
 		w.timeout = 2 * time.Second
 	}
-	w.deadline = time.Now().Add(w.timeout)
+	w.deadline = nowFunc().Add(w.timeout)
 	var rules ignoreSet
+	exclude, err := readIgnore(filepath.Join(root, ".git", "info", "exclude"))
+	if err != nil { // its rules apply everywhere: nothing can be offered without them
+		w.res.Incomplete = ".git/info/exclude " + err.Error()
+		return w.res, nil
+	}
+	rules = rules.with("", exclude)
 	start := ""
 	if o.Sub != "" {
-		sub := filepath.ToSlash(filepath.Clean(o.Sub))
-		if filepath.IsAbs(o.Sub) || sub == "." || sub == ".." || strings.HasPrefix(sub, "../") || !w.isRepo(sub) {
-			return Result{}, fmt.Errorf("%s is not a repository inside the project", o.Sub)
+		sub, err := w.validSub(o.Sub, rules)
+		if err != nil {
+			return Result{}, fmt.Errorf("%s is not a repository the project offers: %w", o.Sub, err)
 		}
-		start = sub
-	} else if b, ok := readSmall(filepath.Join(root, ".git", "info", "exclude")); ok {
-		rules = rules.with("", b)
+		start, rules = sub, nil // a worktree is its own checkout: its own .gitignore files only
 	}
 	if err := w.dir(start, 0, rules); err != nil && !errors.Is(err, errStop) {
 		return w.res, err
@@ -117,9 +128,44 @@ func or(v, def int) int {
 	return def
 }
 
+// validSub checks a Sub (§2.2) the way the walk would have reached it: a
+// relative path with no link anywhere along it (its resolved path is its own
+// path under the resolved root, foureyes), every component a directory the
+// walk would list (not skipped, ignored or refused), and the last one a
+// repository. rules are the root's (info/exclude); each directory's
+// .gitignore on the way is read as the walk would.
+func (w *walker) validSub(sub string, rules ignoreSet) (string, error) {
+	if filepath.IsAbs(sub) {
+		return "", errors.New("an absolute path")
+	}
+	clean := filepath.ToSlash(filepath.Clean(sub))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", errors.New("outside the project")
+	}
+	if real, err := filepath.EvalSymlinks(w.abs(clean)); err != nil || real != filepath.Join(w.real, filepath.FromSlash(clean)) {
+		return "", errors.New("a link on the way")
+	}
+	parts := strings.Split(clean, "/")
+	for i := range parts {
+		dir, at := path.Join(parts[:i]...), path.Join(parts[:i+1]...)
+		text, err := readIgnore(filepath.Join(w.abs(dir), ".gitignore"))
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", path.Join(dir, ".gitignore"), err)
+		}
+		rules = rules.with(dir, text)
+		if parts[i] == ".git" || skipDirs[parts[i]] || rules.ignored(at, true) || w.refused(at, w.abs(at)) != "" {
+			return "", errors.New("not offered")
+		}
+	}
+	if !w.isRepo(clean) {
+		return "", errors.New("not a repository")
+	}
+	return clean, nil
+}
+
 // stopped says whether the walk must end now, and records why.
 func (w *walker) stopped() bool {
-	if w.ctx.Err() != nil || !time.Now().Before(w.deadline) {
+	if w.ctx.Err() != nil || !nowFunc().Before(w.deadline) {
 		w.res.Incomplete = "took over " + w.timeout.String()
 		return true
 	}
@@ -147,60 +193,78 @@ func (w *walker) isRepo(rel string) bool {
 	return err == nil
 }
 
-// dir lists the directory rel, whose entries sit at depth+1.
+// dir lists the directory rel, whose entries sit at depth+1. It reads the
+// directory in batches and checks the cap and the clock at every entry.
 func (w *walker) dir(rel string, depth int, rules ignoreSet) error {
 	if w.stopped() {
 		return errStop
 	}
-	if b, ok := readSmall(filepath.Join(w.abs(rel), ".gitignore")); ok {
-		rules = rules.with(rel, b)
+	text, err := readIgnore(filepath.Join(w.abs(rel), ".gitignore"))
+	if err != nil { // never read as absent: the directory is left out (reviewer-codex)
+		w.res.Incomplete = path.Join(rel, ".gitignore") + " " + err.Error()
+		return nil
 	}
-	ents, err := os.ReadDir(w.abs(rel))
+	rules = rules.with(rel, text)
+	f, err := os.Open(w.abs(rel))
 	if err != nil {
 		return nil // an unreadable directory is left out, the walk goes on
 	}
-	for i, e := range ents {
-		if i%256 == 255 && w.stopped() {
-			return errStop
+	defer f.Close()
+	for {
+		ents, rerr := f.ReadDir(readBatch)
+		for _, e := range ents {
+			if w.stopped() {
+				return errStop
+			}
+			if err := w.entry(rel, depth, rules, e); err != nil {
+				return err
+			}
 		}
-		name := e.Name()
-		child := path.Join(rel, name) // the slash form; w.abs makes it a file-system path
-		switch t := e.Type(); {
-		case name == ".git":
-			continue
-		case t&fs.ModeSymlink != 0:
-			if w.linkOK(child, rules) {
-				if err := w.add(Entry{Path: child}); err != nil {
-					return err
-				}
-			}
-		case t.IsDir():
-			if skipDirs[name] || rules.ignored(child, true) || w.refused(child, w.abs(child)) != "" {
-				continue
-			}
-			if w.isRepo(child) { // a worktree or a nested repository: one entry (§2.2)
-				if err := w.add(Entry{Path: child, Dir: true, Repo: true}); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := w.add(Entry{Path: child, Dir: true}); err != nil {
-				return err
-			}
-			if depth+1 >= w.maxDepth {
-				w.res.Incomplete = fmt.Sprintf("deeper than %d levels", w.maxDepth)
-				continue
-			}
-			if err := w.dir(child, depth+1, rules); err != nil {
-				return err
-			}
-		case t.IsRegular():
-			if rules.ignored(child, false) || w.refused(child, w.abs(child)) != "" {
-				continue
-			}
+		if rerr != nil { // io.EOF, or a failed read: what was read stays
+			return nil
+		}
+	}
+}
+
+// entry handles one entry of the directory rel.
+func (w *walker) entry(rel string, depth int, rules ignoreSet, e fs.DirEntry) error {
+	name := e.Name()
+	child := path.Join(rel, name) // the slash form; w.abs makes it a file-system path
+	switch t := e.Type(); {
+	case name == ".git":
+		return nil
+	case t&fs.ModeSymlink != 0:
+		if w.linkOK(child, rules) {
 			if err := w.add(Entry{Path: child}); err != nil {
 				return err
 			}
+		}
+	case t.IsDir():
+		if skipDirs[name] || rules.ignored(child, true) || w.refused(child, w.abs(child)) != "" {
+			return nil
+		}
+		if w.isRepo(child) { // a worktree or a nested repository: one entry (§2.2)
+			if err := w.add(Entry{Path: child, Dir: true, Repo: true}); err != nil {
+				return err
+			}
+			return nil
+		}
+		if err := w.add(Entry{Path: child, Dir: true}); err != nil {
+			return err
+		}
+		if depth+1 >= w.maxDepth {
+			w.res.Incomplete = fmt.Sprintf("deeper than %d levels", w.maxDepth)
+			return nil
+		}
+		if err := w.dir(child, depth+1, rules); err != nil {
+			return err
+		}
+	case t.IsRegular():
+		if rules.ignored(child, false) || w.refused(child, w.abs(child)) != "" {
+			return nil
+		}
+		if err := w.add(Entry{Path: child}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -276,16 +340,25 @@ func SubFor(entries []Entry, query string) (string, bool) {
 	return "", false
 }
 
-// readSmall reads a regular file (never through a link) of at most
-// maxIgnoreFile bytes.
-func readSmall(abs string) (string, bool) {
+// readIgnore reads an ignore file: "" when there is none; an error when one
+// exists but cannot be read in full (not a regular file, a link, over
+// maxIgnoreFile, a failed read). The caller fails closed on it, never
+// treating it as absent.
+func readIgnore(abs string) (string, error) {
 	st, err := os.Lstat(abs)
-	if err != nil || !st.Mode().IsRegular() || st.Size() > maxIgnoreFile {
-		return "", false
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "", nil
+	case err != nil:
+		return "", errors.New("cannot be read")
+	case !st.Mode().IsRegular():
+		return "", errors.New("is not a regular file")
+	case st.Size() > maxIgnoreFile:
+		return "", fmt.Errorf("is over %d bytes", maxIgnoreFile)
 	}
 	b, err := os.ReadFile(abs)
 	if err != nil {
-		return "", false
+		return "", errors.New("cannot be read")
 	}
-	return string(b), true
+	return string(b), nil
 }

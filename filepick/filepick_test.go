@@ -3,6 +3,7 @@ package filepick
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -263,5 +264,133 @@ func TestRank(t *testing.T) {
 		if got := names(Rank(es, c.q, recent)); got != c.want {
 			t.Errorf("Rank(%q) = %q, want %q", c.q, got, c.want)
 		}
+	}
+}
+
+// foureyes P2: a Sub whose path goes through a directory link escapes the
+// root; every component must be a real directory inside it, and pass the
+// filters a listed entry passes.
+func TestListSubCannotEscape(t *testing.T) {
+	root, outside := fixture(t)
+	write(t, outside, "repo/.git/HEAD", "ref: x\n")
+	write(t, outside, "repo/outside.txt", "")
+	link(t, outside, filepath.Join(root, "evil"))
+	if res, err := List(context.Background(), Options{Root: root, Sub: "evil/repo"}); err == nil {
+		t.Fatalf("a Sub through a directory link was walked: %q", paths(res.Entries))
+	}
+	write(t, root, "build/r/.git/HEAD", "ref: x\n") // under /build/, ignored by the root's .gitignore
+	write(t, root, "build/r/a.go", "")
+	if _, err := List(context.Background(), Options{Root: root, Sub: "build/r"}); err == nil {
+		t.Fatal("a Sub under an ignored directory was walked")
+	}
+	write(t, root, "secrets/r/.git/HEAD", "ref: x\n")
+	if _, err := List(context.Background(), Options{Root: root, Sub: "secrets/r", Deny: denySecrets(root)}); err == nil {
+		t.Fatal("a Sub under a denied directory was walked")
+	}
+	if _, err := List(context.Background(), Options{Root: root, Sub: ".worktrees/w1"}); err != nil {
+		t.Fatalf("the real worktree: %v", err)
+	}
+}
+
+// foureyes P2/P3: a link's own path passes the filters too, not only its
+// target: a link named .env, or one the ignore rules name, is not offered.
+func TestListLinkOwnPath(t *testing.T) {
+	root, _ := fixture(t)
+	link(t, filepath.Join(root, "README.md"), filepath.Join(root, "docs/.env"))
+	link(t, filepath.Join(root, "README.md"), filepath.Join(root, "docs/ign.log"))
+	write(t, root, "bad\x01.md", "")
+	res, err := List(context.Background(), Options{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths(res.Entries) {
+		if p == "docs/.env" || p == "docs/ign.log" || strings.ContainsRune(p, 1) {
+			t.Errorf("offered %q", p)
+		}
+	}
+	if got := Refused(root, "docs/.env", nil); got != "environment file" {
+		t.Errorf("Refused(docs/.env) = %q", got)
+	}
+	if got := Refused(root, "bad\x01.md", nil); got != "unusual name" {
+		t.Errorf("Refused(control character) = %q", got)
+	}
+}
+
+// reviewer-codex 3, foureyes P3: a .gitignore that cannot be read in full (too
+// large, a link, not a regular file) is never treated as absent: its
+// directory is left out and the list says why (fail closed).
+func TestListUnreadableIgnoreFailsClosed(t *testing.T) {
+	root, outside := fixture(t)
+	write(t, root, "big/.gitignore", strings.Repeat("#", maxIgnoreFile+1))
+	write(t, root, "big/x.txt", "")
+	res, err := List(context.Background(), Options{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(res.Entries); slices.Contains(got, "big/x.txt") || !strings.Contains(res.Incomplete, "big/.gitignore") {
+		t.Fatalf("a .gitignore over the size: %q, incomplete %q", got, res.Incomplete)
+	}
+	// a .gitignore that is a link is never followed, whatever it points at
+	other := t.TempDir()
+	write(t, outside, "rules", "# nothing ignored\n")
+	link(t, filepath.Join(outside, "rules"), filepath.Join(other, "linked/.gitignore"))
+	write(t, other, "linked/y.txt", "")
+	res, err = List(context.Background(), Options{Root: other})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(res.Entries); slices.Contains(got, "linked/y.txt") || !strings.Contains(res.Incomplete, "linked/.gitignore") {
+		t.Fatalf("a linked .gitignore: %q, incomplete %q", got, res.Incomplete)
+	}
+	write(t, root, ".git/info/exclude", strings.Repeat("#", maxIgnoreFile+1))
+	res, err = List(context.Background(), Options{Root: root})
+	if err != nil || len(res.Entries) != 0 || !strings.Contains(res.Incomplete, "exclude") {
+		t.Fatalf("an unreadable info/exclude: %v %d entries %q", err, len(res.Entries), res.Incomplete)
+	}
+}
+
+// reviewer-codex 1, foureyes P3: one big directory is read in batches, so the
+// cap and the deadline hold inside it.
+func TestListBigDirectoryBounded(t *testing.T) {
+	root := t.TempDir()
+	for i := range 700 {
+		write(t, root, fmt.Sprintf("flat/f%03d", i), "")
+	}
+	res, err := List(context.Background(), Options{Root: root, MaxEntries: 300})
+	if err != nil || len(res.Entries) != 300 || !strings.Contains(res.Incomplete, "over 300") {
+		t.Fatalf("cap: %v %d %q", err, len(res.Entries), res.Incomplete)
+	}
+	calls := 0
+	t0 := time.Now()
+	nowFunc = func() time.Time { calls++; return t0.Add(time.Duration(calls) * time.Millisecond) }
+	t.Cleanup(func() { nowFunc = time.Now })
+	res, err = List(context.Background(), Options{Root: root, Timeout: 100 * time.Millisecond})
+	if err != nil || !strings.Contains(res.Incomplete, "took over") || len(res.Entries) >= 200 {
+		t.Fatalf("deadline inside one directory: %v %d entries %q", err, len(res.Entries), res.Incomplete)
+	}
+}
+
+// reviewer-codex 2: ** patterns are matched in bounded time, however many.
+func TestIgnoreManyStarsBounded(t *testing.T) {
+	pat := strings.Repeat("**/a/", 40) + "b"
+	s := ignoreSet{}.with("", pat+"\n")
+	rel := strings.TrimSuffix(strings.Repeat("a/", 12), "/")
+	start := time.Now()
+	if s.ignored(rel, false) {
+		t.Fatal("matched")
+	}
+	if d := time.Since(start); d > 200*time.Millisecond {
+		t.Fatalf("one match took %s", d)
+	}
+}
+
+// foureyes P3: a sibling directory never sees another's rules, even when the
+// parent's slice has room to grow.
+func TestIgnoreSiblingsDoNotShare(t *testing.T) {
+	parent := ignoreSet{}.with("", "one\ntwo\nthree\n") // three rules: room for a fourth
+	x := parent.with("x", "px\n")
+	y := parent.with("y", "py\n")
+	if !x.ignored("x/px", false) || x.ignored("y/py", false) || !y.ignored("y/py", false) {
+		t.Fatalf("siblings share rules: x(x/px)=%v x(y/py)=%v y(y/py)=%v", x.ignored("x/px", false), x.ignored("y/py", false), y.ignored("y/py", false))
 	}
 }

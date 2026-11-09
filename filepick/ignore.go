@@ -52,7 +52,7 @@ func (s ignoreSet) with(base, text string) ignoreSet {
 		r.anchored = strings.Contains(line, "/")
 		line = strings.TrimPrefix(line, "/")
 		for _, seg := range strings.Split(line, "/") {
-			if seg != "" {
+			if seg != "" && !(seg == "**" && len(r.segs) > 0 && r.segs[len(r.segs)-1] == "**") { // **/** is **
 				r.segs = append(r.segs, seg)
 			}
 		}
@@ -106,25 +106,26 @@ func (r ignoreRule) matches(rel string, dir bool) bool {
 
 // matchSegs matches path segments, ** standing for zero or more of them;
 // a trailing ** stands for one or more (logs/** is what is inside logs, not
-// logs itself).
+// logs itself). A table over (pattern, path) positions, so the work is
+// len(pat)*len(segs) whatever the **s (reviewer-codex: no backtracking).
 func matchSegs(pat, segs []string) bool {
-	if len(pat) == 0 {
-		return len(segs) == 0
-	}
-	if pat[0] == "**" {
-		if len(pat) == 1 {
-			return len(segs) > 0
-		}
-		for i := 0; i <= len(segs); i++ {
-			if matchSegs(pat[1:], segs[i:]) {
-				return true
+	n, k := len(pat), len(segs)
+	next := make([]bool, k+1) // pat[i+1:] against segs[j:]
+	next[k] = true            // the empty pattern matches the empty rest
+	for i := n - 1; i >= 0; i-- {
+		cur := make([]bool, k+1)
+		for j := k; j >= 0; j-- {
+			switch {
+			case pat[i] == "**" && i == n-1:
+				cur[j] = j < k
+			case pat[i] == "**":
+				cur[j] = next[j] || j < k && cur[j+1]
+			case j < k:
+				ok, _ := path.Match(pat[i], segs[j])
+				cur[j] = ok && next[j+1]
 			}
 		}
-		return false
+		next = cur
 	}
-	if len(segs) == 0 {
-		return false
-	}
-	ok, _ := path.Match(pat[0], segs[0])
-	return ok && matchSegs(pat[1:], segs[1:])
+	return next[0]
 }
