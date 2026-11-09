@@ -860,3 +860,24 @@ func TestSettingsPageAutoRestart(t *testing.T) {
 		t.Fatalf("right of propose: %q", configText(t, getenv))
 	}
 }
+
+// compose-at-file §5 (the person, Q1): compose.at_path is on the C page, chosen
+// with ←→ between absolute and relative, saved and applied at once.
+func TestSettingsPageAtPath(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	if got := loadBusmonSettings(getenv, settingsFlags{}).AtPath; got != "absolute" {
+		t.Fatalf("default %q, want absolute", got)
+	}
+	m = selectSetting(t, m, "compose.at_path")
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "@ inserts paths as") {
+		t.Fatalf("no row:\n%s", body)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "at_path = \"relative\"") || m.cfg.settings.AtPath != "relative" || !strings.Contains(m.ui.flash, "applied") {
+		t.Fatalf("at_path: %q %q %q", configText(t, getenv), m.cfg.settings.AtPath, m.ui.flash)
+	}
+}

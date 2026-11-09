@@ -71,7 +71,7 @@ var themeChoices = []string{"auto", "dark", "light"}
 // settingChoices are the keys chosen with ←→ among their values, in the
 // page's order (busmon-icons: display.icons joins the theme).
 var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont},
-	"sentinel.reload": {"on", "propose", "off"}}
+	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}}
 
 // settingsMsg is the rows read again, after an open or a write.
 type settingsMsg struct {
@@ -192,6 +192,9 @@ func (m *Model) applySettings(key string) string {
 		return "icons applied and saved"
 	case "display.idle_view_after": // idle view §2: counted from the next poll on
 		cur.IdleView = ns.IdleView
+		return "applied and saved"
+	case "compose.at_path": // compose-at-file §5: the next @ pick uses it
+		cur.AtPath = ns.AtPath
 		return "applied and saved"
 	case "waiting.bell", "waiting.fade", "waiting.popup_after", "waiting.snooze", "recap.auto_after":
 		return "applied and saved"
@@ -965,6 +968,7 @@ var settingHelps = map[string]string{
 	"display.theme":           "auto follows the terminal's background; dark or light forces one",
 	"display.icons":           "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":           "Activity lines replayed when busmon starts; 0 or below: all history",
+	"compose.at_path":         "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
 	"display.idle_hint_after": "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after": "the screensaver: a calm screen after this long without input; 0 = off",
 	"waiting.fade":            "fades a waiting agent in and out and slides the gauges (true colour only)",
