@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -39,13 +38,16 @@ func (l life) String() string {
 // snapLife judges an agent by its verified identity, the rule the dispatcher
 // uses: the recorded pid runs with the recorded start time. A pid gone or
 // reused is dead; no snapshot, no pid, or an unreadable process is unknown.
+// Gone is pidListedNoMore: dispatch.ProcStart's ErrNoProcess does not wrap
+// fs.ErrNotExist, and reading it as unknown made a tab whose old client
+// herdr still showed read alive, never waited on (reload of 2026-11-09).
 func snapLife(s bus.AgentSnapshot, has bool, procStart func(int) (uint64, error)) life {
 	if !has || s.PID <= 0 || s.PIDStart == 0 || procStart == nil {
 		return lifeUnknown
 	}
 	start, err := procStart(s.PID)
 	switch {
-	case errors.Is(err, os.ErrNotExist):
+	case err != nil && pidListedNoMore(err):
 		return lifeDead
 	case err != nil:
 		return lifeUnknown
