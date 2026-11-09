@@ -61,7 +61,16 @@ type adminSource struct {
 	// (/proc); nil = it can. Without it the delete says so (master: §5.1's
 	// limit stated, never refused).
 	procAgents func() bool
+	// memory is what one project's keys take (§3.3, the detail only); nil:
+	// not shown.
+	memory func(ctx context.Context, project string) (bus.MemoryUsage, error)
 }
+
+// Memory read bounds (§3.3): one call per key, so a deadline and a cap.
+const (
+	memoryDeadline = 2 * time.Second
+	memoryMaxKeys  = 50000
+)
 
 // adminRow is one row of the page.
 type adminRow struct {
@@ -232,6 +241,11 @@ func realAdminSource(client *redis.Client, getenv func(string) string) adminSour
 		},
 	}
 	src.quiet, src.remove = realQuiet(client, getenv), realRemove(client)
+	src.memory = func(ctx context.Context, p string) (bus.MemoryUsage, error) {
+		ctx, cancel := context.WithTimeout(ctx, memoryDeadline)
+		defer cancel()
+		return bus.ProjectMemory(ctx, client, p, memoryMaxKeys)
+	}
 	src.procAgents = hasProc
 	// The manager is found and asked inside the page's read, never at
 	// busmon's start, and within its deadline (reviewer-codex).
@@ -600,7 +614,24 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 
 // adminDetail is a project's every column, its streams, its pause or
 // suspend record, its template and workspace (§4 enter).
-func adminDetail(r adminRow, v adminView, now time.Time) []Line {
+// memoryText is the detail's memory value (§3.3): reading, the size, a
+// partial size when the read was cut, "?" with why when it is unknown.
+func memoryText(done bool, u bus.MemoryUsage, err error) string {
+	switch {
+	case !done:
+		return "reading" + GlyphEllipsis
+	case err != nil:
+		return "? (" + Preview(err.Error()) + ")"
+	case u.Refused:
+		return "? (the broker refuses MEMORY)"
+	case u.Read < u.Keys:
+		return fmt.Sprintf("at least %s (%d of %d keys read)", humanBytes(u.Bytes), u.Read, u.Keys)
+	}
+	return fmt.Sprintf("%s (%d %s)", humanBytes(u.Bytes), u.Keys, plural(u.Keys, "key"))
+}
+
+// adminDetail is the detail page; mem is its memory value, "" for none.
+func adminDetail(r adminRow, v adminView, now time.Time, mem string) []Line {
 	var out []Line
 	kv := func(k, val string) {
 		out = append(out, Line{{Text: fmt.Sprintf("%-12s", k), Role: RoleMuted}, {Text: val, Role: RoleText}})
@@ -609,6 +640,9 @@ func adminDetail(r adminRow, v adminView, now time.Time) []Line {
 	if r.onBroker {
 		kv("agents", fmt.Sprintf("%d live of %d recorded (heard from within %s)", r.live, r.total, humanAge(bus.DormantAfter)))
 		kv("keys", strconv.Itoa(r.keys))
+		if mem != "" {
+			kv("memory", mem)
+		}
 		var s []string
 		for _, k := range bus.DetailStreams() {
 			if n, ok := r.streams[k]; ok {
@@ -662,6 +696,38 @@ func adminDetail(r adminRow, v adminView, now time.Time) []Line {
 }
 
 // --- the model
+
+// projectMemoryMsg carries one project's memory read for its detail page.
+type projectMemoryMsg struct {
+	serial int
+	usage  bus.MemoryUsage
+	err    error
+}
+
+// memoryCmd reads a project's memory for the detail page serial (§3.3).
+func (m *Model) memoryCmd(serial int, project string) tea.Cmd {
+	read, ctx := m.cfg.admin.memory, m.cfg.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return func() tea.Msg {
+		u, err := read(ctx, project)
+		return projectMemoryMsg{serial: serial, usage: u, err: err}
+	}
+}
+
+// gotMemory fills the detail page it was read for; a page closed meanwhile
+// takes nothing.
+func (m *Model) gotMemory(msg projectMemoryMsg) {
+	for i := range m.rd.pages {
+		p := &m.rd.pages[i]
+		if p.serial == msg.serial && p.kind == ovProjectDetail && p.proj != nil {
+			p.body = adminDetail(p.projRow, *p.proj, m.now, memoryText(true, msg.usage, msg.err))
+			m.refresh()
+			return
+		}
+	}
+}
 
 // projectsMsg carries the page's read; serial 0 opens the page.
 type projectsMsg struct {
@@ -733,8 +799,14 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 		m.moveSel(p, act, m.readerRows(), func() []int { return p.plines })
 	case ActOpen:
 		if p.sel < len(p.proj.rows) {
-			r := p.proj.rows[p.sel]
-			return m.push(page{kind: ovProjectDetail, title: "Project " + r.name, body: adminDetail(r, *p.proj, m.now), fixed: true})
+			r, v := p.proj.rows[p.sel], p.proj
+			src := m.cfg.admin
+			if !r.onBroker || src == nil || src.memory == nil {
+				return m.push(page{kind: ovProjectDetail, title: "Project " + r.name, body: adminDetail(r, *v, m.now, ""), fixed: true})
+			}
+			cmd := m.push(page{kind: ovProjectDetail, title: "Project " + r.name, body: adminDetail(r, *v, m.now, memoryText(false, bus.MemoryUsage{}, nil)),
+				fixed: true, proj: v, projRow: r})
+			return tea.Batch(cmd, m.memoryCmd(m.rd.top().serial, r.name))
 		}
 	case ActRecap: // R: read again
 		return m.projectsCmd(p.serial)

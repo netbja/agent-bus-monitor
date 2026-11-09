@@ -309,6 +309,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotRecap(msg)
 	case settingsMsg:
 		m.gotSettings(msg)
+	case projectMemoryMsg:
+		m.gotMemory(msg)
 	case projectsMsg:
 		return m.gotProjects(msg)
 	case deleteCheckMsg:

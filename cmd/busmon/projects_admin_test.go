@@ -392,3 +392,63 @@ func TestProjectsPageOpensFirst(t *testing.T) {
 		t.Fatalf("a late read reopened the page: %+v", m.rd.top())
 	}
 }
+
+// projects-admin §3.3 (the person, Q2): the memory a project's keys take is
+// read for the detail only, on enter, in its own command: "reading…", then
+// the size, a partial size when cut, "?" when refused or failed; the list
+// never asks for it.
+func TestProjectDetailMemory(t *testing.T) {
+	pinLocal(t)
+	var asked []string
+	answer := bus.MemoryUsage{Bytes: 3 << 20, Read: 800, Keys: 800}
+	var answerErr error
+	src := adminFixture(shellNow)
+	src.memory = func(_ context.Context, p string) (bus.MemoryUsage, error) {
+		asked = append(asked, p)
+		return answer, answerErr
+	}
+	m := adminShell(t, 140, 40)
+	m.cfg.admin = &src
+	m, cmd := pressCmd(t, m, 'M')
+	m = run(t, m, cmd)
+	if len(asked) != 0 {
+		t.Fatalf("the list asked for memory: %v", asked)
+	}
+	m = keys(t, m, 'j') // trading
+	open := func() (Model, string) { // enter, read, then back to the list for the next case
+		m2, cmd := pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+		m2 = run(t, m2, cmd)
+		text := tokLinesText(m2.rd.top().body)
+		m = keys(t, m2, tea.Key{Code: tea.KeyEscape})
+		return m2, text
+	}
+	if got := memoryText(false, bus.MemoryUsage{}, nil); got != "reading"+GlyphEllipsis { // until the read answers
+		t.Fatalf("before the read: %q", got)
+	}
+	_, text := open()
+	if !strings.Contains(text, "memory      3 MB (800 keys)") || len(asked) != 1 || asked[0] != "trading" {
+		t.Fatalf("read for %v:\n%s", asked, text)
+	}
+	answer = bus.MemoryUsage{Bytes: 2 << 20, Read: 500, Keys: 800}
+	if _, text = open(); !strings.Contains(text, "memory      at least 2 MB (500 of 800 keys read)") {
+		t.Fatalf("partial:\n%s", text)
+	}
+	answer = bus.MemoryUsage{Keys: 800, Refused: true}
+	if _, text = open(); !strings.Contains(text, "memory      ? (the broker refuses MEMORY)") {
+		t.Fatalf("refused:\n%s", text)
+	}
+	answer, answerErr = bus.MemoryUsage{}, errors.New("i/o timeout")
+	if _, text = open(); !strings.Contains(text, "memory      ? (i/o timeout)") {
+		t.Fatalf("failed:\n%s", text)
+	}
+	// a template only: no broker keys, no memory line, nothing asked
+	asked, answerErr = nil, nil
+	for range 3 {
+		m = keys(t, m, 'j')
+	}
+	m2, cmd := pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	m2 = run(t, m2, cmd)
+	if d := m2.rd.top(); !strings.Contains(d.title, "newone") || strings.Contains(tokLinesText(d.body), "memory") || len(asked) != 0 {
+		t.Fatalf("a template only: %q asked %v\n%s", d.title, asked, tokLinesText(d.body))
+	}
+}

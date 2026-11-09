@@ -31,8 +31,8 @@ type page struct {
 	threadPlain string // Y
 	top         int    // the first body line shown
 	built       pageStamp
-	dirty       bool // its own state changed since the build (cursor, thread)
-	fixed       bool // its body was given at open (services, a verdict): never rebuilt
+	dirty       bool   // its own state changed since the build (cursor, thread)
+	fixed       bool   // its body was given at open (services, a verdict): never rebuilt
 	drawer      bool   // ovPlan opened as the plan drawer (p, P): at the wide tier, right of For you (home-inbox-drawer §4.4)
 	side        []Line // ovPlan: the side panel of the selected task (wide tier), drawn beside the body
 
@@ -44,6 +44,8 @@ type page struct {
 
 	ask   askPanel   // ovAsk: the question and option under the cursor
 	spans []lineSpan // ovAsk: each option's lines, "Other" last; nil once answered
+
+	projRow adminRow // ovProjectDetail: the row it shows, rebuilt when its memory is read
 
 	sel      int        // ovPlan: the selected item; ovRecap: the cursor's row
 	expanded bool       // ovPlan: the done group is open
