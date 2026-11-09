@@ -73,8 +73,11 @@ a regular file inside the root that passes every filter. Bounded (depth 12, 50 0
 it says why a list is incomplete. Nothing that looks like a secret (`internal/secretpath`, the rule
 health's `tracked-secrets` check shares) or that roles.toml's shared `Read` denies
 (`peer.SharedReadDenies`) is offered; `Refused` says why for the popup. `Rank` orders matches (name
-prefix, segment prefix, substring, subsequence). Spec:
-`docs/superpowers/specs/2026-11-08-compose-at-file-design.md`.
+prefix, segment prefix, substring, subsequence). `ListDir` serves `@~/` (`ParseHome` refuses `~user`,
+`.`/`..` and empty segments first): one directory of the person's home at a time, never a tree,
+hidden entries at its top (and `~/Library` on macOS) never offered, the directory resolved and
+judged on every component, a file link only for a regular target inside home; `HomeRefused` says
+why. Specs: `docs/superpowers/specs/2026-11-08-compose-at-file-design.md` and its home addendum.
 
 `bus/projects.go` is the exception that proves the rule: `bus.Projects(ctx, client)` is a **package
 function taking a raw client**, not a `*Bus` method, because it answers the question you have
