@@ -263,9 +263,11 @@ if every piece of work goes through a loaded plan, which today it does not.
    one line each), or the plan's `Decide:` tasks only?
 3. **The Projects page counts** (part 6): yes or no?
 4. **Keys**: in A, `a` answers an ask from its row (the reader's answer, opened in place). A merge
-   key would be **new behaviour**: busmon merges nothing today, and master pushes and merges under
-   the forge-delivery decision, so `m` would only send master a directive (`merge PR N`). Add
-   `m` on that basis, or keep today's way, opening the reader and acting there?
+   key would be **new behaviour**. busmon merges nothing today, and under the forge-delivery
+   decision the person keeps the merge: master pushes the reviewed head, and `deliver` never
+   merges. So `m` would run **your own** merge from busmon (the forge's CLI, for example
+   `gh pr merge`), refused unless the PR's head is the one both reviewers approved. Add `m` on
+   that basis, or keep today's way, merging on the forge yourself?
 5. **The person's plan tasks as rows**: since 2026-11-07 they are a header count and one pointer
    in For you, not rows. The new page's YOU section lists them as rows (layouts A and C), and the
    For you panel keeps the pointer; layout B makes them For you rows again. Is that what you want
