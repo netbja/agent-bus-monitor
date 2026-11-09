@@ -47,14 +47,15 @@ func bigCount(n int) []string {
 
 // idleData is what the frames show, computed from the model.
 type idleData struct {
-	need   int      // decide + merge: the header chips' count
-	parts  Line     // "♙ 2 decide   ◆ 1 merge"
-	team   []Line   // the agents not idle, attention first
-	idle   int      // the agents counted as idle (idle, answered, done, none)
-	counts []string // "3 waiting", "1 working", "4 idle"… (narrow), the idle one at idleAt
-	idleAt int
-	next   []Line     // the plan's current task, then "then: <next>"
-	strip  stripParts // the bottom row
+	need    int      // decide + merge: the header chips' count
+	parts   Line     // "♙ 2 decide   ◆ 1 merge"
+	team    []Line   // the agents not idle, attention first
+	idle    int      // the agents counted as idle (idle, answered, done, none)
+	allIdle bool     // no agent in any other state: the row above the strip breathes (idle-breathing)
+	counts  []string // "3 waiting", "1 working", "4 idle"… (narrow), the idle one at idleAt
+	idleAt  int
+	next    []Line     // the plan's current task, then "then: <next>"
+	strip   stripParts // the bottom row
 }
 
 type stripParts struct{ tokens, planName, planCount, clock string }
@@ -108,6 +109,7 @@ func (m Model) idleData() idleData {
 		counts = append(counts, fmt.Sprintf("%d %s", byWord[w], w))
 	}
 	d.counts, d.idleAt = slicesInsert(counts, idleAt, fmt.Sprintf("%d idle", d.idle)), idleAt
+	d.allIdle = len(order) == 0
 	d.next = idleNext(m.snap.planState)
 	sep := " " + GlyphNone + " "
 	d.strip = stripParts{tokens: strings.TrimPrefix(strings.TrimPrefix(tokensTitle(m.snap.budgets, m.snap.holds, m.now), "Tokens"+sep+"today"), sep),
@@ -331,10 +333,45 @@ func idleThread(w, step int) Line {
 	return l
 }
 
+// idleBreathCycle is the breath's length in steps (seconds): dim, muted,
+// bright, muted.
+const idleBreathCycle = 4
+
+// idleBreath is the row above the strip while every agent is idle (the
+// person's choice, "Respiration"): the dotted row w cells wide with one cell
+// that brightens and dims over idleBreathCycle steps, a cell further right
+// each cycle so every cell carries it in turn (burn-in), never more than one
+// lit cell (OLED). Without colour it breathes in two glyphs, the row's dim
+// dot and the bright one.
+func idleBreath(w, step int) Line {
+	if w <= 0 {
+		return nil
+	}
+	step = max(step, 0)
+	x, phase := (step/idleBreathCycle)%w, step%idleBreathCycle
+	glyph, role := GlyphSet, [idleBreathCycle]Role{RoleDim, RoleMuted, RoleAccent, RoleMuted}[phase]
+	if th.Palette() == PaletteNone { // no shade to breathe in: the two dots
+		glyph, role = GlyphNone, RoleDim
+		if phase == 1 || phase == 2 {
+			glyph = GlyphSet
+		}
+	}
+	var l Line
+	if x > 0 {
+		l = append(l, Seg{Text: strings.Repeat(GlyphNone, x), Role: RoleDim})
+	}
+	l = append(l, Seg{Text: glyph, Role: role})
+	if rest := w - x - 1; rest > 0 {
+		l = append(l, Seg{Text: strings.Repeat(GlyphNone, rest), Role: RoleDim})
+	}
+	return l
+}
+
 // idleGrid paints the idle view: the frames side by side when they fit,
 // stacked when they do not, one line each on a narrow screen; the block
-// drifts a cell a minute, the strip up to 4 cells sideways, and the thread
-// above the strip slides a cell a second.
+// drifts a cell a minute, the strip up to 4 cells sideways, and the row
+// above the strip carries the thread (a cell a second) while an agent works,
+// the breath while every one is idle.
 func (m Model) idleGrid() *grid {
 	g := newGrid(m.width, m.height)
 	d := m.idleData()
@@ -347,7 +384,12 @@ func (m Model) idleGrid() *grid {
 	}
 	shift := bounce(k+seed, min(4, max(W-8, 0)))
 	drawLine(g, shift, m.height-1, W-4, idleStripLine(d.strip, W-4), false)
-	drawLine(g, 0, m.height-2, W, idleThread(W, int(max(0, m.now.Sub(m.ui.idleSince))/time.Second)), false)
+	step := int(max(0, m.now.Sub(m.ui.idleSince)) / time.Second)
+	row := idleThread(W, step) // something works: the thread slides (idle-animation)
+	if d.allIdle {
+		row = idleBreath(W, step) // the whole team rests: the row breathes
+	}
+	drawLine(g, 0, m.height-2, W, row, false)
 
 	nb := nextBox(d)
 	// Side by side: you left, team over next right.
