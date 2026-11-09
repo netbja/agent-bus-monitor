@@ -2,21 +2,21 @@
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
 │  ● ask    master    review lot 1? (2 questions)                            4m│
-│  ♙ wait   foureyes  need a decision on the width rule                      6m│
 │╭─ Delete project 'old' ─────────────────────────────────────────────────────╮│
 ││ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch   ││
-╰│ ○ here · herdr: —                                                          │╯
-╭│ This is a DEL, not a reset: streams, consumer groups,                      │╮
-││ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │▲
-││ and the worktrees stay.                                                    │┃
-││ units stay installed on: box2 (dispatch, missions)                         │▼
-╰│ remove them there: agentbus --project old service remove                   │╯
-╭│                                                                            │╮
+││ ○ here · herdr: —                                                          ││
+╰│ This is a DEL, not a reset: streams, consumer groups,                      │╯
+╭│ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │╮
+││ and the worktrees stay.                                                    │▲
+││ units reported on: box2 (dispatch, missions)                               │┃
+││ remove them there: agentbus --project old service remove                   │▼
+╰│ other hosts may keep units the broker no longer records: agentbus service  │╯
+╭│ list there                                                                 │╮
+││                                                                            ││
 ││ backup: no backup                                                          ││
 ││ type old to delete:                                                        ││
 ││ ol▏                                                                        ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│   trading               paused      1/5     —                      2h ago    │
 │   demo                  suspended   0/4     —                      3d ago    │
 │ ▶ old                   stopped     0/2     dispatch ○             40d ago   │
 │   newone                template    —       —                      —         │

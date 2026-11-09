@@ -16,14 +16,14 @@
 │ services and herdr: │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
 │                     │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │                     │
 │   PROJECT           │ and gate leases all go. The template and the worktrees stay.                                 │MPLATE               │
-│   agent-bus-monitor │ units stay installed on: box2 (dispatch, missions)                                           │                     │
+│   agent-bus-monitor │ units reported on: box2 (dispatch, missions)                                                 │                     │
 │   trading           │ remove them there: agentbus --project old service remove                                     │                     │
-│   demo              │                                                                                              │                     │
-│ ▶ old               │ backup: no backup                                                                            │                     │
-│   newone            │ type old to delete:                                                                          │                     │
+│   demo              │ other hosts may keep units the broker no longer records: agentbus service list there         │                     │
+│ ▶ old               │                                                                                              │                     │
+│   newone            │ backup: no backup                                                                            │                     │
+│                     │ type old to delete:                                                                          │                     │
 │                     │ ol▏                                                                                          │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────────────────────────╯                     │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

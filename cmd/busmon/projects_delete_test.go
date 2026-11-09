@@ -333,8 +333,8 @@ func TestProjectsDeleteNamesUnitHosts(t *testing.T) {
 		panel, end string
 	}{
 		{[]unitHosts{{host: "vdr", kinds: []string{"dispatch", "missions"}}}, nil,
-			"units stay installed on: vdr (dispatch, missions)", "units stay on vdr: agentbus --project old service remove there"},
-		{nil, nil, "units: this machine only", ""},
+			"units reported on: vdr (dispatch, missions)", "units reported on vdr: agentbus --project old service remove there"},
+		{nil, nil, "units reported: this machine only", ""},
 		{nil, errors.New("i/o timeout"), "units on other hosts: ? (i/o timeout)", ""},
 	} {
 		w := newDeleteWorld(t)
@@ -347,13 +347,16 @@ func TestProjectsDeleteNamesUnitHosts(t *testing.T) {
 		if screen := w.m.grid().plain(); !strings.Contains(screen, c.panel) {
 			t.Fatalf("%q: panel:\n%s", c.panel, screen)
 		}
+		if !strings.Contains(w.m.grid().plain(), "other hosts may keep units the broker no longer records") {
+			t.Fatalf("no caveat:\n%s", w.m.grid().plain())
+		}
 		if len(c.hosts) > 0 && !strings.Contains(w.m.grid().plain(), "agentbus --project old service remove") {
 			t.Fatalf("no way to remove them:\n%s", w.m.grid().plain())
 		}
 		w.press(t, 'n')
 		w.typeName(t, "old")
 		w.press(t, tea.Key{Code: tea.KeyEnter})
-		if !noticeHas(w.m, "deleted 12 keys of old") || c.end != "" && !noticeHas(w.m, c.end) || c.end == "" && noticeHas(w.m, "units stay") {
+		if !noticeHas(w.m, "deleted 12 keys of old") || c.end != "" && !noticeHas(w.m, c.end) || c.end == "" && noticeHas(w.m, "units reported on") {
 			t.Fatalf("%q: notices %v", c.end, w.m.notice.queue)
 		}
 	}
