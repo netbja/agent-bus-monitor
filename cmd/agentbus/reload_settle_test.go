@@ -3,13 +3,17 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 )
 
 // settlingHerdr is a herdr seen right after reload's SIGTERM: for the first
@@ -63,11 +67,14 @@ func settleDeps(t *testing.T, h *settlingHerdr, snaps func() map[string]bus.Agen
 	}
 }
 
+// ifDead is dispatch.ProcStart's answer for a pid /proc lists no more:
+// ErrNoProcess, which does not wrap fs.ErrNotExist (the reload of foureyes
+// on 2026-11-09 read its dead pid as unknown, and the tab as alive).
 func ifDead(pid int) error {
 	if pid == 5151 {
 		return nil
 	}
-	return os.ErrNotExist
+	return fmt.Errorf("pid %d: %w", pid, dispatch.ErrNoProcess)
 }
 
 // The order of events reload meets (bug of 2026-10-28, v0.23.0): the old pid
@@ -111,6 +118,10 @@ func TestRelaunchRoleFailsWhenTheTabStaysBusy(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "skipped (busy)") {
 		t.Fatalf("err = %v, want the busy verdict named", err)
 	}
+	// the time waited, not the reads times the step: the first read waits none
+	if want := "19.5s after the old process exited (40 reads)"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
 	if got := h.ran(); len(got) != 0 {
 		t.Fatalf("a busy tab was relaunched: %q", got)
 	}
@@ -147,5 +158,31 @@ func TestRelaunchRoleWaitsThroughAnUnknownTab(t *testing.T) {
 	}
 	if got := strings.Join(h.ran(), "\n"); !strings.Contains(got, "pane run w4:p2s /r/scripts/agent-launch coder demo") {
 		t.Fatalf("no relaunch after the tab became readable:\n%s", got)
+	}
+}
+
+// A pid the real dispatch.ProcStart finds gone is dead to snapLife, so a tab
+// whose old client still shows in herdr reads busy (waited on), never alive
+// (the reload of foureyes, 2026-11-09 20:24: "still reads alive 500ms after
+// the old process exited").
+func TestSnapLifeReadsAGonePidDead(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("dispatch.ProcStart reads /proc")
+	}
+	c := exec.Command("true")
+	if err := c.Run(); err != nil {
+		t.Fatal(err)
+	}
+	gone := c.Process.Pid // run and reaped: /proc lists it no more
+	if _, err := dispatch.ProcStart(gone); !errors.Is(err, dispatch.ErrNoProcess) {
+		t.Skipf("pid %d was reused already (%v)", gone, err)
+	}
+	if got := snapLife(bus.AgentSnapshot{PID: gone, PIDStart: 1}, true, dispatch.ProcStart); got != lifeDead {
+		t.Fatalf("a gone pid reads %s, want dead", got)
+	}
+	// anything else proves nothing: unknown, as before
+	odd := func(int) (uint64, error) { return 0, errors.New("permission denied") }
+	if got := snapLife(bus.AgentSnapshot{PID: gone, PIDStart: 1}, true, odd); got != lifeUnknown {
+		t.Fatalf("an unreadable pid reads %s, want unknown", got)
 	}
 }

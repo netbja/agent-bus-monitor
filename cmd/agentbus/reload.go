@@ -483,8 +483,8 @@ func relaunchRole(d upDeps, project, role, session string, stdout io.Writer) err
 			if j.Note != "" {
 				why += " (" + j.Note + ")"
 			}
-			return fmt.Errorf("its tab %s still reads %s %s after the old process exited; nothing was relaunched",
-				tab.Name, why, settleEvery*time.Duration(try))
+			return fmt.Errorf("its tab %s still reads %s %s after the old process exited (%d reads); nothing was relaunched",
+				tab.Name, why, settleEvery*time.Duration(try-1), try) // the first read comes before any wait
 		}
 		sleep(settleEvery)
 	}
