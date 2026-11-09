@@ -45,7 +45,7 @@ func TestModelCatalogueReader(t *testing.T) {
 	if len(in.Findings) != 3 {
 		t.Errorf("findings %v (ok, partial, untiered and unknown are none)", keys)
 	}
-	if len(in.OldSources) != 1 || in.OldSources[0].Provider != "moonshot" || !strings.Contains(in.OldSources[0].Hint, "agentbus models --refresh") {
+	if len(in.OldSources) != 1 || in.OldSources[0].Provider != "moonshot" || in.OldSources[0].Hint != "agentbus models --refresh (Kimi's list is read daily; an old one means the reads fail)" { // its own hint, not the fallback (foureyes P3)
 		t.Errorf("old sources %+v", in.OldSources)
 	}
 	if len(in.FailedReads) != 1 || in.FailedReads[0].Provider != "google" || in.FailedReads[0].For < 72*time.Hour-time.Minute {

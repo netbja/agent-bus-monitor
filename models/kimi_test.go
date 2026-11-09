@@ -16,7 +16,9 @@ func TestKimiOneTier(t *testing.T) {
 			t.Errorf("%s: tier %q, want frontier", id, got)
 		}
 	}
-	for _, id := range []string{"gpt-6-astra", "kimchi"} {
+	// the rule is anchored (foureyes P3): another provider's id with a Kimi
+	// name inside is not frontier
+	for _, id := range []string{"gpt-6-astra", "kimchi", "acme-k2-turbo", "acme/kimi-code/k3", "my-kimi-for-coding"} {
 		if got := tiers.Tier(Row{ID: id}); got == Frontier {
 			t.Errorf("%s: frontier, not a Kimi model", id)
 		}
