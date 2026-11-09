@@ -67,10 +67,10 @@ type adminSource struct {
 }
 
 // Memory read bounds (§3.3): one call per key, so a deadline and a cap.
-const (
-	memoryDeadline = 2 * time.Second
-	memoryMaxKeys  = 50000
-)
+// memoryDeadline is a variable for its test only.
+var memoryDeadline = 2 * time.Second
+
+const memoryMaxKeys = 50000
 
 // adminRow is one row of the page.
 type adminRow struct {
@@ -614,9 +614,11 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 
 // adminDetail is a project's every column, its streams, its pause or
 // suspend record, its template and workspace (§4 enter).
-// memoryText is the detail's memory value (§3.3): reading, the size, a
-// partial size when the read was cut, "?" with why when it is unknown.
+// memoryText is the detail's memory value (§3.3): reading, the estimate
+// ("about": each key is sampled), the forms of a cut read, "?" with why when
+// it is unknown.
 func memoryText(done bool, u bus.MemoryUsage, err error) string {
+	size := "about " + humanBytes(u.Bytes)
 	switch {
 	case !done:
 		return "reading" + GlyphEllipsis
@@ -624,10 +626,14 @@ func memoryText(done bool, u bus.MemoryUsage, err error) string {
 		return "? (" + Preview(err.Error()) + ")"
 	case u.Refused:
 		return "? (the broker refuses MEMORY)"
+	case u.ScanCut == "cap":
+		return fmt.Sprintf("%s for the first %d keys; the scan stopped (%d keys)", size, u.Read, memoryMaxKeys)
+	case u.ScanCut != "":
+		return fmt.Sprintf("%s for the first %d keys; the scan stopped (%s)", size, u.Read, memoryDeadline)
 	case u.Read < u.Keys:
-		return fmt.Sprintf("at least %s (%d of %d keys read)", humanBytes(u.Bytes), u.Read, u.Keys)
+		return fmt.Sprintf("%s for %d of %d keys", size, u.Read, u.Keys)
 	}
-	return fmt.Sprintf("%s (%d %s)", humanBytes(u.Bytes), u.Keys, plural(u.Keys, "key"))
+	return fmt.Sprintf("%s (%d %s)", size, u.Keys, plural(u.Keys, "key"))
 }
 
 // adminDetail is the detail page; mem is its memory value, "" for none.
