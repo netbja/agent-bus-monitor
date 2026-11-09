@@ -30,6 +30,18 @@ The home directory is not the project:
 - No home directory (an empty or relative `$HOME`, or one that does not exist): the popup says
   `no home directory` and offers nothing. The rule is the same as `peer.NewDenyMatcher`, which
   fails closed on a home that is not absolute.
+- **The query stays inside home, as written and as resolved** (foureyes, reviewer-codex). The
+  path after `~/` is split on `/`. Any `.` or `..` segment, an empty segment (`~//x`), or a
+  backslash refuses it with `type the path yourself`, and nothing is listed. So
+  `@~/Documents/../.ssh/` and `@~/../` never list anything. Every rule below is then judged on
+  that path, which is already clean, never on the raw text.
+- **The directory to list is resolved before it is read.** Its path is resolved with
+  `filepath.EvalSymlinks` and must lie inside the resolved home (a symlinked home included).
+  Each component of the **resolved** path, relative to home, must pass rules 1–5 of part 3:
+  not hidden at the top, not a `secretpath` kind, not denied, not unusual, not skipped. A link
+  anywhere along the typed path is followed only if its resolved place passes, so `~/docs ->
+  ~/.ssh`, `~/etc -> /etc` and `~/a/b` with `a -> ~/.aws` are all refused with `not offered`.
+  The rule is step 1's for `Sub`, measured against home.
 
 ## 3. What it lists: one directory at a time
 
@@ -42,7 +54,10 @@ shell completes a path:
   the names alone.
 
 One directory read is bounded by the spec's limits: 50 000 entries and 2 s, read in a `tea.Cmd`,
-with `reading…` shown until it answers. No depth limit is needed. `tab` on a directory descends
+with `reading…` shown until it answers. The directory is read **in batches**
+(`File.ReadDir(256)`), with the cap and the clock checked at every entry, as in step 1. A huge
+directory is never read whole before a bound can act (reviewer-codex, foureyes). No depth limit
+is needed. `tab` on a directory descends
 (the query becomes `~/Documents/`), and `enter` inserts it, as in the project (§8 Q5).
 
 **What is never offered:**
@@ -52,6 +67,13 @@ with `reading…` shown until it answers. No depth limit is needed. `tab` on a d
    yourself`. That one rule removes every credential store in part 1, and any the list does not
    name. It is the recommendation in part 6, Q1. Hidden entries **below** the top
    (`~/Projects/x/.github/`) are listed, and pass through the filters below.
+
+   This holds for hidden names only. **On macOS**, `~/Library` holds the Keychains, cookies and
+   applications' tokens (`~/Library/Application Support/<app>`) under names with no dot, so
+   `~/Library` is treated like a hidden entry at the top on darwin: never listed or descended
+   into (foureyes). Other systems have no such directory at the top of home. A credential an
+   application keeps under a plain name elsewhere is not caught by rule 1. Rules 2–3 still apply
+   to it.
 2. **`secretpath`** on the path relative to home, which also catches `.ssh`, `.aws`, `.gnupg` and
    `.git` deeper down, and the key and environment file families.
 3. **roles.toml's shared `Read` denies**, matched against the absolute path. `~/` patterns are
@@ -89,9 +111,9 @@ Following the person's answer to §8 Q1 (absolute paths), and part 6, Q2:
 
 ## 6. Questions for the person
 
-1. **Hidden entries at the top of home.** Never offered (recommended), or offered with a list of
-   exceptions you name (for example `~/.config/someapp/`)? Each exception would need its own
-   filter review.
+1. **Hidden entries at the top of home** (and `~/Library` on macOS). Never offered
+   (recommended), or offered with a list of exceptions you name (for example
+   `~/.config/someapp/`)? Each exception would need its own filter review.
 2. **The inserted form.** The absolute path, with `~/…` shown only in the popup (recommended), or
    `~/…` in the text as typed? `~/…` is shorter to read, but an agent must expand it, and an agent
    on another host has a different home.
@@ -102,7 +124,14 @@ Following the person's answer to §8 Q1 (absolute paths), and part 6, Q2:
   directories; **no** `.ssh/`, `.config/`, `.netrc`, `.env`; an exact `@~/.ssh/config` says
   `hidden in your home` and inserts nothing.
 - One level only: `@~/Documents/` lists `Documents`' entries and nothing deeper. A directory of
-  60 000 entries says `list incomplete`.
+  60 000 entries says `list incomplete`, and with a stubbed clock the read stops at the deadline
+  inside that one directory, having read fewer than all of its entries (batched reads).
+- Traversal: `@~/Documents/../.ssh/`, `@~/../`, `@~/./.aws/`, `@~//x` and a backslash are
+  refused with `type the path yourself`, and nothing is read.
+- Links on the typed path: `~/docs -> ~/.ssh`, `~/etc -> /etc` and `~/a/b` with `a -> ~/.aws`
+  are refused (`not offered`); `~/proj -> ~/Projects/x` lists `x`'s entries.
+- On darwin, `~/Library` is neither listed nor descended into; elsewhere `~/Library` is an
+  ordinary directory.
 - Deeper hidden entries pass the filters: `~/p/x/.github/ci.yml` is offered, while
   `~/p/x/.git/config` and `~/p/x/.env` are not.
 - Links: `~/notes -> ~/.ssh/id_ed25519` is refused, `~/out -> /etc/passwd` is refused (outside
