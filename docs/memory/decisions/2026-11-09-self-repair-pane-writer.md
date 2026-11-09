@@ -5,9 +5,9 @@ scope: project
 kind: decision
 status: active
 created: 2026-11-09
-last_verified: unknown
+last_verified: 2026-11-09
 author: coder
-confidence: unknown
+confidence: verified
 ---
 
 ## Finding/decision
@@ -46,8 +46,9 @@ What the person decided with it (same answers):
   spent budget.
 - **Start at login is an option**, off by default, which amends the
   [project services decision](2026-10-14-project-services.md)'s "never at login": one Go
-  interface, one backend per platform (systemd `--user enable`, a macOS LaunchAgent with
-  `RunAtLoad`, XDG autostart on a Linux without systemd; Windows left open), and **no linger**:
+  interface, one backend per platform: systemd `--user enable`, and a macOS LaunchAgent with
+  `RunAtLoad`. A Linux without systemd and Windows are left open, since the services still need a
+  manager there: the "never a hidden process" rule of that decision is **not** lifted. **No linger**:
   without a session, herdr and the workspace are not open, so there is nothing to relaunch into.
 
 - *Why:* a dead agent today waits for an AI's turn (master, sentinel) or the person's hand. If

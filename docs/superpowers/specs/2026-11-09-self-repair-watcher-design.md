@@ -188,9 +188,13 @@ type LoginStart interface {
   option is on, and `systemctl --user enable`; `disable` when it goes off.
 - **macOS:** a LaunchAgent in `~/Library/LaunchAgents` with `RunAtLoad`. macOS has no `/proc`, so
   the watcher relaunches nothing there until a process identity exists for it (part 6).
-- **Linux without systemd** (OpenRC, runit, …): an XDG autostart entry in
-  `~/.config/autostart`, which starts `agentbus service start <p>` with the desktop session,
-  whatever the init system.
+- **Linux without systemd** (OpenRC, runit, …): **not covered**. The person suggested XDG
+  autostart, but `agentbus service start` needs a service manager: without `systemd --user` it
+  exits 1 and points to herdr tabs (`service.Local`). Running the dispatcher outside a manager is
+  what the project services decision forbids ("an explicit fallback, never a hidden process", no
+  `nohup`), and this amendment does not lift that (foureyes). Covering it needs a supervision
+  story of its own (a user service of the system's init, or a second amendment to that
+  decision). It is an open question for the person (part 8).
 - **Windows:** not covered. One lead is WSL2 with systemd, woken by a scheduled task at logon.
   This is an open question for the person (part 8).
 
@@ -282,8 +286,9 @@ useful alone first, and nothing acts before step 7.
    check: kill an idle agent's client (SIGTERM) and watch it come back, resumed, in a new pane.
 8. **R3 and R4:** hold relaunches while the network is lost; the notice when the workspace is not
    open after a start.
-9. **Start at login:** the `LoginStart` interface and its backends (systemd, macOS LaunchAgent,
-   XDG autostart), wired to the step 3 option.
+9. **Start at login:** the `LoginStart` interface and its two backends (systemd, macOS
+   LaunchAgent), wired to the step 3 option. Elsewhere, enabling the option is refused with the
+   reason ("no service manager to start at login").
 10. **macOS process identity** (later), so R1 can act where there is no `/proc`.
 
 ## 8. The person's answers (2026-11-09)
@@ -306,8 +311,14 @@ The person also noted that R1's trigger used `snapLife` while part 6 required on
 two now agree: `snapLife` delegates to `pidListedNoMore` (PR 388), and a test guards it (4.1,
 part 6).
 
-**Still open, for the person:** start at login on **Windows** (4.4). The lead is WSL2 with
-systemd, woken by a scheduled task at logon.
+**Still open, for the person** (4.4):
+
+- start at login on **Windows**. The lead is WSL2 with systemd, woken by a scheduled task at
+  logon;
+- start at login on a **Linux without systemd**. The suggested XDG autostart cannot start the
+  services, because `agentbus service start` needs a manager, and running the dispatcher outside
+  one is what the services decision forbids. Covering it needs a supervision story (the init
+  system's own user services, or an amendment to that decision).
 
 ## 9. Not in this spec
 
