@@ -68,6 +68,9 @@ func TestServiceTokens(t *testing.T) {
 	if c := serviceTokens(env(map[string]string{"CLAUDE_CONFIG_DIR": "/cfg"}), nohome); c.Root != "/cfg/projects" || c.CodexRoot != "" {
 		t.Errorf("no home, CLAUDE_CONFIG_DIR only: Claude counted, Codex not: %+v", c)
 	}
+	if c := serviceTokens(env(map[string]string{"CODEX_HOME": "/cx"}), nohome); c.Root != "" || c.CodexRoot != "/cx/sessions" || c.Every == 0 {
+		t.Errorf("no home, CODEX_HOME only: Codex counted, Claude not (reviewer-codex): %+v", c)
+	}
 	if c := serviceTokens(env(map[string]string{"AGENT_BUS_TOKENS": "0"}), home); c.Root != "" || c.CodexRoot != "" {
 		t.Errorf("off: %+v", c)
 	}

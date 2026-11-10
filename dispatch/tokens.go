@@ -20,7 +20,7 @@ import (
 // codex-token-attribution) is counted from its rollouts (tokens.CodexScan),
 // on the budget the Claude scan left.
 
-// TokensConfig is the tokens pass's policy; an empty Root turns it off.
+// TokensConfig is the tokens pass's policy; with neither root it is off.
 type TokensConfig struct {
 	Root      string         // Claude Code's projects directory (~/.claude/projects)
 	CodexRoot string         // Codex's sessions directory ($CODEX_HOME/sessions); "" counts no Codex session
@@ -47,7 +47,7 @@ type tokensState struct {
 // {p}:tokens when due; a lost lease is ErrNotHolder.
 func (l *loop) tokensPass(ctx context.Context, snaps map[string]bus.AgentSnapshot) error {
 	c := l.cfg.Tokens
-	if c.Root == "" {
+	if c.Root == "" && c.CodexRoot == "" {
 		return nil
 	}
 	s := &l.tokens
@@ -102,7 +102,7 @@ func provedSessions(snaps map[string]bus.AgentSnapshot) map[string]bus.SessionRe
 func countSessions(scan *tokens.ClaudeScan, codex *tokens.CodexScan, root, codexRoot string, recs map[string]bus.SessionRecord, b tokens.Budget, now time.Time, loc *time.Location) (map[string]bus.TokenRow, bool) {
 	cutoff := now.Add(-tokensDays * 24 * time.Hour)
 	claudeFiles := recentFiles(recs, cutoff, func(id string, rec bus.SessionRecord) ([]string, error) {
-		if rec.Client == "codex" {
+		if rec.Client == "codex" || root == "" { // no Claude directory: never a glob relative to the working directory
 			return nil, nil
 		}
 		return tokens.SessionFiles(root, id) // the id is validated before any path is built

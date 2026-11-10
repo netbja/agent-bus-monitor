@@ -242,13 +242,15 @@ func serviceTokens(getenv func(string) string, home func() (string, error)) disp
 		}
 		return filepath.Join(h, under)
 	}
-	base := dir("CLAUDE_CONFIG_DIR", ".claude")
-	if base == "" {
+	base, codex := dir("CLAUDE_CONFIG_DIR", ".claude"), dir("CODEX_HOME", ".codex")
+	if base == "" && codex == "" {
 		return dispatch.TokensConfig{}
 	}
-	c := dispatch.TokensConfig{Root: filepath.Join(base, "projects"), Every: 5 * time.Minute,
-		Budget: tokens.Budget{Files: 64, Bytes: 128 << 20}}
-	if codex := dir("CODEX_HOME", ".codex"); codex != "" {
+	c := dispatch.TokensConfig{Every: 5 * time.Minute, Budget: tokens.Budget{Files: 64, Bytes: 128 << 20}}
+	if base != "" {
+		c.Root = filepath.Join(base, "projects")
+	}
+	if codex != "" { // either one counts alone (reviewer-codex)
 		c.CodexRoot = filepath.Join(codex, "sessions")
 	}
 	return c

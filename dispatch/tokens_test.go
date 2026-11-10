@@ -121,6 +121,47 @@ func TestTokensPassCountsProvedCodexSessions(t *testing.T) {
 	}
 }
 
+// With Codex's root alone (no Claude directory), the pass still counts the
+// proved Codex sessions (reviewer-codex).
+func TestTokensPassCodexRootAlone(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("lease %v %v", ok, err)
+	}
+	codex := t.TempDir()
+	now := time.Now().UTC()
+	today, day := now.Format("2006-01-02T")+"10:00:00Z", now.Format("2006-01-02")
+	const id = "01a1a38b-a635-76d0-bbc6-348e3c47e603"
+	dir := filepath.Join(codex, now.Format("2006/01/02"))
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "rollout-x-"+id+".jsonl"), []byte(codexLine(today, 300, 20)), 0o644)
+	snaps := map[string]bus.AgentSnapshot{"reviewer-codex": {PID: 12, IdentSession: id, Provider: "openai", Client: "codex"}}
+	l := &loop{b: b, token: "tok-holder", cfg: Config{Log: io.Discard, Tokens: TokensConfig{CodexRoot: codex, Every: time.Minute,
+		Budget: tokens.Budget{Files: 64, Bytes: 1 << 20}, Location: time.UTC}}}
+	if err := l.tokensPass(ctx, snaps); err != nil {
+		t.Fatal(err)
+	}
+	rows, _, ok, _ := b.Tokens(ctx)
+	if !ok || rows[bus.TokenKey(day, "reviewer-codex", "openai")] != (bus.TokenRow{In: 300, Out: 20, N: 1}) {
+		t.Fatalf("ok=%v rows %v", ok, rows)
+	}
+}
+
+// No Claude directory: a Claude record never globs the working directory.
+func TestTokensPassNoClaudeRootReadsNoRelativePath(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	now := time.Now().UTC()
+	os.MkdirAll(filepath.Join(cwd, "-p"), 0o755)
+	os.WriteFile(filepath.Join(cwd, "-p", "0198e5c4-coder-1111.jsonl"), []byte(transcriptLine(now.Format("2006-01-02T")+"10:00:00Z", "m1", 10, 1)), 0o644)
+	recs := map[string]bus.SessionRecord{"0198e5c4-coder-1111": {Agent: "coder", Provider: "anthropic", Client: "claude-code"}}
+	rows, _ := countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), "", t.TempDir(), recs, tokens.Budget{Files: 64, Bytes: 1 << 20}, now, time.UTC)
+	if len(rows) != 0 {
+		t.Errorf("rows %v: a transcript under the working directory was read", rows)
+	}
+}
+
 // Codex reads on the budget the Claude scan left: with room for one file,
 // the Claude transcript takes it and the pass is partial.
 func TestTokensPassCodexSharesTheBudget(t *testing.T) {
