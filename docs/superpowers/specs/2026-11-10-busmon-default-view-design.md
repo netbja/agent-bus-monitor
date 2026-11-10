@@ -124,6 +124,11 @@ Both features read the same `lastInput`; each has its own delay. Three rules mak
    a reader stack holding only the default view's page is not "a page open" for it. So a person
    whose default view is Requests gets Requests after the first delay and the idle view over it
    after the second. Any other page still holds the idle view off, as today (§9 Q5).
+   **The exception lives in `enterIdle` only, never inside `busyForModal()`** (foureyes): that
+   predicate also holds back the waiting reminder (`maybeReminder`), the automatic recap
+   (`tea_signals.go`) and the tour (`tour.go`), and they keep waiting while any page is open, the
+   default view's included, as today. A test checks that a reminder due while the default view's
+   page is shown does not open.
 2. **The return can happen under the idle view.** The return ignores `m.ui.idle` (it is in
    `busyForModal()`, not in `busyWriting()`); the model keeps polling under the view, so going
    back is drawn on the first frame after waking. The waking input still does nothing else (idle
