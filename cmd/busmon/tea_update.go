@@ -160,8 +160,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:
 		cmd = m.pushPlan()
-	case ActShowDone: // the Plan tab: show or fold DONE
-		m.ui.planExpanded = !m.ui.planExpanded
+	case ActShowDone: // Work: the plan's drawer with DONE shown
+		cmd = m.openPlanDone()
 	case ActTokens:
 		cmd = m.push(page{kind: ovTokens})
 	case ActSettings:
@@ -263,10 +263,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		if _, ok := s.board[key]; ok {
 			return m.push(page{kind: ovTask, key: key})
 		}
-	case PanelPlan:
-		if task, ok := strings.CutPrefix(key, "task:"); ok {
-			return m.push(page{kind: ovPlanTask, key: task})
-		}
+	case PanelWork:
+		return m.openWorkRow(key)
 	case PanelRequests:
 		return m.openRequestRow(key)
 	}
@@ -337,10 +335,9 @@ func (m *Model) copySelected() tea.Cmd {
 			_, _, plain := taskDetail(e, key, m.now)
 			return m.copy(plain, "task")
 		}
-	case PanelPlan: // a task's page text; the done toggle copies nothing
-		if task, ok := strings.CutPrefix(key, "task:"); ok {
-			_, _, plain := planTaskDetail(s.planState, task, m.now)
-			return m.copy(plain, "task")
+	case PanelWork:
+		if text, what := m.workCopy(key); text != "" {
+			return m.copy(CopyText(text), what)
 		}
 	case PanelRequests:
 		for _, r := range s.requests {
@@ -430,7 +427,10 @@ func (m *Model) switchTab(n int) {
 	if m.layout.Tier == TierNarrow {
 		tabs = narrowPanels
 	}
-	if n < len(tabs) {
+	switch {
+	case n == len(tabs): // 4 (6 at the narrow tier): Work, on NEXT (correction 8)
+		m.focusWorkNext()
+	case n < len(tabs):
 		m.focusPanel(tabs[n])
 	}
 }
@@ -438,7 +438,11 @@ func (m *Model) switchTab(n int) {
 // stepTab moves the focus to the lower panel's next or previous tab, wrapping
 // as herdr's own next and previous tab do (busmon-keys).
 func (m *Model) stepTab(next bool) {
-	i := slices.Index(lowerTabs, m.ui.focus)
+	focus := m.ui.focus
+	if focus == PanelRequests { // Work's sub-view
+		focus = PanelWork
+	}
+	i := slices.Index(lowerTabs, focus)
 	if i < 0 {
 		return
 	}
@@ -470,6 +474,9 @@ func (m *Model) escape() {
 	switch l := m.lists.of(m.ui.focus); {
 	case m.ui.expanded != "":
 		m.collapse()
+	case m.ui.focus == PanelRequests: // Work's sub-view: back to Work, on its line
+		m.focusPanel(PanelWork)
+		m.lists.work.Select(workFoldBetween)
 	case l.Selected() != "":
 		l.ClearSelection()
 	case !act.Live():

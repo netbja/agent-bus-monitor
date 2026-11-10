@@ -58,6 +58,7 @@ const (
 	ovProjects      // projects (M): every project of this host, read once (projects_admin.go)
 	ovProjectDetail // one project of the Projects page: every column, read only
 	ovTriageEnd     // the triage walk's end page (busmon-queue-triage §4.4), its key the next plan task
+	ovIdea          // an idea of the Work tab: what it is and where it lives, its key the note's id
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.
@@ -312,7 +313,7 @@ func plainLine(e bus.Event, et time.Time) string {
 	return ts + " " + e.Message
 }
 
-var panelNames = map[PanelID]string{PanelAgents: "Agents", PanelActivity: "Activity", PanelBoard: "Board", PanelRequests: "Requests", PanelPlan: "Plan"}
+var panelNames = map[PanelID]string{PanelAgents: "Agents", PanelActivity: "Activity", PanelBoard: "Board", PanelRequests: "Requests", PanelWork: "Work"}
 
 // panelLabel is a panel's name as the shell shows it, For you included.
 func panelLabel(p PanelID) string {

@@ -99,7 +99,6 @@ type uiState struct {
 	flashErr       bool
 	expanded       string                  // the row expanded in place (its list key), "" none
 	expandIn       PanelID                 // the list it is in: Activity or For you
-	planExpanded   bool                    // the Plan tab shows its done tasks (A11)
 	walk           *walk                   // the triage walk in progress (T, triage.go), nil when none
 	reqOpen        reqOpen                 // the Requests view's expanded groups and folded section
 	prioBusy       bool                    // a priority write is in flight: + and - wait for its answer
@@ -136,9 +135,8 @@ type uiState struct {
 // shellLists are the shell's lists. They live behind a pointer: the Model is
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
-	forYou, agents, activity, board, requests, plan listState
+	forYou, agents, activity, board, requests, work listState
 	reqView                                         reqView // the Requests view refresh computed: the layout, fillLists and the header read it
-	planSide                                        []Line  // the Plan tab's side panel (wide tier), drawn inside its frame at the right (home-inbox-drawer §4.3)
 }
 
 func (ls *shellLists) of(p PanelID) *listState {
@@ -153,8 +151,8 @@ func (ls *shellLists) of(p PanelID) *listState {
 		return &ls.board
 	case PanelRequests:
 		return &ls.requests
-	case PanelPlan:
-		return &ls.plan
+	case PanelWork:
+		return &ls.work
 	}
 	return nil
 }
@@ -199,7 +197,7 @@ func newShell(cfg shellConfig) Model {
 		m.feed.unread.floor = c.LastVisit
 	}
 	m.lists.activity.SetTail(true)
-	for _, p := range narrowPanels {
+	for _, p := range shellPanels {
 		m.lists.of(p).SetHue(panelHue[p])
 	}
 	return m

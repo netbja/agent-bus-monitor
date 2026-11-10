@@ -427,7 +427,9 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   nothing is **hidden** from the panel and from `@all` (`a` shows it), never relabelled; `d`/`Delete`
   then `y` forgets an agent (`Bus.ForgetAgent`, `agentbus agents forget`, refused while it listens
   or declared within 10 min) or closes an untracked thread with a `human=yes`, `wake=no` reply
-  (`Bus.HumanClose`). The Requests tab answers who owes whom an answer (spec
+  (`Bus.HumanClose`). The Work tab (`3`, requests-plan-redesign; `work_model.go` the one producer,
+  `work_view.go` the rows) lists who owes what: YOU, TEAM, NEXT, IDEAS; its "between agents" line
+  opens the Requests list, which answers who owes whom an answer (spec
   `docs/superpowers/specs/2026-10-28-requests-view-design.md`; `requests_view.go` pure, `requests_rows.go`
   rows): a thread is the unit, a row a group (section, sender, target, kind); sections owed by you, you wait on,
   tracked requests, reviews still gated, directives between agents, notices, drawn under three headings with

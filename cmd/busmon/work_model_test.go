@@ -297,3 +297,38 @@ func TestWorkOwedRequestCoversItsPlanTask(t *testing.T) {
 		}
 	}
 }
+
+// TEAM is who is at work; the free agents (idle, done) are the idle line;
+// a blocked, waiting or held one is neither (the Agents panel says which).
+func TestWorkTeamOnlyAtWork(t *testing.T) {
+	in := workFixture(shellNow)
+	in.agents["qa"] = &agentState{state: "blocked", lastSeen: shellNow}
+	in.agents["docs"] = &agentState{state: "done", lastSeen: shellNow}
+	in.agents["ui-grok"] = &agentState{state: "waiting", lastSeen: shellNow}
+	w := workOf(in)
+	for _, r := range w.Team {
+		if r.Agent == "qa" || r.Agent == "docs" || r.Agent == "ui-grok" {
+			t.Fatalf("%s in TEAM", r.Agent)
+		}
+	}
+	if idle := slices.Sorted(slices.Values(w.Idle)); !slices.Equal(idle, []string{"docs", "sentinel", "ui-kimi"}) {
+		t.Fatalf("idle = %v", w.Idle)
+	}
+}
+
+// reviewer-codex: a held, blocked or waiting agent is in neither TEAM nor
+// the free line, even holding a task or a gate.
+func TestWorkTeamExcludedStatesWin(t *testing.T) {
+	in := workFixture(shellNow)
+	in.agents["coder"].held, in.agents["coder"].state = true, "idle" // quota, with compose-at-file accepted
+	in.agents["foureyes"].state = "blocked"                          // with a gate
+	w := workOf(in)
+	for _, r := range w.Team {
+		if r.Agent == "coder" || r.Agent == "foureyes" {
+			t.Fatalf("%s (%s) in TEAM", r.Agent, r.Word)
+		}
+	}
+	if slices.Contains(w.Idle, "coder") || slices.Contains(w.Idle, "foureyes") {
+		t.Fatalf("idle = %v", w.Idle)
+	}
+}

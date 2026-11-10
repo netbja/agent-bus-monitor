@@ -14,13 +14,13 @@
 [38;5;8m│[m  [38;5;7m  14:24  [marchitect [38;5;6m│[m   [38;5;6mAgents[m      each agent, its state and how fresh it is                  [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:50  [m♙ Charlie [38;5;6m│[m   [38;5;2m1 Activity[m  everything said on the bus, live                           [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m  [38;5;7m  14:51  [mcoder     [38;5;6m│[m   [38;5;5m2 Board[m     who owns which task                                        [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;7m○ 14:52  [mmaster    [38;5;6m│[m   [38;5;3m3 Requests[m  who owes whom an answer                                    [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;3m● [m[38;5;7m14:56  [mdispatch  [38;5;6m│[m   [38;5;12m4 Plan[m      the batch's tasks by state                                 [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;3m● [m[38;5;7m15:00  [mmaster    [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m  [38;5;7m  15:02  [mcoder     [38;5;6m│[m [1;38;5;6mtab[m moves the focus between panels;[1;38;5;6m 1-4[m pick one of the tabs.            [38;5;6m│[m                     [38;5;8m│[m
-[38;5;8m│[m                     [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m○ 14:52  [mmaster    [38;5;6m│[m   [38;5;12m3 Work[m      who owes what: you, the team, what comes next, ideas       [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;3m● [m[38;5;7m14:56  [mdispatch  [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;3m● [m[38;5;7m15:00  [mmaster    [38;5;6m│[m [1;38;5;6mtab[m moves the focus between panels;[1;38;5;6m 1-4[m pick one of the tabs.            [38;5;6m│[m                     [38;5;8m│[m
+[38;5;8m│[m  [38;5;7m  15:02  [mcoder     [38;5;6m│[m                                                                          [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m                     [38;5;6m│[m [38;5;6m● [m[38;5;7m○ ○ ○ ○ [m  [1;38;5;6menter[m[38;5;7m next · [m[1;38;5;6m←[m[38;5;7m back · [m[1;38;5;6mesc[m[38;5;7m skip                              [m [38;5;6m│[m                     [38;5;8m│[m
 [38;5;8m│[m                     [38;5;6m╰──────────────────────────────────────────────────────────────────────────╯[m                     [38;5;8m│[m
+[38;5;8m│[m                                                                                                                      [38;5;8m│[m
 [38;5;8m│[m                                                                                                                      [38;5;8m│[m
 [38;5;8m│[m                                                                                                                      [38;5;8m│[m
 [38;5;8m│[m                                                                                                                      [38;5;8m│[m

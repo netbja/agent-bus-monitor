@@ -152,7 +152,7 @@ change ([EN](docs/OPERATIONAL-GUIDE.md#6-starting-work-a-small-task-a-large-chan
 | broker     | `redis:8-alpine` on `localhost:6380` (`docker-compose.yml`)                |
 | `bus/`     | Go package: connection, Streams API (`Bus` handle), publish helpers         |
 | `agentbus` | CLI client and project tooling: status, cmd, subscribe, up, ask, swap… (`cmd/agentbus`) |
-| `busmon`   | TUI dashboard: For you, Agents, Activity, Board, Requests, Plan (`cmd/busmon`) |
+| `busmon`   | TUI dashboard: For you, Agents, Activity, Board, Work (`cmd/busmon`) |
 | `dispatch/`| Wake dispatcher behind `agentbus dispatch`: wakes unarmed agents via herdr, watches quotas, health, context |
 | `mission/` | The missions conductor behind `agentbus missions`                          |
 | `service/` | The project services: systemd `--user` units, launchd plists                |
@@ -481,7 +481,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity  2 Board  3 Requests  4 Plan   auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+╭─  1 Activity  2 Board  3 Work   auto-scroll on ──────────────────────────────────────────────────────────────── 7 events · filter: none ─╮
 │    time   from      to         type       message                                                                                        │
 │  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
 │    14:24  architect            status     done · spec merged                                                                             │
@@ -510,14 +510,16 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   then the clock. In a true-colour terminal a gauge fills in eighths of a cell and slides to a new
   value in half a second (the figure changes at once); a 16-colour terminal keeps whole cells. A
   gauge is deep green below 80 %, amber from 80 % and red from 95 %.
-  What is owed to you in Requests reads in orange (`2 requests waiting · oldest 3h`), what agents
-  owe each other muted (`4 between agents`); each is absent at 0. Health and dispatch are never
-  truncated; the rest gives way from the right.
-  A click on a chip goes there: `decide` and `merge` select For you's first such row, `unread` is
-  `u`, and the health pill opens F5.
+  The strip counts what Work's YOU section lists, so the header, For you's frame and Work show one
+  number: `decide` is every row but the merges (asks, waits, gates, the plan tasks of yours nothing
+  blocks, the requests owed to you). What agents owe each other reads muted (`4 between agents`),
+  absent at 0. Health and dispatch are never truncated; the rest gives way from the right.
+  A click on a chip goes there: `decide` and `merge` select For you's first such row (Work's when
+  For you has none), `unread` is `u`, and the health pill opens F5.
 - **For you** — what only you can settle, an inbox that can empty: an agent's open questions
-  (`ask`), an agent `waiting` for your decision (`wait`), a 4-eyes gate you opened or that holds
-  you (`gate`), a stall that waits on you, and the PRs waiting for your merge. The frame reads the
+  (`answer`), an agent `waiting` for your decision (`answer`), a 4-eyes gate you opened or that
+  holds you (`review`), a stall that waits on you (`check`), and the PRs waiting for your merge;
+  the words are Work's. The frame reads the
   strip's words (`2 decide · 1 merge`). Messages addressed to you that you have not opened are no
   rows: the strip's `unread` chip counts them, and `u` or `T` reaches them. Plan tasks are no rows
   either: one muted line at the bottom, `Next for you: …`, names the plan's next task for you
@@ -551,21 +553,24 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     step to the next or previous one). It scrolls live; `f` or a wheel scroll up stops it, `End`
     resumes it. `/` filters (`@agent`, a thread id, words), `u` jumps to the next unread line.
   - **Board** — the shared task board: `task · owner · state · age`; Enter opens a task.
-  - **Requests** — who owes whom an answer, by thread, in three sections with their counts:
-    **Owed by you**, **You wait on**, and **Between agents** (tracked requests, reviews still
-    gated, directives, then the notices line); answered threads and
-    those older than 24 h are folded (`o`). Enter expands a group or opens a thread; `d` then `y`
-    closes a thread with a reply from you.
-  - **Plan** — the batch's plan (`agentbus plan load`) as a board: the progress (`v0.29  6/11 done`,
-    a bar, the share), then **NOW** (waiting for you, a merge only once its PR is linked; answered,
-    master to record; blocked; in review; in progress), **NEXT** (ready to start), **LATER** (waiting
-    on another task) and **DONE**, folded to a count until `d` shows it. At 120 columns and more a
-    side panel beside the list holds the selected task's state, owner, review, reason, what it waits
-    on and what it needs from you. `p` (or `P`) opens the same board as a drawer: at 120 columns and
-    more right of For you, which stays in view; below, in the lower zone. Esc closes it. Enter opens
-    a task: its review, PR, asks and notes.
-    A task waiting for you has an `Action:` row: Enter or `s` opens the compose window to master,
-    prefilled, to start it.
+  - **Work** — who owes what, top-down: **YOU** (what waits on you: `answer` an ask, a waiting
+    agent or a request to you; `merge` a PR both reviewers approved on its pushed head; `decide` a
+    plan task of yours nothing blocks; `review` a gate that concerns you; why on the right),
+    **TEAM** (each agent at work: its task in hand and the plan task it is, the progress line, the
+    gate it holds as a reviewer, who reviews its work and since when; the free agents on one line,
+    as they can take a request), **NEXT** (the plan's tasks not started, yours blocked by others
+    among them, then the requests no plan task names) and **IDEAS** (`◇`, the open questions in
+    `docs/memory/open-questions/` no plan task covers, read-only; Enter says where each lives).
+    Under 100 columns the frame counts them with glyphs (`♙5 ●4 ○3 ◇2`). Two folded lines close
+    it: **between agents** (Enter opens the full Requests list, by thread: owed by you, you wait
+    on, between agents; `o` shows the answered ones, `d` then `y` closes a thread with a reply
+    from you; Esc returns to Work) and **done** (Enter or `d` opens the plan with its done tasks).
+    `+` and `-` set a tracked request's priority on a row that stands for one; on any other
+    row the footer says why nothing changed. `4` is Work, on NEXT. `p` (or `P`) opens the
+    plan as a drawer: the progress, then **NOW**, **NEXT**, **LATER** and **DONE** (folded until
+    `d`), at 120 columns and more right of For you with the selected task's panel. Enter opens a
+    task: its review, PR, asks and notes. A task waiting for you has an `Action:` row: Enter or
+    `s` opens the compose window to master, prefilled, to start it.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
   (Tab completes the name), `@all <text>` every registered agent. The line edits at its cursor:
   `←` `→` by character, Home/End (or Ctrl+A/Ctrl+E) to the ends, Delete, Ctrl+W back a word, Ctrl+U to
@@ -618,7 +623,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |
 
 **Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From
-80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `6 Plan`), with health
+80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `5 Work`, `6` Work on NEXT), with health
 and dispatch still in the header; under 30×6, busmon only says the terminal is too small. It runs
 the same inside herdr or in any terminal.
 
@@ -817,7 +822,7 @@ support (only clients with a probed screen signature are prompted).
   them; `agentbus --project <p> service restart` moves one on.
 
 From there you drive the team as a human:
-- **Watch** everything in the `busmon` tab (Agents, Activity, Board, Requests).
+- **Watch** everything in the `busmon` tab (Agents, Activity, Board, Work).
 - **Talk** to an agent from busmon (press `@`): `@master start on the plan at docs/…` (`@` autocompletes
   agent names), or just type in the master's own tab.
 - **Grow** the team on demand — from the master: `agent-spawn architect myproject` (design

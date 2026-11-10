@@ -202,18 +202,6 @@ func TestPlanSidePanel(t *testing.T) {
 	if !strings.Contains(m.grid().plain(), "Task") {
 		t.Fatal("the side frame is not drawn")
 	}
-	m = keys(t, planShell(t, 140, 40), '4')
-	m.lists.of(PanelPlan).Select("task:r")
-	m.refresh()
-	if s := text(m.lists.planSide); !strings.Contains(s, "PR 338") && !strings.Contains(s, "approved") {
-		t.Fatalf("tab side for r:\n%s", s)
-	}
-	m = keys(t, planShell(t, 100, 40), '4')
-	m.lists.of(PanelPlan).Select("task:r")
-	m.refresh()
-	if m.lists.planSide != nil {
-		t.Fatal("a tab side panel at the medium tier")
-	}
 }
 
 // The side panel shows the PR and the reason as two fields: a blocked task

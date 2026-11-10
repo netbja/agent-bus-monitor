@@ -63,7 +63,7 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "plantab",
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "worktab",
 	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets", "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name", "idle",
 	"compose-at", "compose-at-above", "compose-at-reading", "compose-at-outside", "compose-at-incomplete"}
 
@@ -123,7 +123,7 @@ func inState(t testing.TB, m Model, state string) Model {
 			map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
 		m = stepCmd(t, m, tea.KeyPressMsg(tea.Key{Code: 'C', Text: "C"}))
 		return keys(t, m, kEnter, kDown, kDown) // into Display's keys, then Icons
-	case "plan", "plantab": // home-inbox-drawer §4: the drawer (p) and the Plan tab, the second task selected
+	case "plan", "worktab": // home-inbox-drawer §4: the drawer (p); the Work tab (requests-plan-redesign) on NEXT, two rows down
 		snap := shellFixture(shellNow)
 		snap.planState = goldenPlan()
 		m = step(t, m, pollMsg{snap: snap, at: shellNow})

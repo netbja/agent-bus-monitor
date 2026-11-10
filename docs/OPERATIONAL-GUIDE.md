@@ -439,18 +439,21 @@ agent names, no project template):
   them (`3 dormant`) and `a` shows them. To retire one for good, select it and press `d` (or
   `Delete`), then `y`: same as `agentbus --project myapp agents forget <name>`. An agent that is
   listening, or declared a status in the last 10 minutes, is refused.
-- **Requests: who owes whom an answer.** The Requests tab (`3`) groups threads by what they
-  wait for, in three sections, each heading with its count: **Owed by you**, **You wait on**,
-  and **Between agents** (tracked requests, reviews still gated, directives, then the notices
-  line). Answered threads and those older than 24 hours are folded (`o` shows
-  them): an older unanswered directive wakes nobody. Enter expands a group or opens a thread;
-  `d` then `y` closes a thread with a reply from you, its history stays. A tracked request is
-  closed by its owner (`agentbus request done`). The header carries the same counts: what you owe
-  in orange (`2 requests waiting · oldest 3h`), what agents owe each other muted
-  (`4 between agents`), each absent at 0.
+- **Work: who owes what.** The Work tab (`3`; `4` opens it on NEXT) reads top-down: **YOU**
+  (what waits on you, each with its verb: `answer`, `merge`, `decide`, `review`, `check`, and
+  why), **TEAM** (the agents at work, their task in hand and its progress, who reviews whom and
+  since when; the free agents on one line), **NEXT** (the plan's next tasks, then requests not in
+  the plan) and **IDEAS** (the open questions in `docs/memory/open-questions/` that no plan task
+  covers). The header's `decide` and `merge` count YOU's rows, so header, For you and Work agree.
+  The **between agents** line opens the full Requests list by thread (owed by you, you wait on,
+  between agents; answered threads folded, `o` shows them; `d` then `y` closes a thread with a
+  reply from you; Esc returns to Work). A tracked request is closed by its owner
+  (`agentbus request done`).
 - **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
-  the Plan tab (`4`) and `P` show its tasks by state (waiting for you, answered, blocked, in
-  review, in progress, upcoming, done), each with its review, PR and asks. A merge waits for you
+  its tasks feed Work (a task of yours nothing blocks is a `decide` row, a blocked one is in NEXT),
+  and `p` or `P` opens the plan by state (waiting for you, answered, blocked, in review, in
+  progress, upcoming, done), each with its review, PR and asks; Work's **done** line and `d` open
+  it with the done tasks shown. A merge waits for you
   only once its PR is linked ("merge PR N"); a question of yours you answered moves the task to
   answered, master to record. A task waiting for you has an
   `Action:` row: Enter or `s` opens the compose window to master, prefilled, to start it. A task

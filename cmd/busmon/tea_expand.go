@@ -161,7 +161,7 @@ func (m *Model) withExpansion(p PanelID, items []ListItem, width int) []ListItem
 // keepInView sets each list's kept rows: the expanded row's text, which
 // its viewport keeps in view with the row, in auto-scroll too.
 func (m *Model) keepInView() {
-	for _, p := range narrowPanels {
+	for _, p := range shellPanels {
 		lst := m.lists.of(p)
 		lst.keep = 0
 		if m.ui.expanded == "" || m.ui.expandIn != p {

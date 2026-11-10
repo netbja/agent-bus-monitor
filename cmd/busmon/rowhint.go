@@ -70,9 +70,28 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 		if key != "" {
 			return "task", true
 		}
-	case PanelPlan:
-		if has("task:") { // DONE is d's, no row (home-inbox-drawer §8)
+	case PanelWork:
+		switch {
+		case has("ask:"):
+			return "answer", true
+		case has("wait:"), has("prompt:"), has(workAgentPrefix):
+			return "agent", true
+		case has("gate:"), has("thr:"):
+			return "thread", true
+		case has("req:"):
+			return "request", true
+		case has("plan:"):
 			return "task", true
+		case has("merge:"):
+			return "PR", true
+		case has("health:"):
+			return "health", true
+		case has(workIdeaPrefix):
+			return "where", true
+		case key == workFoldBetween:
+			return "requests", true
+		case key == workFoldDone:
+			return "done", true
 		}
 	}
 	return "", false

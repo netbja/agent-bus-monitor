@@ -8,7 +8,7 @@
 │                                              ││  ✓ 󰬖 architect done      40m     —     —         escalating… spec me…│
 │                                              ││  ○ 󰬈 coder     paused    2m      —     88k 85%   gate 1 · d… busmon-…▼
 ╰──────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Requests   4 Plan    auto-scroll on ──────────────────────────── 7 events · filter: none ─╮
+╭─  1 Activity   2 Board   3 Work    auto-scroll on ───────────────────────────────────────── 7 events · filter: none ─╮
 │    time   from      to         type       message                                                                    │
 │  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────│
 │    14:24  architect            status     done · spec merged                                                         │

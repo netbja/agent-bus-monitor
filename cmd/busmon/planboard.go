@@ -293,23 +293,6 @@ func planSide(r plan.Row, now time.Time) []Line {
 	}
 }
 
-// planBoardItems is the Plan tab's rows from the board (keys task:<id>).
-func planBoardItems(v planBoardView, width int) []ListItem {
-	keys := make(map[int]string, len(v.items))
-	for _, it := range v.items {
-		keys[it.line] = "task:" + it.task
-	}
-	out := make([]ListItem, 0, len(v.lines))
-	for i, l := range v.lines {
-		key, ok := keys[i]
-		if ok && len(l) > 0 && l[0].Text == "  " {
-			l = l[1:] // the list draws its own mark
-		}
-		out = append(out, ListItem{Key: key, Line: FitLine(l, width), Selectable: ok})
-	}
-	return out
-}
-
 // drawPlanSide draws the side panel inside the frame r, at its right, over
 // the list's selection highlight (the list's rows are narrower).
 func drawPlanSide(g cellSink, r Rect, side []Line) {

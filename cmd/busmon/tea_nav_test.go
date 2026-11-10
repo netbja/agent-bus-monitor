@@ -438,7 +438,7 @@ func TestTabsAreHerdrBlocks(t *testing.T) {
 				t.Errorf("inactive tab %d %+v", i+1, block)
 			}
 		}
-		if got, want := l.Width(), Width(" 1 Activity   2 Board   3 Requests   4 Plan  "); got != want {
+		if got, want := l.Width(), Width(" 1 Activity   2 Board   3 Work  "); got != want {
 			t.Errorf("bar is %d cells, want %d (a padded block and a gap per tab)", got, want)
 		}
 	}

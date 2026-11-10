@@ -731,7 +731,9 @@ func TestShellDeleteClosesAnOpenThreadWithAReply(t *testing.T) {
 	id := fmt.Sprintf("%d-0", time.Now().Add(-time.Hour).UnixMilli())
 	st.cmdHistory = []bus.Event{{Kind: "cmd", ID: id, Type: "directive", From: "master", Target: "claude-hl-coder", Message: "x"}}
 	fw := &fakeWriter{}
-	m := keys(t, shellOf(t, st, 160, 45, fw), '3') // Requests
+	m := keys(t, shellOf(t, st, 160, 45, fw), '3') // Work, then its between-agents line: Requests
+	m.lists.work.Select(workFoldBetween)
+	m = keys(t, m, kEnter)
 	m.lists.requests.Select("thr:" + id)
 	if m.lists.requests.Selected() != "thr:"+id {
 		t.Fatalf("no row for the thread")

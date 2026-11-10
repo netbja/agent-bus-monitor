@@ -214,7 +214,7 @@ func either(fs ...func(Key) bool) func(Key) bool {
 
 var (
 	quitBinding   = binding{Keys: "^C", Help: "quit (everywhere)", Act: ActQuit, match: keyIs(keyCtrlC)}
-	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests, PanelPlan}
+	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests, PanelWork}
 	activityOnly  = []PanelID{PanelActivity}
 	arrows        = GlyphUp + GlyphDownArrow
 	panelBindings = []binding{
@@ -226,8 +226,8 @@ var (
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
 		{Keys: "3", Act: ActTab3, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('3')},
 		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
-		{Keys: GlyphArrowL + GlyphArrowR, Hint: "tab", Help: "the lower panel's previous or next tab (Activity, Board, Requests, Plan), wrapping", Act: ActTabNext, Panels: lowerTabs, match: keyIs(keyRight)},
-		{Keys: GlyphArrowL, Act: ActTabPrev, Panels: lowerTabs, match: keyIs(keyLeft)},
+		{Keys: GlyphArrowL + GlyphArrowR, Hint: "tab", Help: "the lower panel's previous or next tab (Activity, Board, Work), wrapping", Act: ActTabNext, Panels: tabbedPanels, match: keyIs(keyRight)},
+		{Keys: GlyphArrowL, Act: ActTabPrev, Panels: tabbedPanels, match: keyIs(keyLeft)},
 		{Keys: arrows + " j k", Hint: "select", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
@@ -247,8 +247,8 @@ var (
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 7 days", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},
 		// request-priority §6: on one tracked request, written at once (the opposite key undoes it).
-		{Keys: "+ -", Hint: "priority", Help: "Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first", Act: ActPriorityUp, Panels: []PanelID{PanelRequests}, OnPage: true, match: runeIs('+')},
-		{Keys: "-", Act: ActPriorityDown, Panels: []PanelID{PanelRequests}, OnPage: true, match: runeIs('-')},
+		{Keys: "+ -", Hint: "priority", Help: "Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first", Act: ActPriorityUp, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('+')},
+		{Keys: "-", Act: ActPriorityDown, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('-')},
 		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
@@ -258,7 +258,7 @@ var (
 		{Keys: "F3", Hint: "services", Alt: "s", Act: ActServices, match: either(keyIs(keyF3), runeIs('s'))},
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
 		{Keys: "p P", Hint: "plan", Help: "the batch's plan in a drawer: NOW, NEXT, LATER, DONE, the progress; enter opens a task, d shows done, esc closes", Act: ActPlan, match: runeIs('p', 'P')},
-		{Keys: "d", Hint: "done", Help: "the Plan tab: show or fold the done tasks", Act: ActShowDone, Panels: []PanelID{PanelPlan}, match: runeIs('d')},
+		{Keys: "d", Hint: "done", Help: "Work: the plan with its done tasks (the drawer; d there folds them)", Act: ActShowDone, Panels: []PanelID{PanelWork}, match: runeIs('d')},
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
 		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and herdr workspace; sleep, stop or back one up", Act: ActProjects, match: runeIs('M')},
@@ -274,9 +274,10 @@ var (
 		{Keys: "1-6", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, match: runeIs('2')},
 		{Keys: "3", Act: ActTab3, match: runeIs('3')},
-		{Keys: "4", Act: ActTab4, match: runeIs('4')},
+		{Keys: "4", Help: "Work, on NEXT: the plan's next tasks (key 4 was the Plan tab)", Act: ActTab4, Tiers: []Tier{TierWide, TierMedium}, match: runeIs('4')},
+		{Keys: "4", Act: ActTab4, Tiers: []Tier{TierNarrow}, match: runeIs('4')},
 		{Keys: "5", Act: ActTab5, Tiers: []Tier{TierNarrow}, match: runeIs('5')},
-		{Keys: "6", Act: ActTab6, Tiers: []Tier{TierNarrow}, match: runeIs('6')},
+		{Keys: "6", Help: "Work, on NEXT: the plan's next tasks", Act: ActTab6, Tiers: []Tier{TierNarrow}, match: runeIs('6')},
 	}
 	shellBindings = shellPanelBindings()
 	// shellAskBindings: in the shell's reader a digit answers with that option,
