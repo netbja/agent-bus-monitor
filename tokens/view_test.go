@@ -145,6 +145,26 @@ func TestAgentRows(t *testing.T) {
 			},
 		},
 		{
+			// idle-view-providers step 2: only Claude Code's sessions are counted,
+			// so another client never reads 0, proved or not: it says it has no adapter.
+			name:  "a client with no token adapter says so, never 0",
+			known: true,
+			agents: map[string]bus.AgentSnapshot{
+				"a-grok":   {Client: "grok", Provider: "xai", PID: 7, IdentSession: sess},
+				"b-agy":    {Client: "agy", Provider: "google"},
+				"c-xai":    {Provider: "xai", PID: 7, IdentSession: sess},
+				"d-other":  {Client: "vibe", Provider: "mistral", PID: 7, IdentSession: sess},
+				"e-claude": {Client: "claude-code", Provider: "anthropic", PID: 7, IdentSession: sess},
+			},
+			want: []rowView{
+				{Agent: "e-claude", Provider: "anthropic", In: 0, Out: 0},
+				{Agent: "a-grok", Provider: "xai", In: -1, Out: -1, Reason: "no token count for grok (no adapter)"},
+				{Agent: "b-agy", Provider: "google", In: -1, Out: -1, Reason: "no token count for agy (no adapter)"},
+				{Agent: "c-xai", Provider: "xai", In: -1, Out: -1, Reason: "no token count for xai (no adapter)"},
+				{Agent: "d-other", Provider: "mistral", In: -1, Out: -1, Reason: "no token count for vibe (no adapter)"},
+			},
+		},
+		{
 			name:   "an agent with rows today keeps its counts, not a reason",
 			known:  true,
 			rows:   map[string]bus.TokenRow{today + "|coder|openai": {In: 3, Out: 4}},

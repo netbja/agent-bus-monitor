@@ -31,12 +31,12 @@
 │   foureyes         󰬈 anthropic      1.2M     206k  ████████████████████                                              │
 │   coder            󰬈 anthropic      345k      83k  ██████▏                                                           │
 │   1 more · Codex session not proved  (a lists them)                                                                  │
-│   6 more · no proved session  (a lists them)                                                                         │
+│   1 more · no token count for google (no adapter)  (a lists them)                                                    │
+│   3 more · no proved session  (a lists them)                                                                         │
+│   2 more · no token count for grok (no adapter)  (a lists them)                                                      │
 │   2 more · Kimi logs give no token counts  (a lists them)                                                            │
 │                                                                                                                      │
 │ in = input + cache writes · out = output · ~ still counting · no cost, by rule                                       │
-│                                                                                                                      │
-│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
