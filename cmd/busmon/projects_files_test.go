@@ -31,6 +31,9 @@ func TestBackupArchiveInLog(t *testing.T) {
 		}
 	}
 	one, two := filepath.Join(dir, "agentbus-backup-box-1.tar.zst"), filepath.Join(dir, "agentbus-backup-box-2.tar.zst")
+	if err := os.Mkdir(filepath.Join(dir, "d.tar.zst"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	for _, p := range []string{one, two} {
 		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
@@ -53,7 +56,7 @@ func TestBackupArchiveInLog(t *testing.T) {
 		"--- y agentbus backup\nbackup: b/agentbus-backup-box-2.tar.zst\n",
 		"--- y agentbus backup\nbackup: /b/notes.txt\n",
 		"--- y agentbus backup\nbackup: " + filepath.Join(dir, "gone.tar.zst") + "\n", // not an existing file
-		"--- y agentbus backup\nbackup: " + dir + "/\n",
+		"--- y agentbus backup\nbackup: " + filepath.Join(dir, "d.tar.zst") + "\n", // a directory, not a file
 		"",
 	} {
 		write(s)
