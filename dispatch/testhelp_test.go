@@ -3,6 +3,7 @@ package dispatch
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -269,4 +270,26 @@ func wakeOf(t *testing.T, b *bus.Bus, agent string) (bus.WakeRecord, bool) {
 		t.Fatalf("Wake(%s): %v", agent, err)
 	}
 	return w, ok
+}
+
+// waitForRun is waitFor for a test that waits on a running dispatcher: a
+// timeout also says whether Run had already returned (and with what), and
+// what the dispatcher logged, so a slow pass and a dead loop read apart.
+func waitForRun(t *testing.T, run *runner, log *syncBuf, d time.Duration, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	state := "Run still running"
+	select {
+	case err := <-run.done:
+		run.done <- err // keep it for stop/cleanup
+		state = fmt.Sprintf("Run had returned: %v", err)
+	default:
+	}
+	t.Fatalf("timed out after %v waiting for %s (%s); dispatcher log:\n%s", d, what, state, log.String())
 }

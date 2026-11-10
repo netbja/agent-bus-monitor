@@ -143,7 +143,7 @@ func TestClientUpdateMixedSourcesOneDirective(t *testing.T) {
 		}
 		return nil, true
 	}
-	start(t, b, newFakeRT(alwaysReady), cfg)
+	run := start(t, b, newFakeRT(alwaysReady), cfg)
 	count := func() int {
 		n := 0
 		for _, m := range entries(t, r, b, "cmd") {
@@ -153,7 +153,11 @@ func TestClientUpdateMixedSourcesOneDirective(t *testing.T) {
 		}
 		return n
 	}
-	waitFor(t, 3*time.Second, "the directive", func() bool { return count() >= 1 })
+	// The directive goes out on the first observe pass (10-25 ms here). The
+	// bound only catches a dispatcher that never sends: it failed twice at 3 s
+	// in full-suite runs at load 7-8, so it is wide, and a timeout says
+	// whether Run had returned and what the dispatcher logged.
+	waitForRun(t, run, cfg.Log.(*syncBuf), 20*time.Second, "the directive", func() bool { return count() >= 1 })
 	time.Sleep(500 * time.Millisecond) // well over ten passes
 	if n := count(); n != 1 {
 		t.Fatalf("%d directives for one update", n)
