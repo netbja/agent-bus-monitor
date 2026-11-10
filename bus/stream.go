@@ -82,7 +82,8 @@ type AgentSnapshot struct {
 	// (/proc/sys/kernel/random/boot_id, first-run-trust): pid and start time
 	// are ticks since a kernel's boot, so only with it does a reader on
 	// another host know the process is not one of its own. It moves with the
-	// pid, on a proof only (mergeSnapshot); empty when unknown.
+	// pid, on a proof only (mergeSnapshot): a proof for the same process from
+	// a caller that cannot read it keeps it; empty when unknown.
 	BootID   string `json:"boot_id,omitempty"`
 	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
 	// IdentTS (ms, Redis time) is when the identity was last proved: by a

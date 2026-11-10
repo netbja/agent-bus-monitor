@@ -194,8 +194,10 @@ func TestMergeModelFollowsTheProvedIdentity(t *testing.T) {
 
 // BootID (first-run-trust, reviewer-codex) is the host's provenance of the
 // proved process: it moves with the pid and its start time, only on a
-// proof. An unverified status keeps it; a proof for another process takes
-// the caller's, even empty; a status proving nothing clears it with the pid.
+// proof, by the Model rule. An unverified status keeps it; a proof for the
+// same process keeps it when the caller has none (foureyes); a proof for
+// another process takes the caller's, even empty; a status proving nothing
+// clears it with the pid.
 func TestMergeBootIDTravelsWithTheIdentity(t *testing.T) {
 	b := bound
 	b.BootID = "boot-a"
@@ -207,6 +209,18 @@ func TestMergeBootIDTravelsWithTheIdentity(t *testing.T) {
 	}
 	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 99, PIDStart: 1}, false); got.BootID != "" {
 		t.Fatalf("a proof with no boot id kept the old one: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 42, PIDStart: 8}, false); got.BootID != "" {
+		t.Fatalf("a recycled pid (another start) kept the old process's boot id: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 99, PIDStart: 7}, false); got.BootID != "" {
+		t.Fatalf("another pid with the same start kept the old process's boot id: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 42, PIDStart: 7}, false); got.BootID != "boot-a" {
+		t.Fatalf("a proof for the same process from a caller with no boot id cleared it: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 42, PIDStart: 7, BootID: "boot-c"}, false); got.BootID != "boot-c" {
+		t.Fatalf("a proof for the same process naming a boot id: %q", got.BootID)
 	}
 	if got := mergeSnapshot(&b, AgentSnapshot{Pane: "w2:p1", PID: 42, PIDStart: 7, BootID: "boot-a"}, true); got.BootID != "boot-a" {
 		t.Fatalf("bind: boot id %q", got.BootID)

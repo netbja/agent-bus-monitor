@@ -40,6 +40,12 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 		if at != 0 && (next.Tier != "" || next.PID != out.PID || next.PIDStart != out.PIDStart) {
 			out.Tier = next.Tier
 		}
+		// The pid's host (first-run-trust) follows the same rule, except that
+		// nothing proved clears it with the pid: a proof for the same process
+		// never forgets a known boot id (foureyes).
+		if at == 0 || next.BootID != "" || next.PID != out.PID || next.PIDStart != out.PIDStart {
+			out.BootID = next.BootID
+		}
 		// The session proved with this process (another process proves its
 		// own, even none); nothing unproved keeps one. For the same process a
 		// status only fills an empty one: once ProveSession moved it after
@@ -53,7 +59,6 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 			out.IdentSession = next.Session
 		}
 		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
-		out.BootID = next.BootID // the pid's host: with the pid, never without
 	}
 	if next.Client != "" {
 		out.Client = next.Client

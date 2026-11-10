@@ -100,7 +100,7 @@ func (b *Bus) DeclareHandoff(ctx context.Context, agent, reportID string, who Ag
 	// The snapshot follows the status entry, as Status's does, but here a
 	// failure is said: without it the clear waits for an idle status.
 	snap := AgentSnapshot{State: "idle", Message: handoffIdleMessage(reportID), TS: h.At, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier}
+		PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier}
 	if err := b.putSnapshot(ctx, agent, snap, false); err != nil {
 		return h, fmt.Errorf("handoff: recorded, but the idle snapshot failed (%w): run agentbus status %s idle", err, agent)
 	}
