@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
 	"os/exec"
@@ -28,7 +29,7 @@ type startWorld struct {
 	config   string // config.toml's path
 	env      map[string]string
 	ups      [][]string
-	live     map[string]life
+	live     map[string]relaunch.Life
 	out, err bytes.Buffer
 }
 
@@ -40,7 +41,7 @@ func newStartWorld(t *testing.T) *startWorld {
 		t.Fatalf("git init: %v %s", err, out)
 	}
 	folder, _ = filepath.EvalSymlinks(folder)
-	w := &startWorld{t: t, m: m, folder: folder, projects: projects, config: filepath.Join(xdg, "agentbus", "config.toml"), env: env, live: map[string]life{}}
+	w := &startWorld{t: t, m: m, folder: folder, projects: projects, config: filepath.Join(xdg, "agentbus", "config.toml"), env: env, live: map[string]relaunch.Life{}}
 	w.manifest = filepath.Join(filepath.Dir(projects), "roles.toml")
 	return w
 }
@@ -50,7 +51,7 @@ func (w *startWorld) deps() startDeps {
 		Env:      func(k string) string { return w.env[k] },
 		Manifest: func() (*rolecfg.Manifest, error) { return w.m, nil },
 		Up:       func(args []string) int { w.ups = append(w.ups, args); return 0 },
-		Live:     func(string) (map[string]life, error) { return w.live, nil },
+		Live:     func(string) (map[string]relaunch.Life, error) { return w.live, nil },
 		Repo:     func() (string, error) { return "/r", nil },
 		Out:      &w.out, Err: &w.err,
 	}
@@ -171,11 +172,11 @@ func TestStartTeamChangeOnAnExistingProject(t *testing.T) {
 
 	w = newStartWorld(t)
 	w.writeTemplate("shop", nil)
-	w.live["coder"] = lifeAlive
+	w.live["coder"] = relaunch.LifeAlive
 	if code := w.start(w.folder, "--yes", "--roles", "master,foureyes"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire coder") || len(w.ups) != 0 {
 		t.Fatalf("dropping a live role = %d %q", code, w.err.String())
 	}
-	w.live = map[string]life{"foureyes": lifeAlive}
+	w.live = map[string]relaunch.Life{"foureyes": relaunch.LifeAlive}
 	if code := w.start(w.folder, "--yes", "--roles", "master,foureyes:review,coder"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire foureyes") {
 		t.Fatalf("a live role's client changed = %d %q", code, w.err.String())
 	}
@@ -307,14 +308,14 @@ func TestStartJudgesTheTemplateAsWritten(t *testing.T) {
 
 	w = newStartWorld(t)
 	w.writeTemplate("shop", []rolecfg.TeamRole{{Role: "master"}, {Role: "ghost"}})
-	w.live["ghost"] = lifeAlive
+	w.live["ghost"] = relaunch.LifeAlive
 	if code := w.start(w.folder, "--yes", "--roles", "master"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire ghost") || len(w.ups) != 0 {
 		t.Fatalf("a live removed role dropped = %d %q", code, w.err.String())
 	}
 
 	w = newStartWorld(t)
 	w.writeTemplate("shop", nil)
-	w.live["coder"] = lifeUnknown
+	w.live["coder"] = relaunch.LifeUnknown
 	if code := w.start(w.folder, "--yes", "--roles", "master,foureyes"); code == 0 || !strings.Contains(w.err.String(), "agentbus retire coder") {
 		t.Fatalf("an unknown liveness dropped = %d %q", code, w.err.String())
 	}

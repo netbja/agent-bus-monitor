@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"maps"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -92,16 +94,12 @@ type upDeps struct {
 	SpawnResume func(project, log string) error
 }
 
-type upTab struct {
-	Name    string `toml:"name"`
-	Command string `toml:"command"`
-}
-
-type upTemplate struct {
-	Name       string  `toml:"name"`
-	WorkingDir string  `toml:"working_dir"`
-	Tabs       []upTab `toml:"tabs"`
-}
+// upTab and upTemplate are the project template's tab and the template
+// itself, as the relaunch core reads them.
+type (
+	upTab      = relaunch.Tab
+	upTemplate = relaunch.Template
+)
 
 // runUp provisions a project (bootstrap, idempotent) and, inside herdr, opens
 // its workspace directly — busmon first and focused, then every tab of the
@@ -261,7 +259,7 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		return 1
 	} else if id != "" {
 		fmt.Fprintf(stdout, "%s is already open: focused workspace %s; checking its tabs\n", project, id)
-		if err := relaunchUp(d, project, id, tpl, relaunchOptions{Resume: resume, Create: true}, stdout); err != nil {
+		if err := relaunchUp(d, project, id, tpl, relaunch.Options{Resume: resume, Create: true}, stdout); err != nil {
 			fmt.Fprintf(stderr, "agentbus up: %v\n", err)
 			code = 1
 		}
@@ -498,27 +496,7 @@ func openWorkspace(d upDeps, project string) (string, error) {
 
 // findWorkspace is the id of the open workspace labelled project, or "".
 func findWorkspace(d upDeps, project string) (string, error) {
-	out, err := d.Herdr("workspace", "list")
-	if err != nil {
-		return "", fmt.Errorf("herdr workspace list: %w", err)
-	}
-	var v struct {
-		Result struct {
-			Workspaces []struct {
-				Label       string `json:"label"`
-				WorkspaceID string `json:"workspace_id"`
-			} `json:"workspaces"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(out, &v); err != nil {
-		return "", fmt.Errorf("herdr workspace list: %w", err)
-	}
-	for _, w := range v.Result.Workspaces {
-		if w.Label == project && w.WorkspaceID != d.IgnoreWorkspace {
-			return w.WorkspaceID, nil
-		}
-	}
-	return "", nil
+	return relaunch.FindWorkspace(d.Herdr, project, d.IgnoreWorkspace)
 }
 
 // layout opens the workspace the way herdr-plus does: the first tab reuses the
@@ -722,7 +700,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 
 // relaunchUp reads the agents' snapshots (without them, the panes decide) and
 // relaunches what is gone in the open workspace ws.
-func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunchOptions, stdout io.Writer) error {
+func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunch.Options, stdout io.Writer) error {
 	var snaps map[string]bus.AgentSnapshot
 	ok := false
 	if d.Agents != nil {
@@ -742,9 +720,9 @@ func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunchOptions,
 		if sleep == nil {
 			sleep = time.Sleep
 		}
-		o.Prove = &relaunchProof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}
+		o.Prove = &relaunch.Proof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}
 	}
-	return relaunchOpen(d.Herdr, snaps, ok, d.ProcStart, project, ws, tpl, o, stdout)
+	return relaunch.Open(d.Herdr, snaps, ok, d.ProcStart, project, ws, tpl, o, stdout)
 }
 
 // upDryRun prints what up would do to an open workspace, and changes nothing:
@@ -779,54 +757,22 @@ func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) i
 	}
 	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab) // services mode; --tabs mode reruns them too
 	fmt.Fprintf(stdout, "dry run: %s is open (workspace %s); services are not checked\n", project, id)
-	if err := relaunchUp(d, project, id, tpl, relaunchOptions{Resume: resume, DryRun: true, Create: true}, stdout); err != nil {
+	if err := relaunchUp(d, project, id, tpl, relaunch.Options{Resume: resume, DryRun: true, Create: true}, stdout); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// errUpBusy: another up of the project holds the lock.
-var errUpBusy = errors.New("another agentbus up of this project is running")
-
-// upLock takes ~/.cache/agentbus/up-<project>.lock: one up per project at a
-// time, so two ups never split or fill one workspace together. wait=false
-// gives up with errUpBusy while another holds it. Any failure to establish
-// the lock is an error: up then touches no pane.
-func upLock(cacheDir string) func(project string, wait bool) (func(), error) {
-	return func(project string, wait bool) (func(), error) {
-		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-			return nil, fmt.Errorf("lock directory: %w", err)
-		}
-		f, err := os.OpenFile(filepath.Join(cacheDir, "up-"+project+".lock"), os.O_CREATE|os.O_RDWR, 0o600)
-		if err != nil {
-			return nil, fmt.Errorf("lock file: %w", err)
-		}
-		how := syscall.LOCK_EX
-		if !wait {
-			how |= syscall.LOCK_NB
-		}
-		if err := syscall.Flock(int(f.Fd()), how); err != nil {
-			f.Close()
-			if errors.Is(err, syscall.EWOULDBLOCK) {
-				return nil, errUpBusy
-			}
-			return nil, fmt.Errorf("lock %s: %w", f.Name(), err)
-		}
-		return func() {
-			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-			f.Close()
-		}, nil
-	}
-}
+// errUpBusy and upLock are the relaunch core's project lock (one up per
+// project at a time; the self-repair watcher takes it too).
+var (
+	errUpBusy = relaunch.ErrBusy
+	upLock    = relaunch.ProjectLock
+)
 
 // upCacheDir is ~/.cache/agentbus (or $XDG_CACHE_HOME/agentbus).
-func upCacheDir(env func(string) string) string {
-	if x := env("XDG_CACHE_HOME"); x != "" {
-		return filepath.Join(x, "agentbus")
-	}
-	return filepath.Join(env("HOME"), ".cache", "agentbus")
-}
+func upCacheDir(env func(string) string) string { return relaunch.CacheDir(env) }
 
 // procStartFn is the dispatcher's process identity, on Linux only: elsewhere
 // a snapshot proves nothing and the panes decide.
@@ -1237,3 +1183,5 @@ func bootstrapCommand(repo string, args []string) *exec.Cmd {
 	cmd.Env = append(os.Environ(), upCallerEnv)
 	return cmd
 }
+
+func itoa(n int) string { return strconv.Itoa(n) }

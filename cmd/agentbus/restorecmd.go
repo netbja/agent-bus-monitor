@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -252,7 +252,7 @@ func projectLive(ctx context.Context, c *redis.Client, p string, d restoreDeps, 
 		switch {
 		case err == nil && start == s.PIDStart:
 			return fmt.Sprintf("agent %s's verified pid %d is alive", name, s.PID), nil
-		case err != nil && !pidListedNoMore(err):
+		case err != nil && !relaunch.PidListedNoMore(err):
 			return "", fmt.Errorf("agent %s's pid %d: %w", name, s.PID, err)
 		}
 	}
@@ -276,20 +276,4 @@ func projectFacts(ctx context.Context, c *redis.Client, p string) string {
 		}
 	}
 	return ""
-}
-
-// pidListedNoMore: a pid's start could not be read because /proc, readable
-// here, lists no such pid: dispatch.ProcStart's ErrNoProcess, which it returns
-// only after that same check (backup-live-check: it does not wrap
-// fs.ErrNotExist), or a bare fs.ErrNotExist. Any other error (no /proc, a
-// failed read) proves nothing: the project is refused.
-func pidListedNoMore(err error) bool {
-	if errors.Is(err, dispatch.ErrNoProcess) {
-		return true
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return false
-	}
-	_, serr := os.Stat("/proc/self/stat")
-	return serr == nil
 }

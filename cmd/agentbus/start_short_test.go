@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"strings"
 	"testing"
@@ -9,7 +10,7 @@ import (
 
 // askOpen runs the assistant on an existing project shop, every agent of
 // its template live but those in dead, busmon's tab judged busmon.
-func askOpen(t *testing.T, typed string, busmon relaunchVerdict, dead ...string) (*startWorld, int, string) {
+func askOpen(t *testing.T, typed string, busmon relaunch.Verdict, dead ...string) (*startWorld, int, string) {
 	t.Helper()
 	w := newStartWorld(t)
 	write(t, w.config, "[identity]\nas = \"charlie\"\n")
@@ -19,16 +20,16 @@ func askOpen(t *testing.T, typed string, busmon relaunchVerdict, dead ...string)
 		t.Fatal(err)
 	}
 	for _, r := range team {
-		w.live[r.Role] = lifeAlive
+		w.live[r.Role] = relaunch.LifeAlive
 	}
 	for _, r := range dead {
-		w.live[r] = lifeDead
+		w.live[r] = relaunch.LifeDead
 	}
 	tty := &fakeTTY{Reader: strings.NewReader(typed)}
 	d := w.deps()
 	d.TTY = func() io.ReadWriter { return tty }
 	d.Look = func(exe string) (string, error) { return "/bin/" + exe, nil }
-	d.Busmon = func(project string) (relaunchVerdict, error) {
+	d.Busmon = func(project string) (relaunch.Verdict, error) {
 		if project != "shop" {
 			t.Errorf("busmon judged for %q", project)
 		}
@@ -42,7 +43,7 @@ func askOpen(t *testing.T, typed string, busmon relaunchVerdict, dead ...string)
 // to settle and no flag, gets a short screen: one status line saying what
 // Enter does, c for the full screen.
 func TestStartShowsTheShortScreenForAnOpenProject(t *testing.T) {
-	w, code, screen := askOpen(t, "\n", verdictRunning)
+	w, code, screen := askOpen(t, "\n", relaunch.VerdictRunning)
 	if code != 0 || len(w.ups) != 1 {
 		t.Fatalf("Enter = %d, ups %q\n%s", code, w.ups, screen)
 	}
@@ -64,15 +65,15 @@ func TestStartShowsTheShortScreenForAnOpenProject(t *testing.T) {
 
 func TestStartShortScreenSaysWhatEnterDoes(t *testing.T) {
 	for name, c := range map[string]struct {
-		busmon relaunchVerdict
+		busmon relaunch.Verdict
 		dead   []string
 		status string
 		enter  string
 	}{
-		"busmon a shell":     {busmon: verdictRelaunch, status: "shop is open: 3 of 3 agents live, busmon not running (its pane is a shell).", enter: "Enter: reopen busmon   c:"},
-		"busmon tab missing": {busmon: verdictCreate, status: "shop is open: 3 of 3 agents live, busmon's tab is missing.", enter: "Enter: reopen busmon   c:"},
-		"agents dead":        {busmon: verdictRunning, dead: []string{"coder", "foureyes"}, status: "shop is open: 1 of 3 agents live (foureyes, coder not).", enter: "Enter: relaunch foureyes and coder in new panes   c:"},
-		"both":               {busmon: verdictRelaunch, dead: []string{"coder"}, status: "shop is open: 2 of 3 agents live (coder not), busmon not running (its pane is a shell).", enter: "Enter: relaunch coder in new panes, reopen busmon   c:"},
+		"busmon a shell":     {busmon: relaunch.VerdictRelaunch, status: "shop is open: 3 of 3 agents live, busmon not running (its pane is a shell).", enter: "Enter: reopen busmon   c:"},
+		"busmon tab missing": {busmon: relaunch.VerdictCreate, status: "shop is open: 3 of 3 agents live, busmon's tab is missing.", enter: "Enter: reopen busmon   c:"},
+		"agents dead":        {busmon: relaunch.VerdictRunning, dead: []string{"coder", "foureyes"}, status: "shop is open: 1 of 3 agents live (foureyes, coder not).", enter: "Enter: relaunch foureyes and coder in new panes   c:"},
+		"both":               {busmon: relaunch.VerdictRelaunch, dead: []string{"coder"}, status: "shop is open: 2 of 3 agents live (coder not), busmon not running (its pane is a shell).", enter: "Enter: relaunch coder in new panes, reopen busmon   c:"},
 		"busmon unknown":     {busmon: "", status: "shop is running: 3 of 3 agents live.", enter: "Enter: focus its workspace   c:"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -89,18 +90,18 @@ func TestStartShortScreenSaysWhatEnterDoes(t *testing.T) {
 // c opens today's full screen; a digit typed on the short one still goes
 // straight to its question, so a habit does not break.
 func TestStartShortScreenCAndDigits(t *testing.T) {
-	_, code, screen := askOpen(t, "c\nq\n", verdictRelaunch)
+	_, code, screen := askOpen(t, "c\nq\n", relaunch.VerdictRelaunch)
 	if code != 0 || !strings.Contains(screen, "1  Project") || !strings.Contains(screen, "4  Team") {
 		t.Fatalf("c = %d:\n%s", code, screen)
 	}
 	if !strings.Contains(screen, "Enter: reopen busmon   1-4: change   q: quit") {
 		t.Fatalf("the full screen's status line lacks busmon:\n%s", screen)
 	}
-	w, code, screen := askOpen(t, "3\ndora\n\n", verdictRunning)
+	w, code, screen := askOpen(t, "3\ndora\n\n", relaunch.VerdictRunning)
 	if code != 0 || len(w.ups) != 1 || !strings.Contains(strings.Join(w.ups[0], " "), "--as dora") || !strings.Contains(screen, "3  You") {
 		t.Fatalf("3 = %d, ups %q:\n%s", code, w.ups, screen)
 	}
-	w, _, _ = askOpen(t, "q\n", verdictRelaunch)
+	w, _, _ = askOpen(t, "q\n", relaunch.VerdictRelaunch)
 	if len(w.ups) != 0 {
 		t.Fatalf("q ran up: %q", w.ups)
 	}
@@ -147,14 +148,14 @@ func TestBusmonVerdict(t *testing.T) {
 			return h.run(args...)
 		}
 	}
-	if v, err := busmonVerdict(ws(h, true), tpl, "demo"); err != nil || v != verdictRelaunch {
+	if v, err := busmonVerdict(ws(h, true), tpl, "demo"); err != nil || v != relaunch.VerdictRelaunch {
 		t.Fatalf("shell: %q %v", v, err)
 	}
 	if bad := h.ran(); len(bad) != 0 || len(h.closes()) != 0 {
 		t.Fatalf("judging acted: %q", h.calls)
 	}
 	h.fg["w4:p1"] = "/r/busmon --project demo"
-	if v, _ := busmonVerdict(ws(h, true), tpl, "demo"); v != verdictRunning {
+	if v, _ := busmonVerdict(ws(h, true), tpl, "demo"); v != relaunch.VerdictRunning {
 		t.Fatalf("running: %q", v)
 	}
 	if v, _ := busmonVerdict(ws(h, false), tpl, "demo"); v != "" {
@@ -169,19 +170,19 @@ func TestBusmonVerdict(t *testing.T) {
 // screen still says busmon is not running and that Enter reopens it
 // (reviewer-codex). busmon's judgement never needs the bus.
 func TestStartShortScreenKeepsBusmonWithTheAgentsUnreadable(t *testing.T) {
-	for v, want := range map[relaunchVerdict][2]string{
-		verdictRelaunch: {"shop: its agents' state cannot be read; busmon not running (its pane is a shell).", "Enter: reopen busmon, and relaunch any agent that is gone (agentbus up's rule)   c:"},
-		verdictRunning:  {"shop: its agents' state cannot be read.", "Enter: open it (agentbus up's rule)   c:"},
+	for v, want := range map[relaunch.Verdict][2]string{
+		relaunch.VerdictRelaunch: {"shop: its agents' state cannot be read; busmon not running (its pane is a shell).", "Enter: reopen busmon, and relaunch any agent that is gone (agentbus up's rule)   c:"},
+		relaunch.VerdictRunning:  {"shop: its agents' state cannot be read.", "Enter: open it (agentbus up's rule)   c:"},
 	} {
 		w := newStartWorld(t)
 		write(t, w.config, "[identity]\nas = \"charlie\"\n")
 		w.writeTemplate("shop", nil)
 		tty := &fakeTTY{Reader: strings.NewReader("c\nq\n")}
 		d := w.deps()
-		d.Live = func(string) (map[string]life, error) { return nil, errors.New("broker down") }
+		d.Live = func(string) (map[string]relaunch.Life, error) { return nil, errors.New("broker down") }
 		d.TTY = func() io.ReadWriter { return tty }
 		d.Look = func(exe string) (string, error) { return "/bin/" + exe, nil }
-		d.Busmon = func(string) (relaunchVerdict, error) { return v, nil }
+		d.Busmon = func(string) (relaunch.Verdict, error) { return v, nil }
 		runStart([]string{w.folder}, d)
 		screen := tty.screen.String()
 		for _, s := range want {
@@ -189,7 +190,7 @@ func TestStartShortScreenKeepsBusmonWithTheAgentsUnreadable(t *testing.T) {
 				t.Errorf("%s: screen lacks %q:\n%s", v, s, screen)
 			}
 		}
-		if v == verdictRelaunch && !strings.Contains(screen, "Enter: reopen busmon, and relaunch any agent that is gone (agentbus up's rule)   1-4: change") {
+		if v == relaunch.VerdictRelaunch && !strings.Contains(screen, "Enter: reopen busmon, and relaunch any agent that is gone (agentbus up's rule)   1-4: change") {
 			t.Errorf("the full screen drops busmon:\n%s", screen)
 		}
 	}

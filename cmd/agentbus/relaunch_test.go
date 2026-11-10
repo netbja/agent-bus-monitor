@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"os"
 	"strings"
 	"testing"
@@ -29,51 +30,51 @@ func TestSnapLife(t *testing.T) {
 		s    bus.AgentSnapshot
 		has  bool
 		ps   func(int) (uint64, error)
-		want life
+		want relaunch.Life
 	}{
-		{"no snapshot", bus.AgentSnapshot{}, false, ps, lifeUnknown},
-		{"no pid", bus.AgentSnapshot{State: "idle"}, true, ps, lifeUnknown},
-		{"runs with its start", bus.AgentSnapshot{PID: 10, PIDStart: 500}, true, ps, lifeAlive},
-		{"pid reused", bus.AgentSnapshot{PID: 10, PIDStart: 499}, true, ps, lifeDead},
-		{"pid gone", bus.AgentSnapshot{PID: 11, PIDStart: 500}, true, ps, lifeDead},
-		{"unreadable", bus.AgentSnapshot{PID: 13, PIDStart: 500}, true, ps, lifeUnknown},
-		{"not on Linux", bus.AgentSnapshot{PID: 10, PIDStart: 500}, true, nil, lifeUnknown},
+		{"no snapshot", bus.AgentSnapshot{}, false, ps, relaunch.LifeUnknown},
+		{"no pid", bus.AgentSnapshot{State: "idle"}, true, ps, relaunch.LifeUnknown},
+		{"runs with its start", bus.AgentSnapshot{PID: 10, PIDStart: 500}, true, ps, relaunch.LifeAlive},
+		{"pid reused", bus.AgentSnapshot{PID: 10, PIDStart: 499}, true, ps, relaunch.LifeDead},
+		{"pid gone", bus.AgentSnapshot{PID: 11, PIDStart: 500}, true, ps, relaunch.LifeDead},
+		{"unreadable", bus.AgentSnapshot{PID: 13, PIDStart: 500}, true, ps, relaunch.LifeUnknown},
+		{"not on Linux", bus.AgentSnapshot{PID: 10, PIDStart: 500}, true, nil, relaunch.LifeUnknown},
 	} {
-		if got := snapLife(c.s, c.has, c.ps); got != c.want {
+		if got := relaunch.SnapLife(c.s, c.has, c.ps); got != c.want {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)
 		}
 	}
 }
 
 func TestDecideRelaunch(t *testing.T) {
-	shell := paneFacts{Known: true, Shell: true}
-	busy := paneFacts{Known: true}
-	withAgent := paneFacts{Known: true, Agent: "claude"}
+	shell := relaunch.PaneFacts{Known: true, Shell: true}
+	busy := relaunch.PaneFacts{Known: true}
+	withAgent := relaunch.PaneFacts{Known: true, Agent: "claude"}
 	for _, c := range []struct {
 		name    string
 		agent   bool
-		snap    life
+		snap    relaunch.Life
 		hasPane bool
-		pane    paneFacts
+		pane    relaunch.PaneFacts
 		create  bool
-		want    relaunchVerdict
+		want    relaunch.Verdict
 	}{
-		{"alive by its snapshot", true, lifeAlive, true, shell, true, verdictAlive},
-		{"alive elsewhere, no tab", true, lifeAlive, false, paneFacts{}, true, verdictAlive},
-		{"dead in a bare shell", true, lifeDead, true, shell, true, verdictRelaunch},
-		{"no snapshot, bare shell", true, lifeUnknown, true, shell, true, verdictRelaunch},
-		{"no snapshot, herdr sees an agent", true, lifeUnknown, true, withAgent, true, verdictAlive},
-		{"dead, another agent in its pane", true, lifeDead, true, withAgent, true, verdictBusy},
-		{"dead, but something runs in its tab", true, lifeDead, true, busy, true, verdictBusy},
-		{"no snapshot, something runs: no proof", true, lifeUnknown, true, busy, true, verdictBusy},
-		{"pane unreadable", true, lifeDead, true, paneFacts{}, true, verdictUnknown},
-		{"no tab: created", true, lifeDead, false, paneFacts{}, true, verdictCreate},
-		{"no tab, not asked to create", true, lifeDead, false, paneFacts{}, false, verdictMissing},
-		{"busmon still runs", false, lifeUnknown, true, busy, true, verdictRunning},
-		{"busmon gone", false, lifeUnknown, true, shell, true, verdictRelaunch},
-		{"an agent where busmon was", false, lifeUnknown, true, withAgent, true, verdictRunning},
+		{"alive by its snapshot", true, relaunch.LifeAlive, true, shell, true, relaunch.VerdictAlive},
+		{"alive elsewhere, no tab", true, relaunch.LifeAlive, false, relaunch.PaneFacts{}, true, relaunch.VerdictAlive},
+		{"dead in a bare shell", true, relaunch.LifeDead, true, shell, true, relaunch.VerdictRelaunch},
+		{"no snapshot, bare shell", true, relaunch.LifeUnknown, true, shell, true, relaunch.VerdictRelaunch},
+		{"no snapshot, herdr sees an agent", true, relaunch.LifeUnknown, true, withAgent, true, relaunch.VerdictAlive},
+		{"dead, another agent in its pane", true, relaunch.LifeDead, true, withAgent, true, relaunch.VerdictBusy},
+		{"dead, but something runs in its tab", true, relaunch.LifeDead, true, busy, true, relaunch.VerdictBusy},
+		{"no snapshot, something runs: no proof", true, relaunch.LifeUnknown, true, busy, true, relaunch.VerdictBusy},
+		{"pane unreadable", true, relaunch.LifeDead, true, relaunch.PaneFacts{}, true, relaunch.VerdictUnknown},
+		{"no tab: created", true, relaunch.LifeDead, false, relaunch.PaneFacts{}, true, relaunch.VerdictCreate},
+		{"no tab, not asked to create", true, relaunch.LifeDead, false, relaunch.PaneFacts{}, false, relaunch.VerdictMissing},
+		{"busmon still runs", false, relaunch.LifeUnknown, true, busy, true, relaunch.VerdictRunning},
+		{"busmon gone", false, relaunch.LifeUnknown, true, shell, true, relaunch.VerdictRelaunch},
+		{"an agent where busmon was", false, relaunch.LifeUnknown, true, withAgent, true, relaunch.VerdictRunning},
 	} {
-		if got := decideRelaunch(c.agent, c.snap, c.hasPane, c.pane, c.create); got != c.want {
+		if got := relaunch.Decide(c.agent, c.snap, c.hasPane, c.pane, c.create); got != c.want {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -88,7 +89,7 @@ func TestLaunchRole(t *testing.T) {
 		"agent-launch":                                                     "",
 		"agent-launch BAD demo":                                            "",
 	} {
-		got, ok := launchRole(cmd, "demo")
+		got, ok := relaunch.LaunchRole(cmd, "demo")
 		if got != want || ok != (want != "") {
 			t.Errorf("%q: %q %v, want %q", cmd, got, ok, want)
 		}
@@ -98,7 +99,7 @@ func TestLaunchRole(t *testing.T) {
 func TestResumeCommand(t *testing.T) {
 	cmd := "agent-launch master demo"
 	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
-	if got := resumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "claude-code"}, true); got != cmd+" --resume "+id {
+	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "claude-code"}, true); got != cmd+" --resume "+id {
 		t.Fatalf("claude: %q", got)
 	}
 	for name, s := range map[string]bus.AgentSnapshot{
@@ -106,11 +107,11 @@ func TestResumeCommand(t *testing.T) {
 		"other client": {Session: id, Client: "codex"},
 		"odd id":       {Session: id + "; rm -rf ~", Client: "claude-code"},
 	} {
-		if got := resumeCommand(cmd, s, true); got != "" {
+		if got := relaunch.ResumeCommand(cmd, s, true); got != "" {
 			t.Errorf("%s: %q", name, got)
 		}
 	}
-	if got := resumeCommand(cmd, bus.AgentSnapshot{Session: id}, false); got != "" {
+	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{Session: id}, false); got != "" {
 		t.Errorf("no snapshot: %q", got)
 	}
 }
@@ -187,7 +188,7 @@ func TestRelaunchOpenRelaunchesOnlyWhatIsGone(t *testing.T) {
 	}
 	ps := func(int) (uint64, error) { return 0, os.ErrNotExist }
 	var out bytes.Buffer
-	err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunchOptions{Resume: true, Create: true}, &out)
+	err := relaunch.Open(h.run, snaps, true, ps, "demo", "w4", relaunchTemplate(), relaunch.Options{Resume: true, Create: true}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestRelaunchOpenDryRunTypesNothing(t *testing.T) {
 		fg:    map[string]string{"w4:p3": "bash"},
 	}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunchOptions{DryRun: true, Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), relaunch.Options{DryRun: true, Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 {
@@ -241,7 +242,7 @@ func TestRelaunchOpenLeavesALiveAgent(t *testing.T) {
 	ps := func(int) (uint64, error) { return 7, nil }
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, snaps, true, ps, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: alive") {
@@ -255,7 +256,7 @@ func TestRelaunchOpenWithoutCreateLeavesMissingTabs(t *testing.T) {
 	h := &relaunchHerdr{}
 	tpl := upTemplate{Tabs: []upTab{{Name: "coder", Command: "agent-launch coder demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "coder: missing") {
@@ -388,7 +389,7 @@ func TestIdleShell(t *testing.T) {
 		"bash -c read": false, "bash script.sh": false, "sh -c x": false, "bash --rcfile x": false,
 		"vim": false, "": false, "python3": false,
 	} {
-		if got := idleShell(strings.Fields(argv)); got != want {
+		if got := relaunch.IdleShell(strings.Fields(argv)); got != want {
 			t.Errorf("%q: %v, want %v", argv, got, want)
 		}
 	}
@@ -403,7 +404,7 @@ func TestRelaunchOpenNeverTypesIntoAShellRunningACommand(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: skipped (busy)") {
@@ -420,7 +421,7 @@ func TestRelaunchOpenLeavesDuplicateLabels(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || !strings.Contains(out.String(), "master: unknown (several tabs") {
@@ -470,7 +471,7 @@ func TestRelaunchOpenLeavesTheOldPaneOfADeadAgentAlone(t *testing.T) {
 		ps := func(int) (uint64, error) { return 0, os.ErrNotExist }
 		tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}}}
 		var out bytes.Buffer
-		if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+		if err := relaunch.Open(h.run, snaps, true, ps, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 			t.Fatal(err)
 		}
 		if bad := h.typedIntoExisting(); len(bad) != 0 {
@@ -493,7 +494,7 @@ func TestRelaunchOpenNeverDuplicatesAcrossSplitPanes(t *testing.T) {
 	}
 	tpl := upTemplate{Tabs: []upTab{{Name: "master", Command: "agent-launch master demo"}, {Name: "busmon", Command: "busmon --project demo"}}}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(h.ran()); n != 4 { // split + run for master and for busmon
@@ -506,7 +507,7 @@ func TestRelaunchOpenNeverDuplicatesAcrossSplitPanes(t *testing.T) {
 	h.fg["w4:p3s"], h.fg["w4:p1s"] = "python3 worker.py", "busmon --project demo"
 	h.calls = nil
 	out.Reset()
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 {
@@ -549,9 +550,9 @@ func procs(pid int) (uint64, error) {
 }
 
 // proofAfter answers the old snapshot n times, then the relaunched one.
-func proofAfter(n int, next bus.AgentSnapshot, sleeps *int) *relaunchProof {
+func proofAfter(n int, next bus.AgentSnapshot, sleeps *int) *relaunch.Proof {
 	reads := 0
-	return &relaunchProof{
+	return &relaunch.Proof{
 		Agents: func() (map[string]bus.AgentSnapshot, error) {
 			reads++
 			if reads <= n {
@@ -570,9 +571,9 @@ func proofAfter(n int, next bus.AgentSnapshot, sleeps *int) *relaunchProof {
 func TestRelaunchOpenClosesTheOldPaneOnceTheNewOneIsProven(t *testing.T) {
 	h, snaps, tpl := deadMaster()
 	sleeps := 0
-	o := relaunchOptions{Create: true, Prove: proofAfter(2, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
+	o := relaunch.Options{Create: true, Prove: proofAfter(2, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
+	if err := relaunch.Open(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.closes(); len(got) != 1 || got[0] != "w4:p3" {
@@ -640,7 +641,7 @@ func TestRelaunchOpenLeavesTheOldPaneWithoutProof(t *testing.T) {
 				return read()
 			}
 			var out bytes.Buffer
-			if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, relaunchOptions{Create: true, Prove: p}, &out); err != nil {
+			if err := relaunch.Open(h.run, snaps, true, procs, "demo", "w4", tpl, relaunch.Options{Create: true, Prove: p}, &out); err != nil {
 				t.Fatal(err)
 			}
 			if got := h.closes(); len(got) != 0 {
@@ -656,9 +657,9 @@ func TestRelaunchOpenLeavesTheOldPaneWithoutProof(t *testing.T) {
 func TestRelaunchOpenDryRunSaysWhatItWouldClose(t *testing.T) {
 	h, snaps, tpl := deadMaster()
 	sleeps := 0
-	o := relaunchOptions{DryRun: true, Create: true, Prove: proofAfter(0, bus.AgentSnapshot{}, &sleeps)}
+	o := relaunch.Options{DryRun: true, Create: true, Prove: proofAfter(0, bus.AgentSnapshot{}, &sleeps)}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
+	if err := relaunch.Open(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || len(h.closes()) != 0 {
@@ -673,9 +674,9 @@ func TestRelaunchOpenReportsAFailedClose(t *testing.T) {
 	h, snaps, tpl := deadMaster()
 	h.closeErr = errors.New("pane busy")
 	sleeps := 0
-	o := relaunchOptions{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
+	o := relaunch.Options{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
 	var out bytes.Buffer
-	err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out)
+	err := relaunch.Open(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out)
 	if err == nil || !strings.Contains(out.String(), "master: old pane w4:p3 not closed: ") {
 		t.Fatalf("err %v out %s", err, out.String())
 	}
@@ -689,9 +690,9 @@ func TestRelaunchOpenClosesOnlyTheRecordedPane(t *testing.T) {
 	h.fg["w4:p7"] = "zsh"
 	snaps["master"] = bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p7"}
 	sleeps := 0
-	o := relaunchOptions{Create: true, Prove: proofAfter(1, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
+	o := relaunch.Options{Create: true, Prove: proofAfter(1, bus.AgentSnapshot{PID: 31, PIDStart: 9, Pane: "w4:p3s"}, &sleeps)}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
+	if err := relaunch.Open(h.run, snaps, true, procs, "demo", "w4", tpl, o, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.closes(); len(got) != 1 || got[0] != "w4:p7" {
@@ -748,9 +749,9 @@ func TestRelaunchOpenNeedsANewProcessAsProof(t *testing.T) {
 		return 7, nil
 	}
 	sleeps := 0
-	o := relaunchOptions{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p3s"}, &sleeps)}
+	o := relaunch.Options{Create: true, Prove: proofAfter(0, bus.AgentSnapshot{PID: 30, PIDStart: 7, Pane: "w4:p3s"}, &sleeps)}
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, snaps, true, ps, "demo", "w4", tpl, o, &out); err != nil {
+	if err := relaunch.Open(h.run, snaps, true, ps, "demo", "w4", tpl, o, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.closes(); len(got) != 0 || !strings.Contains(out.String(), "no proof of the new agent") {

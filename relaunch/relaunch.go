@@ -1,126 +1,134 @@
-package main
+// Package relaunch is the relaunch core (self-repair watcher spec, part 7,
+// step 1): it judges a template tab of an open workspace and reruns the
+// template command in a new pane split from it, then proves the new agent and
+// closes the old pane. It never types into an existing pane. Its callers are
+// agentbus up --resume and reload (the CLI entry, which keeps its herdr-pane
+// guard and up's lock) and, once built, the dispatch service (ServiceHerdr).
+package relaunch
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
-// life is what is known of an agent's process.
-type life int
+// Life is what is known of an agent's process.
+type Life int
 
 const (
-	lifeUnknown life = iota
-	lifeAlive
-	lifeDead
+	LifeUnknown Life = iota
+	LifeAlive
+	LifeDead
 )
 
-func (l life) String() string {
+func (l Life) String() string {
 	switch l {
-	case lifeAlive:
+	case LifeAlive:
 		return "alive"
-	case lifeDead:
+	case LifeDead:
 		return "dead"
 	}
 	return "unknown"
 }
 
-// snapLife judges an agent by its verified identity, the rule the dispatcher
+// SnapLife judges an agent by its verified identity, the rule the dispatcher
 // uses: the recorded pid runs with the recorded start time. A pid gone or
 // reused is dead; no snapshot, no pid, or an unreadable process is unknown.
-// Gone is pidListedNoMore: dispatch.ProcStart's ErrNoProcess does not wrap
+// Gone is PidListedNoMore: dispatch.ProcStart's ErrNoProcess does not wrap
 // fs.ErrNotExist, and reading it as unknown made a tab whose old client
 // herdr still showed read alive, never waited on (reload of 2026-11-09).
-func snapLife(s bus.AgentSnapshot, has bool, procStart func(int) (uint64, error)) life {
+func SnapLife(s bus.AgentSnapshot, has bool, procStart func(int) (uint64, error)) Life {
 	if !has || s.PID <= 0 || s.PIDStart == 0 || procStart == nil {
-		return lifeUnknown
+		return LifeUnknown
 	}
 	start, err := procStart(s.PID)
 	switch {
-	case err != nil && pidListedNoMore(err):
-		return lifeDead
+	case err != nil && PidListedNoMore(err):
+		return LifeDead
 	case err != nil:
-		return lifeUnknown
+		return LifeUnknown
 	case start != s.PIDStart:
-		return lifeDead
+		return LifeDead
 	}
-	return lifeAlive
+	return LifeAlive
 }
 
-// paneFacts is what herdr says of a tab's pane.
-type paneFacts struct {
+// PaneFacts is what herdr says of a tab's pane.
+type PaneFacts struct {
 	Known bool   // herdr answered for this pane
 	Agent string // the agent herdr detects in it, "" for none
 	Shell bool   // its one foreground process is an interactive shell by its argv (no proof it is idle)
 }
 
-// relaunchVerdict is what up does with one template tab of an open workspace.
-type relaunchVerdict string
+// Verdict is what up does with one template tab of an open workspace.
+type Verdict string
 
 const (
-	verdictAlive    relaunchVerdict = "alive"
-	verdictRunning  relaunchVerdict = "running"  // a tab that is not an agent: something runs in it
-	verdictRelaunch relaunchVerdict = "relaunch" // in a new pane split from the tab's pane
-	verdictCreate   relaunchVerdict = "create"   // no tab of that label: create it, then run
-	verdictBusy     relaunchVerdict = "skipped (busy)"
-	verdictUnknown  relaunchVerdict = "unknown"
-	verdictMissing  relaunchVerdict = "missing" // no tab, and creating one was not asked for
+	VerdictAlive    Verdict = "alive"
+	VerdictRunning  Verdict = "running"  // a tab that is not an agent: something runs in it
+	VerdictRelaunch Verdict = "relaunch" // in a new pane split from the tab's pane
+	VerdictCreate   Verdict = "create"   // no tab of that label: create it, then run
+	VerdictBusy     Verdict = "skipped (busy)"
+	VerdictUnknown  Verdict = "unknown"
+	VerdictMissing  Verdict = "missing" // no tab, and creating one was not asked for
 )
 
-// decideRelaunch is the pure rule. agent says the tab runs an agent-launch
-// line; snap is that agent's life by its snapshot. A relaunch never types into
+// Decide is the pure rule. agent says the tab runs an agent-launch
+// line; snap is that agent's Life by its snapshot. A relaunch never types into
 // an existing pane: whether a shell waits at its prompt cannot be proven from
 // outside (a builtin read keeps its argv and can even keep a raw terminal), so
 // the command runs in a new pane split from the tab's, and nothing is ever
 // typed into the old one (closeOldPanes may close it once the new agent is
 // proven). pane covers every pane of the tab: Shell only when all of them are
 // plain shells.
-func decideRelaunch(agent bool, snap life, hasPane bool, pane paneFacts, create bool) relaunchVerdict {
-	if agent && snap == lifeAlive {
-		return verdictAlive // alive, wherever its pane is
+func Decide(agent bool, snap Life, hasPane bool, pane PaneFacts, create bool) Verdict {
+	if agent && snap == LifeAlive {
+		return VerdictAlive // alive, wherever its pane is
 	}
 	if !hasPane {
 		if create {
-			return verdictCreate
+			return VerdictCreate
 		}
-		return verdictMissing
+		return VerdictMissing
 	}
 	if !pane.Known {
-		return verdictUnknown
+		return VerdictUnknown
 	}
 	if pane.Agent != "" {
 		if !agent {
-			return verdictRunning
+			return VerdictRunning
 		}
-		if snap == lifeDead {
-			return verdictBusy // another agent runs in its tab
+		if snap == LifeDead {
+			return VerdictBusy // another agent runs in its tab
 		}
-		return verdictAlive
+		return VerdictAlive
 	}
 	if !pane.Shell {
 		if agent {
 			// Something runs in one of the tab's panes: maybe this agent, relaunched
 			// before and not registered yet, under a name herdr does not detect.
-			return verdictBusy
+			return VerdictBusy
 		}
-		return verdictRunning
+		return VerdictRunning
 	}
-	return verdictRelaunch
+	return VerdictRelaunch
 }
 
-// launchRole reads `[env …] …/agent-launch <role> <project> …` and returns the
+// LaunchRole reads `[env …] …/agent-launch <role> <project> …` and returns the
 // role when the line launches one for this project.
-func launchRole(command, project string) (string, bool) {
+func LaunchRole(command, project string) (string, bool) {
 	f := strings.Fields(command)
 	for i, w := range f {
 		if filepath.Base(w) != "agent-launch" || i+2 >= len(f) {
@@ -137,9 +145,9 @@ func launchRole(command, project string) (string, bool) {
 // never appended to a command line typed into a shell.
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,63}$`)
 
-// resumeCommand is the tab's command resuming the agent's Claude Code
+// ResumeCommand is the tab's command resuming the agent's Claude Code
 // session, or "" when it cannot: another client, no session, an odd id.
-func resumeCommand(command string, s bus.AgentSnapshot, has bool) string {
+func ResumeCommand(command string, s bus.AgentSnapshot, has bool) string {
 	if !has || s.Session == "" || !sessionIDPattern.MatchString(s.Session) {
 		return ""
 	}
@@ -158,11 +166,11 @@ var shells = []string{"bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh"
 // interactiveFlags are the only arguments an idle interactive shell may carry.
 var interactiveFlags = []string{"-l", "--login", "-i", "--interactive"}
 
-// idleShell is affirmative evidence of a shell at its prompt: a shell started
+// IdleShell is affirmative evidence of a shell at its prompt: a shell started
 // with nothing but login or interactive flags. A shell running a script
 // (`bash x.sh`), a command (`bash -c 'read answer'`) or with any other
 // argument is running work, and so is a process herdr reports without argv.
-func idleShell(argv []string) bool {
+func IdleShell(argv []string) bool {
 	if len(argv) == 0 || !slices.Contains(shells, shellName(argv[0])) {
 		return false
 	}
@@ -174,9 +182,9 @@ func idleShell(argv []string) bool {
 	return true
 }
 
-// workspacePanes maps a workspace's tab labels to the first pane of each,
+// WorkspacePanes maps a workspace's tab labels to the first pane of each,
 // with herdr's detected agent: `tab list` and `pane list` for the workspace.
-func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[string]paneRef, error) {
+func WorkspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[string]PaneRef, error) {
 	out, err := herdr("tab", "list", "--workspace", ws)
 	if err != nil {
 		return nil, fmt.Errorf("herdr tab list: %w", err)
@@ -208,7 +216,7 @@ func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[
 	if err := json.Unmarshal(out, &panes); err != nil {
 		return nil, fmt.Errorf("herdr pane list: %w", err)
 	}
-	m := map[string]paneRef{}
+	m := map[string]PaneRef{}
 	for _, t := range tabs.Result.Tabs {
 		if ref, dup := m[t.Label]; dup {
 			ref.Dup = true // two tabs of one label: which one holds the role is unknown
@@ -235,17 +243,17 @@ func workspacePanes(herdr func(args ...string) ([]byte, error), ws string) (map[
 	return m, nil
 }
 
-type paneRef struct {
+type PaneRef struct {
 	Pane, Agent string   // the first pane; the agent herdr sees in any pane of the tab
 	All         []string // every pane of the tab
 	Dup         bool     // more than one tab carries this label
 }
 
-// paneShell asks herdr for the pane's foreground processes: true when there is
-// one, an interactive shell by its argv (idleShell). It only classifies a
+// PaneShell asks herdr for the pane's foreground processes: true when there is
+// one, an interactive shell by its argv (IdleShell). It only classifies a
 // tab (its command is gone, so relaunch it in a new pane); it is never a
 // licence to type into this pane. An error means unknown.
-func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, error) {
+func PaneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, error) {
 	out, err := herdr("pane", "process-info", "--pane", pane)
 	if err != nil {
 		return false, err
@@ -266,65 +274,65 @@ func paneShell(herdr func(args ...string) ([]byte, error), pane string) (bool, e
 	if len(fg) == 0 {
 		return false, errors.New("no foreground process reported")
 	}
-	return len(fg) == 1 && idleShell(fg[0].Argv), nil
+	return len(fg) == 1 && IdleShell(fg[0].Argv), nil
 }
 
-// relaunchOptions are up's flags for an open workspace.
-type relaunchOptions struct {
+// Options are up's flags for an open workspace.
+type Options struct {
 	Resume, DryRun, Create bool
-	Dir                    string         // the project directory a new pane starts in
-	Prove                  *relaunchProof // nil: every old pane is left as it is
+	Dir                    string // the project directory a new pane starts in
+	Prove                  *Proof // nil: every old pane is left as it is
 	// CloseBusmon: a relaunched busmon's old shell is closed (start-busmon-pane):
 	// only up on an open workspace sets it.
 	CloseBusmon bool
 	// Verdicts, when set, receives each tab's verdict by tab name: a caller
 	// that relaunches one role (reload) fails on anything but a relaunch.
-	Verdicts map[string]relaunchVerdict
+	Verdicts map[string]Verdict
 }
 
-// tabJudgement is one template tab of an open workspace, judged.
-type tabJudgement struct {
-	V       relaunchVerdict
+// TabJudgement is one template tab of an open workspace, judged.
+type TabJudgement struct {
+	V       Verdict
 	Note    string // why an unknown is unknown, when it is decided before the panes are read
 	Role    string
 	IsAgent bool
 	Snap    bus.AgentSnapshot
 	Has     bool // a snapshot of an agent tab, read successfully
-	Ref     paneRef
+	Ref     PaneRef
 }
 
-// judgeTab reads herdr's facts for tab t and applies decideRelaunch: the
+// JudgeTab reads herdr's facts for tab t and applies Decide: the
 // one rule both up and reload's relaunch use.
-func judgeTab(herdr func(args ...string) ([]byte, error), panes map[string]paneRef, t upTab, project string,
-	snaps map[string]bus.AgentSnapshot, snapsOK bool, procStart func(int) (uint64, error), create bool) tabJudgement {
-	role, isAgent := launchRole(t.Command, project)
+func JudgeTab(herdr func(args ...string) ([]byte, error), panes map[string]PaneRef, t Tab, project string,
+	snaps map[string]bus.AgentSnapshot, snapsOK bool, procStart func(int) (uint64, error), create bool) TabJudgement {
+	role, isAgent := LaunchRole(t.Command, project)
 	snap, has := snaps[role]
 	has = has && isAgent && snapsOK
-	sl := lifeUnknown
+	sl := LifeUnknown
 	if isAgent {
-		sl = snapLife(snap, has, procStart)
+		sl = SnapLife(snap, has, procStart)
 	}
-	j := tabJudgement{Role: role, IsAgent: isAgent, Snap: snap, Has: has}
+	j := TabJudgement{Role: role, IsAgent: isAgent, Snap: snap, Has: has}
 	ref, hasPane := panes[t.Name]
 	j.Ref = ref
-	if ref.Dup && !(isAgent && sl == lifeAlive) {
-		j.V, j.Note = verdictUnknown, "several tabs are named "+t.Name+"; close the extra one"
+	if ref.Dup && !(isAgent && sl == LifeAlive) {
+		j.V, j.Note = VerdictUnknown, "several tabs are named "+t.Name+"; close the extra one"
 		return j
 	}
-	if hasPane && ref.Pane == "" && !(isAgent && sl == lifeAlive) {
-		j.V, j.Note = verdictUnknown, "herdr lists the tab but no pane in it"
+	if hasPane && ref.Pane == "" && !(isAgent && sl == LifeAlive) {
+		j.V, j.Note = VerdictUnknown, "herdr lists the tab but no pane in it"
 		return j
 	}
-	facts := paneFacts{}
+	facts := PaneFacts{}
 	if hasPane {
 		facts.Agent = ref.Agent
 		facts.Known = true
-		if ref.Agent == "" && !(isAgent && sl == lifeAlive) {
+		if ref.Agent == "" && !(isAgent && sl == LifeAlive) {
 			// The tab's command is gone only if every pane is a plain shell: a
 			// process in any of them may be the agent herdr does not detect.
 			facts.Shell = true
 			for _, p := range ref.All {
-				shell, err := paneShell(herdr, p)
+				shell, err := PaneShell(herdr, p)
 				if err != nil {
 					facts.Known = false
 					break
@@ -333,14 +341,14 @@ func judgeTab(herdr func(args ...string) ([]byte, error), panes map[string]paneR
 			}
 		}
 	}
-	j.V = decideRelaunch(isAgent, sl, hasPane, facts, create)
+	j.V = Decide(isAgent, sl, hasPane, facts, create)
 	return j
 }
 
-// relaunchProof is how up proves a relaunched agent before it closes the pane
+// Proof is how up proves a relaunched agent before it closes the pane
 // the dead one left (the person, 2026-10-27): the agents' snapshots, read once a
 // second, at most Tries times.
-type relaunchProof struct {
+type Proof struct {
 	Agents func() (map[string]bus.AgentSnapshot, error)
 	Sleep  func(time.Duration)
 	Tries  int
@@ -353,23 +361,23 @@ type oldPane struct {
 	Was                  bus.AgentSnapshot
 }
 
-// relaunchOpen checks every tab of an open workspace and reruns the template
+// Open checks every tab of an open workspace and reruns the template
 // command in each pane whose agent (or command) is gone. Master goes first,
 // then the template order. It never types anything but the template command,
 // into a pane it has just created, and touches only panes of workspace ws.
 // The only pane it closes is a relaunched agent's old one: the pane its
 // snapshot recorded, once the new agent is proven (closeOldPanes).
-func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]bus.AgentSnapshot, snapsOK bool,
-	procStart func(int) (uint64, error), project, ws string, tpl upTemplate, o relaunchOptions, stdout io.Writer) error {
-	panes, err := workspacePanes(herdr, ws)
+func Open(herdr func(args ...string) ([]byte, error), snaps map[string]bus.AgentSnapshot, snapsOK bool,
+	procStart func(int) (uint64, error), project, ws string, tpl Template, o Options, stdout io.Writer) error {
+	panes, err := WorkspacePanes(herdr, ws)
 	if err != nil {
 		return err
 	}
 	dir := o.Dir
 	tabs := slices.Clone(tpl.Tabs)
-	slices.SortStableFunc(tabs, func(a, b upTab) int {
-		ra, _ := launchRole(a.Command, project)
-		rb, _ := launchRole(b.Command, project)
+	slices.SortStableFunc(tabs, func(a, b Tab) int {
+		ra, _ := LaunchRole(a.Command, project)
+		rb, _ := LaunchRole(b.Command, project)
 		switch {
 		case ra == "master" && rb != "master":
 			return -1
@@ -384,7 +392,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		if strings.TrimSpace(t.Command) == "" {
 			continue
 		}
-		j := judgeTab(herdr, panes, t, project, snaps, snapsOK, procStart, o.Create)
+		j := JudgeTab(herdr, panes, t, project, snaps, snapsOK, procStart, o.Create)
 		if o.Verdicts != nil {
 			o.Verdicts[t.Name] = j.V
 		}
@@ -395,22 +403,22 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		role, isAgent, snap, has, ref, v := j.Role, j.IsAgent, j.Snap, j.Has, j.Ref, j.V
 		cmd := t.Command
 		resumed := false
-		if o.Resume && isAgent && (v == verdictRelaunch || v == verdictCreate) {
-			if rc := resumeCommand(cmd, snap, has); rc != "" {
+		if o.Resume && isAgent && (v == VerdictRelaunch || v == VerdictCreate) {
+			if rc := ResumeCommand(cmd, snap, has); rc != "" {
 				cmd, resumed = rc, true
 			}
 		}
 		// The old pane is closed only when it is the exact pane the dead agent's
 		// snapshot recorded: the tab's other panes are never touched.
 		old := ""
-		if v == verdictRelaunch && isAgent && has && o.Prove != nil && slices.Contains(ref.All, snap.Pane) {
+		if v == VerdictRelaunch && isAgent && has && o.Prove != nil && slices.Contains(ref.All, snap.Pane) {
 			old = snap.Pane
 		}
 		// busmon's tab (start-busmon-pane, the person's answers of 2026-11-06):
 		// its old pane is closed with no proof, only when it is the tab's one
 		// pane, re-read as a plain shell right before the close.
 		busmonOld, busmonMany := "", 0
-		if v == verdictRelaunch && o.CloseBusmon && isBusmonTab(t, project) {
+		if v == VerdictRelaunch && o.CloseBusmon && IsBusmonTab(t, project) {
 			if len(ref.All) == 1 {
 				busmonOld = ref.All[0]
 			} else {
@@ -419,15 +427,15 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		}
 		word := string(v)
 		switch v {
-		case verdictRelaunch, verdictCreate:
+		case VerdictRelaunch, VerdictCreate:
 			word = "relaunched"
 			if o.DryRun {
 				word = "would relaunch"
 			}
 			switch {
-			case v == verdictRelaunch && old != "" && o.DryRun:
+			case v == VerdictRelaunch && old != "" && o.DryRun:
 				word += " (new pane; would close the old one " + old + " once the new one is proven)"
-			case v == verdictRelaunch && old != "":
+			case v == VerdictRelaunch && old != "":
 				word += " (new pane; the old one " + old + " closes once the new one is proven)"
 			case busmonOld != "" && o.DryRun:
 				word += " (new pane; would close the old one " + busmonOld + " if it is still a plain shell)"
@@ -435,10 +443,10 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 				word += " (new pane; the old one " + busmonOld + " closes if it is still a plain shell)"
 			case busmonMany > 0:
 				word += fmt.Sprintf(" (new pane; the old ones are left as they are: the tab has %d panes)", busmonMany)
-			case v == verdictRelaunch:
+			case v == VerdictRelaunch:
 				word += " (new pane; the old one is left as it is)"
 			}
-			if v == verdictCreate {
+			if v == VerdictCreate {
 				word += " (new tab)"
 			}
 			if resumed {
@@ -449,7 +457,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 		}
 		if !o.DryRun {
 			pane := ref.Pane
-			if v == verdictCreate {
+			if v == VerdictCreate {
 				pane, err = createTab(herdr, ws, t.Name)
 				if err != nil {
 					errs = append(errs, err)
@@ -457,7 +465,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 					continue
 				}
 			}
-			if v == verdictRelaunch {
+			if v == VerdictRelaunch {
 				pane, err = splitPane(herdr, ref.Pane, dir)
 				if err != nil {
 					errs = append(errs, err)
@@ -465,7 +473,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 					continue
 				}
 			}
-			if v == verdictRelaunch || v == verdictCreate {
+			if v == VerdictRelaunch || v == VerdictCreate {
 				if _, err := herdr("pane", "run", pane, cmd); err != nil {
 					errs = append(errs, fmt.Errorf("herdr pane run (%s): %w", t.Name, err))
 					fmt.Fprintf(stdout, "%s: relaunch failed: %v\n", t.Name, err)
@@ -494,7 +502,7 @@ func relaunchOpen(herdr func(args ...string) ([]byte, error), snaps map[string]b
 // shell is closed. Closing is not typing. Anything else (no proof, busy,
 // gone, unreadable) leaves the pane as it is and says so.
 func closeOldPanes(herdr func(args ...string) ([]byte, error), procStart func(int) (uint64, error),
-	p *relaunchProof, olds []oldPane, stdout io.Writer) error {
+	p *Proof, olds []oldPane, stdout io.Writer) error {
 	proven := map[string]bool{}
 	for try := 0; len(proven) < len(olds) && try < p.Tries; try++ {
 		if try > 0 {
@@ -516,7 +524,7 @@ func closeOldPanes(herdr func(args ...string) ([]byte, error), procStart func(in
 			fmt.Fprintf(stdout, "%s: old pane %s left as it is (no proof of the new agent in pane %s after %d s)\n", o.Name, o.Old, o.New, p.Tries)
 			continue
 		}
-		shell, err := paneShell(herdr, o.Old)
+		shell, err := PaneShell(herdr, o.Old)
 		if err != nil {
 			fmt.Fprintf(stdout, "%s: old pane %s left as it is (unreadable: %v)\n", o.Name, o.Old, err)
 			continue
@@ -539,7 +547,7 @@ func closeOldPanes(herdr func(args ...string) ([]byte, error), procStart func(in
 // interactive shell; anything else leaves it as it is and says why. Closing
 // is not typing: nothing is ever typed into it.
 func closeIfShell(herdr func(args ...string) ([]byte, error), name, pane string, stdout io.Writer) error {
-	shell, err := paneShell(herdr, pane)
+	shell, err := PaneShell(herdr, pane)
 	if err != nil {
 		fmt.Fprintf(stdout, "%s: old pane %s left as it is (unreadable: %v)\n", name, pane, err)
 		return nil
@@ -556,9 +564,9 @@ func closeIfShell(herdr func(args ...string) ([]byte, error), name, pane string,
 	return nil
 }
 
-// isBusmonTab: the template tab named busmon that runs this project's busmon
+// IsBusmonTab: the template tab named busmon that runs this project's busmon
 // (its first word's base name busmon, --project <project>). No other tab.
-func isBusmonTab(t upTab, project string) bool {
+func IsBusmonTab(t Tab, project string) bool {
 	if t.Name != "busmon" {
 		return false
 	}
@@ -608,8 +616,6 @@ func shellName(argv0 string) string {
 	return strings.TrimPrefix(filepath.Base(argv0), "-")
 }
 
-func itoa(n int) string { return strconv.Itoa(n) }
-
 // splitPane opens a new pane beside pane, unfocused, in dir: a shell nobody
 // has typed into, which is the only kind a relaunch writes to.
 func splitPane(herdr func(args ...string) ([]byte, error), pane, dir string) (string, error) {
@@ -632,4 +638,33 @@ func splitPane(herdr func(args ...string) ([]byte, error), pane, dir string) (st
 		return "", fmt.Errorf("herdr pane split: unexpected reply %s", strings.TrimSpace(string(out)))
 	}
 	return v.Result.Pane.PaneID, nil
+}
+
+// Tab is one tab of a project template.
+type Tab struct {
+	Name    string `toml:"name"`
+	Command string `toml:"command"`
+}
+
+// Template is a project template (~/.config/agentbus/projects/<p>.toml).
+type Template struct {
+	Name       string `toml:"name"`
+	WorkingDir string `toml:"working_dir"`
+	Tabs       []Tab  `toml:"tabs"`
+}
+
+// PidListedNoMore: a pid's start could not be read because /proc, readable
+// here, lists no such pid: dispatch.ProcStart's ErrNoProcess, which it returns
+// only after that same check (backup-live-check: it does not wrap
+// fs.ErrNotExist), or a bare fs.ErrNotExist. Any other error (no /proc, a
+// failed read) proves nothing: the project is refused.
+func PidListedNoMore(err error) bool {
+	if errors.Is(err, dispatch.ErrNoProcess) {
+		return true
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	_, serr := os.Stat("/proc/self/stat")
+	return serr == nil
 }
