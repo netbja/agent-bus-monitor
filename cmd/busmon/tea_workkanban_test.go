@@ -291,3 +291,19 @@ func TestWorkKanbanHeadingsAndBands(t *testing.T) {
 		t.Fatalf("+N more drawn in a one-row band:\n%s", out)
 	}
 }
+
+// foureyes: the priority mark leads line 1 in For you and In progress too.
+func TestWorkKanbanPriorityEveryColumn(t *testing.T) {
+	high := &request{Task: "x", Tracked: true, State: "accepted", Priority: bus.PriorityHigh}
+	w := workModel{
+		You:  []workItem{{Verb: verbAnswer, Key: "req:x", Who: "master", Text: "x", Req: high}},
+		Team: []teamRow{{Agent: "coder", Word: "working", Task: high}},
+		Next: []workItem{{Key: "req:y", Who: "coder", Text: "y", Req: high}},
+	}
+	k := workKanban(w, workDraw{now: shellNow})
+	for c := 0; c < 3; c++ {
+		if got := k.cols[c].cards[0].lines[0].text(); !strings.HasPrefix(got, GlyphUp) {
+			t.Errorf("column %d: %q has no leading ↑", c, got)
+		}
+	}
+}

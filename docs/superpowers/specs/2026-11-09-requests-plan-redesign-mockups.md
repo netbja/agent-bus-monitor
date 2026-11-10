@@ -378,6 +378,9 @@ four columns: **For you · In progress · Next · Ideas**.
     progress the agent, `#plan` and, when it holds a gate, what it reviews and for whom with the
     gate's age and `(+N)` for more (with no task that is its title); Next the owner and `#t8 waits on t7`; Ideas
     `idea` and the note's file.
+  - In progress carries no progress line: a card is two lines, and the progress line
+    (`started 14:12 ━━━━── ~60% · ends ~15:20`) needs a column of its own width. The list
+    (layout A) keeps it under each agent at work.
   - The second holds the title, indented two cells and cut with `…` at the column's width,
     which leaves 29 cells at 130 columns. A card never wraps to a third line.
   - Each column scrolls on its own, keeping the selected card in view, and ends with `+N more`
