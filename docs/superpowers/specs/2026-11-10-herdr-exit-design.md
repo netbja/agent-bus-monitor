@@ -5,6 +5,8 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 13: reviewer-codex on r11 — `projectKinds` does not drive `--reset`; `{p}:events` gets
+  an explicit place in busmon's purge list and its own replay/tail (§6.3, §6.5)
 - Revision 12: reviewer-codex on r9 — the guard lifts only on a verified **empty** input region
   or `ctrl+\ y`, never on "the original text is gone" (a partial edit could still submit a wake
   line or `/clear`) (§4.2, §8)
@@ -558,8 +560,11 @@ superseded.
 
 ### 6.3 Wire and state
 - Redis: one new hash `{p}:resume` (§4.7) and one new stream `{p}:events` (§6.5), both added
-  to the project's key kinds so `--reset`/`--delete`, backup and restore cover them, and the
-  observed `blocked` source. The design uses only
+  to `projectKinds` (key recognition: `--delete`, project listing, backup and restore), and the
+  observed `blocked` source. `projectKinds` does **not** drive `busmon --reset`: that purges
+  busmon's own `streamKinds` list (`Purge(ctx, streamKinds)`). `{p}:events` therefore joins
+  the reset explicitly (§6.5); `{p}:resume` deliberately does not (a reset trims activity, it
+  must not forget how to resume agents). The design uses only
   commands available in Redis 7.2 (`WATCH`/`MULTI`, `HSET`, `HGETALL`, `HDEL`, `TIME`,
   `CONFIG GET`), so **Valkey (a Redis 7.2 fork) is acceptable as broker for this feature**.
   Declaring Valkey support for agent-bus as a whole is a separate check, done before any such
@@ -618,9 +623,20 @@ dispatcher (fenced, like its other writes), `agentbus attach` for attach/detach 
 own process; unfenced, as a person's `notify` is today), `holder drain` and `up` for
 relaunch/drain. Not the holder (no Redis). busmon replays it on start (`XREVRANGE` of the last
 N) and follows it with `XREAD BLOCK`, as it already does for `notify`; it is a **timeline, not a
-source of truth**: state stays in `{p}:agents`, `{p}:observed`, `{p}:resume`. Added to
-`projectKinds` (so `--reset`, `--delete`, backup cover it), not to `activityKinds` (a wake
-attempt must not date a project as active). Works on 7.2. Lands with the steps that produce the
+source of truth**: state stays in `{p}:agents`, `{p}:observed`, `{p}:resume`. Three lists, each
+named on purpose:
+- `projectKinds` (bus): add `events`, so `--delete`, project listing and backup/restore know
+  the key;
+- busmon's reset list: today `--reset` purges `streamKinds` (status, report, notify, cmd).
+  It becomes an explicit `resetKinds = streamKinds + events`, used only by `--reset`
+  (`XTRIM`, groups kept, as today);
+- busmon's tail lists: `streamKinds` stays the ACTIVITY feed (unchanged); the timeline reads
+  `events` with its own `Recent`/`TailFrom` cursor, so events never mix into ACTIVITY;
+- not `activityKinds` (a wake attempt must not date a project as active).
+Tests: `--reset` on a disposable broker trims `{p}:events` and keeps `{p}:resume`; a guard test
+fails if a stream in `projectKinds` is in neither `resetKinds` nor an explicit
+"survives reset" list (`resume`-like state), so the next stream cannot be forgotten the same
+way. Works on 7.2. Lands with the steps that produce the
 events: wake/refusal kinds in step 6, attach/detach in 12, relaunch/drain in 11 and 13.
 
 **3. Keyspace notifications — defer.** They need `notify-keyspace-events` set on the broker, a
