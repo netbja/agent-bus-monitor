@@ -146,7 +146,7 @@ KEYS
   ↑↓                   choose
   pgup pgdn            a page of the file list
   enter                insert the selected path, a file or a folder, in place of the @ and its query (no new line)
-  tab                  on a folder: list its files (the query becomes the folder); on a file: insert it
+  tab                  on a folder: list its files (the query becomes the folder); on a file: insert it; in a message that holds only @ and the start of an agent's name, the recipient instead (the hint says recipient)
   esc                  close the list only, the typed @query kept; esc again closes the window
   ^C                   quit (everywhere)
   the first-launch tour

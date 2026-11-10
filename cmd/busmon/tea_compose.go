@@ -995,7 +995,11 @@ func (m Model) composeFoot(w int) (Line, []footHit) {
 			foot = append(foot, Seg{Text: "   "})
 		}
 		x := foot.Width()
-		foot = append(foot, Seg{Text: b.Keys, Role: RoleAccent, Bold: true}, Seg{Text: " " + b.Hint, Role: RoleMuted})
+		word := b.Hint
+		if w := m.atHint(b.Act); w != "" {
+			word = w
+		}
+		foot = append(foot, Seg{Text: b.Keys, Role: RoleAccent, Bold: true}, Seg{Text: " " + word, Role: RoleMuted})
 		if foot.Width() <= w {
 			hits = append(hits, footHit{x: x, w: foot.Width() - x, act: b.Act})
 		}

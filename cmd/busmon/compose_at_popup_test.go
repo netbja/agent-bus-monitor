@@ -425,7 +425,7 @@ func TestAtMouse(t *testing.T) {
 
 func TestAtFooterIsTheTable(t *testing.T) {
 	f := &atFake{res: filepick.Result{Entries: atFixtureFiles}}
-	m := typeAt(t, atShell(t, 140, 40, f), "@")
+	m := typeAt(t, atShell(t, 140, 40, f), "see @") // not an agent's prefix: the table's own words
 	plain := m.grid().plain()
 	for _, b := range composeFileBindings {
 		if b.Hint != "" && !strings.Contains(plain, b.Keys+" "+b.Hint) {
@@ -570,5 +570,30 @@ func TestAtSourceFor(t *testing.T) {
 	env["HOME"] = "relative"
 	if src := atSourceFor("demo", getenv); src.home != "" {
 		t.Errorf("a relative HOME: %q", src.home)
+	}
+}
+
+// The hints say what tab does here (reviewer-codex): on a text that is only
+// @agent-prefix it makes the recipient, so "tab recipient", in the window's
+// hint row and the screen's footer; elsewhere "tab open folder". The help
+// names both.
+func TestAtTabHintFollowsWhatTabDoes(t *testing.T) {
+	f := &atFake{res: filepick.Result{Entries: atFixtureFiles}}
+	m := typeAt(t, atShell(t, 140, 40, f), "@co")
+	plain := m.grid().plain()
+	if n := strings.Count(plain, "tab recipient"); n != 2 || strings.Contains(plain, "tab open folder") {
+		t.Errorf("@co: %d times tab recipient, open folder shown %v", n, strings.Contains(plain, "tab open folder"))
+	}
+	m = typeAt(t, atShell(t, 140, 40, f), "see @co")
+	plain = m.grid().plain()
+	if n := strings.Count(plain, "tab open folder"); n != 2 || strings.Contains(plain, "tab recipient") {
+		t.Errorf("see @co: %d times tab open folder", n)
+	}
+	m = typeAt(t, atShell(t, 140, 40, f), "@zz") // no agent starts so
+	if strings.Contains(m.grid().plain(), "tab recipient") {
+		t.Error("@zz: tab recipient advertised")
+	}
+	if !strings.Contains(plainOf(helpText()), "only @ and the start of an agent's name") {
+		t.Error("the help does not say when tab makes the recipient")
 	}
 }

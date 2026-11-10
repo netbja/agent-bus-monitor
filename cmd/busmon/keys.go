@@ -331,7 +331,7 @@ var (
 		{Keys: "pgup pgdn", Help: "a page of the file list", Act: ActPageUp, match: keyIs(keyPgUp)},
 		{Keys: "pgdn", Act: ActPageDown, match: keyIs(keyPgDn)},
 		{Keys: "enter", Hint: "insert", Help: "insert the selected path, a file or a folder, in place of the @ and its query (no new line)", Act: ActOpen, match: keyIs(keyEnter)},
-		{Keys: "tab", Hint: "open folder", Help: "on a folder: list its files (the query becomes the folder); on a file: insert it", Act: ActFieldNext, match: keyIs(keyTab)},
+		{Keys: "tab", Hint: "open folder", Help: "on a folder: list its files (the query becomes the folder); on a file: insert it; in a message that holds only @ and the start of an agent's name, the recipient instead (the hint says recipient)", Act: ActFieldNext, match: keyIs(keyTab)},
 		{Keys: "esc", Hint: "keep text", Help: "close the list only, the typed @query kept; esc again closes the window", Act: ActEscape, match: keyIs(keyEscape)},
 	}
 	pickBindings = []binding{

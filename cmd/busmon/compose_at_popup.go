@@ -368,9 +368,7 @@ func (m *Model) composeFileKey(act Action, k Key) tea.Cmd {
 		}
 		return nil
 	case ActFieldNext:
-		// A message's text that is only @prefix of an agent: tab keeps the
-		// window's rule and makes it the recipient (prefixToRecipient).
-		if c.kind == composeMessage && len(recipientCompletions(c.area.value(), m.names(m.ui.showAll))) > 0 {
+		if m.atTabIsRecipient(c) {
 			c.at = nil
 			return m.composeKey(ActComposeField, k)
 		}
@@ -388,6 +386,22 @@ func (m *Model) composeFileKey(act Action, k Key) tea.Cmd {
 	}
 	cmd := m.composeKey(lookup(ModeCompose, m.ui.focus, m.layout.Tier, k), k)
 	return tea.Batch(cmd, m.atFollow(c, false))
+}
+
+// atTabIsRecipient: a message's text that is only @prefix of an agent; tab
+// keeps the window's rule there and makes it the recipient
+// (prefixToRecipient), and the hints say so (atHint).
+func (m Model) atTabIsRecipient(c *composeState) bool {
+	return c != nil && c.kind == composeMessage && len(recipientCompletions(c.area.value(), m.names(m.ui.showAll))) > 0
+}
+
+// atHint is the popup's word for act where it differs from its table's:
+// tab on an agent's prefix makes the recipient (reviewer-codex).
+func (m Model) atHint(act Action) string {
+	if c := m.ui.compose; act == ActFieldNext && c != nil && c.at != nil && m.atTabIsRecipient(c) {
+		return "recipient"
+	}
+	return ""
 }
 
 // atInsert replaces the @query with the row's path (§5): one undo step, the
