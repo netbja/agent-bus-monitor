@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -53,9 +54,14 @@ var histShortKinds = map[string]string{"directive": "dir", "reply": "rep", "verd
 
 const histWide = 80
 
+// histRowBuilds counts the rows' builds, for the test that a key press
+// does not build them again (history-view-lag).
+var histRowBuilds int
+
 // historyBody lays the page out: its title, its body and its selectable rows
 // (the selected one marked).
 func historyBody(v histView, sel int, loc *time.Location, width int) (string, []Line, []histItem) {
+	histRowBuilds++
 	n := 0
 	for _, e := range v.entries {
 		if e.Stream != history.GapStream {
@@ -108,7 +114,8 @@ func historyBody(v histView, sel int, loc *time.Location, width int) (string, []
 		idx := len(items)
 		row := append(planMark(idx == sel), S(RoleMuted, at.Format("15:04")+"  "),
 			S(RoleText, Fit(Preview(who), whoW)+"  "), S(RoleAccent, Fit(kind, kindW)+"  "))
-		row = append(row, S(RoleText, Fit(Preview(strings.Join(strings.Fields(text), " ")), max(0, width-row.Width()))))
+		flat := strings.Join(strings.Fields(histCut(text, width*8)), " ") // whitespace collapsed on a bounded start
+		row = append(row, S(RoleText, Fit(Preview(histCut(flat, width*2)), max(0, width-row.Width()))))
 		items = append(items, histItem{line: len(body), e: e})
 		body = append(body, row)
 	}
@@ -119,6 +126,44 @@ func historyBody(v histView, sel int, loc *time.Location, width int) (string, []
 	}
 	muted(fmt.Sprintf("o loads the %d days before", histDaysStep))
 	return title, body, items
+}
+
+// histCut is the first n bytes of an entry's text, cut at a rune boundary:
+// enough to fill a row (the row cuts it again), since a full report can run
+// to thousands of characters and measuring all of them (Preview's grapheme
+// pass) for one row made a page build cost about 100 microseconds an entry
+// (history-view-lag). Twice the width in bytes still fills the row with
+// accented letters (2 bytes, 1 cell), CJK (3 bytes, 2 cells) or emoji.
+func histCut(s string, n int) string {
+	limit := max(n, histWide)
+	if len(s) <= limit {
+		return s
+	}
+	for limit > 0 && !utf8.RuneStart(s[limit]) {
+		limit--
+	}
+	return s[:limit]
+}
+
+// histKey is what the page's rows depend on: the load (its identity, and
+// whether a wider read is under way), the filter and the width. The
+// selection is not in it: a move re-marks one row (history-view-lag).
+type histKey struct {
+	v      *histView
+	loaded bool
+	filter string
+	width  int
+}
+
+// markHistRow is the cached rows with row sel marked: a shallow copy, so the
+// cache keeps its unmarked rows.
+func markHistRow(rows []Line, items []histItem, sel int) []Line {
+	body := slices.Clone(rows)
+	if sel >= 0 && sel < len(items) {
+		l := rows[items[sel].line]
+		body[items[sel].line] = append(planMark(true), l[1:]...) // l[0] is planMark(false)
+	}
+	return body
 }
 
 // histGapText is a gap line as the page says it.

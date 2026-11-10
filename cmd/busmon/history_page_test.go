@@ -346,3 +346,94 @@ func TestHistoryCutNoticeSaysLinesMayBeNewer(t *testing.T) {
 		t.Fatalf("the notice:\n%s", body)
 	}
 }
+
+// history-view-lag: the rows are built once per load, filter and width, not
+// once per key. Moving the selection (j, k, a held key's repeats) and a poll
+// re-mark the selected row only; a new filter, width or load builds again.
+func TestHistoryMoveDoesNotRebuildRows(t *testing.T) {
+	now := time.Now()
+	var es []history.Entry
+	for i := range 200 {
+		es = append(es, history.Entry{Stream: "cmd", ID: histID(now.Add(-time.Duration(200-i) * time.Minute)),
+			F: map[string]string{"from": "master", "target": "coder", "type": "directive", "command": fmt.Sprintf("message %d", i)}})
+	}
+	m := fixtureShell(t, 120, 40)
+	m.push(page{kind: ovHistory})
+	v := histView{days: histDaysStep, loaded: true, entries: es}
+	m.rd.top().hist, m.rd.top().dirty = &v, true
+	m.refresh()
+	builds := histRowBuilds
+	selected := func(m Model) string {
+		p := m.rd.top()
+		l := p.body[p.hrows[p.sel].line]
+		if l.text()[:len(GlyphSelect)] != GlyphSelect {
+			t.Fatalf("row %d is not marked: %q", p.sel, l.text())
+		}
+		return l.text()
+	}
+	first := selected(m)
+	for range 10 {
+		m = keys(t, m, 'j')
+	}
+	if got := histRowBuilds - builds; got != 0 {
+		t.Fatalf("10 moves built the rows %d times", got)
+	}
+	if p := m.rd.top(); p.sel != 10 || selected(m) == first {
+		t.Fatalf("the selection did not move: sel %d", p.sel)
+	}
+	for _, it := range m.rd.top().hrows { // exactly one row marked
+		if l := m.rd.top().body[it.line].text(); strings.HasPrefix(l, GlyphSelect) && it.line != m.rd.top().hrows[10].line {
+			t.Fatalf("a second marked row: %q", l)
+		}
+	}
+	m = keys(t, m, 'k')
+	if m.rd.top().sel != 9 || histRowBuilds != builds {
+		t.Fatalf("k: sel %d, builds %d", m.rd.top().sel, histRowBuilds-builds)
+	}
+	m.gen++ // a poll
+	m.rd.top().dirty = true
+	m.refresh()
+	if histRowBuilds != builds {
+		t.Fatal("a poll built the rows again")
+	}
+	m.rd.top().histFilter = parseFilter("message 1") // a new filter builds them
+	m.rd.top().dirty = true
+	m.refresh()
+	if histRowBuilds != builds+1 {
+		t.Fatalf("a new filter: %d builds", histRowBuilds-builds)
+	}
+	v2 := v // a new load builds them
+	m.rd.top().hist, m.rd.top().dirty = &v2, true
+	m.refresh()
+	if histRowBuilds != builds+2 {
+		t.Fatalf("a new load: %d builds", histRowBuilds-builds)
+	}
+	m.rd.top().hist.loaded, m.rd.top().dirty = false, true // o: a wider read under way, in place
+	m.refresh()
+	if histRowBuilds != builds+3 || !strings.Contains(strings.Join(histTexts(m.rd.top().body), "\n"), "loading") {
+		t.Fatalf("o's read under way: %d builds", histRowBuilds-builds)
+	}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40}) // a new width builds them
+	m = next.(Model)
+	m.rd.top().dirty = true
+	m.refresh()
+	if histRowBuilds != builds+4 {
+		t.Fatalf("a new width: %d builds", histRowBuilds-builds)
+	}
+}
+
+// history-view-lag: a long entry (a full report) is cut before it is
+// measured, and its row reads the same as the row of its first part.
+func TestHistoryRowCutsLongTextFirst(t *testing.T) {
+	now := time.Now()
+	long := strings.Repeat("word é 漢 ", 20000)
+	row := func(text string) string {
+		v := histView{days: histDaysStep, loaded: true, entries: []history.Entry{{Stream: "report", ID: histID(now),
+			F: map[string]string{"agent": "coder", "kind": "note", "message": text}}}}
+		_, body, items := historyBody(v, 0, time.UTC, 160)
+		return body[items[0].line].text()
+	}
+	if a, b := row(long), row(long[:2000]); a != b {
+		t.Fatalf("the cut changed the row:\n%q\n%q", a, b)
+	}
+}

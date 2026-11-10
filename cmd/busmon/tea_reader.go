@@ -31,8 +31,8 @@ type page struct {
 	threadPlain string // Y
 	top         int    // the first body line shown
 	built       pageStamp
-	dirty       bool // its own state changed since the build (cursor, thread)
-	fixed       bool // its body was given at open (services, a verdict): never rebuilt
+	dirty       bool   // its own state changed since the build (cursor, thread)
+	fixed       bool   // its body was given at open (services, a verdict): never rebuilt
 	drawer      bool   // ovPlan opened as the plan drawer (p, P): at the wide tier, right of For you (home-inbox-drawer §4.4)
 	side        []Line // ovPlan: the side panel of the selected task (wide tier), drawn beside the body
 
@@ -72,6 +72,9 @@ type page struct {
 	histFilter feedFilter // ovHistory: / and t narrow it
 	fromHist   bool       // ovMessage opened from History: n/p step through it
 	hrows      []histItem // ovHistory: its selectable rows (sel: the selected one)
+	histKey    histKey    // ovHistory: what histRows were built for
+	histRows   []Line     // ovHistory: the rows built, none marked (markHistRow)
+	histTitle  string
 
 	set *settingsPage // ovSettings: its rows and the change in progress (sel: the selected row)
 	ns  *notifySetup  // ovNotifySetup: its step, fields and outcome
@@ -517,13 +520,20 @@ func (m *Model) buildPage() bool {
 			p.title += " " + GlyphNone + " " + strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan ")
 		}
 	case ovHistory:
-		v := histView{days: histDaysStep}
-		if p.hist != nil {
-			v = *p.hist
+		// The rows are built once per load, filter and width; a move or a
+		// poll re-marks the selected row (history-view-lag).
+		key := histKey{v: p.hist, loaded: p.hist != nil && p.hist.loaded, filter: p.histFilter.raw, width: width}
+		if p.histRows == nil || p.histKey != key {
+			v := histView{days: histDaysStep}
+			if p.hist != nil {
+				v = *p.hist
+			}
+			v.entries, v.filter = historyFiltered(v.entries, p.histFilter), p.histFilter.raw
+			p.histTitle, p.histRows, p.hrows = historyBody(v, -1, time.Local, width)
+			p.histKey = key
 		}
-		v.entries, v.filter = historyFiltered(v.entries, p.histFilter), p.histFilter.raw
-		p.title, p.body, p.hrows = historyBody(v, p.sel, time.Local, width)
 		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
+		p.title, p.body = p.histTitle, markHistRow(p.histRows, p.hrows, p.sel)
 	case ovSettings:
 		p.set.running = ""
 		if r := m.ui.sleepRun; r != nil && r.verb == "backup" {
