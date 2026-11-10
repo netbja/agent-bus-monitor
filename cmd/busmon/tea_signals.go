@@ -102,7 +102,14 @@ func (m *Model) animated() bool {
 
 // scheduleFade schedules the next fade frame while one is due and none is.
 func (m *Model) scheduleFade() tea.Cmd {
-	if !m.animated() || m.sig.fading || m.ui.idle { // no fade frame under the idle view (§6)
+	if m.ui.idle { // no fade frame under the idle view (§6), but the breath's own, when set under 1 s
+		if m.sig.fading || !m.idleFrames() {
+			return nil
+		}
+		m.sig.fading = true
+		return tea.Tick(idleBreathFrame, func(t time.Time) tea.Msg { return fadeMsg(t) })
+	}
+	if !m.animated() || m.sig.fading {
 		return nil
 	}
 	m.sig.fading = true

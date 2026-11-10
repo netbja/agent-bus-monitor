@@ -123,7 +123,10 @@ No new read, and no new key in Redis. The three frames show together; nothing ta
   same raised cosine of `RoleAccent` (`rampLevel`, shared with `fadeLevel`), sampled once a second
   over a 6 s cycle, 20, 40, 80, 100, 80, 40 percent. It still draws on the 1 s poll (§6: no frame
   is added); the cell moves once per 6 s cycle. With 16 colours, `NO_COLOR` or the fade off, the
-  4 s role cycle above stays.
+  4 s role cycle above stays. The pace is one named value, `idleBreathFrame` (1 s, the person's
+  option 1, reversible): set under a second (100 ms, the agents' own frame; 250 ms between), the
+  idle view takes frames at that pace while the breath shows, and only then; the measured cost of
+  a frame is 1.6 to 2.6 ms and 1 to 2.8 MB allocated (140×40 to 240×70).
 - **A decision while idle** (§8 Q1, the person: stay): the view stays, the count changes at the
   next poll, and the bell rings as on the dashboard.
 

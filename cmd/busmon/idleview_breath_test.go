@@ -37,7 +37,7 @@ func TestIdleBreath(t *testing.T) {
 	wantRoles := [idleBreathCycle]Role{RoleDim, RoleMuted, RoleAccent, RoleMuted}
 	covered := map[int]bool{}
 	for step := range 2 * w * idleBreathCycle {
-		l := idleBreath(w, step, false)
+		l := idleBreath(w, time.Duration(step)*time.Second, false)
 		if l.Width() != w {
 			t.Fatalf("step %d: %d cells, want %d", step, l.Width(), w)
 		}
@@ -63,7 +63,7 @@ func TestIdleBreathNoColor(t *testing.T) {
 	const w = 12
 	seen := map[string]bool{}
 	for step := range idleBreathCycle * 3 {
-		l := idleBreath(w, step, false)
+		l := idleBreath(w, time.Duration(step)*time.Second, false)
 		cells := []rune(l.text())
 		x := (step / idleBreathCycle) % w
 		bright := step%idleBreathCycle == 1 || step%idleBreathCycle == 2
@@ -142,12 +142,13 @@ func TestIdleBreathSmoothRamp(t *testing.T) {
 	withPalette(t, "dark", false, 1<<24)
 	const w = 10
 	want := []int{20, 40, 80, 100, 80, 40}
+	idleSmoothCycle := int(idleSmoothPeriod / idleBreathFrame) // 6 steps of a second (option 1)
 	if len(want) != idleSmoothCycle {
 		t.Fatalf("cycle %d, want %d", idleSmoothCycle, len(want))
 	}
 	prev := -1
 	for step := range 3 * idleSmoothCycle {
-		l := idleBreath(w, step, true)
+		l := idleBreath(w, time.Duration(step)*time.Second, true)
 		if l.Width() != w {
 			t.Fatalf("step %d: %d cells", step, l.Width())
 		}
@@ -176,8 +177,8 @@ func TestIdleBreathSmoothRamp(t *testing.T) {
 	}
 	// The same curve as the agents' dots: fadeLevel at the same phase.
 	for k := range idleSmoothCycle {
-		at := time.UnixMilli(int64(k) * fadePeriod.Milliseconds() / idleSmoothCycle)
-		if got := rampLevel(float64(k) / idleSmoothCycle); got != fadeLevel(at) {
+		at := time.UnixMilli(int64(k) * fadePeriod.Milliseconds() / int64(idleSmoothCycle))
+		if got := rampLevel(float64(k) / float64(idleSmoothCycle)); got != fadeLevel(at) {
 			t.Errorf("phase %d/%d: ramp %d, the agents' fade %d", k, idleSmoothCycle, got, fadeLevel(at))
 		}
 	}
@@ -219,6 +220,7 @@ func TestIdleViewBreathRampsOnScreen(t *testing.T) {
 		t.Fatal("not all idle")
 	}
 	var levels []int
+	idleSmoothCycle := int(idleSmoothPeriod / time.Second)
 	for s := range idleSmoothCycle {
 		m.now = m.ui.idleSince.Add(time.Hour + time.Duration(s)*time.Second)
 		for _, seg := range m.idleRow(d, 40) {
@@ -230,4 +232,47 @@ func TestIdleViewBreathRampsOnScreen(t *testing.T) {
 	if len(levels) != idleSmoothCycle || levels[0] == levels[3] {
 		t.Errorf("levels over a cycle %v, want the ramp", levels)
 	}
+}
+
+// Option 1 adds no frame under the idle view; the frame knob under a second
+// (options 2, 3) gives the breath its own frames, at that pace, only while it
+// shows (idle-dot-smooth, master: a one-line switch).
+func TestIdleBreathFrameKnob(t *testing.T) {
+	pinLocal(t)
+	withPalette(t, "dark", false, 1<<24)
+	m := pollAt(t, idleAt(t, 140, 40), time.Hour)
+	m.cfg.settings.Fade = true
+	for _, a := range m.snap.agents {
+		a.state, a.message, a.openAsk, a.held, a.paused, a.bg, a.obsPrompt = "idle", "", 0, false, false, nil, false
+	}
+	if !m.ui.idle || !m.idleData().allIdle {
+		t.Fatal("not the idle view with the team resting")
+	}
+	if cmd := m.scheduleFade(); cmd != nil {
+		t.Fatal("option 1 (1 s): a frame under the idle view")
+	}
+	old := idleBreathFrame
+	t.Cleanup(func() { idleBreathFrame = old })
+	idleBreathFrame = 100 * time.Millisecond
+	if cmd := m.scheduleFade(); cmd == nil {
+		t.Fatal("frame at 100 ms: no frame scheduled while the breath shows")
+	}
+	m.sig.fading = false
+	m.snap.agents[m.names(false)[0]].state = "working"
+	if cmd := m.scheduleFade(); cmd != nil {
+		t.Fatal("frame at 100 ms: a frame while the thread shows")
+	}
+	// At 100 ms the ramp moves within a second.
+	if a, b := idleBreath(10, 1500*time.Millisecond, true), idleBreath(10, 1600*time.Millisecond, true); a[len(a)-1].Fade == b[len(b)-1].Fade && fadeOf(a) == fadeOf(b) {
+		t.Error("at 100 ms the shade does not change between frames")
+	}
+}
+
+func fadeOf(l Line) int {
+	for _, s := range l {
+		if s.Role == RoleAccent {
+			return s.Fade
+		}
+	}
+	return -1
 }

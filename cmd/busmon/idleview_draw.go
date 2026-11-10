@@ -421,11 +421,17 @@ func idleThread(w, step int) Line {
 // colour: dim, muted, bright, muted.
 const idleBreathCycle = 4
 
-// idleSmoothCycle is the breath's length in steps (seconds) with true colour:
-// the agents' ramp (rampLevel) sampled once a second, 20, 40, 80, 100, 80,
-// 40 percent, so no step jumps from dim to bright (idle-dot-smooth). It
-// draws on the 1 s poll: no frame is added (idle view §6).
-const idleSmoothCycle = 6
+// idleSmoothPeriod is the breath's cycle with true colour: the agents' ramp
+// (rampLevel) from 20 to 100 percent and back (idle-dot-smooth).
+const idleSmoothPeriod = 6 * time.Second
+
+// idleBreathFrame is how often the smooth breath changes shade: at 1 s (the
+// person's option 1, 2026-11-10) it draws on the poll, 20, 40, 80, 100, 80,
+// 40 percent, and no frame is added (idle view §6). It is the one switch to
+// the other options: 100 ms is the agents' own frame (option 2), 250 ms the
+// middle (option 3); under a second, scheduleFade gives the idle view frames
+// at that pace while the breath shows.
+var idleBreathFrame = time.Second
 
 // idleSmooth: the breath ramps where a shade can show, the agents' rule:
 // true colour and the fade setting on.
@@ -437,15 +443,17 @@ func (m Model) idleSmooth() bool { return m.cfg.settings.Fade && th.Animated() }
 // each cycle so every cell carries it in turn (burn-in), never more than one
 // lit cell (OLED). Without colour it breathes in two glyphs, the row's dim
 // dot and the bright one.
-func idleBreath(w, step int, smooth bool) Line {
+func idleBreath(w int, elapsed time.Duration, smooth bool) Line {
 	if w <= 0 {
 		return nil
 	}
-	step = max(step, 0)
-	if smooth { // the agents' ramp, one shade a second
-		x, phase := (step/idleSmoothCycle)%w, step%idleSmoothCycle
-		return breathRow(w, x, Seg{Text: GlyphSet, Role: RoleAccent, Fade: rampLevel(float64(phase) / idleSmoothCycle)})
+	elapsed = max(elapsed, 0)
+	if smooth { // the agents' ramp, one shade a frame
+		e := elapsed.Truncate(idleBreathFrame)
+		x := int(e/idleSmoothPeriod) % w
+		return breathRow(w, x, Seg{Text: GlyphSet, Role: RoleAccent, Fade: rampLevel(float64(e%idleSmoothPeriod) / float64(idleSmoothPeriod))})
 	}
+	step := int(elapsed / time.Second)
 	x, phase := (step/idleBreathCycle)%w, step%idleBreathCycle
 	glyph, role := GlyphSet, [idleBreathCycle]Role{RoleDim, RoleMuted, RoleAccent, RoleMuted}[phase]
 	if th.Palette() == PaletteNone { // no shade to breathe in: the two dots
@@ -462,11 +470,17 @@ func idleBreath(w, step int, smooth bool) Line {
 // a shade can show (idle-dot-smooth). Its step is the whole seconds since the
 // view came: the 1 s poll's pace.
 func (m Model) idleRow(d idleData, w int) Line {
-	step := int(max(0, m.now.Sub(m.ui.idleSince)) / time.Second)
+	elapsed := max(0, m.now.Sub(m.ui.idleSince))
 	if d.allIdle {
-		return idleBreath(w, step, m.idleSmooth())
+		return idleBreath(w, elapsed, m.idleSmooth())
 	}
-	return idleThread(w, step)
+	return idleThread(w, int(elapsed/time.Second))
+}
+
+// idleFrames: the idle view takes frames between polls, only while the
+// smooth breath shows and its frame is under a second (options 2 and 3).
+func (m *Model) idleFrames() bool {
+	return idleBreathFrame < time.Second && m.ui.idle && m.idleSmooth() && m.idleData().allIdle
 }
 
 // breathRow is the dotted row w cells wide with lit at x.
