@@ -119,7 +119,17 @@ dispatcher write, which must be fenced):
   pane shows the `prompt` flag, in a project whose template's `working_dir` (`projlist`) that
   client does not trust (the same readers). The line goes away once the flag reads true. busmon
   can read the clients' files only on the host they live on: against a remote broker it shows
-  the `prompt` flag as today, with no trust line.
+  the `prompt` flag as today, with no trust line. **As built (first-run-trust-2):** the readers
+  live in package `trust`; the line is the prompt row's own text in For you (`Claude Code asks
+  whether you trust <folder>: choose "Yes, I trust this folder"`), read in the poll outside its
+  lock and only for an agent showing the flag. "On this host" is proved per agent, not by the
+  broker's address (a tunnel makes a remote broker look local). The proved identity in `{p}:agents`
+  carries the host's boot id with its pid (`AgentSnapshot.BootID`, `boot_id`, from
+  `/proc/sys/kernel/random/boot_id`, set by `status` and `bind` and moved only with the pid on a
+  proof): busmon shows the line only when it equals busmon's own and the pid runs here with its
+  recorded start time (`dispatch.ProcStart`). Pid and start time (ticks since a kernel's boot)
+  alone could match a remote agent by chance, whatever its name (reviewer-codex). No boot id on
+  either side (an agent launched before the field, no `/proc`): no trust line.
 - No new dispatcher write: a fenced dispatcher ask (a new bus function) would cover a restore
   with busmon closed, at the cost of a new fenced writer; not proposed.
 
@@ -170,7 +180,8 @@ exactly what it does, but it should not answer it unasked.
 - (b): `up`/`start` with an untrusted gated client open one ask naming the folder, the tab and the
   choice's label; it closes when the flag reads true; an already-trusted folder opens none; a
   non-gated client's agent opens none. busmon's For-you line appears for a restored agent with the
-  `prompt` flag in an untrusted folder, and not for a trusted one, nor against a remote broker.
+  `prompt` flag in an untrusted folder, and not for a trusted one, nor for an agent whose process is
+  not on busmon's host.
 - (c): `--trust` writes only the repository root's key, refuses `~`, `/`, a folder outside home,
   a `working_dir` that is a link out of home, a worktree whose main checkout lies outside home,
   and a running Claude Code; keeps every other byte of the file; backs it up first (0600, beside the file) and prints the

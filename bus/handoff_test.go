@@ -361,3 +361,32 @@ func TestStatusAfterIsSequenceExactRedis(t *testing.T) {
 		t.Errorf("empty at the reservation, then trimmed: %v %v, want written", got, err)
 	}
 }
+
+// A declared hand-off proves the same process again: its idle snapshot keeps
+// the host's boot id (foureyes), whether the caller knows it or not.
+func TestHandoffKeepsTheBootIDRedis(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "coder", "working", "", AgentIdent{Pane: "w1:p2", PID: 42, PIDStart: 7, BootID: "boot-a", Session: "session-0001"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ProveSession(ctx, "coder", 42, 7, "session-0001", 100); err != nil {
+		t.Fatal(err)
+	}
+	for _, who := range []AgentIdent{
+		{Pane: "w1:p2", PID: 42, PIDStart: 7, BootID: "boot-a", Session: "session-0001"},
+		{Pane: "w1:p2", PID: 42, PIDStart: 7, Session: "session-0001"}, // a caller that cannot read it
+	} {
+		rid, err := b.Report(ctx, "coder", ReportNote, "hand-off: next y")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.DeclareHandoff(ctx, "coder", rid, who); err != nil {
+			t.Fatal(err)
+		}
+		m, err := b.Agents(ctx)
+		if err != nil || m["coder"].BootID != "boot-a" || m["coder"].PID != 42 || m["coder"].State != "idle" {
+			t.Fatalf("after the hand-off (caller boot %q): %+v, %v", who.BootID, m["coder"], err)
+		}
+	}
+}

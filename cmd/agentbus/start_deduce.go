@@ -11,6 +11,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
+	"github.com/netbja/agent-bus-monitor/trust"
 )
 
 // startPlan is what agentbus start deduces before it shows the assistant
@@ -199,7 +200,7 @@ func canonDir(dir string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	root, _ := trustKey(abs)
+	root, _ := trust.Key(abs)
 	return root, true
 }
 

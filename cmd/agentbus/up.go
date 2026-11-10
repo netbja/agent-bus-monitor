@@ -22,6 +22,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/trust"
 )
 
 // upDeps is what `agentbus up` touches, injected for tests.
@@ -706,7 +707,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		TabClient: func(cmd string) string { return tabClient(cmd, os.Getenv) },
 		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
 		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath, shellProbe(os.Getenv, 3*time.Second)),
-		Trusted:   clientTrusted(os.Getenv),
+		Trusted:   trust.Reader(os.Getenv),
 		TrustAsks: func(project string) (trustAskBus, error) {
 			c, err := bus.Connect("")
 			if err != nil {
@@ -770,9 +771,9 @@ func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) i
 		_, _, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
 			return d.Trusted == nil || d.Trusted(client, dir)
 		})
-		key, _ := trustKey(dir)
+		key, _ := trust.Key(dir)
 		for _, c := range slices.Sorted(maps.Keys(gates)) {
-			fmt.Fprintf(stdout, "dry run: trust: %s not yet accepted for %s; %s first, the others after\n", clientLabel(c), key, gates[c])
+			fmt.Fprintf(stdout, "dry run: trust: %s not yet accepted for %s; %s first, the others after\n", trust.Label(c), key, gates[c])
 		}
 		return 0
 	}

@@ -52,7 +52,12 @@ func TestStatusRecordsIdentityViaFakeHerdr(t *testing.T) {
 	}
 	out, _ := json.Marshal(m) // what `agents --json` prints
 	want, _ := dispatch.ProcStart(parent)
+	boot, err := dispatch.BootID()
+	if err != nil {
+		t.Skip("no boot id on this system")
+	}
 	for _, frag := range []string{
+		`"boot_id":"` + boot + `"`, // the pid's host (first-run-trust)
 		`"pid":` + strconv.Itoa(parent),
 		`"pid_start":` + strconv.FormatUint(want, 10),
 		`"terminal":"term_fake"`,
@@ -67,7 +72,7 @@ func TestStatusRecordsIdentityViaFakeHerdr(t *testing.T) {
 func TestStatusIdentityFailureLeavesFieldsEmpty(t *testing.T) {
 	fakeHerdrEnv(t, `{"error":{"code":"pane_not_found","message":"pane not found"}}`, `{}`)
 	who := statusIdent(context.Background())
-	if who.PID != 0 || who.PIDStart != 0 || who.Terminal != "" || who.Pane != "w9:p1" {
+	if who.PID != 0 || who.PIDStart != 0 || who.BootID != "" || who.Terminal != "" || who.Pane != "w9:p1" {
 		t.Fatalf("failed lookup: %+v", who)
 	}
 	t.Setenv("HERDR_ENV", "")

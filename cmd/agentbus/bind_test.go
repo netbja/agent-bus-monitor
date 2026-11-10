@@ -25,6 +25,7 @@ func (f *fakeBind) deps(procs []dispatch.Proc, starts map[int]uint64) bindDeps {
 			return procs, "term_x", nil
 		},
 		Start: func(pid int) (uint64, error) { return starts[pid], nil },
+		Boot:  func() string { return "boot-here" },
 		Env:   func(k string) string { return map[string]string{"HERDR_ENV": "1", "HERDR_PANE_ID": "w2:p1"}[k] },
 	}
 }
@@ -64,7 +65,7 @@ func TestBindRecordsPidAndStart(t *testing.T) {
 	if code != 0 || f.who == nil {
 		t.Fatalf("code=%d err=%q", code, errw.String())
 	}
-	if f.agent != "codex" || f.who.Pane != "w2:p1" || f.who.PID != 1930926 || f.who.PIDStart != 555 || f.who.Terminal != "term_x" {
+	if f.agent != "codex" || f.who.Pane != "w2:p1" || f.who.PID != 1930926 || f.who.PIDStart != 555 || f.who.Terminal != "term_x" || f.who.BootID != "boot-here" {
 		t.Fatalf("bound %s %+v", f.agent, *f.who)
 	}
 	if !strings.Contains(out.String(), "bound codex to w2:p1 pid 1930926") {

@@ -57,10 +57,10 @@ func TestMergeBindKeepsState(t *testing.T) {
 func TestBindThenStatusRedis(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	if err := b.Bind(ctx, "codex", AgentIdent{Pane: "w2:p1", PID: 42, PIDStart: 7, Terminal: "term_a"}); err != nil {
+	if err := b.Bind(ctx, "codex", AgentIdent{Pane: "w2:p1", PID: 42, PIDStart: 7, BootID: "boot-a", Terminal: "term_a"}); err != nil {
 		t.Fatalf("Bind: %v", err)
 	}
-	if _, err := b.Status(ctx, "codex", "idle", "ready", AgentIdent{Pane: "wH:p1"}); err != nil {
+	if _, err := b.Status(ctx, "codex", "idle", "ready", AgentIdent{Pane: "wH:p1", BootID: "boot-x"}); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
 	m, err := b.Agents(ctx)
@@ -68,8 +68,15 @@ func TestBindThenStatusRedis(t *testing.T) {
 		t.Fatalf("Agents: %v", err)
 	}
 	s := m["codex"]
-	if s.Pane != "w2:p1" || s.PID != 42 || s.PIDStart != 7 || s.State != "idle" || s.Message != "ready" {
+	if s.Pane != "w2:p1" || s.PID != 42 || s.PIDStart != 7 || s.BootID != "boot-a" || s.State != "idle" || s.Message != "ready" {
 		t.Fatalf("snapshot = %+v, want bound identity + new state", s)
+	}
+	// A proved status records its own host with its pid.
+	if _, err := b.Status(ctx, "proved", "idle", "", AgentIdent{Pane: "w2:p2", PID: 43, PIDStart: 8, BootID: "boot-b"}); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if m, err = b.Agents(ctx); err != nil || m["proved"].BootID != "boot-b" {
+		t.Fatalf("proved status: %+v, %v", m["proved"], err)
 	}
 	if err := b.Bind(ctx, "Bad Name", AgentIdent{PID: 1}); err == nil {
 		t.Fatal("Bind accepted an invalid agent name")
@@ -182,5 +189,43 @@ func TestMergeModelFollowsTheProvedIdentity(t *testing.T) {
 	other := mergeSnapshot(&bound, AgentSnapshot{State: "idle", TS: 400, Pane: "p2", PID: 20, PIDStart: 7}, false)
 	if other.Model != "" {
 		t.Fatalf("another process inherited the model %q", other.Model)
+	}
+}
+
+// BootID (first-run-trust, reviewer-codex) is the host's provenance of the
+// proved process: it moves with the pid and its start time, only on a
+// proof, by the Model rule. An unverified status keeps it; a proof for the
+// same process keeps it when the caller has none (foureyes); a proof for
+// another process takes the caller's, even empty; a status proving nothing
+// clears it with the pid.
+func TestMergeBootIDTravelsWithTheIdentity(t *testing.T) {
+	b := bound
+	b.BootID = "boot-a"
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "working", TS: 200, Pane: "wH:p1", BootID: "boot-x"}, false); got.BootID != "boot-a" {
+		t.Fatalf("an unverified status moved the boot id: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 99, PIDStart: 1, BootID: "boot-b"}, false); got.BootID != "boot-b" {
+		t.Fatalf("a proof for another process: boot id %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 99, PIDStart: 1}, false); got.BootID != "" {
+		t.Fatalf("a proof with no boot id kept the old one: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 42, PIDStart: 8}, false); got.BootID != "" {
+		t.Fatalf("a recycled pid (another start) kept the old process's boot id: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 99, PIDStart: 7}, false); got.BootID != "" {
+		t.Fatalf("another pid with the same start kept the old process's boot id: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 42, PIDStart: 7}, false); got.BootID != "boot-a" {
+		t.Fatalf("a proof for the same process from a caller with no boot id cleared it: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{State: "idle", TS: 200, PID: 42, PIDStart: 7, BootID: "boot-c"}, false); got.BootID != "boot-c" {
+		t.Fatalf("a proof for the same process naming a boot id: %q", got.BootID)
+	}
+	if got := mergeSnapshot(&b, AgentSnapshot{Pane: "w2:p1", PID: 42, PIDStart: 7, BootID: "boot-a"}, true); got.BootID != "boot-a" {
+		t.Fatalf("bind: boot id %q", got.BootID)
+	}
+	if got := mergeSnapshot(&AgentSnapshot{State: "idle", TS: 1, BootID: "stale"}, AgentSnapshot{State: "idle", TS: 2}, false); got.BootID != "" {
+		t.Fatalf("nothing proved, a boot id remains: %q", got.BootID)
 	}
 }

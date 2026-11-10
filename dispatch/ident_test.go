@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -114,5 +115,20 @@ func TestAncestorsListsTheChainWithStarts(t *testing.T) {
 	start, err := ProcStart(os.Getppid())
 	if err != nil || len(live) == 0 || live[0] != (ProcID{os.Getppid(), start}) {
 		t.Fatalf("Ancestors(self) = %v, want the parent %d (start %d, %v) first", live, os.Getppid(), start, err)
+	}
+}
+
+// BootID is this host's boot id: one per kernel boot, the host's provenance
+// of a pid and its start time (first-run-trust).
+func TestBootID(t *testing.T) {
+	if _, err := os.Stat("/proc/sys/kernel/random/boot_id"); err != nil {
+		t.Skip("no boot id on this system")
+	}
+	a, err := BootID()
+	if err != nil || len(a) != 36 || strings.TrimSpace(a) != a {
+		t.Fatalf("BootID = %q, %v", a, err)
+	}
+	if b, _ := BootID(); b != a {
+		t.Fatalf("two reads differ: %q %q", a, b)
 	}
 }

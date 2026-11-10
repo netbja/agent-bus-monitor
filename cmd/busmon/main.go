@@ -428,6 +428,7 @@ type agentState struct {
 	retiring      bool                // retire --forget holds the same intent, kind retire (pop-auto-retire)
 	popDoneAt     time.Time           // the dispatcher judged this pop done for the episode declared then; zero = not done
 	handoff       bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
+	trustFolder   string              // the folder its client's prompt asks to trust, not trusted yet (first-run-trust); "" = none or unknown
 	fallback      *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
 	model         *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
 	judgedAt      time.Time           // the shell's snapshot time (clock); zero in shared's own state
@@ -482,6 +483,9 @@ type shared struct {
 	tokOpen        bool          // the U page is open: only then are they read (a keyspace SCAN per read)
 	tokWasOpen     bool          // it was open at the last poll: a read is due on each opening
 	tokAttempt     int           // the tick of the last read attempt, success or not
+	// trustOf is the folder a gated client asks about for a prompting agent
+	// on this host (first-run-trust, trust_foryou.go); nil: no trust line.
+	trustOf func(client, boot string, pid int, start uint64) string
 }
 
 func main() {
@@ -615,6 +619,7 @@ func main() {
 		health:     health{ok: true, since: time.Now()},
 		configNote: settings.Note,
 		idleHint:   settings.IdleHint,
+		trustOf:    localTrustOf(project, os.Getenv),
 	}
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)

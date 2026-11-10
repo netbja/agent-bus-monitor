@@ -46,8 +46,12 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 			if since.IsZero() {
 				since = a.obsAt
 			}
+			text := "pane prompt"
+			if a.trustFolder != "" {
+				text = trustPromptText(a.client, a.trustFolder)
+			}
 			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("prompt:%s:%d", name, since.UnixMilli()),
-				Agent: name, Text: "pane prompt", At: since})
+				Agent: name, Text: text, At: since})
 		}
 		out = append(out, personGateItems(s.person, name, a.gates)...)
 	}

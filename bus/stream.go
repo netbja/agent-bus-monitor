@@ -78,6 +78,13 @@ type AgentSnapshot struct {
 	// restarted agent is never mistaken for this one. PID 0 = unverified.
 	PID      int    `json:"pid,omitempty"`
 	PIDStart uint64 `json:"pid_start,omitempty"`
+	// BootID is the boot id of the host the proved pid runs on
+	// (/proc/sys/kernel/random/boot_id, first-run-trust): pid and start time
+	// are ticks since a kernel's boot, so only with it does a reader on
+	// another host know the process is not one of its own. It moves with the
+	// pid, on a proof only (mergeSnapshot): a proof for the same process from
+	// a caller that cannot read it keeps it; empty when unknown.
+	BootID   string `json:"boot_id,omitempty"`
 	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
 	// IdentTS (ms, Redis time) is when the identity was last proved: by a
 	// verified status (its stream id) or a bind. Only a newer proof replaces it.
@@ -142,6 +149,7 @@ type AgentIdent struct {
 	Session    string // CLAUDE_CODE_SESSION_ID
 	PID        int    // agent's foreground pid in its herdr pane (0 = unknown)
 	PIDStart   uint64 // that pid's start time, /proc/<pid>/stat field 22
+	BootID     string // the host's boot id (dispatch.BootID), "" when unknown
 	Terminal   string // herdr terminal id, display only
 	Client     string // AGENT_BUS_CLIENT
 	Provider   string // AGENT_BUS_PROVIDER
@@ -386,7 +394,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
+		PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.

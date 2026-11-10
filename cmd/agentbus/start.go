@@ -22,6 +22,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
+	"github.com/netbja/agent-bus-monitor/trust"
 )
 
 // startDeps is what agentbus start touches, injected: a test runs no up,
@@ -113,7 +114,7 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			}
 		},
 		CloseInitial: func(socket, ws string) (string, error) { return closeInitialWorkspace(herdrIn(socket), ws) },
-		Trusted:      clientTrusted(os.Getenv),
+		Trusted:      trust.Reader(os.Getenv),
 		LogPath: func(project string) (string, error) {
 			paths, err := service.PathsFrom(os.Getenv)
 			if err != nil {
@@ -536,7 +537,7 @@ func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string
 				continue
 			}
 			seen[prof.Client] = true
-			fmt.Fprintf(d.Out, "%s does not trust %s yet: answer its dialog in the %s tab\n", clientLabel(prof.Client), p.Folder, r.Role)
+			fmt.Fprintf(d.Out, "%s does not trust %s yet: answer its dialog in the %s tab\n", trust.Label(prof.Client), p.Folder, r.Role)
 		}
 	}
 	closeTTY := func() {
