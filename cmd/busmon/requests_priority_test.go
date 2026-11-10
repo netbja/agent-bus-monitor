@@ -398,3 +398,38 @@ func TestRequestsReadAtOnlyOnASuccessfulRead(t *testing.T) {
 		t.Fatalf("a failed read moved the time (%v -> %v) or the requests (%d)", at, st.requestsReadAt, len(st.requests))
 	}
 }
+
+// requests-keys-discoverable (the person could not find how to change a
+// priority): with a tracked request's row selected, the footer shows
+// "+ - priority" right after the row's enter, as the redesign's mock-ups
+// place it, at every width: it came after the generic keys and was cut below
+// 190 columns. Where the keys do not act (a group, another panel) it stays
+// out, as before (TestPriorityKeysRefused).
+func TestRequestsFooterShowsThePriorityKeys(t *testing.T) {
+	for _, w := range []int{80, 120, 190} {
+		m := priorityShell(t, nil)
+		m = step(t, m, tea.WindowSizeMsg{Width: w, Height: 40})
+		if m.ui.focus != PanelRequests {
+			t.Fatalf("%d: focus %v, want Requests", w, m.ui.focus)
+		}
+		for _, sel := range []string{"req:solo"} {
+			m.lists.requests.Select(sel)
+			m.refresh()
+			lines := strings.Split(m.grid().plain(), "\n")
+			foot := lines[len(lines)-1]
+			at, enter := strings.Index(foot, "+ - priority"), strings.Index(foot, "enter ")
+			if at < 0 {
+				t.Errorf("%d, row %q (%s): no '+ - priority' in %q", w, sel, m.lists.requests.Selected(), strings.TrimSpace(foot))
+				continue
+			}
+			if enter >= 0 && (enter > at || strings.Contains(foot[enter:at], "   T ")) {
+				t.Errorf("%d, row %q: '+ - priority' not right after enter: %q", w, sel, strings.TrimSpace(foot))
+			}
+		}
+		m.ui.focus = PanelAgents
+		m.refresh()
+		if lines := strings.Split(m.grid().plain(), "\n"); strings.Contains(lines[len(lines)-1], "+ - priority") {
+			t.Errorf("%d: the Agents panel's footer shows the priority keys", w)
+		}
+	}
+}
