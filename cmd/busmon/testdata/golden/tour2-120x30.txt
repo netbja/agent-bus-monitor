@@ -1,10 +1,10 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                        15:04:05 
  paused · resumes in 1h52 (lunch)   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
 ╭─ For you ───────────────────────── 4 decide ─╮╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ·…─╮
-│  ● ask    master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
-│  ♙ wait   foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
-│  ♙ wait   sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ gate   coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
+│  ● answer master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
+│  ♙ answer foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ answer sentinel  pane prompt            1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ◆ review coder     by charlie  look at b1   ││  ♙ sentinel  waiting   30m     —     —         prompt · m… health ok │
 │                                              ││  ✓ architect done      40m     —     —         escalating… spec merg…│
 │                     ╭─ Writing to an agent ────────────────────────────────────────────── 2/5 ─╮ate 1 · d… busmon-ch…▼
 ╰─────────────────────│                                                                          │─────────────────────╯

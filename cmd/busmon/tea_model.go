@@ -167,6 +167,7 @@ type Model struct {
 	snap    snapshot
 	feed    *activityFeed
 	forYou  []attentionItem
+	work    workModel // who owes what: the one counter (work_model.go)
 	ui      uiState
 	lists   *shellLists
 	layout  shellLayout
@@ -437,6 +438,7 @@ func (m *Model) refresh() {
 	// One Requests view per refresh, before the layout: For you's empty state
 	// is sized and filled from the same owed count (reviewer-codex).
 	m.lists.reqView = requestGroups(m.requestInput())
+	m.work = workOf(m.workInput())
 	m.layout = shellLayoutFor(m.width, m.height, m.counts(), m.ui.view, m.ui.tab)
 	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes

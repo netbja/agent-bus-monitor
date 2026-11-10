@@ -103,7 +103,7 @@ func (m Model) headerData() headerData {
 	_, _, between := m.lists.reqView.titleCounts()
 	return headerData{icons: m.cfg.settings.Icons, project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, note: s.configNote,
-		waiting: owedText(m.lists.reqView, m.now), between: between, background: backgroundChip(s.agents, s.pilot), strip: stripOf(m.forYou),
+		between: between, background: backgroundChip(s.agents, s.pilot), strip: m.work.strip(unreadItems(m.forYou)),
 		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
 		plan: s.plan, now: m.now, shell: true}
 }
@@ -204,7 +204,7 @@ func (m *Model) fillLists() {
 		rows = append(rows, ListItem{Key: p.key, Line: p.line, Selectable: true})
 	}
 	fy.SetItems(rows)
-	fy.SetFrame(Line{{Text: "For you", Role: RoleText}}, Line{{Text: forYouLabel(stripOf(m.forYou)), Role: RoleMuted}})
+	fy.SetFrame(Line{{Text: "For you", Role: RoleText}}, Line{{Text: forYouLabel(m.work.strip(0)), Role: RoleMuted}})
 
 	// Agents: today's rows and sort.
 	ag := &m.lists.agents
@@ -324,10 +324,10 @@ var forYouKinds = map[int]struct {
 	glyph, word string
 	role        Role
 }{
-	rankAsk:    {"?", "ask", RoleAttention},
-	rankHealth: {GlyphBlocked, "health", RoleAttention},
-	rankWait:   {GlyphHuman, "wait", RoleAttention},
-	rankGate:   {GlyphGate, "gate", RoleDispatch},
+	rankAsk:    {"?", verbAnswer, RoleAttention}, // the Work model's verbs (correction 1)
+	rankHealth: {GlyphBlocked, verbCheck, RoleAttention},
+	rankWait:   {GlyphHuman, verbAnswer, RoleAttention},
+	rankGate:   {GlyphGate, verbReview, RoleDispatch},
 	rankUnread: {GlyphDotFull, "unread", RoleAccent},
 }
 

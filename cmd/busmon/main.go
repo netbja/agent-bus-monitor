@@ -47,6 +47,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
+	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
@@ -486,6 +487,11 @@ type shared struct {
 	// trustOf is the folder a gated client asks about for a prompting agent
 	// on this host (first-run-trust, trust_foryou.go); nil: no trust line.
 	trustOf func(client, boot string, pid int, start uint64) string
+	// ideasOf reads the open questions recorded in the project's repository
+	// (the Work page's IDEAS, work_ideas.go); nil: no IDEAS read.
+	ideasOf  func() ([]memory.Question, error)
+	ideas    []memory.Question
+	ideasErr bool // the last read failed: IDEAS says so, never "none"
 }
 
 func main() {
@@ -620,6 +626,7 @@ func main() {
 		configNote: settings.Note,
 		idleHint:   settings.IdleHint,
 		trustOf:    localTrustOf(project, os.Getenv),
+		ideasOf:    localIdeasOf(project, os.Getenv),
 	}
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)

@@ -37,9 +37,13 @@ func TestHeaderRequestsMatchTheTab(t *testing.T) {
 		t.Fatalf("fixture: %d for you, %d between agents", you, agents)
 	}
 	l := header(m)
-	owed, ok := find(l, "waiting")
-	if !ok || !strings.HasPrefix(owed.Text, fmt.Sprintf("%d request", you)) || owed.Role != RoleAttention || !strings.Contains(owed.Text, "oldest 3h") {
-		t.Errorf("owed item %+v, want %d for you in orange with its oldest (header %q)", owed, you, l.text())
+	// One counter (requests-plan-redesign, correction 3): what the person
+	// owes is in the strip's decide, no second "N requests waiting" item.
+	if _, ok := find(l, "waiting"); ok {
+		t.Errorf("a second owed item in the header %q", l.text())
+	}
+	if q := m.headerData().strip; q.decide+q.merge != m.work.youCount() || q.decide < you {
+		t.Errorf("strip %+v, YOU %d, owed %d", q, m.work.youCount(), you)
 	}
 	between, ok := find(l, "between agents")
 	if !ok || between.Text != fmt.Sprintf("%d between agents", agents) || between.Role != RoleMuted {

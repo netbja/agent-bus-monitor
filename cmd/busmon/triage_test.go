@@ -104,7 +104,7 @@ func TestTriageAnswerAdvances(t *testing.T) {
 	if it2, ok := m.walkItem(); !ok || it2.Rank != rankHealth || topKind(t, m) != ovHealth {
 		t.Fatalf("after the last answer: %v, want the next item (health)", m.rd.top().kind)
 	}
-	if m.ui.walk.outcome[it.Key] != "answered" || !strings.HasPrefix(m.ui.flash, "sent "+GlyphDash+" next: stall health") {
+	if m.ui.walk.outcome[it.Key] != "answered" || !strings.HasPrefix(m.ui.flash, "sent "+GlyphDash+" next: stall "+verbCheck) {
 		t.Fatalf("outcome %q flash %q", m.ui.walk.outcome[it.Key], m.ui.flash)
 	}
 	// left > 0: the page stays on the next question, the walk does not move

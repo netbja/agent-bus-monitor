@@ -66,7 +66,7 @@ type stripParts struct {
 }
 
 func (m Model) idleData() idleData {
-	q := stripOf(m.forYou)
+	q := m.work.strip(0)
 	d := idleData{need: q.decide + q.merge}
 	if q.decide > 0 {
 		d.parts = append(d.parts, Seg{Text: GlyphHuman + " " + strconv.Itoa(q.decide) + " decide", Role: RoleMuted})

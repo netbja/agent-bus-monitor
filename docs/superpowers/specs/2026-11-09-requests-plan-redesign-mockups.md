@@ -280,3 +280,46 @@ if every piece of work goes through a loaded plan, which today it does not.
    in For you, not rows. The new page's YOU section lists them as rows (layouts A and C), and the
    For you panel keeps the pointer; layout B makes them For you rows again. Is that what you want
    now?
+
+## 9. The person's answer (2026-11-10) and what is built
+
+The person's answer:
+- **Layout**: A below 130 columns of busmon's pane, the Kanban B at 130 or more. A setting in
+  Shift+C chooses `auto` (the default), always A, or always Kanban.
+- **Corrections**: the eight listed in master's directive `requests-plan-redesign-impl`.
+- **Q2, Q3 and Q5**: yes, as proposed.
+- **Q4** (the `m` key): deferred until after v0.29.
+
+The work is built in steps, one PR each.
+
+**Step 1, the Work model and one counter** (`cmd/busmon/work_model.go`). One producer,
+`workOf`, feeds the header's strip, the For you panel's label and the idle view now. The Work
+page and the Kanban will read it too.
+
+- **The sort rule** (correction 2):
+  - **YOU** holds what waits on the person:
+    - **answer**: an open ask, a waiting agent or its client's prompt, or a request or
+      directive owed by the person;
+    - **merge**: a change both reviewers approved on its pushed head, from the merge queue,
+      which lists no other head (correction 4 holds by construction);
+    - **decide**: a plan task of the person's that nothing blocks;
+    - **review**: a gate that concerns the person;
+    - **check**: the stall guard.
+  - **NEXT** holds the plan's tasks not started, in file order, the person's blocked tasks
+    among them, then the tracked requests that no plan task names.
+  - **IDEAS** holds the open questions in `docs/memory/open-questions/` with status
+    `proposed` or `active` that no plan task covers. A task covers a note when its board or
+    its id is the note's id, or when its title without `Decide:` is the note's title. The
+    notes are read, never written, from the project template's `working_dir` on busmon's
+    host. A failed read keeps the last list and is flagged.
+  - **TEAM** holds the agents at work: the task in hand (the accepted tracked request and its
+    plan task), the gates the agent holds as a reviewer, and the reviewers of its own work,
+    each with the gate's age (correction 5). The idle agents go on one line.
+- **The verbs** (correction 1): For you's rows use the same words. An ask reads `answer`, never
+  `ask`; a waiting agent reads `answer`; a gate reads `review`; the stall guard reads `check`.
+  A merge row keeps its text, `merge PR N`.
+- **One counter** (correction 3): the strip's `decide` is every YOU row except the merges, so
+  decide + merge is YOU's count, and the For you label shows the same words. The person's
+  unblocked plan tasks are now counted there. The For you panel still shows them as one
+  pointer, not as rows (Q5). The header's separate `N requests waiting` item is gone: those
+  requests are in `decide`.
