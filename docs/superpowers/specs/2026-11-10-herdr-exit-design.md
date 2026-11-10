@@ -5,6 +5,7 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 4: foureyes P2 at bd371e32 (names in `WakeLine` and in the submit frame)
 - Revision 3: reviewer-codex CHANGES at bc2d8394 (Runtime.Prompt still takes text; focus
   fallback for viewers without focus reports)
 - Revision 2: foureyes CHANGES at bc2d8394 (P1 host-reported facts; P2 drain bound, wire-level
@@ -164,9 +165,13 @@ Interface rules (part of the interface, not comments):
   (bracketed when the program enabled mode 2004), waits ~200 ms, then sends CR.
 - **The closed set holds on the wire too.** A Go type protects only inside one process; the
   holder is reached over a socket. So the holder's submit frame carries only
-  `{kind: wake|clear, term, nonce, project, agent, count}` — no text field — and the **holder
+  `{kind: wake|clear, term, nonce, count}` — no text field and **no names** — and the **holder
   composes** the line from a template compiled into it (the same constant the dispatcher uses
-  today). A frame with any other kind, or a nonce not matching `^[0-9a-f]{6,16}$`, is refused.
+  today). The holder fills the project from its own (it serves one, §4.4) and the agent from
+  the terminal's name, both checked with `ValidName` when the terminal was started (`Start`
+  refuses an invalid name). A frame with any other kind, any field beyond these four (a name or
+  text field included), a nonce not matching `^[0-9a-f]{6,16}$`, or a `count` outside 1–999 is
+  refused.
   The only frame that carries raw input bytes is the attach stream (§4.6), opened by a person's
   `agentbus attach`; observer attaches carry none. This is a trust boundary between same-uid
   processes, so §4.4 and §4.6 go to the **security role** for review before step 9 starts.
@@ -183,7 +188,10 @@ Where callers land:
   today it is `Prompt(ctx, pane, text, nonce string)` and only checks that `text` contains the
   nonce marker, so any string still crosses the seam. It becomes
   `Prompt(ctx, pane string, line termhost.Line)`; the dispatcher builds the line with
-  `termhost.WakeLine(project, agent, count, nonce)` and `Clear` passes `termhost.ClearLine()`.
+  `termhost.WakeLine(project, agent, count, nonce) (Line, error)` and `Clear` passes
+  `termhost.ClearLine()`. `WakeLine` refuses a `project` or `agent` that fails `bus.ValidName`,
+  a `count` < 1, and a nonce not matching `^[0-9a-f]{6,16}$`, so nothing outside those
+  alphabets can be interpolated into the typed line.
   `Line` has unexported fields and no exported constructor from a string, so no caller in any
   package can make one carry other text; the observed marker is read from the `Line`, not
   passed beside it. This change lands in step 1, with a test that fails if any exported
@@ -449,7 +457,9 @@ detection herdr-independent.
   focus-out then focus-in toggles it; an observer never blocks. Contract suite, all adapters
   that have viewers.
 - Mutation on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
-  frame validation (unknown kind, malformed nonce, text field present): the guarantees a
+  frame validation (unknown kind, malformed nonce, text field present, a name field present,
+  count out of range), on `WakeLine`'s `ValidName` check (one mutant per argument: project,
+  agent) and on `Start`'s name check: the guarantees a
   reviewer would otherwise only read.
 - `{p}:resume`: Redis tests (disposable broker) — an unproved caller writes nothing; a status,
   a hand-off and the agent's death leave it; `forget` clears it.
