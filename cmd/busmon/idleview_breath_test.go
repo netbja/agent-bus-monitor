@@ -276,3 +276,17 @@ func fadeOf(l Line) int {
 	}
 	return -1
 }
+
+// At 1 s (option 1) the shade is one of the six named levels whatever the
+// poll's jitter: a sample between whole seconds keeps the second's level
+// (foureyes P3: the frame truncation).
+func TestIdleBreathHoldsItsLevelBetweenFrames(t *testing.T) {
+	withPalette(t, "dark", false, 1<<24)
+	for s := range 6 {
+		on := fadeOf(idleBreath(10, time.Duration(s)*time.Second, true))
+		mid := fadeOf(idleBreath(10, time.Duration(s)*time.Second+700*time.Millisecond, true))
+		if on != mid {
+			t.Errorf("second %d: %d on the second, %d at +700 ms", s, on, mid)
+		}
+	}
+}
