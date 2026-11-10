@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -67,6 +68,9 @@ type adminSource struct {
 	// unitHosts reads the other hosts where the project's units remain
 	// (§5.2); nil: not shown.
 	unitHosts func(ctx context.Context, project string) ([]unitHosts, error)
+	// files is where a project's files are, for the delete's two options
+	// (§5.5): its template, working_dir, the backup folder and this host.
+	files func(project string) (projfiles.Options, error)
 }
 
 // Memory read bounds (§3.3): one call per key, so a deadline and a cap.
@@ -249,6 +253,7 @@ func realAdminSource(client *redis.Client, getenv func(string) string) adminSour
 		defer cancel()
 		return bus.ProjectMemory(ctx, client, p, memoryMaxKeys)
 	}
+	src.files = func(p string) (projfiles.Options, error) { return projectFiles(p, getenv, host) }
 	src.unitHosts = func(ctx context.Context, p string) ([]unitHosts, error) {
 		b, err := bus.Open(client, p)
 		if err != nil {

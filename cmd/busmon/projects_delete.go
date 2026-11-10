@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -13,7 +15,11 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/projfiles"
+	"github.com/netbja/agent-bus-monitor/projlist"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -53,12 +59,25 @@ type deletePanel struct {
 	backup    string // the archive, or "no backup"
 	field     string
 	note      string // does not match, a failed backup
+	// What the delete also removes from disk (§5.5): the options as they
+	// were at d, the plan read then (Apply plans again when it removes).
+	files    projfiles.Options
+	plan     projfiles.Plan
+	planErr  error
+	archive  string // the archive b made: never removed (Q7)
+	unknownB bool   // b made an archive whose path the log does not name: no archive removed
 }
+
+// filesOn: an option is on, so the panel lists what goes from disk.
+func (d *deletePanel) filesOn() bool { return d.files.Files || d.files.Backups }
 
 type deleteCheckMsg struct {
 	project, reason string
 	hosts           []unitHosts // where units remain, read with the check (§5.2)
 	hostsErr        error
+	files           projfiles.Options // the options on, and where the project's files are (§5.5)
+	plan            projfiles.Plan
+	planErr         error
 }
 
 // unitHosts is one other host where a project's units remain installed, and
@@ -116,10 +135,12 @@ func unitHostsText(hs []unitHosts) string {
 }
 
 type deleteDoneMsg struct {
-	res    deleteResult
-	became string // the second check refused: nothing was deleted
-	open   bool
-	hosts  []unitHosts // where units remain: repeated in the notice
+	res     deleteResult
+	became  string // the second check refused: nothing was deleted
+	open    bool
+	hosts   []unitHosts     // where units remain: repeated in the notice
+	filesOn bool            // an option was on (§5.5)
+	files   *projfiles.Done // what went from disk: only after a clean delete
 }
 
 // projectDelete is d on a row: the checks, read in a command (§5.1).
@@ -135,12 +156,16 @@ func (m *Model) projectDelete(r adminRow) tea.Cmd {
 	quiet := m.adminQuiet()
 	ctx := m.cfgCtx()
 	src := m.cfg.admin
+	filesOpt, backupsOpt := m.cfg.settings.DeleteFiles, m.cfg.settings.DeleteBackups
 	return func() tea.Msg {
 		c, cancel := context.WithTimeout(ctx, adminReadTimeout)
 		defer cancel()
 		msg := deleteCheckMsg{project: r.name, reason: quiet(c, r.name)}
 		if msg.reason == "" && src != nil && src.unitHosts != nil {
 			msg.hosts, msg.hostsErr = src.unitHosts(c, r.name) // read before the DEL removes them
+		}
+		if msg.reason == "" && (filesOpt || backupsOpt) {
+			msg.files, msg.plan, msg.planErr = planFiles(src, r.name, filesOpt, backupsOpt)
 		}
 		return msg
 	}
@@ -179,7 +204,55 @@ func (m *Model) gotDeleteCheck(msg deleteCheckMsg) {
 		m.ui.flash, m.ui.flashErr = msg.reason, true
 		return
 	}
-	m.ui.del = &deletePanel{row: p.proj.rows[p.sel], unchecked: p.proj.agentsUnchecked, hosts: msg.hosts, hostsErr: msg.hostsErr}
+	m.ui.del = &deletePanel{row: p.proj.rows[p.sel], unchecked: p.proj.agentsUnchecked, hosts: msg.hosts, hostsErr: msg.hostsErr,
+		files: msg.files, plan: msg.plan, planErr: msg.planErr}
+}
+
+// planFiles is where the project's files are, with the options on, and what
+// a delete would remove from them (§5.5). Nothing is removed here.
+func planFiles(src *adminSource, project string, files, backups bool) (projfiles.Options, projfiles.Plan, error) {
+	o := projfiles.Options{Project: project}
+	if src == nil || src.files == nil {
+		o.Files, o.Backups = files, backups
+		return o, projfiles.Plan{}, errors.New("no reader of the project's files")
+	}
+	o, err := src.files(project)
+	o.Project, o.Files, o.Backups = project, files, backups
+	if err != nil {
+		return o, projfiles.Plan{}, err
+	}
+	p, err := projfiles.PlanFor(o)
+	return o, p, err
+}
+
+// backupArchiveInLog is the archive a backup run made: its "backup: <path>"
+// line, an absolute path to a .tar.zst, after the run's own header (the
+// last "--- " line), so never an earlier run's (§5.5, Q7). "" when none.
+func backupArchiveInLog(log string) string {
+	f, err := os.Open(log)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil && fi.Size() > 64<<10 {
+		f.Seek(-64<<10, io.SeekEnd)
+	}
+	b, _ := io.ReadAll(io.LimitReader(f, 64<<10))
+	lines := strings.Split(string(b), "\n")
+	start := 0
+	for i, l := range lines {
+		if strings.HasPrefix(l, "--- ") {
+			start = i + 1
+		}
+	}
+	archive := ""
+	for _, l := range lines[start:] {
+		p, ok := strings.CutPrefix(strings.TrimRight(l, "\r"), "backup: ")
+		if ok && filepath.IsAbs(p) && strings.HasSuffix(p, ".tar.zst") && !strings.ContainsAny(p, "\x00") {
+			archive = p
+		}
+	}
+	return archive
 }
 
 // deleteKey is a key on the panel: its own table; on the name step every
@@ -235,7 +308,7 @@ func (m *Model) deleteKey(k Key) tea.Cmd {
 }
 
 // deleteBackupDone moves the panel on once its backup ends (gotSleepDone).
-func (m *Model) deleteBackupDone(r *sleepRun, err error) {
+func (m *Model) deleteBackupDone(r *sleepRun, err error, archive string) {
 	d := m.ui.del
 	if d == nil || d.step != delBackingUp || r.project != d.row.name {
 		return
@@ -244,7 +317,12 @@ func (m *Model) deleteBackupDone(r *sleepRun, err error) {
 		d.step, d.note = delBackup, "backup failed: "+Preview(r.last)+" ("+r.log+"); b again, n without, esc cancels"
 		return
 	}
-	d.step, d.backup = delName, r.last
+	// The archive is the path the run printed, not its last line (a note,
+	// most often); one it does not name keeps every archive (fail closed).
+	d.step, d.backup, d.archive, d.unknownB = delName, r.last, archive, archive == ""
+	if archive != "" {
+		d.backup = archive
+	}
 }
 
 // runDelete checks again, then deletes, in one command (§5.1, §5.3).
@@ -253,16 +331,26 @@ func (m *Model) runDelete() tea.Cmd {
 	d.step = delDeleting
 	name, open, hosts := d.row.name, d.row.open, d.hosts
 	quiet, src, ctx := m.adminQuiet(), m.cfg.admin, m.cfgCtx()
+	files, filesOn := d.files, d.filesOn() && d.planErr == nil
+	files.KeepArchive = d.archive
+	if d.unknownB {
+		files.Backups = false // the new archive cannot be told apart: none goes
+	}
 	return func() tea.Msg {
 		c, cancel := context.WithTimeout(ctx, deleteTimeout)
 		defer cancel()
 		if why := quiet(c, name); why != "" {
-			return deleteDoneMsg{res: deleteResult{project: name}, became: why, open: open}
+			return deleteDoneMsg{res: deleteResult{project: name}, became: why, open: open, filesOn: filesOn}
 		}
 		if src == nil || src.remove == nil {
-			return deleteDoneMsg{res: deleteResult{project: name, err: errors.New("no broker to delete from")}, open: open}
+			return deleteDoneMsg{res: deleteResult{project: name, err: errors.New("no broker to delete from")}, open: open, filesOn: filesOn}
 		}
-		return deleteDoneMsg{res: src.remove(c, name), open: open, hosts: hosts}
+		msg := deleteDoneMsg{res: src.remove(c, name), open: open, hosts: hosts, filesOn: filesOn}
+		if filesOn && msg.res.err == nil && len(msg.res.left) == 0 { // files only after a clean delete
+			done := projfiles.Apply(files)
+			msg.files = &done
+		}
+		return msg
 	}
 }
 
@@ -271,13 +359,17 @@ func (m *Model) runDelete() tea.Cmd {
 func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 	m.ui.del = nil
 	r := msg.res
+	noFiles := ""
+	if msg.filesOn {
+		noFiles = "; no file removed"
+	}
 	switch {
 	case msg.became != "":
 		m.notice.push(notice{text: "became live: " + msg.became + "; nothing deleted", level: noticeAttention})
 	case r.err != nil: // deleteProjectNow's words: what was and was not deleted
-		m.notice.push(notice{text: r.err.Error(), level: noticeAttention})
+		m.notice.push(notice{text: r.err.Error() + noFiles, level: noticeAttention})
 	case len(r.left) > 0:
-		m.notice.push(notice{text: cameBack(r.project, r.keys, r.left), level: noticeAttention})
+		m.notice.push(notice{text: cameBack(r.project, r.keys, r.left) + noFiles, level: noticeAttention})
 	default:
 		text := fmt.Sprintf("deleted %d %s of %s", r.keys, plural(int(r.keys), "key"), r.project)
 		if len(r.services) > 0 {
@@ -290,16 +382,72 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 			}
 			text += "; units reported on " + strings.Join(names, ", ") + ": agentbus --project " + r.project + " service remove there"
 		}
+		level := noticeDone
+		if msg.files != nil {
+			text += filesDoneText(*msg.files)
+			if len(msg.files.Errs) > 0 {
+				level = noticeAttention
+			}
+		}
 		if msg.open {
 			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --pick to open another project", r.project, r.keys, plural(int(r.keys), "key"))
 			return tea.Quit
 		}
-		m.notice.push(notice{text: text, level: noticeDone})
+		m.notice.push(notice{text: text, level: level})
 	}
 	if p := m.projectsPageOpen(); p != nil {
 		return m.projectsCmd(p.serial)
 	}
 	return nil
+}
+
+// filesDoneText is what went from disk, for the done notice.
+func filesDoneText(d projfiles.Done) string {
+	var parts []string
+	if d.Template != "" {
+		parts = append(parts, "the template")
+	}
+	if n := len(d.Worktrees); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", n, plural(n, "worktree")))
+	}
+	if n := len(d.Archives); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", n, plural(n, "archive")))
+	}
+	text := ""
+	if len(parts) > 0 {
+		text = "; also removed: " + strings.Join(parts, ", ")
+	}
+	if len(d.Errs) > 0 {
+		text += fmt.Sprintf("; %d could not be removed (%s)", len(d.Errs), Preview(d.Errs[0].Error()))
+	}
+	return text
+}
+
+// filesLines are the panel's lines on what goes from disk (§5.5).
+func (m Model) filesLines() []Line {
+	d := m.ui.del
+	if !d.filesOn() {
+		return nil
+	}
+	att := func(s string) Line { return Line{{Text: s, Role: RoleAttention}} }
+	if d.planErr != nil {
+		return []Line{att("also deleted (settings): ? (" + Preview(d.planErr.Error()) + "): no file will be removed")}
+	}
+	p := d.plan
+	if d.archive != "" && d.files.Backups {
+		p.Kept = d.archive
+	}
+	lines := []Line{att("also deleted (settings):")}
+	for _, s := range p.Lines(d.row.name) {
+		lines = append(lines, att("  "+s))
+	}
+	if p.Empty() {
+		lines = append(lines, Line{{Text: "  nothing found on disk", Role: RoleMuted}})
+	}
+	if d.unknownB && d.files.Backups {
+		lines = append(lines, att("  backups: kept, the new archive's path is not in the log"))
+	}
+	return lines
 }
 
 // unitHostsLines are the panel's lines on the other hosts' units (§5.2):
@@ -337,9 +485,12 @@ func (m Model) deletePanelLines(w int) []Line {
 	if d.unchecked {
 		lines = append(lines, Line{{Text: "agents: not checkable on this host (no /proc): only the leases, the services' records and the scan after the delete see them", Role: RoleAttention}})
 	}
-	lines = append(lines, []Line{
-		{{Text: "This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot and gate leases all go. The template and the worktrees stay.", Role: RoleText}},
-	}...)
+	del := "This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot and gate leases all go."
+	if !d.filesOn() {
+		del += " The template and the worktrees stay."
+	}
+	lines = append(lines, Line{{Text: del, Role: RoleText}})
+	lines = append(lines, m.filesLines()...)
 	lines = append(append(lines, m.unitHostsLines()...), nil)
 	key := func(k, what string) Line {
 		return Line{{Text: k, Role: RoleAccent, Bold: true}, {Text: " " + what, Role: RoleMuted}}
@@ -532,4 +683,27 @@ func realRemove(client *redis.Client) func(ctx context.Context, p string) delete
 func hasProc() bool {
 	_, err := os.Stat("/proc/self/stat")
 	return err == nil
+}
+
+// projectFiles is where project p's files are on this machine (§5.5): its
+// template in the projects folder and the template's working_dir, the backup
+// folder, and this host as archives name it. The options are the caller's.
+func projectFiles(p string, getenv func(string) string, host string) (projfiles.Options, error) {
+	o := projfiles.Options{Project: p, Host: host}
+	rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv))
+	if err != nil {
+		return o, fmt.Errorf("the templates: %w", err)
+	}
+	for _, r := range rows {
+		if r.Name == p {
+			o.Template, o.WorkingDir = r.Path, r.WorkingDir
+		}
+	}
+	cfg := config.Load(config.Path(getenv), "config.toml")
+	dir, _, err := config.BackupDir(config.Resolver{Getenv: getenv, Files: []*config.File{cfg}}, getenv)
+	if err != nil {
+		return o, fmt.Errorf("the backup folder: %w", err)
+	}
+	o.BackupDir = dir
+	return o, nil
 }
