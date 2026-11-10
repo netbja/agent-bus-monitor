@@ -56,6 +56,10 @@ func TestKeyOfTeaCtrlAltCharacter(t *testing.T) {
 		{tea.Key{Code: 'b', Mod: tea.ModCtrl | tea.ModAlt}, Key{Alt: true}},
 		{tea.Key{Code: 's', Mod: tea.ModCtrl | tea.ModAlt}, Key{Code: keyCtrlS, Alt: true}},
 		{tea.Key{Code: '~', Mod: tea.ModCtrl}, Key{}}, // ctrl without alt is no AltGr
+		// a control code is no character: Ctrl+Alt+Enter, Tab or Backspace types nothing (foureyes)
+		{tea.Key{Code: tea.KeyEnter, Mod: tea.ModCtrl | tea.ModAlt}, Key{Alt: true}},
+		{tea.Key{Code: tea.KeyTab, Mod: tea.ModCtrl | tea.ModAlt}, Key{Alt: true}},
+		{tea.Key{Code: tea.KeyBackspace, Mod: tea.ModCtrl | tea.ModAlt}, Key{Alt: true}},
 	} {
 		if got := keyOfTea(tea.KeyPressMsg(c.tea)); got != c.want {
 			t.Errorf("%v: %+v, want %+v", c.tea, got, c.want)
