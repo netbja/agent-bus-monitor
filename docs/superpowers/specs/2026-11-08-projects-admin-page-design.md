@@ -3,7 +3,9 @@
 Status: steps 1–4 merged (PRs 373, 383). The person answered part 10 on 2026-11-09 (task
 `projects-progress-answers`); the answers are recorded there, and three changes follow from them:
 the memory size in the detail (§3.3), the hosts named in the delete panel (§5.2), and the two
-options that also delete files (§5.5). They are steps 6–8 (§11). This spec names functions and
+options that also delete files (§5.5). They are steps 6–8 (§11). The person answered Q6 and Q7 on
+2026-11-10 (task `projects-admin-answers-3`): `roles.toml` is never removed, and the archive made
+just before a delete is kept even with `delete_backups` on (§5.5, part 10). This spec names functions and
 seams, not line numbers.
 
 ## 1. The gap
@@ -253,8 +255,8 @@ file is touched, and the notice says so.
 - **The template**, `<projects dir>/<p>.toml`. If it is a link, the link is removed, never its
   target.
 - **`roles.toml` is never removed.** It is one machine-wide file (`ROLES_TOML`, or the agent-bus
-  checkout's), shared by every project. Deleting it would break the others. The person's answer
-  named it; part 10, Q6 asks them to confirm it stays.
+  checkout's), shared by every project. Deleting it would break the others. The person confirmed
+  it (part 10, Q6): `delete_files` covers the template and the worktrees only.
 - **The worktrees.** They are read as text, never by running git (git's config can make git run a
   program: the compose-at-file rule). **That text is writable by any agent**, so what gets removed
   is never decided by it alone (foureyes). For each entry `W/.git/worktrees/<name>`, where `W` is
@@ -290,9 +292,30 @@ read is kept and named.
    backups: 4 archives of demo alone; 3 archives also hold other projects: kept
 ```
 
-**The backup offer.** With `delete_backups` on, the backup that §5.2 offers first would itself be
-removed by the delete. So the panel does not offer one, and says `backups are deleted with the
-project (setting): no backup offered`. Part 10, Q7 asks the person to confirm this.
+**The backup offer, and the one archive kept** (the person, Q7). The backup that §5.2 offers first
+is offered with `delete_backups` on too, and the archive it makes is **never** removed by this
+delete: it is the one exception. busmon knows it by the path `b`'s run printed on its
+`backup: <path>` line (an absolute path to a `.tar.zst`), read from **this run's** part of the log,
+after the runner's own `--- ` header. It is never the log's last line: `agentbus backup` prints
+that line first, then per-project lines, notes, `backup.after_command`'s outcome and the
+retention's `removed N` (foureyes). That path is compared with each candidate as a file
+(`os.SameFile` on the resolved path), never by name, date or size. The panel shows it on its own
+line, and its `backup:` line shows that path, not the run's last line:
+
+```
+   backups: 4 archives of demo alone; 3 archives also hold other projects: kept
+   kept: ~/.local/share/agentbus/backups/agentbus-backup-host-20261110T0915.tar.zst (made now)
+```
+
+**Fail closed** (foureyes): when `b` succeeded but its log names no such path, or the path does
+not resolve to an existing regular file, `delete_backups` removes **no** archive in this delete,
+and the panel says `backups: kept, the new archive's path is not in the log`. It never falls back
+to "no exception", which would erase the fresh archive. `delete_files` is unaffected.
+
+With `n` (no backup), nothing is exempt, and every archive of the project alone goes, as listed.
+An archive made earlier, even minutes before, is not the exception: only the one this panel's `b`
+made. `busmon --delete` offers no backup, so it has no exception either; it lists what it removes
+before it removes it.
 
 `busmon --delete` honours the same two settings and prints what it removed.
 
@@ -420,8 +443,13 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
   a `gitdir` naming a tracked directory with no `.git` file (`W/cmd/.git`); a `.git` file that
   points at another entry; a link on the way to `D`; a `gitdir` naming `W` itself. With
   `delete_backups` on, an archive
-  whose `coverage.json` lists only the project goes, a shared one and an unreadable one stay, and
-  no backup is offered. With keys that came back, no file is touched. Both off: nothing but keys.
+  whose `coverage.json` lists only the project goes, a shared one and an unreadable one stay; the
+  backup is still offered, and the archive `b` made is kept and shown (`kept: <path> (made now)`),
+  through a link to it too, while an older archive of the project alone goes; with `n`, none is
+  kept. The path is read from the run's `backup: <path>` line with `backup.after_command` set and
+  retention pruning (the log's last line is then not a path): the fresh archive is still found and
+  kept; an earlier run's line in the same log is never taken. A log with no such line, or a path
+  that is not an existing regular file: no archive removed, the panel says so. With keys that came back, no file is touched. Both off: nothing but keys.
 
 ## 10. The person's answers (2026-11-09)
 
@@ -429,22 +457,20 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
    (`Z`), then delete it (`d`). That is how steps 1–4 shipped.
 2. **`MEMORY USAGE` in the detail only** (`enter`), never in the list (§3.3).
 3. **Files too, as an option.** Two settings, off by default, in `config/keys.go`, `config.toml`
-   and busmon's settings screen: one for the template, `roles.toml` and the worktrees, one for the
-   backups. The person named `roles.toml` in the first; this spec proposes to leave it out, since
-   it is machine-wide (§5.5, Q6 below).
+   and busmon's settings screen (`C`): `projects.delete_files` for the template and the worktrees,
+   `projects.delete_backups` for the backups (§5.5). `roles.toml` is in neither (Q6).
 4. **`M`** opens the page, as shipped.
 5. **Remote broker:** a delete is allowed for a sleeping or stopped project, since
    `deleteIfQuiet` covers every host. The panel names the hosts where units remain, from
    `{p}:services` (§5.2).
 
-**Questions this raises, for the person:**
+**Answered on 2026-11-10** (task `projects-admin-answers-3`):
 
-6. **`roles.toml` stays.** It is one file for every project on the machine, not the project's own.
-   Deleting it with one project would break the others. Agreed that `delete_files` covers the
-   template and the worktrees only?
-7. **The backup offer with `delete_backups` on.** The backup offered first would be deleted with
-   the rest. Skip the offer in that case (recommended, §5.5), or keep the fresh archive as the one
-   exception?
+6. **`roles.toml` stays.** It is one file for every project on the machine and is never deleted;
+   `delete_files` covers the template and the worktrees only.
+7. **The fresh archive is kept.** With `delete_backups` on, the backup is still offered, and the
+   archive made just before the delete is never erased: the one exception. The panel shows its
+   path (§5.5). (The spec had recommended skipping the offer instead.)
 
 The questions as they were put (2026-11-08):
 
@@ -478,4 +504,4 @@ The questions as they were put (2026-11-08):
 7. The hosts where units remain, in the delete panel and the done notice (§5.2).
 8. The two options (§5.5): the settings, the template, the worktrees read as text and removed
    without git, the backups by their `coverage.json`, the panel lines and the backup offer, and
-   `busmon --delete`. After the person answers Q6 and Q7.
+   `busmon --delete`. Q6 and Q7 answered (part 10): `roles.toml` never, the archive `b` made kept.
