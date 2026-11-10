@@ -75,7 +75,7 @@ func (m *Model) editLine(k Key) bool {
 		s, cur = lineDeleteWord(s, cur)
 	case k.Code == keyCtrlU:
 		s, cur = s[cur:], 0
-	case k.Code == keyRune && !k.Alt:
+	case k.Code == keyRune: // a rune marked Alt too: a dead key's or AltGr's character (compose-dead-keys)
 		s, cur = lineInsert(s, cur, string(k.Rune))
 	default:
 		return false

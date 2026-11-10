@@ -22,6 +22,12 @@ func keyOfTea(msg tea.KeyPressMsg) Key {
 	k := msg.Key()
 	alt := k.Mod.Contains(tea.ModAlt)
 	if k.Mod.Contains(tea.ModCtrl) {
+		// AltGr reported as Ctrl+Alt (kitty's ;7) is the character it made, marked
+		// Alt so no shortcut reads it; a Ctrl+Alt letter stays a control key
+		// (compose-dead-keys: ~ on a Swiss French keyboard in a herdr pane).
+		if alt && !unicode.IsLetter(k.Code) && unicode.IsPrint(k.Code) {
+			return Key{Code: keyRune, Rune: k.Code, Alt: true}
+		}
 		if k.Code == 'z' && k.Mod.Contains(tea.ModShift) { // ctrl+shift+z redoes, where the terminal tells it apart
 			return Key{Code: keyCtrlY, Alt: alt}
 		}

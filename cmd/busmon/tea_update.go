@@ -99,7 +99,7 @@ func (m *Model) modeKey(k Key) tea.Cmd {
 	case ModeCompose:
 		c := m.ui.compose
 		cmd := m.composeKey(act, k)
-		typedAt := act == ActNone && k.Code == keyRune && k.Rune == '@' && !k.Alt
+		typedAt := act == ActNone && k.Code == keyRune && k.Rune == '@' // AltGr's @ (Swiss French) is typed too
 		return tea.Batch(cmd, m.atFollow(c, typedAt))
 	case ModeInput, ModeFilter:
 		return m.lineKey(act, k)

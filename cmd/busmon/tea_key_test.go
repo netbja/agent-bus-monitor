@@ -43,3 +43,22 @@ func TestKeyOfTea(t *testing.T) {
 		}
 	}
 }
+
+// AltGr reported as Ctrl+Alt (kitty's ;7) is its character, marked Alt; a
+// Ctrl+Alt letter stays a control key (compose-dead-keys).
+func TestKeyOfTeaCtrlAltCharacter(t *testing.T) {
+	for _, c := range []struct {
+		tea  tea.Key
+		want Key
+	}{
+		{tea.Key{Code: '~', Mod: tea.ModCtrl | tea.ModAlt}, Key{Code: keyRune, Rune: '~', Alt: true}},
+		{tea.Key{Code: '@', Mod: tea.ModCtrl | tea.ModAlt}, Key{Code: keyRune, Rune: '@', Alt: true}},
+		{tea.Key{Code: 'b', Mod: tea.ModCtrl | tea.ModAlt}, Key{Alt: true}},
+		{tea.Key{Code: 's', Mod: tea.ModCtrl | tea.ModAlt}, Key{Code: keyCtrlS, Alt: true}},
+		{tea.Key{Code: '~', Mod: tea.ModCtrl}, Key{}}, // ctrl without alt is no AltGr
+	} {
+		if got := keyOfTea(tea.KeyPressMsg(c.tea)); got != c.want {
+			t.Errorf("%v: %+v, want %+v", c.tea, got, c.want)
+		}
+	}
+}
