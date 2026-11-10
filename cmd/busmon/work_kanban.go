@@ -14,8 +14,10 @@ import (
 //
 // A card is two lines. The first holds its mark, its verb or owner and its
 // age; the second its title, indented two cells and cut with … at the
-// column's width (never wrapped: a third line would break the columns'
-// rhythm). At 130 columns a column is 31 cells: the title keeps 29.
+// column's width, never wrapped. At 130 columns a column is 31 cells: the
+// title keeps 29. One card has a third line: an agent holding both a task and
+// a review gate, whose gate (for whom, its age, the other gates, then the
+// subject) cannot share the task's two lines at 31 cells (reviewer-codex).
 //
 // The folded lines close the Ideas column: between agents and done, two cards
 // Enter opens as on the list. On a selected card ←→ move between columns, to
@@ -43,7 +45,7 @@ func workKanbanOn(layout string, width int) bool {
 // kanbanCard is one card: its row key (the list's) and its two lines.
 type kanbanCard struct {
 	key   string
-	lines [2]Line
+	lines []Line // two; three for an agent holding a task and a gate
 }
 
 // kanbanCol is one column: its heading and its cards.
@@ -90,7 +92,7 @@ func workKanban(w workModel, d workDraw) kanbanView {
 		if !it.At.IsZero() {
 			a = humanAge(d.now.Sub(it.At))
 		}
-		you.cards = append(you.cards, kanbanCard{key: it.Key, lines: [2]Line{
+		you.cards = append(you.cards, kanbanCard{key: it.Key, lines: []Line{
 			head(reqMark(it.Req), g, role, it.Verb, workWho(it.Who, false), a),
 			title(strings.TrimPrefix(it.Text, "merge "), RoleText)}})
 	}
@@ -108,28 +110,32 @@ func workKanban(w workModel, d workDraw) kanbanView {
 				where = "#" + r.Plan
 			}
 		}
-		if len(r.Reviewing) > 0 { // the gate it holds, named as on the list: its title, or with a task on line 1
+		var gateLine Line
+		if len(r.Reviewing) > 0 { // the gate it holds: for whom, its age and count first, so a cut eats only the subject (reviewer-codex)
 			g := r.Reviewing[0]
-			gate := "reviewing " + g.Subject + " for " + g.Who
+			facts := "for " + g.Who
 			if a := gateAge(g.Since, d.now); a != "" {
-				gate += " " + a
+				facts += " " + a
 			}
 			if n := len(r.Reviewing) - 1; n > 0 {
-				gate += fmt.Sprintf(" (+%d)", n)
+				facts += fmt.Sprintf(" (+%d)", n)
 			}
 			if r.Task == nil {
-				what = gate
-			} else {
-				where = strings.TrimSpace(where + " " + gate)
+				what, where = "reviewing "+g.Subject, facts
+			} else { // a third line: the task stays the title
+				gateLine = Line{{Text: "  " + GlyphGate + " " + Preview(facts) + " " + GlyphNone + " " + Preview(g.Subject), Role: RoleDispatch}}
 			}
 		} else if len(r.Reviewers) > 0 {
 			where = strings.TrimSpace(where + " " + strings.TrimSpace(strings.TrimPrefix(teamReviewers(r, d.now), "  review:")))
 		}
-		team.cards = append(team.cards, kanbanCard{key: workAgentPrefix + r.Agent, lines: [2]Line{
-			head(reqMark(r.Task), glyph, role, r.Agent, where), title(what, RoleText)}})
+		card := kanbanCard{key: workAgentPrefix + r.Agent, lines: []Line{head(reqMark(r.Task), glyph, role, r.Agent, where), title(what, RoleText)}}
+		if gateLine != nil {
+			card.lines = append(card.lines, gateLine)
+		}
+		team.cards = append(team.cards, card)
 	}
 	if len(w.Idle) > 0 { // the free agents: they can take a request (correction 6)
-		team.cards = append(team.cards, kanbanCard{lines: [2]Line{
+		team.cards = append(team.cards, kanbanCard{lines: []Line{
 			head(noMark, GlyphIdle, RoleMuted, "idle, can take a request"), title(strings.Join(w.Idle, ", "), RoleMuted)}})
 	}
 
@@ -142,23 +148,23 @@ func workKanban(w workModel, d workDraw) kanbanView {
 		case it.Plan != "":
 			where = "#" + it.Plan
 		}
-		next.cards = append(next.cards, kanbanCard{key: it.Key, lines: [2]Line{
+		next.cards = append(next.cards, kanbanCard{key: it.Key, lines: []Line{
 			head(reqMark(it.Req), GlyphIdle, RoleMuted, workWho(it.Who, true), where), title(it.Text, RoleText)}})
 	}
 
 	ideas := kanbanCol{title: fmt.Sprintf("Ideas  %d", len(w.Ideas))}
 	if w.IdeasErr {
-		ideas.cards = append(ideas.cards, kanbanCard{lines: [2]Line{
+		ideas.cards = append(ideas.cards, kanbanCard{lines: []Line{
 			head(noMark, GlyphIdea, RoleAttention, "unread"), title("the open questions could not be read", RoleAttention)}})
 	}
 	for _, it := range w.Ideas {
-		ideas.cards = append(ideas.cards, kanbanCard{key: workIdeaPrefix + it.ID, lines: [2]Line{
+		ideas.cards = append(ideas.cards, kanbanCard{key: workIdeaPrefix + it.ID, lines: []Line{
 			head(noMark, GlyphIdea, RoleAccent, "idea", path.Base(it.Where)), title(it.Title, RoleText)}})
 	}
-	ideas.cards = append(ideas.cards, kanbanCard{key: workFoldBetween, lines: [2]Line{
+	ideas.cards = append(ideas.cards, kanbanCard{key: workFoldBetween, lines: []Line{
 		head(noMark, GlyphDash, RoleMuted, "between agents", fmt.Sprint(w.Between)), title("nobody waits on you (enter)", RoleMuted)}})
 	if w.Planned {
-		ideas.cards = append(ideas.cards, kanbanCard{key: workFoldDone, lines: [2]Line{
+		ideas.cards = append(ideas.cards, kanbanCard{key: workFoldDone, lines: []Line{
 			head(noMark, GlyphDash, RoleMuted, "done", fmt.Sprint(w.Done)), title("enter or d shows them", RoleMuted)}})
 	}
 	return kanbanView{cols: []kanbanCol{you, team, next, ideas}}
@@ -215,21 +221,32 @@ func (k *kanbanView) place(sel string, rects []kanbanRect) (col, rank int, first
 		}
 	}
 	if col >= 0 {
-		if fits := kanbanFits(rects[col].h, len(k.cols[col].cards)); rank >= fits {
-			first[col] = rank - fits + 1
+		for first[col] < rank && rank >= first[col]+kanbanFits(rects[col].h, k.cols[col].cards[first[col]:]) {
+			first[col]++
 		}
 	}
 	return col, rank, first
 }
 
-// kanbanFits is how many cards a column of height h shows: its heading, two
-// lines a card, and a "+N more" line when they do not all fit.
-func kanbanFits(h, cards int) int {
-	room := (h - 1) / 2
-	if cards > room {
-		room = (h - 2) / 2
+// kanbanFits is how many of cards, from the first, a column of height h
+// shows: its heading, each card's lines (two, three with a gate), and a
+// "+N more" line when they do not all fit.
+func kanbanFits(h int, cards []kanbanCard) int {
+	count := func(room int) int {
+		n := 0
+		for _, c := range cards {
+			if room < len(c.lines) {
+				break
+			}
+			room -= len(c.lines)
+			n++
+		}
+		return n
 	}
-	return max(room, 0)
+	if n := count(h - 1); n == len(cards) {
+		return n
+	}
+	return count(h - 2)
 }
 
 // draw draws the columns inside the list's inner area; sel is the list's
@@ -248,16 +265,17 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string) {
 				drawLine(screen, r.x-1, r.y+i, 1, nil, false)
 			}
 		}
-		fits := kanbanFits(r.h, len(kc.cards))
+		shown := kc.cards[first[c]:]
+		fits := kanbanFits(r.h, shown)
 		row := r.y + 1
-		for i := first[c]; i < len(kc.cards) && i < first[c]+fits; i++ {
-			card := kc.cards[i]
+		for _, card := range shown[:fits] {
 			on := card.key != "" && card.key == sel
-			drawLine(screen, r.x, row, r.w, FitLine(card.lines[0], r.w), on)
-			drawLine(screen, r.x, row+1, r.w, FitLine(card.lines[1], r.w), on)
-			row += 2
+			for _, l := range card.lines {
+				drawLine(screen, r.x, row, r.w, FitLine(l, r.w), on)
+				row++
+			}
 		}
-		if more := len(kc.cards) - first[c] - fits; more > 0 && row < r.y+r.h { // never on the band below or the frame (foureyes)
+		if more := len(shown) - fits; more > 0 && row < r.y+r.h { // never on the band below or the frame (foureyes)
 			drawLine(screen, r.x, row, r.w, Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, false)
 		}
 	}
@@ -271,9 +289,13 @@ func (k *kanbanView) cardAt(mx, my, x, y, w, h int, sel string) string {
 		if mx < r.x || mx >= r.x+r.w || my <= r.y || my >= r.y+r.h { // the heading (r.y) is no card
 			continue
 		}
-		i := first[c] + (my-r.y-1)/2
-		if i < first[c]+kanbanFits(r.h, len(k.cols[c].cards)) && i < len(k.cols[c].cards) {
-			return k.cols[c].cards[i].key
+		shown := k.cols[c].cards[first[c]:]
+		row := r.y + 1
+		for _, card := range shown[:kanbanFits(r.h, shown)] {
+			if my < row+len(card.lines) {
+				return card.key
+			}
+			row += len(card.lines)
 		}
 	}
 	return ""

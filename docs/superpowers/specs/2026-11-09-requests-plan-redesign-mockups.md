@@ -375,9 +375,13 @@ four columns: **For you · In progress · Next · Ideas**.
 - **A card** is two lines, the same in every column (reviewer-codex):
   - The first line holds the card's facts: the priority mark first, so a cut never loses it, then
     the mark, the verb or the owner, and the age or the place. For you shows verb, who and age; In
-    progress the agent, `#plan` and, when it holds a gate, what it reviews and for whom with the
-    gate's age and `(+N)` for more (with no task that is its title); Next the owner and `#t8 waits on t7`; Ideas
+    progress the agent and `#plan`; Next the owner and `#t8 waits on t7`; Ideas
     `idea` and the note's file.
+  - One card has a third line (reviewer-codex): an agent holding both a task and a review gate.
+    Its task stays the title, and the third line is the gate, `◆ for master 5m (+1) · lot-1`:
+    for whom, its age and the other gates come first, so a cut at 31 cells takes only the
+    subject. An agent holding a gate and no task keeps two lines: `coder · for master 5m (+1)`
+    over `reviewing lot-1`.
   - In progress carries no progress line: a card is two lines, and the progress line
     (`started 14:12 ━━━━── ~60% · ends ~15:20`) needs a column of its own width. The list
     (layout A) keeps it under each agent at work.

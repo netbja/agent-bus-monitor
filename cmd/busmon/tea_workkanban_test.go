@@ -205,12 +205,28 @@ func workPersonTask(i int) plan.Row {
 	return plan.Row{Task: plan.Task{ID: id, Title: "Decide: question " + strconv.Itoa(i), Owner: plan.Person}, State: plan.Waiting}
 }
 
-// A column shows its heading and two lines a card; when they do not all fit,
-// one line is kept for "+N more" (it never spills into the band below).
+// A column shows its heading and each card's lines (two, three with a
+// gate); when they do not all fit, one line is kept for "+N more" (it never
+// spills into the band below).
 func TestKanbanFits(t *testing.T) {
-	for _, c := range []struct{ h, cards, want int }{{11, 5, 5}, {11, 6, 4}, {10, 4, 4}, {10, 9, 4}, {2, 3, 0}} {
+	two, three := kanbanCard{lines: make([]Line, 2)}, kanbanCard{lines: make([]Line, 3)}
+	rep := func(c kanbanCard, n int) []kanbanCard {
+		out := make([]kanbanCard, n)
+		for i := range out {
+			out[i] = c
+		}
+		return out
+	}
+	for _, c := range []struct {
+		h     int
+		cards []kanbanCard
+		want  int
+	}{
+		{11, rep(two, 5), 5}, {11, rep(two, 6), 4}, {10, rep(two, 4), 4}, {10, rep(two, 9), 4}, {2, rep(two, 3), 0},
+		{8, []kanbanCard{three, two, two}, 3}, {8, []kanbanCard{three, two, two, two}, 2}, {3, []kanbanCard{three}, 0},
+	} {
 		if got := kanbanFits(c.h, c.cards); got != c.want {
-			t.Errorf("h %d, %d cards: %d, want %d", c.h, c.cards, got, c.want)
+			t.Errorf("h %d, %d cards: %d, want %d", c.h, len(c.cards), got, c.want)
 		}
 	}
 }
@@ -247,22 +263,40 @@ func TestWorkKanbanCardLines(t *testing.T) {
 	}
 }
 
-// reviewer-codex: an agent with a task and gates shows what it reviews and
-// for whom, with the other gates' count, as the list does.
+// reviewer-codex: an agent with a task and gates shows what it reviews,
+// for whom, since when and how many more, visible at 31 cells: with a task
+// on a third line (the task stays the title), without one on its two lines.
 func TestWorkKanbanTaskAndGates(t *testing.T) {
 	w := workModel{Team: []teamRow{{Agent: "coder", Word: "working", Plan: "t7",
 		Task: &request{Task: "compose-at-file", Tracked: true, State: "accepted"},
 		Reviewing: []teamGate{{Who: "master", Subject: "lot-1", Since: shellNow.Add(-5 * time.Minute)},
 			{Who: "master", Subject: "lot-2", Since: shellNow.Add(-time.Minute)}}}}}
+	fit := func(l Line) string { return FitLine(l, 31).text() }
 	card := workKanban(w, workDraw{now: shellNow}).cols[1].cards[0]
-	l1, l2 := card.lines[0].text(), card.lines[1].text()
-	if !strings.Contains(l1, "reviewing lot-1 for master 5m (+1)") || !strings.Contains(l1, "#t7") || l2 != "  compose-at-file" {
-		t.Fatalf("task and gates: %q / %q", l1, l2)
+	if len(card.lines) != 3 || !strings.Contains(fit(card.lines[0]), "#t7") || fit(card.lines[1]) != FitLine(Line{{Text: "  compose-at-file"}}, 31).text() ||
+		!strings.Contains(fit(card.lines[2]), "for master 5m (+1)") || !strings.Contains(fit(card.lines[2]), "lot-1") {
+		t.Fatalf("task and gates at 31 cells: %q", []string{fit(card.lines[0]), fit(card.lines[1]), fit(card.lines[2])})
 	}
 	w.Team[0].Task = nil
 	card = workKanban(w, workDraw{now: shellNow}).cols[1].cards[0]
-	if l2 := card.lines[1].text(); l2 != "  reviewing lot-1 for master 5m (+1)" {
-		t.Fatalf("gates only: %q", l2)
+	if len(card.lines) != 2 || !strings.Contains(fit(card.lines[0]), "for master 5m (+1)") || !strings.Contains(fit(card.lines[1]), "reviewing lot-1") {
+		t.Fatalf("gates only at 31 cells: %q", []string{fit(card.lines[0]), fit(card.lines[1])})
+	}
+}
+
+// A three-line card takes its three rows: a click on its third line selects
+// it, and the card under it starts one row lower.
+func TestWorkKanbanThreeLineCardClicks(t *testing.T) {
+	gate := []teamGate{{Who: "master", Subject: "lot-1", Since: shellNow.Add(-5 * time.Minute)}}
+	w := workModel{Team: []teamRow{
+		{Agent: "coder", Word: "working", Task: &request{Task: "a", Tracked: true, State: "accepted"}, Reviewing: gate},
+		{Agent: "docs", Word: "working", Message: "b"}}}
+	k := workKanban(w, workDraw{now: shellNow})
+	r := kanbanGrid(4, 0, 0, 128, 20)[1]
+	for row, want := range map[int]string{r.y + 3: "agent:coder", r.y + 4: "agent:docs", r.y + 5: "agent:docs"} {
+		if got := k.cardAt(r.x+1, row, 0, 0, 128, 20, ""); got != want {
+			t.Errorf("row %d: %q, want %q", row-r.y, got, want)
+		}
 	}
 }
 
