@@ -110,9 +110,13 @@ Recommendations in brackets. Each message stays under 150 words.
    most recently changed Git clone other than agent-bus itself, else "none for now": the setup
    then stops after the install.] The project's name is not asked: `agentbus start` deduces it,
    and the plan shows it.
-3. **The team.** "Who should work on it?" [`master,coder,foureyes`, plus `reviewer-codex` when
-   `codex` is found, since a review by another maker's model catches more.] One sentence teaches
-   why: one agent plans, one implements, one reviews.
+3. **The team.** "Who should work on it?" [`master,coder,foureyes`.] One sentence teaches why:
+   one agent plans, one implements, one reviews. The choices are the manifest's **boot** roles
+   only (`tier = "boot"`: `master`, `coder`, `foureyes`, `sentinel`), the only ones `start --roles`
+   accepts (`rolecfg.ParseTeam`, reviewer-codex). A `pop` role (`reviewer-codex`, `docs`,
+   `architect`…) is never in the team: master pops it when a task calls for it. When `codex` is
+   found, the hand-over (§5.5) says so in one line: "master can add reviewer-codex, a second
+   reviewer on another maker's model".
    - **The question is the set of roles, never their clients.** `agentbus start --roles` takes a
      role, or `role:profile` with only the role's own profile or one of its `fallback_profiles`
      (reviewer-codex); the client follows from the profile in `roles.toml`. The setup does not
@@ -182,7 +186,8 @@ The agent waits for "done", then checks what it can without a secret: `go versio
 `./setup.sh status` with no `✗`, then one message under 300 words: where busmon is (`prefix+up`
 in herdr, or `busmon --project <p>`), how to give the first task (the quick start's §3), the
 three habits (start with one small task, read reports in busmon, the person decides merges), and
-where to read more (`docs/quickstart.md`, `docs/OPERATIONAL-GUIDE.md`).
+where to read more (`docs/quickstart.md`, `docs/OPERATIONAL-GUIDE.md`); and, when `codex` is found,
+the one line on `reviewer-codex` (§5.1 Q3).
 
 ## 6. What the agent must not do
 
