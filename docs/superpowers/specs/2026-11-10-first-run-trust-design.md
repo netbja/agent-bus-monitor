@@ -84,11 +84,27 @@ revoke <project>` removes them.
 
 ### (b) No pre-accept: say exactly what to press, where the person looks
 
-Nothing is written. When `up` (or the dispatcher's observe pass, for an agent started any other
-way) sees a gated client not trusting the folder, busmon opens an **ask** for the person: `Claude
-Code asks whether you trust <folder>. In the <role> tab: ↓ then Enter ("Yes, I trust this
-folder"). It loads the repository's own settings, hooks and MCP servers.` The ask closes itself
-once the flag reads true (the same read `up` does). prompt-notify still rings the desktop.
+Nothing is written to a client's file. The person is told, where they look, what the dialog is
+and what to choose: `Claude Code asks whether you trust <folder>. In the <role> tab, choose "Yes,
+I trust this folder" (↓ then Enter in Claude Code 2.1). Trusting lets it run the repository's own
+settings, hooks and MCP servers.` The answer is named by its label; the keys are only a hint, since
+they change between client versions (foureyes). prompt-notify still rings the desktop.
+
+**Who says it** (foureyes: the dispatcher only reads asks today; opening one would be a new
+dispatcher write, which must be fenced):
+
+- **`agentbus up` and `agentbus start`**, for the agents they start: they already know the client
+  and the folder (the template's `working_dir`), and already read the flag (`trustPlan`). They
+  open the ask the way any agent's CLI does (`agentbus ask`, unfenced, like every ask), and close
+  it once the flag reads true, on their next run or when the trust wait ends.
+- **busmon, for an agent herdr restored** (no `up` ran): busmon shows a For-you line computed from
+  what it already reads, with no write: an agent of a gated client (`AgentSnapshot.Client`) whose
+  pane shows the `prompt` flag, in a project whose template's `working_dir` (`projlist`) that
+  client does not trust (the same readers). The line goes away once the flag reads true. busmon
+  can read the clients' files only on the host they live on: against a remote broker it shows
+  the `prompt` flag as today, with no trust line.
+- No new dispatcher write: a fenced dispatcher ask (a new bus function) would cover a restore
+  with busmon closed, at the cost of a new fenced writer; not proposed.
 
 - **For:** the person decides, informed, in one place they already watch (For you); no client
   file is written; it covers agents started by restore or `start`, not only `up`.
@@ -109,26 +125,37 @@ Its rules:
 - each entry written is printed, and `agentbus trust revoke <project>` removes exactly those.
 
 - **For:** no dialog when the person says so, for a project they know; nothing silent.
-- **Against:** the write risks of (a), on demand; a new verb to maintain.
+- **Against:** the write risks of (a), on demand; a new verb to maintain. **And for Claude Code,
+  as limited above, `--trust` is refused whenever any Claude Code runs on the host** (foureyes):
+  with this team up (master, coder, foureyes are Claude Code), starting a second project with
+  `--trust`, the person's own case, is refused for Claude Code and only works for Codex. Whether
+  a write is safe while Claude Code runs (does it re-read `~/.claude.json` before it rewrites it,
+  or rewrite it from memory and drop another program's edit?) is **not verified**; checking it
+  needs a test against a separate `CLAUDE_CONFIG_DIR`, never the person's file. Until it is, (c)
+  helps Claude Code only when no Claude Code runs.
 
-**Recommendation:** (b) by default, and (c) as the explicit opt-in. Never (a). The dialog is a
-security gate the client owns; agent-bus can make it impossible to miss and say exactly what it
-does, but it should not answer it unasked.
+**Recommendation:** (b) now. (c) as the explicit opt-in only once a write to `~/.claude.json`
+while Claude Code runs is verified safe (else it helps Codex alone while a team runs). Never (a).
+The dialog is a security gate the client owns; agent-bus can make it impossible to miss and say
+exactly what it does, but it should not answer it unasked.
 
 ## 6. Tests (when built)
 
-- (b): an untrusted gated client opens one ask naming the folder, the tab and the keys; the ask
-  closes when the flag reads true; an already-trusted folder opens none; a started agent of a
-  non-gated client opens none.
+- (b): `up`/`start` with an untrusted gated client open one ask naming the folder, the tab and the
+  choice's label; it closes when the flag reads true; an already-trusted folder opens none; a
+  non-gated client's agent opens none. busmon's For-you line appears for a restored agent with the
+  `prompt` flag in an untrusted folder, and not for a trusted one, nor against a remote broker.
 - (c): `--trust` writes only the repository root's key, refuses `~`, `/`, a folder outside home,
   and a running Claude Code; keeps every other byte of the file; prints each entry; `trust revoke`
   removes exactly those; without `--trust` nothing is written.
 
 ## 7. Questions for the person
 
-1. **Which option?** (a) pre-accept always, (b) tell exactly what to press (no write), or (c) (b)
-   plus an explicit `up --trust`. **Recommended: (c)**, that is (b) by default with `--trust` as
-   the opt-in.
+1. **Which option?** (a) pre-accept always, (b) tell exactly what to choose (no write), or (c) (b)
+   plus an explicit `up --trust`. With (c), `--trust` is refused for Claude Code whenever a Claude
+   Code runs on the host, so while this team runs it helps Codex only (part 5, (c)), unless a
+   safe concurrent write is verified first. **Recommended: (b) now**; (c) only once a concurrent
+   write to `~/.claude.json` is verified safe on a separate config directory.
 2. **With `--trust`, which clients?** Claude Code and Codex only (formats checked), or Gemini too
    (`trustedFolders.json`)? **Recommended: Claude Code and Codex only**; others once their format
    is verified.
