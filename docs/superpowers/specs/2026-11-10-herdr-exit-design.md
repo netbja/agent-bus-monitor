@@ -5,6 +5,11 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 7: the person's review (written against bc2d8394), every item applied:
+  P1 paste→CR race (§4.2, §8); P1 resume caller proof by ancestor walk (§4.7, §8);
+  P2 drain keyed on build id, not protocol (§4.4); P2 holder crash recovery: restart policy,
+  no automatic relaunch, sentinel runbook (§4.4a); P2 broker persistence for `{p}:resume` and
+  Valkey (§4.7, §6.3); P3 step numbers in §7 and §9. The §10 questions stay open.
 - Revision 6: reviewer-codex at 2e769888 (the herdr residual has no hard bound)
 - Revision 5: reviewer-codex at bd371e32 (the herdr adapter cannot check and type atomically)
 - Revision 4: foureyes P2 at bd371e32 (names in `WakeLine` and in the submit frame)
@@ -165,6 +170,19 @@ Interface rules (part of the interface, not comments):
 - `Submit` takes a `Line`, a type whose only constructors are `WakeLine(nonce, …)` and
   `ClearLine()`. No free text crosses the seam from the dispatcher. It types as a paste
   (bracketed when the program enabled mode 2004), waits ~200 ms, then sends CR.
+- **Re-check before CR.** A person can start typing during that ~200 ms. Viewer input is held
+  in the terminal's input queue while a submit is in flight, and immediately before CR the
+  holder re-checks person-active (§4.5) including any viewer bytes held since the paste began.
+  If a person became active it does **not** send CR and returns `ErrPersonActive`; then:
+  - it clears the pasted line **only when that is safe**: the client's signature declares a
+    clear-input key (e.g. `ctrl+u` where probed) and the current input region (§4.3) holds
+    exactly the pasted text and nothing else; it sends that key, checks the input region is
+    empty, and only then releases the held viewer bytes;
+  - otherwise it leaves the pasted text in place, releases the held bytes after it, and the
+    dispatcher records a person notice ("wake line left unsent in <agent>'s input") so the
+    person can delete or submit it. It never sends a key it has not probed for that client.
+  On the herdr adapter (`AtomicSubmit = false`) no re-check is possible between paste and CR
+  (`agent prompt` is one call); this is part of the residual stated below.
 - **The closed set holds on the wire too.** A Go type protects only inside one process; the
   holder is reached over a socket. So the holder's submit frame carries only
   `{kind: wake|clear, term, nonce, count}` — no text field and **no names** — and the **holder
@@ -253,15 +271,21 @@ unsupported and never prompted, as today. Gemini CLI has none yet (Q7).
 - Keeps, per terminal, a pure-Go emulator (screen + N lines of scrollback, setting
   `holder.scrollback`, default 5 000) and a raw tail (~1 MB) for `agentbus term dump`.
 - Wire: length-prefixed frames on a unix socket; JSON control frames, raw bytes for terminal
-  data; protocol version in hello/welcome.
-- **Upgrade without killing agents**: a new holder build with a new protocol version listens on
-  a new socket; the old one refuses new terminals and exits when its last terminal ends
-  (herdr-core's "older build drains" rule). Clients list every holder socket of the project.
+  data; hello/welcome carry the protocol version **and the build id** (the `buildinfo` version
+  plus VCS revision, the same id `agentbus --version` prints); `Describe` reports both.
+- **Upgrade without killing agents**: the socket is named by build, not by protocol:
+  `holder-<buildid>.sock`. **Any new build drains, same protocol or not** — a same-protocol
+  bug-fix build never replaces the old socket, because replacing a holder means killing its
+  agents. The new build listens on its own socket and takes new terminals; the old one refuses
+  new terminals and exits when its last terminal ends (herdr-core's "older build drains" rule).
+  Clients list every holder socket of the project and speak to each in its own protocol version
+  (a client too old for a holder's protocol says so and does not touch it).
+  `holder_draining` compares build ids, so a bug-fix build is reported like a protocol change.
   No fd-passing, no state migration. **The drain has no natural bound**: `/clear` and
   auto-clear type into the same process and end no terminal; only relaunch, swap, suspend and
   self-repair do. An old holder can therefore serve for as long as its agents live. Two things
   bound it:
-  - `agentbus health` reports `holder_draining` (warn) with the old build, its age and its
+  - `agentbus health` reports `holder_draining` (warn) with the old build id, its age and its
     terminals; after `holder.drain_warn` (default 24 h) it is shown in For you.
   - `agentbus holder drain <project>` finishes it on the person's word: a rolling relaunch of
     each terminal still on the old build, one agent at a time, through the existing relaunch
@@ -271,6 +295,32 @@ unsupported and never prompted, as today. Gemini CLI has none yet (Q7).
 - The holder runs no repository code and makes no bus writes; facts it exposes are read by the
   dispatcher, which keeps doing the fenced writes. (The dispatcher stays the one automated pane
   writer: the holder types only what `Submit` hands it.)
+
+### 4.4a Holder crash and restart
+
+The holder is every agent's parent and holds every PTY master: when it dies, the kernel hangs
+up every terminal and the project's agents die with it. Nothing in this design hides that; it
+bounds and reports it.
+
+- **Restart policy.** systemd: `Restart=on-failure`, `RestartSec=2`,
+  `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `KillMode=control-group` (a crash leaves no
+  orphaned agent: systemd stops the unit's cgroup before the restart). launchd:
+  `KeepAlive = {SuccessfulExit = false}`, `ThrottleInterval = 10`. A clean `agentbus down`
+  exits 0 and is not restarted.
+- **The restarted holder starts empty and relaunches nothing.** Starting agents is a decision
+  (cost, quota, the person's intent); a crash loop that relaunches five clients each time would
+  burn quota. Agents come back by one of the two paths that already exist: `agentbus up
+  <project>` (the person or master), which uses `{p}:resume` (§4.7); or the dispatcher's
+  self-repair (decision 2026-11-09) once built and enabled, which `Start`s a new terminal per
+  dead agent with its recorded resume argv, under that decision's own rules and limits.
+- **Detection.** `agentbus health` gains `holder` (crit when the project's service is enabled
+  and no holder answers; warn `holder_restarted` with the time and the number of terminals lost
+  when a holder's start time is newer than the agents' last proved identities).
+- **Sentinel runbook entry** (`agent-bus-sentinel` skill): on `holder` crit, the one allowed
+  action is the documented service restart (`agentbus service restart holder`), once per
+  episode; then annotate and escalate to master/the person with the list of agents lost. Never
+  `agentbus up`, never relaunch an agent: that stays master's or the person's. On
+  `holder_restarted` warn: escalate only.
 
 ### 4.5 The focus rule, restated for a host without focus
 
@@ -325,11 +375,28 @@ ignored. The focus notice
   pid; resume must **outlive** the process and survive later statuses that do not carry it —
   the c19b3255 hand-off bug shows what a missing rule costs). A hash of its own has no merge.
 - Write path: not lease-fenced (the hook is not the dispatcher) but an optimistic transaction
-  in `bus/` on the `TurnState` pattern: `WATCH {p}:agents`, check the caller is the agent's
-  stored verified process (pid + start), then `HSET {p}:resume`. An unproved caller writes
+  in `bus/` on the `TurnState` pattern: `WATCH {p}:agents`, check the caller is **a descendant
+  of** the agent's stored verified process, then `HSET {p}:resume`. An unproved caller writes
   nothing. Persisted `at` comes from Redis `TIME`.
+- **The caller proof is an ancestor walk.** The SessionStart hook is not the agent's process:
+  it runs as a child (or grandchild, through a shell) of the client, so "the caller is the
+  stored pid" would always fail. The hook passes its ancestor chain — each ancestor's pid
+  **and start time** — and `bus/` accepts the write only when one ancestor matches the stored
+  verified (pid, start) exactly. The walk starts at the hook's own parent, stops at pid 1, at
+  the first unreadable process, or after 32 ancestors, whichever comes first. A reused pid
+  fails because its start time differs. Prior art: the turn and prove-session hooks already
+  walk ancestors with `dispatch.Ancestors` (Linux, `/proc/<pid>/stat` ppid + start). macOS
+  gets the same function behind one platform file: `sysctl kern.proc.pid.<pid>`
+  (`kinfo_proc`: `e_ppid`, `p_starttime`) through `golang.org/x/sys/unix`; until then macOS
+  writes no resume (fail closed), as `Ancestors` is empty there today.
 - Cleared only by `agentbus forget <agent>` and replaced by the next proved session's report;
   an agent's death or a status never touches it.
+- **It must survive a reboot, so the broker must persist.** The shipped `docker-compose.yml`
+  runs Redis with `--appendonly yes` on a named volume. Requirement stated in the README and
+  checked: `agentbus health` gains `broker_persistence` (warn when `CONFIG GET appendonly` is
+  `no` and `CONFIG GET save` is empty; unknown — not warn — when `CONFIG` is refused, as on
+  some managed brokers). Without persistence, a reboot loses `{p}:resume` and agents start
+  fresh; nothing worse.
 - `agentbus up` on a project whose holder has no terminal for a role starts it with that resume
   argv when one is recorded, else fresh. Self-repair (decision 2026-11-09) uses the same path:
   `Start` a new terminal, never type into an old one.
@@ -387,7 +454,7 @@ superseded.
   `holder` (client side), `fake`. Contract test suite in the package, run on every adapter
   available.
 - `agentstate` (new, from `dispatch`): `Signatures` and their fixtures move here; adds `Blocked`
-  patterns, hook-fed observed blocked, settle by quiet time. Pure functions: facts in, judgement
+  patterns, an optional probed `ClearInput` key per client (§4.2 re-check before CR), hook-fed observed blocked, settle by quiet time. Pure functions: facts in, judgement
   out.
 - `holder` (new, server side) + `screen` (internal seam over the emulator: `Write`,
   `Snapshot(lines)`, `Modes`, `Render` for first paint).
@@ -415,7 +482,14 @@ superseded.
 
 ### 6.3 Wire and state
 - Redis: one new hash `{p}:resume` (§4.7; added to the project's key kinds so `--delete`,
-  backup and restore cover it) and the observed `blocked` source. `{p}:agents` and `subscribe`
+  backup and restore cover it) and the observed `blocked` source. The design uses only
+  commands available in Redis 7.2 (`WATCH`/`MULTI`, `HSET`, `HGETALL`, `HDEL`, `TIME`,
+  `CONFIG GET`), so **Valkey (a Redis 7.2 fork) is acceptable as broker for this feature**.
+  Declaring Valkey support for agent-bus as a whole is a separate check, done before any such
+  claim: grep the code for commands newer than 7.2 (the hash-field TTL family `HEXPIRE`/
+  `HPEXPIRE`/`HTTL`/`HPERSIST`, `HGETDEL`/`HGETEX`/`HSETEX`, `XACKDEL`/`XDELEX`, vector sets)
+  and run the Redis suite against a disposable Valkey. A first grep at b3dd13a2 found none of
+  these names; the suite run is the evidence that counts. `{p}:agents` and `subscribe`
   JSON unchanged.
 - Holder protocol: versioned; additive only within a version, like `subscribe`.
 
@@ -434,7 +508,7 @@ emulator code we would own count against a candidate.
 | 0 | This spec + decision note | none | approved |
 | 1 | `termhost` package, fake, contract suite; herdr adapter (with `HostView`) wrapping the calls `dispatch` makes; `Runtime.Prompt` takes a `termhost.Line`, no text | none (same wake line typed) | dispatch tests green on the adapter |
 | 2 | Provisioning callers (`up`, `start`, `restore`) on `Host` | none | installer/up tests green (herdr stubbed) |
-| 3 | Replacement callers (`relaunch`, `swap`, `suspend`, `resume`) on `Host` | none | a test fails on any herdr exec in the **agent-facing** packages (`dispatch`, and the `cmd/agentbus` files of steps 1–3), with an explicit allowlist of the files moved in steps 4 and 14 |
+| 3 | Replacement callers (`relaunch`, `swap`, `suspend`, `resume`) on `Host` | none | a test fails on any herdr exec in the **agent-facing** packages (`dispatch`, and the `cmd/agentbus` files of steps 1–3), with an explicit allowlist of the files moved in step 4 (reporting callers) and step 16 (`reportresume.go`, `setup/*`) |
 | 4 | Reporting callers on `Host.Describe`: health checks, `suspendsnap`, busmon `projects_admin` and `about` | none (same text with herdr) | allowlist shrinks to `reportresume.go`, `setup/*` |
 | 5 | `agentstate` extracted; client from launch profile; `HostView` still decides | none | fixtures green |
 | 6 | Hooks for blocked (Claude `Notification`, Codex `notify`) + `Blocked` signatures; **shadow mode**: our judgement beside `HostView`, disagreements logged | observability only | ≥ 7 days, disagreement reviewed |
@@ -442,9 +516,9 @@ emulator code we would own count against a candidate.
 | 8 | Emulator bake-off; `screen` seam + chosen adapter | none | §6.4 passes |
 | 9 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, peer check, socket dir) — after the security review of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
 | 10 | Holder adapter of `termhost` (contract suite) + `terminal.host` setting | opt-in | contract suite green on holder |
-| 11 | Holder service unit (systemd/launchd) + `holder_draining` health + `holder drain` | opt-in | service tests (fake systemctl/launchctl) |
+| 11 | Holder service unit (systemd/launchd) with the §4.4a restart policy + `holder`, `holder_restarted`, `holder_draining` health + `holder drain` + sentinel runbook entry | opt-in | service tests (fake systemctl/launchctl) |
 | 12 | `agentbus attach`, busmon preview + attach key | opt-in | manual live check by the person |
-| 13 | `{p}:resume` + hook writes it; `up` restores from it | opt-in | reboot trial |
+| 13 | `{p}:resume` + hook writes it (ancestor-walk proof, macOS `Ancestors`); `up` restores from it; `broker_persistence` health; `reportresume.go` keeps its herdr call until step 16 | opt-in | Redis tests of §8; reboot trial |
 | 14 | Live trial on one project with `terminal.host=holder` | trial | Q8 project runs a week |
 | 15 | Default flips to `holder` | default | release |
 | 16 | herdr removal (§4.8: adapter, `HostView`, `reportresume` herdr call, `setup/*` herdr parts, plugin), decisions superseded | herdr gone | no herdr exec anywhere (the step 3 test with an empty allowlist); scrub/test green |
@@ -466,10 +540,21 @@ detection herdr-independent.
   a real agent, never the production broker (CLAUDE.md test rule unchanged).
 - Prior art: dispatch tests with a fake `Runtime`; installer tests that stub `docker`/`herdr`;
   service tests that fake `systemctl`/`launchctl`.
+- Paste→CR race (holder): a viewer byte arriving between paste and CR → no CR,
+  `ErrPersonActive`; with a probed clear key and an input region equal to the paste → line
+  cleared, then the viewer's bytes delivered; without one → paste left, viewer bytes after it,
+  notice recorded. Contract suite (`AtomicSubmit` adapters).
+- Resume caller proof (Redis tests, disposable broker): a direct descendant of the stored
+  (pid, start) writes; a grandchild through a shell writes; a non-descendant writes nothing; an
+  ancestor with the stored pid but another start time (reused pid) writes nothing; a chain
+  longer than 32 writes nothing. The walk itself: table tests with an injected stat reader, as
+  `ancestors` is tested today.
 - Focus rule: a viewer that never sends a focus report blocks `Submit` for its whole attach;
   focus-out then focus-in toggles it; an observer never blocks. Contract suite, all adapters
   that have viewers.
-- Mutation on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
+- Mutation on the re-check before CR (removing it must fail the race test), on the
+  clear-only-when-safe condition, on the ancestor match (pid only, without start, must fail the
+  reused-pid test), on the depth bound, and on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
   frame validation (unknown kind, malformed nonce, text field present, a name field present,
   count out of range), on `WakeLine`'s `ValidName` check (one mutant per argument: project,
   agent) and on `Start`'s name check: the guarantees a
@@ -482,9 +567,10 @@ detection herdr-independent.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| herdr's `agent get` encodes detection we have not seen (blocked, done) | wakes into a permission prompt, or none at all | shadow mode (step 5) before any cutover; hooks for blocked |
+| herdr's `agent get` encodes detection we have not seen (blocked, done) | wakes into a permission prompt, or none at all | shadow mode (step 6) before any cutover; hooks for blocked |
 | Pure-Go emulator fidelity (Ink/ratatui redraws, wide chars, synchronized output) | signatures miss, agent never woken | bake-off on recorded output; oracle test; a client failing stays unsupported (never prompted), the safe direction |
-| Holder crash kills every agent of the project | team down | holder kept small, no policy; per project, not per host; resume via `up`; sentinel health check |
+| Holder crash kills every agent of the project | team down | holder kept small, no policy; per project, not per host; restart policy (§4.4a); agents back via `up` or self-repair from `{p}:resume`; `holder` health + sentinel runbook |
+| Broker without persistence | `{p}:resume` lost on reboot, agents start fresh | AOF in the shipped compose; `broker_persistence` health warn |
 | Upgrade kills agents | interruption | drain-on-upgrade, protocol version in socket name |
 | Old holder never drains (`/clear` keeps the process) | two builds forever, fixes never reach old terminals | `holder_draining` health, `holder drain` rolling relaunch on the person's word |
 | A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 9 |
