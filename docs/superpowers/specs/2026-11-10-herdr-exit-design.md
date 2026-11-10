@@ -5,6 +5,9 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 12: reviewer-codex on r9 — the guard lifts only on a verified **empty** input region
+  or `ctrl+\ y`, never on "the original text is gone" (a partial edit could still submit a wake
+  line or `/clear`) (§4.2, §8)
 - Revision 11: foureyes P3 on r9 — `ctrl+\` becomes a prefix key, so detach and "submit
   anyway" no longer collide (§4.6, Q9); the person's Redis 7.4+/8/Valkey 9 ideas evaluated one
   by one (§6.5)
@@ -195,13 +198,16 @@ Interface rules (part of the interface, not comments):
       Enter encodings of kitty keyboard `CSI 13…u` and modifyOtherKeys `CSI 27;…;13~`); the
       other bytes go in after the pasted text, as typed;
     - while the guard stands, every further viewer submit key is swallowed, not forwarded;
-    - the guard lifts when the input region (§4.3) no longer contains the left-behind text (the
-      person deleted it: checked on the screen after each viewer byte), or when the person
-      acknowledges with the attach chord followed by `y` (`ctrl+\ y`: "submit anyway"), after
-      which submit keys flow again;
+    - the guard lifts only when the input region (§4.3) is **verified empty** (the client's
+      Ready signature matches its empty input on a settled screen, checked after each viewer
+      byte), or when the person explicitly acknowledges. "The left-behind text is no longer
+      there" is not enough: after a partial edit what remains can still be a wake line or
+      `/clear`, and Enter would submit it. A client whose empty input cannot be recognised keeps
+      the guard until the acknowledgement. The explicit acknowledgement is the attach prefix followed by
+      `y` (`ctrl+\ y`: "submit anyway"), after which submit keys flow again;
     - the attach client shows the guard without touching the agent's screen: bell once, and the
-      outer terminal's title (OSC 2) set to `agentbus: <kind> left in <agent>'s input — delete
-      it, or ctrl+\ y to submit anyway`, restored when the guard lifts;
+      outer terminal's title (OSC 2) set to `agentbus: <kind> left in <agent>'s input — clear
+      the input, or ctrl+\ y to submit anyway`, restored when the guard lifts;
     - the dispatcher records a person notice naming the **kind**: "wake line left unsent in
       <agent>'s input" for a `WakeLine`, "`/clear` left unsent in <agent>'s input — submitting
       it clears the conversation" for a `ClearLine`.
@@ -682,8 +688,11 @@ detection herdr-independent.
     the wake line is **not** submitted; the viewer's other bytes are delivered; the notice says
     "wake line";
   - `ClearLine`, same → `/clear` is **not** submitted; the notice says "`/clear`";
-  - each kind, viewer Enter after the guard is armed → swallowed; after deleting the line (screen
-    shows the region without it) → Enter forwarded; after `ctrl+\ y` → Enter forwarded.
+  - each kind, viewer Enter after the guard is armed → swallowed; after a **partial edit** (one
+    character of the left line changed or deleted, the rest still in the input) → Enter still
+    swallowed; after deleting the whole line (the empty-input signature matches) → Enter
+    forwarded; after `ctrl+\ y` → Enter forwarded; a client without an empty-input signature →
+    Enter swallowed until `ctrl+\ y`.
   Contract suite (`AtomicSubmit` adapters).
 - Resume caller proof (Redis tests, disposable broker): a direct descendant of the stored
   (pid, start) writes; a grandchild through a shell writes; a non-descendant writes nothing; an
@@ -694,7 +703,8 @@ detection herdr-independent.
   focus-out then focus-in toggles it; an observer never blocks. Contract suite, all adapters
   that have viewers.
 - Mutation on the re-check before CR (removing it must fail the race test), on the removal of
-  submit keys from held bytes and on the guard's swallowing (each must fail an Enter case), on the
+  submit keys from held bytes, on the guard's swallowing, and on the lift condition (lifting on
+  "original text absent" instead of "input empty" must fail the partial-edit case), on the
   clear-only-when-safe condition, on the ancestor match (pid only, without start, must fail the
   reused-pid test), on the depth bound, and on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
   frame validation (unknown kind, malformed nonce, text field present, a name field present,
