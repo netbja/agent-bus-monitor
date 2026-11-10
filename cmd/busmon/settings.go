@@ -23,7 +23,10 @@ type busmonSettings struct {
 	IdleView    time.Duration // display.idle_view_after: the idle view after this long without input (0 = off)
 	Icons       string        // display.icons: off, nerd or agent-font (busmon-icons)
 	AtPath      string        // compose.at_path: absolute or relative (compose-at-file §5)
-	Note        string
+	// projects.delete_files and delete_backups: what a delete also removes
+	// from disk (projects-admin §5.5)
+	DeleteFiles, DeleteBackups bool
+	Note                       string
 }
 
 // settingsFlags are busmon's flags over the settings: they win over every
@@ -48,9 +51,10 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		PopupAfter: r.Duration("waiting.popup_after"), Snooze: r.Duration("waiting.snooze"),
 		Bell: r.Bool("waiting.bell"), Fade: r.Bool("waiting.fade"), AutoAfter: r.Duration("recap.auto_after"),
 		Limit: r.Int("display.limit"), UpdateCheck: r.Bool("updates.check"), IdleHint: r.Duration("display.idle_hint_after"),
-		IdleView: r.Duration("display.idle_view_after"),
-		Icons:    r.String("display.icons"),
-		AtPath:   r.String("compose.at_path"),
+		IdleView:    r.Duration("display.idle_view_after"),
+		Icons:       r.String("display.icons"),
+		AtPath:      r.String("compose.at_path"),
+		DeleteFiles: r.Bool("projects.delete_files"), DeleteBackups: r.Bool("projects.delete_backups"),
 	}
 	raw := func(name string) string { k, _ := config.Lookup(name); return getenv(k.Env) }
 	if t := r.Get("display.theme"); t.Invalid {

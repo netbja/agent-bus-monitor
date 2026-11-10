@@ -15,10 +15,11 @@ const (
 	GroupBackup        Group = "Backup"
 	GroupNotifications Group = "Notifications"
 	GroupBusCaps       Group = "Bus caps"
+	GroupProjects      Group = "Projects"
 )
 
 // Groups is the page's order.
-var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupNotifications, GroupServices, GroupHealth, GroupBackup, GroupBusCaps}
+var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupNotifications, GroupServices, GroupHealth, GroupBackup, GroupProjects, GroupBusCaps}
 
 // groups is each key's group; TestEveryKeyHasItsGroup fails on a key without.
 var groups = map[string]Group{
@@ -39,6 +40,7 @@ var groups = map[string]Group{
 	"backup.after_command": GroupBackup, "backup.after_env": GroupBackup, "backup.after_timeout": GroupBackup,
 	"notify.on": GroupNotifications, "notify.targets": GroupNotifications, "notify.events": GroupNotifications, "notify.detail": GroupNotifications,
 	"notify.delay": GroupNotifications, "notify.max_per_hour": GroupNotifications, "notify.quiet": GroupNotifications, "notify.quiet_exempt": GroupNotifications,
+	"projects.delete_files": GroupProjects, "projects.delete_backups": GroupProjects,
 	"bus.report_max": GroupBusCaps, "bus.report_full_max": GroupBusCaps, "bus.verdict_max": GroupBusCaps,
 }
 

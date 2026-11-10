@@ -47,6 +47,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
+	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -109,8 +110,12 @@ func confirmDelete(s bus.ProjectSummary, keys int, now time.Time, out io.Writer,
 
 // deleteProject implements `busmon --delete <project>`. A project with no keys is
 // a no-op success: that is the typo signal (you asked to delete 31 keys and were
-// told there are none) without making a repeated cleanup script fail.
-func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, removeServices func(project string) ([]string, error)) error {
+// told there are none) without making a repeated cleanup script fail. files
+// (nil: both options off) is where the project's files are, with the options
+// on: what they would remove is printed before the prompt, and removed only
+// after a clean delete (projects-admin §5.5). No backup is made here, so no
+// archive is exempt.
+func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, removeServices func(project string) ([]string, error), files func() (projfiles.Options, error)) error {
 	client, err := bus.Connect(host)
 	if err != nil {
 		return fmt.Errorf("Redis connection failed: %w", err)
@@ -131,6 +136,17 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 	if err != nil {
 		return err
 	}
+	var fo projfiles.Options
+	filesOK := false
+	if files != nil {
+		var plan projfiles.Plan
+		fo, err = files()
+		if err == nil {
+			plan, err = projfiles.PlanFor(fo)
+		}
+		fmt.Print(filesPlanText(project, plan, err))
+		filesOK = err == nil
+	}
 	if !yes && !confirmDelete(summary, len(keys), now, os.Stdout, in) {
 		fmt.Println("Cancelled.")
 		return nil
@@ -145,7 +161,39 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 		return fmt.Errorf("%s", cameBack(project, n, left))
 	}
 	fmt.Printf("Deleted %d %s for project '%s'.\n", n, plural(int(n), "key"), project)
+	if filesOK {
+		d := projfiles.Apply(fo)
+		if d.Template != "" {
+			fmt.Printf("Removed %s\n", d.Template)
+		}
+		for _, w := range d.Worktrees {
+			fmt.Printf("Removed worktree %s\n", w)
+		}
+		for _, a := range d.Archives {
+			fmt.Printf("Removed %s\n", a)
+		}
+		if len(d.Errs) > 0 {
+			return fmt.Errorf("deleted %s, but %d %s could not be removed: %w", project, len(d.Errs), plural(len(d.Errs), "file"), errors.Join(d.Errs...))
+		}
+	}
 	return nil
+}
+
+// filesPlanText is what --delete prints before its prompt with an option on:
+// the panel's lines (§5.5).
+func filesPlanText(project string, p projfiles.Plan, err error) string {
+	if err != nil {
+		return "also deleted (settings): ? (" + err.Error() + "): no file will be removed\n"
+	}
+	var b strings.Builder
+	b.WriteString("also deleted (settings):\n")
+	for _, l := range p.Lines(project) {
+		b.WriteString("  " + l + "\n")
+	}
+	if p.Empty() {
+		b.WriteString("  nothing found on disk\n")
+	}
+	return b.String()
 }
 
 // cameBack is the delete's truth when keys were written after its script
@@ -489,7 +537,16 @@ func main() {
 		os.Exit(1)
 	}
 	if opts.delete != "" {
-		if err := deleteProject(opts.host, opts.delete, opts.yes, os.Stdin, time.Now(), localServices); err != nil {
+		var files func() (projfiles.Options, error) // projects.delete_files and delete_backups (projects-admin §5.5)
+		if settings.DeleteFiles || settings.DeleteBackups {
+			host, _ := os.Hostname()
+			files = func() (projfiles.Options, error) {
+				o, err := projectFiles(opts.delete, os.Getenv, host)
+				o.Files, o.Backups = settings.DeleteFiles, settings.DeleteBackups
+				return o, err
+			}
+		}
+		if err := deleteProject(opts.host, opts.delete, opts.yes, os.Stdin, time.Now(), localServices, files); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

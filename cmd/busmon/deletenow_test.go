@@ -93,7 +93,7 @@ func TestDeleteProjectNowRefusesALiveProject(t *testing.T) {
 	if ok, _ := b.ServicesInstalled(ctx); !ok {
 		t.Fatal("a refused delete deleted keys")
 	}
-	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), nil); err == nil || !strings.Contains(err.Error(), "dispatch holds its lease") {
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), nil, nil); err == nil || !strings.Contains(err.Error(), "dispatch holds its lease") {
 		t.Fatalf("--delete on a live project: %v", err)
 	}
 }

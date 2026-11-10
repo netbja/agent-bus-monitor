@@ -11,9 +11,9 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ♙ sentinel  waiting  30m  —   prompt      health ok                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 24 default ──────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 26 default ──────────────── esc back ─╮
 │  focus: keys · ← or tab: the tabs                                            ▲
-│  Display   Attention   Identity   Notifications   Services   Backup          ┃
+│ …  Attention   Identity   Notifications   Services   Backup   Projects       ┃
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
 │  Notifications  what reaches your phone or desktop; targets in notify.toml   │
 │                                                                              │

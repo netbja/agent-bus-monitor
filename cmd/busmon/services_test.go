@@ -223,7 +223,7 @@ func TestDeleteRemovesTheServicesFirst(t *testing.T) {
 
 	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), func(string) ([]string, error) {
 		return nil, errors.New("systemctl refused")
-	}); err == nil || !strings.Contains(err.Error(), "nothing deleted") {
+	}, nil); err == nil || !strings.Contains(err.Error(), "nothing deleted") {
 		t.Fatalf("err = %v", err)
 	}
 	if ok, _ := b.ServicesInstalled(ctx); !ok {
@@ -234,7 +234,7 @@ func TestDeleteRemovesTheServicesFirst(t *testing.T) {
 		keys, _ := bus.ProjectKeys(ctx, c, p)
 		keysAtRemoval = len(keys)
 		return []string{"dispatch"}, nil
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if keysAtRemoval == 0 {

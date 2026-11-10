@@ -63,6 +63,9 @@ type sleepDoneMsg struct {
 	id   int
 	err  error
 	last string // the log's last line at the exit: a run shorter than one tick names its result too (reviewer-codex)
+	// archive is the path a backup run printed ("backup: <path>"), read
+	// from this run's part of the log; "" when it names none (§5.5, Q7).
+	archive string
 }
 
 // sleepEvery is how often the log's last line is read.
@@ -201,7 +204,7 @@ func (m *Model) gotSleepStarted(msg sleepStartedMsg) tea.Cmd {
 	log := msg.log
 	return tea.Batch(func() tea.Msg {
 		err := <-done
-		return sleepDoneMsg{id: id, err: err, last: lastLine(log)}
+		return sleepDoneMsg{id: id, err: err, last: lastLine(log), archive: backupArchiveInLog(log)}
 	}, sleepTick(id, log))
 }
 
@@ -233,7 +236,7 @@ func (m *Model) gotSleepDone(msg sleepDoneMsg) tea.Cmd {
 		r.last = msg.last
 	}
 	m.markProjectsDirty()
-	m.deleteBackupDone(r, msg.err) // the delete panel's backup (projects-admin §5.2)
+	m.deleteBackupDone(r, msg.err, msg.archive) // the delete panel's backup (projects-admin §5.2)
 	var reread tea.Cmd
 	if r.verb == "backup" && m.settingsPageOpen() != nil {
 		reread = m.settingsCmd(func() error { return nil })

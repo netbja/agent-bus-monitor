@@ -61,6 +61,7 @@ var settingLabels = map[string]string{
 	"sentinel.reload": "Auto-restart on update",
 	"notify.on":       "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
 	"notify.delay": "Delay", "notify.max_per_hour": "At most per hour", "notify.quiet": "Quiet hours", "notify.quiet_exempt": "Sent in quiet hours",
+	"projects.delete_files": "Delete also its template and worktrees", "projects.delete_backups": "Delete also its backups",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
 }
 
