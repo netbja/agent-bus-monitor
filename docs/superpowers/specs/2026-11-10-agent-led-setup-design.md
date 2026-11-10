@@ -139,6 +139,12 @@ Recommendations in brackets. Each message stays under 150 words.
      offers only roles whose client the probe found. A role whose client is missing is named with
      its client ("foureyes runs on claude-code, not installed") and is either left out or its
      client goes into the person steps; the person picks which.
+   - **`master` is never left out** (reviewer-codex): `start` refuses a team without it ("master
+     is required (the escalation target and the pilot)", `cmd/agentbus/start_ask.go`). When
+     master's client is missing (Codex but no Claude Code, with the shipped manifest), the
+     question does not offer to drop it: installing and logging in to that client is a
+     **prerequisite person step** (§5.4), sent before the plan, and the plan waits for it. Only
+     `coder`, `foureyes` and `sentinel` may be left out.
    - The plan (§5.2) shows that table, role → profile → client → model, as the manifest gives it:
      what the person confirms is what `start` will launch. Putting a role on another client is
      the manifest's business (`roles.toml`, its fallbacks), out of this setup (§9 Q7).
@@ -268,8 +274,9 @@ One PR, docs and one test:
 6. **Notifications in the setup.** Recommended: offered as question 4, done as a person step. Or
    left out entirely, mentioned only in the hand-over.
 7. **A role whose client is not installed** (the shipped core roles all run on Claude Code).
-   Recommended: the setup only reports it, with the client to install as a person step, and keeps
-   to the manifest's profiles (§5.1 Q3). Or a later step gives the core roles `fallback_profiles`
+   Recommended: the setup only reports it, with the client to install as a person step (a
+   prerequisite for `master`, which cannot be left out), and keeps to the manifest's profiles
+   (§5.1 Q3). Or a later step gives the core roles `fallback_profiles`
    on other clients (codex, grok, kimi), so `start --roles coder:<profile>` can pick one; that is a
    manifest change with its own review, not part of this spec.
 8. **The Redis password rotation.** Recommended: a person step with its effect stated (§5.4), as
