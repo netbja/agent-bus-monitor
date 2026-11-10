@@ -45,6 +45,8 @@ type page struct {
 	ask   askPanel   // ovAsk: the question and option under the cursor
 	spans []lineSpan // ovAsk: each option's lines, "Other" last; nil once answered
 
+	projRow adminRow // ovProjectDetail: the row it shows, rebuilt when its memory is read
+
 	sel      int        // ovPlan: the selected item; ovRecap: the cursor's row
 	expanded bool       // ovPlan: the done group is open
 	items    []planItem // ovPlan

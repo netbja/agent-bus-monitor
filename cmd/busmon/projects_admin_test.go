@@ -392,3 +392,129 @@ func TestProjectsPageOpensFirst(t *testing.T) {
 		t.Fatalf("a late read reopened the page: %+v", m.rd.top())
 	}
 }
+
+// projects-admin §3.3 (the person, Q2): the memory a project's keys take is
+// read for the detail only, on enter, in its own command: "reading…", then
+// the size, a partial size when cut, "?" when refused or failed; the list
+// never asks for it.
+func TestProjectDetailMemory(t *testing.T) {
+	pinLocal(t)
+	var asked []string
+	answer := bus.MemoryUsage{Bytes: 3 << 20, Read: 800, Keys: 800}
+	var answerErr error
+	src := adminFixture(shellNow)
+	src.memory = func(_ context.Context, p string) (bus.MemoryUsage, error) {
+		asked = append(asked, p)
+		return answer, answerErr
+	}
+	m := adminShell(t, 140, 40)
+	m.cfg.admin = &src
+	m, cmd := pressCmd(t, m, 'M')
+	m = run(t, m, cmd)
+	if len(asked) != 0 {
+		t.Fatalf("the list asked for memory: %v", asked)
+	}
+	m = keys(t, m, 'j')              // trading
+	open := func() (Model, string) { // enter, read, then back to the list for the next case
+		m2, cmd := pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+		m2 = run(t, m2, cmd)
+		text := tokLinesText(m2.rd.top().body)
+		m = keys(t, m2, tea.Key{Code: tea.KeyEscape})
+		return m2, text
+	}
+	if got := memoryText(false, bus.MemoryUsage{}, nil); got != "reading"+GlyphEllipsis { // until the read answers
+		t.Fatalf("before the read: %q", got)
+	}
+	_, text := open()
+	if !strings.Contains(text, "memory      about 3 MB (800 keys)") || len(asked) != 1 || asked[0] != "trading" {
+		t.Fatalf("read for %v:\n%s", asked, text)
+	}
+	answer = bus.MemoryUsage{Bytes: 2 << 20, Read: 799, Keys: 800} // one key short is still partial
+	if _, text = open(); !strings.Contains(text, "memory      about 2 MB for 799 of 800 keys") {
+		t.Fatalf("partial:\n%s", text)
+	}
+	answer = bus.MemoryUsage{Bytes: 2 << 20, Read: 900, Keys: 900, ScanCut: "deadline"}
+	if _, text = open(); !strings.Contains(text, "memory      about 2 MB for the first 900 keys; the scan stopped (2s)") {
+		t.Fatalf("scan cut by the clock:\n%s", text)
+	}
+	answer = bus.MemoryUsage{Bytes: 2 << 20, Read: 50000, Keys: 50000, ScanCut: "cap"}
+	if _, text = open(); !strings.Contains(text, "memory      about 2 MB for the first 50000 keys; the scan stopped (50000 keys)") {
+		t.Fatalf("scan cut by the cap:\n%s", text)
+	}
+	answer = bus.MemoryUsage{Keys: 800, Refused: true}
+	if _, text = open(); !strings.Contains(text, "memory      ? (the broker refuses MEMORY)") {
+		t.Fatalf("refused:\n%s", text)
+	}
+	answer, answerErr = bus.MemoryUsage{}, errors.New("i/o timeout")
+	if _, text = open(); !strings.Contains(text, "memory      ? (i/o timeout)") {
+		t.Fatalf("failed:\n%s", text)
+	}
+	// a template only: no broker keys, no memory line, nothing asked
+	asked, answerErr = nil, nil
+	for range 3 {
+		m = keys(t, m, 'j')
+	}
+	m2, cmd := pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	m2 = run(t, m2, cmd)
+	if d := m2.rd.top(); !strings.Contains(d.title, "newone") || strings.Contains(tokLinesText(d.body), "memory") || len(asked) != 0 {
+		t.Fatalf("a template only: %q asked %v\n%s", d.title, asked, tokLinesText(d.body))
+	}
+}
+
+// foureyes: a read answering late, for a detail since closed, never lands
+// on another project's detail.
+func TestProjectDetailMemoryLateAnswer(t *testing.T) {
+	pinLocal(t)
+	src := adminFixture(shellNow)
+	src.memory = func(_ context.Context, p string) (bus.MemoryUsage, error) {
+		return bus.MemoryUsage{Bytes: int64(len(p)) << 20, Read: 1, Keys: 1}, nil
+	}
+	m := adminShell(t, 140, 40)
+	m.cfg.admin = &src
+	m, cmd := pressCmd(t, m, 'M')
+	m = run(t, m, cmd)
+	m = keys(t, m, 'j') // trading
+	m, cmdA := pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	late := cmdA // trading's read, not yet answered
+	m = keys(t, m, tea.Key{Code: tea.KeyEscape}, 'k')
+	m, cmdB := pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
+	if d := m.rd.top(); !strings.Contains(d.title, "agent-bus-monitor") {
+		t.Fatalf("second detail: %q", d.title)
+	}
+	m = run(t, m, late) // trading's answer arrives on agent-bus-monitor's detail
+	if text := tokLinesText(m.rd.top().body); strings.Contains(text, "about 7 MB") || !strings.Contains(text, "reading") {
+		t.Fatalf("a late answer landed on another detail:\n%s", text)
+	}
+	m = run(t, m, cmdB)
+	if text := tokLinesText(m.rd.top().body); !strings.Contains(text, "about 17 MB (1 key)") {
+		t.Fatalf("its own answer:\n%s", text)
+	}
+}
+
+// foureyes: the real reader has a deadline: with a tiny one, a read of many
+// keys is cut and shown as such, never as complete or as an error.
+func TestProjectMemoryRealDeadline(t *testing.T) {
+	testredis.Configure(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	p := "dl" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	t.Cleanup(func() {
+		keys, _ := bus.ProjectKeys(ctx, c, p)
+		c.Del(ctx, keys...)
+	})
+	for i := range 3000 {
+		c.Set(ctx, p+":k"+strconv.Itoa(i), "x", 0)
+	}
+	old := memoryDeadline
+	memoryDeadline = time.Microsecond
+	t.Cleanup(func() { memoryDeadline = old })
+	src := realAdminSource(c, func(string) string { return "" })
+	u, err := src.memory(ctx, p)
+	if text := memoryText(true, u, err); err != nil || u.ScanCut == "" && u.Read >= u.Keys || !strings.Contains(text, "about") {
+		t.Fatalf("a read past its deadline: %+v %v %q", u, err, text)
+	}
+}
