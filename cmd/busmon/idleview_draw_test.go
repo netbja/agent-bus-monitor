@@ -1,11 +1,13 @@
 package main
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -28,7 +30,7 @@ func TestIdleViewLayoutA(t *testing.T) {
 		got := m.grid().plain()
 		q := stripOf(m.forYou)
 		for _, want := range []string{" you ", " team ", " next ", "█", forYouLabel(q), "foureyes", "waiting", " idle",
-			"anthropic 62% 5h", "xai held", "16:04"} {
+			"claude 62% 5h", "grok held", "16:04"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("%dx%d: no %q:\n%s", size[0], size[1], want, got)
 			}
@@ -172,10 +174,10 @@ func TestIdleViewNext(t *testing.T) {
 			t.Errorf("no %q:\n%s", want, got)
 		}
 	}
-	if l := idleStripLine(stripParts{tokens: "anthropic 62% 5h", planName: "v0.29", planCount: "1/3 33%", clock: "16:04"}, 30); l.text() != "anthropic 62% 5h · 1/3 33%" {
+	if l := idleStripLine(stripParts{tokens: []string{"anthropic 62% 5h"}, planName: "v0.29", planCount: "1/3 33%", clock: "16:04"}, 30); l.text() != "anthropic 62% 5h · 1/3 33%" {
 		t.Errorf("narrow strip %q", l.text())
 	}
-	if l := idleStripLine(stripParts{tokens: "anthropic 62% 5h", planName: "v0.29", planCount: "1/3 33%", clock: "16:04"}, 39); l.text() != "anthropic 62% 5h · plan v0.29 1/3 33%" {
+	if l := idleStripLine(stripParts{tokens: []string{"anthropic 62% 5h"}, planName: "v0.29", planCount: "1/3 33%", clock: "16:04"}, 39); l.text() != "anthropic 62% 5h · plan v0.29 1/3 33%" {
 		t.Errorf("no room for the clock, room for the name: %q", l.text())
 	}
 }
@@ -198,5 +200,72 @@ func TestIdleViewCountsMerges(t *testing.T) {
 	d := m.idleData()
 	if d.need != q.decide+1 || !strings.Contains(d.parts.text(), GlyphGate+" 1 merge") {
 		t.Fatalf("need %d parts %q, want %d and 1 merge", d.need, d.parts.text(), q.decide+1)
+	}
+}
+
+// idle-view-providers: the strip lists every provider with a reading or a
+// present agent, its tightest fresh window first by use; a stale reading says
+// its age; a held one says until when; a present agent's provider with no
+// reading says no data and why; an unknown reading of no present agent and
+// an unlimited provider are left out. Never a number the bus does not hold.
+func TestIdleTokenItems(t *testing.T) {
+	now := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+	ms := func(d time.Duration) int64 { return now.Add(-d).UnixMilli() }
+	reset := now.Add(3 * time.Hour).Unix()
+	budgets := map[string]bus.BudgetSnapshot{
+		"anthropic": {Windows: []bus.BudgetWindow{{Name: "7d", UsedPct: 65, ResetsAt: reset, ObservedAt: ms(8 * time.Minute)}, {Name: "5h", UsedPct: 16, ResetsAt: reset, ObservedAt: ms(8 * time.Minute)}}},
+		"openai":    {Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 2, ResetsAt: reset, ObservedAt: ms(time.Minute)}, {Name: "7d", UsedPct: 23, ResetsAt: reset, ObservedAt: ms(time.Minute)}}},
+		"xai":       {Windows: []bus.BudgetWindow{{Name: "weekly", UsedPct: 71, ResetsAt: reset, ObservedAt: ms(43 * time.Hour)}}},
+		"moonshot":  {Unknown: true, Source: "kimi-log"},
+		"google":    {Unknown: true, Source: "agy-log"},
+		"local":     {Unlimited: true},
+	}
+	present := map[string]bool{"anthropic": true, "openai": true, "moonshot": true, "mistral": true}
+	got := idleTokenItems(budgets, nil, present, now)
+	want := []string{"claude 65% 7d", "codex 23% 7d", "grok 71% 7d (1d old)", "kimi: no data (kimi-log: unknown)", "mistral: no data (no reading published)"}
+	if strings.Join(got, " | ") != strings.Join(want, " | ") {
+		t.Errorf("items\n got %q\nwant %q", got, want)
+	}
+
+	held := map[string]int64{"openai": now.Add(2 * time.Hour).Unix()}
+	got = idleTokenItems(budgets, held, present, now)
+	if !slices.Contains(got, "codex held 2h00") {
+		t.Errorf("held: %q", got)
+	}
+}
+
+// Too narrow for every provider: the first, then +N for the rest.
+func TestIdleStripCollapsesProviders(t *testing.T) {
+	s := stripParts{tokens: []string{"claude 65% 7d", "codex 23% 7d", "kimi: no data (kimi-log: unknown)"}, planCount: "1/3 33%", clock: "16:04"}
+	if l := idleStripLine(s, 120); l.text() != "claude 65% 7d · codex 23% 7d · kimi: no data (kimi-log: unknown) · 1/3 33%"+strings.Repeat(" ", 120-Width("claude 65% 7d · codex 23% 7d · kimi: no data (kimi-log: unknown) · 1/3 33%")-5)+"16:04" {
+		t.Errorf("wide %q", l.text())
+	}
+	if l := idleStripLine(s, 30); l.text() != "claude 65% 7d +2 · 1/3 33%" {
+		t.Errorf("narrow %q", l.text())
+	}
+}
+
+// The strip reads the present agents' providers from the model: an agent on
+// a provider with no reading says no data; an unlimited one says nothing.
+func TestIdleStripPresentProviders(t *testing.T) {
+	pinLocal(t)
+	m := idleAt(t, 140, 40)
+	var name string
+	for _, n := range m.names(false) {
+		if a := m.snap.agents[n]; a != nil && a.provider != "xai" {
+			name = n
+			break
+		}
+	}
+	if name == "" {
+		t.Fatal("no agent to put on another provider")
+	}
+	m.snap.agents[name].provider = "moonshot"
+	if got := strings.Join(m.idleData().strip.tokens, " | "); !strings.Contains(got, "kimi: no data (no reading published)") {
+		t.Errorf("strip %q", got)
+	}
+	m.snap.budgets = map[string]bus.BudgetSnapshot{"moonshot": {Unlimited: true}}
+	if got := strings.Join(m.idleData().strip.tokens, " | "); strings.Contains(got, "kimi") {
+		t.Errorf("an unlimited provider shows: %q", got)
 	}
 }

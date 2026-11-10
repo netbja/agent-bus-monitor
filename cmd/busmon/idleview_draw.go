@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -58,7 +59,10 @@ type idleData struct {
 	strip   stripParts // the bottom row
 }
 
-type stripParts struct{ tokens, planName, planCount, clock string }
+type stripParts struct {
+	tokens                     []string // one per provider, the most used first (idleTokenItems)
+	planName, planCount, clock string
+}
 
 func (m Model) idleData() idleData {
 	q := stripOf(m.forYou)
@@ -111,9 +115,13 @@ func (m Model) idleData() idleData {
 	d.counts, d.idleAt = slicesInsert(counts, idleAt, fmt.Sprintf("%d idle", d.idle)), idleAt
 	d.allIdle = len(order) == 0
 	d.next = idleNext(m.snap.planState)
-	sep := " " + GlyphNone + " "
-	d.strip = stripParts{tokens: strings.TrimPrefix(strings.TrimPrefix(tokensTitle(m.snap.budgets, m.snap.holds, m.now), "Tokens"+sep+"today"), sep),
-		clock: m.now.Local().Format("15:04")}
+	present := map[string]bool{}
+	for _, name := range m.names(false) {
+		if a := m.snap.agents[name]; a != nil && a.provider != "" {
+			present[a.provider] = true
+		}
+	}
+	d.strip = stripParts{tokens: idleTokenItems(m.snap.budgets, m.snap.holds, present, m.now), clock: m.now.Local().Format("15:04")}
 	if p := m.snap.planState; p.loaded {
 		d.strip.planName = Preview(p.file.Plan)
 		d.strip.planCount = planProgress(p, 0, TierNarrow).text()
@@ -273,13 +281,89 @@ func nextBox(d idleData) idleBox {
 	return b
 }
 
+// idleTokenItems is the strip's quota, one item per provider with a known
+// reading or a present agent (idle-view-providers): its tightest fresh window
+// ("codex 23% 7d"), else its tightest window with the reading's age; "held"
+// while the dispatcher holds it; "no data (why)" for a present agent's
+// provider without a reading. An unknown reading no present agent uses and an
+// unlimited provider are left out. Fresh readings first, the most used
+// first; then stale, held, no data. Nothing the bus does not hold is shown.
+func idleTokenItems(budgets map[string]bus.BudgetSnapshot, holds map[string]int64, present map[string]bool, now time.Time) []string {
+	type item struct {
+		text  string
+		rank  int // 0 fresh, 1 stale, 2 held, 3 no data
+		pct   float64
+		order string
+	}
+	provs := map[string]bool{}
+	for p := range budgets {
+		provs[p] = true
+	}
+	for p := range present {
+		provs[p] = true
+	}
+	var items []item
+	for p := range provs {
+		b, has := budgets[p]
+		name := Preview(providerLabel(p))
+		if until, isHeld := held(holds, p, now); isHeld {
+			items = append(items, item{text: name + " held " + compactDur(until.Sub(now)), rank: 2, order: name})
+			continue
+		}
+		switch {
+		case has && b.Unlimited:
+			continue
+		case has && !b.Unknown && len(b.Windows) > 0:
+			if w, ok := tightestWindow(freshWindows(b, now), now); ok {
+				items = append(items, item{text: fmt.Sprintf("%s %.0f%% %s", name, w.UsedPct, windowLabel(w)), pct: w.UsedPct, order: name})
+				continue
+			}
+			if w, ok := tightestWindow(b.Windows, now); ok {
+				items = append(items, item{text: fmt.Sprintf("%s %.0f%% %s (%s old)", name, w.UsedPct, windowLabel(w), windowAge(w, b, now)), rank: 1, pct: w.UsedPct, order: name})
+				continue
+			}
+		}
+		if !present[p] {
+			continue // an unknown or expired reading nobody here draws on
+		}
+		why := "no reading published"
+		if has {
+			why = "unknown"
+			if b.Source != "" {
+				why = Preview(b.Source) + ": unknown"
+			}
+		}
+		items = append(items, item{text: name + ": no data (" + why + ")", rank: 3, order: name})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		a, c := items[i], items[j]
+		if a.rank != c.rank {
+			return a.rank < c.rank
+		}
+		if a.pct != c.pct {
+			return a.pct > c.pct
+		}
+		return a.order < c.order
+	})
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = it.text
+	}
+	return out
+}
+
 // idleStripLine is the bottom row in w cells: tokens · plan, the clock at the
-// right. Too narrow, the clock goes first, then the plan's name.
+// right. Too narrow, the clock goes first, then the plan's name, then every
+// provider but the first ("claude 65% 7d +2").
 func idleStripLine(s stripParts, w int) Line {
-	build := func(clock, name bool) Line {
+	build := func(clock, name, all bool) Line {
 		var parts []string
-		if s.tokens != "" {
-			parts = append(parts, s.tokens)
+		switch {
+		case len(s.tokens) == 0:
+		case all || len(s.tokens) == 1:
+			parts = append(parts, strings.Join(s.tokens, " "+GlyphNone+" "))
+		default:
+			parts = append(parts, fmt.Sprintf("%s +%d", s.tokens[0], len(s.tokens)-1))
 		}
 		if s.planCount != "" {
 			p := s.planCount
@@ -298,12 +382,12 @@ func idleStripLine(s stripParts, w int) Line {
 		}
 		return l
 	}
-	for _, try := range [][2]bool{{true, true}, {false, true}, {false, false}} {
-		if l := build(try[0], try[1]); l != nil && l.Width() <= w {
+	for _, try := range [][3]bool{{true, true, true}, {false, true, true}, {false, false, true}, {false, false, false}} {
+		if l := build(try[0], try[1], try[2]); l != nil && l.Width() <= w {
 			return l
 		}
 	}
-	return FitLine(build(false, false), w)
+	return FitLine(build(false, false, false), w)
 }
 
 // idleThreadLen is the thread's length in cells.
