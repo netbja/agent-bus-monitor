@@ -155,7 +155,7 @@ func TestAgentRows(t *testing.T) {
 				"c-xai":    {Provider: "xai", PID: 7, IdentSession: sess},
 				"d-other":  {Client: "vibe", Provider: "mistral", PID: 7, IdentSession: sess},
 				"f-codex":  {Client: "codex", Provider: "openai", PID: 7, IdentSession: sess}, // proved: counted since codex-token-attribution step 2
-				"g-openai": {Provider: "openai", PID: 7, IdentSession: sess},                 // no client: the pass counts Client codex only
+				"g-openai": {Provider: "openai", PID: 7, IdentSession: sess},                  // no client: the pass counts Client codex only
 				"e-claude": {Client: "claude-code", Provider: "anthropic", PID: 7, IdentSession: sess},
 			},
 			want: []rowView{
