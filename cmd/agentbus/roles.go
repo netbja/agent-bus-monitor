@@ -72,7 +72,10 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		proveSessionSend(rest, openProver, dispatch.ProcStart)
 		return nil
 	case "turn": // the turn hooks: the state follows the client's turns (auto-state)
-		turnHook(rest, env, os.Stdin, stdout, realTurnFlip)
+		turnHook(rest, env, os.Stdin, stdout, realTurnFlip, func(project, agent, session string) {
+			proveFromHook(env, project, agent, session, spawnDetached,
+				hookFacts{Ancestors: func() []dispatch.ProcID { return dispatch.Ancestors(os.Getpid()) }, Now: time.Now})
+		})
 		return nil
 	}
 	if action == "check-toml" {

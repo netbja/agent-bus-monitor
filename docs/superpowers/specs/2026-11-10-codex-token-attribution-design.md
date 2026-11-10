@@ -1,7 +1,8 @@
 # A Codex agent's tokens and context, counted like a Claude agent's (codex-token-attribution)
 
-Status: proposed, for the person's review (task `idle-view-providers-1`, step 3). No code before
-the answers in part 6. Base `origin/main`. This spec names functions and seams, not line numbers.
+Status: merged (PR 416); the person answered part 6 on 2026-11-10 (task
+`codex-token-attribution-impl`): yes to all three; being implemented in the steps of part 8.
+Base `origin/main`. This spec names functions and seams, not line numbers.
 
 ## 1. The gap
 
@@ -98,6 +99,14 @@ session id, a file named by it, a token record in it), once its client provides 
    percentage and the alert, as for Claude.
 3. **Kimi, Gemini, Grok:** the explicit `no adapter` row until their clients record tokens per
    session, rather than anything estimated? The recommendation is yes.
+
+**The person's answers (2026-11-10):**
+
+1. **Yes:** Codex agents' tokens are counted per agent, the session proved by the hook as Claude's,
+   then `CodexScan` on the proved rollout.
+2. **A percentage:** Codex's fill in `{p}:context`, exact from `model_context_window` (the context
+   alert applies to Codex agents as to Claude's); the raw count on the agent's page.
+3. **Yes:** Kimi, Gemini and Grok read `no token count (no adapter)`, nothing estimated.
 
 ## 7. Tests (when built)
 

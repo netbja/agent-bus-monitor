@@ -61,16 +61,7 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		return 0
 	}
 	logPath := filepath.Join(paths.StateDir(project), "resume.log")
-	if chain := fg.Ancestors(); len(chain) > 0 && bus.ValidName(role) && bus.ValidSessionID(in.SessionID) {
-		at := strconv.FormatInt(fg.Now().UnixNano(), 10) // this event's order, taken before the detach
-		argv := []string{"roles", "prove-session", logPath, project, role, in.SessionID, at, "--"}
-		for _, p := range chain {
-			argv = append(argv, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
-		}
-		if err := spawn(argv); err != nil {
-			resumeLog(logPath, time.Now(), "session prover not started: "+err.Error())
-		}
-	}
+	handToProver(logPath, project, role, in.SessionID, spawn, fg)
 	profile, err := resumeProfile(manifest, role, get("AGENT_BUS_PROFILE"))
 	if err != nil {
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
@@ -85,6 +76,36 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		resumeLog(logPath, time.Now(), "sender not started: "+err.Error())
 	}
 	return 0
+}
+
+// handToProver starts the detached session prover (roles prove-session) with
+// the hook's ancestry, read here in its foreground: once detached, the prover
+// is reparented and its own ancestry proves nothing. Without a chain (no
+// /proc) or with an id the prover cannot take, nothing is started.
+func handToProver(logPath, project, role, session string, spawn func(argv []string) error, fg hookFacts) {
+	chain := fg.Ancestors()
+	if len(chain) == 0 || !bus.ValidName(role) || !bus.ValidSessionID(session) {
+		return
+	}
+	at := strconv.FormatInt(fg.Now().UnixNano(), 10) // this event's order, taken before the detach
+	argv := []string{"roles", "prove-session", logPath, project, role, session, at, "--"}
+	for _, p := range chain {
+		argv = append(argv, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
+	}
+	if err := spawn(argv); err != nil {
+		resumeLog(logPath, time.Now(), "session prover not started: "+err.Error())
+	}
+}
+
+// proveFromHook hands a session to the prover from a hook that has no resume
+// to report (Codex's turn hook): the same log, the same prover.
+func proveFromHook(env []string, project, role, session string, spawn func(argv []string) error, fg hookFacts) {
+	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
+	paths, err := service.PathsFrom(get)
+	if err != nil || !bus.ValidName(project) {
+		return
+	}
+	handToProver(filepath.Join(paths.StateDir(project), "resume.log"), project, role, session, spawn, fg)
 }
 
 // resumeProfile is the --profile of the resume command: the profile the

@@ -25,8 +25,14 @@ const turnHookBudget = 2 * time.Second
 // the typed /clear must neither void a hand-off nor read as a turn, and a
 // local command gets no Stop. A subagent's events are not the agent's:
 // Claude Code marks them with agent_id, Grok with subagentType.
+//
+// On a Codex launch, the SessionStart that ends a turn also hands its
+// session_id to the prover (codex-token-attribution step 1): the same detached
+// prover Claude Code's resume hook starts (proveFromHook), so a Codex agent's
+// session is proved with its process and the tokens pass can count it.
 func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
-	flip func(ctx context.Context, project, agent, state string) error) int {
+	flip func(ctx context.Context, project, agent, state string) error,
+	prove func(project, agent, session string)) int {
 	if len(args) != 1 || (args[0] != "start" && args[0] != "end") {
 		return 0
 	}
@@ -36,6 +42,8 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 		return 0
 	}
 	var in struct {
+		Event        string `json:"hook_event_name"`
+		SessionID    string `json:"session_id"`
 		Prompt       string `json:"prompt"`
 		AgentID      string `json:"agent_id"`
 		SubagentType string `json:"subagentType"`
@@ -50,6 +58,9 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 			return 0
 		}
 		state = "working"
+	}
+	if args[0] == "end" && in.Event == "SessionStart" && get("AGENT_BUS_CLIENT") == "codex" && bus.ValidSessionID(in.SessionID) {
+		prove(project, agent, in.SessionID) // Claude Code proves through its resume hook instead
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), turnHookBudget)
 	defer cancel()
