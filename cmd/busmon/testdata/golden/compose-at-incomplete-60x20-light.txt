@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+╭─ Compose ────────────────────────────────────────────────╮
+│ to: @coder                                   · directive │
+│ Please read @c                                           │
+╭──────────────────────────────────────────────────────────╮
+│ cmd/                                                     ▲
+│ cmd/busmon/compose.go                                    ┃
+│ cmd/busmon/                                              │
+│ cmd/busmon/tea_compose.go                                ▼
+╰──────────────────────────────────────────────────────────╯
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│ ↑↓ choose   enter insert  … list incomplete (the 2s dea… │
+╰──────────────────────────────────────────────────────────╯

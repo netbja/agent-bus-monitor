@@ -1,0 +1,40 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
+│  ● ask    master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
+│  ♙ wait   foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
+│  ♙ wait   sentinel  pane prompt                    1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
+│  ◆ gate   coder     by charlie  look at b1           ││  ♙ sentinel  waiting   30m     —        —         prompt · model≠     health ok  ┃
+│                                                      ││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…┃
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
+│                   ╭─ Compose ────────────────────────────────────────────────────────────────────────────────────────╮i-alt   tagging    ▼
+╰───────────────────│ to: @coder                                                                           · directive │───────────────────╯
+╭─  1 Activity   2 B│ Please read @c                                                                                   │ts · filter: none ─╮
+│    time   from    │╭────────────────────────────────────────────────────────────────────────────────────────────────╮│                   │
+│  ── Mon 2026-10-26││ cmd/                                                                                           ││───────────────────│
+│    14:24  architec││ cmd/busmon/compose.go                                                                          ││                   │
+│    14:50  ♙ Charli││ cmd/busmon/                                                                                    ││                   │
+│    14:51  coder   ││ cmd/busmon/tea_compose.go                                                                      ││                   │
+│  ○ 14:52  master  ││ docs/                                                                                          ││                   │
+│  ● 14:56  dispatch││ docs/my notes.md                                                                               ││                   │
+│  ● 15:00  master  ││                                                                                                ││                   │
+│    15:02  coder   ││                                                                                                ││                   │
+│                   │╰────────────────────────────────────────────────────────────────────────────────────────────────╯│                   │
+│                   │                                                                                                  │                   │
+│                   │ ↑↓ choose   enter insert   tab open folder   esc keep text                               6 files │                   │
+│                   ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯                   │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                                           
+ ↑↓ choose   enter insert   tab open folder   esc keep text                                                                                 

@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -47,41 +45,10 @@ func lookupEnv(env []string, key string) (string, bool) {
 	return "", false
 }
 
-// manifestPath is ROLES_TOML, else <repo>/roles.toml, where the repo is
-// AGENTBUS_REPO, else the checkout setup.sh stamped (buildinfo.Repo) when it
-// holds a roles.toml, else this binary's directory (the scripts run
-// <repo>/agentbus).
+// manifestPath is roles.toml as the launcher finds it (rolecfg.ManifestPath)
+// in the environment env.
 func manifestPath(env []string) (string, error) {
-	path, ok := lookupEnv(env, "ROLES_TOML")
-	if !ok || path == "" {
-		repo, ok := lookupEnv(env, "AGENTBUS_REPO")
-		if (!ok || repo == "") && buildinfo.Repo != "" {
-			// The checkout setup.sh stamped, as repoDir finds scripts/bootstrap:
-			// an installed binary has no roles.toml beside it.
-			if st, err := os.Stat(filepath.Join(buildinfo.Repo, "roles.toml")); err == nil && !st.IsDir() {
-				repo, ok = buildinfo.Repo, true
-			}
-		}
-		if !ok || repo == "" {
-			exe, err := os.Executable()
-			if err != nil {
-				return "", err
-			}
-			if r, err := filepath.EvalSymlinks(exe); err == nil {
-				exe = r
-			}
-			repo = filepath.Dir(exe)
-		}
-		path = filepath.Join(repo, "roles.toml")
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	if r, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = r
-	}
-	return abs, nil
+	return rolecfg.ManifestPath(func(k string) string { v, _ := lookupEnv(env, k); return v })
 }
 
 func roles1(args, env []string, stdout, stderr io.Writer) error {

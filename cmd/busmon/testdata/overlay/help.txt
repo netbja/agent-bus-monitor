@@ -142,6 +142,13 @@ KEYS
   shift+↑↓←→ home end  select text: del or backspace removes it, typing replaces it, esc or a plain move clears it
   pgup pgdn            a page up or down (with shift: extend the selection)
   ^C                   quit (everywhere)
+  the compose window's file list (@ in the text)
+  ↑↓                   choose
+  pgup pgdn            a page of the file list
+  enter                insert the selected path, a file or a folder, in place of the @ and its query (no new line)
+  tab                  on a folder: list its files (the query becomes the folder); on a file: insert it
+  esc                  close the list only, the typed @query kept; esc again closes the window
+  ^C                   quit (everywhere)
   the first-launch tour
   enter →              next
   ←                    back

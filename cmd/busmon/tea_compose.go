@@ -415,6 +415,10 @@ type composeState struct {
 	agent              string // composeAnswer: whose question
 	askID, qid, header string
 	orphan             bool // composeAnswer: its question changed or closed; the next send makes it a message
+	// at is the @ popup over the text, when open (compose_at_popup.go);
+	// atLists the listings this window read, dropped with it (§2.1).
+	at      *atPopup
+	atLists map[string]*atList
 }
 
 // composeDraft is the message window's draft, kept while it is closed or
@@ -741,6 +745,7 @@ func deleteKind(t *textArea) string {
 // step of the history, whatever its length (compose-undo).
 func (m *Model) pasteCompose(s string) {
 	c := m.ui.compose
+	c.at = nil // a paste never opens the popup, nor types into its query
 	if c.onTo && c.kind == composeMessage {
 		s, _, _ = strings.Cut(s, "\n")
 		c.to.edit("", func() { c.to.insert(s) })
@@ -851,9 +856,16 @@ func (m *Model) composeClick(x, y int) tea.Cmd {
 		m.closeCompose()
 	case y == f.Y+f.H-2: // the hint row: a hint is a button
 		counter := fmt.Sprintf("%d / %d", utf8.RuneCountInString(c.area.value()), c.area.limit)
+		if c.at != nil {
+			counter, _ = c.at.atFootRight()
+			counter = atFit(counter, (f.W-4)/2)
+		}
 		_, hits := m.composeFoot(max(0, f.W-4-Width(counter)-1))
 		for _, h := range hits {
 			if x >= f.X+2+h.x && x < f.X+2+h.x+h.w {
+				if c.at != nil { // the popup's hints are its keys
+					return m.composeFileKey(h.act, Key{})
+				}
 				return m.composeKey(h.act, Key{})
 			}
 		}
@@ -933,11 +945,18 @@ func (m Model) drawCompose(g *grid) {
 		}
 		drawLine(g, tr.X, tr.Y, tr.W, l, false)
 	}
+	if c.at != nil {
+		m.drawAtPopup(g)
+	}
 	n := utf8.RuneCountInString(c.area.value())
 	counter := fmt.Sprintf("%d / %d", n, c.area.limit)
 	crole := RoleMuted
 	if n >= c.area.limit {
 		crole = RoleAttention
+	}
+	if c.at != nil { // the popup's footer: its state or its count (§4.3)
+		counter, crole = c.at.atFootRight()
+		counter = atFit(counter, iw/2)
 	}
 	foot, _ := m.composeFoot(max(0, iw-Width(counter)-1))
 	foot = append(foot, Seg{Text: strings.Repeat(" ", max(1, iw-foot.Width()-Width(counter)))}, Seg{Text: counter, Role: crole})
@@ -964,7 +983,11 @@ func (m Model) composeFoot(w int) (Line, []footHit) {
 	}
 	var foot Line
 	var hits []footHit
-	for _, b := range bindings(ModeCompose) {
+	mode := ModeCompose
+	if c.at != nil {
+		mode = ModeComposeFile
+	}
+	for _, b := range bindings(mode) {
 		if b.Hint == "" || (b.Act == ActComposeField && c.kind != composeMessage) {
 			continue
 		}

@@ -76,6 +76,9 @@ type shellConfig struct {
 	sleepWait   func() time.Duration
 	// admin is the Projects page's sources (M); nil = every part unknown.
 	admin *adminSource
+	// files is where the compose window's @ lists from; nil = no checkout
+	// and no home on this machine (compose-at-file).
+	files *atSource
 }
 
 // uiState is the person's place on the screen.
@@ -120,6 +123,7 @@ type uiState struct {
 	summarySent    bool                    // the summary request is in flight: its success closes the recap
 	tour           *tourState              // the first-launch tour, when open (tour.go)
 	pastedImages   map[string]string       // an image pasted in compose: its hash -> the file saved (never saved twice)
+	atRecent       []string                // the @ popup's picks this session, most recent first (compose-at-file §4.2)
 	del            *deletePanel            // the Projects page's delete confirmation (projects_delete.go)
 	// The idle view (idleview.go): shown after display.idle_view_after with
 	// no input; lastInput is the last input's poll time (the first poll's
@@ -340,6 +344,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.notifySetupResult(msg)
 		m.refresh()
 		return m.settingsCmd(func() error { return nil })
+	case atListMsg:
+		cmd := m.atListed(msg)
+		m.refresh()
+		return cmd
 	case tea.PasteMsg:
 		switch {
 		case m.rd.open() && m.rd.top().kind == ovNotifySetup:

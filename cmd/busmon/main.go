@@ -585,7 +585,7 @@ func main() {
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 		},
 		sleepRunner: realSleepRunner(agentbusBeside()), sleepLog: realSleepLog(os.Getenv), sleepWait: realSleepWait(os.Getenv),
-		admin: adminSourceFor(client, os.Getenv)})
+		admin: adminSourceFor(client, os.Getenv), files: atSourceFor(project, os.Getenv)})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up
