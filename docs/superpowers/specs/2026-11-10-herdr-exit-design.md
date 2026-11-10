@@ -5,6 +5,9 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 9: reviewer-codex at dece79b9 — a left-behind line must not be committable by the
+  person's queued Enter (submit guard, §4.2); notice distinguishes wake line and `/clear`;
+  herdr residual lasts as long as a project runs on herdr (§4.2)
 - Revision 8: foureyes at dece79b9 — P2 one restartable unit cannot drain: per-build unit
   instances, holder excluded from restart paths (§4.4a); P3 stale risk row, self-attested
   ancestor proof (§4.7), linger under Q5
@@ -181,9 +184,24 @@ Interface rules (part of the interface, not comments):
     clear-input key (e.g. `ctrl+u` where probed) and the current input region (§4.3) holds
     exactly the pasted text and nothing else; it sends that key, checks the input region is
     empty, and only then releases the held viewer bytes;
-  - otherwise it leaves the pasted text in place, releases the held bytes after it, and the
-    dispatcher records a person notice ("wake line left unsent in <agent>'s input") so the
-    person can delete or submit it. It never sends a key it has not probed for that client.
+  - otherwise it leaves the pasted text in place and arms a **submit guard** on that terminal,
+    so the left-behind line cannot be committed by a key the person did not mean for it:
+    - the held viewer bytes are released **with every submit key removed** (CR, LF, and the
+      Enter encodings of kitty keyboard `CSI 13…u` and modifyOtherKeys `CSI 27;…;13~`); the
+      other bytes go in after the pasted text, as typed;
+    - while the guard stands, every further viewer submit key is swallowed, not forwarded;
+    - the guard lifts when the input region (§4.3) no longer contains the left-behind text (the
+      person deleted it: checked on the screen after each viewer byte), or when the person
+      acknowledges with the attach chord followed by `y` (`ctrl+\ y`: "submit anyway"), after
+      which submit keys flow again;
+    - the attach client shows the guard without touching the agent's screen: bell once, and the
+      outer terminal's title (OSC 2) set to `agentbus: <kind> left in <agent>'s input — delete
+      it, or ctrl+\ y to submit anyway`, restored when the guard lifts;
+    - the dispatcher records a person notice naming the **kind**: "wake line left unsent in
+      <agent>'s input" for a `WakeLine`, "`/clear` left unsent in <agent>'s input — submitting
+      it clears the conversation" for a `ClearLine`.
+    It never sends a key it has not probed for that client, and never discards a printable byte
+    the person typed.
   On the herdr adapter (`AtomicSubmit = false`) no re-check is possible between paste and CR
   (`agent prompt` is one call); this is part of the residual stated below.
 - **The closed set holds on the wire too.** A Go type protects only inside one process; the
@@ -208,7 +226,10 @@ Interface rules (part of the interface, not comments):
     then the prompt. The residual window is the time between the end of the first call and the
     start of the second: normally one CLI round-trip, but **without a hard bound**
     (`herdrCallTimeout` limits each call on its own, not the gap; a scheduler pause can stretch
-    it). This is **today's documented residual, unchanged**, and it stays until the project moves to the holder (step 15); the
+    it). This is **today's documented residual, unchanged**, and it stays for as long as a project runs on herdr: every project until step 10 (the
+    holder becomes opt-in), all but the trial project at step 14, every project not yet
+    switched until step 15 flips the default, and any project kept on herdr after that until
+    step 16 removes the adapter; the
     spec claims no improvement for herdr.
   - The contract suite's race test (a viewer types concurrently with `Submit`; no interleaving,
     or a refusal) runs only on adapters with `AtomicSubmit`; on the others the suite checks only
@@ -573,8 +594,15 @@ detection herdr-independent.
   service tests that fake `systemctl`/`launchctl`.
 - Paste→CR race (holder): a viewer byte arriving between paste and CR → no CR,
   `ErrPersonActive`; with a probed clear key and an input region equal to the paste → line
-  cleared, then the viewer's bytes delivered; without one → paste left, viewer bytes after it,
-  notice recorded. Contract suite (`AtomicSubmit` adapters).
+  cleared, then the viewer's bytes delivered; without one → paste left, guard armed, notice
+  recorded. Both kinds, each in two cases:
+  - `WakeLine`, the viewer pressed Enter (CR, and the kitty encoding) during the paste window →
+    the wake line is **not** submitted; the viewer's other bytes are delivered; the notice says
+    "wake line";
+  - `ClearLine`, same → `/clear` is **not** submitted; the notice says "`/clear`";
+  - each kind, viewer Enter after the guard is armed → swallowed; after deleting the line (screen
+    shows the region without it) → Enter forwarded; after `ctrl+\ y` → Enter forwarded.
+  Contract suite (`AtomicSubmit` adapters).
 - Resume caller proof (Redis tests, disposable broker): a direct descendant of the stored
   (pid, start) writes; a grandchild through a shell writes; a non-descendant writes nothing; an
   ancestor with the stored pid but another start time (reused pid) writes nothing; a chain
@@ -583,7 +611,8 @@ detection herdr-independent.
 - Focus rule: a viewer that never sends a focus report blocks `Submit` for its whole attach;
   focus-out then focus-in toggles it; an observer never blocks. Contract suite, all adapters
   that have viewers.
-- Mutation on the re-check before CR (removing it must fail the race test), on the
+- Mutation on the re-check before CR (removing it must fail the race test), on the removal of
+  submit keys from held bytes and on the guard's swallowing (each must fail an Enter case), on the
   clear-only-when-safe condition, on the ancestor match (pid only, without start, must fail the
   reused-pid test), on the depth bound, and on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
   frame validation (unknown kind, malformed nonce, text field present, a name field present,
