@@ -581,7 +581,11 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		cmd := m.tourClick(ms.X, ms.Y)
 		m.refresh()
 		return cmd
-	case m.ui.reminder != nil || m.ui.summary:
+	case m.ui.reminder != nil: // modal: a click on an item acts on it
+		cmd := m.reminderClick(ms.X, ms.Y)
+		m.refresh()
+		return cmd
+	case m.ui.summary:
 		return nil
 	case m.ui.compose != nil:
 		c := m.ui.compose
