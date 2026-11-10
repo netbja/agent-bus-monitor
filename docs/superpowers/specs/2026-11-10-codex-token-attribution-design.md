@@ -51,6 +51,15 @@ refusals, same log. Nothing else changes in the hook: it still ends the turn, ne
 stdout, and always exits 0. A Codex started outside the launcher (no hook) stays unproved, as
 today.
 
+**The same accepted limit** (reviewer-codex): the prover trusts the hook's ancestor chain, so a
+process of the same local user, the agent itself included, can run the hook by hand and name any
+valid session. The lifecycle spec (`2026-10-28-agent-lifecycle-design.md`, part D, "What it still
+trusts") accepts this for Claude Code's resume hook, for the reason a forged `status` is accepted:
+the bus authenticates no local process (one Redis password, the user's own files), and the worst
+outcome is that the fill and the tokens follow the wrong session until the next proof, which never
+moves a pid, a pane or a declared state. Codex adds no new trust; an unforgeable proof (a launcher
+token) would be a change to both clients' path, outside this spec.
+
 The session is recorded with `Client: codex` (the record already has `Provider` and `Client`).
 The hook seam is `codexHookArgs` (`rolecfg/resume.go`, used by `launch.go`).
 
