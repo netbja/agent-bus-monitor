@@ -290,6 +290,12 @@ func archives(o Options, p *Plan) error {
 			p.Shared++
 		}
 	}
+	// The fresh archive is always written to this folder: a kept path that
+	// is none of its archives (a copy elsewhere) cannot be told apart from
+	// it, so none goes (fail closed, foureyes).
+	if keep != nil && p.Kept == "" {
+		p.KeepUnknown, p.Archives = true, nil
+	}
 	return nil
 }
 

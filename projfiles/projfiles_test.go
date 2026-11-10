@@ -253,6 +253,22 @@ func TestUnresolvableKeptArchiveRemovesNone(t *testing.T) {
 	}
 }
 
+// The kept archive is always written to the backup folder: one that is no
+// archive of that folder (a NAS copy, a file elsewhere) cannot be told from
+// the fresh one, so none goes (foureyes).
+func TestKeptArchiveOutsideTheListRemovesNone(t *testing.T) {
+	root, _ := repo(t)
+	dir := filepath.Join(root, "backups")
+	a := archive(t, dir, time.Now(), "demo")
+	nas := archive(t, filepath.Join(root, "nas"), time.Now().Add(time.Minute), "demo")
+	o := Options{Project: "demo", BackupDir: dir, Host: "box", Backups: true, KeepArchive: nas}
+	p, _ := PlanFor(o)
+	Apply(o)
+	if !exists(a) || len(p.Archives) != 0 || !p.KeepUnknown {
+		t.Errorf("archive removed %v, plan %+v", !exists(a), p)
+	}
+}
+
 func TestBothOffTouchNothing(t *testing.T) {
 	root, w := repo(t)
 	worktree(t, w, "a", filepath.Join(w, ".worktrees", "a"), "a")

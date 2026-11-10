@@ -46,6 +46,12 @@ func TestBackupArchiveInLog(t *testing.T) {
 	if got := backupArchiveInLog(log); got != two {
 		t.Errorf("got %q", got)
 	}
+	// after_command's output follows agentbus's own line, unindented: an echoed
+	// path (a NAS copy, an older local archive) never wins (foureyes).
+	write("--- y agentbus backup --project old\nbackup: " + two + "\nbackup.after_command output:\nbackup: " + one + "\n")
+	if got := backupArchiveInLog(log); got != two {
+		t.Errorf("after_command's echo won: %q", got)
+	}
 	// This run named no archive: the earlier run's is never taken.
 	write("--- x agentbus backup\nbackup: " + one + "\n--- y agentbus backup\n  note: nothing\n")
 	if got := backupArchiveInLog(log); got != "" {
@@ -195,7 +201,8 @@ func TestProjectsDeleteUnknownArchiveKeepsTheBackups(t *testing.T) {
 	f.press(t, 'd')
 	f.press(t, 'b')
 	f.backedUp(t, "")
-	if lines := linesPlain(f.m.deletePanelLines(400)); !strings.Contains(lines, "backups: kept, the new archive's path is not in the log") {
+	// The panel never lists an archive as going when none will (reviewer-codex).
+	if lines := linesPlain(f.m.deletePanelLines(400)); !strings.Contains(lines, "backups: kept, the new archive's path is not in the log") || strings.Contains(lines, "archive of old alone") {
 		t.Fatalf("panel:\n%s", lines)
 	}
 	f.typeName(t, "old")

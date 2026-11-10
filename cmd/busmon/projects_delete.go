@@ -227,7 +227,9 @@ func planFiles(src *adminSource, project string, files, backups bool) (projfiles
 
 // backupArchiveInLog is the archive a backup run made: its "backup: <path>"
 // line, an absolute path to a .tar.zst, after the run's own header (the
-// last "--- " line), so never an earlier run's (§5.5, Q7). "" when none.
+// last "--- " line), so never an earlier run's (§5.5, Q7). The FIRST such
+// line: agentbus prints its own before backup.after_command's output, which
+// follows in the same log and may echo another path (foureyes). "" when none.
 func backupArchiveInLog(log string) string {
 	f, err := os.Open(log)
 	if err != nil {
@@ -250,6 +252,7 @@ func backupArchiveInLog(log string) string {
 		p, ok := strings.CutPrefix(strings.TrimRight(l, "\r"), "backup: ")
 		if ok && filepath.IsAbs(p) && strings.HasSuffix(p, ".tar.zst") && !strings.ContainsAny(p, "\x00") {
 			archive = p
+			break
 		}
 	}
 	// Not an existing regular file: the fresh archive cannot be told apart,
@@ -441,6 +444,9 @@ func (m Model) filesLines() []Line {
 	p := d.plan
 	if d.archive != "" && d.files.Backups {
 		p.Kept = d.archive
+	}
+	if d.unknownB && d.files.Backups {
+		p.Archives = nil // none will go: never listed as going (reviewer-codex)
 	}
 	lines := []Line{att("also deleted (settings):")}
 	for _, s := range p.Lines(d.row.name) {
