@@ -154,16 +154,18 @@ func TestAgentRows(t *testing.T) {
 				"b-agy":    {Client: "agy", Provider: "google"},
 				"c-xai":    {Provider: "xai", PID: 7, IdentSession: sess},
 				"d-other":  {Client: "vibe", Provider: "mistral", PID: 7, IdentSession: sess},
-				"f-codex":  {Client: "codex", Provider: "openai", PID: 7, IdentSession: sess}, // proved, not yet counted (reviewer-codex)
+				"f-codex":  {Client: "codex", Provider: "openai", PID: 7, IdentSession: sess}, // proved: counted since codex-token-attribution step 2
+				"g-openai": {Provider: "openai", PID: 7, IdentSession: sess},                 // no client: the pass counts Client codex only
 				"e-claude": {Client: "claude-code", Provider: "anthropic", PID: 7, IdentSession: sess},
 			},
 			want: []rowView{
 				{Agent: "e-claude", Provider: "anthropic", In: 0, Out: 0},
+				{Agent: "f-codex", Provider: "openai", In: 0, Out: 0},
 				{Agent: "a-grok", Provider: "xai", In: -1, Out: -1, Reason: "no token count for grok (no adapter)"},
 				{Agent: "b-agy", Provider: "google", In: -1, Out: -1, Reason: "no token count for agy (no adapter)"},
 				{Agent: "c-xai", Provider: "xai", In: -1, Out: -1, Reason: "no token count for xai (no adapter)"},
 				{Agent: "d-other", Provider: "mistral", In: -1, Out: -1, Reason: "no token count for vibe (no adapter)"},
-				{Agent: "f-codex", Provider: "openai", In: -1, Out: -1, Reason: "no token count for codex (no adapter)"},
+				{Agent: "g-openai", Provider: "openai", In: -1, Out: -1, Reason: "no token count for openai (no adapter)"},
 			},
 		},
 		{

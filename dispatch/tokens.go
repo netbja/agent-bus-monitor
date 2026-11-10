@@ -16,15 +16,17 @@ import (
 // offsets in memory only) and replaces {p}:tokens with the sums. Only a
 // session proved with the agent's process (IdentSession) is recorded: a
 // status that merely names a session never points the pass at a file.
-// Codex has no proved session yet: its tokens are only the person's
-// `agentbus tokens --unattributed`.
+// A Codex session proved the same way (its SessionStart hook,
+// codex-token-attribution) is counted from its rollouts (tokens.CodexScan),
+// on the budget the Claude scan left.
 
 // TokensConfig is the tokens pass's policy; an empty Root turns it off.
 type TokensConfig struct {
-	Root     string         // Claude Code's projects directory (~/.claude/projects)
-	Every    time.Duration  // how often {p}:tokens is replaced (sessions are recorded each minute)
-	Budget   tokens.Budget  // per pass: files with new bytes, bytes read
-	Location *time.Location // the host's local days (nil = time.Local)
+	Root      string         // Claude Code's projects directory (~/.claude/projects)
+	CodexRoot string         // Codex's sessions directory ($CODEX_HOME/sessions); "" counts no Codex session
+	Every     time.Duration  // how often {p}:tokens is replaced (sessions are recorded each minute)
+	Budget    tokens.Budget  // per pass: files with new bytes, bytes read
+	Location  *time.Location // the host's local days (nil = time.Local)
 }
 
 // tokensDays is how far back the tokens count: the record's 8 days.
@@ -33,6 +35,7 @@ const tokensDays = 8
 // tokensState is the pass's memory: the scan and its throttles.
 type tokensState struct {
 	scan       *tokens.ClaudeScan
+	codex      *tokens.CodexScan
 	sessionsAt time.Time
 	tokensAt   time.Time
 	complete   bool               // every file read once since the start
@@ -62,13 +65,13 @@ func (l *loop) tokensPass(ctx context.Context, snaps map[string]bus.AgentSnapsho
 		loc = time.Local
 	}
 	if s.scan == nil {
-		s.scan = tokens.NewClaudeScan(loc)
+		s.scan, s.codex = tokens.NewClaudeScan(loc), tokens.NewCodexScan(loc)
 	}
 	recs, err := l.b.Sessions(ctx)
 	if err != nil {
 		return err
 	}
-	rows, partial := countSessions(s.scan, c.Root, recs, c.Budget, time.Now(), loc)
+	rows, partial := countSessions(s.scan, s.codex, c.Root, c.CodexRoot, recs, c.Budget, time.Now(), loc)
 	if !partial {
 		s.complete = true
 	}
@@ -92,39 +95,79 @@ func provedSessions(snaps map[string]bus.AgentSnapshot) map[string]bus.SessionRe
 }
 
 // countSessions scans the recorded sessions' files modified within the
-// record's days, newest first, and sums them per day, agent and provider.
-func countSessions(scan *tokens.ClaudeScan, root string, recs map[string]bus.SessionRecord, b tokens.Budget, now time.Time, loc *time.Location) (map[string]bus.TokenRow, bool) {
-	type file struct {
-		path, session string
-		mod           time.Time
-	}
+// record's days, newest first, and sums them per day, agent and provider:
+// Claude Code's transcripts, then Codex's rollouts (a session recorded with
+// Client codex) on the budget the first left, as agentbus tokens
+// --unattributed shares it.
+func countSessions(scan *tokens.ClaudeScan, codex *tokens.CodexScan, root, codexRoot string, recs map[string]bus.SessionRecord, b tokens.Budget, now time.Time, loc *time.Location) (map[string]bus.TokenRow, bool) {
 	cutoff := now.Add(-tokensDays * 24 * time.Hour)
-	var files []file
-	for id := range recs {
-		paths, err := tokens.SessionFiles(root, id) // the id is validated before any path is built
+	claudeFiles := recentFiles(recs, cutoff, func(id string, rec bus.SessionRecord) ([]string, error) {
+		if rec.Client == "codex" {
+			return nil, nil
+		}
+		return tokens.SessionFiles(root, id) // the id is validated before any path is built
+	})
+	partial := scan.Pass(filePaths(claudeFiles), b)
+	rows := map[string]bus.TokenRow{}
+	sumFiles(rows, claudeFiles, recs, scan.Sums, now, loc)
+	if codexRoot == "" || codex == nil {
+		return rows, partial
+	}
+	codexFiles := recentFiles(recs, cutoff, func(id string, rec bus.SessionRecord) ([]string, error) {
+		if rec.Client != "codex" {
+			return nil, nil
+		}
+		return tokens.CodexSessionFiles(codexRoot, id)
+	})
+	used := scan.Used()
+	if codex.Pass(filePaths(codexFiles), tokens.Budget{Files: b.Files - used.Files, Bytes: b.Bytes - used.Bytes}) {
+		partial = true
+	}
+	sumFiles(rows, codexFiles, recs, codex.Sums, now, loc)
+	return rows, partial
+}
+
+// sessionFile is one recorded session's file and when it last changed.
+type sessionFile struct {
+	path, session string
+	mod           time.Time
+}
+
+// recentFiles are the recorded sessions' files (find's) modified after
+// cutoff, newest first.
+func recentFiles(recs map[string]bus.SessionRecord, cutoff time.Time, find func(id string, rec bus.SessionRecord) ([]string, error)) []sessionFile {
+	var files []sessionFile
+	for id, rec := range recs {
+		paths, err := find(id, rec)
 		if err != nil {
 			continue
 		}
 		for _, p := range paths {
 			if info, err := os.Stat(p); err == nil && info.ModTime().After(cutoff) {
-				files = append(files, file{p, id, info.ModTime()})
+				files = append(files, sessionFile{p, id, info.ModTime()})
 			}
 		}
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
+	return files
+}
+
+func filePaths(files []sessionFile) []string {
 	paths := make([]string, len(files))
 	for i, f := range files {
 		paths[i] = f.path
 	}
-	partial := scan.Pass(paths, b)
-	// Only the files passed are summed: a file the scan still remembers but
-	// that left the window (or the record) counts nowhere, even when a Codex-
-	// style rebuild would have reset it.
+	return paths
+}
+
+// sumFiles adds each passed file's days to rows. Only the files passed are
+// summed: a file the scan still remembers but that left the window (or the
+// record) counts nowhere, even when a Codex-style rebuild would have reset it.
+func sumFiles(rows map[string]bus.TokenRow, files []sessionFile, recs map[string]bus.SessionRecord, sums func(string) tokens.DaySums, now time.Time, loc *time.Location) {
 	firstDay := now.In(loc).AddDate(0, 0, -tokensDays).Format("2006-01-02")
-	rows := map[string]bus.TokenRow{}
 	for _, f := range files {
 		rec := recs[f.session]
-		for day, u := range scan.Sums(f.path) {
+		for day, u := range sums(f.path) {
 			if day <= firstDay {
 				continue
 			}
@@ -134,7 +177,6 @@ func countSessions(scan *tokens.ClaudeScan, root string, recs map[string]bus.Ses
 			rows[k] = r
 		}
 	}
-	return rows, partial
 }
 
 // quotaHistEvery is how often an unchanged window's reading is sampled anyway.

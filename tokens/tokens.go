@@ -59,6 +59,17 @@ func SessionFiles(root, id string) ([]string, error) {
 	return out, nil
 }
 
+// CodexSessionFiles are a Codex session's rollouts under root
+// ($CODEX_HOME/sessions): rollout-*-<id>.jsonl in any start-date folder
+// (YYYY/MM/DD), since a resumed session keeps appending to the file of the
+// day it began. The id is validated before any path is built.
+func CodexSessionFiles(root, id string) ([]string, error) {
+	if !ValidSessionID(id) {
+		return nil, errors.New("invalid session id")
+	}
+	return filepath.Glob(filepath.Join(root, "*", "*", "*", "rollout-*-"+id+".jsonl"))
+}
+
 // fileState is what a pass keeps of one file between passes.
 type fileState struct {
 	ino    uint64

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -57,7 +58,17 @@ func TestServiceTokens(t *testing.T) {
 	if c := serviceTokens(env(map[string]string{"CLAUDE_CONFIG_DIR": "/cfg"}), home); c.Root != "/cfg/projects" {
 		t.Errorf("CLAUDE_CONFIG_DIR: %+v", c)
 	}
-	if c := serviceTokens(env(map[string]string{"AGENT_BUS_TOKENS": "0"}), home); c.Root != "" {
+	if c := serviceTokens(env(nil), home); c.CodexRoot != "/home/user/.codex/sessions" {
+		t.Errorf("codex default %+v", c)
+	}
+	if c := serviceTokens(env(map[string]string{"CODEX_HOME": "/cx"}), home); c.CodexRoot != "/cx/sessions" {
+		t.Errorf("CODEX_HOME: %+v", c)
+	}
+	nohome := func() (string, error) { return "", errors.New("no home") }
+	if c := serviceTokens(env(map[string]string{"CLAUDE_CONFIG_DIR": "/cfg"}), nohome); c.Root != "/cfg/projects" || c.CodexRoot != "" {
+		t.Errorf("no home, CLAUDE_CONFIG_DIR only: Claude counted, Codex not: %+v", c)
+	}
+	if c := serviceTokens(env(map[string]string{"AGENT_BUS_TOKENS": "0"}), home); c.Root != "" || c.CodexRoot != "" {
 		t.Errorf("off: %+v", c)
 	}
 }
