@@ -63,8 +63,15 @@ did not write (a clone of someone else's work, a dependency checked out to read)
 the one moment the person is warned before that code runs. Accepting it for them removes that
 moment.
 
-**What stays unchanged in every option:** the clients' own permission rules (`roles.toml`'s
-`[tool_rules]`, each role's deny list); a client started outside agent-bus asks as before; and
+**What changes with trust, and what does not** (reviewer-codex): agent-bus's own rules are
+unchanged: the role's denies from `roles.toml`'s `[tool_rules]`, given to the client at launch. But
+the client's **effective** permissions are not only those: once the folder is trusted, the
+project's own `.claude/settings.json` takes part in them, and may add allow rules, hooks and MCP
+servers. Claude Code documents that a deny from any settings source wins over an allow, which
+would keep the role's denies in force; this spec does **not** verify that precedence on the
+installed version, and part 6 asks for a test of it. Trusting a repository the person did not
+write therefore widens what the agent may do by whatever that repository's settings allow, within
+the role's denies if the precedence holds. A client started outside agent-bus asks as before, and
 agent-bus never trusts a folder the person did not name.
 
 ## 5. Options
@@ -95,8 +102,10 @@ dispatcher write, which must be fenced):
 
 - **`agentbus up` and `agentbus start`**, for the agents they start: they already know the client
   and the folder (the template's `working_dir`), and already read the flag (`trustPlan`). They
-  open the ask the way any agent's CLI does (`agentbus ask`, unfenced, like every ask), and close
-  it once the flag reads true, on their next run or when the trust wait ends.
+  open the ask the way any agent's CLI does (`agentbus ask`, unfenced, like every ask). `up`
+  closes it when the trust is accepted during its wait (`errTrustPending`'s wait). Accepted after
+  `up` exits, it stays open until the next `up` or `start` closes it; meanwhile busmon, reading
+  the same flag, shows it as `trusted now: nothing to do` (foureyes).
 - **busmon, for an agent herdr restored** (no `up` ran): busmon shows a For-you line computed from
   what it already reads, with no write: an agent of a gated client (`AgentSnapshot.Client`) whose
   pane shows the `prompt` flag, in a project whose template's `working_dir` (`projlist`) that
@@ -115,17 +124,24 @@ dispatcher write, which must be fenced):
 As (a), but only when the person runs `agentbus up <project> --trust`. Without it, (b) applies.
 Its rules:
 
-- only the template's `working_dir`, at the key the client reads (repository root), never `~`,
-  `/` or a folder outside the person's home;
+- only the template's `working_dir`, at the key the client reads (repository root). Both the
+  `working_dir` and that key are resolved (`EvalSymlinks`) and must lie strictly inside the
+  resolved home, never be `~` or `/` (reviewer-codex): a `working_dir` under home that is a link
+  to a folder outside it, or a worktree whose main checkout (Claude Code's key) lies outside
+  home, is refused;
 - only for the gated clients whose format is checked here (Claude Code, Codex); another client
   keeps its dialog;
 - Claude Code's file is written only while no Claude Code process runs (else `--trust` is refused
   with that reason), through a read, edit of that one key, and atomic replace that keeps every
-  other byte;
+  other byte. **This is not a safe write** (reviewer-codex): the process check is a check, then a
+  write; a Claude Code started between them can rewrite the file from its own memory and drop the
+  edit, or have its newer account and project state replaced by the older copy. The atomic
+  replace prevents a torn file, not a lost update. A backup of the file is taken before the
+  replace and its path printed, so the person can restore it; the race remains and is said;
 - each entry written is printed, and `agentbus trust revoke <project>` removes exactly those.
 
 - **For:** no dialog when the person says so, for a project they know; nothing silent.
-- **Against:** the write risks of (a), on demand; a new verb to maintain. **And for Claude Code,
+- **Against:** the write risks of (a), on demand, including the residual race above; a new verb to maintain. **And for Claude Code,
   as limited above, `--trust` is refused whenever any Claude Code runs on the host** (foureyes):
   with this team up (master, coder, foureyes are Claude Code), starting a second project with
   `--trust`, the person's own case, is refused for Claude Code and only works for Codex. Whether
@@ -146,8 +162,12 @@ exactly what it does, but it should not answer it unasked.
   non-gated client's agent opens none. busmon's For-you line appears for a restored agent with the
   `prompt` flag in an untrusted folder, and not for a trusted one, nor against a remote broker.
 - (c): `--trust` writes only the repository root's key, refuses `~`, `/`, a folder outside home,
-  and a running Claude Code; keeps every other byte of the file; prints each entry; `trust revoke`
-  removes exactly those; without `--trust` nothing is written.
+  a `working_dir` that is a link out of home, a worktree whose main checkout lies outside home,
+  and a running Claude Code; keeps every other byte of the file; backs it up first and prints the
+  backup's path; prints each entry; `trust revoke` removes exactly those; without `--trust`
+  nothing is written.
+- The precedence part 4 relies on, on the installed Claude Code: in a trusted test folder whose
+  `.claude/settings.json` allows a tool the role denies, the role's deny still wins.
 
 ## 7. Questions for the person
 
