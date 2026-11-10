@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -595,5 +596,153 @@ func TestAtTabHintFollowsWhatTabDoes(t *testing.T) {
 	}
 	if !strings.Contains(plainOf(helpText()), "only @ and the start of an agent's name") {
 		t.Error("the help does not say when tab makes the recipient")
+	}
+}
+
+// foureyes's test gaps on compose-at-file-3 (P3): each pins one rule a
+// surviving mutant broke.
+
+// Only a typed @ opens the popup: an @ the cursor comes back to, by a
+// backspace or an arrow, after esc closed it, does not.
+func TestAtOnlyATypedAtOpens(t *testing.T) {
+	f := &atFake{res: filepick.Result{Entries: atFixtureFiles}}
+	m := pressAt(t, typeAt(t, atShell(t, 140, 40, f), "@x"), kEsc)
+	m = pressAt(t, m, kBackspce)
+	if got := m.ui.compose.area.value(); got != "@" || m.ui.compose.at != nil {
+		t.Errorf("backspace back to @: text %q, popup open %v", got, m.ui.compose.at != nil)
+	}
+	m = pressAt(t, typeAt(t, atShell(t, 140, 40, f), "see @"), kEsc)
+	m = pressAt(t, pressAt(t, m, tea.Key{Code: tea.KeyLeft}), tea.Key{Code: tea.KeyRight})
+	if m.ui.compose.at != nil {
+		t.Error("an arrow back next to the @ reopened the popup")
+	}
+}
+
+// A listing that answers after its window closed is dropped: the window
+// open now keeps reading its own.
+func TestAtAnswerForAClosedWindowIsDropped(t *testing.T) {
+	f := &atFake{res: filepick.Result{Entries: atFixtureFiles}}
+	m, stale := pressCmd(t, atShell(t, 140, 40, f), '@')
+	m = pressAt(t, pressAt(t, m, kEsc), kEsc) // the popup, then the window
+	if m.ui.compose != nil {
+		t.Fatal("the window is still open")
+	}
+	m = keys(t, m, 'I') // the window again, on its kept draft "@": cleared first
+	if m.ui.compose.onTo {
+		m = keys(t, m, kTab)
+	}
+	for m.ui.compose.area.value() != "" {
+		m = keys(t, m, kBackspce)
+	}
+	m, fresh := pressCmd(t, m, '@')
+	m = run(t, m, stale)
+	if p := m.ui.compose.at; p == nil || p.state != atReading || len(p.rows) != 0 {
+		t.Fatalf("the old window's listing reached the new one: %+v", p)
+	}
+	if l := m.ui.compose.atLists[""]; l == nil || l.done {
+		t.Fatalf("the new window's listing: %+v", l)
+	}
+	m = run(t, m, fresh)
+	if len(atRows(m)) == 0 {
+		t.Error("the new window's own listing did not land")
+	}
+}
+
+// Home picks are not remembered (the recent list is the project's paths),
+// and the recent list keeps the last 20 picks, newest first.
+func TestAtRecentKeepsProjectPicksOnly(t *testing.T) {
+	f := &atFake{res: filepick.Result{Entries: atFixtureFiles},
+		home: map[string]filepick.Result{"": {Entries: []filepick.Entry{{Path: "notes.md"}}}}}
+	m := pressAt(t, typeAt(t, atShell(t, 140, 40, f), "@~/no"), kEnter)
+	if got := m.ui.compose.area.value(); got != filepath.Join(atHome, "notes.md")+" " {
+		t.Fatalf("home insert %q", got)
+	}
+	if len(m.ui.atRecent) != 0 {
+		t.Errorf("a home pick was remembered: %v", m.ui.atRecent)
+	}
+	many := make([]filepick.Entry, 25)
+	for i := range many {
+		many[i] = filepick.Entry{Path: fmt.Sprintf("f%02d.go", i)}
+	}
+	f = &atFake{res: filepick.Result{Entries: many}}
+	m = atShell(t, 140, 40, f)
+	m.ui.compose.area.limit = 1 << 20
+	for i := range many {
+		m = pressAt(t, typeAt(t, m, fmt.Sprintf("@f%02d", i)), kEnter)
+	}
+	if n := len(m.ui.atRecent); n != atRecentMax || atRecentMax != 20 {
+		t.Fatalf("recent holds %d (max %d), want 20", n, atRecentMax)
+	}
+	if m.ui.atRecent[0] != "f24.go" || m.ui.atRecent[19] != "f05.go" {
+		t.Errorf("recent order %v", m.ui.atRecent)
+	}
+	// A pick made again moves to the front, never twice.
+	m = pressAt(t, typeAt(t, m, "@f10"), kEnter)
+	if m.ui.atRecent[0] != "f10.go" || slices.Index(m.ui.atRecent[1:], "f10.go") >= 0 || len(m.ui.atRecent) != 20 {
+		t.Errorf("a repeated pick: %v", m.ui.atRecent)
+	}
+}
+
+// ".." alone is outside the project, as "../x" is.
+func TestAtDotDotIsOutside(t *testing.T) {
+	f := &atFake{res: filepick.Result{Entries: atFixtureFiles}}
+	m := typeAt(t, atShell(t, 140, 40, f), "@..")
+	if p := m.ui.compose.at; p == nil || p.state != "outside the project: type the path yourself" || len(p.rows) != 0 {
+		t.Errorf("@..: %+v", p)
+	}
+}
+
+// An exact query for a file home never offers says why in the popup and
+// its footer (HomeRefused), on a real home directory.
+func TestAtHomeRefusalIsShown(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f := &atFake{home: map[string]filepick.Result{"": {Entries: []filepick.Entry{{Path: "Documents", Dir: true}}}}}
+	src := f.source()
+	src.home = home
+	m := fixtureShell(t, 140, 40)
+	m.cfg.files = src
+	m = typeAt(t, keys(t, m, 'I', kTab), "@~/.ssh")
+	want := "hidden in your home: type it yourself"
+	if p := m.ui.compose.at; p == nil || p.state != want || len(p.rows) != 0 {
+		t.Fatalf("@~/.ssh: %+v", p)
+	}
+	if n := strings.Count(m.grid().plain(), want); n != 2 {
+		t.Errorf("the refusal shows %d times, want the list and the footer", n)
+	}
+}
+
+// With no checkout on this machine the shared denies still compile, and a
+// ~/ deny still hides a home path (relative patterns anchor at /).
+func TestAtDeniesWithoutACheckout(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	manifest := filepath.Join(dir, "roles.toml")
+	body := "schema_version = 2\n[defaults]\nprofile = \"p\"\n[profiles.p]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m\"\n" +
+		"[tool_rules]\ndeny = [\"Read(~/private/**)\", \"Read(**/secrets/**)\", \"Read(docs/**)\"]\n" +
+		"[roles.local]\ntier = \"pop\"\n"
+	if err := os.WriteFile(manifest, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"AGENTBUS_PROJECTS_DIR": filepath.Join(dir, "none"), "HOME": home, "ROLES_TOML": manifest}
+	src := atSourceFor("demo", func(k string) string { return env[k] })
+	if src.root != "" || src.denyErr != "" || src.deny == nil {
+		t.Fatalf("source %+v", src)
+	}
+	for p, want := range map[string]bool{
+		filepath.Join(home, "private/a.txt"): true,
+		filepath.Join(home, "x/secrets/b"):   true,
+		filepath.Join(home, "notes.md"):      false,
+		"/docs/a.md":                         true,  // a relative pattern anchors at /
+		filepath.Join(home, "docs/a.md"):     false, // never at home
+	} {
+		if got := src.deny(p); got != want {
+			t.Errorf("deny(%s) = %v, want %v", p, got, want)
+		}
 	}
 }
