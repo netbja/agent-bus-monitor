@@ -52,6 +52,7 @@ type Plan struct {
 	Shared       int      // archives that also hold other projects: kept
 	Unreadable   []string // archives whose coverage cannot be read: kept
 	Kept         string   // the archive made now, resolved: kept
+	KeepUnknown  bool     // the archive made now is not an existing regular file: no archive removed
 	Errs         []error  // what could not be read
 }
 
@@ -257,9 +258,13 @@ func archives(o Options, p *Plan) error {
 	var keep os.FileInfo
 	if o.KeepArchive != "" {
 		if r, err := filepath.EvalSymlinks(o.KeepArchive); err == nil {
-			if st, err := os.Stat(r); err == nil {
+			if st, err := os.Stat(r); err == nil && st.Mode().IsRegular() {
 				keep = st
 			}
+		}
+		if keep == nil { // the fresh archive cannot be told apart: none goes (fail closed)
+			p.KeepUnknown = true
+			return nil
 		}
 	}
 	for _, a := range list {
@@ -313,6 +318,9 @@ func (p Plan) Lines(project string) []string {
 	}
 	if p.Kept != "" {
 		out = append(out, "kept: "+p.Kept+" (made now)")
+	}
+	if p.KeepUnknown {
+		out = append(out, "backups: kept, the new archive is not a file busmon can find")
 	}
 	return out
 }

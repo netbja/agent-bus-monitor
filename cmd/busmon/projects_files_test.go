@@ -30,15 +30,30 @@ func TestBackupArchiveInLog(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("--- 2026-11-10T09:00:00Z agentbus backup --project old\nbackup: /b/agentbus-backup-box-1.tar.zst\n" +
-		"--- 2026-11-10T09:10:00Z agentbus backup --project old\nbackup: /b/agentbus-backup-box-2.tar.zst\n  old: 12 keys\n  note: Redis: each project is read at one instant\n")
-	if got := backupArchiveInLog(log); got != "/b/agentbus-backup-box-2.tar.zst" {
+	one, two := filepath.Join(dir, "agentbus-backup-box-1.tar.zst"), filepath.Join(dir, "agentbus-backup-box-2.tar.zst")
+	for _, p := range []string{one, two} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// after_command and the retention print after the path (foureyes).
+	write("--- 2026-11-10T09:00:00Z agentbus backup --project old\nbackup: " + one + "\n" +
+		"--- 2026-11-10T09:10:00Z agentbus backup --project old\nbackup: " + two + "\n  old: 12 keys\n  note: Redis: each project is read at one instant\n" +
+		"  backup.after_command: ok\n  removed 2 (backup.keep = 5)\n")
+	if got := backupArchiveInLog(log); got != two {
 		t.Errorf("got %q", got)
+	}
+	// This run named no archive: the earlier run's is never taken.
+	write("--- x agentbus backup\nbackup: " + one + "\n--- y agentbus backup\n  note: nothing\n")
+	if got := backupArchiveInLog(log); got != "" {
+		t.Errorf("an earlier run's archive: %q", got)
 	}
 	for _, s := range []string{
 		"--- x agentbus backup\nbackup: /b/a.tar.zst\n--- y agentbus backup\nbackup: warning: backup.dir is the default\n",
 		"--- y agentbus backup\nbackup: b/agentbus-backup-box-2.tar.zst\n",
 		"--- y agentbus backup\nbackup: /b/notes.txt\n",
+		"--- y agentbus backup\nbackup: " + filepath.Join(dir, "gone.tar.zst") + "\n", // not an existing file
+		"--- y agentbus backup\nbackup: " + dir + "/\n",
 		"",
 	} {
 		write(s)

@@ -252,6 +252,11 @@ func backupArchiveInLog(log string) string {
 			archive = p
 		}
 	}
+	// Not an existing regular file: the fresh archive cannot be told apart,
+	// so no archive goes (fail closed, §5.5).
+	if st, err := os.Stat(archive); archive == "" || err != nil || !st.Mode().IsRegular() {
+		return ""
+	}
 	return archive
 }
 

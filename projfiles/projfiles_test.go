@@ -237,6 +237,22 @@ func TestBackupsOfTheProjectAloneTheFreshOneKept(t *testing.T) {
 	}
 }
 
+// A kept archive that is not an existing regular file removes no archive at
+// all: the fresh one cannot be told apart (spec §5.5, fail closed).
+func TestUnresolvableKeptArchiveRemovesNone(t *testing.T) {
+	root, _ := repo(t)
+	dir := filepath.Join(root, "backups")
+	a := archive(t, dir, time.Now(), "demo")
+	for _, keep := range []string{filepath.Join(dir, "missing.tar.zst"), dir} {
+		o := Options{Project: "demo", BackupDir: dir, Host: "box", Backups: true, KeepArchive: keep}
+		p, _ := PlanFor(o)
+		Apply(o)
+		if !exists(a) || len(p.Archives) != 0 || !p.KeepUnknown {
+			t.Errorf("%s: archive removed %v, plan %+v", keep, !exists(a), p)
+		}
+	}
+}
+
 func TestBothOffTouchNothing(t *testing.T) {
 	root, w := repo(t)
 	worktree(t, w, "a", filepath.Join(w, ".worktrees", "a"), "a")
