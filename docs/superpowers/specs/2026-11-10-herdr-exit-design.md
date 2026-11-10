@@ -5,6 +5,9 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 8: foureyes at dece79b9 — P2 one restartable unit cannot drain: per-build unit
+  instances, holder excluded from restart paths (§4.4a); P3 stale risk row, self-attested
+  ancestor proof (§4.7), linger under Q5
 - Revision 7: the person's review (written against bc2d8394), every item applied:
   P1 paste→CR race (§4.2, §8); P1 resume caller proof by ancestor walk (§4.7, §8);
   P2 drain keyed on build id, not protocol (§4.4); P2 holder crash recovery: restart policy,
@@ -302,11 +305,31 @@ The holder is every agent's parent and holds every PTY master: when it dies, the
 up every terminal and the project's agents die with it. Nothing in this design hides that; it
 bounds and reports it.
 
-- **Restart policy.** systemd: `Restart=on-failure`, `RestartSec=2`,
+- **One unit instance per build, never restarted to upgrade.** A single restartable unit
+  cannot drain: starting a new build would mean restarting the unit, and with
+  `KillMode=control-group` that kills every agent. So the holder is a **templated unit**,
+  `agentbus-holder@<project>.<buildid>.service` (systemd; the instance string escaped with
+  `systemd-escape`), and on macOS a launchd job per build, label
+  `com.agentbus.holder.<project>.<buildid>`. An upgrade **starts a new instance** beside the old
+  one; it never stops or restarts the old one. Each instance has its own cgroup, so the old
+  build's agents live on in theirs.
+- **Each instance runs its own build.** The installer copies the holder binary to
+  `<datadir>/agentbus/holder/<buildid>/agentbus` (0755, owner only) and the instance's
+  `ExecStart` / `ProgramArguments` points there, not at the installed `agentbus`, which the
+  next upgrade replaces. A crashed old instance therefore restarts its own build, not the new
+  one under the old name. The copy is removed when its instance exits for good.
+- **Restart policy, per instance.** systemd: `Restart=on-failure`, `RestartSec=2`,
   `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `KillMode=control-group` (a crash leaves no
-  orphaned agent: systemd stops the unit's cgroup before the restart). launchd:
-  `KeepAlive = {SuccessfulExit = false}`, `ThrottleInterval = 10`. A clean `agentbus down`
-  exits 0 and is not restarted.
+  orphaned agent in that instance). launchd: `KeepAlive = {SuccessfulExit = false}`,
+  `ThrottleInterval = 10`. A holder that has no terminals and is **not** its project's current
+  build (the newest instance) exits 0 at once: a drained or crashed old build retires instead of
+  coming back empty. `agentbus down` stops every instance of the project; each exits 0.
+- **Excluded from every restart path.** The holder makes no Redis connection (§4.4), so a
+  password change does not concern it: `setup/rotate.go`'s `restartRunningServices` and
+  `setup/plugin.go`'s `ServicesHint` ("services keep running the previous agentbus until
+  restarted") skip holder instances by kind, with a test for each. `agentbus service restart`
+  refuses the holder unless `--kill-agents` is given, and says how many agents it would kill.
+  An upgrade's only holder action is "start the new build's instance".
 - **The restarted holder starts empty and relaunches nothing.** Starting agents is a decision
   (cost, quota, the person's intent); a crash loop that relaunches five clients each time would
   burn quota. Agents come back by one of the two paths that already exist: `agentbus up
@@ -317,8 +340,10 @@ bounds and reports it.
   and no holder answers; warn `holder_restarted` with the time and the number of terminals lost
   when a holder's start time is newer than the agents' last proved identities).
 - **Sentinel runbook entry** (`agent-bus-sentinel` skill): on `holder` crit, the one allowed
-  action is the documented service restart (`agentbus service restart holder`), once per
-  episode; then annotate and escalate to master/the person with the list of agents lost. Never
+  action is the documented service start of the project's current holder instance
+  (`agentbus service start holder`), never `restart` of a running one, once per
+  episode, and only for an instance that is down (the restart of a down instance kills nothing);
+  then annotate and escalate to master/the person with the list of agents lost. Never
   `agentbus up`, never relaunch an agent: that stays master's or the person's. On
   `holder_restarted` warn: escalate only.
 
@@ -389,6 +414,12 @@ ignored. The focus notice
   gets the same function behind one platform file: `sysctl kern.proc.pid.<pid>`
   (`kinfo_proc`: `e_ppid`, `p_starttime`) through `golang.org/x/sys/unix`; until then macOS
   writes no resume (fail closed), as `Ancestors` is empty there today.
+- **The proof is self-attested**, exactly like the turn and prove-session hooks: the hook
+  reports its own ancestor chain and `bus/` checks the claim against the stored identity; the
+  broker cannot read the host's process table. It stops an honest mistake (a hook of another
+  agent, a stale process, a reused pid), not a same-uid process that lies — which could write
+  any bus entry anyway. The resume argv it records is run only through `agent-launch` for that
+  role (§4.7, `up`), never as a free command line.
 - Cleared only by `agentbus forget <agent>` and replaced by the next proved session's report;
   an agent's death or a status never touches it.
 - **It must survive a reboot, so the broker must persist.** The shipped `docker-compose.yml`
@@ -468,7 +499,7 @@ superseded.
   project terminal count, draining builds — for the callers that today report on herdr itself
   (health, about, projects admin, suspend snapshot).
 - `cmd/busmon`: preview panel, attach key; no herdr env.
-- `service`: holder unit per project.
+- `service`: holder as a templated unit, one instance per project and build (§4.4a).
 
 ### 6.2 Libraries
 - PTY: `github.com/creack/pty` (Linux, macOS; pure Go). Not ptyx (its Windows half is out of
@@ -516,7 +547,7 @@ emulator code we would own count against a candidate.
 | 8 | Emulator bake-off; `screen` seam + chosen adapter | none | §6.4 passes |
 | 9 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, peer check, socket dir) — after the security review of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
 | 10 | Holder adapter of `termhost` (contract suite) + `terminal.host` setting | opt-in | contract suite green on holder |
-| 11 | Holder service unit (systemd/launchd) with the §4.4a restart policy + `holder`, `holder_restarted`, `holder_draining` health + `holder drain` + sentinel runbook entry | opt-in | service tests (fake systemctl/launchctl) |
+| 11 | Holder templated unit per build (systemd `@`, launchd job per build, per-build binary copy) with the §4.4a restart policy; rotate/upgrade paths skip it + `holder`, `holder_restarted`, `holder_draining` health + `holder drain` + sentinel runbook entry | opt-in | service tests (fake systemctl/launchctl) |
 | 12 | `agentbus attach`, busmon preview + attach key | opt-in | manual live check by the person |
 | 13 | `{p}:resume` + hook writes it (ancestor-walk proof, macOS `Ancestors`); `up` restores from it; `broker_persistence` health; `reportresume.go` keeps its herdr call until step 16 | opt-in | Redis tests of §8; reboot trial |
 | 14 | Live trial on one project with `terminal.host=holder` | trial | Q8 project runs a week |
@@ -571,7 +602,7 @@ detection herdr-independent.
 | Pure-Go emulator fidelity (Ink/ratatui redraws, wide chars, synchronized output) | signatures miss, agent never woken | bake-off on recorded output; oracle test; a client failing stays unsupported (never prompted), the safe direction |
 | Holder crash kills every agent of the project | team down | holder kept small, no policy; per project, not per host; restart policy (§4.4a); agents back via `up` or self-repair from `{p}:resume`; `holder` health + sentinel runbook |
 | Broker without persistence | `{p}:resume` lost on reboot, agents start fresh | AOF in the shipped compose; `broker_persistence` health warn |
-| Upgrade kills agents | interruption | drain-on-upgrade, protocol version in socket name |
+| Upgrade kills agents | interruption | per-build unit instance and socket (`holder-<buildid>.sock`), each build drains, no restart path touches a running holder (§4.4, §4.4a) |
 | Old holder never drains (`/clear` keeps the process) | two builds forever, fixes never reach old terminals | `holder_draining` health, `holder drain` rolling relaunch on the person's word |
 | A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 9 |
 | Losing the tiled always-visible layout | the person sees less at a glance | busmon preview + terminal splits; Q1 |
@@ -599,8 +630,11 @@ detection herdr-independent.
    `ValidName` before use) and keeps one connection per holder; a per-project dispatcher
    (today) has one directory to read.
 5. **Lifetime.** Agents die on reboot and come back with `agentbus up` using their recorded
-   resume. Is that enough, or should the holder start at login (with systemd linger) and
-   relaunch them itself?
+   resume. Is that enough, or should the holder start at login and relaunch them itself? On
+   Linux this also decides **logout**: without `loginctl enable-linger`, systemd stops a user's
+   units when the last session ends, so logging out (or the last ssh session closing) kills
+   every holder and its agents. Enable linger (agents outlive logout), or accept that logout
+   ends the team? (macOS: a LaunchAgent stops at logout; a LaunchDaemon would be needed.)
 6. **herdr after cutover.** Delete the herdr adapter entirely (recommended, step 16), or keep it
    as an optional host?
 7. **Gemini.** The dispatcher supports Antigravity (`agy`), not Gemini CLI. Is Gemini CLI a
