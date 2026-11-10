@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
@@ -183,6 +185,122 @@ func (d upDeps) waitTrust(tpl upTemplate, dir string, gates, paneOf map[string]s
 		}
 		d.Sleep(poll)
 	}
+}
+
+// trustAskBus is what the trust reminder needs of the project's asks.
+type trustAskBus interface {
+	Ask(ctx context.Context, def bus.AskDef, replaces string) (string, string, error)
+	Asks(ctx context.Context) ([]bus.Ask, error)
+	WithdrawQuestion(ctx context.Context, agent, askID, qid, note string) (int, error)
+}
+
+// trustAskQID is a trust reminder's question id: the client it is about.
+func trustAskQID(client string) string { return "trust-" + client }
+
+// trustAskDef is the reminder (first-run-trust (b), the person's answer):
+// the folder, where to answer, the choice by its label (the keys only as a
+// hint: they change between client versions) and what trusting loads. Asked
+// from the gate agent, whose pane shows the dialog. Nothing is written to a
+// client's file.
+func trustAskDef(client, agent, key, where string) bus.AskDef {
+	label := clientLabel(client)
+	hint := ""
+	if client == "claude-code" {
+		hint = " In Claude Code 2.1: ↓ then Enter (a hint: the keys change between versions)."
+	}
+	title := "Trust " + filepath.Base(key) + "?"
+	if r := []rune(title); len(r) > 100 {
+		title = string(r[:99]) + "…"
+	}
+	return bus.AskDef{From: agent, Title: title, Questions: []bus.AskQuestion{{
+		ID:       trustAskQID(client),
+		Header:   "Folder trust",
+		Question: label + ` asks whether you trust this folder: in ` + where + `, choose "Yes, I trust this folder".`,
+		Context: "Folder: " + key + ". Trusting lets " + label + " read, edit and run files there, and load the repository's own " +
+			"settings, hooks and MCP servers: for a repository you did not write, look at it first." + hint +
+			" This ask closes itself once the trust is recorded.",
+		Options: []bus.AskOption{{Label: "Done in the pane", Description: "it also closes by itself once the trust is recorded"}},
+	}}}
+}
+
+// trustReminders settles and opens the trust asks of tpl's gated clients:
+// an open trust ask of this template's agents whose client now trusts dir is
+// closed; each untrusted gated client without one gets one. It returns what
+// closes the reminders once the trust is accepted. A broker error is a note:
+// the line on the terminal still says where to answer.
+func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[string]string) func() {
+	noop := func() {}
+	if d.TrustAsks == nil || d.Trusted == nil {
+		return noop
+	}
+	note := func(err error) {
+		fmt.Fprintf(d.Out, "busmon ask not opened (%v): answer the dialog as said above\n", err)
+	}
+	ab, err := d.TrustAsks(tpl.Name)
+	if err != nil {
+		note(err)
+		return noop
+	}
+	ctx := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.Background(), 5*time.Second)
+	}
+	c, cancel := ctx()
+	asks, err := ab.Asks(c)
+	cancel()
+	if err != nil {
+		note(err)
+		return noop
+	}
+	ours := map[string]bool{}
+	for _, t := range tpl.Tabs {
+		ours[t.Name] = true
+	}
+	type open struct{ agent, id, qid string }
+	openFor := map[string]open{} // client -> its open reminder
+	for _, a := range asks {
+		if a.State != "open" || !ours[a.From] {
+			continue
+		}
+		for _, q := range a.Questions {
+			if client, ok := strings.CutPrefix(q.ID, "trust-"); ok && q.Answer == nil {
+				openFor[client] = open{a.From, a.ID, q.ID}
+			}
+		}
+	}
+	closeTrusted := func() {
+		for client, o := range openFor {
+			if !d.Trusted(client, dir) {
+				continue
+			}
+			c, cancel := ctx()
+			if _, err := ab.WithdrawQuestion(c, o.agent, o.id, o.qid, "trusted: recorded by "+clientLabel(client)); err == nil {
+				delete(openFor, client)
+			}
+			cancel()
+		}
+	}
+	closeTrusted()
+	key, _ := trustKey(dir)
+	for _, client := range slices.Sorted(maps.Keys(gates)) {
+		if _, ok := openFor[client]; ok {
+			continue
+		}
+		agent := gates[client]
+		where := agent + "'s pane"
+		if p := paneOf[agent]; p != "" {
+			where += " (" + p + ")"
+		}
+		def := trustAskDef(client, agent, key, where)
+		c, cancel := ctx()
+		id, _, err := ab.Ask(c, def, "")
+		cancel()
+		if err != nil {
+			note(err)
+			continue
+		}
+		openFor[client] = open{agent, id, trustAskQID(client)}
+	}
+	return closeTrusted
 }
 
 func clientLabel(client string) string {

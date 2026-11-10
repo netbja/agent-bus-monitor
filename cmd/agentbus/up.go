@@ -64,8 +64,11 @@ type upDeps struct {
 	// The trust gate (specialist roles spec, part B; trust.go). TabClient is
 	// the client a tab's command launches ("" for none); Trusted reads that
 	// client's trust of the project folder. Nil Trusted: no gate.
-	TabClient    func(command string) string
-	Trusted      func(client, dir string) bool
+	TabClient func(command string) string
+	Trusted   func(client, dir string) bool
+	// TrustAsks is the project's asks on the broker, for the trust reminder
+	// in busmon (first-run-trust (b)); nil: no reminder, the line only.
+	TrustAsks    func(project string) (trustAskBus, error)
 	Sleep        func(time.Duration)
 	TrustPoll    time.Duration
 	TrustTimeout time.Duration
@@ -589,14 +592,21 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 	now, later, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
 		return d.Trusted == nil || d.Trusted(client, dir)
 	})
-	if err := run(now); err != nil || len(later) == 0 {
+	if err := run(now); err != nil {
 		return err
 	}
 	paneOf := map[string]string{} // A10: the gate names the pane to answer in
 	for i, t := range tpl.Tabs {
 		paneOf[t.Name] = panes[i]
 	}
-	return d.waitTrust(tpl, dir, gates, paneOf, func() error { return run(later) })
+	settle := d.trustReminders(tpl, dir, gates, paneOf) // the ask in busmon, also when no agent waits
+	if len(later) == 0 {
+		return nil
+	}
+	return d.waitTrust(tpl, dir, gates, paneOf, func() error {
+		settle() // accepted: the reminder closes itself
+		return run(later)
+	})
 }
 
 // templatePath is where bootstrap writes the project's template
@@ -697,8 +707,15 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
 		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath, shellProbe(os.Getenv, 3*time.Second)),
 		Trusted:   clientTrusted(os.Getenv),
-		Sleep:     time.Sleep,
-		Out:       stdout,
+		TrustAsks: func(project string) (trustAskBus, error) {
+			c, err := bus.Connect("")
+			if err != nil {
+				return nil, err
+			}
+			return bus.Open(c, project) // the process ends with up: the connection with it
+		},
+		Sleep: time.Sleep,
+		Out:   stdout,
 	}
 }
 
