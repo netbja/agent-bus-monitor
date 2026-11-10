@@ -222,22 +222,38 @@ func serviceContext(getenv func(string) string, lookPath func(string) (string, e
 
 // serviceTokens is the dispatch service's tokens pass: the transcripts of
 // Claude Code's projects directory ($CLAUDE_CONFIG_DIR/projects, else
-// ~/.claude/projects), {p}:tokens every 5 minutes, 64 files and 128 MiB per
-// pass. AGENT_BUS_TOKENS=0 turns it off.
+// ~/.claude/projects) and the rollouts of Codex's sessions directory
+// ($CODEX_HOME/sessions, else ~/.codex/sessions), {p}:tokens every 5 minutes,
+// 64 files and 128 MiB per pass for both. AGENT_BUS_TOKENS=0 turns it off.
 func serviceTokens(getenv func(string) string, home func() (string, error)) dispatch.TokensConfig {
 	if !config.Machine(getenv).Bool("dispatch.tokens") {
 		return dispatch.TokensConfig{}
 	}
-	base := getenv("CLAUDE_CONFIG_DIR")
-	if base == "" {
-		h, err := home()
-		if err != nil || h == "" {
-			return dispatch.TokensConfig{}
-		}
-		base = filepath.Join(h, ".claude")
+	h, err := home()
+	if err != nil {
+		h = ""
 	}
-	return dispatch.TokensConfig{Root: filepath.Join(base, "projects"), Every: 5 * time.Minute,
-		Budget: tokens.Budget{Files: 64, Bytes: 128 << 20}}
+	dir := func(env, under string) string { // "" when neither the env nor a home names it
+		if v := getenv(env); v != "" {
+			return v
+		}
+		if h == "" {
+			return ""
+		}
+		return filepath.Join(h, under)
+	}
+	base, codex := dir("CLAUDE_CONFIG_DIR", ".claude"), dir("CODEX_HOME", ".codex")
+	if base == "" && codex == "" {
+		return dispatch.TokensConfig{}
+	}
+	c := dispatch.TokensConfig{Every: 5 * time.Minute, Budget: tokens.Budget{Files: 64, Bytes: 128 << 20}}
+	if base != "" {
+		c.Root = filepath.Join(base, "projects")
+	}
+	if codex != "" { // either one counts alone (reviewer-codex)
+		c.CodexRoot = filepath.Join(codex, "sessions")
+	}
+	return c
 }
 
 // servicePrompt is the dispatch service's prompt notification (prompt-notify):

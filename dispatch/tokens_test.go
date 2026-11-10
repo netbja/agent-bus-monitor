@@ -64,6 +64,138 @@ func TestTokensPassCountsProvedSessionsOnly(t *testing.T) {
 	}
 }
 
+func codexLine(ts string, input, output int) string {
+	u := fmt.Sprintf(`{"input_tokens":%d,"cached_input_tokens":0,"output_tokens":%d,"reasoning_output_tokens":0,"total_tokens":%d}`, input, output, input+output)
+	return fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":%s,"last_token_usage":%s,"model_context_window":272000}}}`, ts, u, u) + "\n"
+}
+
+// codex-token-attribution step 2: a proved Codex session (Client codex) is
+// counted from its rollout, found by its id in its start-date folder, on the
+// agent's rows under its provider; a Claude session in the same pass counts
+// as before; a Codex rollout no proved session names counts nowhere.
+func TestTokensPassCountsProvedCodexSessions(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("lease %v %v", ok, err)
+	}
+	claude, codex := t.TempDir(), t.TempDir()
+	now := time.Now().UTC()
+	today, day := now.Format("2006-01-02T")+"10:00:00Z", now.Format("2006-01-02")
+	write := func(root, rel, s string) {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(s), 0o644)
+	}
+	const id = "01a1a38b-a635-76d0-bbc6-348e3c47e603"
+	write(claude, "-data-projects-x/0198e5c4-coder-1111.jsonl", transcriptLine(today, "m1", 10, 1))
+	started := now.AddDate(0, 0, -5) // a session started days ago, still appended today
+	write(codex, filepath.Join(started.Format("2006/01/02"), "rollout-"+started.Format("2006-01-02T15-04-05")+"-"+id+".jsonl"),
+		`{"timestamp":"`+today+`","type":"session_meta","payload":{"id":"`+id+`"}}`+"\n"+codexLine(today, 300, 20))
+	write(codex, filepath.Join(now.Format("2006/01/02"), "rollout-x-0198e5c4-stray-9.jsonl"), codexLine(today, 5000, 5000))
+	// Each client's root is searched for its own sessions only: a rollout named
+	// with the Claude session's id, a transcript named with the Codex one.
+	write(codex, filepath.Join(now.Format("2006/01/02"), "rollout-x-0198e5c4-coder-1111.jsonl"), codexLine(today, 7000, 7000))
+	write(claude, "-data-projects-x/"+id+".jsonl", transcriptLine(today, "m9", 9000, 9000))
+	snaps := map[string]bus.AgentSnapshot{
+		"coder":          {PID: 10, IdentSession: "0198e5c4-coder-1111", Provider: "anthropic", Client: "claude-code"},
+		"reviewer-codex": {PID: 12, IdentSession: id, Provider: "openai", Client: "codex"},
+	}
+	l := &loop{b: b, token: "tok-holder", cfg: Config{Log: io.Discard, Tokens: TokensConfig{Root: claude, CodexRoot: codex, Every: time.Minute,
+		Budget: tokens.Budget{Files: 64, Bytes: 1 << 20}, Location: time.UTC}}}
+	if err := l.tokensPass(ctx, snaps); err != nil {
+		t.Fatal(err)
+	}
+	rows, meta, ok, _ := b.Tokens(ctx)
+	if !ok || meta.Partial {
+		t.Fatalf("tokens ok=%v meta %+v", ok, meta)
+	}
+	if got := rows[bus.TokenKey(day, "reviewer-codex", "openai")]; got != (bus.TokenRow{In: 300, Out: 20, N: 1}) {
+		t.Errorf("codex row %+v (all %v)", got, rows)
+	}
+	if got := rows[bus.TokenKey(day, "coder", "anthropic")]; got != (bus.TokenRow{In: 10, Out: 1, N: 1}) {
+		t.Errorf("claude row %+v", got)
+	}
+	if len(rows) != 2 {
+		t.Errorf("rows %v: the stray rollout counted", rows)
+	}
+}
+
+// With Codex's root alone (no Claude directory), the pass still counts the
+// proved Codex sessions (reviewer-codex).
+func TestTokensPassCodexRootAlone(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("lease %v %v", ok, err)
+	}
+	codex := t.TempDir()
+	now := time.Now().UTC()
+	today, day := now.Format("2006-01-02T")+"10:00:00Z", now.Format("2006-01-02")
+	const id = "01a1a38b-a635-76d0-bbc6-348e3c47e603"
+	dir := filepath.Join(codex, now.Format("2006/01/02"))
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "rollout-x-"+id+".jsonl"), []byte(codexLine(today, 300, 20)), 0o644)
+	snaps := map[string]bus.AgentSnapshot{"reviewer-codex": {PID: 12, IdentSession: id, Provider: "openai", Client: "codex"}}
+	l := &loop{b: b, token: "tok-holder", cfg: Config{Log: io.Discard, Tokens: TokensConfig{CodexRoot: codex, Every: time.Minute,
+		Budget: tokens.Budget{Files: 64, Bytes: 1 << 20}, Location: time.UTC}}}
+	if err := l.tokensPass(ctx, snaps); err != nil {
+		t.Fatal(err)
+	}
+	rows, _, ok, _ := b.Tokens(ctx)
+	if !ok || rows[bus.TokenKey(day, "reviewer-codex", "openai")] != (bus.TokenRow{In: 300, Out: 20, N: 1}) {
+		t.Fatalf("ok=%v rows %v", ok, rows)
+	}
+}
+
+// No Claude directory: a Claude record never globs the working directory.
+func TestTokensPassNoClaudeRootReadsNoRelativePath(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	now := time.Now().UTC()
+	os.MkdirAll(filepath.Join(cwd, "-p"), 0o755)
+	os.WriteFile(filepath.Join(cwd, "-p", "0198e5c4-coder-1111.jsonl"), []byte(transcriptLine(now.Format("2006-01-02T")+"10:00:00Z", "m1", 10, 1)), 0o644)
+	recs := map[string]bus.SessionRecord{"0198e5c4-coder-1111": {Agent: "coder", Provider: "anthropic", Client: "claude-code"}}
+	rows, _ := countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), "", t.TempDir(), recs, tokens.Budget{Files: 64, Bytes: 1 << 20}, now, time.UTC)
+	if len(rows) != 0 {
+		t.Errorf("rows %v: a transcript under the working directory was read", rows)
+	}
+}
+
+// Codex reads on the budget the Claude scan left: with room for one file,
+// the Claude transcript takes it and the pass is partial.
+func TestTokensPassCodexSharesTheBudget(t *testing.T) {
+	claude, codex := t.TempDir(), t.TempDir()
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02T") + "10:00:00Z"
+	const id = "01a1a38b-a635-76d0-bbc6-348e3c47e603"
+	os.MkdirAll(filepath.Join(claude, "-p"), 0o755)
+	os.WriteFile(filepath.Join(claude, "-p", "0198e5c4-coder-1111.jsonl"), []byte(transcriptLine(today, "m1", 10, 1)), 0o644)
+	dir := filepath.Join(codex, now.Format("2006/01/02"))
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "rollout-x-"+id+".jsonl"), []byte(codexLine(today, 300, 20)), 0o644)
+	recs := map[string]bus.SessionRecord{
+		"0198e5c4-coder-1111": {Agent: "coder", Provider: "anthropic", Client: "claude-code"},
+		id:                    {Agent: "reviewer-codex", Provider: "openai", Client: "codex"},
+	}
+	_, partial := countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), claude, codex, recs, tokens.Budget{Files: 1, Bytes: 1 << 20}, now, time.UTC)
+	if !partial {
+		t.Error("Codex read past the files the Claude scan used")
+	}
+	// The bytes too (foureyes P3): room for every file and for the
+	// transcript, but one byte short of the rollout once the transcript's
+	// bytes are taken, so only the Codex share runs out.
+	transcript, _ := os.Stat(filepath.Join(claude, "-p", "0198e5c4-coder-1111.jsonl"))
+	rollout, _ := os.Stat(filepath.Join(dir, "rollout-x-"+id+".jsonl"))
+	both := transcript.Size() + rollout.Size()
+	if _, partial = countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), claude, codex, recs, tokens.Budget{Files: 64, Bytes: both}, now, time.UTC); partial {
+		t.Fatal("room for both files' bytes, yet partial")
+	}
+	if _, partial = countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), claude, codex, recs, tokens.Budget{Files: 64, Bytes: both - 1}, now, time.UTC); !partial {
+		t.Error("Codex read past the bytes the Claude scan used")
+	}
+}
+
 // A first pass that cannot read everything within its budget publishes
 // partial, and says so until every file has been read once.
 func TestTokensPassIsPartialUntilComplete(t *testing.T) {

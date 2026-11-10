@@ -361,3 +361,26 @@ func TestUnreadableFileIsPartial(t *testing.T) {
 		t.Error("a missing Codex rollout, yet complete")
 	}
 }
+
+// A proved Codex session's rollouts are found by its id under any start-date
+// folder ($CODEX_HOME/sessions/YYYY/MM/DD), never by today's; an id that is
+// not valid builds no path (codex-token-attribution step 2).
+func TestCodexSessionFiles(t *testing.T) {
+	root := t.TempDir()
+	const id = "01a1a38b-a635-76d0-bbc6-348e3c47e603"
+	mine := filepath.Join(root, "2026", "11", "03", "rollout-2026-11-03T23-33-20-"+id+".jsonl")
+	other := filepath.Join(root, "2026", "11", "10", "rollout-2026-11-10T08-00-00-0198e5c4-other.jsonl")
+	write(t, mine, codexMeta(id))
+	write(t, other, codexMeta("0198e5c4-other"))
+	// A longer id that ends with this one is another session.
+	write(t, filepath.Join(root, "2026", "11", "04", "rollout-2026-11-04T01-00-00-xx"+id+".jsonl"), codexMeta("xx"+id))
+	got, err := CodexSessionFiles(root, id)
+	if err != nil || len(got) != 1 || got[0] != mine {
+		t.Fatalf("files %v %v, want %s", got, err, mine)
+	}
+	for _, bad := range []string{"", "../x", "*", "a/b"} {
+		if got, err := CodexSessionFiles(root, bad); err == nil || got != nil {
+			t.Errorf("%q: %v %v", bad, got, err)
+		}
+	}
+}
