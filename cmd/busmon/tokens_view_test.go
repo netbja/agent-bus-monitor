@@ -76,7 +76,7 @@ func pageText(st tokState, agents map[string]*agentState, width int) string {
 // "… not read yet", "?" with its reason, and 0.
 func TestTokensPagePendingUnknownZero(t *testing.T) {
 	agents := map[string]*agentState{
-		"coder":          {registered: true, pid: 1, identSession: "0198e5c4-coder-1", provider: "claude"},
+		"coder":          {registered: true, pid: 1, identSession: "0198e5c4-coder-1", provider: "anthropic"},
 		"reviewer-codex": {registered: true, pid: 2, provider: "openai", client: "codex"},
 	}
 	// The open project's row stays, unknown, with its reason: never folded, never 0.
