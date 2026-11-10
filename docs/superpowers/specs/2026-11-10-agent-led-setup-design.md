@@ -76,8 +76,8 @@ What it decides:
   plan item the agent may run (`--install-herdr`), since `./setup.sh` already offers it.
 - **An earlier install** (`./setup.sh status` prints ✓ lines) turns the setup into an update: the
   first question becomes "update it, or leave it?" and the plan uses `./setup.sh update`.
-- **The agent CLIs found** are the choices offered in question 3; none found stops the setup with
-  one person step (install one, and log in to it).
+- **The agent CLIs found** are checked against the clients the shipped roles run on (§5.1 Q3);
+  none found stops the setup with one person step (install one, and log in to it).
 - **`./setup.sh status` saying `Redis password: the historical default`** adds a plan item (§5.3).
 
 ## 5. The questions, the plan, the run
@@ -93,9 +93,21 @@ Recommendations in brackets. Each message stays under 150 words.
    most recently changed Git clone other than agent-bus itself, else "none for now": the setup
    then stops after the install.] The project's name is not asked: `agentbus start` deduces it,
    and the plan shows it.
-3. **The team and its clients.** "Who should work on it?" [`master,coder,foureyes`, each on the
-   first client found, `foureyes` on a second client when one is found, since a review by another
-   model catches more.] One sentence teaches why: one agent plans, one implements, one reviews.
+3. **The team.** "Who should work on it?" [`master,coder,foureyes`, plus `reviewer-codex` when
+   `codex` is found, since a review by another maker's model catches more.] One sentence teaches
+   why: one agent plans, one implements, one reviews.
+   - **The question is the set of roles, never their clients.** `agentbus start --roles` takes a
+     role, or `role:profile` with only the role's own profile or one of its `fallback_profiles`
+     (reviewer-codex); the client follows from the profile in `roles.toml`. The setup does not
+     edit `roles.toml` (§6), so it cannot put a role on another client.
+   - Before asking, the agent reads each candidate role's profile and client with
+     `agentbus roles fallbacks <role>` (`profile  claude-opus  claude-code  anthropic  opus`) and
+     offers only roles whose client the probe found. A role whose client is missing is named with
+     its client ("foureyes runs on claude-code, not installed") and is either left out or its
+     client goes into the person steps; the person picks which.
+   - The plan (§5.2) shows that table, role → profile → client → model, as the manifest gives it:
+     what the person confirms is what `start` will launch. Putting a role on another client is
+     the manifest's business (`roles.toml`, its fallbacks), out of this setup (§9 Q7).
 4. **Notifications.** "Should your phone ring when the team needs you?" [not now: busmon shows
    it; you can set it up later with `agentbus notifications setup`.] A yes adds a person step,
    never an agent step (§5.4).
@@ -110,7 +122,8 @@ installed by `agentbus start`.
 ### 5.2 The plan
 
 One message, under 300 words: what is installed and where, the commands the agent will run, in
-order, the person steps, the defaults, and what is left untouched. It ends with one question:
+order, the person steps, the defaults, the team as role → profile → client → model (§5.1 Q3), and
+what is left untouched. It ends with one question:
 "Go?" Nothing runs before a yes. A change to any answer sends the whole plan again.
 
 ### 5.3 The run (the agent's own commands)
@@ -124,7 +137,8 @@ In this order, each command printed before it runs, the agent stopping at the fi
 4. The status-line block, when the person said yes: the agent reads `~/.claude/settings.json`,
    shows the diff, and writes it only after the person's yes to that diff (the person's client
    config is theirs; a second, explicit confirmation).
-5. `agentbus start <folder> --dry-run --roles <team>`, its output shown as is.
+5. `agentbus start <folder> --dry-run --roles <team>`, its output shown as is, with
+   `agentbus roles fallbacks <role>` for each role: a refused role or profile stops the run.
 
 The team itself is **not started by the agent** (§6): the last step is a person step.
 
@@ -213,3 +227,8 @@ One PR, docs and one test:
    release, so the agent never reads human text.
 6. **Notifications in the setup.** Recommended: offered as question 4, done as a person step. Or
    left out entirely, mentioned only in the hand-over.
+7. **A role whose client is not installed** (the shipped core roles all run on Claude Code).
+   Recommended: the setup only reports it, with the client to install as a person step, and keeps
+   to the manifest's profiles (§5.1 Q3). Or a later step gives the core roles `fallback_profiles`
+   on other clients (codex, grok, kimi), so `start --roles coder:<profile>` can pick one; that is a
+   manifest change with its own review, not part of this spec.
