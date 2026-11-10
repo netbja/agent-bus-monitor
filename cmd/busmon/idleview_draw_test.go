@@ -269,3 +269,32 @@ func TestIdleStripPresentProviders(t *testing.T) {
 		t.Errorf("an unlimited provider shows: %q", got)
 	}
 }
+
+// The four kinds keep their order whatever the use: fresh, stale, held, no
+// data (foureyes P3).
+func TestIdleTokenItemsKindOrder(t *testing.T) {
+	now := time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC)
+	reset := now.Add(3 * time.Hour).Unix()
+	budgets := map[string]bus.BudgetSnapshot{
+		"anthropic": {Windows: []bus.BudgetWindow{{Name: "5h", UsedPct: 5, ResetsAt: reset, ObservedAt: now.Add(-time.Minute).UnixMilli()}}},
+		"xai":       {Windows: []bus.BudgetWindow{{Name: "weekly", UsedPct: 90, ResetsAt: reset, ObservedAt: now.Add(-2 * time.Hour).UnixMilli()}}},
+		"openai":    {Windows: []bus.BudgetWindow{{Name: "7d", UsedPct: 99, ResetsAt: reset, ObservedAt: now.Add(-time.Minute).UnixMilli()}}},
+	}
+	got := idleTokenItems(budgets, map[string]int64{"openai": now.Add(time.Hour).Unix()}, map[string]bool{"moonshot": true, "anthropic": true}, now)
+	want := []string{"claude 5% 5h", "grok 90% 7d (2h old)", "codex held 1h00", "kimi: no data (no reading published)"}
+	if strings.Join(got, " | ") != strings.Join(want, " | ") {
+		t.Errorf("order\n got %q\nwant %q", got, want)
+	}
+}
+
+// A dormant agent is not present: its provider without a reading shows
+// nothing, as on the Agents panel without a (foureyes P3).
+func TestIdleStripDormantIsNotPresent(t *testing.T) {
+	pinLocal(t)
+	m := idleAt(t, 140, 40)
+	m.snap.agents["old-kimi"] = &agentState{registered: true, provider: "moonshot", state: "idle",
+		stateAt: m.now.Add(-20 * 24 * time.Hour), lastSeen: m.now.Add(-20 * 24 * time.Hour)}
+	if got := strings.Join(m.idleData().strip.tokens, " | "); strings.Contains(got, "kimi") {
+		t.Errorf("a dormant agent's provider shows: %q", got)
+	}
+}
