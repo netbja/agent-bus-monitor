@@ -689,7 +689,7 @@ func (m *Model) composeKey(act Action, k Key) tea.Cmd {
 	case k.Code == keyEnter && field == &c.to: // the recipient is done: to the text
 		c.onTo = false
 		c.switchedField()
-	case k.Code == keyEnter, k.Code == keyRune && !k.Alt:
+	case k.Code == keyEnter, k.Code == keyRune: // a rune marked Alt too: a dead key's or AltGr's character (compose-dead-keys)
 		s, kind := "\n", "" // a line break is a step of its own
 		if k.Code == keyRune {
 			s, kind = string(k.Rune), "type"
