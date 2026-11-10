@@ -37,19 +37,20 @@ type HomeQuery struct {
 	Dir, Filter string
 }
 
-// ParseHome reads a query: isHome when it starts with ~; why when it is
-// refused before anything is read (§2): another user's home, a backslash, a
-// . or .. segment, or an empty one other than the one trailing slash that
-// marks a directory.
+// ParseHome reads a query: isHome for ~ and ~/… only (§2); ~user/… is a
+// home query refused; anything else, ~notes.md included, stays a project
+// query (reviewer-codex). why is a refusal before anything is read: another
+// user's home, a backslash, a . or .. segment, or an empty one other than
+// the one trailing slash that marks a directory.
 func ParseHome(q string) (h HomeQuery, why string, isHome bool) {
-	if !strings.HasPrefix(q, "~") {
-		return HomeQuery{}, "", false
-	}
 	if q == "~" {
 		return HomeQuery{}, "", true
 	}
 	if !strings.HasPrefix(q, "~/") {
-		return HomeQuery{}, "only your own home (~/)", true
+		if user, _, slash := strings.Cut(q[min(1, len(q)):], "/"); strings.HasPrefix(q, "~") && slash && user != "" {
+			return HomeQuery{}, "only your own home (~/)", true
+		}
+		return HomeQuery{}, "", false
 	}
 	rest := q[2:]
 	const refuse = "type the path yourself"
@@ -242,15 +243,40 @@ func (w *walker) homeLinkRefused(rel string) string {
 }
 
 // HomeRefused is why rel under home would never be offered, for the
-// popup's footer when a query names it exactly; "" when it may be.
+// popup's footer when a query names it exactly; "" when it may be. Its
+// directory is judged as ListDir judges one, typed and resolved, so a file
+// reached through a directory link (~/docs -> ~/.ssh) is refused as its
+// listing would be (foureyes); then the name itself.
 func HomeRefused(home, rel string, deny func(string) bool) string {
 	w, err := homeWalker(context.Background(), home, Options{Deny: deny})
 	if err != nil {
 		return ErrNoHome.Error()
 	}
-	rel = strings.Trim(filepath.ToSlash(filepath.Clean(rel)), "/")
+	rel = strings.Trim(filepath.ToSlash(rel), "/")
+	if _, why, _ := ParseHome("~/" + rel); why != "" {
+		return why // .., ., an empty segment, a backslash: never resolved
+	}
+	dir, name := path.Split(rel)
+	dir = strings.TrimSuffix(dir, "/")
+	if why := w.passes(dir); why != "" {
+		return why
+	}
+	resolved, err := filepath.EvalSymlinks(w.abs(dir))
+	if err != nil {
+		return "not a file"
+	}
+	rdir, ok := w.inHome(resolved)
+	if !ok {
+		return "outside your home"
+	}
+	if why := w.passes(rdir); why != "" {
+		return why
+	}
 	if st, err := os.Lstat(w.abs(rel)); err == nil && st.Mode()&fs.ModeSymlink != 0 {
 		return w.homeLinkRefused(rel)
+	}
+	if why := w.homeRefused(path.Join(rdir, name)); why != "" {
+		return why
 	}
 	return w.homeRefused(rel)
 }

@@ -61,6 +61,8 @@ func TestParseHome(t *testing.T) {
 		{"~/a\\b", "", "", "type the path yourself", true},
 		{"~bob/x", "", "", "only your own home (~/)", true},
 		{"cmd/bu", "", "", "", false},
+		{"~notes.md", "", "", "", false}, // a project file whose name starts with ~ (reviewer-codex)
+		{"~bob", "", "", "", false},      // no slash yet: still a project query
 	} {
 		h, why, ok := ParseHome(c.q)
 		if ok != c.home || why != c.why || why == "" && ok && (h.Dir != c.dir || h.Filter != c.filter) {
@@ -101,6 +103,13 @@ func TestListDir(t *testing.T) {
 			t.Errorf("%q was listed", dir)
 		}
 	}
+	link(t, filepath.Join(home, "Documents"), filepath.Join(home, ".dl")) // a hidden-named link to a fine dir
+	if _, err := ListDir(context.Background(), home, ".dl", Options{}); err == nil {
+		t.Error("a hidden-named directory link at the top was listed (the typed path is judged too)")
+	}
+	if _, err := ListDir(context.Background(), home, "notes.md", Options{}); err == nil {
+		t.Error("a file was listed as a directory")
+	}
 	if got := ls("proj"); !slices.Equal(got, []string{"proj/.github/", "proj/main.go"}) {
 		t.Fatalf("a dir link inside home lists its target's entries: %q", got)
 	}
@@ -129,10 +138,23 @@ func TestListDirLibraryOnDarwin(t *testing.T) {
 // addendum §3, §7: the reason an exact query is refused.
 func TestHomeRefused(t *testing.T) {
 	home, _ := homeFixture(t)
+	write(t, home, "dotfiles/netrc", "")
+	link(t, filepath.Join(home, "dotfiles/netrc"), filepath.Join(home, ".netrc2"))
+	link(t, filepath.Join(home, "node_modules"), filepath.Join(home, "mods"))
+	link(t, filepath.Join(home, "Documents"), filepath.Join(home, "vendor"))
 	for rel, want := range map[string]string{
 		".ssh/config": "hidden in your home: type it yourself", ".netrc": "hidden in your home: type it yourself",
 		"p/x/.env": "environment file", "p/x/.git/config": "git directory", "private/x": "denied by roles.toml",
 		"key": "hidden in your home: type it yourself", "out": "outside your home", "a.md": "", "p/x/main.go": "",
+		"docs/config":       "hidden in your home: type it yourself", // through a directory link to ~/.ssh (foureyes)
+		"etc/passwd":        "outside your home",                     // through a directory link out of home
+		"proj/main.go":      "",                                      // through a directory link inside home
+		".netrc2":           "hidden in your home: type it yourself", // a link whose own name is hidden, its target fine
+		"node_modules/m.js": "skipped",                               // a skipped dir, typed
+		"mods/m.js":         "skipped",                               // reached through a link into a skipped dir
+		"vendor/report.md":  "skipped",                               // typed through a skip-named link to a fine dir
+		"../x":              "type the path yourself",
+		"a/../.ssh/x":       "type the path yourself",
 	} {
 		if got := HomeRefused(home, rel, denyPrivate(home)); got != want {
 			t.Errorf("HomeRefused(%q) = %q, want %q", rel, got, want)
