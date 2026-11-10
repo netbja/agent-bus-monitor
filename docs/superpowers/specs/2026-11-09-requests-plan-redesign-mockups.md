@@ -306,7 +306,10 @@ page and the Kanban will read it too.
     - **review**: a gate that concerns the person;
     - **check**: the stall guard.
   - **NEXT** holds the plan's tasks not started, in file order, the person's blocked tasks
-    among them, then the tracked requests that no plan task names.
+    among them, then the tracked requests that no plan task names. A request the person owes
+    is in YOU only, never in NEXT; when a plan task names it, the request's answer row stands
+    for that task, which is then not also a decide or NEXT row. The sections never list one
+    thing twice.
   - **IDEAS** holds the open questions in `docs/memory/open-questions/` with status
     `proposed` or `active` that no plan task covers. A task covers a note when its board or
     its id is the note's id, or when its title without `Decide:` is the note's title. The

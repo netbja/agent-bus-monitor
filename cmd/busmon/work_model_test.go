@@ -256,3 +256,44 @@ func TestWorkTeamGatesOldestFirst(t *testing.T) {
 	}
 	t.Fatal("no coder row")
 }
+
+// reviewer-codex: a tracked request owed by the person is YOU's answer row
+// only, never also in NEXT (the sections are a partition).
+func TestWorkOwedRequestNotAlsoNext(t *testing.T) {
+	in := workFixture(shellNow)
+	r := request{Task: "sign-off", Tracked: true, State: "requested", From: "master", Target: "charlie", Created: shellNow.Add(-time.Hour)}
+	in.requests = append(in.requests, r)
+	in.reqs = requestGroups(reqInput{reqs: in.requests, self: "charlie", now: shellNow})
+	w := workOf(in)
+	if !slices.Contains(youVerbs(w), "answer sign-off") {
+		t.Fatalf("YOU = %q", youVerbs(w))
+	}
+	for _, it := range w.Next {
+		if it.Key == "req:sign-off" {
+			t.Fatalf("sign-off in both YOU and NEXT: %+v", w.Next)
+		}
+	}
+}
+
+// The same partition from the plan's side: a plan task whose board request
+// the person owes is that request's answer row, not also a decide or a
+// NEXT row.
+func TestWorkOwedRequestCoversItsPlanTask(t *testing.T) {
+	for _, st := range []plan.State{plan.Waiting, plan.Upcoming} {
+		in := workFixture(shellNow)
+		r := request{Task: "sign-off", Tracked: true, State: "requested", From: "master", Target: "charlie"}
+		in.requests = append(in.requests, r)
+		in.plan.rows = append(in.plan.rows, plan.Row{Task: plan.Task{ID: "t20", Title: "Decide: sign-off", Owner: plan.Person, Board: "sign-off"}, State: st})
+		in.reqs = requestGroups(reqInput{reqs: in.requests, self: "charlie", now: shellNow})
+		w := workOf(in)
+		n := 0
+		for _, it := range append(append([]workItem{}, w.You...), w.Next...) {
+			if it.Plan == "t20" || (it.Req != nil && it.Req.Task == "sign-off") {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Fatalf("%s: sign-off listed %d times: YOU %q NEXT %+v", st, n, youVerbs(w), w.Next)
+		}
+	}
+}

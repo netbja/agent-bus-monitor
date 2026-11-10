@@ -24,7 +24,7 @@ import (
 //     that concerns the person: review. The stall guard: check.
 //   - NEXT: the plan's tasks not started, in file order, the person's tasks
 //     blocked by other tasks among them; then the tracked requests no plan
-//     task names (not in the plan).
+//     task names (not in the plan) and not owed by the person (those are YOU).
 //   - IDEAS: the open questions recorded in the repository
 //     (docs/memory/open-questions, status proposed or active) that no plan
 //     task covers; ◇ is theirs alone.
@@ -147,9 +147,17 @@ func workOf(in workInput) workModel {
 		}
 	}
 	links := planLinks(in.plan)
+	owed := map[string]bool{} // board tasks the person owes: their answer row stands for their plan task
+	for _, it := range w.You {
+		if it.Req != nil {
+			owed[it.Req.Task] = true
+		}
+	}
 	if in.plan.loaded {
 		for _, r := range in.plan.rows {
 			switch {
+			case r.Task.Board != "" && owed[r.Task.Board] && r.State != plan.Done:
+				// listed once, as the request the person answers (reviewer-codex)
 			case r.State == plan.Done:
 				w.Done++
 			case r.Task.Owner == plan.Person && r.State == plan.Waiting && r.Ask == "":
@@ -164,6 +172,9 @@ func workOf(in workInput) workModel {
 	for i := range in.requests {
 		r := in.requests[i]
 		if !r.Tracked || r.State != "requested" {
+			continue
+		}
+		if in.reqs.self != "" && target(r) == in.reqs.self { // owed by the person: YOU's answer row (reviewer-codex)
 			continue
 		}
 		if _, named := links[r.Task]; named {
