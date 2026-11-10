@@ -194,6 +194,10 @@ type trustAskBus interface {
 	WithdrawQuestion(ctx context.Context, agent, askID, qid, note string) (int, error)
 }
 
+// trustAskFolder opens a reminder's context: the folder it is about, what
+// binds the reminder to it (reviewer-codex).
+func trustAskFolder(key string) string { return "Folder: " + key + ". " }
+
 // trustAskHeader heads a trust reminder's question: with its id, what tells
 // it from any other question.
 const trustAskHeader = "Folder trust"
@@ -220,7 +224,7 @@ func trustAskDef(client, key, where string) bus.AskDef {
 		ID:       trustAskQID(client),
 		Header:   trustAskHeader,
 		Question: label + ` asks whether you trust this folder: in ` + where + `, choose "Yes, I trust this folder".`,
-		Context: "Folder: " + key + ". Trusting lets " + label + " read, edit and run files there, and load the repository's own " +
+		Context: trustAskFolder(key) + "Trusting lets " + label + " read, edit and run files there, and load the repository's own " +
 			"settings, hooks and MCP servers: for a repository you did not write, look at it first." + hint +
 			" This ask closes itself once the trust is recorded.",
 		Options: []bus.AskOption{{Label: "Done in the pane", Description: "it also closes by itself once the trust is recorded"}},
@@ -233,7 +237,7 @@ func trustAskDef(client, key, where string) bus.AskDef {
 // gate agent, the reminder would block that agent's own asks, a --replace
 // would drop it, and the desktop would not ring for the very dialog it is
 // about (foureyes, reviewer-codex).
-const trustAskFrom = "agentbus"
+const trustAskFrom = bus.SystemSender
 
 // trustReminders settles and opens the trust reminders: one ask from
 // agentbus, a question trust-<client> headed "Folder trust" per untrusted
@@ -261,25 +265,51 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 	ctx := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.Background(), 5*time.Second)
 	}
-	c, cancel := ctx()
-	asks, err := ab.Asks(c)
-	cancel()
+	key, _ := trustKey(dir)
+	var mine *bus.Ask              // agentbus's open ask
+	openFor := map[string]string{} // client -> the ask holding its open reminder for key
+	read := func() (bool, error) { // true: stale reminders were withdrawn, read again
+		c, cancel := ctx()
+		asks, err := ab.Asks(c)
+		cancel()
+		if err != nil {
+			return false, err
+		}
+		mine, openFor = nil, map[string]string{}
+		var stale [][2]string // client, ask: a reminder about another folder (the template moved, reviewer-codex)
+		for i, a := range asks {
+			if a.State != "open" || a.From != trustAskFrom {
+				continue
+			}
+			mine = &asks[i]
+			for _, q := range a.Questions {
+				client, ok := strings.CutPrefix(q.ID, "trust-")
+				switch {
+				case !ok || q.Answer != nil || q.Header != trustAskHeader:
+				case strings.HasPrefix(q.Context, trustAskFolder(key)):
+					openFor[client] = a.ID
+				default:
+					stale = append(stale, [2]string{client, a.ID})
+				}
+			}
+		}
+		for _, st := range stale {
+			c, cancel := ctx()
+			_, err := ab.WithdrawQuestion(c, trustAskFrom, st[1], trustAskQID(st[0]), "the project's folder is now "+key)
+			cancel()
+			if err != nil {
+				return false, err
+			}
+		}
+		return len(stale) > 0, nil
+	}
+	again, err := read()
+	if again && err == nil {
+		_, err = read()
+	}
 	if err != nil {
 		note(err)
 		return noop
-	}
-	var mine *bus.Ask              // agentbus's open ask
-	openFor := map[string]string{} // client -> the ask holding its open reminder
-	for i, a := range asks {
-		if a.State != "open" || a.From != trustAskFrom {
-			continue
-		}
-		mine = &asks[i]
-		for _, q := range a.Questions {
-			if client, ok := strings.CutPrefix(q.ID, "trust-"); ok && q.Answer == nil && q.Header == trustAskHeader {
-				openFor[client] = a.ID
-			}
-		}
 	}
 	closeTrusted := func() {
 		for client, id := range openFor {
@@ -294,7 +324,6 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 		}
 	}
 	closeTrusted()
-	key, _ := trustKey(dir)
 	for _, client := range slices.Sorted(maps.Keys(gates)) {
 		if _, ok := openFor[client]; ok {
 			continue
@@ -306,13 +335,15 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 		}
 		def, replaces := trustAskDef(client, key, where), ""
 		if mine != nil { // agentbus's open ask keeps its questions: this one joins them
-			if len(mine.Questions) >= bus.AskMaxQuestions || slices.ContainsFunc(mine.Questions, func(q bus.AskQuestionState) bool { return q.ID == trustAskQID(client) }) {
+			if len(mine.Questions) >= bus.AskMaxQuestions || slices.ContainsFunc(mine.Questions, func(q bus.AskQuestionState) bool { return q.ID == trustAskQID(client) && q.Answer == nil }) {
 				note(fmt.Errorf("agentbus's open ask has no room for %s's reminder", clientLabel(client)))
 				continue
 			}
 			merged := bus.AskDef{From: trustAskFrom, Title: mine.Title, Task: mine.Task}
 			for _, q := range mine.Questions {
-				merged.Questions = append(merged.Questions, q.AskQuestion)
+				if q.Answer == nil { // its open reminders only: a closed one would hold its id
+					merged.Questions = append(merged.Questions, q.AskQuestion)
+				}
 			}
 			def, replaces = bus.AskDef{From: trustAskFrom, Title: merged.Title, Task: merged.Task, Questions: append(merged.Questions, def.Questions...)}, mine.ID
 		}

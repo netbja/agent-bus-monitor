@@ -406,3 +406,15 @@ func TestFallbackProfiles(t *testing.T) {
 		t.Fatalf("v1: %v", err)
 	}
 }
+
+// agentbus is the bus's own sender (bus.SystemSender, first-run-trust): no
+// role may take the name, or it would receive agentbus's reminders.
+func TestRoleNameAgentbusIsReserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(path, []byte("[roles.agentbus]\nclient = \"claude-code\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("Load = %v, want the name refused as reserved", err)
+	}
+}

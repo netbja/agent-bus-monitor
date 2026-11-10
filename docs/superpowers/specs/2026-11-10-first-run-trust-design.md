@@ -102,10 +102,18 @@ dispatcher write, which must be fenced):
 
 - **`agentbus up` and `agentbus start`**, for the agents they start: they already know the client
   and the folder (the template's `working_dir`), and already read the flag (`trustPlan`). They
-  open the ask the way any agent's CLI does (`agentbus ask`, unfenced, like every ask). `up`
-  closes it when the trust is accepted during its wait (`errTrustPending`'s wait). Accepted after
-  `up` exits, it stays open until the next `up` or `start` closes it; meanwhile busmon, reading
-  the same flag, shows it as `trusted now: nothing to do` (foureyes).
+  open the ask unfenced, like every ask, **as built (first-run-trust-1)**: from agentbus itself
+  (`bus.SystemSender`, a name no role may take), never from an agent. An ask takes its sender's one
+  open-ask slot, and an agent's open ask also mutes its prompt-notify ring and holds its
+  auto-clear: asked from the gate agent, the reminder would block that agent's own asks and
+  silence the ring for the very dialog it is about (foureyes). One agentbus ask holds a question
+  `trust-<client>` headed `Folder trust` per untrusted client, naming the gate agent's pane, its
+  context opening with the folder, which binds it: a reminder about another folder (the template
+  moved) is withdrawn and replaced (reviewer-codex). A person's answer to it is replied to people
+  with `wake=no`: nobody is woken, no group or wake is owed to agentbus. `up` closes a reminder
+  when the trust is accepted during its wait (`errTrustPending`'s wait). Accepted after `up`
+  exits, it stays open until the next `up` or `start` closes it; meanwhile busmon, reading the
+  same flag, shows it as `trusted now: nothing to do` (foureyes).
 - **busmon, for an agent herdr restored** (no `up` ran): busmon shows a For-you line computed from
   what it already reads, with no write: an agent of a gated client (`AgentSnapshot.Client`) whose
   pane shows the `prompt` flag, in a project whose template's `working_dir` (`projlist`) that

@@ -161,8 +161,9 @@ func TestUpTrustAskStaysOpenOnTimeout(t *testing.T) {
 	}
 }
 
-func trustQuestion(client, header string) bus.AskQuestionState {
-	return bus.AskQuestionState{AskQuestion: bus.AskQuestion{ID: "trust-" + client, Header: header, Question: "x?", Options: []bus.AskOption{{Label: "a"}}}}
+func trustQuestion(client, header, folder string) bus.AskQuestionState {
+	return bus.AskQuestionState{AskQuestion: bus.AskQuestion{ID: "trust-" + client, Header: header, Question: "x?",
+		Context: "Folder: " + folder + ". Trusting…", Options: []bus.AskOption{{Label: "a"}}}}
 }
 
 // A later up closes a reminder whose folder is now trusted, and opens no
@@ -170,8 +171,8 @@ func trustQuestion(client, header string) bus.AskQuestionState {
 // or not headed Folder trust, is not a reminder.
 func TestUpSettlesItsTrustAsks(t *testing.T) {
 	work, _, deps, _ := gateFixture(t, 0) // trusted from the start
-	open := bus.Ask{ID: "ask-agentbus-0", From: "agentbus", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust")}}
-	stranger := bus.Ask{ID: "ask-coder-0", From: "coder", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust")}}
+	open := bus.Ask{ID: "ask-agentbus-0", From: "agentbus", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust", work)}}
+	stranger := bus.Ask{ID: "ask-coder-0", From: "coder", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust", work)}}
 	f := &fakeAsks{asks: []bus.Ask{open, stranger}}
 	deps = withAsks(deps, f)
 	var out, errw bytes.Buffer
@@ -183,7 +184,7 @@ func TestUpSettlesItsTrustAsks(t *testing.T) {
 	}
 
 	work, _, deps, _ = gateFixture(t, -1) // still untrusted, its reminder open
-	open.State = "open"
+	open = bus.Ask{ID: "ask-agentbus-0", From: "agentbus", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust", work)}}
 	f = &fakeAsks{asks: []bus.Ask{open}}
 	deps = withAsks(deps, f)
 	runUp([]string{"demo", work}, deps, &out, &errw)
@@ -200,6 +201,43 @@ func TestUpSettlesItsTrustAsks(t *testing.T) {
 	}
 }
 
+// reviewer-codex: a reminder is bound to its folder. The template moved to
+// another untrusted folder: the reminder about the old one is withdrawn and
+// one about the new folder opens, in a fresh ask (the old one ended).
+func TestUpTrustAskFollowsTheFolder(t *testing.T) {
+	work, _, deps, _ := gateFixture(t, -1)
+	old := bus.Ask{ID: "ask-agentbus-0", From: "agentbus", Title: "Trust old?", State: "open",
+		Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust", "/elsewhere/old")}}
+	f := &fakeAsks{asks: []bus.Ask{old}}
+	deps = withAsks(deps, f)
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if len(f.withdrawn) != 1 || !strings.Contains(f.withdrawn[0], "folder is now "+work) {
+		t.Fatalf("withdrawn %q", f.withdrawn)
+	}
+	if len(f.defs) != 1 || !strings.HasPrefix(f.defs[0].Questions[0].Context, "Folder: "+work+". ") {
+		t.Fatalf("defs %+v", f.defs)
+	}
+}
+
+// A closed reminder (answered or withdrawn) inside agentbus's open ask does
+// not travel into a replace: its id is free again for a new reminder.
+func TestUpTrustAskMergeKeepsOpenRemindersOnly(t *testing.T) {
+	work, _, deps, _ := gateFixture(t, -1)
+	deps.Trusted = func(string, string) bool { return false } // both clients untrusted
+	closed := trustQuestion("codex", "Folder trust", work)
+	closed.Answer = &bus.AskAnswer{Withdrawn: true, By: "agentbus"}
+	ask := bus.Ask{ID: "ask-agentbus-0", From: "agentbus", Title: "Trust work?", State: "open",
+		Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Folder trust", work), closed}}
+	f := &fakeAsks{asks: []bus.Ask{ask}}
+	deps = withAsks(deps, f)
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if len(f.defs) != 1 || len(f.defs[0].Questions) != 2 || f.defs[0].Questions[0].ID != "trust-claude-code" || f.defs[0].Questions[1].ID != "trust-codex" {
+		t.Fatalf("defs %+v out %q", f.defs, out.String())
+	}
+}
+
 // agentbus's open ask with no room (full, or the id taken by a question that
 // is not a reminder): a note, never a replace the bus would refuse.
 func TestUpTrustAskNoRoomIsANote(t *testing.T) {
@@ -207,7 +245,7 @@ func TestUpTrustAskNoRoomIsANote(t *testing.T) {
 	for i := range bus.AskMaxQuestions {
 		full.Questions = append(full.Questions, bus.AskQuestionState{AskQuestion: bus.AskQuestion{ID: fmt.Sprintf("q%d", i), Header: "H", Question: "x?", Options: []bus.AskOption{{Label: "a"}}}})
 	}
-	taken := bus.Ask{ID: "ask-agentbus-0", From: "agentbus", Title: "T", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Other")}}
+	taken := bus.Ask{ID: "ask-agentbus-0", From: "agentbus", Title: "T", State: "open", Questions: []bus.AskQuestionState{trustQuestion("claude-code", "Other", "/x")}}
 	for _, a := range []bus.Ask{full, taken} {
 		work, _, deps, _ := gateFixture(t, -1)
 		f := &fakeAsks{asks: []bus.Ask{a}}
