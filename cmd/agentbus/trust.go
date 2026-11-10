@@ -202,21 +202,21 @@ const trustAskHeader = "Folder trust"
 func trustAskQID(client string) string { return "trust-" + client }
 
 // trustAskDef is the reminder (first-run-trust (b), the person's answer):
-// the folder, where to answer, the choice by its label (the keys only as a
-// hint: they change between client versions) and what trusting loads. Asked
-// from the gate agent, whose pane shows the dialog. Nothing is written to a
-// client's file.
-func trustAskDef(client, agent, key, where string) bus.AskDef {
+// the folder, where to answer (the gate agent's pane, which shows the
+// dialog), the choice by its label (the keys only as a hint: they change
+// between client versions) and what trusting loads. Asked from agentbus
+// (trustAskFrom). Nothing is written to a client's file.
+func trustAskDef(client, key, where string) bus.AskDef {
 	label := clientLabel(client)
 	hint := ""
 	if client == "claude-code" {
 		hint = " In Claude Code 2.1: ↓ then Enter (a hint: the keys change between versions)."
 	}
-	title := "Trust " + filepath.Base(key) + "?"
+	title := "Trust " + filepath.Base(key) + "?" // the first client's folder: every reminder of one up is about the same folder
 	if r := []rune(title); len(r) > 100 {
 		title = string(r[:99]) + "…"
 	}
-	return bus.AskDef{From: agent, Title: title, Questions: []bus.AskQuestion{{
+	return bus.AskDef{From: trustAskFrom, Title: title, Questions: []bus.AskQuestion{{
 		ID:       trustAskQID(client),
 		Header:   trustAskHeader,
 		Question: label + ` asks whether you trust this folder: in ` + where + `, choose "Yes, I trust this folder".`,
@@ -227,23 +227,31 @@ func trustAskDef(client, agent, key, where string) bus.AskDef {
 	}}}
 }
 
-// trustReminders settles and opens the trust asks of tpl's gated clients:
-// a client's reminder is the question trust-<client>, headed "Folder trust",
-// in the ask of that client's first agent in the template (its pane shows
-// the dialog), nothing else (reviewer-codex). An open reminder whose client
-// now trusts dir is closed; each untrusted gated client without one gets
-// one. When that agent already has an open ask, the reminder joins it as one
-// more question, through the bus's replace, which carries its answers: no
-// question of the agent's is lost (reviewer-codex). It returns what closes
-// the reminders once the trust is accepted. A broker error is a note: the
-// line on the terminal still says where to answer.
+// trustAskFrom is the trust reminders' sender: agentbus itself, never an
+// agent. An ask takes its sender's one open-ask slot, and an agent's open ask
+// also mutes its prompt-notify ring and holds its auto-clear: asked from the
+// gate agent, the reminder would block that agent's own asks, a --replace
+// would drop it, and the desktop would not ring for the very dialog it is
+// about (foureyes, reviewer-codex).
+const trustAskFrom = "agentbus"
+
+// trustReminders settles and opens the trust reminders: one ask from
+// agentbus, a question trust-<client> headed "Folder trust" per untrusted
+// gated client, naming the pane to answer in. A reminder whose client now
+// trusts dir is withdrawn; each untrusted gated client without one gets its
+// question, added to agentbus's open ask through the bus's replace (its
+// other questions kept). It returns what closes the reminders once the trust
+// is accepted. A broker error is a note when there is a dialog to answer,
+// silent otherwise (foureyes).
 func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[string]string) func() {
 	noop := func() {}
 	if d.TrustAsks == nil || d.Trusted == nil {
 		return noop
 	}
 	note := func(err error) {
-		fmt.Fprintf(d.Out, "busmon ask not opened (%v): answer the dialog as said above\n", err)
+		if len(gates) > 0 {
+			fmt.Fprintf(d.Out, "busmon ask not opened (%v): answer the dialog as said above\n", err)
+		}
 	}
 	ab, err := d.TrustAsks(tpl.Name)
 	if err != nil {
@@ -260,37 +268,26 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 		note(err)
 		return noop
 	}
-	gateOf := map[string]string{} // client -> its first agent in the template, whose ask carries the reminder
-	for _, t := range tpl.Tabs {
-		if d.TabClient == nil || strings.TrimSpace(t.Command) == "" {
+	var mine *bus.Ask              // agentbus's open ask
+	openFor := map[string]string{} // client -> the ask holding its open reminder
+	for i, a := range asks {
+		if a.State != "open" || a.From != trustAskFrom {
 			continue
 		}
-		if client := d.TabClient(t.Command); trustGated[client] && gateOf[client] == "" {
-			gateOf[client] = t.Name
-		}
-	}
-	type open struct{ agent, id, qid string }
-	openFor := map[string]open{}    // client -> its open reminder
-	openAsk := map[string]bus.Ask{} // agent -> its open ask
-	for _, a := range asks {
-		if a.State != "open" {
-			continue
-		}
-		openAsk[a.From] = a
+		mine = &asks[i]
 		for _, q := range a.Questions {
-			client, ok := strings.CutPrefix(q.ID, "trust-")
-			if ok && q.Answer == nil && q.Header == trustAskHeader && gateOf[client] == a.From {
-				openFor[client] = open{a.From, a.ID, q.ID}
+			if client, ok := strings.CutPrefix(q.ID, "trust-"); ok && q.Answer == nil && q.Header == trustAskHeader {
+				openFor[client] = a.ID
 			}
 		}
 	}
 	closeTrusted := func() {
-		for client, o := range openFor {
+		for client, id := range openFor {
 			if !d.Trusted(client, dir) {
 				continue
 			}
 			c, cancel := ctx()
-			if _, err := ab.WithdrawQuestion(c, o.agent, o.id, o.qid, "trusted: recorded by "+clientLabel(client)); err == nil {
+			if _, err := ab.WithdrawQuestion(c, trustAskFrom, id, trustAskQID(client), "trusted: recorded by "+clientLabel(client)); err == nil {
 				delete(openFor, client)
 			}
 			cancel()
@@ -307,21 +304,17 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 		if p := paneOf[agent]; p != "" {
 			where += " (" + p + ")"
 		}
-		def, replaces := trustAskDef(client, agent, key, where), ""
-		if old, ok := openAsk[agent]; ok { // its open ask keeps every question: the reminder joins it
-			if len(old.Questions) >= bus.AskMaxQuestions {
-				note(fmt.Errorf("%s's open ask already has %d questions", agent, len(old.Questions)))
+		def, replaces := trustAskDef(client, key, where), ""
+		if mine != nil { // agentbus's open ask keeps its questions: this one joins them
+			if len(mine.Questions) >= bus.AskMaxQuestions || slices.ContainsFunc(mine.Questions, func(q bus.AskQuestionState) bool { return q.ID == trustAskQID(client) }) {
+				note(fmt.Errorf("agentbus's open ask has no room for %s's reminder", clientLabel(client)))
 				continue
 			}
-			if slices.ContainsFunc(old.Questions, func(q bus.AskQuestionState) bool { return q.ID == trustAskQID(client) }) {
-				note(fmt.Errorf("%s's open ask already uses the id %s for a question of its own", agent, trustAskQID(client)))
-				continue
-			}
-			merged := bus.AskDef{From: agent, Title: old.Title, Task: old.Task}
-			for _, q := range old.Questions {
+			merged := bus.AskDef{From: trustAskFrom, Title: mine.Title, Task: mine.Task}
+			for _, q := range mine.Questions {
 				merged.Questions = append(merged.Questions, q.AskQuestion)
 			}
-			def, replaces = bus.AskDef{From: merged.From, Title: merged.Title, Task: merged.Task, Questions: append(merged.Questions, def.Questions...)}, old.ID
+			def, replaces = bus.AskDef{From: trustAskFrom, Title: merged.Title, Task: merged.Task, Questions: append(merged.Questions, def.Questions...)}, mine.ID
 		}
 		c, cancel := ctx()
 		id, _, err := ab.Ask(c, def, replaces)
@@ -330,7 +323,16 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 			note(err)
 			continue
 		}
-		openFor[client] = open{agent, id, trustAskQID(client)}
+		for other, held := range openFor { // a replace moved the earlier reminders to the new ask
+			if held == replaces {
+				openFor[other] = id
+			}
+		}
+		openFor[client] = id
+		mine = &bus.Ask{ID: id, From: trustAskFrom, Title: def.Title, Task: def.Task, State: "open"}
+		for _, q := range def.Questions {
+			mine.Questions = append(mine.Questions, bus.AskQuestionState{AskQuestion: q})
+		}
 	}
 	return closeTrusted
 }
