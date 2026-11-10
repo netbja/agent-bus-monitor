@@ -14,8 +14,11 @@ remains is per agent:
   Claude Code's transcripts (`tokens.ClaudeScan`). A Codex agent has no proved session, so it is
   never counted. `tokens.CodexScan` already exists and counts Codex rollouts, but only for
   `agentbus tokens --unattributed`: nothing ties a rollout to an agent.
-- **Context fill** (`{p}:usage`, the agent's page): read from Claude Code's transcripts only
-  (`collectAgentUsage`).
+- **Context**, two contracts (reviewer-codex): the **fill as a percentage** is `bus.ContextFill`
+  in `{p}:context`, published by the dispatcher's context pass (`dispatch/context.go`) from the
+  reading `agentbus statusline` recorded for the agent's proved session (decision 2026-10-27).
+  The **raw context count** is `UsageSnapshot.Ctx` in `{p}:usage`, from Claude Code's transcripts
+  (`collectAgentUsage`). Both are Claude-only today.
 
 Measured on 2026-11-10 (`agentbus agents --json`): every Claude agent has an `ident_session`;
 reviewer-codex has none.
@@ -48,6 +51,11 @@ stdout, and always exits 0. A Codex started outside the launcher (no hook) stays
 today.
 
 The session is recorded with `Client: codex` (the record already has `Provider` and `Client`).
+The hook seam is `codexHookArgs` (`rolecfg/resume.go`, used by `launch.go`).
+
+**What else reads `IdentSession`** (foureyes), and stays as it is for Codex: auto-clear acts only
+for `clearClients` (`claude-code`), so a proved Codex session never gets `/clear`; the context
+pass's statusline read simply misses for a Codex session until part 4 gives it a source.
 
 ## 4. Counting
 
@@ -57,9 +65,14 @@ The session is recorded with `Client: codex` (the record already has `Provider` 
   the files modified within the record's 8 days, the same per-pass budget). The sums go into the
   same `{p}:tokens` rows (agent, provider `openai`, day). Codex's counts then show on the U page
   and in `agentbus tokens`, and leave `--unattributed`.
-- **Context fill:** from the proved session's last `token_count` event:
-  `last_token_usage.input_tokens` (the request's context) against `model_context_window`, written
-  to `{p}:usage` like Claude's. Part 6, Q2 asks how to show it.
+- **Context fill (`{p}:context`):** the context pass gets a second source for a proved Codex
+  session: its last `token_count` event, `last_token_usage.input_tokens` (the request's context)
+  against `model_context_window`, as `bus.ContextFill{Pct, ObservedAt: the event's timestamp,
+  Session}`, published in the same fenced replace as Claude's. A consequence to accept: the
+  context alert (ca2, `dispatch.context_alert`) then applies to Codex agents at the same
+  threshold, telling them to hand off. Part 6, Q2 asks how to show it.
+- **Raw context count (`{p}:usage`):** the same event's input tokens as `UsageSnapshot.Ctx`, with
+  `Source: rollout`, so the agent's page shows the count beside the percentage.
 - **Nothing is invented:** an agent with no proved session gets the explicit row of step 2 (`no
   token count for codex (no proved session)`), never a zero.
 
@@ -79,24 +92,29 @@ session id, a file named by it, a token record in it), once its client provides 
 1. **Count Codex agents' tokens per agent** as in parts 3–4 (the Codex hook also proves the
    session; the dispatcher reads `~/.codex/sessions`)? The recommendation is yes.
 2. **Codex's context fill:** Codex states its window (`model_context_window`), so a percentage is
-   exact. Show it as a percentage, as the decision of 2026-10-27 does for Claude (from the
-   statusLine), or as raw tokens? The recommendation is the percentage, with the raw count in the
-   agent's page.
+   exact. Publish it as a percentage in `{p}:context`, as the decision of 2026-10-27 does for
+   Claude, with the raw count in `{p}:usage`, or the raw count only? The percentage also turns on
+   the context alert (hand off at the threshold) for Codex agents. The recommendation is the
+   percentage and the alert, as for Claude.
 3. **Kimi, Gemini, Grok:** the explicit `no adapter` row until their clients record tokens per
    session, rather than anything estimated? The recommendation is yes.
 
 ## 7. Tests (when built)
 
 - The hook: a Codex `SessionStart` payload with a valid id hands it to the prover; an invalid id,
-  another event, or no payload hands nothing; the turn still ends; stdout stays empty.
+  another event, or no payload hands nothing; the turn still ends; stdout stays empty. A resumed
+  session (`source: resume`, the same id, a new process) is proved again, never refused as a stale
+  proof (foureyes).
 - The pass: a recorded Codex session finds its rollout in a start-date folder other than today's;
   its `token_count` deltas land on the agent's rows by day; a Claude session in the same pass is
   counted as before; an id that is not valid builds no path.
-- Context: the last `token_count` gives the fill against `model_context_window`; no event, no fill
-  (never 0).
+- Context: the last `token_count` gives `{p}:context`'s fill against `model_context_window` and
+  `{p}:usage`'s raw count; no event, neither (never 0); a Claude agent's fill still comes from its
+  statusline reading.
 
 ## 8. Steps (each its own subject for 4-eyes)
 
 1. The hook hands the Codex session to the prover (`roles turn end`), with its tests.
 2. The tokens pass counts proved Codex sessions with `CodexScan`.
-3. Codex's context fill in `{p}:usage`, shown as part 6, Q2 decides.
+3. Codex's context: the fill in `{p}:context` (the context pass's second source) and the raw count
+   in `{p}:usage`, as part 6, Q2 decides.
