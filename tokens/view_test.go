@@ -128,7 +128,7 @@ func TestAgentRows(t *testing.T) {
 			agents: map[string]bus.AgentSnapshot{
 				"a-codex":   {Client: "codex"},
 				"b-openai":  {Provider: "openai"},
-				"c-kimi":    {Client: "kimi"},
+				"c-kimi":    {Client: "kimi-cli"}, // the launcher's client name (rolecfg), not "kimi" (foureyes)
 				"d-moon":    {Provider: "moonshot"},
 				"e-nopid":   {Provider: "anthropic", IdentSession: sess},
 				"f-badsess": {Provider: "anthropic", PID: 7, IdentSession: "../x"},
@@ -142,6 +142,28 @@ func TestAgentRows(t *testing.T) {
 				{Agent: "d-moon", Provider: "moonshot", In: -1, Out: -1, Reason: "Kimi logs give no token counts"},
 				{Agent: "e-nopid", Provider: "anthropic", In: -1, Out: -1, Reason: "no session proved with its process"},
 				{Agent: "f-badsess", Provider: "anthropic", In: -1, Out: -1, Reason: "no session proved with its process"},
+			},
+		},
+		{
+			// idle-view-providers step 2: only Claude Code's sessions are counted,
+			// so another client never reads 0, proved or not: it says it has no adapter.
+			name:  "a client with no token adapter says so, never 0",
+			known: true,
+			agents: map[string]bus.AgentSnapshot{
+				"a-grok":   {Client: "grok", Provider: "xai", PID: 7, IdentSession: sess},
+				"b-agy":    {Client: "agy", Provider: "google"},
+				"c-xai":    {Provider: "xai", PID: 7, IdentSession: sess},
+				"d-other":  {Client: "vibe", Provider: "mistral", PID: 7, IdentSession: sess},
+				"f-codex":  {Client: "codex", Provider: "openai", PID: 7, IdentSession: sess}, // proved, not yet counted (reviewer-codex)
+				"e-claude": {Client: "claude-code", Provider: "anthropic", PID: 7, IdentSession: sess},
+			},
+			want: []rowView{
+				{Agent: "e-claude", Provider: "anthropic", In: 0, Out: 0},
+				{Agent: "a-grok", Provider: "xai", In: -1, Out: -1, Reason: "no token count for grok (no adapter)"},
+				{Agent: "b-agy", Provider: "google", In: -1, Out: -1, Reason: "no token count for agy (no adapter)"},
+				{Agent: "c-xai", Provider: "xai", In: -1, Out: -1, Reason: "no token count for xai (no adapter)"},
+				{Agent: "d-other", Provider: "mistral", In: -1, Out: -1, Reason: "no token count for vibe (no adapter)"},
+				{Agent: "f-codex", Provider: "openai", In: -1, Out: -1, Reason: "no token count for codex (no adapter)"},
 			},
 		},
 		{

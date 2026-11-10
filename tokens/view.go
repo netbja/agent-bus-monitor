@@ -77,10 +77,12 @@ func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents m
 		switch {
 		case !known:
 			a.Reason = reason
-		case s.Client == "codex" || s.Provider == "openai":
-			a.Reason = "Codex session not proved"
-		case s.Client == "kimi" || s.Provider == "moonshot":
+		case (s.Client == "codex" || s.Provider == "openai") && (s.PID == 0 || !ValidSessionID(s.IdentSession)):
+			a.Reason = "Codex session not proved" // proved, it reads no adapter below (reviewer-codex)
+		case s.Client == "kimi-cli" || s.Provider == "moonshot":
 			a.Reason = "Kimi logs give no token counts"
+		case !countedClient(s): // only Claude Code's sessions are counted: never a 0 nobody counted
+			a.Reason = "no token count for " + or(s.Client, s.Provider) + " (no adapter)"
 		case s.PID == 0 || !ValidSessionID(s.IdentSession): // no proof, or an id no transcript path can carry
 			a.Reason = "no session proved with its process"
 		default:
@@ -106,6 +108,26 @@ func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents m
 		return out[i].Agent < out[j].Agent
 	})
 	return out
+}
+
+// countedClient: the tokens pass counts this agent's sessions (Claude Code's
+// transcripts, tokens.ClaudeScan). An agent that names neither a client nor a
+// provider is judged by its proof alone, as before (idle-view-providers).
+func countedClient(s bus.AgentSnapshot) bool {
+	switch {
+	case s.Client != "":
+		return s.Client == "claude-code"
+	case s.Provider != "":
+		return s.Provider == "anthropic"
+	}
+	return true
+}
+
+func or(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // topProvider is the provider an agent with rows today shows, by a rule that
