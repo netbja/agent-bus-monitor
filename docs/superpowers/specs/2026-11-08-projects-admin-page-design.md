@@ -294,14 +294,23 @@ read is kept and named.
 
 **The backup offer, and the one archive kept** (the person, Q7). The backup that §5.2 offers first
 is offered with `delete_backups` on too, and the archive it makes is **never** removed by this
-delete: it is the one exception. busmon knows it by the path `b`'s run printed (its last line,
-§5.2), compared with each candidate as a file (`os.SameFile` on the resolved path), never by name,
-date or size. The panel shows it on its own line:
+delete: it is the one exception. busmon knows it by the path `b`'s run printed on its
+`backup: <path>` line (an absolute path to a `.tar.zst`), read from **this run's** part of the log,
+after the runner's own `--- ` header. It is never the log's last line: `agentbus backup` prints
+that line first, then per-project lines, notes, `backup.after_command`'s outcome and the
+retention's `removed N` (foureyes). That path is compared with each candidate as a file
+(`os.SameFile` on the resolved path), never by name, date or size. The panel shows it on its own
+line, and its `backup:` line shows that path, not the run's last line:
 
 ```
    backups: 4 archives of demo alone; 3 archives also hold other projects: kept
    kept: ~/.local/share/agentbus/backups/agentbus-backup-host-20261110T0915.tar.zst (made now)
 ```
+
+**Fail closed** (foureyes): when `b` succeeded but its log names no such path, or the path does
+not resolve to an existing regular file, `delete_backups` removes **no** archive in this delete,
+and the panel says `backups: kept, the new archive's path is not in the log`. It never falls back
+to "no exception", which would erase the fresh archive. `delete_files` is unaffected.
 
 With `n` (no backup), nothing is exempt, and every archive of the project alone goes, as listed.
 An archive made earlier, even minutes before, is not the exception: only the one this panel's `b`
@@ -437,7 +446,10 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
   whose `coverage.json` lists only the project goes, a shared one and an unreadable one stay; the
   backup is still offered, and the archive `b` made is kept and shown (`kept: <path> (made now)`),
   through a link to it too, while an older archive of the project alone goes; with `n`, none is
-  kept. With keys that came back, no file is touched. Both off: nothing but keys.
+  kept. The path is read from the run's `backup: <path>` line with `backup.after_command` set and
+  retention pruning (the log's last line is then not a path): the fresh archive is still found and
+  kept; an earlier run's line in the same log is never taken. A log with no such line, or a path
+  that is not an existing regular file: no archive removed, the panel says so. With keys that came back, no file is touched. Both off: nothing but keys.
 
 ## 10. The person's answers (2026-11-09)
 
