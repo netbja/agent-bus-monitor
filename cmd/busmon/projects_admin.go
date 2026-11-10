@@ -64,6 +64,9 @@ type adminSource struct {
 	// memory is what one project's keys take (§3.3, the detail only); nil:
 	// not shown.
 	memory func(ctx context.Context, project string) (bus.MemoryUsage, error)
+	// unitHosts reads the other hosts where the project's units remain
+	// (§5.2); nil: not shown.
+	unitHosts func(ctx context.Context, project string) ([]unitHosts, error)
 }
 
 // Memory read bounds (§3.3): one call per key, so a deadline and a cap.
@@ -245,6 +248,17 @@ func realAdminSource(client *redis.Client, getenv func(string) string) adminSour
 		ctx, cancel := context.WithTimeout(ctx, memoryDeadline)
 		defer cancel()
 		return bus.ProjectMemory(ctx, client, p, memoryMaxKeys)
+	}
+	src.unitHosts = func(ctx context.Context, p string) ([]unitHosts, error) {
+		b, err := bus.Open(client, p)
+		if err != nil {
+			return nil, err
+		}
+		inst, recs, err := b.ServiceStates(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return remoteUnitHosts(inst, recs, host), nil
 	}
 	src.procAgents = hasProc
 	// The manager is found and asked inside the page's read, never at

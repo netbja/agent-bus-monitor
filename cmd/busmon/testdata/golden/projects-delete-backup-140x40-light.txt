@@ -13,16 +13,16 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Projects · 5 · read just now ──────────────────────────────────────────────────────────────────────────────────────────────── esc back ─╮
-│ services and herdr: this machine (vdr); — means not here                                                                                 │
-│                     ╭─ Delete project 'old' ───────────────────────────────────────────────────────────────────────╮                     │
-│   PROJECT           │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │MPLATE               │
-│   agent-bus-monitor │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │                     │
-│   trading           │ and gate leases all go. The template and the worktrees stay.                                 │                     │
-│   demo              │                                                                                              │                     │
-│ ▶ old               │ A backup first?  b back up, then continue · n no backup · esc cancel                         │                     │
-│   newone            ╰──────────────────────────────────────────────────────────────────────────────────────────────╯                     │
-│                                                                                                                                          │
-│                                                                                                                                          │
+│ services and herdr: ╭─ Delete project 'old' ───────────────────────────────────────────────────────────────────────╮                     │
+│                     │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
+│   PROJECT           │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │MPLATE               │
+│   agent-bus-monitor │ and gate leases all go. The template and the worktrees stay.                                 │                     │
+│   trading           │ units reported on: box2 (dispatch, missions)                                                 │                     │
+│   demo              │ remove them there: agentbus --project old service remove                                     │                     │
+│ ▶ old               │ other hosts may keep units the broker no longer records: agentbus service list there         │                     │
+│   newone            │                                                                                              │                     │
+│                     │ A backup first?  b back up, then continue · n no backup · esc cancel                         │                     │
+│                     ╰──────────────────────────────────────────────────────────────────────────────────────────────╯                     │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

@@ -23,16 +23,16 @@
 │ ▶ old                                stopped     0/2     12      dispatch ○             —                40d ago                         │
 │   newone                             template    —       —       —                      —                —        ✓                      │
 │                                                                                                                                          │
-│                                                                                                                                          │
 │                     ╭─ Delete project 'old' ───────────────────────────────────────────────────────────────────────╮                     │
 │                     │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
 │                     │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │                     │
 │                     │ and gate leases all go. The template and the worktrees stay.                                 │                     │
+│                     │ units reported on: box2 (dispatch, missions)                                                 │                     │
+│                     │ remove them there: agentbus --project old service remove                                     │                     │
+│                     │ other hosts may keep units the broker no longer records: agentbus service list there         │                     │
 │                     │                                                                                              │                     │
 │                     │ A backup first?  b back up, then continue · n no backup · esc cancel                         │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────────────────────────╯                     │
-│                                                                                                                                          │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

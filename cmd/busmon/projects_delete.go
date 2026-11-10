@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,8 @@ const (
 type deletePanel struct {
 	row       adminRow
 	unchecked bool // no /proc here: this host's agents are not checked
+	hosts     []unitHosts
+	hostsErr  error
 	step      int
 	backup    string // the archive, or "no backup"
 	field     string
@@ -54,12 +57,69 @@ type deletePanel struct {
 
 type deleteCheckMsg struct {
 	project, reason string
+	hosts           []unitHosts // where units remain, read with the check (§5.2)
+	hostsErr        error
+}
+
+// unitHosts is one other host where a project's units remain installed, and
+// the kinds they run (§5.2, the person's Q5).
+type unitHosts struct {
+	host  string
+	kinds []string
+}
+
+// remoteUnitHosts reads them from {p}:services: the installed marker's host
+// and each service record's, minus here, whose units the delete removes. A
+// record that names no host is listed as "?".
+func remoteUnitHosts(inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, here string) []unitHosts {
+	kinds := map[string]map[string]bool{}
+	add := func(host, kind string) {
+		if host == "" {
+			host = "?"
+		}
+		if host == here {
+			return
+		}
+		if kinds[host] == nil {
+			kinds[host] = map[string]bool{}
+		}
+		kinds[host][kind] = true
+	}
+	if inst != nil {
+		for _, k := range inst.Kinds {
+			add(inst.Host, k)
+		}
+	}
+	for k, r := range recs {
+		add(r.Host, k)
+	}
+	var out []unitHosts
+	for h, ks := range kinds {
+		u := unitHosts{host: h}
+		for k := range ks {
+			u.kinds = append(u.kinds, k)
+		}
+		sort.Strings(u.kinds)
+		out = append(out, u)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].host < out[j].host })
+	return out
+}
+
+// unitHostsText is "vdr (dispatch, missions), box2 (extra)".
+func unitHostsText(hs []unitHosts) string {
+	var parts []string
+	for _, h := range hs {
+		parts = append(parts, h.host+" ("+strings.Join(h.kinds, ", ")+")")
+	}
+	return strings.Join(parts, ", ")
 }
 
 type deleteDoneMsg struct {
 	res    deleteResult
 	became string // the second check refused: nothing was deleted
 	open   bool
+	hosts  []unitHosts // where units remain: repeated in the notice
 }
 
 // projectDelete is d on a row: the checks, read in a command (§5.1).
@@ -74,10 +134,15 @@ func (m *Model) projectDelete(r adminRow) tea.Cmd {
 	}
 	quiet := m.adminQuiet()
 	ctx := m.cfgCtx()
+	src := m.cfg.admin
 	return func() tea.Msg {
 		c, cancel := context.WithTimeout(ctx, adminReadTimeout)
 		defer cancel()
-		return deleteCheckMsg{project: r.name, reason: quiet(c, r.name)}
+		msg := deleteCheckMsg{project: r.name, reason: quiet(c, r.name)}
+		if msg.reason == "" && src != nil && src.unitHosts != nil {
+			msg.hosts, msg.hostsErr = src.unitHosts(c, r.name) // read before the DEL removes them
+		}
+		return msg
 	}
 }
 
@@ -114,7 +179,7 @@ func (m *Model) gotDeleteCheck(msg deleteCheckMsg) {
 		m.ui.flash, m.ui.flashErr = msg.reason, true
 		return
 	}
-	m.ui.del = &deletePanel{row: p.proj.rows[p.sel], unchecked: p.proj.agentsUnchecked}
+	m.ui.del = &deletePanel{row: p.proj.rows[p.sel], unchecked: p.proj.agentsUnchecked, hosts: msg.hosts, hostsErr: msg.hostsErr}
 }
 
 // deleteKey is a key on the panel: its own table; on the name step every
@@ -186,7 +251,7 @@ func (m *Model) deleteBackupDone(r *sleepRun, err error) {
 func (m *Model) runDelete() tea.Cmd {
 	d := m.ui.del
 	d.step = delDeleting
-	name, open := d.row.name, d.row.open
+	name, open, hosts := d.row.name, d.row.open, d.hosts
 	quiet, src, ctx := m.adminQuiet(), m.cfg.admin, m.cfgCtx()
 	return func() tea.Msg {
 		c, cancel := context.WithTimeout(ctx, deleteTimeout)
@@ -197,7 +262,7 @@ func (m *Model) runDelete() tea.Cmd {
 		if src == nil || src.remove == nil {
 			return deleteDoneMsg{res: deleteResult{project: name, err: errors.New("no broker to delete from")}, open: open}
 		}
-		return deleteDoneMsg{res: src.remove(c, name), open: open}
+		return deleteDoneMsg{res: src.remove(c, name), open: open, hosts: hosts}
 	}
 }
 
@@ -218,6 +283,13 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 		if len(r.services) > 0 {
 			text += fmt.Sprintf("; removed the %s %s here", strings.Join(r.services, " and "), plural(len(r.services), "service"))
 		}
+		if len(msg.hosts) > 0 {
+			var names []string
+			for _, h := range msg.hosts {
+				names = append(names, h.host)
+			}
+			text += "; units reported on " + strings.Join(names, ", ") + ": agentbus --project " + r.project + " service remove there"
+		}
 		if msg.open {
 			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --pick to open another project", r.project, r.keys, plural(int(r.keys), "key"))
 			return tea.Quit
@@ -228,6 +300,24 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 		return m.projectsCmd(p.serial)
 	}
 	return nil
+}
+
+// unitHostsLines are the panel's lines on the other hosts' units (§5.2):
+// where they stay, and the command that removes them there.
+func (m Model) unitHostsLines() []Line {
+	d := m.ui.del
+	// The broker reports only the last up's marker and each kind's last
+	// record: a host that fell silent leaves no trace (reviewer-codex), so
+	// the panel never claims to name them all.
+	caveat := Line{{Text: "other hosts may keep units the broker no longer records: agentbus service list there", Role: RoleMuted}}
+	switch {
+	case d.hostsErr != nil:
+		return []Line{{{Text: "units on other hosts: ? (" + Preview(d.hostsErr.Error()) + ")", Role: RoleAttention}}, caveat}
+	case len(d.hosts) == 0:
+		return []Line{{{Text: "units reported: this machine only", Role: RoleMuted}}, caveat}
+	}
+	return []Line{{{Text: "units reported on: " + unitHostsText(d.hosts), Role: RoleAttention}},
+		{{Text: "remove them there: agentbus --project " + d.row.name + " service remove", Role: RoleMuted}}, caveat}
 }
 
 // deletePanelLines is the panel's body at width w.
@@ -249,8 +339,8 @@ func (m Model) deletePanelLines(w int) []Line {
 	}
 	lines = append(lines, []Line{
 		{{Text: "This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot and gate leases all go. The template and the worktrees stay.", Role: RoleText}},
-		nil,
 	}...)
+	lines = append(append(lines, m.unitHostsLines()...), nil)
 	key := func(k, what string) Line {
 		return Line{{Text: k, Role: RoleAccent, Bold: true}, {Text: " " + what, Role: RoleMuted}}
 	}

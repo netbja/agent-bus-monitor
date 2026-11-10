@@ -3,10 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
 // deleteWorld is the Projects page with fake checks and a fake delete.
@@ -293,5 +299,92 @@ func TestProjectsDeleteUnknowns(t *testing.T) {
 	w.press(t, 'd')
 	if w.m.ui.del == nil || strings.Contains(w.m.grid().plain(), "not checkable") {
 		t.Fatal("the line shows with /proc")
+	}
+}
+
+// projects-admin §5.2 (the person, Q5): the hosts where units remain, from
+// {p}:services (the installed marker's host and each record's), this machine
+// left out: it is the one whose units the delete removes.
+func TestRemoteUnitHosts(t *testing.T) {
+	inst := &bus.ServicesInstall{Kinds: []string{"dispatch", "missions"}, Host: "vdr"}
+	recs := map[string]bus.ServiceRecord{"dispatch": {Host: "vdr"}, "missions": {Host: "laptop"}, "extra": {Host: "box2"}}
+	got := remoteUnitHosts(inst, recs, "laptop")
+	if len(got) != 2 || got[0].host != "box2" || strings.Join(got[0].kinds, ",") != "extra" ||
+		got[1].host != "vdr" || strings.Join(got[1].kinds, ",") != "dispatch,missions" {
+		t.Fatalf("hosts %+v", got)
+	}
+	if got := remoteUnitHosts(nil, nil, "laptop"); len(got) != 0 {
+		t.Fatalf("none recorded: %+v", got)
+	}
+	if got := remoteUnitHosts(&bus.ServicesInstall{Kinds: []string{"dispatch"}, Host: "laptop"}, nil, "laptop"); len(got) != 0 {
+		t.Fatalf("this machine only: %+v", got)
+	}
+	if got := remoteUnitHosts(nil, map[string]bus.ServiceRecord{"dispatch": {}}, "laptop"); len(got) != 1 || got[0].host != "?" {
+		t.Fatalf("a record with no host: %+v", got)
+	}
+}
+
+// The panel names them before the delete, and the done notice repeats them
+// (the DEL removes {p}:services); none: this machine only; unreadable: "?".
+func TestProjectsDeleteNamesUnitHosts(t *testing.T) {
+	for _, c := range []struct {
+		hosts      []unitHosts
+		err        error
+		panel, end string
+	}{
+		{[]unitHosts{{host: "vdr", kinds: []string{"dispatch", "missions"}}}, nil,
+			"units reported on: vdr (dispatch, missions)", "units reported on vdr: agentbus --project old service remove there"},
+		{nil, nil, "units reported: this machine only", ""},
+		{nil, errors.New("i/o timeout"), "units on other hosts: ? (i/o timeout)", ""},
+	} {
+		w := newDeleteWorld(t)
+		src := *w.m.cfg.admin
+		src.unitHosts = func(context.Context, string) ([]unitHosts, error) { return c.hosts, c.err }
+		w.m.cfg.admin = &src
+		w.result = deleteResult{keys: 12}
+		w.selectRow(t, "old")
+		w.press(t, 'd')
+		if screen := w.m.grid().plain(); !strings.Contains(screen, c.panel) {
+			t.Fatalf("%q: panel:\n%s", c.panel, screen)
+		}
+		if !strings.Contains(w.m.grid().plain(), "other hosts may keep units the broker no longer records") {
+			t.Fatalf("no caveat:\n%s", w.m.grid().plain())
+		}
+		if len(c.hosts) > 0 && !strings.Contains(w.m.grid().plain(), "agentbus --project old service remove") {
+			t.Fatalf("no way to remove them:\n%s", w.m.grid().plain())
+		}
+		w.press(t, 'n')
+		w.typeName(t, "old")
+		w.press(t, tea.Key{Code: tea.KeyEnter})
+		if !noticeHas(w.m, "deleted 12 keys of old") || c.end != "" && !noticeHas(w.m, c.end) || c.end == "" && noticeHas(w.m, "units reported on") {
+			t.Fatalf("%q: notices %v", c.end, w.m.notice.queue)
+		}
+	}
+}
+
+// The real reader of §5.2 on a disposable Redis: {p}:services as `agentbus up`
+// and the services write it, this machine left out.
+func TestUnitHostsReader(t *testing.T) {
+	testredis.Configure(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	project := "uh" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b, _ := bus.Open(c, project)
+	t.Cleanup(func() { c.Del(ctx, bus.ServicesKey(project)) })
+	here, _ := os.Hostname()
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch", "missions"}, Manager: "systemd", Host: "far-host"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.PutServiceState(ctx, "dispatch", bus.ServiceRecord{State: "stopped", Host: here}); err != nil {
+		t.Fatal(err)
+	}
+	src := realAdminSource(c, func(string) string { return "" })
+	got, err := src.unitHosts(ctx, project)
+	if err != nil || len(got) != 1 || got[0].host != "far-host" || strings.Join(got[0].kinds, ",") != "dispatch,missions" {
+		t.Fatalf("hosts %+v %v", got, err)
 	}
 }
