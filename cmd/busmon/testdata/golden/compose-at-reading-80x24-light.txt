@@ -1,7 +1,7 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
-│  ● ask    master    review lot 1? (2 questions)                            4m│
+│  ● answer master    review lot 1? (2 questions)                            4m│
 │ ╭─ Compose ────────────────────────────────────────────────────────────────╮m│
 │ │ to: @coder                                                   · directive │m│
 │ │ Please read @                                                            │ │

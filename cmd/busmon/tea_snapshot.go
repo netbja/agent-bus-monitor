@@ -6,6 +6,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -42,6 +43,8 @@ type snapshot struct {
 	guardianNow                       time.Time
 	svcInst                           *bus.ServicesInstall
 	svcRecs                           map[string]bus.ServiceRecord
+	ideas                             []memory.Question
+	ideasErr                          bool
 }
 
 // takeSnapshot copies st at now.
@@ -64,7 +67,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause, pauseFailed: st.pauseFailed,
 		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, mergeQ: st.mergeQ, mergeQRead: st.mergeQRead, mergeQErr: st.mergeQErr, requestsReadAt: st.requestsReadAt, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
 		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
-		svcInst: st.svcInst, svcRecs: st.svcRecs,
+		svcInst: st.svcInst, svcRecs: st.svcRecs, ideas: st.ideas, ideasErr: st.ideasErr,
 	}
 	for n, a := range st.agents {
 		c := *a

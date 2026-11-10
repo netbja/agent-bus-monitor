@@ -89,9 +89,12 @@ func TestForYouPanelRowsAndLabel(t *testing.T) {
 			t.Errorf("the pointer is not muted: %+v", last.Line)
 		}
 	}
-	q := stripOf(m.forYou)
-	if q.decide == 0 || q.merge == 0 {
-		t.Fatalf("fixture strip %+v", q)
+	// One counter (requests-plan-redesign, correction 3): the label is the
+	// Work model's, which also counts the person's unblocked plan task the
+	// pointer names.
+	q := m.work.strip(0)
+	if q.decide == 0 || q.merge == 0 || q.decide+q.merge != m.work.youCount() || q.decide != stripOf(m.forYou).decide+1 {
+		t.Fatalf("fixture strip %+v, YOU %d, For you %+v", q, m.work.youCount(), stripOf(m.forYou))
 	}
 	if got, want := m.lists.forYou.label.text(), itoa(q.decide)+" decide "+GlyphNone+" "+itoa(q.merge)+" merge"; got != want {
 		t.Errorf("label %q, want %q", got, want)
