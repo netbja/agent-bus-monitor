@@ -65,3 +65,21 @@ func TestAskCLITask(t *testing.T) {
 		t.Fatal("an invalid task was accepted")
 	}
 }
+
+// reviewer-codex: agentbus is the bus's own sender (bus.SystemSender): the
+// ask CLI refuses it, to ask as to withdraw, before any broker call, so no
+// agent can forge a trust reminder or close one.
+func TestAskRefusesTheSystemSender(t *testing.T) {
+	for _, args := range [][]string{
+		{"agentbus"},
+		{"agentbus", "--replace", "a1"},
+		{"agentbus", "--withdraw", "a1"},
+		{"agentbus", "--withdraw", "a1", "--question", "trust-claude-code", "--note", "x"},
+	} {
+		var out, errw bytes.Buffer
+		in := `{"title":"t","questions":[{"id":"trust-claude-code","header":"Folder trust","question":"q?","options":[{"label":"a"}]}]}`
+		if code := runAsk(context.Background(), nil, args, strings.NewReader(in), &out, &errw); code == 0 || !strings.Contains(errw.String(), "reserved") {
+			t.Errorf("%v: exit %d, %q", args, code, errw.String())
+		}
+	}
+}
