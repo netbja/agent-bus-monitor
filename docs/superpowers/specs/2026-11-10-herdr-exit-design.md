@@ -5,6 +5,7 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 5: reviewer-codex at bd371e32 (the herdr adapter cannot check and type atomically)
 - Revision 4: foureyes P2 at bd371e32 (names in `WakeLine` and in the submit frame)
 - Revision 3: reviewer-codex CHANGES at bc2d8394 (Runtime.Prompt still takes text; focus
   fallback for viewers without focus reports)
@@ -175,10 +176,20 @@ Interface rules (part of the interface, not comments):
   The only frame that carries raw input bytes is the attach stream (§4.6), opened by a person's
   `agentbus attach`; observer attaches carry none. This is a trust boundary between same-uid
   processes, so §4.4 and §4.6 go to the **security role** for review before step 9 starts.
-- `Submit` refuses (typed error `ErrPersonActive`) when Activity says a person is active
-  (§4.5). The host enforces it at the moment of typing; the dispatcher's check before is only
-  an early skip. This closes the inspect→type race the dispatcher handles today with a
-  re-inspection.
+- `Submit` refuses (typed error `ErrPersonActive`) when a person is active (§4.5). How strong
+  that refusal is depends on the adapter, and the interface says so: `HostInfo.AtomicSubmit`.
+  - **holder** (`AtomicSubmit = true`): the check and the write happen under the terminal's
+    input lock, which every viewer's input also takes; no viewer byte can land between the
+    check and the last byte of the line. This closes the inspect→type race.
+  - **herdr** (`AtomicSubmit = false`): herdr has no check-and-prompt call. The adapter does
+    what the dispatcher does today: a fresh `agent get` for focus right before `agent prompt`,
+    then the prompt. The residual window is the time between those two herdr calls (bounded
+    by `herdrCallTimeout`, 3 s; in practice one CLI round-trip). This is **today's documented
+    residual, unchanged**, and it stays until the project moves to the holder (step 15); the
+    spec claims no improvement for herdr.
+  - The contract suite's race test (a viewer types concurrently with `Submit`; no interleaving,
+    or a refusal) runs only on adapters with `AtomicSubmit`; on the others the suite checks only
+    the pre-typing refusal. busmon's About/health shows `atomic submit: no` for a herdr project.
 - `Start` puts `AGENTBUS_TERM_ID` and `AGENTBUS_HOST` in the program's environment, and returns
   the pid it spawned. Identity no longer needs a process search: the host knows its child.
 - Every call reports what it observed, never what it assumed (herdr-core's rule, adopted).
@@ -384,7 +395,7 @@ superseded.
   `relaunch`/`swap`/`suspend`/`resume` on `Host`; `holder drain`. `config/keys.go`:
   `terminal.host` (`herdr|holder`), `holder.scrollback`, `holder.size`, `holder.drain_warn`,
   `dispatch.person_quiet`, `dispatch.draft_wait`.
-- `Host` also answers `Describe(ctx) (HostInfo, error)` — name, version, socket/session, per
+- `Host` also answers `Describe(ctx) (HostInfo, error)` — name, version, `AtomicSubmit`, socket/session, per
   project terminal count, draining builds — for the callers that today report on herdr itself
   (health, about, projects admin, suspend snapshot).
 - `cmd/busmon`: preview panel, attach key; no herdr env.
@@ -476,7 +487,7 @@ detection herdr-independent.
 | Old holder never drains (`/clear` keeps the process) | two builds forever, fixes never reach old terminals | `holder_draining` health, `holder drain` rolling relaunch on the person's word |
 | A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 9 |
 | Losing the tiled always-visible layout | the person sees less at a glance | busmon preview + terminal splits; Q1 |
-| Person/agent typing race | wake line inside a draft | host-side refusal at typing time, draft tracking |
+| Person/agent typing race | wake line inside a draft | holder: check and write under the input lock (closed); herdr: today's re-inspect-then-prompt residual, bounded by one call (≤ 3 s), kept until step 15 and shown as `atomic submit: no` |
 | macOS process facts (foreground group, start time) | identity/foreground wrong on Mac | `tcgetpgrp` on the PTY master is portable; per-OS facts behind one platform file, tested on its OS |
 | Two hosts during the trial | confusion over where an agent runs | `terminal.host` per project; busmon shows the host per agent |
 | Scope creep into a multiplexer | months of work | non-goal stated; busmon only previews and attaches |
