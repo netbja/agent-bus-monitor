@@ -1,7 +1,8 @@
 # A Codex agent's tokens and context, counted like a Claude agent's (codex-token-attribution)
 
-Status: proposed, for the person's review (task `idle-view-providers-1`, step 3). No code before
-the answers in part 6. Base `origin/main`. This spec names functions and seams, not line numbers.
+Status: merged (PR 416); the person answered part 6 on 2026-11-10 (task
+`codex-token-attribution-impl`): yes to all three; being implemented in the steps of part 8.
+Base `origin/main`. This spec names functions and seams, not line numbers.
 
 ## 1. The gap
 
@@ -49,6 +50,15 @@ a valid `session_id` (`bus.ValidSessionID`), also hands it to that same prover. 
 refusals, same log. Nothing else changes in the hook: it still ends the turn, never prints on
 stdout, and always exits 0. A Codex started outside the launcher (no hook) stays unproved, as
 today.
+
+**The same accepted limit** (reviewer-codex): the prover trusts the hook's ancestor chain, so a
+process of the same local user, the agent itself included, can run the hook by hand and name any
+valid session. The lifecycle spec (`2026-10-28-agent-lifecycle-design.md`, part D, "What it still
+trusts") accepts this for Claude Code's resume hook, for the reason a forged `status` is accepted:
+the bus authenticates no local process (one Redis password, the user's own files), and the worst
+outcome is that the fill and the tokens follow the wrong session until the next proof, which never
+moves a pid, a pane or a declared state. Codex adds no new trust; an unforgeable proof (a launcher
+token) would be a change to both clients' path, outside this spec.
 
 The session is recorded with `Client: codex` (the record already has `Provider` and `Client`).
 The hook seam is `codexHookArgs` (`rolecfg/resume.go`, used by `launch.go`).
@@ -98,6 +108,14 @@ session id, a file named by it, a token record in it), once its client provides 
    percentage and the alert, as for Claude.
 3. **Kimi, Gemini, Grok:** the explicit `no adapter` row until their clients record tokens per
    session, rather than anything estimated? The recommendation is yes.
+
+**The person's answers (2026-11-10):**
+
+1. **Yes:** Codex agents' tokens are counted per agent, the session proved by the hook as Claude's,
+   then `CodexScan` on the proved rollout.
+2. **A percentage:** Codex's fill in `{p}:context`, exact from `model_context_window` (the context
+   alert applies to Codex agents as to Claude's); the raw count on the agent's page.
+3. **Yes:** Kimi, Gemini and Grok read `no token count (no adapter)`, nothing estimated.
 
 ## 7. Tests (when built)
 
