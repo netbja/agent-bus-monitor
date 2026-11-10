@@ -5,6 +5,8 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 3: reviewer-codex CHANGES at bc2d8394 (Runtime.Prompt still takes text; focus
+  fallback for viewers without focus reports)
 - Revision 2: foureyes CHANGES at bc2d8394 (P1 host-reported facts; P2 drain bound, wire-level
   closed set, herdr callers outside dispatch, resume storage; P3 interrupt, macOS socket dir,
   file count, step 8 split, socket enumeration)
@@ -177,9 +179,17 @@ Interface rules (part of the interface, not comments):
 - Every call reports what it observed, never what it assumed (herdr-core's rule, adopted).
 
 Where callers land:
-- `dispatch.Runtime` keeps its three methods; its herdr implementation becomes
-  `termhost` + `agentstate`. `Inspection` keeps its fields; `State`, `Ready`, `Busy` come from
-  `agentstate`, `Focused` becomes "person active".
+- `dispatch.Runtime` keeps its three operations, but **`Prompt` loses its text parameter**:
+  today it is `Prompt(ctx, pane, text, nonce string)` and only checks that `text` contains the
+  nonce marker, so any string still crosses the seam. It becomes
+  `Prompt(ctx, pane string, line termhost.Line)`; the dispatcher builds the line with
+  `termhost.WakeLine(project, agent, count, nonce)` and `Clear` passes `termhost.ClearLine()`.
+  `Line` has unexported fields and no exported constructor from a string, so no caller in any
+  package can make one carry other text; the observed marker is read from the `Line`, not
+  passed beside it. This change lands in step 1, with a test that fails if any exported
+  function of `dispatch` or `termhost` takes a `string` that reaches `Submit`. Over the
+  holder's socket the same set is enforced by the frame (below). `Inspection` keeps its fields;
+  `State`, `Ready`, `Busy` come from `agentstate`, `Focused` becomes "person active".
 - `up`, `start`, `restore`, `relaunch`, `swap`, `suspend`, self-repair call `Start/List/Close`
   only. The herdr adapter maps a project to a workspace and an agent to a tab; that mapping
   lives in the adapter and dies with it.
@@ -248,10 +258,21 @@ window; it has viewers. Proposed rule (Q2 decides the threshold):
 
 > The dispatcher never types into a terminal while a person is **active** in it: a viewer has
 > typed within `dispatch.person_quiet` (default 3 s), or holds an unsent draft (typed bytes
-> since the last CR, up to `dispatch.draft_wait`, default 60 s), or a viewer is attached with
-> focus (the viewer's terminal reports focus-in via mode 1004).
+> since the last CR, up to `dispatch.draft_wait`, default 60 s), or a non-observer viewer is
+> attached and **not proven unfocused**.
 
-Strict alternative: any attached, non-observer viewer blocks typing. The focus notice
+"Proven unfocused" fails closed. Whether a viewer's terminal supports focus reports (mode 1004)
+cannot be queried; it can only be observed. So `agentbus attach` enables 1004 on the outer
+terminal and forwards focus-in/focus-out to the holder as control frames (never as program
+input). A viewer counts as **focused from the moment it attaches** and stays so until the
+holder has received a focus-out from it; after a focus-out it is unfocused until the next
+focus-in. A terminal that never sends focus reports therefore blocks typing for as long as it
+is attached — today's invariant ("never type into a focused pane") holds without knowing the
+terminal. An observer (`--observe`) never blocks: it cannot type. The quiet and draft timers
+apply in addition, never instead.
+
+Strict alternative (Q2 b): any attached non-observer viewer blocks typing, focus reports
+ignored. The focus notice
 (`dispatch.focus_notice`) keeps its meaning: a wake waiting on the person is shown in busmon.
 
 ### 4.6 The person's console: busmon + attach
@@ -390,7 +411,7 @@ emulator code we would own count against a candidate.
 | # | PR | Behaviour change | Exit criterion |
 |---|---|---|---|
 | 0 | This spec + decision note | none | approved |
-| 1 | `termhost` package, fake, contract suite; herdr adapter (with `HostView`) wrapping the calls `dispatch` makes | none | dispatch tests green on the adapter |
+| 1 | `termhost` package, fake, contract suite; herdr adapter (with `HostView`) wrapping the calls `dispatch` makes; `Runtime.Prompt` takes a `termhost.Line`, no text | none (same wake line typed) | dispatch tests green on the adapter |
 | 2 | Provisioning callers (`up`, `start`, `restore`) on `Host` | none | installer/up tests green (herdr stubbed) |
 | 3 | Replacement callers (`relaunch`, `swap`, `suspend`, `resume`) on `Host` | none | a test fails on any herdr exec in the **agent-facing** packages (`dispatch`, and the `cmd/agentbus` files of steps 1–3), with an explicit allowlist of the files moved in steps 4 and 14 |
 | 4 | Reporting callers on `Host.Describe`: health checks, `suspendsnap`, busmon `projects_admin` and `about` | none (same text with herdr) | allowlist shrinks to `reportresume.go`, `setup/*` |
@@ -424,6 +445,9 @@ detection herdr-independent.
   a real agent, never the production broker (CLAUDE.md test rule unchanged).
 - Prior art: dispatch tests with a fake `Runtime`; installer tests that stub `docker`/`herdr`;
   service tests that fake `systemctl`/`launchctl`.
+- Focus rule: a viewer that never sends a focus report blocks `Submit` for its whole attach;
+  focus-out then focus-in toggles it; an observer never blocks. Contract suite, all adapters
+  that have viewers.
 - Mutation on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
   frame validation (unknown kind, malformed nonce, text field present): the guarantees a
   reviewer would otherwise only read.
@@ -454,8 +478,9 @@ detection herdr-independent.
    terminal's splits (one `agentbus attach` each). Is that acceptable, or must busmon show
    several agents' screens at once (a much larger, multiplexer-like piece)?
 2. **The focus rule.** With no window focus, which rule stops a wake line: (a) you typed in that
-   agent in the last 3 s or hold an unsent draft (recommended), or (b) any attached viewer at
-   all, even idle?
+   agent in the last 3 s, hold an unsent draft, or are attached and your terminal has not
+   reported losing focus (recommended; a terminal without focus reports always blocks), or
+   (b) any attached viewer at all, even when it reports being unfocused?
 3. **"100 % Go".** Is a Go module that embeds a native library (gostty: Ghostty's Zig-built VT
    core, loaded without cgo) acceptable in production, in tests only, or not at all?
 4. **Holder scope.** One holder per project (recommended: a crash takes one project down) or
