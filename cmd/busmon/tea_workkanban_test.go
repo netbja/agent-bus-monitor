@@ -341,3 +341,37 @@ func TestWorkKanbanPriorityEveryColumn(t *testing.T) {
 		}
 	}
 }
+
+// master: on the rendered screen, at 31 and 32 cells a column, the card of an
+// agent with a task and gates keeps for whom, the age and (+N) whole; only a
+// long subject is cut.
+func TestWorkKanbanGateRenderedAt31And32(t *testing.T) {
+	w := workModel{Team: []teamRow{{Agent: "coder", Word: "working", Plan: "t7",
+		Task: &request{Task: "compose-at-file", Tracked: true, State: "accepted"},
+		Reviewing: []teamGate{{Who: "master", Subject: "a review subject far too long for one column", Since: shellNow.Add(-5 * time.Minute)},
+			{Who: "master", Subject: "lot-2", Since: shellNow.Add(-time.Minute)}}}}}
+	k := workKanban(w, workDraw{now: shellNow})
+	for _, inner := range []int{128, 131} { // 31 and 32 cells a column
+		g := newGrid(inner+2, 12)
+		k.draw(g, 1, 1, inner, 10, "")
+		r := kanbanGrid(4, 1, 1, inner, 10)[1]
+		var rows []string
+		for _, l := range strings.Split(g.plain(), "\n") {
+			if rs := []rune(l); len(rs) >= r.x+r.w {
+				rows = append(rows, string(rs[r.x:r.x+r.w]))
+			}
+		}
+		col := strings.Join(rows, "\n")
+		if want := map[int]int{128: 31, 131: 32}[inner]; r.w != want {
+			t.Fatalf("column width %d, want %d", r.w, want)
+		}
+		for _, want := range []string{"#t7", "compose-at-file", GlyphGate + " for master 5m (+1) " + GlyphNone + " a rev"} {
+			if !strings.Contains(col, want) {
+				t.Errorf("%d cells: %q not on screen:\n%s", r.w, want, col)
+			}
+		}
+		if !strings.Contains(col, GlyphEllipsis) {
+			t.Errorf("%d cells: the long subject is not cut:\n%s", r.w, col)
+		}
+	}
+}
