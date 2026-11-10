@@ -1,7 +1,7 @@
 # A client's "do you trust this folder?" on a project's first run (first-run-trust)
 
-Status: proposed, for the person's review (task `first-run-trust-spec`). No code before the
-answers in part 7. Base `origin/main`. This spec names functions and seams, not line numbers.
+Status: merged (PR 423); the person answered part 7 on 2026-11-10 (task `first-run-trust-impl`):
+option (b), being implemented in steps (part 6). Base `origin/main`. This spec names functions and seams, not line numbers.
 
 ## 1. The ask
 
@@ -172,6 +172,13 @@ exactly what it does, but it should not answer it unasked.
   `.claude/settings.json` allows a tool the role denies, the role's deny still wins.
 
 ## 7. Questions for the person
+
+**The person's answers (2026-11-10):** (1) option (b): no write, say exactly what to choose;
+(c) not built. (2) Without (c), no client file is written at all. (3) The reminder is a busmon
+**ask** in For you that closes itself. (4) Codex's `~` entry: the person thinks it a mistake and
+edits it himself; agent-bus never writes or removes an entry it did not write.
+
+The questions as they were put:
 
 1. **Which option?** (a) pre-accept always, (b) tell exactly what to choose (no write), or (c) (b)
    plus an explicit `up --trust`. With (c), `--trust` is refused for Claude Code whenever a Claude
