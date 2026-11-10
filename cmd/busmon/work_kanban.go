@@ -108,12 +108,20 @@ func workKanban(w workModel, d workDraw) kanbanView {
 				where = "#" + r.Plan
 			}
 		}
-		if len(r.Reviewing) > 0 { // the gate it holds: its age on line 1, unless a task is its title
+		if len(r.Reviewing) > 0 { // the gate it holds, named as on the list: its title, or with a task on line 1
 			g := r.Reviewing[0]
-			if r.Task == nil {
-				what = "reviewing " + g.Subject + " for " + g.Who
+			gate := "reviewing " + g.Subject + " for " + g.Who
+			if a := gateAge(g.Since, d.now); a != "" {
+				gate += " " + a
 			}
-			where = strings.TrimSpace(where + " review " + gateAge(g.Since, d.now))
+			if n := len(r.Reviewing) - 1; n > 0 {
+				gate += fmt.Sprintf(" (+%d)", n)
+			}
+			if r.Task == nil {
+				what = gate
+			} else {
+				where = strings.TrimSpace(where + " " + gate)
+			}
 		} else if len(r.Reviewers) > 0 {
 			where = strings.TrimSpace(where + " " + strings.TrimSpace(strings.TrimPrefix(teamReviewers(r, d.now), "  review:")))
 		}
@@ -249,7 +257,7 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string) {
 			drawLine(screen, r.x, row+1, r.w, FitLine(card.lines[1], r.w), on)
 			row += 2
 		}
-		if more := len(kc.cards) - first[c] - fits; more > 0 && fits >= 0 {
+		if more := len(kc.cards) - first[c] - fits; more > 0 && row < r.y+r.h { // never on the band below or the frame (foureyes)
 			drawLine(screen, r.x, row, r.w, Line{{Text: fmt.Sprintf("+%d more", more), Role: RoleMuted}}, false)
 		}
 	}
@@ -260,7 +268,7 @@ func (k *kanbanView) cardAt(mx, my, x, y, w, h int, sel string) string {
 	rects := kanbanGrid(len(k.cols), x, y, w, h)
 	_, _, first := k.place(sel, rects)
 	for c, r := range rects {
-		if mx < r.x || mx >= r.x+r.w || my <= r.y || my >= r.y+r.h {
+		if mx < r.x || mx >= r.x+r.w || my <= r.y || my >= r.y+r.h { // the heading (r.y) is no card
 			continue
 		}
 		i := first[c] + (my-r.y-1)/2

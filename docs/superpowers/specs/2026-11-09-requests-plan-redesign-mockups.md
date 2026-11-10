@@ -375,12 +375,14 @@ four columns: **For you · In progress · Next · Ideas**.
 - **A card** is two lines, the same in every column (reviewer-codex):
   - The first line holds the card's facts: the priority mark first, so a cut never loses it, then
     the mark, the verb or the owner, and the age or the place. For you shows verb, who and age; In
-    progress the agent, `#plan` and a gate's age; Next the owner and `#t8 waits on t7`; Ideas
+    progress the agent, `#plan` and, when it holds a gate, what it reviews and for whom with the
+    gate's age and `(+N)` for more (with no task that is its title); Next the owner and `#t8 waits on t7`; Ideas
     `idea` and the note's file.
   - The second holds the title, indented two cells and cut with `…` at the column's width,
     which leaves 29 cells at 130 columns. A card never wraps to a third line.
   - Each column scrolls on its own, keeping the selected card in view, and ends with `+N more`
-    when the cards do not fit.
+    when the cards do not fit, never past its band (a forced Kanban in a short pane). A column's
+    heading is no card: a click on it selects nothing, and the free agents' card is never selected.
 - **Folded lines:** the free agents are the last card of In progress. The between-agents and
   done lines are the last cards of Ideas, and Enter opens them as on the list.
 - **Keys:**

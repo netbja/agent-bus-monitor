@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -243,5 +244,50 @@ func TestWorkKanbanCardLines(t *testing.T) {
 	}
 	if !strings.HasSuffix(strings.TrimRight(FitLine(card.lines[1], 31).text(), " "), GlyphEllipsis) {
 		t.Fatalf("the long title is not cut: %q", FitLine(card.lines[1], 31).text())
+	}
+}
+
+// reviewer-codex: an agent with a task and gates shows what it reviews and
+// for whom, with the other gates' count, as the list does.
+func TestWorkKanbanTaskAndGates(t *testing.T) {
+	w := workModel{Team: []teamRow{{Agent: "coder", Word: "working", Plan: "t7",
+		Task: &request{Task: "compose-at-file", Tracked: true, State: "accepted"},
+		Reviewing: []teamGate{{Who: "master", Subject: "lot-1", Since: shellNow.Add(-5 * time.Minute)},
+			{Who: "master", Subject: "lot-2", Since: shellNow.Add(-time.Minute)}}}}}
+	card := workKanban(w, workDraw{now: shellNow}).cols[1].cards[0]
+	l1, l2 := card.lines[0].text(), card.lines[1].text()
+	if !strings.Contains(l1, "reviewing lot-1 for master 5m (+1)") || !strings.Contains(l1, "#t7") || l2 != "  compose-at-file" {
+		t.Fatalf("task and gates: %q / %q", l1, l2)
+	}
+	w.Team[0].Task = nil
+	card = workKanban(w, workDraw{now: shellNow}).cols[1].cards[0]
+	if l2 := card.lines[1].text(); l2 != "  reviewing lot-1 for master 5m (+1)" {
+		t.Fatalf("gates only: %q", l2)
+	}
+}
+
+// foureyes (P3): a click on a column's heading selects nothing; the free
+// agents' card is no selectable item; "+N more" never spills out of a band
+// one row high.
+func TestWorkKanbanHeadingsAndBands(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	m.lists.work.ClearSelection()
+	ix, iy, iw, ih := m.lists.work.inner()
+	r := kanbanGrid(4, ix, iy, iw, ih)[2]
+	if key := m.lists.work.kanban.cardAt(r.x+2, r.y, ix, iy, iw, ih, ""); key != "" {
+		t.Fatalf("a heading click hits %q", key)
+	}
+	for _, it := range m.lists.work.items {
+		if it.Key == "" && it.Selectable {
+			t.Fatalf("a keyless card is selectable: %q", it.Line.text())
+		}
+	}
+	cards := []kanbanCard{{key: "x"}, {key: "y"}}
+	k := kanbanView{cols: []kanbanCol{{title: "a", cards: cards}, {title: "b"}, {title: "c"}, {title: "d", cards: cards}}} // the last band's would land on the frame
+	g := newGrid(22, 6)
+	k.draw(g, 1, 1, 20, 4, "") // four bands of one row each
+	if out := g.plain(); strings.Contains(out, "more") {
+		t.Fatalf("+N more drawn in a one-row band:\n%s", out)
 	}
 }
