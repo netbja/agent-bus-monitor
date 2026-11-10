@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -210,5 +211,37 @@ func TestKanbanFits(t *testing.T) {
 		if got := kanbanFits(c.h, c.cards); got != c.want {
 			t.Errorf("h %d, %d cards: %d, want %d", c.h, c.cards, got, c.want)
 		}
+	}
+}
+
+// reviewer-codex: every card reads the same way, its facts on line 1 (the
+// priority mark first, then its mark) and its title alone on line 2; a long
+// high-priority title keeps its ↑ in a 31-cell column.
+func TestWorkKanbanCardLines(t *testing.T) {
+	st := workShared()
+	long := "requests-plan redesign with a title far longer than any column"
+	st.plan.rows[3].Task.Title = long
+	st.requests[1].Priority = bus.PriorityHigh // requests-plan, the board task t8 names
+	m := keys(t, workShellOf(t, st, 130, 40), '3')
+	k := m.lists.work.kanban
+	youMark, _ := workGlyph(m.work.You[0])
+	marks := []string{youMark, GlyphWorking, GlyphIdle, GlyphIdea} // each column's first card's mark
+	titles := []string{m.work.You[0].Text, "compose-at-file", long, "Three ideas from DeepSeek's Super-Agent prototype"}
+	for c, col := range k.cols {
+		card := col.cards[0]
+		l1, l2 := card.lines[0].text(), card.lines[1].text()
+		if !strings.HasPrefix(l1[len(card.lines[0][0].Text):], marks[c]+" ") {
+			t.Errorf("column %d line 1 %q: its mark %q does not follow the priority slot", c, l1, marks[c])
+		}
+		if l2 != "  "+Preview(titles[c]) {
+			t.Errorf("column %d line 2 %q, want the title %q", c, l2, titles[c])
+		}
+	}
+	card := k.cols[2].cards[0]
+	if card.key != "plan:t8" || !strings.HasPrefix(FitLine(card.lines[0], 31).text(), GlyphUp) {
+		t.Fatalf("high priority lost in 31 cells: %q", FitLine(card.lines[0], 31).text())
+	}
+	if !strings.HasSuffix(strings.TrimRight(FitLine(card.lines[1], 31).text(), " "), GlyphEllipsis) {
+		t.Fatalf("the long title is not cut: %q", FitLine(card.lines[1], 31).text())
 	}
 }

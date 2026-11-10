@@ -15,13 +15,13 @@
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity   2 Board   3 Work   ──────────────────────────────────────────────────────────── 4 for you · 1 at work · 2 next · 0 ideas ─╮
 │For you  4                        In progress  1                    Next  2                           Ideas  0                            │
-│? answer · master 4m              ● release · tagging               ○ title requests                  — between agents · 0                │
-│  review lot 1? (2 questions)                                         coder · #requests                 nobody waits on you (enter)       │
-│♙ answer · foureyes 6m            ○ architect                       ○ title tag                       — done · 1                          │
-│  need a decision on the width r…   idle, can take a request          ♙ you · #tag · waits on reques…   enter or d shows them             │
-│◆ review · coder                                                                                                                          │
+│ ? answer · master · 4m            ● release                         ○ coder · #requests               — between agents · 0               │
+│  review lot 1? (2 questions)       tagging                           title requests                    nobody waits on you (enter)       │
+│ ♙ answer · foureyes · 6m          ○ idle, can take a request        ○ ♙ you · #tag waits on requests  — done · 1                         │
+│  need a decision on the width r…   architect                         title tag                         enter or d shows them             │
+│ ◆ review · coder                                                                                                                         │
 │  look at b1                                                                                                                              │
-│♙ decide · you                                                                                                                            │
+│ ♙ decide · you                                                                                                                           │
 │  title notes                                                                                                                             │
 │                                                                                                                                          │
 │                                                                                                                                          │

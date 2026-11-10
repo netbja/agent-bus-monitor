@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"path"
 	"strings"
-
-	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // The Work tab's Kanban (requests-plan-redesign, layout B; the person's
@@ -59,110 +57,101 @@ type kanbanView struct {
 	cols []kanbanCol
 }
 
-// workKanban builds the four columns from the model.
+// workKanban builds the four columns from the model. Every card reads the
+// same way (reviewer-codex): its first line is the card's facts, the
+// priority mark first (never cut), then its mark, verb or owner, and its age
+// or place; its second line is its title, cut with … at the column.
 func workKanban(w workModel, d workDraw) kanbanView {
-	age := func(c kanbanCard, at string) kanbanCard { // the age at the first line's right
-		if at != "" {
-			c.lines[0] = append(c.lines[0], Seg{Text: " " + at, Role: RoleMuted})
+	title := func(text string, role Role) Line { return Line{{Text: "  " + Preview(text), Role: role}} }
+	head := func(prio Seg, mark string, role Role, parts ...string) Line {
+		l := Line{prio, {Text: mark + " ", Role: role}}
+		for i, p := range parts {
+			if p == "" {
+				continue
+			}
+			if i > 0 {
+				l = append(l, Seg{Text: " " + GlyphNone + " ", Role: RoleMuted})
+			}
+			l = append(l, Seg{Text: Preview(p), Role: role})
 		}
-		return c
+		return l
 	}
-	title := func(text string) Line { return Line{{Text: "  " + Preview(text), Role: RoleText}} }
+	reqMark := func(r *request) Seg {
+		if r != nil {
+			return priorityMark(r.Priority)
+		}
+		return noMark
+	}
 
 	you := kanbanCol{title: fmt.Sprintf("For you  %d", w.youCount())}
 	for _, it := range w.You {
 		g, role := workGlyph(it)
-		c := kanbanCard{key: it.Key}
-		c.lines[0] = Line{{Text: g + " ", Role: role}, {Text: it.Verb, Role: role}, {Text: " " + GlyphNone + " " + Preview(workWho(it.Who, false)), Role: RoleText}}
-		c.lines[1] = title(strings.TrimPrefix(it.Text, "merge "))
 		a := ""
 		if !it.At.IsZero() {
 			a = humanAge(d.now.Sub(it.At))
 		}
-		you.cards = append(you.cards, age(c, a))
+		you.cards = append(you.cards, kanbanCard{key: it.Key, lines: [2]Line{
+			head(reqMark(it.Req), g, role, it.Verb, workWho(it.Who, false), a),
+			title(strings.TrimPrefix(it.Text, "merge "), RoleText)}})
 	}
 
 	team := kanbanCol{title: fmt.Sprintf("In progress  %d", len(w.Team))}
-	paces := ownerPaces(d.requests)
 	for _, r := range w.Team {
 		glyph, role := GlyphWorking, RoleOK
 		if r.Word != "working" {
 			glyph, role = GlyphIdle, RoleMuted
 		}
-		c := kanbanCard{key: workAgentPrefix + r.Agent}
-		what := r.Message
+		what, where := r.Message, ""
 		if r.Task != nil {
 			what = r.Task.Task
 			if r.Plan != "" {
-				what += " " + GlyphNone + " #" + r.Plan
+				where = "#" + r.Plan
 			}
 		}
-		second := ""
-		switch {
-		case len(r.Reviewing) > 0:
+		if len(r.Reviewing) > 0 { // the gate it holds: its age on line 1, unless a task is its title
 			g := r.Reviewing[0]
-			second = "reviewing " + g.Subject + " for " + g.Who
-			if a := gateAge(g.Since, d.now); a != "" {
-				second += " " + GlyphNone + " " + a
-			}
 			if r.Task == nil {
-				what, second = second, ""
+				what = "reviewing " + g.Subject + " for " + g.Who
 			}
-		case r.Task != nil:
-			if p, ok := progressLine(*r.Task, paces[r.Agent], d.now); ok {
-				second = strings.TrimSpace(p.text())
-			}
-		case len(r.Reviewers) > 0:
-			second = strings.TrimSpace(teamReviewers(r, d.now))
+			where = strings.TrimSpace(where + " review " + gateAge(g.Since, d.now))
+		} else if len(r.Reviewers) > 0 {
+			where = strings.TrimSpace(where + " " + strings.TrimSpace(strings.TrimPrefix(teamReviewers(r, d.now), "  review:")))
 		}
-		c.lines[0] = Line{{Text: glyph + " ", Role: role}, {Text: Preview(r.Agent), Role: RoleText}, {Text: " " + GlyphNone + " " + Preview(what), Role: RoleText}}
-		c.lines[1] = Line{{Text: "  " + Preview(second), Role: RoleMuted}}
-		team.cards = append(team.cards, c)
+		team.cards = append(team.cards, kanbanCard{key: workAgentPrefix + r.Agent, lines: [2]Line{
+			head(reqMark(r.Task), glyph, role, r.Agent, where), title(what, RoleText)}})
 	}
 	if len(w.Idle) > 0 { // the free agents: they can take a request (correction 6)
-		var names []string
-		for _, n := range w.Idle {
-			names = append(names, GlyphIdle+" "+Preview(n))
-		}
-		team.cards = append(team.cards, kanbanCard{lines: [2]Line{{{Text: strings.Join(names, "  "), Role: RoleMuted}}, {{Text: "  idle, can take a request", Role: RoleMuted}}}})
+		team.cards = append(team.cards, kanbanCard{lines: [2]Line{
+			head(noMark, GlyphIdle, RoleMuted, "idle, can take a request"), title(strings.Join(w.Idle, ", "), RoleMuted)}})
 	}
 
 	next := kanbanCol{title: fmt.Sprintf("Next  %d", len(w.Next))}
 	for _, it := range w.Next {
-		c := kanbanCard{key: it.Key}
-		mark := noMark
-		if it.Req != nil {
-			mark = priorityMark(it.Req.Priority)
-		}
-		c.lines[0] = Line{{Text: GlyphIdle + " ", Role: RoleMuted}, {Text: Preview(it.Text), Role: RoleText}, mark}
 		where := "not in the plan"
 		switch {
 		case it.Plan != "" && len(it.After) > 0:
-			where = "#" + it.Plan + " " + GlyphNone + " waits on " + strings.Join(it.After, ", ")
+			where = "#" + it.Plan + " waits on " + strings.Join(it.After, ", ")
 		case it.Plan != "":
 			where = "#" + it.Plan
 		}
-		who := workWho(it.Who, true)
-		if it.Who == plan.Person {
-			who = GlyphHuman + " you"
-		}
-		c.lines[1] = Line{{Text: "  " + Preview(who) + " " + GlyphNone + " " + where, Role: RoleMuted}}
-		next.cards = append(next.cards, c)
+		next.cards = append(next.cards, kanbanCard{key: it.Key, lines: [2]Line{
+			head(reqMark(it.Req), GlyphIdle, RoleMuted, workWho(it.Who, true), where), title(it.Text, RoleText)}})
 	}
 
 	ideas := kanbanCol{title: fmt.Sprintf("Ideas  %d", len(w.Ideas))}
 	if w.IdeasErr {
-		ideas.cards = append(ideas.cards, kanbanCard{lines: [2]Line{{{Text: "the open questions", Role: RoleAttention}}, {{Text: "  could not be read", Role: RoleAttention}}}})
+		ideas.cards = append(ideas.cards, kanbanCard{lines: [2]Line{
+			head(noMark, GlyphIdea, RoleAttention, "unread"), title("the open questions could not be read", RoleAttention)}})
 	}
 	for _, it := range w.Ideas {
-		ideas.cards = append(ideas.cards, kanbanCard{key: workIdeaPrefix + it.ID,
-			lines: [2]Line{{{Text: GlyphIdea + " ", Role: RoleAccent}, {Text: Preview(it.Title), Role: RoleText}}, {{Text: "  " + path.Base(it.Where), Role: RoleMuted}}}})
+		ideas.cards = append(ideas.cards, kanbanCard{key: workIdeaPrefix + it.ID, lines: [2]Line{
+			head(noMark, GlyphIdea, RoleAccent, "idea", path.Base(it.Where)), title(it.Title, RoleText)}})
 	}
-	ideas.cards = append(ideas.cards, kanbanCard{key: workFoldBetween,
-		lines: [2]Line{{{Text: GlyphDash + " between agents " + GlyphNone + fmt.Sprintf(" %d", w.Between), Role: RoleMuted}}, {{Text: "  nobody waits on you (enter)", Role: RoleMuted}}}})
+	ideas.cards = append(ideas.cards, kanbanCard{key: workFoldBetween, lines: [2]Line{
+		head(noMark, GlyphDash, RoleMuted, "between agents", fmt.Sprint(w.Between)), title("nobody waits on you (enter)", RoleMuted)}})
 	if w.Planned {
-		ideas.cards = append(ideas.cards, kanbanCard{key: workFoldDone,
-			lines: [2]Line{{{Text: GlyphDash + " done " + GlyphNone + fmt.Sprintf(" %d", w.Done), Role: RoleMuted}}, {{Text: "  enter or d shows them", Role: RoleMuted}}}})
+		ideas.cards = append(ideas.cards, kanbanCard{key: workFoldDone, lines: [2]Line{
+			head(noMark, GlyphDash, RoleMuted, "done", fmt.Sprint(w.Done)), title("enter or d shows them", RoleMuted)}})
 	}
 	return kanbanView{cols: []kanbanCol{you, team, next, ideas}}
 }

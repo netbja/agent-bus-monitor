@@ -54,7 +54,11 @@ func tabText(l Line) string {
 
 func workShell(t *testing.T, w, h int) Model {
 	t.Helper()
-	st := workShared()
+	return workShellOf(t, workShared(), w, h)
+}
+
+func workShellOf(t *testing.T, st *shared, w, h int) Model {
+	t.Helper()
 	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	return step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
@@ -309,7 +313,7 @@ func TestWorkTabSurvivorsOfStep2(t *testing.T) {
 		}
 	}
 	k := workKanban(idle, workDraw{now: shellNow, width: 140})
-	if got := k.cols[1].cards[0].lines[0].text(); !strings.HasPrefix(got, GlyphIdle+" coder") {
+	if got := k.cols[1].cards[0].lines[0].text(); !strings.HasPrefix(strings.TrimLeft(got, " "), GlyphIdle+" coder") {
 		t.Fatalf("kanban: %q", got)
 	}
 }
