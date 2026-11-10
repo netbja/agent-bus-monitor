@@ -575,8 +575,11 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   clipboard's image: saved privately under `~/.cache/agentbus/attachments`, its path put in the text,
   nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). In the window's text, a typed
   **`@`** (at the start or after a space or `(` `[` `"` `'`, so never in `a@b.c`) lists the
-  project's files under the cursor: `↑` `↓` choose, Enter puts the file's **path** in place of the
-  `@query` (never its content), Tab opens a folder, Esc closes the list and keeps the text.
+  project's files under the cursor: `↑` `↓` choose, Enter puts the selected file's or folder's
+  **path** in place of the `@query` (never its content; a path with a space in backticks), Tab
+  opens a folder (on a file it inserts it; in a message that is only `@` and the start of an
+  agent's name, it makes that agent the recipient, as before), Esc closes the list and keeps the
+  text.
   `@~/` lists your home one folder at a time. The path is absolute, or relative to the project's
   root with `compose.at_path = "relative"` (`C`; a home path stays absolute). What
   `roles.toml`'s shared `Read(…)` rules deny, secret-looking files (`.env`, keys, `.ssh`, `.git`…)
