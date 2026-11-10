@@ -5,6 +5,8 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 10: foureyes P3s on r5/r6 and r8 — `WakeLine` caps the count at 999 instead of
+  refusing it (§4.2); one plain systemd unit per build, not a template (§4.4a)
 - Revision 9: reviewer-codex at dece79b9 — a left-behind line must not be committable by the
   person's queued Enter (submit guard, §4.2); notice distinguishes wake line and `/clear`;
   herdr residual lasts as long as a project runs on herdr (§4.2)
@@ -246,7 +248,11 @@ Where callers land:
   `termhost.WakeLine(project, agent, count, nonce) (Line, error)` and `Clear` passes
   `termhost.ClearLine()`. `WakeLine` refuses a `project` or `agent` that fails `bus.ValidName`,
   a `count` < 1, and a nonce not matching `^[0-9a-f]{6,16}$`, so nothing outside those
-  alphabets can be interpolated into the typed line.
+  alphabets can be interpolated into the typed line. A `count` above 999 is **capped, not
+  refused**: the count is `Obligation.Size()` (pending + unread, unbounded), and refusing a
+  large backlog would mean never waking the agent that needs it most — the unsafe direction.
+  `WakeLine` stores 999 and the line reads `999+ message(s) waiting`; the frame's 1–999 range
+  then always holds. Test at 999, 1000 and a very large count.
   `Line` has unexported fields and no exported constructor from a string, so no caller in any
   package can make one carry other text; the observed marker is read from the `Line`, not
   passed beside it. This change lands in step 1, with a test that fails if any exported
@@ -326,13 +332,17 @@ The holder is every agent's parent and holds every PTY master: when it dies, the
 up every terminal and the project's agents die with it. Nothing in this design hides that; it
 bounds and reports it.
 
-- **One unit instance per build, never restarted to upgrade.** A single restartable unit
+- **One unit per build (an "instance" below = one such unit), never restarted to upgrade.** A single restartable unit
   cannot drain: starting a new build would mean restarting the unit, and with
-  `KillMode=control-group` that kills every agent. So the holder is a **templated unit**,
-  `agentbus-holder@<project>.<buildid>.service` (systemd; the instance string escaped with
-  `systemd-escape`), and on macOS a launchd job per build, label
-  `com.agentbus.holder.<project>.<buildid>`. An upgrade **starts a new instance** beside the old
-  one; it never stops or restarts the old one. Each instance has its own cgroup, so the old
+  `KillMode=control-group` that kills every agent. So each (project, build) gets **its own plain
+  unit file**, `agentbus-holder-<project>-<buildid>.service` (systemd; `<buildid>` reduced to
+  `[a-z0-9.-]`), not a template: a template `agentbus-holder@.service` has one `ExecStart` for
+  all instances, systemd cannot split `%i` into project and build, and rewriting the template
+  on upgrade would change the binary of every old instance at its next restart. On macOS a
+  launchd job per build, label `com.agentbus.holder.<project>.<buildid>` (one plist per label
+  already). An upgrade **writes and starts a new unit** beside the old one; it never edits,
+  stops or restarts an old unit, and removes an old unit file only after its holder exited 0
+  for good. Each instance has its own cgroup, so the old
   build's agents live on in theirs.
 - **Each instance runs its own build.** The installer copies the holder binary to
   `<datadir>/agentbus/holder/<buildid>/agentbus` (0755, owner only) and the instance's
@@ -520,7 +530,7 @@ superseded.
   project terminal count, draining builds — for the callers that today report on herdr itself
   (health, about, projects admin, suspend snapshot).
 - `cmd/busmon`: preview panel, attach key; no herdr env.
-- `service`: holder as a templated unit, one instance per project and build (§4.4a).
+- `service`: holder as one plain unit (systemd) / one job (launchd) per project and build (§4.4a).
 
 ### 6.2 Libraries
 - PTY: `github.com/creack/pty` (Linux, macOS; pure Go). Not ptyx (its Windows half is out of
@@ -568,7 +578,7 @@ emulator code we would own count against a candidate.
 | 8 | Emulator bake-off; `screen` seam + chosen adapter | none | §6.4 passes |
 | 9 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, peer check, socket dir) — after the security review of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
 | 10 | Holder adapter of `termhost` (contract suite) + `terminal.host` setting | opt-in | contract suite green on holder |
-| 11 | Holder templated unit per build (systemd `@`, launchd job per build, per-build binary copy) with the §4.4a restart policy; rotate/upgrade paths skip it + `holder`, `holder_restarted`, `holder_draining` health + `holder drain` + sentinel runbook entry | opt-in | service tests (fake systemctl/launchctl) |
+| 11 | Holder unit per project and build (plain systemd unit, launchd job, per-build binary copy; test: writing a new build's unit never changes an old unit's file or binary) with the §4.4a restart policy; rotate/upgrade paths skip it + `holder`, `holder_restarted`, `holder_draining` health + `holder drain` + sentinel runbook entry | opt-in | service tests (fake systemctl/launchctl) |
 | 12 | `agentbus attach`, busmon preview + attach key | opt-in | manual live check by the person |
 | 13 | `{p}:resume` + hook writes it (ancestor-walk proof, macOS `Ancestors`); `up` restores from it; `broker_persistence` health; `reportresume.go` keeps its herdr call until step 16 | opt-in | Redis tests of §8; reboot trial |
 | 14 | Live trial on one project with `terminal.host=holder` | trial | Q8 project runs a week |
