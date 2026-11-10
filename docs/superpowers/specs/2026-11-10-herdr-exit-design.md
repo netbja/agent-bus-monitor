@@ -5,6 +5,7 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 6: reviewer-codex at 2e769888 (the herdr residual has no hard bound)
 - Revision 5: reviewer-codex at bd371e32 (the herdr adapter cannot check and type atomically)
 - Revision 4: foureyes P2 at bd371e32 (names in `WakeLine` and in the submit frame)
 - Revision 3: reviewer-codex CHANGES at bc2d8394 (Runtime.Prompt still takes text; focus
@@ -183,9 +184,10 @@ Interface rules (part of the interface, not comments):
     check and the last byte of the line. This closes the inspect→type race.
   - **herdr** (`AtomicSubmit = false`): herdr has no check-and-prompt call. The adapter does
     what the dispatcher does today: a fresh `agent get` for focus right before `agent prompt`,
-    then the prompt. The residual window is the time between those two herdr calls (bounded
-    by `herdrCallTimeout`, 3 s; in practice one CLI round-trip). This is **today's documented
-    residual, unchanged**, and it stays until the project moves to the holder (step 15); the
+    then the prompt. The residual window is the time between the end of the first call and the
+    start of the second: normally one CLI round-trip, but **without a hard bound**
+    (`herdrCallTimeout` limits each call on its own, not the gap; a scheduler pause can stretch
+    it). This is **today's documented residual, unchanged**, and it stays until the project moves to the holder (step 15); the
     spec claims no improvement for herdr.
   - The contract suite's race test (a viewer types concurrently with `Submit`; no interleaving,
     or a refusal) runs only on adapters with `AtomicSubmit`; on the others the suite checks only
@@ -487,7 +489,7 @@ detection herdr-independent.
 | Old holder never drains (`/clear` keeps the process) | two builds forever, fixes never reach old terminals | `holder_draining` health, `holder drain` rolling relaunch on the person's word |
 | A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 9 |
 | Losing the tiled always-visible layout | the person sees less at a glance | busmon preview + terminal splits; Q1 |
-| Person/agent typing race | wake line inside a draft | holder: check and write under the input lock (closed); herdr: today's re-inspect-then-prompt residual, bounded by one call (≤ 3 s), kept until step 15 and shown as `atomic submit: no` |
+| Person/agent typing race | wake line inside a draft | holder: check and write under the input lock (closed); herdr: today's re-inspect-then-prompt residual, normally one CLI round-trip but with no hard bound, kept until step 15 and shown as `atomic submit: no` |
 | macOS process facts (foreground group, start time) | identity/foreground wrong on Mac | `tcgetpgrp` on the PTY master is portable; per-OS facts behind one platform file, tested on its OS |
 | Two hosts during the trial | confusion over where an agent runs | `terminal.host` per project; busmon shows the host per agent |
 | Scope creep into a multiplexer | months of work | non-goal stated; busmon only previews and attaches |
