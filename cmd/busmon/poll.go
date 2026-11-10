@@ -269,7 +269,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		trustFolders = map[string]string{}
 		for n, o := range observed {
 			if s, ok := snaps[n]; ok && o.State == "blocked" && o.PID != 0 && o.PID == s.PID {
-				trustFolders[n] = st.trustOf(s.Client, s.PID, s.PIDStart)
+				trustFolders[n] = st.trustOf(n, s.Client, s.PID, s.PIDStart)
 			}
 		}
 	}

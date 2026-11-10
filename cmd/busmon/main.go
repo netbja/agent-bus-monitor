@@ -485,7 +485,7 @@ type shared struct {
 	tokAttempt     int           // the tick of the last read attempt, success or not
 	// trustOf is the folder a gated client asks about for a prompting agent
 	// on this host (first-run-trust, trust_foryou.go); nil: no trust line.
-	trustOf func(client string, pid int, start uint64) string
+	trustOf func(agent, client string, pid int, start uint64) string
 }
 
 func main() {
