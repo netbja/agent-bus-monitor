@@ -63,7 +63,10 @@ Run once, from the clone, before the first question. **The silent part only read
 no download, no file written:
 
 ```sh
-uname -sm; git --version; go version; sed -n 's/^go //p' go.mod   # Go found vs go.mod's line
+uname -sm; git --version; sed -n 's/^go //p' go.mod        # the Go go.mod asks for
+GOTOOLCHAIN=local go env GOVERSION                         # the local Go, never a download
+echo "${GOTOOLCHAIN-}"; grep -s '^GOTOOLCHAIN=' "$(GOTOOLCHAIN=local go env GOENV)" \
+  "$(GOTOOLCHAIN=local go env GOROOT)/go.env"               # the person's own setting
 docker version --format '{{.Server.Version}}'; docker compose version --short
 command -v herdr && herdr --version
 command -v claude codex grok kimi            # the agent CLIs on PATH
@@ -77,6 +80,16 @@ fills Go's build and module caches, downloads the modules on a fresh machine, an
 `GOTOOLCHAIN=auto` and an older local Go downloads a newer toolchain, hundreds of MB. An earlier
 install is read with the **installed** binary instead (`agentbus setup --repo . status`), which
 builds nothing.
+
+**Every `go` command the agent runs before the install carries `GOTOOLCHAIN=local`** (foureyes):
+inside a module whose `go` line is newer than the local Go, Go's default `GOTOOLCHAIN=auto`
+switches to, and first downloads, that toolchain for any `go` command, `go version` included.
+The installer's own preflight does the same (`setup/preflight.go`, `setup.sh`). Because
+of that prefix, `go env GOTOOLCHAIN` would print `local`, not the person's setting: the probe
+reads it as Go does, the environment first, then the `go env -w` file (`GOENV`), then the
+distribution's `$GOROOT/go.env` (Fedora's says `local`, upstream's `auto`). It says whether the
+install itself would download a toolchain: `local` with an older Go is a person step (§5.4),
+`auto` is said in the consent message.
 
 So the **first message** is not a question about the person's setup but one consent, with the
 silent findings: "May I run the installer's dry run? It changes nothing in your setup, but it
@@ -178,7 +191,7 @@ and nothing to fill in:
 - **starting the team**: `agentbus start <folder> --roles <team>`, from their own terminal (it
   opens herdr), since it launches agents with their rights.
 
-The agent waits for "done", then checks what it can without a secret: `go version`,
+The agent waits for "done", then checks what it can without a secret: `GOTOOLCHAIN=local go env GOVERSION`,
 `docker version`, `agentbus notifications status`, `agentbus --project <p> agents`.
 
 ### 5.5 Verify and hand over
