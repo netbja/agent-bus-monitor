@@ -255,3 +255,20 @@ func TestWorkTabGateAgeAndYou(t *testing.T) {
 		}
 	}
 }
+
+// reviewer-codex: an agent with a task in hand and a gate shows both, the
+// task and its plan task on its row, the gate under it.
+func TestWorkTabTaskAndGateBoth(t *testing.T) {
+	w := workModel{Team: []teamRow{{Agent: "coder", Word: "working",
+		Task:      &request{Task: "compose-at-file", Tracked: true, State: "accepted"},
+		Plan:      "t7",
+		Reviewing: []teamGate{{Who: "master", Subject: "lot-1", Since: shellNow.Add(-5 * time.Minute)}}}}}
+	var page []string
+	for _, it := range workRows(w, workDraw{now: shellNow, width: 140}) {
+		page = append(page, it.Line.text())
+	}
+	all := strings.Join(page, "\n")
+	if !strings.Contains(all, "compose-at-file  "+GlyphNone+" plan #t7") || !strings.Contains(all, "reviewing lot-1 for master") {
+		t.Fatalf("task or gate missing:\n%s", all)
+	}
+}

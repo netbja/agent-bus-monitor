@@ -341,7 +341,10 @@ page and the Kanban will read it too.
   - It shows the gate the agent holds as a reviewer, and who reviews its own work, with the
     gate's age (correction 5). A gate whose ref is not a stream id shows no age.
   - The free agents (idle or done) go on one line, at every width (correction 6). A waiting,
-    blocked or held agent is in neither: the Agents panel says which.
+    blocked or held agent is in neither, even when it holds a task or a gate: the Agents panel
+    says which.
+  - An agent with both a task in hand and a gate shows its task on its row and the gate on a
+    line under it.
 - **NEXT and IDEAS:** each row says where it comes from (`plan #t8 · waits on t7`,
   `request · not in the plan`). Enter on an idea says where it lives, and `y` copies the path.
 - **The folded lines:**

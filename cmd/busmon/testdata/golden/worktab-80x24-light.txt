@@ -11,7 +11,7 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ✓ architect done     40m  —   escalating  spec merged                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Work   ───────────────────────────── ♙4 ●2 ○2 ◇0 ─╮
+╭─  1 Activity   2 Board   3 Work   ───────────────────────────── ♙4 ●1 ○2 ◇0 ─╮
 │  NEXT  2   the plan, then requests not in it                                 ▲
 │   ○ title requests          coder         plan #requests                     │
 │   ○ title tag               ♙ you         plan #tag · waits on requests      │

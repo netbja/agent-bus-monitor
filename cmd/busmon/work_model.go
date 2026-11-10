@@ -253,14 +253,17 @@ func teamOf(in workInput, links map[string]planLink) ([]teamRow, []string) {
 				break
 			}
 		}
+		free := word == "idle" || word == "done" || word == "answered"
 		switch {
+		case word != "working" && !free:
+			// waiting, blocked, held or paused: neither, whatever it holds
+			// (the Agents panel says which; a wait on the person is YOU's;
+			// reviewer-codex)
 		case word == "working" || row.Task != nil || len(row.Reviewing) > 0:
 			team = append(team, row) // at work
-		case word == "idle" || word == "done" || word == "answered":
+		default:
 			idle = append(idle, n) // free: it can take a request
 		}
-		// waiting, blocked, held or paused: neither (the Agents panel says
-		// which; a wait on the person is YOU's)
 	}
 	return team, idle
 }

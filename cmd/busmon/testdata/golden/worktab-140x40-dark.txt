@@ -12,15 +12,14 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
 │                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Work   ──────────────────────────────────────────────────────────── 4 for you · 2 at work · 2 next · 0 ideas ─╮
+╭─  1 Activity   2 Board   3 Work   ──────────────────────────────────────────────────────────── 4 for you · 1 at work · 2 next · 0 ideas ─╮
 │  YOU  4                                                                                                                                  │
 │   ? answer master    review lot 1? (2 questions)                                                 4m  an ask: answer it in the reader     │
 │   ♙ answer foureyes  need a decision on the width rule                                           6m  the agent waits on your answer      │
 │   ◆ review coder     look at b1                                                                      a review that concerns you          │
 │   ♙ decide you       title notes                                                                     a plan task of yours: decide it     │
 │                                                                                                                                          │
-│  TEAM  2   at work · 1 idle                                                                                                              │
-│   ● coder           reviewing look at b1 for charlie                                                                                     │
+│  TEAM  1   at work · 1 idle                                                                                                              │
 │   ● release         tagging                                                                                                              │
 │   ○ architect   idle, can take a request                                                                                                 │
 │                                                                                                                                          │
@@ -32,6 +31,7 @@
 │                                                                                                                                          │
 │▶ — between agents · 0, nobody waits on you  (enter shows them) —                                                                         │
 │  — done · 1  (enter or d shows them) —                                                                                                   │
+│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

@@ -157,17 +157,25 @@ func workRows(w workModel, d workDraw) []ListItem {
 				what += "  " + GlyphNone + " plan #" + r.Plan
 			}
 		}
-		if len(r.Reviewing) > 0 { // the oldest gate it holds
+		var review string // the oldest gate it holds: what, unless a task is in hand (then a line under it)
+		if len(r.Reviewing) > 0 {
 			g := r.Reviewing[0]
-			what = "reviewing " + g.Subject + " for " + g.Who
+			review = "reviewing " + g.Subject + " for " + g.Who
 			if a := gateAge(g.Since, d.now); a != "" {
-				what += "  " + GlyphNone + " gate open " + a
+				review += "  " + GlyphNone + " gate open " + a
 			}
 			if n := len(r.Reviewing) - 1; n > 0 {
-				what += fmt.Sprintf(" (+%d)", n)
+				review += fmt.Sprintf(" (+%d)", n)
+			}
+			if r.Task == nil {
+				what, review = review, ""
 			}
 		}
-		l := Line{noMark, col(GlyphWorking, 2, RoleOK), col(Preview(r.Agent), 16, RoleText)}
+		glyph, role := GlyphWorking, RoleOK
+		if r.Word != "working" { // idle or done, holding a task or a gate
+			glyph, role = GlyphIdle, RoleMuted
+		}
+		l := Line{noMark, col(glyph, 2, role), col(Preview(r.Agent), 16, RoleText)}
 		rev := teamReviewers(r, d.now)
 		room := max(0, d.width-l.Width()-Width(rev))
 		l = append(l, FitLine(Line{{Text: Preview(what), Role: RoleText}}, room)...)
@@ -175,6 +183,9 @@ func workRows(w workModel, d workDraw) []ListItem {
 			l = append(l, Seg{Text: rev, Role: RoleDispatch})
 		}
 		add(workAgentPrefix+r.Agent, l, true)
+		if review != "" {
+			add(workHeadPrefix+"review:"+r.Agent, Line{{Text: strings.Repeat(" ", 4) + Preview(review), Role: RoleMuted}}, false)
+		}
 		if r.Task != nil {
 			if p, ok := progressLine(*r.Task, paces[r.Agent], d.now); ok {
 				add(workHeadPrefix+"progress:"+r.Agent, append(Line{{Text: strings.Repeat(" ", 4), Role: RoleDim}}, p...), false)
