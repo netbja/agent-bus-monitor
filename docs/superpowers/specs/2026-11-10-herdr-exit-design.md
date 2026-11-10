@@ -5,6 +5,9 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 11: foureyes P3 on r9 — `ctrl+\` becomes a prefix key, so detach and "submit
+  anyway" no longer collide (§4.6, Q9); the person's Redis 7.4+/8/Valkey 9 ideas evaluated one
+  by one (§6.5)
 - Revision 10: foureyes P3s on r5/r6 and r8 — `WakeLine` caps the count at 999 instead of
   refusing it (§4.2); one plain systemd unit per build, not a template (§4.4a)
 - Revision 9: reviewer-codex at dece79b9 — a left-behind line must not be committable by the
@@ -405,8 +408,13 @@ ignored. The focus notice
 ### 4.6 The person's console: busmon + attach
 
 - `agentbus attach <agent> [--observe]`: puts the current terminal on the agent's terminal.
-  Raw bytes both ways, first paint from the emulator's screen, detach chord `ctrl+\`
-  (herdr-core's; go-pty uses `ctrl+]`), outer terminal restored on detach (synchronized output,
+  Raw bytes both ways, first paint from the emulator's screen. `ctrl+\` is a
+  **prefix key**, not a bare chord (a bare chord would detach before `ctrl+\ y` could be
+  read): `ctrl+\ d` detaches, `ctrl+\ y` is "submit anyway" (§4.2, only while a guard
+  stands; otherwise ignored), `ctrl+\ ctrl+\` sends one literal `ctrl+\` (SIGQUIT for the
+  program, which some need), and any other key after the prefix is dropped with a bell. The
+  prefix waits for its second key without a timeout and is shown in the outer terminal's title
+  while pending. Outer terminal restored on detach (synchronized output,
   kitty key flags, modes, scroll region, cursor, colors — the list in herdr-core `attach.rs`).
   `--observe` never types or resizes. Works over `ssh host agentbus attach coder` with no extra
   machinery (laptop ⇄ host topology).
@@ -543,8 +551,9 @@ superseded.
   No code copied (its own rule, and a different language).
 
 ### 6.3 Wire and state
-- Redis: one new hash `{p}:resume` (§4.7; added to the project's key kinds so `--delete`,
-  backup and restore cover it) and the observed `blocked` source. The design uses only
+- Redis: one new hash `{p}:resume` (§4.7) and one new stream `{p}:events` (§6.5), both added
+  to the project's key kinds so `--reset`/`--delete`, backup and restore cover them, and the
+  observed `blocked` source. The design uses only
   commands available in Redis 7.2 (`WATCH`/`MULTI`, `HSET`, `HGETALL`, `HDEL`, `TIME`,
   `CONFIG GET`), so **Valkey (a Redis 7.2 fork) is acceptable as broker for this feature**.
   Declaring Valkey support for agent-bus as a whole is a separate check, done before any such
@@ -562,6 +571,66 @@ candidate passes when, replayed, its screen satisfies every existing signature t
 typed, busy, modal, dialog, old box) for every client, renders wide chars (Kimi's moon, `❯`,
 `›`, `─`) at the right column, and keeps SGR dim (Claude/Codex placeholders). Lines of
 emulator code we would own count against a candidate.
+
+### 6.5 Newer broker features (the person's four ideas, evaluated)
+
+Context. Today the floor is Redis 7.2: this spec uses only 7.2 commands, so Valkey 7.2+ works
+(§6.3). Hash-field expiration (`HEXPIRE`/`HSETEX`/`HGETEX`…) needs Redis 7.4+ (8 for
+`HSETEX`/`HGETEX`) or Valkey 9; adopting it **raises the floor** for every install. The shipped
+broker is `redis:8-alpine`, so the floor is a promise to people running their own broker, not a
+constraint on ours. The project already has: per-project streams `status`, `report`, `notify`,
+`cmd` that busmon replays (`Recent`/`TailFrom`) and follows; `{p}:agents` written only through
+`putSnapshot` (an optimistic `WATCH` merge); `{p}:observed`, a whole-hash TTL written by the
+dispatcher; busmon polls about once a second; the client is go-redis v9.19.
+
+| # | Idea | Verdict | Why |
+|---|---|---|---|
+| 1 | Presence by field TTL | **Defer** (and never on `{p}:agents` or `{p}:resume`) | See below. |
+| 2 | Per-project event stream | **Adopt**, as `{p}:events` | See below. |
+| 3 | Keyspace notifications for busmon | **Defer** | See below. |
+| 4 | RESP3 client-side caching | **Reject for now** | See below. |
+
+**1. Presence by field TTL — defer.** The idea needs a writer that refreshes the field on a
+timer. An agent cannot: a client between turns runs nothing, so an idle agent would look
+"silent" while healthy — the opposite of what busmon must say. The holder could (it knows each
+terminal is alive), but the holder makes no Redis connection by design (§4.4a: it must not be
+in the password-rotation path). The dispatcher already writes `{p}:observed` with a whole-hash
+TTL and every observation carries its own `At`, judged by `Observation.Fresh` on the reader
+side; per-field TTL would only move that age check from the reader to the server, at the cost
+of raising the floor to 7.4/Valkey 9. Never on `{p}:agents`: a field that expires there would
+silently drop a verified identity, which `putSnapshot`'s merge rules exist to prevent. Never on
+`{p}:resume` (it must outlive the process; §4.7). Revisit if the floor moves to 7.4 for another
+reason: then `{p}:observed` per-agent expiry is the natural first use, written by the
+dispatcher under its lease fence.
+
+**2. Event stream — adopt as `{p}:events`.** Terminal-lifecycle facts have no home today and
+this spec adds several: wake typed / refused (person active) / left behind (guard armed),
+blocked observed, attach / detach (observer or not), relaunch, holder started / restarted /
+draining / drained. One stream per project, `XADD {p}:events MAXLEN ~ 10000`, fields
+`{kind, agent, term, by, detail}`, time from the entry id (Redis `TIME`). Writers: the
+dispatcher (fenced, like its other writes), `agentbus attach` for attach/detach (the person's
+own process; unfenced, as a person's `notify` is today), `holder drain` and `up` for
+relaunch/drain. Not the holder (no Redis). busmon replays it on start (`XREVRANGE` of the last
+N) and follows it with `XREAD BLOCK`, as it already does for `notify`; it is a **timeline, not a
+source of truth**: state stays in `{p}:agents`, `{p}:observed`, `{p}:resume`. Added to
+`projectKinds` (so `--reset`, `--delete`, backup cover it), not to `activityKinds` (a wake
+attempt must not date a project as active). Works on 7.2. Lands with the steps that produce the
+events: wake/refusal kinds in step 6, attach/detach in 12, relaunch/drain in 11 and 13.
+
+**3. Keyspace notifications — defer.** They need `notify-keyspace-events` set on the broker, a
+global setting that managed brokers often refuse and that costs every write on the server; the
+messages are fire-and-forget Pub/Sub, lost while busmon reconnects, so polling stays as the
+fallback anyway. busmon's 1 s poll of one project is a handful of small reads. Adopting `{p}:events`
+(item 2) already gives busmon a blocking read that wakes it on the changes this spec adds.
+Revisit if a measured poll cost or latency complaint appears; then as a refresh hint only, with
+`agentbus health` reporting `broker_keyspace_events` (unknown when `CONFIG` is refused).
+
+**4. RESP3 client-side caching — reject for now.** busmon reads a few small hashes per second
+for one person; the gain is unmeasured and the cost is real: `CLIENT TRACKING`, an invalidation
+channel to handle on reconnect, and a cache that can serve a stale verified identity in the
+window before invalidation — the one record whose staleness matters. Whether go-redis v9.19
+supports it natively is unverified here (rueidis does). As the person says, measure first: a
+busmon profile showing Redis round-trips as the bottleneck would reopen it.
 
 ## 7. Migration plan (one PR from main each)
 
@@ -602,6 +671,9 @@ detection herdr-independent.
   a real agent, never the production broker (CLAUDE.md test rule unchanged).
 - Prior art: dispatch tests with a fake `Runtime`; installer tests that stub `docker`/`herdr`;
   service tests that fake `systemctl`/`launchctl`.
+- Attach prefix: `ctrl+\ d` detaches; `ctrl+\ y` lifts a standing guard and is ignored
+  without one; `ctrl+\ ctrl+\` delivers one `0x1c` to the program; `ctrl+\ x` delivers
+  nothing and rings; the prefix split across two reads is still recognised.
 - Paste→CR race (holder): a viewer byte arriving between paste and CR → no CR,
   `ErrPersonActive`; with a probed clear key and an input region equal to the paste → line
   cleared, then the viewer's bytes delivered; without one → paste left, guard armed, notice
@@ -680,7 +752,9 @@ detection herdr-independent.
    client to support in this work (needs probing and signatures), or later?
 8. **Trial project.** Which project runs the live trial (step 14): agent-bus-monitor itself
    (dogfood, highest visibility) or a quieter one?
-9. **Detach chord.** `ctrl+\` (herdr-core) or `ctrl+]` (go-pty, telnet habit)?
+9. **Attach prefix key.** `ctrl+\` (herdr-core's key; `ctrl+\ d` detaches) or `ctrl+]`
+   (go-pty, telnet habit; `ctrl+] d`)? Either way it is a prefix, and pressing it twice sends
+   it to the agent.
 
 ## 11. Out of scope
 
