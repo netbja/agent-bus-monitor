@@ -484,6 +484,21 @@ noms d'onglets et d'agents, sans modèle de projet) :
   préremplie, pour la démarrer. Une tâche n'est
   done que si master l'enregistre (`agentbus plan done <tâche>`), ou si elle n'a pas à être
   fusionnée et qu'elle est livrée et approuvée.
+- **Désigner un fichier à un agent.** Dans la fenêtre de rédaction (`I`), tapez `@` dans le
+  texte : busmon liste les fichiers du projet sous le curseur, classés par nom, et Entrée remplace
+  le `@requête` par le chemin absolu du fichier ou du dossier choisi (l'agent lit le chemin
+  lui-même ; le contenu n'est jamais envoyé ; un chemin avec une espace vient entre backticks). Tab
+  ouvre un dossier et insère un fichier ; dans un message qui n'est que `@` et le début du nom d'un
+  agent, Tab fait toujours de cet agent le destinataire (l'indication dit alors `recipient`).
+  `@.worktrees/<nom>/` atteint le worktree d'un codeur, et
+  `@~/` liste votre dossier personnel un dossier à la fois. `compose.at_path = "relative"`
+  (réglages, `C`) insère les chemins relatifs à la racine du projet ; un chemin du dossier
+  personnel reste absolu. Jamais proposés : ce que les règles `Read(…)` partagées de `roles.toml`
+  interdisent (un `roles.toml` illisible ne propose rien), les fichiers d'allure secrète (`.env`,
+  clés, `.ssh`, `.aws`, `.gnupg`, `.git`) et les entrées cachées au sommet du dossier personnel.
+  Le pied de la liste dit pourquoi elle est vide ou courte, par exemple `no checkout of <project> on this machine`
+  (busmon sur un autre hôte), `outside the project: type the path yourself`,
+  `<kind>: not offered`, `no home directory`, `list incomplete (…)`. F1 liste ses touches.
 - **Lire les journaux :** `agentbus --project myapp service logs missions -n 100`. Ils tournent
   à 1 Mio, trois fichiers gardés.
 - **Arrêter :** `agentbus down myapp` arrête les services et ne supprime rien. Les agents et

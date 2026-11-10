@@ -457,6 +457,18 @@ agent names, no project template):
   reads done only when
   master records it (`agentbus plan done <task>`) or it needs no merge and is delivered and
   approved.
+- **Pointing an agent at a file.** In the compose window (`I`), type `@` in the text: busmon lists
+  the project's files under the cursor, ranked by name, and Enter replaces the `@query` with the
+  selected file's or folder's absolute path (an agent reads the path itself; the content is never
+  sent; a path with a space comes in backticks). Tab opens a folder and inserts a file; in a
+  message that is only `@` and the start of an agent's name, Tab still makes that agent the
+  recipient (the hint then reads `recipient`). `@.worktrees/<name>/` reaches a coder's worktree, and `@~/` lists your home one folder
+  at a time. `compose.at_path = "relative"` (settings, `C`) inserts paths relative to the
+  project's root instead; a home path stays absolute. Never offered: what `roles.toml`'s shared
+  `Read(…)` rules deny (an unreadable `roles.toml` offers nothing), secret-looking files (`.env`,
+  keys, `.ssh`, `.aws`, `.gnupg`, `.git`) and hidden entries at the top of home. The list's
+  footer says why it is empty or short, for example `no checkout of <project> on this machine` (busmon on another
+  host), `outside the project: type the path yourself`, `<kind>: not offered`, `no home directory`, `list incomplete (…)`. F1 lists its keys.
 - **Read the logs:** `agentbus --project myapp service logs missions -n 100`. They rotate at
   1 MiB, three files kept.
 - **Stop:** `agentbus down myapp` stops the services and deletes nothing. The agents and the
