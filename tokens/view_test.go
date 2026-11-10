@@ -128,7 +128,7 @@ func TestAgentRows(t *testing.T) {
 			agents: map[string]bus.AgentSnapshot{
 				"a-codex":   {Client: "codex"},
 				"b-openai":  {Provider: "openai"},
-				"c-kimi":    {Client: "kimi"},
+				"c-kimi":    {Client: "kimi-cli"}, // the launcher's client name (rolecfg), not "kimi" (foureyes)
 				"d-moon":    {Provider: "moonshot"},
 				"e-nopid":   {Provider: "anthropic", IdentSession: sess},
 				"f-badsess": {Provider: "anthropic", PID: 7, IdentSession: "../x"},

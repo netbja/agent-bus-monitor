@@ -79,7 +79,7 @@ func AgentRows(rows map[string]bus.TokenRow, known bool, reason string, agents m
 			a.Reason = reason
 		case (s.Client == "codex" || s.Provider == "openai") && (s.PID == 0 || !ValidSessionID(s.IdentSession)):
 			a.Reason = "Codex session not proved" // proved, it reads no adapter below (reviewer-codex)
-		case s.Client == "kimi" || s.Provider == "moonshot":
+		case s.Client == "kimi-cli" || s.Provider == "moonshot":
 			a.Reason = "Kimi logs give no token counts"
 		case !countedClient(s): // only Claude Code's sessions are counted: never a 0 nobody counted
 			a.Reason = "no token count for " + or(s.Client, s.Provider) + " (no adapter)"
