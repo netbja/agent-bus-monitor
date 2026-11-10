@@ -426,22 +426,7 @@ func (m *Model) reminderKey(k Key) tea.Cmd {
 	case k.Code == keyDown || k.Code == keyTab || k.Code == keyRune && k.Rune == 'j':
 		d.sel = (d.sel + 1) % len(d.items)
 	case k.Code == keyEnter:
-		it := d.items[d.sel]
-		m.ui.reminder = nil
-		switch it.Rank {
-		case rankAsk:
-			return m.pushAsk(it.AskID)
-		case rankHealth:
-			return m.push(page{kind: ovHealth})
-		case rankMerge:
-			if it.Key != mergeUnknownKey {
-				return m.push(page{kind: ovMerge, key: strings.TrimPrefix(it.Key, "merge:")})
-			}
-		case rankGate:
-			ref := strings.TrimPrefix(it.Key, "gate:"+it.Agent+":")
-			return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
-		}
-		m.openMessageCompose("", it.Agent) // a declared wait: Enter answers it like i
+		return m.reminderAct()
 	case k.Code == keyRune && k.Rune == 'i':
 		if it := d.items[d.sel]; it.Rank != rankAsk && it.Rank != rankHealth { // a health row names a check, no agent to write to
 			m.ui.reminder = nil
@@ -451,10 +436,59 @@ func (m *Model) reminderKey(k Key) tea.Cmd {
 	return nil
 }
 
+// reminderAct closes the reminder and opens what its selected item announces:
+// an ask its answer page, the health page, a merge, a gate's thread, or for a
+// declared wait the compose window to its agent.
+func (m *Model) reminderAct() tea.Cmd {
+	it := m.ui.reminder.items[m.ui.reminder.sel]
+	m.ui.reminder = nil
+	switch it.Rank {
+	case rankAsk:
+		return m.pushAsk(it.AskID)
+	case rankHealth:
+		return m.push(page{kind: ovHealth})
+	case rankMerge:
+		if it.Key != mergeUnknownKey {
+			return m.push(page{kind: ovMerge, key: strings.TrimPrefix(it.Key, "merge:")})
+		}
+	case rankGate:
+		ref := strings.TrimPrefix(it.Key, "gate:"+it.Agent+":")
+		return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
+	}
+	m.openMessageCompose("", it.Agent) // a declared wait: Enter answers it like i
+	return nil
+}
+
+// reminderItemLines is one item's height in the reminder: its heading, its
+// text, a blank line (drawReminder).
+const reminderItemLines = 3
+
+// reminderClick (popup-click): a click on an item's heading or text acts on
+// it as Enter does; anywhere else it does nothing, the reminder stays modal.
+func (m *Model) reminderClick(x, y int) tea.Cmd {
+	i, ok := m.reminderItemAt(x, y)
+	if !ok {
+		return nil
+	}
+	m.ui.reminder.sel = i
+	return m.reminderAct()
+}
+
+// reminderItemAt is the item drawReminder draws at (x, y), inside the frame.
+func (m *Model) reminderItemAt(x, y int) (int, bool) {
+	r := m.reminderRect()
+	line := y - (r.Y + 1)
+	if r.W < 20 || r.H < 3 || x <= r.X || x >= r.X+r.W-1 || line < 0 || line >= r.H-2 || line%reminderItemLines == reminderItemLines-1 {
+		return 0, false
+	}
+	i := line / reminderItemLines
+	return i, i < len(m.ui.reminder.items)
+}
+
 // reminderRect is the reminder's place: centred, its items' height.
 func (m *Model) reminderRect() Rect {
 	d := m.ui.reminder
-	h := min(m.height-m.layout.Header.H, 3*len(d.items)+2)
+	h := min(m.height-m.layout.Header.H, reminderItemLines*len(d.items)+2)
 	w := min(80, m.width-2)
 	return Rect{(m.width - w) / 2, max(m.layout.Header.H, (m.height-h)/2), w, h}
 }
@@ -468,7 +502,7 @@ func (m Model) drawReminder(g *grid) {
 		drawLine(g, r.X, y, r.W, nil, false)
 	}
 	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: Line{{Text: fmt.Sprintf("Waiting for you %s %d", GlyphNone, len(d.items)), Role: RoleText}},
-		Label: Line{{Text: "enter act " + GlyphNone + " i message " + GlyphNone + " esc later", Role: RoleMuted}}, Focused: true, Hue: RoleAttention})
+		Label: Line{{Text: "enter or click act " + GlyphNone + " i message " + GlyphNone + " esc later", Role: RoleMuted}}, Focused: true, Hue: RoleAttention})
 	var b body
 	for i, it := range d.items {
 		marker := S(RoleText, "  ")
