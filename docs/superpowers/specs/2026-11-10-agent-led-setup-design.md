@@ -143,8 +143,9 @@ Recommendations in brackets. Each message stays under 150 words.
      is required (the escalation target and the pilot)", `cmd/agentbus/start_ask.go`). When
      master's client is missing (Codex but no Claude Code, with the shipped manifest), the
      question does not offer to drop it: installing and logging in to that client is a
-     **prerequisite person step** (§5.4), sent before the plan, and the plan waits for it. Only
-     `coder`, `foureyes` and `sentinel` may be left out.
+     **prerequisite person step** (§5.4). It is an item of the full plan like every other, and is
+     confirmed with it; after the plan's yes it comes first, and the agent's run waits for it
+     (reviewer-codex). Only `coder`, `foureyes` and `sentinel` may be left out.
    - The plan (§5.2) shows that table, role → profile → client → model, as the manifest gives it:
      what the person confirms is what `start` will launch. Putting a role on another client is
      the manifest's business (`roles.toml`, its fallbacks), out of this setup (§9 Q7).
@@ -164,7 +165,9 @@ installed by `agentbus start`.
 One message, under 300 words: what is installed and where, the commands the agent will run, in
 order, the person steps, the defaults, the team as role → profile → client → model (§5.1 Q3), and
 what is left untouched. It ends with one question:
-"Go?" Nothing runs before a yes. A change to any answer sends the whole plan again.
+"Go?" Nothing runs before a yes, neither the agent's commands nor the person steps (§5.4); the
+only earlier acts are the silent probe and the installer's dry run, under its own consent (§4).
+A change to any answer sends the whole plan again.
 
 ### 5.3 The run (the agent's own commands)
 
@@ -182,8 +185,17 @@ The team itself is **not started by the agent** (§6): the last step is a person
 
 ### 5.4 Person steps
 
-One message, before the run when a prerequisite is missing, else after it, with exact commands
-and nothing to fill in:
+Every person step is an item of the full plan (§5.2) and is confirmed with it; none is sent
+before the plan's yes (reviewer-codex). After that yes they come in at most two messages, each
+with exact commands and nothing to fill in:
+
+- **before the agent's run**, the prerequisites: what `sudo` needs, and the client of `master`
+  and its login when missing (§5.1 Q3). The agent's run (§5.3) starts only after the person's
+  "done" and the checks below;
+- **after the run**, the rest: the Redis password rotation, the other logins, notifications and
+  starting the team.
+
+The steps:
 
 - prerequisites needing `sudo` (Go, Docker, the `docker` group and its re-login);
 - `./setup.sh rotate-redis-password`, when the status showed the historical default (foureyes).
@@ -197,7 +209,7 @@ and nothing to fill in:
 - **starting the team**: `agentbus start <folder> --roles <team>`, from their own terminal (it
   opens herdr), since it launches agents with their rights.
 
-The agent waits for "done", then checks what it can without a secret: `GOTOOLCHAIN=local go env GOVERSION`,
+After each message the agent waits for "done", then checks what it can without a secret: `GOTOOLCHAIN=local go env GOVERSION`,
 `docker version`, `agentbus notifications status`, `agentbus --project <p> agents`.
 
 ### 5.5 Verify and hand over
