@@ -5,6 +5,7 @@
    Notifications  │   • Theme                           ‹ dark ›                                
    Services       │ ▶ • Icons                           ‹ nerd ›                                
    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font                                   
+                  │     @ inserts paths as              ‹ absolute ›                            
                   │     Activity lines at start         25                                      
                   │     Idle? hint after                10m                                     
                   │     Screensaver (idle view) after   off                                     

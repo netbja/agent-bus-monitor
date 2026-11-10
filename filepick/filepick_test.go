@@ -426,6 +426,16 @@ func TestListWorktreeRoot(t *testing.T) {
 	if err != nil || slices.Contains(paths(res.Entries), "a.go") || !slices.Contains(paths(res.Entries), "secret-notes.txt") {
 		t.Fatalf("a gitdir with no commondir: %v %q", err, paths(res.Entries))
 	}
+	// a relative gitdir: line is read from the root, as git reads it (foureyes P3)
+	rel, err := filepath.Rel(root, filepath.Join(common, "worktrees/wt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, ".git", "gitdir: "+rel+"\n")
+	res, err = List(context.Background(), Options{Root: root})
+	if err != nil || !slices.Equal(paths(res.Entries), []string{"a.go"}) {
+		t.Fatalf("a relative gitdir: %v %q", err, paths(res.Entries))
+	}
 	write(t, base, "plain-file", "")
 	write(t, root, ".git", "gitdir: "+filepath.Join(base, "plain-file")+"\n") // a parent that is not a directory
 	res, err = List(context.Background(), Options{Root: root})
