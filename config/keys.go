@@ -415,6 +415,13 @@ var Keys = []*Key{
 	{Name: "bus.report_max", Env: "AGENT_BUS_REPORT_MAX", Kind: Int, Default: 500, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.report_full_max", Env: "AGENT_BUS_REPORT_FULL_MAX", Kind: Int, Default: 8000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
 	{Name: "bus.verdict_max", Env: "AGENT_BUS_VERDICT_MAX", Kind: Int, Default: 10000, ReadBy: "each writer (per writer)", env: envPositiveInt, file: filePositiveInt},
+	// projects-admin §5.5 (the person, Q3, Q6, Q7): what a project's delete
+	// (busmon's M page, busmon --delete) also removes from disk, both off.
+	// delete_files: the template and the worktrees (never roles.toml, never
+	// the checkout); delete_backups: the archives of the project alone,
+	// never the one made just before the delete. No env: the machine's file.
+	{Name: "projects.delete_files", Kind: Bool, Default: false, ReadBy: "busmon", MachineOnly: true, file: fileBool},
+	{Name: "projects.delete_backups", Kind: Bool, Default: false, ReadBy: "busmon", MachineOnly: true, file: fileBool},
 	// The disk check (disk-check): a device warns under either warn bound and
 	// fails under either fail bound (its free percentage, its free GiB).
 	{Name: "health.disk_warn_pct", Env: "AGENT_BUS_DISK_WARN_PCT", Kind: Float, Default: 10.0, ReadBy: "dispatch (health)", env: envPositiveFloat, file: filePositivePercent},

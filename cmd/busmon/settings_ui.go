@@ -24,7 +24,7 @@ import (
 // written by busmon; settingOnPage). Services shows one key, sentinel.reload
 // ("Auto-restart on update", auto-reload): the other thresholds stay in the
 // file.
-var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupNotifications, config.GroupServices, config.GroupBackup}
+var settingsPageGroups = []config.Group{config.GroupDisplay, config.GroupAttention, config.GroupIdentity, config.GroupNotifications, config.GroupServices, config.GroupBackup, config.GroupProjects}
 
 // settingsPage is the page's state (settings-panels: the groups on the left,
 // the selected group's keys on the right; page.sel is the row in that group).
@@ -195,6 +195,9 @@ func (m *Model) applySettings(key string) string {
 		return "applied and saved"
 	case "compose.at_path": // compose-at-file §5: the next @ pick uses it
 		cur.AtPath = ns.AtPath
+		return "applied and saved"
+	case "projects.delete_files", "projects.delete_backups": // the next delete panel reads them
+		cur.DeleteFiles, cur.DeleteBackups = ns.DeleteFiles, ns.DeleteBackups
 		return "applied and saved"
 	case "waiting.bell", "waiting.fade", "waiting.popup_after", "waiting.snooze", "recap.auto_after":
 		return "applied and saved"
@@ -562,6 +565,7 @@ var settingsGroupNotes = map[config.Group]string{
 	config.GroupIdentity:      "your name as a person on the bus",
 	config.GroupNotifications: "what reaches your phone or desktop; targets in notify.toml",
 	config.GroupBackup:        "this host's archives; your own after_* keys: edit config.toml yourself",
+	config.GroupProjects:      "what a project's delete (M, d) also removes from disk; roles.toml never",
 }
 
 // settingsBody lays the page out in width cells: the groups on the left (or

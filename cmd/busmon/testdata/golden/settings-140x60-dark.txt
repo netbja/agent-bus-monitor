@@ -13,7 +13,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 23 default ──────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 25 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │                   │ focus: keys · ← or tab: the groups ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
@@ -21,7 +21,7 @@
 │    Notifications  │   • Theme                           ‹ dark ›                                                                         │
 │    Services       │ ▶ • Icons                           ‹ nerd ›                                                                         │
 │    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         │
-│                   │     @ inserts paths as              ‹ absolute ›                                                                     │
+│    Projects       │     @ inserts paths as              ‹ absolute ›                                                                     │
 │                   │     Activity lines at start         25                                                                               │
 │                   │     Idle? hint after                10m                                                                              │
 │                   │     Screensaver (idle view) after   off                                                                              │

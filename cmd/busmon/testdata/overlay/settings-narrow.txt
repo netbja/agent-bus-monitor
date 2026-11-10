@@ -1,5 +1,5 @@
  focus: tabs · ↓ or tab: the keys ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Display   Attention   Identity   Notifications   Services   Backup   
+ Display   Attention   Identity   Notifications   Services  …         
 
  Attention  how busmon calls you; bell and reminder timings apply at …
                                                                       

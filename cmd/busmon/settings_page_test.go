@@ -881,3 +881,30 @@ func TestSettingsPageAtPath(t *testing.T) {
 		t.Fatalf("at_path: %q %q %q", configText(t, getenv), m.cfg.settings.AtPath, m.ui.flash)
 	}
 }
+
+// projects-admin §5.5 (the person, Q3): the two delete options are on the C
+// page, off by default, each toggled on enter, saved and applied at once.
+func TestSettingsPageDeleteOptions(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	if s := loadBusmonSettings(getenv, settingsFlags{}); s.DeleteFiles || s.DeleteBackups {
+		t.Fatalf("defaults %+v, want both off", s)
+	}
+	for _, c := range []struct{ key, label, line string }{
+		{"projects.delete_files", "Delete also its template and worktrees", "delete_files = true"},
+		{"projects.delete_backups", "Delete also its backups", "delete_backups = true"},
+	} {
+		m = selectSetting(t, m, c.key)
+		if body := tokLinesText(m.rd.top().body); !strings.Contains(body, c.label) {
+			t.Fatalf("no row %q:\n%s", c.label, body)
+		}
+		m = press(t, m, tea.Key{Code: tea.KeyEnter})
+		if !strings.Contains(configText(t, getenv), c.line) || !strings.Contains(m.ui.flash, "applied") {
+			t.Fatalf("%s: %q %q", c.key, configText(t, getenv), m.ui.flash)
+		}
+	}
+	if s := m.cfg.settings; !s.DeleteFiles || !s.DeleteBackups {
+		t.Fatalf("not applied: %+v", s)
+	}
+}
