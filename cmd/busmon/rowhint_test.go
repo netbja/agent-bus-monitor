@@ -44,7 +44,11 @@ func TestRowHintTable(t *testing.T) {
 		{PanelRequests, "older:grp:1|a|b|report", true, "fold"},
 		{PanelAgents, "coder", false, "agent"},
 		{PanelBoard, "busmon-charm-b", false, "task"},
-		{PanelPlan, "task:t1", false, "task"},
+		{PanelWork, "plan:t1", false, "task"},
+		{PanelWork, "idea:q", false, "where"},
+		{PanelWork, workFoldBetween, false, "requests"},
+		{PanelWork, workFoldDone, false, "done"},
+		{PanelWork, "agent:coder", false, "agent"},
 		{PanelForYou, "", false, rowNoPair},
 		{PanelAgents, "", false, rowNoPair},
 	} {
@@ -102,6 +106,7 @@ func rowsFixture(t *testing.T, unknownMerge, empty bool) Model {
 var enterOutcome = map[string][]overlayKind{
 	"answer": {ovAsk}, "agent": {ovAgent}, "thread": {ovMessage}, "task": {ovPlanTask, ovTask}, "PR": {ovMerge},
 	"health": {ovHealth}, "request": {ovRequest}, "notices": {ovNotices}, "full text": {ovMessage},
+	"where": {ovIdea}, "done": {ovPlan},
 }
 
 var inPlaceWords = map[string]bool{"expand": true, "fold": true, "unfold": true}
@@ -155,6 +160,10 @@ func checkEnter(t *testing.T, m Model, p PanelID, key, what string) (Model, stri
 		if top != nil {
 			t.Errorf("%s: Enter opened %v", what, top.kind)
 		}
+	case word == "requests": // Work's between-agents line: its sub-view, no page
+		if top != nil || m.ui.focus != PanelRequests {
+			t.Errorf("%s: Enter left focus %v, page %v", what, m.ui.focus, top)
+		}
 	case inPlaceWords[word]:
 		if top != nil {
 			t.Errorf("%s: Enter opened %v, want a change in place", what, top.kind)
@@ -196,9 +205,10 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 		{"empty", func(t *testing.T) Model { return rowsFixture(t, false, true) }},
 		{"requests", func(t *testing.T) Model { return reqShell(t, 140, 40, nil) }},
 		{"requests open", reqOpenShell},
+		{"work", func(t *testing.T) Model { return workShell(t, 140, 40) }},
 	} {
 		base := fx.build(t)
-		for _, p := range []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelRequests, PanelPlan} {
+		for _, p := range shellPanels {
 			base.focusPanel(p)
 			base.refresh()
 			for _, it := range base.lists.of(p).items {
@@ -241,7 +251,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 		PanelActivity: {"expand", "full text"},
 		PanelBoard:    {"task"},
 		PanelRequests: {"answer", "request", "thread", "notices", "fold", "unfold"},
-		PanelPlan:     {"task"},
+		PanelWork:     {"answer", "agent", "thread", "task", "PR", "health", "request", "where", "requests", "done"},
 	} {
 		for _, w := range words {
 			want = append(want, fmt.Sprintf("%d %s", p, w))
@@ -259,7 +269,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 	for p, ks := range map[PanelID][]string{
 		PanelForYou:   {"ask", "wait", "prompt", "gate", "plan-next", "merge", mergeUnknownKey, "health"},
 		PanelRequests: {"ask", "req", "thr", "ntc", reqNoticesKey, "fold", "grp", "older"},
-		PanelPlan:     {"task"},
+		PanelWork:     {"ask", "wait", "prompt", "gate", "merge", "health", "plan", "agent", "idea", "req", "thr", workFoldBetween, workFoldDone},
 	} {
 		for _, k := range ks {
 			if !kinds[fmt.Sprintf("%d %s", p, k)] {

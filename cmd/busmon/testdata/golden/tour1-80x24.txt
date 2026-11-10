@@ -11,13 +11,13 @@
 │  ♙│   Agents      each agent, its state and how fresh it is              │   ┃
 │  ♙│   1 Activity  everything said on the bus, live                       │   ▼
 ╰───│   2 Board     who owns which task                                    │───╯
-╭─  │   3 Requests  who owes whom an answer                                │·…─╮
-│   │   4 Plan      the batch's tasks by state                             │   ▲
-│   │                                                                      │   │
+╭─  │   3 Work      who owes what: you, the team, what comes next, ideas   │e ─╮
+│   │                                                                      │   ▲
 │   │ tab moves the focus between panels; 1-4 pick one of the tabs.        │   │
-│  ○│                                                                      │   ┃
-│  ●│ ● ○ ○ ○ ○   enter next · ← back · esc skip                           │   ┃
-│  ●╰──────────────────────────────────────────────────────────────────────╯2 …┃
+│   │                                                                      │   │
+│  ○│ ● ○ ○ ○ ○   enter next · ← back · esc skip                           │   ┃
+│  ●╰──────────────────────────────────────────────────────────────────────╯   ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
 │    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -28,9 +29,10 @@ import (
 //   - IDEAS: the open questions recorded in the repository
 //     (docs/memory/open-questions, status proposed or active) that no plan
 //     task covers; ◇ is theirs alone.
-//   - TEAM: one row per agent at work, with its task in hand, the gates it
-//     holds as a reviewer, and the reviewers of its own work; the idle agents
-//     on one line, as they can take a request.
+//   - TEAM: one row per agent at work (working, or holding a task or a
+//     review gate), with its task in hand, the gates it holds as a reviewer,
+//     and the reviewers of its own work; the free agents (idle, done) on one
+//     line, as they can take a request.
 
 // Verbs, the same on every surface (correction 1).
 const (
@@ -44,7 +46,7 @@ const (
 // workItem is a row of YOU or NEXT.
 type workItem struct {
 	Verb  string // YOU's verb; "" in NEXT
-	Key   string // the For you key, plan:<task> or req:<task>
+	Key   string // the For you key, a Requests thread key (req:<task>, thr:<id>), or plan:<task>
 	Who   string // the asker, the owner, plan.Person for the person
 	Text  string
 	At    time.Time
@@ -85,6 +87,7 @@ type workModel struct {
 	IdeasErr bool // the notes could not be read: the page says so, never "none"
 	Between  int  // threads between agents nobody waits on the person for
 	Done     int  // plan tasks done
+	Planned  bool // a plan is loaded
 }
 
 // youCount is the one counter (correction 3).
@@ -136,14 +139,18 @@ func workOf(in workInput) workModel {
 		if it.Rank == rankUnread || it.Key == mergeUnknownKey {
 			continue
 		}
-		w.You = append(w.You, workItem{Verb: workVerbOf(it), Key: it.Key, Who: it.Agent, Text: it.Text, At: it.At})
+		text := it.Text
+		if it.Rank == rankAsk && it.Count > 1 { // as For you's row says it
+			text += fmt.Sprintf(" (%d questions)", it.Count)
+		}
+		w.You = append(w.You, workItem{Verb: workVerbOf(it), Key: it.Key, Who: it.Agent, Text: text, At: it.At})
 	}
 	for _, g := range in.reqs.groups[secOwed] {
 		for _, th := range g.Threads {
 			if th.Kind == kindChallenge { // a gate on the person: For you's review row
 				continue
 			}
-			w.You = append(w.You, workItem{Verb: verbAnswer, Key: "thread:" + th.ID, Who: th.From, Text: th.Subject, At: th.At, Req: th.Request})
+			w.You = append(w.You, workItem{Verb: verbAnswer, Key: threadKey(th), Who: th.From, Text: th.Subject, At: th.At, Req: th.Request})
 		}
 	}
 	links := planLinks(in.plan)
@@ -153,6 +160,7 @@ func workOf(in workInput) workModel {
 			owed[it.Req.Task] = true
 		}
 	}
+	w.Planned = in.plan.loaded
 	if in.plan.loaded {
 		for _, r := range in.plan.rows {
 			switch {
@@ -245,11 +253,14 @@ func teamOf(in workInput, links map[string]planLink) ([]teamRow, []string) {
 				break
 			}
 		}
-		if word == "idle" && row.Task == nil && len(row.Reviewing) == 0 {
-			idle = append(idle, n)
-			continue
+		switch {
+		case word == "working" || row.Task != nil || len(row.Reviewing) > 0:
+			team = append(team, row) // at work
+		case word == "idle" || word == "done" || word == "answered":
+			idle = append(idle, n) // free: it can take a request
 		}
-		team = append(team, row)
+		// waiting, blocked, held or paused: neither (the Agents panel says
+		// which; a wait on the person is YOU's)
 	}
 	return team, idle
 }

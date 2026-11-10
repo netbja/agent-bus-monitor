@@ -1,14 +1,25 @@
 package main
 
+import "slices"
+
 // The shell's screen (busmon Charm spec, "The screen"): a two-line header,
 // For you and Agents on top, Activity/Board/Requests as one tabbed panel,
 // the input line and the footer. Pure geometry, like computeLayout.
 
-// lowerTabs are the tabbed panel's tabs, in key order (1, 2, 3, 4).
-var lowerTabs = []PanelID{PanelActivity, PanelBoard, PanelRequests, PanelPlan}
+// lowerTabs are the tabbed panel's tabs, in key order (1, 2, 3). Key 4 is an
+// alias to Work on NEXT, not a fourth tab (requests-plan-redesign,
+// correction 8); Requests is Work's sub-view, its "between agents" line.
+var lowerTabs = []PanelID{PanelActivity, PanelBoard, PanelWork}
 
-// narrowPanels are the narrow tier's views, in Tab and digit order.
-var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelRequests, PanelPlan}
+// narrowPanels are the narrow tier's views, in Tab and digit order; 6 is
+// the alias to Work on NEXT.
+var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelWork}
+
+// tabbedPanels are the lower panel's lists: its tabs and Work's sub-view.
+var tabbedPanels = append(slices.Clone(lowerTabs), PanelRequests)
+
+// shellPanels are every list the shell fills: the views and Work's sub-view.
+var shellPanels = append(slices.Clone(narrowPanels), PanelRequests)
 
 // shellCounts is what the shell's layout needs to know about the content.
 type shellCounts struct {
@@ -71,7 +82,7 @@ func shellLayoutFor(w, h int, c shellCounts, view, tab PanelID) shellLayout {
 }
 
 func isLowerTab(p PanelID) bool {
-	return p == PanelActivity || p == PanelBoard || p == PanelRequests || p == PanelPlan
+	return p == PanelActivity || p == PanelBoard || p == PanelWork || p == PanelRequests
 }
 
 func shellWide(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
@@ -134,7 +145,7 @@ func shellNarrow(w, h int, c shellCounts, view PanelID) shellLayout {
 		headerH = shellHeaderHeight
 	}
 	known := false
-	for _, p := range narrowPanels {
+	for _, p := range shellPanels { // Requests too: Work's sub-view
 		known = known || p == view
 	}
 	if !known {

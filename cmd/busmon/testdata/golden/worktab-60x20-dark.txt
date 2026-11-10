@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you   2 Agents   3 Activity   4 Board   5 Work       
+╭─ Work ───────────────────────────────────── ♙4 ●2 ○2 ◇0 ─╮
+│   ♙ decide you       title notes                         ▲
+│                                                          │
+│  TEAM  2   at work · 1 idle                              │
+│   ● coder           reviewing look at b1 for charlie     │
+│   ● release         tagging                              ┃
+│   ○ architect   idle, can take a request                 ┃
+│                                                          ┃
+│  NEXT  2   the plan, then requests not in it             ┃
+│   ○ title requests          coder         plan #requests ┃
+│   ○ title tag               ♙ you         plan #tag · wa…┃
+│                                                          ┃
+│  IDEAS  0   not decided yet                              ┃
+│                                                          │
+│▶ — between agents · 0, nobody waits on you  (enter shows…▼
+╰──────────────────────────────────────────────────────────╯
+ enter requests   T triage   ←→ tab   F1 help   F5 health   

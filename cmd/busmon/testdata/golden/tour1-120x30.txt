@@ -14,13 +14,13 @@
 │    14:24  architect │   Agents      each agent, its state and how fresh it is                  │                     │
 │    14:50  ♙ Charlie │   1 Activity  everything said on the bus, live                           │                     │
 │    14:51  coder     │   2 Board     who owns which task                                        │                     │
-│  ○ 14:52  master    │   3 Requests  who owes whom an answer                                    │                     │
-│  ● 14:56  dispatch  │   4 Plan      the batch's tasks by state                                 │                     │
-│  ● 15:00  master    │                                                                          │                     │
-│    15:02  coder     │ tab moves the focus between panels; 1-4 pick one of the tabs.            │                     │
-│                     │                                                                          │                     │
+│  ○ 14:52  master    │   3 Work      who owes what: you, the team, what comes next, ideas       │                     │
+│  ● 14:56  dispatch  │                                                                          │                     │
+│  ● 15:00  master    │ tab moves the focus between panels; 1-4 pick one of the tabs.            │                     │
+│    15:02  coder     │                                                                          │                     │
 │                     │ ● ○ ○ ○ ○   enter next · ← back · esc skip                               │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────╯                     │
+│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

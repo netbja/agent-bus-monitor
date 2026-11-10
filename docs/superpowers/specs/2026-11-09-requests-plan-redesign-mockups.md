@@ -326,3 +326,33 @@ page and the Kanban will read it too.
   unblocked plan tasks are now counted there. The For you panel still shows them as one
   pointer, not as rows (Q5). The header's separate `N requests waiting` item is gone: those
   requests are in `decide`.
+
+**Step 2, the Work tab (layout A)** (`cmd/busmon/work_view.go`, `work_actions.go`). Tab 3 is
+**Work**, in place of the Requests and Plan tabs. The tab bar reads `1 Activity 2 Board 3 Work`.
+
+- **Keys:**
+  - `4` is an alias: it opens Work on NEXT's first row (correction 8).
+  - At the narrow tier, `5` is Work and `6` is the same alias.
+- **YOU:** each row carries its verb, who, the text, the age and, at 100 columns and more,
+  "why it waits on you". Enter opens what For you's row would.
+- **TEAM:**
+  - Only the agents at work: working, or holding a task or a review gate. Each row shows the
+    task in hand and its plan task, then the progress line under it.
+  - It shows the gate the agent holds as a reviewer, and who reviews its own work, with the
+    gate's age (correction 5). A gate whose ref is not a stream id shows no age.
+  - The free agents (idle or done) go on one line, at every width (correction 6). A waiting,
+    blocked or held agent is in neither: the Agents panel says which.
+- **NEXT and IDEAS:** each row says where it comes from (`plan #t8 · waits on t7`,
+  `request · not in the plan`). Enter on an idea says where it lives, and `y` copies the path.
+- **The folded lines:**
+  - **between agents** opens today's Requests list as Work's sub-view
+    (`Work → between agents`); Esc returns to Work.
+  - **done** (and `d` on Work) opens the plan drawer with DONE shown. With no plan loaded, the
+    line says so instead.
+- **The frame's label** reads `5 for you · 4 at work · 3 next · 2 ideas`, or with glyphs below
+  100 columns: `♙5 ●4 ○3 ◇2` (correction 6).
+- **`+` and `-`** act on a row that stands for a tracked request (a request row, or a plan task
+  whose board names one). On any other row the footer says "only a tracked request has a
+  priority" (correction 7).
+- **The decide chip:** a click on it selects For you's first decide row, else Work's first
+  non-merge YOU row. The chip counts both (foureyes, step 1).

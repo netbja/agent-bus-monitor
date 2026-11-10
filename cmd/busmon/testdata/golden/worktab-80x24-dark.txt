@@ -11,14 +11,14 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ✓ architect done     40m  —   escalating  spec merged                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Requests   4 Plan   ──────────────────────────────╮
-│  v0.29  1 of 6 done  ━━━━━━━━━━━━  16%  ·  now: title strip (coder)          ▲
-│  the inbox · loaded 0s ago (abcdef0)                                         ┃
-│                                                                              ┃
-│  NOW  3                                                                      │
-│  ♙ title notes  ♙ person  waiting for you                                    │
-│▶ ○ title strip  coder  #338 · approved · merge PR 338                        │
-│  ● title drawer  coder  in progress                                          ▼
+╭─  1 Activity   2 Board   3 Work   ───────────────────────────── ♙4 ●2 ○2 ◇0 ─╮
+│  NEXT  2   the plan, then requests not in it                                 ▲
+│   ○ title requests          coder         plan #requests                     │
+│   ○ title tag               ♙ you         plan #tag · waits on requests      │
+│                                                                              │
+│  IDEAS  0   not decided yet                                                  ┃
+│                                                                              │
+│▶ — between agents · 0, nobody waits on you  (enter shows them) —             ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- enter task   T triage   p P plan   tab focus   ←→ tab   F1 help   F5 health    
+ enter requests   T triage   p P plan   tab focus   F1 help   F5 health         

@@ -13,26 +13,26 @@
 │                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  │
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Requests   4 Plan   ──────────────────────────────────────────────────────────────────────────────────────────╮
-│  v0.29  1 of 6 done  ━━━━━━━━━━━━━━━━  16%  ·  now: title strip (coder)  ·  next: title requests      ╭─ Task ─────────────────────────╮ │
-│  the inbox · loaded 0s ago (abcdef0)                                                                  │ strip                          │ │
-│                                                                                                       │ state    in review             │ │
-│  NOW  3                                                                                               │ owner    coder                 │ │
-│  ♙ title notes  ♙ person  waiting for you                                                             │ review   approved              │ │
-│▶ ○ title strip  coder  #338 · approved · merge PR 338                                                 │ PR       338                   │ │
-│  ● title drawer  coder  in progress                                                                   │ reason   merge PR 338          │ │
-│                                                                                                       │ waits on —                     │ │
-│  NEXT  1                                                                                              │ for you  nothing               │ │
-│  ○ title requests  coder  upcoming                                                                    │                                │ │
-│                                                                                                       │ enter task page                │ │
-│  LATER  1                                                                                             ╰────────────────────────────────╯ │
-│  ○ title tag  ♙ person  waiting on requests                                                                                              │
+╭─  1 Activity   2 Board   3 Work   ──────────────────────────────────────────────────────────── 4 for you · 2 at work · 2 next · 0 ideas ─╮
+│  YOU  4                                                                                                                                  │
+│   ? answer master    review lot 1? (2 questions)                                                 4m  an ask: answer it in the reader     │
+│   ♙ answer foureyes  need a decision on the width rule                                           6m  the agent waits on your answer      │
+│   ◆ review coder     look at b1                                                                      a review that concerns you          │
+│   ♙ decide you       title notes                                                                     a plan task of yours: decide it     │
 │                                                                                                                                          │
-│  DONE  1   d shows                                                                                                                       │
+│  TEAM  2   at work · 1 idle                                                                                                              │
+│   ● coder           reviewing look at b1 for charlie                                                                                     │
+│   ● release         tagging                                                                                                              │
+│   ○ architect   idle, can take a request                                                                                                 │
 │                                                                                                                                          │
+│  NEXT  2   the plan, then requests not in it                                                                                             │
+│   ○ title requests              coder         plan #requests                                                                             │
+│   ○ title tag                   ♙ you         plan #tag · waits on requests                                                              │
 │                                                                                                                                          │
+│  IDEAS  0   not decided yet                                                                                                              │
 │                                                                                                                                          │
-│                                                                                                                                          │
+│▶ — between agents · 0, nobody waits on you  (enter shows them) —                                                                         │
+│  — done · 1  (enter or d shows them) —                                                                                                   │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
@@ -57,4 +57,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- enter task   T triage   p P plan   tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   y copy   f auto-scroll   d done   F1 help   F5 health   
+ enter requests   T triage   p P plan   tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   y copy   f auto-scroll   F1 help   F5 health        

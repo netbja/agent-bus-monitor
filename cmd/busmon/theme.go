@@ -357,6 +357,7 @@ const (
 	GlyphHuman    = "♙" // a person on the bus (busmon), never an agent
 	GlyphNotEqual = "≠" // model≠: the running model is not the configured one
 	GlyphGate     = "◆" // a 4-eyes gate waiting on a verdict (For you); ▲ means blocked
+	GlyphIdea     = "◇" // an idea not decided yet (the Work page's IDEAS), nothing else
 	GlyphReturn   = "↵" // an expansion's last line: Enter again opens the full text
 	GlyphTimes    = "×" // a repeat count: a subject reviewed three times reads `a ×3`
 	// The settings page (settings-panels): a choice reads ‹ value ›, and •
@@ -439,5 +440,5 @@ var UIGlyphs = []string{
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphUpperHalf,
-	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet, GlyphOpenHere,
+	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet, GlyphOpenHere, GlyphIdea,
 }

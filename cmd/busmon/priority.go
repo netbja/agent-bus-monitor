@@ -55,10 +55,18 @@ func (m *Model) priorityTarget() (request, string) {
 		}
 		key = p.key
 	} else {
-		if m.ui.focus != PanelRequests {
+		switch m.ui.focus {
+		case PanelWork: // a row standing for a tracked request (correction 7)
+			k, ok := m.workRequestKey()
+			if !ok {
+				return request{}, notRequest
+			}
+			key = k
+		case PanelRequests:
+			key = m.lists.of(PanelRequests).Selected()
+		default:
 			return request{}, notRequest
 		}
-		key = m.lists.of(PanelRequests).Selected()
 	}
 	if strings.HasPrefix(key, "grp:") && strings.HasSuffix(key, "|"+kindRequest) {
 		return request{}, "open the group to set one request's priority"

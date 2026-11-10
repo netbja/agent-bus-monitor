@@ -12,7 +12,7 @@
 │  ♙ sentinel  waiting  30m  —   prompt      health ok                                             │
 │  ✓ architect done     40m  —   escalating  spec merged                                           ▼
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Requests   4 Plan    auto-scroll on ──────── 8 events · filter: none ─╮
+╭─  1 Activity   2 Board   3 Work    auto-scroll on ───────────────────── 8 events · filter: none ─╮
 │    time  from     to       type      message                                                     │
 │  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────│
 │    14:24 archite…          status    done · spec merged                                          │

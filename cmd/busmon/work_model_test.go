@@ -297,3 +297,21 @@ func TestWorkOwedRequestCoversItsPlanTask(t *testing.T) {
 		}
 	}
 }
+
+// TEAM is who is at work; the free agents (idle, done) are the idle line;
+// a blocked, waiting or held one is neither (the Agents panel says which).
+func TestWorkTeamOnlyAtWork(t *testing.T) {
+	in := workFixture(shellNow)
+	in.agents["qa"] = &agentState{state: "blocked", lastSeen: shellNow}
+	in.agents["docs"] = &agentState{state: "done", lastSeen: shellNow}
+	in.agents["ui-grok"] = &agentState{state: "waiting", lastSeen: shellNow}
+	w := workOf(in)
+	for _, r := range w.Team {
+		if r.Agent == "qa" || r.Agent == "docs" || r.Agent == "ui-grok" {
+			t.Fatalf("%s in TEAM", r.Agent)
+		}
+	}
+	if idle := slices.Sorted(slices.Values(w.Idle)); !slices.Equal(idle, []string{"docs", "sentinel", "ui-kimi"}) {
+		t.Fatalf("idle = %v", w.Idle)
+	}
+}

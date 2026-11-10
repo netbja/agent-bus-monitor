@@ -50,9 +50,6 @@ func (m Model) grid() *grid {
 		}
 		lst := *m.lists.of(p) // drawn from a copy: View leaves the model as it found it
 		lst.draw(g)
-		if p == PanelPlan && m.lists.planSide != nil {
-			drawPlanSide(g, l.Lower, m.lists.planSide)
-		}
 	}
 	if reading {
 		m.drawReader(g)
@@ -112,7 +109,10 @@ func (m Model) headerData() headerData {
 // highlighted; names shorten when they do not
 // fit width.
 func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
-	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelPlan: "Pln"}
+	if active == PanelRequests { // Work's sub-view: its tab is Work's
+		active = PanelWork
+	}
+	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelWork: "Wrk"}
 	names := make([]string, len(tabs))
 	for i, p := range tabs {
 		names[i] = panelLabel(p)
@@ -176,7 +176,7 @@ func tabLabels(tabs []PanelID, active PanelID, width int) []string {
 func (m *Model) fillLists() {
 	l, s, now := m.layout, m.snap, m.now
 	rowW := func(r Rect) int { return max(0, r.W-2-listGutter) }
-	for _, p := range narrowPanels {
+	for _, p := range shellPanels {
 		lst := m.lists.of(p)
 		lst.rect, lst.focused = l.rect(p), m.ui.focus == p
 	}
@@ -262,42 +262,19 @@ func (m *Model) fillLists() {
 	bt, bl := boardFrame(s.board)
 	bd.SetFrame(m.lowerTitle(PanelBoard, bt), bl)
 
-	pl := &m.lists.plan
-	m.lists.planSide = nil
-	if !s.planState.loaded {
-		pl.SetItems([]ListItem{{Line: FitLine(Line{{Text: "no plan loaded (master: agentbus plan load <path>@<commit>)", Role: RoleMuted}}, lower)}})
-	} else {
-		// The board (home-inbox-drawer §4): at the wide tier the side panel
-		// takes the frame's right part when the list keeps planListMin cells.
-		wide := l.Tier == TierWide && lower >= planListMin+planSideWidth+1
-		lw := lower
-		if wide {
-			lw = lower - planSideWidth - 1
-		}
-		v := planBoard(s.planState, -1, m.ui.planExpanded, now, lw, l.Tier, false, s.requests)
-		pl.SetItems(planBoardItems(v, lw))
-		if task, ok := strings.CutPrefix(pl.Selected(), "task:"); ok && wide {
-			for _, r := range s.planState.rows {
-				if r.Task.ID == task {
-					m.lists.planSide = planSide(r, now)
-				}
-			}
-		}
-	}
-	pt := Line{{Text: "Plan", Role: RoleText}}
-	var plabel Line
-	if s.plan != nil {
-		plabel = Line{{Text: strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan "), Role: RoleMuted}}
-	}
-	pl.SetFrame(m.lowerTitle(PanelPlan, pt), plabel)
+	wk := &m.lists.work // who owes what (requests-plan-redesign, layout A)
+	compact := lower < workCompactW
+	wk.SetItems(workRows(m.work, workDraw{requests: s.requests, now: now, width: lower}))
+	wk.SetFrame(m.lowerTitle(PanelWork, Line{{Text: "Work", Role: RoleText}}), Line{{Text: workLabel(m.work, compact), Role: RoleMuted}})
 
 	rq := &m.lists.requests
 	rv := m.lists.reqView // refresh computed it before the layout
 	rq.SetItems(requestRows(rv, m.ui.reqOpen, now, lower))
-	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Requests", Role: RoleText}}), requestsTitle(rv, lower))
+	// Work's sub-view, from its "between agents" line; esc returns to Work.
+	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Work", Role: RoleText}, {Text: " " + GlyphArrowR + " between agents", Role: RoleMuted}}), requestsTitle(rv, lower))
 
 	m.keepInView()
-	for _, p := range narrowPanels {
+	for _, p := range shellPanels {
 		m.lists.of(p).viewport()
 	}
 }

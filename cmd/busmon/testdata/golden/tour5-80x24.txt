@@ -11,7 +11,7 @@
 │  ♙│   ● missions up      the conductor runs                              │   ┃
 │  ♙│   health ▲2          two checks only you can fix; F5 says which      │   ▼
 ╰───│   claude 62%/40%     your account's windows, shared by every agent   │───╯
-╭─  │   ♙ Charlie [human]  you, as the agents see you                      │·…─╮
+╭─  │   ♙ Charlie [human]  you, as the agents see you                      │e ─╮
 │   │                                                                      │   ▲
 │   │ That is all. F1 then t shows these pages again.                      │   │
 │   │                                                                      │   │

@@ -5,7 +5,7 @@ KEYS
   F5                   health
   1-3                  view
   1-4                  view
-  ←→                   the lower panel's previous or next tab (Activity, Board, Requests, Plan), wrapping
+  ←→                   the lower panel's previous or next tab (Activity, Board, Work), wrapping
   ↑↓ j k               select
   pgup                 page up
   pgdn                 page down
@@ -32,7 +32,7 @@ KEYS
   F3 s                 services
   R                    where was I? open the project recap
   p P                  the batch's plan in a drawer: NOW, NEXT, LATER, DONE, the progress; enter opens a task, d shows done, esc closes
-  d                    the Plan tab: show or fold the done tasks
+  d                    Work: the plan with its done tasks (the drawer; d there folds them)
   U                    tokens: the account windows, every project side by side, this project by agent
   C                    settings: display, attention and your name, changed in config.toml
   M                    projects: every project of this host, its state, agents, keys, services and herdr workspace; sleep, stop or back one up

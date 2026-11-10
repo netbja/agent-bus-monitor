@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -103,7 +104,10 @@ func (m *Model) headerClick(x, row int) tea.Cmd {
 			continue
 		}
 		switch s.hit {
-		case hitDecide:
+		case hitDecide: // For you's row, else Work's: the chip counts both (foureyes)
+			if !m.forYouHas(isDecide) && m.selectWork(func(it workItem) bool { return it.Verb != verbMerge }) {
+				return nil
+			}
 			m.selectForYou(isDecide)
 		case hitMerge:
 			m.selectForYou(isMergePR)
@@ -115,6 +119,11 @@ func (m *Model) headerClick(x, row int) tea.Cmd {
 		return nil
 	}
 	return nil
+}
+
+// forYouHas says For you lists a row ok accepts.
+func (m *Model) forYouHas(ok func(attentionItem) bool) bool {
+	return slices.ContainsFunc(m.forYou, ok)
 }
 
 // selectForYou focuses For you and selects its first row that ok accepts.
