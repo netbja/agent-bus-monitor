@@ -1,8 +1,10 @@
 # busmon's Projects page: list, sleep, stop, back up and delete projects (projects-admin)
 
-Status: spec for review (subject `projects-admin-spec`), v0.29 chantier 6. No code on this branch.
-Base `origin/main` b1671ee (home-inbox merged). coder is rewriting parts of `cmd/busmon`. This
-spec names functions and seams, not line numbers, so it survives that rewrite.
+Status: steps 1–4 merged (PRs 373, 383). The person answered part 10 on 2026-11-09 (task
+`projects-progress-answers`); the answers are recorded there, and three changes follow from them:
+the memory size in the detail (§3.3), the hosts named in the delete panel (§5.2), and the two
+options that also delete files (§5.5). They are steps 6–8 (§11). This spec names functions and
+seams, not line numbers.
 
 ## 1. The gap
 
@@ -71,6 +73,23 @@ projects by name.
   do, with a deadline of 5 s. Each part can fail without the others: the broker unreachable makes
   every broker column `?` and keeps the template rows; herdr or the service manager missing makes
   their column `?`, never `–`. An unknown is never shown as an empty value (the Redis page's rule).
+- **Memory, in the detail only** (the person, Q2). On `enter`, the detail adds `memory about 1 MB
+  (1204 keys)`. The read runs in the detail's own `tea.Cmd`, bounded on the client **and on the
+  broker** (reviewer-codex):
+  - **Each key is sampled, never walked.** `MEMORY USAGE <key>` with Redis's default sample of 5
+    nested values, never `SAMPLES 0`, which walks every element of a large stream or hash (O(N))
+    and keeps working on the broker after busmon has given up. Each command's server work is
+    therefore bounded, and the total is an **estimate**, so it reads `about`.
+  - **The cap holds while scanning.** The `{p}:*` SCAN stops at 50 000 keys; it never collects
+    every key before applying the cap.
+  - **Small batches, one deadline.** Pipelines of 100 commands; 2 s for the whole read, scan
+    included.
+  - **What a cut read shows:** cut while reading the keys, `about 800 KB for 900 of 1204 keys`;
+    cut while scanning (the total is then unknown), `about 800 KB for the first 900 keys; the scan
+    stopped (2 s)` or `(50 000 keys)`. A broker that refuses `MEMORY` (a restricted ACL) shows
+    `memory ? (the broker refuses MEMORY)`; another error, `? (<why>)`.
+
+  The list never shows memory: one call per key is too dear for every row.
 - **"This machine".** Services and herdr are local. When busmon runs against a remote broker
   (`--host` through a tunnel), the header says `services and herdr: this machine (<hostname>)`,
   and a project with no local service shows `–`, which means "not here", not "none".
@@ -82,7 +101,7 @@ compare it with the selected row's name (§5.2).
 
 | Key | Action | How | Allowed when |
 |---|---|---|---|
-| `enter` | detail: every column, the five streams' XLEN, the pause or suspend record (by, reason, since), the template path, the workspace id | read only | always |
+| `enter` | detail: every column, the five streams' XLEN, the memory the project's keys take (§3.3), the pause or suspend record (by, reason, since), the template path, the workspace id | read only | always |
 | `Z` | sleep or wake: `agentbus --project <p> suspend --yes`, or `resume`, after the same `y` confirmation as the shell's `Z` | `startRun`, one run at a time, log `suspend.log` | the project is on the broker |
 | `x` | stop its services: `agentbus down <p>`, after a `y` | `startRun` | it has a local service that is active |
 | `b` | back it up: `agentbus backup --project <p>`; the archive path, from the last line, becomes the notice | `startRun` | always (a template-only project backs up its template and roles) |
@@ -140,9 +159,27 @@ has none.
  1 204 keys · 7 agents (0 live) · last activity 3d · services: none here · herdr: –
  This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts,
  pilot and gate leases all go. The template and the worktrees stay.
+ units reported on: vdr (dispatch, missions) · remove them there: agentbus --project demo service remove
+ other hosts may keep units the broker no longer records: agentbus service list there
 
  A backup first?  b back up, then continue · n no backup · esc cancel
 ```
+
+**The hosts where units remain** (the person, Q5). A delete is allowed from a remote broker for a
+sleeping or stopped project: `deleteIfQuiet` checks the leases and the services' records of every
+host (§5.3). It removes the units of **this machine** only. The panel names the other hosts the
+broker **reports**, read from `{p}:services` before the delete: the installed marker's `host` and
+the `host` of each service record, minus this machine, each with the kinds it ran.
+
+The broker cannot name **every** host (reviewer-codex). `{p}:services` holds one installed
+marker, which the last `agentbus up` overwrites, and one record per service kind, which its last
+writer overwrites. A host that installed units earlier and then fell silent leaves no trace. So
+the panel says `units reported on: vdr (dispatch, missions)` (or `units reported: this machine
+only`) and always adds `other hosts may keep units the broker no longer records: agentbus service
+list there`. A registry of installations per host would close that gap; it is a change to `bus/`
+and to `agentbus up`, outside this spec. Since the DEL removes `{p}:services`, the line is
+read before it and repeated in the done notice (`deleted demo; units reported on vdr: agentbus --project demo service
+remove there`).
 
 1. **The backup is offered first, every time.** `b` runs `agentbus backup --project demo`
    (`startRun`). Only when it exits 0 does the panel go on, showing the archive path. A failed
@@ -196,8 +233,68 @@ The list is then read again (the row disappears, or shows `template` when a temp
 `busmon --delete` prints the same two outcomes, and exits with code 1 in the second case. The
 residual race is stated in operator-notes.
 
-The template, the roles, the worktrees and the backups are **not** touched. Deleting those is a
-different act (§10 Q3).
+The template, the worktrees and the backups are **not** touched by default. Two options, off by
+default, delete them too (§5.5).
+
+### 5.5 Files too: two options, off by default (the person, Q3)
+
+Two settings, registered in `config/keys.go`, set in `config.toml` and on busmon's settings screen
+(`C`), both **off** by default:
+
+- `projects.delete_files`: the project's **template** and its **worktrees**;
+- `projects.delete_backups`: its **backup archives**. They are separate because the backups are
+  the only way to restore.
+
+They act only **after** a clean broker delete (§5.3: nothing came back). If keys came back, no
+file is touched, and the notice says so.
+
+**What `delete_files` removes, and what it never removes:**
+
+- **The template**, `<projects dir>/<p>.toml`. If it is a link, the link is removed, never its
+  target.
+- **`roles.toml` is never removed.** It is one machine-wide file (`ROLES_TOML`, or the agent-bus
+  checkout's), shared by every project. Deleting it would break the others. The person's answer
+  named it; part 10, Q6 asks them to confirm it stays.
+- **The worktrees.** They are read as text, never by running git (git's config can make git run a
+  program: the compose-at-file rule). **That text is writable by any agent**, so what gets removed
+  is never decided by it alone (foureyes). For each entry `W/.git/worktrees/<name>`, where `W` is
+  the template's `working_dir`:
+  1. its `gitdir` file names the worktree's `.git` **file**; the candidate is that file's parent
+     directory `D`;
+  2. `D` is resolved (`EvalSymlinks`) and must lie **strictly below** the resolved `W`, with no
+     link on any component (its resolved path is its own path), and must be neither `W` nor
+     contain `W/.git`;
+  3. **git's own two-way link must hold:** `D/.git` is a regular **file** (not a directory, not a
+     link) whose `gitdir:` line resolves to exactly `W/.git/worktrees/<name>`, the entry that
+     named it.
+
+  Only then is `D` removed (`os.RemoveAll`, which removes a link and never follows it), and then
+  its `W/.git/worktrees/<name>` entry. Anything else is listed as `not a worktree: kept`, and so is
+  a worktree outside `W`. A forged `gitdir` naming `W/cmd/.git`, for example, fails step 3: `W/cmd`
+  has no `.git` file pointing back, so nothing there is touched. **The checkout itself (`W`) is
+  never removed.** Branches and commits stay in the repository; only what was not committed is
+  lost. The panel lists each worktree with its branch (read from its `HEAD`) and says
+  `uncommitted changes in them are lost`.
+
+**What `delete_backups` removes:** the archives in the backup folder (`config.BackupDir`) whose
+`coverage.json`, their first member, lists **this project alone**. It is read with a bounded
+reader, and never the whole archive. An archive that also holds other projects is **kept**, and
+the panel says how many (`3 archives also hold other projects: kept`). An archive that cannot be
+read is kept and named.
+
+**The panel**, with an option on, adds what it will remove:
+
+```
+ also deleted (settings): template ~/.config/agentbus/projects/demo.toml
+   worktrees: .worktrees/fix-a (fix/a), .worktrees/spec-b (spec/b): uncommitted changes in them are lost
+   backups: 4 archives of demo alone; 3 archives also hold other projects: kept
+```
+
+**The backup offer.** With `delete_backups` on, the backup that §5.2 offers first would itself be
+removed by the delete. So the panel does not offer one, and says `backups are deleted with the
+project (setting): no backup offered`. Part 10, Q7 asks the person to confirm this.
+
+`busmon --delete` honours the same two settings and prints what it removed.
 
 ### 5.4 Agents cannot reach this
 
@@ -307,8 +404,49 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
   checks that each spelling (`--delete demo`, `-delete demo`, `-d demo`, `-d=demo`, `--d demo`,
   `--yes --delete demo`, `-p x -d demo`, `-H h --delete=demo`, the same for reset) is denied by
   the shared rules, as deliver's test does, and that `busmon --list` and `busmon -p x` are not.
+- **Memory (step 6):** on a disposable Redis, the sum equals the per-key `MEMORY USAGE` totals and
+  no command carries `SAMPLES 0`; a stubbed short deadline cut mid-read gives the partial form,
+  and one cut during the scan gives the "scan stopped" form, never `?`; the cap stops the scan; a
+  key deleted between the scan and its read counts as read; a refused `MEMORY` shows `?`; a late
+  answer for a closed detail never lands on another project's detail; the list never calls it.
+- **Hosts (step 7):** `{p}:services` with a marker on `vdr` and records on `vdr` and this machine:
+  the panel names `vdr` only, with its kinds, as reported; none: `units reported: this machine
+  only`; both forms carry the "other hosts may keep units" line; the done notice repeats it after
+  the DEL.
+- **Files (step 8), on a temp tree:** with `delete_files` on, the template goes (a linked template:
+  the link only); `roles.toml` never; the worktrees named in `.git/worktrees/*/gitdir` inside
+  `working_dir` go with their metadata, one outside is kept, `working_dir` stays; nothing runs git
+  (a repository config naming a program that leaves a mark). Worktree fixtures that must be kept:
+  a `gitdir` naming a tracked directory with no `.git` file (`W/cmd/.git`); a `.git` file that
+  points at another entry; a link on the way to `D`; a `gitdir` naming `W` itself. With
+  `delete_backups` on, an archive
+  whose `coverage.json` lists only the project goes, a shared one and an unreadable one stay, and
+  no backup is offered. With keys that came back, no file is touched. Both off: nothing but keys.
 
-## 10. Questions for the person
+## 10. The person's answers (2026-11-09)
+
+1. **No forced delete.** A live project is never deleted. The one path is to put it to sleep
+   (`Z`), then delete it (`d`). That is how steps 1–4 shipped.
+2. **`MEMORY USAGE` in the detail only** (`enter`), never in the list (§3.3).
+3. **Files too, as an option.** Two settings, off by default, in `config/keys.go`, `config.toml`
+   and busmon's settings screen: one for the template, `roles.toml` and the worktrees, one for the
+   backups. The person named `roles.toml` in the first; this spec proposes to leave it out, since
+   it is machine-wide (§5.5, Q6 below).
+4. **`M`** opens the page, as shipped.
+5. **Remote broker:** a delete is allowed for a sleeping or stopped project, since
+   `deleteIfQuiet` covers every host. The panel names the hosts where units remain, from
+   `{p}:services` (§5.2).
+
+**Questions this raises, for the person:**
+
+6. **`roles.toml` stays.** It is one file for every project on the machine, not the project's own.
+   Deleting it with one project would break the others. Agreed that `delete_files` covers the
+   template and the worktrees only?
+7. **The backup offer with `delete_backups` on.** The backup offered first would be deleted with
+   the rest. Skip the offer in that case (recommended, §5.5), or keep the fresh archive as the one
+   exception?
+
+The questions as they were put (2026-11-08):
 
 1. **A forced delete?** Should there be a way to delete a project that is still live (§5.1),
    for example `D` with a third confirmation, or is "sleep it first" the only path?
@@ -336,3 +474,8 @@ the existing sizes (`goldenSizes`: 60×20, 80×24, 140×40, 140×60):
    exit.
 5. Docs: README's busmon keys, OPERATIONAL-GUIDE (and `.fr`), operator-notes (the live check, the
    remote case).
+6. The memory size in the detail (§3.3), bounded, with its `?` and partial forms.
+7. The hosts where units remain, in the delete panel and the done notice (§5.2).
+8. The two options (§5.5): the settings, the template, the worktrees read as text and removed
+   without git, the backups by their `coverage.json`, the panel lines and the backup offer, and
+   `busmon --delete`. After the person answers Q6 and Q7.
