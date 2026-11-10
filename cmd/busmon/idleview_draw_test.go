@@ -298,3 +298,34 @@ func TestIdleStripDormantIsNotPresent(t *testing.T) {
 		t.Errorf("a dormant agent's provider shows: %q", got)
 	}
 }
+
+// idle-view-project-name (the person): the strip names the project before
+// the clock ("agent-bus-monitor · 16:04"), the frames untouched; too narrow,
+// the name goes first, then the clock as before.
+func TestIdleStripNamesTheProject(t *testing.T) {
+	s := stripParts{tokens: []string{"claude 62% 5h"}, planCount: "1/3 33%", clock: "16:04", project: "agent-bus-monitor"}
+	if l := idleStripLine(s, 80); !strings.HasSuffix(l.text(), "agent-bus-monitor "+GlyphNone+" 16:04") || l.Width() != 80 {
+		t.Errorf("80: %q", l.text())
+	}
+	left := "claude 62% 5h " + GlyphNone + " 1/3 33%"
+	if l := idleStripLine(s, Width(left)+2+Width("16:04")); l.text() != left+"  16:04" {
+		t.Errorf("no room for the name: %q", l.text())
+	}
+	if l := idleStripLine(s, Width(left)); l.text() != left {
+		t.Errorf("no room for the clock: %q", l.text())
+	}
+}
+
+// On screen at every tier the strip ends with the project and the clock, and
+// the frames keep their place.
+func TestIdleViewShowsTheProject(t *testing.T) {
+	pinLocal(t)
+	for _, size := range [][2]int{{190, 44}, {120, 40}, {80, 24}} {
+		m := idleAt(t, size[0], size[1])
+		lines := strings.Split(m.grid().plain(), "\n")
+		strip := strings.TrimRight(lines[m.height-1], " ")
+		if !strings.HasSuffix(strip, m.cfg.project+" "+GlyphNone+" 16:04") {
+			t.Errorf("%dx%d: strip %q", size[0], size[1], strip)
+		}
+	}
+}

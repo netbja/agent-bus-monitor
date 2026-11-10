@@ -62,6 +62,7 @@ type idleData struct {
 type stripParts struct {
 	tokens                     []string // one per provider, the most used first (idleTokenItems)
 	planName, planCount, clock string
+	project                    string // before the clock (idle-view-project-name), dropped first when the strip is tight
 }
 
 func (m Model) idleData() idleData {
@@ -121,7 +122,8 @@ func (m Model) idleData() idleData {
 			present[a.provider] = true
 		}
 	}
-	d.strip = stripParts{tokens: idleTokenItems(m.snap.budgets, m.snap.holds, present, m.now), clock: m.now.Local().Format("15:04")}
+	d.strip = stripParts{tokens: idleTokenItems(m.snap.budgets, m.snap.holds, present, m.now), clock: m.now.Local().Format("15:04"),
+		project: Preview(m.cfg.project)}
 	if p := m.snap.planState; p.loaded {
 		d.strip.planName = Preview(p.file.Plan)
 		d.strip.planCount = planProgress(p, 0, TierNarrow).text()
@@ -352,11 +354,11 @@ func idleTokenItems(budgets map[string]bus.BudgetSnapshot, holds map[string]int6
 	return out
 }
 
-// idleStripLine is the bottom row in w cells: tokens · plan, the clock at the
-// right. Too narrow, the clock goes first, then the plan's name, then every
-// provider but the first ("claude 65% 7d +2").
+// idleStripLine is the bottom row in w cells: tokens · plan, the project and
+// the clock at the right. Too narrow, the project goes first, then the clock,
+// then the plan's name, then every provider but the first ("claude 65% 7d +2").
 func idleStripLine(s stripParts, w int) Line {
-	build := func(clock, name, all bool) Line {
+	build := func(project, clock, name, all bool) Line {
 		var parts []string
 		switch {
 		case len(s.tokens) == 0:
@@ -374,20 +376,24 @@ func idleStripLine(s stripParts, w int) Line {
 		}
 		l := Line{{Text: strings.Join(parts, " "+GlyphNone+" "), Role: RoleDim}}
 		if clock {
-			if gap := w - l.Width() - Width(s.clock); gap >= 2 {
-				l = append(l, Seg{Text: strings.Repeat(" ", gap), Role: RoleText}, Seg{Text: s.clock, Role: RoleMuted})
+			right := Line{{Text: s.clock, Role: RoleMuted}}
+			if project && s.project != "" {
+				right = Line{{Text: s.project + " " + GlyphNone + " ", Role: RoleDim}, {Text: s.clock, Role: RoleMuted}}
+			}
+			if gap := w - l.Width() - right.Width(); gap >= 2 {
+				l = append(append(l, Seg{Text: strings.Repeat(" ", gap), Role: RoleText}), right...)
 			} else {
 				return nil
 			}
 		}
 		return l
 	}
-	for _, try := range [][3]bool{{true, true, true}, {false, true, true}, {false, false, true}, {false, false, false}} {
-		if l := build(try[0], try[1], try[2]); l != nil && l.Width() <= w {
+	for _, try := range [][4]bool{{true, true, true, true}, {false, true, true, true}, {false, false, true, true}, {false, false, false, true}, {false, false, false, false}} {
+		if l := build(try[0], try[1], try[2], try[3]); l != nil && l.Width() <= w {
 			return l
 		}
 	}
-	return FitLine(build(false, false, false), w)
+	return FitLine(build(false, false, false, false), w)
 }
 
 // idleThreadLen is the thread's length in cells.
