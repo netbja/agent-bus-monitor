@@ -53,6 +53,7 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 			out.IdentSession = next.Session
 		}
 		out.Pane, out.PID, out.PIDStart, out.Terminal, out.IdentTS = next.Pane, next.PID, next.PIDStart, next.Terminal, at
+		out.BootID = next.BootID // the pid's host: with the pid, never without
 	}
 	if next.Client != "" {
 		out.Client = next.Client
@@ -155,7 +156,7 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 	if err != nil {
 		return err
 	}
-	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, Terminal: who.Terminal, IdentTS: now,
+	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, IdentTS: now,
 		Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier}, true)
 }
 

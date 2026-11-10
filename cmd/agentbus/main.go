@@ -249,7 +249,7 @@ func main() {
 		os.Exit(code)
 	case "bind":
 		h := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}
-		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: h.ForegroundProcs, Start: dispatch.ProcStart, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
+		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: h.ForegroundProcs, Start: dispatch.ProcStart, Boot: hostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
 		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "reload":
@@ -938,5 +938,14 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		return who
 	}
 	who.PID, who.PIDStart, who.Terminal = pid, start, terminal
+	who.BootID = hostBootID()
 	return who
+}
+
+// hostBootID is this host's boot id, "" when it cannot be read (no /proc):
+// the identity then carries no host, and readers on other hosts prove
+// nothing from it.
+func hostBootID() string {
+	id, _ := dispatch.BootID()
+	return id
 }

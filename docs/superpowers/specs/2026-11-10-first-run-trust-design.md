@@ -123,12 +123,13 @@ dispatcher write, which must be fenced):
   live in package `trust`; the line is the prompt row's own text in For you (`Claude Code asks
   whether you trust <folder>: choose "Yes, I trust this folder"`), read in the poll outside its
   lock and only for an agent showing the flag. "On this host" is proved per agent, not by the
-  broker's address (a tunnel makes a remote broker look local): the agent's recorded pid must run
-  here with its recorded start time (`dispatch.ProcStart`), and that process's environment
-  (`/proc/<pid>/environ`) must name this project and this agent as the launcher exported them
-  (`AGENT_BUS_PROJECT`, `AGENT_BUS_AGENT`): pid and start time (ticks since the kernel's boot) alone
-  could match a remote agent by chance (reviewer-codex). Else, or where `/proc` is absent, no trust
-  line.
+  broker's address (a tunnel makes a remote broker look local). The proved identity in `{p}:agents`
+  carries the host's boot id with its pid (`AgentSnapshot.BootID`, `boot_id`, from
+  `/proc/sys/kernel/random/boot_id`, set by `status` and `bind` and moved only with the pid on a
+  proof): busmon shows the line only when it equals busmon's own and the pid runs here with its
+  recorded start time (`dispatch.ProcStart`). Pid and start time (ticks since a kernel's boot)
+  alone could match a remote agent by chance, whatever its name (reviewer-codex). No boot id on
+  either side (an agent launched before the field, no `/proc`): no trust line.
 - No new dispatcher write: a fenced dispatcher ask (a new bus function) would cover a restore
   with busmon closed, at the cost of a new fenced writer; not proposed.
 

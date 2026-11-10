@@ -68,6 +68,21 @@ func ProcStart(pid int) (uint64, error) {
 	return f.start, nil
 }
 
+// BootID is this host's boot id (/proc/sys/kernel/random/boot_id): one per
+// kernel boot. With a pid and its start time (ticks since that boot) it
+// names one process on one host (first-run-trust).
+func BootID() (string, error) {
+	b, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(string(b))
+	if id == "" {
+		return "", fmt.Errorf("empty boot id")
+	}
+	return id, nil
+}
+
 // AncestorAmong returns the OUTERMOST candidate on self's ancestor chain,
 // self excluded. The pane's foreground set can include short-lived tool
 // shells (or this very process) below the agent; the long-lived agent is the

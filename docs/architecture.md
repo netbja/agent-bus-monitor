@@ -119,7 +119,9 @@ service kind — state, detail, `at` from Redis `TIME`, pid, host, last error, l
 `AgentSnapshot` also carries `pid`/`pid_start`/`terminal`, recorded by `agentbus status` inside
 herdr — the identity the dispatcher checks before typing into a pane — or by `agentbus bind`
 (v0.10.1, `Bus.Bind` in `bus/ident.go`) for a client whose commands do not descend from its pane
-(Codex's shared app-server). cmd `type` gains
+(Codex's shared app-server). With the pid goes `boot_id` (first-run-trust): the boot id of the
+host it runs on, so a reader on another host (busmon through a tunnel) knows the pid is not one
+of its own. cmd `type` gains
 `escalation` (dispatcher → `--escalate-to`, default `master`; for the services, `agentbus up
 --escalate-to` records it as `AGENT_BUS_ESCALATE_TO` in the project's env file), `blocked` (written by `request
 block` to the requester, only on a transition or a new reason) and `complete` (conductor → the

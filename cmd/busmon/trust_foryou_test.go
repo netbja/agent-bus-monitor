@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,11 +19,11 @@ import (
 // host's agents, through a tunnel or a remote broker: their clients' files
 // are not here), a process that is not the one recorded, no template.
 //
-// pid and start time alone prove no host (reviewer-codex): start is ticks
-// since this kernel's boot, so a remote agent may match a local process by
-// chance. The local process must also be this project's agent of that name,
-// as its launcher exported it (AGENT_BUS_PROJECT, AGENT_BUS_AGENT); an
-// environment that cannot be read is no proof.
+// "On this host" is the snapshot's boot id equal to busmon's own (bus
+// AgentSnapshot.BootID, reviewer-codex): pid and start time alone (ticks
+// since a kernel's boot) could match a remote agent by chance, whatever its
+// name. A snapshot with no boot id (an agent launched before it existed), or
+// a host whose boot id cannot be read, proves nothing: no line.
 func TestTrustFolderOf(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo")
@@ -39,16 +37,9 @@ func TestTrustFolderOf(t *testing.T) {
 		}
 		return 0, errors.New("no such process")
 	}
-	envOf := map[int]map[string]string{4242: {"AGENT_BUS_PROJECT": "demo", "AGENT_BUS_AGENT": "master"}}
-	procEnv := func(pid int) (func(string) string, error) {
-		e, ok := envOf[pid]
-		if !ok {
-			return nil, errors.New("permission denied")
-		}
-		return func(k string) string { return e[k] }, nil
-	}
+	here := func() (string, error) { return "boot-here", nil }
 	deps := func(dir string, ok bool, trusted bool) trustDeps {
-		return trustDeps{project: "demo", procStart: local, procEnv: procEnv, workingDir: func() (string, bool) { return dir, ok },
+		return trustDeps{bootID: here, procStart: local, workingDir: func() (string, bool) { return dir, ok },
 			trusted: func(client, d string) bool {
 				if d != dir {
 					t.Errorf("trust read for %q, want the working_dir %q", d, dir)
@@ -60,37 +51,32 @@ func TestTrustFolderOf(t *testing.T) {
 		name   string
 		d      trustDeps
 		client string
+		boot   string
 		pid    int
 		start  uint64
 		want   string
 	}{
-		{"claude, untrusted", deps(repo, true, false), "claude-code", 4242, 7, repo},
-		{"codex, untrusted", deps(repo, true, false), "codex", 4242, 7, repo},
-		{"keyed on the repository root", deps(sub, true, false), "claude-code", 4242, 7, repo},
-		{"trusted", deps(repo, true, true), "claude-code", 4242, 7, ""},
-		{"not gated", deps(repo, true, false), "kimi-cli", 4242, 7, ""},
-		{"not on this host", deps(repo, true, false), "claude-code", 999, 7, ""},
-		{"another process", deps(repo, true, false), "claude-code", 4242, 8, ""},
-		{"no pid", deps(repo, true, false), "claude-code", 0, 0, ""},
-		{"no template", deps("", false, false), "claude-code", 4242, 7, ""},
+		{"claude, untrusted", deps(repo, true, false), "claude-code", "boot-here", 4242, 7, repo},
+		{"codex, untrusted", deps(repo, true, false), "codex", "boot-here", 4242, 7, repo},
+		{"keyed on the repository root", deps(sub, true, false), "claude-code", "boot-here", 4242, 7, repo},
+		{"trusted", deps(repo, true, true), "claude-code", "boot-here", 4242, 7, ""},
+		{"not gated", deps(repo, true, false), "kimi-cli", "boot-here", 4242, 7, ""},
+		{"another host, same pid and start", deps(repo, true, false), "claude-code", "boot-there", 4242, 7, ""},
+		{"no boot id recorded", deps(repo, true, false), "claude-code", "", 4242, 7, ""},
+		{"not running here", deps(repo, true, false), "claude-code", "boot-here", 999, 7, ""},
+		{"another process", deps(repo, true, false), "claude-code", "boot-here", 4242, 8, ""},
+		{"no pid", deps(repo, true, false), "claude-code", "boot-here", 0, 0, ""},
+		{"no template", deps("", false, false), "claude-code", "boot-here", 4242, 7, ""},
 	}
 	for _, c := range cases {
-		if got := c.d.folder("master", c.client, c.pid, c.start); got != c.want {
+		if got := c.d.folder(c.client, c.boot, c.pid, c.start); got != c.want {
 			t.Errorf("%s: folder = %q, want %q", c.name, got, c.want)
 		}
 	}
-	d := deps(repo, true, false)
-	d.project = "elsewhere"
-	if got := d.folder("master", "claude-code", 4242, 7); got != "" {
-		t.Errorf("another project's process: folder = %q", got)
-	}
-	d.project = "demo"
-	if got := d.folder("coder", "claude-code", 4242, 7); got != "" {
-		t.Errorf("another agent's process: folder = %q", got)
-	}
-	delete(envOf, 4242)
-	if got := d.folder("master", "claude-code", 4242, 7); got != "" {
-		t.Errorf("an unreadable environment: folder = %q", got)
+	unread := deps(repo, true, false)
+	unread.bootID = func() (string, error) { return "", errors.New("no /proc") }
+	if got := unread.folder("claude-code", "", 4242, 7); got != "" {
+		t.Errorf("this host's boot id unreadable, the snapshot's empty: folder = %q", got)
 	}
 }
 
@@ -121,17 +107,17 @@ func TestTrustLineThroughThePoll(t *testing.T) {
 	now := time.Now().UnixMilli()
 	f := &fakeReader{calls: map[string]int{},
 		snaps: map[string]bus.AgentSnapshot{
-			"master": {State: "working", TS: 1, Pane: "w2:p2", PID: 4242, PIDStart: 7, Client: "claude-code"},
-			"coder":  {State: "working", TS: 1, Pane: "w2:p3", PID: 4343, PIDStart: 9, Client: "codex"}},
+			"master": {State: "working", TS: 1, Pane: "w2:p2", PID: 4242, PIDStart: 7, Client: "claude-code", BootID: "boot-m"},
+			"coder":  {State: "working", TS: 1, Pane: "w2:p3", PID: 4343, PIDStart: 9, Client: "codex", BootID: "boot-here"}},
 		observed: map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now - 60000, PID: 4242}}}
 	var asked []string
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true},
-		trustOf: func(agent, client string, pid int, start uint64) string {
-			asked = append(asked, agent+":"+client)
+		trustOf: func(client, boot string, pid int, start uint64) string {
+			asked = append(asked, client+"@"+boot)
 			return "/w/repo"
 		}}
 	pollOnce(context.Background(), f, st, 1)
-	if strings.Join(asked, ",") != "master:claude-code" {
+	if strings.Join(asked, ",") != "claude-code@boot-m" { // the snapshot's own host
 		t.Fatalf("trust read for %q: only master shows a prompt", asked)
 	}
 	row := promptRow(t, takeSnapshot(st, time.Now()), "master")
@@ -163,36 +149,4 @@ func promptRow(t *testing.T, s snapshot, agent string) string {
 	}
 	t.Fatalf("no prompt row for %s", agent)
 	return ""
-}
-
-// procEnviron reads a live process's launcher names from /proc, and keeps no
-// other variable; a process that does not exist is an error (no line).
-func TestProcEnviron(t *testing.T) {
-	if _, err := os.Stat("/proc/self/environ"); err != nil {
-		t.Skip("no /proc: no trust line on this system")
-	}
-	cmd := exec.Command("sleep", "30")
-	cmd.Env = []string{"AGENT_BUS_PROJECT=demo", "AGENT_BUS_AGENT=master", "SECRET_TOKEN=x"}
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
-	exe, _ := exec.LookPath("sleep")
-	exe, _ = filepath.EvalSymlinks(exe)
-	for deadline := time.Now().Add(5 * time.Second); ; { // until the child has exec'd sleep: before, /proc shows the parent's environment
-		if got, _ := os.Readlink(filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid), "exe")); got == exe || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	env, err := procEnviron(cmd.Process.Pid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if env("AGENT_BUS_PROJECT") != "demo" || env("AGENT_BUS_AGENT") != "master" || env("SECRET_TOKEN") != "" {
-		t.Fatalf("project %q agent %q secret %q", env("AGENT_BUS_PROJECT"), env("AGENT_BUS_AGENT"), env("SECRET_TOKEN"))
-	}
-	if _, err := procEnviron(1 << 30); err == nil {
-		t.Fatal("no error for a process that does not exist")
-	}
 }

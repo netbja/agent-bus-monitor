@@ -16,6 +16,7 @@ type bindDeps struct {
 	Bind  func(ctx context.Context, agent string, who bus.AgentIdent) error
 	Procs func(ctx context.Context, pane string) ([]dispatch.Proc, string, error)
 	Start func(pid int) (uint64, error)
+	Boot  func() string // this host's boot id, "" when unknown (dispatch.BootID)
 	Env   func(string) string
 }
 
@@ -75,7 +76,7 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 		fmt.Fprintf(errw, "bind: cannot read the start time of pid %d: %v\n", pid, err)
 		return 1
 	}
-	if err := d.Bind(ctx, agent, bus.AgentIdent{Pane: pane, PID: pid, PIDStart: start, Terminal: terminal,
+	if err := d.Bind(ctx, agent, bus.AgentIdent{Pane: pane, PID: pid, PIDStart: start, BootID: d.Boot(), Terminal: terminal,
 		Client: d.Env("AGENT_BUS_CLIENT"), Provider: bus.ProviderFor(d.Env("AGENT_BUS_CLIENT"), d.Env("AGENT_BUS_PROVIDER")),
 		Model: d.Env("AGENT_BUS_MODEL"), ClientFP: d.Env("AGENT_BUS_CLIENT_FP"), Tier: d.Env("AGENT_BUS_TIER")}); err != nil {
 		fmt.Fprintf(errw, "bind: %v\n", err)
