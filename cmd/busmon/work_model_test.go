@@ -155,7 +155,7 @@ func TestWorkTeam(t *testing.T) {
 // stays For you's review row, never twice.
 func TestWorkOwedThreadsAreAnswer(t *testing.T) {
 	in := workFixture(shellNow)
-	r := request{Task: "sign-off", Tracked: true, State: "requested", From: "master", Target: "bernard"}
+	r := request{Task: "sign-off", Tracked: true, State: "requested", From: "master", Target: "charlie"}
 	in.reqs = reqView{groups: map[reqSection][]reqGroup{secOwed: {
 		{Section: secOwed, Threads: []reqThread{{ID: "req:sign-off", From: "master", Kind: kindRequest, Subject: "sign-off", Request: &r}}},
 		{Section: secOwed, Threads: []reqThread{{ID: "1-0", From: "master", Kind: kindChallenge, Subject: "x"}}},
