@@ -92,3 +92,56 @@ func TestReminderClickOffAnItemDoesNothing(t *testing.T) {
 		}
 	}
 }
+
+// Every kind of item routes by click as Enter routes it (foureyes P3 b): a
+// gate opens its challenge's thread, health the health page, a merge its
+// page; none falls through to the compose window.
+func TestReminderClickRoutesEachKind(t *testing.T) {
+	pinLocal(t)
+	at := shellNow.Add(-10 * time.Minute)
+	for _, c := range []struct {
+		it   attentionItem
+		kind overlayKind
+		key  string
+	}{
+		{attentionItem{Rank: rankGate, Key: "gate:coder:1793026685000-0", Agent: "coder", By: "foureyes", Text: "review lot 1", At: at}, ovMessage, "1793026685000-0"},
+		{attentionItem{Rank: rankHealth, Key: "health:team-stall:1", Agent: "stall", Text: "the team waits on you", At: at}, ovHealth, ""},
+		{attentionItem{Rank: rankMerge, Key: "merge:pr:42", Agent: "master", Text: "PR 42", At: at}, ovMerge, "pr:42"},
+	} {
+		m := shellWith(t, 140, 40, shellConfig{}, false)
+		m.ui.reminder = &reminderDialog{items: []attentionItem{c.it}}
+		m.refresh()
+		m, cmd := clickCmd(t, m, m.reminderRect().X+4, reminderRow(t, m, Preview(c.it.Text)))
+		m = run(t, m, cmd)
+		p := m.rd.top()
+		if m.ui.reminder != nil || m.ui.compose != nil || p == nil || p.kind != c.kind || c.key != "" && p.key != c.key {
+			t.Fatalf("click on a rank %d item: reminder %+v, compose %v, page %+v", c.it.Rank, m.ui.reminder, m.ui.compose != nil, p)
+		}
+	}
+}
+
+// When the screen clips the reminder (more items than rows), a click on its
+// bottom row, the frame and its hint, acts on nothing, not on an item cut
+// from view (foureyes P3 a).
+func TestReminderClickClippedBottomRow(t *testing.T) {
+	pinLocal(t)
+	for n := 13; n < 16; n++ { // three heights: the bottom row falls on each line of an item
+		m := shellWith(t, 140, 40, shellConfig{}, false)
+		var items []attentionItem
+		for i := range n {
+			items = append(items, attentionItem{Rank: rankWait, Key: "wait:a" + string(rune('a'+i)), Agent: "a" + string(rune('a'+i)), Text: "w", At: shellNow})
+		}
+		m.ui.reminder = &reminderDialog{items: items}
+		m.refresh()
+		r := m.reminderRect()
+		if r.H >= reminderItemLines*n+2 {
+			t.Fatalf("setup: the reminder is not clipped (%d rows for %d items)", r.H, n)
+		}
+		// The items are no decisions of the fixture: the update's prune closes
+		// the reminder after the click; what matters is that the click opened
+		// nothing (on an item, a wait opens the compose window).
+		if m = clickAt(t, m, r.X+4, r.Y+r.H-1); m.ui.compose != nil || m.rd.open() {
+			t.Fatalf("%d items: a click on the clipped bottom row acted (compose %v, reader %v)", n, m.ui.compose != nil, m.rd.open())
+		}
+	}
+}
