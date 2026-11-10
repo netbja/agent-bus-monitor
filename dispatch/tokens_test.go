@@ -180,7 +180,19 @@ func TestTokensPassCodexSharesTheBudget(t *testing.T) {
 	}
 	_, partial := countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), claude, codex, recs, tokens.Budget{Files: 1, Bytes: 1 << 20}, now, time.UTC)
 	if !partial {
-		t.Error("Codex read past the budget the Claude scan used")
+		t.Error("Codex read past the files the Claude scan used")
+	}
+	// The bytes too (foureyes P3): room for every file and for the
+	// transcript, but one byte short of the rollout once the transcript's
+	// bytes are taken, so only the Codex share runs out.
+	transcript, _ := os.Stat(filepath.Join(claude, "-p", "0198e5c4-coder-1111.jsonl"))
+	rollout, _ := os.Stat(filepath.Join(dir, "rollout-x-"+id+".jsonl"))
+	both := transcript.Size() + rollout.Size()
+	if _, partial = countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), claude, codex, recs, tokens.Budget{Files: 64, Bytes: both}, now, time.UTC); partial {
+		t.Fatal("room for both files' bytes, yet partial")
+	}
+	if _, partial = countSessions(tokens.NewClaudeScan(time.UTC), tokens.NewCodexScan(time.UTC), claude, codex, recs, tokens.Budget{Files: 64, Bytes: both - 1}, now, time.UTC); !partial {
+		t.Error("Codex read past the bytes the Claude scan used")
 	}
 }
 

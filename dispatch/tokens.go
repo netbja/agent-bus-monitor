@@ -18,7 +18,9 @@ import (
 // status that merely names a session never points the pass at a file.
 // A Codex session proved the same way (its SessionStart hook,
 // codex-token-attribution) is counted from its rollouts (tokens.CodexScan),
-// on the budget the Claude scan left.
+// on the budget the Claude scan left: a Claude pass that takes the whole
+// budget each time leaves Codex partial until it has room, the same sharing
+// as agentbus tokens --unattributed (foureyes).
 
 // TokensConfig is the tokens pass's policy; with neither root it is off.
 type TokensConfig struct {
