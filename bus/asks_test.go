@@ -268,3 +268,31 @@ func TestAskTaskIsValidatedAndRoundTrips(t *testing.T) {
 		t.Fatalf("got %+v", asks)
 	}
 }
+
+// first-run-trust: an ask from SystemSender (agentbus's own reminders) is
+// answered without waking anyone: the reply goes to people with wake=no, so
+// no cmd target, no consumer group and no owed wake appear for "agentbus"
+// (foureyes).
+func TestSystemSenderAnswerWakesNobody(t *testing.T) {
+	b := dialTest(t)
+	cleanAsks(t, b)
+	ctx := context.Background()
+	id, _, err := b.Ask(ctx, AskDef{From: SystemSender, Title: "Trust x?", Questions: []AskQuestion{q("trust-claude-code", "Folder trust", "Done in the pane")}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := b.Answer(ctx, id, "trust-claude-code", "charlie", "Done in the pane", ""); err != nil {
+		t.Fatal(err)
+	}
+	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 5)
+	r := evs[len(evs)-1]
+	if r.Type != CmdReply || r.Ref != id || r.Target != PeopleTarget || !r.NoWake || !r.Human {
+		t.Fatalf("reply %+v", r)
+	}
+	if targets, _ := b.CmdTargets(ctx); strings.Contains(strings.Join(targets, ","), SystemSender) {
+		t.Fatalf("agentbus is a cmd target: %v", targets)
+	}
+	if o, err := b.Obligation(ctx, SystemSender, DefaultHorizon); err != nil || o.Wakes() {
+		t.Fatalf("an owed wake for agentbus: %+v %v", o, err)
+	}
+}

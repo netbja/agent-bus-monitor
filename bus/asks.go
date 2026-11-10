@@ -37,6 +37,14 @@ const CmdAsk = "ask"
 // group, never woken.
 const PeopleTarget = "people"
 
+// SystemSender is agentbus's own name on an ask (first-run-trust: the
+// folder-trust reminder of agentbus up), never an agent's: an ask takes its
+// sender's one open-ask slot, so a reminder asked from an agent would block
+// its own asks. A person's answer to its ask is replied to people with
+// wake=no: nobody is woken, no group or wake is owed to "agentbus"
+// (foureyes). No role may take the name (rolecfg).
+const SystemSender = "agentbus"
+
 // askRetention: a closed ask stays readable this long.
 const askRetention = 7 * 24 * time.Hour
 
@@ -292,7 +300,8 @@ end
 return {id, state}`)
 
 // askAnswer: KEYS asks, cmd. ARGV maxlen, id, qid, answer JSON (no at),
-// by, agent, reply text, retention ms. Returns {id, remaining, reply id}.
+// by, agent, reply text, retention ms, reply target, wake ("no" or "").
+// Returns {id, remaining, reply id}.
 var askAnswer = redis.NewScript(sweepLua + `
 local now = nowms()
 sweep(KEYS[1], now)
@@ -313,8 +322,9 @@ redis.call('HSET', KEYS[1], id .. '|a|' .. qid, cjson.encode(a))
 local left = remaining(KEYS[1], id)
 local text = ARGV[7]
 if left > 0 then text = text .. ' (' .. left .. ' question(s) still open)' end
-local reply = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[1], '*', 'from', ARGV[5], 'target', ARGV[6],
-  'type', 'reply', 'ref', id, 'command', text, 'human', 'yes', 'text_complete', 'yes')
+local fields = {'from', ARGV[5], 'target', ARGV[9], 'type', 'reply', 'ref', id, 'command', text, 'human', 'yes', 'text_complete', 'yes'}
+if ARGV[10] == 'no' then table.insert(fields, 'wake'); table.insert(fields, 'no') end
+local reply = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[1], '*', unpack(fields))
 if left == 0 then
   redis.call('HSET', KEYS[1], id .. '|s', 'answered', id .. '|e', tostring(now + tonumber(ARGV[8])))
   if redis.call('HGET', KEYS[1], 'open:' .. ARGV[6]) == id then redis.call('HDEL', KEYS[1], 'open:' .. ARGV[6]) end
@@ -488,8 +498,12 @@ func (b *Bus) Answer(ctx context.Context, askID, qid, by, choice, text string) (
 		return "", 0, err
 	}
 	raw, _ := json.Marshal(a)
+	target, wake := def.From, ""
+	if def.From == SystemSender { // agentbus's own ask: nobody to wake
+		target, wake = PeopleTarget, "no"
+	}
 	res, err := askAnswer.Run(ctx, b.r, []string{AsksKey(b.project), StreamKey(b.project, "cmd")},
-		streamMaxLen, askID, qid, string(raw), by, def.From, reply, askRetention.Milliseconds()).Slice()
+		streamMaxLen, askID, qid, string(raw), by, def.From, reply, askRetention.Milliseconds(), target, wake).Slice()
 	if err != nil {
 		return "", 0, askErr(err)
 	}

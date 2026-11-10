@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/models"
 )
 
@@ -143,6 +144,9 @@ func Load(path string) (*Manifest, error) {
 	for _, role := range m.roleOrder {
 		if !namePattern.MatchString(role) {
 			return nil, fmt.Errorf("invalid role name")
+		}
+		if role == bus.SystemSender {
+			return nil, fmt.Errorf("role name %q is reserved: agentbus's own asks are sent under it", role)
 		}
 		info, ok := asTable(roles[role])
 		if !ok {

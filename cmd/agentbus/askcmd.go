@@ -36,6 +36,10 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 		return 2
 	}
 	agent := args[0]
+	if agent == bus.SystemSender { // agentbus's own asks (the trust reminders) are not an agent's to ask or close (reviewer-codex)
+		fmt.Fprintf(errw, "ask: %q is reserved for agentbus's own asks\n", agent)
+		return 2
+	}
 	if question != "" {
 		if note == "" {
 			note = "answered outside the question panel"
