@@ -5,13 +5,17 @@
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at b3dd13a2
+- Revision 2: foureyes CHANGES at bc2d8394 (P1 host-reported facts; P2 drain bound, wire-level
+  closed set, herdr callers outside dispatch, resume storage; P3 interrupt, macOS socket dir,
+  file count, step 8 split, socket enumeration)
 
 ## 1. Problem
 
 agent-bus runs every agent inside herdr (0.9.5, Rust). herdr gives us four things we do not
 own: the terminals the agents run in, the reading of each agent's state (`agent get`), typing
 into a pane (`agent prompt`), and the window the person looks at (workspaces, tabs, splits,
-the plugin overlay). 131 Go files mention it. Every herdr release can move a field we parse,
+the plugin overlay). 145 Go files mention it (`git grep -il herdr -- '*.go'` at b3dd13a2,
+tests included). Every herdr release can move a field we parse,
 the plugin contract binds our release to theirs, and a Rust toolchain sits in the critical path
 of a Go project. The person wants agent-bus to stop depending on herdr and to stay 100 % Go.
 
@@ -34,6 +38,7 @@ Read from `origin/main`. Grouped by the caller's need, not by herdr verb.
 | **Resume after herdr restarts** | `roles report-resume` (SessionStart hook) | `pane report-agent-session` | herdr's native restore re-runs our `agent-launch --resume` argv. |
 | **The person's window** | `busmon` in a pane, `busmon --pick`, `agentbus plugin`, `herdr-plugin.toml`, `setup.sh` link + key binding | `plugin pane open`, workspace events | Workspace events start a project's stopped services. |
 | **Liveness** | dispatcher supervisor, health | `workspace list` as ping, `session list --json` | "waiting for herdr". |
+| **Reporting about herdr itself** | `healthchecks.go` (version, plugin list, herdr probe), `suspendsnap.go` (herdr session), busmon `projects_admin.go` (workspaces per project), busmon `about.go` (herdr and plugin versions), `setup/plugin.go`, `setup/status.go`, `setup/uninstall.go` | `--version`, `plugin list`, `workspace list`, `session list` | Not agent-facing; they describe or install herdr. They move to `Host.Describe` in step 4 or die in step 16 (§7). |
 
 Two observations drive the design:
 
@@ -91,10 +96,13 @@ or gostty; busmon as view with attach) is the right shape. Three changes:
    If the backend returns a state word, the herdr adapter returns herdr's and the Go adapter has
    to reinvent it inside itself: two detectors, untestable against each other. The interface
    returns **facts** (screen snapshot, foreground processes, viewer/typing activity, output
-   quiet time); one `agentstate` module judges, for every backend.
+   quiet time); one `agentstate` module judges, for every backend. herdr's own state word is
+   carried as one more *fact*, optional and labelled as the host's opinion (§4.2 `HostView`),
+   so nothing changes while herdr hosts the agents.
 2. **"create/run" and "send text+keys" are too wide.** Callers never need a split, a tab or a
-   raw key stream: they need "start this agent's command as a terminal named X in project P",
-   "type this line and submit", and the two control sequences `/clear` and interrupt. A narrow
+   raw key stream: they need "start this agent's command as a terminal named X in project P" and
+   "submit one of the two fixed lines" (wake line, `/clear`). No interrupt: nothing calls one
+   today, and adding one would be a new kind of automated write needing its own decision. A narrow
    interface keeps herdr's layout out of the domain and keeps the dispatcher unable to type
    anything but its fixed lines (a CLAUDE.md rule) — enforced by type, not by review.
 3. **go-vte is a parser, not a screen.** It turns bytes into Print/Execute/CSI callbacks; we
@@ -139,10 +147,27 @@ type Host interface {
 }
 ```
 
+`Activity` carries an optional `HostView` — `{State, Client, Focused}` as the host itself
+judges them — set **only by the herdr adapter** (from `agent get`), nil from the holder and the
+fake. It is how herdr's judgement reaches the dispatcher in steps 1–14 (and on any project still on herdr) without a state word in
+the interface's contract: `agentstate` uses it as its source of state, client and focus while
+`terminal.host=herdr`, exactly as `Inspect` uses `agent get` today (dispatch/herdr.go:422), so
+steps 1–5 change no behaviour. From step 6, `agentstate` also computes its own judgement from
+the other facts and shadow mode logs every disagreement with `HostView`. At cutover (`holder`)
+`HostView` is nil and only our judgement remains; the field is deleted with the herdr adapter.
+
 Interface rules (part of the interface, not comments):
 - `Submit` takes a `Line`, a type whose only constructors are `WakeLine(nonce, …)` and
   `ClearLine()`. No free text crosses the seam from the dispatcher. It types as a paste
   (bracketed when the program enabled mode 2004), waits ~200 ms, then sends CR.
+- **The closed set holds on the wire too.** A Go type protects only inside one process; the
+  holder is reached over a socket. So the holder's submit frame carries only
+  `{kind: wake|clear, term, nonce, project, agent, count}` — no text field — and the **holder
+  composes** the line from a template compiled into it (the same constant the dispatcher uses
+  today). A frame with any other kind, or a nonce not matching `^[0-9a-f]{6,16}$`, is refused.
+  The only frame that carries raw input bytes is the attach stream (§4.6), opened by a person's
+  `agentbus attach`; observer attaches carry none. This is a trust boundary between same-uid
+  processes, so §4.4 and §4.6 go to the **security role** for review before step 9 starts.
 - `Submit` refuses (typed error `ErrPersonActive`) when Activity says a person is active
   (§4.5). The host enforces it at the moment of typing; the dispatcher's check before is only
   an early skip. This closes the inspect→type race the dispatcher handles today with a
@@ -185,8 +210,12 @@ unsupported and never prompted, as today. Gemini CLI has none yet (Q7).
 
 - One process **per project** (Q4), started as a project service (systemd user unit /
   launchd agent, like `dispatch` and `missions`), socket under
-  `$XDG_RUNTIME_DIR/agentbus/<project>/holder-<protoversion>.sock`, mode 0600, same-uid peer
-  check (`SO_PEERCRED` / `getpeereid`).
+  `<rundir>/agentbus/<project>/holder-<protoversion>.sock`, mode 0600, directory 0700, same-uid
+  peer check (`SO_PEERCRED` on Linux, `getpeereid` on macOS). `<rundir>` is `$XDG_RUNTIME_DIR`
+  when set (Linux with a user session); otherwise (macOS, Linux without logind) a per-uid
+  directory `$TMPDIR/agentbus-<uid>` (falling back to `/tmp/agentbus-<uid>`), created 0700 and
+  refused if it exists with another owner or wider mode. A unix socket path must fit in 104
+  bytes on macOS: the path is checked at start and the holder refuses to run with a clear error.
 - Owns the PTYs (creack/pty), is every agent's parent, reaps them, always reads output (a slow
   viewer never blocks a program: per-viewer bounded queue, a viewer that falls behind is
   repainted, herdr-core's rule).
@@ -196,9 +225,18 @@ unsupported and never prompted, as today. Gemini CLI has none yet (Q7).
   data; protocol version in hello/welcome.
 - **Upgrade without killing agents**: a new holder build with a new protocol version listens on
   a new socket; the old one refuses new terminals and exits when its last terminal ends
-  (herdr-core's "older build drains" rule). Agents are relaunched routinely (`/clear`, reload,
-  relaunch), so an old holder drains within a day. Clients list every holder socket of the
-  project. No fd-passing, no state migration.
+  (herdr-core's "older build drains" rule). Clients list every holder socket of the project.
+  No fd-passing, no state migration. **The drain has no natural bound**: `/clear` and
+  auto-clear type into the same process and end no terminal; only relaunch, swap, suspend and
+  self-repair do. An old holder can therefore serve for as long as its agents live. Two things
+  bound it:
+  - `agentbus health` reports `holder_draining` (warn) with the old build, its age and its
+    terminals; after `holder.drain_warn` (default 24 h) it is shown in For you.
+  - `agentbus holder drain <project>` finishes it on the person's word: a rolling relaunch of
+    each terminal still on the old build, one agent at a time, through the existing relaunch
+    path (new terminal, proof, close the old one — relaunch-close decision), skipping an agent
+    that is working or has a person active. It is never automatic: relaunching an agent is a
+    person's or master's decision, not the holder's.
 - The holder runs no repository code and makes no bus writes; facts it exposes are read by the
   dispatcher, which keeps doing the fenced writes. (The dispatcher stays the one automated pane
   writer: the holder types only what `Submit` hands it.)
@@ -234,13 +272,22 @@ Strict alternative: any attached, non-observer viewer blocks typing. The focus n
 - Side-by-side viewing of several agents is the terminal's job (Ghostty splits, one `attach`
   each). busmon does **not** become a multiplexer (Q1).
 
-### 4.7 Resume and restore
+### 4.7 Resume and restore (storage revised)
 
 - Process lifetime = holder lifetime. The holder survives busmon, ssh sessions and the person's
   terminal closing; it does not survive reboot or `agentbus down`.
-- The resume argv the SessionStart hook reports today to herdr is written instead to
-  `{p}:agents.<agent>.resume` (fenced like the rest of the snapshot; the hook is the agent's own
-  verified process).
+- The resume argv the SessionStart hook reports today to herdr is written instead to a
+  **separate hash**, `{p}:resume` (field = agent, value = JSON `{argv, session, at}`), not into
+  the `{p}:agents` snapshot. Reason: a snapshot field would need a `mergeSnapshot` carry rule,
+  and resume's is the opposite of every identity field there (BootID, Model, ClientFP follow the
+  pid; resume must **outlive** the process and survive later statuses that do not carry it —
+  the c19b3255 hand-off bug shows what a missing rule costs). A hash of its own has no merge.
+- Write path: not lease-fenced (the hook is not the dispatcher) but an optimistic transaction
+  in `bus/` on the `TurnState` pattern: `WATCH {p}:agents`, check the caller is the agent's
+  stored verified process (pid + start), then `HSET {p}:resume`. An unproved caller writes
+  nothing. Persisted `at` comes from Redis `TIME`.
+- Cleared only by `agentbus forget <agent>` and replaced by the next proved session's report;
+  an agent's death or a status never touches it.
 - `agentbus up` on a project whose holder has no terminal for a role starts it with that resume
   argv when one is recorded, else fresh. Self-repair (decision 2026-11-09) uses the same path:
   `Start` a new terminal, never type into an old one.
@@ -269,6 +316,7 @@ superseded.
 12. As the person, I want a dump of an agent's raw recent output, so that I can attach it to a bug report.
 13. As the person, I want the desktop to ring once when an agent waits on a permission prompt, as today, so that I do not miss a blocked agent.
 14. As the person, I want upgrading agent-bus not to kill running agents, so that an update is not a team restart.
+14a. As the person, I want to be told when an old holder build is still serving, and to finish its drain with one command that relaunches agents one at a time, so that an upgrade does not linger forever.
 15. As the dispatcher, I want an agent's screen and activity facts from any host through one interface, so that my wake decisions do not depend on which host runs.
 16. As the dispatcher, I want the host to refuse typing at the moment a person is active, so that the inspect-then-type race is closed.
 17. As the dispatcher, I want to type only the wake line and `/clear`, by type, so that no message text can ever be typed into a pane.
@@ -284,7 +332,8 @@ superseded.
 27. As a maintainer, I want a recorder that captures a client's raw output to a fixture, so that a new client or a new client version can be probed in minutes.
 28. As a maintainer, I want the emulator behind an internal seam with a fidelity oracle in tests, so that the production emulator can be swapped after a bake-off.
 29. As a maintainer, I want the herdr adapter and the holder adapter to pass the same contract suite, so that the cutover changes no caller.
-30. As a maintainer, I want a shadow mode in which our detector runs beside herdr's `agent get` and logs disagreements, so that we prove parity before cutover.
+30. As a maintainer, I want a shadow mode in which our detector runs beside herdr's own judgement (`HostView`) and logs disagreements, so that we prove parity before cutover while herdr still decides.
+30a. As a security reviewer, I want the holder's submit frame to carry no text, so that no same-uid process can make the holder type arbitrary input into an agent.
 31. As a maintainer, I want the host chosen by one setting in `config/keys.go`, so that rollback during the trial is a setting change.
 32. As a maintainer, I want holder tests to use a temporary socket directory and scripted programs, so that no test touches a running holder or a real agent.
 33. As a reviewer, I want each migration step as one PR from main, so that each is reviewable and revertible alone.
@@ -303,9 +352,12 @@ superseded.
 - `dispatch`: `Runtime` implemented by `termhost`+`agentstate`; decision code unchanged except
   `Focused` → person active and the new `ErrPersonActive` from `Submit`.
 - `cmd/agentbus`: `holder`, `attach`, `term record`, `term dump`; `up`/`start`/`restore`/
-  `relaunch`/`swap`/`suspend`/`resume` on `Host`. `config/keys.go`: `terminal.host`
-  (`herdr|holder`), `holder.scrollback`, `holder.size`, `dispatch.person_quiet`,
-  `dispatch.draft_wait`.
+  `relaunch`/`swap`/`suspend`/`resume` on `Host`; `holder drain`. `config/keys.go`:
+  `terminal.host` (`herdr|holder`), `holder.scrollback`, `holder.size`, `holder.drain_warn`,
+  `dispatch.person_quiet`, `dispatch.draft_wait`.
+- `Host` also answers `Describe(ctx) (HostInfo, error)` — name, version, socket/session, per
+  project terminal count, draining builds — for the callers that today report on herdr itself
+  (health, about, projects admin, suspend snapshot).
 - `cmd/busmon`: preview panel, attach key; no herdr env.
 - `service`: holder unit per project.
 
@@ -320,8 +372,9 @@ superseded.
   No code copied (its own rule, and a different language).
 
 ### 6.3 Wire and state
-- No Redis schema change except `{p}:agents.<agent>.resume` (string, additive) and the observed
-  `blocked` source. `subscribe` JSON unchanged.
+- Redis: one new hash `{p}:resume` (§4.7; added to the project's key kinds so `--delete`,
+  backup and restore cover it) and the observed `blocked` source. `{p}:agents` and `subscribe`
+  JSON unchanged.
 - Holder protocol: versioned; additive only within a version, like `subscribe`.
 
 ### 6.4 Emulator bake-off (the gate before the holder)
@@ -337,21 +390,24 @@ emulator code we would own count against a candidate.
 | # | PR | Behaviour change | Exit criterion |
 |---|---|---|---|
 | 0 | This spec + decision note | none | approved |
-| 1 | `termhost` package, fake, contract suite; herdr adapter wrapping the calls `dispatch` makes | none | dispatch tests green on the adapter |
+| 1 | `termhost` package, fake, contract suite; herdr adapter (with `HostView`) wrapping the calls `dispatch` makes | none | dispatch tests green on the adapter |
 | 2 | Provisioning callers (`up`, `start`, `restore`) on `Host` | none | installer/up tests green (herdr stubbed) |
-| 3 | Replacement callers (`relaunch`, `swap`, `suspend`, `resume`) on `Host` | none | no `herdr(` call left outside the adapter (a test greps, like `TestNoStructWriterOfTheBoard`) |
-| 4 | `agentstate` extracted; client from launch profile | none | fixtures green |
-| 5 | Hooks for blocked (Claude `Notification`, Codex `notify`) + `Blocked` signatures; **shadow mode**: log disagreement with herdr `agent get` | observability only | ≥ 7 days, disagreement reviewed |
-| 6 | `agentbus term record` + raw fixtures for each client | none | fixtures committed |
-| 7 | Emulator bake-off; `screen` seam + chosen adapter | none | §6.4 passes |
-| 8 | `agentbus holder` + holder adapter (contract suite) + service unit | opt-in only | real-PTY e2e green |
-| 9 | `agentbus attach`, busmon preview + attach key | opt-in | manual live check by the person |
-| 10 | Resume to `{p}:agents.<a>.resume`; `up` restores from it | opt-in | reboot trial |
-| 11 | Live trial on one project with `terminal.host=holder` | trial | Q8 project runs a week |
-| 12 | Default flips to `holder` | default | release |
-| 13 | herdr removal (§4.8), decisions superseded | herdr gone | `go build` with no herdr reference; scrub/test green |
+| 3 | Replacement callers (`relaunch`, `swap`, `suspend`, `resume`) on `Host` | none | a test fails on any herdr exec in the **agent-facing** packages (`dispatch`, and the `cmd/agentbus` files of steps 1–3), with an explicit allowlist of the files moved in steps 4 and 14 |
+| 4 | Reporting callers on `Host.Describe`: health checks, `suspendsnap`, busmon `projects_admin` and `about` | none (same text with herdr) | allowlist shrinks to `reportresume.go`, `setup/*` |
+| 5 | `agentstate` extracted; client from launch profile; `HostView` still decides | none | fixtures green |
+| 6 | Hooks for blocked (Claude `Notification`, Codex `notify`) + `Blocked` signatures; **shadow mode**: our judgement beside `HostView`, disagreements logged | observability only | ≥ 7 days, disagreement reviewed |
+| 7 | `agentbus term record` + raw fixtures for each client | none | fixtures committed |
+| 8 | Emulator bake-off; `screen` seam + chosen adapter | none | §6.4 passes |
+| 9 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, peer check, socket dir) — after the security review of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
+| 10 | Holder adapter of `termhost` (contract suite) + `terminal.host` setting | opt-in | contract suite green on holder |
+| 11 | Holder service unit (systemd/launchd) + `holder_draining` health + `holder drain` | opt-in | service tests (fake systemctl/launchctl) |
+| 12 | `agentbus attach`, busmon preview + attach key | opt-in | manual live check by the person |
+| 13 | `{p}:resume` + hook writes it; `up` restores from it | opt-in | reboot trial |
+| 14 | Live trial on one project with `terminal.host=holder` | trial | Q8 project runs a week |
+| 15 | Default flips to `holder` | default | release |
+| 16 | herdr removal (§4.8: adapter, `HostView`, `reportresume` herdr call, `setup/*` herdr parts, plugin), decisions superseded | herdr gone | no herdr exec anywhere (the step 3 test with an empty allowlist); scrub/test green |
 
-Steps 1–5 are useful even if the project stops there: they make herdr replaceable and our
+Steps 1–6 are useful even if the project stops there: they make herdr replaceable and our
 detection herdr-independent.
 
 ## 8. Testing decisions
@@ -368,8 +424,12 @@ detection herdr-independent.
   a real agent, never the production broker (CLAUDE.md test rule unchanged).
 - Prior art: dispatch tests with a fake `Runtime`; installer tests that stub `docker`/`herdr`;
   service tests that fake `systemctl`/`launchctl`.
-- Mutation on `Submit`'s person-active refusal and on the `Line` constructors: the two
-  guarantees a reviewer would otherwise only read.
+- Mutation on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
+  frame validation (unknown kind, malformed nonce, text field present): the guarantees a
+  reviewer would otherwise only read.
+- `{p}:resume`: Redis tests (disposable broker) — an unproved caller writes nothing; a status,
+  a hand-off and the agent's death leave it; `forget` clears it.
+- The step-3 guard test: an allowlist that only shrinks; step 16 empties it.
 
 ## 9. Risks
 
@@ -379,6 +439,8 @@ detection herdr-independent.
 | Pure-Go emulator fidelity (Ink/ratatui redraws, wide chars, synchronized output) | signatures miss, agent never woken | bake-off on recorded output; oracle test; a client failing stays unsupported (never prompted), the safe direction |
 | Holder crash kills every agent of the project | team down | holder kept small, no policy; per project, not per host; resume via `up`; sentinel health check |
 | Upgrade kills agents | interruption | drain-on-upgrade, protocol version in socket name |
+| Old holder never drains (`/clear` keeps the process) | two builds forever, fixes never reach old terminals | `holder_draining` health, `holder drain` rolling relaunch on the person's word |
+| A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 9 |
 | Losing the tiled always-visible layout | the person sees less at a glance | busmon preview + terminal splits; Q1 |
 | Person/agent typing race | wake line inside a draft | host-side refusal at typing time, draft tracking |
 | macOS process facts (foreground group, start time) | identity/foreground wrong on Mac | `tcgetpgrp` on the PTY master is portable; per-OS facts behind one platform file, tested on its OS |
@@ -397,15 +459,19 @@ detection herdr-independent.
 3. **"100 % Go".** Is a Go module that embeds a native library (gostty: Ghostty's Zig-built VT
    core, loaded without cgo) acceptable in production, in tests only, or not at all?
 4. **Holder scope.** One holder per project (recommended: a crash takes one project down) or
-   one per host (matches the one-dispatcher-per-host decision)?
+   one per host? Note the consequence with the one-dispatcher-per-host decision (2026-10-26):
+   a per-host dispatcher enumerates every project's holder sockets
+   (`<rundir>/agentbus/*/holder-*.sock`, project from the directory name, validated with
+   `ValidName` before use) and keeps one connection per holder; a per-project dispatcher
+   (today) has one directory to read.
 5. **Lifetime.** Agents die on reboot and come back with `agentbus up` using their recorded
    resume. Is that enough, or should the holder start at login (with systemd linger) and
    relaunch them itself?
-6. **herdr after cutover.** Delete the herdr adapter entirely (recommended, step 13), or keep it
+6. **herdr after cutover.** Delete the herdr adapter entirely (recommended, step 16), or keep it
    as an optional host?
 7. **Gemini.** The dispatcher supports Antigravity (`agy`), not Gemini CLI. Is Gemini CLI a
    client to support in this work (needs probing and signatures), or later?
-8. **Trial project.** Which project runs the live trial (step 11): agent-bus-monitor itself
+8. **Trial project.** Which project runs the live trial (step 14): agent-bus-monitor itself
    (dogfood, highest visibility) or a quieter one?
 9. **Detach chord.** `ctrl+\` (herdr-core) or `ctrl+]` (go-pty, telnet habit)?
 
