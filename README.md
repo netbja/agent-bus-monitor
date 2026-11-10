@@ -561,7 +561,13 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     as they can take a request), **NEXT** (the plan's tasks not started, yours blocked by others
     among them, then the requests no plan task names) and **IDEAS** (`◇`, the open questions in
     `docs/memory/open-questions/` no plan task covers, read-only; Enter says where each lives).
-    Under 100 columns the frame counts them with glyphs (`♙5 ●4 ○3 ◇2`). Two folded lines close
+    Under 100 columns the frame counts them with glyphs (`♙5 ●4 ○3 ◇2`). From 130 columns of
+    busmon's pane, Work is a **Kanban** of four columns, **For you · In progress · Next · Ideas**,
+    from the same model: two lines a card, the title cut with `…` at the column's width, `←→`
+    between columns on a card (past the last one, the next tab), `↑↓` through the cards, Enter as
+    on the rows; too narrow for four, the
+    columns stack two by two. `display.work_layout` (`C`) picks `auto` (the default), `list` or
+    `kanban` at every width. Two folded lines close
     it: **between agents** (Enter opens the full Requests list, by thread: owed by you, you wait
     on, between agents; `o` shows the answered ones, `d` then `y` closes a thread with a reply
     from you; Esc returns to Work) and **done** (Enter or `d` opens the plan with its done tasks).

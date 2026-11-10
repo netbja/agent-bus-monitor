@@ -36,6 +36,7 @@ type listState struct {
 	onChange     func(key string, live bool)
 	lastSeen     string // the last item drawn while live (holdSelection)
 	onOpen       func(key string)
+	kanban       *kanbanView // set: the rows are a Kanban's cards, drawn as columns (the Work tab)
 }
 
 func (l *listState) SetHeader(h Line) { l.header = h }
@@ -361,9 +362,17 @@ func (l *listState) draw(screen cellSink) {
 		return
 	}
 	l.viewport()
-	drawFrame(screen, x, y, w, h, Frame{Title: l.title, Label: l.label, Focused: l.focused, Scroll: l.Scroll(), Hue: l.hue})
+	scroll := l.Scroll()
+	if l.kanban != nil { // each column scrolls on its own: no frame scrollbar
+		scroll = ScrollState{}
+	}
+	drawFrame(screen, x, y, w, h, Frame{Title: l.title, Label: l.label, Focused: l.focused, Scroll: scroll, Hue: l.hue})
 	ix, iy, iw, ih := l.inner()
 	if iw <= 0 {
+		return
+	}
+	if l.kanban != nil {
+		l.kanban.draw(screen, ix, iy, iw, ih, l.sel)
 		return
 	}
 	gutter := min(listGutter, iw)
@@ -393,6 +402,13 @@ func (l *listState) draw(screen cellSink) {
 // click selects the row under (mx, my) or opens it when it is the selected
 // one; on the scrollbar column it pages towards the click.
 func (l *listState) click(mx, my int) {
+	if l.kanban != nil { // a card: selected (the shell opens the selected one before, as Enter)
+		ix, iy, iw, ih := l.inner()
+		if key := l.kanban.cardAt(mx, my, ix, iy, iw, ih, l.sel); key != "" {
+			l.Select(key)
+		}
+		return
+	}
 	x, w := l.rect.X, l.rect.W
 	_, iy, _, ih := l.inner()
 	if my < iy || my >= iy+ih {
@@ -416,6 +432,12 @@ func (l *listState) click(mx, my int) {
 
 // itemAt is the index of the row under (mx, my), off the scrollbar column.
 func (l *listState) itemAt(mx, my int) (int, bool) {
+	if l.kanban != nil {
+		ix, iy, iw, ih := l.inner()
+		key := l.kanban.cardAt(mx, my, ix, iy, iw, ih, l.sel)
+		i := l.index(key)
+		return i, key != "" && i >= 0
+	}
 	_, iy, _, ih := l.inner()
 	if my < iy || my >= iy+ih || mx <= l.rect.X || mx >= l.rect.X+l.rect.W-1 {
 		return 0, false

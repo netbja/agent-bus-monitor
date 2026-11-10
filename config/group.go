@@ -23,7 +23,7 @@ var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupNotificat
 
 // groups is each key's group; TestEveryKeyHasItsGroup fails on a key without.
 var groups = map[string]Group{
-	"display.theme": GroupDisplay, "display.icons": GroupDisplay, "display.limit": GroupDisplay, "display.idle_hint_after": GroupDisplay, "display.idle_view_after": GroupDisplay, "compose.at_path": GroupDisplay, "waiting.fade": GroupDisplay,
+	"display.theme": GroupDisplay, "display.icons": GroupDisplay, "display.limit": GroupDisplay, "display.idle_hint_after": GroupDisplay, "display.idle_view_after": GroupDisplay, "compose.at_path": GroupDisplay, "display.work_layout": GroupDisplay, "waiting.fade": GroupDisplay,
 	"waiting.popup_after": GroupAttention, "waiting.snooze": GroupAttention, "waiting.bell": GroupAttention,
 	"recap.auto_after": GroupAttention, "updates.check": GroupAttention, "dispatch.focus_notice": GroupAttention,
 	"identity.as": GroupIdentity, "start.team": GroupIdentity,

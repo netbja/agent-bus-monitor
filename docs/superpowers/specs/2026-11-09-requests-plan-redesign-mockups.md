@@ -359,3 +359,34 @@ page and the Kanban will read it too.
   priority" (correction 7).
 - **The decide chip:** a click on it selects For you's first decide row, else Work's first
   non-merge YOU row. The chip counts both (foureyes, step 1).
+
+**Step 3, the Kanban (layout B)** (`cmd/busmon/work_kanban.go`). The same Work model, drawn as
+four columns: **For you · In progress · Next · Ideas**.
+
+- **When:**
+  - `display.work_layout` is a Display setting (`C`, `config/keys.go`): `auto` (the default),
+    `list` or `kanban`.
+  - `auto` draws the Kanban when busmon's own width is 130 columns or more. That width is the
+    herdr pane's, since busmon runs in it, not the terminal's.
+- **At 130 columns** (checked): the lower frame's inside is 128 cells, so each column is 31 cells
+  with one blank column between them.
+  - Too narrow for four columns of at least 24 cells, the columns stack two per band, then one,
+    and the bands share the height. That is what `kanban` draws on a narrow screen.
+- **A card** is two lines:
+  - The first line holds the mark, the verb or the owner, and the age.
+  - The second holds the title, indented two cells and cut with `…` at the column's width,
+    which leaves 29 cells at 130 columns. A card never wraps to a third line.
+  - Each column scrolls on its own, keeping the selected card in view, and ends with `+N more`
+    when the cards do not fit.
+- **Folded lines:** the free agents are the last card of In progress. The between-agents and
+  done lines are the last cards of Ideas, and Enter opens them as on the list.
+- **Keys:**
+  - On a selected card, `←→` move between columns, to the same rank among their cards (else the
+    last), and the footer reads `←→ column`.
+  - Past the first or last column, or with no card selected, `←→` step the lower panel's tabs as
+    everywhere else, so the arrows never trap the person in Work.
+  - `↑↓` walk the cards in reading order.
+  - Enter, `y`, `+ -` and a click (select, then open) act as on the list's rows, by the same
+    keys.
+- **For you panel:** it keeps its place and its pointer. Part 4's idea of making it the board's
+  first column, which would reverse 2026-11-07, is not built: the person's Q5 kept the pointer.

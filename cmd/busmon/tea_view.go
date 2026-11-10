@@ -264,7 +264,15 @@ func (m *Model) fillLists() {
 
 	wk := &m.lists.work // who owes what (requests-plan-redesign, layout A)
 	compact := lower < workCompactW
-	wk.SetItems(workRows(m.work, workDraw{requests: s.requests, now: now, width: lower}))
+	wd := workDraw{requests: s.requests, now: now, width: lower}
+	wk.kanban = nil
+	if workKanbanOn(m.cfg.settings.WorkLayout, m.width) { // layout B: the same model as columns
+		v := workKanban(m.work, wd)
+		wk.kanban = &v
+		wk.SetItems(v.items())
+	} else {
+		wk.SetItems(workRows(m.work, wd))
+	}
 	wk.SetFrame(m.lowerTitle(PanelWork, Line{{Text: "Work", Role: RoleText}}), Line{{Text: workLabel(m.work, compact), Role: RoleMuted}})
 
 	rq := &m.lists.requests

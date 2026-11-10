@@ -25,7 +25,7 @@ func writeFile(t *testing.T, name, body string) string {
 func TestRegistryRows(t *testing.T) {
 	want := []string{
 		"waiting.popup_after", "waiting.snooze", "waiting.bell", "waiting.fade", "recap.auto_after",
-		"display.theme", "display.icons", "compose.at_path", "display.limit", "display.idle_hint_after", "display.idle_view_after", "identity.as", "updates.check",
+		"display.theme", "display.icons", "compose.at_path", "display.work_layout", "display.limit", "display.idle_hint_after", "display.idle_view_after", "identity.as", "updates.check",
 		"dispatch.context_alert", "dispatch.prompt_grace", "dispatch.focus_notice", "dispatch.quota", "dispatch.quota_warn",
 		"dispatch.quota_hold", "dispatch.quota_max_age", "dispatch.quota_long_hold", "dispatch.tokens",
 		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.idle_after", "dispatch.turn_stale_after", "dispatch.pop_retire", "dispatch.pop_retire_after", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "suspend.wait", "suspend.auto_resume", "delivery.forge", "delivery.base", "backup.schedule", "backup.dir", "backup.keep", "backup.warn_after", "backup.age_recipient", "backup.after_command", "backup.after_env", "backup.after_timeout", "notify.on", "notify.targets", "notify.events", "notify.detail", "notify.delay", "notify.max_per_hour", "notify.quiet", "notify.quiet_exempt", "bus.report_max", "bus.report_full_max", "bus.verdict_max", "projects.delete_files", "projects.delete_backups",
@@ -343,5 +343,22 @@ func TestParseWarningQuotesNothing(t *testing.T) {
 	f := Load(writeFile(t, "config.toml", "[dispatch]\nPASTE%q-HERE = 1\n"), "config.toml")
 	if len(f.Warnings) != 1 || f.Warnings[0].Line != 2 || strings.Contains(f.Warnings[0].String(), "PASTE") || strings.Contains(f.Warnings[0].String(), "%") {
 		t.Errorf("warnings = %v", f.Warnings)
+	}
+}
+
+// requests-plan-redesign (the person, Q1): the Work tab's layout, auto by
+// default (the Kanban from 130 columns of busmon's pane), or always one.
+func TestWorkLayoutKey(t *testing.T) {
+	k, ok := Lookup("display.work_layout")
+	if !ok || k.Default != "auto" || k.Kind != String {
+		t.Fatalf("%+v %v", k, ok)
+	}
+	for _, v := range []string{"auto", "list", "kanban"} {
+		if got, why := k.file(v); got != v || why != "" {
+			t.Errorf("%s: %v %q", v, got, why)
+		}
+	}
+	if got, why := k.file("board"); got != nil || why == "" {
+		t.Errorf("board accepted: %v %q", got, why)
 	}
 }
