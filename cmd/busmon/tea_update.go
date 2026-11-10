@@ -22,6 +22,8 @@ func (m *Model) mode() Mode {
 		return ModeTour
 	case m.ui.del != nil:
 		return ModeProjectDelete
+	case m.ui.compose != nil && m.ui.compose.at != nil:
+		return ModeComposeFile
 	case m.ui.compose != nil:
 		return ModeCompose
 	case m.ui.line == lineFilter || m.ui.line == lineHistFilter:
@@ -88,12 +90,17 @@ func (m *Model) modeKey(k Key) tea.Cmd {
 	if act == ActQuit {
 		return tea.Quit
 	}
-	if act != ActNone || mode == ModeCompose || mode == ModeInput {
+	if act != ActNone || mode == ModeCompose || mode == ModeComposeFile || mode == ModeInput {
 		m.ui.flash, m.ui.flashErr = "", false
 	}
 	switch mode {
+	case ModeComposeFile:
+		return m.composeFileKey(act, k)
 	case ModeCompose:
-		return m.composeKey(act, k)
+		c := m.ui.compose
+		cmd := m.composeKey(act, k)
+		typedAt := act == ActNone && k.Code == keyRune && k.Rune == '@' && !k.Alt
+		return tea.Batch(cmd, m.atFollow(c, typedAt))
 	case ModeInput, ModeFilter:
 		return m.lineKey(act, k)
 	}
@@ -536,6 +543,9 @@ func (m *Model) wheel(ms tea.Mouse) {
 	default:
 		return
 	}
+	if m.ui.pausePopup == nil && m.atWheel(ms.X, ms.Y, delta) {
+		return // the @ popup's list
+	}
 	if m.ui.compose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary {
 		return // a window or a dialog is over the screen
 	}
@@ -574,7 +584,13 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	case m.ui.reminder != nil || m.ui.summary:
 		return nil
 	case m.ui.compose != nil:
+		c := m.ui.compose
+		if c.at != nil && m.atClick(ms.X, ms.Y) {
+			m.refresh()
+			return nil
+		}
 		cmd := m.composeClick(ms.X, ms.Y)
+		cmd = tea.Batch(cmd, m.atFollow(c, false)) // the cursor moved out of the token: the popup closes
 		m.refresh()
 		return cmd
 	}

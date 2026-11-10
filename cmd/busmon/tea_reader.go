@@ -1340,6 +1340,9 @@ func (m Model) pageOffers(act Action) bool {
 // copy ("" keeps the binding's own); with no page open, Enter's word on the
 // selected row (shellHint, busmon-row-actions).
 func (m Model) pageHint(act Action) string {
+	if w := m.atHint(act); w != "" { // the compose window's @ popup, over any page
+		return w
+	}
 	p := m.rd.top()
 	if p == nil {
 		return m.shellHint(act)

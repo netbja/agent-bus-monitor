@@ -64,7 +64,8 @@ func checkGolden(t *testing.T, name, got string) {
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
 var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "plantab",
-	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets", "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name", "idle"}
+	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets", "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name", "idle",
+	"compose-at", "compose-at-above", "compose-at-reading", "compose-at-outside", "compose-at-incomplete"}
 
 // reportID is the fixture's report, whose fenced code is longer than any width.
 var reportID = fmt.Sprintf("%d-0", shellNow.Add(-13*time.Minute).UnixMilli())
@@ -136,6 +137,8 @@ func inState(t testing.TB, m Model, state string) Model {
 		return keys(t, m, tab, 'j', 'j')
 	case "notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets":
 		return notifyGolden(t, m, state)
+	case "compose-at", "compose-at-above", "compose-at-reading", "compose-at-outside", "compose-at-incomplete": // the @ popup (compose-at-file §4.3, §9)
+		return atGolden(t, m, state)
 	case "compose": // a directive to coder, two lines written
 		m = typeText(t, keys(t, m, 'I'), "@cod")
 		m = typeText(t, keys(t, m, kTab), "Review lot 1 please: the reader, the ask mode and the cache.")

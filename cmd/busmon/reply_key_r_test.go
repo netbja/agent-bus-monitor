@@ -70,7 +70,7 @@ func footerHas(m Model, s string) bool { return strings.Contains(footerText(m), 
 // OnPage and no page offers two of them (lookupOn picks the offered one).
 // Checked per mode over every printable rune.
 func TestNoKeyCollisionPerMode(t *testing.T) {
-	modes := []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay, ModeAsk, ModeCompose, ModePick, ModeShell, ModeShellAsk, ModeTour, ModeSettings, ModeNotifySetup}
+	modes := []Mode{ModePanel, ModeInput, ModeFilter, ModeOverlay, ModeAsk, ModeCompose, ModePick, ModeShell, ModeShellAsk, ModeTour, ModeSettings, ModeNotifySetup, ModeComposeFile}
 	shared := map[string]bool{}
 	for _, mode := range modes {
 		for r := rune(0x21); r < 0x7f; r++ {

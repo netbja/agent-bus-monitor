@@ -31,6 +31,9 @@ const (
 	// ModeProjectDelete is the Projects page's delete confirmation
 	// (projects_delete.go): its own small table, the name field's keys.
 	ModeProjectDelete
+	// ModeComposeFile is ModeCompose with the @ popup open over the text
+	// (compose-at-file §4.4): its own table first, any other key the window's.
+	ModeComposeFile
 )
 
 // Action is what a key means in a mode; the ui performs it.
@@ -319,6 +322,18 @@ var (
 		{Keys: "shift+" + arrows + GlyphArrowL + GlyphArrowR + " home end", Help: "select text: del or backspace removes it, typing replaces it, esc or a plain move clears it", match: never},
 		{Keys: "pgup pgdn", Help: "a page up or down (with shift: extend the selection)", match: never},
 	}
+	// composeFileBindings: the @ popup over the compose window's text
+	// (compose-at-file §4.4). A key it does not bind goes to the window's
+	// table and the text, and the query follows it.
+	composeFileBindings = []binding{
+		{Keys: arrows, Hint: "choose", Act: ActUp, match: keyIs(keyUp)},
+		{Keys: GlyphDownArrow, Act: ActDown, match: keyIs(keyDown)},
+		{Keys: "pgup pgdn", Help: "a page of the file list", Act: ActPageUp, match: keyIs(keyPgUp)},
+		{Keys: "pgdn", Act: ActPageDown, match: keyIs(keyPgDn)},
+		{Keys: "enter", Hint: "insert", Help: "insert the selected path, a file or a folder, in place of the @ and its query (no new line)", Act: ActOpen, match: keyIs(keyEnter)},
+		{Keys: "tab", Hint: "open folder", Help: "on a folder: list its files (the query becomes the folder); on a file: insert it; in a message that holds only @ and the start of an agent's name, the recipient instead (the hint says recipient)", Act: ActFieldNext, match: keyIs(keyTab)},
+		{Keys: "esc", Hint: "keep text", Help: "close the list only, the typed @query kept; esc again closes the window", Act: ActEscape, match: keyIs(keyEscape)},
+	}
 	pickBindings = []binding{
 		{Keys: "type", Hint: "to filter", Act: ActPickType, match: keyIs(keyRune, keyBackspace, keyBackspace)},
 		{Keys: arrows, Hint: "select", Act: ActUp, match: keyIs(keyUp)},
@@ -480,6 +495,8 @@ func bindings(m Mode) []binding {
 		bs = askBindings
 	case ModeCompose:
 		bs = composeBindings
+	case ModeComposeFile:
+		bs = composeFileBindings
 	case ModePick:
 		bs = pickBindings
 	case ModeShell:

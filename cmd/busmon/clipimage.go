@@ -291,6 +291,7 @@ func (m *Model) gotPastedImage(msg pastedImageMsg) {
 		return
 	}
 	dropped := 0
+	c.at = nil                                                          // a path pasted: the popup's query is no longer typed
 	c.area.edit("", func() { dropped = insertPath(&c.area, msg.path) }) // one step, as a paste
 	if dropped > 0 {
 		m.ui.flash, m.ui.flashErr = "image saved, but the text is full: "+msg.path, true
