@@ -137,7 +137,9 @@ Its rules:
   write; a Claude Code started between them can rewrite the file from its own memory and drop the
   edit, or have its newer account and project state replaced by the older copy. The atomic
   replace prevents a torn file, not a lost update. A backup of the file is taken before the
-  replace and its path printed, so the person can restore it; the race remains and is said;
+  replace and its path printed, so the person can restore it; it holds the account's data, so it
+  is written mode 0600 beside the file (the same folder, the same filesystem), never in a shared
+  or project folder (foureyes). The race remains and is said;
 - each entry written is printed, and `agentbus trust revoke <project>` removes exactly those.
 
 - **For:** no dialog when the person says so, for a project they know; nothing silent.
@@ -163,7 +165,7 @@ exactly what it does, but it should not answer it unasked.
   `prompt` flag in an untrusted folder, and not for a trusted one, nor against a remote broker.
 - (c): `--trust` writes only the repository root's key, refuses `~`, `/`, a folder outside home,
   a `working_dir` that is a link out of home, a worktree whose main checkout lies outside home,
-  and a running Claude Code; keeps every other byte of the file; backs it up first and prints the
+  and a running Claude Code; keeps every other byte of the file; backs it up first (0600, beside the file) and prints the
   backup's path; prints each entry; `trust revoke` removes exactly those; without `--trust`
   nothing is written.
 - The precedence part 4 relies on, on the installed Claude Code: in a trusted test folder whose
