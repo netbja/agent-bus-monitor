@@ -573,7 +573,15 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
   several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft, Ctrl+V pastes the
   clipboard's image: saved privately under `~/.cache/agentbus/attachments`, its path put in the text,
-  nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). You write as a
+  nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). In the window's text, a typed
+  **`@`** (at the start or after a space or `(` `[` `"` `'`, so never in `a@b.c`) lists the
+  project's files under the cursor: `↑` `↓` choose, Enter puts the file's **path** in place of the
+  `@query` (never its content), Tab opens a folder, Esc closes the list and keeps the text.
+  `@~/` lists your home one folder at a time. The path is absolute, or relative to the project's
+  root with `compose.at_path = "relative"` (`C`; a home path stays absolute). What
+  `roles.toml`'s shared `Read(…)` rules deny, secret-looking files (`.env`, keys, `.ssh`, `.git`…)
+  and hidden entries at the top of home are never offered; a path outside the project you type
+  yourself. You write as a
   **person**: `busmon --as charlie` (or `AGENT_BUS_HUMAN`, or `agentbus identity set charlie`)
   shows `♙ Charlie [human]`; your entries carry `human=yes`, and agents see `"human": true`.
 - **Footer** — the keys of where you are (F1 lists them all). On the main screen `enter` comes
