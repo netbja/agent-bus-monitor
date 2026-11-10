@@ -587,6 +587,15 @@ func footerHintsOn(m Mode, p PanelID, t Tier, width int, offers func(Action) boo
 			shown = append(shown, b)
 		}
 	}
+	if m == ModeShell { // the priority keys right after the row's enter, as the Requests mock-ups place them
+		if i := slices.IndexFunc(shown, func(x binding) bool { return x.Act == ActPriorityUp }); i > 0 {
+			b, at := shown[i], 0
+			if shown[0].Act == ActOpen {
+				at = 1
+			}
+			shown = slices.Insert(slices.Delete(shown, i, i+1), at, b)
+		}
+	}
 	sort.SliceStable(fkeys, func(i, j int) bool { return fkeyNumber(fkeys[i].Keys) < fkeyNumber(fkeys[j].Keys) })
 	pair := func(b binding) Line {
 		word := b.Hint
