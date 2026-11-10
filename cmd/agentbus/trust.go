@@ -136,7 +136,7 @@ func trustAskDef(client, key, where string) bus.AskDef {
 	return bus.AskDef{From: trustAskFrom, Title: title, Questions: []bus.AskQuestion{{
 		ID:       trustAskQID(client),
 		Header:   trustAskHeader,
-		Question: label + ` asks whether you trust this folder: in ` + where + `, choose "Yes, I trust this folder".`,
+		Question: label + ` asks whether you trust this folder: in ` + where + `, choose "` + trust.Choice + `".`,
 		Context: trustAskFolder(key) + "Trusting lets " + label + " read, edit and run files there, and load the repository's own " +
 			"settings, hooks and MCP servers: for a repository you did not write, look at it first." + hint +
 			" This ask closes itself once the trust is recorded.",

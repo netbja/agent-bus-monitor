@@ -131,3 +131,7 @@ func Reader(env func(string) string) func(client, dir string) bool {
 		return true
 	}
 }
+
+// Choice is the trust dialog's answer by its label, as the person is told to
+// choose it (the keys change between client versions; the label is named).
+const Choice = "Yes, I trust this folder"

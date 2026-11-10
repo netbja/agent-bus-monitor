@@ -262,6 +262,17 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 	}
 
+	// The trust line's reads (file I/O) happen here, outside the lock, and
+	// only for an agent showing a prompt (first-run-trust).
+	var trustFolders map[string]string
+	if observedErr == nil && snapsErr == nil && st.trustOf != nil {
+		trustFolders = map[string]string{}
+		for n, o := range observed {
+			if s, ok := snaps[n]; ok && o.State == "blocked" && o.PID != 0 && o.PID == s.PID {
+				trustFolders[n] = st.trustOf(s.Client, s.PID, s.PIDStart)
+			}
+		}
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.pilot = driver
@@ -442,6 +453,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			// Only the agent's current process: a reading carried for an older
 			// one (a replaced agent) is not its prompt.
 			a.obsPrompt = ok && o.State == "blocked" && o.PID != 0 && o.PID == a.pid
+			a.trustFolder = ""
+			if a.obsPrompt && snapsErr == nil {
+				a.trustFolder = trustFolders[n]
+			}
 			a.clientUpdate = nil // client reload spec: only for the agent's current process
 			if ok && o.Update != nil && o.PID != 0 && o.PID == a.pid {
 				a.clientUpdate = o.Update
