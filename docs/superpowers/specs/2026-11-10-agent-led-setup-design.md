@@ -49,7 +49,9 @@ path are the same path, and the manual one stays the reference.
 - **`AGENTS.md` and `CLAUDE.md` get one line at the very top**: "Asked to install or set up
   agent-bus on this machine? Read `SETUP.md` and follow it; the rest of this file is for
   developing agent-bus." A client loads one of these two first; without that line the agent
-  would read the development team's rules (worktrees, 4-eyes, the bus) and act on them.
+  would read the development team's rules (worktrees, 4-eyes, the bus) and act on them. In
+  `AGENTS.md` the line goes above the generated memory-index block (`<!-- memory-index:begin -->`),
+  so `agentbus mem sync` keeps it (foureyes).
 - **The quick start and the README** gain one sentence in §1: "Or open your coding agent in the
   clone and say: *read SETUP.md and set up agent-bus*."
 - A test checks that `SETUP.md` names only commands and flags that exist (`agentbus help <cmd>`
@@ -57,28 +59,43 @@ path are the same path, and the manual one stays the reference.
 
 ## 4. The probe (silent, read-only)
 
-Run once, from the clone, before the first question. Nothing it runs writes anything:
+Run once, from the clone, before the first question. **The silent part only reads**: no build,
+no download, no file written:
 
 ```sh
-uname -sm; git --version; go version; docker version --format '{{.Server.Version}}'
-docker compose version --short; command -v herdr && herdr --version
+uname -sm; git --version; go version; sed -n 's/^go //p' go.mod   # Go found vs go.mod's line
+docker version --format '{{.Server.Version}}'; docker compose version --short
+command -v herdr && herdr --version
 command -v claude codex grok kimi            # the agent CLIs on PATH
-./setup.sh install --dry-run                 # the installer's own checks, nothing changed
-command -v agentbus && ./setup.sh status     # an earlier install
+command -v agentbus && agentbus version && agentbus setup --repo . status   # an earlier install
 agentbus identity 2>/dev/null; git config user.name
 ```
 
-What it decides:
+**`./setup.sh` is not in the silent part** (foureyes). Every call of it, `--dry-run` and `status`
+included, builds a temporary `agentbus` first (`setup.sh`, `go build`): it writes that binary,
+fills Go's build and module caches, downloads the modules on a fresh machine, and with
+`GOTOOLCHAIN=auto` and an older local Go downloads a newer toolchain, hundreds of MB. An earlier
+install is read with the **installed** binary instead (`agentbus setup --repo . status`), which
+builds nothing.
 
-- **A missing prerequisite becomes a plan item, not a question.** Go too old, Docker absent or its
-  daemon down, the person not in the `docker` group: these need `sudo` or a package manager, so
-  they are **person steps** (§5.4) with the exact command for the detected OS. herdr missing is a
-  plan item the agent may run (`--install-herdr`), since `./setup.sh` already offers it.
-- **An earlier install** (`./setup.sh status` prints ✓ lines) turns the setup into an update: the
+So the **first message** is not a question about the person's setup but one consent, with the
+silent findings: "May I run the installer's dry run? It changes nothing in your setup, but it
+builds a temporary agentbus, which may download Go modules (and a Go toolchain, about N MB,
+since yours is X and go.mod asks Y)." [yes.] A no skips the dry run: the plan is built from the
+silent findings alone, and says so.
+
+What the probe decides:
+
+- **A missing prerequisite becomes a plan item, not a question.** Go too old (and
+  `GOTOOLCHAIN=local`), Docker absent or its daemon down, the person not in the `docker` group:
+  these need `sudo` or a package manager, so they are **person steps** (§5.4) with the exact
+  command for the detected OS. herdr missing is a plan item the agent may run
+  (`--install-herdr`), since `./setup.sh` already offers it.
+- **An earlier install** (the installed status prints ✓ lines) turns the setup into an update: the
   first question becomes "update it, or leave it?" and the plan uses `./setup.sh update`.
 - **The agent CLIs found** are checked against the clients the shipped roles run on (§5.1 Q3);
   none found stops the setup with one person step (install one, and log in to it).
-- **`./setup.sh status` saying `Redis password: the historical default`** adds a plan item (§5.3).
+- **The status saying `Redis password: the historical default`** adds a person step (§5.4).
 
 ## 5. The questions, the plan, the run
 
@@ -131,13 +148,11 @@ what is left untouched. It ends with one question:
 In this order, each command printed before it runs, the agent stopping at the first failure:
 
 1. `./setup.sh install [--install-herdr]` (or `update`).
-2. `./setup.sh rotate-redis-password --yes` when the probe saw the historical default; this
-   requires that the command prints no password (to verify while building, §8).
-3. `agentbus identity set <name>`.
-4. The status-line block, when the person said yes: the agent reads `~/.claude/settings.json`,
+2. `agentbus identity set <name>`.
+3. The status-line block, when the person said yes: the agent reads `~/.claude/settings.json`,
    shows the diff, and writes it only after the person's yes to that diff (the person's client
    config is theirs; a second, explicit confirmation).
-5. `agentbus start <folder> --dry-run --roles <team>`, its output shown as is, with
+4. `agentbus start <folder> --dry-run --roles <team>`, its output shown as is, with
    `agentbus roles fallbacks <role>` for each role: a refused role or profile stops the run.
 
 The team itself is **not started by the agent** (§6): the last step is a person step.
@@ -148,6 +163,11 @@ One message, before the run when a prerequisite is missing, else after it, with 
 and nothing to fill in:
 
 - prerequisites needing `sudo` (Go, Docker, the `docker` group and its re-login);
+- `./setup.sh rotate-redis-password`, when the status showed the historical default (foureyes).
+  `setup/rotate.go` calls the rotation "the person's explicit act, never automatic", and it
+  changes the live broker's password: every client on another host (a laptop's tunnel) fails
+  until it gets the new file. The message says that effect in one line; the agent never runs it
+  (§9 Q8);
 - logging in to an agent CLI (`claude`, `codex login`…);
 - `agentbus notifications setup`, on their own terminal, when they said yes to question 4: the
   topic or webhook stays between them and that command;
@@ -169,8 +189,9 @@ where to read more (`docs/quickstart.md`, `docs/OPERATIONAL-GUIDE.md`).
 - **Ask for, read, show or repeat a secret**: no token, password, webhook, ntfy topic, API key;
   it never reads `notify.toml`, the Redis password, the env files the services read, or a
   client's credentials; it never runs `notifications show-topic`.
-- **Run anything before the plan's yes**, apart from the probe; run a command the plan did not
-  list; or use `sudo`.
+- **Run anything before the plan's yes**, apart from the silent probe (§4) and, after its own
+  yes, the installer's dry run; run a command the plan did not list; use `sudo`; or rotate the
+  Redis password (§5.4).
 - **Start agents or open herdr** in the person's workspace (§5.4): a team acts with the person's
   rights and is launched by the person.
 - **Act on the bus**: no `agentbus cmd`, `report`, `request`, `verdict`, `gate` or `pilot`. It is
@@ -185,8 +206,9 @@ where to read more (`docs/quickstart.md`, `docs/OPERATIONAL-GUIDE.md`).
 ## 7. How it fits what exists
 
 - **`setup.sh` / `agentbus setup`**: unchanged. The agent is one more caller of its documented
-  flags, and `--dry-run` is the probe's core. `--dry-run`'s summary line (`0 missing, N
-  warning(s)`) is what the agent reads, never a scrape of the ✓ lines; if that proves too thin,
+  flags; its `--dry-run` runs only after the first message's yes (§4), since it builds. Its
+  summary line (`0 missing, N warning(s)`) is what the agent reads, never a scrape of the ✓
+  lines; if that proves too thin,
   `agentbus setup install --dry-run --json` is a later, separate step (§9 Q5).
 - **`agentbus start`**: unchanged. The agent uses only `--dry-run`; the person runs the real one.
   Its own questions (name, team) are the ones question 2 and 3 answer, so the person types
@@ -204,8 +226,8 @@ One PR, docs and one test:
    `README.fr.md` and `docs/quickstart.md`.
 2. `TestSetupMdNamesRealCommands`: every `agentbus <cmd> --flag` and `./setup.sh <sub> --flag` in
    `SETUP.md` is known to the binaries' help.
-3. Checked by hand and written in the PR: `rotate-redis-password --yes` prints no password; a
-   live run of `SETUP.md` with Claude Code and with Codex on a scratch user account (as the quick
+3. Checked by hand and written in the PR: the silent probe of §4 builds and downloads nothing (Go's
+   caches and `~/go/pkg` unchanged around it); a live run of `SETUP.md` with Claude Code and with Codex on a scratch user account (as the quick
    start's outputs were), its transcript summarized, no secret in it.
 4. A decision note superseding the first idea of the 2026-11-03 open question.
 
@@ -232,3 +254,7 @@ One PR, docs and one test:
    to the manifest's profiles (§5.1 Q3). Or a later step gives the core roles `fallback_profiles`
    on other clients (codex, grok, kimi), so `start --roles coder:<profile>` can pick one; that is a
    manifest change with its own review, not part of this spec.
+8. **The Redis password rotation.** Recommended: a person step with its effect stated (§5.4), as
+   `setup/rotate.go` wants. Or the plan's yes counts as the person's act, with the effect listed in
+   the plan, and the agent runs `rotate-redis-password --yes` (only once it is proven to print no
+   password).
