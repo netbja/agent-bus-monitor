@@ -118,6 +118,12 @@ No new read, and no new key in Redis. The three frames show together; nothing ta
   `RoleMuted`, one shade a second on the same poll step. The cell moves one place right each cycle,
   wrapping at the right edge, so over `width` cycles every cell carries it. One lit cell at most
   (OLED). As soon as an agent is in any other state, the thread is back.
+  **With true colour and the fade setting on** (idle-dot-smooth, 2026-11-10, the person found the
+  three whole colours jerky next to the agents' dots), the `•` takes the agents' ramp instead: the
+  same raised cosine of `RoleAccent` (`rampLevel`, shared with `fadeLevel`), sampled once a second
+  over a 6 s cycle, 20, 40, 80, 100, 80, 40 percent. It still draws on the 1 s poll (§6: no frame
+  is added); the cell moves once per 6 s cycle. With 16 colours, `NO_COLOR` or the fade off, the
+  4 s role cycle above stays.
 - **A decision while idle** (§8 Q1, the person: stay): the view stays, the count changes at the
   next poll, and the bell rings as on the dashboard.
 

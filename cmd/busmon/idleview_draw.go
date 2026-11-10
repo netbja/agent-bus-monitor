@@ -417,9 +417,19 @@ func idleThread(w, step int) Line {
 	return l
 }
 
-// idleBreathCycle is the breath's length in steps (seconds): dim, muted,
-// bright, muted.
+// idleBreathCycle is the breath's length in steps (seconds) without true
+// colour: dim, muted, bright, muted.
 const idleBreathCycle = 4
+
+// idleSmoothCycle is the breath's length in steps (seconds) with true colour:
+// the agents' ramp (rampLevel) sampled once a second, 20, 40, 80, 100, 80,
+// 40 percent, so no step jumps from dim to bright (idle-dot-smooth). It
+// draws on the 1 s poll: no frame is added (idle view §6).
+const idleSmoothCycle = 6
+
+// idleSmooth: the breath ramps where a shade can show, the agents' rule:
+// true colour and the fade setting on.
+func (m Model) idleSmooth() bool { return m.cfg.settings.Fade && th.Animated() }
 
 // idleBreath is the row above the strip while every agent is idle (the
 // person's choice, "Respiration"): the dotted row w cells wide with one cell
@@ -427,11 +437,15 @@ const idleBreathCycle = 4
 // each cycle so every cell carries it in turn (burn-in), never more than one
 // lit cell (OLED). Without colour it breathes in two glyphs, the row's dim
 // dot and the bright one.
-func idleBreath(w, step int) Line {
+func idleBreath(w, step int, smooth bool) Line {
 	if w <= 0 {
 		return nil
 	}
 	step = max(step, 0)
+	if smooth { // the agents' ramp, one shade a second
+		x, phase := (step/idleSmoothCycle)%w, step%idleSmoothCycle
+		return breathRow(w, x, Seg{Text: GlyphSet, Role: RoleAccent, Fade: rampLevel(float64(phase) / idleSmoothCycle)})
+	}
 	x, phase := (step/idleBreathCycle)%w, step%idleBreathCycle
 	glyph, role := GlyphSet, [idleBreathCycle]Role{RoleDim, RoleMuted, RoleAccent, RoleMuted}[phase]
 	if th.Palette() == PaletteNone { // no shade to breathe in: the two dots
@@ -440,11 +454,28 @@ func idleBreath(w, step int) Line {
 			glyph = GlyphSet
 		}
 	}
+	return breathRow(w, x, Seg{Text: glyph, Role: role})
+}
+
+// idleRow is the row above the strip, w cells: the thread while something
+// works (idle-animation), the breath while the whole team rests, smooth where
+// a shade can show (idle-dot-smooth). Its step is the whole seconds since the
+// view came: the 1 s poll's pace.
+func (m Model) idleRow(d idleData, w int) Line {
+	step := int(max(0, m.now.Sub(m.ui.idleSince)) / time.Second)
+	if d.allIdle {
+		return idleBreath(w, step, m.idleSmooth())
+	}
+	return idleThread(w, step)
+}
+
+// breathRow is the dotted row w cells wide with lit at x.
+func breathRow(w, x int, lit Seg) Line {
 	var l Line
 	if x > 0 {
 		l = append(l, Seg{Text: strings.Repeat(GlyphNone, x), Role: RoleDim})
 	}
-	l = append(l, Seg{Text: glyph, Role: role})
+	l = append(l, lit)
 	if rest := w - x - 1; rest > 0 {
 		l = append(l, Seg{Text: strings.Repeat(GlyphNone, rest), Role: RoleDim})
 	}
@@ -468,12 +499,7 @@ func (m Model) idleGrid() *grid {
 	}
 	shift := bounce(k+seed, min(4, max(W-8, 0)))
 	drawLine(g, shift, m.height-1, W-4, idleStripLine(d.strip, W-4), false)
-	step := int(max(0, m.now.Sub(m.ui.idleSince)) / time.Second)
-	row := idleThread(W, step) // something works: the thread slides (idle-animation)
-	if d.allIdle {
-		row = idleBreath(W, step) // the whole team rests: the row breathes
-	}
-	drawLine(g, 0, m.height-2, W, row, false)
+	drawLine(g, 0, m.height-2, W, m.idleRow(d, W), false)
 
 	nb := nextBox(d)
 	// Side by side: you left, team over next right.

@@ -528,7 +528,13 @@ func pulsing(a *agentState, now time.Time) bool {
 // fadeLevel is the waiting word's intensity at now, 20 to 100 percent, eased
 // in and out (a raised cosine, like CSS ease-in-out between 0.2 and 1).
 func fadeLevel(now time.Time) int {
-	phase := float64(now.UnixMilli()%fadePeriod.Milliseconds()) / float64(fadePeriod.Milliseconds())
+	return rampLevel(float64(now.UnixMilli()%fadePeriod.Milliseconds()) / float64(fadePeriod.Milliseconds()))
+}
+
+// rampLevel is the fade's curve at phase (0 to 1 over a cycle): 20 to 100
+// percent and back, a raised cosine. The agents' dots and the idle view's
+// breath share it (idle-dot-smooth).
+func rampLevel(phase float64) int {
 	return 20 + int(math.Round(80*(1-math.Cos(2*math.Pi*phase))/2))
 }
 
