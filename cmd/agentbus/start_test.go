@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -331,6 +332,7 @@ type outsideWorld struct {
 	order     []string
 	tty       io.ReadWriter // what herdr was given
 	release   chan struct{} // up waits until herdr exits
+	said      chan struct{} // then until start has said it still waits (nil: no wait)
 	mu        sync.Mutex    // up runs beside herdr's wait
 
 	// start-tabs: the session's first workspace.
@@ -382,6 +384,12 @@ func (w *startWorld) outside(o *outsideWorld) startDeps {
 	d.UpInSession = func(args []string, session, socket, ignore string, log io.Writer) int {
 		if o.release != nil {
 			<-o.release
+		}
+		if o.said != nil { // up stays open until start has looked (no race on its select)
+			select {
+			case <-o.said:
+			case <-time.After(5 * time.Second):
+			}
 		}
 		o.mu.Lock()
 		o.inSession, o.inSock = append(o.inSession, args), socket
@@ -492,8 +500,12 @@ func TestStartAssistantProjectAndTeam(t *testing.T) {
 // told stops start before herdr (foureyes).
 func TestStartOutsideHerdrTerminalAndTiming(t *testing.T) {
 	w := newStartWorld(t)
-	o := &outsideWorld{socket: "/s.sock", release: make(chan struct{})}
+	o := &outsideWorld{socket: "/s.sock", release: make(chan struct{}), said: make(chan struct{})}
 	d := w.outside(o)
+	// The fake up returned as soon as herdr's exit released it, and could beat
+	// start's own look at it (its select), so the message was not always said
+	// (a flake under load): up now waits until start has written it.
+	d.Err = &saidWriter{w: d.Err, needle: "still opening the team", said: o.said}
 	tty := &fakeTTY{Reader: strings.NewReader("")}
 	d.TTY = func() io.ReadWriter { return tty }
 	if code := runStart([]string{w.folder, "--yes"}, d); code != 0 {
@@ -592,4 +604,20 @@ func TestStartClosesHerdrsFirstWorkspace(t *testing.T) {
 	if len(o.closed) != 0 {
 		t.Fatalf("closed after a failed up: %q", o.closed)
 	}
+}
+
+// saidWriter passes writes on and closes said once needle has been written.
+type saidWriter struct {
+	w      io.Writer
+	needle string
+	said   chan struct{}
+	once   sync.Once
+}
+
+func (s *saidWriter) Write(b []byte) (int, error) {
+	n, err := s.w.Write(b)
+	if strings.Contains(string(b), s.needle) {
+		s.once.Do(func() { close(s.said) })
+	}
+	return n, err
 }
