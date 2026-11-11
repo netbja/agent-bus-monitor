@@ -6,8 +6,16 @@
 - Task: `selfrepair-host-events`
 - Base: `origin/main` at 394a7261
 - Companion of: [the self-repair watcher](2026-11-09-self-repair-watcher-design.md) (answered,
-  not built). This spec adds a light **system view** to the same loop. It changes none of the
-  watcher's rules; it gives R3 (network) and R4 (reboot) a better fact and a record.
+  not built). This spec adds a light **system view** to the same loop. It **records and
+  reports only**: it changes none of the watcher's rules. In particular `host-network` does
+  **not** feed R3 (the watcher's precondition 4 keeps reading `quota-freshness` / `llm-endpoint`
+  only), so a wrong `down` here can never hold a relaunch.
+- Revision 2: foureyes on 74d33d98 — VPN/tunnel interfaces read `unknown`: the link check
+  judges down only on no default route or an explicit down state, and asks the upstream probe
+  otherwise; host-network stated as record-and-report only (not R3); upstream probes in
+  parallel off the wake and health paths; no report on the first start; macOS boot id from
+  `kern.bootsessionuuid`; episodes buffered in memory when the broker is unreachable; `{p}:host`
+  written on change (§2.1–2.4)
 
 ## 1. Why
 
@@ -28,28 +36,44 @@ mechanism, and told to master on the bus.
 ### 2.1 Network: down and up
 
 Two probes, cheapest first:
-- **Link, every 2 s (Linux).** Read `/proc/net/route` (is there a default route?) and
-  `/sys/class/net/<iface>/operstate` of that route's interface. Two small file reads; this is
-  what catches an 18 s WiFi drop. macOS has neither file: there, only the upstream probe runs
-  (§7 Q3).
-- **Upstream, every `host.probe_every` (default 30 s), skipped while the link is down.** A TCP
-  connect, 3 s timeout, to port 443 of the API host of each provider the project's roles use
-  (from the launch profiles: e.g. `api.anthropic.com`, `api.openai.com`), at most three hosts. No
-  TLS, no request, nothing sent: a connect proves the route, DNS and the provider's edge answer.
-  Uses Go's `net` package only.
+- **Link, every 2 s (Linux).** Read `/proc/net/route` (is there a default route, through which
+  interface?) and `/sys/class/net/*/operstate`. A few small file reads; this is what catches an
+  18 s WiFi drop. The link check alone says **down** only when there is **no default route**, or
+  the default route's interface reads `down`, `lowerlayerdown` or `notpresent`. Any other state —
+  `up`, and also `unknown`, `dormant` and `testing`, which VPN and tunnel interfaces (`wg0`,
+  `tun0`, `ppp0`) report permanently — is not a verdict: it is left to the upstream probe.
+  **Any change** of the default route or of any interface's operstate (a WiFi interface dropping
+  under a VPN default route included) triggers an **immediate** upstream probe instead of
+  waiting for its period. macOS has neither file: there, only the upstream probe runs (§7 Q3).
+- **Upstream, every `host.probe_every` (default 30 s), and at once on a link change; skipped
+  while the link check says down.** A TCP connect to port 443 of the API host of each provider
+  the project's roles use (from the launch profiles: e.g. `api.anthropic.com`,
+  `api.openai.com`), at most three hosts, **in parallel under one 3 s deadline**. No TLS, no
+  request, nothing sent: a connect proves the route, DNS and the provider's edge answer. Uses
+  Go's `net` package only. The probes run in **their own goroutine**, never on the wake path or
+  the health pass: those read the last result, so a slow DNS or a hung connect never delays a
+  wake.
 
-**Down** = the link has no default route or its interface is not `up`, or every upstream host
-failed twice in a row. **Up** = the link is back and one upstream connect succeeded (on macOS:
-one connect). The duration is measured on the monotonic clock; the times written come from Redis
-`TIME`, which still answers during a drop because the broker is local (`127.0.0.1:6380`).
+**Down** = the link check says down (no default route, or an explicit down state), or every
+upstream host failed on two probes in a row. **Up** = the link check does not say down and one
+upstream connect succeeded (on macOS: one connect). A host whose default route goes through a
+tunnel with operstate `unknown` therefore reads **up** as long as its upstream connects work.
+The duration is measured on the monotonic clock. Times written come from Redis `TIME`: with the
+shipped local broker (`127.0.0.1:6380`) it still answers during a drop. With a **non-local
+broker**, unreachable during the drop, the episode is kept **in memory** and written on return,
+each time computed as Redis `TIME` at the write minus the monotonic time elapsed since the
+event; a dispatcher that restarts meanwhile loses only that unwritten episode.
 
 ### 2.2 Machine start and resume
 
 - **Reboot.** The dispatcher already reads the boot id (`dispatch.BootID`,
   `/proc/sys/kernel/random/boot_id`). It keeps `{p}:host` (a small hash: `boot_id`, `last_seen`),
-  written fenced each pass (Redis `TIME`). At start, a boot id different from the stored one is a
-  **reboot**: the host was down at most from `last_seen` to the new boot. macOS: the boot id is
-  `kern.boottime` read through `golang.org/x/sys/unix` (already a dependency).
+  written fenced (Redis `TIME`): `boot_id` when it changes, `last_seen` once a minute — not every
+  pass. At start, a boot id different from the stored one is a **reboot**: the host was down at
+  most from `last_seen` (±1 min) to the new boot. **No stored boot id** (the first start with
+  this feature, or a new project): store it and report nothing. macOS: the boot id is
+  `kern.bootsessionuuid` (a UUID per boot) read through `golang.org/x/sys/unix` (already a
+  dependency); `kern.boottime` is a time and can move with clock changes.
 - **Resume from suspend.** Same boot id, and the wall clock moved more than 30 s further than the
   monotonic clock between two passes: the host slept. (The watcher already uses this to restart
   R1's grace, §4.4 there.)
@@ -72,8 +96,8 @@ one connect). The duration is measured on the monotonic clock; the times written
 
 | Event | Told to master (one report from `dispatch`, fenced) | Action |
 |---|---|---|
-| **Network down** | nothing at the drop (master's own provider is likely unreachable then) | none. R3 already holds relaunches while the network is down (watcher §4.3) |
-| **Network up** | one line per episode: `network: down 18s (21:04:12–21:04:30), link wlan0 down; API errors in that window: coder (claude-code) 1` | none: agents whose processes survived need nothing; R1 handles any that died (watcher §4.3) |
+| **Network down** | nothing at the drop (master's own provider is likely unreachable then) | none. R3 is unchanged: it holds relaunches on its own fact (`quota-freshness`), not on `host-network` |
+| **Network up** | one line per episode: `network: down 18s (21:04:12–21:04:30), link wlan0 down; API errors in that window: coder (claude-code) 1` | none: agents whose processes survived need nothing; R1 handles any that died, under its own preconditions (watcher §4.1, §4.3) |
 | **Reboot** | one line at the first pass after start: `host rebooted: last seen 02:10, up since 07:42; agents dead: 4; self-repair: on (relaunching per R1) / off` | the existing paths only: R1 relaunch-with-resume when self-repair is on and the workspace is open, else the watcher's existing notice to run `agentbus up <p> --resume` (watcher §4.4) |
 | **Resume from suspend** | one line: `host resumed after 6h12m asleep` | none beyond R1's grace restart (watcher §4.4) |
 
@@ -115,9 +139,20 @@ transcript tail count, the settings, and one line in the master skill on reading
 
 ## 6. Tests
 
-- Link probe: tables over fake `/proc/net/route` and `operstate` files (default route present,
-  absent, interface `down`, `dormant`, `unknown`).
-- Upstream probe: a fake dialer; two failures needed for down; skipped while the link is down.
+- Link probe: tables over fake `/proc/net/route` and `operstate` files: no default route →
+  down; default interface `down`, `lowerlayerdown`, `notpresent` → down; **a `wg0` or `tun0`
+  default route with operstate `unknown` and upstream ok → up**; `dormant`/`unknown` with
+  upstream failing twice → down; a change of any interface's operstate → one immediate upstream
+  probe.
+- Upstream probe: a fake dialer; the three hosts dialled in parallel under one 3 s deadline (a
+  hung host does not delay the others); two failures needed for down; skipped while the link
+  check says down; the wake path and the health pass never wait on it (a dialer that blocks for
+  10 s leaves a wake's latency unchanged).
+- Non-local broker: writes fail during the drop → the episode is written on return with times
+  `TIME − elapsed`; first start with no stored boot id → stored, no report; `last_seen` written
+  once a minute, not per pass.
+- `host-network` never changes R1's decision: a mutant that feeds it into precondition 4 must
+  fail a test where host-network reads down and `quota-freshness` is fresh.
 - An 18 s drop on fake clocks: one `warn` and one `ok` transition in the health log, one report
   at `up` with the right duration; a 2 s drop: two transitions, no report.
 - Reboot: a different stored boot id → `host-boot` warn and one report; the same id → nothing;
