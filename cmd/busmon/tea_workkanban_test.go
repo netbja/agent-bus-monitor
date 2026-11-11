@@ -394,3 +394,43 @@ func TestKanbanScrollStopsAtATallCard(t *testing.T) {
 		t.Fatalf("drawn past the band:\n%s", out)
 	}
 }
+
+// The person (2026-11-11): a discreet rule between the columns, the same
+// length for every column, inset one row from the band's top and bottom so
+// it touches neither the heading's row nor the frame, in the rules' own
+// colour (RoleLine). The same at 130 columns and wider, and per band when
+// the columns stack.
+func TestKanbanColumnRules(t *testing.T) {
+	cards := []kanbanCard{{key: "a", lines: []Line{{{Text: "a"}}, {{Text: "a"}}}}}
+	k := kanbanView{cols: []kanbanCol{{title: "For you", cards: cards}, {title: "In progress"}, {title: "Next", cards: cards}, {title: "Ideas"}}}
+	for _, c := range []struct {
+		name  string
+		w, h  int
+		bands int
+	}{{"130", 128, 20, 1}, {"200", 198, 30, 1}, {"stacked", 60, 20, 2}} {
+		g := newGrid(c.w+2, c.h+2)
+		k.draw(g, 1, 1, c.w, c.h, "")
+		rects := kanbanGrid(4, 1, 1, c.w, c.h)
+		seps := 0
+		for i, r := range rects {
+			if i%(4/c.bands) == 0 { // a band's first column has no rule on its left
+				continue
+			}
+			seps++
+			x := r.x - 1
+			for y := r.y; y < r.y+r.h; y++ {
+				cell := g.at(x, y)
+				inside := y > r.y && y < r.y+r.h-1
+				if inside && (cell.text != glyphVertical || cell.st.Role != RoleLine) {
+					t.Errorf("%s: column %d row %d: %q role %v, want the rule", c.name, i, y-r.y, cell.text, cell.st.Role)
+				}
+				if !inside && cell.text != " " {
+					t.Errorf("%s: column %d row %d: %q, want the inset left blank", c.name, i, y-r.y, cell.text)
+				}
+			}
+		}
+		if want := 4 - c.bands; seps != want {
+			t.Errorf("%s: %d rules, want %d", c.name, seps, want)
+		}
+	}
+}
