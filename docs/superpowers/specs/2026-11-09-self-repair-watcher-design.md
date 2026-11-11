@@ -311,9 +311,10 @@ useful alone first, and nothing acts before step 7.
    shipped `roles.toml` gains `required = true` on its boot roles (master, coder, foureyes,
    sentinel) only in a follow-up, merged once a release with this parser is installed. Every
    session reads the main checkout's `roles.toml` with the installed `agentbus`, and an older
-   parser refuses the unknown key, so no role could launch, relaunch or swap.
-   `TestRolesTomlWaitsForTheRelease` holds `roles.toml` back until then. Nothing acts on the
-   key before step 7.
+   parser refuses the unknown key, so no role could launch, relaunch or swap. The follow-up
+   landed after agentbus v0.28.0-390-gcda8cf13 was installed: `roles.toml` marks its four boot
+   roles, and `TestShippedManifestsMarkTheBootRolesRequired` checks both manifests. Nothing
+   acts on the key before step 7.
 5. **Every client resumes:** capture and prove the session id of Codex, Kimi and Gemini, as Claude
    Code's is today (the launcher's resume flag for each, the `SessionStart`-style proof); verify
    whether Grok has a resume at all. This is useful alone: `reload` and `up --resume` gain it too.
