@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -53,7 +54,11 @@ func tabText(l Line) string {
 
 func workShell(t *testing.T, w, h int) Model {
 	t.Helper()
-	st := workShared()
+	return workShellOf(t, workShared(), w, h)
+}
+
+func workShellOf(t *testing.T, st *shared, w, h int) Model {
+	t.Helper()
 	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	return step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
@@ -94,7 +99,9 @@ func TestWorkTabKeys(t *testing.T) {
 // idle line), NEXT, IDEAS, the folded lines; the label counts them.
 func TestWorkTabRows(t *testing.T) {
 	pinLocal(t)
-	m := keys(t, workShell(t, 140, 40), '3')
+	m := workShell(t, 140, 40)
+	m.cfg.settings.WorkLayout = "list" // layout A at any width (the Kanban has its own tests)
+	m = keys(t, m, '3')
 	var text []string
 	for _, it := range m.lists.work.items {
 		text = append(text, it.Line.text())
@@ -270,5 +277,43 @@ func TestWorkTabTaskAndGateBoth(t *testing.T) {
 	all := strings.Join(page, "\n")
 	if !strings.Contains(all, "compose-at-file  "+GlyphNone+" plan #t7") || !strings.Contains(all, "reviewing lot-1 for master") {
 		t.Fatalf("task or gate missing:\n%s", all)
+	}
+}
+
+// foureyes (step 2, P3): in Work's Requests sub-view the tab bar's pill is
+// Work's; an answered agent is free; an idle agent holding a task reads ○,
+// not the working ●, in the list and in the Kanban.
+func TestWorkTabSurvivorsOfStep2(t *testing.T) {
+	for _, s := range tabBar(lowerTabs, PanelRequests, 200, true) {
+		if s.Pill && !strings.Contains(s.Text, "3 Work") {
+			t.Fatalf("the pill is on %q in the sub-view", s.Text)
+		}
+	}
+	pill := false
+	for _, s := range tabBar(lowerTabs, PanelRequests, 200, true) {
+		pill = pill || s.Pill
+	}
+	if !pill {
+		t.Fatal("no pill in the sub-view")
+	}
+
+	in := workFixture(shellNow)
+	in.agents["docs"] = &agentState{state: "waiting", stateAt: shellNow.Add(-time.Hour), answeredAt: shellNow, lastSeen: shellNow}
+	if _, word, _, _ := stateLook(in.agents["docs"]); word != "answered" {
+		t.Fatalf("fixture: docs reads %q, not answered", word)
+	}
+	if w := workOf(in); !slices.Contains(w.Idle, "docs") {
+		t.Fatalf("an answered agent is not free: %v", w.Idle)
+	}
+
+	idle := workModel{Team: []teamRow{{Agent: "coder", Word: "idle", Task: &request{Task: "x", Tracked: true, State: "accepted"}}}}
+	for _, it := range workRows(idle, workDraw{now: shellNow, width: 140}) {
+		if strings.HasPrefix(it.Key, workAgentPrefix) && !strings.Contains(it.Line.text(), GlyphIdle+" coder") {
+			t.Fatalf("list: %q", it.Line.text())
+		}
+	}
+	k := workKanban(idle, workDraw{now: shellNow, width: 140})
+	if got := k.cols[1].cards[0].lines[0].text(); !strings.HasPrefix(strings.TrimLeft(got, " "), GlyphIdle+" coder") {
+		t.Fatalf("kanban: %q", got)
 	}
 }

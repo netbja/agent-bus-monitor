@@ -23,6 +23,7 @@ type busmonSettings struct {
 	IdleView    time.Duration // display.idle_view_after: the idle view after this long without input (0 = off)
 	Icons       string        // display.icons: off, nerd or agent-font (busmon-icons)
 	AtPath      string        // compose.at_path: absolute or relative (compose-at-file §5)
+	WorkLayout  string        // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
 	// projects.delete_files and delete_backups: what a delete also removes
 	// from disk (projects-admin §5.5)
 	DeleteFiles, DeleteBackups bool
@@ -54,6 +55,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		IdleView:    r.Duration("display.idle_view_after"),
 		Icons:       r.String("display.icons"),
 		AtPath:      r.String("compose.at_path"),
+		WorkLayout:  r.String("display.work_layout"),
 		DeleteFiles: r.Bool("projects.delete_files"), DeleteBackups: r.Bool("projects.delete_backups"),
 	}
 	raw := func(name string) string { k, _ := config.Lookup(name); return getenv(k.Env) }

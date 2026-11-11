@@ -445,6 +445,9 @@ agent names, no project template):
   since when; the free agents on one line), **NEXT** (the plan's next tasks, then requests not in
   the plan) and **IDEAS** (the open questions in `docs/memory/open-questions/` that no plan task
   covers). The header's `decide` and `merge` count YOU's rows, so header, For you and Work agree.
+  From 130 columns of busmon's pane the same page is a Kanban (For you, In progress, Next,
+  Ideas; `←→` between columns); `display.work_layout = "list"` or `"kanban"` (settings, `C`)
+  keeps one layout at every width.
   The **between agents** line opens the full Requests list by thread (owed by you, you wait on,
   between agents; answered threads folded, `o` shows them; `d` then `y` closes a thread with a
   reply from you; Esc returns to Work). A tracked request is closed by its owner

@@ -71,7 +71,7 @@ var themeChoices = []string{"auto", "dark", "light"}
 // settingChoices are the keys chosen with ←→ among their values, in the
 // page's order (busmon-icons: display.icons joins the theme).
 var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont},
-	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}}
+	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}, "display.work_layout": {"auto", "list", "kanban"}}
 
 // settingsMsg is the rows read again, after an open or a write.
 type settingsMsg struct {
@@ -195,6 +195,9 @@ func (m *Model) applySettings(key string) string {
 		return "applied and saved"
 	case "compose.at_path": // compose-at-file §5: the next @ pick uses it
 		cur.AtPath = ns.AtPath
+		return "applied and saved"
+	case "display.work_layout": // requests-plan-redesign: the next frame draws it
+		cur.WorkLayout = ns.WorkLayout
 		return "applied and saved"
 	case "projects.delete_files", "projects.delete_backups": // the next delete panel reads them
 		cur.DeleteFiles, cur.DeleteBackups = ns.DeleteFiles, ns.DeleteBackups
@@ -973,6 +976,7 @@ var settingHelps = map[string]string{
 	"display.icons":           "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":           "Activity lines replayed when busmon starts; 0 or below: all history",
 	"compose.at_path":         "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
+	"display.work_layout":     "the Work tab (3): auto is the list below 130 columns of busmon's pane and the Kanban from 130; list or kanban keeps one",
 	"display.idle_hint_after": "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after": "the screensaver: a calm screen after this long without input; 0 = off",
 	"waiting.fade":            "fades a waiting agent in and out and slides the gauges (true colour only)",

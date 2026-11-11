@@ -129,6 +129,16 @@ var Keys = []*Key{
 			}
 			return nil, "want absolute or relative"
 		}},
+	// requests-plan-redesign (the person, Q1): the Work tab is the list (layout
+	// A) below 130 columns of busmon's pane and the Kanban (layout B) from 130;
+	// list or kanban keeps one at every width.
+	{Name: "display.work_layout", Kind: String, Default: "auto", ReadBy: "busmon",
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "auto" || s == "list" || s == "kanban") {
+				return s, ""
+			}
+			return nil, "want auto, list or kanban"
+		}},
 	{Name: "display.limit", Env: "AGENT_BUS_BUSMON_LIMIT", Kind: Int, Default: 25, ReadBy: "busmon", Legacy: true, Flag: "busmon --limit",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {

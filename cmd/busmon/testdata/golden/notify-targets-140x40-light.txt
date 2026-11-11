@@ -12,7 +12,7 @@
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 26 default ──────────────────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 27 default ──────────────────────────────────────────────────────────────────────────── esc back ─╮
 │                   │ focus: keys · ← or tab: the groups ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │    Display        │ Notifications  what reaches your phone or desktop; targets in notify.toml                                            │
 │    Attention      │                                                                                                                      │
