@@ -16,13 +16,15 @@ func TestReloadingFlagNamesTheIntentsKind(t *testing.T) {
 	}{
 		"swap":   {bus.SwapIntent{ToProfile: "opus"}, "swapping"},
 		"reload": {bus.SwapIntent{Kind: bus.SwapKindReload}, "reloading"},
+		// self-repair step 2: the watcher's intent is no swap
+		"self-repair": {bus.SwapIntent{Kind: bus.SwapKindSelfRepair, Nonce: "n1"}, "self-repair"},
 	} {
 		f := &fakeReader{calls: map[string]int{}, intents: map[string]bus.SwapIntent{"coder": c.intent}}
 		st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
 		pollOnce(context.Background(), f, st, 1)
 		var words []string
 		for _, fl := range agentFlags(st.agents["coder"], false) {
-			if fl.Word == "swapping" || fl.Word == "reloading" {
+			if fl.Word == "swapping" || fl.Word == "reloading" || fl.Word == "self-repair" {
 				words = append(words, fl.Word)
 			}
 		}

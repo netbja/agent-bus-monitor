@@ -401,8 +401,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 		if swapsErr == nil {
 			in, ok := swaps[n]
-			a.swapping = ok && in.Kind != bus.SwapKindReload && in.Kind != bus.SwapKindRetire
+			a.swapping = ok && bus.SwapKindWord(in.Kind) == "swap"
 			a.reloading, a.retiring = ok && in.Kind == bus.SwapKindReload, ok && in.Kind == bus.SwapKindRetire
+			a.repairing = ok && in.Kind == bus.SwapKindSelfRepair
 		}
 		if marksErr == nil && snapsErr == nil {
 			a.popDoneAt = popDoneAt(marks, n, snaps[n])

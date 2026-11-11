@@ -137,3 +137,13 @@ func (b *Bus) SwapIntentOf(ctx context.Context, role string) (SwapIntent, bool, 
 	_ = json.Unmarshal([]byte(v), &in)
 	return in, true, nil
 }
+
+// SwapKindWord names a ledger entry's or an intent's kind as the person
+// reads it: "reload", "retire", "self-repair", else "swap".
+func SwapKindWord(kind string) string {
+	switch kind {
+	case SwapKindReload, SwapKindRetire, SwapKindSelfRepair:
+		return kind
+	}
+	return "swap"
+}

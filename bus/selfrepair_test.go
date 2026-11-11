@@ -101,3 +101,11 @@ func TestSelfRepairIntentRedis(t *testing.T) {
 		t.Fatalf("intent TTL %v", ttl)
 	}
 }
+
+func TestSwapKindWord(t *testing.T) {
+	for kind, want := range map[string]string{"": "swap", SwapKindReload: "reload", SwapKindRetire: "retire", SwapKindSelfRepair: "self-repair", "odd": "swap"} {
+		if got := SwapKindWord(kind); got != want {
+			t.Errorf("%q: %q, want %q", kind, got, want)
+		}
+	}
+}

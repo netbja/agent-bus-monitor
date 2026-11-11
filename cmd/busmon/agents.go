@@ -164,6 +164,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	if a.retiring {
 		add("retiring", RoleDispatch, 1, 1)
 	}
+	if a.repairing {
+		add("self-repair", RoleDispatch, 1, 1)
+	}
 	if !a.popDoneAt.IsZero() && !a.retiring {
 		add("done "+humanAge(a.clock().Sub(a.popDoneAt)), RoleMuted, 4, 2)
 	}

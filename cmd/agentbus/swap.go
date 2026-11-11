@@ -382,10 +382,7 @@ func closeInterrupted(ctx context.Context, b *bus.Bus, role, self string) {
 	if err != nil || !bad {
 		return
 	}
-	what := "swap"
-	if ev.Kind == bus.SwapKindReload {
-		what = "reload"
-	}
+	what := bus.SwapKindWord(ev.Kind)
 	_ = b.LogSwap(ctx, bus.SwapEvent{Role: role, Event: bus.SwapFailed, ToProfile: ev.ToProfile, By: self, Kind: ev.Kind,
 		Error: "interrupted: the " + what + " begun at " + ev.ID + " never finished"})
 }
