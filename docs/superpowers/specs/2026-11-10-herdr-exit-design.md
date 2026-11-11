@@ -2,10 +2,15 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 16 on 2026-11-11
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428)
+- Revision 17 (correction): reviewer-codex on r15 — the prefix default was chosen across
+  supported clients only, yet an unsupported client can be attached: the probe and the default
+  now cover every client with a profile, and a non-observer attach is refused when the prefix is
+  bound or unverified for the terminal's client unless the person picks `--prefix` (§4.6, §7,
+  §8, §10)
 - Revision 16 (correction): foureyes on r15 — the simplified submit held for the person's bytes
   but not for text already in the input that no viewer typed (a left-behind line of an earlier
   submit; text the client puts back). Step 1 now also requires a verified empty input
@@ -602,15 +607,36 @@ meaning: a wake waiting on the person is shown in busmon.
     f12-at-input` — start the client, type `abc` at the input, press F12 in the legacy and the
     kitty encoding, wait 2 s, record; F12 is free for that client when the screen after F12 is
     identical to the screen before it (input still `abc`, no overlay, no mode change). The
-    default becomes final when the probe passes for every supported client; if a client binds
+    probe runs for **every attachable client**, supported or not: `Start` runs only a role's
+    launch profile, so the attachable clients are exactly the clients that have a profile
+    (§4.9), and an unsupported client (never prompted) can still be attached by the person. The
+    default becomes final when the probe passes for every client with a profile; if one binds
     F12, step 3 picks the default instead from the same probe run over `f1`–`f12`: the first key
-    free for every supported client, preferring F12, F11, F10, then descending. Until then F12
-    is the default only as a proposal, and step 7 ships whatever step 3 settled. Cost: on Mac
+    free for every client with a profile, preferring F12, F11, F10, then descending. Until then
+    F12 is the default only as a proposal, and step 7 ships whatever step 3 settled. Each
+    profile records, per probed key, `free` or `bound`; a key not probed for a client is
+    `unknown` for it. Cost: on Mac
     keyboards F12 is a media key unless `fn` is held or "use F1, F2… as standard function keys"
     is set — the setting is the answer there.
   - **Accepted values**: `f1`–`f12`, or `ctrl+<letter>`, `ctrl+\`, `ctrl+]`. A value is refused
     when the client matrix (§4.9) lists it as bound by a client used in the project, or when it
     is one of `ctrl+c/d/h/i/j/m/q/s/z`; busmon's config screen shows why.
+  - **Attach is gated per client** (reviewer-codex on r15), because a profile added later, or
+    a client's new version, can bind the key the default was chosen without. A non-observer
+    `agentbus attach` reads the terminal's client profile and the effective prefix:
+    - prefix `free` for that client → attach;
+    - prefix `bound` for that client → **refused**, naming the client, the binding and the keys
+      the profile lists as `free`; `agentbus attach --prefix <key>` with a `free` key attaches
+      with that prefix for this session only;
+    - prefix `unknown` for that client (not probed, or a client version newer than the profile's
+      probed range) → **refused** unless the person chooses the prefix explicitly for this
+      attach: `--prefix <key>` (a `free` key, or an `unknown` one the person accepts; then the
+      attach starts with one line, `<key> is not verified for <client>: press it twice to send
+      it to the program`). The default is never used silently on a client it was not checked
+      against.
+    `--observe` is never gated: an observer sends no input, so intercepting the prefix takes
+    nothing from the program. busmon's attach key runs the same command and shows a refusal in
+    its status line, with the `--prefix` choices.
   - **Both encodings are recognised**, because the outer terminal switches to the kitty keyboard
     protocol whenever the program inside asks for it (attach forwards the program's key flags):
     F12 as legacy `CSI 24 ~` and kitty `CSI 24 ~` / `CSI 24 ; 1 : 1 ~` (press; the release event
@@ -697,7 +723,7 @@ A client profile holds: binary and version range probed; launch form (already in
 `rolecfg/launch.go`); turn and blocked hook routes; `Ready`/`EmptyInput`/`Busy`/`Modal`/`Dialog`/
 `Blocked` signatures; background-work sources and which are authoritative; helper process patterns;
 resume form and session id source; clear command; whether an empty submit is a no-op; key
-bindings. **Supported** = a verified blocked source **and** screen signatures for Ready,
+bindings, and per probed prefix key `free` or `bound` (§4.6). **Supported** = a verified blocked source **and** screen signatures for Ready,
 `EmptyInput` and Blocked passing on recorded fixtures. An unsupported client is never prompted and never cleared.
 A new client or version is probed with `agentbus term record` (§6.4).
 
@@ -915,7 +941,7 @@ host, no shadow mode runs.
 | 0 | This spec (revision 14, frozen) + decision note | none | coder, foureyes and reviewer-codex approve |
 | 1 | `termhost` package: `Host`, `Line` (`WakeLine`/`ClearLine`), `fake`, contract suite; today's herdr `Runtime.Prompt` takes a `termhost.Line`, no text | none (same wake line typed) | dispatch tests green; the no-string-reaches-`Submit`/`Prompt` test |
 | 2 | `agentstate` extracted from `dispatch` (signatures, fixtures), client profiles as data (§4.9), `Blocked` signatures, background-work fact (§4.3b), blocked-enter/leave judgement (§4.3a) — pure functions with table tests; hook wiring for blocked and subagents per client (Claude Code `Notification`/`PermissionRequest`/`SubagentStart`/`SubagentStop`; Codex `PermissionRequest`/subagent hooks once probed; `agy` `Stop`) writing observed facts only | none (herdr still decides; the hooks only record) | fixtures green; hook route tests per client |
-| 3 | `agentbus term record` + raw fixtures per client (§6.4); every "to verify" cell of §4.9 probed and the profile rows updated; the `f12-at-input` probe run for every supported client and the attach default settled (§4.6) | none | fixtures committed; the matrix has no unexplained "to verify" for the clients the person's projects use |
+| 3 | `agentbus term record` + raw fixtures per client (§6.4); every "to verify" cell of §4.9 probed and the profile rows updated; the `f12-at-input` probe run for every client with a profile, supported or not, and the attach default settled (§4.6) | none | fixtures committed; the matrix has no unexplained "to verify" for the clients the person's projects use |
 | 4 | Emulator bake-off; `screen` seam + chosen adapter; gostty oracle behind a build tag | none | §6.4 passes for those clients |
 | 5 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, held viewer bytes, landing check, peer check, socket dir, process facts) — after the **security review** of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
 | 6 | Holder adapter of `termhost` (contract suite) + services: per-build units, launchd jobs, binary copy, restart policy, `services.manager` with the `none` supervisor (§4.4b), `service gc` with the two-upgrade test, rotate/upgrade paths skip the holder, `holder`/`holder_restarted`/`holder_draining`/`holder_leftovers` health, `holder drain`, sentinel runbook entry | none (no project runs on it) | contract suite and service tests (fake `systemctl`/`launchctl`, scripted supervisor) green |
@@ -964,7 +990,11 @@ step claims an improvement for herdr, and none exists after the cutover.
 - Attach prefix: the default key (F12 unless step 3 settled another) in legacy and kitty encodings (press recognised, release ignored);
   `<prefix> d` detaches; `<prefix> <prefix>` delivers one prefix to the program; `<prefix> x`
   delivers nothing and rings; the prefix split across two reads; a configured `ctrl+<letter>` in
-  C0 and kitty `CSI … ; 5 u`; a value bound by a client in the project is refused.
+  C0 and kitty `CSI … ; 5 u`; a value bound by a client in the project is refused. Attach gate: prefix `free` for the
+  terminal's client → attaches; `bound` → refused, and `--prefix <free key>` attaches;
+  `unknown` (no probe, or a client version beyond the profile's range) → refused without
+  `--prefix`, attaches with it and prints the warning line; `--observe` is never refused; a
+  mutant that skips the gate for an unsupported client must fail.
 - Blocked reports: one enter and one leave per episode; a flapping screen inside one episode
   sends nothing more; screen text stripped and capped.
 - Background work: §4.3b's table; each skipping action skips; each command refuses without
@@ -1037,7 +1067,7 @@ All questions of revision 13 are decided; this spec is frozen after revision 14.
 7. **Gemini CLI.** Dropped: the Google client is Antigravity (`agy`), already supported.
 8. **Trial project.** Settled by the direct cutover: no trial; the person's live check of the
    cutover branch and the tagged last herdr release replace it (§7).
-9. **Attach prefix.** Replaced by the configurable `attach.prefix`; proposed default F12, final once the step-3 probe shows it free in every supported client (§4.6).
+9. **Attach prefix.** Replaced by the configurable `attach.prefix`; proposed default F12, final once the step-3 probe shows it free in every client with a profile; attach refuses a client for which the prefix is bound or unverified unless the person picks `--prefix` (§4.6).
 - **Submit.** Simplified: viewer input held during the submit, CR, then release; the guard
   machinery removed (§4.2).
 - **Windows.** Out of scope; a mode without a service manager is in scope (§4.4b, §11).
