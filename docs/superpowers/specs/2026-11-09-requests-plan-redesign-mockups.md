@@ -397,8 +397,11 @@ four columns: **For you · In progress · Next · Ideas**.
 - **Keys:**
   - On a selected card, `←→` move between columns, to the same rank among their cards (else the
     last), and the footer reads `←→ column`.
-  - Past the first or last column, or with no card selected, `←→` step the lower panel's tabs as
-    everywhere else, so the arrows never trap the person in Work.
+  - Past the first or last column, `←→` wrap around the columns (Ideas → For you, For you →
+    Ideas); with no card selected, `→` selects the first column's first card and `←` the last
+    column's. They never change tab on the Kanban: the digits do (the person, 2026-11-11, which
+    replaced the first build's fall-through to the tabs). The list (layout A) has no columns: there
+    `←→` still step the tabs.
   - `↑↓` walk the cards in reading order.
   - Enter, `y`, `+ -` and a click (select, then open) act as on the list's rows, by the same
     keys.

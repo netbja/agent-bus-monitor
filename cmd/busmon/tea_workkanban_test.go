@@ -110,9 +110,10 @@ func TestWorkKanbanTruncates(t *testing.T) {
 	}
 }
 
-// ←→ move between columns at the same rank; past the last or first column,
-// or with no card selected, they step the tabs; the footer says column only
-// on a card.
+// ←→ move between columns at the same rank and wrap around them (the person,
+// 2026-11-11): → on Ideas goes to For you, ← on For you to Ideas, and they
+// never change tab on the Kanban; the tabs keep their own keys. With no card
+// selected, → selects the first column's first card, ← the last column's.
 func TestWorkKanbanArrows(t *testing.T) {
 	pinLocal(t)
 	m := kanbanShell(t, 130, 40)
@@ -129,10 +130,10 @@ func TestWorkKanbanArrows(t *testing.T) {
 	if foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text(); !strings.Contains(foot, GlyphArrowL+GlyphArrowR+" column") {
 		t.Fatalf("footer %q", foot)
 	}
-	if r := keys(t, m, kRight); r.ui.focus != PanelActivity { // past the last column: the next tab, wrapping
-		t.Fatalf("→ past Ideas: focus %v", r.ui.focus)
+	if m = keys(t, m, kRight); m.ui.focus != PanelWork || m.lists.work.Selected() != m.work.You[0].Key { // past Ideas: For you
+		t.Fatalf("→ on Ideas: focus %v selected %q, want For you's %q", m.ui.focus, m.lists.work.Selected(), m.work.You[0].Key)
 	}
-	m = keys(t, m, kLeft)
+	m = keys(t, m, kLeft, kLeft) // back over the edge to Ideas, then Next
 	if m.lists.work.Selected() != want[1] || m.ui.focus != PanelWork {
 		t.Fatalf("←: %q focus %v", m.lists.work.Selected(), m.ui.focus)
 	}
@@ -142,15 +143,48 @@ func TestWorkKanbanArrows(t *testing.T) {
 		t.Fatalf("rank kept: %q", m.lists.work.Selected())
 	}
 	m.lists.work.Select(m.work.You[0].Key)
-	if r := keys(t, m, kLeft); r.ui.focus != PanelBoard {
-		t.Fatalf("← past For you: focus %v", r.ui.focus)
+	if m = keys(t, m, kLeft); m.ui.focus != PanelWork || m.lists.work.Selected() != want[2] { // past For you: Ideas
+		t.Fatalf("← on For you: focus %v selected %q, want Ideas' %q", m.ui.focus, m.lists.work.Selected(), want[2])
 	}
 	m.lists.work.ClearSelection()
-	if r := keys(t, m, kRight); r.ui.focus != PanelActivity {
-		t.Fatalf("→ with no card: focus %v", r.ui.focus)
+	if m = keys(t, m, kRight); m.ui.focus != PanelWork || m.lists.work.Selected() != m.work.You[0].Key {
+		t.Fatalf("→ with no card: focus %v selected %q", m.ui.focus, m.lists.work.Selected())
 	}
-	if foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text(); strings.Contains(foot, " column") {
+	m.lists.work.ClearSelection()
+	if m = keys(t, m, kLeft); m.ui.focus != PanelWork || m.lists.work.Selected() != want[2] {
+		t.Fatalf("← with no card: focus %v selected %q", m.ui.focus, m.lists.work.Selected())
+	}
+	if foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text(); !strings.Contains(foot, GlyphArrowL+GlyphArrowR+" column") {
 		t.Fatalf("no card, footer %q", foot)
+	}
+	if r := keys(t, m, '1'); r.ui.focus != PanelActivity { // the tabs keep their own keys
+		t.Fatalf("1 on the Kanban: focus %v", r.ui.focus)
+	}
+}
+
+// The steps alone: a wrap at both edges, empty columns skipped, a lone
+// non-empty column keeping its card, an empty Kanban selecting nothing.
+func TestKanbanStepWraps(t *testing.T) {
+	card := func(key string) kanbanCard { return kanbanCard{key: key, lines: []Line{{{Text: key}}}} }
+	k := kanbanView{cols: []kanbanCol{{cards: []kanbanCard{card("a0"), card("a1")}}, {}, {cards: []kanbanCard{card("c0")}}, {}}}
+	for _, c := range []struct {
+		sel  string
+		next bool
+		want string
+	}{
+		{"a1", true, "c0"}, {"c0", true, "a0"}, {"a0", false, "c0"}, {"c0", false, "a0"},
+		{"", true, "a0"}, {"", false, "c0"}, {"gone", true, "a0"},
+	} {
+		if got := k.step(c.sel, c.next); got != c.want {
+			t.Errorf("step(%q, next %v) = %q, want %q", c.sel, c.next, got, c.want)
+		}
+	}
+	lone := kanbanView{cols: []kanbanCol{{}, {cards: []kanbanCard{card("b0"), card("b1")}}, {}}}
+	if got := lone.step("b1", true); got != "b1" {
+		t.Errorf("a lone column: %q, want b1 kept", got)
+	}
+	if got := (&kanbanView{cols: []kanbanCol{{}, {}}}).step("", true); got != "" {
+		t.Errorf("an empty Kanban: %q", got)
 	}
 }
 
