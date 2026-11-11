@@ -337,9 +337,11 @@ func requestsTitle(v reqView, width int) Line {
 
 // requestInput is the view's facts from the snapshot: the retained cmd
 // stream, the board, every open gate, each agent's delivery cursor and hold.
-func (m *Model) requestInput() reqInput {
-	s := m.snap
-	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), asks: reqAsks(s.asks), plans: planLinks(s.planState), self: m.cfg.self, now: m.now,
+func (m *Model) requestInput() reqInput { return requestInputOf(m.snap, m.cfg.self, m.now) }
+
+// requestInputOf is the Requests view's input from a poll's snapshot.
+func requestInputOf(s snapshot, self string, now time.Time) reqInput {
+	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), asks: reqAsks(s.asks), plans: planLinks(s.planState), self: self, now: now,
 		gates: map[string]map[string]string{}, delivery: map[string]reqDelivery{}, held: map[string]bool{}}
 	for n, a := range s.agents {
 		if len(a.gates) > 0 {
@@ -352,8 +354,8 @@ func (m *Model) requestInput() reqInput {
 			in.delivery[n] = reqDelivery{lastDelivered: a.delivered, pending: a.pendingIDs}
 		}
 	}
-	if len(s.personGates) > 0 && in.gates[m.cfg.self] == nil {
-		in.gates[m.cfg.self] = s.personGates
+	if len(s.personGates) > 0 && in.gates[self] == nil {
+		in.gates[self] = s.personGates
 	}
 	return in
 }

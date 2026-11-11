@@ -19,10 +19,10 @@
 │ herdr: not read                                                                                                                          │
 │ services and herdr: this machine (vdr); — means not here                                                                                 │
 │                                                                                                                                          │
-│   PROJECT                            STATE       AGENTS  KEYS    SERVICES               HERDR            LAST     TEMPLATE               │
-│ ▶ agent-bus-monitor ◂ open           ?           ?       ?       ?                      ?                ?                               │
-│   demo                               ?           ?       ?       ?                      ?                ?        ✓                      │
-│   newone                             ?           ?       ?       ?                      ?                ?        ✓                      │
+│   PROJECT                         STATE       FOR YOU AT WORK AGENTS  KEYS    SERVICES               HERDR            LAST     TEMPLATE  │
+│ ▶ agent-bus-monitor ◂ open        ?           ?       ?       ?       ?       ?                      ?                ?                  │
+│   demo                            ?           ?       ?       ?       ?       ?                      ?                ?        ✓         │
+│   newone                          ?           ?       ?       ?       ?       ?                      ?                ?        ✓         │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

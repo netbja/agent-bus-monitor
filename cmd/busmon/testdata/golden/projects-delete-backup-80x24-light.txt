@@ -16,9 +16,9 @@
 ││                                                                            ││
 ││ A backup first?  b back up, then continue · n no backup · esc cancel       ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│   trading               paused      1/5     —                      2h ago    │
-│   demo                  suspended   0/4     —                      3d ago    │
-│ ▶ old                   stopped     0/2     dispatch ○             40d ago   │
-│   newone                template    —       —                      —         │
+│   trading            paused      1/2  1/5    —                     2h ago    │
+│   demo               suspended   0/0  0/4    —                     3d ago    │
+│ ▶ old                stopped     ?/?  0/2    dispatch ○            40d ago   │
+│   newone             template    —    —      —                     —         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
  b back up   n no backup   enter confirm   y delete   esc cancel                

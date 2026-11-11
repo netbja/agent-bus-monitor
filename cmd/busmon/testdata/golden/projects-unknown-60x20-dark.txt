@@ -8,11 +8,11 @@
 │ services and herdr: this machine (vdr); — means not here │
 │                                                          │
 │ ▶ agent-bus-monitor ◂ open  ?                            │
-│   ? agents · ? · ?                                       │
+│   ? for you · ? at work · ? agents · ? · ?               │
 │   demo  ?                                                │
-│   ? agents · ? · ?                                       │
+│   ? for you · ? at work · ? agents · ? · ?               │
 │   newone  ?                                              │
-│   ? agents · ? · ?                                       │
+│   ? for you · ? at work · ? agents · ? · ?               │
 │                                                          │
 │                                                          │
 │                                                          │

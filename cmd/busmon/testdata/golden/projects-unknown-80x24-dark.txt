@@ -17,8 +17,8 @@
 │ herdr: not read                                                              ┃
 │ services and herdr: this machine (vdr); — means not here                     ┃
 │                                                                              ┃
-│   PROJECT               STATE       AGENTS  SERVICES               LAST      ┃
-│ ▶ agent-bus-monitor ◂   ?           ?       ?                      ?         │
-│   demo                  ?           ?       ?                      ?         ▼
+│   PROJECT            STATE       ♙/●  AGENTS SERVICES              LAST      ┃
+│ ▶ agent-bus-monitor  ?           ?/?  ?      ?                     ?         │
+│   demo               ?           ?/?  ?      ?                     ?         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k move   enter detail   Z sleep   x stop   b back up   q quit   F1 help   
