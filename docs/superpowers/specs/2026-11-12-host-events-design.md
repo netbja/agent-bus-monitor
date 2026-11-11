@@ -10,6 +10,9 @@
   reports only**: it changes none of the watcher's rules. In particular `host-network` does
   **not** feed R3 (the watcher's precondition 4 keeps reading `quota-freshness` / `llm-endpoint`
   only), so a wrong `down` here can never hold a relaunch.
+- Revision 4: reviewer-codex on r2 — with a non-local broker, buffered transitions are stamped
+  at reconnect by `FencedHealthPut`; the spec now says so and carries the true times (`≈`) in
+  the detail and the report, with no second health writer (§2.1, §6)
 - Revision 3: reviewer-codex on 74d33d98 — its VPN/`unknown` and macOS boot-id points were
   already fixed in r2; new: `/proc/net/route` is IPv4 only, so the link check also reads
   `/proc/net/ipv6_route` and an IPv6-only host is not judged down (§2.1, §6)
@@ -70,9 +73,15 @@ upstream connect succeeded (on macOS: one connect). A host whose default route g
 tunnel with operstate `unknown` therefore reads **up** as long as its upstream connects work.
 The duration is measured on the monotonic clock. Times written come from Redis `TIME`: with the
 shipped local broker (`127.0.0.1:6380`) it still answers during a drop. With a **non-local
-broker**, unreachable during the drop, the episode is kept **in memory** and written on return,
-each time computed as Redis `TIME` at the write minus the monotonic time elapsed since the
-event; a dispatcher that restarts meanwhile loses only that unwritten episode.
+broker**, unreachable during the drop, the episode is kept **in memory** and written on return
+through the ordinary `FencedHealthPut`, which stamps the **current** Redis `TIME` (it clears
+`ObservedAt`/`Since`, `bus/health.go:151`): the two transitions in `{p}:health:log` then carry
+the reconnect time, not the drop's. The true times are kept in the text instead: the check's
+detail and the report to master give the drop and return as Redis `TIME` at the write minus the
+monotonic time elapsed, marked `≈` (`network: down ≈18s (≈21:04:12–21:04:30), written late:
+broker unreachable`). No new writer that accepts past timestamps is added: it would be a second
+fenced health path for a case the shipped local broker never has. A dispatcher that restarts
+meanwhile loses only that unwritten episode.
 
 ### 2.2 Machine start and resume
 
@@ -159,8 +168,9 @@ transcript tail count, the settings, and one line in the master skill on reading
   hung host does not delay the others); two failures needed for down; skipped while the link
   check says down; the wake path and the health pass never wait on it (a dialer that blocks for
   10 s leaves a wake's latency unchanged).
-- Non-local broker: writes fail during the drop → the episode is written on return with times
-  `TIME − elapsed`; first start with no stored boot id → stored, no report; `last_seen` written
+- Non-local broker: writes fail during the drop → on return the two transitions are written
+  (stamped with the reconnect time by `FencedHealthPut`) and the detail and the report carry
+  `≈` times computed as `TIME − elapsed`, flagged `written late`; first start with no stored boot id → stored, no report; `last_seen` written
   once a minute, not per pass.
 - `host-network` never changes R1's decision: a mutant that feeds it into precondition 4 must
   fail a test where host-network reads down and `quota-freshness` is fresh.
