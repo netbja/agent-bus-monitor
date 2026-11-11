@@ -58,7 +58,8 @@ type File struct {
 	Exists    bool
 	Warnings  []Warning
 	values    map[string]fileValue
-	endpoints []Endpoint // config.toml's [llm.<name>] tables (llm.go)
+	refused   map[string]fileValue // a FailClosed key's line its rule refuses (value nil)
+	endpoints []Endpoint           // config.toml's [llm.<name>] tables (llm.go)
 }
 
 type fileValue struct {
@@ -87,7 +88,7 @@ var secretNames = map[string]bool{"password": true, "passwd": true, "secret": tr
 	"api_key": true, "apikey": true, "credential": true, "credentials": true, "url": true}
 
 func load(path, label string, legacy bool) *File {
-	f := &File{Label: label, Path: path, values: map[string]fileValue{}}
+	f := &File{Label: label, Path: path, values: map[string]fileValue{}, refused: map[string]fileValue{}}
 	if path == "" {
 		return f
 	}
@@ -144,6 +145,11 @@ func load(path, label string, legacy bool) *File {
 			continue
 		}
 		v, why := k.file(leaves[name])
+		if why != "" && k.FailClosed {
+			f.Warnings = append(f.Warnings, Warning{File: label, Line: lines[name], Key: name, Msg: why + "; " + k.Invalid})
+			f.refused[name] = fileValue{line: lines[name]}
+			continue
+		}
 		if why != "" {
 			f.Warnings = append(f.Warnings, Warning{File: label, Line: lines[name], Key: name, Msg: why + "; ignored"})
 			continue

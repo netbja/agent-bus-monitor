@@ -352,8 +352,8 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 		case key.Kind == config.Bool: // one key, one meaning: written at once
 			v := row.Value != "on"
 			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
-		case settingChoices[row.Key] != nil:
-			s.edit, s.choice = row.Key, max(0, indexOf(settingChoices[row.Key], row.Value))
+		case rowChoices(row) != nil:
+			s.edit, s.choice = row.Key, max(0, indexOf(rowChoices(row), row.Value))
 		default:
 			s.edit, s.text = row.Key, editText(key, row.Value)
 		}
@@ -428,7 +428,7 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 		s.edit, s.err = "", ""
 		return nil
 	}
-	if choices := settingChoices[s.edit]; choices != nil {
+	if choices := rowChoices(row); s.edit == row.Key && choices != nil {
 		switch k.Code {
 		case keyLeft:
 			s.choice = (s.choice + len(choices) - 1) % len(choices)
@@ -918,7 +918,7 @@ func settingsKeyRow(s *settingsPage, r settingRow, selected bool, labelW, width 
 // the attention colour.
 func settingControl(s *settingsPage, r settingRow) Line {
 	if s.edit == r.Key {
-		if choices := settingChoices[r.Key]; choices != nil {
+		if choices := rowChoices(r); choices != nil {
 			return Line{S(RoleMuted, GlyphArrowL+" "), {Text: choices[s.choice], Role: RoleAccent, Bold: true}, S(RoleMuted, " "+GlyphArrowR)}
 		}
 		return Line{S(RoleAccent, "[ "+Preview(s.text)+" ]")}
@@ -933,7 +933,7 @@ func settingControl(s *settingsPage, r settingRow) Line {
 		l = Line{S(RoleOK, GlyphWorking+" on")}
 	case r.Kind == config.Bool:
 		l = Line{S(RoleMuted, GlyphIdle+" off")}
-	case settingChoices[r.Key] != nil:
+	case rowChoices(r) != nil:
 		l = Line{S(RoleMuted, GlyphChoiceL+" "), S(RoleAccent, text), S(RoleMuted, " "+GlyphChoiceR)}
 	default:
 		l = Line{S(role, text)}
@@ -972,30 +972,35 @@ func settingsDetail(r settingRow) []mdSpan {
 // settingHelps are the page's keys' help lines; a key without one is helped
 // by its kind (settingHelp).
 var settingHelps = map[string]string{
-	"display.theme":           "auto follows the terminal's background; dark or light forces one",
-	"display.icons":           "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
-	"display.limit":           "Activity lines replayed when busmon starts; 0 or below: all history",
-	"compose.at_path":         "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
-	"display.work_layout":     "the Work tab (3): auto is the list below 130 columns of busmon's pane and the Kanban from 130; list or kanban keeps one",
-	"display.idle_hint_after": "flags idle? on a working agent whose pane looks ready this long; 0 is off",
-	"display.idle_view_after": "the screensaver: a calm screen after this long without input; 0 = off",
-	"waiting.fade":            "fades a waiting agent in and out and slides the gauges (true colour only)",
-	"waiting.popup_after":     "the reminder opens once a decision has waited this long",
-	"waiting.snooze":          "how long a dismissed reminder stays away",
-	"waiting.bell":            "rings the terminal's bell on a new decision for you",
-	"recap.auto_after":        "the recap opens by itself after you were away this long",
-	"dispatch.focus_notice":   "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
-	"updates.check":           "asks GitHub once a day whether a newer release exists",
-	"identity.as":             "your name on the bus, as a person",
-	"start.team":              "the roles agentbus start opens for a new project, separated by commas",
-	"notify.on":               "sends notifications to the targets of notify.toml",
-	"notify.targets":          "the targets of notify.toml to send to, separated by commas",
-	"notify.events":           "decision, stall, fail, blocked, prompt, for-you; separated by commas",
-	"notify.detail":           "summary sends no agent text; full sends it to a private target only",
-	"notify.delay":            "how long an event waits before it is sent",
-	"notify.max_per_hour":     "messages an hour at most; a fail or a stall always goes",
-	"notify.quiet":            "HH:MM-HH:MM; only the exempt events are sent then",
-	"notify.quiet_exempt":     "the events still sent in quiet hours, separated by commas",
+	"display.theme":                "auto follows the terminal's background; dark or light forces one",
+	"display.icons":                "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
+	"display.limit":                "Activity lines replayed when busmon starts; 0 or below: all history",
+	"compose.at_path":              "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
+	"display.work_layout":          "the Work tab (3): auto is the list below 130 columns of busmon's pane and the Kanban from 130; list or kanban keeps one",
+	"display.idle_hint_after":      "flags idle? on a working agent whose pane looks ready this long; 0 is off",
+	"display.idle_view_after":      "the screensaver: a calm screen after this long without input; 0 = off",
+	"waiting.fade":                 "fades a waiting agent in and out and slides the gauges (true colour only)",
+	"waiting.popup_after":          "the reminder opens once a decision has waited this long",
+	"waiting.snooze":               "how long a dismissed reminder stays away",
+	"waiting.bell":                 "rings the terminal's bell on a new decision for you",
+	"recap.auto_after":             "the recap opens by itself after you were away this long",
+	"dispatch.focus_notice":        "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
+	"updates.check":                "asks GitHub once a day whether a newer release exists",
+	"identity.as":                  "your name on the bus, as a person",
+	"start.team":                   "the roles agentbus start opens for a new project, separated by commas",
+	"notify.on":                    "sends notifications to the targets of notify.toml",
+	"notify.targets":               "the targets of notify.toml to send to, separated by commas",
+	"notify.events":                "decision, stall, fail, blocked, prompt, for-you; separated by commas",
+	"notify.detail":                "summary sends no agent text; full sends it to a private target only",
+	"notify.delay":                 "how long an event waits before it is sent",
+	"notify.max_per_hour":          "messages an hour at most; a fail or a stall always goes",
+	"notify.quiet":                 "HH:MM-HH:MM; only the exempt events are sent then",
+	"notify.quiet_exempt":          "the events still sent in quiet hours, separated by commas",
+	"dispatch.self_repair":         "relaunches a dead agent in a new pane, resumed, master first. on or off; shadow (development mode only) records what it would do and acts on nothing (the dispatch service reads it at its start)",
+	"dispatch.self_repair_every":   "per agent: no second relaunch before this long; a duration above 0, such as 30m",
+	"dispatch.self_repair_per_day": "per agent: past this many relaunches in 24 h it is a crash loop, escalated, not relaunched",
+	"services.start_at_login":      "starts each project's services when you log in (systemd or launchd); stored only for now",
+	"dev":                          "development mode: unlocks extra values such as self-repair's shadow, never weakens a check; busmon's header says dev",
 	"sentinel.reload": "a new version of an agent's client is installed. on: sentinel restarts each idle agent on it, resuming its conversation, master last (needs a registered sentinel; without one, you are asked) " +
 		GlyphNone + " propose: you approve each restart " + GlyphNone + " off: nothing restarts. A project's agentbus up --reload overrides it",
 }
@@ -1009,8 +1014,8 @@ func settingHelp(r settingRow) string {
 		return h
 	}
 	switch {
-	case settingChoices[r.Key] != nil:
-		return strings.Join(settingChoices[r.Key], ", ")
+	case rowChoices(r) != nil:
+		return strings.Join(rowChoices(r), ", ")
 	case r.List:
 		return "names separated by commas"
 	case r.Kind == config.Bool:

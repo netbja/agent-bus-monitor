@@ -79,6 +79,13 @@ type Key struct {
 	// (backup.after_env, notify.targets...): a page edits them as text
 	// separated by commas.
 	List bool
+	// DevOnly are values the key takes only in development mode (dev): from
+	// any source outside it, the key resolves Invalid, with Why naming it.
+	DevOnly []string
+	// FailClosed: a value the file's rule refuses resolves Invalid too, at
+	// its line, never the next source down (a switch whose default is on:
+	// self_repair = false must not leave it on, foureyes).
+	FailClosed bool
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -255,6 +262,39 @@ var Keys = []*Key{
 		file: fileBool},
 	{Name: "dispatch.pop_retire_after", Env: "AGENT_BUS_POP_RETIRE_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch, agentbus retire",
 		env: envStallDuration, file: fileDuration(true)},
+	// Self-repair (spec 2026-11-09-self-repair-watcher-design.md, 4.5).
+	// Development mode: one boolean, read once at start, that only ever
+	// unlocks extra values (shadow); it never weakens a check. 1 on, 0 off,
+	// any other env value skipped. A top-level key: dev = true.
+	{Name: "dev", Env: "AGENT_BUS_DEV", Kind: Bool, Default: false, ReadBy: "dispatch, busmon",
+		env: envZeroOne, file: fileBool},
+	// The watcher's switch, on by default (the person, Q1); shadow records
+	// what it would do and acts on nothing, in development mode only. A value
+	// its rule refuses, from the env or the file, or shadow outside dev, is
+	// refused: the watcher stays off (SelfRepairMode).
+	{Name: "dispatch.self_repair", Env: "AGENT_BUS_SELF_REPAIR", Kind: String, Default: "on", ReadBy: "dispatch",
+		Invalid: "self-repair stays off", DevOnly: []string{"shadow"}, FailClosed: true,
+		env: func(raw string) (any, envResult) {
+			if isSelfRepairMode(raw) {
+				return raw, envUse
+			}
+			return nil, envInvalid
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && isSelfRepairMode(s) {
+				return s, ""
+			}
+			return nil, "want on, off or shadow (shadow in development mode only)"
+		}},
+	// Its budgets per agent (the person, Q5): one relaunch per this long, at
+	// most this many a day; a fourth death in a day is a crash loop.
+	{Name: "dispatch.self_repair_every", Env: "AGENT_BUS_SELF_REPAIR_EVERY", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch",
+		env: envPositiveDuration, file: filePositiveDuration},
+	{Name: "dispatch.self_repair_per_day", Env: "AGENT_BUS_SELF_REPAIR_PER_DAY", Kind: Int, Default: 3, ReadBy: "dispatch",
+		env: envPositiveInt, file: filePositiveInt},
+	// Start at login (the person, Q8): the project's services start when the
+	// person logs in. Stored only until its backends exist (step 9).
+	{Name: "services.start_at_login", Kind: Bool, Default: false, ReadBy: "agentbus service (not yet)", MachineOnly: true, file: fileBool},
 	// The history archive (spec 2026-11-01-history-design.md): days of day
 	// files kept (0 = no archive) and the directory's cap in MiB.
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",
@@ -523,6 +563,16 @@ func Lookup(name string) (*Key, bool) {
 var validName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString
 
 func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" }
+
+func isSelfRepairMode(s string) bool { return s == "on" || s == "off" || s == "shadow" }
+
+// envPositiveDuration: a Go duration above 0; anything else is skipped.
+func envPositiveDuration(raw string) (any, envResult) {
+	if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+		return d, envUse
+	}
+	return nil, envSkip
+}
 
 func isIcons(s string) bool { return s == "off" || s == "nerd" || s == "agent-font" }
 

@@ -271,6 +271,17 @@ func setLine(text, name, lit string) string {
 		return strings.Join(lines, "")
 	}
 	dot := strings.LastIndex(name, ".")
+	if dot < 0 { // a top-level key (dev): after the last top-level key, else above everything
+		at := 0
+		if last, ok := sc.lastKey[""]; ok {
+			at = last + 1
+			if !strings.HasSuffix(lines[last], "\n") {
+				lines[last] += "\n"
+			}
+		}
+		out := append(append(append([]string{}, lines[:at]...), name+" = "+lit+"\n"), lines[at:]...)
+		return strings.Join(out, "")
+	}
 	table, leaf := name[:dot], name[dot+1:]
 	if hdr, ok := sc.header[table]; ok {
 		at := hdr

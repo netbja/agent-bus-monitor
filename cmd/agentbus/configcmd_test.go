@@ -190,7 +190,7 @@ func TestConfigJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out)
 	}
-	if len(doc.Rows) != 69 { // the registry, display.work_layout, projects.delete_files and delete_backups, compose.at_path, display.idle_view_after, models.source_max_age, stall guard (idle_after too), auto-state, idle hint, history, disk, reload, start.team, pop-retire, suspend.wait and auto_resume, delivery.forge/base, backup.*, notify.* and focus_notice keys included
+	if len(doc.Rows) != 74 { // self-repair's five (dev, self_repair, its two budgets, start_at_login), the registry, display.work_layout, projects.delete_files and delete_backups, compose.at_path, display.idle_view_after, models.source_max_age, stall guard (idle_after too), auto-state, idle hint, history, disk, reload, start.team, pop-retire, suspend.wait and auto_resume, delivery.forge/base, backup.*, notify.* and focus_notice keys included
 		t.Errorf("%d rows", len(doc.Rows))
 	}
 	for _, r := range doc.Rows {
@@ -338,5 +338,28 @@ func TestConfigProjectIgnoresDeliverySettings(t *testing.T) {
 		if row := strings.Join(rowOf(t, out, key), " "); !strings.Contains(row, want) || strings.Contains(row, "gitlab") || strings.Contains(row, "dev") {
 			t.Errorf("%s row %q: want %q, never the env file's value", key, row, want)
 		}
+	}
+}
+
+// Self-repair step 3: shadow outside development mode is refused with the
+// key named, and the switch reads invalid (the watcher stays off).
+func TestConfigShadowOutsideDev(t *testing.T) {
+	f := newConfigFixture(t)
+	f.write(t, "config.toml", "[dispatch]\nself_repair = \"shadow\"\n")
+	out, _, code := f.run(t, "")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	want := "config.toml: dispatch.self_repair: shadow only in development mode (AGENT_BUS_DEV=1 or dev = true); self-repair stays off"
+	if !strings.Contains(out, want) {
+		t.Errorf("output misses %q:\n%s", want, out)
+	}
+	if row := rowOf(t, out, "dispatch.self_repair"); row[1] != "invalid" {
+		t.Errorf("self_repair row = %v", row)
+	}
+	f.env["AGENT_BUS_DEV"] = "1"
+	out, _, _ = f.run(t, "")
+	if row := rowOf(t, out, "dispatch.self_repair"); row[1] != "shadow" || strings.Contains(out, "development mode") {
+		t.Errorf("in dev: row %v\n%s", row, out)
 	}
 }

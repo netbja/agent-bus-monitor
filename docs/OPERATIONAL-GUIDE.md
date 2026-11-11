@@ -534,6 +534,12 @@ to watch a pane.
   overrides it. The dispatcher reads it at each update, so a change needs no restart. An agent
   that was busy when the update came is reloaded once it is idle: sentinel gets one more
   directive for it. Without a registered sentinel nothing restarts by itself: master asks you.
+  The same Services group holds the self-repair settings, which nothing acts on yet: the switch
+  **Self-repair** (`on` by default, or `off`), its budgets (one relaunch per agent every 30
+  minutes, three a day), **Start services at login** (off, stored only for now) and
+  **Development mode** (`dev = true` or `AGENT_BUS_DEV=1`). Development mode only unlocks extra
+  values, such as the switch's `shadow`, and busmon's header says `dev` while it is on. Outside
+  it, `shadow` is refused, and the switch reads off.
 - **Quotas run out.** At 95% a provider's agents are held (scenario C). When the reset is more
   than 2 hours away (`AGENT_BUS_QUOTA_LONG_HOLD`), master tells you which held agents had work in
   flight, so you can move a role to one of its `fallback_profiles` in `roles.toml`:

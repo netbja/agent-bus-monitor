@@ -797,8 +797,7 @@ func procStartFn() func(int) (uint64, error) {
 	return dispatch.ProcStart
 }
 
-// readAgents is the project's {p}:agents, bounded.
-// readIntent is role's swap intent on the broker, if one is held.
+// readIntent is role's swap intent on the broker, if one is held, bounded.
 func readIntent(project, role string) (bus.SwapIntent, bool, error) {
 	c, err := bus.Connect("")
 	if err != nil {
@@ -814,6 +813,7 @@ func readIntent(project, role string) (bus.SwapIntent, bool, error) {
 	return b.SwapIntentOf(ctx, role)
 }
 
+// readAgents is the project's {p}:agents, bounded.
 func readAgents(project string) (map[string]bus.AgentSnapshot, error) {
 	c, err := bus.Connect("")
 	if err != nil {

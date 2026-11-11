@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Resolver resolves a key from the environment, then each file in order,
 // then the registry's default. Flags are the caller's, above it.
@@ -16,6 +20,10 @@ type Resolved struct {
 	Source  string // "env <NAME>", a file's label, or "default"
 	Line    int    // the file's line, when Source is a file
 	Invalid bool   // the env value is refused by its rule: the caller stops or reads unknown
+	// Why is a refusal's reason when it is not the env rule's: a DevOnly
+	// value outside development mode, the key named.
+	Why string
+	dev bool // refused for a DevOnly value outside development mode
 }
 
 // Get resolves the key named; an unknown name panics (a programming error).
@@ -28,7 +36,7 @@ func (r Resolver) Get(name string) Resolved {
 		if raw := r.Getenv(k.Env); raw != "" {
 			switch v, res := k.env(raw); res {
 			case envUse:
-				return Resolved{Key: k, Value: v, Source: "env " + k.Env}
+				return r.devChecked(Resolved{Key: k, Value: v, Source: "env " + k.Env})
 			case envInvalid:
 				return Resolved{Key: k, Value: k.Default, Source: "env " + k.Env, Invalid: true}
 			}
@@ -39,10 +47,35 @@ func (r Resolver) Get(name string) Resolved {
 			continue
 		}
 		if v, ok := f.values[name]; ok {
-			return Resolved{Key: k, Value: v.value, Source: f.Label, Line: v.line}
+			return r.devChecked(Resolved{Key: k, Value: v.value, Source: f.Label, Line: v.line})
+		}
+		if v, ok := f.refused[name]; ok { // FailClosed: refused here, never the next source
+			return Resolved{Key: k, Value: k.Default, Source: f.Label, Line: v.line, Invalid: true,
+				Why: fmt.Sprintf("%s: line %d refused by its rule", name, v.line)}
 		}
 	}
 	return Resolved{Key: k, Value: k.Default, Source: "default"}
+}
+
+// devChecked refuses a DevOnly value outside development mode: Invalid, the
+// default as its value, Why naming the key.
+func (r Resolver) devChecked(g Resolved) Resolved {
+	for _, v := range g.Key.DevOnly {
+		if g.Value == v && !r.Bool("dev") {
+			g.Value, g.Invalid, g.dev = g.Key.Default, true, true
+			g.Why = fmt.Sprintf("%s: %s only in development mode (AGENT_BUS_DEV=1 or dev = true)", g.Key.Name, v)
+		}
+	}
+	return g
+}
+
+// SelfRepairMode is dispatch.self_repair as the watcher reads it: on, off
+// or shadow, and off when refused (a refused switch never acts).
+func SelfRepairMode(r Resolver) string {
+	if g := r.Get("dispatch.self_repair"); !g.Invalid {
+		return g.Value.(string)
+	}
+	return "off"
 }
 
 // Machine is the resolver of a process whose environment is getenv: the env,
@@ -60,6 +93,16 @@ func (r Resolver) Warnings() []Warning {
 	for _, f := range r.Files {
 		if f != nil {
 			out = append(out, f.Warnings...)
+		}
+	}
+	// A file's DevOnly value outside development mode: a warning of that
+	// file, at its line (the env's refusal is said by its reader).
+	for _, k := range Keys {
+		if len(k.DevOnly) == 0 {
+			continue
+		}
+		if g := r.Get(k.Name); g.dev && g.Line > 0 {
+			out = append(out, Warning{File: g.Source, Line: g.Line, Key: k.Name, Msg: strings.TrimPrefix(g.Why, k.Name+": ") + "; refused"})
 		}
 	}
 	return out
