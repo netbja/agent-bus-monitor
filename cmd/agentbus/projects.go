@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
 	"runtime"
@@ -110,10 +111,10 @@ func runProjects(args []string, d projectsDeps, stdout, stderr io.Writer) int {
 				l.Agents = true
 				for _, role := range roles {
 					s, has := snaps[role]
-					switch snapLife(s, has, d.ProcStart) {
-					case lifeAlive:
+					switch relaunch.SnapLife(s, has, d.ProcStart) {
+					case relaunch.LifeAlive:
 						l.Alive++
-					case lifeDead:
+					case relaunch.LifeDead:
 						l.Dead++
 					default:
 						l.Unknown++
@@ -204,7 +205,7 @@ func templateRoles(path, project string) []string {
 	}
 	var roles []string
 	for _, t := range tpl.Tabs {
-		if r, ok := launchRole(t.Command, project); ok {
+		if r, ok := relaunch.LaunchRole(t.Command, project); ok {
 			roles = append(roles, r)
 		}
 	}

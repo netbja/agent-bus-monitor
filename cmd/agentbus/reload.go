@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
 	"os/exec"
@@ -431,82 +432,9 @@ func relaunchRole(d upDeps, project, role, session string, stdout io.Writer) err
 	if _, err := toml.DecodeFile(templatePath(d, project), &tpl); err != nil {
 		return fmt.Errorf("template: %w", err)
 	}
-	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, func(t upTab) bool {
-		r, ok := launchRole(t.Command, project)
-		return !ok || r != role
-	})
-	if len(tpl.Tabs) != 1 {
-		return fmt.Errorf("the template has %d tabs launching %s, want 1", len(tpl.Tabs), role)
-	}
-	ws, err := findWorkspace(d, project)
-	if err != nil {
-		return err
-	}
-	if ws == "" {
-		return fmt.Errorf("the workspace of %s is not open", project)
-	}
-	if d.Agents == nil {
-		return fmt.Errorf("no bus to prove the new agent on")
-	}
-	snaps, err := d.Agents(project)
-	if err != nil {
-		return err
-	}
-	// The relaunch resumes the session the reload chose (the proved one),
-	// not the snapshot's unverified Session.
-	if s, ok := snaps[role]; ok {
-		s.Session = session
-		snaps[role] = s
-	}
-	sleep := d.Sleep
-	if sleep == nil {
-		sleep = time.Sleep
-	}
-	// The old process is gone, but herdr's view of its tab lags its exit: its
-	// agent detection and the pane's foreground process still show the
-	// client for a moment, which decideRelaunch reads as busy. Wait, bounded,
-	// for the tab to be what a relaunch needs (no agent, every pane a plain
-	// shell), as up --resume finds it seconds later. The rule is not relaxed
-	// and nothing is typed while waiting.
-	tab := tpl.Tabs[0]
-	for try := 1; ; try++ {
-		panes, err := workspacePanes(d.Herdr, ws)
-		if err != nil {
-			return err
-		}
-		j := judgeTab(d.Herdr, panes, tab, project, snaps, true, d.ProcStart, true)
-		if j.V == verdictRelaunch || j.V == verdictCreate {
-			break
-		}
-		if (j.V != verdictBusy && j.V != verdictUnknown) || try >= settleTries {
-			why := string(j.V)
-			if j.Note != "" {
-				why += " (" + j.Note + ")"
-			}
-			return fmt.Errorf("its tab %s still reads %s %s after the old process exited (%d reads); nothing was relaunched",
-				tab.Name, why, settleEvery*time.Duration(try-1), try) // the first read comes before any wait
-		}
-		sleep(settleEvery)
-	}
-	verdicts := map[string]relaunchVerdict{}
-	o := relaunchOptions{Resume: session != "", Create: true, Verdicts: verdicts,
-		Dir:   os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1)),
-		Prove: &relaunchProof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}}
-	if err := relaunchOpen(d.Herdr, snaps, true, d.ProcStart, project, ws, tpl, o, stdout); err != nil {
-		return err
-	}
-	if v := verdicts[tab.Name]; v != verdictRelaunch && v != verdictCreate {
-		return fmt.Errorf("its tab %s read %s at the relaunch; nothing was relaunched", tab.Name, v)
-	}
-	return nil
+	return relaunch.Role(relaunch.Deps{Herdr: d.Herdr, IgnoreWorkspace: d.IgnoreWorkspace, Agents: d.Agents,
+		ProcStart: d.ProcStart, Sleep: d.Sleep, Home: d.Env("HOME")}, project, role, session, tpl, stdout)
 }
-
-// settleTries reads of the role's tab, settleEvery apart (20 s), before a
-// relaunch gives up on a tab that still reads busy after the old exit.
-const (
-	settleTries = 40
-	settleEvery = 500 * time.Millisecond
-)
 
 // popRole says whether the manifest declares role as a pop (agent-spawn, no
 // template tab).
@@ -543,7 +471,7 @@ func planRelaunch(d upDeps, project, role string, pop bool) (relaunchPlan, error
 	}
 	tabs := 0
 	for _, t := range tpl.Tabs {
-		if r, ok := launchRole(t.Command, project); ok && r == role {
+		if r, ok := relaunch.LaunchRole(t.Command, project); ok && r == role {
 			tabs++
 		}
 	}
@@ -571,7 +499,7 @@ func planRelaunch(d upDeps, project, role string, pop bool) (relaunchPlan, error
 	if st, err := os.Stat(filepath.Join(repo, "scripts", "agent-spawn")); err != nil || st.IsDir() {
 		return relaunchPlan{}, fmt.Errorf("no scripts/agent-spawn in %s to relaunch the pop %s", repo, role)
 	}
-	panes, err := workspacePanes(d.Herdr, ws)
+	panes, err := relaunch.WorkspacePanes(d.Herdr, ws)
 	if err != nil {
 		return relaunchPlan{}, err
 	}

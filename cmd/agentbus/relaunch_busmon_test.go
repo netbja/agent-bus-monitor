@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func busmonQuit() (*relaunchHerdr, upTemplate) {
 func TestRelaunchOpenClosesBusmonsOldShell(t *testing.T) {
 	h, tpl := busmonQuit()
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, CloseBusmon: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true, CloseBusmon: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.closes(); len(got) != 1 || got[0] != "w4:p1" {
@@ -79,7 +80,7 @@ func TestRelaunchOpenLeavesBusmonsOldPaneUnlessStillAShell(t *testing.T) {
 			h, tpl := busmonQuit()
 			rh := &rereadHerdr{relaunchHerdr: h, pane: "w4:p1", later: c.later}
 			var out bytes.Buffer
-			if err := relaunchOpen(rh.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, CloseBusmon: true}, &out); err != nil {
+			if err := relaunch.Open(rh.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true, CloseBusmon: true}, &out); err != nil {
 				t.Fatal(err)
 			}
 			if got := h.closes(); len(got) != 0 {
@@ -93,7 +94,7 @@ func TestRelaunchOpenLeavesBusmonsOldPaneUnlessStillAShell(t *testing.T) {
 	h, tpl := busmonQuit()
 	h.closeErr = errors.New("pane busy")
 	var out bytes.Buffer
-	err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, CloseBusmon: true}, &out)
+	err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true, CloseBusmon: true}, &out)
 	if err == nil || !strings.Contains(out.String(), "busmon: old pane w4:p1 not closed: ") {
 		t.Fatalf("err %v out %s", err, out.String())
 	}
@@ -129,7 +130,7 @@ func TestRelaunchOpenLeavesEveryPaneOfASplitBusmonTab(t *testing.T) {
 	h.panes = `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p7","tab_id":"w4:t1"}`
 	h.fg["w4:p7"] = "bash"
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, CloseBusmon: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true, CloseBusmon: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.closes(); len(got) != 0 {
@@ -158,7 +159,7 @@ func TestRelaunchOpenClosesOnlyBusmonsTab(t *testing.T) {
 			h.tabs = `{"label":"` + tab.Name + `","tab_id":"w4:t1"}`
 			var out bytes.Buffer
 			tpl := upTemplate{Tabs: []upTab{tab}}
-			if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true, CloseBusmon: true}, &out); err != nil {
+			if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true, CloseBusmon: true}, &out); err != nil {
 				t.Fatal(err)
 			}
 			if got := h.closes(); len(got) != 0 {
@@ -176,7 +177,7 @@ func TestRelaunchOpenClosesOnlyBusmonsTab(t *testing.T) {
 func TestRelaunchOpenWithoutCloseBusmonLeavesItsPane(t *testing.T) {
 	h, tpl := busmonQuit()
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{Create: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{Create: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.closes(); len(got) != 0 || !strings.Contains(out.String(), "busmon: relaunched (new pane; the old one is left as it is)") {
@@ -187,7 +188,7 @@ func TestRelaunchOpenWithoutCloseBusmonLeavesItsPane(t *testing.T) {
 func TestRelaunchOpenDryRunSaysItWouldCloseBusmonsShell(t *testing.T) {
 	h, tpl := busmonQuit()
 	var out bytes.Buffer
-	if err := relaunchOpen(h.run, nil, false, nil, "demo", "w4", tpl, relaunchOptions{DryRun: true, Create: true, CloseBusmon: true}, &out); err != nil {
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", tpl, relaunch.Options{DryRun: true, Create: true, CloseBusmon: true}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.ran(); len(got) != 0 || len(h.closes()) != 0 {
@@ -208,11 +209,11 @@ func TestIsBusmonTab(t *testing.T) {
 		"/r/busmonx --project demo":             false,
 		"":                                      false,
 	} {
-		if got := isBusmonTab(upTab{Name: "busmon", Command: cmd}, "demo"); got != want {
+		if got := relaunch.IsBusmonTab(upTab{Name: "busmon", Command: cmd}, "demo"); got != want {
 			t.Errorf("%q = %v, want %v", cmd, got, want)
 		}
 	}
-	if isBusmonTab(upTab{Name: "monitor", Command: "/r/busmon --project demo"}, "demo") {
+	if relaunch.IsBusmonTab(upTab{Name: "monitor", Command: "/r/busmon --project demo"}, "demo") {
 		t.Error("a tab not named busmon")
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"maps"
 	"os"
@@ -117,7 +118,7 @@ func templateAgents(getenv func(string) string) func(project string) ([]string, 
 		}
 		var roles []string
 		for _, t := range tpl.Tabs {
-			if role, ok := launchRole(t.Command, project); ok {
+			if role, ok := relaunch.LaunchRole(t.Command, project); ok {
 				roles = append(roles, role)
 			}
 		}

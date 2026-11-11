@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"slices"
 	"strconv"
@@ -23,8 +24,8 @@ type asker struct {
 	m      *rolecfg.Manifest
 	env    func(string) string
 	look   func(exe string) (string, error) // the agent CLI lookup up uses
-	live   map[string]life                  // an existing project's agents; nil unknown
-	busmon relaunchVerdict                  // what up would do to its busmon tab; "" unknown
+	live   map[string]relaunch.Life         // an existing project's agents; nil unknown
+	busmon relaunch.Verdict                 // what up would do to its busmon tab; "" unknown
 	short  bool                             // an existing project: the short screen until c or a digit
 
 	chosenTeam bool // the person changed the team: start.team follows
@@ -148,9 +149,9 @@ func (a *asker) shortScreen(p startPlan) {
 // or is unknown.
 func (a *asker) busmonDown() string {
 	switch a.busmon {
-	case verdictRelaunch:
+	case relaunch.VerdictRelaunch:
 		return "busmon not running (its pane is a shell)"
-	case verdictCreate:
+	case relaunch.VerdictCreate:
 		return "busmon's tab is missing"
 	}
 	return ""
@@ -171,7 +172,7 @@ func (a *asker) openState(p startPlan) (status, enter string) {
 	}
 	var dead []string
 	for _, r := range p.Team {
-		if a.live[r.Role] != lifeAlive {
+		if a.live[r.Role] != relaunch.LifeAlive {
 			dead = append(dead, r.Role)
 		}
 	}

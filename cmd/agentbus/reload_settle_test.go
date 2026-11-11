@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -127,7 +128,7 @@ func TestRelaunchRoleFailsWhenTheTabStaysBusy(t *testing.T) {
 	}
 }
 
-// The tab settles, then relaunchOpen's own read finds it busy again: the
+// The tab settles, then relaunch.Open's own read finds it busy again: the
 // relaunch is skipped there, and relaunchRole fails at once instead of
 // returning as if it had relaunched (reload then waited a minute for proof).
 func TestRelaunchRoleFailsWhenTheRelaunchSkipsTheTab(t *testing.T) {
@@ -161,7 +162,7 @@ func TestRelaunchRoleWaitsThroughAnUnknownTab(t *testing.T) {
 	}
 }
 
-// A pid the real dispatch.ProcStart finds gone is dead to snapLife, so a tab
+// A pid the real dispatch.ProcStart finds gone is dead to relaunch.SnapLife, so a tab
 // whose old client still shows in herdr reads busy (waited on), never alive
 // (the reload of foureyes, 2026-11-09 20:24: "still reads alive 500ms after
 // the old process exited").
@@ -177,12 +178,12 @@ func TestSnapLifeReadsAGonePidDead(t *testing.T) {
 	if _, err := dispatch.ProcStart(gone); !errors.Is(err, dispatch.ErrNoProcess) {
 		t.Skipf("pid %d was reused already (%v)", gone, err)
 	}
-	if got := snapLife(bus.AgentSnapshot{PID: gone, PIDStart: 1}, true, dispatch.ProcStart); got != lifeDead {
+	if got := relaunch.SnapLife(bus.AgentSnapshot{PID: gone, PIDStart: 1}, true, dispatch.ProcStart); got != relaunch.LifeDead {
 		t.Fatalf("a gone pid reads %s, want dead", got)
 	}
 	// anything else proves nothing: unknown, as before
 	odd := func(int) (uint64, error) { return 0, errors.New("permission denied") }
-	if got := snapLife(bus.AgentSnapshot{PID: gone, PIDStart: 1}, true, odd); got != lifeUnknown {
+	if got := relaunch.SnapLife(bus.AgentSnapshot{PID: gone, PIDStart: 1}, true, odd); got != relaunch.LifeUnknown {
 		t.Fatalf("an unreadable pid reads %s, want unknown", got)
 	}
 }

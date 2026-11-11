@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
 	"os/exec"
@@ -31,10 +32,10 @@ type startDeps struct {
 	Env      func(string) string
 	Manifest func() (*rolecfg.Manifest, error)
 	Up       func(args []string) int // up's own code path
-	Live     func(project string) (map[string]life, error)
+	Live     func(project string) (map[string]relaunch.Life, error)
 	// Busmon judges an open project's busmon tab with up's own rule, reading
 	// herdr only; nil, an error or "" leave busmon out of the screen.
-	Busmon   func(project string) (relaunchVerdict, error)
+	Busmon   func(project string) (relaunch.Verdict, error)
 	Repo     func() (string, error) // the checkout bootstrap writes templates from
 	TTY      func() io.ReadWriter   // the person's terminal; nil when there is none
 	Look     func(exe string) (string, error)
@@ -126,7 +127,7 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			}
 			return filepath.Join(dir, "start.log"), nil
 		},
-		Live: func(project string) (map[string]life, error) {
+		Live: func(project string) (map[string]relaunch.Life, error) {
 			client, err := bus.Connect("")
 			if err != nil {
 				return nil, err
@@ -140,13 +141,13 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			if err != nil {
 				return nil, err
 			}
-			out := map[string]life{}
+			out := map[string]relaunch.Life{}
 			for name, s := range snaps {
-				out[name] = snapLife(s, true, dispatch.ProcStart)
+				out[name] = relaunch.SnapLife(s, true, dispatch.ProcStart)
 			}
 			return out, nil
 		},
-		Busmon: func(project string) (relaunchVerdict, error) {
+		Busmon: func(project string) (relaunch.Verdict, error) {
 			if os.Getenv("HERDR_ENV") != "1" {
 				return "", nil // outside herdr the workspace cannot be read
 			}
@@ -163,10 +164,10 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 }
 
 // busmonVerdict is what up would do to the project's busmon tab, judged by
-// up's own rule (judgeTab) from herdr's read-only answers: "" when the
+// up's own rule (relaunch.JudgeTab) from herdr's read-only answers: "" when the
 // project's workspace is not open or its template has no busmon tab.
-func busmonVerdict(herdr func(args ...string) ([]byte, error), tpl upTemplate, project string) (relaunchVerdict, error) {
-	i := slices.IndexFunc(tpl.Tabs, func(t upTab) bool { return isBusmonTab(t, project) })
+func busmonVerdict(herdr func(args ...string) ([]byte, error), tpl upTemplate, project string) (relaunch.Verdict, error) {
+	i := slices.IndexFunc(tpl.Tabs, func(t upTab) bool { return relaunch.IsBusmonTab(t, project) })
 	if i < 0 {
 		return "", nil
 	}
@@ -174,11 +175,11 @@ func busmonVerdict(herdr func(args ...string) ([]byte, error), tpl upTemplate, p
 	if err != nil || ws == "" {
 		return "", err
 	}
-	panes, err := workspacePanes(herdr, ws)
+	panes, err := relaunch.WorkspacePanes(herdr, ws)
 	if err != nil {
 		return "", err
 	}
-	return judgeTab(herdr, panes, tpl.Tabs[i], project, nil, false, nil, true).V, nil
+	return relaunch.JudgeTab(herdr, panes, tpl.Tabs[i], project, nil, false, nil, true).V, nil
 }
 
 // herdrSessionSocket asks herdr where a session lives (herdr session list
@@ -279,7 +280,7 @@ func initialWorkspace(herdr func(args ...string) ([]byte, error)) (string, error
 
 // closeInitialWorkspace closes herdr's first workspace ws only while it is
 // still untouched, read again right before: one tab, one pane, a plain shell
-// in it (paneShell, argv only). It never types into the pane; anything else
+// in it (relaunch.PaneShell, argv only). It never types into the pane; anything else
 // keeps it and the note says why.
 func closeInitialWorkspace(herdr func(args ...string) ([]byte, error), ws string) (string, error) {
 	all, err := herdrWorkspaces(herdr)
@@ -322,7 +323,7 @@ func closeInitialWorkspace(herdr func(args ...string) ([]byte, error), ws string
 	if pane == "" {
 		return fmt.Sprintf("kept herdr's first workspace %s: its pane is not listed", ws), nil
 	}
-	if plain, err := paneShell(herdr, pane); err != nil || !plain {
+	if plain, err := relaunch.PaneShell(herdr, pane); err != nil || !plain {
 		return fmt.Sprintf("kept herdr's first workspace %s: something runs in it, or it could not be read", ws), nil
 	}
 	if _, err := herdr("workspace", "close", ws); err != nil {
@@ -687,11 +688,11 @@ func checkTeamChange(d startDeps, m *rolecfg.Manifest, p startPlan) error {
 	for _, old := range onDisk {
 		i := slices.IndexFunc(p.Team, func(r rolecfg.TeamRole) bool { return r.Role == old.Role })
 		state, known := live[old.Role]
-		if !known || state == lifeDead || (i >= 0 && p.Team[i].Profile == old.Profile) {
+		if !known || state == relaunch.LifeDead || (i >= 0 && p.Team[i].Profile == old.Profile) {
 			continue
 		}
 		why := "is live"
-		if state != lifeAlive { // snapLife proves nothing off Linux (foureyes)
+		if state != relaunch.LifeAlive { // relaunch.SnapLife proves nothing off Linux (foureyes)
 			why = "may still run (its process cannot be checked)"
 		}
 		return fmt.Errorf("%s %s: run agentbus retire %s first (up never closes a running agent's tab)", old.Role, why, old.Role)

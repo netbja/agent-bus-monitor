@@ -270,6 +270,11 @@ useful alone first, and nothing acts before step 7.
    split and run, `replaced`, the close) into a package; the CLI entry keeps `HERDR_ENV=1` and
    `up`'s lock; a service entry reaches herdr through the services' env file (4.1). No behaviour
    change for `reload` and `up`.
+   *As built (step 1):* the package `relaunch/` (`relaunch.go`: the judgement and `Open`;
+   `role.go`: `Role`, `FindWorkspace`, `ProjectLock`, `CacheDir`, `ReadTemplate`, and the service
+   entry `ServiceHerdr` plus `ServiceRole`). `cmd/agentbus` keeps `upTab` and `upTemplate` as
+   aliases and `relaunchRole` as the CLI entry. `reload`'s and `up`'s tests pass unchanged against
+   the moved code.
 2. **The intent:** the fenced `self-repair` kind of `BeginSwap`/`EndSwap` (lease token and nonce),
    and `up --resume` skipping a role whose intent is held. Useful alone: today two people (or a
    person and master) running `up --resume` at once can already race.

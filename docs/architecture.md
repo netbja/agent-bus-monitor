@@ -47,6 +47,18 @@ lease, inbox, tick). Its Redis primitives are in `bus/conductorkeys.go`: the `{p
 (`PX 15000`, renewed every 5s) and fenced writes on `{p}:change:{c}`, `{p}:missions:{c}`, the board,
 gates and cmd. Spec: `specs/2026-10-11-missions-design.md`.
 
+**`relaunch/`** is the relaunch core (self-repair watcher spec, part 7, step 1): the template's
+`Tab` and `Template`, the one life rule (`SnapLife`, a pid gone only by `PidListedNoMore`), the
+pure `Decide`, `JudgeTab` over herdr's panes, `Open` (a new pane split from the tab's, the
+template command run in it, the old pane closed once the new agent is proven) and `Role`, which
+relaunches one role: the settle loop, then `Open`, then its verdict. It never types into an
+existing pane. Two entries call it. The CLI entry (`reload`, `up --resume`, in `cmd/agentbus`)
+keeps the `HERDR_ENV=1` guard and `up`'s lock. The service entry (`ServiceRole`, with
+`ServiceHerdr`) is for the dispatch service, which runs in no pane: it reaches herdr through the
+session its env file names, refuses when none is named, and takes the same lock
+(`ProjectLock`, `~/.cache/agentbus/up-<p>.lock`) without waiting. Nothing calls the service
+entry yet: the watcher's R1 will (step 7).
+
 **`plan/`** (v0.22) is the batch's plan as the person reads it: `docs/plans/<name>.json` (strict,
 `Parse`), published at a commit by `agentbus plan load` into `{p}:plan` (the file kept opaque:
 cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`: PR, done, note,
