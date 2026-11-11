@@ -45,6 +45,10 @@ func TestSelfRepairIntentRedis(t *testing.T) {
 	if err != nil || !held || in.Kind != SwapKindSelfRepair || in.Nonce != "n1" || in.By != "dispatch" || in.OldPID != 241 {
 		t.Fatalf("intent %+v held %v err %v", in, held, err)
 	}
+	// foureyes (step 2): the intent expires as a swap's does, SwapTTL from its begin.
+	if ttl := b.r.PTTL(ctx, SwapKey(b.project, "foureyes")).Val(); ttl <= SwapTTL-5*time.Second || ttl > SwapTTL {
+		t.Fatalf("self-repair intent TTL %v, want about %v", ttl, SwapTTL)
+	}
 	log, _ := b.SwapLog(ctx, "foureyes", 0)
 	if len(log) != 1 || log[0].Event != SwapBegin || log[0].Kind != SwapKindSelfRepair || log[0].Reason != "process gone 70s" {
 		t.Fatalf("ledger %+v", log)

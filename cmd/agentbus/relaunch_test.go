@@ -836,10 +836,15 @@ func TestUpSkipsARoleUnderSelfRepair(t *testing.T) {
 		return bus.SwapIntent{}, false, errors.New("connection refused")
 	}
 	out.Reset()
+	before := len(h.ran())
 	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
 	if !strings.Contains(out.String(), "master: intent unreadable (connection refused)") {
 		t.Fatalf("out:\n%s", out.String())
+	}
+	// foureyes (step 2): not checked is not skipped: master is relaunched.
+	if got := strings.Join(h.ran()[before:], "\n"); !strings.Contains(got, "agent-launch master") {
+		t.Fatalf("master not relaunched with its intent unreadable:\n%s", got)
 	}
 }
