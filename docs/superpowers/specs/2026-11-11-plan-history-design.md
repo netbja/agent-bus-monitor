@@ -1,6 +1,9 @@
 # Plan history: every plan kept, one active, progress and staleness at a glance
 
 - Status: draft, for review (coder, foureyes, reviewer-codex) and for the person's answers (§8)
+- Revision 4: master and foureyes on r3 — the four-case count stays the recommended default and
+  the choice goes to the person (§8 Q1); a recorded done never makes a mission task Done
+  (`derive.go:108-110`), resume case included (§2, §3.4, §8)
 - Revision 3: reviewer-codex on bb1ff8ef — §2 and §3.4 misstated today's Done rule: it also
   derives Done for a person task whose board row is done and for a delivered, approved non-merge
   task, and for integrated/aborted missions. No behaviour change: progress stays
@@ -48,8 +51,10 @@ progress deduction** from the board or the PRs; loading stays one command from a
   requires a PR. This spec keeps the code as it is and fixes the skill's wording (§3.6).
 - `plan/derive.go` reads a task as **Done** in four cases (read at this base,
   `derive.go:111` and `:135-141`, `deriveMission`):
-  1. master recorded it (`plan done`, fact `done`);
-  2. a mission task whose mission is integrated, or aborted;
+  1. master recorded it (`plan done`, fact `done`) — **for a task with no mission only**: a
+     mission task returns through `deriveMission` before the fact is read (`derive.go:108-110`),
+     so a recorded done never makes a mission task Done;
+  2. a mission task whose mission is integrated, or aborted (its only way to be Done);
   3. a **person** task whose board row is `done` (no `plan done` needed);
   4. a non-merge, non-person task that was **delivered and whose review is approved**.
   Cases 2–4 are derived, not recorded. `plan.Count` is done/total over the derived rows, and is
@@ -152,7 +157,9 @@ queue) that the header already reads.
   is live again and may differ from the frozen one: a task done only by a derived case (2–4)
   whose source is gone reads as today's derivation reads it then (a mission no longer loaded
   reads `upcoming`, `mission not loaded`); a task master recorded done (`plan done`, case 1)
-  stays done, since its fact travels with the plan. busmon's list shows the frozen count with
+  stays done, since its fact travels with the plan — **except a mission task**: its state comes
+  only from the mission (case 2), so when a resumed plan's mission is gone it reads `upcoming`
+  (`mission not loaded`) even if master had recorded it done. busmon's list shows the frozen count with
   its time, and the active plan's row the live one.
 So the active plan's header and its own list row use the same function on the same inputs and
 never disagree. Percent = `done*100/total`, rounded down: 100 % only when every task reads Done
@@ -246,7 +253,8 @@ abandon one; never `plan clear` to "make room".
 - Progress: tests pinning today's four Done cases so this change cannot alter them — a person
   task whose board row is `done` with no `plan done` fact counts; a non-merge task delivered with
   an approved review counts; a merge task delivered and approved but not recorded does **not**;
-  an integrated and an aborted mission task count; and the active plan's header and its list row
+  an integrated and an aborted mission task count; a mission task with a recorded `plan done` whose
+  mission is not loaded does **not** count (it reads `upcoming`), live and after a resume; and the active plan's header and its list row
   give the same numbers for the same inputs (one code path). Archive: the frozen count equals
   the live count at archive time; after the board row of a case-3 task is trimmed, the archived
   count is unchanged and a resumed plan's live count reflects the loss.
@@ -270,12 +278,17 @@ once.
 `{p}:plans` with the rest of the project and `agentbus backup` carries it, both by `SCAN <p>:*`;
 §3.2.)
 
-1. **busmon resume.** May busmon re-open a plan itself (after a confirmation), or should it only
+1. **What counts as done.** Today a person task done on the board and a delivered task with an
+   approved review count as done without `plan done`. Keep (recommended: no change, the
+   percentages you see today stay as they are), or count only what master records? Counting
+   only recorded dones would make those tasks drop out of the percentage until master runs
+   `plan done` for each; missions would still count when integrated or aborted.
+2. **busmon resume.** May busmon re-open a plan itself (after a confirmation), or should it only
    ask master (an `ask` to master: "re-open v0.25")? Recommended: busmon does it, and master is
    told by a report, since it is the person's own decision.
-2. **Stale thresholds.** Are 7 days and 3 merges since the last recorded done the right
+3. **Stale thresholds.** Are 7 days and 3 merges since the last recorded done the right
    defaults?
-3. **Abandoning a plan.** Is `plan close <id>` (kept in the list, never stale) wanted, or is an
+4. **Abandoning a plan.** Is `plan close <id>` (kept in the list, never stale) wanted, or is an
    unfinished plan simply left unfinished?
-4. **Folding.** Should the list fold finished plans older than 30 days by default, or always show
+5. **Folding.** Should the list fold finished plans older than 30 days by default, or always show
    every plan?
