@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -330,5 +331,52 @@ func TestWorkTeamExcludedStatesWin(t *testing.T) {
 	}
 	if slices.Contains(w.Idle, "coder") || slices.Contains(w.Idle, "foureyes") {
 		t.Fatalf("idle = %v", w.Idle)
+	}
+}
+
+// The person (2026-11-11): TEAM's rows keep their place between redraws. They
+// are in agent-name order whatever their states and gates, the free agents'
+// line last, and the list and the Kanban show the same order.
+func TestWorkTeamStableOrder(t *testing.T) {
+	in := workFixture(shellNow)
+	in.agents["reviewer-codex"] = &agentState{state: "working", lastSeen: shellNow}
+	in.agents["architect"] = &agentState{state: "idle", lastSeen: shellNow,
+		gates: map[string]string{msID(shellNow.Add(-time.Minute)): "coder|[subject x] review"}}
+	order := func(w workModel) []string {
+		var names []string
+		for _, r := range w.Team {
+			names = append(names, r.Agent)
+		}
+		return names
+	}
+	want := []string{"architect", "coder", "foureyes", "master", "reviewer-codex"}
+	before := workOf(in)
+	if got := order(before); !slices.Equal(got, want) {
+		t.Fatalf("team %v, want by name %v", got, want)
+	}
+	// Statuses and gates change: master idles with a gate, foureyes'
+	// gate closes and it waits on nothing, reviewer-codex declares idle with a task.
+	in.agents["master"] = &agentState{state: "idle", lastSeen: shellNow,
+		gates: map[string]string{msID(shellNow.Add(-2 * time.Minute)): "coder|[subject y] review"}}
+	in.agents["foureyes"] = &agentState{state: "working", lastSeen: shellNow.Add(-time.Hour)}
+	in.agents["coder"].state = "idle"
+	in.requests = append(in.requests, request{Task: "codex-task", Tracked: true, State: "accepted", From: "master", Target: "reviewer-codex", Accepted: shellNow})
+	after := workOf(in)
+	if got := order(after); !slices.Equal(got, want) {
+		t.Fatalf("after the changes: team %v, want by name %v", got, want)
+	}
+	in.agents["zed"] = &agentState{state: "idle", lastSeen: shellNow}
+	in.agents["alpha"] = &agentState{state: "done", lastSeen: shellNow}
+	if idle := workOf(in).Idle; !slices.IsSorted(idle) || len(idle) < 3 {
+		t.Fatalf("idle %v, want by name", idle)
+	}
+	// The Kanban's In progress column: the same agents, the same order, the free line last.
+	k := workKanban(after, workDraw{now: shellNow})
+	var cards []string
+	for _, c := range k.cols[1].cards {
+		cards = append(cards, strings.TrimPrefix(c.key, workAgentPrefix))
+	}
+	if !slices.Equal(cards[:len(want)], want) || (len(after.Idle) > 0 && cards[len(cards)-1] != "") {
+		t.Fatalf("Kanban In progress %q, want %v then the free line", cards, want)
 	}
 }

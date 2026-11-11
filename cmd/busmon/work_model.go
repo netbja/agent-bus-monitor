@@ -265,6 +265,10 @@ func teamOf(in workInput, links map[string]planLink) ([]teamRow, []string) {
 			idle = append(idle, n) // free: it can take a request
 		}
 	}
+	// By name, whatever the states and gates (the person, 2026-11-11): a row
+	// keeps its place between redraws, in the list and the Kanban alike.
+	sort.Slice(team, func(i, j int) bool { return team[i].Agent < team[j].Agent })
+	sort.Strings(idle)
 	return team, idle
 }
 
