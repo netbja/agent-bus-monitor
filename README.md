@@ -572,7 +572,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     on, between agents; `o` shows the answered ones, `d` then `y` closes a thread with a reply
     from you; Esc returns to Work) and **done** (Enter or `d` opens the plan with its done tasks).
     `+` and `-` set a tracked request's priority on a row that stands for one; on any other
-    row the footer says why nothing changed. `4` is Work, on NEXT. `p` (or `P`) opens the
+    row the footer says why nothing changed. `4` is Work, on NEXT. The Projects page (`M`) counts
+    each project's **for you** and **at work** by the same rule (`♙/●` under 90 columns); `?` when a
+    count was not read or is more than a minute old (`R` reads them again). `p` (or `P`) opens the
     plan as a drawer: the progress, then **NOW**, **NEXT**, **LATER** and **DONE** (folded until
     `d`), at 120 columns and more right of For you with the selected task's panel. Enter opens a
     task: its review, PR, asks and notes. A task waiting for you has an `Action:` row: Enter or

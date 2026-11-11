@@ -402,3 +402,20 @@ four columns: **For you · In progress · Next · Ideas**.
     keys.
 - **For you panel:** it keeps its place and its pointer. Part 4's idea of making it the board's
   first column, which would reverse 2026-11-07, is not built: the person's Q5 kept the pointer.
+
+**Step 4, the Projects page counts** (`cmd/busmon/projects_counts.go`, part 6 and Q3). Each
+project on the broker gets two columns, **FOR YOU** and **AT WORK**: YOU's rows and TEAM's agents
+of the Work model, the header's rule (correction 3).
+
+- **How they are read:**
+  - The open project's are the shell's own, live: the same numbers as the header.
+  - Every other project's are read with the page (`M`, `R`), never polled: one poll tick of its
+    bus (every read a read), then the Work model. They are read last, each alone within the
+    page's deadline, so one that fails or runs out of time costs only its own two cells.
+- **`?`, never 0** (the person's Q3): a count reads `?` when it was not read (the broker or that
+  project's read failed), when it is more than a minute old (a note says when it was read and that
+  `R` reads it again), or, for the open project, while busmon's own link to the broker is down.
+  A template with no key on the broker reads `—`.
+- **Widths:** below 90 columns the two share one column, `♙/●` (`4/1`, as AGENTS reads `3/7`),
+  so the project's name keeps its room at 80 columns. When the name with ` ◂ open` does not fit,
+  it keeps ` ◂`, then the name alone, bold: the name is never cut for its mark.

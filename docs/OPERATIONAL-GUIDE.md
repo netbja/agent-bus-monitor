@@ -448,6 +448,8 @@ agent names, no project template):
   From 130 columns of busmon's pane the same page is a Kanban (For you, In progress, Next,
   Ideas; `←→` between columns); `display.work_layout = "list"` or `"kanban"` (settings, `C`)
   keeps one layout at every width.
+  The Projects page (`M`) counts each project's **for you** and **at work** by the same rule;
+  a count not read, or more than a minute old, reads `?`, never 0 (`R` reads it again).
   The **between agents** line opens the full Requests list by thread (owed by you, you wait on,
   between agents; answered threads folded, `o` shows them; `d` then `y` closes a thread with a
   reply from you; Esc returns to Work). A tracked request is closed by its owner
