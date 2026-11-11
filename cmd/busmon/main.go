@@ -427,6 +427,7 @@ type agentState struct {
 	swapping      bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
 	reloading     bool                // agentbus reload holds the same intent, kind reload (lifecycle part C)
 	retiring      bool                // retire --forget holds the same intent, kind retire (pop-auto-retire)
+	repairing     bool                // the self-repair watcher holds the same intent, kind self-repair (self-repair spec 4.1)
 	popDoneAt     time.Time           // the dispatcher judged this pop done for the episode declared then; zero = not done
 	handoff       bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
 	trustFolder   string              // the folder its client's prompt asks to trust, not trusted yet (first-run-trust); "" = none or unknown

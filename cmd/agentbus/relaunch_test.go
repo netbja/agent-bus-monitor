@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -756,5 +757,89 @@ func TestRelaunchOpenNeedsANewProcessAsProof(t *testing.T) {
 	}
 	if got := h.closes(); len(got) != 0 || !strings.Contains(out.String(), "no proof of the new agent") {
 		t.Fatalf("closed %q\n%s", got, out.String())
+	}
+}
+
+// Self-repair spec 4.1 (step 2): up never relaunches a role whose intent is
+// held (a self-repair, a reload, a swap or a retire relaunches it): it is
+// skipped and says by what, the dry run too. A live or a running tab is
+// judged as before, and the others are relaunched.
+func TestRelaunchOpenSkipsARoleWhoseIntentIsHeld(t *testing.T) {
+	for _, dry := range []bool{false, true} {
+		h := &relaunchHerdr{
+			tabs:  `{"label":"busmon","tab_id":"w4:t1"},{"label":"coder","tab_id":"w4:t2"},{"label":"master","tab_id":"w4:t3"}`,
+			panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p2","tab_id":"w4:t2"},{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+			fg:    map[string]string{"w4:p1": "busmon", "w4:p2": "bash", "w4:p3": "bash"},
+		}
+		held := map[string]string{"coder": bus.SwapKindSelfRepair, "sentinel": bus.SwapKindReload, "foureyes": ""}
+		asked := []string{}
+		o := relaunch.Options{Resume: true, Create: true, DryRun: dry, Held: func(role string) (string, bool) {
+			asked = append(asked, role)
+			k, ok := held[role]
+			return k, ok
+		}}
+		var out bytes.Buffer
+		if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), o, &out); err != nil {
+			t.Fatal(err)
+		}
+		got := strings.Join(h.ran(), "\n")
+		if strings.Contains(got, "coder") || strings.Contains(got, "sentinel") || strings.Contains(got, "foureyes") {
+			t.Fatalf("dry %v: a held role relaunched:\n%s", dry, got)
+		}
+		if !dry && !strings.Contains(got, "agent-launch master demo") {
+			t.Fatalf("master, not held, was not relaunched:\n%s", got)
+		}
+		for _, w := range []string{"coder: skipped (self-repair in progress)", "sentinel: skipped (reload in progress)", "foureyes: skipped (swap in progress)", "busmon: running"} {
+			if !strings.Contains(out.String(), w) {
+				t.Errorf("dry %v: no %q:\n%s", dry, w, out.String())
+			}
+		}
+		if slices.Contains(asked, "busmon") {
+			t.Errorf("busmon's tab, no agent, was asked for an intent: %v", asked)
+		}
+	}
+}
+
+// up reads each role's intent from the broker right before it acts on it.
+func TestUpSkipsARoleUnderSelfRepair(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	h := &relaunchHerdr{
+		tabs:  `{"label":"busmon","tab_id":"w4:t1"},{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p1": "bash", "w4:p3": "bash"},
+	}
+	deps.Herdr = func(args ...string) ([]byte, error) {
+		if strings.Join(args, " ") == "workspace list" {
+			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
+		}
+		return h.run(args...)
+	}
+	deps.Lock = func(string, bool) (func(), error) { return func() {}, nil }
+	deps.Intent = func(project, role string) (bus.SwapIntent, bool, error) {
+		if project == "demo" && role == "master" {
+			return bus.SwapIntent{Kind: bus.SwapKindSelfRepair, Nonce: "n1"}, true, nil
+		}
+		return bus.SwapIntent{}, false, nil
+	}
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if got := strings.Join(h.ran(), "\n"); strings.Contains(got, "agent-launch master") {
+		t.Fatalf("master relaunched under a self-repair:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "master: skipped (self-repair in progress)") {
+		t.Fatalf("out:\n%s", out.String())
+	}
+	// An unreadable intent is said, and up goes on as when the agents are unreadable.
+	deps.Intent = func(string, string) (bus.SwapIntent, bool, error) {
+		return bus.SwapIntent{}, false, errors.New("connection refused")
+	}
+	out.Reset()
+	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if !strings.Contains(out.String(), "master: intent unreadable (connection refused)") {
+		t.Fatalf("out:\n%s", out.String())
 	}
 }

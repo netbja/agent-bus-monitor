@@ -57,7 +57,11 @@ keeps the `HERDR_ENV=1` guard and `up`'s lock. The service entry (`ServiceRole`,
 `ServiceHerdr`) is for the dispatch service, which runs in no pane: it reaches herdr through the
 session its env file names, refuses when none is named, and takes the same lock
 (`ProjectLock`, `~/.cache/agentbus/up-<p>.lock`) without waiting. Nothing calls the service
-entry yet: the watcher's R1 will (step 7).
+entry yet: the watcher's R1 will (step 7). Step 2 adds the role's **intent** for a self-repair
+(`bus/selfrepair.go`): `BeginSelfRepair`, `SelfRepairHeld` and `EndSelfRepair` take, check and end
+`{p}:swap:<role>` with kind `self-repair` and a nonce, each in a script that also checks the
+dispatch lease token, so one relauncher holds a role at a time. `up` reads each agent role's intent
+right before relaunching it (`Options.Held`) and skips a held one, saying by what.
 
 **`plan/`** (v0.22) is the batch's plan as the person reads it: `docs/plans/<name>.json` (strict,
 `Parse`), published at a commit by `agentbus plan load` into `{p}:plan` (the file kept opaque:

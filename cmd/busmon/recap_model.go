@@ -309,10 +309,7 @@ func buildRecap(in recapInput) recapModel {
 				continue
 			}
 			copy := s
-			what := "swap"
-			if s.Kind == bus.SwapKindReload {
-				what = "reload"
-			}
+			what := bus.SwapKindWord(s.Kind) // a self-repair never reads as a profile swap (reviewer-codex)
 			add(recapRow{Key: "swap:" + s.ID, Section: "Since your last visit", Title: s.Role + " " + GlyphNone + " " + what + " " + s.Event,
 				Detail: swapDescription(s), Kind: "swap", Agent: s.Role, Swap: &copy, Selectable: true})
 		}

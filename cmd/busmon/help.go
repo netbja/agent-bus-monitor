@@ -49,6 +49,7 @@ func helpText() []Line {
 	row("swapping", "agentbus swap is replacing it by its role on another profile: the dispatcher leaves its pane alone.")
 	row("reloading", "agentbus reload is restarting it on the same role and profile, resumed: the dispatcher leaves its pane alone.")
 	row("retiring", "agentbus retire --forget is ending this pop: its pane closes, then it is unregistered.")
+	row("self-repair", "the dispatcher is relaunching this dead agent in a new pane, resumed (self-repair).")
 	row("done Nm", "a pop the dispatcher judged finished N minutes ago: master was told to end it (retire --forget).")
 	row("handoff", "it declared a hand-off (agentbus handoff) and has not moved on since: a fresh session can resume from its report.")
 	row("escalated", "the dispatcher could not wake this agent and told the escalation target.")

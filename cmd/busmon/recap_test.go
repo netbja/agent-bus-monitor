@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -122,5 +123,26 @@ func TestRecapSnapshotKeepsAnsweredCorrelationOnlyForSameDeclaration(t *testing.
 	}
 	if !got["new"].answeredAt.IsZero() {
 		t.Fatalf("new declaration inherited stale answer correlation: %v", got["new"].answeredAt)
+	}
+}
+
+// reviewer-codex (self-repair step 2): a ledger entry says what it was, a
+// self-repair never reads as a profile swap.
+func TestRecapNamesTheLedgerEntrysKind(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	at := strconv.FormatInt(now.Add(-time.Minute).UnixMilli(), 10)
+	m := buildRecap(recapInput{Now: now, Since: now.Add(-time.Hour), Human: "charlie", Swaps: []bus.SwapEvent{
+		{ID: at + "-0", Role: "foureyes", Event: bus.SwapBegin, Kind: bus.SwapKindSelfRepair, By: "dispatch", Reason: "process gone 70s"},
+		{ID: at + "-1", Role: "coder", Event: bus.SwapBegin, Kind: bus.SwapKindReload, By: "sentinel"},
+		{ID: at + "-2", Role: "docs", Event: bus.SwapBegin, By: "master"},
+	}})
+	var text string
+	for _, row := range m.Rows {
+		text += row.Title + "\n"
+	}
+	for _, w := range []string{"foureyes " + GlyphNone + " self-repair begin", "coder " + GlyphNone + " reload begin", "docs " + GlyphNone + " swap begin"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("no %q:\n%s", w, text)
+		}
 	}
 }

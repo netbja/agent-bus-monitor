@@ -288,6 +288,11 @@ type Options struct {
 	// Verdicts, when set, receives each tab's verdict by tab name: a caller
 	// that relaunches one role (reload) fails on anything but a relaunch.
 	Verdicts map[string]Verdict
+	// Held, when set, is an agent role's intent read right before it is
+	// relaunched (self-repair spec 4.1): a held one (a self-repair, a reload,
+	// a swap or a retire) is skipped, by its kind ("" a swap). up sets it;
+	// reload, which holds its own intent, does not.
+	Held func(role string) (kind string, held bool)
 }
 
 // TabJudgement is one template tab of an open workspace, judged.
@@ -401,6 +406,15 @@ func Open(herdr func(args ...string) ([]byte, error), snaps map[string]bus.Agent
 			continue
 		}
 		role, isAgent, snap, has, ref, v := j.Role, j.IsAgent, j.Snap, j.Has, j.Ref, j.V
+		if o.Held != nil && isAgent && (v == VerdictRelaunch || v == VerdictCreate) {
+			if kind, held := o.Held(role); held {
+				if kind == "" {
+					kind = "swap"
+				}
+				fmt.Fprintf(stdout, "%s: skipped (%s in progress)\n", t.Name, kind)
+				continue
+			}
+		}
 		cmd := t.Command
 		resumed := false
 		if o.Resume && isAgent && (v == VerdictRelaunch || v == VerdictCreate) {
