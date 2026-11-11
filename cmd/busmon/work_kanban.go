@@ -186,7 +186,7 @@ func (k *kanbanView) items() []ListItem {
 type kanbanRect struct{ x, y, w, h int }
 
 // kanbanGrid places n columns in the inner area (x, y, w, h): side by side
-// when each keeps kanbanMinCol cells, else two per band, else one; a blank
+// when each keeps kanbanMinCol cells, else two per band, else one; one
 // column apart side by side, the bands sharing the height.
 func kanbanGrid(n, x, y, w, h int) []kanbanRect {
 	per := n
@@ -260,9 +260,13 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string) {
 			continue
 		}
 		drawLine(screen, r.x, r.y, r.w, Line{{Text: kc.title, Role: RoleText, Bold: true}}, false)
-		if c > 0 && r.x > x { // the blank column apart
+		if c > 0 && r.x > x { // the column apart: a rule in the rules' colour, inset one row at each end (the person)
 			for i := 0; i < r.h; i++ {
-				drawLine(screen, r.x-1, r.y+i, 1, nil, false)
+				var rule Line
+				if i > 0 && i < r.h-1 {
+					rule = Line{{Text: glyphVertical, Role: RoleLine}}
+				}
+				drawLine(screen, r.x-1, r.y+i, 1, rule, false)
 			}
 		}
 		shown := kc.cards[first[c]:]

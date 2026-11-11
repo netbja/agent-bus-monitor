@@ -369,7 +369,9 @@ four columns: **For you · In progress · Next · Ideas**.
   - `auto` draws the Kanban when busmon's own width is 130 columns or more. That width is the
     herdr pane's, since busmon runs in it, not the terminal's.
 - **At 130 columns** (checked): the lower frame's inside is 128 cells, so each column is 31 cells
-  with one blank column between them.
+  with one column between them. That column holds a discreet rule (`│`, the rules' colour,
+  `RoleLine`), inset one row at each end of its band, so it touches neither the headings' row nor
+  the frame, and every rule has the same length (the person, 2026-11-11).
   - Too narrow for four columns of at least 24 cells, the columns stack two per band, then one,
     and the bands share the height. That is what `kanban` draws on a narrow screen.
 - **A card** is two lines, the same in every column (reviewer-codex):
