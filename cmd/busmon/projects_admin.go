@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -71,6 +72,9 @@ type adminSource struct {
 	// files is where a project's files are, for the delete's two options
 	// (§5.5): its template, working_dir, the backup folder and this host.
 	files func(project string) (projfiles.Options, error)
+	// counts reads one project's for you and at work (part 6 of the
+	// requests-plan spec); nil: not read, ?.
+	counts func(ctx context.Context, project string) (workCounts, error)
 }
 
 // Memory read bounds (§3.3): one call per key, so a deadline and a cap.
@@ -99,6 +103,9 @@ type adminRow struct {
 	lastTS       int64
 	template     bool
 	templatePath string
+	counts       *workCounts // nil: not read (?)
+	countsAt     time.Time   // when counts was read
+	countsLive   bool        // the open project's: the shell's own, always fresh
 }
 
 // adminView is the page's read: its rows and what failed.
@@ -152,6 +159,33 @@ func gatherAdmin(ctx context.Context, src adminSource, open string, now time.Tim
 		ws, herdrOK = w, true
 	}
 	v.rows = adminRows(facts, brokerOK, tmpls, svc, svcOK, ws, herdrOK, open)
+	// The counts last, each alone: one that fails or runs out of time is ?,
+	// never the page's other columns nor another project's (reviewer-codex):
+	// each read has its own deadline, from the caller's context rather than
+	// the page's, and they run side by side, a few at a time. The open
+	// project's are the shell's.
+	if src.counts != nil {
+		var wg sync.WaitGroup
+		slots := make(chan struct{}, countsReadsAtOnce)
+		for i := range v.rows {
+			r := &v.rows[i]
+			if !r.onBroker || r.open {
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				slots <- struct{}{}
+				defer func() { <-slots }()
+				rc, cancel := context.WithTimeout(ctx, countsReadTimeout)
+				defer cancel()
+				if n, err := src.counts(rc, r.name); err == nil {
+					r.counts, r.countsAt = &n, now // its own row: no other goroutine writes it
+				}
+			}()
+		}
+		wg.Wait()
+	}
 	return v
 }
 
@@ -524,7 +558,7 @@ type adminCol struct {
 	cell func(adminRow) Line
 }
 
-func adminCols(tier Tier, now time.Time, running string) []adminCol {
+func adminCols(tier Tier, width int, now time.Time, running string) []adminCol {
 	text := func(f func(adminRow) string) func(adminRow) Line {
 		return func(r adminRow) Line { return Line{{Text: f(r), Role: RoleMuted}} }
 	}
@@ -535,6 +569,16 @@ func adminCols(tier Tier, now time.Time, running string) []adminCol {
 	services := adminCol{"SERVICES", 22, adminServicesCell}
 	herdr := adminCol{"HERDR", 16, text(adminHerdrCell)}
 	last := adminCol{"LAST", 8, text(func(r adminRow) string { return adminLast(r, now) })}
+	forYou := adminCol{"FOR YOU", 7, text(func(r adminRow) string { return adminForYou(r, now) })}
+	atWork := adminCol{"AT WORK", 7, text(func(r adminRow) string { return adminAtWork(r, now) })}
+	// Below countsSplitW cells the two share one, by their glyphs (correction 6):
+	// "4/1", as AGENTS reads "3/7".
+	counts := adminCol{GlyphHuman + "/" + GlyphWorking, 4, text(func(r adminRow) string {
+		if f := adminForYou(r, now); f != GlyphDash {
+			return f + "/" + adminAtWork(r, now)
+		}
+		return GlyphDash
+	})}
 	tmpl := adminCol{"TEMPLATE", 8, text(func(r adminRow) string {
 		if r.template {
 			return GlyphDone
@@ -542,9 +586,13 @@ func adminCols(tier Tier, now time.Time, running string) []adminCol {
 		return ""
 	})}
 	if tier == TierWide {
-		return []adminCol{project, state, agents, keys, services, herdr, last, tmpl}
+		return []adminCol{project, state, forYou, atWork, agents, keys, services, herdr, last, tmpl}
 	}
-	return []adminCol{project, state, agents, services, last}
+	if width < countsSplitW { // the cells their values need, so the name keeps its 80-column room
+		agents.w, services.w = 6, 21
+		return []adminCol{project, state, counts, agents, services, last}
+	}
+	return []adminCol{project, state, forYou, atWork, agents, services, last}
 }
 
 // projectsTitle: "Projects · 5 · read 12s ago".
@@ -573,6 +621,9 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 	if v.tmplErr != "" {
 		note("templates: " + v.tmplErr)
 	}
+	if n := countsNote(v, now); n != "" {
+		body = append(body, FitLine(Line{{Text: n, Role: RoleMuted}}, width))
+	}
 	// Always: busmon cannot tell a tunnel (localhost:6380 to another host's
 	// broker) from a local broker, and services and herdr are this machine's
 	// (foureyes).
@@ -589,7 +640,8 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 			lines = append(lines, len(body))
 			first := append(append(Line{mark(i)}, adminName(r)...), Seg{Text: "  ", Role: RoleText})
 			first = append(first, adminStateCell(r, running)...)
-			second := Line{{Text: "  " + adminAgents(r) + " agents " + GlyphNone + " " + adminLast(r, now) + " " + GlyphNone + " ", Role: RoleMuted}}
+			second := Line{{Text: "  " + adminForYou(r, now) + " for you " + GlyphNone + " " + adminAtWork(r, now) + " at work " + GlyphNone + " " +
+				adminAgents(r) + " agents " + GlyphNone + " " + adminLast(r, now) + " " + GlyphNone + " ", Role: RoleMuted}}
 			second = append(second, adminServicesCell(r)...)
 			if r.brokerKnown && !r.onBroker {
 				second = Line{{Text: "  a template only: no key on the broker", Role: RoleMuted}}
@@ -598,7 +650,7 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 		}
 		return body, lines
 	}
-	cols := adminCols(tier, now, running)
+	cols := adminCols(tier, width, now, running)
 	rest := 2 // the selection mark
 	for _, c := range cols[1:] {
 		rest += c.w + 1
@@ -623,6 +675,9 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 			cell := c.cell(r)
 			if i == 0 && r.open && cell.Width() > c.w { // the mark alone when "open" does not fit
 				cell = Line{{Text: r.name, Role: RoleText, Bold: true}, {Text: " " + GlyphOpenHere, Role: RoleAccent}}
+			}
+			if i == 0 && r.open && cell.Width() > c.w { // then the name alone, bold, rather than a cut
+				cell = Line{{Text: r.name, Role: RoleText, Bold: true}}
 			}
 			l = append(l, pad(cell, c.w)...)
 		}
@@ -850,8 +905,15 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 }
 
 // adminSourceFor is the page's sources for busmon's broker.
-func adminSourceFor(client *redis.Client, getenv func(string) string) *adminSource {
+func adminSourceFor(client *redis.Client, getenv func(string) string, self string) *adminSource {
 	src := realAdminSource(client, getenv)
+	src.counts = func(ctx context.Context, p string) (workCounts, error) {
+		b, err := bus.Open(client, p)
+		if err != nil {
+			return workCounts{}, err
+		}
+		return readProjectCounts(ctx, b, self, time.Now())
+	}
 	return &src
 }
 

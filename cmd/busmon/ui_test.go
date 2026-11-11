@@ -171,6 +171,9 @@ type fakeReader struct {
 	backgroundErr error
 	contextErr error                        // returned by Context when set
 	gates      map[string]map[string]string // OpenChallenges by gated name, when set
+	// agentsErr, asksErr and gatesErr fail those reads (the Projects page's
+	// counts: a partial read is ?).
+	agentsErr, asksErr, gatesErr, recentErr error
 }
 
 func (f *fakeReader) n(name string) { f.calls[name]++ }
@@ -191,6 +194,9 @@ func (f *fakeReader) CmdLag(context.Context) (map[string]int64, error) {
 }
 func (f *fakeReader) Agents(context.Context) (map[string]bus.AgentSnapshot, error) {
 	f.n("Agents")
+	if f.agentsErr != nil {
+		return nil, f.agentsErr
+	}
 	if f.snaps != nil {
 		return f.snaps, nil
 	}
@@ -216,7 +222,7 @@ func (f *fakeReader) Board(context.Context) (map[string]bus.BoardEntry, error) {
 }
 func (f *fakeReader) Recent(context.Context, []string, int) ([]bus.Event, map[string]string, error) {
 	f.n("Recent")
-	return nil, nil, nil
+	return nil, nil, f.recentErr
 }
 func (f *fakeReader) ServiceStates(context.Context) (*bus.ServicesInstall, map[string]bus.ServiceRecord, error) {
 	f.n("ServiceStates")
@@ -236,6 +242,9 @@ func (f *fakeReader) Wake(context.Context, string) (bus.WakeRecord, bool, error)
 }
 func (f *fakeReader) OpenChallenges(_ context.Context, agent string) (map[string]string, error) {
 	f.n("OpenChallenges")
+	if f.gatesErr != nil {
+		return nil, f.gatesErr
+	}
 	return f.gates[agent], nil
 }
 
@@ -390,7 +399,7 @@ func (f *fakeWriter) Answer(_ context.Context, askID, qid, by, choice, text stri
 
 func (f *fakeReader) Asks(context.Context) ([]bus.Ask, error) {
 	f.n("Asks")
-	return f.asks, nil
+	return f.asks, f.asksErr
 }
 
 func (f *fakeWriter) Asks(context.Context) ([]bus.Ask, error) {

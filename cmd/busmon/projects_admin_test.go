@@ -44,6 +44,15 @@ func adminFixture(now time.Time) adminSource {
 			return map[string]adminWorkspace{"agent-bus-monitor": {id: "w1", panes: 6}}, nil
 		},
 		host: "vdr",
+		counts: func(_ context.Context, p string) (workCounts, error) { // the open project's are the shell's
+			switch p {
+			case "trading":
+				return workCounts{you: 1, team: 2}, nil
+			case "demo":
+				return workCounts{}, nil
+			}
+			return workCounts{}, errors.New("timeout")
+		},
 	}
 }
 

@@ -17,8 +17,8 @@
 ││ type old to delete:                                                        ││
 ││ ol▏                                                                        ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│   demo                  suspended   0/4     —                      3d ago    │
-│ ▶ old                   stopped     0/2     dispatch ○             40d ago   │
-│   newone                template    —       —                      —         │
+│   demo               suspended   0/0  0/4    —                     3d ago    │
+│ ▶ old                stopped     ?/?  0/2    dispatch ○            40d ago   │
+│   newone             template    —    —      —                     —         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
  b back up   n no backup   enter confirm   y delete   esc cancel                

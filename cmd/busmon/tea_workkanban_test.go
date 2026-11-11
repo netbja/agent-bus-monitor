@@ -375,3 +375,22 @@ func TestWorkKanbanGateRenderedAt31And32(t *testing.T) {
 		}
 	}
 }
+
+// foureyes (step 3): a selected card taller than its band. The scroll stops
+// at the card: it never runs past it, and the draw neither panics nor
+// spills out of the band.
+func TestKanbanScrollStopsAtATallCard(t *testing.T) {
+	two := func(k string) kanbanCard { return kanbanCard{key: k, lines: []Line{{{Text: k}}, {{Text: k}}}} }
+	tall := kanbanCard{key: "gate", lines: []Line{{{Text: "gate"}}, {{Text: "title"}}, {{Text: "◆ for master"}}}}
+	k := kanbanView{cols: []kanbanCol{{title: "In progress", cards: []kanbanCard{two("a"), two("b"), tall}}}}
+	rects := []kanbanRect{{x: 1, y: 1, w: 30, h: 3}} // heading, one row, "+N more": no room for three lines
+	col, rank, first := k.place("gate", rects)
+	if col != 0 || rank != 2 || first[0] != rank {
+		t.Fatalf("place: col %d rank %d first %v, want the scroll to stop at the selected card (2)", col, rank, first)
+	}
+	g := newGrid(32, 5)
+	k.draw(g, 1, 1, 30, 3, "gate")
+	if out := g.plain(); strings.Contains(strings.Split(out, "\n")[4], "gate") {
+		t.Fatalf("drawn past the band:\n%s", out)
+	}
+}
