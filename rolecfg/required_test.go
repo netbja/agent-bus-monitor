@@ -64,18 +64,34 @@ required = true
 	}
 }
 
-// The shipped manifests mark the project's standing roles required: every
+// The example manifest marks the project's standing roles required: every
 // boot role, and no pop.
-func TestShippedManifestsMarkTheBootRolesRequired(t *testing.T) {
-	for _, name := range []string{"roles.toml", "examples/roles.mixed.toml"} {
-		m, err := Load(repoPath(t, name))
-		if err != nil {
-			t.Fatal(err)
+func TestExampleManifestMarksTheBootRolesRequired(t *testing.T) {
+	m, err := Load(repoPath(t, "examples/roles.mixed.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range m.RoleNames() {
+		if want := m.RoleTier(role) == "boot"; m.RoleRequired(role) != want {
+			t.Errorf("%s (%s) required %v", role, m.RoleTier(role), m.RoleRequired(role))
 		}
-		for _, role := range m.RoleNames() {
-			if want := m.RoleTier(role) == "boot"; m.RoleRequired(role) != want {
-				t.Errorf("%s: %s (%s) required %v", name, role, m.RoleTier(role), m.RoleRequired(role))
-			}
+	}
+}
+
+// foureyes (rollout): every session reads the main checkout's roles.toml with
+// the installed agentbus, whose parser refuses an unknown role key. roles.toml
+// gains required = true only once a release that reads it is installed (the
+// follow-up of self-repair step 4, which then changes this test to the
+// example's rule).
+func TestRolesTomlWaitsForTheRelease(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range m.RoleNames() {
+		info, _ := asTable(m.Roles[role])
+		if _, set := info["required"]; set {
+			t.Errorf("%s: required in roles.toml before a release that reads it is installed", role)
 		}
 	}
 }
