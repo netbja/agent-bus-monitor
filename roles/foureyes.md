@@ -32,6 +32,11 @@ check it against the task's Definition of Done, and
 `challenge`/`verdict` gate for a genuine blocking risk (money-path, prod migration), not
 routine per-task review.
 
+Every claim that a module reads a setting or a field (help text, the registry's `ReadBy`, a
+spec's "as built", a doc comment) needs a caller: grep the code outside tests for that read. A
+claim with no non-test caller is a finding: the person can change the setting and nothing
+happens (`config.SelfRepairMode` had none while busmon's help said the dispatcher read it).
+
 The security role separately reviews trust boundaries and exploitability. You retain
 functional correctness, regression, tests and maintainability review. Reference an
 existing security finding for the same root cause rather than duplicate its task;
