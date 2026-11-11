@@ -556,7 +556,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   - **Work** — who owes what, top-down: **YOU** (what waits on you: `answer` an ask, a waiting
     agent or a request to you; `merge` a PR both reviewers approved on its pushed head; `decide` a
     plan task of yours nothing blocks; `review` a gate that concerns you; why on the right),
-    **TEAM** (each agent at work: its task in hand and the plan task it is, the progress line, the
+    **TEAM** (each agent at work, in name order so a row keeps its place: its task in hand and the plan task it is, the progress line, the
     gate it holds as a reviewer, who reviews its work and since when; the free agents on one line,
     as they can take a request), **NEXT** (the plan's tasks not started, yours blocked by others
     among them, then the requests no plan task names) and **IDEAS** (`◇`, the open questions in

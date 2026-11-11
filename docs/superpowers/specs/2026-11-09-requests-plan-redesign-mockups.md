@@ -343,6 +343,9 @@ page and the Kanban will read it too.
   - The free agents (idle or done) go on one line, at every width (correction 6). A waiting,
     blocked or held agent is in neither, even when it holds a task or a gate: the Agents panel
     says which.
+  - The rows are in agent-name order, the free agents' line last and its names sorted too, so a
+    row keeps its place when a status or a gate changes (the person, 2026-11-11). The list and
+    the Kanban's In progress column show the same order.
   - An agent with both a task in hand and a gate shows its task on its row and the gate on a
     line under it.
 - **NEXT and IDEAS:** each row says where it comes from (`plan #t8 · waits on t7`,
