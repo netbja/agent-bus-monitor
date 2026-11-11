@@ -1,6 +1,11 @@
 # Plan history: every plan kept, one active, progress and staleness at a glance
 
 - Status: draft, for review (coder, foureyes, reviewer-codex) and for the person's answers (§8)
+- Revision 2: foureyes on bb1ff8ef — archive moves are Go `WATCH`/`MULTI` transactions, not one
+  Lua script (the record gains an `id`, with an in-transaction migration; done/total computed in
+  Go, frozen for an archived plan; record and facts kept as opaque strings, no `cjson`); backup
+  and `--delete` already cover `{p}:plans` (two questions dropped); `plan-stale` uses the bounded
+  git exec of `trackedPaths` (§3.1–3.5, §5, §6, §8)
 - Date: 2026-11-11
 - Author: architect
 - Task: `plan-history-spec`
@@ -48,7 +53,9 @@ progress deduction** from the board or the PRs; loading stays one command from a
 
 A plan file already has a name (`"plan": "v0.27"`). The name is the plan's **id** in the
 history (checked with `ValidName`-like rules extended to dots: `^[a-z0-9][a-z0-9._-]{0,47}$`;
-a file whose name fails is refused at load). Loading a new commit of the same name is a new
+a file whose name fails is refused at load). The id is taken in Go from `plan.Parse` and
+stored in the record: `PlanRecord` gains `ID string json:"id"` (today the name lives only inside
+the opaque `File` bytes, `bus/plan.go`). Loading a new commit of the same name is a new
 **revision** of the same plan, not a new plan — exactly what the master skill already does when
 a task is added ("a new commit and a new `plan load`; facts of the tasks kept stay").
 
@@ -56,25 +63,43 @@ a task is added ("a new commit and a new `plan load`; facts of the tasks kept st
 
 - `{p}:plan` and `{p}:plan:facts` stay as they are: every reader of the active plan (busmon,
   `plan show`, the derivation, the merge queue, sentinel) is untouched.
-- New hash `{p}:plans`: field = plan id, value = JSON
+- New hash `{p}:plans`: field = plan id, value = one JSON object built **in Go**:
   `{id, goal, first_loaded, last_loaded, loads: [{commit, path, at}], record, facts, done,
-  total, closed}`: the last `PlanRecord` (file bytes included), the facts as they stood when the
-  plan stopped being active, the done/total computed then, and `closed` (§3.4). `loads` keeps
-  the last 50 revisions. A plan file is a few KB; a hundred plans stay under 1 MB.
+  total, archived_at, closed}`. `record` is the last `{p}:plan` value **as an opaque string**
+  (exactly the bytes stored there), and `facts` maps each task id to its `{p}:plan:facts` value,
+  again an **opaque string**: nothing is decoded and re-encoded by Lua's `cjson`, which would
+  rewrite an empty array as `{}` (the reason `File` is already opaque today). `done`/`total` are
+  computed in Go at archive time (§3.4). `loads` keeps the last 50 revisions. A plan file is a
+  few KB; a hundred plans stay under 1 MB.
 - **Never erased by the plan commands.** No command deletes an entry. `busmon --reset` trims
   streams only, so the hash survives it. When the herdr-exit spec's explicit `survivesReset` list
   is built (§6.5 there; it does not exist in the code yet), `plans` joins it beside `resume`, so
-  its guard test covers it; until then a Redis test here checks that `--reset` keeps it. `--delete` of a whole project is
-  the one exception (§8 Q2).
-- Not in `projectKinds`, like the active keys: a plan alone never lists a project. It is added
-  to the backup/restore key list explicitly (§8 Q3 asks whether backup should carry it).
+  its guard test covers it; until then a Redis test here checks that `--reset` keeps it.
+- **Backup and `--delete` need nothing added**: both enumerate a project's keys by `SCAN
+  <p>:*` (`bus/backupdump.go:38`, `bus/deletequiet.go:126`), so `agentbus backup` carries
+  `{p}:plans` and `busmon --delete` removes it with the rest of the project, as it does the
+  active plan today. A Redis test pins both.
+- Not in `projectKinds`, like the active keys: a plan alone never lists a project.
 
 ### 3.3 The commands
 
-All writes are single Lua scripts with Redis `TIME`, as today; each one moves the active plan
-into the archive and out of it atomically, so no crash leaves a plan in neither place.
+**Every write that moves a plan is one optimistic transaction in Go**, on the `putSnapshot`
+pattern (`bus/ident.go`: `b.r.Watch` with a retry on `redis.TxFailedErr`, with jitter): `WATCH {p}:plan {p}:plan:facts {p}:plans`; read the active record,
+its facts and the archive entry; read Redis `TIME`; compute in Go the new archive value
+(including `done`/`total` with `plan.Progress`, which needs the mission states that only Go
+reads) and the new active keys; then `MULTI` … `EXEC` writes them together. A conflict (another
+writer touched a watched key) retries with jitter, as `putSnapshot` does, at most 20 times,
+then fails with a clear error. So the
+move is atomic — no crash or race leaves a plan in neither place — without any decoding in Lua.
+`plan link|done|note` keep their existing Lua script (it only reads `rec.tasks` from the record
+and never re-encodes it); the new `id` field passes through untouched.
 
-- **`plan load <path>@<commit>`** (unchanged syntax, no PR needed). The script:
+**Migration.** A record written before the upgrade has no `id`. The first transaction that
+archives it (a `load`, `resume` or `clear`) runs `plan.Parse` on its `File` in Go to take the id,
+and writes the archive under it; a record whose file no longer parses is archived under
+`legacy-<loaded_at>`. No offline step.
+
+- **`plan load <path>@<commit>`** (unchanged syntax, no PR needed). The transaction:
   1. archives the active plan, if any: its record and facts written to `{p}:plans[<its id>]`;
   2. if the loaded file's id equals the active plan's, it is a revision: facts of the tasks
      still in the file are kept (today's rule);
@@ -98,10 +123,19 @@ into the archive and out of it atomically, so no crash leaves a plan in neither 
 
 ### 3.4 Progress: one function, recorded facts only
 
-`plan.Progress(file, facts, missions) (done, total int)` — the same Done rule as
+`plan.Progress(file, facts, missions) (done, total int)` — Go, the same Done rule as
 `derive.go` (a recorded `done` fact, or the task's mission integrated or aborted), no board, no
-PR, no verdict input. It replaces `plan.Count` for the header and is used for archived plans,
-so the active plan's percentage and its row in the list never disagree. Percent =
+PR, no verdict input. It replaces `plan.Count` for the header.
+- **Active plan**: computed at read time, live, as the header does today.
+- **Archived plan**: computed **once, when it is archived** (inside the transaction of §3.3),
+  and stored as `done`/`total`. The list shows that frozen count, labelled with the archive
+  time. Reason: a mission's state can be gone later (its keys expire or are cleaned), and an
+  archived plan must not lose progress it had. When an archived plan is resumed, its percentage
+  is live again; a mission task whose mission is no longer loaded then reads `upcoming` with the
+  reason `mission not loaded`, exactly as an active plan's does today, unless master recorded it
+  done (`plan done`), which a resumed plan keeps.
+So the active plan's header and its own list row use the same function on the same inputs and
+never disagree. Percent =
 `done*100/total`, rounded down (a plan is 100 % only when every task is recorded done).
 A plan is **finished** at 100 %, **closed** when `plan close` marked it, else **unfinished**.
 
@@ -114,7 +148,9 @@ A loaded plan is **stale** when either holds:
   (`delivery.base`, e.g. `origin/main`) since the plan's last progress — the newest of
   `last_loaded` and its newest `done` fact — while its done count did not change. The count is
   `git rev-list --count --first-parent --since=<last progress> <base>` on the local repo's
-  refs, no fetch: it reads refs, runs no repository code, and is a hint, not a deduction — the
+  refs, no fetch, run the way the existing `git ls-files` health read is
+  (`cmd/agentbus/healthchecks.go` `trackedPaths`: `exec.CommandContext` with the check's
+  deadline, its own process group, killed as a group on cancel): it reads refs, runs no repository code, and is a hint, not a deduction — the
   plan is never changed by it.
 
 Where it shows:
@@ -160,10 +196,12 @@ abandon one; never `plan clear` to "make room".
 
 ## 5. Implementation decisions
 
-- `bus/plan.go`: `PlansKey`, `PlanArchive` type, scripts `planLoad` (extended), `planResume`,
-  `planClear` (archive), `planClose`; reads `Plans`, `ArchivedPlan(id)`. Never written from a Go
-  struct through `HSET` field by field: each value is one JSON string set by the script (the
-  board rule's spirit: no field can be dropped by a partial writer).
+- `bus/plan.go`: `PlanRecord.ID`; `PlansKey`; the transactions `LoadPlan` (replacing the
+  `planLoad` script), `ResumePlan`, `ClearPlan` (archives), `ClosePlan`, each `WATCH`/`MULTI`
+  with retry; reads `Plans`, `ArchivedPlan(id)`. Each archive entry is one JSON string written
+  whole (`HSET` of one field), its record and facts kept as opaque strings: no partial writer
+  can drop a field (the board rule's spirit). Progress is passed in as a function so `bus` does
+  not import `plan`.
 - `plan/`: `Progress`, `ValidID`, `Stale(lastLoaded, lastDone, mergesSince, now, settings)`.
 - `config/keys.go`: `plan.stale_after` (duration, default 7d), `plan.stale_merges` (int,
   default 3, 0 = signal off).
@@ -171,22 +209,27 @@ abandon one; never `plan clear` to "make room".
   check `plan-stale`.
 - `cmd/busmon`: header and Work percentage, `h` overlay, `r` resume with confirmation.
 - `skills/agent-bus-master`, `skills/agent-bus-sentinel`: §3.5, §3.7.
-- Migration: none needed. The first load or clear after the upgrade archives whatever plan is
-  active; nothing older exists on the bus to recover.
+- Migration: in Go, inside the first archiving transaction (§3.3): the id is parsed from the old
+  record's `File`; `legacy-<loaded_at>` when it no longer parses.
 
 ## 6. Testing decisions
 
-- Redis tests (disposable broker), one per script: load archives the previous plan with its
+- Redis tests (disposable broker), one per transaction: load archives the previous plan with its
   facts; a revision keeps the facts of kept tasks; loading an archived id restores its facts
   filtered to the new tasks; resume swaps the two plans atomically; clear archives and leaves none
-  active; close marks and never deletes; `loads` capped at 50; `--reset` keeps `{p}:plans`.
+  active; close marks and never deletes; `loads` capped at 50; `--reset` keeps `{p}:plans`;
+  `backup` carries it and `--delete` removes it; a concurrent `plan done` during a `load` makes
+  the load retry and the done survive (WATCH conflict); a record with an empty task list or
+  empty fact arrays round-trips byte-for-byte through archive and resume (no `{}` rewrite); a
+  pre-upgrade record without `id` is archived under the id parsed from its file, and under
+  `legacy-<loaded_at>` when the file does not parse.
 - `plan.Progress`: table tests, and a test that the active plan's header and its list row give
   the same numbers for the same facts (one function).
 - `plan.Stale`: old, not moving (merges ≥ N with no new done), moving (a done after the merges),
   signal off at 0; the git count against a scripted repository.
 - busmon: the `h` overlay rows, `enter` read only, `r` confirm then resume, refused on the active
   plan.
-- Mutation on: the archive step of load (dropping it must fail "load archives"), the filter of
+- Mutation on: the WATCH of the facts key (dropping it must fail the concurrent-done test), the archive step of load (dropping it must fail "load archives"), the filter of
   restored facts, `Progress`'s done rule (counting an in-review task must fail), the stale
   thresholds.
 
@@ -198,17 +241,16 @@ once.
 
 ## 8. Questions for the person
 
+(Revision 2: two former questions are answered by the code — `busmon --delete` removes
+`{p}:plans` with the rest of the project and `agentbus backup` carries it, both by `SCAN <p>:*`;
+§3.2.)
+
 1. **busmon resume.** May busmon re-open a plan itself (after a confirmation), or should it only
    ask master (an `ask` to master: "re-open v0.25")? Recommended: busmon does it, and master is
    told by a report, since it is the person's own decision.
-2. **Deleting a project.** `busmon --delete` removes every key of a project. Should it keep
-   `{p}:plans` (the history outlives the project), or delete it with the rest? Recommended:
-   delete it with the rest — a deleted project is gone, and the plans' files remain in Git.
-3. **Backups.** Should `agentbus backup` carry `{p}:plans`? Recommended: yes (it is small and is
-   the only record of the facts).
-4. **Stale thresholds.** Are 7 days and 3 merges since the last recorded done the right
+2. **Stale thresholds.** Are 7 days and 3 merges since the last recorded done the right
    defaults?
-5. **Abandoning a plan.** Is `plan close <id>` (kept in the list, never stale) wanted, or is an
+3. **Abandoning a plan.** Is `plan close <id>` (kept in the list, never stale) wanted, or is an
    unfinished plan simply left unfinished?
-6. **Folding.** Should the list fold finished plans older than 30 days by default, or always show
+4. **Folding.** Should the list fold finished plans older than 30 days by default, or always show
    every plan?
