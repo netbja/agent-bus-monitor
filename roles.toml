@@ -9,6 +9,9 @@
 # (`Bash(agent-spawn <role> *)`), or an ask rule for a role with approval = "person".
 # approval = "person": that rule is an ask, so Claude Code asks the person in the popping agent's
 # pane before it runs `agent-spawn <role>`. A convenience, not a lock. v0.17.
+# required = true: a boot role the dispatcher's self-repair (once built) brings back when its tab is closed
+# (absent: false, the closed tab is only reported to master). Never on a pop: a pop comes back
+# through master only. Stop a required agent on purpose with agentbus retire or suspend.
 # Shared Claude Code denies apply to every role, including bypassPermissions. Defence in depth,
 # not a boundary: processes an agent starts (tests, dotenv, and similar tools) can still read env.
 
@@ -172,6 +175,7 @@ deny = [
 [roles.master]
 profile = "claude-sonnet-auto"
 tier = "boot"
+required = true
 pops = true
 # forge-delivery: master delivers; agentbus deliver refuses every role without delivers = true.
 delivers = true
@@ -188,6 +192,7 @@ allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent
 [roles.coder]
 profile = "claude-opus"
 tier = "boot"
+required = true
 skills = ["agent-bus", "tdd", "implement"]
 # Only master and docs deliver (forge-delivery, the person's answer 3): they
 # carry delivers = true, which agentbus deliver itself checks whatever the
@@ -203,6 +208,7 @@ deny = ["Bash(agentbus deliver *)"]
 [roles.foureyes]
 profile = "claude-opus"
 tier = "boot"
+required = true
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 [roles.foureyes.tool_rules]
 deny = ["Bash(agentbus deliver *)"]
@@ -210,6 +216,7 @@ deny = ["Bash(agentbus deliver *)"]
 [roles.sentinel]
 profile = "claude-haiku"
 tier = "boot"
+required = true
 skills = ["agent-bus", "agent-bus-sentinel"]
 # Lifecycle part C: sentinel reloads agents on a client-update episode. The
 # command checks who and when from AGENT_BUS_AGENT and the bus facts, but it

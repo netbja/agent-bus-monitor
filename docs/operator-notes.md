@@ -214,8 +214,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   A new role key reaches the shipped `roles.toml` only after a release that parses it is
   installed: sessions read the main checkout's `roles.toml` with the installed `agentbus`, whose
   older parser refuses the key ("unknown fields in role …") and stops every launch, relaunch and
-  swap. `required` itself waits for that release (`TestRolesTomlWaitsForTheRelease`), and the
-  example `examples/roles.mixed.toml` already marks its boot roles.
+  swap. `required` itself waited for that release; since then `roles.toml` and
+  `examples/roles.mixed.toml` mark every boot role, which `TestShippedManifestsMarkTheBootRolesRequired`
+  checks.
 - **The launcher's environment rules** (`rolecfg/config.go`, `launch.go`): `env_refs` may not
   target loader/hook variables (`LD_*`, `DYLD_*`, `HERDR_*`, `BASH_ENV`, `NODE_OPTIONS`, …);
   `ANTHROPIC_API_KEY` is dropped for every client unless `AGENT_LAUNCH_KEEP_API_KEY=1` or
