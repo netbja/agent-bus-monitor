@@ -208,6 +208,11 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   the change completes, written with the `complete` notice in one fenced script
   (`Store.PutChangeWithCmds` → `FencedCmdsWithChange`). The docs agent opens a PR from
   `pr/<change>` and never merges.
+- **`required = true` on a role** (self-repair step 4, `Manifest.RoleRequired`): a boot role whose
+  closed tab the self-repair watcher will recreate (step 7; an optional role's is only reported).
+  `Load` refuses it on a pop and refuses any value but a boolean; `roles doctor` shows it (`REQ`).
+  The shipped manifests mark every boot role required, and a test keeps them so: a new boot role
+  in `roles.toml` needs `required = true` too, or a reason in that test.
 - **The launcher's environment rules** (`rolecfg/config.go`, `launch.go`): `env_refs` may not
   target loader/hook variables (`LD_*`, `DYLD_*`, `HERDR_*`, `BASH_ENV`, `NODE_OPTIONS`, …);
   `ANTHROPIC_API_KEY` is dropped for every client unless `AGENT_LAUNCH_KEEP_API_KEY=1` or
