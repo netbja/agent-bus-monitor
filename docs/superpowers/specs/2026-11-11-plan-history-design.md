@@ -1,6 +1,11 @@
 # Plan history: every plan kept, one active, progress and staleness at a glance
 
 - Status: draft, for review (coder, foureyes, reviewer-codex) and for the person's answers (§8)
+- Revision 3: reviewer-codex on bb1ff8ef — §2 and §3.4 misstated today's Done rule: it also
+  derives Done for a person task whose board row is done and for a delivered, approved non-merge
+  task, and for integrated/aborted missions. No behaviour change: progress stays
+  `Count(Derive(…))` with all four cases; the archive freezes that count; tests pin each case
+  (§2, §3.3, §3.4, §5, §6, §7)
 - Revision 2: foureyes on bb1ff8ef — archive moves are Go `WATCH`/`MULTI` transactions, not one
   Lua script (the record gains an `id`, with an in-transaction migration; done/total computed in
   Go, frozen for an archived plan; record and facts kept as opaque strings, no `cjson`); backup
@@ -41,9 +46,14 @@ progress deduction** from the board or the PRs; loading stays one command from a
   and reads the file with `git show` — **any commit the repo has**, merged or not. The "PR first"
   habit lives only in the master skill (commit the file on `plan/<name>`); nothing in the code
   requires a PR. This spec keeps the code as it is and fixes the skill's wording (§3.6).
-- `plan/derive.go`: a task is **done** when master recorded it (`plan done`, fact `done`) or its
-  mission is integrated or aborted. Every other state is derived for display; nothing is ever
-  marked done automatically. `plan.Count` is done/total over the derived rows.
+- `plan/derive.go` reads a task as **Done** in four cases (read at this base,
+  `derive.go:111` and `:135-141`, `deriveMission`):
+  1. master recorded it (`plan done`, fact `done`);
+  2. a mission task whose mission is integrated, or aborted;
+  3. a **person** task whose board row is `done` (no `plan done` needed);
+  4. a non-merge, non-person task that was **delivered and whose review is approved**.
+  Cases 2–4 are derived, not recorded. `plan.Count` is done/total over the derived rows, and is
+  what the header's `3/9` shows today.
 - Stale: `plan.StaleAfter = 7 days` since `LoadedAt`, shown by `plan show` (`"stale": true`),
   busmon's plan header and drawer; sentinel's daily review tells master when it is true.
 
@@ -86,7 +96,7 @@ a task is added ("a new commit and a new `plan load`; facts of the tasks kept st
 **Every write that moves a plan is one optimistic transaction in Go**, on the `putSnapshot`
 pattern (`bus/ident.go`: `b.r.Watch` with a retry on `redis.TxFailedErr`, with jitter): `WATCH {p}:plan {p}:plan:facts {p}:plans`; read the active record,
 its facts and the archive entry; read Redis `TIME`; compute in Go the new archive value
-(including `done`/`total` with `plan.Progress`, which needs the mission states that only Go
+(including `done`/`total` from `plan.Count(plan.Derive(…))`, which needs the board, verdicts and mission states that only Go
 reads) and the new active keys; then `MULTI` … `EXEC` writes them together. A conflict (another
 writer touched a watched key) retries with jitter, as `putSnapshot` does, at most 20 times,
 then fails with a clear error. So the
@@ -121,22 +131,32 @@ and writes the archive under it; a record whose file no longer parses is archive
   list, sorted with the finished ones, never stale. `plan reopen`… is `plan resume`.
 - `plan link|done|note` act on the active plan only, as today.
 
-### 3.4 Progress: one function, recorded facts only
+### 3.4 Progress: today's rule, one function, no new deduction
 
-`plan.Progress(file, facts, missions) (done, total int)` — Go, the same Done rule as
-`derive.go` (a recorded `done` fact, or the task's mission integrated or aborted), no board, no
-PR, no verdict input. It replaces `plan.Count` for the header.
+**No behaviour change.** The percentage counts exactly what today's header counts: the rows
+`plan.Derive` reads as Done, all four cases of §2 included. The person's "no automatic progress
+deduction" (§1) rules out **new** inference from the board, PRs or merge queue (for instance
+"PR merged, so the task is done"); it does not remove the derivations the plan view has used
+since v0.22, and removing them would make today's `3/9` drop for no reason the person asked
+for. So there is no new `Progress` with fewer inputs: progress is `plan.Count(plan.Derive(file,
+inputs))`, one code path, with the same `Inputs` (facts, board, verdicts, asks, missions, merge
+queue) that the header already reads.
 - **Active plan**: computed at read time, live, as the header does today.
-- **Archived plan**: computed **once, when it is archived** (inside the transaction of §3.3),
-  and stored as `done`/`total`. The list shows that frozen count, labelled with the archive
-  time. Reason: a mission's state can be gone later (its keys expire or are cleaned), and an
-  archived plan must not lose progress it had. When an archived plan is resumed, its percentage
-  is live again; a mission task whose mission is no longer loaded then reads `upcoming` with the
-  reason `mission not loaded`, exactly as an active plan's does today, unless master recorded it
-  done (`plan done`), which a resumed plan keeps.
+- **Archived plan**: computed **once, when it is archived**, and stored as `done`/`total`. The
+  transaction of §3.3 reads the derivation inputs that are not plan keys (board, verdicts, asks,
+  missions, merge queue) just before its `WATCH`; they are not watched, so a board change in the
+  same instant can shift the frozen count by that one change — the count is a snapshot labelled
+  with its time, not a ledger. The list shows that frozen count, labelled with the archive
+  time. Reason: a mission's state, a board row or a verdict can be gone later (expired, trimmed,
+  cleaned), and an archived plan must not lose progress it had. When an archived plan is resumed, its percentage
+  is live again and may differ from the frozen one: a task done only by a derived case (2–4)
+  whose source is gone reads as today's derivation reads it then (a mission no longer loaded
+  reads `upcoming`, `mission not loaded`); a task master recorded done (`plan done`, case 1)
+  stays done, since its fact travels with the plan. busmon's list shows the frozen count with
+  its time, and the active plan's row the live one.
 So the active plan's header and its own list row use the same function on the same inputs and
-never disagree. Percent =
-`done*100/total`, rounded down (a plan is 100 % only when every task is recorded done).
+never disagree. Percent = `done*100/total`, rounded down: 100 % only when every task reads Done
+by one of the four cases.
 A plan is **finished** at 100 %, **closed** when `plan close` marked it, else **unfinished**.
 
 ### 3.5 Staleness: two signals, a warning only
@@ -200,9 +220,9 @@ abandon one; never `plan clear` to "make room".
   `planLoad` script), `ResumePlan`, `ClearPlan` (archives), `ClosePlan`, each `WATCH`/`MULTI`
   with retry; reads `Plans`, `ArchivedPlan(id)`. Each archive entry is one JSON string written
   whole (`HSET` of one field), its record and facts kept as opaque strings: no partial writer
-  can drop a field (the board rule's spirit). Progress is passed in as a function so `bus` does
+  can drop a field (the board rule's spirit). The count is passed in as a function so `bus` does
   not import `plan`.
-- `plan/`: `Progress`, `ValidID`, `Stale(lastLoaded, lastDone, mergesSince, now, settings)`.
+- `plan/`: no new progress function (`Count` over `Derive`, §3.4); `ValidID`, `Stale(lastLoaded, lastDone, mergesSince, now, settings)`.
 - `config/keys.go`: `plan.stale_after` (duration, default 7d), `plan.stale_merges` (int,
   default 3, 0 = signal off).
 - `cmd/agentbus`: `plan list|resume|close`, `plan show [<id>]`, `plan clear` archives; health
@@ -223,20 +243,25 @@ abandon one; never `plan clear` to "make room".
   empty fact arrays round-trips byte-for-byte through archive and resume (no `{}` rewrite); a
   pre-upgrade record without `id` is archived under the id parsed from its file, and under
   `legacy-<loaded_at>` when the file does not parse.
-- `plan.Progress`: table tests, and a test that the active plan's header and its list row give
-  the same numbers for the same facts (one function).
+- Progress: tests pinning today's four Done cases so this change cannot alter them — a person
+  task whose board row is `done` with no `plan done` fact counts; a non-merge task delivered with
+  an approved review counts; a merge task delivered and approved but not recorded does **not**;
+  an integrated and an aborted mission task count; and the active plan's header and its list row
+  give the same numbers for the same inputs (one code path). Archive: the frozen count equals
+  the live count at archive time; after the board row of a case-3 task is trimmed, the archived
+  count is unchanged and a resumed plan's live count reflects the loss.
 - `plan.Stale`: old, not moving (merges ≥ N with no new done), moving (a done after the merges),
   signal off at 0; the git count against a scripted repository.
 - busmon: the `h` overlay rows, `enter` read only, `r` confirm then resume, refused on the active
   plan.
 - Mutation on: the WATCH of the facts key (dropping it must fail the concurrent-done test), the archive step of load (dropping it must fail "load archives"), the filter of
-  restored facts, `Progress`'s done rule (counting an in-review task must fail), the stale
+  restored facts, the count's done rule (counting an in-review task must fail; dropping case 3 or 4 must fail the pinning tests), the stale
   thresholds.
 
 ## 7. Out of scope
 
-Automatic progress deduction from the board, the PRs or the merge queue (the person: too
-complex). Editing a plan from busmon. Deleting a plan from the history. Several active plans at
+New automatic progress deduction from the board, the PRs or the merge queue (the person: too
+complex); the plan view's existing Done derivations (§2) stay as they are. Editing a plan from busmon. Deleting a plan from the history. Several active plans at
 once.
 
 ## 8. Questions for the person
