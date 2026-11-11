@@ -126,8 +126,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		if k := m.lists.work.kanban; m.ui.focus == PanelWork && k != nil { // the Kanban: ←→ move between columns
 			if key := k.step(m.lists.work.Selected(), act == ActTabNext); key != "" {
 				m.lists.work.Select(key)
-				break
-			} // no card selected, or past the edge: the tabs
+			}
+			break // wrapping around the columns, never into the tabs (the person, 2026-11-11): 1-4 change tab
 		}
 		m.stepTab(act == ActTabNext)
 	case ActTab5:

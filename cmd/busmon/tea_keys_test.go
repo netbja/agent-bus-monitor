@@ -9,7 +9,8 @@ import (
 // question is open.
 
 // Right and Left step the lower panel's tabs, wrapping at both ends as herdr's next and previous
-// tab do (herdr src/client/shell/actions.rs: rem_euclid).
+// tab do (herdr src/client/shell/actions.rs: rem_euclid); on the Work tab's Kanban they move
+// between its columns instead, and the digits change tab.
 func TestArrowsStepTheLowerTabs(t *testing.T) {
 	pinLocal(t)
 	for _, size := range [][2]int{{200, 50}, {100, 40}, {70, 40}} {
@@ -24,7 +25,15 @@ func TestArrowsStepTheLowerTabs(t *testing.T) {
 		}
 		n := len(lowerTabs)
 		for i := 1; i <= n; i++ {
-			if m = keys(t, m, kRight); m.ui.focus != lowerTabs[i%n] {
+			if m.ui.focus == PanelWork && m.lists.work.kanban != nil { // the Kanban keeps ←→ for its columns (the person, 2026-11-11)
+				if m = keys(t, m, kRight, kLeft); m.ui.focus != PanelWork {
+					t.Fatalf("%v: the arrows left the Kanban for %v", size, m.ui.focus)
+				}
+				m = keys(t, m, rune('1'+slices.Index(tabs, lowerTabs[i%n]))) // its digit leaves it
+			} else {
+				m = keys(t, m, kRight)
+			}
+			if m.ui.focus != lowerTabs[i%n] {
 				t.Fatalf("%v: right #%d focused %v, want %v", size, i, m.ui.focus, lowerTabs[i%n])
 			}
 		}

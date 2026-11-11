@@ -305,41 +305,53 @@ func (k *kanbanView) cardAt(mx, my, x, y, w, h int, sel string) string {
 	return ""
 }
 
-// step is ←→ on a selected card: the card at the same rank in the next or
-// previous column with a selectable card (else its last one). It returns ""
-// with no card selected, or past the first or last column: the arrows then
-// step the lower panel's tabs, as on every other tab.
+// step is ←→ on the Kanban: the card at the same rank in the next or
+// previous column with a selectable card (else its last one), wrapping
+// around the columns; with no card selected, the first card in that
+// direction. "" only when no column has a card. The arrows never step the
+// tabs here (the person, 2026-11-11): the digits do.
 func (k *kanbanView) step(sel string, next bool) string {
-	col, rank := -1, 0
-	for c, kc := range k.cols {
-		r := 0 // its rank among the column's selectable cards
-		for _, card := range kc.cards {
-			if card.key == "" {
-				continue
-			}
-			if card.key == sel {
-				col, rank = c, r
-			}
-			r++
-		}
-	}
-	if col < 0 {
-		return ""
-	}
-	d := 1
-	if !next {
-		d = -1
-	}
-	for c := col + d; c >= 0 && c < len(k.cols); c += d {
+	n := len(k.cols)
+	keysOf := func(c int) []string {
 		var keys []string
 		for _, card := range k.cols[c].cards {
 			if card.key != "" {
 				keys = append(keys, card.key)
 			}
 		}
-		if len(keys) > 0 {
+		return keys
+	}
+	col, rank := -1, 0
+	for c := range k.cols {
+		for r, key := range keysOf(c) {
+			if key == sel {
+				col, rank = c, r
+			}
+		}
+	}
+	d := 1
+	if !next {
+		d = -1
+	}
+	if col < 0 { // no card selected: the first card in that direction
+		for i := 0; i < n; i++ {
+			c := i
+			if !next {
+				c = n - 1 - i
+			}
+			if keys := keysOf(c); len(keys) > 0 {
+				return keys[0]
+			}
+		}
+		return ""
+	}
+	// Around the columns, wrapping (the person, 2026-11-11): never past an
+	// edge into the tabs; a lone non-empty column keeps its card.
+	for i := 1; i <= n; i++ {
+		c := ((col+d*i)%n + n) % n
+		if keys := keysOf(c); len(keys) > 0 {
 			return keys[min(rank, len(keys)-1)]
 		}
 	}
-	return ""
+	return sel
 }

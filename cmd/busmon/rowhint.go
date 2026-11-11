@@ -113,7 +113,7 @@ func (m Model) selectedItem(p PanelID) ListItem {
 // the picker's or a text mode's): Enter's on the selected row (rowHint),
 // else the binding's own.
 func (m Model) shellHint(act Action) string {
-	if act == ActTabNext && m.mode() == ModeShell && m.ui.focus == PanelWork && m.lists.work.kanban != nil && m.lists.work.Selected() != "" {
+	if act == ActTabNext && m.mode() == ModeShell && m.ui.focus == PanelWork && m.lists.work.kanban != nil {
 		return "column" // the Kanban: ←→ move between its columns
 	}
 	if act != ActOpen || m.mode() != ModeShell {
