@@ -1,39 +1,55 @@
 # Leaving herdr: a Go terminal host for the agents
 
-- Status: draft, for review (coder, foureyes) and for the person's decisions (§10)
-- Date: 2026-11-10
+- Status: **frozen after revision 14** — corrections only, no new features in this spec. For
+  review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
+- Date: 2026-11-10, revision 14 on 2026-11-11
 - Author: architect
 - Task: `herdr-exit-spec`
-- Base: `origin/main` at b3dd13a2
+- Base: `origin/main` at a3e60956 (revision 13 merged as PR 428)
+- Revision 14: the person's review of revision 13 and the decisions of 2026-11-11, every item
+  applied:
+  - **direct cutover**: no herdr adapter, no `HostView`, no `AtomicSubmit` flag, no
+    `terminal.host` setting, no shadow mode, no trial or default flip; `termhost` has two
+    adapters, `holder` and `fake`; §7 rewritten as a PR series ending in one cutover PR that
+    removes herdr (§4.8); the gate before cutover is the recorded raw fixtures per client (§6.4);
+    the person tags the last release with herdr before the cutover PR merges (§7);
+  - **submit simplified** (P1): viewer bytes are held for the whole submit; the submit guard,
+    Enter swallowing, `prefix y`, the OSC 2 title and the empty-input lift are removed; the
+    reasoning is checked in §4.2, with the one condition it needs (the line must be seen in the
+    input before CR);
+  - **cross-platform** (P1): a mode with no service manager (§4.4b); Windows out of scope, PTY
+    and process code one file per platform (§11);
+  - **cleanup owner** of per-build units and binaries, with a two-upgrade test (P2, §4.4a);
+  - **Codex `notify` verified**: it reports turn completion only; Codex's blocked comes from its
+    `PermissionRequest` hook (to verify by probe) and screen signatures (P2, §4.3, §4.9);
+  - **broker**: `valkey/valkey:9` with AOF in `docker-compose.yml`, floor Redis 7.2 / Valkey 7.2
+    (P3, §6.3, §6.5);
+  - **inconsistencies** fixed: §9 herdr residual row, user stories 4 and 25, the §6.5 guard test
+    wording (P3);
+  - **master told on blocked enter and leave** (P1, §4.3a);
+  - **background-work fact** in `agentstate` and the actions that skip such an agent (P1, §4.3b);
+  - **`attach.prefix` setting**, default F12, legacy and kitty encodings (P2, §4.6);
+  - **every client** as data, with the client matrix filled where verified (P1, §4.9); Gemini CLI
+    removed, DeepSeek out of scope;
+  - **§10 decisions** Q1–Q9 recorded, including the draft rule (§4.5).
 - Revision 13: reviewer-codex on r11 — `projectKinds` does not drive `--reset`; `{p}:events` gets
   an explicit place in busmon's purge list and its own replay/tail (§6.3, §6.5)
-- Revision 12: reviewer-codex on r9 — the guard lifts only on a verified **empty** input region
-  or `ctrl+\ y`, never on "the original text is gone" (a partial edit could still submit a wake
-  line or `/clear`) (§4.2, §8)
-- Revision 11: foureyes P3 on r9 — `ctrl+\` becomes a prefix key, so detach and "submit
-  anyway" no longer collide (§4.6, Q9); the person's Redis 7.4+/8/Valkey 9 ideas evaluated one
-  by one (§6.5)
-- Revision 10: foureyes P3s on r5/r6 and r8 — `WakeLine` caps the count at 999 instead of
-  refusing it (§4.2); one plain systemd unit per build, not a template (§4.4a)
-- Revision 9: reviewer-codex at dece79b9 — a left-behind line must not be committable by the
-  person's queued Enter (submit guard, §4.2); notice distinguishes wake line and `/clear`;
-  herdr residual lasts as long as a project runs on herdr (§4.2)
-- Revision 8: foureyes at dece79b9 — P2 one restartable unit cannot drain: per-build unit
-  instances, holder excluded from restart paths (§4.4a); P3 stale risk row, self-attested
-  ancestor proof (§4.7), linger under Q5
-- Revision 7: the person's review (written against bc2d8394), every item applied:
-  P1 paste→CR race (§4.2, §8); P1 resume caller proof by ancestor walk (§4.7, §8);
-  P2 drain keyed on build id, not protocol (§4.4); P2 holder crash recovery: restart policy,
-  no automatic relaunch, sentinel runbook (§4.4a); P2 broker persistence for `{p}:resume` and
-  Valkey (§4.7, §6.3); P3 step numbers in §7 and §9. The §10 questions stay open.
-- Revision 6: reviewer-codex at 2e769888 (the herdr residual has no hard bound)
-- Revision 5: reviewer-codex at bd371e32 (the herdr adapter cannot check and type atomically)
-- Revision 4: foureyes P2 at bd371e32 (names in `WakeLine` and in the submit frame)
-- Revision 3: reviewer-codex CHANGES at bc2d8394 (Runtime.Prompt still takes text; focus
-  fallback for viewers without focus reports)
-- Revision 2: foureyes CHANGES at bc2d8394 (P1 host-reported facts; P2 drain bound, wire-level
-  closed set, herdr callers outside dispatch, resume storage; P3 interrupt, macOS socket dir,
-  file count, step 8 split, socket enumeration)
+- Revision 12: reviewer-codex on r9 — the guard lifts only on a verified empty input region
+  (superseded in r14: the guard is gone)
+- Revision 11: foureyes P3 on r9 — attach prefix key; the person's Redis 7.4+/8/Valkey 9 ideas
+  evaluated one by one (§6.5)
+- Revision 10: foureyes P3s — `WakeLine` caps the count at 999 instead of refusing it (§4.2); one
+  plain systemd unit per build, not a template (§4.4a)
+- Revision 9: reviewer-codex at dece79b9 — submit guard, kind-specific notice, herdr residual
+  span (superseded in r14)
+- Revision 8: foureyes at dece79b9 — per-build holder units, holder excluded from restart paths
+  (§4.4a); self-attested ancestor proof (§4.7); linger under Q5
+- Revision 7: the person's review of bc2d8394 — paste→CR race (§4.2); resume caller proof by
+  ancestor walk (§4.7); drain keyed on build id (§4.4); holder crash recovery (§4.4a); broker
+  persistence (§4.7, §6.3); step numbers
+- Revisions 2–6: foureyes and reviewer-codex on bc2d8394, bd371e32, 2e769888 (host facts not a
+  state word, drain bound, wire-level closed set, names validated, `Prompt` takes a `Line`, focus
+  fails closed, herdr residual unbounded)
 
 ## 1. Problem
 
@@ -41,14 +57,19 @@ agent-bus runs every agent inside herdr (0.9.5, Rust). herdr gives us four thing
 own: the terminals the agents run in, the reading of each agent's state (`agent get`), typing
 into a pane (`agent prompt`), and the window the person looks at (workspaces, tabs, splits,
 the plugin overlay). 145 Go files mention it (`git grep -il herdr -- '*.go'` at b3dd13a2,
-tests included). Every herdr release can move a field we parse,
-the plugin contract binds our release to theirs, and a Rust toolchain sits in the critical path
-of a Go project. The person wants agent-bus to stop depending on herdr and to stay 100 % Go.
+tests included). Every herdr release can move a field we parse, the plugin contract binds our
+release to theirs, and a Rust toolchain sits in the critical path of a Go project. The person
+wants agent-bus to stop depending on herdr and to stay 100 % Go.
 
-The hard part is not running a program in a PTY. It is the **agent console**: knowing, for five
-different clients (Claude Code, Codex, Kimi, Grok, Antigravity/Gemini), whether the agent is
-idle, working, or waiting on a dialog; typing the wake line only when it is safe; letting the
-person watch, take over and give back a pane; and bringing an agent back after a restart.
+The hard part is not running a program in a PTY. It is the **agent console**: knowing, for
+every supported **client** (the CLI that runs the model, not the model: Claude Code, Codex CLI,
+Kimi CLI, Grok CLI, Antigravity `agy`), whether the agent is idle, working, blocked on a
+permission prompt, or still running background work; typing the wake line only when it is safe;
+letting the person watch, take over and give back a terminal; and bringing an agent back after a
+restart.
+
+The project is still in development: the person decided (2026-11-11) on a **direct cutover**,
+not a gradual migration with herdr kept alive beside the new host.
 
 ## 2. What herdr does for us today (inventory)
 
@@ -64,7 +85,7 @@ Read from `origin/main`. Grouped by the caller's need, not by herdr verb.
 | **Resume after herdr restarts** | `roles report-resume` (SessionStart hook) | `pane report-agent-session` | herdr's native restore re-runs our `agent-launch --resume` argv. |
 | **The person's window** | `busmon` in a pane, `busmon --pick`, `agentbus plugin`, `herdr-plugin.toml`, `setup.sh` link + key binding | `plugin pane open`, workspace events | Workspace events start a project's stopped services. |
 | **Liveness** | dispatcher supervisor, health | `workspace list` as ping, `session list --json` | "waiting for herdr". |
-| **Reporting about herdr itself** | `healthchecks.go` (version, plugin list, herdr probe), `suspendsnap.go` (herdr session), busmon `projects_admin.go` (workspaces per project), busmon `about.go` (herdr and plugin versions), `setup/plugin.go`, `setup/status.go`, `setup/uninstall.go` | `--version`, `plugin list`, `workspace list`, `session list` | Not agent-facing; they describe or install herdr. They move to `Host.Describe` in step 4 or die in step 16 (§7). |
+| **Reporting about herdr itself** | `healthchecks.go` (version, plugin list, herdr probe), `suspendsnap.go` (herdr session), busmon `projects_admin.go` (workspaces per project), busmon `about.go` (herdr and plugin versions), `setup/plugin.go`, `setup/status.go`, `setup/uninstall.go` | `--version`, `plugin list`, `workspace list`, `session list` | Not agent-facing. They move to `Host.Describe` or are deleted in the cutover PR (§7). |
 
 Two observations drive the design:
 
@@ -80,16 +101,16 @@ Two observations drive the design:
 
 Introduce the seam, keep herdr as the only adapter.
 - For: no new runtime, nothing to operate.
-- Against: does not meet the goal (Rust stays, plugin contract stays). Useful only as step 0.
+- Against: does not meet the goal (Rust stays, plugin contract stays).
 
 ### Option B — move to herdr-core (`hc`)
 
 herdr-core is the maintainer's new runtime: holder + core, raw attach, OSC 7501 status.
 - For: designed for exactly this (runtime, not multiplexer); a smaller API than herdr.
 - Against: still Rust, still someone else's release cadence; and its rule "status comes only
-  from OSC 7501, no screen detection, no vendor logic" means **none of our five clients would
+  from OSC 7501, no screen detection, no vendor logic" means **none of our clients would
   report a state** — they do not emit OSC 7501. We would keep all detection ourselves anyway.
-  Read as reference only, as the directive says.
+  Read as reference only.
 
 ### Option C — our own Go host, pure-Go emulator (recommended)
 
@@ -101,9 +122,8 @@ detection stays ours and moves above the seam; busmon becomes the view, with att
 As C, but the screen model is gostty: Ghostty's VT core, best fidelity, snapshots with restore.
 - For: fidelity (Kitty keyboard, wide chars, every mode), first-paint render for free.
 - Against: not Go. gostty is "no cgo" but **embeds a native Zig-built shared library** loaded
-  with purego and unpacked into the user's cache at init. A native blob per OS/arch in our
-  binary, a pinned Ghostty revision, and a loader that writes to disk at start. Against the
-  spirit of "100 % Go" (question Q3).
+  with purego and unpacked into the user's cache at init. Decided (Q3): tests only, as an oracle
+  behind a build tag.
 
 ### Option E — tmux as the host
 
@@ -113,24 +133,20 @@ As C, but the screen model is gostty: Ghostty's VT core, best fidelity, snapshot
 
 ### Challenge to master's proposal
 
-The proposal (step 0 = a `termhost` interface "list/create/run/read screen/send text+keys/close/
-pane state" with herdr as first backend; step 1 = a Go holder with creack/pty or ptyx and go-vte
-or gostty; busmon as view with attach) is the right shape. Three changes:
+The proposal (a `termhost` interface "list/create/run/read screen/send text+keys/close/pane
+state"; a Go holder with creack/pty or ptyx and go-vte or gostty; busmon as view with attach) is
+the right shape. Three changes:
 
 1. **"pane state" must not be in the interface.** State (idle/working/blocked) is a judgement
    from screen + hooks + process facts, and it is the part we must own and test across clients.
-   If the backend returns a state word, the herdr adapter returns herdr's and the Go adapter has
-   to reinvent it inside itself: two detectors, untestable against each other. The interface
-   returns **facts** (screen snapshot, foreground processes, viewer/typing activity, output
-   quiet time); one `agentstate` module judges, for every backend. herdr's own state word is
-   carried as one more *fact*, optional and labelled as the host's opinion (§4.2 `HostView`),
-   so nothing changes while herdr hosts the agents.
+   The interface returns **facts** (screen snapshot, process facts, viewer/typing activity,
+   output quiet time); one `agentstate` module judges.
 2. **"create/run" and "send text+keys" are too wide.** Callers never need a split, a tab or a
    raw key stream: they need "start this agent's command as a terminal named X in project P" and
    "submit one of the two fixed lines" (wake line, `/clear`). No interrupt: nothing calls one
    today, and adding one would be a new kind of automated write needing its own decision. A narrow
-   interface keeps herdr's layout out of the domain and keeps the dispatcher unable to type
-   anything but its fixed lines (a CLAUDE.md rule) — enforced by type, not by review.
+   interface keeps the dispatcher unable to type anything but its fixed lines (a CLAUDE.md rule)
+   — enforced by type, not by review.
 3. **go-vte is a parser, not a screen.** It turns bytes into Print/Execute/CSI callbacks; we
    would still write the grid (cursor, erase, scroll regions, SGR, wide chars, alt screen,
    modes). The emulator choice is a bake-off on recorded agent output (§6.4), not a given.
@@ -140,83 +156,87 @@ or gostty; busmon as view with attach) is the right shape. Three changes:
 
 ### 4.1 Vocabulary
 
+- **Client**: the CLI that runs the model (Claude Code, Codex CLI, Kimi CLI, Grok CLI,
+  Antigravity `agy`). Detection, hooks, resume and key bindings are per client, never per model.
+- **Client profile**: the data that describes one client (§4.9): its launch form, hooks,
+  signatures, background-work signals, helper processes, resume form, clear command, key bindings.
 - **Terminal**: one PTY running one program, owned by the host. Replaces herdr's *pane*.
   Identified by a `TermID` (opaque, unique for the host's lifetime) and named `<agent>` within
   its **project**. There are no tabs, splits or workspaces in the domain.
-- **Host**: the process that owns terminals. herdr in step 0, the **holder** (`agentbus holder`)
-  after.
+- **Host**: the process that owns terminals: the **holder** (`agentbus holder`).
 - **Screen**: a snapshot of a terminal's rendered lines (text and, per line, the SGR-styled
   form), cursor, and modes (bracketed paste, alt screen, focus reporting).
 - **Viewer**: a person's terminal attached to a Terminal (raw passthrough), or an observer
   (read-only).
-- **Activity**: when a viewer last typed, whether it holds an unsent draft, and when the program
-  last wrote output.
-- **Agent state**: the judgement `idle | working | blocked | unknown` plus `ready`, made by
-  `agentstate` from Screen + Activity + hooks + declared status. Never made by a host.
+- **Activity**: when a viewer last typed, whether a **draft** stands (§4.5) and since when, when
+  the program last wrote output.
+- **Process facts**: the terminal's process tree under the holder: pid and start time of each
+  descendant, its command name, its CPU time.
+- **Agent state**: the judgement `idle | working | blocked | unknown` plus `ready` and
+  `background` (§4.3b), made by `agentstate`. Never made by a host.
 
 ### 4.2 The seam: `termhost`
 
-One package, one interface, two adapters (herdr, holder) plus an in-memory fake for tests.
-Shape (prose first; the type sketch only fixes the decision):
+One package, one interface, two adapters: `holder` (the client side of the holder's socket) and
+an in-memory `fake` for tests. Shape (prose first; the type sketch only fixes the decision):
 
 ```go
 type Host interface {
     // Start runs spec as a new terminal. It never reuses an existing one.
-    Start(ctx, Spec) (Term, error)          // Spec: project, name, cwd, argv, env, size
-    List(ctx, project string) ([]Term, error) // Term: id, name, pid, pidStart, alive, viewers
-    Close(ctx, TermID) error                 // SIGHUP, then SIGKILL after a grace period
+    Start(ctx, Spec) (Term, error)            // Spec: project, name, cwd, argv, env, size
+    List(ctx, project string) ([]Term, error) // Term: id, name, pid, pidStart, alive, viewers, build
+    Close(ctx, TermID) error                  // SIGHUP, then SIGKILL after a grace period
     Screen(ctx, TermID, lines int) (Screen, error)
-    Activity(ctx, TermID) (Activity, error)  // viewer typing/draft, output quiet, foreground procs
-    Submit(ctx, TermID, Line) error          // Line: a closed set (wake line, /clear), see below
+    Activity(ctx, TermID) (Activity, error)   // viewer typing, draft, output quiet
+    Processes(ctx, TermID) ([]Proc, error)    // the terminal's process tree (§4.3b)
+    Submit(ctx, TermID, Line) error           // Line: a closed set (wake line, /clear), see below
     WaitScreen(ctx, TermID, match string, d time.Duration) (bool, error)
     Ping(ctx) error
+    Describe(ctx) (HostInfo, error)           // builds, sockets, terminal counts, draining builds
 }
 ```
 
-`Activity` carries an optional `HostView` — `{State, Client, Focused}` as the host itself
-judges them — set **only by the herdr adapter** (from `agent get`), nil from the holder and the
-fake. It is how herdr's judgement reaches the dispatcher in steps 1–14 (and on any project still on herdr) without a state word in
-the interface's contract: `agentstate` uses it as its source of state, client and focus while
-`terminal.host=herdr`, exactly as `Inspect` uses `agent get` today (dispatch/herdr.go:422), so
-steps 1–5 change no behaviour. From step 6, `agentstate` also computes its own judgement from
-the other facts and shadow mode logs every disagreement with `HostView`. At cutover (`holder`)
-`HostView` is nil and only our judgement remains; the field is deleted with the herdr adapter.
-
 Interface rules (part of the interface, not comments):
-- `Submit` takes a `Line`, a type whose only constructors are `WakeLine(nonce, …)` and
-  `ClearLine()`. No free text crosses the seam from the dispatcher. It types as a paste
-  (bracketed when the program enabled mode 2004), waits ~200 ms, then sends CR.
-- **Re-check before CR.** A person can start typing during that ~200 ms. Viewer input is held
-  in the terminal's input queue while a submit is in flight, and immediately before CR the
-  holder re-checks person-active (§4.5) including any viewer bytes held since the paste began.
-  If a person became active it does **not** send CR and returns `ErrPersonActive`; then:
-  - it clears the pasted line **only when that is safe**: the client's signature declares a
-    clear-input key (e.g. `ctrl+u` where probed) and the current input region (§4.3) holds
-    exactly the pasted text and nothing else; it sends that key, checks the input region is
-    empty, and only then releases the held viewer bytes;
-  - otherwise it leaves the pasted text in place and arms a **submit guard** on that terminal,
-    so the left-behind line cannot be committed by a key the person did not mean for it:
-    - the held viewer bytes are released **with every submit key removed** (CR, LF, and the
-      Enter encodings of kitty keyboard `CSI 13…u` and modifyOtherKeys `CSI 27;…;13~`); the
-      other bytes go in after the pasted text, as typed;
-    - while the guard stands, every further viewer submit key is swallowed, not forwarded;
-    - the guard lifts only when the input region (§4.3) is **verified empty** (the client's
-      Ready signature matches its empty input on a settled screen, checked after each viewer
-      byte), or when the person explicitly acknowledges. "The left-behind text is no longer
-      there" is not enough: after a partial edit what remains can still be a wake line or
-      `/clear`, and Enter would submit it. A client whose empty input cannot be recognised keeps
-      the guard until the acknowledgement. The explicit acknowledgement is the attach prefix followed by
-      `y` (`ctrl+\ y`: "submit anyway"), after which submit keys flow again;
-    - the attach client shows the guard without touching the agent's screen: bell once, and the
-      outer terminal's title (OSC 2) set to `agentbus: <kind> left in <agent>'s input — clear
-      the input, or ctrl+\ y to submit anyway`, restored when the guard lifts;
-    - the dispatcher records a person notice naming the **kind**: "wake line left unsent in
-      <agent>'s input" for a `WakeLine`, "`/clear` left unsent in <agent>'s input — submitting
-      it clears the conversation" for a `ClearLine`.
-    It never sends a key it has not probed for that client, and never discards a printable byte
-    the person typed.
-  On the herdr adapter (`AtomicSubmit = false`) no re-check is possible between paste and CR
-  (`agent prompt` is one call); this is part of the residual stated below.
+
+- `Submit` takes a `Line`, a type whose only constructors are `WakeLine(…)` and `ClearLine()`.
+  No free text crosses the seam from the dispatcher.
+- **Submit is one critical section on the terminal's input lock**, which every viewer's input
+  also takes. Under the lock the holder:
+  1. checks person-active (§4.5) and the client's Ready signature on a settled screen; either
+     fails → `ErrPersonActive` / `ErrNotReady`, nothing written;
+  2. **holds** every viewer byte that arrives from now on (all viewers; a per-terminal queue,
+     never dropped: when the queue reaches 1 MiB the holder stops reading the viewers' sockets,
+     which back-pressures them);
+  3. types the line as a paste (bracketed when the program enabled mode 2004);
+  4. waits until the line is **seen in the input** (the wake line's nonce, or `/clear`, in the
+     client's input region on a settled screen), up to `dispatch.submit_wait` (default 2 s);
+  5. if seen, sends CR; if not, sends nothing more and returns `ErrNotLanded` (below);
+  6. releases the held viewer bytes, in order, and the lock.
+
+  **Why no guard is needed any more (the reasoning the person asked to check).** The old guard
+  existed for one case: a person's bytes arriving between the paste and the CR, mixing with the
+  pasted line or committing it with their Enter. Holding the viewer bytes for the whole submit
+  removes that case: between step 2 and step 6 no viewer byte reaches the program. Step 1
+  guarantees the input held no draft before the paste (a draft is any viewer byte since the
+  last CR, §4.5, and the holder sees every viewer byte because every viewer goes through it).
+  So when CR is sent the input holds the pasted line and nothing else, and the person's held
+  keys (their Enter included) are delivered **after** the line was submitted, as a new input.
+  The reasoning holds under two conditions, both enforced, not assumed:
+  - **every byte reaches the program through the holder** — true by construction: the holder
+    owns the PTY master; `agentbus attach` is the only way to type, and there is no herdr
+    beside it after the cutover;
+  - **the line landed in the input before CR** — step 4. Without it, a dialog that opened
+    between step 1 and the paste would receive the paste, and CR would answer the dialog. When
+    the line is not seen, no CR is sent and nothing is cleared: the holder never sends a key it
+    has not probed, and the case is rare (a dialog or a redraw in the same ~200 ms). The
+    dispatcher records a person notice and an event naming the kind — "wake line may be left
+    unsent in <agent>'s input" or "`/clear` may be left unsent in <agent>'s input — submitting it
+    clears the conversation" — and the agent's row shows it until the next settled Ready screen
+    without it. This is the only left-behind case, and it no longer depends on the person typing.
+
+  Remaining cost, accepted (the person, 2026-11-11): the person's keys typed during a submit are
+  delayed by the submit (about 200 ms plus the landing wait) and reach an agent that has just
+  started a turn. Annoying, not unsafe.
 - **The closed set holds on the wire too.** A Go type protects only inside one process; the
   holder is reached over a socket. So the holder's submit frame carries only
   `{kind: wake|clear, term, nonce, count}` — no text field and **no names** — and the **holder
@@ -228,30 +248,14 @@ Interface rules (part of the interface, not comments):
   refused.
   The only frame that carries raw input bytes is the attach stream (§4.6), opened by a person's
   `agentbus attach`; observer attaches carry none. This is a trust boundary between same-uid
-  processes, so §4.4 and §4.6 go to the **security role** for review before step 9 starts.
-- `Submit` refuses (typed error `ErrPersonActive`) when a person is active (§4.5). How strong
-  that refusal is depends on the adapter, and the interface says so: `HostInfo.AtomicSubmit`.
-  - **holder** (`AtomicSubmit = true`): the check and the write happen under the terminal's
-    input lock, which every viewer's input also takes; no viewer byte can land between the
-    check and the last byte of the line. This closes the inspect→type race.
-  - **herdr** (`AtomicSubmit = false`): herdr has no check-and-prompt call. The adapter does
-    what the dispatcher does today: a fresh `agent get` for focus right before `agent prompt`,
-    then the prompt. The residual window is the time between the end of the first call and the
-    start of the second: normally one CLI round-trip, but **without a hard bound**
-    (`herdrCallTimeout` limits each call on its own, not the gap; a scheduler pause can stretch
-    it). This is **today's documented residual, unchanged**, and it stays for as long as a project runs on herdr: every project until step 10 (the
-    holder becomes opt-in), all but the trial project at step 14, every project not yet
-    switched until step 15 flips the default, and any project kept on herdr after that until
-    step 16 removes the adapter; the
-    spec claims no improvement for herdr.
-  - The contract suite's race test (a viewer types concurrently with `Submit`; no interleaving,
-    or a refusal) runs only on adapters with `AtomicSubmit`; on the others the suite checks only
-    the pre-typing refusal. busmon's About/health shows `atomic submit: no` for a herdr project.
+  processes, so §4.4 and §4.6 go to the **security role** for review before the holder PR
+  (§7 step 5).
 - `Start` puts `AGENTBUS_TERM_ID` and `AGENTBUS_HOST` in the program's environment, and returns
   the pid it spawned. Identity no longer needs a process search: the host knows its child.
 - Every call reports what it observed, never what it assumed (herdr-core's rule, adopted).
 
-Where callers land:
+Where callers land (all in the cutover PR, §7 step 10, except the `Line` change):
+
 - `dispatch.Runtime` keeps its three operations, but **`Prompt` loses its text parameter**:
   today it is `Prompt(ctx, pane, text, nonce string)` and only checks that `text` contains the
   nonce marker, so any string still crosses the seam. It becomes
@@ -266,46 +270,121 @@ Where callers land:
   then always holds. Test at 999, 1000 and a very large count.
   `Line` has unexported fields and no exported constructor from a string, so no caller in any
   package can make one carry other text; the observed marker is read from the `Line`, not
-  passed beside it. This change lands in step 1, with a test that fails if any exported
-  function of `dispatch` or `termhost` takes a `string` that reaches `Submit`. Over the
-  holder's socket the same set is enforced by the frame (below). `Inspection` keeps its fields;
-  `State`, `Ready`, `Busy` come from `agentstate`, `Focused` becomes "person active".
+  passed beside it. This change lands in step 1 on today's herdr `Runtime` (same wake line
+  typed), with a test that fails if any exported function of `dispatch` or `termhost` takes a
+  `string` that reaches `Submit` or `Prompt`. `Inspection` keeps its fields; `State`, `Ready`,
+  `Busy` come from `agentstate`, `Focused` becomes "person active".
 - `up`, `start`, `restore`, `relaunch`, `swap`, `suspend`, self-repair call `Start/List/Close`
-  only. The herdr adapter maps a project to a workspace and an agent to a tab; that mapping
-  lives in the adapter and dies with it.
-- Identity: `status`/`bind` record `AGENTBUS_TERM_ID` (with the herdr adapter, the pane id) in
-  the existing `pane` field; the verified pid+start rule is unchanged.
+  only.
+- Identity: `status`/`bind` record `AGENTBUS_TERM_ID` in the existing `pane` field; the verified
+  pid+start rule is unchanged.
 
-### 4.3 `agentstate`: one detector for every host
+### 4.3 `agentstate`: one detector for every host and every client
 
 Inputs, strongest first:
 1. **Declared status and turn hooks** (already on the bus: `status`, `bus.TurnState` from
-   UserPromptSubmit/Stop/SessionStart). Working/idle at turn edges are exact for Claude, Grok,
-   Codex.
-2. **Client hooks for "waiting on the person"**: Claude Code's `Notification` hook
-   (permission prompt), Codex's `notify`. Each wired in the launcher, writing an observed
-   `blocked` (not a declared one). Today `blocked` comes from herdr's `agent get`; this is the
-   single largest piece of herdr intelligence we must replace, and hooks replace it more
-   reliably than screen text.
-3. **Screen signatures** (existing `Signatures`: Ready, Busy, Modal, Dialog, plus new
-   `Blocked` patterns per client for permission menus, pinned by captured screens).
+   UserPromptSubmit/Stop/SessionStart). Working/idle at turn edges are exact for the clients
+   whose turn hooks are wired today: Claude Code, Codex, Grok (auto-state spec 2026-11-01).
+2. **Client hooks for "waiting on the person"**, per client (§4.9): Claude Code's
+   `Notification` hook with the `permission_prompt` matcher (and its `PermissionRequest` hook);
+   Codex's `PermissionRequest` hook. Each wired by the launcher, writing an observed `blocked`
+   (not a declared one). Today `blocked` comes from herdr's `agent get`; this is the single
+   largest piece of herdr intelligence we must replace.
+   **Codex `notify` does not report approvals** (verified on codex-cli 0.166.0): the external
+   `notify` program receives one event type, `agent-turn-complete` (payload fields `thread-id`,
+   `turn-id`, `cwd`, `client`, `input-messages`, `last-assistant-message`); `approval-requested`
+   exists only as one of the TUI's own desktop-notification kinds, not as a `notify` event. So
+   `notify` is not a blocked source. Codex 0.166 has a hook system with a `PermissionRequest`
+   event (in its hook schema); whether it fires for every approval the TUI shows is **to verify**
+   by the probe in §4.9. Until verified, Codex's blocked comes **from screen signatures only**,
+   and the Codex approval screens join the fixtures (§6.4).
+3. **Screen signatures** (existing `Signatures`: Ready, Busy, Modal, Dialog, plus new `Blocked`
+   patterns per client for permission menus, pinned by captured screens). For a client with no
+   blocked hook (Kimi, Grok and `agy` today, §4.9) this is the only blocked source.
 4. **Activity**: output quiet for ≥ 800 ms replaces "two reads 200 ms apart agree" as the
-   settle test (both kept until the trial shows one suffices).
+   settle test.
 
-The **client** is no longer detected: it comes from the agent's launch profile (`roles.toml`
-→ client), cross-checked with the foreground process name. A client without signatures is
-unsupported and never prompted, as today. Gemini CLI has none yet (Q7).
+**Leaving blocked**: the blocked hook's matching end (a `PostToolUse`, `Stop` or
+`UserPromptSubmit` after it), or the `Blocked` signature no longer matching on a settled screen.
+
+The **client** is no longer detected: it comes from the agent's launch profile (`roles.toml` →
+client), cross-checked with the foreground process name. A client without a verified blocked
+source and screen signatures is **unsupported**: never prompted, never cleared (§4.9).
+
+### 4.3a Master is told when an agent is blocked
+
+Today blocked is written to `{p}:observed` (and, from this spec, `{p}:events`), but nobody is
+told. On the model of the self-repair watcher's reports (spec 2026-11-09 §5: one line to master
+on the bus per event, plus a ledger entry):
+
+- **Enter.** When `agentstate` judges an agent blocked (the hook, or the `Blocked` signature on
+  two settled screens), the dispatcher sends master one report: `blocked: <agent> (<client>)
+  since HH:MM:SS — <screen>`, where `<screen>` is what the matched signature names (e.g. the
+  tool line of the permission menu), when it names something. The screen text is the agent's
+  output, so it is treated as data: one line, control characters stripped, capped at 120
+  characters, quoted, and labelled `screen:`. The report is from `dispatch` (fenced, like every
+  dispatcher write) and wakes master by the ordinary rules.
+- **Leave.** One report when the episode ends: `unblocked: <agent> after 3m12s`.
+- **One episode, one pair.** The episode is the prompt-notify decision's (2026-10-27): the same
+  rule that rings the desktop once per episode decides when a new enter is sent, so a flapping
+  screen does not flood master.
+- **What master may do.** Master cannot answer a permission prompt: only the person can, by
+  attaching. Master may reroute work and escalate to the person. The desktop ring for the person
+  stays (user story 13).
+- `{p}:events` records `blocked` and `unblocked` with the same fields (§6.5).
+
+### 4.3b Background work: subagents and background tasks
+
+An agent can end its turn (it looks idle) while a subagent or a background command still runs.
+A `/clear`, a relaunch or a drain at that moment loses work or context. `agentstate` therefore
+judges one more fact per agent: **background**, `none | running(<what>) | unknown`, from three
+sources, any one of which says running:
+
+- **Process facts.** The holder is the agent's parent and sees its process tree
+  (`Host.Processes`: pid, start time, command name, CPU time). Long-lived helpers are always
+  children — MCP servers, language servers, the client's own daemons — so "has children" is not
+  enough. A descendant counts as background work when it is **not** in the client profile's
+  helper list (§4.9: command-name patterns, plus every MCP server the launcher configured), or
+  when it is a helper that is **active** (CPU time grew by more than `agentstate.helper_cpu`,
+  default 2 % of the window, over the last 10 s). Not every client keeps its tools under its own
+  process: Codex runs through a shared local app-server daemon and Grok has a shared leader
+  process (auto-state spec 2026-11-01), so for them a command may not be a descendant of the
+  terminal at all. The client profile states whether process facts are authoritative for it;
+  where they are not, they can say running but never prove none.
+- **Hooks**, where the client has them: subagent start/stop pairs (Claude Code
+  `SubagentStart`/`SubagentStop`, Codex and Grok the same names, Kimi none), `agy`'s `Stop` hook
+  field `fullyIdle` ("true if all background tasks are done"), tool hooks for background shells
+  where the client marks them. Counts reset at `SessionStart` and when the process ends, so a
+  lost stop event cannot hold the fact forever.
+- **Screen signatures** for clients that show running tasks (a background-tasks footer, Codex's
+  "Background terminals" list), pinned by fixtures.
+
+The judgement is `none` only when every source the client profile declares authoritative says
+none; `unknown` counts as running for the rule below (fail closed).
+
+**Rule.** While background work is observed, a **wake is allowed** (typing a wake line starts a
+turn and loses nothing), but these skip the agent: `/clear`, auto-clear, relaunch, swap,
+suspend, pop-retire and `holder drain`. Automated actions (auto-clear, pop-retire, `holder
+drain`'s rolling relaunch) skip and retry on their next pass; a command run by master or the
+person (`relaunch`, `swap`, `suspend`) refuses with what is running (`coder: skipped —
+background work: subagent ×2, process 'pytest' 4m`) and accepts `--ignore-background` from the
+person or master, never from an automated caller. `agentbus down` warns with the same list.
+Self-repair is unaffected: it acts only on a dead agent, which has no background work.
+
+Contract and table tests per client: each source alone says running; helpers idle → none;
+an active helper → running; a lost stop event cleared by `SessionStart`; a client whose process
+facts are not authoritative never yields none from process facts alone; each skipping action
+skips and each command refuses without the flag.
 
 ### 4.4 The holder (`agentbus holder`)
 
-- One process **per project** (Q4), started as a project service (systemd user unit /
-  launchd agent, like `dispatch` and `missions`), socket under
-  `<rundir>/agentbus/<project>/holder-<protoversion>.sock`, mode 0600, directory 0700, same-uid
-  peer check (`SO_PEERCRED` on Linux, `getpeereid` on macOS). `<rundir>` is `$XDG_RUNTIME_DIR`
-  when set (Linux with a user session); otherwise (macOS, Linux without logind) a per-uid
-  directory `$TMPDIR/agentbus-<uid>` (falling back to `/tmp/agentbus-<uid>`), created 0700 and
-  refused if it exists with another owner or wider mode. A unix socket path must fit in 104
-  bytes on macOS: the path is checked at start and the holder refuses to run with a clear error.
+- One process **per project** (Q4), started as a project service (§4.4a, §4.4b), socket
+  `<rundir>/agentbus/<project>/holder-<buildid>.sock`, mode 0600, directory 0700, same-uid peer
+  check (`SO_PEERCRED` on Linux, `getpeereid` on macOS). `<rundir>` is `$XDG_RUNTIME_DIR` when
+  set (Linux with a user session); otherwise (macOS, Linux without logind) a per-uid directory
+  `$TMPDIR/agentbus-<uid>` (falling back to `/tmp/agentbus-<uid>`), created 0700 and refused if
+  it exists with another owner or wider mode. A unix socket path must fit in 104 bytes on macOS:
+  the path is checked at start and the holder refuses to run with a clear error.
 - Owns the PTYs (creack/pty), is every agent's parent, reaps them, always reads output (a slow
   viewer never blocks a program: per-viewer bounded queue, a viewer that falls behind is
   repainted, herdr-core's rule).
@@ -314,189 +393,299 @@ unsupported and never prompted, as today. Gemini CLI has none yet (Q7).
 - Wire: length-prefixed frames on a unix socket; JSON control frames, raw bytes for terminal
   data; hello/welcome carry the protocol version **and the build id** (the `buildinfo` version
   plus VCS revision, the same id `agentbus --version` prints); `Describe` reports both.
-- **Upgrade without killing agents**: the socket is named by build, not by protocol:
-  `holder-<buildid>.sock`. **Any new build drains, same protocol or not** — a same-protocol
-  bug-fix build never replaces the old socket, because replacing a holder means killing its
-  agents. The new build listens on its own socket and takes new terminals; the old one refuses
-  new terminals and exits when its last terminal ends (herdr-core's "older build drains" rule).
-  Clients list every holder socket of the project and speak to each in its own protocol version
-  (a client too old for a holder's protocol says so and does not touch it).
-  `holder_draining` compares build ids, so a bug-fix build is reported like a protocol change.
-  No fd-passing, no state migration. **The drain has no natural bound**: `/clear` and
-  auto-clear type into the same process and end no terminal; only relaunch, swap, suspend and
-  self-repair do. An old holder can therefore serve for as long as its agents live. Two things
+- **Upgrade without killing agents**: the socket is named by build, not by protocol. **Any new
+  build drains, same protocol or not** — a same-protocol bug-fix build never replaces the old
+  socket, because replacing a holder means killing its agents. The new build listens on its own
+  socket and takes new terminals; the old one refuses new terminals and exits when its last
+  terminal ends (herdr-core's "older build drains" rule). Clients list every holder socket of
+  the project and speak to each in its own protocol version (a client too old for a holder's
+  protocol says so and does not touch it). `holder_draining` compares build ids. No fd-passing,
+  no state migration. **The drain has no natural bound**: `/clear` and auto-clear type into the
+  same process and end no terminal; only relaunch, swap, suspend and self-repair do. Two things
   bound it:
   - `agentbus health` reports `holder_draining` (warn) with the old build id, its age and its
     terminals; after `holder.drain_warn` (default 24 h) it is shown in For you.
   - `agentbus holder drain <project>` finishes it on the person's word: a rolling relaunch of
     each terminal still on the old build, one agent at a time, through the existing relaunch
     path (new terminal, proof, close the old one — relaunch-close decision), skipping an agent
-    that is working or has a person active. It is never automatic: relaunching an agent is a
-    person's or master's decision, not the holder's.
+    that is working, has a person active or a draft, or has background work (§4.3b). It is never
+    automatic.
 - The holder runs no repository code and makes no bus writes; facts it exposes are read by the
   dispatcher, which keeps doing the fenced writes. (The dispatcher stays the one automated pane
   writer: the holder types only what `Submit` hands it.)
 
-### 4.4a Holder crash and restart
+### 4.4a Holder crash, restart and cleanup (with a service manager)
 
 The holder is every agent's parent and holds every PTY master: when it dies, the kernel hangs
 up every terminal and the project's agents die with it. Nothing in this design hides that; it
 bounds and reports it.
 
-- **One unit per build (an "instance" below = one such unit), never restarted to upgrade.** A single restartable unit
-  cannot drain: starting a new build would mean restarting the unit, and with
-  `KillMode=control-group` that kills every agent. So each (project, build) gets **its own plain
-  unit file**, `agentbus-holder-<project>-<buildid>.service` (systemd; `<buildid>` reduced to
-  `[a-z0-9.-]`), not a template: a template `agentbus-holder@.service` has one `ExecStart` for
-  all instances, systemd cannot split `%i` into project and build, and rewriting the template
-  on upgrade would change the binary of every old instance at its next restart. On macOS a
-  launchd job per build, label `com.agentbus.holder.<project>.<buildid>` (one plist per label
-  already). An upgrade **writes and starts a new unit** beside the old one; it never edits,
-  stops or restarts an old unit, and removes an old unit file only after its holder exited 0
-  for good. Each instance has its own cgroup, so the old
-  build's agents live on in theirs.
+- **One unit per build (an "instance" below = one such unit), never restarted to upgrade.** A
+  single restartable unit cannot drain: starting a new build would mean restarting the unit, and
+  with `KillMode=control-group` that kills every agent. So each (project, build) gets **its own
+  plain unit file**, `agentbus-holder-<project>-<buildid>.service` (systemd; `<buildid>` reduced
+  to `[a-z0-9.-]`), not a template: a template has one `ExecStart` for all instances, systemd
+  cannot split `%i` into project and build, and rewriting the template on upgrade would change
+  the binary of every old instance at its next restart. On macOS a launchd job per build, label
+  `com.agentbus.holder.<project>.<buildid>`. An upgrade **writes and starts a new unit** beside
+  the old one; it never edits, stops or restarts an old unit. Each instance has its own cgroup,
+  so the old build's agents live on in theirs.
 - **Each instance runs its own build.** The installer copies the holder binary to
   `<datadir>/agentbus/holder/<buildid>/agentbus` (0755, owner only) and the instance's
-  `ExecStart` / `ProgramArguments` points there, not at the installed `agentbus`, which the
-  next upgrade replaces. A crashed old instance therefore restarts its own build, not the new
-  one under the old name. The copy is removed when its instance exits for good.
+  `ExecStart` / `ProgramArguments` points there, not at the installed `agentbus`, which the next
+  upgrade replaces. A crashed old instance therefore restarts its own build.
 - **Restart policy, per instance.** systemd: `Restart=on-failure`, `RestartSec=2`,
-  `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `KillMode=control-group` (a crash leaves no
-  orphaned agent in that instance). launchd: `KeepAlive = {SuccessfulExit = false}`,
-  `ThrottleInterval = 10`. A holder that has no terminals and is **not** its project's current
-  build (the newest instance) exits 0 at once: a drained or crashed old build retires instead of
-  coming back empty. `agentbus down` stops every instance of the project; each exits 0.
+  `StartLimitIntervalSec=300`, `StartLimitBurst=5`, `KillMode=control-group`. launchd:
+  `KeepAlive = {SuccessfulExit = false}`, `ThrottleInterval = 10`. A holder that has no
+  terminals and is **not** its project's current build exits 0 at once: a drained or crashed old
+  build retires instead of coming back empty. `agentbus down` stops every instance of the
+  project; each exits 0.
+- **Cleanup: owned by `agentbus service gc`.** A unit file and its binary copy are removed by
+  one command, never by the holder itself (a unit deleting its own file while systemd runs it is
+  fragile, and a crashed holder never runs its exit path). `service gc <project>` removes, for
+  every build that is **not** the project's current build, the unit (`systemctl --user disable`
+  then the file, then `daemon-reload`; launchd `bootout` then the plist) and
+  `<datadir>/agentbus/holder/<buildid>/` — only when that build's instance is **not active**
+  (systemd `is-active` inactive or failed; launchd not loaded) and no holder socket of that build
+  answers. It never touches the current build or a running instance. It runs at three moments:
+  every install or upgrade (after the new unit is started), every `agentbus up`, and `agentbus
+  holder drain` when the last old terminal has gone. `agentbus health` reports
+  `holder_leftovers` (warn) when an inactive old build's unit or binary is still present after a
+  gc, so a failure to clean is seen.
+  Test (fake `systemctl`/`launchctl`, temp datadir): install A, upgrade to B, upgrade to C; A's
+  and B's holders exit → after the gc only C's unit and binary remain; with B still active
+  after the second upgrade, B's unit and binary are kept and C's start; a gc never stops a unit.
 - **Excluded from every restart path.** The holder makes no Redis connection (§4.4), so a
   password change does not concern it: `setup/rotate.go`'s `restartRunningServices` and
-  `setup/plugin.go`'s `ServicesHint` ("services keep running the previous agentbus until
-  restarted") skip holder instances by kind, with a test for each. `agentbus service restart`
-  refuses the holder unless `--kill-agents` is given, and says how many agents it would kill.
-  An upgrade's only holder action is "start the new build's instance".
+  `setup/plugin.go`'s `ServicesHint` skip holder instances by kind, with a test for each.
+  `agentbus service restart` refuses the holder unless `--kill-agents` is given, and says how
+  many agents it would kill. An upgrade's only holder actions are "start the new build's
+  instance" and the gc.
 - **The restarted holder starts empty and relaunches nothing.** Starting agents is a decision
-  (cost, quota, the person's intent); a crash loop that relaunches five clients each time would
-  burn quota. Agents come back by one of the two paths that already exist: `agentbus up
-  <project>` (the person or master), which uses `{p}:resume` (§4.7); or the dispatcher's
-  self-repair (decision 2026-11-09) once built and enabled, which `Start`s a new terminal per
-  dead agent with its recorded resume argv, under that decision's own rules and limits.
+  (cost, quota, the person's intent). Agents come back by one of the two paths that already
+  exist: `agentbus up <project>` (the person or master), which uses `{p}:resume` (§4.7); or the
+  dispatcher's self-repair (decision 2026-11-09) once built and enabled, which `Start`s a new
+  terminal per dead agent with its recorded resume argv, under that decision's own rules.
 - **Detection.** `agentbus health` gains `holder` (crit when the project's service is enabled
   and no holder answers; warn `holder_restarted` with the time and the number of terminals lost
   when a holder's start time is newer than the agents' last proved identities).
 - **Sentinel runbook entry** (`agent-bus-sentinel` skill): on `holder` crit, the one allowed
-  action is the documented service start of the project's current holder instance
-  (`agentbus service start holder`), never `restart` of a running one, once per
-  episode, and only for an instance that is down (the restart of a down instance kills nothing);
-  then annotate and escalate to master/the person with the list of agents lost. Never
-  `agentbus up`, never relaunch an agent: that stays master's or the person's. On
-  `holder_restarted` warn: escalate only.
+  action is the documented service start of the project's current holder instance (`agentbus
+  service start holder`), never `restart` of a running one, once per episode, and only for an
+  instance that is down; then annotate and escalate to master/the person with the list of agents
+  lost. Never `agentbus up`, never relaunch an agent. On `holder_restarted` warn: escalate only.
+- **Lifetime (Q5, decided).** Services start at login **without linger**, as the existing option
+  `services.start_at_login`; logging out (or the last ssh session closing) ends the team on a
+  systemd host. Agents come back through `up` or self-repair with their recorded resume.
 
-### 4.5 The focus rule, restated for a host without focus
+### 4.4b No service manager (Linux without systemd, or by choice)
+
+agent-bus must run where neither systemd nor launchd is available (a Linux without systemd, a
+container) and on macOS and Linux by choice. A new setting `services.manager`
+(`auto | systemd | launchd | none`, default `auto`: systemd when `systemctl --user` answers,
+launchd on macOS, otherwise `none`) selects the mode. It applies to every project service
+(holder, dispatch, missions), not only the holder.
+
+With `none`:
+- **Start.** `agentbus up <project>` starts each project service **detached**: a small
+  supervisor process, `agentbus service supervise <kind> <project> <buildid>`, started in its own
+  session (`setsid`), stdio to `<statedir>/agentbus/logs/<project>-<kind>.log`, which runs the
+  service (the holder from its per-build binary copy, as in §4.4a). The supervisor's pid and
+  start time are written to `<rundir>/agentbus/<project>/<kind>-<buildid>.pid`; a second `up`
+  finds it alive and starts nothing.
+- **Same restart rules.** The supervisor applies §4.4a's policy itself: restart on a non-zero
+  exit after 2 s, at most 5 starts in 300 s, then it stops and the `holder` health check goes
+  crit; an exit 0 ends the supervisor. A holder crash leaves the PTYs hung up as under systemd;
+  as there is no cgroup, the supervisor then kills the process groups the holder recorded for its
+  terminals (`<rundir>/…/holder-<buildid>.pgids`, pid and start time each, so a reused pid is not
+  killed) — the equivalent of `KillMode=control-group`.
+- **Same drain rules.** Builds are told apart by socket and by pidfile, as with units: an upgrade
+  starts the new build's supervisor beside the old one, never stops an old one; `service gc`
+  removes an old build's binary copy and pidfile once its supervisor is gone.
+- **Stop.** `agentbus down` signals each supervisor (SIGTERM; it stops its service, which exits
+  0). `agentbus service restart` keeps its `--kill-agents` rule.
+- **What does not exist without a manager.** No start at login (`services.start_at_login` is
+  refused with the reason), and whether the processes survive a logout depends on the system
+  (logind with `KillUserProcesses=yes` ends them). Both are stated by `agentbus service status`.
+- Tests: the supervisor's restart, burst and exit-0 rules with a scripted program; the
+  process-group kill skips a reused pid; `up` twice starts one supervisor; an upgrade starts a
+  second supervisor and leaves the first.
+
+### 4.5 The focus rule and drafts, restated for a host without focus
 
 Today: "never type into a focused pane" — herdr knows which pane has focus. A holder has no
-window; it has viewers. Proposed rule (Q2 decides the threshold):
+window; it has viewers. Decided rule (Q2 a):
 
 > The dispatcher never types into a terminal while a person is **active** in it: a viewer has
-> typed within `dispatch.person_quiet` (default 3 s), or holds an unsent draft (typed bytes
-> since the last CR, up to `dispatch.draft_wait`, default 60 s), or a non-observer viewer is
-> attached and **not proven unfocused**.
+> typed within `dispatch.person_quiet` (default 3 s), or a **draft** stands, or a non-observer
+> viewer is attached and **not proven unfocused**.
 
-"Proven unfocused" fails closed. Whether a viewer's terminal supports focus reports (mode 1004)
-cannot be queried; it can only be observed. So `agentbus attach` enables 1004 on the outer
+**Drafts.** A draft is the viewer bytes typed since the last CR the person sent (focus reports
+are control frames, not input, and mouse reports — SGR `CSI < … M/m` and X10 `CSI M` — do not
+edit the input, so neither starts a draft). **A draft never expires into permission to type**:
+the dispatcher does not type into a terminal holding a draft, however old it is. (Revision 13
+read as if the draft stopped blocking after `dispatch.draft_wait`; that was wrong and is fixed
+here.) What `dispatch.draft_wait` (default 60 s) now governs is only the notice:
+- while a draft stands, the agent's row in busmon shows it: `draft 2m` (its age) and `wake
+  waiting` when a wake is held behind it;
+- after `dispatch.draft_wait`, the desktop rings **once** for that draft (`notify` event
+  `draft`), naming the agent;
+- the draft ends at the person's next CR (an empty Enter ends it too; whether an empty submit is
+  a no-op is checked per client in the fixtures, §4.9).
+The dispatcher reads `Activity` on each pass and writes the draft's start into `{p}:observed`,
+so busmon shows it on the laptop as well (it reads Redis, not the holder).
+
+**"Proven unfocused" fails closed.** Whether a viewer's terminal supports focus reports (mode
+1004) cannot be queried; it can only be observed. So `agentbus attach` enables 1004 on the outer
 terminal and forwards focus-in/focus-out to the holder as control frames (never as program
 input). A viewer counts as **focused from the moment it attaches** and stays so until the
 holder has received a focus-out from it; after a focus-out it is unfocused until the next
 focus-in. A terminal that never sends focus reports therefore blocks typing for as long as it
-is attached — today's invariant ("never type into a focused pane") holds without knowing the
-terminal. An observer (`--observe`) never blocks: it cannot type. The quiet and draft timers
-apply in addition, never instead.
-
-Strict alternative (Q2 b): any attached non-observer viewer blocks typing, focus reports
-ignored. The focus notice
-(`dispatch.focus_notice`) keeps its meaning: a wake waiting on the person is shown in busmon.
+is attached. An observer (`--observe`) never blocks: it cannot type. The quiet timer and the
+draft apply in addition, never instead. The focus notice (`dispatch.focus_notice`) keeps its
+meaning: a wake waiting on the person is shown in busmon.
 
 ### 4.6 The person's console: busmon + attach
 
 - `agentbus attach <agent> [--observe]`: puts the current terminal on the agent's terminal.
-  Raw bytes both ways, first paint from the emulator's screen. `ctrl+\` is a
-  **prefix key**, not a bare chord (a bare chord would detach before `ctrl+\ y` could be
-  read): `ctrl+\ d` detaches, `ctrl+\ y` is "submit anyway" (§4.2, only while a guard
-  stands; otherwise ignored), `ctrl+\ ctrl+\` sends one literal `ctrl+\` (SIGQUIT for the
-  program, which some need), and any other key after the prefix is dropped with a bell. The
+  Raw bytes both ways, first paint from the emulator's screen. Outer terminal restored on detach
+  (synchronized output, kitty key flags, modes, scroll region, cursor, colors — the list in
+  herdr-core `attach.rs`). `--observe` never types or resizes. Works over `ssh host agentbus
+  attach coder` with no extra machinery (laptop ⇄ host topology).
+- **The prefix key is a setting**, `attach.prefix`, shown and editable in busmon's config screen
+  (Q9 replaced, the person 2026-11-11). `<prefix> d` detaches; `<prefix> <prefix>` sends one
+  literal prefix key to the program; any other key after the prefix is dropped with a bell. The
   prefix waits for its second key without a timeout and is shown in the outer terminal's title
-  while pending. Outer terminal restored on detach (synchronized output,
-  kitty key flags, modes, scroll region, cursor, colors — the list in herdr-core `attach.rs`).
-  `--observe` never types or resizes. Works over `ssh host agentbus attach coder` with no extra
-  machinery (laptop ⇄ host topology).
+  while pending. (`<prefix> y` is gone with the submit guard.)
+  - **Default `f12`.** `ctrl+\` and `ctrl+]` need AltGr on French and Swiss layouts and are
+    unreliable there; and `ctrl+]` is bound by Claude Code (`app:openArtifact`, verified in
+    2.1.322's default key table). No `ctrl+letter` is free across the clients: Claude Code alone
+    binds b c d e f g j l n o p r s t u v x y and `_`, uses readline's a e k w h in its input,
+    and handles z (suspend); Grok binds `ctrl+q`; `ctrl+q`/`ctrl+s` are also flow control on a
+    cooked tty, and `ctrl+h/i/j/m` are backspace, tab, LF and CR. F12 needs no modifier on any
+    layout and is bound by none of the clients checked (§4.9; for Claude Code and Kimi the only
+    `f12` strings are key-name tables, not bindings). Cost: on Mac keyboards F12 is a media key
+    unless `fn` is held or "use F1, F2… as standard function keys" is set — the setting is the
+    answer there.
+  - **Accepted values**: `f1`–`f12`, or `ctrl+<letter>`, `ctrl+\`, `ctrl+]`. A value is refused
+    when the client matrix (§4.9) lists it as bound by a client used in the project, or when it
+    is one of `ctrl+c/d/h/i/j/m/q/s/z`; busmon's config screen shows why.
+  - **Both encodings are recognised**, because the outer terminal switches to the kitty keyboard
+    protocol whenever the program inside asks for it (attach forwards the program's key flags):
+    F12 as legacy `CSI 24 ~` and kitty `CSI 24 ~` / `CSI 24 ; 1 : 1 ~` (press; the release event
+    `: 3` and repeats are ignored); `ctrl+<letter>` as the C0 byte and kitty `CSI <code> ; 5 u`.
+    The prefix split across two reads is still recognised.
 - **Size**: the most recently active viewer sets the size; with none, the size the terminal was
   started with (default 200×50, setting `holder.size`). Agents do not see a resize from a
   read-only observer.
 - busmon (bubbletea): the Agents panel gains a **live preview** of the selected agent's screen
   (read-only, from `Screen`), and `enter`/`a` runs `agentbus attach` through `tea.ExecProcess`;
-  detach returns to busmon. busmon itself is no longer a herdr pane or plugin; it runs in any
-  terminal.
-- Side-by-side viewing of several agents is the terminal's job (Ghostty splits, one `attach`
-  each). busmon does **not** become a multiplexer (Q1).
+  detach returns to busmon. The row shows drafts (§4.5), blocked (§4.3a) and background work
+  (§4.3b). busmon itself is no longer a herdr pane or plugin; it runs in any terminal.
+- **Visibility (Q1, decided)**: busmon list + live preview + full-screen attach; side-by-side
+  viewing of several agents through the terminal's own splits (one `attach` each). busmon does
+  **not** become a multiplexer.
 
 ### 4.7 Resume and restore (storage revised)
 
 - Process lifetime = holder lifetime. The holder survives busmon, ssh sessions and the person's
-  terminal closing; it does not survive reboot or `agentbus down`.
+  terminal closing; it does not survive reboot, `agentbus down`, or (without linger) logout.
 - The resume argv the SessionStart hook reports today to herdr is written instead to a
   **separate hash**, `{p}:resume` (field = agent, value = JSON `{argv, session, at}`), not into
   the `{p}:agents` snapshot. Reason: a snapshot field would need a `mergeSnapshot` carry rule,
   and resume's is the opposite of every identity field there (BootID, Model, ClientFP follow the
   pid; resume must **outlive** the process and survive later statuses that do not carry it —
   the c19b3255 hand-off bug shows what a missing rule costs). A hash of its own has no merge.
+- **Per client.** Today only Claude Code resumes (`rolecfg/launch.go`: "session resume is
+  supported only for Claude Code"). The other clients have a resume form (§4.9) and a session id
+  source of varying strength; each becomes resumable when its row in the matrix is verified, as
+  data in its client profile. A client without a verified session id source starts fresh (never
+  `--continue`, which picks "the most recent session for this folder" and can pick another
+  agent's when roles share a folder).
 - Write path: not lease-fenced (the hook is not the dispatcher) but an optimistic transaction
   in `bus/` on the `TurnState` pattern: `WATCH {p}:agents`, check the caller is **a descendant
   of** the agent's stored verified process, then `HSET {p}:resume`. An unproved caller writes
   nothing. Persisted `at` comes from Redis `TIME`.
 - **The caller proof is an ancestor walk.** The SessionStart hook is not the agent's process:
-  it runs as a child (or grandchild, through a shell) of the client, so "the caller is the
-  stored pid" would always fail. The hook passes its ancestor chain — each ancestor's pid
-  **and start time** — and `bus/` accepts the write only when one ancestor matches the stored
-  verified (pid, start) exactly. The walk starts at the hook's own parent, stops at pid 1, at
-  the first unreadable process, or after 32 ancestors, whichever comes first. A reused pid
-  fails because its start time differs. Prior art: the turn and prove-session hooks already
-  walk ancestors with `dispatch.Ancestors` (Linux, `/proc/<pid>/stat` ppid + start). macOS
-  gets the same function behind one platform file: `sysctl kern.proc.pid.<pid>`
-  (`kinfo_proc`: `e_ppid`, `p_starttime`) through `golang.org/x/sys/unix`; until then macOS
-  writes no resume (fail closed), as `Ancestors` is empty there today.
-- **The proof is self-attested**, exactly like the turn and prove-session hooks: the hook
-  reports its own ancestor chain and `bus/` checks the claim against the stored identity; the
-  broker cannot read the host's process table. It stops an honest mistake (a hook of another
-  agent, a stale process, a reused pid), not a same-uid process that lies — which could write
-  any bus entry anyway. The resume argv it records is run only through `agent-launch` for that
-  role (§4.7, `up`), never as a free command line.
+  it runs as a child (or grandchild, through a shell) of the client. The hook passes its ancestor
+  chain — each ancestor's pid **and start time** — and `bus/` accepts the write only when one
+  ancestor matches the stored verified (pid, start) exactly. The walk starts at the hook's own
+  parent, stops at pid 1, at the first unreadable process, or after 32 ancestors. A reused pid
+  fails because its start time differs. Prior art: `dispatch.Ancestors` (Linux, `/proc/<pid>/stat`
+  ppid + start). macOS gets the same function behind one platform file: `sysctl
+  kern.proc.pid.<pid>` (`kinfo_proc`: `e_ppid`, `p_starttime`) through `golang.org/x/sys/unix`;
+  until then macOS writes no resume (fail closed). A client whose hooks run under a shared daemon
+  rather than under the agent's process (Codex's app-server) fails this proof by construction;
+  its row in §4.9 says so and its resume waits for a proof that works for it.
+- **The proof is self-attested**, exactly like the turn and prove-session hooks: it stops an
+  honest mistake (a hook of another agent, a stale process, a reused pid), not a same-uid process
+  that lies — which could write any bus entry anyway. The resume argv it records is run only
+  through `agent-launch` for that role, never as a free command line.
 - Cleared only by `agentbus forget <agent>` and replaced by the next proved session's report;
   an agent's death or a status never touches it.
 - **It must survive a reboot, so the broker must persist.** The shipped `docker-compose.yml`
-  runs Redis with `--appendonly yes` on a named volume. Requirement stated in the README and
-  checked: `agentbus health` gains `broker_persistence` (warn when `CONFIG GET appendonly` is
-  `no` and `CONFIG GET save` is empty; unknown — not warn — when `CONFIG` is refused, as on
-  some managed brokers). Without persistence, a reboot loses `{p}:resume` and agents start
-  fresh; nothing worse.
+  runs the broker with AOF on a named volume (§6.3). `agentbus health` gains
+  `broker_persistence` (warn when `CONFIG GET appendonly` is `no` and `CONFIG GET save` is empty;
+  unknown — not warn — when `CONFIG` is refused). Without persistence, a reboot loses
+  `{p}:resume` and agents start fresh; nothing worse.
 - `agentbus up` on a project whose holder has no terminal for a role starts it with that resume
-  argv when one is recorded, else fresh. Self-repair (decision 2026-11-09) uses the same path:
-  `Start` a new terminal, never type into an old one.
+  argv when one is recorded, else fresh. Self-repair (decision 2026-11-09) uses the same path.
 
-### 4.8 What is deleted at the end
+### 4.8 What the cutover deletes
 
 `herdr-plugin.toml`, `agentbus plugin`, `busmon --pick` as a herdr overlay (the projects page
-stays), herdr parts of `setup.sh` (link, key binding block), `dispatch/herdr.go`,
-`herdrbin.go`, `reportresume.go`'s herdr call, every `HERDR_*` read, the herdr stubs in tests,
-and decisions 2026-10-19 (plugin) and the herdr parts of 2026-10-27 (relaunch-close) marked
-superseded.
+stays), herdr parts of `setup.sh` (link, key binding block), `dispatch/herdr.go` (its signatures
+moved to `agentstate` earlier), `herdrbin.go`, `reportresume.go`'s herdr call, every `HERDR_*`
+read, the herdr stubs in tests, the herdr reporting in `healthchecks.go`, `suspendsnap.go`,
+busmon `projects_admin.go` and `about.go`, `setup/plugin.go`, `setup/status.go`,
+`setup/uninstall.go`'s herdr parts; decisions 2026-10-19 (plugin) and the herdr parts of
+2026-10-27 (relaunch-close) marked superseded. Exit check: `git grep -il herdr -- '*.go'` lists
+only the test that forbids a herdr exec (and its own name).
+
+### 4.9 Clients: the matrix, as data
+
+Detection is per client. Every point of this spec — blocked, background work, resume, the clear
+command, an empty submit, the key bindings the prefix must avoid — has an answer per client, kept
+as **data**: a client profile (`agentstate/clients/<client>.toml`, embedded) plus its recorded
+raw fixtures. Adding a client means a profile and fixtures, not code — with one limit stated
+honestly: wiring hooks uses one of a small closed set of mechanisms (Claude Code's `--settings`
+JSON, Codex's `-c` overrides, Grok's project hook file, `agy`'s `hooks.json`), and a client that
+needs a new mechanism needs code for it once.
+
+A client profile holds: binary and version range probed; launch form (already in
+`rolecfg/launch.go`); turn and blocked hook routes; `Ready`/`Busy`/`Modal`/`Dialog`/`Blocked`
+signatures; background-work sources and which are authoritative; helper process patterns;
+resume form and session id source; clear command; whether an empty submit is a no-op; key
+bindings. **Supported** = a verified blocked source **and** screen signatures for Ready and
+Blocked passing on recorded fixtures. An unsupported client is never prompted and never cleared.
+A new client or version is probed with `agentbus term record` (§6.4).
+
+Verified on this host on 2026-11-11 (Claude Code 2.1.322, codex-cli 0.166.0, Kimi 2.2.0, Grok
+1.0.77, `agy` 1.5.6) from the installed binaries, their `--help`, `agy`'s bundled
+`agy-customizations/docs/hooks.md`, and this repository; "to verify" names the probe.
+
+| Client | Blocked source | Background-work signal | Resume | Clear command | Bindings the prefix avoids |
+|---|---|---|---|---|---|
+| **Claude Code** | `Notification` hook, matcher `permission_prompt` (verified in the binary), and `PermissionRequest` hook; + `Blocked` screen signature | `SubagentStart`/`SubagentStop` hooks (verified in the binary); process tree (tools run as its descendants); background-tasks footer: to verify (fixture of a `run_in_background` shell) | **yes, built** (`--resume <id>`, id from the SessionStart hook) | `/clear` (the only client `dispatch` clears today, `clearClients`) | ctrl+ b c d e f g j l n o p r s t u v x y `_` `]`, and readline a e k w h; F12 not bound (key-name table only) |
+| **Codex CLI** | **not** `notify` (turn complete only, verified); `PermissionRequest` hook in the 0.166 hook schema — **to verify**: launch with `--ask-for-approval on-request` and the hook wired, record a command needing approval, the hook must fire before the approval screen settles; until then screen only, with Codex approval fixtures | `SubagentStart`/`SubagentStop` hooks (in the schema; to verify by the same probe with a subagent); "Background terminals" on screen (string verified; fixture to record); process tree **not authoritative** (shared local app-server daemon) | flag exists (`codex resume <id>`); session id from the SessionStart hook (wired today for the prover); caller proof under the app-server: **to verify** (record the hook's ancestor chain) | `/clear` semantics not probed: **to verify**; not cleared until then | to verify: press F12 at the input in a recording, the screen must not change |
+| **Kimi CLI** | screen signatures only: Kimi hooks are not used (the person, 2026-11-02, auto-state spec) | process tree (to verify that tools are its descendants: record `ps` during a tool run); screen: to verify | flag exists (`--session <id>`); no session id source without hooks: **to verify** (probe the session store after a launch); fresh start until then | to verify | F12 not bound (key-name table only); others to verify by recording |
+| **Grok CLI** | screen signatures; a permission hook event: **to verify** (the binary holds `Notification`; project hooks are wired for turns) | `SubagentStart`/`SubagentStop` (its hook events carry `subagentType`, already filtered by `turnhook.go`); process tree **to verify** (shared leader process) | flag exists (`--resume <id>`, `--session-id <uuid>` for a new one: the launcher can choose the id); to verify end to end | to verify | `ctrl+q` bound (verified string); F12 to verify by recording |
+| **Antigravity `agy`** | screen signatures only: its documented hook events (`SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) include no approval event | `Stop` hook field `fullyIdle` ("true if all background tasks are done", documented); process tree to verify | flag exists (`--conversation <id>`); id = `conversationId`, in every hook payload (documented); hooks not wired today: to build and verify | to verify | to verify by recording |
+
+Out of scope: Gemini CLI (the Google client is `agy`; the person, Q7) and DeepSeek (the person,
+2026-11-11). Every "to verify" above is a §7 step-3 deliverable: the recording, the fixture and
+the profile row, or the row stays as it is and the feature it gates stays off for that client.
 
 ## 5. User stories
 
 1. As the person, I want agent-bus to install and run without herdr, so that one Go toolchain builds everything I depend on.
 2. As the person, I want `agentbus up <project>` to start every role's agent in its own terminal, so that a project starts with one command as today.
 3. As the person, I want to see which agents run, their state and a live preview of the selected one in busmon, so that I can watch the team without opening each agent.
-4. As the person, I want to attach to an agent full-screen from busmon and return with one chord, so that I can take over a conversation.
+4. As the person, I want to attach to an agent full-screen from busmon and return with the attach prefix followed by `d`, so that I can take over a conversation.
 5. As the person, I want to attach to an agent from another terminal or over ssh, so that I can work from my laptop against the host.
 6. As the person, I want an observe-only attach, so that I can watch without any risk of typing into the agent.
-7. As the person, I want the dispatcher never to type while I am typing or have a draft in an agent, so that a wake line never lands in the middle of my sentence.
-8. As the person, I want to see in busmon that a wake is waiting because I am active in that agent, so that I know to step away.
+7. As the person, I want the dispatcher never to type while I am typing or have a draft in an agent, however old the draft, so that a wake line never lands in the middle of my sentence.
+8. As the person, I want to see in busmon that a draft stands in an agent, its age, and that a wake waits behind it, and to be rung once when it has waited long, so that I do not leave a team stalled.
 9. As the person, I want agents to keep running when I close busmon or my terminal, so that work continues unattended.
 10. As the person, I want agents restarted with their previous conversation after a reboot when I run `agentbus up`, so that I do not lose context.
 11. As the person, I want to scroll an agent's recent output, so that I can see what it did while I was away.
@@ -504,49 +693,56 @@ superseded.
 13. As the person, I want the desktop to ring once when an agent waits on a permission prompt, as today, so that I do not miss a blocked agent.
 14. As the person, I want upgrading agent-bus not to kill running agents, so that an update is not a team restart.
 14a. As the person, I want to be told when an old holder build is still serving, and to finish its drain with one command that relaunches agents one at a time, so that an upgrade does not linger forever.
-15. As the dispatcher, I want an agent's screen and activity facts from any host through one interface, so that my wake decisions do not depend on which host runs.
-16. As the dispatcher, I want the host to refuse typing at the moment a person is active, so that the inspect-then-type race is closed.
-17. As the dispatcher, I want to type only the wake line and `/clear`, by type, so that no message text can ever be typed into a pane.
-18. As the dispatcher, I want to observe that my nonce reached the screen, so that delivery is recorded as observed, as today.
+14b. As the person, I want old holder units and binaries removed once their build is done, so that upgrades do not accumulate files.
+14c. As the person, I want agent-bus to run on a machine without systemd or launchd, so that it works on any Linux or macOS I use.
+14d. As the person, I want to choose the attach prefix key, so that it works on my French or Swiss keyboard.
+15. As the dispatcher, I want an agent's screen, activity and process facts from the host through one interface, so that my wake decisions do not depend on how the host is built.
+16. As the dispatcher, I want the host to refuse typing at the moment a person is active, and to hold the person's keys while it types, so that a wake line can never mix with their input.
+17. As the dispatcher, I want to type only the wake line and `/clear`, by type, so that no message text can ever be typed into a terminal.
+18. As the dispatcher, I want to observe that my line reached the input before I submit it, so that a CR never answers a dialog.
 19. As the dispatcher, I want each agent's client from its launch profile, so that the right signatures apply without screen guessing.
 20. As the dispatcher, I want "blocked" from the client's own permission hook where it has one, so that blocked is exact instead of inferred from screen text.
 21. As the dispatcher, I want a settled-screen test based on output quiet time, so that a screen still rendering is never judged ready.
 22. As an agent, I want my terminal id and host in my environment, so that `status` and `bind` record my identity without a process search.
 23. As master, I want relaunch, swap and suspend to start a new terminal and close the old one once the new agent is proven, so that the relaunch-close rule survives the change.
 24. As master, I want self-repair to relaunch a dead agent through the same `Start`, so that there is one way to create an agent's terminal.
-25. As sentinel, I want the holder's health (up, protocol version, terminals, draining builds) in `agentbus health`, so that I can restart only what the runbook allows.
+24a. As master, I want a report when an agent becomes blocked and when it stops being blocked, so that I can reroute work and escalate to the person.
+24b. As master, I want `/clear`, relaunch, swap, suspend and drain to skip an agent whose subagents or background commands still run, so that no work or context is lost.
+25. As sentinel, I want the holder's health (up, build id, terminals, draining builds, leftovers) in `agentbus health`, so that I can start only what the runbook allows.
 26. As a maintainer, I want detection tested from recorded raw output of each client, so that an emulator change that alters a screen fails a test.
 27. As a maintainer, I want a recorder that captures a client's raw output to a fixture, so that a new client or a new client version can be probed in minutes.
 28. As a maintainer, I want the emulator behind an internal seam with a fidelity oracle in tests, so that the production emulator can be swapped after a bake-off.
-29. As a maintainer, I want the herdr adapter and the holder adapter to pass the same contract suite, so that the cutover changes no caller.
-30. As a maintainer, I want a shadow mode in which our detector runs beside herdr's own judgement (`HostView`) and logs disagreements, so that we prove parity before cutover while herdr still decides.
-30a. As a security reviewer, I want the holder's submit frame to carry no text, so that no same-uid process can make the holder type arbitrary input into an agent.
-31. As a maintainer, I want the host chosen by one setting in `config/keys.go`, so that rollback during the trial is a setting change.
+29. As a maintainer, I want each client described as data (profile + fixtures), so that adding a client is data and recordings, not code.
+30. As a security reviewer, I want the holder's submit frame to carry no text, so that no same-uid process can make the holder type arbitrary input into an agent.
+31. As the person, I want the last release with herdr tagged before the cutover, so that I can go back to it if the cutover fails.
 32. As a maintainer, I want holder tests to use a temporary socket directory and scripted programs, so that no test touches a running holder or a real agent.
-33. As a reviewer, I want each migration step as one PR from main, so that each is reviewable and revertible alone.
+33. As a reviewer, I want each step as one PR from main, so that each is reviewable and revertible alone until the cutover.
 
 ## 6. Implementation decisions
 
 ### 6.1 Modules
-- `termhost` (new): `Host`, `Spec`, `Term`, `Screen`, `Activity`, `Line`; adapters `herdr`,
-  `holder` (client side), `fake`. Contract test suite in the package, run on every adapter
-  available.
-- `agentstate` (new, from `dispatch`): `Signatures` and their fixtures move here; adds `Blocked`
-  patterns, an optional probed `ClearInput` key per client (§4.2 re-check before CR), hook-fed observed blocked, settle by quiet time. Pure functions: facts in, judgement
-  out.
+- `termhost` (new): `Host`, `Spec`, `Term`, `Screen`, `Activity`, `Proc`, `Line`, `HostInfo`;
+  adapters `holder` (client side) and `fake`. Contract test suite in the package, run on both.
+- `agentstate` (new, from `dispatch`): `Signatures` and their fixtures move here; client profiles
+  (`clients/*.toml`, §4.9); `Blocked` patterns, hook-fed observed blocked, background-work fact
+  (§4.3b), settle by quiet time. Pure functions: facts in, judgement out.
 - `holder` (new, server side) + `screen` (internal seam over the emulator: `Write`,
-  `Snapshot(lines)`, `Modes`, `Render` for first paint).
+  `Snapshot(lines)`, `Modes`, `Render` for first paint). PTY and process code one file per
+  platform (`pty_unix.go`; `proc_linux.go`, `proc_darwin.go`), so a `_windows.go` (ConPTY) can
+  be added later without touching the rest.
 - `dispatch`: `Runtime` implemented by `termhost`+`agentstate`; decision code unchanged except
-  `Focused` → person active and the new `ErrPersonActive` from `Submit`.
-- `cmd/agentbus`: `holder`, `attach`, `term record`, `term dump`; `up`/`start`/`restore`/
-  `relaunch`/`swap`/`suspend`/`resume` on `Host`; `holder drain`. `config/keys.go`:
-  `terminal.host` (`herdr|holder`), `holder.scrollback`, `holder.size`, `holder.drain_warn`,
-  `dispatch.person_quiet`, `dispatch.draft_wait`.
-- `Host` also answers `Describe(ctx) (HostInfo, error)` — name, version, `AtomicSubmit`, socket/session, per
-  project terminal count, draining builds — for the callers that today report on herdr itself
-  (health, about, projects admin, suspend snapshot).
-- `cmd/busmon`: preview panel, attach key; no herdr env.
-- `service`: holder as one plain unit (systemd) / one job (launchd) per project and build (§4.4a).
+  `Focused` → person active, `ErrPersonActive`/`ErrNotReady`/`ErrNotLanded` from `Submit`, the
+  blocked reports to master (§4.3a), and the background-work skip (§4.3b).
+- `cmd/agentbus`: `holder`, `attach`, `term record`, `term dump`, `holder drain`, `service gc`,
+  `service supervise`; `up`/`start`/`restore`/`relaunch`/`swap`/`suspend`/`resume` on `Host`.
+- `config/keys.go`: `holder.scrollback`, `holder.size`, `holder.drain_warn`,
+  `dispatch.person_quiet`, `dispatch.draft_wait` (the ring, §4.5), `dispatch.submit_wait`,
+  `agentstate.helper_cpu`, `attach.prefix`, `services.manager`. No `terminal.host`: there is one
+  host.
+- `cmd/busmon`: preview panel, attach key, draft/blocked/background on the agent row,
+  `attach.prefix` in the config screen; no herdr env.
+- `service`: holder as one plain unit (systemd) / one job (launchd) per project and build, or a
+  supervisor with `services.manager=none` (§4.4a, §4.4b); `gc`.
 
 ### 6.2 Libraries
 - PTY: `github.com/creack/pty` (Linux, macOS; pure Go). Not ptyx (its Windows half is out of
@@ -554,45 +750,63 @@ superseded.
 - Raw mode, size, SIGWINCH for attach: `golang.org/x/term`, `golang.org/x/sys/unix`.
 - Emulator: bake-off (§6.4) between pure-Go candidates — `go-vte` + our own grid,
   `charmbracelet/x/vt`, `hinshun/vt10x` (the last two not yet checked out locally: to verify).
-  gostty only as a **test oracle** behind a build tag, if Q3 allows it at all.
+  gostty only as a **test oracle** behind a build tag (Q3, decided).
 - herdr-core: reference for holder framing, input gate, attach restore list, drain-on-upgrade.
   No code copied (its own rule, and a different language).
 
 ### 6.3 Wire and state
 - Redis: one new hash `{p}:resume` (§4.7) and one new stream `{p}:events` (§6.5), both added
   to `projectKinds` (key recognition: `--delete`, project listing, backup and restore), and the
-  observed `blocked` source. `projectKinds` does **not** drive `busmon --reset`: that purges
-  busmon's own `streamKinds` list (`Purge(ctx, streamKinds)`). `{p}:events` therefore joins
-  the reset explicitly (§6.5); `{p}:resume` deliberately does not (a reset trims activity, it
-  must not forget how to resume agents). The design uses only
-  commands available in Redis 7.2 (`WATCH`/`MULTI`, `HSET`, `HGETALL`, `HDEL`, `TIME`,
-  `CONFIG GET`), so **Valkey (a Redis 7.2 fork) is acceptable as broker for this feature**.
-  Declaring Valkey support for agent-bus as a whole is a separate check, done before any such
-  claim: grep the code for commands newer than 7.2 (the hash-field TTL family `HEXPIRE`/
-  `HPEXPIRE`/`HTTL`/`HPERSIST`, `HGETDEL`/`HGETEX`/`HSETEX`, `XACKDEL`/`XDELEX`, vector sets)
-  and run the Redis suite against a disposable Valkey. A first grep at b3dd13a2 found none of
-  these names; the suite run is the evidence that counts. `{p}:agents` and `subscribe`
-  JSON unchanged.
+  observed `blocked`, draft and background facts in `{p}:observed`. `projectKinds` does **not**
+  drive `busmon --reset`: that purges busmon's own `streamKinds` list. `{p}:events` therefore
+  joins the reset explicitly (§6.5); `{p}:resume` deliberately does not (a reset trims activity,
+  it must not forget how to resume agents).
+- **Broker floor: Redis 7.2 / Valkey 7.2.** The design uses only commands available in 7.2
+  (`WATCH`/`MULTI`, `HSET`, `HGETALL`, `HDEL`, `TIME`, `CONFIG GET`, `XADD … MAXLEN ~`,
+  `XREVRANGE`, `XREAD BLOCK`). A first grep at b3dd13a2 found none of the newer commands
+  (hash-field TTL family, `HGETDEL`/`HGETEX`/`HSETEX`, `XACKDEL`/`XDELEX`, vector sets).
+- **Shipped broker: `valkey/valkey:9`** in `docker-compose.yml` (the person needs none of
+  Redis 8's built-in modules), with `--appendonly yes` on the named volume as today. The change
+  (§7 step 8) must handle three things, each checked in that PR:
+  - the server binary and the health check's CLI are `valkey-server`/`valkey-cli` (whether the
+    image also ships `redis-*` names is to verify; use the `valkey-*` names);
+  - the config-on-stdin form (`valkey-server -`) and `requirepass` behave as in the Redis
+    command: to verify by `docker compose up` and an authenticated `PING`;
+  - **the existing volume was written by Redis 8.** Whether Valkey 9 loads a Redis 8 RDB/AOF is
+    **to verify** on a copy of the volume; if it refuses, the migration is `agentbus backup` on
+    Redis 8, a fresh volume, restore on Valkey — stated in the release note, never a silent
+    switch on the person's data.
+  The Redis integration suite is re-run against a disposable Valkey 9 (and once against Valkey
+  7.2, the floor) before that PR merges; the run is the evidence, not the grep.
+- `{p}:agents` and `subscribe` JSON unchanged.
 - Holder protocol: versioned; additive only within a version, like `subscribe`.
 
-### 6.4 Emulator bake-off (the gate before the holder)
-Recorded raw output (via `agentbus term record`, which runs a client under our PTY and saves
-bytes + resize events) of each supported client in each state the fixtures cover today. A
-candidate passes when, replayed, its screen satisfies every existing signature test (ready,
-typed, busy, modal, dialog, old box) for every client, renders wide chars (Kimi's moon, `❯`,
-`›`, `─`) at the right column, and keeps SGR dim (Claude/Codex placeholders). Lines of
-emulator code we would own count against a candidate.
+### 6.4 Raw fixtures and the emulator bake-off (the gate before the cutover)
+
+Shadow mode against herdr is dropped (direct cutover). The gate is recorded output instead:
+- `agentbus term record <client> <fixture>` runs a client under our PTY (no holder needed) and
+  saves bytes + resize events + the hook events received, with timestamps.
+- **Raw fixtures per client** in every state the matrix needs: empty input, typed, working,
+  modal, dialog, **each permission screen** (Codex approval screens included), background work
+  running and finished, an empty submit, F12 pressed at the input, and `/clear` where a client
+  has one.
+- An emulator candidate passes when, replayed, its screen satisfies every signature test for
+  every client (ready, typed, busy, modal, dialog, blocked, background, old box), renders wide
+  chars (Kimi's moon, `❯`, `›`, `─`) at the right column, and keeps SGR dim (Claude/Codex
+  placeholders). Lines of emulator code we would own count against a candidate.
+- **A client that fails stays unsupported** (never prompted, never cleared). The cutover does not
+  wait for every client; it waits for the clients the person's projects use.
 
 ### 6.5 Newer broker features (the person's four ideas, evaluated)
 
-Context. Today the floor is Redis 7.2: this spec uses only 7.2 commands, so Valkey 7.2+ works
-(§6.3). Hash-field expiration (`HEXPIRE`/`HSETEX`/`HGETEX`…) needs Redis 7.4+ (8 for
-`HSETEX`/`HGETEX`) or Valkey 9; adopting it **raises the floor** for every install. The shipped
-broker is `redis:8-alpine`, so the floor is a promise to people running their own broker, not a
-constraint on ours. The project already has: per-project streams `status`, `report`, `notify`,
-`cmd` that busmon replays (`Recent`/`TailFrom`) and follows; `{p}:agents` written only through
-`putSnapshot` (an optimistic `WATCH` merge); `{p}:observed`, a whole-hash TTL written by the
-dispatcher; busmon polls about once a second; the client is go-redis v9.19.
+Context. The floor is Redis 7.2 / Valkey 7.2 (§6.3). Hash-field expiration (`HEXPIRE`/`HSETEX`/
+`HGETEX`…) needs Redis 7.4+ (8 for `HSETEX`/`HGETEX`) or Valkey 9; adopting it **raises the
+floor** for every install. The shipped broker becomes Valkey 9 (§6.3), so the floor is a promise
+to people running their own broker, not a constraint on ours. The project already has:
+per-project streams `status`, `report`, `notify`, `cmd` that busmon replays (`Recent`/`TailFrom`)
+and follows; `{p}:agents` written only through `putSnapshot` (an optimistic `WATCH` merge);
+`{p}:observed`, a whole-hash TTL written by the dispatcher; busmon polls about once a second;
+the client is go-redis v9.19.
 
 | # | Idea | Verdict | Why |
 |---|---|---|---|
@@ -603,187 +817,184 @@ dispatcher; busmon polls about once a second; the client is go-redis v9.19.
 
 **1. Presence by field TTL — defer.** The idea needs a writer that refreshes the field on a
 timer. An agent cannot: a client between turns runs nothing, so an idle agent would look
-"silent" while healthy — the opposite of what busmon must say. The holder could (it knows each
-terminal is alive), but the holder makes no Redis connection by design (§4.4a: it must not be
-in the password-rotation path). The dispatcher already writes `{p}:observed` with a whole-hash
-TTL and every observation carries its own `At`, judged by `Observation.Fresh` on the reader
-side; per-field TTL would only move that age check from the reader to the server, at the cost
-of raising the floor to 7.4/Valkey 9. Never on `{p}:agents`: a field that expires there would
-silently drop a verified identity, which `putSnapshot`'s merge rules exist to prevent. Never on
-`{p}:resume` (it must outlive the process; §4.7). Revisit if the floor moves to 7.4 for another
-reason: then `{p}:observed` per-agent expiry is the natural first use, written by the
-dispatcher under its lease fence.
+"silent" while healthy. The holder could, but it makes no Redis connection by design (§4.4a: it
+must not be in the password-rotation path). The dispatcher already writes `{p}:observed` with a
+whole-hash TTL and every observation carries its own `At`, judged by `Observation.Fresh` on the
+reader side; per-field TTL would only move that age check to the server, at the cost of raising
+the floor. Never on `{p}:agents` (a field that expires there would silently drop a verified
+identity) and never on `{p}:resume` (it must outlive the process; §4.7). Revisit if the floor
+moves to 7.4 for another reason.
 
 **2. Event stream — adopt as `{p}:events`.** Terminal-lifecycle facts have no home today and
-this spec adds several: wake typed / refused (person active) / left behind (guard armed),
-blocked observed, attach / detach (observer or not), relaunch, holder started / restarted /
-draining / drained. One stream per project, `XADD {p}:events MAXLEN ~ 10000`, fields
-`{kind, agent, term, by, detail}`, time from the entry id (Redis `TIME`). Writers: the
-dispatcher (fenced, like its other writes), `agentbus attach` for attach/detach (the person's
-own process; unfenced, as a person's `notify` is today), `holder drain` and `up` for
-relaunch/drain. Not the holder (no Redis). busmon replays it on start (`XREVRANGE` of the last
-N) and follows it with `XREAD BLOCK`, as it already does for `notify`; it is a **timeline, not a
-source of truth**: state stays in `{p}:agents`, `{p}:observed`, `{p}:resume`. Three lists, each
-named on purpose:
-- `projectKinds` (bus): add `events`, so `--delete`, project listing and backup/restore know
-  the key;
-- busmon's reset list: today `--reset` purges `streamKinds` (status, report, notify, cmd).
-  It becomes an explicit `resetKinds = streamKinds + events`, used only by `--reset`
-  (`XTRIM`, groups kept, as today);
+this spec adds several: wake typed / refused (person active, not ready) / not landed, blocked /
+unblocked, draft waiting, background work skipped an action, attach / detach (observer or not),
+relaunch, holder started / restarted / draining / drained / gc. One stream per project,
+`XADD {p}:events MAXLEN ~ 10000`, fields `{kind, agent, term, by, detail}`, time from the entry id
+(Redis `TIME`). Writers: the dispatcher (fenced, like its other writes), `agentbus attach` for
+attach/detach (the person's own process; unfenced, as a person's `notify` is today), `holder
+drain`, `service gc` and `up` for relaunch/drain/gc. Not the holder (no Redis). busmon replays it
+on start (`XREVRANGE` of the last N) and follows it with `XREAD BLOCK`; it is a **timeline, not a
+source of truth**: state stays in `{p}:agents`, `{p}:observed`, `{p}:resume`. Lists, each named
+on purpose:
+- `projectKinds` (bus): add `events` and `resume`, so `--delete`, project listing and
+  backup/restore know both keys;
+- busmon's reset list: `--reset` purges `streamKinds` (status, report, notify, cmd) today. It
+  becomes an explicit `resetKinds = streamKinds + events`, used only by `--reset` (`XTRIM`,
+  groups kept, as today);
+- an explicit `survivesReset` list holding `resume`;
 - busmon's tail lists: `streamKinds` stays the ACTIVITY feed (unchanged); the timeline reads
   `events` with its own `Recent`/`TailFrom` cursor, so events never mix into ACTIVITY;
 - not `activityKinds` (a wake attempt must not date a project as active).
 Tests: `--reset` on a disposable broker trims `{p}:events` and keeps `{p}:resume`; a guard test
-fails if a stream in `projectKinds` is in neither `resetKinds` nor an explicit
-"survives reset" list (`resume`-like state), so the next stream cannot be forgotten the same
-way. Works on 7.2. Lands with the steps that produce the
-events: wake/refusal kinds in step 6, attach/detach in 12, relaunch/drain in 11 and 13.
+fails if a **key kind** in `projectKinds` (stream or hash) is in neither `resetKinds` nor
+`survivesReset`, so the next key cannot be forgotten the same way. Works on 7.2.
 
 **3. Keyspace notifications — defer.** They need `notify-keyspace-events` set on the broker, a
 global setting that managed brokers often refuse and that costs every write on the server; the
 messages are fire-and-forget Pub/Sub, lost while busmon reconnects, so polling stays as the
-fallback anyway. busmon's 1 s poll of one project is a handful of small reads. Adopting `{p}:events`
-(item 2) already gives busmon a blocking read that wakes it on the changes this spec adds.
-Revisit if a measured poll cost or latency complaint appears; then as a refresh hint only, with
-`agentbus health` reporting `broker_keyspace_events` (unknown when `CONFIG` is refused).
+fallback anyway. `{p}:events` already gives busmon a blocking read that wakes it on the changes
+this spec adds. Revisit if a measured poll cost or latency complaint appears.
 
 **4. RESP3 client-side caching — reject for now.** busmon reads a few small hashes per second
 for one person; the gain is unmeasured and the cost is real: `CLIENT TRACKING`, an invalidation
 channel to handle on reconnect, and a cache that can serve a stale verified identity in the
-window before invalidation — the one record whose staleness matters. Whether go-redis v9.19
-supports it natively is unverified here (rueidis does). As the person says, measure first: a
-busmon profile showing Redis round-trips as the bottleneck would reopen it.
+window before invalidation. Measure first: a busmon profile showing Redis round-trips as the
+bottleneck would reopen it.
 
-## 7. Migration plan (one PR from main each)
+## 7. Migration plan: a PR series from main, ending in one cutover
+
+Every step is one PR from main. Steps 1–9 add code that **nothing in the running system uses
+yet** (herdr still hosts every agent, unchanged); step 10 is the cutover, which switches every
+caller and deletes herdr in the same PR. No herdr adapter is ever written, no setting chooses a
+host, no shadow mode runs.
 
 | # | PR | Behaviour change | Exit criterion |
 |---|---|---|---|
-| 0 | This spec + decision note | none | approved |
-| 1 | `termhost` package, fake, contract suite; herdr adapter (with `HostView`) wrapping the calls `dispatch` makes; `Runtime.Prompt` takes a `termhost.Line`, no text | none (same wake line typed) | dispatch tests green on the adapter |
-| 2 | Provisioning callers (`up`, `start`, `restore`) on `Host` | none | installer/up tests green (herdr stubbed) |
-| 3 | Replacement callers (`relaunch`, `swap`, `suspend`, `resume`) on `Host` | none | a test fails on any herdr exec in the **agent-facing** packages (`dispatch`, and the `cmd/agentbus` files of steps 1–3), with an explicit allowlist of the files moved in step 4 (reporting callers) and step 16 (`reportresume.go`, `setup/*`) |
-| 4 | Reporting callers on `Host.Describe`: health checks, `suspendsnap`, busmon `projects_admin` and `about` | none (same text with herdr) | allowlist shrinks to `reportresume.go`, `setup/*` |
-| 5 | `agentstate` extracted; client from launch profile; `HostView` still decides | none | fixtures green |
-| 6 | Hooks for blocked (Claude `Notification`, Codex `notify`) + `Blocked` signatures; **shadow mode**: our judgement beside `HostView`, disagreements logged | observability only | ≥ 7 days, disagreement reviewed |
-| 7 | `agentbus term record` + raw fixtures for each client | none | fixtures committed |
-| 8 | Emulator bake-off; `screen` seam + chosen adapter | none | §6.4 passes |
-| 9 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, peer check, socket dir) — after the security review of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
-| 10 | Holder adapter of `termhost` (contract suite) + `terminal.host` setting | opt-in | contract suite green on holder |
-| 11 | Holder unit per project and build (plain systemd unit, launchd job, per-build binary copy; test: writing a new build's unit never changes an old unit's file or binary) with the §4.4a restart policy; rotate/upgrade paths skip it + `holder`, `holder_restarted`, `holder_draining` health + `holder drain` + sentinel runbook entry | opt-in | service tests (fake systemctl/launchctl) |
-| 12 | `agentbus attach`, busmon preview + attach key | opt-in | manual live check by the person |
-| 13 | `{p}:resume` + hook writes it (ancestor-walk proof, macOS `Ancestors`); `up` restores from it; `broker_persistence` health; `reportresume.go` keeps its herdr call until step 16 | opt-in | Redis tests of §8; reboot trial |
-| 14 | Live trial on one project with `terminal.host=holder` | trial | Q8 project runs a week |
-| 15 | Default flips to `holder` | default | release |
-| 16 | herdr removal (§4.8: adapter, `HostView`, `reportresume` herdr call, `setup/*` herdr parts, plugin), decisions superseded | herdr gone | no herdr exec anywhere (the step 3 test with an empty allowlist); scrub/test green |
+| 0 | This spec (revision 14, frozen) + decision note | none | coder, foureyes and reviewer-codex approve |
+| 1 | `termhost` package: `Host`, `Line` (`WakeLine`/`ClearLine`), `fake`, contract suite; today's herdr `Runtime.Prompt` takes a `termhost.Line`, no text | none (same wake line typed) | dispatch tests green; the no-string-reaches-`Submit`/`Prompt` test |
+| 2 | `agentstate` extracted from `dispatch` (signatures, fixtures), client profiles as data (§4.9), `Blocked` signatures, background-work fact (§4.3b), blocked-enter/leave judgement (§4.3a) — pure functions with table tests; hook wiring for blocked and subagents per client (Claude Code `Notification`/`PermissionRequest`/`SubagentStart`/`SubagentStop`; Codex `PermissionRequest`/subagent hooks once probed; `agy` `Stop`) writing observed facts only | none (herdr still decides; the hooks only record) | fixtures green; hook route tests per client |
+| 3 | `agentbus term record` + raw fixtures per client (§6.4); every "to verify" cell of §4.9 probed and the profile rows updated | none | fixtures committed; the matrix has no unexplained "to verify" for the clients the person's projects use |
+| 4 | Emulator bake-off; `screen` seam + chosen adapter; gostty oracle behind a build tag | none | §6.4 passes for those clients |
+| 5 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, held viewer bytes, landing check, peer check, socket dir, process facts) — after the **security review** of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
+| 6 | Holder adapter of `termhost` (contract suite) + services: per-build units, launchd jobs, binary copy, restart policy, `services.manager` with the `none` supervisor (§4.4b), `service gc` with the two-upgrade test, rotate/upgrade paths skip the holder, `holder`/`holder_restarted`/`holder_draining`/`holder_leftovers` health, `holder drain`, sentinel runbook entry | none (no project runs on it) | contract suite and service tests (fake `systemctl`/`launchctl`, scripted supervisor) green |
+| 7 | `agentbus attach` + `attach.prefix` (F12 default, both encodings) + busmon preview, attach key, draft/blocked/background on the row, the setting in the config screen | none (used only against a test holder) | attach tests; the person attaches to a scripted program in a test holder |
+| 8 | `{p}:resume` + hooks write it (ancestor-walk proof, macOS `Ancestors`) for each client whose row is verified; `broker_persistence` health; `{p}:events` with `resetKinds`/`survivesReset`; `valkey/valkey:9` in `docker-compose.yml` (§6.3) | the shipped broker image changes; resume is recorded beside herdr's | Redis tests of §8 on a disposable Valkey 9 and Valkey 7.2; the volume migration checked on a copy |
+| 9 | Dispatcher on `termhost`+`agentstate` behind no switch: the code path exists and is covered by tests against the fake and a test holder; the blocked reports to master (§4.3a) and the background skip (§4.3b) wired in it | none (the running dispatcher still uses the herdr `Runtime`) | dispatch suite green on both paths |
+| 10 | **Cutover**: `up`/`start`/`restore`/`relaunch`/`swap`/`suspend`/`resume`/self-repair on `Host`; the dispatcher's herdr path removed; reporting callers on `Host.Describe`; herdr deleted (§4.8); decisions superseded; release note | **herdr gone** | the test forbidding any herdr exec, with no allowlist; scrub and the full suite green; the person's live check of the branch on one project before merge |
 
-Steps 1–6 are useful even if the project stops there: they make herdr replaceable and our
-detection herdr-independent.
+**Before the cutover PR merges**, the person tags the current release on GitHub as **the last
+release with herdr**, with a release note saying so. Master never tags; this spec only states
+the step. That tag is the rollback: reinstalling it brings herdr back, and nothing in steps 1–9
+changes what it runs. The cutover PR's description names the tag.
+
+Until the cutover, the released build keeps today's herdr behaviour, including today's documented
+residual between `agent get` and `agent prompt` (one CLI round-trip, without a hard bound); no
+step claims an improvement for herdr, and none exists after the cutover.
 
 ## 8. Testing decisions
 
 - One external seam: `termhost.Host`. The contract suite (start, list, screen after output,
-  submit with bracketed paste, refusal while a person is active, wait-screen, close and reap,
-  identity env) runs against `fake` always, `holder` always, `herdr` only on opt-in (needs a
-  running herdr in an isolated session).
+  process facts, submit with bracketed paste, refusal while a person is active or the screen is
+  not ready, wait-screen, close and reap, identity env) runs against `fake` and `holder` always.
 - `agentstate`: table tests from screen fixtures (existing `dispatch/testdata/screens`, moved)
   and from raw-byte fixtures replayed through the chosen emulator; good tests assert the
-  judgement, not regexes.
-- `holder`: end-to-end with real PTYs running small scripted programs (a shell script that
-  draws a fake prompt, enables bracketed paste, prints a spinner), temp `XDG_RUNTIME_DIR`. Never
-  a real agent, never the production broker (CLAUDE.md test rule unchanged).
-- Prior art: dispatch tests with a fake `Runtime`; installer tests that stub `docker`/`herdr`;
-  service tests that fake `systemctl`/`launchctl`.
-- Attach prefix: `ctrl+\ d` detaches; `ctrl+\ y` lifts a standing guard and is ignored
-  without one; `ctrl+\ ctrl+\` delivers one `0x1c` to the program; `ctrl+\ x` delivers
-  nothing and rings; the prefix split across two reads is still recognised.
-- Paste→CR race (holder): a viewer byte arriving between paste and CR → no CR,
-  `ErrPersonActive`; with a probed clear key and an input region equal to the paste → line
-  cleared, then the viewer's bytes delivered; without one → paste left, guard armed, notice
-  recorded. Both kinds, each in two cases:
-  - `WakeLine`, the viewer pressed Enter (CR, and the kitty encoding) during the paste window →
-    the wake line is **not** submitted; the viewer's other bytes are delivered; the notice says
-    "wake line";
-  - `ClearLine`, same → `/clear` is **not** submitted; the notice says "`/clear`";
-  - each kind, viewer Enter after the guard is armed → swallowed; after a **partial edit** (one
-    character of the left line changed or deleted, the rest still in the input) → Enter still
-    swallowed; after deleting the whole line (the empty-input signature matches) → Enter
-    forwarded; after `ctrl+\ y` → Enter forwarded; a client without an empty-input signature →
-    Enter swallowed until `ctrl+\ y`.
-  Contract suite (`AtomicSubmit` adapters).
+  judgement, not regexes. Per client: blocked enter and leave, background work (§4.3b's list),
+  supported/unsupported from the profile.
+- `holder`: end-to-end with real PTYs running small scripted programs (a shell script that draws
+  a fake prompt, enables bracketed paste, prints a spinner, starts a child), temp
+  `XDG_RUNTIME_DIR`. Never a real agent, never the production broker (CLAUDE.md test rule).
+- Submit (holder, contract suite):
+  - a viewer typing a sentence and Enter during the submit → the line is submitted alone, then
+    the viewer's bytes arrive in order after the CR, Enter included; no byte lost;
+  - the same with the kitty Enter encoding and with a large paste filling the hold queue (the
+    viewer is back-pressured, nothing dropped);
+  - a dialog drawn between the check and the paste → the line is not seen in the input, **no CR**,
+    `ErrNotLanded`, notice naming the kind (wake line / `/clear`);
+  - a draft standing (any viewer byte since the last CR, mouse and focus reports excepted) →
+    refused, however old the draft; a CR ends it; an empty Enter ends it.
+- Attach prefix: default F12 in legacy and kitty encodings (press recognised, release ignored);
+  `<prefix> d` detaches; `<prefix> <prefix>` delivers one prefix to the program; `<prefix> x`
+  delivers nothing and rings; the prefix split across two reads; a configured `ctrl+<letter>` in
+  C0 and kitty `CSI … ; 5 u`; a value bound by a client in the project is refused.
+- Blocked reports: one enter and one leave per episode; a flapping screen inside one episode
+  sends nothing more; screen text stripped and capped.
+- Background work: §4.3b's table; each skipping action skips; each command refuses without
+  `--ignore-background`; an automated caller cannot pass the flag.
+- Services: the two-upgrade gc test (§4.4a); the `none` supervisor tests (§4.4b); rotate and
+  `ServicesHint` skip the holder; `service restart` refuses without `--kill-agents`.
 - Resume caller proof (Redis tests, disposable broker): a direct descendant of the stored
   (pid, start) writes; a grandchild through a shell writes; a non-descendant writes nothing; an
-  ancestor with the stored pid but another start time (reused pid) writes nothing; a chain
-  longer than 32 writes nothing. The walk itself: table tests with an injected stat reader, as
-  `ancestors` is tested today.
+  ancestor with the stored pid but another start time writes nothing; a chain longer than 32
+  writes nothing. The walk itself: table tests with an injected stat reader.
 - Focus rule: a viewer that never sends a focus report blocks `Submit` for its whole attach;
-  focus-out then focus-in toggles it; an observer never blocks. Contract suite, all adapters
-  that have viewers.
-- Mutation on the re-check before CR (removing it must fail the race test), on the removal of
-  submit keys from held bytes, on the guard's swallowing, and on the lift condition (lifting on
-  "original text absent" instead of "input empty" must fail the partial-edit case), on the
-  clear-only-when-safe condition, on the ancestor match (pid only, without start, must fail the
-  reused-pid test), on the depth bound, and on `Submit`'s person-active refusal, on the `Line` constructors and on the holder's
-  frame validation (unknown kind, malformed nonce, text field present, a name field present,
-  count out of range), on `WakeLine`'s `ValidName` check (one mutant per argument: project,
-  agent) and on `Start`'s name check: the guarantees a
-  reviewer would otherwise only read.
-- `{p}:resume`: Redis tests (disposable broker) — an unproved caller writes nothing; a status,
-  a hand-off and the agent's death leave it; `forget` clears it.
-- The step-3 guard test: an allowlist that only shrinks; step 16 empties it.
+  focus-out then focus-in toggles it; an observer never blocks.
+- Mutation on: the hold of viewer bytes (releasing them before CR must fail the
+  sentence-and-Enter test); the landing check (sending CR without it must fail the dialog test);
+  the draft never expiring (a draft older than `draft_wait` must still refuse); the mouse/focus
+  exclusion; the ancestor match (pid only must fail the reused-pid test) and depth bound;
+  `Submit`'s person-active refusal; the `Line` constructors and the holder's frame validation
+  (unknown kind, malformed nonce, text field, name field, count out of range); `WakeLine`'s
+  `ValidName` check (one mutant per argument) and `Start`'s name check; the background-work
+  rule (`unknown` treated as none must fail); the gc's "not active" condition.
+- `{p}:resume`: Redis tests — an unproved caller writes nothing; a status, a hand-off and the
+  agent's death leave it; `forget` clears it.
+- The cutover's guard test: no herdr exec anywhere, no allowlist.
 
 ## 9. Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| herdr's `agent get` encodes detection we have not seen (blocked, done) | wakes into a permission prompt, or none at all | shadow mode (step 6) before any cutover; hooks for blocked |
-| Pure-Go emulator fidelity (Ink/ratatui redraws, wide chars, synchronized output) | signatures miss, agent never woken | bake-off on recorded output; oracle test; a client failing stays unsupported (never prompted), the safe direction |
-| Holder crash kills every agent of the project | team down | holder kept small, no policy; per project, not per host; restart policy (§4.4a); agents back via `up` or self-repair from `{p}:resume`; `holder` health + sentinel runbook |
+| herdr's `agent get` encodes detection we have not seen (blocked, done) | wakes into a permission prompt, or none at all | raw fixtures per client, including every permission screen; hooks for blocked where verified; a client without a verified blocked source is unsupported (never prompted) |
+| Direct cutover with no trial | a fault reaches every project at once | the gate of §6.4, the holder e2e and contract suites, the person's live check of the cutover branch, and the tagged last herdr release as rollback |
+| Pure-Go emulator fidelity (Ink/ratatui redraws, wide chars, synchronized output) | signatures miss, agent never woken | bake-off on recorded output; oracle test; a client failing stays unsupported, the safe direction |
+| Holder crash kills every agent of the project | team down | holder kept small, no policy; per project; restart policy (§4.4a, §4.4b); agents back via `up` or self-repair from `{p}:resume`; `holder` health + sentinel runbook |
+| No service manager | no restart, no start at login | the `none` supervisor applies the same restart and drain rules (§4.4b); what it cannot do is stated by `service status` |
+| Per-build units and binaries accumulate | disk and unit clutter | `service gc` at install, `up` and drain; `holder_leftovers` health |
 | Broker without persistence | `{p}:resume` lost on reboot, agents start fresh | AOF in the shipped compose; `broker_persistence` health warn |
-| Upgrade kills agents | interruption | per-build unit instance and socket (`holder-<buildid>.sock`), each build drains, no restart path touches a running holder (§4.4, §4.4a) |
-| Old holder never drains (`/clear` keeps the process) | two builds forever, fixes never reach old terminals | `holder_draining` health, `holder drain` rolling relaunch on the person's word |
-| A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 9 |
-| Losing the tiled always-visible layout | the person sees less at a glance | busmon preview + terminal splits; Q1 |
-| Person/agent typing race | wake line inside a draft | holder: check and write under the input lock (closed); herdr: today's re-inspect-then-prompt residual, normally one CLI round-trip but with no hard bound, kept until step 15 and shown as `atomic submit: no` |
+| Valkey 9 refuses the Redis 8 volume | broker does not start after the image change | checked on a copy in step 8; migration through backup/restore, stated in the release note |
+| Upgrade kills agents | interruption | per-build unit and socket, each build drains, no restart path touches a running holder (§4.4, §4.4a) |
+| Old holder never drains (`/clear` keeps the process) | two builds forever | `holder_draining` health, `holder drain` on the person's word |
+| A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 5 |
+| Person/agent typing race | wake line inside a draft | check, paste, landing check and CR under the input lock with viewer bytes held (§4.2): closed; the herdr residual exists only in releases up to the last herdr tag |
+| A CR answers a dialog | an unintended choice in the client | the line must be seen in the input before CR (§4.2) |
+| Background work lost by `/clear` or relaunch | work or context lost | background-work fact, fail closed on unknown, actions skip (§4.3b) |
+| Master flooded by blocked reports | noise | one enter and one leave per episode (§4.3a) |
+| Screen text in a master report | prompt injection into master's context | one line, stripped, capped, labelled as screen data (§4.3a) |
+| A stale draft holds wakes forever | an agent never woken | the row shows the draft's age, one ring after `draft_wait`; the person ends it with Enter (§4.5) |
 | macOS process facts (foreground group, start time) | identity/foreground wrong on Mac | `tcgetpgrp` on the PTY master is portable; per-OS facts behind one platform file, tested on its OS |
-| Two hosts during the trial | confusion over where an agent runs | `terminal.host` per project; busmon shows the host per agent |
+| Losing the tiled always-visible layout | the person sees less at a glance | busmon preview + terminal splits (Q1) |
 | Scope creep into a multiplexer | months of work | non-goal stated; busmon only previews and attaches |
 
-## 10. Questions for the person
+## 10. Decisions of the person (2026-11-11)
 
-1. **Visibility.** herdr shows all agents tiled at once. The design replaces it with busmon's
-   list + live preview of one agent + full-screen attach, and leaves side-by-side to your
-   terminal's splits (one `agentbus attach` each). Is that acceptable, or must busmon show
-   several agents' screens at once (a much larger, multiplexer-like piece)?
-2. **The focus rule.** With no window focus, which rule stops a wake line: (a) you typed in that
-   agent in the last 3 s, hold an unsent draft, or are attached and your terminal has not
-   reported losing focus (recommended; a terminal without focus reports always blocks), or
-   (b) any attached viewer at all, even when it reports being unfocused?
-3. **"100 % Go".** Is a Go module that embeds a native library (gostty: Ghostty's Zig-built VT
-   core, loaded without cgo) acceptable in production, in tests only, or not at all?
-4. **Holder scope.** One holder per project (recommended: a crash takes one project down) or
-   one per host? Note the consequence with the one-dispatcher-per-host decision (2026-10-26):
-   a per-host dispatcher enumerates every project's holder sockets
-   (`<rundir>/agentbus/*/holder-*.sock`, project from the directory name, validated with
-   `ValidName` before use) and keeps one connection per holder; a per-project dispatcher
-   (today) has one directory to read.
-5. **Lifetime.** Agents die on reboot and come back with `agentbus up` using their recorded
-   resume. Is that enough, or should the holder start at login and relaunch them itself? On
-   Linux this also decides **logout**: without `loginctl enable-linger`, systemd stops a user's
-   units when the last session ends, so logging out (or the last ssh session closing) kills
-   every holder and its agents. Enable linger (agents outlive logout), or accept that logout
-   ends the team? (macOS: a LaunchAgent stops at logout; a LaunchDaemon would be needed.)
-6. **herdr after cutover.** Delete the herdr adapter entirely (recommended, step 16), or keep it
-   as an optional host?
-7. **Gemini.** The dispatcher supports Antigravity (`agy`), not Gemini CLI. Is Gemini CLI a
-   client to support in this work (needs probing and signatures), or later?
-8. **Trial project.** Which project runs the live trial (step 14): agent-bus-monitor itself
-   (dogfood, highest visibility) or a quieter one?
-9. **Attach prefix key.** `ctrl+\` (herdr-core's key; `ctrl+\ d` detaches) or `ctrl+]`
-   (go-pty, telnet habit; `ctrl+] d`)? Either way it is a prefix, and pressing it twice sends
-   it to the agent.
+All questions of revision 13 are decided; this spec is frozen after revision 14.
+
+1. **Visibility.** busmon list + live preview + full-screen attach; side by side through the
+   terminal's splits. No multiplexer (§4.6).
+2. **Focus rule.** (a): typed in the last `dispatch.person_quiet`, a draft standing, or attached
+   and not proven unfocused. A draft never expires into permission to type; the row shows its
+   age and a waiting wake; one desktop ring after `dispatch.draft_wait` (§4.5).
+3. **gostty.** Tests only, as an oracle behind a build tag. Production is pure Go (§6.2).
+4. **Holder scope.** One holder per project (§4.4). With the one-dispatcher-per-host decision
+   (2026-10-26), a per-host dispatcher enumerates `<rundir>/agentbus/*/holder-*.sock` (project
+   from the directory name, validated with `ValidName` before use).
+5. **Lifetime.** Services start at login without linger, as the configurable option
+   `services.start_at_login`; logout ends the team; agents return through `up` or self-repair
+   with their recorded resume (§4.4a).
+6. **herdr after cutover.** Settled by the direct cutover: no adapter, herdr deleted (§4.8, §7).
+7. **Gemini CLI.** Dropped: the Google client is Antigravity (`agy`), already supported.
+8. **Trial project.** Settled by the direct cutover: no trial; the person's live check of the
+   cutover branch and the tagged last herdr release replace it (§7).
+9. **Attach prefix.** Replaced by the configurable `attach.prefix`, default F12 (§4.6).
+- **Submit.** Simplified: viewer input held during the submit, CR, then release; the guard
+  machinery removed (§4.2).
+- **Windows.** Out of scope; a mode without a service manager is in scope (§4.4b, §11).
 
 ## 11. Out of scope
 
-Windows (ConPTY). A tiling multiplexer in busmon. Remote hosts other than over ssh. OSC 7501
-emission by clients. Changing the dispatcher's decision rules beyond focus → person active.
-Any new automated pane writer.
+Windows: the PTY (ConPTY), process facts and service code are kept one file per platform so a
+Windows port can be added later, but nothing in this spec builds or tests it. A tiling
+multiplexer in busmon. Remote hosts other than over ssh. OSC 7501 emission by clients. Gemini
+CLI and DeepSeek. Changing the dispatcher's decision rules beyond focus → person active, the
+blocked reports and the background-work skip. Any new automated pane writer. New features in
+this spec after revision 14.
