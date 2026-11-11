@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -14,13 +15,17 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
-func TestWakeTextExact(t *testing.T) {
-	got := WakeText("demo", "coder", "a1b2c3", 3)
-	want := "[agentbus#a1b2c3] demo: 3 message(s) waiting for coder. Run: agentbus --project demo subscribe --drain coder"
-	if got != want {
-		t.Fatalf("WakeText =\n%q\nwant\n%q", got, want)
+// The Runtime takes a termhost.Line, never text (herdr exit 4.2, step 1):
+// Prompt's parameters are the context, the pane and the line, and nothing
+// else crosses the seam.
+func TestRuntimePromptTakesALine(t *testing.T) {
+	m, _ := reflect.TypeOf((*Runtime)(nil)).Elem().MethodByName("Prompt")
+	ft := m.Type
+	if ft.NumIn() != 3 || ft.In(1).Kind() != reflect.String || ft.In(2) != reflect.TypeOf(termhost.Line{}) {
+		t.Fatalf("Prompt %v, want (ctx, pane, termhost.Line)", ft)
 	}
 }
 
@@ -48,8 +53,8 @@ func TestRunWakesUnarmedIdleAgent(t *testing.T) {
 	if p.Pane != "p-coder" || m == nil || m[1] != p.Nonce {
 		t.Fatalf("prompt = %+v, want pane p-coder with its nonce marker", p)
 	}
-	if want := WakeText(b.Project(), "coder", p.Nonce, 1); p.Text != want {
-		t.Fatalf("text = %q, want %q", p.Text, want)
+	if want, _ := termhost.WakeLine(b.Project(), "coder", 1, p.Nonce); p.Text != want.Text() {
+		t.Fatalf("text = %q, want %q", p.Text, want.Text())
 	}
 	waitFor(t, 2*time.Second, "prompted record", func() bool {
 		w, ok := wakeOf(t, b, "coder")
@@ -584,8 +589,9 @@ func TestRunLargeBacklogOnePromptThenDrainInOrder(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	run.stop(t)
 	ps := rt.Prompts()
-	if len(ps) != 1 || !strings.Contains(ps[0].Text, " 1000 message(s) waiting for coder.") {
-		t.Fatalf("prompts = %+v, want one announcing 1000 messages", ps)
+	// herdr exit 4.2: a count above 999 reads 999+ (capped, never refused).
+	if len(ps) != 1 || !strings.Contains(ps[0].Text, " 999+ message(s) waiting for coder.") {
+		t.Fatalf("prompts = %+v, want one announcing 999+ messages", ps)
 	}
 	var got []string
 	n, err := b.DrainCmd(ctx, "coder", "c", bus.DefaultHorizon, func(e bus.Event) error {

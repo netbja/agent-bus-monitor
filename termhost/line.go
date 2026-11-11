@@ -27,7 +27,8 @@ const MaxCount = 999
 const clearText = "/clear"
 
 // wakeFormat is the wake line, the one the dispatcher has always typed:
-// nonce, project, count, agent, project, agent.
+// nonce, project, count, agent, project, agent. It carries no message body:
+// peer content is never typed into a terminal (event-driven dispatch §3.3).
 const wakeFormat = "[agentbus#%s] %s: %s message(s) waiting for %s. Run: agentbus --project %s subscribe --drain %s"
 
 var nonceRE = regexp.MustCompile(`^[0-9a-f]{6,16}$`)

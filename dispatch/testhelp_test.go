@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/termhost"
 	"regexp"
 	"strconv"
 	"strings"
@@ -93,7 +94,7 @@ type fakeRT struct {
 // wakeLinePattern is WakeText's format: the dispatchTypes invariant (lifecycle
 // part B) is that every Runtime write in every test of this package is a wake
 // line or exactly ClearText, and a clear only follows its reservation.
-var wakeLinePattern = regexp.MustCompile(`^\[agentbus#\S+\] \S+: \d+ message\(s\) waiting for \S+\. Run: agentbus --project \S+ subscribe --drain \S+$`)
+var wakeLinePattern = regexp.MustCompile(`^\[agentbus#\S+\] \S+: \d+\+? message\(s\) waiting for \S+\. Run: agentbus --project \S+ subscribe --drain \S+$`)
 
 func newFakeRT(script func(pane string, n int) Inspection) *fakeRT {
 	return &fakeRT{script: script, calls: map[string]int{}, observed: true}
@@ -107,8 +108,9 @@ func (f *fakeRT) Inspect(_ context.Context, pane string) Inspection {
 	return f.script(pane, n)
 }
 
-func (f *fakeRT) Prompt(_ context.Context, pane, text, nonce string) (bool, error) {
-	if !wakeLinePattern.MatchString(text) {
+func (f *fakeRT) Prompt(_ context.Context, pane string, line termhost.Line) (bool, error) {
+	text, nonce := line.Text(), line.Nonce()
+	if line.Kind() != termhost.KindWake || !wakeLinePattern.MatchString(text) {
 		panic("dispatchTypes: the dispatcher typed something other than a wake line: " + text)
 	}
 	f.mu.Lock()
