@@ -155,6 +155,15 @@ func Load(path string) (*Manifest, error) {
 		if tier, ok := info["tier"].(string); !ok || (tier != "boot" && tier != "pop") {
 			return nil, fmt.Errorf("role %s: tier must be boot or pop", role)
 		}
+		if req, exists := info["required"]; exists { // self-repair 4.2: a closed tab is recreated
+			b, isBool := req.(bool)
+			if !isBool {
+				return nil, fmt.Errorf("role %s: required must be true or false", role)
+			}
+			if b && info["tier"] == "pop" {
+				return nil, fmt.Errorf("role %s: required on a pop role: a pop comes back through master only", role)
+			}
+		}
 		if skills, exists := info["skills"]; exists && !validNames(skills) {
 			return nil, fmt.Errorf("role %s: invalid skills", role)
 		}
@@ -357,7 +366,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 		profile["options"] = options
 	} else {
-		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "pops", "approval", "delivers", "tool_rules"), "role "+role+" (move execution fields into a profile)"); err != nil {
+		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "pops", "approval", "delivers", "tool_rules", "required"), "role "+role+" (move execution fields into a profile)"); err != nil {
 			return Profile{}, err
 		}
 		profileNameValue, ok := info["profile"]
@@ -697,6 +706,14 @@ func (m *Manifest) RoleTier(role string) string {
 	info, _ := asTable(m.Roles[role])
 	tier, _ := info["tier"].(string)
 	return tier
+}
+
+// RoleRequired is the role's required (self-repair 4.2): its closed tab is
+// recreated, where an optional role's is only reported. Absent, false.
+func (m *Manifest) RoleRequired(role string) bool {
+	info, _ := asTable(m.Roles[role])
+	req, _ := info["required"].(bool)
+	return req
 }
 
 // RolesByTier returns roles in their original manifest order.
