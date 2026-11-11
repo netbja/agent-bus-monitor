@@ -411,8 +411,9 @@ of the Work model, the header's rule (correction 3).
   - The open project's are the shell's own, live: the same numbers as the header.
   - Every other project's are read with the page (`M`, `R`), never polled: two poll ticks of its
     bus (every read a read; the second reads the gates of the agents the first found), then the
-    Work model. They are read last, each alone within the page's deadline, so one that fails or
-    runs out of time costs only its own two cells.
+    Work model. They are read last, side by side (four at a time), each with its own deadline
+    (4 s) rather than the page's, so one that fails or stalls costs only its own two cells
+    (reviewer-codex).
 - **`?`, never 0** (the person's Q3): a count reads `?` when it was not read (the broker, or any
   read of that project's poll, failed: the poll would keep no value, which would count as 0,
   reviewer-codex), when it is more than a minute old (a note says when it was read and that

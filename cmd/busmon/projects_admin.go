@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -159,17 +160,31 @@ func gatherAdmin(ctx context.Context, src adminSource, open string, now time.Tim
 	}
 	v.rows = adminRows(facts, brokerOK, tmpls, svc, svcOK, ws, herdrOK, open)
 	// The counts last, each alone: one that fails or runs out of time is ?,
-	// never the page's other columns. The open project's are the shell's.
+	// never the page's other columns nor another project's (reviewer-codex):
+	// each read has its own deadline, from the caller's context rather than
+	// the page's, and they run side by side, a few at a time. The open
+	// project's are the shell's.
 	if src.counts != nil {
+		var wg sync.WaitGroup
+		slots := make(chan struct{}, countsReadsAtOnce)
 		for i := range v.rows {
 			r := &v.rows[i]
-			if !r.onBroker || r.open || c.Err() != nil {
+			if !r.onBroker || r.open {
 				continue
 			}
-			if n, err := src.counts(c, r.name); err == nil {
-				r.counts, r.countsAt = &n, now
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				slots <- struct{}{}
+				defer func() { <-slots }()
+				rc, cancel := context.WithTimeout(ctx, countsReadTimeout)
+				defer cancel()
+				if n, err := src.counts(rc, r.name); err == nil {
+					r.counts, r.countsAt = &n, now // its own row: no other goroutine writes it
+				}
+			}()
 		}
+		wg.Wait()
 	}
 	return v
 }

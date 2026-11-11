@@ -193,3 +193,41 @@ func TestRecordingKeepsTheCountsReaders(t *testing.T) {
 		t.Error("no health reader")
 	}
 }
+
+// reviewer-codex: one project's read that stalls costs its own cells only.
+// Each count read has its own deadline (countsReadTimeout), the reads run
+// side by side, and a slow project never leaves the next ones unread.
+func TestGatherAdminCountsStallOnlyTheirProject(t *testing.T) {
+	old, oldPage := countsReadTimeout, adminReadTimeout
+	countsReadTimeout, adminReadTimeout = 50*time.Millisecond, 50*time.Millisecond
+	t.Cleanup(func() { countsReadTimeout, adminReadTimeout = old, oldPage })
+	src := adminFixture(shellNow)
+	broker := src.broker
+	src.broker = func(ctx context.Context) ([]adminFacts, error) { // the page's own read spends its deadline
+		time.Sleep(adminReadTimeout)
+		return broker(ctx)
+	}
+	src.counts = func(ctx context.Context, p string) (workCounts, error) {
+		if p == "trading" { // the first broker project after the open one: it stalls to its deadline
+			<-ctx.Done()
+			return workCounts{}, ctx.Err()
+		}
+		if err := ctx.Err(); err != nil { // a read on a spent deadline fails, as a broker's would
+			return workCounts{}, err
+		}
+		return workCounts{you: 1, team: 1}, nil
+	}
+	start := time.Now()
+	v := gatherAdmin(context.Background(), src, "agent-bus-monitor", shellNow)
+	if r := rowNamed(t, v, "trading"); r.counts != nil {
+		t.Errorf("trading stalled: %+v", r.counts)
+	}
+	for _, p := range []string{"demo", "old"} {
+		if r := rowNamed(t, v, p); r.counts == nil {
+			t.Errorf("%s left unread behind a stalled project", p)
+		}
+	}
+	if d := time.Since(start); d > 10*countsReadTimeout {
+		t.Errorf("the page waited %s", d)
+	}
+}

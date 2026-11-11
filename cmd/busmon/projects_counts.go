@@ -23,6 +23,13 @@ type workCounts struct{ you, team int }
 // fresh"). The page is read on M and R, never polled.
 const countsFresh = time.Minute
 
+// countsReadTimeout bounds one project's count read (two poll ticks, each
+// within pollBudget); a test lowers it. countsReadsAtOnce is how many run
+// side by side.
+var countsReadTimeout = 4 * time.Second
+
+const countsReadsAtOnce = 4
+
 // countsSplitW: a page narrower (its inside, 88 cells at 90 columns) shows
 // the two counts in one column, "♙/●", so the project's name keeps its room.
 const countsSplitW = 88
