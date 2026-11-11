@@ -28,6 +28,7 @@ import (
 // doctorRow is one agent's verdict.
 type doctorRow struct {
 	Agent      string `json:"agent"`
+	Required   bool   `json:"required"`      // roles.toml's required (self-repair 4.2): its closed tab is recreated
 	PID        int    `json:"pid,omitempty"` // the process judged: busmon shows the verdict only for it
 	Profile    string `json:"profile"`
 	Configured string `json:"configured"`
@@ -170,7 +171,7 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 	var rows []doctorRow
 	for _, n := range names {
 		s := snaps[n]
-		r := doctorRow{Agent: n, PID: s.PID}
+		r := doctorRow{Agent: n, PID: s.PID, Required: m.RoleRequired(n)}
 		own, err := m.Resolve(n)
 		if d.Env != nil {
 			own, err = ownProfile(m, d.Env, b.Project(), n)
@@ -304,9 +305,13 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 		}
 		return code
 	}
-	fmt.Fprintf(out, "%-12s %-10s %-22s %-22s %-22s %s\n", "AGENT", "PROFILE", "CONFIGURED", "LAUNCHED", "USED", "VERDICT")
+	fmt.Fprintf(out, "%-12s %-3s %-10s %-22s %-22s %-22s %s\n", "AGENT", "REQ", "PROFILE", "CONFIGURED", "LAUNCHED", "USED", "VERDICT")
 	for _, r := range rows {
-		fmt.Fprintf(out, "%-12s %-10s %-22s %-22s %-22s %s\n", r.Agent, dash(r.Profile), dash(r.Configured), dash(r.Launched), dash(r.Used), r.Verdict)
+		req := "-"
+		if r.Required {
+			req = "yes"
+		}
+		fmt.Fprintf(out, "%-12s %-3s %-10s %-22s %-22s %-22s %s\n", r.Agent, req, dash(r.Profile), dash(r.Configured), dash(r.Launched), dash(r.Used), r.Verdict)
 		if r.Why != "" && r.Verdict != "ok" {
 			fmt.Fprintf(out, "%12s %s\n", "", r.Why)
 		}
