@@ -295,7 +295,8 @@ useful alone first, and nothing acts before step 7.
    (`AGENT_BUS_SELF_REPAIR_PER_DAY`, above 0) and `services.start_at_login` (the machine's file
    only, no env). `Key.DevOnly` lists the values taken only in dev: outside it, from the env or a
    file, the key resolves `Invalid` with `Resolved.Why` naming it, `agentbus config` prints the
-   reason, and a file's line is a warning. An env value its rule refuses is `Invalid` too. The
+   reason, and a file's line is a warning. A value its rule refuses is `Invalid` too, from the
+   env or from the file (`Key.FailClosed`: `self_repair = false` never falls to the default). The
    watcher (steps 6 and 7) reads the switch through `config.SelfRepairMode`, which reads any
    refusal as `off`. `config.Set` and `Unset` learned a top-level key. busmon's C page shows
    the five in Services. It offers `shadow` only in dev and keeps a refused line editable, and the

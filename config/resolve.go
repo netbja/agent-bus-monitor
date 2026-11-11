@@ -23,6 +23,7 @@ type Resolved struct {
 	// Why is a refusal's reason when it is not the env rule's: a DevOnly
 	// value outside development mode, the key named.
 	Why string
+	dev bool // refused for a DevOnly value outside development mode
 }
 
 // Get resolves the key named; an unknown name panics (a programming error).
@@ -48,6 +49,10 @@ func (r Resolver) Get(name string) Resolved {
 		if v, ok := f.values[name]; ok {
 			return r.devChecked(Resolved{Key: k, Value: v.value, Source: f.Label, Line: v.line})
 		}
+		if v, ok := f.refused[name]; ok { // FailClosed: refused here, never the next source
+			return Resolved{Key: k, Value: k.Default, Source: f.Label, Line: v.line, Invalid: true,
+				Why: fmt.Sprintf("%s: line %d refused by its rule", name, v.line)}
+		}
 	}
 	return Resolved{Key: k, Value: k.Default, Source: "default"}
 }
@@ -57,7 +62,7 @@ func (r Resolver) Get(name string) Resolved {
 func (r Resolver) devChecked(g Resolved) Resolved {
 	for _, v := range g.Key.DevOnly {
 		if g.Value == v && !r.Bool("dev") {
-			g.Value, g.Invalid = g.Key.Default, true
+			g.Value, g.Invalid, g.dev = g.Key.Default, true, true
 			g.Why = fmt.Sprintf("%s: %s only in development mode (AGENT_BUS_DEV=1 or dev = true)", g.Key.Name, v)
 		}
 	}
@@ -96,7 +101,7 @@ func (r Resolver) Warnings() []Warning {
 		if len(k.DevOnly) == 0 {
 			continue
 		}
-		if g := r.Get(k.Name); g.Why != "" && g.Line > 0 {
+		if g := r.Get(k.Name); g.dev && g.Line > 0 {
 			out = append(out, Warning{File: g.Source, Line: g.Line, Key: k.Name, Msg: strings.TrimPrefix(g.Why, k.Name+": ") + "; refused"})
 		}
 	}

@@ -52,6 +52,10 @@ func TestSelfRepairMode(t *testing.T) {
 		{"file shadow, dev in the file", nil, devFile, "shadow", false},
 		{"file shadow, dev off by env", map[string]string{"AGENT_BUS_DEV": "0"}, devFile, "off", true},
 		{"env junk", map[string]string{"AGENT_BUS_SELF_REPAIR": "true"}, offFile, "off", true},
+		// foureyes: a value the file's rule refuses never leaves the watcher on.
+		{"file false", nil, Load(writeFile(t, "config.toml", "[dispatch]\nself_repair = false\n"), "config.toml"), "off", true},
+		{"file Off", nil, Load(writeFile(t, "config.toml", "[dispatch]\nself_repair = \"Off\"\n"), "config.toml"), "off", true},
+		{"file typo", nil, Load(writeFile(t, "config.toml", "[dispatch]\nself_repair = \"of\"\n"), "config.toml"), "off", true},
 	} {
 		r := Resolver{Getenv: env(c.env), Files: []*File{c.file}}
 		if got := SelfRepairMode(r); got != c.want {
@@ -75,6 +79,10 @@ func TestSelfRepairMode(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no warning for shadow outside dev: %v", r.Warnings())
+	}
+	falseFile := Load(writeFile(t, "config.toml", "[dispatch]\nself_repair = false\n"), "config.toml")
+	if ws := (Resolver{Getenv: env(nil), Files: []*File{falseFile}}).Warnings(); len(ws) != 1 || ws[0].Line != 2 || !strings.Contains(ws[0].Msg, "self-repair stays off") {
+		t.Errorf("a refused line: warnings %v, want one, at line 2, saying it stays off", ws)
 	}
 	if ws := (Resolver{Getenv: env(nil), Files: []*File{devFile}}).Warnings(); len(ws) != 0 {
 		t.Errorf("shadow in dev warned: %v", ws)

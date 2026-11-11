@@ -82,6 +82,10 @@ type Key struct {
 	// DevOnly are values the key takes only in development mode (dev): from
 	// any source outside it, the key resolves Invalid, with Why naming it.
 	DevOnly []string
+	// FailClosed: a value the file's rule refuses resolves Invalid too, at
+	// its line, never the next source down (a switch whose default is on:
+	// self_repair = false must not leave it on, foureyes).
+	FailClosed bool
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -266,10 +270,10 @@ var Keys = []*Key{
 		env: envZeroOne, file: fileBool},
 	// The watcher's switch, on by default (the person, Q1); shadow records
 	// what it would do and acts on nothing, in development mode only. A value
-	// its rule refuses, or shadow outside dev, is refused: the watcher stays
-	// off (SelfRepairMode).
+	// its rule refuses, from the env or the file, or shadow outside dev, is
+	// refused: the watcher stays off (SelfRepairMode).
 	{Name: "dispatch.self_repair", Env: "AGENT_BUS_SELF_REPAIR", Kind: String, Default: "on", ReadBy: "dispatch",
-		Invalid: "self-repair stays off", DevOnly: []string{"shadow"},
+		Invalid: "self-repair stays off", DevOnly: []string{"shadow"}, FailClosed: true,
 		env: func(raw string) (any, envResult) {
 			if isSelfRepairMode(raw) {
 				return raw, envUse

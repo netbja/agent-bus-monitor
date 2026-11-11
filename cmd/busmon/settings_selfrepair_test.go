@@ -51,6 +51,16 @@ func TestSettingsPageShadowRefused(t *testing.T) {
 	}
 }
 
+// foureyes: self_repair = false (a value its rule refuses) is refused at its
+// line, reads off, and the person can set it on the page.
+func TestSettingsPageSelfRepairFalse(t *testing.T) {
+	getenv := settingsEnv(t, "[dispatch]\nself_repair = false\n", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	r := settingRowOf(t, settingsGroups(getenv, settingsFlags{}, settingsPageGroups), "dispatch.self_repair")
+	if r.From != fromRefused || r.Source != "config.toml line 2 refused" || !r.Editable || !r.InFile {
+		t.Fatalf("row %+v", r)
+	}
+}
+
 // busmon's header says dev while development mode is on (4.5).
 func TestHeaderDevMode(t *testing.T) {
 	d := fullHeader()

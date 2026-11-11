@@ -882,7 +882,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   header says `dev` while it is on. `dispatch.self_repair` (`AGENT_BUS_SELF_REPAIR`, on | off |
   shadow, default on) has `Key.DevOnly = shadow`: outside dev, from any source, it resolves
   `Invalid` with `Resolved.Why` naming the key (`devChecked`); a file's refusal is also a
-  warning of that file at its line (`Resolver.Warnings`). Read it only through
+  warning of that file at its line (`Resolver.Warnings`). It is also `Key.FailClosed`: a file
+  value its rule refuses (`self_repair = false`, a typo) resolves `Invalid` at its line instead
+  of falling to the default `on` (foureyes). Read it only through
   `config.SelfRepairMode`, which reads a refused switch as `off`: `Get`'s value for an invalid
   key is the default, `on`. The budgets `dispatch.self_repair_every` (30m) and
   `dispatch.self_repair_per_day` (3) take only values above 0 (an env 0 is skipped).
