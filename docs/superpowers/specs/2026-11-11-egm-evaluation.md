@@ -18,15 +18,19 @@ installer; there is no runtime dependency. The drift report is not a tool either
 
 ## Cost
 
-- **Subagents and tokens.** A full `egm-review` has five stages. Two of them are review loops
-  with three reviewers each, which converge only after two clean rounds in a row, capped at five
-  rounds. That is about 14 fresh subagents when everything is clean and up to about 35 at the
-  cap, each re-reading the document and its linked files. Our r14 spec is about 1 000 lines, so
+- **Subagents and tokens.** A full `egm-review` runs stages 5 to 9. Stage 5 is zoom-out plus
+  inventive catalyst (2 reviewers), stage 6 comprehension (1), stage 7 a loop of 3 reviewers,
+  stage 8 zoom-out (1), and stage 9 a loop of 3. A loop converges only after two clean rounds in
+  a row, capped at five rounds. Counting reviewers only, that is **16** fresh agents at two
+  clean rounds per loop (2+1+3×2+1+3×2) and **34** at the cap (2+1+3×5+1+3×5). That is the
+  direct-dispatch path. The synthesizer path, the one `egm-review` documents first, adds one
+  synthesizer per loop round and one each for stages 5 and 8: **22** and **46**. Each agent
+  re-reads the document and its linked files. Our r14 spec is about 1 000 lines, so
   one review would cost a few hundred thousand tokens, against two reviewers today.
 - **Latency and people.** Every gate asks the person **one question at a time in chat**, then
   "remains idle across human turns". On the bus, nobody reads an agent's chat: the person reads
-  busmon. EGM would stall or ask questions into the void. It also cannot run headless; its own
-  rule is "if no subagent tool, stop".
+  busmon. EGM would stall or ask questions into the void. A review also needs fresh subagents:
+  `egm-review` says to stop without a subagent tool. (Bootstrap instead runs its scouts inline.)
 - **Fit with large codebases.** Bootstrap and drift "read files liberally", one document after
   another. Across our 67 specs, that is a whole-repository read per run, with no index and no
   cache.
