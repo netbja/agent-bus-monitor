@@ -45,6 +45,10 @@ type settingRow struct {
 	ReadBy     string // who reads it (the registry's words)
 	Kind       config.Kind
 	List       bool
+	// Choices are the values ←→ picks among when they depend on the
+	// settings (dispatch.self_repair's shadow, in development mode only);
+	// nil = settingChoices.
+	Choices []string
 }
 
 // settingGroup is one group's rows, in the registry's order.
@@ -58,8 +62,10 @@ var settingLabels = map[string]string{
 	"display.theme": "Theme", "display.icons": "Icons", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after", "display.idle_view_after": "Screensaver (idle view) after", "compose.at_path": "@ inserts paths as", "display.work_layout": "Work layout",
 	"waiting.fade": "Fade and slide", "waiting.popup_after": "Reminder after", "waiting.snooze": "Reminder snooze",
 	"waiting.bell": "Bell", "dispatch.focus_notice": "Focused pane notice after", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "start.team": "Default team",
-	"sentinel.reload": "Auto-restart on update",
-	"notify.on":       "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
+	"sentinel.reload":      "Auto-restart on update",
+	"dispatch.self_repair": "Self-repair", "dispatch.self_repair_every": "Self-repair at most once per", "dispatch.self_repair_per_day": "Self-repairs a day per agent",
+	"services.start_at_login": "Start services at login", "dev": "Development mode",
+	"notify.on": "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
 	"notify.delay": "Delay", "notify.max_per_hour": "At most per hour", "notify.quiet": "Quiet hours", "notify.quiet_exempt": "Sent in quiet hours",
 	"projects.delete_files": "Delete also its template and worktrees", "projects.delete_backups": "Delete also its backups",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
@@ -73,10 +79,15 @@ func settingOnPage(k *config.Key) bool {
 	case config.GroupBackup:
 		return k.PersonOnly
 	case config.GroupServices:
-		return k.Name == "sentinel.reload"
+		return servicesOnPage[k.Name]
 	}
 	return true
 }
+
+// servicesOnPage are the Services keys the page shows: auto-reload's, and
+// self-repair's (the person: the mode, the budgets and the login option).
+var servicesOnPage = map[string]bool{"sentinel.reload": true, "dispatch.self_repair": true, "dispatch.self_repair_every": true,
+	"dispatch.self_repair_per_day": true, "services.start_at_login": true, "dev": true}
 
 // settingFlags are the flags above a key's env: busmon's own, read-only here.
 var settingFlags = map[string]string{"display.theme": "busmon --theme", "display.limit": "busmon --limit", "identity.as": "busmon --as"}
@@ -120,6 +131,8 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 			switch v, isFlag := flagged[k.Name]; {
 			case isFlag:
 				row.From, row.Source, row.Editable, value = fromElsewhere, "flag "+settingFlags[k.Name], false, v
+			case res.Invalid && res.Source == "config.toml": // a DevOnly value outside dev: the person may set it here
+				row.From, row.Source, row.InFile = fromRefused, fmt.Sprintf("config.toml line %d refused", res.Line), true
 			case res.Invalid:
 				row.From, row.Source, row.Editable = fromRefused, res.Source+" refused", false
 			case res.Source != "default" && res.Source != "config.toml" && res.Source != "busmon.toml":
@@ -135,6 +148,9 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 				row.From, row.Source = fromDefault, "default"
 			}
 			row.Default, row.ReadBy, row.Kind, row.List = settingValue(k, k.Default), k.ReadBy, k.Kind, k.List
+			if k.Name == "dispatch.self_repair" {
+				row.Choices = selfRepairChoices(r.Bool("dev"))
+			}
 			row.FileHeld = cfg.Has(k.Name) || refused[k.Name] > 0
 			row.Value = settingValue(k, value)
 			switch after := below.Get(k.Name); after.Source {
@@ -178,4 +194,20 @@ func settingValue(k *config.Key, v any) string {
 		}
 	}
 	return config.Format(v)
+}
+
+// selfRepairChoices: shadow is offered in development mode only (4.5).
+func selfRepairChoices(dev bool) []string {
+	if dev {
+		return []string{"on", "off", "shadow"}
+	}
+	return []string{"on", "off"}
+}
+
+// rowChoices are the values ←→ picks among for r; nil when it has none.
+func rowChoices(r settingRow) []string {
+	if r.Choices != nil {
+		return r.Choices
+	}
+	return settingChoices[r.Key]
 }

@@ -27,6 +27,7 @@ type busmonSettings struct {
 	// projects.delete_files and delete_backups: what a delete also removes
 	// from disk (projects-admin §5.5)
 	DeleteFiles, DeleteBackups bool
+	Dev                        bool // dev: development mode, shown in the header (self-repair 4.5)
 	Note                       string
 }
 
@@ -57,6 +58,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		AtPath:      r.String("compose.at_path"),
 		WorkLayout:  r.String("display.work_layout"),
 		DeleteFiles: r.Bool("projects.delete_files"), DeleteBackups: r.Bool("projects.delete_backups"),
+		Dev: r.Bool("dev"),
 	}
 	raw := func(name string) string { k, _ := config.Lookup(name); return getenv(k.Env) }
 	if t := r.Get("display.theme"); t.Invalid {

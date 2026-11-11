@@ -35,6 +35,7 @@ type headerData struct {
 	bars       barView      // the gauges as they slide
 	plan       *planSummary // the batch's plan (P); nil when none is loaded
 	icons      string       // display.icons: a gauge's provider icon, the first thing to go for room (busmon-icons)
+	dev        bool         // development mode is on (self-repair 4.5): "dev" by the project
 	now        time.Time
 }
 
@@ -90,6 +91,9 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 		return &items[len(items)-1]
 	}
 	add(Line{{Text: Preview(d.project), Role: RoleText, Bold: true}}, 3, 0).trunc = true
+	if d.dev { // development mode unlocks values such as shadow: never out of sight
+		add(Line{{Text: "dev", Role: RoleAttention, Bold: true}}, 1, 0)
+	}
 	add(healthSeg(d.health, d.now, compact), 1, 0)
 	if d.guardian.Total > 0 {
 		add(guardianSeg(d.guardian, width), 1, 0).hit = hitHealth
