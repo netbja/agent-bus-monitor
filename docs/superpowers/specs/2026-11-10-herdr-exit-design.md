@@ -2,10 +2,16 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 and 15 on 2026-11-11
+- Date: 2026-11-10, revisions 14 to 16 on 2026-11-11
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428)
+- Revision 16 (correction): foureyes on r15 — the simplified submit held for the person's bytes
+  but not for text already in the input that no viewer typed (a left-behind line of an earlier
+  submit; text the client puts back). Step 1 now also requires a verified empty input
+  (`EmptyInput` signature per client, from the §6.4 fixtures); after `ErrNotLanded` the terminal
+  takes no submit until its input is verified empty; a client without `EmptyInput` is
+  unsupported; two submit tests, two mutants, the risk row (§4.2, §4.9, §6.1, §8, §9)
 - Revision 15 (correction): reviewer-codex on r14 — §4.6 claimed F12 unbound in every checked
   client while §4.9 left it unverified for Codex, Grok and `agy`. Grok is now verified from its
   bundled shortcut guide (F12 free; it binds `ctrl+\`, `ctrl+q`, F2, F8); Codex and `agy` cannot
@@ -207,26 +213,39 @@ Interface rules (part of the interface, not comments):
   No free text crosses the seam from the dispatcher.
 - **Submit is one critical section on the terminal's input lock**, which every viewer's input
   also takes. Under the lock the holder:
-  1. checks person-active (§4.5) and the client's Ready signature on a settled screen; either
-     fails → `ErrPersonActive` / `ErrNotReady`, nothing written;
+  1. checks person-active (§4.5), the client's Ready signature **and its `EmptyInput`
+     signature** (the input region holds nothing) on a settled screen, and that the terminal is
+     not marked *left-behind* (below); any check failing → `ErrPersonActive` / `ErrNotReady`,
+     nothing written. A non-empty input sets the row's `input not empty`;
   2. **holds** every viewer byte that arrives from now on (all viewers; a per-terminal queue,
      never dropped: when the queue reaches 1 MiB the holder stops reading the viewers' sockets,
      which back-pressures them);
   3. types the line as a paste (bracketed when the program enabled mode 2004);
   4. waits until the line is **seen in the input** (the wake line's nonce, or `/clear`, in the
      client's input region on a settled screen), up to `dispatch.submit_wait` (default 2 s);
-  5. if seen, sends CR; if not, sends nothing more and returns `ErrNotLanded` (below);
+  5. if seen, sends CR; if not, sends nothing more, marks the terminal **left-behind**, and
+     returns `ErrNotLanded` (below);
   6. releases the held viewer bytes, in order, and the lock.
 
   **Why no guard is needed any more (the reasoning the person asked to check).** The old guard
   existed for one case: a person's bytes arriving between the paste and the CR, mixing with the
   pasted line or committing it with their Enter. Holding the viewer bytes for the whole submit
-  removes that case: between step 2 and step 6 no viewer byte reaches the program. Step 1
-  guarantees the input held no draft before the paste (a draft is any viewer byte since the
-  last CR, §4.5, and the holder sees every viewer byte because every viewer goes through it).
-  So when CR is sent the input holds the pasted line and nothing else, and the person's held
-  keys (their Enter included) are delivered **after** the line was submitted, as a new input.
-  The reasoning holds under two conditions, both enforced, not assumed:
+  removes that case: between step 2 and step 6 no viewer byte reaches the program. But "no
+  draft" (no viewer byte since the last CR, §4.5) is not "an empty input": text can sit in the
+  input that no viewer typed since the last CR — (a) a line of an earlier `Submit` that was
+  pasted but not seen within `submit_wait` (no CR): the next submit would paste after it, and a
+  left-behind `/clear` followed by a wake line submits `/clear agentbus#…`, which Claude Code
+  runs as `/clear` and clears the conversation; (b) text the client itself puts back in the
+  input, e.g. a queued message returned to the input on Esc, which was sent with a CR and so is
+  no draft. (foureyes on r15; r12's guard covered both by lifting only on a verified empty
+  input, and the person removed the guard, not that precondition.) So step 1 requires the input
+  region to be **verified empty** on the settled screen, from the client's `EmptyInput`
+  signature (§4.9), recorded from the empty-input fixtures (§6.4). Then, when CR is sent, the
+  input holds the pasted line and nothing else, and the person's held keys (their Enter
+  included) are delivered **after** the line was submitted, as a new input.
+  The reasoning holds under three conditions, all enforced, not assumed:
+  - **the input is empty before the paste** — step 1's `EmptyInput` check; a client with no
+    verified `EmptyInput` signature is unsupported (never prompted, §4.9);
   - **every byte reaches the program through the holder** — true by construction: the holder
     owns the PTY master; `agentbus attach` is the only way to type, and there is no herdr
     beside it after the cutover;
@@ -236,8 +255,10 @@ Interface rules (part of the interface, not comments):
     has not probed, and the case is rare (a dialog or a redraw in the same ~200 ms). The
     dispatcher records a person notice and an event naming the kind — "wake line may be left
     unsent in <agent>'s input" or "`/clear` may be left unsent in <agent>'s input — submitting it
-    clears the conversation" — and the agent's row shows it until the next settled Ready screen
-    without it. This is the only left-behind case, and it no longer depends on the person typing.
+    clears the conversation" — and the agent's row shows it. **A left-behind terminal takes no
+    `Submit`** until a settled screen shows its input empty (`EmptyInput` matches); the mark is
+    cleared only then, so a left `/clear` can never be completed by the next wake. This is the
+    only left-behind case, and it no longer depends on the person typing.
 
   Remaining cost, accepted (the person, 2026-11-11): the person's keys typed during a submit are
   delayed by the submit (about 200 ms plus the landing wait) and reach an agent that has just
@@ -673,11 +694,11 @@ JSON, Codex's `-c` overrides, Grok's project hook file, `agy`'s `hooks.json`), a
 needs a new mechanism needs code for it once.
 
 A client profile holds: binary and version range probed; launch form (already in
-`rolecfg/launch.go`); turn and blocked hook routes; `Ready`/`Busy`/`Modal`/`Dialog`/`Blocked`
-signatures; background-work sources and which are authoritative; helper process patterns;
+`rolecfg/launch.go`); turn and blocked hook routes; `Ready`/`EmptyInput`/`Busy`/`Modal`/`Dialog`/
+`Blocked` signatures; background-work sources and which are authoritative; helper process patterns;
 resume form and session id source; clear command; whether an empty submit is a no-op; key
-bindings. **Supported** = a verified blocked source **and** screen signatures for Ready and
-Blocked passing on recorded fixtures. An unsupported client is never prompted and never cleared.
+bindings. **Supported** = a verified blocked source **and** screen signatures for Ready,
+`EmptyInput` and Blocked passing on recorded fixtures. An unsupported client is never prompted and never cleared.
 A new client or version is probed with `agentbus term record` (§6.4).
 
 Verified on this host on 2026-11-11 (Claude Code 2.1.322, codex-cli 0.166.0, Kimi 2.2.0, Grok
@@ -744,7 +765,7 @@ the profile row, or the row stays as it is and the feature it gates stays off fo
 - `termhost` (new): `Host`, `Spec`, `Term`, `Screen`, `Activity`, `Proc`, `Line`, `HostInfo`;
   adapters `holder` (client side) and `fake`. Contract test suite in the package, run on both.
 - `agentstate` (new, from `dispatch`): `Signatures` and their fixtures move here; client profiles
-  (`clients/*.toml`, §4.9); `Blocked` patterns, hook-fed observed blocked, background-work fact
+  (`clients/*.toml`, §4.9); `Blocked` and `EmptyInput` patterns, hook-fed observed blocked, background-work fact
   (§4.3b), settle by quiet time. Pure functions: facts in, judgement out.
 - `holder` (new, server side) + `screen` (internal seam over the emulator: `Write`,
   `Snapshot(lines)`, `Modes`, `Render` for first paint). PTY and process code one file per
@@ -808,10 +829,11 @@ Shadow mode against herdr is dropped (direct cutover). The gate is recorded outp
   saves bytes + resize events + the hook events received, with timestamps.
 - **Raw fixtures per client** in every state the matrix needs: empty input, typed, working,
   modal, dialog, **each permission screen** (Codex approval screens included), background work
-  running and finished, an empty submit, F12 pressed at the input, and `/clear` where a client
-  has one.
+  running and finished, an empty submit, F12 pressed at the input, `/clear` where a client
+  has one, and an input holding text the client put there itself (a queued message returned on
+  Esc, where the client does that), so `EmptyInput` is pinned both ways.
 - An emulator candidate passes when, replayed, its screen satisfies every signature test for
-  every client (ready, typed, busy, modal, dialog, blocked, background, old box), renders wide
+  every client (ready, empty input, typed, busy, modal, dialog, blocked, background, old box), renders wide
   chars (Kimi's moon, `❯`, `›`, `─`) at the right column, and keeps SGR dim (Claude/Codex
   placeholders). Lines of emulator code we would own count against a candidate.
 - **A client that fails stays unsupported** (never prompted, never cleared). The cutover does not
@@ -931,7 +953,14 @@ step claims an improvement for herdr, and none exists after the cutover.
   - a dialog drawn between the check and the paste → the line is not seen in the input, **no CR**,
     `ErrNotLanded`, notice naming the kind (wake line / `/clear`);
   - a draft standing (any viewer byte since the last CR, mouse and focus reports excepted) →
-    refused, however old the draft; a CR ends it; an empty Enter ends it.
+    refused, however old the draft; a CR ends it; an empty Enter ends it;
+  - **a left-behind `/clear`, then a wake**: the first submit's line is not seen (no CR,
+    `ErrNotLanded`, terminal marked left-behind) while `/clear` stays in the input → the next
+    `Submit` (a wake) is refused with nothing typed; once the input is cleared and a settled
+    screen matches `EmptyInput`, the mark lifts and the wake goes through alone;
+  - **program-placed input text** (a scripted program that redraws a non-empty input after a CR,
+    as a client returning a queued message on Esc does; no viewer byte since the CR) → refused,
+    `ErrNotReady`, nothing typed, the row shows `input not empty`.
 - Attach prefix: the default key (F12 unless step 3 settled another) in legacy and kitty encodings (press recognised, release ignored);
   `<prefix> d` detaches; `<prefix> <prefix>` delivers one prefix to the program; `<prefix> x`
   delivers nothing and rings; the prefix split across two reads; a configured `ctrl+<letter>` in
@@ -950,6 +979,9 @@ step claims an improvement for herdr, and none exists after the cutover.
   focus-out then focus-in toggles it; an observer never blocks.
 - Mutation on: the hold of viewer bytes (releasing them before CR must fail the
   sentence-and-Enter test); the landing check (sending CR without it must fail the dialog test);
+  the empty-input check (dropping it must fail both the left-behind `/clear` and the
+  program-placed text tests); the left-behind mark (clearing it on `ErrNotLanded`'s return
+  instead of on a verified empty input must fail the left-behind `/clear` test);
   the draft never expiring (a draft older than `draft_wait` must still refuse); the mouse/focus
   exclusion; the ancestor match (pid only must fail the reused-pid test) and depth bound;
   `Submit`'s person-active refusal; the `Line` constructors and the holder's frame validation
@@ -975,7 +1007,7 @@ step claims an improvement for herdr, and none exists after the cutover.
 | Upgrade kills agents | interruption | per-build unit and socket, each build drains, no restart path touches a running holder (§4.4, §4.4a) |
 | Old holder never drains (`/clear` keeps the process) | two builds forever | `holder_draining` health, `holder drain` on the person's word |
 | A same-uid process drives the holder | arbitrary typing into an agent | text-free submit frame, holder-composed lines, raw input only on a person's attach, 0600/0700 socket, security review before step 5 |
-| Person/agent typing race | wake line inside a draft | check, paste, landing check and CR under the input lock with viewer bytes held (§4.2): closed; the herdr residual exists only in releases up to the last herdr tag |
+| Person/agent typing race, and text in the input that no viewer typed | wake line inside a draft; a wake appended to a left-behind `/clear` (clears the conversation) or to text the client returned to the input | check (person active, Ready, **input verified empty**), paste, landing check and CR under the input lock with viewer bytes held; a left-behind terminal takes no submit until its input is verified empty; a client without a verified `EmptyInput` signature is unsupported (§4.2, §4.9): closed; the herdr residual exists only in releases up to the last herdr tag |
 | A CR answers a dialog | an unintended choice in the client | the line must be seen in the input before CR (§4.2) |
 | Background work lost by `/clear` or relaunch | work or context lost | background-work fact, fail closed on unknown, actions skip (§4.3b) |
 | Master flooded by blocked reports | noise | one enter and one leave per episode (§4.3a) |
