@@ -278,6 +278,14 @@ useful alone first, and nothing acts before step 7.
 2. **The intent:** the fenced `self-repair` kind of `BeginSwap`/`EndSwap` (lease token and nonce),
    and `up --resume` skipping a role whose intent is held. Useful alone: today two people (or a
    person and master) running `up --resume` at once can already race.
+   *As built (step 2):* `bus/selfrepair.go`: `SwapKindSelfRepair`; `BeginSelfRepair(token, role,
+   nonce, ev)` checks the lease, the role's snapshot (as a reload's intent does) and `SET NX PX`,
+   and logs the `begin` (kind `self-repair`) in one script; `SelfRepairHeld` (the check right
+   before the split) and `EndSelfRepair` share one script: the lease, then the intent's kind and
+   nonce, `ErrNotOwnIntent` for any other. `SwapIntentOf` reads one role's intent. `up` (with or
+   without `--resume`, the dry run too) skips any held intent by kind, read per role right before
+   it acts (`relaunch.Options.Held`, `upDeps.Intent`); `reload`, which holds its own intent, sets
+   no `Held`.
 3. **The settings:** development mode (`AGENT_BUS_DEV`, `dev`); `dispatch.self_repair` (`on` |
    `off`, `shadow` only in dev, refused otherwise); the two budgets; `services.start_at_login`
    (stored only, no backend yet). All in `config/keys.go` and on busmon's settings screen.

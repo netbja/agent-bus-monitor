@@ -867,6 +867,14 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   script: a deleted project is never revived, and tab mode, which has no services marker, still
   reloads), it ends with `reloaded` (`FinishReload`, never the fallback state), an interrupted one is
   closed as a failed reload (`closeInterrupted`), and busmon flags it `reloading` (`SwapIntents`).
+  Self-repair step 2 (`bus/selfrepair.go`): the watcher's intent is the same key with
+  `kind=self-repair` and a nonce, fenced by the dispatch lease token (`BeginSelfRepair`, refused
+  `ErrNotHolder` without the lease, `ErrNoSnapshot` for a role with no snapshot, `ErrSwapInProgress`
+  next to any intent); `SelfRepairHeld` re-checks nonce and lease before the split; `EndSelfRepair`
+  deletes it only for the holder and its own nonce (`ErrNotOwnIntent`), and a lost runner's intent
+  waits out `SwapTTL`. `up` (and `up --resume`) skips a role whose intent is held, of any kind:
+  `coder: skipped (self-repair in progress)`; an unreadable intent is said and not checked, as an
+  unreadable `{p}:agents` is.
   Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
   (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
   last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
