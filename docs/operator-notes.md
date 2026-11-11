@@ -875,6 +875,20 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   waits out `SwapTTL`. `up` (and `up --resume`) skips a role whose intent is held, of any kind:
   `coder: skipped (self-repair in progress)`; an unreadable intent is said and not checked, as an
   unreadable `{p}:agents` is.
+  Self-repair step 3, the settings (`config/keys.go`, read by nothing yet but `agentbus config`
+  and busmon's C page): `dev` is development mode, a **top-level** key (`dev = true`, above every
+  table; `config.Set` writes such a key after the last top-level one) or `AGENT_BUS_DEV` (1 on,
+  0 off, anything else skipped); it only unlocks values, never weakens a check, and busmon's
+  header says `dev` while it is on. `dispatch.self_repair` (`AGENT_BUS_SELF_REPAIR`, on | off |
+  shadow, default on) has `Key.DevOnly = shadow`: outside dev, from any source, it resolves
+  `Invalid` with `Resolved.Why` naming the key (`devChecked`); a file's refusal is also a
+  warning of that file at its line (`Resolver.Warnings`). Read it only through
+  `config.SelfRepairMode`, which reads a refused switch as `off`: `Get`'s value for an invalid
+  key is the default, `on`. The budgets `dispatch.self_repair_every` (30m) and
+  `dispatch.self_repair_per_day` (3) take only values above 0 (an env 0 is skipped).
+  `services.start_at_login` (off, the machine's file only) is stored, nothing acts on it before
+  step 9. The C page shows the five in Services (`servicesOnPage`), offers `shadow` only in dev
+  (`settingRow.Choices`), and keeps a refused `shadow` line editable.
   Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
   (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
   last and only with no other pilot driver; master only sentinel; a person anyone by an explicit
@@ -998,8 +1012,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   on later passes, only for such an episode and while the policy is still `on`, an agent of the
   episode now ready with no mark gets one hint
   (`client update: <agent> is ready now …`, `retryReloads`), never sentinel about itself. busmon's
-  C page shows `sentinel.reload` as "Auto-restart on update" (on / propose / off), the Services
-  group's only key there (`settingOnPage`).
+  C page shows `sentinel.reload` as "Auto-restart on update" (on / propose / off) in the Services
+  group, with self-repair's keys (`servicesOnPage`).
   v0.15: an observation carries `since` (first reading of
   that state by the same pid, carried forward) and a failed inspection keeps the previous reading
   (`Observation.Fresh`, 120 s); a pane seen `blocked` (its client's own menu or permission prompt)

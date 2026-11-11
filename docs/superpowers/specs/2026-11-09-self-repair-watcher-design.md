@@ -289,6 +289,17 @@ useful alone first, and nothing acts before step 7.
 3. **The settings:** development mode (`AGENT_BUS_DEV`, `dev`); `dispatch.self_repair` (`on` |
    `off`, `shadow` only in dev, refused otherwise); the two budgets; `services.start_at_login`
    (stored only, no backend yet). All in `config/keys.go` and on busmon's settings screen.
+   *As built (step 3):* five keys in `config/keys.go`: `dev` (top-level, `AGENT_BUS_DEV` 1/0),
+   `dispatch.self_repair` (`AGENT_BUS_SELF_REPAIR`), `dispatch.self_repair_every`
+   (`AGENT_BUS_SELF_REPAIR_EVERY`, above 0), `dispatch.self_repair_per_day`
+   (`AGENT_BUS_SELF_REPAIR_PER_DAY`, above 0) and `services.start_at_login` (the machine's file
+   only, no env). `Key.DevOnly` lists the values taken only in dev: outside it, from the env or a
+   file, the key resolves `Invalid` with `Resolved.Why` naming it, `agentbus config` prints the
+   reason, and a file's line is a warning. An env value its rule refuses is `Invalid` too. The
+   watcher (steps 6 and 7) reads the switch through `config.SelfRepairMode`, which reads any
+   refusal as `off`. `config.Set` and `Unset` learned a top-level key. busmon's C page shows
+   the five in Services. It offers `shadow` only in dev and keeps a refused line editable, and the
+   header says `dev`.
 4. **`required` in `roles.toml`:** the key, its validation (refused on a pop), `roles doctor`, the
    shipped templates.
 5. **Every client resumes:** capture and prove the session id of Codex, Kimi and Gemini, as Claude
