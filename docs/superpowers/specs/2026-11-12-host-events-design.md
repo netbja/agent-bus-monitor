@@ -10,6 +10,9 @@
   reports only**: it changes none of the watcher's rules. In particular `host-network` does
   **not** feed R3 (the watcher's precondition 4 keeps reading `quota-freshness` / `llm-endpoint`
   only), so a wrong `down` here can never hold a relaunch.
+- Revision 3: reviewer-codex on 74d33d98 — its VPN/`unknown` and macOS boot-id points were
+  already fixed in r2; new: `/proc/net/route` is IPv4 only, so the link check also reads
+  `/proc/net/ipv6_route` and an IPv6-only host is not judged down (§2.1, §6)
 - Revision 2: foureyes on 74d33d98 — VPN/tunnel interfaces read `unknown`: the link check
   judges down only on no default route or an explicit down state, and asks the upstream probe
   otherwise; host-network stated as record-and-report only (not R3); upstream probes in
@@ -36,10 +39,17 @@ mechanism, and told to master on the bus.
 ### 2.1 Network: down and up
 
 Two probes, cheapest first:
-- **Link, every 2 s (Linux).** Read `/proc/net/route` (is there a default route, through which
-  interface?) and `/sys/class/net/*/operstate`. A few small file reads; this is what catches an
-  18 s WiFi drop. The link check alone says **down** only when there is **no default route**, or
-  the default route's interface reads `down`, `lowerlayerdown` or `notpresent`. Any other state —
+- **Link, every 2 s (Linux).** Read `/proc/net/route` (IPv4) **and `/proc/net/ipv6_route`**
+  (IPv6: a default route is destination `::` with prefix length 0) — is there a default route in
+  either family, and through which interface? — and `/sys/class/net/*/operstate`. An entry with
+  the reject flag (`RTF_REJECT`, `0x0200`) or on `lo` is not a default route: Linux keeps an
+  unreachable `::/0` entry on `lo` (flags `00200200`, seen on this host) on every machine, IPv6
+  in use or not. A few small file reads; this is what catches an
+  18 s WiFi drop. The link check alone says **down** only when there is **no default route in
+  either family**, or every default route's interface reads `down`, `lowerlayerdown` or
+  `notpresent`. An IPv6-only host with a working IPv6 default route is therefore not down, and
+  its upstream probe runs (Go's dialer uses IPv6 when the host resolves to it). A kernel built
+  without IPv6 has no `ipv6_route` file: that reads as "no IPv6 default route", not as an error. Any other state —
   `up`, and also `unknown`, `dormant` and `testing`, which VPN and tunnel interfaces (`wg0`,
   `tun0`, `ppp0`) report permanently — is not a verdict: it is left to the upstream probe.
   **Any change** of the default route or of any interface's operstate (a WiFi interface dropping
@@ -139,8 +149,9 @@ transcript tail count, the settings, and one line in the master skill on reading
 
 ## 6. Tests
 
-- Link probe: tables over fake `/proc/net/route` and `operstate` files: no default route →
-  down; default interface `down`, `lowerlayerdown`, `notpresent` → down; **a `wg0` or `tun0`
+- Link probe: tables over fake `/proc/net/route`, `/proc/net/ipv6_route` and `operstate` files:
+  no default route in either family → down; **IPv6-only default route, interface up → not down,
+  upstream probed**; the `lo` reject entry (`00200200`) alone → no IPv6 default route; no `ipv6_route` file with an IPv4 default route → judged on IPv4 alone; default interface `down`, `lowerlayerdown`, `notpresent` → down; **a `wg0` or `tun0`
   default route with operstate `unknown` and upstream ok → up**; `dormant`/`unknown` with
   upstream failing twice → down; a change of any interface's operstate → one immediate upstream
   probe.
