@@ -409,11 +409,13 @@ of the Work model, the header's rule (correction 3).
 
 - **How they are read:**
   - The open project's are the shell's own, live: the same numbers as the header.
-  - Every other project's are read with the page (`M`, `R`), never polled: one poll tick of its
-    bus (every read a read), then the Work model. They are read last, each alone within the
-    page's deadline, so one that fails or runs out of time costs only its own two cells.
-- **`?`, never 0** (the person's Q3): a count reads `?` when it was not read (the broker or that
-  project's read failed), when it is more than a minute old (a note says when it was read and that
+  - Every other project's are read with the page (`M`, `R`), never polled: two poll ticks of its
+    bus (every read a read; the second reads the gates of the agents the first found), then the
+    Work model. They are read last, each alone within the page's deadline, so one that fails or
+    runs out of time costs only its own two cells.
+- **`?`, never 0** (the person's Q3): a count reads `?` when it was not read (the broker, or any
+  read of that project's poll, failed: the poll would keep no value, which would count as 0,
+  reviewer-codex), when it is more than a minute old (a note says when it was read and that
   `R` reads it again), or, for the open project, while busmon's own link to the broker is down.
   A template with no key on the broker reads `—`.
 - **Widths:** below 90 columns the two share one column, `♙/●` (`4/1`, as AGENTS reads `3/7`),

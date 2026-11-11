@@ -35,14 +35,21 @@ func workCountsOf(s snapshot, self string, now time.Time) workCounts {
 	return workCounts{you: w.youCount(), team: len(w.Team)}
 }
 
-// readProjectCounts reads one project as the poll does (one tick, every
-// throttled read included) and counts it. Every read is a read: busReader
-// writes nothing.
+// readProjectCounts reads one project as the poll does (two ticks: the
+// first reads everything, the throttled reads included, and learns the
+// agents; the second reads their gates) and counts it. Any read that fails
+// makes it an error (?), never a 0 (reviewer-codex). Every read is a read:
+// busReader writes nothing.
 func readProjectCounts(ctx context.Context, b busReader, person string, now time.Time) (workCounts, error) {
+	r, failed := recording(b)
 	st := newPollShared(person)
-	pollOnce(ctx, b, st, 1)
+	pollOnce(ctx, r, st, 1) // every read, the throttled ones included
+	pollOnce(ctx, r, st, 2) // the gates of the agents the first tick read (they are read per known agent)
 	if !st.health.ok {
 		return workCounts{}, errors.New(or(st.health.err, "broker not read"))
+	}
+	if err := failed(); err != nil { // a kept or missing value would count as 0
+		return workCounts{}, err
 	}
 	return workCountsOf(takeSnapshot(st, now), person, now), nil
 }
