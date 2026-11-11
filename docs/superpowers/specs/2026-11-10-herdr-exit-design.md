@@ -2,10 +2,15 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revision 14 on 2026-11-11
+- Date: 2026-11-10, revisions 14 and 15 on 2026-11-11
 - Author: architect
 - Task: `herdr-exit-spec`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428)
+- Revision 15 (correction): reviewer-codex on r14 — §4.6 claimed F12 unbound in every checked
+  client while §4.9 left it unverified for Codex, Grok and `agy`. Grok is now verified from its
+  bundled shortcut guide (F12 free; it binds `ctrl+\`, `ctrl+q`, F2, F8); Codex and `agy` cannot
+  be verified offline, so F12 is the **provisional** default until step 3's `f12-at-input` probe,
+  which also chooses the fallback (§4.6, §4.9, §7, §8, §10)
 - Revision 14: the person's review of revision 13 and the decisions of 2026-11-11, every item
   applied:
   - **direct cutover**: no herdr adapter, no `HostView`, no `AtomicSubmit` flag, no
@@ -28,7 +33,7 @@
     wording (P3);
   - **master told on blocked enter and leave** (P1, §4.3a);
   - **background-work fact** in `agentstate` and the actions that skip such an agent (P1, §4.3b);
-  - **`attach.prefix` setting**, default F12, legacy and kitty encodings (P2, §4.6);
+  - **`attach.prefix` setting**, default F12 (provisional since r15), legacy and kitty encodings (P2, §4.6);
   - **every client** as data, with the client matrix filled where verified (P1, §4.9); Gemini CLI
     removed, DeepSeek out of scope;
   - **§10 decisions** Q1–Q9 recorded, including the draft rule (§4.5).
@@ -557,16 +562,31 @@ meaning: a wake waiting on the person is shown in busmon.
   literal prefix key to the program; any other key after the prefix is dropped with a bell. The
   prefix waits for its second key without a timeout and is shown in the outer terminal's title
   while pending. (`<prefix> y` is gone with the submit guard.)
-  - **Default `f12`.** `ctrl+\` and `ctrl+]` need AltGr on French and Swiss layouts and are
-    unreliable there; and `ctrl+]` is bound by Claude Code (`app:openArtifact`, verified in
-    2.1.322's default key table). No `ctrl+letter` is free across the clients: Claude Code alone
-    binds b c d e f g j l n o p r s t u v x y and `_`, uses readline's a e k w h in its input,
-    and handles z (suspend); Grok binds `ctrl+q`; `ctrl+q`/`ctrl+s` are also flow control on a
-    cooked tty, and `ctrl+h/i/j/m` are backspace, tab, LF and CR. F12 needs no modifier on any
-    layout and is bound by none of the clients checked (§4.9; for Claude Code and Kimi the only
-    `f12` strings are key-name tables, not bindings). Cost: on Mac keyboards F12 is a media key
-    unless `fn` is held or "use F1, F2… as standard function keys" is set — the setting is the
-    answer there.
+  - **Default `f12`, provisional until step 3 verifies it for every client.** `ctrl+\` and
+    `ctrl+]` need AltGr on French and Swiss layouts and are unreliable there; `ctrl+]` is bound
+    by Claude Code (`app:openArtifact`, in 2.1.322's default key table) and `ctrl+\` by Grok
+    (Agent Dashboard, its bundled shortcut guide). No `ctrl+letter` is free across the clients:
+    Claude Code alone binds b c d e f g j l n o p r s t u v x y and `_`, uses readline's a e k w h
+    in its input, and handles z (suspend); Grok binds `ctrl+q` (quit); `ctrl+q`/`ctrl+s` are also
+    flow control on a cooked tty, and `ctrl+h/i/j/m` are backspace, tab, LF and CR. F12 needs no
+    modifier on any layout. Where F12 stands per client (§4.9):
+    - **not bound, verified**: Claude Code (its default key-binding table has no `f12` entry;
+      the `f12` strings are its key-name parser) and Grok (its shortcut guide binds `F2` and
+      `F8`, not `F12`);
+    - **not bound as far as the binary shows**: Kimi (`f12` only in a key-name parser) — weaker
+      than a binding table, so the probe below confirms it;
+    - **not verifiable offline**: Codex CLI and `agy`. A compiled binding leaves no `f12` string
+      (a crossterm binding is `KeyCode::F(12)`), so finding none proves nothing.
+    The **probe** (§7 step 3, one recording per client): `agentbus term record <client>
+    f12-at-input` — start the client, type `abc` at the input, press F12 in the legacy and the
+    kitty encoding, wait 2 s, record; F12 is free for that client when the screen after F12 is
+    identical to the screen before it (input still `abc`, no overlay, no mode change). The
+    default becomes final when the probe passes for every supported client; if a client binds
+    F12, step 3 picks the default instead from the same probe run over `f1`–`f12`: the first key
+    free for every supported client, preferring F12, F11, F10, then descending. Until then F12
+    is the default only as a proposal, and step 7 ships whatever step 3 settled. Cost: on Mac
+    keyboards F12 is a media key unless `fn` is held or "use F1, F2… as standard function keys"
+    is set — the setting is the answer there.
   - **Accepted values**: `f1`–`f12`, or `ctrl+<letter>`, `ctrl+\`, `ctrl+]`. A value is refused
     when the client matrix (§4.9) lists it as bound by a client used in the project, or when it
     is one of `ctrl+c/d/h/i/j/m/q/s/z`; busmon's config screen shows why.
@@ -662,15 +682,15 @@ A new client or version is probed with `agentbus term record` (§6.4).
 
 Verified on this host on 2026-11-11 (Claude Code 2.1.322, codex-cli 0.166.0, Kimi 2.2.0, Grok
 1.0.77, `agy` 1.5.6) from the installed binaries, their `--help`, `agy`'s bundled
-`agy-customizations/docs/hooks.md`, and this repository; "to verify" names the probe.
+`agy-customizations/docs/hooks.md`, Grok's bundled user guide (`~/.grok/docs/user-guide/`), and this repository; "to verify" names the probe.
 
 | Client | Blocked source | Background-work signal | Resume | Clear command | Bindings the prefix avoids |
 |---|---|---|---|---|---|
-| **Claude Code** | `Notification` hook, matcher `permission_prompt` (verified in the binary), and `PermissionRequest` hook; + `Blocked` screen signature | `SubagentStart`/`SubagentStop` hooks (verified in the binary); process tree (tools run as its descendants); background-tasks footer: to verify (fixture of a `run_in_background` shell) | **yes, built** (`--resume <id>`, id from the SessionStart hook) | `/clear` (the only client `dispatch` clears today, `clearClients`) | ctrl+ b c d e f g j l n o p r s t u v x y `_` `]`, and readline a e k w h; F12 not bound (key-name table only) |
-| **Codex CLI** | **not** `notify` (turn complete only, verified); `PermissionRequest` hook in the 0.166 hook schema — **to verify**: launch with `--ask-for-approval on-request` and the hook wired, record a command needing approval, the hook must fire before the approval screen settles; until then screen only, with Codex approval fixtures | `SubagentStart`/`SubagentStop` hooks (in the schema; to verify by the same probe with a subagent); "Background terminals" on screen (string verified; fixture to record); process tree **not authoritative** (shared local app-server daemon) | flag exists (`codex resume <id>`); session id from the SessionStart hook (wired today for the prover); caller proof under the app-server: **to verify** (record the hook's ancestor chain) | `/clear` semantics not probed: **to verify**; not cleared until then | to verify: press F12 at the input in a recording, the screen must not change |
-| **Kimi CLI** | screen signatures only: Kimi hooks are not used (the person, 2026-11-02, auto-state spec) | process tree (to verify that tools are its descendants: record `ps` during a tool run); screen: to verify | flag exists (`--session <id>`); no session id source without hooks: **to verify** (probe the session store after a launch); fresh start until then | to verify | F12 not bound (key-name table only); others to verify by recording |
-| **Grok CLI** | screen signatures; a permission hook event: **to verify** (the binary holds `Notification`; project hooks are wired for turns) | `SubagentStart`/`SubagentStop` (its hook events carry `subagentType`, already filtered by `turnhook.go`); process tree **to verify** (shared leader process) | flag exists (`--resume <id>`, `--session-id <uuid>` for a new one: the launcher can choose the id); to verify end to end | to verify | `ctrl+q` bound (verified string); F12 to verify by recording |
-| **Antigravity `agy`** | screen signatures only: its documented hook events (`SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) include no approval event | `Stop` hook field `fullyIdle` ("true if all background tasks are done", documented); process tree to verify | flag exists (`--conversation <id>`); id = `conversationId`, in every hook payload (documented); hooks not wired today: to build and verify | to verify | to verify by recording |
+| **Claude Code** | `Notification` hook, matcher `permission_prompt` (verified in the binary), and `PermissionRequest` hook; + `Blocked` screen signature | `SubagentStart`/`SubagentStop` hooks (verified in the binary); process tree (tools run as its descendants); background-tasks footer: to verify (fixture of a `run_in_background` shell) | **yes, built** (`--resume <id>`, id from the SessionStart hook) | `/clear` (the only client `dispatch` clears today, `clearClients`) | ctrl+ b c d e f g j l n o p r s t u v x y `_` `]`, and readline a e k w h; F12 **not bound** (verified: absent from the default key-binding table) |
+| **Codex CLI** | **not** `notify` (turn complete only, verified); `PermissionRequest` hook in the 0.166 hook schema — **to verify**: launch with `--ask-for-approval on-request` and the hook wired, record a command needing approval, the hook must fire before the approval screen settles; until then screen only, with Codex approval fixtures | `SubagentStart`/`SubagentStop` hooks (in the schema; to verify by the same probe with a subagent); "Background terminals" on screen (string verified; fixture to record); process tree **not authoritative** (shared local app-server daemon) | flag exists (`codex resume <id>`); session id from the SessionStart hook (wired today for the prover); caller proof under the app-server: **to verify** (record the hook's ancestor chain) | `/clear` semantics not probed: **to verify**; not cleared until then | F12 **not verifiable offline** (no binding table readable; a crossterm binding leaves no string): the `f12-at-input` probe (§4.6) |
+| **Kimi CLI** | screen signatures only: Kimi hooks are not used (the person, 2026-11-02, auto-state spec) | process tree (to verify that tools are its descendants: record `ps` during a tool run); screen: to verify | flag exists (`--session <id>`); no session id source without hooks: **to verify** (probe the session store after a launch); fresh start until then | to verify | F12 not bound as far as the binary shows (`f12` only in a key-name parser): confirmed by the `f12-at-input` probe; others to verify by recording |
+| **Grok CLI** | screen signatures; a permission hook event: **to verify** (the binary holds `Notification`; project hooks are wired for turns) | `SubagentStart`/`SubagentStop` (its hook events carry `subagentType`, already filtered by `turnhook.go`); process tree **to verify** (shared leader process) | flag exists (`--resume <id>`, `--session-id <uuid>` for a new one: the launcher can choose the id); to verify end to end | to verify | `ctrl+q` (quit), `ctrl+\` (Agent Dashboard), `F2` (settings), `F8` (voice) bound; F12 **not bound** (verified: bundled `~/.grok/docs/user-guide/03-keyboard-shortcuts.md` and the config reference) |
+| **Antigravity `agy`** | screen signatures only: its documented hook events (`SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`) include no approval event | `Stop` hook field `fullyIdle` ("true if all background tasks are done", documented); process tree to verify | flag exists (`--conversation <id>`); id = `conversationId`, in every hook payload (documented); hooks not wired today: to build and verify | to verify | F12 **not verifiable offline**: the `f12-at-input` probe (§4.6); others by recording |
 
 Out of scope: Gemini CLI (the Google client is `agy`; the person, Q7) and DeepSeek (the person,
 2026-11-11). Every "to verify" above is a §7 step-3 deliverable: the recording, the fixture and
@@ -873,11 +893,11 @@ host, no shadow mode runs.
 | 0 | This spec (revision 14, frozen) + decision note | none | coder, foureyes and reviewer-codex approve |
 | 1 | `termhost` package: `Host`, `Line` (`WakeLine`/`ClearLine`), `fake`, contract suite; today's herdr `Runtime.Prompt` takes a `termhost.Line`, no text | none (same wake line typed) | dispatch tests green; the no-string-reaches-`Submit`/`Prompt` test |
 | 2 | `agentstate` extracted from `dispatch` (signatures, fixtures), client profiles as data (§4.9), `Blocked` signatures, background-work fact (§4.3b), blocked-enter/leave judgement (§4.3a) — pure functions with table tests; hook wiring for blocked and subagents per client (Claude Code `Notification`/`PermissionRequest`/`SubagentStart`/`SubagentStop`; Codex `PermissionRequest`/subagent hooks once probed; `agy` `Stop`) writing observed facts only | none (herdr still decides; the hooks only record) | fixtures green; hook route tests per client |
-| 3 | `agentbus term record` + raw fixtures per client (§6.4); every "to verify" cell of §4.9 probed and the profile rows updated | none | fixtures committed; the matrix has no unexplained "to verify" for the clients the person's projects use |
+| 3 | `agentbus term record` + raw fixtures per client (§6.4); every "to verify" cell of §4.9 probed and the profile rows updated; the `f12-at-input` probe run for every supported client and the attach default settled (§4.6) | none | fixtures committed; the matrix has no unexplained "to verify" for the clients the person's projects use |
 | 4 | Emulator bake-off; `screen` seam + chosen adapter; gostty oracle behind a build tag | none | §6.4 passes for those clients |
 | 5 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit set, held viewer bytes, landing check, peer check, socket dir, process facts) — after the **security review** of §4.4/§4.6 | none (nothing uses it) | e2e green, security role approves |
 | 6 | Holder adapter of `termhost` (contract suite) + services: per-build units, launchd jobs, binary copy, restart policy, `services.manager` with the `none` supervisor (§4.4b), `service gc` with the two-upgrade test, rotate/upgrade paths skip the holder, `holder`/`holder_restarted`/`holder_draining`/`holder_leftovers` health, `holder drain`, sentinel runbook entry | none (no project runs on it) | contract suite and service tests (fake `systemctl`/`launchctl`, scripted supervisor) green |
-| 7 | `agentbus attach` + `attach.prefix` (F12 default, both encodings) + busmon preview, attach key, draft/blocked/background on the row, the setting in the config screen | none (used only against a test holder) | attach tests; the person attaches to a scripted program in a test holder |
+| 7 | `agentbus attach` + `attach.prefix` (the default settled by step 3's `f12-at-input` probe, F12 if it passes; both encodings) + busmon preview, attach key, draft/blocked/background on the row, the setting in the config screen | none (used only against a test holder) | attach tests; the person attaches to a scripted program in a test holder |
 | 8 | `{p}:resume` + hooks write it (ancestor-walk proof, macOS `Ancestors`) for each client whose row is verified; `broker_persistence` health; `{p}:events` with `resetKinds`/`survivesReset`; `valkey/valkey:9` in `docker-compose.yml` (§6.3) | the shipped broker image changes; resume is recorded beside herdr's | Redis tests of §8 on a disposable Valkey 9 and Valkey 7.2; the volume migration checked on a copy |
 | 9 | Dispatcher on `termhost`+`agentstate` behind no switch: the code path exists and is covered by tests against the fake and a test holder; the blocked reports to master (§4.3a) and the background skip (§4.3b) wired in it | none (the running dispatcher still uses the herdr `Runtime`) | dispatch suite green on both paths |
 | 10 | **Cutover**: `up`/`start`/`restore`/`relaunch`/`swap`/`suspend`/`resume`/self-repair on `Host`; the dispatcher's herdr path removed; reporting callers on `Host.Describe`; herdr deleted (§4.8); decisions superseded; release note | **herdr gone** | the test forbidding any herdr exec, with no allowlist; scrub and the full suite green; the person's live check of the branch on one project before merge |
@@ -912,7 +932,7 @@ step claims an improvement for herdr, and none exists after the cutover.
     `ErrNotLanded`, notice naming the kind (wake line / `/clear`);
   - a draft standing (any viewer byte since the last CR, mouse and focus reports excepted) →
     refused, however old the draft; a CR ends it; an empty Enter ends it.
-- Attach prefix: default F12 in legacy and kitty encodings (press recognised, release ignored);
+- Attach prefix: the default key (F12 unless step 3 settled another) in legacy and kitty encodings (press recognised, release ignored);
   `<prefix> d` detaches; `<prefix> <prefix>` delivers one prefix to the program; `<prefix> x`
   delivers nothing and rings; the prefix split across two reads; a configured `ctrl+<letter>` in
   C0 and kitty `CSI … ; 5 u`; a value bound by a client in the project is refused.
@@ -985,7 +1005,7 @@ All questions of revision 13 are decided; this spec is frozen after revision 14.
 7. **Gemini CLI.** Dropped: the Google client is Antigravity (`agy`), already supported.
 8. **Trial project.** Settled by the direct cutover: no trial; the person's live check of the
    cutover branch and the tagged last herdr release replace it (§7).
-9. **Attach prefix.** Replaced by the configurable `attach.prefix`, default F12 (§4.6).
+9. **Attach prefix.** Replaced by the configurable `attach.prefix`; proposed default F12, final once the step-3 probe shows it free in every supported client (§4.6).
 - **Submit.** Simplified: viewer input held during the submit, CR, then release; the guard
   machinery removed (§4.2).
 - **Windows.** Out of scope; a mode without a service manager is in scope (§4.4b, §11).
