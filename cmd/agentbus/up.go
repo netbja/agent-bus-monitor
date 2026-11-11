@@ -60,7 +60,10 @@ type upDeps struct {
 	// The relaunch of an open workspace (v0.21): the agents' snapshots, the
 	// process start time (nil off Linux: snapshots then decide nothing) and the
 	// per-project lock that keeps two ups from typing into one pane.
-	Agents    func(project string) (map[string]bus.AgentSnapshot, error)
+	Agents func(project string) (map[string]bus.AgentSnapshot, error)
+	// Intent is a role's swap intent, if held (self-repair spec 4.1): up
+	// skips a role a self-repair, a reload, a swap or a retire relaunches.
+	Intent    func(project, role string) (bus.SwapIntent, bool, error)
 	ProcStart func(int) (uint64, error)
 	Lock      func(project string, wait bool) (unlock func(), err error)
 
@@ -680,6 +683,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		Agents: func(project string) (map[string]bus.AgentSnapshot, error) {
 			return readAgents(project)
 		},
+		Intent:    readIntent,
 		ProcStart: procStartFn(),
 		Lock:      upLock(upCacheDir(os.Getenv)),
 		TabClient: func(cmd string) string { return tabClient(cmd, os.Getenv) },
@@ -712,6 +716,16 @@ func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunch.Options
 		}
 	}
 	o.Dir = os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+	if d.Intent != nil {
+		o.Held = func(role string) (string, bool) {
+			in, held, err := d.Intent(project, role)
+			if err != nil { // as for the agents: said, and the panes decide
+				fmt.Fprintf(stdout, "%s: intent unreadable (%v): not checked\n", role, err)
+				return "", false
+			}
+			return in.Kind, held
+		}
+	}
 	// busmon's old shell needs herdr only, not the agents (start-busmon-pane).
 	o.CloseBusmon = true
 	if ok {
@@ -784,6 +798,22 @@ func procStartFn() func(int) (uint64, error) {
 }
 
 // readAgents is the project's {p}:agents, bounded.
+// readIntent is role's swap intent on the broker, if one is held.
+func readIntent(project, role string) (bus.SwapIntent, bool, error) {
+	c, err := bus.Connect("")
+	if err != nil {
+		return bus.SwapIntent{}, false, err
+	}
+	defer c.Close()
+	b, err := bus.Open(c, project)
+	if err != nil {
+		return bus.SwapIntent{}, false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return b.SwapIntentOf(ctx, role)
+}
+
 func readAgents(project string) (map[string]bus.AgentSnapshot, error) {
 	c, err := bus.Connect("")
 	if err != nil {
