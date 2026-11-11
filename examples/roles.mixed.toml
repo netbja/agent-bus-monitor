@@ -42,6 +42,7 @@ sandbox = true
 
 [roles.master]
 tier = "boot"
+required = true
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
 delivers = true
 [roles.master.tool_rules]
@@ -49,6 +50,7 @@ allow = ["Bash(agentbus deliver *)"]
 
 [roles.coder]
 tier = "boot"
+required = true
 skills = ["agent-bus", "tdd", "implement"]
 # When anthropic is out for long, master may ask you to swap coder (agentbus swap, v0.15).
 # At most 3, each on another provider; `agentbus roles fallbacks coder` lists them.
@@ -59,6 +61,7 @@ deny = ["Bash(agentbus deliver *)"]
 [roles.foureyes]
 profile = "review"
 tier = "boot"
+required = true
 skills = ["agent-bus", "code-review", "diagnosing-bugs"]
 # fallback_profiles = ["kimi"]   # on claude it would share coder's provider: less diversity
 [roles.foureyes.tool_rules]
@@ -67,6 +70,7 @@ deny = ["Bash(agentbus deliver *)"]
 [roles.sentinel]
 profile = "kimi"
 tier = "boot"
+required = true
 skills = ["agent-bus", "agent-bus-sentinel"]
 [roles.sentinel.tool_rules]
 deny = ["Bash(agentbus deliver *)"]

@@ -303,6 +303,17 @@ useful alone first, and nothing acts before step 7.
    header says `dev`.
 4. **`required` in `roles.toml`:** the key, its validation (refused on a pop), `roles doctor`, the
    shipped templates.
+   *As built (step 4):* a role's `required` (schema 1 and 2, absent false). `rolecfg.Load`
+   refuses a value other than true or false, and `required = true` on a pop (`required = false`
+   on a pop is accepted). `Manifest.RoleRequired` reads it. `roles doctor` has a `REQ` column
+   (`yes` or `-`) and `required` in `--json`. `examples/roles.mixed.toml` marks every boot role
+   required (`TestExampleManifestMarksTheBootRolesRequired`). **Rollout (foureyes):** the
+   shipped `roles.toml` gains `required = true` on its boot roles (master, coder, foureyes,
+   sentinel) only in a follow-up, merged once a release with this parser is installed. Every
+   session reads the main checkout's `roles.toml` with the installed `agentbus`, and an older
+   parser refuses the unknown key, so no role could launch, relaunch or swap.
+   `TestRolesTomlWaitsForTheRelease` holds `roles.toml` back until then. Nothing acts on the
+   key before step 7.
 5. **Every client resumes:** capture and prove the session id of Codex, Kimi and Gemini, as Claude
    Code's is today (the launcher's resume flag for each, the `SessionStart`-style proof); verify
    whether Grok has a resume at all. This is useful alone: `reload` and `up --resume` gain it too.

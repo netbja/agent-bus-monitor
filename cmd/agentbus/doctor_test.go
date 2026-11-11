@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +37,7 @@ tier = "boot"
 tier = "boot"
 [roles.master]
 tier = "boot"
+required = true
 profile = "alias"
 [roles.deploy]
 tier = "pop"
@@ -120,6 +123,23 @@ func TestDoctorVerdicts(t *testing.T) {
 	v, _ := b.ModelVerdicts(ctx)
 	if v["foureyes"].Verdict != "drift" || v["foureyes"].PID != 12 || v["foureyes"].At == 0 {
 		t.Fatalf("published %+v", v["foureyes"])
+	}
+	// Self-repair step 4: the REQ column and --json's required say which roles are required.
+	if !regexp.MustCompile(`(?m)^AGENT +REQ +PROFILE`).MatchString(out.String()) ||
+		!regexp.MustCompile(`(?m)^master +yes +alias `).MatchString(out.String()) ||
+		!regexp.MustCompile(`(?m)^coder +- +main `).MatchString(out.String()) {
+		t.Errorf("no REQ column:\n%s", out.String())
+	}
+	out.Reset()
+	runDoctor(ctx, b, d, []string{"--json"}, &out, &errw)
+	var js []map[string]any
+	if err := json.Unmarshal(out.Bytes(), &js); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range js {
+		if want := r["agent"] == "master"; (r["required"] == true) != want {
+			t.Errorf("json %v: required %v", r["agent"], r["required"])
+		}
 	}
 }
 
