@@ -36,6 +36,9 @@ type vtScreen struct {
 
 func newVT(cols, rows, scrollback int) *vtScreen {
 	s := &vtScreen{e: vt.NewEmulator(max(cols, 1), max(rows, 1)), keep: max(scrollback, 0), done: make(chan struct{})}
+	if alt := altScreenOf(s.e); alt != nil { // the alternate screen keeps no scrollback (vtalt.go)
+		alt.SetScrollbackSize(1)
+	}
 	go func() {
 		defer close(s.done)
 		buf := make([]byte, 4096)

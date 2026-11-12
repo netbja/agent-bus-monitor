@@ -71,6 +71,14 @@ What the numbers mean for the holder:
   The seam does not use it: after each write the scrolled-off lines move into a ring of rendered
   ANSI strings (about the line's length in bytes), x/vt's scrollback is cleared, and writes reach
   x/vt in 4 KiB pieces because `Clear` keeps the backing array of what one write pushed.
+  x/vt gives the **alternate screen its own 10 000-line scrollback** too, which its API cannot
+  reach (`Scrollback`, `ClearScrollback` and `SetScrollbackSize` act on the main screen):
+  a full-screen program that scrolls would fill it (reviewer-codex). The seam sets it to one line
+  at construction, reaching the private field by reflection (`vtalt.go`) and calling x/vt's
+  own `SetScrollbackSize`; `TestAltScreenScrollbackIsBounded` (20 000 scrolled alt-screen lines:
+  at most one kept, under 16 MiB of heap growth) fails if a new x/vt moves the field. It is the
+  one place the seam depends on x/vt's internals, and the first thing to drop if x/vt gains an
+  option for it.
 - **Queries**: x/vt answers DA/DSR/DECRQM on an unbuffered pipe, which blocks a write until read;
   the seam drains it into `Replies()` for the holder to forward to the PTY (capped at 64 KiB).
 - **Modes**: x/vt exposes the alternate screen and the cursor's visibility only; bracketed paste

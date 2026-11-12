@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -328,4 +329,37 @@ func TestProductionLinksNoOracle(t *testing.T) {
 			t.Errorf("a production build links %s", bad)
 		}
 	}
+}
+
+// x/vt gives the alternate screen its own 10 000-line scrollback, out of
+// reach of its API (reviewer-codex): the adapter bounds it at construction,
+// so a full-screen program that scrolls for ever keeps nothing.
+func TestAltScreenScrollbackIsBounded(t *testing.T) {
+	s := newVT(120, 40, 0)
+	defer s.Close()
+	alt := altScreenOf(s.e)
+	if alt == nil {
+		t.Fatal("x/vt's alternate screen not found: its layout changed, see altScreenOf")
+	}
+	line := strings.Repeat("x", 110) + "\r\n"
+	before := heapNow()
+	s.Write([]byte(esc + "[?1049h"))
+	for i := 0; i < 20; i++ {
+		s.Write([]byte(strings.Repeat(line, 1000)))
+	}
+	if n := alt.Scrollback().Len(); n > 1 {
+		t.Fatalf("the alternate screen kept %d scrolled lines", n)
+	}
+	if grew := int64(heapNow()) - int64(before); grew > 16<<20 {
+		t.Fatalf("20 000 alt-screen lines kept %d MiB", grew>>20)
+	}
+	runtime.KeepAlive(s)
+}
+
+func heapNow() uint64 {
+	runtime.GC()
+	runtime.GC()
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.HeapAlloc
 }
