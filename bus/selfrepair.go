@@ -147,3 +147,49 @@ func SwapKindWord(kind string) string {
 	}
 	return "swap"
 }
+
+// fencedLogSwap: -1 the lease is not ARGV[1]'s; 1 the entry appended. KEYS:
+// dispatch lease, ledger. ARGV: token, maxlen, fields...
+var fencedLogSwap = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
+redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', unpack(ARGV, 3))
+return 1`)
+
+// LogWouldRelaunch records what the self-repair shadow would do (delivery
+// step 6): a would-relaunch ledger entry, kind self-repair, for ev's role and
+// death episode (the dead process, "pid:start"), written only by the
+// dispatch lease holder (ErrNotHolder otherwise). It changes nothing else.
+func (b *Bus) LogWouldRelaunch(ctx context.Context, token string, ev SwapEvent) error {
+	ev.Event, ev.Kind = SwapWouldRelaunch, SwapKindSelfRepair
+	if err := ev.valid(); err != nil {
+		return err
+	}
+	if ev.Episode == "" {
+		return errors.New("would-relaunch: no death episode")
+	}
+	args := append([]interface{}{token, streamMaxLen}, ev.fields()...)
+	n, err := fencedLogSwap.Run(ctx, b.r, []string{DispatchKey(b.project), SwapsKey(b.project)}, args...).Int()
+	if err != nil {
+		return err
+	}
+	if n == -1 {
+		return ErrNotHolder
+	}
+	return nil
+}
+
+// WouldRelaunchLogged reports whether role's death episode already has its
+// would-relaunch entry among the ledger's last 1000, so the shadow records
+// a death once, not once a pass.
+func (b *Bus) WouldRelaunchLogged(ctx context.Context, role, episode string) (bool, error) {
+	evs, err := b.SwapLog(ctx, role, 0)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range evs {
+		if e.Event == SwapWouldRelaunch && e.Episode == episode {
+			return true, nil
+		}
+	}
+	return false, nil
+}

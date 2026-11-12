@@ -321,6 +321,21 @@ useful alone first, and nothing acts before step 7.
 6. **Facts and decision, acting on nothing:** `decideRepair(facts)` as a pure function, health
    `self-repair`, and the ledger's `would relaunch`. In development mode, `shadow` runs it
    against this project for a while.
+   *As built (step 6a, the judgement):* `selfrepair/decide.go`: `Decide(Facts) []Decision`, one
+   decision per agent (`none`, `unknown`, `wait`, `skip`, `hold`, `report`, `budget`, `relaunch`,
+   `create`) with its reason, at most one `Act` per pass (master first, then the oldest death;
+   none while a relaunch is in flight or within the 2-min project pause). R1's preconditions in
+   the spec's order: alive and unknown first (unknown never acts), `off`, the grace (60 s, three
+   reads), a declared departure or another intent, the tab (`relaunch`/`create` go on, an optional
+   `missing` tab is reported, any other verdict is waited on), herdr and the workspace, the
+   provider (fresh, not held), a resume-verified client with a proved session (else reported,
+   never a fresh start), then the budget (a crash loop or the day's count escalates, the spacing
+   waits). `Health(mode, decisions)`: ok when off or nothing to repair (a report stays ok); warn
+   for the shadow's would-be act, a hold or a tab not settling; fail for a crash loop, but never
+   in shadow (it acts on nothing, so it spends no budget). `bus.LogWouldRelaunch`: the shadow's
+   ledger entry (`would-relaunch`, kind `self-repair`, the death episode), fenced on the dispatch
+   lease; `WouldRelaunchLogged` finds an episode's entry, so a death is recorded once. Step 6b
+   wires the loop (gathering the facts, the health check, the shadow run) and the help text.
 7. **R1 and R2 on** (default `on`): the relaunch, the proof, budgets and `self-repair reset`,
    master first, required tabs recreated and optional ones reported, the notifications. Live
    check: kill an idle agent's client (SIGTERM) and watch it come back, resumed, in a new pane.
