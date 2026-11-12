@@ -157,11 +157,16 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 	if who.PID <= 0 || who.PIDStart == 0 || who.Pane == "" {
 		return fmt.Errorf("bind needs a pane, a pid and its start time")
 	}
+	// A session bound here is the one the launcher chose for the client it
+	// is about to exec (Grok's --session-id): proved with this process.
+	if who.Session != "" && !ValidSessionID(who.Session) {
+		return fmt.Errorf("bind: %q is not a session id", who.Session)
+	}
 	now, err := b.ServerNowMS(ctx)
 	if err != nil {
 		return err
 	}
-	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, IdentTS: now,
+	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, IdentTS: now, Session: who.Session,
 		Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier}, true)
 }
 

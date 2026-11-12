@@ -39,7 +39,7 @@ type launchFixture struct {
 	execEnv                     []string
 }
 
-const fakeHelp = "--rules --settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume"
+const fakeHelp = "--rules --settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume --session-id"
 
 func newLaunchFixture(t *testing.T) *launchFixture {
 	t.Helper()
@@ -224,7 +224,7 @@ func TestLaunchResumeKeepsRoleSettingsAndRejectsOtherClients(t *testing.T) {
 	}
 
 	codex := f.config("codex", "", "", "")
-	if _, _, err := f.launchWithResume(codex, "coder", "session-123"); err == nil || !strings.Contains(err.Error(), "only for Claude Code") {
+	if _, _, err := f.launchWithResume(codex, "coder", "session-123"); err == nil || !strings.Contains(err.Error(), "session resume is not verified for codex") {
 		t.Fatalf("Codex resume error = %v", err)
 	}
 }

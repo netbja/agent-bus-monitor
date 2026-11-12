@@ -69,8 +69,8 @@ cinq clients :
 | Client | Reprise de session | État travail/repos automatique | Fenêtres d'usage lues dans |
 |---|---|---|---|
 | Claude Code (`claude`) | oui | oui, par ses hooks | sa ligne d'état, la transcription en secours |
-| Codex CLI (`codex`) | non | oui, par ses hooks | `codex app-server`, ses journaux de session en repli |
-| Grok Build (`grok`, bêta) | non | oui, par ses hooks | sa ligne de journal de facturation |
+| Codex CLI (`codex`) | pas encore : sa preuve de session est à vérifier | oui, par ses hooks | `codex app-server`, ses journaux de session en repli |
+| Grok Build (`grok`, bêta) | oui : le lanceur choisit son identifiant de session | oui, par ses hooks | sa ligne de journal de facturation |
 | Kimi Code CLI (`kimi`) | non | non | son journal, seulement les limites atteintes (Kimi n'indique pas de réinitialisation) |
 | Antigravity CLI (`agy`, Google) | non | non : l'agent le déclare | son journal, seulement les limites atteintes (une fenêtre pour tous les modèles) |
 

@@ -101,3 +101,20 @@ func TestBindRecordsTier(t *testing.T) {
 		t.Fatalf("recorded %+v, want tier pop", f.who)
 	}
 }
+
+// The launcher binds the session it chose for its client (Grok, self-repair
+// step 5) with --session; an id that is no id is refused before any write.
+func TestBindRecordsTheLaunchSession(t *testing.T) {
+	f := &fakeBind{}
+	var out, errw bytes.Buffer
+	const id = "1a60c66b-d4e8-4a0e-8017-d50248645b38"
+	code := runBind(context.Background(), f.deps(codexProcs, map[int]uint64{1930926: 555}), []string{"grokker", "--pid", "1930926", "--session", id}, &out, &errw)
+	if code != 0 || f.who == nil || f.who.Session != id {
+		t.Fatalf("code=%d who=%+v err=%q", code, f.who, errw.String())
+	}
+	f = &fakeBind{}
+	code = runBind(context.Background(), f.deps(codexProcs, map[int]uint64{1930926: 555}), []string{"grokker", "--pid", "1930926", "--session", "../x"}, &out, &errw)
+	if code == 0 || f.who != nil {
+		t.Fatalf("code=%d wrote %+v for a bad session", code, f.who)
+	}
+}

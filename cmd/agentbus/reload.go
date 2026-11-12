@@ -229,11 +229,10 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 	}
 	session := ""
 	if !fresh {
-		if snap.Client != "claude-code" || !bus.ValidSessionID(snap.IdentSession) {
-			return fail("no proved Claude Code session to resume (client %s); pass --fresh to relaunch without one (its conversation is lost)",
+		if session = relaunch.ProvedSession(snap); session == "" {
+			return fail("no proved session to resume (client %s, whose resume must be verified); pass --fresh to relaunch without one (its conversation is lost)",
 				dash(snap.Client))
 		}
-		session = snap.IdentSession
 	}
 	// Everything the relaunch needs is checked now, before the kill: once the
 	// old client is gone, a relaunch that cannot run leaves no agent.

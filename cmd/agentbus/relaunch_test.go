@@ -103,10 +103,24 @@ func TestResumeCommand(t *testing.T) {
 	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "claude-code"}, true); got != cmd+" --resume "+id {
 		t.Fatalf("claude: %q", got)
 	}
+	// Grok's session is the one its launcher chose and bound (self-repair step 5).
+	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "grok"}, true); got != cmd+" --resume "+id {
+		t.Fatalf("grok: %q", got)
+	}
+	// No status of a Grok agent names its session: up --resume takes the one
+	// its bind proved.
+	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{IdentSession: id, Client: "grok"}, true); got != cmd+" --resume "+id {
+		t.Fatalf("grok, proved only: %q", got)
+	}
+	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{IdentSession: id, Client: "codex"}, true); got != "" {
+		t.Fatalf("codex, proved only: %q", got)
+	}
 	for name, s := range map[string]bus.AgentSnapshot{
-		"no session":   {Client: "claude-code"},
-		"other client": {Session: id, Client: "codex"},
-		"odd id":       {Session: id + "; rm -rf ~", Client: "claude-code"},
+		"no session":        {Client: "claude-code"},
+		"unverified client": {Session: id, Client: "codex"},
+		"unverified kimi":   {Session: id, Client: "kimi-cli"},
+		"unverified agy":    {Session: id, Client: "agy"},
+		"odd id":            {Session: id + "; rm -rf ~", Client: "claude-code"},
 	} {
 		if got := relaunch.ResumeCommand(cmd, s, true); got != "" {
 			t.Errorf("%s: %q", name, got)
@@ -846,5 +860,41 @@ func TestUpSkipsARoleUnderSelfRepair(t *testing.T) {
 	// foureyes (step 2): not checked is not skipped: master is relaunched.
 	if got := strings.Join(h.ran()[before:], "\n"); !strings.Contains(got, "agent-launch master") {
 		t.Fatalf("master not relaunched with its intent unreadable:\n%s", got)
+	}
+}
+
+// ProvedSession is the session a relaunch may resume: the one proved with the
+// agent's process, for a client whose session source is verified. A Codex
+// session proved by its hook is not resumed until Codex's proof is verified.
+func TestProvedSession(t *testing.T) {
+	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
+	for _, c := range []struct {
+		s    bus.AgentSnapshot
+		want string
+	}{
+		{bus.AgentSnapshot{Client: "claude-code", IdentSession: id}, id},
+		{bus.AgentSnapshot{Client: "grok", IdentSession: id}, id},
+		{bus.AgentSnapshot{Client: "codex", IdentSession: id}, ""},
+		{bus.AgentSnapshot{Client: "agy", IdentSession: id}, ""},
+		{bus.AgentSnapshot{Client: "claude-code", Session: id}, ""}, // unproved
+		{bus.AgentSnapshot{Client: "claude-code", IdentSession: "../x"}, ""},
+		{bus.AgentSnapshot{IdentSession: id}, ""}, // no client known
+	} {
+		if got := relaunch.ProvedSession(c.s); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.s, got, c.want)
+		}
+	}
+}
+
+// A pop that is gone is named with the command that brings it back, resumed
+// only when its session can be: a Codex pop's proved session would be refused
+// by the launcher.
+func TestPopRecoveryLine(t *testing.T) {
+	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
+	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "grok", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo --resume "+id {
+		t.Fatalf("grok: %q", got)
+	}
+	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "codex", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo" {
+		t.Fatalf("codex: %q", got)
 	}
 }

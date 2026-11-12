@@ -145,19 +145,33 @@ func LaunchRole(command, project string) (string, bool) {
 // never appended to a command line typed into a shell.
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,63}$`)
 
-// ResumeCommand is the tab's command resuming the agent's Claude Code
-// session, or "" when it cannot: another client, no session, an odd id.
+// ResumeCommand is the tab's command resuming the agent's session, or ""
+// when it cannot: a client whose session source is not verified
+// (rolecfg.ResumeVerified), no session, an odd id.
 func ResumeCommand(command string, s bus.AgentSnapshot, has bool) string {
+	if s.Session == "" { // no status names it (Grok): the session its bind proved
+		s.Session = ProvedSession(s)
+	}
 	if !has || s.Session == "" || !sessionIDPattern.MatchString(s.Session) {
 		return ""
 	}
-	if s.Client != "" && s.Client != "claude-code" {
+	if s.Client != "" && !rolecfg.ResumeVerified(s.Client) {
 		return ""
 	}
 	if strings.Contains(command, " --resume") {
 		return ""
 	}
 	return command + " --resume " + s.Session
+}
+
+// ProvedSession is the session a relaunch of the agent may resume: the one
+// proved with its process (IdentSession), for a client whose session source
+// is verified (self-repair step 5), else "".
+func ProvedSession(s bus.AgentSnapshot) string {
+	if !rolecfg.ResumeVerified(s.Client) || !bus.ValidSessionID(s.IdentSession) {
+		return ""
+	}
+	return s.IdentSession
 }
 
 // shells are the foreground names of an idle pane.
@@ -466,7 +480,7 @@ func Open(herdr func(args ...string) ([]byte, error), snaps map[string]bus.Agent
 			if resumed {
 				word += " (resumed)"
 			} else if o.Resume && isAgent {
-				word += " (fresh: no Claude Code session to resume)"
+				word += " (fresh: no session to resume)"
 			}
 		}
 		if !o.DryRun {

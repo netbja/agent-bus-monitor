@@ -236,7 +236,7 @@ func TestLaunchGrokWritesTurnHooks(t *testing.T) {
 	f.env = append(f.env, "AGENTBUS_BIN=/opt/bus/agentbus")
 	m := f.config("grok", "", "", "")
 	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
-	if err != nil || !strings.Contains(out, "grok --model test-model --permission-mode default --rules '<role prompt and skill paths>'\n") {
+	if err != nil || !strings.Contains(out, "grok --model test-model --permission-mode default --session-id '<new session id>' --rules '<role prompt and skill paths>'\n") {
 		t.Fatalf("dry run = %q %v", out, err)
 	}
 	file := filepath.Join(dir, ".grok", "hooks", "agentbus.json")
@@ -254,7 +254,7 @@ func TestLaunchGrokWritesTurnHooks(t *testing.T) {
 	if !strings.Contains(errOut, file) || !strings.Contains(errOut, "trust") {
 		t.Errorf("stderr does not name the file and the trust to give: %q", errOut)
 	}
-	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, " ") != "grok --model test-model --permission-mode default --rules" {
+	if got := f.execed[1 : len(f.execed)-1]; len(got) != 8 || strings.Join(append(got[:6:6], got[7]), " ") != "grok --model test-model --permission-mode default --session-id --rules" {
 		t.Fatalf("argv changed: %q", got)
 	}
 }

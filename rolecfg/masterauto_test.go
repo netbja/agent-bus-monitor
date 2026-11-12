@@ -28,7 +28,7 @@ func TestMasterStartsInAutoMode(t *testing.T) {
 		t.Fatal("master lost its ask rules (the person's approval of deploy and infra pops)")
 	}
 	p, _ := m.Resolve("master")
-	args, err := build(p, r, "p", "prompt", "/tmp/prompt", "", true, nil)
+	args, err := build(p, r, "p", "prompt", "/tmp/prompt", "", "", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

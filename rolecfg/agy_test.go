@@ -314,11 +314,11 @@ func TestAgyElevated(t *testing.T) {
 	}
 }
 
-// v1 keeps resume Claude-only (§4.6); agy has no turn hooks (§4.5): nothing is
+// agy's resume is not verified yet (self-repair step 5); agy has no turn hooks (§4.5): nothing is
 // written where the client starts.
 func TestAgyResumeAndNoHooks(t *testing.T) {
 	f := agyFixture(t)
-	if _, _, err := f.launchWithResume(f.config("agy", "", "", ""), "coder", "s1"); err == nil || !strings.Contains(err.Error(), "only for Claude Code") {
+	if _, _, err := f.launchWithResume(f.config("agy", "", "", ""), "coder", "s1"); err == nil || !strings.Contains(err.Error(), "session resume is not verified for agy") {
 		t.Fatalf("agy resume: %v", err)
 	}
 	if _, _, err := f.launch(f.config("agy", "", "", ""), "coder"); err != nil {

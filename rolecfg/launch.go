@@ -2,6 +2,7 @@ package rolecfg
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -284,7 +285,8 @@ func jsonString(s string) string {
 
 // build is Python's build(): the client command line. dry replaces the
 // prompt and the generated files with placeholders and writes nothing.
-func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID string, dry bool, env []string) ([]string, error) {
+// session is Grok's: the id it resumes or the new one the launcher chose.
+func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID, session string, dry bool, env []string) ([]string, error) {
 	model, opts := p.Model, p.Options
 	switch p.Client {
 	case "claude-code":
@@ -352,6 +354,12 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 			perm = "default"
 		}
 		cmd := []string{"grok", "--model", model, "--permission-mode", perm}
+		switch {
+		case resumeID != "":
+			cmd = append(cmd, "--resume", resumeID)
+		case session != "":
+			cmd = append(cmd, "--session-id", session)
+		}
 		// --rules appends to grok's system prompt, like Claude's --append-system-prompt.
 		if dry {
 			return append(cmd, "--rules", "<role prompt and skill paths>"), nil
@@ -422,6 +430,13 @@ func preflight(p Profile, rules ToolRules, resume bool, e *envMap) error {
 		"kimi-cli":    {"--model", "--agent-file"},
 		"grok":        {"--model", "--rules", "--permission-mode"},
 	}[p.Client]
+	if p.Client == "grok" {
+		if resume {
+			needed = append(needed, "--resume")
+		} else {
+			needed = append(needed, "--session-id")
+		}
+	}
 	perm := p.Options["permission"]
 	if p.Client == "claude-code" {
 		if resume {
@@ -523,10 +538,26 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		}
 		p.Model = id
 	}
-	if resumeID != "" && p.Client != "claude-code" {
-		return fmt.Errorf("session resume is supported only for Claude Code (role %s uses %s)", role, p.Client)
+	if resumeID != "" && !ResumeVerified(p.Client) {
+		return fmt.Errorf("session resume is not verified for %s (role %s): it starts fresh (clients.go names its session source)", p.Client, role)
 	}
 	e := newEnv(cfg.Env)
+	dry := e.or("AGENT_LAUNCH_DRYRUN", "") == "1"
+	// The session this launch binds with its process: Grok's is chosen here
+	// (--session-id), or the one it resumes (self-repair step 5).
+	session := ""
+	if p.Client == "grok" && !p.Legacy {
+		switch {
+		case resumeID != "":
+			session = resumeID
+		case dry:
+			session = "<new session id>"
+		default:
+			if session, err = newSessionID(); err != nil {
+				return err
+			}
+		}
+	}
 	requireBind := e.or("AGENT_LAUNCH_REQUIRE_BIND", "") == "1"
 	promptPath, prompt, missing, err := promptFor(p, repoRoot(e), e)
 	if err != nil {
@@ -558,13 +589,12 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		fmt.Fprintf(cfg.Stderr, "note: tool_rules not applied for %s\n", p.Client)
 		rules = ToolRules{}
 	}
-	dry := e.or("AGENT_LAUNCH_DRYRUN", "") == "1"
 	if _, builtin := builtinBinary[p.Client]; !dry && !p.Legacy && builtin {
 		if err := preflight(p, rules, resumeID != "", e); err != nil {
 			return err
 		}
 	}
-	cmd, err := build(p, rules, project, prompt, promptPath, resumeID, dry, cfg.Env)
+	cmd, err := build(p, rules, project, prompt, promptPath, resumeID, session, dry, cfg.Env)
 	if err != nil {
 		return err
 	}
@@ -585,6 +615,9 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		}
 		// The pane is the one this launcher started in, read before env_refs apply.
 		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid()), "--pane", pane}
+		if session != "" {
+			bind = append(bind, "--session", session)
+		}
 	}
 	if requireBind && bind == nil {
 		return errors.New("AGENT_LAUNCH_REQUIRE_BIND=1 but not inside a herdr pane: nothing to bind")
@@ -1111,4 +1144,16 @@ func ShellSplit(s string) ([]string, error) {
 	}
 	flush()
 	return words, nil
+}
+
+// newSessionID is a random UUID (version 4), the form grok --session-id takes.
+func newSessionID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	h := hex.EncodeToString(b[:])
+	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:], nil
 }

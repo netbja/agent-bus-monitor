@@ -244,7 +244,13 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   resolve back to this repository's scripts, and uninstall removes only links to these exact files.
   Resume Claude Code with `agent-launch <role> <project> [--profile <p>] --resume <session-id>` to
   retain role settings and identity; never use `claude --resume` by hand. Every Claude launch passes
-  `--settings` (the resume hook, the turn hooks, plus tool rules when there are any). Other clients currently refuse resume.
+  `--settings` (the resume hook, the turn hooks, plus tool rules when there are any). Grok resumes too
+  (self-repair step 5): a fresh launch passes `--session-id <new UUID>` and `bind --session` records it as
+  the session proved with the launcher's pid; `--resume <id>` brings it back. Codex, Kimi and agy refuse
+  resume until their session id source is verified (`rolecfg.Clients`, `ResumeVerified`): Codex's hook
+  proof needs a probe in a Codex pane (it re-trusts the launch hooks in `~/.codex/config.toml`), agy's
+  needs `hooks.json` wired, Kimi has no source. A Codex pane restored by herdr itself runs a bare
+  `codex resume <id>` with no hooks: it proves no session and reports no turns.
   **Automatic state** (spec `docs/superpowers/specs/2026-11-01-auto-state-design.md`): the launch's `--settings`
   (`launchHooks`) also runs `agentbus roles turn start` on `UserPromptSubmit` and `roles turn end` on `Stop` and on
   `SessionStart` (`cmd/agentbus/turnhook.go`: silent on stdout, always exit 0, 2 s with the dial, a prompt starting with
