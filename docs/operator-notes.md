@@ -907,7 +907,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `services.start_at_login` (off, the machine's file only; step 9, `service/login.go`): `agentbus up`
   writes its units for it and enables them after the install (`LoginStart.Enable`), or, off, disables
   an enabled project **before** the install (systemd disables by the `[Install]` section the new unit
-  would lose); `agentbus service login` applies it to every installed project. systemd: the
+  would lose), and one whose state `is-enabled` cannot say is disabled anyway; a disable that fails
+  stops `up` before any unit is rewritten (`is-enabled` exits non-zero for `disabled`: its output is read); `agentbus service login` applies it to every installed project. systemd: the
   `[Install] WantedBy=default.target` suffix plus `systemctl --user enable` (never `--now`, never
   linger); `service remove` disables first. launchd: a copy of the job's plist in
   `~/Library/LaunchAgents`, kept in step by every install; a file there agentbus did not write

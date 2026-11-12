@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,7 @@ import (
 // enabled; off, it is disabled and loses the section. No linger.
 func TestSystemdLoginStart(t *testing.T) {
 	s, p := testSpec(t, Dispatch)
-	f := &fakeRun{}
+	f := &fakeRun{answers: map[string]string{"--user is-enabled": "disabled\n"}}
 	m := Systemd{Run: f.run, Paths: p}
 	if _, err := m.Install(s); err != nil {
 		t.Fatal(err)
@@ -249,5 +250,45 @@ func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// is-enabled exits non-zero for a disabled unit: its answer is read from its
+// output; anything that is not a state is an error, never "disabled"
+// (reviewer-codex: a failed read must not let a wants link survive).
+func TestSystemdEnabledReadsTheStateNotTheExitCode(t *testing.T) {
+	s, p := testSpec(t, Dispatch)
+	answer, fail := "", false
+	run := func(args ...string) ([]byte, error) {
+		if len(args) > 1 && args[1] == "is-enabled" {
+			if fail {
+				return []byte(answer), errors.New("exit status 1")
+			}
+			return []byte(answer), nil
+		}
+		return nil, nil
+	}
+	m := Systemd{Run: run, Paths: p}
+	if _, err := m.Install(s); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		out  string
+		fail bool
+		on   bool
+		err  bool
+	}{
+		{"enabled\n", false, true, false},
+		{"disabled\n", true, false, false},
+		{"static\n", false, false, false},
+		{"linked\n", true, false, false},
+		{"Failed to connect to bus: No medium found\n", true, false, true},
+		{"", true, false, true},
+	} {
+		answer, fail = c.out, c.fail
+		on, err := m.Enabled("my-app")
+		if on != c.on || (err != nil) != c.err {
+			t.Errorf("is-enabled %q (fail %v): %v %v", c.out, c.fail, on, err)
+		}
 	}
 }

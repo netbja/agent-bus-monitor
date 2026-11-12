@@ -96,20 +96,31 @@ func (m Systemd) Disable(project string) error {
 	return nil
 }
 
+// isEnabledStates are the answers systemctl is-enabled prints; it exits
+// non-zero for most of them, so the answer is read from the output.
+var isEnabledStates = map[string]bool{"enabled": true, "enabled-runtime": true, "linked": true, "linked-runtime": true,
+	"alias": true, "masked": true, "masked-runtime": true, "static": true, "indirect": true, "disabled": true,
+	"generated": true, "transient": true, "bad": true, "not-found": true}
+
 // Enabled: every installed unit of the project is enabled (none installed:
-// false).
+// false). An answer that is no state is an error, never "disabled": a failed
+// read must not let a wants link survive the option going off
+// (reviewer-codex).
 func (m Systemd) Enabled(project string) (bool, error) {
 	kinds, err := projectUnits(m, project)
 	if err != nil || len(kinds) == 0 {
 		return false, err
 	}
+	on := true
 	for _, k := range kinds {
-		out, _ := m.Run("--user", "is-enabled", UnitName(project, k)) // exits non-zero when disabled
-		if strings.TrimSpace(string(out)) != "enabled" {
-			return false, nil
+		out, err := m.Run("--user", "is-enabled", UnitName(project, k))
+		state := strings.TrimSpace(string(out))
+		if !isEnabledStates[state] {
+			return false, fmt.Errorf("systemctl --user is-enabled %s: %s", UnitName(project, k), firstLine(out, err))
 		}
+		on = on && state == "enabled"
 	}
-	return true, nil
+	return on, nil
 }
 
 // setInstall adds or removes the [Install] section of an installed unit and

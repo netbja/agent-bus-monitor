@@ -12,11 +12,15 @@ import (
 // fakeLogin is a service manager with a login backend (self-repair step 9).
 type fakeLogin struct {
 	*fakeManager
-	enabled   map[string]bool
-	failEnble bool
+	enabled     map[string]bool
+	failEnble   bool
+	failDisable bool
+	enabledErr  error
 }
 
-func newFakeLogin() *fakeLogin { return &fakeLogin{fakeManager: newFakeManager(), enabled: map[string]bool{}} }
+func newFakeLogin() *fakeLogin {
+	return &fakeLogin{fakeManager: newFakeManager(), enabled: map[string]bool{}}
+}
 
 func (f *fakeLogin) Enable(p string) error {
 	f.calls = append(f.calls, "enable "+p)
@@ -28,10 +32,18 @@ func (f *fakeLogin) Enable(p string) error {
 }
 func (f *fakeLogin) Disable(p string) error {
 	f.calls = append(f.calls, "disable "+p)
+	if f.failDisable {
+		return errors.New("systemctl --user disable: refused")
+	}
 	f.enabled[p] = false
 	return nil
 }
-func (f *fakeLogin) Enabled(p string) (bool, error) { return f.enabled[p], nil }
+func (f *fakeLogin) Enabled(p string) (bool, error) {
+	if f.enabledErr != nil {
+		return false, f.enabledErr
+	}
+	return f.enabled[p], nil
+}
 
 func (f *fakeLogin) index(c string) int {
 	for i, x := range f.calls {
@@ -191,5 +203,51 @@ func TestServiceLoginWithoutABackend(t *testing.T) {
 	out.Reset()
 	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 || !strings.Contains(out.String(), "off") {
 		t.Fatalf("off, no manager: code %d, out %q", code, out.String())
+	}
+}
+
+// Off, a project whose login state cannot be read is disabled anyway, before
+// the install; when that disable fails too, up writes no unit and fails
+// (reviewer-codex: never strip the section while the link may remain).
+func TestUpOffDisablesWhenTheStateIsUnknown(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	withServices(t, &deps)
+	m := newFakeLogin()
+	m.enabledErr = errors.New("is-enabled: Failed to connect to bus")
+	deps.Services = func() (service.Manager, string) { return m, "" }
+	deps.AtLogin = func() bool { return false }
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if i := m.index("disable demo"); i < 0 || i > m.index("install demo dispatch") {
+		t.Fatalf("calls = %v (disable before the install)", m.calls)
+	}
+	m.calls, m.failDisable = nil, true
+	errw.Reset()
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
+		t.Fatal("up succeeded with login start neither read nor disabled")
+	}
+	if m.index("install demo dispatch") >= 0 || !strings.Contains(errw.String(), "start at login") {
+		t.Fatalf("calls = %v, stderr = %q", m.calls, errw.String())
+	}
+}
+
+// service login, off: an unreadable state is disabled anyway; a failure is
+// said and exits 1.
+func TestServiceLoginOffWithAnUnknownState(t *testing.T) {
+	_, d := cmdFixture(t)
+	m := newFakeLogin()
+	d.Manager = m
+	m.Install(service.Spec{Project: "demo", Kind: service.Dispatch})
+	m.enabledErr = errors.New("is-enabled: Failed to connect to bus")
+	d.AtLogin = func() bool { return false }
+	var out, errw bytes.Buffer
+	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 || !m.saw("disable demo") {
+		t.Fatalf("code %d, calls %v, stderr %q", code, m.calls, errw.String())
+	}
+	m.failDisable = true
+	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 1 {
+		t.Fatalf("a failed disable exited %d", code)
 	}
 }
