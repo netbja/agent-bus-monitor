@@ -160,3 +160,35 @@ func TestPersistenceTellsARefusalFromAFailure(t *testing.T) {
 		t.Fatalf("a failed read read as a refusal: %v", err)
 	}
 }
+
+// replyErr is a server error reply, as go-redis types one.
+type replyErr string
+
+func (e replyErr) Error() string { return string(e) }
+func (replyErr) RedisError()     {}
+
+// Only the replies that mean "CONFIG is not for you" are a refusal: an
+// unknown or renamed command, NOPERM. A broker loading its dataset or busy
+// running a script answers an error the check must see (reviewer-codex).
+func TestConfigErrClassifiesOnlyRefusals(t *testing.T) {
+	for reply, refused := range map[string]bool{
+		"NOPERM User noconfig has no permissions to run the 'config|get' command": true,
+		"ERR unknown command 'CONFIG', with args beginning with: 'GET' ":          true,
+		"ERR unknown subcommand 'GET'. Try CONFIG HELP.":                          true,
+		"LOADING Redis is loading the dataset in memory":                          false,
+		"BUSY Redis is busy running a script. You can only call SCRIPT KILL":      false,
+		"MASTERDOWN Link with MASTER is down":                                     false,
+		"ERR max number of clients reached":                                       false,
+	} {
+		err := configErr(replyErr(reply))
+		if errors.Is(err, ErrConfigRefused) != refused {
+			t.Errorf("%q: refused=%v, want %v", reply, !refused, refused)
+		}
+		if !refused && err.Error() != reply {
+			t.Errorf("%q passed on as %q", reply, err)
+		}
+	}
+	if err := configErr(context.Canceled); errors.Is(err, ErrConfigRefused) {
+		t.Error("a context error read as a refusal")
+	}
+}

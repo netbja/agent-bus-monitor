@@ -144,12 +144,23 @@ var (
 // value. A connection or context failure is never this.
 var ErrConfigRefused = errors.New("the broker refused CONFIG GET")
 
-// configErr tells a refusal (an error reply from the server) from a failure
-// to reach it, which is returned as it is (reviewer-codex).
+// refusalReplies are the server replies that mean CONFIG is not this
+// client's to run: no permission, or the command renamed or disabled (a
+// managed broker). Every other reply (LOADING, BUSY, MASTERDOWN…) is a
+// broker that cannot answer now, not a refusal.
+var refusalReplies = []string{"NOPERM", "ERR unknown command", "ERR unknown subcommand"}
+
+// configErr tells a refusal from a failure: only a refusal reply is
+// ErrConfigRefused; any other server reply, a transport or a context failure
+// is returned as it is (reviewer-codex).
 func configErr(err error) error {
 	var reply redis.Error
 	if errors.As(err, &reply) {
-		return fmt.Errorf("%w: %v", ErrConfigRefused, err)
+		for _, p := range refusalReplies {
+			if strings.HasPrefix(reply.Error(), p) {
+				return fmt.Errorf("%w: %v", ErrConfigRefused, err)
+			}
+		}
 	}
 	return err
 }
