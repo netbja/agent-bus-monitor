@@ -164,6 +164,7 @@ func runTerm(args []string, d termDeps, stdout, stderr io.Writer) int {
 		return fail(err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp) // nothing left on failure (reviewer-codex)
 		return fail(err)
 	}
 	fmt.Fprintln(stdout, "recorded "+path)

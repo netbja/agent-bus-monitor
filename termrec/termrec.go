@@ -155,7 +155,8 @@ const maxWait = 5 * time.Minute
 //	type <text>               the text as typed (no Enter: key enter)
 //	key <name>                enter, esc, tab, backspace, ctrl+<a-z\]>, f1-f12, f1-kitty…f12-kitty
 //	sleep <dur>               wait
-//	quiet <dur> [max <dur>]   wait until the client wrote nothing for dur (max 30s by default)
+//	quiet <dur> [max <dur>]   wait until the client has written, then nothing went either way
+//	                          (no output, input or resize) for dur; max 30s by default
 //	mark <name>               a named point in the recording
 //	resize <cols>x<rows>      resize the terminal
 func ParseScript(s string) ([]Step, error) {
@@ -298,13 +299,17 @@ func Record(ctx context.Context, w io.Writer, o Options) error {
 		enc     = json.NewEncoder(w)
 		werr    error
 		lastOut = start
+		wrote   bool // the client has written something: a quiet wait needs it
 	)
 	emit := func(e Event) {
 		mu.Lock()
 		defer mu.Unlock()
 		e.T = time.Since(start).Milliseconds()
 		if e.Kind == KindOutput || e.Kind == KindInput || e.Kind == KindResize {
-			lastOut = time.Now() // quiet counts from what we sent too: an answer is still coming
+			lastOut = time.Now() // quiet counts from what we sent too: an answer (or a redraw) is still coming
+		}
+		if e.Kind == KindOutput {
+			wrote = true
 		}
 		if werr == nil {
 			werr = enc.Encode(e)
@@ -388,10 +393,10 @@ func Record(ctx context.Context, w io.Writer, o Options) error {
 			return true
 		}
 	}
-	quietSince := func() time.Duration {
+	quiet := func(d time.Duration) bool { // the client wrote, then nothing came either way for d
 		mu.Lock()
 		defer mu.Unlock()
-		return time.Since(lastOut)
+		return wrote && time.Since(lastOut) >= d
 	}
 	for _, st := range o.Steps {
 		if ctx.Err() != nil {
@@ -406,9 +411,9 @@ func Record(ctx context.Context, w io.Writer, o Options) error {
 			emit(Event{Kind: KindInput, Data: base64.StdEncoding.EncodeToString([]byte(st.Bytes))})
 		case st.Quiet:
 			deadline := time.Now().Add(st.Max)
-			for quietSince() < st.Wait && time.Now().Before(deadline) && sleep(20*time.Millisecond) {
+			for !quiet(st.Wait) && time.Now().Before(deadline) && sleep(20*time.Millisecond) {
 			}
-			if quietSince() < st.Wait {
+			if !quiet(st.Wait) {
 				emit(Event{Kind: KindMark, Text: "quiet-timeout"})
 			}
 		case st.Wait > 0:

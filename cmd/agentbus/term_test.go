@@ -143,3 +143,21 @@ func TestTermDump(t *testing.T) {
 		t.Fatal("a missing file accepted")
 	}
 }
+
+// A rename that fails leaves no temporary file either (reviewer-codex): the
+// destination is a directory.
+func TestTermRecordLeavesNothingWhenTheRenameFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "claude", "empty.jsonl")
+	if err := os.MkdirAll(filepath.Join(path, "inside"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var o termrec.Options
+	var out, errb bytes.Buffer
+	if code := runTerm([]string{"record", "claude", "empty", "--out", dir, "--force"}, fakeRecorder(t, &o, ""), &out, &errb); code != 1 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+		t.Fatal("the temporary file stayed after a failed rename")
+	}
+}

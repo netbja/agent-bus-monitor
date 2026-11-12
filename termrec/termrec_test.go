@@ -42,6 +42,12 @@ func fakeClient(mode string) {
 			}
 		}()
 	}
+	switch mode {
+	case "slow": // its prompt comes after 1.2 s
+		time.Sleep(1200 * time.Millisecond)
+	case "silent": // never writes
+		select {}
+	}
 	old, _ := term.MakeRaw(0)
 	defer term.Restore(0, old)
 	os.Stdout.WriteString("ready> ")
@@ -274,5 +280,40 @@ func TestOutputBetween(t *testing.T) {
 	}
 	if got, ok := (Recording{Events: []Event{{Kind: KindMark, Text: "a"}, {Kind: KindMark, Text: "b"}}}).OutputBetween("a", "b"); !ok || got == nil || len(got) != 0 {
 		t.Fatalf("nothing between = %q %v", got, ok)
+	}
+}
+
+// A quiet wait needs the client to have written something: a client slow
+// to start is waited for, and one that never writes times out
+// (reviewer-codex).
+func TestQuietWaitsForTheFirstOutput(t *testing.T) {
+	rec := record(t, "slow", "quiet 300ms max 5s\nmark settled\ntype q\nquiet 300ms max 5s\n")
+	if b, ok := rec.OutputBetween("settled", "nope"); ok {
+		t.Fatalf("mark %q", b)
+	}
+	before := ""
+	for _, e := range rec.Events {
+		if e.Kind == KindMark && e.Text == "settled" {
+			break
+		}
+		if e.Kind == KindOutput {
+			before += string(e.Bytes())
+		}
+		if e.Kind == KindMark && e.Text == "quiet-timeout" {
+			t.Fatal("a slow client timed out")
+		}
+	}
+	if !strings.Contains(before, "ready> ") {
+		t.Fatalf("the quiet wait ended before the prompt: %q", before)
+	}
+	rec = record(t, "silent", "quiet 200ms max 700ms\nmark after\n")
+	timedOut := false
+	for _, e := range rec.Events {
+		if e.Kind == KindMark && e.Text == "quiet-timeout" {
+			timedOut = true
+		}
+	}
+	if !timedOut {
+		t.Fatal("a silent client read as quiet")
 	}
 }
