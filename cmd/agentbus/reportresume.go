@@ -41,9 +41,10 @@ import (
 func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, fg hookFacts) int {
 	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
 	pane, herdr, role, project, manifest := get("HERDR_PANE_ID"), get("HERDR_BIN_PATH"), get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
-	if len(args) != 1 || get("HERDR_ENV") != "1" || pane == "" || herdr == "" || role == "" || project == "" || manifest == "" {
-		return 0 // not a launched agent inside herdr: nothing to report
+	if len(args) != 1 || role == "" || project == "" || manifest == "" {
+		return 0 // not a launched agent: nothing to report
 	}
+	inHerdr := get("HERDR_ENV") == "1" && pane != "" && herdr != "" // herdr's report and its prover: inside herdr only, as before
 	var in struct {
 		Event     string `json:"hook_event_name"`
 		SessionID string `json:"session_id"`
@@ -61,7 +62,10 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		return 0
 	}
 	logPath := filepath.Join(paths.StateDir(project), "resume.log")
-	handToProver(logPath, project, role, in.SessionID, spawn, fg)
+	chain := fg.Ancestors() // read once, in the hook's foreground
+	if inHerdr {
+		handToProver(logPath, project, role, in.SessionID, spawn, chain, fg.Now())
+	}
 	profile, err := resumeProfile(manifest, role, get("AGENT_BUS_PROFILE"))
 	if err != nil {
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
@@ -72,22 +76,96 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
 		return 0
 	}
+	handToRecorder(logPath, project, role, in.SessionID, argv, spawn, chain)
+	if !inHerdr {
+		return 0
+	}
 	if err := spawn(append([]string{"roles", "report-resume-send", logPath, herdr, pane, "--"}, argv...)); err != nil {
 		resumeLog(logPath, time.Now(), "sender not started: "+err.Error())
 	}
 	return 0
 }
 
+// handToRecorder starts the detached resume recorder (roles record-resume)
+// with the hook's ancestry and the resume command (herdr exit step 8, spec
+// 4.7): it writes {p}:resume when the bus proves an ancestor is the agent's
+// verified process. Without a chain (no /proc: macOS today) nothing is
+// started, so nothing is recorded: fail closed.
+func handToRecorder(logPath, project, role, session string, argv []string, spawn func(argv []string) error, chain []dispatch.ProcID) {
+	if len(chain) == 0 || len(argv) == 0 || !bus.ValidName(role) || !bus.ValidSessionID(session) {
+		return
+	}
+	call := []string{"roles", "record-resume", logPath, project, role, session, "--"}
+	for _, p := range chain {
+		call = append(call, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
+	}
+	call = append(append(call, "--"), argv...)
+	if err := spawn(call); err != nil {
+		resumeLog(logPath, time.Now(), "resume recorder not started: "+err.Error())
+	}
+}
+
+// resumeRecorder is the bus as the recorder needs it.
+type resumeRecorder interface {
+	RecordResume(ctx context.Context, agent string, chain []bus.ProcID, argv []string, session string) error
+}
+
+func openRecorder(project string) (resumeRecorder, func(), error) { return openHookBus(project) }
+
+// recordResumeSend writes the resume record: <log> <project> <agent>
+// <session> -- <pid:start>... -- <argv...>. The bus proves the caller
+// (RecordResume); every outcome is one line of the log.
+func recordResumeSend(args []string, open func(project string) (resumeRecorder, func(), error)) {
+	if len(args) < 7 || args[4] != "--" {
+		return
+	}
+	logPath, project, agent, session := args[0], args[1], args[2], args[3]
+	rest := args[5:]
+	sep := -1
+	for i, a := range rest {
+		if a == "--" {
+			sep = i
+			break
+		}
+	}
+	if sep <= 0 || sep == len(rest)-1 {
+		return
+	}
+	var chain []bus.ProcID
+	for _, a := range rest[:sep] {
+		p, s, ok := strings.Cut(a, ":")
+		pid, err1 := strconv.Atoi(p)
+		start, err2 := strconv.ParseUint(s, 10, 64)
+		if !ok || err1 != nil || err2 != nil || pid <= 0 {
+			return
+		}
+		chain = append(chain, bus.ProcID{PID: pid, Start: start})
+	}
+	argv := rest[sep+1:]
+	b, done, err := open(project)
+	if err != nil {
+		resumeLog(logPath, time.Now(), "resume not recorded: "+err.Error())
+		return
+	}
+	defer done()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := b.RecordResume(ctx, agent, chain, argv, session); err != nil {
+		resumeLog(logPath, time.Now(), "resume not recorded: "+err.Error())
+		return
+	}
+	resumeLog(logPath, time.Now(), "resume recorded: "+agent+" "+session)
+}
+
 // handToProver starts the detached session prover (roles prove-session) with
 // the hook's ancestry, read here in its foreground: once detached, the prover
 // is reparented and its own ancestry proves nothing. Without a chain (no
 // /proc) or with an id the prover cannot take, nothing is started.
-func handToProver(logPath, project, role, session string, spawn func(argv []string) error, fg hookFacts) {
-	chain := fg.Ancestors()
+func handToProver(logPath, project, role, session string, spawn func(argv []string) error, chain []dispatch.ProcID, now time.Time) {
 	if len(chain) == 0 || !bus.ValidName(role) || !bus.ValidSessionID(session) {
 		return
 	}
-	at := strconv.FormatInt(fg.Now().UnixNano(), 10) // this event's order, taken before the detach
+	at := strconv.FormatInt(now.UnixNano(), 10) // this event's order, taken before the detach
 	argv := []string{"roles", "prove-session", logPath, project, role, session, at, "--"}
 	for _, p := range chain {
 		argv = append(argv, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
@@ -105,7 +183,7 @@ func proveFromHook(env []string, project, role, session string, spawn func(argv 
 	if err != nil || !bus.ValidName(project) {
 		return
 	}
-	handToProver(filepath.Join(paths.StateDir(project), "resume.log"), project, role, session, spawn, fg)
+	handToProver(filepath.Join(paths.StateDir(project), "resume.log"), project, role, session, spawn, fg.Ancestors(), fg.Now())
 }
 
 // resumeProfile is the --profile of the resume command: the profile the
@@ -205,7 +283,11 @@ type sessionProver interface {
 
 // openProver connects to the project's bus from the environment the hook
 // left the prover.
-func openProver(project string) (sessionProver, func(), error) {
+func openProver(project string) (sessionProver, func(), error) { return openHookBus(project) }
+
+// openHookBus connects to the project's bus from the environment a hook left
+// its detached helper.
+func openHookBus(project string) (*bus.Bus, func(), error) {
 	r, err := bus.Connect("")
 	if err != nil {
 		return nil, nil, err

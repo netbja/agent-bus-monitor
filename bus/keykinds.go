@@ -42,6 +42,7 @@ var keyKinds = map[string]KeyClass{
 	"plan": KeyRecord, "plan:facts": KeyRecord, "gate:*": KeyRecord, "swaps": KeyRecord,
 	"health": KeyRecord, "health:log": KeyRecord, "health:notes": KeyRecord, "quota:hist": KeyRecord,
 	"change:*": KeyRecord, "missions:*": KeyRecord,
+	"resume": KeyRecord, // how each agent resumes: it must outlive a reboot (herdr exit 4.7)
 
 	"services": KeyRuntime, "agents": KeyRuntime, "wake:*": KeyRuntime, "handoff": KeyRuntime,
 	"quota": KeyRuntime, "pause": KeyRuntime, "fallback": KeyRuntime, "usage": KeyRuntime,
