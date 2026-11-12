@@ -807,8 +807,13 @@ support (only clients with a probed screen signature are prompted).
 | `agentbus --project <p> service restart\|stop\|start\|remove [kind]` | one service; `remove` keeps data and logs |
 | `agentbus service list` | every project's services on this machine |
 
-- **Nothing starts at login.** A reboot starts no project; opening its workspace in herdr (the
-  plugin's workspace hook starts its services) or `agentbus up` does. See [Resume a project](#resume-a-project).
+- **Nothing starts at login, unless you ask.** By default a reboot starts no project; opening its
+  workspace in herdr (the plugin's workspace hook starts its services) or `agentbus up` does. See
+  [Resume a project](#resume-a-project). With `services.start_at_login = true` in your
+  `config.toml` (or busmon's settings, `C`), every project's services start when you log in
+  (systemd `--user enable`, or a copy of the plist in `~/Library/LaunchAgents`), never before:
+  no linger. `agentbus up` applies it to its project, `agentbus service login` to every project at
+  once. Without systemd or launchd it is refused with the reason.
 - **A project directory without Git** is not an error: `missions` waits (`missions waiting git`,
   health `warn`) and starts by itself once you run `git init` there.
 - **Bounded restarts.** A service that fails is restarted; after 5 failures in 10 minutes it

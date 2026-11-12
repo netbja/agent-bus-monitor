@@ -14,10 +14,14 @@ import (
 // in WorkDir. Exe is the absolute path of the agentbus that wrote the unit;
 // EnvFile is named explicitly because the manager's environment may resolve
 // the XDG directories differently from the shell that ran `agentbus up`.
+//
+// AtLogin is the services.start_at_login option (self-repair step 9): the
+// unit is written started at login (login.go).
 type Spec struct {
 	Project, Kind, Exe, WorkDir, EnvFile string
 	Args                                 []string
 	Paths                                Paths
+	AtLogin                              bool
 }
 
 // argv is the service command; stderr is true where stderr is a journal.

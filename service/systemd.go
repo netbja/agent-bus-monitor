@@ -9,9 +9,10 @@ import (
 	"strings"
 )
 
-// Systemd manages the services as systemd --user units. The units have no
-// [Install] section and are never enabled: a login or a reboot starts no
-// project; `agentbus up` (or `service start`) does.
+// Systemd manages the services as systemd --user units. A unit has an
+// [Install] section and is enabled only while services.start_at_login is on
+// (login.go); otherwise a login or a reboot starts no project, `agentbus up`
+// (or `service start`) does.
 type Systemd struct {
 	Run   Runner // systemctl
 	Paths Paths
@@ -39,7 +40,7 @@ func systemdUnit(s Spec) string {
 	}
 	pct := strings.NewReplacer("%", "%%")
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Written by `agentbus up`; `agentbus service remove` deletes it. Never enabled at login.\n")
+	fmt.Fprintf(&b, "# Written by `agentbus up`; `agentbus service remove` deletes it. Enabled at login only while services.start_at_login is on.\n")
 	fmt.Fprintf(&b, "[Unit]\nDescription=agentbus %s for project %s\n", s.Kind, s.Project)
 	fmt.Fprintf(&b, "StartLimitIntervalSec=%d\nStartLimitBurst=%d\n\n", int(BudgetWindow.Seconds()), BudgetStarts)
 	fmt.Fprintf(&b, "[Service]\nType=simple\nExecStart=%s\n", strings.Join(words, " "))
@@ -49,6 +50,9 @@ func systemdUnit(s Spec) string {
 	// Exit 0 is final (stopped, project gone, another instance, invalid
 	// configuration, budget spent); only a failure is restarted.
 	b.WriteString("Restart=on-failure\nRestartSec=5s\nTimeoutStopSec=60\nKillMode=control-group\n")
+	if s.AtLogin {
+		b.WriteString(systemdInstall)
+	}
 	return b.String()
 }
 
@@ -83,6 +87,11 @@ func (m Systemd) Remove(project, kind string) error {
 	// worker running that nothing manages any more.
 	if err := m.ctl("stop", UnitName(project, kind)); err != nil {
 		return err
+	}
+	if m.mayStartAtLogin(project, kind) { // no wants link left pointing at nothing
+		if err := m.ctl("disable", UnitName(project, kind)); err != nil {
+			return err
+		}
 	}
 	if err := os.Remove(p); err != nil {
 		return err
