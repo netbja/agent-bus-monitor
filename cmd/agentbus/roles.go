@@ -71,6 +71,9 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 	case "prove-session":
 		proveSessionSend(rest, openProver, dispatch.ProcStart)
 		return nil
+	case "record-resume": // the resume record (herdr exit step 8): the bus proves the caller
+		recordResumeSend(rest, openRecorder)
+		return nil
 	case "turn": // the turn hooks: the state follows the client's turns (auto-state)
 		turnHook(rest, env, os.Stdin, stdout, realTurnFlip, func(project, agent, session string) {
 			proveFromHook(env, project, agent, session, spawnDetached,

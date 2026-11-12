@@ -140,7 +140,9 @@ Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), 
 (Redis hash, ref→meta; 4-eyes challenges gate the named agent), `{p}:verdicts` (Redis stream,
 append-only 4-eyes ledger; one entry per verdict — subject/author/reviewer/decision/message/ref —
 capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`), `{p}:agents` (Redis hash,
-agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
+agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:resume` (Redis hash, agent→`{argv, session,
+at}`; how to resume its last proved session, written by the SessionStart hook's recorder, cleared only by
+`forget`), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
 **per-agent** model + context fill), `{p}:budget` (Redis hash, provider→`BudgetSnapshot`;
 **account-scope** session/weekly window per provider), `{p}:board` (Redis hash, task→`BoardEntry`;
 the shared ownership registry — owner + state + branch, claimed via `agentbus board claim`),
