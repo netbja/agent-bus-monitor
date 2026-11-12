@@ -1,0 +1,12 @@
+# Antigravity agy. `>` alone between two `─` rules; the approval menu shows `> 1. Yes…`.
+
+client = "agy"
+
+[signature]
+ansi = false
+prompt = '^>(?:[ \t]|$)'
+rule_above = true
+ready = ['(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}']
+busy = []
+modal = ['(?m)^[ \t]*>[ \t]*1\.[ \t]']
+dialog = []

@@ -232,7 +232,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   processes an agent starts (tests, dotenv, and similar tools) can still read environment files.
   A pop's client can stop on its own pre-session dialog (trust, hooks review) before it declares a
   status (A10): `agent-launch` binds the pane first, so the observe pass already inspects it, and a
-  dialog herdr reports as `blocked` (Claude Code's trust check, `testdata/screens/claude-trust.txt`)
+  dialog herdr reports as `blocked` (Claude Code's trust check, `agentstate/testdata/screens/claude-trust.txt`)
   gets busmon's `prompt` flag and the prompt-notify ring; `agent-spawn` waits `AGENT_SPAWN_WAIT` s
   (default 30, `0` = no wait; `swap` passes 0, it proves the agent itself) for the first status
   (`agentbus agents wait <agent> --since <ms> --timeout <d>`, read-only) and otherwise names the
