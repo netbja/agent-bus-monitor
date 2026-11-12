@@ -1,0 +1,12 @@
+# Grok CLI.
+
+client = "grok"
+
+[signature]
+ansi = false
+prompt = '^[ \t]*│ ❯'
+rule_above = false
+ready = ['(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$']
+busy = []
+modal = []
+dialog = []

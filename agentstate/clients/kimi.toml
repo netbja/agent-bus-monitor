@@ -1,0 +1,13 @@
+# Kimi CLI. The input box has a right border on screen: `│ >   …   │`. Kimi 2.1 reports
+# idle/done while its moon spinner runs (`🌑 · Tip: …`).
+
+client = "kimi"
+
+[signature]
+ansi = false
+prompt = '^[ \t]*│ >'
+rule_above = false
+ready = ['(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?$']
+busy = ['(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)']
+modal = []
+dialog = []

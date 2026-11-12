@@ -1,0 +1,15 @@
+# Claude Code. Empty input is `❯` + NBSP (optionally a dim `Try "…"` placeholder; the glyph
+# itself turns grey during a turn) directly under a `─` rule; typed text is not dim. A turn keeps
+# the input box empty, so the spinner line (`✶ Kneading… (2s · ↓ 91 tokens)`) is the busy
+# signature. Dialog: screens/claude-trust.txt.
+
+client = "claude"
+
+[signature]
+ansi = true
+prompt = '^❯'
+rule_above = true
+ready = ['(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?$']
+busy = ['(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…']
+modal = []
+dialog = ['(?s)Accessing workspace:.*Yes, I trust this folder']
