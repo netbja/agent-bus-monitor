@@ -155,8 +155,8 @@ const maxWait = 5 * time.Minute
 //	type <text>               the text as typed (no Enter: key enter)
 //	key <name>                enter, esc, tab, backspace, ctrl+<a-z\]>, f1-f12, f1-kitty…f12-kitty
 //	sleep <dur>               wait
-//	quiet <dur> [max <dur>]   wait until the client has written, then nothing went either way
-//	                          (no output, input or resize) for dur; max 30s by default
+//	quiet <dur> [max <dur>]   wait until the client has written, then no output and no input
+//	                          for dur (a resize is no I/O); max 30s by default
 //	mark <name>               a named point in the recording
 //	resize <cols>x<rows>      resize the terminal
 func ParseScript(s string) ([]Step, error) {
@@ -235,10 +235,11 @@ func ParseScript(s string) ([]Step, error) {
 }
 
 // legacyF are F1-F12 as xterm sends them; kittyF in the kitty keyboard
-// protocol with the press event reported (CSI number ; 1:1 final).
+// protocol with the press event reported (CSI number ; 1:1 final). F3 is
+// CSI 13 ~ there, not CSI R, which is the cursor position report (foureyes).
 var legacyF = [...]string{"\x1bOP", "\x1bOQ", "\x1bOR", "\x1bOS", "\x1b[15~", "\x1b[17~", "\x1b[18~", "\x1b[19~", "\x1b[20~", "\x1b[21~", "\x1b[23~", "\x1b[24~"}
 
-var kittyF = [...]string{"\x1b[1;1:1P", "\x1b[1;1:1Q", "\x1b[1;1:1R", "\x1b[1;1:1S", "\x1b[15;1:1~", "\x1b[17;1:1~", "\x1b[18;1:1~", "\x1b[19;1:1~", "\x1b[20;1:1~", "\x1b[21;1:1~", "\x1b[23;1:1~", "\x1b[24;1:1~"}
+var kittyF = [...]string{"\x1b[1;1:1P", "\x1b[1;1:1Q", "\x1b[13;1:1~", "\x1b[1;1:1S", "\x1b[15;1:1~", "\x1b[17;1:1~", "\x1b[18;1:1~", "\x1b[19;1:1~", "\x1b[20;1:1~", "\x1b[21;1:1~", "\x1b[23;1:1~", "\x1b[24;1:1~"}
 
 // Key is the bytes a named key sends.
 func Key(name string) (string, bool) {
@@ -305,8 +306,8 @@ func Record(ctx context.Context, w io.Writer, o Options) error {
 		mu.Lock()
 		defer mu.Unlock()
 		e.T = time.Since(start).Milliseconds()
-		if e.Kind == KindOutput || e.Kind == KindInput || e.Kind == KindResize {
-			lastOut = time.Now() // quiet counts from what we sent too: an answer (or a redraw) is still coming
+		if e.Kind == KindOutput || e.Kind == KindInput {
+			lastOut = time.Now() // quiet counts from real I/O either way: an answer is still coming; a resize is no I/O (master)
 		}
 		if e.Kind == KindOutput {
 			wrote = true
@@ -315,8 +316,9 @@ func Record(ctx context.Context, w io.Writer, o Options) error {
 			werr = enc.Encode(e)
 		}
 	}
+	argv := append([]string{filepath.Base(o.Argv[0])}, o.Argv[1:]...) // the binary's name: a committed fixture names no home directory (foureyes)
 	if err := enc.Encode(Header{V: Version, Client: o.Client, Fixture: o.Fixture, ClientVersion: o.ClientVersion,
-		Argv: o.Argv, Term: recordTerm, Cols: o.Cols, Rows: o.Rows, Start: start.UTC()}); err != nil {
+		Argv: argv, Term: recordTerm, Cols: o.Cols, Rows: o.Rows, Start: start.UTC()}); err != nil {
 		return err
 	}
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -132,7 +133,8 @@ type q
 quiet 300ms max 5s
 `)
 	if rec.Header.V != Version || rec.Header.Client != "fake" || rec.Header.Fixture != "probe" ||
-		rec.Header.Cols != 80 || rec.Header.Rows != 24 || len(rec.Header.Argv) == 0 || rec.Header.Start.IsZero() {
+		rec.Header.Cols != 80 || rec.Header.Rows != 24 || len(rec.Header.Argv) != 2 || strings.Contains(rec.Header.Argv[0], "/") ||
+		rec.Header.Argv[0] != filepath.Base(fakeArgv(t)[0]) || rec.Header.Start.IsZero() {
 		t.Fatalf("header %+v", rec.Header)
 	}
 	out := string(rec.Output())
@@ -218,7 +220,7 @@ func TestParseScript(t *testing.T) {
 func TestKeys(t *testing.T) {
 	for k, want := range map[string]string{
 		"f1": "\x1bOP", "f4": "\x1bOS", "f5": "\x1b[15~", "f10": "\x1b[21~", "f11": "\x1b[23~", "f12": "\x1b[24~",
-		"f1-kitty": "\x1b[1;1:1P", "f4-kitty": "\x1b[1;1:1S", "f12-kitty": "\x1b[24;1:1~",
+		"f1-kitty": "\x1b[1;1:1P", "f3-kitty": "\x1b[13;1:1~", "f4-kitty": "\x1b[1;1:1S", "f12-kitty": "\x1b[24;1:1~",
 		"enter": "\r", "esc": "\x1b", "tab": "\t", "backspace": "\x7f", "ctrl+a": "\x01", "ctrl+]": "\x1d", "ctrl+\\": "\x1c",
 	} {
 		if got, ok := Key(k); !ok || got != want {
@@ -315,5 +317,23 @@ func TestQuietWaitsForTheFirstOutput(t *testing.T) {
 	}
 	if !timedOut {
 		t.Fatal("a silent client read as quiet")
+	}
+}
+
+// Only real I/O restarts a quiet wait, never a resize (master): a resize
+// right after the client settled does not hold the wait.
+func TestResizeDoesNotRestartTheQuiet(t *testing.T) {
+	rec := record(t, "free", "quiet 300ms max 5s\nmark a\nresize 90x20\nquiet 400ms max 5s\nmark b\ntype q\nquiet 300ms max 5s\n")
+	var ta, tb int64 = -1, -1
+	for _, e := range rec.Events {
+		if e.Kind == KindMark && e.Text == "a" {
+			ta = e.T
+		}
+		if e.Kind == KindMark && e.Text == "b" {
+			tb = e.T
+		}
+	}
+	if ta < 0 || tb < 0 || tb-ta > 250 {
+		t.Fatalf("the resize held the quiet wait: a at %d, b at %d", ta, tb)
 	}
 }
