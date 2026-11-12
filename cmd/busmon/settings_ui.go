@@ -204,6 +204,8 @@ func (m *Model) applySettings(key string) string {
 		return "applied and saved"
 	case "waiting.bell", "waiting.fade", "waiting.popup_after", "waiting.snooze", "recap.auto_after":
 		return "applied and saved"
+	case "services.start_at_login": // self-repair step 9: the service manager applies it, not busmon
+		return "saved: applies at the next agentbus up, or now with agentbus service login"
 	}
 	return "saved: next start of busmon"
 }
@@ -999,7 +1001,7 @@ var settingHelps = map[string]string{
 	"dispatch.self_repair":         "relaunches a dead agent in a new pane, resumed, master first. on or off; shadow (development mode only) records what it would do and acts on nothing (the dispatch service reads it at its start); takes effect when the watcher ships",
 	"dispatch.self_repair_every":   "per agent: no second relaunch before this long; a duration above 0, such as 30m; takes effect when the watcher ships",
 	"dispatch.self_repair_per_day": "per agent: past this many relaunches in 24 h it is a crash loop, escalated, not relaunched; takes effect when the watcher ships",
-	"services.start_at_login":      "starts each project's services when you log in (systemd or launchd); stored only for now",
+	"services.start_at_login":      "starts each project's services when you log in (systemd or launchd; no linger); applies at the next agentbus up, or at once with agentbus service login",
 	"dev":                          "development mode: unlocks extra values such as self-repair's shadow, never weakens a check; busmon's header says dev",
 	"sentinel.reload": "a new version of an agent's client is installed. on: sentinel restarts each idle agent on it, resuming its conversation, master last (needs a registered sentinel; without one, you are asked) " +
 		GlyphNone + " propose: you approve each restart " + GlyphNone + " off: nothing restarts. A project's agentbus up --reload overrides it",

@@ -293,8 +293,9 @@ var Keys = []*Key{
 	{Name: "dispatch.self_repair_per_day", Env: "AGENT_BUS_SELF_REPAIR_PER_DAY", Kind: Int, Default: 3, ReadBy: "dispatch",
 		env: envPositiveInt, file: filePositiveInt},
 	// Start at login (the person, Q8): the project's services start when the
-	// person logs in. Stored only until its backends exist (step 9).
-	{Name: "services.start_at_login", Kind: Bool, Default: false, ReadBy: "agentbus service (not yet)", MachineOnly: true, file: fileBool},
+	// person logs in: agentbus up and agentbus service login apply it through
+	// service.LoginStart (step 9: systemd, launchd; refused elsewhere).
+	{Name: "services.start_at_login", Kind: Bool, Default: false, ReadBy: "agentbus up, agentbus service login", MachineOnly: true, file: fileBool},
 	// The history archive (spec 2026-11-01-history-design.md): days of day
 	// files kept (0 = no archive) and the directory's cap in MiB.
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",

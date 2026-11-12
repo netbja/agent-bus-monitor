@@ -11,7 +11,8 @@ import (
 
 // Launchd manages the services as launchd jobs in the user's GUI domain. The
 // plists live in ~/.local/share/agentbus/launchd, not ~/Library/LaunchAgents,
-// so launchd never loads them at login: `agentbus up` bootstraps them.
+// so launchd never loads them at login: `agentbus up` bootstraps them. Only
+// while services.start_at_login is on, a copy sits in LaunchAgents (login.go).
 type Launchd struct {
 	Run   Runner // launchctl
 	Paths Paths
@@ -42,7 +43,7 @@ func launchdPlist(s Spec) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	b.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">` + "\n")
-	b.WriteString("<!-- Written by `agentbus up`; `agentbus service remove` deletes it. Not loaded at login. -->\n")
+	b.WriteString("<!-- " + launchdMark + "; `agentbus service remove` deletes it. Loaded at login only from its LaunchAgents copy, while services.start_at_login is on. -->\n")
 	b.WriteString(`<plist version="1.0"><dict>` + "\n")
 	fmt.Fprintf(&b, "<key>Label</key><string>%s</string>\n", xmlEscape(Label(s.Project, s.Kind)))
 	b.WriteString("<key>ProgramArguments</key><array>")
@@ -65,11 +66,24 @@ func launchdPlist(s Spec) string {
 	return b.String()
 }
 
+// launchdMark names a plist agentbus wrote: a LaunchAgents file without it
+// is the person's, never touched.
+const launchdMark = "Written by `agentbus up`"
+
+// Install writes the job's plist and keeps its LaunchAgents copy in step
+// with the option: written while it is on, removed while it is off.
 func (m Launchd) Install(s Spec) (bool, error) {
 	if err := os.MkdirAll(s.Paths.StateDir(s.Project), 0o700); err != nil {
 		return false, err
 	}
-	return writeIfChanged(m.path(s.Project, s.Kind), launchdPlist(s))
+	changed, err := writeIfChanged(m.path(s.Project, s.Kind), launchdPlist(s))
+	if err != nil {
+		return changed, err
+	}
+	if s.AtLogin {
+		return changed, m.writeAgent(s.Project, s.Kind)
+	}
+	return changed, m.removeAgent(s.Project, s.Kind)
 }
 
 func (m Launchd) loaded(project, kind string) bool {
@@ -102,6 +116,9 @@ func (m Launchd) Stop(project, kind string) error {
 
 func (m Launchd) Remove(project, kind string) error {
 	if err := m.Stop(project, kind); err != nil {
+		return err
+	}
+	if err := m.removeAgent(project, kind); err != nil {
 		return err
 	}
 	if err := os.Remove(m.path(project, kind)); err != nil && !os.IsNotExist(err) {

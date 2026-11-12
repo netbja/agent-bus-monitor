@@ -172,7 +172,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   swap and reload read it there, and `up`'s `checkProfiles` stops before anything starts on a profile `roles.toml` no
   longer allows. Tests stub up, herdr and the bus (`startDeps`); none starts a real session.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
-  writes systemd `--user` units / launchd plists (never enabled at login), the 0600 env file the
+  writes systemd `--user` units / launchd plists (enabled at login only while `services.start_at_login` is on), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
   service run <kind>` (`cmd/agentbus/servicerun.go`), whose exit code *is* the restart rule: 0 is
   final (stopped, project gone, another instance, invalid config, budget spent), 1 restarts. Its
@@ -904,8 +904,15 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `config.SelfRepairMode`, which reads a refused switch as `off`: `Get`'s value for an invalid
   key is the default, `on`. The budgets `dispatch.self_repair_every` (30m) and
   `dispatch.self_repair_per_day` (3) take only values above 0 (an env 0 is skipped).
-  `services.start_at_login` (off, the machine's file only) is stored, nothing acts on it before
-  step 9. The C page shows the five in Services (`servicesOnPage`), offers `shadow` only in dev
+  `services.start_at_login` (off, the machine's file only; step 9, `service/login.go`): `agentbus up`
+  writes its units for it and enables them after the install (`LoginStart.Enable`), or, off, disables
+  an enabled project **before** the install (systemd disables by the `[Install]` section the new unit
+  would lose); `agentbus service login` applies it to every installed project. systemd: the
+  `[Install] WantedBy=default.target` suffix plus `systemctl --user enable` (never `--now`, never
+  linger); `service remove` disables first. launchd: a copy of the job's plist in
+  `~/Library/LaunchAgents`, kept in step by every install; a file there agentbus did not write
+  (without the "Written by agentbus up" mark) is never changed or removed. No backend: `up` warns,
+  `service login` exits 1 with "no service manager to start at login". The C page shows the five in Services (`servicesOnPage`), offers `shadow` only in dev
   (`settingRow.Choices`), and keeps a refused `shadow` line editable.
   Lifecycle-3b, `agentbus reload <role> [--fresh] [--dry-run] [--reason] [--as <person>]`
   (`cmd/agentbus/reload.go`): who may (sentinel any role but itself on an observed update, master
