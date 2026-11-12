@@ -295,7 +295,8 @@ go install ./...            # -> $GOBIN/busmon, $GOBIN/agentbus (version "dev": 
 `AGENT_BUS_PROJECT` (or `--project <p>`, `-p <p>`) is required for every command that reads or
 writes one project's bus. The machine-wide ones need none: `up` (the project is its argument),
 `projects`, `tokens`, `quota`, `models`, `identity`, `limits`, `version`, `help`, `agentbus mem`
-([shared memory](#shared-memory-agentbus-mem), which works on files only) and `agentbus roles`
+([shared memory](#shared-memory-agentbus-mem), which works on files only), `agentbus term`
+([recording a client](#recording-a-client-agentbus-term)) and `agentbus roles`
 (the role manifest; `roles doctor` and `roles adopt` need the project).
 
 `agentbus help` lists every command, `agentbus help <command>` (or `<command> --help`) shows its
@@ -426,6 +427,20 @@ A new note is a stub: `mem check` fails until its `<!-- mem:fill -->` sections a
 it links a piece of evidence. AGENTS.md carries a generated copy of the index so that clients
 which load only AGENTS.md see it at boot; Claude Code imports the real file from CLAUDE.md. See
 [the memory protocol](docs/memory/PROTOCOL.md).
+
+### Recording a client: agentbus term
+
+`agentbus term record` runs a client under its own PTY and saves what it wrote, what was typed,
+the resizes, named marks and the lines its hooks sent to `$AGENTBUS_TERM_HOOKS`, each with its
+time, as JSON lines: the raw fixtures the terminal host is built against (herdr exit step 3). No
+project, no broker; the recorder writes nothing to a client's files, but the client runs as
+usual, so a probe that would make it write its trust or config is the person's to run.
+
+```bash
+agentbus term record claude f12-at-input          # built-in probe: abc typed, F12 legacy then kitty
+agentbus term record kimi my-probe --script s.txt # steps: type, key, sleep, quiet, mark, resize
+agentbus term dump agentstate/testdata/raw/claude/f12-at-input.jsonl --between before-f12 after-f12-kitty
+```
 
 ### Missions: agentbus missions (v0.10)
 

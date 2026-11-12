@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
 	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.9
 	github.com/klauspost/compress v1.20.3
 	github.com/redis/go-redis/v9 v9.19.0

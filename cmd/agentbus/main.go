@@ -171,6 +171,10 @@ func main() {
 	}
 	// version reads a compile-time constant — no project, no broker. Handle it
 	// before the project check and before bus.Connect.
+	// term records a client under a PTY to a fixture: no project, no broker.
+	if len(args) >= 1 && args[0] == "term" {
+		os.Exit(runTerm(args[1:], realTermDeps(), os.Stdout, os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "limits" {
 		out, _ := json.MarshalIndent(bus.Limits(), "", "  ")
 		fmt.Println(string(out))

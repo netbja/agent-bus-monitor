@@ -629,6 +629,23 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus mem check", "agentbus mem new lesson cursor-floor -T \"A floor discards\""},
 	},
 	{
+		Name: "term", NoProject: true,
+		Usage: []string{
+			"term record <client> <fixture> [--script <file>] [--cmd \"<command line>\"] [--size <cols>x<rows>] [--out <dir>] [--force]",
+			"term dump <recording> [--between <mark> <mark>]",
+		},
+		Summary: "record a client under a PTY to a raw fixture (herdr exit step 3), or print one",
+		Flags: []cli.Flag{
+			{Long: "script", Arg: "<file>", Help: "record: the steps (type, key, sleep, quiet, mark, resize); f12-at-input, empty and typed have one built in"},
+			{Long: "cmd", Arg: "<line>", Help: "record: the command, split on spaces (default the client's binary)"},
+			{Long: "size", Arg: "<cols>x<rows>", Help: "record: the terminal's size (default 120x40)"},
+			{Long: "out", Arg: "<dir>", Help: "record: where <client>/<fixture>.jsonl goes (default agentstate/testdata/raw)"},
+			{Long: "force", Help: "record: replace an existing recording"},
+			{Long: "between", Arg: "<mark>", Help: "dump: only the bytes written between two marks"},
+		},
+		Examples: []string{"agentbus term record claude f12-at-input", "agentbus term dump agentstate/testdata/raw/claude/f12-at-input.jsonl --between before-f12 after-f12-kitty"},
+	},
+	{
 		Name: "limits", NoProject: true, Usage: []string{"limits"},
 		Summary:  "the writers' size and retention limits",
 		Examples: []string{"agentbus limits"},

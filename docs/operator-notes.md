@@ -421,6 +421,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   project-required exit, like `limits` and `version`. AGENTS.md carries a generated copy of
   `docs/memory/INDEX.md` between `<!-- memory-index:begin -->` and `<!-- memory-index:end -->`:
   edit the index, run `agentbus mem sync`; `TestRepositoryPasses` fails `go test ./...` on drift.
+- **`agentbus term` needs no project and no broker** (`termrec` package, herdr exit step 3):
+  `record` runs a client under a PTY (`github.com/creack/pty`) and writes
+  `agentstate/testdata/raw/<client>/<fixture>.jsonl` (`--out` elsewhere; `--force` replaces).
+  A quiet wait needs the client to have written something, then counts from the last output or
+  input (a resize is no I/O), so it never ends before a slow prompt or between a key and its
+  echo; a client that stays silent until `max` gets a `quiet-timeout` mark. The header names the
+  binary, not its path. A client still running when the script ends gets SIGTERM, then SIGKILL 2 s later (an
+  interactive shell ignores SIGTERM). Without an emulator (step 4) the only judgement is on bytes:
+  `dump --between` says what the client wrote between two marks. Tests run a fake client (the
+  test binary under `TERMREC_FAKE`), never a real one.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
