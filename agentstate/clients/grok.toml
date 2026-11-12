@@ -10,3 +10,12 @@ ready = ['(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$']
 busy = []
 modal = []
 dialog = []
+# Blocked: no menu captured yet; a permission hook is to verify (step 3).
+blocked = []
+
+# Background work: the subagent hooks are to verify, and the process tree is never authoritative (a
+# shared leader process).
+[background]
+authoritative = []
+helpers = []
+screen = []

@@ -164,7 +164,7 @@ func TestParseProfileRefuses(t *testing.T) {
 	}
 	for name, c := range map[string]struct{ file, text string }{
 		"another client": {"y.toml", good},
-		"unknown key":    {"x.toml", good + "blocked = ['x']\n"},
+		"unknown key":    {"x.toml", good + "colour = 'x'\n"},
 		"no prompt":      {"x.toml", "client = \"x\"\n[signature]\nready = ['>']\n"},
 		"bad pattern":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['(']\n"},
 	} {

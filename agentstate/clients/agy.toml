@@ -10,3 +10,16 @@ ready = ['(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}']
 busy = []
 modal = ['(?m)^[ \t]*>[ \t]*1\.[ \t]']
 dialog = []
+# Blocked: the approval menus of screens/agy153-approval.txt (`Requesting permission for:` then the
+# command) and screens/agy-approval.txt (`Allow command: sleep 8?`, synthetic).
+blocked = [
+  '(?m)^[ \t]*Requesting permission for:[ \t]*\n[ \t]*(?P<what>\S[^\n]*?)[ \t]*\n(?s:.*)^[ \t]*>[ \t]*1\.[ \t]',
+  '(?m)^[ \t]*Allow command: (?P<what>[^\n]*?)\?[ \t]*\n[ \t]*>[ \t]*1\.[ \t]',
+]
+
+# Background work: the Stop hook's fullyIdle is documented, not yet wired or verified (step 2c and
+# step 3), and the process tree is to verify: no source is authoritative, so never none.
+[background]
+authoritative = []
+helpers = []
+screen = []

@@ -26,7 +26,12 @@ type Signature struct {
 	// Dialog (A10): the client's own pre-session dialog (trust, hooks review),
 	// matched on the stripped screen. It reads blocked even when the host does
 	// not say so, and is never ready. Only patterns pinned by a real screen.
-	Dialog    []*regexp.Regexp
+	Dialog []*regexp.Regexp
+	// Blocked (step 2b, spec 4.3): a menu of the client's waiting on the
+	// person (a permission, a question), matched on the bottom of the
+	// stripped screen; a named group "what" names what it asks about. Only
+	// patterns pinned by a captured screen (BlockedOn).
+	Blocked   []*regexp.Regexp
 	ANSI      bool
 	Prompt    *regexp.Regexp
 	RuleAbove bool
@@ -98,15 +103,5 @@ const dialogLines = 14
 // screen: a Dialog pattern matched on the last dialogLines non-blank lines of
 // the stripped screen.
 func (s Signature) InDialog(screen string) bool {
-	plain := Strip(strings.ReplaceAll(screen, "\r", ""))
-	var lines []string
-	for _, l := range strings.Split(plain, "\n") {
-		if strings.TrimSpace(l) != "" {
-			lines = append(lines, l)
-		}
-	}
-	if len(lines) > dialogLines {
-		lines = lines[len(lines)-dialogLines:]
-	}
-	return anyMatch(s.Dialog, strings.Join(lines, "\n"))
+	return anyMatch(s.Dialog, bottomLines(screen))
 }

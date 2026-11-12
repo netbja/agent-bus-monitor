@@ -11,3 +11,12 @@ ready = ['(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m']
 busy = []
 modal = ['enter/esc latest']
 dialog = ['(?s)Hooks need review.*Trust all and continue']
+# Blocked: no permission menu captured yet (step 3); the hooks review above is a Dialog.
+blocked = []
+
+# Background work: the process tree is never authoritative (tools run under a shared local
+# app-server daemon); the subagent hooks and the "Background terminals" list are to verify (step 3).
+[background]
+authoritative = []
+helpers = []
+screen = []
