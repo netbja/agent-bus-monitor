@@ -147,7 +147,7 @@ func (m *Model) afterUpdate() tea.Cmd {
 		save = m.saveCache("local busmon cache not saved")
 	}
 	m.pruneReminder()
-	return tea.Batch(lost, save, m.writeSeen(), m.maybeReminder(), frames)
+	return tea.Batch(lost, save, m.writeSeen(), m.maybeReminder(), frames, m.armMarquee())
 }
 
 // seenWriter is the writer's read receipt (report-one-row §5 B), optional so

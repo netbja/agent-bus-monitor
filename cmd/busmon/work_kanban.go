@@ -250,8 +250,9 @@ func kanbanFits(h int, cards []kanbanCard) int {
 }
 
 // draw draws the columns inside the list's inner area; sel is the list's
-// selection.
-func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string) {
+// selection, off its marquee offset (each cut line of the selected card
+// moved left by it, never past its end).
+func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int) {
 	rects := kanbanGrid(len(k.cols), x, y, w, h)
 	_, _, first := k.place(sel, rects)
 	for c, kc := range k.cols {
@@ -275,6 +276,9 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string) {
 		for _, card := range shown[:fits] {
 			on := card.key != "" && card.key == sel
 			for _, l := range card.lines {
+				if on && off > 0 {
+					l = scrolled(l, r.w, off)
+				}
 				drawLine(screen, r.x, row, r.w, FitLine(l, r.w), on)
 				row++
 			}

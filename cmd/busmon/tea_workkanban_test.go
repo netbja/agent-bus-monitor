@@ -354,7 +354,7 @@ func TestWorkKanbanHeadingsAndBands(t *testing.T) {
 	cards := []kanbanCard{{key: "x"}, {key: "y"}}
 	k := kanbanView{cols: []kanbanCol{{title: "a", cards: cards}, {title: "b"}, {title: "c"}, {title: "d", cards: cards}}} // the last band's would land on the frame
 	g := newGrid(22, 6)
-	k.draw(g, 1, 1, 20, 4, "") // four bands of one row each
+	k.draw(g, 1, 1, 20, 4, "", 0) // four bands of one row each
 	if out := g.plain(); strings.Contains(out, "more") {
 		t.Fatalf("+N more drawn in a one-row band:\n%s", out)
 	}
@@ -387,7 +387,7 @@ func TestWorkKanbanGateRenderedAt31And32(t *testing.T) {
 	k := workKanban(w, workDraw{now: shellNow})
 	for _, inner := range []int{128, 131} { // 31 and 32 cells a column
 		g := newGrid(inner+2, 12)
-		k.draw(g, 1, 1, inner, 10, "")
+		k.draw(g, 1, 1, inner, 10, "", 0)
 		r := kanbanGrid(4, 1, 1, inner, 10)[1]
 		var rows []string
 		for _, l := range strings.Split(g.plain(), "\n") {
@@ -423,7 +423,7 @@ func TestKanbanScrollStopsAtATallCard(t *testing.T) {
 		t.Fatalf("place: col %d rank %d first %v, want the scroll to stop at the selected card (2)", col, rank, first)
 	}
 	g := newGrid(32, 5)
-	k.draw(g, 1, 1, 30, 3, "gate")
+	k.draw(g, 1, 1, 30, 3, "gate", 0)
 	if out := g.plain(); strings.Contains(strings.Split(out, "\n")[4], "gate") {
 		t.Fatalf("drawn past the band:\n%s", out)
 	}
@@ -443,7 +443,7 @@ func TestKanbanColumnRules(t *testing.T) {
 		bands int
 	}{{"130", 128, 20, 1}, {"200", 198, 30, 1}, {"stacked", 60, 20, 2}} {
 		g := newGrid(c.w+2, c.h+2)
-		k.draw(g, 1, 1, c.w, c.h, "")
+		k.draw(g, 1, 1, c.w, c.h, "", 0)
 		rects := kanbanGrid(4, 1, 1, c.w, c.h)
 		seps := 0
 		for i, r := range rects {

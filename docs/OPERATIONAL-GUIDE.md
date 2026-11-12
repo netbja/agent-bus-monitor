@@ -447,7 +447,8 @@ agent names, no project template):
   covers). The header's `decide` and `merge` count YOU's rows, so header, For you and Work agree.
   From 130 columns of busmon's pane the same page is a Kanban (For you, In progress, Next,
   Ideas; `←→` between columns, wrapping around them, never into the other tabs: the digits change tab); `display.work_layout = "list"` or `"kanban"` (settings, `C`)
-  keeps one layout at every width.
+  keeps one layout at every width. A selected row or card whose title is cut with `…` scrolls it
+  once after a short pause, holds its end, then shows the cut text again.
   The Projects page (`M`) counts each project's **for you** and **at work** by the same rule;
   a count not read, or more than a minute old, reads `?`, never 0 (`R` reads it again).
   The **between agents** line opens the full Requests list by thread (owed by you, you wait on,

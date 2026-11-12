@@ -107,6 +107,9 @@ func workRows(w workModel, d workDraw) []ListItem {
 	add := func(key string, l Line, sel bool) {
 		out = append(out, ListItem{Key: key, Line: FitLine(l, d.width), Selectable: sel})
 	}
+	marq := func(x, w int, text string) { // the last row's title field (marquee.go)
+		out[len(out)-1].Marquee = fieldMarquee(x, w, Line{{Text: text, Role: RoleText}})
+	}
 	head := func(key, name string, n int, note string) {
 		l := Line{{Text: fmt.Sprintf("%s  %d", name, n), Role: RoleText, Bold: true}}
 		if note != "" {
@@ -143,6 +146,7 @@ func workRows(w workModel, d workDraw) []ListItem {
 		room := max(0, d.width-lead.Width()-a.Width()-why.Width())
 		l := append(lead, FitLine(Line{{Text: text, Role: RoleText}}, room)...) // padded: the age and why line up
 		add(it.Key, append(append(l, a...), why...), true)
+		marq(lead.Width(), room, text)
 	}
 
 	// TEAM
@@ -178,11 +182,13 @@ func workRows(w workModel, d workDraw) []ListItem {
 		l := Line{noMark, col(glyph, 2, role), col(Preview(r.Agent), 16, RoleText)}
 		rev := teamReviewers(r, d.now)
 		room := max(0, d.width-l.Width()-Width(rev))
+		x := l.Width()
 		l = append(l, FitLine(Line{{Text: Preview(what), Role: RoleText}}, room)...)
 		if rev != "" {
 			l = append(l, Seg{Text: rev, Role: RoleDispatch})
 		}
 		add(workAgentPrefix+r.Agent, l, true)
+		marq(x, room, Preview(what))
 		if review != "" {
 			add(workHeadPrefix+"review:"+r.Agent, Line{{Text: strings.Repeat(" ", 4) + Preview(review), Role: RoleMuted}}, false)
 		}
@@ -230,6 +236,7 @@ func workRows(w workModel, d workDraw) []ListItem {
 		l := Line{mark, col(GlyphIdle, 2, RoleMuted), col(Preview(it.Text), titleW, RoleText), col(Preview(workWho(it.Who, true)), 14, RoleText),
 			{Text: where, Role: RoleMuted}}
 		add(it.Key, l, true)
+		marq(Line{mark}.Width()+2, titleW-1, Preview(it.Text)) // col keeps a space after the title
 	}
 
 	// IDEAS
@@ -240,12 +247,15 @@ func workRows(w workModel, d workDraw) []ListItem {
 	}
 	for _, it := range w.Ideas {
 		l := Line{noMark, col(GlyphIdea, 2, RoleAccent)}
+		x, fw := l.Width(), 49 // col keeps a space after the title
 		if compact {
 			l = append(l, Seg{Text: Preview(it.Title), Role: RoleText})
+			fw = d.width - x
 		} else {
 			l = append(l, col(Preview(it.Title), 50, RoleText), Seg{Text: it.Where, Role: RoleMuted})
 		}
 		add(workIdeaPrefix+it.ID, l, true)
+		marq(x, fw, Preview(it.Title))
 	}
 
 	// the folded lines
