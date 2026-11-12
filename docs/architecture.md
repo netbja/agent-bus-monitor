@@ -63,6 +63,16 @@ entry yet: the watcher's R1 will (step 7). Step 2 adds the role's **intent** for
 dispatch lease token, so one relauncher holds a role at a time. `up` reads each agent role's intent
 right before relaunching it (`Options.Held`) and skips a held one, saying by what.
 
+**`termhost/`** is the seam to whatever hosts the agents' terminals (herdr-exit spec, 4.2, step
+1): the `Host` interface (`Start`, `List`, `Close`, `Screen`, `Activity`, `Processes`, `Submit`,
+`WaitScreen`, `Ping`, `Describe`) and its errors, and `Line`, the only thing a host types: built by
+`WakeLine(project, agent, count, nonce)` (names `ValidName`, count at least 1 and shown as `999+`
+past 999, nonce `^[0-9a-f]{6,16}$`) or `ClearLine()`, with no exported field
+(`TestLineIsAClosedSet`). `termhost/fake` is an in-memory host for tests and `termhost/contract`
+the suite every adapter passes (`Run(t, harness)`; the fake today, the holder later). Nothing
+runs on a `Host` yet: only `Line` is used, by `dispatch.Runtime.Prompt(ctx, pane, line)`, which
+types the same wake line as before and takes no text.
+
 **`plan/`** (v0.22) is the batch's plan as the person reads it: `docs/plans/<name>.json` (strict,
 `Parse`), published at a commit by `agentbus plan load` into `{p}:plan` (the file kept opaque:
 cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`: PR, done, note,

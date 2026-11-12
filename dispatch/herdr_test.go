@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"github.com/netbja/agent-bus-monitor/termhost"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -149,8 +150,9 @@ func TestPromptObservesOnlyNewNonce(t *testing.T) {
 		"screen.txt":  "screens/old-prompt.txt",    // carries [agentbus#abc123]
 	})
 	ctx := context.Background()
-	text := "[agentbus#def456] probe: 1 message(s) waiting for kimi."
-	observed, err := h.Prompt(ctx, "w4:p1", text, "def456")
+	line, _ := termhost.WakeLine("probe", "kimi", 1, "def456")
+	text := line.Text()
+	observed, err := h.Prompt(ctx, "w4:p1", line)
 	if err != nil {
 		t.Fatalf("Prompt: %v", err)
 	}
@@ -165,7 +167,8 @@ func TestPromptObservesOnlyNewNonce(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "echo"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	observed, err = h.Prompt(ctx, "w4:p1", "[agentbus#0a1b2c] probe", "0a1b2c")
+	line, _ = termhost.WakeLine("probe", "kimi", 1, "0a1b2c")
+	observed, err = h.Prompt(ctx, "w4:p1", line)
 	if err != nil || !observed {
 		t.Fatalf("new nonce on screen: observed=%v err=%v", observed, err)
 	}
@@ -176,8 +179,23 @@ func TestPromptFailureIsAnError(t *testing.T) {
 		"prompt.json": "={\"error\":{\"code\":\"agent_blocked\",\"message\":\"blocked\"}}\n",
 		"screen.txt":  "screens/kimi-empty.txt",
 	})
-	if _, err := h.Prompt(context.Background(), "w4:p1", "[agentbus#aaaaaa] x", "aaaaaa"); err == nil {
+	line, _ := termhost.WakeLine("probe", "kimi", 1, "aaaaaa")
+	if _, err := h.Prompt(context.Background(), "w4:p1", line); err == nil {
 		t.Fatal("a rejected prompt returned no error")
+	}
+}
+
+// Prompt types a wake line only: /clear goes through Clear, and the zero
+// Line never reaches herdr.
+func TestPromptRefusesAnythingButAWakeLine(t *testing.T) {
+	h, dir := fakeHerdr(t, map[string]string{"prompt.json": "herdr/prompt-stalled.json", "screen.txt": "screens/kimi-empty.txt"})
+	for _, l := range []termhost.Line{{}, termhost.ClearLine()} {
+		if _, err := h.Prompt(context.Background(), "w4:p1", l); err == nil {
+			t.Errorf("kind %v: no error", l.Kind())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "prompted")); err == nil {
+		t.Fatal("herdr was prompted")
 	}
 }
 

@@ -12,21 +12,25 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // Runtime is how the dispatcher sees and touches an agent's terminal. herdr is
 // the only one in v0.8; it is the only file that knows herdr exists.
 type Runtime interface {
 	Inspect(ctx context.Context, pane string) Inspection // errors in Inspection.Err
-	Prompt(ctx context.Context, pane, text, nonce string) (observed bool, err error)
+	// Prompt types a wake line (termhost.WakeLine) and reports whether its
+	// marker reached the pane; it takes no text (herdr exit 4.2).
+	Prompt(ctx context.Context, pane string, line termhost.Line) (observed bool, err error)
 	// Clear types ClearText into the pane (lifecycle part B): the one other
 	// write besides the wake line. It takes no text: the constant is all it
 	// can type.
 	Clear(ctx context.Context, pane string) error
 }
 
-// ClearText is the only thing Clear types.
-const ClearText = "/clear"
+// ClearText is the only thing Clear types: termhost.ClearLine's text.
+var ClearText = termhost.ClearLine().Text()
 
 const (
 	herdrCallTimeout = 3 * time.Second        // every herdr call, prompt included
@@ -473,15 +477,15 @@ func (h Herdr) Inspect(ctx context.Context, pane string) Inspection {
 	return in
 }
 
-// Prompt submits text (which must carry "[agentbus#<nonce>]") and waits for
-// that exact marker to appear on the pane. Observed means the line reached the
-// screen, not that the agent took the work. herdr's agent_prompt_stalled is
-// not an error: it fired for Kimi on a successful submission (spec §10).
-func (h Herdr) Prompt(ctx context.Context, pane, text, nonce string) (bool, error) {
-	marker := "[agentbus#" + nonce + "]"
-	if nonce == "" || !strings.Contains(text, marker) {
-		return false, fmt.Errorf("prompt text does not carry %s", marker)
+// Prompt submits a wake line and waits for its marker ("[agentbus#<nonce>]")
+// to appear on the pane. Observed means the line reached the screen, not that
+// the agent took the work. herdr's agent_prompt_stalled is not an error: it
+// fired for Kimi on a successful submission (spec §10).
+func (h Herdr) Prompt(ctx context.Context, pane string, line termhost.Line) (bool, error) {
+	if line.Kind() != termhost.KindWake {
+		return false, errors.New("prompt: not a wake line")
 	}
+	text, marker := line.Text(), line.Marker()
 	if _, err := h.run(ctx, herdrCallTimeout, "agent", "prompt", pane, text); err != nil && errCode(err) != "agent_prompt_stalled" {
 		return false, err
 	}
@@ -499,7 +503,7 @@ func (h Herdr) Prompt(ctx context.Context, pane, text, nonce string) (bool, erro
 // Clear types /clear and Enter into pane. A stalled prompt is not an error:
 // the proof (the agent's new proved session) is read on the bus, not here.
 func (h Herdr) Clear(ctx context.Context, pane string) error {
-	if _, err := h.run(ctx, herdrCallTimeout, "agent", "prompt", pane, ClearText); err != nil && errCode(err) != "agent_prompt_stalled" {
+	if _, err := h.run(ctx, herdrCallTimeout, "agent", "prompt", pane, termhost.ClearLine().Text()); err != nil && errCode(err) != "agent_prompt_stalled" {
 		return err
 	}
 	return nil

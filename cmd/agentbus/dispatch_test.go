@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"github.com/netbja/agent-bus-monitor/termhost"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func (n noRuntime) Inspect(context.Context, string) dispatch.Inspection {
 	n.t.Error("Inspect called")
 	return dispatch.Inspection{}
 }
-func (n noRuntime) Prompt(context.Context, string, string, string) (bool, error) {
+func (n noRuntime) Prompt(context.Context, string, termhost.Line) (bool, error) {
 	n.t.Error("Prompt called")
 	return false, nil
 }

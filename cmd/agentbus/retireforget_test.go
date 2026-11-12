@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/termhost"
 	"slices"
 	"strconv"
 	"strings"
@@ -39,8 +40,8 @@ func (p *popRT) Inspect(context.Context, string) dispatch.Inspection {
 	}
 	return dispatch.Inspection{State: "idle", Ready: true, Focused: p.focused, PIDs: []int{6161}, Starts: map[int]uint64{6161: 61}}
 }
-func (*popRT) Prompt(context.Context, string, string, string) (bool, error) { return false, nil }
-func (*popRT) Clear(context.Context, string) error                          { return nil }
+func (*popRT) Prompt(context.Context, string, termhost.Line) (bool, error) { return false, nil }
+func (*popRT) Clear(context.Context, string) error                         { return nil }
 
 // newPopWorld is the swap world plus a pop, security, idle on pane p-sec,
 // whose close ends its process; afterClose runs once the pane is closed.

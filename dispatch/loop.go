@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // ErrAlreadyRunning: another dispatcher holds the project's lease.
@@ -128,13 +129,6 @@ func (c Config) filled() (Config, error) {
 		return c, fmt.Errorf("renew (%v) and min PTTL (%v) must be shorter than the lease (%v)", c.Renew, c.MinPTTL, c.Lease)
 	}
 	return c, nil
-}
-
-// WakeText is the exact line typed into an agent's pane. It carries no message
-// body: peer content is never typed into a terminal (spec §3.3).
-func WakeText(project, agent, nonce string, n int64) string {
-	return fmt.Sprintf("[agentbus#%s] %s: %d message(s) waiting for %s. Run: agentbus --project %s subscribe --drain %s",
-		nonce, project, n, agent, project, agent)
 }
 
 // hooks are crash-injection points for tests; production leaves them nil.
@@ -725,7 +719,12 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 		return err
 	}
 	nonce := randomHex(3)
-	observed, perr := l.rt.Prompt(ctx, s.snap.Pane, WakeText(l.b.Project(), s.agent, nonce, s.o.Size()), nonce)
+	observed, perr := false, error(nil)
+	if line, err := termhost.WakeLine(l.b.Project(), s.agent, s.o.Size(), nonce); err != nil {
+		perr = err // never typed: the agent's name or the count fails the line's rules
+	} else {
+		observed, perr = l.rt.Prompt(ctx, s.snap.Pane, line)
+	}
 	call(l.h.afterPrompt)
 	if ctx.Err() != nil {
 		return ctx.Err() // stopping: the reservation already bounds a retry
