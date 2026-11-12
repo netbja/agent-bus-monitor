@@ -139,21 +139,36 @@ var (
 		"missionops", "services", "pause", "quota", "asks", "resume"}
 )
 
+// ErrConfigRefused: the broker answered CONFIG GET with an error reply of its
+// own (an unknown or renamed command, NOPERM on a managed broker), or with no
+// value. A connection or context failure is never this.
+var ErrConfigRefused = errors.New("the broker refused CONFIG GET")
+
+// configErr tells a refusal (an error reply from the server) from a failure
+// to reach it, which is returned as it is (reviewer-codex).
+func configErr(err error) error {
+	var reply redis.Error
+	if errors.As(err, &reply) {
+		return fmt.Errorf("%w: %v", ErrConfigRefused, err)
+	}
+	return err
+}
+
 // Persistence is the broker's persistence settings: CONFIG GET appendonly
-// and save. A broker that refuses CONFIG (a managed one) answers an error.
+// and save; ErrConfigRefused when the broker refuses them.
 func (b *Bus) Persistence(ctx context.Context) (appendOnly, save string, err error) {
 	aof, err := b.r.ConfigGet(ctx, "appendonly").Result()
 	if err != nil {
-		return "", "", err
+		return "", "", configErr(err)
 	}
 	sv, err := b.r.ConfigGet(ctx, "save").Result()
 	if err != nil {
-		return "", "", err
+		return "", "", configErr(err)
 	}
 	a, ok1 := aof["appendonly"]
 	s, ok2 := sv["save"]
 	if !ok1 || !ok2 {
-		return "", "", errors.New("CONFIG GET answered no value")
+		return "", "", fmt.Errorf("%w: no value", ErrConfigRefused)
 	}
 	return a, s, nil
 }

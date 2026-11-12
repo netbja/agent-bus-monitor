@@ -2,9 +2,12 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // {p}:events (spec 2026-11-10-herdr-exit-design.md 6.5): one entry per
@@ -129,5 +132,31 @@ func TestPersistenceReadsTheConfig(t *testing.T) {
 	}
 	if _, save, _ := b.Persistence(ctx); save != "" {
 		t.Fatalf("save %q after clearing it", save)
+	}
+}
+
+// A broker that refuses CONFIG answers ErrConfigRefused; a broker that cannot
+// be reached answers its own error, never a refusal (reviewer-codex).
+func TestPersistenceTellsARefusalFromAFailure(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if err := b.r.Do(ctx, "ACL", "SETUSER", "noconfig", "on", ">pw", "~*", "&*", "+@all", "-config").Err(); err != nil {
+		t.Skipf("ACL refused by this broker: %v", err)
+	}
+	t.Cleanup(func() { b.r.Do(context.Background(), "ACL", "DELUSER", "noconfig") })
+	opt := b.r.Options()
+	limited := redis.NewClient(&redis.Options{Network: opt.Network, Addr: opt.Addr, DB: opt.DB, Username: "noconfig", Password: "pw"})
+	defer limited.Close()
+	lb, err := Open(limited, b.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := lb.Persistence(ctx); !errors.Is(err, ErrConfigRefused) {
+		t.Fatalf("a refused CONFIG: %v", err)
+	}
+	gone, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, _, err := b.Persistence(gone); err == nil || errors.Is(err, ErrConfigRefused) {
+		t.Fatalf("a failed read read as a refusal: %v", err)
 	}
 }

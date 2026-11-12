@@ -538,9 +538,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("broker-persistence", func(ctx context.Context) (health.Status, string, error) {
-			aof, save, err := b.Persistence(ctx)
-			out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{Known: err == nil, AppendOnly: aof, Save: save})
-			return out.Status, out.Detail, nil // a refused CONFIG is unknown, not a failed check
+			return persistenceOutcome(b.Persistence(ctx))
 		}),
 		healthTask("service-env", func(ctx context.Context) (health.Status, string, error) {
 			installed, err := b.ServicesInstalled(ctx)
@@ -992,4 +990,20 @@ func deliveryEvidence(groups []bus.CmdDeliveryGroup, registered map[string]bus.A
 		ev.Lag = max(ev.Lag, group.Lag)
 	}
 	return ev, ignored
+}
+
+// persistenceOutcome judges the broker's persistence: a refused CONFIG is
+// unknown and no error (a managed broker may refuse it for good); a broker
+// that could not be read is unknown with its error, so the runner sees the
+// failure (reviewer-codex).
+func persistenceOutcome(appendOnly, save string, err error) (health.Status, string, error) {
+	switch {
+	case errors.Is(err, bus.ErrConfigRefused):
+		out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{})
+		return out.Status, out.Detail, nil
+	case err != nil:
+		return health.Unknown, "broker persistence unavailable", err
+	}
+	out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{Known: true, AppendOnly: appendOnly, Save: save})
+	return out.Status, out.Detail, nil
 }
