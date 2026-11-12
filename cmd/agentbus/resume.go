@@ -406,14 +406,20 @@ func missingPops(ctx context.Context, b *bus.Bus, roles []string, d resumeDeps) 
 		if s.Tier != "pop" || containsString(roles, name) || alive(&s, d.ProcStart) {
 			continue
 		}
-		cmd := "agent-spawn " + name + " " + b.Project()
-		if s.IdentSession != "" {
-			cmd += " --resume " + s.IdentSession
-		}
-		out = append(out, "pop "+name+" not relaunched: "+cmd)
+		out = append(out, popRecovery(name, b.Project(), s))
 	}
 	sort.Strings(out)
 	return out
+}
+
+// popRecovery names a gone pop with the command that brings it back, resuming
+// only a session the launcher would resume (relaunch.ProvedSession).
+func popRecovery(name, project string, s bus.AgentSnapshot) string {
+	cmd := "agent-spawn " + name + " " + project
+	if session := relaunch.ProvedSession(s); session != "" {
+		cmd += " --resume " + session
+	}
+	return "pop " + name + " not relaunched: " + cmd
 }
 
 func containsString(list []string, s string) bool {

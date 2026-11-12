@@ -75,7 +75,7 @@ func TestGrokElevatedResumeAndRules(t *testing.T) {
 	if strings.Contains(strings.Join(f.execed, " "), "--settings") || strings.Contains(strings.Join(f.execed, " "), "--allow") {
 		t.Fatalf("grok got Claude rules: %q", f.execed)
 	}
-	if _, _, err := f.launchWithResume(f.config("grok", "", "", ""), "coder", "s1"); err == nil || !strings.Contains(err.Error(), "only for Claude Code") {
+	if _, _, err := f.launchWithResume(f.config("grok", "", "", ""), "coder", "s1"); err == nil || !strings.Contains(err.Error(), "session resume is not verified for grok") {
 		t.Fatalf("grok resume: %v", err)
 	}
 	if ClientExecutable(Profile{Client: "grok"}) != "grok" {

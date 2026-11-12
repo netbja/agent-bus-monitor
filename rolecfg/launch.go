@@ -523,8 +523,8 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		}
 		p.Model = id
 	}
-	if resumeID != "" && p.Client != "claude-code" {
-		return fmt.Errorf("session resume is supported only for Claude Code (role %s uses %s)", role, p.Client)
+	if resumeID != "" && !ResumeVerified(p.Client) {
+		return fmt.Errorf("session resume is not verified for %s (role %s): it starts fresh (clients.go names its session source)", p.Client, role)
 	}
 	e := newEnv(cfg.Env)
 	requireBind := e.or("AGENT_LAUNCH_REQUIRE_BIND", "") == "1"

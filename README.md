@@ -64,8 +64,8 @@ Every agent runs in its own herdr pane, whatever its client. The launcher knows 
 | Client | Resume a session | Automatic working/idle state | Usage windows read from |
 |---|---|---|---|
 | Claude Code (`claude`) | yes | yes, from its hooks | its status line, the transcript as backstop |
-| Codex CLI (`codex`) | no | yes, from its hooks | `codex app-server`, its session logs as fallback |
-| Grok Build (`grok`, beta) | no | yes, from its hooks | its billing log line |
+| Codex CLI (`codex`) | not yet: its session proof is to verify | yes, from its hooks | `codex app-server`, its session logs as fallback |
+| Grok Build (`grok`, beta) | not yet: `/new` is to track | yes, from its hooks | its billing log line |
 | Kimi Code CLI (`kimi`) | no | no | its log, limit hits only (Kimi states no reset) |
 | Antigravity CLI (`agy`, Google) | no | no: the agent declares it | its log, limit hits only (one window for every model) |
 
@@ -897,8 +897,9 @@ Agent Bus identity stay attached:
 agent-launch coder myproject --resume <session-id>
 ```
 
-Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only;
-other clients are refused until their resume flags are defined.
+Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only:
+Codex, Kimi, Grok and Antigravity are refused until their session id source is verified
+(`rolecfg/clients.go` names each one); they start fresh, never with `--continue`.
 
 ### Notifications on your phone and desktop
 
