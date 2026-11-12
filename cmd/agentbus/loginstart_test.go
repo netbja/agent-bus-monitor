@@ -251,3 +251,71 @@ func TestServiceLoginOffWithAnUnknownState(t *testing.T) {
 		t.Fatalf("a failed disable exited %d", code)
 	}
 }
+
+// partlyEnabled is a real systemd backend over a fake systemctl whose
+// dispatch unit is enabled and missions not (foureyes' case).
+func partlyEnabled(t *testing.T, paths service.Paths) (service.Systemd, *[]string) {
+	t.Helper()
+	calls := &[]string{}
+	run := func(args ...string) ([]byte, error) {
+		*calls = append(*calls, strings.Join(args, " "))
+		if len(args) == 3 && args[1] == "is-enabled" {
+			if strings.Contains(args[2], "dispatch") {
+				return []byte("enabled\n"), nil
+			}
+			return []byte("disabled\n"), errors.New("exit status 1")
+		}
+		return nil, nil
+	}
+	m := service.Systemd{Run: run, Paths: paths}
+	for _, k := range []string{service.Dispatch, service.Missions} {
+		if _, err := m.Install(service.Spec{Project: "demo", Kind: k, Exe: "/opt/ab/agentbus", Paths: paths}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	*calls = nil
+	return m, calls
+}
+
+func callIndex(calls []string, prefix string) int {
+	for i, c := range calls {
+		if strings.HasPrefix(c, prefix) {
+			return i
+		}
+	}
+	return -1
+}
+
+// up, option off, a partly enabled project: every unit is disabled before
+// any is rewritten.
+func TestUpOffDisablesAPartlyEnabledProject(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	m, calls := partlyEnabled(t, u.paths)
+	deps.Services = func() (service.Manager, string) { return m, "" }
+	deps.AtLogin = func() bool { return false }
+	var out, errw bytes.Buffer
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	d := callIndex(*calls, "--user disable agentbus-demo-dispatch.service")
+	if d < 0 || callIndex(*calls, "--user disable agentbus-demo-missions.service") < 0 {
+		t.Fatalf("calls = %v", *calls)
+	}
+	if r := callIndex(*calls, "--user daemon-reload"); r >= 0 && r < d {
+		t.Fatalf("a unit was rewritten before the disable: %v", *calls)
+	}
+}
+
+// service login, option off, a partly enabled project: disabled.
+func TestServiceLoginOffDisablesAPartlyEnabledProject(t *testing.T) {
+	_, d := cmdFixture(t)
+	m, calls := partlyEnabled(t, d.Paths)
+	d.Manager = m
+	d.AtLogin = func() bool { return false }
+	var out, errw bytes.Buffer
+	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 {
+		t.Fatalf("login = %d: %s", code, errw.String())
+	}
+	if callIndex(*calls, "--user disable agentbus-demo-dispatch.service") < 0 || !strings.Contains(out.String(), "demo: no longer starts at login") {
+		t.Fatalf("calls = %v, out = %q", *calls, out.String())
+	}
+}

@@ -118,6 +118,7 @@ func TestSystemdRemoveDisablesAnEnabledUnit(t *testing.T) {
 	if _, err := m.Install(s); err != nil {
 		t.Fatal(err)
 	}
+	f.answers = map[string]string{"--user is-enabled": "enabled\n"}
 	f.calls = nil
 	if err := m.Remove("my-app", Dispatch); err != nil {
 		t.Fatal(err)
@@ -126,6 +127,7 @@ func TestSystemdRemoveDisablesAnEnabledUnit(t *testing.T) {
 		t.Fatalf("calls = %v", f.calls)
 	}
 	f.calls = nil
+	f.answers = map[string]string{"--user is-enabled": "disabled\n"}
 	s.AtLogin = false
 	if _, err := m.Install(s); err != nil {
 		t.Fatal(err)
@@ -281,7 +283,7 @@ func TestSystemdEnabledReadsTheStateNotTheExitCode(t *testing.T) {
 		{"enabled\n", false, true, false},
 		{"disabled\n", true, false, false},
 		{"static\n", false, false, false},
-		{"linked\n", true, false, false},
+		{"linked\n", true, true, false}, // a login may start a linked unit
 		{"Failed to connect to bus: No medium found\n", true, false, true},
 		{"", true, false, true},
 	} {
@@ -289,6 +291,80 @@ func TestSystemdEnabledReadsTheStateNotTheExitCode(t *testing.T) {
 		on, err := m.Enabled("my-app")
 		if on != c.on || (err != nil) != c.err {
 			t.Errorf("is-enabled %q (fail %v): %v %v", c.out, c.fail, on, err)
+		}
+	}
+}
+
+// A partly enabled project (an Enable that failed half way, a unit disabled
+// by hand) counts as starting at login: the option going off disables every
+// unit (foureyes).
+func TestSystemdPartlyEnabledCountsAsEnabled(t *testing.T) {
+	s, p := testSpec(t, Dispatch)
+	f := &fakeRun{fails: map[string]bool{"--user enable agentbus-my-app-missions.service": true}}
+	m := Systemd{Run: f.run, Paths: p}
+	missions, _ := testSpec(t, Missions)
+	missions.Paths = p
+	for _, sp := range []Spec{s, missions} {
+		if _, err := m.Install(sp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.Enable("my-app"); err == nil {
+		t.Fatal("the missions enable failure was swallowed")
+	}
+	f.fails = nil
+	f.answers = map[string]string{
+		"--user is-enabled agentbus-my-app-dispatch.service": "enabled\n",
+		"--user is-enabled agentbus-my-app-missions.service": "disabled\n",
+	}
+	if on, err := m.Enabled("my-app"); err != nil || !on {
+		t.Fatalf("partly enabled = %v %v", on, err)
+	}
+	f.calls = nil
+	if err := m.Disable("my-app"); err != nil {
+		t.Fatal(err)
+	}
+	if !f.saw("--user disable agentbus-my-app-dispatch.service") || !f.saw("--user disable agentbus-my-app-missions.service") {
+		t.Fatalf("calls = %v", f.calls)
+	}
+}
+
+// Remove disables a unit that is-enabled says starts at login even when its
+// section is gone, and one whose state cannot be read; a disabled unit
+// without the section is not touched (foureyes).
+func TestSystemdRemoveDisablesByTheState(t *testing.T) {
+	for _, c := range []struct {
+		answer  string
+		fail    bool
+		disable bool
+	}{
+		{"enabled\n", false, true},
+		{"linked\n", true, true},
+		{"Failed to connect to bus\n", true, true},
+		{"disabled\n", true, false},
+		{"static\n", false, false},
+	} {
+		s, p := testSpec(t, Dispatch)
+		var calls []string
+		run := func(args ...string) ([]byte, error) {
+			calls = append(calls, strings.Join(args, " "))
+			if len(args) > 1 && args[1] == "is-enabled" {
+				if c.fail {
+					return []byte(c.answer), errors.New("exit status 1")
+				}
+				return []byte(c.answer), nil
+			}
+			return nil, nil
+		}
+		m := Systemd{Run: run, Paths: p}
+		if _, err := m.Install(s); err != nil { // no [Install] section
+			t.Fatal(err)
+		}
+		if err := m.Remove("my-app", Dispatch); err != nil {
+			t.Fatalf("%q: %v", c.answer, err)
+		}
+		if got := strings.Contains(strings.Join(calls, ";"), "--user disable"); got != c.disable {
+			t.Errorf("is-enabled %q: disabled %v, want %v (%v)", c.answer, got, c.disable, calls)
 		}
 	}
 }

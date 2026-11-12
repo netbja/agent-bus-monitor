@@ -910,7 +910,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   would lose), and one whose state `is-enabled` cannot say is disabled anyway; a disable that fails
   stops `up` before any unit is rewritten (`is-enabled` exits non-zero for `disabled`: its output is read); `agentbus service login` applies it to every installed project. systemd: the
   `[Install] WantedBy=default.target` suffix plus `systemctl --user enable` (never `--now`, never
-  linger); `service remove` disables first. launchd: a copy of the job's plist in
+  linger); `service remove` disables a unit `is-enabled` says starts at login, or cannot read. A project counts as
+  enabled when ANY unit starts at login, so the option going off disables every unit (a half-failed enable, a unit
+  disabled by hand). launchd: a copy of the job's plist in
   `~/Library/LaunchAgents`, kept in step by every install; a file there agentbus did not write
   (without the "Written by agentbus up" mark) is never changed or removed. No backend: `up` warns,
   `service login` exits 1 with "no service manager to start at login". The C page shows the five in Services (`servicesOnPage`), offers `shadow` only in dev
