@@ -102,25 +102,48 @@ var isEnabledStates = map[string]bool{"enabled": true, "enabled-runtime": true, 
 	"alias": true, "masked": true, "masked-runtime": true, "static": true, "indirect": true, "disabled": true,
 	"generated": true, "transient": true, "bad": true, "not-found": true}
 
-// Enabled: every installed unit of the project is enabled (none installed:
-// false). An answer that is no state is an error, never "disabled": a failed
-// read must not let a wants link survive the option going off
-// (reviewer-codex).
+// startsAtLogin are the states whose unit a login may start.
+var startsAtLogin = map[string]bool{"enabled": true, "enabled-runtime": true, "linked": true, "linked-runtime": true}
+
+// unitState is is-enabled's answer for one unit. An answer that is no state
+// is an error, never "disabled": a failed read must not let a wants link
+// survive the option going off (reviewer-codex).
+func (m Systemd) unitState(project, kind string) (string, error) {
+	out, err := m.Run("--user", "is-enabled", UnitName(project, kind))
+	state := strings.TrimSpace(string(out))
+	if !isEnabledStates[state] {
+		return "", fmt.Errorf("systemctl --user is-enabled %s: %s", UnitName(project, kind), firstLine(out, err))
+	}
+	return state, nil
+}
+
+// Enabled: some installed unit of the project starts at login (none
+// installed: false). A partly enabled project counts, so the option going
+// off disables every unit (foureyes: an Enable that failed half way, a unit
+// disabled by hand).
 func (m Systemd) Enabled(project string) (bool, error) {
 	kinds, err := projectUnits(m, project)
-	if err != nil || len(kinds) == 0 {
+	if err != nil {
 		return false, err
 	}
-	on := true
 	for _, k := range kinds {
-		out, err := m.Run("--user", "is-enabled", UnitName(project, k))
-		state := strings.TrimSpace(string(out))
-		if !isEnabledStates[state] {
-			return false, fmt.Errorf("systemctl --user is-enabled %s: %s", UnitName(project, k), firstLine(out, err))
+		state, err := m.unitState(project, k)
+		if err != nil {
+			return false, err
 		}
-		on = on && state == "enabled"
+		if startsAtLogin[state] {
+			return true, nil
+		}
 	}
-	return on, nil
+	return false, nil
+}
+
+// mayStartAtLogin: is-enabled says a login may start the unit, or cannot
+// say. Its state, not the [Install] section, is the fact: a link outlives
+// the section (foureyes).
+func (m Systemd) mayStartAtLogin(project, kind string) bool {
+	state, err := m.unitState(project, kind)
+	return err != nil || startsAtLogin[state]
 }
 
 // setInstall adds or removes the [Install] section of an installed unit and
@@ -141,12 +164,6 @@ func (m Systemd) setInstall(project, kind string, on bool) error {
 		return err
 	}
 	return m.ctl("daemon-reload")
-}
-
-// hasInstall reports whether the installed unit carries the section.
-func (m Systemd) hasInstall(project, kind string) bool {
-	b, err := os.ReadFile(m.path(project, kind))
-	return err == nil && strings.HasSuffix(string(b), systemdInstall)
 }
 
 // agentPath is the job's copy in ~/Library/LaunchAgents, which launchd loads
@@ -230,16 +247,17 @@ func (m Launchd) removeAgent(project, kind string) error {
 	return os.Remove(m.agentPath(project, kind))
 }
 
-// Enabled: every installed job of the project has its LaunchAgents copy.
+// Enabled: some job of the project has its LaunchAgents copy (a partly
+// enabled project counts, as for systemd).
 func (m Launchd) Enabled(project string) (bool, error) {
-	kinds, err := projectUnits(m, project)
-	if err != nil || len(kinds) == 0 {
-		return false, err
-	}
-	for _, k := range kinds {
-		if mine, err := ours(m.agentPath(project, k)); err != nil || !mine {
-			return false, err
+	for _, k := range Kinds {
+		mine, err := ours(m.agentPath(project, k))
+		if errors.Is(err, errForeign) {
+			continue // the person's file, not ours to report or remove
+		}
+		if err != nil || mine {
+			return mine, err
 		}
 	}
-	return true, nil
+	return false, nil
 }

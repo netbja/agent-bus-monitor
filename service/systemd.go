@@ -88,7 +88,7 @@ func (m Systemd) Remove(project, kind string) error {
 	if err := m.ctl("stop", UnitName(project, kind)); err != nil {
 		return err
 	}
-	if m.hasInstall(project, kind) { // no wants link left pointing at nothing
+	if m.mayStartAtLogin(project, kind) { // no wants link left pointing at nothing
 		if err := m.ctl("disable", UnitName(project, kind)); err != nil {
 			return err
 		}
