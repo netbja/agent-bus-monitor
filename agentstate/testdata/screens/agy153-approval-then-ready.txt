@@ -1,0 +1,42 @@
+  READY
+
+────────────────────────────────────────────────────────────
+> Use your terminal tool to run exactly: touch ap1
+
+● Ran (touch ap1) (ctrl+o to expand)
+
+Command
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Requesting permission for:
+   touch ap1
+
+Run this command?
+> 1. Yes, run command
+  2. Yes, and always allow in this conversation for commands that start with 'touch'
+  3. Yes, and always allow for commands that start with 'touch' (Persist to settings.json)
+  4. No, cancel
+
+  ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+esc to cancel                                                                                                                                                     Gemini 3.8 Flash · low
+  0148 Lorem ipsum filler line for a size test, nothing to do here.
+  0149 Lorem ipsum filler line for a size test, nothing to do here.
+  0150 Lorem ipsum filler line for a size test, nothing to do here.
+  0151 Lorem ipsum filler line for a size test, nothing to do here.
+  0152 Lorem ipsum filler line for a size test, nothing to do here.
+  0153 Lorem ipsum filler line for a size test, nothing to do here.
+  0154 Lorem ipsum filler line for a size test, nothing to do here.
+  0155 Lorem ipsum filler line for a size test, nothing to do here.
+  0156 Lorem ipsum filler line for a size test, nothing to do here.
+  0157 Lorem ipsum filler line for a size test, nothing to do here.
+  0158 Lorem ipsum filler line for a size test, nothing to do here.
+  0159 Lorem ipsum filler line for a size test, nothing to do here.
+  --- filler end ---
+  Reply with the single word READY.
+
+  READY
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                                                                                                   Gemini 3.8 Flash · low

@@ -3,7 +3,9 @@
 // 4.3 and 4.9). Detection is per client and kept as data: one profile per
 // client in clients/<client>.toml, embedded, with its screen fixtures in
 // testdata/screens. Herdr exit step 2a moves today's judgement here from
-// dispatch, unchanged.
+// dispatch, unchanged; step 2b adds the blocked judgement (blocked.go, 4.3a)
+// and background work (background.go, 4.3b) as pure functions nothing calls
+// yet.
 package agentstate
 
 import (
@@ -22,8 +24,9 @@ var clientFiles embed.FS
 
 // Profile is one client's data.
 type Profile struct {
-	Client    string
-	Signature Signature
+	Client     string
+	Signature  Signature
+	Background Background
 }
 
 type profileFile struct {
@@ -36,7 +39,13 @@ type profileFile struct {
 		Busy      []string `toml:"busy"`
 		Modal     []string `toml:"modal"`
 		Dialog    []string `toml:"dialog"`
+		Blocked   []string `toml:"blocked"`
 	} `toml:"signature"`
+	Background struct {
+		Authoritative []string `toml:"authoritative"`
+		Helpers       []string `toml:"helpers"`
+		Screen        []string `toml:"screen"`
+	} `toml:"background"`
 }
 
 // parseProfile reads one profile: every key known, the client named as its
@@ -74,12 +83,32 @@ func parseProfile(name string, data []byte) (Profile, error) {
 	for _, x := range []struct {
 		dst *[]*regexp.Regexp
 		src []string
-	}{{&s.Ready, f.Signature.Ready}, {&s.Busy, f.Signature.Busy}, {&s.Modal, f.Signature.Modal}, {&s.Dialog, f.Signature.Dialog}} {
+	}{{&s.Ready, f.Signature.Ready}, {&s.Busy, f.Signature.Busy}, {&s.Modal, f.Signature.Modal}, {&s.Dialog, f.Signature.Dialog},
+		{&s.Blocked, f.Signature.Blocked}} {
 		if *x.dst, err = compile(x.src); err != nil {
 			return Profile{}, err
 		}
 	}
-	return Profile{Client: f.Client, Signature: s}, nil
+	bg := Background{Authoritative: f.Background.Authoritative}
+	if bg.Helpers, err = compile(f.Background.Helpers); err != nil {
+		return Profile{}, err
+	}
+	if bg.Screen, err = compile(f.Background.Screen); err != nil {
+		return Profile{}, err
+	}
+	seen := map[string]bool{}
+	for _, a := range bg.Authoritative {
+		switch {
+		case !sources[a]:
+			return Profile{}, fmt.Errorf("%s: unknown background source %q", name, a)
+		case seen[a]:
+			return Profile{}, fmt.Errorf("%s: background source %q twice", name, a)
+		case a == SourceScreen && len(bg.Screen) == 0:
+			return Profile{}, fmt.Errorf("%s: the screen is authoritative with no screen pattern", name)
+		}
+		seen[a] = true
+	}
+	return Profile{Client: f.Client, Signature: s, Background: bg}, nil
 }
 
 // loadProfiles reads every embedded profile.

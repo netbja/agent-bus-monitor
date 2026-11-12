@@ -11,3 +11,11 @@ ready = ['(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?$']
 busy = ['(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)']
 modal = []
 dialog = []
+# Blocked: screen signatures only (no Kimi hooks); no menu captured yet (step 3).
+blocked = []
+
+# Background work: the process tree is to verify (step 3): not authoritative until then.
+[background]
+authoritative = []
+helpers = []
+screen = []

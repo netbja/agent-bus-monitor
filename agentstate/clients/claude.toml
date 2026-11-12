@@ -13,3 +13,14 @@ ready = ['(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:
 busy = ['(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…']
 modal = []
 dialog = ['(?s)Accessing workspace:.*Yes, I trust this folder']
+# Blocked: the question menu of screens/claude-modal.txt (`Pick red or blue?` above `❯ 1. Red`).
+# A permission menu has no captured screen yet: its source is the Notification hook (step 2c).
+blocked = ['(?m)^[ \t]*(?P<what>[^\n]*\S\?)[ \t]*\n[ \t]*❯ 1\. ']
+
+# Background work (spec 4.3b, matrix 4.9): the SubagentStart/SubagentStop hooks and the process tree
+# (its tools run as its descendants) are authoritative. No helper is recorded yet (step 3), so any
+# descendant counts as running: fail closed. The background-tasks footer is to verify.
+[background]
+authoritative = ['hooks', 'process']
+helpers = []
+screen = []
