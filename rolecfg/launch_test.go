@@ -39,7 +39,7 @@ type launchFixture struct {
 	execEnv                     []string
 }
 
-const fakeHelp = "--rules --settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume --session-id"
+const fakeHelp = "--rules --settings --model --config --sandbox --ask-for-approval --append-system-prompt --name --effort --permission-mode --fallback-model --agent-file --yolo --auto --plan --resume"
 
 func newLaunchFixture(t *testing.T) *launchFixture {
 	t.Helper()

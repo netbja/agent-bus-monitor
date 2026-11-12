@@ -210,12 +210,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo pane coder"},
 	},
 	{
-		Name: "bind", Usage: []string{"bind <agent> [--pane <pane>] [--pid <pid>] [--session <id>]"},
+		Name: "bind", Usage: []string{"bind <agent> [--pane <pane>] [--pid <pid>]"},
 		Summary: "bind a verified pane identity (lists candidates without --pid)",
 		Flags: []cli.Flag{
 			{Long: "pane", Short: 'P', Arg: "<pane>", Help: "herdr pane id"},
 			{Long: "pid", Short: 'i', Arg: "<pid>", Help: "the client's process id"},
-			{Long: "session", Arg: "<id>", Help: "the session the launcher chose for the client (Grok), proved with it"},
 		},
 		Examples: []string{"agentbus -p demo bind foureyes -P w1-3 -i 41235"},
 	},

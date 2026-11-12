@@ -27,7 +27,7 @@ var Clients = []ClientInfo{
 	{Client: "kimi-cli", Exe: "kimi", Name: "Kimi Code CLI", Install: "https://github.com/MoonshotAI/kimi-code", // the successor of the archived kimi-cli (reviewer-codex)
 		Resume: "kimi --session <id>", ResumeSource: "none: Kimi hooks are not used (the person, 2026-11-02) and kimi session list is per folder, ambiguous when roles share one"},
 	{Client: "grok", Exe: "grok", Name: "Grok Build (xAI, beta)", Install: "https://x.ai/cli",
-		Resume: "grok --resume <id>", ResumeSource: "the launcher chooses it (--session-id) and binds it with the process (verified with grok 1.0.77, 2026-11-12)", resumeVerified: true},
+		Resume: "grok --resume <id>", ResumeSource: "the launcher could choose it (--session-id; resume verified with grok 1.0.77, 2026-11-12), but /new and /clear start another session that only its SessionStart hook reports; not verified: the hook fires only from a hook file the person trusts"},
 	{Client: "agy", Exe: "agy", Name: "Antigravity CLI (Google)", Install: "https://antigravity.google/docs/cli/reference", // the page agy's own bundled docs name
 		Resume: "agy --conversation <id>", ResumeSource: "conversationId in its hook payloads; not verified: wiring hooks.json is a write the person approves"},
 }

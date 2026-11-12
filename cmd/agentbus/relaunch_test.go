@@ -103,22 +103,11 @@ func TestResumeCommand(t *testing.T) {
 	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "claude-code"}, true); got != cmd+" --resume "+id {
 		t.Fatalf("claude: %q", got)
 	}
-	// Grok's session is the one its launcher chose and bound (self-repair step 5).
-	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{Session: id, Client: "grok"}, true); got != cmd+" --resume "+id {
-		t.Fatalf("grok: %q", got)
-	}
-	// No status of a Grok agent names its session: up --resume takes the one
-	// its bind proved.
-	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{IdentSession: id, Client: "grok"}, true); got != cmd+" --resume "+id {
-		t.Fatalf("grok, proved only: %q", got)
-	}
-	if got := relaunch.ResumeCommand(cmd, bus.AgentSnapshot{IdentSession: id, Client: "codex"}, true); got != "" {
-		t.Fatalf("codex, proved only: %q", got)
-	}
 	for name, s := range map[string]bus.AgentSnapshot{
 		"no session":        {Client: "claude-code"},
 		"unverified client": {Session: id, Client: "codex"},
 		"unverified kimi":   {Session: id, Client: "kimi-cli"},
+		"unverified grok":   {Session: id, Client: "grok"},
 		"unverified agy":    {Session: id, Client: "agy"},
 		"odd id":            {Session: id + "; rm -rf ~", Client: "claude-code"},
 	} {
@@ -873,7 +862,7 @@ func TestProvedSession(t *testing.T) {
 		want string
 	}{
 		{bus.AgentSnapshot{Client: "claude-code", IdentSession: id}, id},
-		{bus.AgentSnapshot{Client: "grok", IdentSession: id}, id},
+		{bus.AgentSnapshot{Client: "grok", IdentSession: id}, ""},
 		{bus.AgentSnapshot{Client: "codex", IdentSession: id}, ""},
 		{bus.AgentSnapshot{Client: "agy", IdentSession: id}, ""},
 		{bus.AgentSnapshot{Client: "claude-code", Session: id}, ""}, // unproved
@@ -891,8 +880,8 @@ func TestProvedSession(t *testing.T) {
 // by the launcher.
 func TestPopRecoveryLine(t *testing.T) {
 	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
-	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "grok", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo --resume "+id {
-		t.Fatalf("grok: %q", got)
+	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "claude-code", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo --resume "+id {
+		t.Fatalf("claude: %q", got)
 	}
 	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "codex", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo" {
 		t.Fatalf("codex: %q", got)

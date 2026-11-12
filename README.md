@@ -65,7 +65,7 @@ Every agent runs in its own herdr pane, whatever its client. The launcher knows 
 |---|---|---|---|
 | Claude Code (`claude`) | yes | yes, from its hooks | its status line, the transcript as backstop |
 | Codex CLI (`codex`) | not yet: its session proof is to verify | yes, from its hooks | `codex app-server`, its session logs as fallback |
-| Grok Build (`grok`, beta) | yes: the launcher chooses its session id | yes, from its hooks | its billing log line |
+| Grok Build (`grok`, beta) | not yet: `/new` is to track | yes, from its hooks | its billing log line |
 | Kimi Code CLI (`kimi`) | no | no | its log, limit hits only (Kimi states no reset) |
 | Antigravity CLI (`agy`, Google) | no | no: the agent declares it | its log, limit hits only (one window for every model) |
 
@@ -885,21 +885,20 @@ services yet. Switching to the workspace (or `agentbus up <p>` in it) brings eve
   it is still a plain shell; otherwise it is left as it is, and the output says why. busmon's tab
   is the one exception to the proof: when you quit busmon and its tab's only pane is a shell, `up`
   reopens busmon in a new pane and closes the old shell at once, if it is still a plain shell.
-  `--dry-run` prints the plan and changes nothing; `--resume` resumes a Claude Code or Grok agent's
+  `--dry-run` prints the plan and changes nothing; `--resume` resumes a Claude Code agent's
   recorded session through the launcher (other clients start fresh).
 - **`agentbus projects`** lists every known project with its broker state, services and agents,
   even with Redis down, and names the `agentbus up` to run.
 
-To resume one Claude Code or Grok conversation by hand, use the role launcher so its permission rules and
+To resume one Claude Code conversation by hand, use the role launcher so its permission rules and
 Agent Bus identity stay attached:
 
 ```bash
 agent-launch coder myproject --resume <session-id>
 ```
 
-Never run `claude --resume` or `grok --resume` by hand. Session resume through the launcher is
-Claude Code and Grok only: a Grok launch chooses its session id (`--session-id`) and binds it with
-the process. Codex, Kimi and Antigravity are refused until their session id source is verified
+Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only:
+Codex, Kimi, Grok and Antigravity are refused until their session id source is verified
 (`rolecfg/clients.go` names each one); they start fresh, never with `--continue`.
 
 ### Notifications on your phone and desktop

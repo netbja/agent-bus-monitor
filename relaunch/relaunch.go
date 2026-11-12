@@ -149,9 +149,6 @@ var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{7,63}$`)
 // when it cannot: a client whose session source is not verified
 // (rolecfg.ResumeVerified), no session, an odd id.
 func ResumeCommand(command string, s bus.AgentSnapshot, has bool) string {
-	if s.Session == "" { // no status names it (Grok): the session its bind proved
-		s.Session = ProvedSession(s)
-	}
 	if !has || s.Session == "" || !sessionIDPattern.MatchString(s.Session) {
 		return ""
 	}

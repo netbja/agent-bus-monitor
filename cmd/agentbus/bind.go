@@ -27,15 +27,8 @@ type bindDeps struct {
 func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer) int {
 	args, pane := extractFlag(args, "--pane")
 	args, pidArg := extractFlag(args, "--pid")
-	args, session := extractFlag(args, "--session")
 	if len(args) != 1 || !bus.ValidName(args[0]) {
-		fmt.Fprintln(errw, "usage: bind <agent> [--pane <pane>] [--pid <pid>] [--session <id>]")
-		return 1
-	}
-	// --session: the session the launcher chose for its client (Grok,
-	// self-repair step 5), proved with the process this bind proves.
-	if session != "" && !bus.ValidSessionID(session) {
-		fmt.Fprintf(errw, "bind: invalid session id %q\n", session)
+		fmt.Fprintln(errw, "usage: bind <agent> [--pane <pane>] [--pid <pid>]")
 		return 1
 	}
 	agent := args[0]
@@ -83,7 +76,7 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 		fmt.Fprintf(errw, "bind: cannot read the start time of pid %d: %v\n", pid, err)
 		return 1
 	}
-	if err := d.Bind(ctx, agent, bus.AgentIdent{Pane: pane, PID: pid, PIDStart: start, BootID: d.Boot(), Terminal: terminal, Session: session,
+	if err := d.Bind(ctx, agent, bus.AgentIdent{Pane: pane, PID: pid, PIDStart: start, BootID: d.Boot(), Terminal: terminal,
 		Client: d.Env("AGENT_BUS_CLIENT"), Provider: bus.ProviderFor(d.Env("AGENT_BUS_CLIENT"), d.Env("AGENT_BUS_PROVIDER")),
 		Model: d.Env("AGENT_BUS_MODEL"), ClientFP: d.Env("AGENT_BUS_CLIENT_FP"), Tier: d.Env("AGENT_BUS_TIER")}); err != nil {
 		fmt.Fprintf(errw, "bind: %v\n", err)

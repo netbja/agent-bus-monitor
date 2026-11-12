@@ -235,6 +235,7 @@ func TestReloadPreflightRefusesWithoutChangingAnything(t *testing.T) {
 		"an open ask, fresh":          {"sentinel", []string{"coder", "--fresh"}, openAsk, "ask"},
 		"no relaunch path":            {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.check = errors.New("not inside herdr") }, "not inside herdr"},
 		"no session to resume":        {"sentinel", []string{"foureyes"}, nil, "--fresh"},
+		"a Codex session, unverified": {"sentinel", []string{"foureyes"}, provedCodexSession, "--fresh"},
 		"no pilot for master":         {"sentinel", []string{"master"}, nil, "verified pane"},
 		"master while another pilots": {"sentinel", []string{"master"}, masterPilotedByOther, "pilot"},
 	} {
@@ -586,5 +587,15 @@ func TestServiceReloadPolicyReadsEachTime(t *testing.T) {
 	write(t, envFile, "AGENT_BUS_RELOAD=\"on\"\n")
 	if got := read(); got != "on" {
 		t.Fatalf("with the env file = %q", got)
+	}
+}
+
+// provedCodexSession gives foureyes (Codex) a session proved by its hook: a
+// reload still refuses to resume it until Codex's proof is verified
+// (self-repair step 5, rolecfg.ResumeVerified).
+func provedCodexSession(w *reloadWorld) {
+	w.t.Helper()
+	if err := w.b.ProveSession(context.Background(), "foureyes", 6060, 3, "01a1a38b-a635-76d0-bbc6-348e3c47e603", 100); err != nil {
+		w.t.Fatal(err)
 	}
 }

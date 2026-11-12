@@ -13,12 +13,8 @@ func TestLaunchGrok(t *testing.T) {
 	if _, e, err := f.launch(m, "coder"); err != nil {
 		t.Fatal(err, e)
 	}
-	want := []string{"grok", "--model", "test-model", "--permission-mode", "acceptEdits", "--session-id", "", "--rules"}
-	got := append([]string{}, f.execed[1:len(f.execed)-1]...)
-	if len(got) == len(want) && uuidV4.MatchString(got[6]) {
-		got[6] = "" // a new id each launch (TestLaunchGrokChoosesItsSessionID)
-	}
-	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+	want := []string{"grok", "--model", "test-model", "--permission-mode", "acceptEdits", "--rules"}
+	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("grok argv = %q", got)
 	}
 	if rules := f.execed[len(f.execed)-1]; !strings.Contains(rules, "ROLE INSTRUCTIONS") || !strings.Contains(rules, "test-skill/SKILL.md") {
@@ -32,7 +28,7 @@ func TestLaunchGrok(t *testing.T) {
 	for _, opts := range []string{"", "[profiles.main.options]\npermission = \"default\""} {
 		m = f.config("grok", "", "", opts)
 		out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
-		if err != nil || !strings.Contains(out, "grok --model test-model --permission-mode default --session-id '<new session id>' --rules '<role prompt and skill paths>'\n") {
+		if err != nil || !strings.Contains(out, "grok --model test-model --permission-mode default --rules '<role prompt and skill paths>'\n") {
 			t.Fatalf("dry run (%q) = %q %v", opts, out, err)
 		}
 	}
@@ -65,7 +61,7 @@ func mustLoadResolve(t *testing.T, body string) (Profile, error) {
 	return m.Resolve("a")
 }
 
-func TestGrokElevatedAndRules(t *testing.T) {
+func TestGrokElevatedResumeAndRules(t *testing.T) {
 	f := newLaunchFixture(t)
 	m := f.config("grok", "", popsRoles, "[profiles.main.options]\npermission = \"bypassPermissions\"")
 	_, errOut, err := f.launch(m, "coder")
@@ -79,6 +75,9 @@ func TestGrokElevatedAndRules(t *testing.T) {
 	if strings.Contains(strings.Join(f.execed, " "), "--settings") || strings.Contains(strings.Join(f.execed, " "), "--allow") {
 		t.Fatalf("grok got Claude rules: %q", f.execed)
 	}
+	if _, _, err := f.launchWithResume(f.config("grok", "", "", ""), "coder", "s1"); err == nil || !strings.Contains(err.Error(), "session resume is not verified for grok") {
+		t.Fatalf("grok resume: %v", err)
+	}
 	if ClientExecutable(Profile{Client: "grok"}) != "grok" {
 		t.Fatal("ClientExecutable")
 	}
@@ -88,7 +87,7 @@ func TestGrokElevatedAndRules(t *testing.T) {
 // anything is written: a default profile passes --permission-mode too.
 func TestPreflightGrok(t *testing.T) {
 	f := newLaunchFixture(t)
-	for _, flag := range []string{"--rules ", "--permission-mode ", "--session-id"} {
+	for _, flag := range []string{"--rules ", "--permission-mode "} {
 		f.fake("grok", "#!/bin/sh\necho '"+strings.Replace(fakeHelp, flag, "", 1)+"'\n")
 		if _, _, err := f.launch(f.config("grok", "", "", ""), "coder"); err == nil || err.Error() != "grok lacks required launch flags; inspect its version/help" {
 			t.Fatalf("grok without %s: %v", flag, err)
