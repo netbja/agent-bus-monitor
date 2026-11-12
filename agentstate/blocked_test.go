@@ -42,9 +42,13 @@ func TestBlockedSignatures(t *testing.T) {
 			}
 		}
 	}
-	// A menu right above a ready input box is an answered one (DERIVED).
-	if b, _ := sigs["claude"].BlockedOn(readScreen(t, "claude-modal-accepted-close.txt")); b {
-		t.Error("a menu above a ready input box read as blocked")
+	// A menu right above a ready input box is an answered one (DERIVED), even
+	// when the old menu still trips the client's screen-wide Modal veto (agy:
+	// reviewer-codex).
+	for client, screen := range map[string]string{"claude": "claude-modal-accepted-close", "agy": "agy153-approval-accepted-close"} {
+		if b, _ := sigs[client].BlockedOn(readScreen(t, screen+".txt")); b {
+			t.Errorf("%s: a menu above a ready input box read as blocked", screen)
+		}
 	}
 	// A menu far above the bottom is an answered one.
 	if b, _ := sigs["agy"].BlockedOn(readScreen(t, "agy153-approval.txt") + strings.Repeat("later output\n", 20)); b {

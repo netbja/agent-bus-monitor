@@ -84,15 +84,21 @@ func (s Signature) Match(screen string) (ready, busy bool) {
 	screen = strings.ReplaceAll(screen, "\r", "")
 	plain := Strip(screen)
 	busy = anyMatch(s.Busy, plain)
+	ready = s.boxReady(screen) && !anyMatch(s.Modal, plain)
+	return ready, busy
+}
+
+// boxReady: the current input box (inputRegion) matches Ready, before the
+// screen-wide Modal veto. screen has its \r removed.
+func (s Signature) boxReady(screen string) bool {
 	region, ok := s.inputRegion(screen)
 	if !ok {
-		return false, busy
+		return false
 	}
 	if !s.ANSI {
 		region = Strip(region)
 	}
-	ready = anyMatch(s.Ready, region) && !anyMatch(s.Modal, plain)
-	return ready, busy
+	return anyMatch(s.Ready, region)
 }
 
 // dialogLines is how far up from the bottom a dialog may start: the words of

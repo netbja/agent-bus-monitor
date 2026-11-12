@@ -35,6 +35,7 @@ Spec §10 records what each state means.
 | `codex-hooks-accepted-close.txt` | DERIVED — `codex-hooks.txt` right above the last 6 lines of `codex-empty.txt` (the ready input box): the dialog words inside the bottom window, yet the pane is ready; pins the not-ready guard |
 | `claude-modal-then-ready.txt` | DERIVED — `claude-modal.txt` above the last 28 lines of `claude-empty.txt`: a question menu answered, far above a ready prompt; must read ready, never blocked (step 2b) |
 | `claude-modal-accepted-close.txt` | DERIVED — `claude-modal.txt` right above the last 5 lines of `claude-empty.txt` (the ready input box): the menu words inside the bottom window, yet the pane is ready; pins BlockedOn's not-ready guard |
+| `agy153-approval-accepted-close.txt` | DERIVED — `agy153-approval.txt` right above the last 4 lines of `agy153-empty.txt` (the ready input box): the old menu still inside the bottom window and tripping agy's screen-wide Modal; must not read blocked (reviewer-codex) |
 | `agy153-approval-then-ready.txt` | DERIVED — `agy153-approval.txt` above the last 28 lines of `agy153-empty.txt`: an answered approval scrolled up; must not read blocked |
 | `old-prompt.txt` | DERIVED — `kimi-empty.txt` plus an earlier `[agentbus#abc123]` wake line in the transcript, for the nonce test |
 

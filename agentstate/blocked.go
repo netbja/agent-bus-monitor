@@ -16,12 +16,15 @@ import (
 // bottom of the screen, and what the menu names (the signature's named group
 // "what"; "" when it names nothing). Like InDialog, only the last
 // dialogLines non-blank lines count (an answered menu higher up is not one),
-// and a screen whose current input box reads ready is never blocked.
+// and a screen whose current input box reads ready is never blocked. That
+// test is the box's own, without Match's screen-wide Modal veto: agy's Modal
+// matches its approval menu, so an answered menu still near the bottom would
+// veto the ready box below it and read blocked (reviewer-codex).
 func (s Signature) BlockedOn(screen string) (bool, string) {
 	if len(s.Blocked) == 0 {
 		return false, ""
 	}
-	if ready, _ := s.Match(screen); ready {
+	if s.boxReady(strings.ReplaceAll(screen, "\r", "")) {
 		return false, ""
 	}
 	window := bottomLines(screen)
