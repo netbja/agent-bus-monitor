@@ -77,3 +77,14 @@ func TestHeaderDevMode(t *testing.T) {
 		t.Error("AGENT_BUS_DEV=1 not read")
 	}
 }
+
+// The watcher is not wired yet (self-repair steps 6-10): each of its settings
+// says it takes effect when the watcher ships, so the person does not expect a
+// relaunch today (master, 2026-11-11).
+func TestSelfRepairHelpsSayNotYetWired(t *testing.T) {
+	for _, k := range []string{"dispatch.self_repair", "dispatch.self_repair_every", "dispatch.self_repair_per_day"} {
+		if h := settingHelps[k]; !strings.Contains(h, "takes effect when the watcher ships") {
+			t.Errorf("%s help = %q", k, h)
+		}
+	}
+}
