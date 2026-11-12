@@ -563,7 +563,8 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     `docs/memory/open-questions/` no plan task covers, read-only; Enter says where each lives).
     Under 100 columns the frame counts them with glyphs (`♙5 ●4 ○3 ◇2`). From 130 columns of
     busmon's pane, Work is a **Kanban** of four columns, **For you · In progress · Next · Ideas**,
-    from the same model, a dim rule between them: two lines a card, the title cut with `…` at the column's width, `←→`
+    from the same model, a dim rule between them: two lines a card, the title cut with `…` at the column's width (the focused card's cut text scrolls once, then
+    shows cut again; the list's selected row does the same with its title), `←→`
     between columns, wrapping around them (never into the other tabs: the digits change tab), `↑↓` through the cards, Enter as
     on the rows; too narrow for four, the
     columns stack two by two. `display.work_layout` (`C`) picks `auto` (the default), `list` or

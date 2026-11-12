@@ -8,7 +8,8 @@ type ListItem struct {
 	Key        string
 	Line       Line
 	Selectable bool
-	Expanded   bool // its text is open below it: the gutter shows ▼, not ▶
+	Expanded   bool        // its text is open below it: the gutter shows ▼, not ▶
+	Marquee    *rowMarquee // its cut title field, scrolled once when selected (marquee.go)
 }
 
 // listGutter is the column every row reserves on its left for the selection
@@ -37,6 +38,7 @@ type listState struct {
 	lastSeen     string // the last item drawn while live (holdSelection)
 	onOpen       func(key string)
 	kanban       *kanbanView // set: the rows are a Kanban's cards, drawn as columns (the Work tab)
+	mq           marquee     // the selected row's scroll (Work, marquee.go)
 }
 
 func (l *listState) SetHeader(h Line) { l.header = h }
@@ -372,7 +374,11 @@ func (l *listState) draw(screen cellSink) {
 		return
 	}
 	if l.kanban != nil {
-		l.kanban.draw(screen, ix, iy, iw, ih, l.sel)
+		off := 0
+		if l.mq.key == l.sel {
+			off = l.mq.off
+		}
+		l.kanban.draw(screen, ix, iy, iw, ih, l.sel, off)
 		return
 	}
 	gutter := min(listGutter, iw)
@@ -396,6 +402,11 @@ func (l *listState) draw(screen cellSink) {
 		}
 		drawLine(screen, ix, iy+r, gutter, mark, selected)
 		drawLine(screen, ix+gutter, iy+r, iw-gutter, it.Line, selected)
+		if mq := it.Marquee; selected && mq != nil && l.mq.key == it.Key && l.mq.off > 0 {
+			if fw := min(mq.w, iw-gutter-mq.x); fw > 0 { // the field over itself, the rest of the row unmoved
+				drawLine(screen, ix+gutter+mq.x, iy+r, fw, FitLine(scrolled(mq.text, mq.w, l.mq.off), mq.w), selected)
+			}
+		}
 	}
 }
 

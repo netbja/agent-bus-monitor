@@ -259,6 +259,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case tickMsg:
 		m.tick++
 		return m.pollCmd(m.tick + 1)
+	case marqueeMsg:
+		return m.marqueeStep(msg)
 	case fadeMsg:
 		m.sig.fading = false
 		sliding := m.barView().moving() // its last frame draws the bar at rest
