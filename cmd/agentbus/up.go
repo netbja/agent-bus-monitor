@@ -446,11 +446,15 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 	// once installed.
 	atLogin := d.AtLogin != nil && d.AtLogin()
 	ls, _ := service.LoginStartOf(m)
+	// A state that cannot be read is disabled anyway; a disable that fails
+	// stops here, before any unit loses the section (reviewer-codex).
 	if ls != nil && !atLogin {
-		if on, _ := ls.Enabled(project); on {
-			if err := ls.Disable(project); err != nil {
-				errs = append(errs, fmt.Errorf("start at login: %v", err))
-			} else {
+		if on, err := ls.Enabled(project); on || err != nil {
+			if derr := ls.Disable(project); derr != nil {
+				return fmt.Errorf("%w: start at login is on or unknown (%v) and could not be disabled: %v; no unit was rewritten",
+					errNotInstalled, err, derr)
+			}
+			if on {
 				fmt.Fprintf(stdout, "services: no longer start at login (services.start_at_login is off)\n")
 			}
 		}

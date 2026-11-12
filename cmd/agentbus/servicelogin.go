@@ -53,7 +53,10 @@ func serviceLogin(d serviceCmdDeps, stdout, stderr io.Writer) int {
 	}
 	code := 0
 	for _, p := range projects {
-		was, _ := ls.Enabled(p)
+		was, err := ls.Enabled(p)
+		if err != nil && !on { // unknown: disabled anyway, never left as it may be
+			was = true
+		}
 		switch {
 		case on:
 			if err := ls.Enable(p); err != nil {
