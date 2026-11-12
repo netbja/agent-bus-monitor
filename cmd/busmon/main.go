@@ -53,8 +53,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// streamKinds are the four streams busmon tails into the ACTIVITY feed and that
-// --reset purges.
+// streamKinds are the four streams busmon tails into the ACTIVITY feed.
+// --reset trims bus.ResetKinds: these and the event timeline (herdr exit 6.5).
 var streamKinds = []string{"status", "report", "notify", "cmd"}
 
 // resolveLimit picks the ACTIVITY backfill size: an explicit --limit wins, else
@@ -599,7 +599,7 @@ func main() {
 			fmt.Println("Cancelled.")
 			os.Exit(0)
 		}
-		removed, err := b.Purge(ctx, streamKinds)
+		removed, err := b.Purge(ctx, bus.ResetKinds)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: purge failed: %v\n", err)
 			os.Exit(1)

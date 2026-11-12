@@ -561,6 +561,10 @@ to watch a pane.
   its own major, read once a day from GitHub's release list. Behind in its major is a warning; a
   newer major is only named, since changing major is your decision. No check for 48 hours reads
   `unknown`. You update the broker yourself; sentinel never restarts or upgrades it.
+- **Broker persistence.** Health `broker-persistence` warns when the broker has neither AOF
+  (`appendonly`) nor RDB snapshots (`save`) on: a reboot would lose every project's state, the
+  resume records included. The shipped `docker-compose.yml` runs AOF on a named volume. A broker
+  that refuses `CONFIG` reads `unknown`, never a warning.
 - **Stall guard.** Three health checks, each after 15 minutes (`dispatch.stall_after`,
   `clear_stall_after`, `quiet_after` in `config.toml`; `0` turns one off). `team-stall` fails when every
   agent is idle, nothing is open (request, accepted task, ask, gate, pause, swap, hand-off, mission,

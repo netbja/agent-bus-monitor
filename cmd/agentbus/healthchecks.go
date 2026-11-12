@@ -537,6 +537,11 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			out := redisVersionOutcome(info.Version, runErr, cache, cacheErr, time.Now())
 			return out.Status, out.Detail, nil
 		}),
+		healthTask("broker-persistence", func(ctx context.Context) (health.Status, string, error) {
+			aof, save, err := b.Persistence(ctx)
+			out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{Known: err == nil, AppendOnly: aof, Save: save})
+			return out.Status, out.Detail, nil // a refused CONFIG is unknown, not a failed check
+		}),
 		healthTask("service-env", func(ctx context.Context) (health.Status, string, error) {
 			installed, err := b.ServicesInstalled(ctx)
 			if err != nil {

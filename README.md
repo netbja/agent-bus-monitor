@@ -373,7 +373,8 @@ floors at "now" and acknowledges the waiting entries unseen. The cmd `type` fiel
 On launch, busmon backfills only the **last `--limit` ACTIVITY lines** (default `25`, merged across
 all four streams) before live-tailing — set a persistent default with `AGENT_BUS_BUSMON_LIMIT`, or
 `--limit 0` to replay everything. `--reset` clears the project's history (`XTRIM` of the four
-streams — it keeps consumer groups and the armed/pilot/gate leases, so cmd delivery is unaffected)
+streams and the `{p}:events` timeline — it keeps consumer groups, the armed/pilot/gate leases and
+every agent's resume record, so cmd delivery is unaffected)
 after a `[y/N]` confirmation; a piped/non-TTY stdin counts as "no".
 
 `busmon --list` is the way back in when you have forgotten a project's name — it is the only busmon
@@ -976,7 +977,9 @@ handles each with a rule you can read, never a guess:
   models, versions, secret-like files tracked in Git…); `agentbus health` and busmon's F5 show it.
   `redis-version` compares the broker with the latest Redis release of its own major, checked
   once a day on GitHub: behind is a warning, a newer major only a note, since changing major is
-  your decision; you update the broker, nothing else does. `github` (every 15 minutes, only
+  your decision; you update the broker, nothing else does. `broker-persistence` warns when the
+  broker keeps nothing across a restart (neither AOF nor RDB snapshots: a reboot loses the resume
+  records), and reads `unknown` on a broker that refuses `CONFIG`. `github` (every 15 minutes, only
   when the project's remote is on github.com) says whether the services reach GitHub by SSH and
   by HTTPS: one transport only is a warning for you, both down a warning after an hour, never a
   failure; it judges reachability, not your credentials, and makes no claim about pushing. The stall guard

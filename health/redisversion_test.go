@@ -85,3 +85,30 @@ func TestRedisVersionRemediation(t *testing.T) {
 		t.Errorf("remediation %q claims a compose pin", d.Remediation)
 	}
 }
+
+// broker-persistence (spec 4.7): warn when neither AOF nor RDB snapshots are
+// on (a reboot loses {p}:resume); unknown, never warn, when CONFIG is refused.
+func TestEvaluateBrokerPersistence(t *testing.T) {
+	for name, c := range map[string]struct {
+		e    PersistenceEvidence
+		want Status
+		has  string
+	}{
+		"aof":            {PersistenceEvidence{Known: true, AppendOnly: "yes", Save: ""}, OK, "AOF"},
+		"rdb":            {PersistenceEvidence{Known: true, AppendOnly: "no", Save: "3600 1 300 100"}, OK, "RDB"},
+		"both":           {PersistenceEvidence{Known: true, AppendOnly: "yes", Save: "3600 1"}, OK, "AOF"},
+		"neither":        {PersistenceEvidence{Known: true, AppendOnly: "no", Save: ""}, Warn, "reboot"},
+		"neither, blank": {PersistenceEvidence{Known: true, AppendOnly: "no", Save: "  "}, Warn, "reboot"},
+		"config refused": {PersistenceEvidence{}, Unknown, "CONFIG"},
+		"odd answer":     {PersistenceEvidence{Known: true, AppendOnly: "maybe"}, Unknown, "appendonly"},
+	} {
+		out := EvaluateBrokerPersistence(c.e)
+		if out.Status != c.want || !strings.Contains(out.Detail, c.has) {
+			t.Errorf("%s: %+v", name, out)
+		}
+	}
+	d, ok := ByID("broker-persistence")
+	if !ok || d.Place(Warn) != PlaceForYou {
+		t.Fatalf("definition %+v %v", d, ok)
+	}
+}

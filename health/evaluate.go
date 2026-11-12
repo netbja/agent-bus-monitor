@@ -464,3 +464,32 @@ func parseRedisVersion(s string) ([3]int, bool) {
 	}
 	return v, true
 }
+
+// PersistenceEvidence is the broker's CONFIG GET appendonly and save; Known
+// is false when the broker refused CONFIG.
+type PersistenceEvidence struct {
+	Known      bool
+	AppendOnly string
+	Save       string
+}
+
+// EvaluateBrokerPersistence (herdr exit spec 4.7): {p}:resume must survive a
+// reboot, so the broker must persist. Warn when neither AOF nor RDB
+// snapshots are on; unknown, never a warning, when CONFIG was refused or
+// answered something else.
+func EvaluateBrokerPersistence(e PersistenceEvidence) Outcome {
+	if !e.Known {
+		return Outcome{Status: Unknown, Detail: "the broker refused CONFIG GET"}
+	}
+	save := strings.TrimSpace(e.Save)
+	switch e.AppendOnly {
+	case "yes":
+		return Outcome{Status: OK, Detail: "AOF on"}
+	case "no":
+		if save != "" {
+			return Outcome{Status: OK, Detail: "RDB snapshots (save " + save + ")"}
+		}
+		return Outcome{Status: Warn, Detail: "neither AOF nor RDB snapshots: a reboot loses the resume records and agents start fresh"}
+	}
+	return Outcome{Status: Unknown, Detail: "appendonly answered " + e.AppendOnly}
+}

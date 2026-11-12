@@ -142,7 +142,9 @@ append-only 4-eyes ledger; one entry per verdict — subject/author/reviewer/dec
 capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`), `{p}:agents` (Redis hash,
 agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:resume` (Redis hash, agent→`{argv, session,
 at}`; how to resume its last proved session, written by the SessionStart hook's recorder, cleared only by
-`forget`), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
+`forget`), `{p}:events` (Redis stream, `MAXLEN ~ 10000`; the terminal timeline: wake, blocked, attach, relaunch,
+holder…; history, trimmed by `busmon --reset` with the activity streams, never in ACTIVITY nor an
+activity date), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;
 **per-agent** model + context fill), `{p}:budget` (Redis hash, provider→`BudgetSnapshot`;
 **account-scope** session/weekly window per provider), `{p}:board` (Redis hash, task→`BoardEntry`;
 the shared ownership registry — owner + state + branch, claimed via `agentbus board claim`),
