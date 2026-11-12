@@ -1,5 +1,5 @@
 ── For you ──
-    coder         asks: Review: Approve this?                                                       
+    coder         asks: Review: Approve this?
     coder         waiting: review [red]this[-]                                                   30m
     coder         Need a decision                                                                10s
 
@@ -18,7 +18,7 @@
   Change completed · master
     change integrated
   APPROVE · pr:7
-    foureyes reviewed coder: 
+    foureyes reviewed coder:
   dispatch service failure
     exited
   cmd history before 2027-01-15 07:59 is not retained
