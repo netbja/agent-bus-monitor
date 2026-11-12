@@ -9,10 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
@@ -39,79 +39,14 @@ const (
 	screenLines      = "40"
 )
 
-// Signature recognises one client's screen. Ready: any regex matches the input
-// line as it looks when empty and submittable. Busy: any regex matches a
-// running turn the client's herdr state may not report. Modal: any regex
-// matches a state where Enter would not submit (it vetoes Ready). Ready is
-// matched on the ANSI read when ANSI is set (some empty inputs differ from
-// typed ones only by their dim placeholder); Busy and Modal always match the
-// screen with escapes stripped.
-//
-// Prompt is the client's input-line marker, matched per line on stripped text.
-// Ready is evaluated only on the CURRENT input box: the region from the last
-// line matching Prompt to the end of the screen — from the nearest `─` rule
-// above it when RuleAbove is set (claude, agy: the box starts with a rule). An
-// older box higher in scrollback can therefore neither make a typed current
-// box look ready nor veto an empty one. No Prompt line on screen → not ready.
-// Busy and Modal still look at the whole screen (the safe direction).
-type Signature struct {
-	Ready, Busy []*regexp.Regexp
-	Modal       []*regexp.Regexp
-	// Dialog (A10): the client's own pre-session dialog (trust, hooks review),
-	// matched on the stripped screen. It reads blocked even when herdr does not
-	// say so, and is never ready. Only patterns pinned by a real screen.
-	Dialog    []*regexp.Regexp
-	ANSI      bool
-	Prompt    *regexp.Regexp
-	RuleAbove bool
-}
+// Signature is a client's screen signature (agentstate, herdr exit step
+// 2a): the judgement and the per-client data live there.
+type Signature = agentstate.Signature
 
-var res = regexp.MustCompile
-
-// Signatures holds only clients probed live (spec §10); a client without an
-// entry is unsupported and never prompted. Fixtures: testdata/screens.
-var Signatures = map[string]Signature{
-	// Empty input is `❯` + NBSP (optionally a dim `Try "…"` placeholder;
-	// the glyph itself turns grey during a turn)
-	// directly under a `─` rule; typed text is not dim. A turn keeps the
-	// input box empty, so the spinner line (`✶ Kneading… (2s · ↓ 91 tokens)`)
-	// is the busy signature.
-	"claude": {
-		Ready:     []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?$`)},
-		Busy:      []*regexp.Regexp{res(`(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…`)},
-		ANSI:      true,
-		Prompt:    res(`^❯`),
-		RuleAbove: true,
-		Dialog:    []*regexp.Regexp{res(`(?s)Accessing workspace:.*Yes, I trust this folder`)}, // screens/claude-trust.txt
-	},
-	// `›` followed only by styling and spaces, then the dim placeholder.
-	// Transcript-scroll mode (footer `enter/esc latest`) does not submit on Enter.
-	"codex": {
-		Ready:  []*regexp.Regexp{res(`(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m`)},
-		Modal:  []*regexp.Regexp{res(`enter/esc latest`)},
-		Dialog: []*regexp.Regexp{res(`(?s)Hooks need review.*Trust all and continue`)}, // screens/codex-hooks.txt
-		ANSI:   true,
-		Prompt: res(`^›`),
-	},
-	// The input box has a right border on screen: `│ >   …   │`.
-	// Kimi 2.1 reports idle/done while its moon spinner runs (`🌑 · Tip: …`).
-	"kimi": {
-		Ready:  []*regexp.Regexp{res(`(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?$`)},
-		Busy:   []*regexp.Regexp{res(`(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)`)},
-		Prompt: res(`^[ \t]*│ >`),
-	},
-	"grok": {
-		Ready:  []*regexp.Regexp{res(`(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$`)},
-		Prompt: res(`^[ \t]*│ ❯`),
-	},
-	// `>` alone between two `─` rules; the approval menu shows `> 1. Yes…`.
-	"agy": {
-		Ready:     []*regexp.Regexp{res(`(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}`)},
-		Modal:     []*regexp.Regexp{res(`(?m)^[ \t]*>[ \t]*1\.[ \t]`)},
-		Prompt:    res(`^>(?:[ \t]|$)`),
-		RuleAbove: true,
-	},
-}
+// Signatures holds only clients probed live, from agentstate's embedded
+// client profiles; a client without one is unsupported and never prompted.
+// Fixtures: agentstate/testdata/screens.
+var Signatures = agentstate.Signatures()
 
 // Supported is the set of clients the dispatcher may prompt.
 func Supported() map[string]bool {
@@ -120,82 +55,6 @@ func Supported() map[string]bool {
 		m[k] = true
 	}
 	return m
-}
-
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
-
-func anyMatch(rs []*regexp.Regexp, s string) bool {
-	for _, r := range rs {
-		if r.MatchString(s) {
-			return true
-		}
-	}
-	return false
-}
-
-var ruleLine = regexp.MustCompile(`^[ \t]*─{3,}`)
-
-// inputRegion is the part of screen (raw, escapes kept) that holds the current
-// input box: from the last line whose stripped text matches Prompt — or the
-// nearest rule above it, with RuleAbove — to the end. ok=false: no input line.
-func (s Signature) inputRegion(screen string) (string, bool) {
-	if s.Prompt == nil {
-		return "", false
-	}
-	lines := strings.Split(screen, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if !s.Prompt.MatchString(ansiEscape.ReplaceAllString(lines[i], "")) {
-			continue
-		}
-		start := i
-		if s.RuleAbove {
-			for j := i - 1; j >= 0; j-- {
-				if ruleLine.MatchString(ansiEscape.ReplaceAllString(lines[j], "")) {
-					start = j
-					break
-				}
-			}
-		}
-		return strings.Join(lines[start:], "\n"), true
-	}
-	return "", false
-}
-
-// match judges one screen read.
-func (s Signature) match(screen string) (ready, busy bool) {
-	screen = strings.ReplaceAll(screen, "\r", "")
-	plain := ansiEscape.ReplaceAllString(screen, "")
-	busy = anyMatch(s.Busy, plain)
-	region, ok := s.inputRegion(screen)
-	if !ok {
-		return false, busy
-	}
-	if !s.ANSI {
-		region = ansiEscape.ReplaceAllString(region, "")
-	}
-	ready = anyMatch(s.Ready, region) && !anyMatch(s.Modal, plain)
-	return ready, busy
-}
-
-// dialogLines is how far up from the bottom a dialog may start: the words of
-// a dialog higher up (accepted, or quoted in a review) are not the dialog.
-const dialogLines = 14
-
-// dialog reports the client's own pre-session dialog at the bottom of the
-// screen: a Dialog pattern matched on the last dialogLines non-blank lines of
-// the stripped screen.
-func (s Signature) dialog(screen string) bool {
-	plain := ansiEscape.ReplaceAllString(strings.ReplaceAll(screen, "\r", ""), "")
-	var lines []string
-	for _, l := range strings.Split(plain, "\n") {
-		if strings.TrimSpace(l) != "" {
-			lines = append(lines, l)
-		}
-	}
-	if len(lines) > dialogLines {
-		lines = lines[len(lines)-dialogLines:]
-	}
-	return anyMatch(s.Dialog, strings.Join(lines, "\n"))
 }
 
 // Herdr drives panes through the herdr CLI. Bin "" means "herdr" on PATH.
@@ -461,13 +320,13 @@ func (h Herdr) Inspect(ctx context.Context, pane string) Inspection {
 	if err != nil {
 		return failed(in, err)
 	}
-	r1, b1 := sig.match(first)
-	r2, b2 := sig.match(second)
+	r1, b1 := sig.Match(first)
+	r2, b2 := sig.Match(second)
 	in.Busy = b1 || b2
 	in.Ready = first == second && r1 && r2
 	// A10: its own dialog waits on the person, whatever herdr says; only when
 	// the client is not ready, so its words in view above a prompt never count.
-	if !r1 && !r2 && sig.dialog(second) {
+	if !r1 && !r2 && sig.InDialog(second) {
 		in.State, in.Ready = "blocked", false
 	}
 	if first == second {

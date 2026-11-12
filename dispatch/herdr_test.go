@@ -12,80 +12,15 @@ import (
 
 func readFixture(t *testing.T, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("testdata", rel))
+	dir := "testdata"
+	if strings.HasPrefix(rel, "screens/") { // the screens moved with the judgement (herdr exit step 2a)
+		dir = filepath.Join("..", "agentstate", "testdata")
+	}
+	b, err := os.ReadFile(filepath.Join(dir, rel))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(b)
-}
-
-// TestSignatures runs every client's signature over the screens captured in
-// the spec §10 probes (see testdata/screens/README.md for real vs synthetic).
-func TestSignatures(t *testing.T) {
-	cases := []struct {
-		client, screen string
-		ready, busy    bool
-	}{
-		{"claude", "claude-empty", true, false},
-		{"claude", "claude-idle", true, false},
-		{"claude", "claude-typed", false, false},
-		{"claude", "claude-busy", true, true}, // input box stays empty during a turn: busy decides
-		{"claude", "claude-modal", false, false},
-		{"codex", "codex-empty", true, false},
-		{"codex", "codex-typed", false, false},
-		{"codex", "codex-scroll", false, false},
-		{"kimi", "kimi-empty", true, false},
-		{"kimi", "kimi-typed", false, false},
-		{"kimi", "kimi-spinner", true, true},
-		{"grok", "grok-empty", true, false},
-		{"grok", "grok-typed", false, false},
-		{"agy", "agy-empty", true, false},
-		{"agy", "agy-typed", false, false},
-		{"agy", "agy-approval", false, false},
-		{"agy", "agy153-empty", true, false}, // agy 1.5.3, the agy-client probe (2026-11-07)
-		{"agy", "agy153-typed", false, false},
-		{"agy", "agy153-approval", false, false},
-		// Only the CURRENT (last) input box counts: an old empty box higher in
-		// scrollback must not make a typed current box look ready, and an old
-		// typed box must not veto an empty current one. DERIVED fixtures.
-		{"claude", "claude-old-empty-typed", false, false},
-		{"claude", "claude-old-typed-empty", true, false},
-		{"codex", "codex-old-empty-typed", false, false},
-		{"codex", "codex-old-typed-empty", true, false},
-		{"kimi", "kimi-old-empty-typed", false, false},
-		{"kimi", "kimi-old-typed-empty", true, false},
-		{"grok", "grok-old-empty-typed", false, false},
-		{"grok", "grok-old-typed-empty", true, false},
-		{"agy", "agy-old-empty-typed", false, false},
-		{"agy", "agy-old-typed-empty", true, false},
-	}
-	for _, c := range cases {
-		t.Run(c.screen, func(t *testing.T) {
-			sig, ok := Signatures[c.client]
-			if !ok {
-				t.Fatalf("no signature for %s", c.client)
-			}
-			ready, busy := sig.match(readFixture(t, "screens/"+c.screen+".txt"))
-			if ready != c.ready || busy != c.busy {
-				t.Fatalf("%s: ready=%v busy=%v; want ready=%v busy=%v", c.screen, ready, busy, c.ready, c.busy)
-			}
-		})
-	}
-	for name, sig := range Signatures {
-		if sig.Prompt == nil {
-			t.Errorf("%s: no Prompt marker; its readiness could match an old input box", name)
-		}
-		// No input line on screen at all: never ready.
-		if ready, _ := sig.match("some output\nmore output\n"); ready {
-			t.Errorf("%s: ready without any input line", name)
-		}
-		if !Supported()[name] {
-			t.Errorf("Supported() misses %s", name)
-		}
-	}
-	if Supported()["gemini"] {
-		t.Error("an unprobed client is supported")
-	}
 }
 
 func TestParseAgentGet(t *testing.T) {
@@ -223,7 +158,7 @@ func TestInspectReady(t *testing.T) {
 // proves it.
 func TestInspectUnsettledNotReady(t *testing.T) {
 	for _, s := range []string{"kimi-empty", "old-prompt"} {
-		if ready, _ := Signatures["kimi"].match(readFixture(t, "screens/"+s+".txt")); !ready {
+		if ready, _ := Signatures["kimi"].Match(readFixture(t, "screens/"+s+".txt")); !ready {
 			t.Fatalf("precondition: %s is not Ready on its own", s)
 		}
 	}
@@ -315,34 +250,6 @@ func TestParseAgentGetTrustDialogIsBlocked(t *testing.T) {
 	}
 }
 
-// A10: a client's own pre-session dialog reads blocked even when herdr does
-// not say so (Codex's hooks review, read by master in a stuck pane), and is
-// never ready: a wake line typed into it would answer the dialog. Claude
-// Code's trust check (herdr already reports it blocked) matches too. No other
-// fixture matches.
-func TestDialogSignatures(t *testing.T) {
-	for _, c := range []struct{ client, screen string }{{"codex", "codex-hooks"}, {"claude", "claude-trust"}} {
-		if !Signatures[c.client].dialog(readFixture(t, "screens/"+c.screen+".txt")) {
-			t.Errorf("%s: %s not seen as a dialog", c.client, c.screen)
-		}
-	}
-	entries, err := os.ReadDir("testdata/screens")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		name := strings.TrimSuffix(e.Name(), ".txt")
-		if name == "codex-hooks" || name == "claude-trust" || name == "README.md" ||
-			strings.HasSuffix(name, "-then-ready") || strings.Contains(name, "-accepted") {
-			continue
-		}
-		client := strings.SplitN(name, "-", 2)[0]
-		if sig, ok := Signatures[client]; ok && sig.dialog(readFixture(t, "screens/"+e.Name())) {
-			t.Errorf("%s reads as a dialog", e.Name())
-		}
-	}
-}
-
 func TestInspectCodexHooksDialogIsBlocked(t *testing.T) {
 	h, _ := fakeHerdr(t, map[string]string{
 		"agent-get.json":    "=" + `{"result":{"agent":{"agent":"codex","agent_status":"idle","focused":false,"pane_id":"w2:pE","terminal_id":"t"},"type":"agent_info"}}`,
@@ -377,7 +284,7 @@ func TestDialogTextAboveAReadyPromptIsNotADialog(t *testing.T) {
 	// The ready guard alone: the dialog's lines right above Codex's ready input
 	// box (just accepted) are inside the window, yet the pane reads ready.
 	close := readFixture(t, "screens/codex-hooks-accepted-close.txt")
-	if !Signatures["codex"].dialog(close) {
+	if !Signatures["codex"].InDialog(close) {
 		t.Fatal("precondition: the close fixture's dialog lines are inside the window")
 	}
 	h, _ := fakeHerdr(t, map[string]string{
@@ -390,7 +297,7 @@ func TestDialogTextAboveAReadyPromptIsNotADialog(t *testing.T) {
 	}
 	// The anchor alone: the dialog's lines far above the bottom do not count.
 	quoted := readFixture(t, "screens/codex-hooks.txt") + strings.Repeat("some later line\n", 20)
-	if Signatures["codex"].dialog(quoted) {
+	if Signatures["codex"].InDialog(quoted) {
 		t.Error("dialog text 20 lines above the bottom read as a dialog")
 	}
 }

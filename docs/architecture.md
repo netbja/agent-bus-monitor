@@ -90,6 +90,15 @@ input reads `?`. busmon reads the plan every `requestPoll` tick through the opti
 narrow tier's sixth view; Enter opens a task or expands done). Spec:
 `docs/superpowers/specs/2026-10-22-plan-view-design.md`.
 
+**`agentstate/`** judges an agent's state from its screen, per client (herdr-exit spec 4.3, 4.9;
+step 2a): `Signature` (Ready, Busy, Modal, Dialog, the input region under the last Prompt line)
+with `Match` and `InDialog`, and one embedded profile per client, `clients/<client>.toml`, holding
+today's patterns as data; its fixtures are `testdata/screens`. A profile is refused when it names
+another client, holds an unknown key, has no prompt marker or a pattern that does not compile.
+`TestProfilesAreTheOldTable` pins the move: the profiles compile to the table `dispatch` held.
+`dispatch.Signatures` and `Supported` read these profiles; nothing else changed. A new client
+is a profile and its fixtures, not code.
+
 **`filepick/`** (compose-at-file) lists a project's files for busmon's `@` in the compose window:
 a walk in Go that runs **no program** (git's config can make git run one: `core.fsmonitor`), reads
 the `.gitignore` files and `.git/info/exclude` as text, skips `.git`, `node_modules`, `.venv` and

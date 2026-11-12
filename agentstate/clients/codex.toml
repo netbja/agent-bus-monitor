@@ -1,0 +1,13 @@
+# Codex CLI. `›` followed only by styling and spaces, then the dim placeholder. Transcript-scroll
+# mode (footer `enter/esc latest`) does not submit on Enter. Dialog: screens/codex-hooks.txt.
+
+client = "codex"
+
+[signature]
+ansi = true
+prompt = '^›'
+rule_above = false
+ready = ['(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m']
+busy = []
+modal = ['enter/esc latest']
+dialog = ['(?s)Hooks need review.*Trust all and continue']
