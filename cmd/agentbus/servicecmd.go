@@ -20,7 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all"
+const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login"
 
 // serviceCmdDeps: the manager (nil when none is usable, Why says why), the
 // user's directories and, for state reads, the project's bus.
@@ -29,13 +29,14 @@ type serviceCmdDeps struct {
 	Why     string
 	Paths   service.Paths
 	Bus     func(project string) (*bus.Bus, error)
+	AtLogin func() bool // services.start_at_login (service login); nil reads as off
 }
 
 func realServiceCmdDeps(host string) serviceCmdDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
 	bin := service.ManagerBin(runtime.GOOS, os.Getenv)
 	m, why := service.Detect(runtime.GOOS, service.CommandRunner(bin), os.Getenv)
-	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, Bus: func(project string) (*bus.Bus, error) {
+	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, AtLogin: func() bool { return machineAtLogin(os.Getenv) }, Bus: func(project string) (*bus.Bus, error) {
 		c, err := bus.Connect(host)
 		if err != nil {
 			return nil, err
@@ -68,6 +69,9 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 		return 2
 	}
 	sub, rest := args[0], args[1:]
+	if sub == "login" && len(rest) == 0 { // the machine's option, every project: no project needed
+		return serviceLogin(d, stdout, stderr)
+	}
 	if d.Manager == nil {
 		if sub == "list" || (sub == "remove" && len(rest) == 1 && rest[0] == "--all") {
 			fmt.Fprintf(stdout, "no service manager (%s): no service installed\n", d.Why)

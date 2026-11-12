@@ -77,3 +77,16 @@ func TestHeaderDevMode(t *testing.T) {
 		t.Error("AGENT_BUS_DEV=1 not read")
 	}
 }
+
+// Start at login is built (self-repair step 9): its help no longer says it is
+// only stored, and saving it says how it applies.
+func TestStartAtLoginSaysHowItApplies(t *testing.T) {
+	h := settingHelps["services.start_at_login"]
+	if strings.Contains(h, "stored only") || !strings.Contains(h, "agentbus service login") {
+		t.Fatalf("help = %q", h)
+	}
+	m := &Model{}
+	if w := m.applySettings("services.start_at_login"); !strings.Contains(w, "agentbus service login") {
+		t.Fatalf("flash = %q", w)
+	}
+}

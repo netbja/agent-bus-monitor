@@ -465,6 +465,7 @@ var commands = []cli.Command{
 			"service status|start|stop|restart|remove [dispatch|missions]",
 			"service logs [dispatch|missions] [-n 50]",
 			"service list | service remove --all",
+			"service login",
 		},
 		Summary: "the project's user services (systemd --user, launchd)",
 		Flags: []cli.Flag{

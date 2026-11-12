@@ -39,8 +39,11 @@ type upDeps struct {
 	// The project services (v0.12). Services finds the manager, or says why
 	// there is none; nil means none.
 	Services func() (service.Manager, string)
-	Paths    service.Paths
-	Exe      func() (string, error) // this agentbus: the units run it when Installed is absent
+	// AtLogin is the machine's services.start_at_login (self-repair step 9);
+	// nil reads as off.
+	AtLogin func() bool
+	Paths   service.Paths
+	Exe     func() (string, error) // this agentbus: the units run it when Installed is absent
 	// Installed is the agentbus setup.sh installed (buildinfo.Bin), "" when
 	// unknown: when it exists the units run it, whoever runs up.
 	Installed string
@@ -207,6 +210,11 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		}
 	}
 	failed := false
+	if d.AtLogin != nil && d.AtLogin() {
+		if _, why := service.LoginStartOf(m); why != "" {
+			fmt.Fprintf(stderr, "agentbus up: services.start_at_login is on, but %s; the services start with agentbus up only\n", why)
+		}
+	}
 	if m != nil {
 		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), escalate, reload, kinds, stdout); err != nil {
 			fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
@@ -432,8 +440,24 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		return fmt.Errorf("%w: marking %s: %v", errNotInstalled, bus.ServicesKey(project), err)
 	}
 	var errs []error
+	// Start at login (self-repair step 9): off, a project that was enabled is
+	// disabled before its units lose their [Install] section (systemd
+	// disables by that section); on, the units are written for it and enabled
+	// once installed.
+	atLogin := d.AtLogin != nil && d.AtLogin()
+	ls, _ := service.LoginStartOf(m)
+	if ls != nil && !atLogin {
+		if on, _ := ls.Enabled(project); on {
+			if err := ls.Disable(project); err != nil {
+				errs = append(errs, fmt.Errorf("start at login: %v", err))
+			} else {
+				fmt.Fprintf(stdout, "services: no longer start at login (services.start_at_login is off)\n")
+			}
+		}
+	}
 	for _, k := range kinds {
-		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths, EnvFile: d.Paths.EnvFile(project)}
+		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths, EnvFile: d.Paths.EnvFile(project),
+			AtLogin: atLogin && ls != nil}
 		if k == service.Missions {
 			spec.Args = []string{"--repo", workdir}
 		}
@@ -479,6 +503,13 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		}
 		if st, err := m.State(project, k); err == nil && st.Active {
 			fmt.Fprintf(stdout, "%s: still running from before (stop it: agentbus --project %s service stop %s)\n", k, project, k)
+		}
+	}
+	if ls != nil && atLogin {
+		if err := ls.Enable(project); err != nil {
+			errs = append(errs, fmt.Errorf("start at login: %v", err))
+		} else {
+			fmt.Fprintf(stdout, "services: start at login (services.start_at_login; no linger: only once you log in)\n")
 		}
 	}
 	return errors.Join(errs...)
@@ -646,7 +677,8 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		Services: func() (service.Manager, string) {
 			return service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 		},
-		Paths: paths,
+		AtLogin: func() bool { return machineAtLogin(os.Getenv) },
+		Paths:   paths,
 		Exe: func() (string, error) {
 			exe, err := os.Executable()
 			if err != nil {
