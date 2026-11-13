@@ -69,6 +69,9 @@ type ForgetResult struct {
 // the role; then deletes its registration and keeps its consumer group.
 var forgetIfClear = redis.NewScript(`
 local held = {}
+if ARGV[6] ~= '' and redis.call('GET', KEYS[11]) ~= ARGV[6] then
+  return {'\0not the dispatch lease holder'}
+end
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then
   return {'its retire intent no longer holds'}
 end
@@ -135,16 +138,33 @@ return {}`)
 // ForgetAgent deletes but the consumer group, whose cursor a later spawn
 // reads on from.
 func (b *Bus) ForgetIfClear(ctx context.Context, role, own string, was RetiredAs) (ForgetResult, error) {
+	return b.forgetIfClear(ctx, "", role, own, was)
+}
+
+// ForgetIfClearFenced is ForgetIfClear for the dispatcher (pop-retire-auto):
+// the same script, refused (ErrNotHolder, nothing changed) unless token
+// holds the dispatch lease.
+func (b *Bus) ForgetIfClearFenced(ctx context.Context, token, role, own string, was RetiredAs) (ForgetResult, error) {
+	if token == "" {
+		return ForgetResult{}, fmt.Errorf("fenced forget: token required")
+	}
+	return b.forgetIfClear(ctx, token, role, own, was)
+}
+
+func (b *Bus) forgetIfClear(ctx context.Context, token, role, own string, was RetiredAs) (ForgetResult, error) {
 	if !ValidName(role) {
 		return ForgetResult{}, fmt.Errorf("invalid agent %q", role)
 	}
 	p := b.project
 	keys := []string{SwapKey(p, role), StreamKey(p, "cmd"), AsksKey(p), BoardKey(p), GateKey(p, role),
-		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role)}
+		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role), DispatchKey(p)}
 	held, err := forgetIfClear.Run(ctx, b.r, keys, own, role,
-		strconv.Itoa(was.PID), strconv.FormatUint(was.PIDStart, 10), strconv.FormatInt(was.Episode, 10)).StringSlice()
+		strconv.Itoa(was.PID), strconv.FormatUint(was.PIDStart, 10), strconv.FormatInt(was.Episode, 10), token).StringSlice()
 	if err != nil {
 		return ForgetResult{}, err
+	}
+	if len(held) == 1 && held[0] == "\x00not the dispatch lease holder" {
+		return ForgetResult{}, ErrNotHolder
 	}
 	return ForgetResult{Forgot: len(held) == 0, Held: held}, nil
 }
