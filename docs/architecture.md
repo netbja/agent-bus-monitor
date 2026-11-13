@@ -140,8 +140,8 @@ Additional keys: `{p}:pilot` (Redis string, pilot lease → driver name + TTL), 
 (Redis hash, ref→meta; 4-eyes challenges gate the named agent), `{p}:verdicts` (Redis stream,
 append-only 4-eyes ledger; one entry per verdict — subject/author/reviewer/decision/message/ref —
 capped at `verdictMaxLen()` = 10000, override `AGENT_BUS_VERDICT_MAX`), `{p}:agents` (Redis hash,
-agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:resume` (Redis hash, agent→`{argv, session,
-at}`; how to resume its last proved session, written by the SessionStart hook's recorder, cleared only by
+agent→`AgentSnapshot`; state + `pane` + `session`), `{p}:resume` (Redis hash, agent→`{session, profile,
+at}`, never a command; how to resume its last proved session, written by the SessionStart hook's recorder, cleared only by
 `forget`), `{p}:events` (Redis stream, `MAXLEN ~ 10000`; the terminal timeline: wake, blocked, attach, relaunch,
 holder…; history, trimmed by `busmon --reset` with the activity streams, never in ACTIVITY nor an
 activity date), `{p}:usage` (Redis hash, agent→`UsageSnapshot`;

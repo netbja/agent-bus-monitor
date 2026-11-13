@@ -76,7 +76,7 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
 		return 0
 	}
-	handToRecorder(logPath, project, role, in.SessionID, argv, spawn, chain)
+	handToRecorder(logPath, project, role, in.SessionID, profile, spawn, chain)
 	if !inHerdr {
 		return 0
 	}
@@ -87,19 +87,22 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 }
 
 // handToRecorder starts the detached resume recorder (roles record-resume)
-// with the hook's ancestry and the resume command (herdr exit step 8, spec
-// 4.7): it writes {p}:resume when the bus proves an ancestor is the agent's
-// verified process. Without a chain (no /proc: macOS today) nothing is
-// started, so nothing is recorded: fail closed.
-func handToRecorder(logPath, project, role, session string, argv []string, spawn func(argv []string) error, chain []dispatch.ProcID) {
-	if len(chain) == 0 || len(argv) == 0 || !bus.ValidName(role) || !bus.ValidSessionID(session) {
+// with the hook's ancestry, the session and the profile ("-" the role's own;
+// never a command: security finding S1) (herdr exit step 8, spec 4.7): it
+// writes {p}:resume when the bus proves an ancestor is the agent's verified
+// process. Without a chain (no /proc: macOS today) nothing is started, so
+// nothing is recorded: fail closed.
+func handToRecorder(logPath, project, role, session, profile string, spawn func(argv []string) error, chain []dispatch.ProcID) {
+	if len(chain) == 0 || !bus.ValidName(role) || !bus.ValidSessionID(session) || profile != "" && !bus.ValidName(profile) {
 		return
 	}
-	call := []string{"roles", "record-resume", logPath, project, role, session, "--"}
+	if profile == "" {
+		profile = "-"
+	}
+	call := []string{"roles", "record-resume", logPath, project, role, session, profile, "--"}
 	for _, p := range chain {
 		call = append(call, strconv.Itoa(p.PID)+":"+strconv.FormatUint(p.Start, 10))
 	}
-	call = append(append(call, "--"), argv...)
 	if err := spawn(call); err != nil {
 		resumeLog(logPath, time.Now(), "resume recorder not started: "+err.Error())
 	}
@@ -107,32 +110,25 @@ func handToRecorder(logPath, project, role, session string, argv []string, spawn
 
 // resumeRecorder is the bus as the recorder needs it.
 type resumeRecorder interface {
-	RecordResume(ctx context.Context, agent string, chain []bus.ProcID, argv []string, session string) error
+	RecordResume(ctx context.Context, agent string, chain []bus.ProcID, profile, session string) error
 }
 
 func openRecorder(project string) (resumeRecorder, func(), error) { return openHookBus(project) }
 
 // recordResumeSend writes the resume record: <log> <project> <agent>
-// <session> -- <pid:start>... -- <argv...>. The bus proves the caller
-// (RecordResume); every outcome is one line of the log.
+// <session> <profile|-> -- <pid:start>.... No command is ever passed (S1).
+// The bus proves the caller (RecordResume); every outcome is one line of the
+// log.
 func recordResumeSend(args []string, open func(project string) (resumeRecorder, func(), error)) {
-	if len(args) < 7 || args[4] != "--" {
+	if len(args) < 7 || args[5] != "--" {
 		return
 	}
-	logPath, project, agent, session := args[0], args[1], args[2], args[3]
-	rest := args[5:]
-	sep := -1
-	for i, a := range rest {
-		if a == "--" {
-			sep = i
-			break
-		}
-	}
-	if sep <= 0 || sep == len(rest)-1 {
-		return
+	logPath, project, agent, session, profile := args[0], args[1], args[2], args[3], args[4]
+	if profile == "-" {
+		profile = ""
 	}
 	var chain []bus.ProcID
-	for _, a := range rest[:sep] {
+	for _, a := range args[6:] {
 		p, s, ok := strings.Cut(a, ":")
 		pid, err1 := strconv.Atoi(p)
 		start, err2 := strconv.ParseUint(s, 10, 64)
@@ -141,7 +137,6 @@ func recordResumeSend(args []string, open func(project string) (resumeRecorder, 
 		}
 		chain = append(chain, bus.ProcID{PID: pid, Start: start})
 	}
-	argv := rest[sep+1:]
 	b, done, err := open(project)
 	if err != nil {
 		resumeLog(logPath, time.Now(), "resume not recorded: "+err.Error())
@@ -150,7 +145,7 @@ func recordResumeSend(args []string, open func(project string) (resumeRecorder, 
 	defer done()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := b.RecordResume(ctx, agent, chain, argv, session); err != nil {
+	if err := b.RecordResume(ctx, agent, chain, profile, session); err != nil {
 		resumeLog(logPath, time.Now(), "resume not recorded: "+err.Error())
 		return
 	}

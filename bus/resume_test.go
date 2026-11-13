@@ -2,12 +2,11 @@ package bus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"testing"
 )
-
-var resumeArgv = []string{"agent-launch", "coder", "--resume", "0f1e2d3c-aaaa-bbbb-cccc-000000000001"}
 
 const resumeSession = "0f1e2d3c-aaaa-bbbb-cccc-000000000001"
 
@@ -37,13 +36,13 @@ func TestRecordResumeNeedsAnAncestor(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			b.r.Del(ctx, ResumeKey(b.project))
-			err := b.RecordResume(ctx, "coder", c.chain, resumeArgv, resumeSession)
+			err := b.RecordResume(ctx, "coder", c.chain, "", resumeSession)
 			got, gerr := b.ResumeOf(ctx, "coder")
 			if gerr != nil {
 				t.Fatal(gerr)
 			}
 			if c.ok {
-				if err != nil || got == nil || !slices.Equal(got.Argv, resumeArgv) || got.Session != resumeSession || got.At <= 0 {
+				if err != nil || got == nil || got.Profile != "" || got.Session != resumeSession || got.At <= 0 {
 					t.Fatalf("not written: %v %+v", err, got)
 				}
 				return
@@ -53,34 +52,35 @@ func TestRecordResumeNeedsAnAncestor(t *testing.T) {
 			}
 		})
 	}
-	if err := b.RecordResume(ctx, "nobody", []ProcID{{4242, 99}}, resumeArgv, resumeSession); !errors.Is(err, ErrNotProved) {
+	if err := b.RecordResume(ctx, "nobody", []ProcID{{4242, 99}}, "", resumeSession); !errors.Is(err, ErrNotProved) {
 		t.Fatalf("no snapshot: %v", err)
 	}
 	// An agent with no verified process: a zero ancestor matches nothing.
 	if _, err := b.Status(ctx, "kimi", "idle", "unverified", AgentIdent{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.RecordResume(ctx, "kimi", []ProcID{{0, 0}}, resumeArgv, resumeSession); !errors.Is(err, ErrNotProved) {
+	if err := b.RecordResume(ctx, "kimi", []ProcID{{0, 0}}, "", resumeSession); !errors.Is(err, ErrNotProved) {
 		t.Fatalf("an unverified agent: %v", err)
 	}
 }
 
-// What a write needs besides the proof: a valid agent, a session id, an argv.
+// What a write needs besides the proof: a valid agent, a session id, and a
+// profile that is a name ("" the role's own).
 func TestRecordResumeRefuses(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
 	verifiedAgent(t, b, "idle", "x")
 	ok := []ProcID{{4242, 99}}
 	for name, c := range map[string]struct {
-		agent, session string
-		argv           []string
+		agent, session, profile string
 	}{
-		"agent":   {"Bad Agent", resumeSession, resumeArgv},
-		"session": {"coder", "../etc", resumeArgv},
-		"argv":    {"coder", resumeSession, nil},
-		"empty":   {"coder", resumeSession, []string{""}},
+		"agent":              {"Bad Agent", resumeSession, ""},
+		"session":            {"coder", "../etc", ""},
+		"a command":          {"coder", resumeSession, "sh -c 'touch /tmp/x'"},
+		"a path":             {"coder", resumeSession, "../profiles/x"},
+		"an uppercase start": {"coder", resumeSession, "Opus"},
 	} {
-		if err := b.RecordResume(ctx, c.agent, ok, c.argv, c.session); err == nil {
+		if err := b.RecordResume(ctx, c.agent, ok, c.profile, c.session); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -95,7 +95,7 @@ func TestResumeOutlivesTheProcess(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
 	who := verifiedAgent(t, b, "idle", "x")
-	if err := b.RecordResume(ctx, "coder", []ProcID{{4242, 99}}, resumeArgv, resumeSession); err != nil {
+	if err := b.RecordResume(ctx, "coder", []ProcID{{4242, 99}}, "", resumeSession); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := b.ResumeOf(ctx, "coder")
@@ -125,14 +125,14 @@ func TestResumeOutlivesTheProcess(t *testing.T) {
 		t.Fatalf("resumes %+v %v", all, err)
 	}
 	// The old process can no longer write: the stored identity moved.
-	if err := b.RecordResume(ctx, "coder", []ProcID{{4242, 99}}, resumeArgv, resumeSession); !errors.Is(err, ErrNotProved) {
+	if err := b.RecordResume(ctx, "coder", []ProcID{{4242, 99}}, "", resumeSession); !errors.Is(err, ErrNotProved) {
 		t.Fatalf("the dead process wrote: %v", err)
 	}
-	next := []string{"agent-launch", "coder", "--resume", "0f1e2d3c-aaaa-bbbb-cccc-000000000002"}
-	if err := b.RecordResume(ctx, "coder", []ProcID{{5151, 7}}, next, "0f1e2d3c-aaaa-bbbb-cccc-000000000002"); err != nil {
+	const next = "0f1e2d3c-aaaa-bbbb-cccc-000000000002"
+	if err := b.RecordResume(ctx, "coder", []ProcID{{5151, 7}}, "claude-sonnet", next); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := b.ResumeOf(ctx, "coder"); got == nil || !slices.Equal(got.Argv, next) {
+	if got, _ := b.ResumeOf(ctx, "coder"); got == nil || got.Session != next || got.Profile != "claude-sonnet" {
 		t.Fatalf("not replaced: %+v", got)
 	}
 	if _, err := b.ForgetAgent(ctx, "coder"); err != nil {
@@ -148,7 +148,8 @@ func TestResumeOutlivesTheProcess(t *testing.T) {
 func TestResumeReadsAMalformedFieldAsNone(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	b.r.HSet(ctx, ResumeKey(b.project), "coder", "not json", "kimi", `{"argv":[],"session":"x"}`)
+	b.r.HSet(ctx, ResumeKey(b.project), "coder", "not json", "kimi", `{"session":"x"}`,
+		"grok", `{"session":"`+resumeSession+`","profile":"sh -c id"}`)
 	if got, err := b.ResumeOf(ctx, "coder"); err != nil || got != nil {
 		t.Fatalf("coder %+v %v", got, err)
 	}
@@ -164,5 +165,69 @@ func TestResumeKeyIsARecord(t *testing.T) {
 	}
 	if !projectKinds["resume"] {
 		t.Fatal("resume is not a project kind")
+	}
+}
+
+// Security finding S1 (herdr security review): the record is a closed set,
+// {session, profile, at}, never a command. A field written by hand with an
+// argv (a broker writer that skips the proof) is read without it: a
+// consumer rebuilds the command from the template with
+// rolecfg.ResumeArgv and the record's re-validated session and profile, so
+// what the broker holds can never run.
+func TestResumeRecordCarriesNoCommand(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	verifiedAgent(t, b, "idle", "x")
+	if err := b.RecordResume(ctx, "coder", []ProcID{{4242, 99}}, "claude-sonnet", resumeSession); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := b.r.HGet(ctx, ResumeKey(b.project), "coder").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{}
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	if !slices.Equal(keys, []string{"at", "profile", "session"}) {
+		t.Fatalf("stored fields %v: want at, profile, session only", keys)
+	}
+	b.r.HSet(ctx, ResumeKey(b.project), "coder", `{"argv":["sh","-c","touch /tmp/x"],"session":"`+resumeSession+`","profile":"","at":1}`)
+	got, err := b.ResumeOf(ctx, "coder")
+	if err != nil || got == nil || *got != (ResumeRecord{Session: resumeSession, At: 1}) {
+		t.Fatalf("a hostile field read as %+v %v", got, err)
+	}
+}
+
+// reviewer-codex on S1: a record of the old schema, {argv, session, at},
+// lives on in the broker until a later SessionStart or forget. Without its
+// profile key it would read as profile "", the role's own, and a session
+// recorded under a swapped profile would be resumed under the wrong one. A
+// record without the profile key is not one (none, as a malformed field);
+// an explicit "" is the role's own profile.
+func TestResumeRefusesALegacyRecord(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	b.r.HSet(ctx, ResumeKey(b.project),
+		"coder", `{"argv":["claude","--resume","`+resumeSession+`"],"session":"`+resumeSession+`","at":1}`,
+		"own", `{"session":"`+resumeSession+`","profile":"","at":2}`,
+		"nullp", `{"session":"`+resumeSession+`","profile":null,"at":3}`)
+	if got, err := b.ResumeOf(ctx, "coder"); err != nil || got != nil {
+		t.Fatalf("a legacy record read as %+v %v", got, err)
+	}
+	if got, err := b.ResumeOf(ctx, "nullp"); err != nil || got != nil {
+		t.Fatalf("a null profile read as %+v %v", got, err)
+	}
+	if got, err := b.ResumeOf(ctx, "own"); err != nil || got == nil || got.Profile != "" || got.At != 2 {
+		t.Fatalf("an explicit own profile: %+v %v", got, err)
+	}
+	all, err := b.ResumeRecords(ctx)
+	if err != nil || len(all) != 1 || all["own"].At != 2 {
+		t.Fatalf("all %+v %v", all, err)
 	}
 }
