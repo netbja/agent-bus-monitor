@@ -104,7 +104,7 @@ func (c *selfRepairChore) deliver(ctx context.Context, token, master string) err
 			_ = c.b.AckSelfRepairOwed(ctx, token, o) // unreadable: nothing to send
 			continue
 		}
-		wrote, err := c.sender()(ctx, token, m.Mark, m.Episode, master, m.Text)
+		wrote, err := c.sender()(ctx, token, m.Mark, o.ID, master, m.Text) // once per end: its ledger id
 		if errors.Is(err, errNotYet) {
 			continue
 		}

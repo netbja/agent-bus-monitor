@@ -443,9 +443,10 @@ func TestSelfRepairOwedRedis(t *testing.T) {
 		}
 	}
 	end("n1", "1:1", "first")
-	end("n2", "2:2", "second") // the first still owed
+	end("n2", "1:1", "second") // the same death again (after a reset): the first still owed
 	got, err := b.SelfRepairOwed(ctx)
-	if err != nil || len(got) != 2 || got[0].Value != "first" || got[1].Value != "second" || got[0].Role != "coder" {
+	if err != nil || len(got) != 2 || got[0].Value != "first" || got[1].Value != "second" || got[0].Role != "coder" ||
+		got[0].ID == "" || got[0].ID == got[1].ID {
 		t.Fatalf("owed %+v %v", got, err)
 	}
 	if err := b.AckSelfRepairOwed(ctx, "other", got[0]); !errors.Is(err, ErrNotHolder) {

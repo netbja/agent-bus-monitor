@@ -1006,8 +1006,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   session) goes to master once per death, never acted on. Every message is `FencedCmdOnce` (mark
   `selfrepair-done|failed|budget|report:<role>`), and is sent until it is written (reviewer-codex): a
   relaunch's or a failure's message is recorded by its finish's own script (`FinishSelfRepairOwing`,
-  `owed:<role>:<episode>` in `{p}:selfrepair`, one field per death so a later end never replaces an earlier
-  one still owed), delivered at each pass, oldest first, and acknowledged (`AckSelfRepairOwed`, fenced, only
+  `owed:<role>:<ledger id>` in `{p}:selfrepair`, one field per end, its own ledger entry's id, so a later
+  end, of another death or of the same one after a reset, never replaces one still owed), delivered at each
+  pass, oldest first, once per end (the ledger id is the send's episode), and acknowledged (`AckSelfRepairOwed`, fenced, only
   while unchanged) once written or found already written; of any age, a reset keeps it, and
   master being swapped holds it back without counting it written. A crash loop's is sent each pass while
   its mark stands (episode the mark's Redis `TIME`, `SelfRepairRecord.CrashLoopAt`). Only the send that

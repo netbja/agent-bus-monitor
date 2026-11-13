@@ -479,3 +479,39 @@ func TestSelfRepairTwoEndsOwed(t *testing.T) {
 		t.Fatalf("still owed %+v", owed)
 	}
 }
+
+// A failure still owed (master swapped), a reset, then a success for the
+// same death (reviewer-codex on 7b, round 4): two ends, two messages, in
+// order, none replacing the other.
+func TestSelfRepairFailResetSucceedSameDeath(t *testing.T) {
+	w := newActWorld(t)
+	ctx := context.Background()
+	if err := w.b.BeginSwap(ctx, "master", bus.SwapIntent{ToProfile: "opus", By: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	w.onLaunch = func(string, func(string) error) error { return nil } // no proof
+	w.passes(5)
+	if got := strings.Join(w.ledger(), " "); got != "begin failed" {
+		t.Fatalf("ledger %q", got)
+	}
+	if _, err := w.b.ResetSelfRepair(ctx, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	w.onLaunch = nil             // the default: a new process comes up
+	w.now = w.now.Add(time.Hour) // past the budget's spacing
+	w.passes(2)
+	if got := strings.Join(w.ledger(), " "); got != "begin failed begin relaunched" {
+		t.Fatalf("ledger %q", got)
+	}
+	if got := w.toMaster(); len(got) != 0 {
+		t.Fatalf("sent during the swap: %q", got)
+	}
+	if err := w.b.EndSwap(ctx, "master"); err != nil {
+		t.Fatal(err)
+	}
+	w.passes(1)
+	got := w.toMaster()
+	if len(got) != 2 || !strings.Contains(got[0], "relaunch failed") || !strings.Contains(got[1], "relaunched (pid 102 -> 202") {
+		t.Fatalf("master told %q", got)
+	}
+}
