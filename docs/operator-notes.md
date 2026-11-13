@@ -1095,8 +1095,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   the ideas still `to discuss` (a plan task naming an idea's id or title takes its place); F6 lists
   them all by state (tab: one state, enter: the idea, a: add one in the compose window, its first line
   the title and the rest its text, s: the state picker, y sets it) and flags a state set by someone
-  other than the configured person. busmon refuses a set when it runs in an agent's environment
-  (`AGENT_BUS_AGENT`: it would inherit the person's name); it does not refuse a herdr pane, since the
+  other than the configured person. busmon refuses a set or an add when it runs in an agent's
+  environment (`AGENT_BUS_AGENT`: it would inherit the person's name; an agent adds with `idea add`
+  under its own); a failed add keeps the window's text for the next `a`; it does not refuse a herdr pane, since the
   person's own busmon runs in one (the plugin). **The limit, said plainly: this is an
   audit, not a proof.** Agents run under the person's uid with the same broker URL, so nothing stops a
   deliberate `idea set --as <person>` from a plain shell, or a raw `HSET`: the guards catch accidents

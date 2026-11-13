@@ -243,3 +243,48 @@ func TestIdeasKeysStayOnF6(t *testing.T) {
 		t.Fatalf("sent %v", w.sent)
 	}
 }
+
+// reviewer-codex: a failed add keeps the text (a reopens it), and only a
+// written idea spends the draft.
+func TestIdeasAddFailureKeepsTheDraft(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	w.fail = errors.New("broker down")
+	m = keys(t, m, kF6, 'a')
+	for _, r := range "keep me" {
+		m = keys(t, m, r)
+	}
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if !m.ui.flashErr || !strings.Contains(m.ui.flash, "broker down") || !strings.Contains(m.ui.flash, "kept") {
+		t.Fatalf("flash %q", m.ui.flash)
+	}
+	m = keys(t, m, 'a')
+	if c := m.ui.compose; c == nil || c.area.value() != "keep me" {
+		t.Fatalf("the draft after a failed add: %+v", m.ui.compose)
+	}
+	w.fail = nil
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if m.ui.ideaDraft != "" {
+		t.Fatalf("a written idea left its draft %q", m.ui.ideaDraft)
+	}
+}
+
+// reviewer-codex: busmon in an agent's environment would credit the person
+// with the agent's idea: the add is refused there, as the set is (an agent
+// adds with agentbus idea add, under its own name).
+func TestIdeasAddRefusedInAnAgentsEnv(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	m.cfg.getenv = func(k string) string {
+		if k == "AGENT_BUS_AGENT" {
+			return "coder"
+		}
+		return ""
+	}
+	m = keys(t, m, kF6, 'a')
+	for _, r := range "an agent's idea" {
+		m = keys(t, m, r)
+	}
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if len(w.sent) != 0 || !m.ui.flashErr || !strings.Contains(m.ui.flash, "idea add") {
+		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
+	}
+}

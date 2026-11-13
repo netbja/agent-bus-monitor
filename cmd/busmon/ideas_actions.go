@@ -17,6 +17,7 @@ type ideaMsg struct {
 	said  string
 	err   error
 	ideas []bus.Idea
+	add   bool // an add: its draft is spent only once written
 }
 
 // ideasKey is a key on F6 or an idea's page; done when it was the page's.
@@ -146,6 +147,10 @@ func (m *Model) openIdeaCompose() {
 // the rest the text, added by the person at "to discuss". A title too long
 // or none keeps the window open and says why.
 func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
+	if a := m.env("AGENT_BUS_AGENT"); a != "" { // it would credit the person with the agent's idea (reviewer-codex)
+		m.ui.flash, m.ui.flashErr = "this busmon runs in "+Preview(a)+"'s agent environment (AGENT_BUS_AGENT): an agent adds its idea with agentbus idea add, under its own name", true
+		return nil
+	}
 	title, text, _ := strings.Cut(strings.TrimLeft(c.area.value(), "\n "), "\n")
 	title, text = strings.TrimSpace(title), strings.TrimSpace(text)
 	switch {
@@ -161,11 +166,21 @@ func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "name yourself first (agentbus identity set <name>)", true
 		return nil
 	}
-	m.ui.compose, m.ui.ideaDraft = nil, ""
-	return m.ideaWrite("added: "+Preview(title), func(ctx context.Context, w busWriter) error {
+	// The draft stays until the idea is written (reviewer-codex): a failed
+	// write keeps it, and a reopens it.
+	m.ui.compose, m.ui.ideaDraft = nil, c.area.value()
+	cmd := m.ideaWrite("added: "+Preview(title), func(ctx context.Context, w busWriter) error {
 		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, By: who})
 		return err
 	})
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg := cmd().(ideaMsg)
+		msg.add = true
+		return msg
+	}
 }
 
 // ideaWrite runs one idea write off the update loop, then reads the list
@@ -197,7 +212,13 @@ func (m *Model) ideaWrite(said string, write func(context.Context, busWriter) er
 func (m *Model) gotIdea(msg ideaMsg) {
 	if msg.err != nil {
 		m.ui.flash, m.ui.flashErr = "idea: "+msg.err.Error(), true
+		if msg.add {
+			m.ui.flash += " (your text is kept: a reopens it)"
+		}
 		return
+	}
+	if msg.add {
+		m.ui.ideaDraft = ""
 	}
 	m.ui.flash, m.ui.flashErr = msg.said, false
 	if msg.ideas != nil {
