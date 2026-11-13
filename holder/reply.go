@@ -56,9 +56,17 @@ type ScreenInfo struct {
 	AltScreen      bool     `json:"alt_screen"`
 }
 
-// ActivityInfo is a terminal's last output (ms since the epoch, 0 none).
+// ActivityInfo is a terminal's input and output (spec 4.5; times in ms
+// since the epoch, 0 none): its last output, a viewer's last typing, the
+// draft and since when, the viewers, and how many of them may be at it
+// (non-observers not proven unfocused).
 type ActivityInfo struct {
-	OutputAt int64 `json:"output_at"`
+	OutputAt       int64 `json:"output_at"`
+	ViewerTypedAt  int64 `json:"viewer_typed_at,omitempty"`
+	Draft          bool  `json:"draft,omitempty"`
+	DraftSince     int64 `json:"draft_since,omitempty"`
+	Viewers        int   `json:"viewers,omitempty"`
+	FocusedViewers int   `json:"focused_viewers,omitempty"`
 }
 
 // ProcInfo is one process of a terminal's tree (spec 4.3b).

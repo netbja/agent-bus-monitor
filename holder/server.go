@@ -29,6 +29,7 @@ type Config struct {
 	Launch     func(Start) (Command, error)
 	Scrollback int           // holder.scrollback, default 5000
 	Grace      time.Duration // SIGHUP to SIGKILL, default 5 s
+	OSC52      bool          // attach.osc52: pass OSC 52 to viewers (default off, spec 4.6)
 
 	// ancestors is dispatch.Ancestors; procStart dispatch.ProcStart (tests
 	// replace them).
@@ -248,6 +249,14 @@ func (s *Server) serveConn(c *net.UnixConn) {
 			r = errReply(CodeBadFrame, "a data frame outside an attach")
 		} else if v, err := DecodeControl(body); err != nil {
 			r = errReply(CodeBadFrame, "%v", err)
+		} else if a, ok := v.(Attach); ok && (!inTree || a.Observe) {
+			t, found := s.term(a.Term)
+			if !found {
+				r = errReply(CodeUnknown, "no terminal %s", a.Term)
+			} else {
+				s.attach(c, t, a) // the connection is the viewer's until it ends
+				return
+			}
 		} else {
 			r = s.handle(v, inTree)
 		}
@@ -309,14 +318,7 @@ func (s *Server) handle(v any, inTree bool) Reply {
 		if !ok {
 			return errReply(CodeUnknown, "no terminal %s", f.Term)
 		}
-		t.mu.Lock()
-		at := t.outAt
-		t.mu.Unlock()
-		a := &ActivityInfo{}
-		if !at.IsZero() {
-			a.OutputAt = at.UnixMilli()
-		}
-		return Reply{Activity: a}
+		return Reply{Activity: t.activity()}
 	case Processes:
 		t, ok := s.term(f.Term)
 		if !ok {
@@ -331,11 +333,10 @@ func (s *Server) handle(v any, inTree bool) Reply {
 			return refuseInTree("submit")
 		}
 		return errReply(CodeLater, "submit is not served yet")
-	case Attach:
-		if inTree && !f.Observe {
-			return refuseInTree("an attach that types")
-		}
-		return errReply(CodeLater, "attach is not served yet")
+	case Attach: // served by serveConn; here only when refused
+		return refuseInTree("an attach that types")
+	case Focus, Resize, Detach:
+		return errReply(CodeBadFrame, "not attached")
 	}
 	return errReply(CodeBadFrame, "%T is not a request", v)
 }
@@ -385,7 +386,7 @@ func (s *Server) start(f Start) Reply {
 	}
 	trackedSet[c.Process.Pid] = true
 	trackMu.Unlock()
-	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others,
+	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others,
 		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{})}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t
