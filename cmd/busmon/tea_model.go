@@ -110,6 +110,7 @@ type uiState struct {
 	heldDrafts     []composeDraft          // message drafts kept after msgCompose, each opening in turn
 	askDrafts      map[string]string       // free answers being written, by ask|question
 	ideaDraft      string                  // a new idea's text while its window is closed (a on F6)
+	ideaAdding     bool                    // an add is on its way: another waits for its result
 	askDraft       string                  // a directive held once: its recipient has an open ask
 	broadcastDraft string                  // a broadcast warned about once: the next send sends it
 	askChoose      *askChoice              // several recipients hold questions: the next digit picks one

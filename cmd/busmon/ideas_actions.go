@@ -17,7 +17,8 @@ type ideaMsg struct {
 	said  string
 	err   error
 	ideas []bus.Idea
-	add   bool // an add: its draft is spent only once written
+	add   bool   // an add: its draft is spent only once written
+	sent  string // an add's text as sent: the draft is spent only if it is still that
 }
 
 // ideasKey is a key on F6 or an idea's page; done when it was the page's.
@@ -151,6 +152,10 @@ func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "this busmon runs in "+Preview(a)+"'s agent environment (AGENT_BUS_AGENT): an agent adds its idea with agentbus idea add, under its own name", true
 		return nil
 	}
+	if m.ui.ideaAdding { // one add at a time: the kept text sent twice would be two ideas (reviewer-codex)
+		m.ui.flash, m.ui.flashErr = "an add is on its way: wait for its result", true
+		return nil
+	}
 	title, text, _ := strings.Cut(strings.TrimLeft(c.area.value(), "\n "), "\n")
 	title, text = strings.TrimSpace(title), strings.TrimSpace(text)
 	switch {
@@ -168,7 +173,8 @@ func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
 	}
 	// The draft stays until the idea is written (reviewer-codex): a failed
 	// write keeps it, and a reopens it.
-	m.ui.compose, m.ui.ideaDraft = nil, c.area.value()
+	sent := c.area.value()
+	m.ui.compose, m.ui.ideaDraft = nil, sent
 	cmd := m.ideaWrite("added: "+Preview(title), func(ctx context.Context, w busWriter) error {
 		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, By: who})
 		return err
@@ -176,9 +182,10 @@ func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
 	if cmd == nil {
 		return nil
 	}
+	m.ui.ideaAdding = true
 	return func() tea.Msg {
 		msg := cmd().(ideaMsg)
-		msg.add = true
+		msg.add, msg.sent = true, sent
 		return msg
 	}
 }
@@ -210,6 +217,9 @@ func (m *Model) ideaWrite(said string, write func(context.Context, busWriter) er
 // gotIdea says the outcome and keeps the list read after it, in the shared
 // state too, so the next snapshot does not bring the old one back.
 func (m *Model) gotIdea(msg ideaMsg) {
+	if msg.add {
+		m.ui.ideaAdding = false
+	}
 	if msg.err != nil {
 		m.ui.flash, m.ui.flashErr = "idea: "+msg.err.Error(), true
 		if msg.add {
@@ -217,7 +227,7 @@ func (m *Model) gotIdea(msg ideaMsg) {
 		}
 		return
 	}
-	if msg.add {
+	if msg.add && m.ui.ideaDraft == msg.sent { // an edit made meanwhile is kept
 		m.ui.ideaDraft = ""
 	}
 	m.ui.flash, m.ui.flashErr = msg.said, false

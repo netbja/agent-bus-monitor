@@ -288,3 +288,41 @@ func TestIdeasAddRefusedInAnAgentsEnv(t *testing.T) {
 		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
 	}
 }
+
+// reviewer-codex: while an add is in flight a second Ctrl+S (a reopens the
+// kept text) adds nothing; its result spends the draft only if the draft is
+// still what was sent (an edit made meanwhile is kept).
+func TestIdeasAddOneInFlight(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	m = keys(t, m, kF6, 'a')
+	for _, r := range "once" {
+		m = keys(t, m, r)
+	}
+	next, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: 's', Mod: tea.ModCtrl}))
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("no write")
+	}
+	m = keys(t, m, 'a') // the kept text, reopened while the add is on its way
+	next, cmd2 := m.Update(tea.KeyPressMsg(tea.Key{Code: 's', Mod: tea.ModCtrl}))
+	m = next.(Model)
+	if cmd2 != nil || !strings.Contains(m.ui.flash, "on its way") {
+		t.Fatalf("a second add in flight: cmd %v flash %q", cmd2 != nil, m.ui.flash)
+	}
+	// An edit made meanwhile, then the window closed: kept past the result.
+	m.ui.compose.area.set("once, edited")
+	m = keys(t, m, kEsc)
+	m = step(t, m, cmd().(ideaMsg))
+	if n := strings.Count(strings.Join(w.sent, "\n"), "idea add"); n != 1 {
+		t.Fatalf("%d adds sent: %v", n, w.sent)
+	}
+	if m.ui.ideaDraft != "once, edited" {
+		t.Fatalf("the edited draft after the first add's result: %q", m.ui.ideaDraft)
+	}
+	// The result came: a new add may go.
+	m = keys(t, m, 'a')
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if n := strings.Count(strings.Join(w.sent, "\n"), "idea add"); n != 2 {
+		t.Fatalf("after the result, a new add: %v", w.sent)
+	}
+}
