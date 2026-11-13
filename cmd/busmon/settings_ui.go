@@ -998,9 +998,9 @@ var settingHelps = map[string]string{
 	"notify.max_per_hour":          "messages an hour at most; a fail or a stall always goes",
 	"notify.quiet":                 "HH:MM-HH:MM; only the exempt events are sent then",
 	"notify.quiet_exempt":          "the events still sent in quiet hours, separated by commas",
-	"dispatch.self_repair":         "relaunches a dead agent in a new pane, resumed, master first. on or off; shadow (development mode only) decides what it would do and acts on nothing: shadow records it now (health self-repair, agentbus swaps); on relaunches nothing yet (the watcher's next step). The dispatch service reads it at its start",
-	"dispatch.self_repair_every":   "per agent: no second relaunch before this long; a duration above 0, such as 30m; read by shadow, but nothing relaunches yet to count; enforced once the watcher relaunches",
-	"dispatch.self_repair_per_day": "per agent: past this many relaunches in 24 h it is a crash loop, escalated, not relaunched; read by shadow, but nothing relaunches yet to count; enforced once the watcher relaunches",
+	"dispatch.self_repair":         "relaunches a dead agent in a new pane, resumed, master first. on or off; shadow (development mode only) decides what it would do and acts on nothing: on relaunches (R1; a missing required tab recreated, R2) and tells master; shadow records what it would do (health self-repair, agentbus swaps). The dispatch service reads it at its start",
+	"dispatch.self_repair_every":   "per agent: no second relaunch before this long; a duration above 0, such as 30m; counted from the relaunches on records",
+	"dispatch.self_repair_per_day": "per agent: past this many relaunches in 24 h it is a crash loop, escalated, not relaunched until agentbus self-repair reset; counted from the relaunches on records",
 	"services.start_at_login":      "starts each project's services when you log in (systemd or launchd; no linger); applies at the next agentbus up, or at once with agentbus service login",
 	"dev":                          "development mode: unlocks extra values such as self-repair's shadow, never weakens a check; busmon's header says dev",
 	"sentinel.reload": "a new version of an agent's client is installed. on: sentinel restarts each idle agent on it, resuming its conversation, master last (needs a registered sentinel; without one, you are asked) " +

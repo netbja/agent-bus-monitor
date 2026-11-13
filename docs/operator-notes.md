@@ -976,7 +976,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `self-repair` is registered in every mode, the service's only (a foreground `agentbus dispatch`
   has no services env to reach herdr): `off` and `on` say so; shadow reports its last pass,
   unknown past 2 min without one. A would-relaunch is not an end: `Interrupted` looks past it.
-  Self-repair step 7a, what acting needs (acting on nothing yet): a self-repair ends with
+  Self-repair step 7a, what acting needs: a self-repair ends with
   `FinishSelfRepair` (`relaunched`, the proof, or `failed`, kind `self-repair`), its entry and the
   end of its own intent in one script fenced on the lease and the nonce; an intent already expired
   still gets the entry. The budget is its own record, `{p}:selfrepair` (a record key: a crash loop
@@ -995,6 +995,33 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   (`Deps.Fence` for `Role`) is read right before an agent's split or tab create, after its tab is
   judged: an error relaunches nothing for that role (`coder: not relaunched (…)`); the dry run
   never reads it, and `up` and `reload` set none.
+  Self-repair step 7b, on mode acts (`cmd/agentbus/selfrepairact.go`): `on` (the default) runs the pass
+  as shadow does, then applies the one decision it allows (master first, then the oldest death). A
+  relaunch takes the role's intent (`BeginSelfRepair`, a fresh nonce; an intent already held skips it),
+  runs the service entry (`relaunch.ServiceRole`: herdr on the services' env file's session, up's project
+  lock, the template's tab) with the fence `SelfRepairHeld` read right before the split, then proves it
+  for 60 s (a new pid alive by its start time, in a new pane, on the role's own profile's client and
+  provider: reload's `replaced`), and ends it with `FinishSelfRepair`. Proved: `relaunched`, and one line
+  to master (`self-repair: coder relaunched (pid A -> B, pane P -> Q, resumed <8 chars>), it was dead
+  70s.`). The proof decides, the relaunch's error or not (`Role` can err after the new agent came up,
+  its old pane not closed). Not proved (its tab never settled, herdr refused, the fence, no process): `failed`,
+  one escalation to master with the recovery line (`agent-launch <role> <p> --resume <id>`), the desktop
+  rung, and no retry for that death (`Decide` reads it `failed`). A spent day marks the crash loop
+  (`MarkCrashLoop`): master told and the desktop rung once, nothing more until `agentbus self-repair
+  reset`. A report (an optional role's missing tab, a client without a verified resume, no proved
+  session) goes to master once per death, never acted on. Every message is `FencedCmdOnce` (mark
+  `selfrepair-done|failed|budget|report:<role>`), and is sent until it is written (reviewer-codex): a
+  relaunch's or a failure's message is recorded by its finish's own script (`FinishSelfRepairOwing`,
+  `owed:<role>:<ledger id>` in `{p}:selfrepair`, one field per end, its own ledger entry's id, so a later
+  end, of another death or of the same one after a reset, never replaces one still owed), delivered at each
+  pass, oldest first, once per end (the ledger id is the send's episode), and acknowledged (`AckSelfRepairOwed`, fenced, only
+  while unchanged) once written or found already written; of any age, a reset keeps it, and
+  master being swapped holds it back without counting it written. A crash loop's is sent each pass while
+  its mark stands (episode the mark's Redis `TIME`, `SelfRepairRecord.CrashLoopAt`). Only the send that
+  writes rings the desktop. The pass runs the relaunch in its
+  own goroutine (the dispatch chore), so a minute's proof never delays a wake. The death count stays in
+  the service's memory: a dispatcher restart restarts a death's grace (conservative). busmon's row line
+  (`relaunched by self-repair HH:MM`) is not built yet.
   `services.start_at_login` (off, the machine's file only; step 9, `service/login.go`): `agentbus up`
   writes its units for it and enables them after the install (`LoginStart.Enable`), or, off, disables
   an enabled project **before** the install (systemd disables by the `[Install]` section the new unit

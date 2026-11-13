@@ -78,25 +78,24 @@ func TestHeaderDevMode(t *testing.T) {
 	}
 }
 
-// Shadow runs (self-repair step 6b): the switch's help says shadow records
-// now and on relaunches nothing yet, and no help still says the watcher is
-// not shipped; the budgets say nothing relaunches yet for them to count (only
-// step 7 records relaunches, so neither changes a shadow decision: foureyes),
-// so the person does not expect a relaunch, or a shadow reacting, today.
+// The watcher acts (self-repair step 7b): the switch's help says on
+// relaunches and tells master, shadow only records; no help still says
+// nothing relaunches yet; the budgets count the relaunches on records and
+// name the reset.
 func TestSelfRepairHelpsSayWhatRunsNow(t *testing.T) {
 	h := settingHelps["dispatch.self_repair"]
-	for _, want := range []string{"shadow records it now", "health self-repair", "agentbus swaps", "on relaunches nothing yet"} {
+	for _, want := range []string{"on relaunches (R1", "tells master", "shadow records what it would do", "health self-repair", "agentbus swaps"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("dispatch.self_repair help lacks %q: %q", want, h)
 		}
 	}
 	for _, k := range []string{"dispatch.self_repair", "dispatch.self_repair_every", "dispatch.self_repair_per_day"} {
-		if h := settingHelps[k]; strings.Contains(h, "takes effect when the watcher ships") {
+		if h := settingHelps[k]; strings.Contains(h, "takes effect when the watcher ships") || strings.Contains(h, "nothing relaunches yet") {
 			t.Errorf("%s help still says the watcher is not shipped: %q", k, h)
 		}
 	}
 	for _, k := range []string{"dispatch.self_repair_every", "dispatch.self_repair_per_day"} {
-		if h := settingHelps[k]; !strings.Contains(h, "read by shadow, but nothing relaunches yet to count; enforced once the watcher relaunches") {
+		if h := settingHelps[k]; !strings.Contains(h, "counted from the relaunches on records") {
 			t.Errorf("%s help = %q", k, h)
 		}
 	}

@@ -253,7 +253,7 @@ if v then
   if not ok or type(d) ~= 'table' or d['kind'] ~= 'self-repair' or d['nonce'] ~= ARGV[2] then return 2 end
   redis.call('DEL', KEYS[2])
 end
-redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[3], '*', unpack(ARGV, 7))
+local id = redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[3], '*', unpack(ARGV, 8))
 if ARGV[5] ~= '' then
   local f = 'failed:' .. ARGV[4]
   local keep = {}
@@ -263,6 +263,7 @@ if ARGV[5] ~= '' then
   while #keep > tonumber(ARGV[6]) do table.remove(keep, 1) end
   redis.call('HSET', KEYS[4], f, table.concat(keep, ','))
 end
+if ARGV[7] ~= '' then redis.call('HSET', KEYS[4], 'owed:' .. ARGV[4] .. ':' .. id, ARGV[7]) end
 return 1`)
 
 // FinishSelfRepair ends a self-repair: ev (relaunched, the proof; or failed,
@@ -272,6 +273,16 @@ return 1`)
 // written). An intent already expired still gets its entry: the relaunch
 // happened.
 func (b *Bus) FinishSelfRepair(ctx context.Context, token, nonce string, ev SwapEvent) error {
+	return b.FinishSelfRepairOwing(ctx, token, nonce, ev, "")
+}
+
+// FinishSelfRepairOwing is FinishSelfRepair that also records, in the same
+// script, what the self-repair owes master (owed, opaque to the bus) in
+// "owed:<role>:<ledger id>" of the self-repair hash: one field per end, its
+// own ledger entry's id, so a later end (another death, or the same one
+// after a reset) never replaces an earlier one still owed. It stays, of any
+// age, until AckSelfRepairOwed (reviewer-codex on 7b).
+func (b *Bus) FinishSelfRepairOwing(ctx context.Context, token, nonce string, ev SwapEvent, owed string) error {
 	if ev.Event != SwapRelaunched && ev.Event != SwapFailed {
 		return fmt.Errorf("a self-repair ends relaunched or failed, not %q", ev.Event)
 	}
@@ -289,7 +300,7 @@ func (b *Bus) FinishSelfRepair(ctx context.Context, token, nonce string, ev Swap
 		}
 		failed = ev.Episode
 	}
-	args := append([]interface{}{token, nonce, streamMaxLen, ev.Role, failed, selfRepairListMax}, ev.fields()...)
+	args := append([]interface{}{token, nonce, streamMaxLen, ev.Role, failed, selfRepairListMax, owed}, ev.fields()...)
 	n, err := finishSelfRepair.Run(ctx, b.r,
 		[]string{DispatchKey(b.project), SwapKey(b.project, ev.Role), SwapsKey(b.project), SelfRepairKey(b.project)}, args...).Int()
 	switch {
@@ -308,9 +319,10 @@ func (b *Bus) FinishSelfRepair(ctx context.Context, token, nonce string, ev Swap
 // death episodes whose relaunch failed its proof (no retry for those), and a
 // crash loop the dispatcher marked.
 type SelfRepairRecord struct {
-	Attempts  []time.Time
-	Failed    map[string]bool
-	CrashLoop bool
+	Attempts    []time.Time
+	Failed      map[string]bool
+	CrashLoop   bool
+	CrashLoopAt int64 // the mark's Redis TIME (ms): the crash loop's episode
 }
 
 // SelfRepairPast reads every role's SelfRepairRecord from {p}:selfrepair. A
@@ -333,6 +345,7 @@ func (b *Bus) SelfRepairPast(ctx context.Context) (map[string]SelfRepairRecord, 
 		switch kind {
 		case "crashloop":
 			r.CrashLoop = true
+			r.CrashLoopAt, _ = strconv.ParseInt(v, 10, 64)
 		case "attempts":
 			for _, ms := range strings.Split(v, ",") {
 				if n, err := strconv.ParseInt(ms, 10, 64); err == nil && n > 0 {
@@ -395,4 +408,56 @@ func (b *Bus) ResetSelfRepair(ctx context.Context, role string) (wasLoop bool, e
 	}
 	n, err := resetSelfRepair.Run(ctx, b.r, []string{SelfRepairKey(b.project)}, role).Int()
 	return n == 1, err
+}
+
+// Owed is one message a self-repair owes master: its role, the ledger id of
+// the end it tells (unique, ordered: what a send dedups on), the field it
+// waits in, and its value (opaque to the bus).
+type Owed struct {
+	Role, ID, Field, Value string
+}
+
+// SelfRepairOwed is every unacknowledged message, oldest end first.
+func (b *Bus) SelfRepairOwed(ctx context.Context) ([]Owed, error) {
+	all, err := b.r.HGetAll(ctx, SelfRepairKey(b.project)).Result()
+	if err != nil {
+		return nil, err
+	}
+	var out []Owed
+	for f, v := range all {
+		rest, ok := strings.CutPrefix(f, "owed:")
+		if !ok {
+			continue
+		}
+		role, id, ok := strings.Cut(rest, ":")
+		if ok && ValidName(role) && id != "" {
+			out = append(out, Owed{Role: role, ID: id, Field: f, Value: v})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return idLess(out[i].ID, out[j].ID) })
+	return out, nil
+}
+
+// ackOwed: -1 the lease is not ARGV[1]'s; else the owed field removed only
+// when it still holds ARGV[2]. KEYS: dispatch lease, self-repair hash.
+// ARGV: token, value, field.
+var ackOwed = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
+if redis.call('HGET', KEYS[2], ARGV[3]) == ARGV[2] then redis.call('HDEL', KEYS[2], ARGV[3]) end
+return 1`)
+
+// AckSelfRepairOwed acknowledges one death's message once written, only by
+// the dispatch lease holder and only while it is still o.Value.
+func (b *Bus) AckSelfRepairOwed(ctx context.Context, token string, o Owed) error {
+	if !strings.HasPrefix(o.Field, "owed:") {
+		return fmt.Errorf("invalid owed field %q", o.Field)
+	}
+	n, err := ackOwed.Run(ctx, b.r, []string{DispatchKey(b.project), SelfRepairKey(b.project)}, token, o.Value, o.Field).Int()
+	if err != nil {
+		return err
+	}
+	if n == -1 {
+		return ErrNotHolder
+	}
+	return nil
 }

@@ -82,7 +82,10 @@ with reload, restore and pop-retire: a pid is gone only by `pidListedNoMore` (PR
 4. **The network can carry it.** Its provider's quota reader succeeded in the last 5 min (a
    local model: `llm-endpoint` is ok), and the
    provider is not held by the quota coordinator. A relaunch into a dead network or a held quota
-   just dies again.
+   just dies again. The provider judged is the one of the role's **own** profile, the one a
+   relaunch runs, never the snapshot's. A role on a quota fallback (`{p}:fallback`) is only
+   reported to master, never relaunched: the relaunch would run its own profile, and bringing it
+   back is master's `swap` (foureyes, step 7b).
 5. **A session to resume.** Every client is relaunched **resuming** its proved session (the
    person, Q4): Claude Code (`--resume <id>`, as today), and Codex, Kimi and Gemini once their
    session ids are captured and proved (part 7, step 5). Never a fresh start. A client with no
@@ -327,8 +330,8 @@ useful alone first, and nothing acts before step 7.
    none while a relaunch is in flight or within the 2-min project pause). R1's preconditions in
    the spec's order: alive and unknown first (unknown never acts), `off`, the grace (60 s, three
    reads), a declared departure or another intent, the tab (`relaunch`/`create` go on, an optional
-   `missing` tab is reported, any other verdict is waited on), herdr and the workspace, the
-   provider (fresh, not held), a resume-verified client with a proved session (else reported,
+   `missing` tab is reported, any other verdict is waited on), a role on a quota fallback
+   (reported), herdr and the workspace, the own profile's provider (fresh, not held), a resume-verified client with a proved session (else reported,
    never a fresh start), then the budget (a crash loop or the day's count escalates, the spacing
    waits). `Health(mode, decisions)`: ok when off or nothing to repair (a report stays ok); warn
    for the shadow's would-be act, a hold or a tab not settling; fail for a crash loop, but never
@@ -377,6 +380,17 @@ useful alone first, and nothing acts before step 7.
    split or the tab create, after the judgement: it is where step 7b checks `SelfRepairHeld`.
    Step 7b turns `on` into acting: `BeginSelfRepair`, `ServiceRole` with the fence, the proof,
    the finish, the crash-loop mark, and the notifications.
+   *As built (step 7b, on acts):* `cmd/agentbus/selfrepairact.go`. On mode (the default) runs the
+   pass, then applies its one allowed decision: the intent (`BeginSelfRepair`, a fresh nonce), the
+   service entry (`relaunch.ServiceRole`) with the fence `SelfRepairHeld`, a 60 s proof (reload's
+   `replaced`, against the role's own profile from `roles.toml`), `FinishSelfRepair` relaunched or
+   failed. Master gets one line per relaunch; a failure (no proof, or the relaunch's own error) is
+   escalated with the recovery line and rings the desktop, once, never retried for that death; a
+   spent day marks the crash loop and does the same. Reports (an optional tab missing, a client
+   without a verified resume, no proved session) reach master once per death. All messages are
+   fenced, once per episode. Not built in 7b: busmon's `relaunched by self-repair` row line, R3's
+   held-network notice and R4's workspace-not-open notice (step 8). The live kill check is the
+   person's.
 8. **R3 and R4:** hold relaunches while the network is lost; the notice when the workspace is not
    open after a start.
 9. **Start at login:** the `LoginStart` interface and its two backends (systemd, macOS

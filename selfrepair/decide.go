@@ -1,9 +1,9 @@
 // Package selfrepair is the self-repair watcher's judgement (spec
 // docs/superpowers/specs/2026-11-09-self-repair-watcher-design.md, delivery
 // step 6): facts in, one decision per agent out, as a pure function. The
-// dispatch service gathers the facts and applies the decision; in step 6 it
-// applies nothing but the shadow's record (would relaunch), and nothing
-// relaunches before step 7.
+// dispatch service gathers the facts and applies the decision: in on mode
+// it relaunches (step 7b, cmd/agentbus/selfrepairact.go), in shadow it only
+// records the would-be act.
 package selfrepair
 
 import (
@@ -64,6 +64,11 @@ type Agent struct {
 	// model: its endpoint answers); ProviderHeld: the coordinator holds it.
 	ProviderFresh bool
 	ProviderHeld  bool
+	// Fallback is the profile the role runs on in place of its own after a
+	// quota swap ({p}:fallback; "" none). A relaunch runs the own profile,
+	// so a role on a fallback is told to master, never relaunched: bringing
+	// it back is master's swap back.
+	Fallback string
 
 	// Relaunches are its self-repair relaunches, oldest first; CrashLoop: a
 	// spent day escalated, until `agentbus self-repair reset`.
@@ -162,6 +167,9 @@ func decideOne(f Facts, a Agent) Decision {
 		return d(KindReport, "its tab missing (an optional role: told, not recreated)")
 	default:
 		return d(KindWait, "tab %s: waited on, never forced", a.Tab)
+	}
+	if a.Fallback != "" {
+		return d(KindReport, "on its quota fallback profile %s: a relaunch would run its own profile; master swaps it (agentbus swap %s)", a.Fallback, a.Name)
 	}
 	switch {
 	case !f.HerdrUp:
