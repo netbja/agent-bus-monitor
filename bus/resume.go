@@ -124,6 +124,17 @@ func parseResume(raw string) *ResumeRecord {
 	if json.Unmarshal([]byte(raw), &r) != nil || !ValidSessionID(r.Session) || r.Profile != "" && !ValidName(r.Profile) {
 		return nil
 	}
+	// The profile key must be there, a string ("" is the role's own): a
+	// record of the old schema, {argv, session, at}, would read as the own
+	// profile and resume a swapped session under the wrong one
+	// (reviewer-codex). Unknown fields (argv) are still ignored.
+	var keys map[string]json.RawMessage
+	if json.Unmarshal([]byte(raw), &keys) != nil {
+		return nil
+	}
+	if p, ok := keys["profile"]; !ok || len(p) == 0 || p[0] != '"' {
+		return nil
+	}
 	return &r
 }
 

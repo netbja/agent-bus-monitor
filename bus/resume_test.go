@@ -197,9 +197,37 @@ func TestResumeRecordCarriesNoCommand(t *testing.T) {
 	if !slices.Equal(keys, []string{"at", "profile", "session"}) {
 		t.Fatalf("stored fields %v: want at, profile, session only", keys)
 	}
-	b.r.HSet(ctx, ResumeKey(b.project), "coder", `{"argv":["sh","-c","touch /tmp/x"],"session":"`+resumeSession+`","at":1}`)
+	b.r.HSet(ctx, ResumeKey(b.project), "coder", `{"argv":["sh","-c","touch /tmp/x"],"session":"`+resumeSession+`","profile":"","at":1}`)
 	got, err := b.ResumeOf(ctx, "coder")
 	if err != nil || got == nil || *got != (ResumeRecord{Session: resumeSession, At: 1}) {
 		t.Fatalf("a hostile field read as %+v %v", got, err)
+	}
+}
+
+// reviewer-codex on S1: a record of the old schema, {argv, session, at},
+// lives on in the broker until a later SessionStart or forget. Without its
+// profile key it would read as profile "", the role's own, and a session
+// recorded under a swapped profile would be resumed under the wrong one. A
+// record without the profile key is not one (none, as a malformed field);
+// an explicit "" is the role's own profile.
+func TestResumeRefusesALegacyRecord(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	b.r.HSet(ctx, ResumeKey(b.project),
+		"coder", `{"argv":["claude","--resume","`+resumeSession+`"],"session":"`+resumeSession+`","at":1}`,
+		"own", `{"session":"`+resumeSession+`","profile":"","at":2}`,
+		"nullp", `{"session":"`+resumeSession+`","profile":null,"at":3}`)
+	if got, err := b.ResumeOf(ctx, "coder"); err != nil || got != nil {
+		t.Fatalf("a legacy record read as %+v %v", got, err)
+	}
+	if got, err := b.ResumeOf(ctx, "nullp"); err != nil || got != nil {
+		t.Fatalf("a null profile read as %+v %v", got, err)
+	}
+	if got, err := b.ResumeOf(ctx, "own"); err != nil || got == nil || got.Profile != "" || got.At != 2 {
+		t.Fatalf("an explicit own profile: %+v %v", got, err)
+	}
+	all, err := b.ResumeRecords(ctx)
+	if err != nil || len(all) != 1 || all["own"].At != 2 {
+		t.Fatalf("all %+v %v", all, err)
 	}
 }

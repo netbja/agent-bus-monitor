@@ -130,7 +130,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   (`-` the role's own) and its chain to a detached `roles record-resume`: `Bus.RecordResume` writes
   `{p}:resume` (agent → `{session, profile, at}`, `at` from Redis `TIME`; never a command, security
   finding S1: a consumer rebuilds the argv with `rolecfg.ResumeArgv`, and `parseResume` drops any
-  other field and refuses a profile that is no name) only when one ancestor (at most 32) is the stored
+  other field, refuses a profile that is no name, and reads a record without its `profile` key as
+  none: an old-schema `{argv, session, at}` record would otherwise resume a swapped session under the
+  role's own profile, reviewer-codex) only when one ancestor (at most 32) is the stored
   verified process, pid and start alike, in a `WATCH {p}:agents` transaction. The record outlives the
   process (a status, a hand-off, a relaunch leave it); only `forget` clears it, and the next proved
   session replaces it. No chain (macOS) records nothing. It is a backup record and a project kind. The hook
