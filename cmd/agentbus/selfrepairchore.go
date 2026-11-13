@@ -247,8 +247,16 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 	}
 	c.mu.Lock()
 	f := c.facts(r)
+	// A spell of a closed workspace (R4) ends when herdr is read and says it
+	// is open, or when nobody is dead: no hold stands then, and herdr is
+	// read only for a death (foureyes: after up --resume everyone is alive).
+	// A later closing is a new spell, told again.
+	dead := false
+	for _, a := range f.Agents {
+		dead = dead || a.Life == relaunch.LifeDead
+	}
 	clearSpell := false
-	if f.HerdrUp && f.WorkspaceOpen { // read, and open: a later closing is a new spell (R4)
+	if f.HerdrUp && f.WorkspaceOpen || !dead {
 		c.wsClosed = time.Time{}
 		clearSpell = r.Marks[workspaceMark] != ""
 	}

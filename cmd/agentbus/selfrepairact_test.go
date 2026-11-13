@@ -635,3 +635,36 @@ func TestSelfRepairWorkspaceSpellOutlivesARestart(t *testing.T) {
 		t.Fatalf("a new closure not told: %q", msgs)
 	}
 }
+
+// foureyes on step 8: after the notice, master runs up --resume and
+// everyone is alive again: herdr is not read (nobody dead), but the spell
+// ends all the same (no hold stands), so a later closure is told again.
+func TestSelfRepairWorkspaceSpellEndsWithNobodyDead(t *testing.T) {
+	w := newActWorld(t)
+	read := w.c.read
+	w.c.read = func(ctx context.Context) (selfRepairReads, error) {
+		r, err := read(ctx)
+		if err == nil {
+			r.Marks, err = w.b.QuotaMarks(ctx)
+		}
+		return r, err
+	}
+	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
+		return selfRepairHerdr{Up: true, Open: false, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
+	}
+	w.passes(6)
+	if msgs := w.only("workspace"); len(msgs) != 1 {
+		t.Fatalf("first closure: %q", msgs)
+	}
+	alive := w.c.procStart
+	w.c.procStart = srProcs(map[int]uint64{101: 99, 102: 99, 103: 99}) // up --resume: everyone alive
+	w.passes(3)
+	if marks, _ := w.b.QuotaMarks(context.Background()); marks["selfrepair-workspace"] != "" {
+		t.Fatalf("the spell kept with nobody dead: %q", marks["selfrepair-workspace"])
+	}
+	w.c.procStart = alive // closed again, coder dead again
+	w.passes(6)
+	if msgs := w.only("workspace"); len(msgs) != 2 {
+		t.Fatalf("the next closure not told: %q", msgs)
+	}
+}
