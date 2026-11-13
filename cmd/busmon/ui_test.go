@@ -152,6 +152,7 @@ type fakeReader struct {
 	svcInst    *bus.ServicesInstall
 	svcRecs    map[string]bus.ServiceRecord
 	snaps      map[string]bus.AgentSnapshot // Agents, when set
+	armed      map[string]string            // ArmedAgents, when set
 	pause      *bus.PauseRecord
 	marks      map[string]string
 	observed   map[string]bus.Observation
@@ -186,6 +187,9 @@ func (f *fakeReader) PilotDriver(context.Context) (string, error) {
 }
 func (f *fakeReader) ArmedAgents(context.Context) (map[string]string, error) {
 	f.n("ArmedAgents")
+	if f.armed != nil {
+		return f.armed, nil
+	}
 	return map[string]string{}, nil
 }
 func (f *fakeReader) CmdLag(context.Context) (map[string]int64, error) {

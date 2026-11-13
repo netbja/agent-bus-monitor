@@ -931,7 +931,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   passes), then `Bus.ForgetIfClear`: one script that unregisters the pop only if the stored
   registration is still that pid, start and episode and nothing waits (pending, unread with no
   floor, open ask, owned board task not `done`, gate), and keeps its consumer group so a respawn
-  reads on; `dispatch.pop_retire`/`pop_retire_after` (on, 15 min), busmon `done Nm`/`retiring`,
+  reads on; busmon drops a row whose agent was registered and has left `{p}:agents` (unless an armed
+  subscriber still listens), so a retired pop leaves the Agents panel at the next poll instead of
+  showing its last state until it turns dormant (retire-forget-roster); `dispatch.pop_retire`/`pop_retire_after` (on, 15 min), busmon `done Nm`/`retiring`,
   health `pop-done`; pop-closed-by-hand: a plain `retire` of a pop ends with the same `ForgetIfClear`
   under a retire intent (a boot role never), and a pop closed by hand, its verified process proved gone
   (`dispatch.ProcGone`: only `ErrNoProcess`, a pid readable `/proc` lists no more, or a recycled pid; any
