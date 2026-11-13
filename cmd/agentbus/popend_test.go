@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -157,5 +159,55 @@ func TestPopEndStopsWhenTheLeaseGoes(t *testing.T) {
 	r := popEnd(ctx, w.b, d, "tok", "security", ep)
 	if r.Ended || r.Wait == "" || w.closed() || !w.registered(t, "security") {
 		t.Fatalf("popEnd %+v closed=%v", r, w.closed())
+	}
+}
+
+// foureyes P3: the pane closed but its process still runs past PIDGone: a
+// failure, master told, the registration kept.
+func TestPopEndFailsWhenThePidOutlivesTheClose(t *testing.T) {
+	w, d, _, _, ep := popEndWorld(t)
+	d.ClosePane = func(context.Context, string) error { return nil } // closes nothing: pid 6161 lives on
+	d.PIDGone = 50 * time.Millisecond
+	r := popEnd(context.Background(), w.b, d, "tok", "security", ep)
+	if r.Ended || !strings.Contains(r.Failed, "still running") || !w.registered(t, "security") {
+		t.Fatalf("popEnd %+v", r)
+	}
+}
+
+// A close that fails (a herdr that answered an error or hit its deadline):
+// a failure, nothing forgotten.
+func TestPopEndFailsWhenTheCloseFails(t *testing.T) {
+	w, d, _, _, ep := popEndWorld(t)
+	d.ClosePane = func(context.Context, string) error { return context.DeadlineExceeded }
+	r := popEnd(context.Background(), w.b, d, "tok", "security", ep)
+	if r.Ended || !strings.Contains(r.Failed, "deadline") || !w.registered(t, "security") {
+		t.Fatalf("popEnd %+v", r)
+	}
+}
+
+// reviewer-codex: the service's close goes to herdr with a deadline, so a
+// herdr that hangs never holds the dispatcher's pass.
+func TestServiceClosePaneHasADeadline(t *testing.T) {
+	dir := t.TempDir()
+	hang := filepath.Join(dir, "herdr")
+	if err := os.WriteFile(hang, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := func(k string) string {
+		return map[string]string{"HERDR_SESSION": "s", "HERDR_BIN_PATH": hang}[k]
+	}
+	closePane, err := serviceClosePane(env, 200*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := closePane(context.Background(), "p1"); err == nil {
+		t.Fatal("a hung herdr closed the pane")
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("the close outlived its deadline: %v", d)
+	}
+	if _, err := serviceClosePane(func(string) string { return "" }, time.Second); err == nil {
+		t.Fatal("a close with no herdr session")
 	}
 }

@@ -1,12 +1,14 @@
 package relaunch
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -118,5 +120,32 @@ func TestCacheDir(t *testing.T) {
 	}
 	if got := CacheDir(envOf(map[string]string{"HOME": "/h"})); got != "/h/.cache/agentbus" {
 		t.Fatal(got)
+	}
+}
+
+// pop-retire-auto (reviewer-codex): the dispatcher's herdr calls take a
+// context, so a herdr that hangs is killed at the deadline instead of
+// holding the pass.
+func TestServiceHerdrContextIsCancelled(t *testing.T) {
+	dir := t.TempDir()
+	hang := filepath.Join(dir, "hang")
+	if err := os.WriteFile(hang, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ServiceHerdrContext(envOf(nil)); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("no session: %v", err)
+	}
+	h, err := ServiceHerdrContext(envOf(map[string]string{"HERDR_SESSION": "s", "HERDR_BIN_PATH": hang}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := h(ctx, "pane", "close", "p1"); err == nil {
+		t.Fatal("a hung herdr returned no error")
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("the call outlived its deadline by far: %v", d)
 	}
 }

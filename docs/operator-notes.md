@@ -956,7 +956,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   reaches herdr (`withPopEnd`: a session named in the env, `relaunch.ServiceHerdr`): `popEnd`, the
   steps of `retire --forget` with every write fenced (`BeginAutoRetire`, `AutoRetireHeld`,
   `EndAutoRetire`, `FencedLogSwap`, `FencedRetireSwap`, `ForgetIfClearFenced`), by `dispatch`, never a
-  boot role or a running turn; master gets one wake=no notice once ended (`PopEndedText`), the waking
+  boot role or a running turn; its herdr pane close is bounded (10 s, `serviceClosePane` over
+  `relaunch.ServiceHerdrContext`, the herdr process group killed at the deadline), so a hung herdr
+  never holds the pass; master gets one wake=no notice once ended (`PopEndedText`), the waking
   directive with the reason once it failed after the close (`PopEndFailedText`), nothing on a wait
   (a turn, a wake being typed, a re-judgement that no longer holds: the next pass judges again); one
   per episode (mark `popdone:<a>`). Without a herdr session it sends master one waking directive per

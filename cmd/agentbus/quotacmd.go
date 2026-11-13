@@ -294,22 +294,38 @@ func withPopEnd(c dispatch.PopRetireConfig, b *bus.Bus, rt dispatch.Runtime, get
 	if !c.On {
 		return c
 	}
-	herdr, err := relaunch.ServiceHerdr(getenv)
+	closePane, err := serviceClosePane(getenv, popEndCloseTimeout)
 	if err != nil {
 		return c
 	}
 	d := swapDeps{Env: getenv, ProcStart: c.ProcStart, Runtime: rt, PopRetireAfter: c.After,
 		Now: time.Now, Sleep: time.Sleep, PIDGone: 15 * time.Second, Recent: 2 * time.Minute,
-		ClosePane: func(_ context.Context, pane string) error {
-			if out, err := herdr("pane", "close", pane); err != nil {
-				return fmt.Errorf("herdr pane close %s: %v: %s", pane, err, strings.TrimSpace(string(out)))
-			}
-			return nil
-		}}
+		ClosePane: closePane}
 	c.End = func(ctx context.Context, token, role string, episode int64) dispatch.PopEnd {
 		return popEnd(ctx, b, d, token, role, episode)
 	}
 	return c
+}
+
+// popEndCloseTimeout bounds the dispatcher's herdr pane close.
+const popEndCloseTimeout = 10 * time.Second
+
+// serviceClosePane closes a pane through the herdr session the service's env
+// names, every call bounded by timeout and cancelled with its context
+// (reviewer-codex: a hung herdr never holds the dispatcher's pass).
+func serviceClosePane(getenv func(string) string, timeout time.Duration) (func(context.Context, string) error, error) {
+	herdr, err := relaunch.ServiceHerdrContext(getenv)
+	if err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context, pane string) error {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		if out, err := herdr(ctx, "pane", "close", pane); err != nil {
+			return fmt.Errorf("herdr pane close %s: %v: %s", pane, err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}, nil
 }
 
 // desktopNotify runs notify-send, bounded to 5 s; nil when it is not on PATH.

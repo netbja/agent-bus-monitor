@@ -1,6 +1,7 @@
 package relaunch
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -215,6 +216,34 @@ func ServiceHerdr(env func(string) string) (func(args ...string) ([]byte, error)
 	}
 	return func(args ...string) ([]byte, error) {
 		return exec.Command(bin, args...).Output() // the service's own environment: the session it names
+	}, nil
+}
+
+// ServiceHerdrContext is ServiceHerdr whose calls take a context: killed at
+// its end (its own process group), so a herdr that hangs never holds the
+// caller (the dispatcher's pass, pop-retire-auto; reviewer-codex).
+func ServiceHerdrContext(env func(string) string) (func(ctx context.Context, args ...string) ([]byte, error), error) {
+	if env("HERDR_SESSION") == "" && env("HERDR_SOCKET_PATH") == "" {
+		return nil, ErrNoSession
+	}
+	bin := env("HERDR_BIN_PATH")
+	if bin == "" {
+		bin = env("HERDR_BIN")
+	}
+	if bin == "" {
+		bin = "herdr"
+	}
+	return func(ctx context.Context, args ...string) ([]byte, error) {
+		c := exec.CommandContext(ctx, bin, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		c.Cancel = func() error { // the whole group, a child it started included
+			if c.Process == nil {
+				return os.ErrProcessDone
+			}
+			return syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
+		}
+		c.WaitDelay = time.Second // a child holding the output pipe does not hold the call
+		return c.Output()
 	}, nil
 }
 
