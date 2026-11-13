@@ -577,3 +577,34 @@ func TestHolderListen(t *testing.T) {
 		t.Fatal("an invalid project")
 	}
 }
+
+// reviewer-codex on 5b round 3: one /proc scan can miss a process forked
+// while it reads (the parent read only once it exited, the child after the
+// directory listing). The scan never decides whether the group is ended:
+// the group gets its SIGKILL at the leader's exit whatever the scan says, so
+// a member it missed (here: a scan that always reports none) still ends.
+func TestHolderEndsTheGroupWhatTheScanMissed(t *testing.T) {
+	_, sock := newTestHolderWith(t, func(c *Config) { c.others = func(int) bool { return false } })
+	cl := dial(t, sock)
+	x := startRole(t, cl, "leaver")
+	text := waitScreen(t, cl, x.ID, "CHILD ")
+	var child int
+	for _, l := range strings.Split(text, "\n") {
+		if n, ok := strings.CutPrefix(strings.TrimSpace(l), "CHILD "); ok {
+			child, _ = strconv.Atoi(n)
+		}
+	}
+	if child <= 0 {
+		t.Fatalf("no child pid in %q", text)
+	}
+	gone := func() bool {
+		st, ok := readProcStat(child)
+		return !ok || st.state == 'Z'
+	}
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && !gone(); time.Sleep(50 * time.Millisecond) {
+	}
+	if !gone() {
+		_ = syscall.Kill(child, syscall.SIGKILL)
+		t.Fatal("a group member the scan missed outlived its terminal")
+	}
+}

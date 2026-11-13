@@ -123,6 +123,10 @@ func othersInGroup(pgid int) bool {
 	return false
 }
 
+// leaderHeld: waitExited leaves the leader unreaped (WNOWAIT), so its group's
+// number is still the terminal's while endGroup signals it.
+const leaderHeld = true
+
 // waitExited returns once pid exited, leaving it unreaped (WNOWAIT): its
 // own Wait reaps it after its group was ended.
 func waitExited(pid int) {

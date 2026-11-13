@@ -36,6 +36,7 @@ type Config struct {
 	procStart func(int) (uint64, error)
 	peerOf    func(*net.UnixConn) (Peer, error)
 	kill      func(pid int, sig syscall.Signal) error // nil: syscall.Kill (tests record the signals)
+	others    func(pgid int) bool                     // nil: othersInGroup (a test makes the scan miss)
 }
 
 // Defaults.
@@ -384,7 +385,7 @@ func (s *Server) start(f Start) Reply {
 	}
 	trackedSet[c.Process.Pid] = true
 	trackMu.Unlock()
-	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true, grace: s.cfg.Grace, kill: s.cfg.kill,
+	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others,
 		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{})}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t

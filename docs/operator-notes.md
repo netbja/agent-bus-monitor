@@ -491,7 +491,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   group: on Linux the wait loop learns the leader's exit with `waitid(WNOWAIT)`, leaving it unreaped
   (so its pid, and its group's number, cannot be reused), ends what is left of the group (SIGHUP,
   SIGKILL after the grace: a child that ignores SIGHUP never outlives its terminal, reviewer-codex),
-  then reaps it. `Close` is SIGHUP to the group, SIGKILL after the grace, and only while the leader is
+  then reaps it. The group always gets that SIGKILL: the `/proc` scan only spares the grace (a group
+  that looks empty is killed at once), it never decides that nothing is left, since one scan can miss
+  a process forked while it reads (reviewer-codex). `Close` is SIGHUP to the group, SIGKILL after the grace, and only while the leader is
   unreaped: a terminal that ended is never signalled again, by one Close or many, since its group's
   number may be another terminal's now (reviewer-codex). A descendant that left the group (setsid)
   is not reached; off Linux (no `/proc`) the leftovers are not ended at the leader's exit. A terminal's own pid is reaped by its `Wait`, so its exit

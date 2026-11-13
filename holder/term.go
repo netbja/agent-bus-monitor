@@ -33,10 +33,11 @@ type terminal struct {
 	exit   *int
 	closed bool
 
-	grace time.Duration                           // SIGHUP to SIGKILL for its group
-	kill  func(pid int, sig syscall.Signal) error // nil: syscall.Kill
-	sigMu sync.Mutex                              // a signal to the group never crosses the leader's reaping
-	ended bool                                    // the leader was reaped: its numbers may be reused, never signalled again
+	grace  time.Duration                           // SIGHUP to SIGKILL for its group
+	kill   func(pid int, sig syscall.Signal) error // nil: syscall.Kill
+	others func(pgid int) bool                     // nil: othersInGroup
+	sigMu  sync.Mutex                              // a signal to the group never crosses the leader's reaping
+	ended  bool                                    // the leader was reaped: its numbers may be reused, never signalled again
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
@@ -174,15 +175,28 @@ func (t *terminal) close(grace time.Duration) {
 // not reused while it is a zombie): SIGHUP, then SIGKILL after grace. A
 // child that ignores SIGHUP never outlives its terminal (reviewer-codex);
 // one that left the group (setsid) is not reached.
+//
+// The /proc scan never decides whether the group is ended: one scan can
+// miss a process forked while it reads (reviewer-codex, 5b round 3), so the
+// group gets its SIGKILL whatever the scan says (the kernel's group kill
+// also reaches a child forked meanwhile). The scan only spares the grace:
+// a group that looks empty gets the SIGKILL at once, a busy one SIGHUP
+// first, then the SIGKILL when it empties or the grace ends. Only where the
+// leader is held unreaped (leaderHeld: Linux); elsewhere it was reaped
+// already and its group's number may be another's.
 func (t *terminal) endGroup(grace time.Duration) {
-	if !othersInGroup(t.pid) {
+	if !leaderHeld {
 		return
 	}
-	t.signal(-t.pid, syscall.SIGHUP)
-	for deadline := time.Now().Add(grace); othersInGroup(t.pid) && time.Now().Before(deadline); {
-		time.Sleep(20 * time.Millisecond)
+	others := t.others
+	if others == nil {
+		others = othersInGroup
 	}
-	if othersInGroup(t.pid) {
-		t.signal(-t.pid, syscall.SIGKILL)
+	if others(t.pid) {
+		t.signal(-t.pid, syscall.SIGHUP)
+		for deadline := time.Now().Add(grace); others(t.pid) && time.Now().Before(deadline); {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
+	t.signal(-t.pid, syscall.SIGKILL)
 }

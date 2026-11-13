@@ -13,3 +13,7 @@ func childrenOf(int) []int { return nil }
 func othersInGroup(int) bool { return false }
 
 func waitExited(int) {}
+
+// leaderHeld: no WNOWAIT wait here, the leader may be reaped already: its
+// group is never signalled at its exit.
+const leaderHeld = false
