@@ -128,6 +128,9 @@ func TestPlanDriftRealGit(t *testing.T) {
 	git("commit", "-q", "--allow-empty", "-m", "a squash (#8)")
 	git("commit", "-q", "--allow-empty", "-m", "Merge pull request #9 from o/feat/y")
 	git("update-ref", "refs/remotes/origin/main", "HEAD")
+	git("remote", "add", "origin", "git@github.com:o/r.git")
+	tip := git("rev-parse", "origin/main")
+	fetched := []byte(tip + "\t\tbranch 'main' of github.com:o/r\n") // a fetch that saw origin's main at origin/main
 	out, err := gitRead(context.Background(), dir, append(append([]string{}, gitSafe...), "rev-list", "--first-parent", "--format=%s", "--max-count=500", base+"..origin/main")...)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +142,7 @@ func TestPlanDriftRealGit(t *testing.T) {
 	if _, err := fetchAgeIn(context.Background(), dir); err == nil {
 		t.Fatal("an age without FETCH_HEAD")
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), fetched, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if age, err := fetchAgeIn(context.Background(), dir); err != nil || age > time.Minute {
@@ -156,7 +159,7 @@ func TestPlanDriftRealGit(t *testing.T) {
 		t.Fatal("an age with no FETCH_HEAD anywhere")
 	}
 	old := time.Now().Add(-3 * time.Hour)
-	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), fetched, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	os.Chtimes(filepath.Join(dir, ".git", "FETCH_HEAD"), old, old)
@@ -164,7 +167,7 @@ func TestPlanDriftRealGit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(strings.TrimSpace(wtGit), "FETCH_HEAD"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(strings.TrimSpace(wtGit), "FETCH_HEAD"), fetched, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, root := range []string{dir, wt} {
@@ -172,6 +175,45 @@ func TestPlanDriftRealGit(t *testing.T) {
 			t.Fatalf("from %s: age %v %v, want the worktree's fresh fetch", root, age, err)
 		}
 	}
+	// reviewer-codex: a fresh FETCH_HEAD is no proof of origin/main by
+	// itself. A fetch of another branch, of another remote, or one that saw
+	// main at another commit than origin/main holds is no evidence: unknown.
+	for name, body := range map[string]string{
+		"another branch": tip + "\t\tbranch 'feature/other' of github.com:o/r\n",
+		"another remote": tip + "\t\tbranch 'main' of github.com:someone/fork\n",
+		"main elsewhere": strings.Repeat("a", 40) + "\t\tbranch 'main' of github.com:o/r\n",
+		"no main line":   "garbage\n",
+	} {
+		for _, f := range []string{filepath.Join(dir, ".git", "FETCH_HEAD"), filepath.Join(strings.TrimSpace(wtGit), "FETCH_HEAD")} {
+			if err := os.WriteFile(f, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if age, err := fetchAgeIn(context.Background(), dir); err == nil {
+			t.Fatalf("%s: a fresh FETCH_HEAD read as origin/main fetched %v ago", name, age)
+		}
+	}
+	// The evidence is the newest FETCH_HEAD that shows origin's main: a
+	// newer fetch of another branch does not hide an older fetch of main.
+	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), fetched, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ten := time.Now().Add(-10 * time.Minute)
+	os.Chtimes(filepath.Join(dir, ".git", "FETCH_HEAD"), ten, ten)
+	if age, err := fetchAgeIn(context.Background(), dir); err != nil || age < 9*time.Minute || age > 11*time.Minute {
+		t.Fatalf("the main fetch 10 min ago behind a newer branch fetch: %v %v", age, err)
+	}
+	// An https remote reads the same as the scp form.
+	for _, url := range []string{"https://github.com/o/r.git", "ssh://git@github.com/o/r", "https://github.com/o/r/"} {
+		git("remote", "set-url", "origin", url)
+		if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), []byte(tip+"\t\tbranch 'main' of https://github.com/o/r\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fetchAgeIn(context.Background(), dir); err != nil {
+			t.Fatalf("origin %s: %v", url, err)
+		}
+	}
+	git("remote", "set-url", "origin", "git@github.com:o/r.git")
 	if validCommit("--all") || validCommit("HEAD") || validCommit("abc") || !validCommit(base) {
 		t.Fatal("validCommit")
 	}

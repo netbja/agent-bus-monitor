@@ -101,31 +101,80 @@ func realFetchAge(ctx context.Context) (time.Duration, error) {
 	return fetchAgeIn(ctx, root)
 }
 
-// fetchAgeIn is how long ago origin was last fetched in root's repository:
-// the newest FETCH_HEAD across it. FETCH_HEAD is per worktree (foureyes):
-// the common directory's, and each linked worktree's under
-// <common>/worktrees/*, where the agents fetch; any fetch of origin moves
-// the shared origin/main.
+// fetchAgeIn is how long ago origin's main was last fetched in root's
+// repository, with evidence (reviewer-codex): the newest FETCH_HEAD that
+// holds a line "branch 'main' of <origin's URL>" at the very commit
+// origin/main points to. A fresh FETCH_HEAD alone proves nothing: a fetch of
+// another branch or remote writes one without moving origin/main. The
+// files read are the common directory's and each linked worktree's (it is
+// per worktree, and the agents fetch in theirs; foureyes). No evidence: an
+// error, the check unknown.
 func fetchAgeIn(ctx context.Context, root string) (time.Duration, error) {
 	p, err := gitRead(ctx, root, append(append([]string{}, gitSafe...), "rev-parse", "--path-format=absolute", "--git-common-dir")...)
 	if err != nil {
 		return 0, err
 	}
 	common := strings.TrimSpace(p)
+	tip, err := gitRead(ctx, root, append(append([]string{}, gitSafe...), "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main")...)
+	if err != nil {
+		return 0, errors.New("no origin/main")
+	}
+	url, err := gitRead(ctx, root, append(append([]string{}, gitSafe...), "remote", "get-url", "origin")...)
+	if err != nil {
+		return 0, errors.New("no remote origin")
+	}
+	tip, origin := strings.TrimSpace(tip), remoteKey(strings.TrimSpace(url))
 	paths := []string{filepath.Join(common, "FETCH_HEAD")}
 	if more, err := filepath.Glob(filepath.Join(common, "worktrees", "*", "FETCH_HEAD")); err == nil {
 		paths = append(paths, more...)
 	}
 	var newest time.Time
 	for _, f := range paths {
-		if st, err := os.Lstat(f); err == nil && st.Mode().IsRegular() && st.ModTime().After(newest) {
+		st, err := os.Lstat(f)
+		if err != nil || !st.Mode().IsRegular() || st.Size() > planDriftOutMax || !st.ModTime().After(newest) {
+			continue
+		}
+		body, err := os.ReadFile(f)
+		if err == nil && fetchedMain(string(body), tip, origin) {
 			newest = st.ModTime()
 		}
 	}
 	if newest.IsZero() {
-		return 0, errors.New("no FETCH_HEAD in the repository")
+		return 0, errors.New("no fetch of origin's main at origin/main in any FETCH_HEAD")
 	}
 	return time.Since(newest), nil
+}
+
+// fetchedMain: a FETCH_HEAD line records origin's main (origin, as
+// remoteKey) at tip.
+func fetchedMain(body, tip, origin string) bool {
+	for _, l := range strings.Split(body, "\n") {
+		f := strings.SplitN(l, "\t", 3)
+		if len(f) != 3 || f[0] != tip {
+			continue
+		}
+		if from, ok := strings.CutPrefix(f[2], "branch 'main' of "); ok && remoteKey(from) == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// remoteKey is a remote URL as FETCH_HEAD and the config may both write it:
+// no scheme, no user, host and path joined by /, no trailing / or .git
+// (git@github.com:o/r.git, https://github.com/o/r and github.com:o/r are
+// one).
+func remoteKey(u string) string {
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+3:]
+	} else if c := strings.Index(u, ":"); c >= 0 && (strings.Index(u, "/") < 0 || c < strings.Index(u, "/")) {
+		u = u[:c] + "/" + u[c+1:] // scp form host:path
+	}
+	if at := strings.Index(u, "@"); at >= 0 && at < strings.Index(u+"/", "/") {
+		u = u[at+1:]
+	}
+	u = strings.TrimSuffix(strings.TrimSuffix(strings.TrimRight(u, "/"), ".git"), "/")
+	return strings.ToLower(u)
 }
 
 // planDrift is the check plan-drift: the merges of origin/main since the
