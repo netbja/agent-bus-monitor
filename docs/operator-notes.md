@@ -521,7 +521,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   frames. A viewer is focused from its attach until a focus-out; an observer never is. The viewer's
   input is read as a stream (a sequence cut across frames is one): any key starts a draft and an Enter
   (CR, kitty `CSI 13 u`) ends it; SGR and X10 mouse reports, focus reports and the viewer terminal's
-  replies (a CSI ending in R, n, y, c or t; any DCS, OSC, APC string) are no typing. The most recently active non-observer sets the size. `Activity` reports
+  replies (a CSI ending in R, n, y, c or t; any DCS, OSC, APC string) are no typing. A lone ESC waits
+  100 ms for the rest of a sequence; nothing follows, it was the Escape key, counted at its own time
+  (resolved by the next frame, when Activity is read, or at once on a focus-out or a detach). The most recently active non-observer sets the size. `Activity` reports
   the viewers, the focused ones, the last typing and the draft.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old

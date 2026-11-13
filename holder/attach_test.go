@@ -239,8 +239,8 @@ func TestInputScan(t *testing.T) {
 	} {
 		for cut := 0; cut <= len(c.in); cut++ {
 			var s inputScan
-			d, t1 := s.feed(c.before, []byte(c.in[:cut]))
-			d, t2 := s.feed(d, []byte(c.in[cut:]))
+			d, t1 := s.feed(c.before, []byte(c.in[:cut]), scanT0, escWait)
+			d, t2 := s.feed(d, []byte(c.in[cut:]), scanT0.Add(time.Millisecond), escWait) // the rest within escWait
 			if d != c.draft || (t1 || t2) != c.typed {
 				t.Errorf("%q (cut at %d) from %v: draft %v typed %v, want %v %v", c.in, cut, c.before, d, t1 || t2, c.draft, c.typed)
 				break
@@ -267,5 +267,77 @@ func TestSlowViewerIsRepainted(t *testing.T) {
 	b, ok := term.nextFor(v, nil, nil)
 	if !ok || v.repaint || len(v.out) != 0 || !strings.Contains(string(b), "\x1b[") {
 		t.Fatalf("repaint %q ok %v queue %d", b, ok, len(v.out))
+	}
+}
+
+var scanT0 = time.Date(2026, 11, 13, 22, 0, 0, 0, time.UTC)
+
+// reviewer-codex on 5c: a lone ESC is a key (the Escape key) once nothing
+// follows it within escWait; bytes that follow sooner make it a sequence.
+// expire resolves it at the ESC's own time; force (a focus-out, a detach)
+// resolves it at once.
+func TestInputScanLoneEsc(t *testing.T) {
+	var s inputScan
+	if d, ty := s.feed(false, []byte("\x1b"), scanT0, escWait); d || ty {
+		t.Fatalf("a pending ESC typed at once: %v %v", d, ty)
+	}
+	if ok, _ := s.expire(scanT0.Add(escWait/2), escWait, false); ok {
+		t.Fatal("expired within escWait")
+	}
+	ok, at := s.expire(scanT0.Add(escWait+time.Millisecond), escWait, false)
+	if !ok || !at.Equal(scanT0) {
+		t.Fatalf("expire after escWait: %v %v", ok, at)
+	}
+	if ok, _ := s.expire(scanT0.Add(time.Hour), escWait, true); ok {
+		t.Fatal("an ESC resolved twice")
+	}
+	// A focus-out resolves it at once.
+	s = inputScan{}
+	s.feed(false, []byte("\x1b"), scanT0, escWait)
+	if ok, at := s.expire(scanT0, escWait, true); !ok || !at.Equal(scanT0) {
+		t.Fatalf("forced: %v %v", ok, at)
+	}
+	// A frame after escWait: the ESC was a key, then the frame is read on
+	// its own (a mouse report, itself no typing).
+	s = inputScan{}
+	s.feed(false, []byte("\x1b"), scanT0, escWait)
+	if d, ty := s.feed(false, []byte("\x1b[<0;5;5M"), scanT0.Add(escWait+time.Millisecond), escWait); !d || !ty {
+		t.Fatalf("an ESC followed late: draft %v typed %v", d, ty)
+	}
+	// Nothing pending: expire does nothing.
+	if ok, _ := (&inputScan{}).expire(scanT0, escWait, true); ok {
+		t.Fatal("expired with nothing pending")
+	}
+}
+
+// The case end to end: Escape alone, then a focus-out: the activity shows
+// the typing and a draft, so the dispatcher does not take the pane as idle.
+func TestHolderLoneEscThenFocusOut(t *testing.T) {
+	_, sock := newTestHolderWith(t, func(c *Config) { c.escWait = time.Hour }) // only a focus-out resolves it
+	cl := dial(t, sock)
+	x := startRole(t, cl, "talker")
+	waitScreen(t, cl, x.ID, "ready")
+	v := attached(t, sock, Attach{Term: x.ID, Cols: 100, Rows: 30})
+	readUntil(t, v, "ready")
+	send(t, v, FrameData, []byte("\x1b"))
+	control(t, v, Focus{In: false})
+	eventually(t, "the Escape counted", func() bool {
+		a := activityOf(t, cl, x.ID)
+		return a.FocusedViewers == 0 && a.Draft && a.ViewerTypedAt != 0
+	})
+	// And with no focus-out, once escWait has passed, Activity resolves it
+	// (a holder with the real wait).
+	_, sock = newTestHolder(t)
+	cl = dial(t, sock)
+	x = startRole(t, cl, "talker")
+	waitScreen(t, cl, x.ID, "ready")
+	v2 := attached(t, sock, Attach{Term: x.ID, Cols: 100, Rows: 30})
+	readUntil(t, v2, "ready")
+	send(t, v2, FrameData, []byte("\r"))
+	eventually(t, "the draft ended", func() bool { return !activityOf(t, cl, x.ID).Draft })
+	send(t, v2, FrameData, []byte("\x1b"))
+	time.Sleep(escWait + 50*time.Millisecond)
+	if a := activityOf(t, cl, x.ID); !a.Draft {
+		t.Fatalf("an Escape older than escWait not counted: %+v", a)
 	}
 }

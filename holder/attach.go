@@ -43,6 +43,9 @@ func (t *terminal) addViewer(v *viewer) {
 func (t *terminal) removeViewer(v *viewer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if !v.observe { // a lone ESC right before the detach was the Escape key
+		t.settle(v, time.Now(), true)
+	}
 	delete(t.viewers, v)
 	if t.last == v {
 		t.last = nil
@@ -125,15 +128,34 @@ func (t *terminal) input(v *viewer, b []byte) {
 	t.inMu.Unlock()
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	draft, typed := v.in.feed(t.draft, b)
+	now := time.Now()
+	t.settle(v, now, false)
+	draft, typed := v.in.feed(t.draft, b, now, t.escWait)
 	if typed {
-		t.typedAt = time.Now()
+		t.typedAt = now
 		t.activeViewer(v)
 	}
 	if draft && !t.draft {
-		t.draftSince = time.Now()
+		t.draftSince = now
 	}
 	t.draft = draft
+}
+
+// settle counts v's pending lone ESC as the Escape key once escWait has
+// passed, or at once when force (a focus-out, a detach): typed at the
+// ESC's own time, a draft started. Called with t.mu held.
+func (t *terminal) settle(v *viewer, now time.Time, force bool) {
+	ok, at := v.in.expire(now, t.escWait, force)
+	if !ok {
+		return
+	}
+	if at.After(t.typedAt) {
+		t.typedAt = at
+	}
+	if !t.draft {
+		t.draft, t.draftSince = true, at
+	}
+	t.activeViewer(v)
 }
 
 // inputScan reads one viewer's input as a stream (spec 4.5): a sequence cut
@@ -143,29 +165,52 @@ func (t *terminal) input(v *viewer, b []byte) {
 // viewer terminal's replies to queries (foureyes), which a key never
 // produces: a CSI ending in R, n, y, c or t (DSR, DECRPM, DA, window reports)
 // and any string (DCS, OSC, APC, PM, SOS: XTVERSION, colour reports, kitty
-// graphics replies). A lone ESC at a frame's end waits for the next byte.
+// graphics replies). A lone ESC waits escWait for the bytes of a sequence;
+// nothing in that time, it was the Escape key (reviewer-codex): resolved by
+// the next frame, by expire (Activity read) or at once on a focus-out or a
+// detach.
 // xterm's modified F3 (CSI 1 ; m R) reads as a cursor report: no typing.
 type inputScan struct {
-	state  byte   // 0 ground, 'e' after ESC, '[' in a CSI, 'O' after SS3, 's' in a string, 'x' ESC in a string, 'm' X10 mouse bytes
-	params []byte // a CSI's parameters and intermediates
-	skip   int    // X10 mouse: bytes left
-	strBEL bool   // the string is an OSC: BEL ends it too
+	state  byte      // 0 ground, 'e' after ESC, '[' in a CSI, 'O' after SS3, 's' in a string, 'x' ESC in a string, 'm' X10 mouse bytes
+	params []byte    // a CSI's parameters and intermediates
+	skip   int       // X10 mouse: bytes left
+	strBEL bool      // the string is an OSC: BEL ends it too
+	escAt  time.Time // when the pending ESC came (state 'e')
+}
+
+// escWait is how long a lone ESC waits for the rest of a sequence before it
+// is the Escape key (terminals send a sequence's bytes together; vim's
+// ttimeoutlen is of this order).
+const escWait = 100 * time.Millisecond
+
+// expire resolves a pending ESC as the Escape key once wait has passed
+// since it came, or at once when force: true and the ESC's time. Nothing
+// pending: false.
+func (s *inputScan) expire(now time.Time, wait time.Duration, force bool) (bool, time.Time) {
+	if s.state != 'e' || !force && now.Sub(s.escAt) < wait {
+		return false, time.Time{}
+	}
+	s.state = 0
+	return true, s.escAt
 }
 
 // csiMax bounds the parameters kept (a key's are a few bytes).
 const csiMax = 64
 
-func (s *inputScan) feed(draft bool, b []byte) (bool, bool) {
+func (s *inputScan) feed(draft bool, b []byte, now time.Time, wait time.Duration) (bool, bool) {
 	typed := false
 	key := func(enter bool) {
 		typed, draft = true, !enter
+	}
+	if ok, _ := s.expire(now, wait, false); ok && len(b) > 0 { // the ESC came long before: the Escape key
+		key(false)
 	}
 	for _, c := range b {
 		switch s.state {
 		case 0:
 			switch c {
 			case 0x1b:
-				s.state = 'e'
+				s.state, s.escAt = 'e', now
 			case '\r':
 				key(true)
 			default:
@@ -181,6 +226,7 @@ func (s *inputScan) feed(draft bool, b []byte) (bool, bool) {
 				s.state, s.strBEL = 's', c == ']'
 			case 0x1b: // ESC ESC: the first is the Esc key
 				key(false)
+				s.escAt = now
 			default: // Alt and a key
 				s.state = 0
 				key(c == '\r')
@@ -248,6 +294,10 @@ func csiReply(params []byte, final byte) bool {
 func (t *terminal) activity() *ActivityInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	now := time.Now()
+	for v := range t.viewers { // a lone ESC older than escWait was the Escape key
+		t.settle(v, now, false)
+	}
 	a := &ActivityInfo{Draft: t.draft, Viewers: len(t.viewers)}
 	ms := func(at time.Time) int64 {
 		if at.IsZero() {
@@ -302,6 +352,9 @@ func (s *Server) attach(c *net.UnixConn, t *terminal, f Attach) {
 				return
 			case Focus:
 				t.mu.Lock()
+				if !r.In && !v.observe { // a lone ESC before a focus-out was the Escape key
+					t.settle(v, time.Now(), true)
+				}
 				v.focused = r.In && !v.observe
 				t.mu.Unlock()
 			case Resize:

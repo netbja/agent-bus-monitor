@@ -39,12 +39,13 @@ type terminal struct {
 	draft      bool
 	draftSince time.Time
 
-	grace  time.Duration                           // SIGHUP to SIGKILL for its group
-	kill   func(pid int, sig syscall.Signal) error // nil: syscall.Kill
-	others func(pgid int) bool                     // nil: othersInGroup
-	sigMu  sync.Mutex                              // a signal to the group never crosses the leader's reaping
-	ended  bool                                    // the leader was reaped: its numbers may be reused, never signalled again
-	inMu   sync.Mutex                              // the input lock: every viewer byte, and Submit's critical section (step 5d)
+	grace   time.Duration                           // SIGHUP to SIGKILL for its group
+	kill    func(pid int, sig syscall.Signal) error // nil: syscall.Kill
+	others  func(pgid int) bool                     // nil: othersInGroup
+	escWait time.Duration                           // a lone ESC's wait for a sequence (escWait; tests set it)
+	sigMu   sync.Mutex                              // a signal to the group never crosses the leader's reaping
+	ended   bool                                    // the leader was reaped: its numbers may be reused, never signalled again
+	inMu    sync.Mutex                              // the input lock: every viewer byte, and Submit's critical section (step 5d)
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
