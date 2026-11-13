@@ -13,6 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/relaunch"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
 )
 
@@ -56,6 +57,8 @@ func srReads(now time.Time) selfRepairReads {
 		},
 		Required: map[string]bool{"master": true, "coder": true},
 		Pops:     map[string]bool{},
+		Own: map[string]rolecfg.Profile{"master": {Client: "claude-code", Provider: "anthropic"},
+			"coder": {Client: "claude-code", Provider: "anthropic"}, "foureyes": {Client: "claude-code", Provider: "anthropic"}},
 	}
 }
 
@@ -302,34 +305,32 @@ func TestSelfRepairShadowPassRedis(t *testing.T) {
 	}
 }
 
-// The check by mode: off and on (nothing relaunches before step 7) are ok
-// with no pass at all; shadow reports its last pass, unknown once stale.
+// The check by mode: off is ok with no pass at all; on (step 7b) and
+// shadow report their last pass, unknown before one and once stale.
 func TestSelfRepairCheckModes(t *testing.T) {
 	ctx := context.Background()
-	for _, m := range []selfrepair.Mode{selfrepair.ModeOff, selfrepair.ModeOn} {
-		c := &selfRepairChore{mode: m}
-		out, err := c.check(ctx)
-		if err != nil || out.Status != health.OK || !strings.Contains(out.Detail, string(m)) {
-			t.Errorf("%s: %+v %v", m, out, err)
+	if out, err := (&selfRepairChore{mode: selfrepair.ModeOff}).check(ctx); err != nil || out.Status != health.OK || !strings.Contains(out.Detail, "off") {
+		t.Errorf("off: %+v %v", out, err)
+	}
+	for _, m := range []selfrepair.Mode{selfrepair.ModeOn, selfrepair.ModeShadow} {
+		c := &selfRepairChore{mode: m, every: 30 * time.Minute, clock: func() time.Time { return srT0 }}
+		if out, _ := c.check(ctx); out.Status != health.Unknown || !strings.Contains(out.Detail, "no self-repair pass yet") {
+			t.Fatalf("%s before a pass: %+v", m, out)
 		}
-	}
-	if out, _ := (&selfRepairChore{mode: selfrepair.ModeOn}).check(ctx); !strings.Contains(out.Detail, "nothing is relaunched yet") {
-		t.Errorf("on: %+v", out)
-	}
-	c := &selfRepairChore{mode: selfrepair.ModeShadow, every: 30 * time.Minute, clock: func() time.Time { return srT0 }}
-	c.ran, c.ranAt, c.out = true, srT0.Add(-30*time.Second), health.Outcome{Status: health.OK, Detail: "nothing to repair"}
-	if out, _ := c.check(ctx); out.Status != health.OK {
-		t.Fatalf("fresh: %+v", out)
-	}
-	c.ranAt = srT0.Add(-5 * time.Minute)
-	if out, _ := c.check(ctx); out.Status != health.Unknown || !strings.Contains(out.Detail, "no self-repair pass since") {
-		t.Fatalf("stale: %+v", out)
+		c.ran, c.ranAt, c.out = true, srT0.Add(-30*time.Second), health.Outcome{Status: health.OK, Detail: "nothing to repair"}
+		if out, _ := c.check(ctx); out.Status != health.OK {
+			t.Fatalf("%s fresh: %+v", m, out)
+		}
+		c.ranAt = srT0.Add(-5 * time.Minute)
+		if out, _ := c.check(ctx); out.Status != health.Unknown || !strings.Contains(out.Detail, "no self-repair pass since") {
+			t.Fatalf("%s stale: %+v", m, out)
+		}
 	}
 }
 
-// The service reads the mode once at its start: shadow (development mode
-// only) runs the pass; on and off run none; shadow outside development mode
-// is refused and reads off. The check is there in every mode, and the
+// The service reads the mode once at its start: on (the default, step 7b)
+// and shadow (development mode only) run the pass; off runs none; shadow
+// outside development mode is refused and reads off. Only on has the acts. The check is there in every mode, and the
 // settings reach the facts.
 func TestServiceSelfRepairByMode(t *testing.T) {
 	b := notifyBus(t)
@@ -338,7 +339,7 @@ func TestServiceSelfRepairByMode(t *testing.T) {
 		mode selfrepair.Mode
 		pass bool
 	}{
-		{map[string]string{}, selfrepair.ModeOn, false},
+		{map[string]string{}, selfrepair.ModeOn, true},
 		{map[string]string{"AGENT_BUS_SELF_REPAIR": "off"}, selfrepair.ModeOff, false},
 		{map[string]string{"AGENT_BUS_SELF_REPAIR": "shadow"}, selfrepair.ModeOff, false},
 		{map[string]string{"AGENT_BUS_SELF_REPAIR": "shadow", "AGENT_BUS_DEV": "1",
@@ -360,7 +361,10 @@ func TestServiceSelfRepairByMode(t *testing.T) {
 		if check := selfRepairCheck(c); check.Definition.ID != "self-repair" || check.Run == nil {
 			t.Errorf("%v: check %+v", tc.env, check.Definition)
 		}
-		if tc.pass && (c.every != 45*time.Minute || c.perDay != 5 || cfg.Every != dispatch.SelfRepairEvery) {
+		if (c.relaunch != nil) != (tc.mode == selfrepair.ModeOn) || (c.agents != nil) != (tc.mode == selfrepair.ModeOn) {
+			t.Errorf("%v: the acts wired in mode %s", tc.env, c.mode)
+		}
+		if tc.mode == selfrepair.ModeShadow && (c.every != 45*time.Minute || c.perDay != 5 || cfg.Every != dispatch.SelfRepairEvery) {
 			t.Errorf("settings: every %s per day %d chore %s", c.every, c.perDay, cfg.Every)
 		}
 	}

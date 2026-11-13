@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"sync"
 	"time"
@@ -20,9 +21,9 @@ import (
 // The self-repair watcher's pass (spec
 // docs/superpowers/specs/2026-11-09-self-repair-watcher-design.md, step 6b):
 // the dispatch service gathers the facts of the template's agents, decides
-// (selfrepair.Decide), and in shadow mode records the would-be act in the
-// ledger. Nothing relaunches: step 7 acts. In on mode the pass does not run
-// yet; off never runs it.
+// (selfrepair.Decide), and in on mode acts (selfrepairact.go, step 7b): the
+// relaunch, its proof, the crash loop, the reports to master. Shadow records
+// the would-be act in the ledger only; off never runs the pass.
 
 const (
 	// selfRepairGrace: dead this long, by Redis TIME, before R1 acts (4.1).
@@ -48,6 +49,7 @@ type selfRepairReads struct {
 	Required map[string]bool                 // roles.toml's required
 	Pops     map[string]bool                 // roles.toml's pop tier
 	Past     map[string]bus.SelfRepairRecord // each role's attempts, failed proofs, crash loop (step 7)
+	Own      map[string]rolecfg.Profile      // each role's own profile: what a relaunch must prove
 }
 
 // selfRepairHerdr is herdr as the pass sees it: the server answers, the
@@ -80,6 +82,15 @@ type selfRepairChore struct {
 	// reads dead: a project with nobody dead costs herdr nothing.
 	herdr func(snaps map[string]bus.AgentSnapshot) selfRepairHerdr
 	clock func() time.Time // the check's staleness (local: never persisted)
+
+	// The acts of on mode (step 7b), each replaced by tests: relaunch runs
+	// the service entry of a relaunch with its fence; agents reads the
+	// snapshots the proof needs; notify rings the desktop (nil: none).
+	relaunch   func(ctx context.Context, role, session string, fence func(string) error) error
+	agents     func(ctx context.Context) (map[string]bus.AgentSnapshot, error)
+	notify     func(ctx context.Context, title, body string) error
+	proofTries int                 // reads of the proof, proofEvery apart (60: 60 s)
+	sleep      func(time.Duration) // nil: time.Sleep
 
 	mu     sync.Mutex
 	deaths map[string]repairDeath
@@ -216,6 +227,9 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 	c.mu.Unlock()
 	ds := selfrepair.Decide(f)
 	var first error
+	if c.mode == selfrepair.ModeOn {
+		first = c.act(ctx, token, ds, r, deaths, f.Now)
+	}
 	if c.mode == selfrepair.ModeShadow {
 		for _, d := range ds {
 			if !d.Act {
@@ -247,15 +261,12 @@ func (c *selfRepairChore) now() time.Time {
 	return time.Now()
 }
 
-// check is the health check self-repair: off and on (nothing relaunches
-// before step 7) say so; shadow reports its last pass, unknown when none ran
-// lately.
+// check is the health check self-repair: off says so; on and shadow report
+// their last pass, unknown when none ran lately.
 func (c *selfRepairChore) check(context.Context) (health.Outcome, error) {
 	switch c.mode {
 	case selfrepair.ModeOff:
 		return health.Outcome{Status: health.OK, Detail: "self-repair off"}, nil
-	case selfrepair.ModeOn:
-		return health.Outcome{Status: health.OK, Detail: "self-repair on: nothing is relaunched yet (the watcher acts from its step 7); shadow, in development mode, records what it would do"}, nil
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -282,8 +293,15 @@ func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (
 			return "master"
 		},
 		procStart: dispatch.ProcStart}
-	if c.mode != selfrepair.ModeShadow {
+	if c.mode == selfrepair.ModeOff {
 		return c, dispatch.SelfRepairConfig{}
+	}
+	if c.mode == selfrepair.ModeOn {
+		c.agents = b.Agents
+		c.notify = desktopNotify(exec.LookPath, runQuiet)
+		c.relaunch = func(ctx context.Context, role, session string, fence func(string) error) error {
+			return serviceRelaunch(ctx, b, getenv, c.procStart, role, session, fence)
+		}
 	}
 	c.read = func(ctx context.Context) (selfRepairReads, error) { return readSelfRepair(ctx, b, getenv) }
 	c.herdr = func(snaps map[string]bus.AgentSnapshot) selfRepairHerdr {
@@ -331,13 +349,16 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	if r.Past, err = b.SelfRepairPast(ctx); err != nil {
 		return r, err
 	}
-	r.Required, r.Pops, r.Intents = map[string]bool{}, map[string]bool{}, map[string]bus.SwapIntent{}
+	r.Required, r.Pops, r.Intents, r.Own = map[string]bool{}, map[string]bool{}, map[string]bus.SwapIntent{}, map[string]rolecfg.Profile{}
 	for _, t := range r.Tabs {
 		role, ok := relaunch.LaunchRole(t.Command, b.Project())
 		if !ok {
 			continue
 		}
 		r.Required[role], r.Pops[role] = m.RoleRequired(role), m.RoleTier(role) == "pop"
+		if own, err := m.Resolve(role); err == nil {
+			r.Own[role] = own
+		}
 		in, held, err := b.SwapIntentOf(ctx, role)
 		if err != nil {
 			return r, err

@@ -540,12 +540,19 @@ to watch a pane.
   The same Services group holds the self-repair settings: the switch **Self-repair** (`on` by
   default, or `off`), its budgets (one relaunch per agent every 30 minutes, three a day),
   **Start services at login** (off, stored only for now) and **Development mode** (`dev = true`
-  or `AGENT_BUS_DEV=1`). Nothing is relaunched yet. Development mode only unlocks extra values,
+  or `AGENT_BUS_DEV=1`). With `on`, the dispatch service relaunches a dead agent (its process gone
+  for a minute, three reads) in a new pane of its tab, resuming its session, master first, one at a
+  time, and recreates a required role's missing tab; master gets one line per relaunch. A relaunch
+  with no proof within a minute, or a fourth death in a day, is escalated to master and rings your
+  desktop, and nothing more is tried for it: `agentbus self-repair reset <agent> --as <you>` clears
+  a crash loop. It never relaunches a pop that was retired, a role whose intent is held (a swap, a
+  reload), a client without a verified resume, or anyone while the project is paused or suspended.
+  Development mode only unlocks extra values,
   such as the switch's `shadow`, and busmon's header says `dev` while it is on. Outside it,
   `shadow` is refused, and the switch reads off. In `shadow` the dispatch service (read at its
   start) watches the template's agents and records what it would do, acting on nothing: health
   `self-repair` warns `shadow: would relaunch coder (…)`, and `agentbus swaps` keeps one
-  `would-relaunch` line per death. In `on` or `off`, health `self-repair` only says so.
+  `would-relaunch` line per death. With `off`, health `self-repair` only says so.
 - **Quotas run out.** At 95% a provider's agents are held (scenario C). When the reset is more
   than 2 hours away (`AGENT_BUS_QUOTA_LONG_HOLD`), master tells you which held agents had work in
   flight, so you can move a role to one of its `fallback_profiles` in `roles.toml`:

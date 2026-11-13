@@ -1,9 +1,9 @@
 // Package selfrepair is the self-repair watcher's judgement (spec
 // docs/superpowers/specs/2026-11-09-self-repair-watcher-design.md, delivery
 // step 6): facts in, one decision per agent out, as a pure function. The
-// dispatch service gathers the facts and applies the decision; in step 6 it
-// applies nothing but the shadow's record (would relaunch), and nothing
-// relaunches before step 7.
+// dispatch service gathers the facts and applies the decision: in on mode
+// it relaunches (step 7b, cmd/agentbus/selfrepairact.go), in shadow it only
+// records the would-be act.
 package selfrepair
 
 import (
