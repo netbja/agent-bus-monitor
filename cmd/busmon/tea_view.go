@@ -53,10 +53,15 @@ func (m Model) grid() *grid {
 	}
 	if reading {
 		m.drawReader(g)
-	} else if l.Input.H > 0 {
+	}
+	if l.Input.H > 0 && (!reading || m.ui.line == lineMessage) { // Ctrl+P on a page: the line over it
 		drawLine(g, l.Input.X, l.Input.Y, l.Input.W, m.inputRow(l.Input.W), false)
 		if row := m.completionRow(l.Input.W); row != nil && l.Input.Y > 0 { // over the row above
 			drawLine(g, l.Input.X, l.Input.Y-1, l.Input.W, row, false)
+		}
+		rows := m.paletteLines(l.Input.W, l.Input.Y) // the palette's list, ending right above the line
+		for i, row := range rows {
+			drawLine(g, l.Input.X, l.Input.Y-len(rows)+i, l.Input.W, row, false)
 		}
 	}
 	footer := footerHintsOn(m.mode(), m.ui.focus, l.Tier, m.width, m.pageOffers, m.pageHint)

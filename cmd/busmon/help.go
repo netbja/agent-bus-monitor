@@ -1,6 +1,8 @@
 package main
 
-import ()
+import (
+	"strings"
+)
 
 // helpText is the legend (F1): KEYS generated from the key tables, then every
 // state, flag, type and counter on the screen, in words. The panels stay
@@ -30,6 +32,22 @@ func helpText() []Line {
 	more("a click outside an open detail closes it, like esc")
 	row("i : @", "write: @agent text wakes that agent, @all text every agent; plain text is a broadcast nobody reads (Enter twice)")
 	row(GlyphUp+" vX.Y.Z", "header: a newer release exists - run ./setup.sh update (checked once a day; AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)")
+	blank()
+
+	// The palette's own table (palette spec §4.1): / in the line, Ctrl+P anywhere.
+	head("COMMANDS")
+	sub("/ at the start of the line (i or :), or Ctrl+P anywhere; Tab completes, Enter runs, // sends a /")
+	cmdRow := func(k, v string) { b.text("  ").text(Fit(k, 24)).text(" " + v + "\n") }
+	for _, c := range paletteTable {
+		desc := c.Summary
+		if key := paletteKeyHint(c, false); key != "" {
+			desc += " (" + key + ")"
+		}
+		if len(c.Aliases) > 0 {
+			desc += "; also /" + strings.Join(c.Aliases, ", /")
+		}
+		cmdRow(paletteUsage(c), desc)
+	}
 	blank()
 
 	head("STATES")

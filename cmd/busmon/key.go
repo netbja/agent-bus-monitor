@@ -40,6 +40,7 @@ const (
 	keyCtrlC
 	keyCtrlE
 	keyCtrlO
+	keyCtrlP
 	keyCtrlS
 	keyCtrlT
 	keyCtrlU

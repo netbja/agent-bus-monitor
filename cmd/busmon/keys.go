@@ -128,6 +128,7 @@ const (
 	ActProjects     // open the Projects page (M)
 	ActStopServices // projects (M): stop the selected project's services here (agentbus down)
 	ActBackupNow    // projects (M): back the selected project up (agentbus backup --project)
+	ActPalette      // Ctrl+P: the command palette, the line opened with / (palette spec §4.3)
 	ActIdeas        // open the Ideas page (F6)
 	ActIdeaFilter   // Ideas (F6): tab, the next state shown
 	ActIdeaAdd      // Ideas (F6): a, add an idea (its title on the line)
@@ -226,6 +227,7 @@ var (
 		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(keyBacktab)},
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
+		{Keys: "^P", Help: "the command palette: the line opened with /, every command searchable (also i then /)", Act: ActPalette, match: keyIs(keyCtrlP)},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
@@ -352,6 +354,7 @@ var (
 	overlayBindings = []binding{
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
+		{Keys: "^P", Help: "the command palette, from any page", Act: ActPalette, match: keyIs(keyCtrlP)},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
@@ -388,6 +391,7 @@ var (
 	// enter go to the keys, ↑ on the first key comes back. tab toggles the
 	// focus. An open choice takes ←→ for its value first (settings_ui.go).
 	settingsBindings = []binding{
+		{Keys: "^P", Help: "the command palette (not while a value is being edited)", Act: ActPalette, match: keyIs(keyCtrlP)},
 		{Keys: arrows + " j k", Hint: "move", Help: "the groups (or the keys, with the focus there); on a narrow page " + GlyphDownArrow + " from the tabs goes to the keys, " + GlyphUp + " on the first key back", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: GlyphArrowL + GlyphArrowR, Hint: "panel", Help: GlyphArrowR + " into the keys, " + GlyphArrowL + " back to the groups (a narrow page: they step the tabs); on an open choice they change its value", Act: ActGroupNext, match: keyIs(keyRight)},

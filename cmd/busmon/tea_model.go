@@ -120,6 +120,9 @@ type uiState struct {
 	pauseAck       string                  // the send the person chose to make despite the pause
 	pausePopup     *pauseDialog            // the pause popup, when open
 	confirm        *pendingRemoval         // a d waiting for its y
+	palSel         int                     // the palette's chosen row (a leading / in the line)
+	palMoved       bool                    // ↑↓ moved it since the last edit: Enter runs that row
+	palHidden      bool                    // Esc hid the list; the next edit shows it again
 	sleepAsk       *sleepAsk               // a Z waiting for its y
 	sleepRun       *sleepRun               // agentbus suspend or resume running
 	sleepSeq       int                     // the last run's id
