@@ -286,7 +286,7 @@ func TestKeyClassOf(t *testing.T) {
 		}
 	}
 	// The spec's record list, each restored by default.
-	for _, k := range []string{"status", "report", "notify", "cmd", "verdicts", "board", "asks", "plan", "plan:facts",
+	for _, k := range []string{"status", "report", "notify", "cmd", "verdicts", "board", "asks", "ideas", "plan", "plan:facts",
 		"gate:*", "swaps", "health", "health:log", "health:notes", "quota:hist", "change:*", "missions:*"} {
 		if keyKinds[k] != KeyRecord {
 			t.Errorf("%q: %v, the spec makes it record", k, keyKinds[k])

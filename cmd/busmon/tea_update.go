@@ -26,7 +26,7 @@ func (m *Model) mode() Mode {
 		return ModeComposeFile
 	case m.ui.compose != nil:
 		return ModeCompose
-	case m.ui.line == lineFilter || m.ui.line == lineHistFilter:
+	case m.ui.line.filterLike():
 		return ModeFilter
 	case m.ui.line == lineMessage:
 		return ModeInput
@@ -159,6 +159,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.servicesCmd(0)
 	case ActHealth:
 		cmd = m.push(page{kind: ovHealth})
+	case ActIdeas:
+		cmd = m.push(page{kind: ovIdeas})
 	case ActHelp:
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:

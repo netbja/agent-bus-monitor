@@ -1082,6 +1082,24 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   master turns it into an ask with the diff (`gone` on a role in use first, as urgent), and on a yes
   coder changes the line as a reviewed step. Agents read models from `agentbus models --json`, never
   from memory (AGENT-BUS-GUIDE, "Which models exist").
+- **Ideas (ideas slice 1): the project's ideas live on the broker, not in notes.** `bus/ideas.go`:
+  `{p}:ideas`, one flat hash (`seq`, `<id>` the definition {title, text, by, at, source}, `<id>|s` the
+  state, `<id>|log` the capped audit {from, to, by, at}), every write one Lua script with Redis `TIME`.
+  Four states, none final: `to discuss`, `decided`, `doing`, `dropped`. `agentbus idea add` is open to
+  agents and always starts at `to discuss`; `idea set` is the person's: refused in an agent's
+  environment (`AGENT_BUS_AGENT`) or a herdr pane (`HERDR_PANE_ID`), named by `--as` or `identity.as`
+  (never `pilot`), and the script refuses a name registered in `{p}:agents` or a reserved one. A set is
+  a compare-and-set on the state the setter saw (`--from`, or the state read just before; busmon's
+  picker passes the state shown), so two windows never overwrite each other. Each set writes a `reply`
+  to `people` (`wake=no`, `human=yes`): Activity shows it, nobody is woken. busmon: Work's IDEAS lists
+  the ideas still `to discuss` (a plan task naming an idea's id or title takes its place); F6 lists
+  them all by state (tab: one state, enter: the idea, a: add one, s: the state picker, y sets it) and
+  flags a state set by someone other than the configured person. **The limit, said plainly: this is an
+  audit, not a proof.** Agents run under the person's uid with the same broker URL, so nothing stops a
+  deliberate `idea set --as <person>` from a plain shell, or a raw `HSET`: the guards catch accidents
+  and every set records who and when. Real prevention would need a separate uid for the agents (out of
+  scope). The ideas once kept as open-question notes are moved by master with `idea add --source`
+  (data, not code).
 - **Asks (v0.14): a person's decisions are structured questions, not report text.** `bus/asks.go`:
   `{p}:asks`, one flat hash (`<id>` definition, `<id>|q|s|a|<qid>|r|c|e`, `open:<agent>`), every write
   one Lua script (`askCreate`, `askAnswer`, `askWithdraw`); the id is the stream id of the `ask` cmd

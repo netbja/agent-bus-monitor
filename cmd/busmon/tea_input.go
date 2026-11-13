@@ -22,7 +22,14 @@ const (
 	lineMessage          // a message: "@agent body", "@all body" or a broadcast
 	lineFilter           // Activity's filter
 	lineHistFilter       // the History page's filter (/ on that page)
+	lineIdeaTitle        // a new idea's title (a on the Ideas page, F6)
 )
+
+// filterLike: the lines edited the filter's way (ModeFilter): Enter applies,
+// Esc cancels, no completions.
+func (k lineKind) filterLike() bool {
+	return k == lineFilter || k == lineHistFilter || k == lineIdeaTitle
+}
 
 // sendResultMsg is one send's outcome: the plan and its calls' errors.
 type sendResultMsg struct {
@@ -100,7 +107,12 @@ func (m *Model) names(showAll bool) []string {
 
 // lineKey is a key while the line has the keyboard (ModeInput, ModeFilter).
 func (m *Model) lineKey(act Action, k Key) tea.Cmd {
-	if m.ui.line == lineFilter || m.ui.line == lineHistFilter {
+	if m.ui.line == lineIdeaTitle && act == ActSend {
+		title := m.ui.edit
+		m.leaveLine(false)
+		return m.addIdea(title)
+	}
+	if m.ui.line.filterLike() {
 		m.editFilter(act, k)
 		return nil
 	}
@@ -314,6 +326,9 @@ func (m *Model) inputRow(width int) Line {
 	label := GlyphPrompt + " "
 	if m.ui.line == lineFilter || m.ui.line == lineHistFilter {
 		label = "filter" + GlyphPrompt + " "
+	}
+	if m.ui.line == lineIdeaTitle {
+		label = "new idea" + GlyphPrompt + " "
 	}
 	l := Line{{Text: label, Role: RoleAccent}}
 	if m.ui.line == lineNone {

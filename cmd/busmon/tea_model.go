@@ -312,6 +312,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.refresh()
 	case priorityMsg:
 		m.gotPriority(msg)
+	case ideaMsg:
+		m.gotIdea(msg)
+		m.refresh()
 	case recapMsg:
 		m.gotRecap(msg)
 	case settingsMsg:

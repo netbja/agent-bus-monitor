@@ -6,7 +6,6 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
-	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -43,7 +42,7 @@ type snapshot struct {
 	guardianNow                       time.Time
 	svcInst                           *bus.ServicesInstall
 	svcRecs                           map[string]bus.ServiceRecord
-	ideas                             []memory.Question
+	ideas                             []bus.Idea
 	ideasErr                          bool
 }
 

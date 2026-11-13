@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -72,9 +71,9 @@ type teamGate struct {
 	Since        time.Time
 }
 
-// workIdea is a row of IDEAS.
+// workIdea is a row of IDEAS: an idea still to discuss.
 type workIdea struct {
-	ID, Title, Where string
+	ID, Title, By string
 }
 
 // workModel is the computed page.
@@ -84,7 +83,7 @@ type workModel struct {
 	Idle     []string
 	Next     []workItem
 	Ideas    []workIdea
-	IdeasErr bool // the notes could not be read: the page says so, never "none"
+	IdeasErr bool // the ideas could not be read: the page says so, never "none"
 	Between  int  // threads between agents nobody waits on the person for
 	Done     int  // plan tasks done
 	Planned  bool // a plan is loaded
@@ -115,7 +114,7 @@ type workInput struct {
 	plan     planState
 	agents   map[string]*agentState
 	pilot    string
-	ideas    []memory.Question
+	ideas    []bus.Idea
 	ideasErr bool
 	now      time.Time
 }
@@ -197,9 +196,9 @@ func workOf(in workInput) workModel {
 	w.Between = in.reqs.count(secTracked) + in.reqs.count(secReviews) + in.reqs.count(secDirectives)
 	w.Team, w.Idle = teamOf(in, links)
 	w.IdeasErr = in.ideasErr
-	for _, q := range in.ideas {
-		if !ideaPlanned(q, in.plan) {
-			w.Ideas = append(w.Ideas, workIdea{ID: q.ID, Title: q.Title, Where: q.Path})
+	for _, it := range in.ideas {
+		if it.State == bus.IdeaToDiscuss && !ideaPlanned(it, in.plan) {
+			w.Ideas = append(w.Ideas, workIdea{ID: it.ID, Title: it.Title, By: it.By})
 		}
 	}
 	return w
@@ -293,10 +292,10 @@ func ideaKey(s string) string {
 	return strings.Join(ideaWords.FindAllString(strings.ToLower(s), -1), " ")
 }
 
-// ideaPlanned says a plan task covers the note (Q2: a note never shows twice):
-// a task whose board or id names the note's id, or whose title, without
-// "Decide:", is the note's title.
-func ideaPlanned(q memory.Question, p planState) bool {
+// ideaPlanned says a plan task covers the idea (Q2: an idea never shows
+// twice): a task whose board or id names the idea's id, or whose title,
+// without "Decide:", is the idea's title.
+func ideaPlanned(q bus.Idea, p planState) bool {
 	if !p.loaded {
 		return false
 	}

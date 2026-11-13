@@ -1,0 +1,177 @@
+package main
+
+import (
+	"context"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+)
+
+// ideaMsg is an idea write's outcome: what to say, the refusal, and the
+// list read right after it (nil when that read failed).
+type ideaMsg struct {
+	said  string
+	err   error
+	ideas []bus.Idea
+}
+
+// ideasKey is a key on F6 or an idea's page; done when it was the page's.
+// While the picker is open it takes every key: the arrows choose, y sets,
+// esc (or q) cancels.
+func (m *Model) ideasKey(p *page, act Action, k Key) (tea.Cmd, bool) {
+	if pk := p.ideas.pick; pk != nil {
+		n := len(bus.IdeaStates)
+		switch act {
+		case ActUp:
+			pk.sel = (pk.sel + n - 1) % n
+		case ActDown:
+			pk.sel = (pk.sel + 1) % n
+		case ActCopy:
+			return m.setIdeaState(p), true
+		case ActClose:
+			p.ideas.pick = nil
+		}
+		p.dirty = true
+		m.refresh()
+		return nil, true
+	}
+	switch {
+	case act == ActIdeaState:
+		id := p.key
+		if p.kind == ovIdeas {
+			if p.sel >= len(p.iitems) {
+				return nil, true
+			}
+			id = p.iitems[p.sel].id
+		}
+		for _, it := range m.snap.ideas {
+			if it.ID == id {
+				sel := 0
+				for i, st := range bus.IdeaStates {
+					if st == it.State {
+						sel = i
+					}
+				}
+				p.ideas.pick, p.dirty = &ideaPick{id: id, from: it.State, sel: sel}, true
+				m.refresh()
+			}
+		}
+		return nil, true
+	case p.kind != ovIdeas:
+		return nil, false
+	case act == ActIdeaFilter:
+		p.ideas.filter, p.ideas.selID, p.sel, p.dirty = nextIdeaFilter(p.ideas.filter), "", 0, true
+		m.refresh()
+		return nil, true
+	case act == ActIdeaAdd:
+		m.openLine(lineIdeaTitle, "")
+		return nil, true
+	case k.Code == keyEnter:
+		if p.sel < len(p.iitems) {
+			return m.pushIdea(p.iitems[p.sel].id), true
+		}
+		return nil, true
+	case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
+		p.ideas.selID = "" // the keys move by index; the rebuild records the new idea
+		m.moveSel(p, act, m.readerRows(), ideaLines(p))
+		return nil, true
+	}
+	return nil, false
+}
+
+// ideaLines are F6's rows' body lines, read after a rebuild.
+func ideaLines(p *page) func() []int {
+	return func() []int {
+		lines := make([]int, len(p.iitems))
+		for i, it := range p.iitems {
+			lines[i] = it.line
+		}
+		return lines
+	}
+}
+
+// setIdeaState is y in the picker: the state chosen, set as the person,
+// the state the picker opened on as the expected one (a change made
+// meanwhile elsewhere is refused, never overwritten).
+func (m *Model) setIdeaState(p *page) tea.Cmd {
+	pk := *p.ideas.pick
+	to := bus.IdeaStates[pk.sel]
+	p.ideas.pick, p.dirty = nil, true
+	defer m.refresh()
+	if to == pk.from {
+		m.ui.flash, m.ui.flashErr = pk.id+": already "+to, false
+		return nil
+	}
+	who := m.cfg.self
+	if who == "" || who == "pilot" {
+		m.ui.flash, m.ui.flashErr = "name yourself first (agentbus identity set <name>): only a person sets an idea's state", true
+		return nil
+	}
+	return m.ideaWrite(pk.id+": "+pk.from+" → "+to, func(ctx context.Context, w busWriter) error {
+		return w.SetIdeaState(ctx, pk.id, pk.from, to, who)
+	})
+}
+
+// addIdea is the idea line's Enter: a new idea, by the person, at "to discuss".
+func (m *Model) addIdea(title string) tea.Cmd {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil
+	}
+	who := m.cfg.self
+	if who == "" || who == "pilot" {
+		m.ui.flash, m.ui.flashErr = "name yourself first (agentbus identity set <name>)", true
+		return nil
+	}
+	return m.ideaWrite("added: "+Preview(title), func(ctx context.Context, w busWriter) error {
+		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, By: who})
+		return err
+	})
+}
+
+// ideaWrite runs one idea write off the update loop, then reads the list
+// again so the page shows it at once.
+func (m *Model) ideaWrite(said string, write func(context.Context, busWriter) error) tea.Cmd {
+	w, ctx := m.cfg.w, m.cfg.ctx
+	if w == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return func() tea.Msg {
+		cc, cancel := context.WithTimeout(ctx, pollBudget)
+		defer cancel()
+		if err := write(cc, w); err != nil {
+			return ideaMsg{err: err}
+		}
+		ideas, err := w.Ideas(cc)
+		if err != nil {
+			ideas = nil
+		}
+		return ideaMsg{said: said, ideas: ideas}
+	}
+}
+
+// gotIdea says the outcome and keeps the list read after it, in the shared
+// state too, so the next snapshot does not bring the old one back.
+func (m *Model) gotIdea(msg ideaMsg) {
+	if msg.err != nil {
+		m.ui.flash, m.ui.flashErr = "idea: "+msg.err.Error(), true
+		return
+	}
+	m.ui.flash, m.ui.flashErr = msg.said, false
+	if msg.ideas != nil {
+		m.snap.ideas, m.snap.ideasErr = msg.ideas, false
+		if st := m.cfg.st; st != nil {
+			st.mu.Lock()
+			st.ideas, st.ideasErr = msg.ideas, false
+			st.mu.Unlock()
+		}
+		if p := m.rd.top(); p != nil {
+			p.dirty = true
+		}
+	}
+}

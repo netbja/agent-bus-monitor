@@ -172,7 +172,7 @@ func TestWorkKanbanFocusLevels(t *testing.T) {
 		t.Fatalf("↑ past Next's start: %q", m.lists.work.Selected())
 	}
 	// ←→ in a column: the next column's card at the same rank.
-	if m = keys(t, m, kRight); m.lists.work.Selected() != "idea:2026-11-03-deepseek-superagent-ideas" || m.ui.workCol != 3 {
+	if m = keys(t, m, kRight); m.lists.work.Selected() != "idea:i7" || m.ui.workCol != 3 {
 		t.Fatalf("→ from Next: %q col %d", m.lists.work.Selected(), m.ui.workCol)
 	}
 	m = keys(t, m, kLeft)

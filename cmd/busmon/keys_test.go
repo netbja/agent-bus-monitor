@@ -138,10 +138,10 @@ func TestFooterGroupsFKeys(t *testing.T) {
 			fs = append(fs, k)
 		}
 	}
-	if strings.Join(fs, " ") != "F1 F2 F3 F5" {
+	if strings.Join(fs, " ") != "F1 F2 F3 F5 F6" {
 		t.Fatalf("F-keys %v in footer %v", fs, keys)
 	}
-	if first+len(fs) != len(keys) || strings.Join(keys[first:], " ") != "F1 F2 F3 F5" {
+	if first+len(fs) != len(keys) || strings.Join(keys[first:], " ") != "F1 F2 F3 F5 F6" {
 		t.Fatalf("F-keys not grouped at the end: %v", keys)
 	}
 }

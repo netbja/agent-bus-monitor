@@ -84,6 +84,7 @@ func helpText() []Line {
 	row(GlyphWorking+" bus ok", "busmon's OWN link to Redis. "+GlyphBlocked+" bus down Ns: busmon is blind,")
 	more("the agents may be fine; values on screen are the last ones read.")
 	row("F5 health", "measured project checks; unknown counts as unhealthy, and remediation is guidance only.")
+	row("F6 ideas", "the project's ideas by state (to discuss, decided, doing, dropped); s sets one, the person only.")
 	row(GlyphWorking+" dispatch up", "a dispatcher holds the lease: unarmed agents are woken in their panes.")
 	row(GlyphIdle+" dispatch down", "none runs: nothing wakes an unarmed agent. ? dispatch: not measured yet.")
 	row(GlyphWorking+" missions up", "a missions conductor runs; down: a change is loaded but no conductor runs (its work is stalled).")

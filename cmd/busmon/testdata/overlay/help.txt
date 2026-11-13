@@ -3,6 +3,7 @@ KEYS
   tab                  focus
   shift-tab            focus the previous panel
   F5                   health
+  F6                   ideas
   1-3                  view
   1-4                  view
   ←→                   the lower panel's previous or next tab (Activity, Board, Work), wrapping
@@ -55,6 +56,7 @@ KEYS
   ^C                   quit (everywhere)
   an open detail
   F5                   health
+  F6                   ideas
   ↑↓ j k               scroll
   pgup                 page up
   pgdn                 page down
@@ -68,6 +70,9 @@ KEYS
   /                    History (H): filter by @agent, a thread id or words
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
+  a                    Ideas (F6): add an idea, its title on the line (it starts at to discuss)
+  s                    Ideas (F6) or an idea's page: the state picker under the idea (↑↓ choose, y sets it as you, esc cancels)
+  tab                  Ideas (F6): show one state, then the next, then all
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day
   r                    About (A): play the packet's run again
   d                    the plan (p): show or fold the done tasks
@@ -219,6 +224,7 @@ DELIVERY
   ● bus ok             busmon's OWN link to Redis. ▲ bus down Ns: busmon is blind,
                        the agents may be fine; values on screen are the last ones read.
   F5 health            measured project checks; unknown counts as unhealthy, and remediation is guidance only.
+  F6 ideas             the project's ideas by state (to discuss, decided, doing, dropped); s sets one, the person only.
   ● dispatch up        a dispatcher holds the lease: unarmed agents are woken in their panes.
   ○ dispatch down      none runs: nothing wakes an unarmed agent. ? dispatch: not measured yet.
   ● missions up        a missions conductor runs; down: a change is loaded but no conductor runs (its work is stalled).

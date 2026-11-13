@@ -13,7 +13,7 @@
 │   ○ title requests          coder         plan #requests ┃
 │   ○ title tag               ♙ you         plan #tag · wa…┃
 │                                                          ┃
-│  IDEAS  0   not decided yet                              ┃
+│  IDEAS  0   to discuss (F6: all of them)                 ┃
 │                                                          │
 │▶ — between agents · 0, nobody waits on you  (enter shows…▼
 ╰──────────────────────────────────────────────────────────╯

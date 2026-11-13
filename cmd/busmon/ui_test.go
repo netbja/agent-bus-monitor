@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"context"
 	"errors"
 	"strings"
@@ -23,6 +24,7 @@ type fakeWriter struct {
 	asks      []bus.Ask       // what Asks returns
 	failFor   map[string]bool // HumanCmd fails for these targets
 	resumeErr error           // returned by Resume when set
+	ideas     []bus.Idea      // what Ideas returns; AddIdea and SetIdeaState change it
 }
 
 func (f *fakeWriter) Resume(_ context.Context, by, message string) (bool, error) {
@@ -61,6 +63,36 @@ func (f *fakeWriter) SetRequestPriority(_ context.Context, task, level, by strin
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "priority "+task+" "+level+" "+by)
 	return true, f.fail
+}
+
+func (f *fakeWriter) AddIdea(_ context.Context, d bus.IdeaDef) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "idea add "+d.By+" "+d.Title)
+	f.ideas = append(f.ideas, bus.Idea{ID: "i" + strconv.Itoa(len(f.ideas)+1), IdeaDef: d, State: bus.IdeaToDiscuss})
+	return f.ideas[len(f.ideas)-1].ID, f.fail
+}
+
+func (f *fakeWriter) SetIdeaState(_ context.Context, id, expect, to, by string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "idea set "+id+" "+expect+" -> "+to+" "+by)
+	if f.fail != nil {
+		return f.fail
+	}
+	for i := range f.ideas {
+		if f.ideas[i].ID == id {
+			f.ideas[i].State = to
+			f.ideas[i].Log = append(f.ideas[i].Log, bus.IdeaChange{From: expect, To: to, By: by, At: 1})
+		}
+	}
+	return nil
+}
+
+func (f *fakeWriter) Ideas(context.Context) ([]bus.Idea, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]bus.Idea(nil), f.ideas...), nil
 }
 
 func (f *fakeWriter) MarkSeen(_ context.Context, person string, ids ...string) error {

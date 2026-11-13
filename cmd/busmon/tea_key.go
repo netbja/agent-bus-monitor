@@ -12,7 +12,7 @@ var teaKeys = map[rune]KeyCode{
 	tea.KeyEnter: keyEnter, tea.KeyEscape: keyEscape, tea.KeyTab: keyTab, tea.KeyBackspace: keyBackspace,
 	tea.KeyDelete: keyDelete, tea.KeyUp: keyUp, tea.KeyDown: keyDown, tea.KeyLeft: keyLeft, tea.KeyRight: keyRight,
 	tea.KeyHome: keyHome, tea.KeyEnd: keyEnd, tea.KeyPgUp: keyPgUp, tea.KeyPgDown: keyPgDn,
-	tea.KeyF1: keyF1, tea.KeyF2: keyF2, tea.KeyF3: keyF3, tea.KeyF4: keyF4, tea.KeyF5: keyF5,
+	tea.KeyF1: keyF1, tea.KeyF2: keyF2, tea.KeyF3: keyF3, tea.KeyF4: keyF4, tea.KeyF5: keyF5, tea.KeyF6: keyF6,
 }
 
 var teaCtrl = map[rune]KeyCode{'a': keyCtrlA, 'c': keyCtrlC, 'e': keyCtrlE, 'o': keyCtrlO, 's': keyCtrlS, 't': keyCtrlT, 'u': keyCtrlU, 'v': keyCtrlV, 'w': keyCtrlW, 'y': keyCtrlY, 'z': keyCtrlZ}
