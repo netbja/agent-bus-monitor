@@ -11,6 +11,11 @@ package main
 //     past its first or last card into the next; ←→ go to the next column's
 //     card at the same rank; Enter opens the card; Esc back to the selector.
 //
+// Inside the columns (the selector and the cards) Tab and shift-Tab are →
+// and ← (the person's follow-up, busmon-work-tab-header); at the tab they
+// keep moving the focus to the next panel, the way out of Work. The column
+// holding the cursor has its heading in the Work tab's colour.
+//
 // The tab bar's pill is full only at the tab's level, faded once the focus
 // is inside the columns: where the focus is shows on the screen.
 type workLevel int
@@ -31,6 +36,14 @@ func (m *Model) workKanbanKey(act Action) bool {
 		return false
 	}
 	m.ui.workCol = min(max(m.ui.workCol, 0), n-1)
+	if m.ui.workLevel != workAtTabs {
+		switch act {
+		case ActNextPanel:
+			act = ActTabNext
+		case ActPrevPanel:
+			act = ActTabPrev
+		}
+	}
 	switch m.ui.workLevel {
 	case workAtTabs:
 		switch act {
@@ -75,6 +88,7 @@ func (m *Model) workKanbanKey(act Action) bool {
 			m.ui.workLevel = workAtCols
 			return act == ActUp || act == ActDown || act == ActTabNext || act == ActTabPrev || act == ActEscape
 		}
+		m.ui.workCol = c // the card's column, however the cards were reached
 		last := k.cardCount(c) - 1
 		to := r
 		switch act {

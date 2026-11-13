@@ -269,6 +269,11 @@ func (m *Model) fillLists() {
 	if workKanbanOn(m.cfg.settings.WorkLayout, m.width) { // layout B: the same model as columns
 		v := workKanban(m.work, wd)
 		v.level, v.col = m.ui.workLevel, m.ui.workCol
+		if v.level == workAtCards { // in the cards the column is the selected card's, however it was reached (4, a chip, a click; foureyes)
+			if c, _ := v.cardPlace(wk.Selected()); c >= 0 {
+				v.col = c
+			}
+		}
 		wk.kanban = &v
 		wk.SetItems(v.items())
 	} else {
