@@ -1004,10 +1004,13 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   (`MarkCrashLoop`): master told and the desktop rung once, nothing more until `agentbus self-repair
   reset`. A report (an optional role's missing tab, a client without a verified resume, no proved
   session) goes to master once per death, never acted on. Every message is `FencedCmdOnce` (mark
-  `selfrepair-done|failed|budget|report:<role>`), and is replayed from what is durable until it is
-  written (reviewer-codex): a relaunch or a failure from the ledger's newest self-repair end of the role
-  (its `Reason` and `Error` hold the whole message; episode the death), a crash loop from its mark (episode
-  the mark's Redis `TIME`, `SelfRepairRecord.CrashLoopAt`). Only the send that writes rings the desktop. The pass runs the relaunch in its
+  `selfrepair-done|failed|budget|report:<role>`), and is sent until it is written (reviewer-codex): a
+  relaunch's or a failure's message is recorded by its finish's own script (`FinishSelfRepairOwing`,
+  `owed:<role>` in `{p}:selfrepair`), delivered at each pass, and acknowledged (`AckSelfRepairOwed`,
+  fenced, only while unchanged) once written or found already written; of any age, a reset keeps it, and
+  master being swapped holds it back without counting it written. A crash loop's is sent each pass while
+  its mark stands (episode the mark's Redis `TIME`, `SelfRepairRecord.CrashLoopAt`). Only the send that
+  writes rings the desktop. The pass runs the relaunch in its
   own goroutine (the dispatch chore), so a minute's proof never delays a wake. The death count stays in
   the service's memory: a dispatcher restart restarts a death's grace (conservative). busmon's row line
   (`relaunched by self-repair HH:MM`) is not built yet.

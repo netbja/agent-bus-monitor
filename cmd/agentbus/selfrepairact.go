@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -25,8 +25,8 @@ import (
 
 const proofEvery = time.Second
 
-// act applies one pass's decisions, then sends what is owed to master and
-// not written yet (replay). now is the pass's Redis time.
+// act applies one pass's decisions, then delivers what is owed to master
+// and not written yet. now is the pass's Redis time.
 func (c *selfRepairChore) act(ctx context.Context, token string, ds []selfrepair.Decision, r selfRepairReads, deaths map[string]repairDeath, now time.Time) error {
 	master := c.master()
 	var first error
@@ -35,22 +35,22 @@ func (c *selfRepairChore) act(ctx context.Context, token string, ds []selfrepair
 			first = err
 		}
 	}
-	acted := false
 	for _, d := range ds {
 		ep := deaths[d.Agent].episode
 		switch {
 		case d.Act && (d.Kind == selfrepair.KindRelaunch || d.Kind == selfrepair.KindCreate):
-			acted = true
 			keep(c.repair(ctx, token, d, r, ep, now.Sub(deaths[d.Agent].since)))
 		case d.Kind == selfrepair.KindBudget:
 			keep(c.crashLoop(ctx, token, d, master))
 		case d.Kind == selfrepair.KindReport && ep != "":
 			_, err := c.sender()(ctx, token, "selfrepair-report:"+d.Agent, ep, master,
 				fmt.Sprintf("self-repair: %s not relaunched: %s. Master relaunches it, or asks the person.", d.Agent, d.Reason))
-			keep(err)
+			if !errors.Is(err, errNotYet) { // a report is sent again at the next pass of the same death
+				keep(err)
+			}
 		}
 	}
-	keep(c.replay(ctx, token, r, now, master, acted))
+	keep(c.deliver(ctx, token, master))
 	return first
 }
 
@@ -72,65 +72,56 @@ func (c *selfRepairChore) crashLoop(ctx context.Context, token string, d selfrep
 	if wrote {
 		c.ring(ctx, d.Agent+": self-repair budget spent", text)
 	}
+	if errors.Is(err, errNotYet) {
+		return nil // the mark stands: sent at a later pass
+	}
 	return err
 }
 
-// replay sends master what a relaunch or a failure owes it, read from the
-// ledger's newest self-repair end of each role that made an attempt in the
-// last day: the send is once per death (FencedCmdOnce), so one that failed
-// is written now, and one written is not repeated.
-func (c *selfRepairChore) replay(ctx context.Context, token string, r selfRepairReads, now time.Time, master string, acted bool) error {
-	recent := acted // this pass's own relaunch is told in this pass
-	for _, p := range r.Past {
-		for _, at := range p.Attempts {
-			recent = recent || now.Sub(at) < 24*time.Hour
-		}
-	}
-	if !recent {
-		return nil
-	}
-	log, err := c.b.SwapLog(ctx, "", 0)
+// owedMsg is a message a self-repair owes master, recorded with its finish
+// (FinishSelfRepairOwing) and kept until written: of any age, through a
+// lost lease, a broker away or master being swapped (reviewer-codex on 7b).
+type owedMsg struct {
+	Mark    string `json:"mark"`
+	Episode string `json:"episode"`
+	Text    string `json:"text"`
+	Ring    bool   `json:"ring,omitempty"` // a failure: the desktop rings when it is written
+}
+
+// deliver sends every owed message: written now, or already written by an
+// earlier send (FencedCmdOnce's mark holds its episode), it is acknowledged;
+// a send that failed, or waits on a swap, keeps it for the next pass. Only
+// the send that writes rings the desktop.
+func (c *selfRepairChore) deliver(ctx context.Context, token, master string) error {
+	owed, err := c.b.SelfRepairOwed(ctx)
 	if err != nil {
 		return err
 	}
-	seen := map[string]bool{}
 	var first error
-	for _, e := range log { // newest first
-		if e.Kind != bus.SwapKindSelfRepair || (e.Event != bus.SwapRelaunched && e.Event != bus.SwapFailed) || seen[e.Role] {
+	for role, raw := range owed {
+		var m owedMsg
+		if json.Unmarshal([]byte(raw), &m) != nil || m.Mark == "" {
+			_ = c.b.AckSelfRepairOwed(ctx, token, role, raw) // unreadable: nothing to send
 			continue
 		}
-		seen[e.Role] = true
-		if ms, _, ok := strings.Cut(e.ID, "-"); ok {
-			if n, err := strconv.ParseInt(ms, 10, 64); err == nil && now.Sub(time.UnixMilli(n)) > 24*time.Hour {
-				continue
-			}
+		wrote, err := c.sender()(ctx, token, m.Mark, m.Episode, master, m.Text)
+		if errors.Is(err, errNotYet) {
+			continue
 		}
-		if err := c.announce(ctx, token, e, master); err != nil && first == nil {
+		if err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		if wrote && m.Ring {
+			c.ring(ctx, role+": self-repair failed", m.Text)
+		}
+		if err := c.b.AckSelfRepairOwed(ctx, token, role, raw); err != nil && first == nil {
 			first = err
 		}
 	}
 	return first
-}
-
-// announce is a self-repair's end told to master, built from its ledger
-// entry alone (so a replay says the same), once per death; a failure rings
-// the desktop when this send wrote it.
-func (c *selfRepairChore) announce(ctx context.Context, token string, e bus.SwapEvent, master string) error {
-	ep := e.Episode
-	if ep == "" {
-		ep = e.ID
-	}
-	if e.Event == bus.SwapRelaunched {
-		_, err := c.sender()(ctx, token, "selfrepair-done:"+e.Role, ep, master,
-			fmt.Sprintf("self-repair: %s relaunched (pid %d -> %d, pane %s -> %s, %s).", e.Role, e.OldPID, e.NewPID, e.OldPane, e.NewPane, e.Reason))
-		return err
-	}
-	text := fmt.Sprintf("self-repair: %s relaunch %s. No retry for this death: %s.", e.Role, e.Error, e.Reason)
-	wrote, err := c.sender()(ctx, token, "selfrepair-failed:"+e.Role, ep, master, text)
-	if wrote {
-		c.ring(ctx, e.Role+": self-repair failed", text)
-	}
-	return err
 }
 
 // repair is R1 (R2 when its tab is recreated): the role's intent taken,
@@ -185,10 +176,20 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 		fin = bus.SwapEvent{Role: role, Event: bus.SwapFailed, By: "dispatch", OldPID: snap.PID, OldPane: snap.Pane, Episode: ep, Error: why,
 			Reason: "recover with " + recovery + " in a new pane of its tab, or agentbus up " + c.project + " --resume"}
 	}
-	if err := c.b.FinishSelfRepair(ctx, token, nonce, fin); err != nil {
+	msg := owedMsg{Mark: "selfrepair-done:" + role, Episode: ep,
+		Text: fmt.Sprintf("self-repair: %s relaunched (pid %d -> %d, pane %s -> %s, %s).", role, snap.PID, fin.NewPID, snap.Pane, fin.NewPane, fin.Reason)}
+	if !ok {
+		msg = owedMsg{Mark: "selfrepair-failed:" + role, Episode: ep, Ring: true,
+			Text: fmt.Sprintf("self-repair: %s relaunch %s. No retry for this death: %s.", role, fin.Error, fin.Reason)}
+	}
+	if msg.Episode == "" {
+		msg.Episode = "-"
+	}
+	raw, _ := json.Marshal(msg)
+	if err := c.b.FinishSelfRepairOwing(ctx, token, nonce, fin, string(raw)); err != nil {
 		return fmt.Errorf("self-repair %s: its finish not written: %w", role, err)
 	}
-	return nil // the replay of this same pass tells master (announce)
+	return nil // deliver, in this same pass, tells master
 }
 
 func (c *selfRepairChore) tries() int {
@@ -225,6 +226,10 @@ func (c *selfRepairChore) prove(ctx context.Context, role string, old bus.AgentS
 	return bus.AgentSnapshot{}, false
 }
 
+// errNotYet: the target is being swapped; the message waits for a later
+// pass (never counted written).
+var errNotYet = errors.New("self-repair: master is being swapped: the message waits")
+
 // sender is send, or FencedCmdOnce: one message to master per (mark,
 // episode), fenced; a message to an agent being swapped waits for a later
 // pass.
@@ -238,7 +243,7 @@ func (c *selfRepairChore) sender() func(ctx context.Context, token, mark, episod
 		}
 		wrote, err := c.b.FencedCmdOnce(ctx, token, mark, episode, "dispatch", target, bus.CmdDirective, text, false)
 		if errors.Is(err, bus.ErrSwapInProgress) {
-			return false, nil
+			return false, errNotYet
 		}
 		return wrote, err
 	}

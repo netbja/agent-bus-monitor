@@ -41,14 +41,20 @@ func newActWorld(t *testing.T) *actWorld {
 	w := &actWorld{t: t, b: b, now: srT0}
 	c, _ := srChore(map[int]uint64{101: 99, 103: 99, 202: 77})
 	c.b, c.mode = b, selfrepair.ModeOn
+	// The snapshots as the relaunch leaves them: the proof and the next
+	// passes read them.
+	w.snaps = srReads(srT0).Snaps
 	c.read = func(context.Context) (selfRepairReads, error) {
 		r := srReads(w.now)
 		past, err := b.SelfRepairPast(ctx)
 		r.Past = past
+		w.mu.Lock()
+		for k, v := range w.snaps {
+			r.Snaps[k] = v
+		}
+		w.mu.Unlock()
 		return r, err
 	}
-	// The proof reads coder's snapshot as the relaunch left it.
-	w.snaps = srReads(srT0).Snaps
 	c.agents = func(context.Context) (map[string]bus.AgentSnapshot, error) {
 		w.mu.Lock()
 		defer w.mu.Unlock()
@@ -393,6 +399,7 @@ func TestSelfRepairMessagesAreReplayed(t *testing.T) {
 			if got := w.toMaster(); len(got) != 0 {
 				t.Fatalf("sent while failing: %q", got)
 			}
+			w.now = w.now.Add(25 * time.Hour) // a day and more: still owed (reviewer-codex)
 			failing = false
 			w.passes(3)
 			msgs := w.only(tc.want)
@@ -402,6 +409,33 @@ func TestSelfRepairMessagesAreReplayed(t *testing.T) {
 			if len(w.desktop) != tc.rings {
 				t.Fatalf("desktop %q", w.desktop)
 			}
+			if owed, _ := w.b.SelfRepairOwed(context.Background()); len(owed) != 0 {
+				t.Fatalf("still owed after its delivery: %v", owed)
+			}
 		})
+	}
+}
+
+// Master being swapped holds a message back: it is not counted written,
+// and arrives once master can take it.
+func TestSelfRepairMessageWaitsOnASwappedMaster(t *testing.T) {
+	w := newActWorld(t)
+	ctx := context.Background()
+	if err := w.b.BeginSwap(ctx, "master", bus.SwapIntent{ToProfile: "opus", By: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	w.passes(5)
+	if got := w.toMaster(); len(got) != 0 {
+		t.Fatalf("sent to a master being swapped: %q", got)
+	}
+	if owed, _ := w.b.SelfRepairOwed(ctx); len(owed) != 1 {
+		t.Fatalf("owed %v", owed)
+	}
+	if err := w.b.EndSwap(ctx, "master"); err != nil {
+		t.Fatal(err)
+	}
+	w.passes(1)
+	if got := w.only("relaunched (pid"); len(got) != 1 {
+		t.Fatalf("after the swap: %q", w.toMaster())
 	}
 }

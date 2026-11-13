@@ -419,3 +419,49 @@ func TestSelfRepairAttemptsKeptForTheDayRedis(t *testing.T) {
 		t.Fatalf("oldest kept %v, want the 23-hour-old one", a[0])
 	}
 }
+
+// What a self-repair owes master is durable (reviewer-codex on 7b): the
+// finish writes it with the ledger entry, it stays until acknowledged, of
+// any age, and only the lease holder acknowledges it, only as written.
+func TestSelfRepairOwedRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "coder", "idle", "", AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := b.BeginSelfRepair(ctx, "tok", "coder", "n1", SwapEvent{By: "dispatch", Episode: "1:1"}); err != nil {
+		t.Fatal(err)
+	}
+	owed := `{"mark":"selfrepair-done:coder","episode":"1:1","text":"self-repair: coder relaunched"}`
+	if err := b.FinishSelfRepairOwing(ctx, "tok", "n1", SwapEvent{Role: "coder", Event: SwapRelaunched, By: "dispatch", Episode: "1:1"}, owed); err != nil {
+		t.Fatal(err)
+	}
+	got, err := b.SelfRepairOwed(ctx)
+	if err != nil || got["coder"] != owed || len(got) != 1 {
+		t.Fatalf("owed %v %v", got, err)
+	}
+	if err := b.AckSelfRepairOwed(ctx, "other", "coder", owed); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("ack without the lease: %v", err)
+	}
+	if err := b.AckSelfRepairOwed(ctx, "tok", "coder", "an older message"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := b.SelfRepairOwed(ctx); got["coder"] != owed {
+		t.Fatal("a stale ack removed a newer message")
+	}
+	if was, _ := b.ResetSelfRepair(ctx, "coder"); was {
+		t.Fatal("no crash loop")
+	}
+	if got, _ := b.SelfRepairOwed(ctx); got["coder"] != owed {
+		t.Fatal("a reset dropped what master is owed")
+	}
+	if err := b.AckSelfRepairOwed(ctx, "tok", "coder", owed); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := b.SelfRepairOwed(ctx); len(got) != 0 {
+		t.Fatalf("acknowledged, still owed %v", got)
+	}
+}
