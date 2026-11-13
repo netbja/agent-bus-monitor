@@ -375,6 +375,18 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			st.agents[n] = &agentState{}
 		}
 	}
+	// An agent that was registered and has left the hash (retire --forget,
+	// agents forget, busmon's d) leaves the roster, unless a subscriber still
+	// listens for it: busmon's copy never outlives the bus's row
+	// (retire-forget-roster, the person's bug). Only on good reads of both.
+	if snapsErr == nil && armedErr == nil {
+		for n, a := range st.agents {
+			_, still := snaps[n]
+			if _, listens := armed[n]; a.registered && !still && !listens {
+				delete(st.agents, n)
+			}
+		}
+	}
 	for n, a := range st.agents {
 		if armedErr == nil {
 			_, a.armed = armed[n]
