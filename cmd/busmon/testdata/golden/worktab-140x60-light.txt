@@ -14,7 +14,7 @@
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity   2 Board   3 Work   ──────────────────────────────────────────────────────────── 4 for you · 1 at work · 2 next · 0 ideas ─╮
-│ For you  4                       In progress  1                    Next  2                           Ideas  0                            │
+│For you  4                        In progress  1                     Next  2                          Ideas  0                            │
 │ ? answer · master · 4m          │ ● release                       │ ○ coder · #requests             │ — between agents · 0               │
 │  review lot 1? (2 questions)    │  tagging                        │  title requests                 │  nobody waits on you (enter)       │
 │ ♙ answer · foureyes · 6m        │ ○ idle, can take a request      │ ○ ♙ you · #tag waits on requests│ — done · 1                         │

@@ -88,6 +88,7 @@ func (m *Model) workKanbanKey(act Action) bool {
 			m.ui.workLevel = workAtCols
 			return act == ActUp || act == ActDown || act == ActTabNext || act == ActTabPrev || act == ActEscape
 		}
+		m.ui.workCol = c // the card's column, however the cards were reached
 		last := k.cardCount(c) - 1
 		to := r
 		switch act {

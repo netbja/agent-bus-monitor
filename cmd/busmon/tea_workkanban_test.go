@@ -735,3 +735,41 @@ func TestWorkKanbanFocusedHeading(t *testing.T) {
 		t.Fatalf("→ to col %d: headings %v pilled", m.ui.workCol, got)
 	}
 }
+
+// foureyes' probe: entering the cards without the arrows (key 4, a card
+// click) or walking them leaves m.ui.workCol behind; the pill follows the
+// selected card's column, never the stale one.
+func TestWorkKanbanPillFollowsTheCard(t *testing.T) {
+	pinLocal(t)
+	pilled := func(m Model) []int {
+		ix, iy, iw, ih := m.lists.work.inner()
+		g := m.grid()
+		var out []int
+		for c, r := range kanbanGrid(4, ix, iy, iw, ih) {
+			if cell := g.at(r.x+1, r.y); cell.st.Pill && cell.st.Role == panelHue[PanelWork] {
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	m := keys(t, workShell(t, 130, 40), '4') // Work, its first NEXT card
+	c, _ := m.lists.work.kanban.cardPlace(m.lists.work.Selected())
+	if m.ui.workLevel != workAtCards || c != 2 {
+		t.Fatalf("4: level %v card column %d", m.ui.workLevel, c)
+	}
+	if got := pilled(m); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("after 4: headings %v pilled, the card is in column 2", got)
+	}
+	m = kanbanShell(t, 130, 40)
+	ix, iy, iw, ih := m.lists.work.inner()
+	r := kanbanGrid(4, ix, iy, iw, ih)[2]
+	m = step(t, m, tea.MouseClickMsg{X: r.x + 2, Y: r.y + 2, Button: tea.MouseLeft})
+	if got := pilled(m); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("after a click in Next: headings %v pilled", got)
+	}
+	// Tab from there goes on from the card's column, not the stale one.
+	m = keys(t, m, kTab)
+	if c, _ := m.lists.work.kanban.cardPlace(m.lists.work.Selected()); m.ui.workCol != c {
+		t.Fatalf("Tab after the click: workCol %d, card column %d", m.ui.workCol, c)
+	}
+}
