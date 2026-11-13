@@ -632,10 +632,11 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   while git writes, the group killed past it,
   `-c core.fsmonitor=false -c core.pager=cat`): `rev-list --first-parent --format=%s --max-count=500
   <plan commit>..origin/main`, the plan commit refused unless it is a commit id. Only GitHub's merge-commit subject
-  (`Merge pull request #N from owner/branch`) is a signal. Nothing fetches: the newest FETCH_HEAD of the repository
-  (the common directory's and each linked worktree's: FETCH_HEAD is per worktree, and the agents fetch in
-  theirs) older than an hour makes the check unknown, never ok. A `git fetch origin <another branch>` writes
-  FETCH_HEAD without moving origin/main, so it reads fresh then. Load the plan from a commit on main: from a
+  (`Merge pull request #N from owner/branch`) is a signal. Nothing fetches: origin/main's freshness is the newest FETCH_HEAD
+  of the repository (the common directory's and each linked worktree's: FETCH_HEAD is per worktree, and the
+  agents fetch in theirs) that records `branch 'main' of <origin's URL>` at the very commit origin/main
+  holds; a fetch of another branch or remote, or one that saw main elsewhere, is no evidence. None, or older
+  than an hour, makes the check unknown, never ok. Load the plan from a commit on main: from a
   branch, the merges of main since its fork point would warn as not in the plan. It wakes master once per drift (mark `plan-drift`, episode a hash of the drift). It writes
   nothing to the plan; a derived Done is a later step. `{p}:plan:ignore` (a set, a record key) is dropped by a new
   `plan load` and by `plan clear`. busmon shows the health pill, F5
