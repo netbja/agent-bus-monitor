@@ -175,8 +175,14 @@ func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
 	// write keeps it, and a reopens it.
 	sent := c.area.value()
 	m.ui.compose, m.ui.ideaDraft = nil, sent
+	// One request id per text sent (reviewer-codex): a retry after a failed
+	// reply, the script maybe committed, finds the idea it made.
+	if m.ui.ideaReq == "" || m.ui.ideaReqText != sent {
+		m.ui.ideaReq, m.ui.ideaReqText = bus.NewIntentNonce(), sent
+	}
+	req := m.ui.ideaReq
 	cmd := m.ideaWrite("added: "+Preview(title), func(ctx context.Context, w busWriter) error {
-		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, By: who})
+		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, By: who, Request: req})
 		return err
 	})
 	if cmd == nil {
@@ -229,6 +235,9 @@ func (m *Model) gotIdea(msg ideaMsg) {
 	}
 	if msg.add && m.ui.ideaDraft == msg.sent { // an edit made meanwhile is kept
 		m.ui.ideaDraft = ""
+	}
+	if msg.add && m.ui.ideaReqText == msg.sent { // written: the next text is a new request
+		m.ui.ideaReq, m.ui.ideaReqText = "", ""
 	}
 	m.ui.flash, m.ui.flashErr = msg.said, false
 	if msg.ideas != nil {

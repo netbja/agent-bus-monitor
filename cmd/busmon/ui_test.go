@@ -25,6 +25,9 @@ type fakeWriter struct {
 	failFor   map[string]bool // HumanCmd fails for these targets
 	resumeErr error           // returned by Resume when set
 	ideas     []bus.Idea      // what Ideas returns; AddIdea and SetIdeaState change it
+	ideaReqs  []string        // each AddIdea's request id
+	// failAfterCommit: the next AddIdea stores the idea, then fails (a reply lost)
+	failAfterCommit bool
 }
 
 func (f *fakeWriter) Resume(_ context.Context, by, message string) (bool, error) {
@@ -69,7 +72,20 @@ func (f *fakeWriter) AddIdea(_ context.Context, d bus.IdeaDef) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "idea add "+d.By+" "+d.Title)
+	f.ideaReqs = append(f.ideaReqs, d.Request)
+	if f.fail != nil && !f.failAfterCommit {
+		return "", f.fail
+	}
+	for _, it := range f.ideas { // the bus's request dedupe
+		if d.Request != "" && it.Request == d.Request {
+			return it.ID, nil
+		}
+	}
 	f.ideas = append(f.ideas, bus.Idea{ID: "i" + strconv.Itoa(len(f.ideas)+1), IdeaDef: d, State: bus.IdeaToDiscuss})
+	if f.failAfterCommit { // committed, the reply lost
+		f.failAfterCommit = false
+		return "", errors.New("i/o timeout")
+	}
 	return f.ideas[len(f.ideas)-1].ID, f.fail
 }
 

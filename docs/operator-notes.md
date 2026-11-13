@@ -1097,7 +1097,10 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   the title and the rest its text, s: the state picker, y sets it) and flags a state set by someone
   other than the configured person. busmon refuses a set or an add when it runs in an agent's
   environment (`AGENT_BUS_AGENT`: it would inherit the person's name; an agent adds with `idea add`
-  under its own); a failed add keeps the window's text for the next `a`; it does not refuse a herdr pane, since the
+  under its own); a failed add keeps the window's text for the next `a`. An add is idempotent by
+  its request id (`IdeaDef.Request`, a `req|<id>` field expiring after a day): busmon reuses the id while
+  the text sent is unchanged, and `idea add` always sends one and prints it on a failure (`--request <id>`
+  retries), so a reply lost after the script committed never yields a second idea; it does not refuse a herdr pane, since the
   person's own busmon runs in one (the plugin). **The limit, said plainly: this is an
   audit, not a proof.** Agents run under the person's uid with the same broker URL, so nothing stops a
   deliberate `idea set --as <person>` from a plain shell, or a raw `HSET`: the guards catch accidents

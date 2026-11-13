@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,7 +78,21 @@ type IdeaDef struct {
 	By     string `json:"by"`
 	At     int64  `json:"at"`
 	Source string `json:"source,omitempty"` // where it came from: a file, a note, a thread
+	// Request, when set, makes the add idempotent (reviewer-codex): a retry
+	// with the same id, after a reply lost once the script committed, finds
+	// the idea it made instead of making another. Never stored in the
+	// definition; its field req|<id> expires after ideaRequestTTL.
+	Request string `json:"-"`
 }
+
+// ideaRequestTTL keeps an add's request id this long: retries come within
+// seconds, a day is plenty.
+const ideaRequestTTL = 24 * 60 * 60
+
+var ideaRequestRE = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
+
+// ValidIdeaRequest: a request id is 8 to 64 letters, digits, - or _.
+func ValidIdeaRequest(s string) bool { return ideaRequestRE.MatchString(s) }
 
 // IdeaChange is one state change of the audit.
 type IdeaChange struct {
@@ -137,13 +152,22 @@ local function nowms()
 end
 `
 
-// ideaAdd: KEYS ideas. ARGV def JSON (no at). Returns the id.
+// ideaAdd: KEYS ideas. ARGV def JSON (no at), request id ("" none), its
+// TTL in seconds. Returns the id: the one this request made before, if any.
 var ideaAdd = redis.NewScript(ideaNowLua + `
+if ARGV[2] ~= '' then
+  local had = redis.call('HGET', KEYS[1], 'req|' .. ARGV[2])
+  if had then return had end
+end
 local n = redis.call('HINCRBY', KEYS[1], 'seq', 1)
 local id = 'i' .. n
 local d = cjson.decode(ARGV[1])
 d['at'] = nowms()
 redis.call('HSET', KEYS[1], id, cjson.encode(d), id .. '|s', 'to discuss')
+if ARGV[2] ~= '' then
+  redis.call('HSET', KEYS[1], 'req|' .. ARGV[2], id)
+  redis.call('HEXPIRE', KEYS[1], tonumber(ARGV[3]), 'FIELDS', 1, 'req|' .. ARGV[2])
+end
 return id`)
 
 // ideaSet: KEYS ideas, agents, cmd. ARGV id, expected state, new state, by,
@@ -206,12 +230,15 @@ func (b *Bus) AddIdea(ctx context.Context, d IdeaDef) (string, error) {
 	if err := ValidateIdeaDef(d); err != nil {
 		return "", err
 	}
+	if d.Request != "" && !ValidIdeaRequest(d.Request) {
+		return "", fmt.Errorf("invalid request id %q", d.Request)
+	}
 	d.At = 0
 	raw, err := json.Marshal(d)
 	if err != nil {
 		return "", err
 	}
-	id, err := ideaAdd.Run(ctx, b.r, []string{IdeasKey(b.project)}, string(raw)).Text()
+	id, err := ideaAdd.Run(ctx, b.r, []string{IdeasKey(b.project)}, string(raw), d.Request, ideaRequestTTL).Text()
 	return id, ideaErr(err)
 }
 

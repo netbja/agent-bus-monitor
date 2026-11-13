@@ -13,7 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 )
 
-const ideaUsage = "usage: idea add <title...> [--text <text>] [--source <where>] [--as <person>] | idea list [--state <state>] [--json] | idea set <id> <state> [--from <state>] [--as <person>]"
+const ideaUsage = "usage: idea add <title...> [--text <text>] [--source <where>] [--as <person>] [--request <id>] | idea list [--state <state>] [--json] | idea set <id> <state> [--from <state>] [--as <person>]"
 
 // runIdea is the project's ideas (bus/ideas.go): add is open to agents and
 // always starts at "to discuss"; set is the person's, never an agent's.
@@ -50,6 +50,7 @@ func ideaAdd(ctx context.Context, b *bus.Bus, args []string, getenv func(string)
 	args, text := extractFlag(args, "--text")
 	args, source := extractFlag(args, "--source")
 	args, as := extractFlag(args, "--as")
+	args, req := extractFlag(args, "--request")
 	title := strings.TrimSpace(strings.Join(args, " "))
 	if title == "" {
 		fmt.Fprintln(errw, ideaUsage)
@@ -67,9 +68,18 @@ func ideaAdd(ctx context.Context, b *bus.Bus, args []string, getenv func(string)
 			return 2
 		}
 	}
-	id, err := b.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, Source: source, By: by})
+	// Always a request id: a reply lost after the script committed is
+	// retried with it and finds the idea it made (reviewer-codex).
+	if req == "" {
+		req = bus.NewIntentNonce()
+	} else if !bus.ValidIdeaRequest(req) {
+		fmt.Fprintln(errw, "idea add: --request is 8 to 64 letters, digits, - or _")
+		return 2
+	}
+	id, err := b.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, Source: source, By: by, Request: req})
 	if err != nil {
 		fmt.Fprintf(errw, "idea add: %v\n", err)
+		fmt.Fprintf(errw, "it may have been added all the same: retry with --request %s, never without (no second idea)\n", req)
 		return 1
 	}
 	fmt.Fprintf(out, "%s added: %s (%s)\n", id, title, bus.IdeaToDiscuss)

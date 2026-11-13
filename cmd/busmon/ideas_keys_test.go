@@ -326,3 +326,36 @@ func TestIdeasAddOneInFlight(t *testing.T) {
 		t.Fatalf("after the result, a new add: %v", w.sent)
 	}
 }
+
+// reviewer-codex: an add committed whose reply was lost is retried with the
+// same request id, so the bus finds the idea it made (no second one); an
+// edited text is another request.
+func TestIdeasAddRetrySameRequest(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	w.failAfterCommit = true
+	m = keys(t, m, kF6, 'a')
+	for _, r := range "lost reply" {
+		m = keys(t, m, r)
+	}
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if !m.ui.flashErr || m.ui.ideaDraft != "lost reply" {
+		t.Fatalf("flash %q draft %q", m.ui.flash, m.ui.ideaDraft)
+	}
+	m = keys(t, m, 'a')
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if len(w.ideaReqs) != 2 || w.ideaReqs[0] == "" || w.ideaReqs[1] != w.ideaReqs[0] {
+		t.Fatalf("request ids %q: the retry must reuse the first", w.ideaReqs)
+	}
+	if n := len(w.ideas); n != len(ideasFixture())+1 {
+		t.Fatalf("%d ideas: the retry made a second one", n)
+	}
+	// A new text after that: a new request.
+	m = keys(t, m, 'a')
+	for _, r := range "another" {
+		m = keys(t, m, r)
+	}
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if len(w.ideaReqs) != 3 || w.ideaReqs[2] == w.ideaReqs[0] {
+		t.Fatalf("request ids %q: a new text is a new request", w.ideaReqs)
+	}
+}

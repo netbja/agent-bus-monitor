@@ -271,7 +271,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo refresh -q"},
 	},
 	{
-		Name: "idea", Text: true, Usage: []string{"idea add <title...> [--text <text>] [--source <where>] [--as <person>]",
+		Name: "idea", Text: true, Usage: []string{"idea add <title...> [--text <text>] [--source <where>] [--as <person>] [--request <id>]",
 			"idea list [--state <state>] [--json]", "idea set <id> <state> [--from <state>] [--as <person>]"},
 		Summary: "the project's ideas: add one (anyone; it starts at 'to discuss'), list them, or set a state (to discuss, decided, doing, dropped: the person only, from their own shell)",
 		Flags: []cli.Flag{
@@ -280,6 +280,7 @@ var commands = []cli.Command{
 			{Long: "state", Arg: "<state>", Help: "list: only the ideas in this state"},
 			{Long: "from", Arg: "<state>", Help: "set: the state you saw; refused if it changed since"},
 			{Long: "as", Short: 'a', Arg: "<person>", Help: "your name (default identity.as); set: a person only, never an agent"},
+			{Long: "request", Arg: "<id>", Help: "add: the request id a failed add printed; a retry with it never adds a second idea"},
 			{Long: "json", Help: "list: JSON"},
 		},
 		Examples: []string{"agentbus -p demo idea add busmon update without setup.sh --source memory",

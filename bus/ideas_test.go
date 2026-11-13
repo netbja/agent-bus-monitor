@@ -169,3 +169,40 @@ func TestIdeaLogCapped(t *testing.T) {
 		t.Fatalf("log %d, last %+v", n, ideas[0].Log[n-1])
 	}
 }
+
+// reviewer-codex: an add whose reply is lost after the script committed is
+// retried with the same request id and finds its idea; no second one. The
+// id is never stored in the definition, and Ideas never lists it.
+func TestAddIdeaRetryIsIdempotent(t *testing.T) {
+	b := dialTest(t)
+	cleanIdeas(t, b)
+	ctx := context.Background()
+	req := NewIntentNonce()
+	first, err := b.AddIdea(ctx, IdeaDef{Title: "voice notes", By: "charlie", Request: req})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := b.AddIdea(ctx, IdeaDef{Title: "voice notes", By: "charlie", Request: req})
+	if err != nil || again != first {
+		t.Fatalf("the retry: %q %v, want %q", again, err, first)
+	}
+	other, _ := b.AddIdea(ctx, IdeaDef{Title: "voice notes", By: "charlie", Request: NewIntentNonce()})
+	none, _ := b.AddIdea(ctx, IdeaDef{Title: "voice notes", By: "charlie"})
+	if other == first || none == first || none == other {
+		t.Fatalf("distinct requests share an id: %q %q %q", first, other, none)
+	}
+	ideas, _ := b.Ideas(ctx)
+	if len(ideas) != 3 {
+		t.Fatalf("%d ideas, want 3: %+v", len(ideas), ideas)
+	}
+	raw, _ := b.r.HGet(ctx, IdeasKey(b.Project()), first).Result()
+	if strings.Contains(raw, req) || strings.Contains(raw, "request") {
+		t.Fatalf("the request id stored in the definition: %s", raw)
+	}
+	if ttl, err := b.r.HTTL(ctx, IdeasKey(b.Project()), "req|"+req).Result(); err != nil || len(ttl) != 1 || ttl[0] <= 0 {
+		t.Fatalf("the request field never expires: %v %v", ttl, err)
+	}
+	if _, err := b.AddIdea(ctx, IdeaDef{Title: "t", By: "charlie", Request: "not|valid"}); err == nil {
+		t.Fatal("a malformed request id accepted")
+	}
+}

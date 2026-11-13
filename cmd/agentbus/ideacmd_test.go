@@ -137,3 +137,31 @@ func TestIdeaGuard(t *testing.T) {
 		t.Fatal("add writes as the sender")
 	}
 }
+
+// reviewer-codex (the add's ambiguous outcome): idea add always sends a
+// request id; --request reuses one, so a retry after a lost reply finds the
+// idea it made. A malformed id is a usage error.
+func TestIdeaAddRequest(t *testing.T) {
+	b := notifyBus(t)
+	env := ideaEnv("AGENT_BUS_AGENT", "coder")
+	code, out, errw := runIdeaT(t, b, env, "add", "once", "--request", "req-0001-abcd")
+	if code != 0 || !strings.Contains(out, "i1") {
+		t.Fatalf("add %d %q %q", code, out, errw)
+	}
+	code, out, _ = runIdeaT(t, b, env, "add", "once", "--request", "req-0001-abcd")
+	if code != 0 || !strings.Contains(out, "i1") {
+		t.Fatalf("the retry %d %q", code, out)
+	}
+	if ideas, _ := b.Ideas(context.Background()); len(ideas) != 1 {
+		t.Fatalf("%d ideas after a retry", len(ideas))
+	}
+	if code, _, _ := runIdeaT(t, b, env, "add", "x", "--request", "a|b"); code != 2 {
+		t.Fatal("a malformed request id is not a usage error")
+	}
+	if code, _, _ := runIdeaT(t, b, env, "add", "twice"); code != 0 {
+		t.Fatal("an add without --request")
+	}
+	if ideas, _ := b.Ideas(context.Background()); len(ideas) != 2 {
+		t.Fatalf("%d ideas", len(ideas))
+	}
+}
