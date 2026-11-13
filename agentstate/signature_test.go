@@ -18,8 +18,12 @@ func readScreen(t *testing.T, name string) string {
 	return string(b)
 }
 
-// Herdr exit step 2a moves the signatures, never changes them: the embedded
-// profiles compile to the table dispatch held before, pattern for pattern.
+// Herdr exit step 2a moved the signatures without changing them: the
+// embedded profiles compile to the table dispatch held before, pattern for
+// pattern. One change since, on purpose: the architect's ruling of
+// 2026-11-13 (herdr exit 5d) anchors claude's, kimi's and grok's Ready to
+// the input box's end, so it is the empty-input check too; it can only make
+// the dispatcher wake less, never type into text.
 func TestProfilesAreTheOldTable(t *testing.T) {
 	type sig struct {
 		ansi, rule                 bool
@@ -28,14 +32,14 @@ func TestProfilesAreTheOldTable(t *testing.T) {
 	}
 	old := map[string]sig{
 		"claude": {true, true, `^❯`,
-			[]string{`(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?$`},
+			[]string{`(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?\n(?:\x1b\[[0-9;]*m)*─{3,}`},
 			[]string{`(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…`}, nil, []string{`(?s)Accessing workspace:.*Yes, I trust this folder`}},
 		"codex": {true, false, `^›`,
 			[]string{`(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m`}, nil, []string{`enter/esc latest`},
 			[]string{`(?s)Hooks need review.*Trust all and continue`}},
 		"kimi": {false, false, `^[ \t]*│ >`,
-			[]string{`(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?$`}, []string{`(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)`}, nil, nil},
-		"grok": {false, false, `^[ \t]*│ ❯`, []string{`(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$`}, nil, nil, nil},
+			[]string{`(?m)^[ \t]*│ >[ \t]*(?:│[ \t]*)?\n[ \t]*╰`}, []string{`(?m)^[ \t]*(?:🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)(?:[ \t]|·|$)`}, nil, nil},
+		"grok": {false, false, `^[ \t]*│ ❯`, []string{`(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?\n[ \t]*╰`}, nil, nil, nil},
 		"agy":  {false, true, `^>(?:[ \t]|$)`, []string{`(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}`}, nil, []string{`(?m)^[ \t]*>[ \t]*1\.[ \t]`}, nil},
 	}
 	strs := func(rs []*regexp.Regexp) []string {
@@ -98,6 +102,19 @@ func TestSignatures(t *testing.T) {
 		{"grok", "grok-old-typed-empty", true, false},
 		{"agy", "agy-old-empty-typed", false, false},
 		{"agy", "agy-old-typed-empty", true, false},
+		// EmptyInput is Ready on the current box (architect's ruling on 5d):
+		// the box must be empty to its end, not only its prompt line, and
+		// text the client put back in the input is not empty. DERIVED.
+		{"claude", "claude-multiline-typed", false, false},
+		{"codex", "codex-multiline-typed", false, false},
+		{"kimi", "kimi-multiline-typed", false, false},
+		{"grok", "grok-multiline-typed", false, false},
+		{"agy", "agy-multiline-typed", false, false},
+		{"claude", "claude-returned", false, false},
+		{"codex", "codex-returned", false, false},
+		{"kimi", "kimi-returned", false, false},
+		{"grok", "grok-returned", false, false},
+		{"agy", "agy-returned", false, false},
 	}
 	sigs := Signatures()
 	for _, c := range cases {
@@ -158,7 +175,7 @@ func TestDialogSignatures(t *testing.T) {
 // A profile is refused when it names another client, holds an unknown key,
 // has no prompt marker or a pattern that does not compile.
 func TestParseProfileRefuses(t *testing.T) {
-	good := "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['>']\n"
+	good := "client = \"x\"\n[signature]\nprompt = '^>'\nbox_end = '^-'\nready = ['>']\n"
 	if _, err := parseProfile("x.toml", []byte(good)); err != nil {
 		t.Fatalf("good profile: %v", err)
 	}
@@ -166,10 +183,92 @@ func TestParseProfileRefuses(t *testing.T) {
 		"another client": {"y.toml", good},
 		"unknown key":    {"x.toml", good + "colour = 'x'\n"},
 		"no prompt":      {"x.toml", "client = \"x\"\n[signature]\nready = ['>']\n"},
-		"bad pattern":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['(']\n"},
+		"bad pattern":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nbox_end = '^-'\nready = ['(']\n"},
+		"no box end":     {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['>']\n"},
+		"bad box end":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nbox_end = '('\nready = ['>']\n"},
 	} {
 		if _, err := parseProfile(c.file, []byte(c.text)); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// EmptyInput (spec 4.2 step 1, the architect's ruling): the current input
+// box is empty to its end, with the Modal and Dialog vetoes; InputHolds:
+// the current input region holds a token (the wake line's agentbus#<nonce>,
+// or /clear), never an older box in scrollback.
+func TestEmptyInputAndInputHolds(t *testing.T) {
+	sigs := Signatures()
+	for _, c := range []string{"claude", "codex", "kimi", "grok", "agy"} {
+		sig := sigs[c]
+		empty := readScreen(t, c+"-empty.txt")
+		if !sig.EmptyInput(empty) {
+			t.Errorf("%s: its empty fixture reads not empty", c)
+		}
+		for _, f := range []string{"typed", "multiline-typed", "returned", "old-empty-typed"} {
+			if sig.EmptyInput(readScreen(t, c+"-"+f+".txt")) {
+				t.Errorf("%s-%s reads empty", c, f)
+			}
+		}
+		typed := readScreen(t, c+"-typed.txt")
+		woken := strings.Replace(typed, "zz-probe", "[agentbus#a1b2c3] demo: 2 message(s)", 1)
+		if !sig.InputHolds(woken, "agentbus#a1b2c3") || sig.InputHolds(woken, "agentbus#ffffff") {
+			t.Errorf("%s: the wake token in its input not read", c)
+		}
+		if !sig.InputHolds(strings.Replace(typed, "zz-probe", "/clear", 1), "/clear") {
+			t.Errorf("%s: /clear in its input not read", c)
+		}
+		if sig.InputHolds(empty, "agentbus#a1b2c3") || sig.InputHolds(typed, "") {
+			t.Errorf("%s: an empty input or an empty token holds", c)
+		}
+		// An older box in scrollback holding the token is not the input.
+		old := strings.Replace(readScreen(t, c+"-old-typed-empty.txt"), "zz-probe", "agentbus#a1b2c3", 1)
+		if !strings.Contains(old, "agentbus#a1b2c3") || sig.InputHolds(old, "agentbus#a1b2c3") {
+			t.Errorf("%s: an old box's token read as the input's", c)
+		}
+	}
+	// foureyes: the region ends at the box's end. Claude's slash menu drawn
+	// under the box lists /clear while the input holds only /cl: not seen.
+	claudeTyped := readScreen(t, "claude-typed.txt")
+	menu := "\n  /clear            Clear conversation history and free up context\n  /compact          Clear history but keep a summary\n"
+	partial := strings.Replace(claudeTyped, "zz-probe", "/cl", 1) + menu
+	if sigs["claude"].InputHolds(partial, "/clear") {
+		t.Error("claude: the slash menu under the box read as the input")
+	}
+	if !sigs["claude"].InputHolds(strings.Replace(claudeTyped, "zz-probe", "/clear", 1)+menu, "/clear") {
+		t.Error("claude: /clear in the input, with the menu under it, not read")
+	}
+	for _, c := range []string{"codex", "kimi", "grok", "agy"} {
+		typed := readScreen(t, c+"-typed.txt")
+		if sigs[c].InputHolds(strings.Replace(typed, "zz-probe", "/cl", 1)+menu, "/clear") {
+			t.Errorf("%s: a line under the box read as the input", c)
+		}
+	}
+	// reviewer-codex: a blank line inside codex's input is not its box's end
+	// (the shaded padding is): a token after it is still in the input.
+	blank := readScreen(t, "codex-multiline-blank.txt")
+	if !sigs["codex"].InputHolds(blank, "agentbus#a1b2c3") || sigs["codex"].EmptyInput(blank) {
+		t.Error("codex: a token after a blank line inside the input not read")
+	}
+	// No box end on the screen: nothing is read as landed (fail closed).
+	if sigs["agy"].InputHolds("────\n> agentbus#a1b2c3", "agentbus#a1b2c3") {
+		t.Error("agy: an unclosed box read")
+	}
+	// A token wrapped inside a bordered box is still read (a long wake line
+	// wraps; the border and the blanks are not the token).
+	wrapped := " ╭──────────╮\n │ > [agentbus#a1b │\n │   2c3] demo  │\n ╰──────────╯\n"
+	if !sigs["kimi"].InputHolds(wrapped, "agentbus#a1b2c3") {
+		t.Error("a wrapped token not read")
+	}
+	if sigs["claude"].EmptyInput(readScreen(t, "claude-trust.txt")) {
+		t.Error("a dialog reads as an empty input")
+	}
+	// The Dialog veto on its own: an empty box Ready matches, under a dialog.
+	empty := readScreen(t, "codex-empty.txt")
+	lines := strings.Split(strings.TrimRight(empty, "\n"), "\n")
+	at := len(lines) - 4
+	withDialog := strings.Join(append(append(append([]string{}, lines[:at]...), "Hooks need review", "Trust all and continue"), lines[at:]...), "\n")
+	if ready, _ := sigs["codex"].Match(withDialog); !ready || sigs["codex"].EmptyInput(withDialog) {
+		t.Errorf("a dialog under an empty box: ready %v, reads empty %v", ready, sigs["codex"].EmptyInput(withDialog))
 	}
 }

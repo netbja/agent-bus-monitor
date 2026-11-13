@@ -6,7 +6,11 @@ client = "grok"
 ansi = false
 prompt = '^[ \t]*│ ❯'
 rule_above = false
-ready = ['(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?$']
+# Ready is anchored to the box's end (the empty `│ ❯` line directly above the bottom border): it is
+# also the empty-input check, and a second input line must not read empty.
+# box_end: the bottom border of the input box.
+box_end = '^[ \t]*╰'
+ready = ['(?m)^[ \t]*│ ❯[ \t]*(?:│[ \t]*)?\n[ \t]*╰']
 busy = []
 modal = []
 dialog = []

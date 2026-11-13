@@ -6,6 +6,8 @@ client = "agy"
 ansi = false
 prompt = '^>(?:[ \t]|$)'
 rule_above = true
+# box_end: the closing rule under the input.
+box_end = '^─{3,}'
 ready = ['(?m)^─{3,}[ \t]*\n>[ \t]*\n─{3,}']
 busy = []
 modal = ['(?m)^[ \t]*>[ \t]*1\.[ \t]']

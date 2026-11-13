@@ -35,6 +35,12 @@ type Signature struct {
 	ANSI      bool
 	Prompt    *regexp.Regexp
 	RuleAbove bool
+	// BoxEnd matches the line that closes the input box, below the prompt
+	// line: the closing rule, the bottom border, or the first line out of
+	// a shaded input block. Matched on the raw line (escapes kept) when
+	// ANSI is set, else on the stripped text. InputHolds reads the box only, never what a
+	// client draws under it (a slash-command menu: foureyes on 5d).
+	BoxEnd *regexp.Regexp
 }
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
@@ -110,4 +116,80 @@ const dialogLines = 14
 // the stripped screen.
 func (s Signature) InDialog(screen string) bool {
 	return anyMatch(s.Dialog, bottomLines(screen))
+}
+
+// EmptyInput reports the current input box empty to its end and
+// submittable (spec 4.2 step 1, the architect's ruling of 2026-11-13): Ready
+// on the current box, each client's Ready pattern anchored to the box's end
+// and pinned by its empty, typed, multiline-typed and returned fixtures,
+// with the Modal and Dialog vetoes. A client whose Ready cannot be anchored
+// to its box end is unsupported (never prompted). Mode 2004 is the holder's
+// to check beside it (screen.Modes).
+func (s Signature) EmptyInput(screen string) bool {
+	ready, _ := s.Match(screen)
+	return ready && !s.InDialog(Strip(strings.ReplaceAll(screen, "\r", "")))
+}
+
+// InputHolds reports token in the current input box only: never in an older
+// box in scrollback, never under the box (spec 4.2 step 5, the landing
+// check; a box with no end on screen holds nothing): the wake
+// line's "agentbus#<nonce>", or "/clear". A token wrapped inside the box is
+// still read: the region is also compared with its blanks and box borders
+// removed. An empty token holds nothing.
+func (s Signature) InputHolds(screen, token string) bool {
+	if token == "" {
+		return false
+	}
+	region, ok := s.inputBox(strings.ReplaceAll(screen, "\r", ""))
+	if !ok {
+		return false
+	}
+	if strings.Contains(region, token) {
+		return true
+	}
+	squeeze := func(x string) string {
+		return strings.Map(func(r rune) rune {
+			switch r {
+			case ' ', '\t', '\n', ' ', '│':
+				return -1
+			}
+			return r
+		}, x)
+	}
+	return strings.Contains(squeeze(region), squeeze(token))
+}
+
+// inputBox is the current input box, stripped: inputRegion's start through
+// the prompt line and the lines after it, up to (not including) the first
+// line BoxEnd matches. ok=false: no prompt line, or no end of the box.
+func (s Signature) inputBox(screen string) (string, bool) {
+	region, ok := s.inputRegion(screen)
+	if !ok || s.BoxEnd == nil {
+		return "", false
+	}
+	raw := strings.Split(region, "\n")
+	lines := make([]string, len(raw))
+	for i, l := range raw {
+		lines[i] = Strip(l)
+	}
+	prompt := -1
+	for i, l := range lines {
+		if s.Prompt.MatchString(l) {
+			prompt = i // the region's last prompt line is its first one after any rule
+			break
+		}
+	}
+	if prompt < 0 {
+		return "", false
+	}
+	for i := prompt + 1; i < len(lines); i++ {
+		end := lines[i]
+		if s.ANSI {
+			end = raw[i]
+		}
+		if s.BoxEnd.MatchString(end) {
+			return strings.Join(lines[:i], "\n"), true
+		}
+	}
+	return "", false
 }

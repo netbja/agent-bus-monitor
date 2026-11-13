@@ -35,6 +35,7 @@ type profileFile struct {
 		ANSI      bool     `toml:"ansi"`
 		Prompt    string   `toml:"prompt"`
 		RuleAbove bool     `toml:"rule_above"`
+		BoxEnd    string   `toml:"box_end"`
 		Ready     []string `toml:"ready"`
 		Busy      []string `toml:"busy"`
 		Modal     []string `toml:"modal"`
@@ -78,6 +79,12 @@ func parseProfile(name string, data []byte) (Profile, error) {
 	}
 	s := Signature{ANSI: f.Signature.ANSI, RuleAbove: f.Signature.RuleAbove}
 	if s.Prompt, err = regexp.Compile(f.Signature.Prompt); err != nil {
+		return Profile{}, fmt.Errorf("%s: %w", name, err)
+	}
+	if f.Signature.BoxEnd == "" {
+		return Profile{}, fmt.Errorf("%s: no box_end: the input box cannot be bounded", name)
+	}
+	if s.BoxEnd, err = regexp.Compile(f.Signature.BoxEnd); err != nil {
 		return Profile{}, fmt.Errorf("%s: %w", name, err)
 	}
 	for _, x := range []struct {
