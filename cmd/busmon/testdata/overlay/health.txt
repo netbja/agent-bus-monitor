@@ -36,4 +36,5 @@
   ? Model catalogue                  no current measurement
   ? Broker persistence               no current measurement
   ? Self-repair                      no current measurement
+  ? Plan drift                       no current measurement
   ── fine · 1  (a shows them) ──

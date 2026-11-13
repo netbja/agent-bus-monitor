@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/config"
@@ -18,6 +19,11 @@ import (
 // projectKinds: a plan alone never makes a project appear in --list.
 func PlanKey(project string) string      { return project + ":plan" }
 func PlanFactsKey(project string) string { return project + ":plan:facts" }
+
+// PlanIgnoreKey is the set of PRs master said belong to no task of the
+// loaded plan (plan-drift: notes, a release, a hotfix); a new load or a
+// clear drops it with the plan.
+func PlanIgnoreKey(project string) string { return project + ":plan:ignore" }
 
 // PlanRecord is {p}:plan.
 type PlanRecord struct {
@@ -57,7 +63,7 @@ func (b *Bus) LoadPlan(ctx context.Context, path, commit string, file []byte, ta
 		return fmt.Errorf("%w: %s", ErrNoProject, b.project)
 	}
 	rec, _ := json.Marshal(PlanRecord{Path: path, Commit: commit, Tasks: tasks, File: string(file)})
-	return planLoad.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project)}, string(rec)).Err()
+	return planLoad.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project), PlanIgnoreKey(b.project)}, string(rec)).Err()
 }
 
 func (b *Bus) hasProjectKind(ctx context.Context) (bool, error) {
@@ -83,6 +89,7 @@ for _, f in ipairs(redis.call('HKEYS', KEYS[2])) do
   if not keep[f] then redis.call('HDEL', KEYS[2], f) end
 end
 redis.call('SET', KEYS[1], cjson.encode(rec))
+redis.call('DEL', KEYS[3])
 return 1`)
 
 // Plan reads the active plan; ok is false when none is loaded.
@@ -119,7 +126,40 @@ func (b *Bus) PlanFacts(ctx context.Context) (map[string]PlanFact, error) {
 
 // ClearPlan deletes the plan and its facts.
 func (b *Bus) ClearPlan(ctx context.Context) error {
-	return b.r.Del(ctx, PlanKey(b.project), PlanFactsKey(b.project)).Err()
+	return b.r.Del(ctx, PlanKey(b.project), PlanFactsKey(b.project), PlanIgnoreKey(b.project)).Err()
+}
+
+// planIgnore adds a PR to the ignore set, only while a plan is loaded.
+var planIgnore = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then return redis.error_reply('PLAN_NONE') end
+return redis.call('SADD', KEYS[2], ARGV[1])`)
+
+// PlanIgnore records that PR belongs to no task of the loaded plan: its
+// merge no longer warns plan-drift.
+func (b *Bus) PlanIgnore(ctx context.Context, pr int) error {
+	if pr <= 0 {
+		return fmt.Errorf("invalid PR number %d", pr)
+	}
+	err := planIgnore.Run(ctx, b.r, []string{PlanKey(b.project), PlanIgnoreKey(b.project)}, pr).Err()
+	if err != nil && strings.Contains(err.Error(), "PLAN_NONE") {
+		return errors.New("no plan is loaded (agentbus plan load <path>@<commit>)")
+	}
+	return err
+}
+
+// PlanIgnored is the set of ignored PRs.
+func (b *Bus) PlanIgnored(ctx context.Context) (map[int]bool, error) {
+	all, err := b.r.SMembers(ctx, PlanIgnoreKey(b.project)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int]bool, len(all))
+	for _, v := range all {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			out[n] = true
+		}
+	}
+	return out, nil
 }
 
 // PlanLink records the PR of a task.

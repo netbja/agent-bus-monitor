@@ -195,6 +195,7 @@ agentbus plan link roles --pr 102                        # record a task's PR (i
 agentbus plan link roles --ref coder/roles@<sha>          # or the delivered commit, when no PR was opened (link or local mode)
 agentbus plan done roles                                 # the person merged it (or did their step): shown as "merged (recorded 2h ago)"
 agentbus plan note roles rebased on main                 # a one-line note on the task
+agentbus plan ignore 458                                 # a merge that belongs to no task (notes, a release): no plan-drift warning
 agentbus plan show [--json]                              # tasks by DERIVED state; exit 1 when a read failed ('?' tasks)
 agentbus ask master --task roles -F q.json               # an ask about a plan task names it by field (never by its words)
 # States are derived, never typed: board request done = delivered = IN REVIEW (not done);

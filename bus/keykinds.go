@@ -39,7 +39,7 @@ func (c KeyClass) String() string {
 var keyKinds = map[string]KeyClass{
 	"status": KeyRecord, "report": KeyRecord, "notify": KeyRecord, "cmd": KeyRecord,
 	"verdicts": KeyRecord, "board": KeyRecord, "asks": KeyRecord, "ideas": KeyRecord,
-	"plan": KeyRecord, "plan:facts": KeyRecord, "gate:*": KeyRecord, "swaps": KeyRecord,
+	"plan": KeyRecord, "plan:facts": KeyRecord, "plan:ignore": KeyRecord, "gate:*": KeyRecord, "swaps": KeyRecord,
 	"health": KeyRecord, "health:log": KeyRecord, "health:notes": KeyRecord, "quota:hist": KeyRecord,
 	"change:*": KeyRecord, "missions:*": KeyRecord,
 	"resume": KeyRecord, // how each agent resumes: it must outlive a reboot (herdr exit 4.7)
