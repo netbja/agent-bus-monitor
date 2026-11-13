@@ -304,6 +304,11 @@ type Options struct {
 	// a swap or a retire) is skipped, by its kind ("" a swap). up sets it;
 	// reload, which holds its own intent, does not.
 	Held func(role string) (kind string, held bool)
+	// Fence, when set, is read right before an agent role's split or tab
+	// create, after its tab was judged (self-repair spec 4.1): the service's
+	// relaunch is still its own (its intent, the dispatch lease). An error
+	// relaunches nothing for the role. The dry run never reads it.
+	Fence func(role string) error
 }
 
 // TabJudgement is one template tab of an open workspace, judged.
@@ -478,6 +483,13 @@ func Open(herdr func(args ...string) ([]byte, error), snaps map[string]bus.Agent
 				word += " (resumed)"
 			} else if o.Resume && isAgent {
 				word += " (fresh: no session to resume)"
+			}
+		}
+		if !o.DryRun && o.Fence != nil && isAgent && (v == VerdictRelaunch || v == VerdictCreate) {
+			if err := o.Fence(role); err != nil {
+				errs = append(errs, fmt.Errorf("%s: not relaunched: %w", t.Name, err))
+				fmt.Fprintf(stdout, "%s: not relaunched (%v)\n", t.Name, err)
+				continue
 			}
 		}
 		if !o.DryRun {

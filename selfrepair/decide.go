@@ -69,6 +69,9 @@ type Agent struct {
 	// spent day escalated, until `agentbus self-repair reset`.
 	Relaunches []time.Time
 	CrashLoop  bool
+	// ProofFailed: this death's relaunch failed its proof (escalated); no
+	// retry for the episode until `agentbus self-repair reset`.
+	ProofFailed bool
 }
 
 // Facts are one pass's facts for the project.
@@ -97,6 +100,7 @@ const (
 	KindHold     Kind = "hold"     // the conditions to relaunch are not there (herdr, workspace, network)
 	KindReport   Kind = "report"   // told to master, never acted on
 	KindBudget   Kind = "budget"   // a crash loop: escalated, nothing more until reset
+	KindFailed   Kind = "failed"   // this death's relaunch failed its proof: escalated, no retry
 	KindRelaunch Kind = "relaunch" // R1: a new pane split from the tab's, resumed
 	KindCreate   Kind = "create"   // R2: the required tab recreated, then the relaunch
 )
@@ -149,6 +153,8 @@ func decideOne(f Facts, a Agent) Decision {
 		return d(KindSkip, "the project is paused")
 	case a.HandoffClear:
 		return d(KindSkip, "a hand-off clear in flight")
+	case a.ProofFailed:
+		return d(KindFailed, "its relaunch failed its proof: escalated, no retry for this death until agentbus self-repair reset %s", a.Name)
 	}
 	switch a.Tab {
 	case relaunch.VerdictRelaunch, relaunch.VerdictCreate:
@@ -242,8 +248,8 @@ func Decide(f Facts) []Decision {
 
 // Health is the health check self-repair (spec 5): ok when off or with
 // nothing to repair; warn for a shadow's would-be action, a hold or a tab
-// not settling; fail for a crash loop, except in shadow, which acts on
-// nothing and so spends no budget.
+// not settling; fail for a crash loop or a failed proof, except in shadow,
+// which acts on nothing and so spends no budget.
 func Health(mode Mode, ds []Decision) health.Outcome {
 	if mode == ModeOff {
 		return health.Outcome{Status: health.OK, Detail: "self-repair off"}
@@ -251,7 +257,7 @@ func Health(mode Mode, ds []Decision) health.Outcome {
 	var fail, warn, reports []string
 	for _, d := range ds {
 		switch {
-		case d.Kind == KindBudget:
+		case d.Kind == KindBudget || d.Kind == KindFailed:
 			fail = append(fail, d.Agent+": "+d.Reason)
 		case d.Act && mode == ModeShadow && d.Kind == KindCreate:
 			warn = append(warn, "shadow: would recreate "+d.Agent+"'s tab and relaunch it ("+d.Reason+")")

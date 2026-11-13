@@ -198,3 +198,153 @@ func TestWouldRelaunchHidesNoInterruptedBeginRedis(t *testing.T) {
 		t.Fatalf("foureyes: %v %v", bad, err)
 	}
 }
+
+// A self-repair's end (step 7): its relaunched or failed entry and the end of
+// its intent in one fenced script, only by the lease holder and only while
+// the intent is its own (or already expired).
+func TestFinishSelfRepairRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "coder", "idle", "", AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	begin := SwapEvent{By: "dispatch", OldPID: 241, OldPane: "w1:p2", Episode: "241:99"}
+	if err := b.BeginSelfRepair(ctx, "tok", "coder", "n1", begin); err != nil {
+		t.Fatal(err)
+	}
+	done := SwapEvent{Role: "coder", Event: SwapRelaunched, By: "dispatch", OldPID: 241, NewPID: 902, NewPane: "w1:p5", Episode: "241:99"}
+	if err := b.FinishSelfRepair(ctx, "other", "n1", done); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("another token: %v", err)
+	}
+	if err := b.FinishSelfRepair(ctx, "tok", "n2", done); !errors.Is(err, ErrNotOwnIntent) {
+		t.Fatalf("another nonce: %v", err)
+	}
+	if err := b.FinishSelfRepair(ctx, "tok", "n1", SwapEvent{Role: "coder", Event: SwapDone, Episode: "241:99"}); err == nil {
+		t.Fatal("a done entry ends a self-repair")
+	}
+	if log, _ := b.SwapLog(ctx, "coder", 0); len(log) != 1 {
+		t.Fatalf("a refused finish wrote: %+v", log)
+	}
+	if live, _ := b.Swapping(ctx, "coder"); !live {
+		t.Fatal("a refused finish ended the intent")
+	}
+	if err := b.FinishSelfRepair(ctx, "tok", "n1", done); err != nil {
+		t.Fatalf("FinishSelfRepair: %v", err)
+	}
+	if live, _ := b.Swapping(ctx, "coder"); live {
+		t.Fatal("the intent outlived its finish")
+	}
+	log, _ := b.SwapLog(ctx, "coder", 0)
+	if len(log) != 2 || log[0].Event != SwapRelaunched || log[0].Kind != SwapKindSelfRepair || log[0].NewPID != 902 || log[0].Episode != "241:99" {
+		t.Fatalf("ledger %+v", log)
+	}
+	if bad, _, err := b.Interrupted(ctx, "coder"); err != nil || bad {
+		t.Fatalf("a finished self-repair reads interrupted: %v %v", bad, err)
+	}
+	// An intent already expired: the entry is still written (the act happened).
+	fail := SwapEvent{Role: "coder", Event: SwapFailed, By: "dispatch", Episode: "902:5", Error: "no proof in 60s"}
+	if err := b.FinishSelfRepair(ctx, "tok", "n3", fail); err != nil {
+		t.Fatalf("finish after expiry: %v", err)
+	}
+	if log, _ := b.SwapLog(ctx, "coder", 1); len(log) != 1 || log[0].Event != SwapFailed || log[0].Kind != SwapKindSelfRepair || log[0].Error != "no proof in 60s" {
+		t.Fatalf("failed entry %+v", log)
+	}
+}
+
+// What the budget reads (4.5, step 7): each role's self-repair attempts (its
+// begins), the death episodes whose relaunch failed its proof, and the crash
+// loop the dispatcher marked, all counted from the role's last reset.
+func TestSelfRepairPastRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	for _, r := range []string{"coder", "foureyes"} {
+		if _, err := b.Status(ctx, r, "idle", "", AgentIdent{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := b.MarkCrashLoop(ctx, "tok", "coder"); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("crash loop without the lease: %v", err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	attempt := func(role, nonce, ep, event string) {
+		t.Helper()
+		if err := b.BeginSelfRepair(ctx, "tok", role, nonce, SwapEvent{By: "dispatch", Episode: ep}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.FinishSelfRepair(ctx, "tok", nonce, SwapEvent{Role: role, Event: event, By: "dispatch", Episode: ep}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	attempt("coder", "a", "1:1", SwapRelaunched)
+	attempt("coder", "b", "2:2", SwapFailed)
+	// Neither a reload's begin nor a shadow's record is a self-repair attempt.
+	if err := b.BeginSwap(ctx, "coder", SwapIntent{Kind: SwapKindReload, By: "sentinel"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = b.EndSwap(ctx, "coder")
+	if err := b.LogWouldRelaunch(ctx, "tok", SwapEvent{Role: "coder", By: "dispatch", Episode: "3:3"}); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := b.ServerTime(ctx)
+	past, err := b.SelfRepairPast(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := past["coder"]
+	if len(c.Attempts) != 2 || !c.Failed["2:2"] || c.Failed["1:1"] || c.CrashLoop {
+		t.Fatalf("coder %+v", c)
+	}
+	for _, at := range c.Attempts {
+		if d := now.Sub(at); d < 0 || d > time.Minute {
+			t.Fatalf("attempt at %v, now %v", at, now)
+		}
+	}
+	if !c.Attempts[0].Before(c.Attempts[1]) && !c.Attempts[0].Equal(c.Attempts[1]) {
+		t.Fatalf("attempts not oldest first: %v", c.Attempts)
+	}
+	if _, ok := past["foureyes"]; ok {
+		t.Fatalf("foureyes has no past: %+v", past["foureyes"])
+	}
+
+	// The crash loop: marked once (the escalation is sent once), kept until reset.
+	if fresh, err := b.MarkCrashLoop(ctx, "other", "coder"); !errors.Is(err, ErrNotHolder) || fresh {
+		t.Fatalf("another token: %v %v", fresh, err)
+	}
+	if fresh, err := b.MarkCrashLoop(ctx, "tok", "coder"); err != nil || !fresh {
+		t.Fatalf("first mark: %v %v", fresh, err)
+	}
+	if fresh, err := b.MarkCrashLoop(ctx, "tok", "coder"); err != nil || fresh {
+		t.Fatalf("second mark: %v %v", fresh, err)
+	}
+	if past, _ := b.SelfRepairPast(ctx); !past["coder"].CrashLoop {
+		t.Fatalf("crash loop not read: %+v", past["coder"])
+	}
+
+	// The reset (agentbus self-repair reset): the crash loop cleared, and what
+	// came before it no longer counts, neither attempts nor failed episodes.
+	if was, err := b.ResetSelfRepair(ctx, "coder"); err != nil || !was {
+		t.Fatalf("reset: %v %v", was, err)
+	}
+	if was, err := b.ResetSelfRepair(ctx, "coder"); err != nil || was {
+		t.Fatalf("second reset: %v %v", was, err)
+	}
+	if _, err := b.ResetSelfRepair(ctx, "Bad Role"); err == nil {
+		t.Fatal("an invalid role reset")
+	}
+	past, _ = b.SelfRepairPast(ctx)
+	if c = past["coder"]; c.CrashLoop || len(c.Attempts) != 0 || len(c.Failed) != 0 || c.ResetAfter == "" {
+		t.Fatalf("after reset %+v", c)
+	}
+	attempt("coder", "c", "4:4", SwapFailed)
+	if past, _ = b.SelfRepairPast(ctx); len(past["coder"].Attempts) != 1 || !past["coder"].Failed["4:4"] {
+		t.Fatalf("after reset, a new attempt: %+v", past["coder"])
+	}
+	if c, k := ClassOf(b.Project(), SelfRepairKey(b.Project())); c != KeyRecord || k != "selfrepair" {
+		t.Fatalf("selfrepair key class %v %q", c, k)
+	}
+}
