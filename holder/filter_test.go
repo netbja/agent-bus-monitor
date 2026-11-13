@@ -38,6 +38,16 @@ func TestFilterOutput(t *testing.T) {
 		{"XTGETTCAP", "\x1bP+q544e" + st, "", false},
 		{"a sixel DCS passes", "\x1bPq#0;2;0;0;0" + st, "\x1bPq#0;2;0;0;0" + st, false},
 		{"bracketed paste mode passes", "\x1b[?2004h", "\x1b[?2004h", false},
+		// foureyes on 5c: the rest of the query class, whose replies the
+		// person's terminal would type into the program.
+		{"DECRQM", "a\x1b[?2026$pb", "ab", false},
+		{"DECRQM ANSI", "\x1b[4$p", "", false},
+		{"XTVERSION", "\x1b[>q\x1b[>0q", "", false},
+		{"colour-scheme query", "\x1b[?996n", "", false},
+		{"another DSR", "\x1b[?15n\x1b[?26n", "", false},
+		{"kitty graphics query", "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA" + st + "x", "x", false},
+		{"kitty graphics display passes", "\x1b_Ga=T,f=100;AAAA" + st, "\x1b_Ga=T,f=100;AAAA" + st, false},
+		{"a DECSET passes", "\x1b[?2026h", "\x1b[?2026h", false},
 		{"UTF-8 passes", "é→✓", "é→✓", false},
 	}
 	for _, c := range cases {

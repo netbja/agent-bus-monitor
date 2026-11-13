@@ -20,8 +20,11 @@ const seqMax = 1 << 20
 //     into the program: window reports (CSI 11/13-16/18-21 t), DECRQSS and
 //     XTGETTCAP (DCS $ q, DCS + q), OSC 4/10-19 colour queries ("?"), DA
 //     (CSI c, CSI > c, CSI = c), DSR (CSI 5 n, CSI 6 n, CSI ? 6 n) and the
-//     kitty keyboard query (CSI ? u). The holder's emulator answers the
-//     program itself (terminal.readLoop).
+//     kitty keyboard query (CSI ? u), and (foureyes on 5c) every DSR request
+//     (CSI … n), DECRQM (CSI … $ p), XTVERSION (CSI > q) and kitty graphics
+//     queries (APC G … a=q). The holder's emulator answers the program
+//     itself (terminal.readLoop). 8-bit C1 introducers (0x9b, 0x9d, 0x90) are
+//     not parsed: terminals in UTF-8 mode do not act on them.
 //
 // Everything else passes byte for byte.
 type outputFilter struct {
@@ -129,6 +132,15 @@ func (f *outputFilter) dropString() bool {
 	body := f.seq[2:]
 	body = bytes.TrimSuffix(bytes.TrimSuffix(body, []byte{0x1b, '\\'}), []byte{0x07})
 	switch f.strKind {
+	case '_': // a kitty graphics query (APC G a=q ...): the terminal answers it (foureyes)
+		ctl, _, _ := bytes.Cut(body, []byte(";"))
+		if len(ctl) > 0 && ctl[0] == 'G' {
+			for _, kv := range bytes.Split(ctl[1:], []byte(",")) {
+				if bytes.Equal(kv, []byte("a=q")) {
+					return true
+				}
+			}
+		}
 	case 'P':
 		return bytes.HasPrefix(body, []byte("$q")) || bytes.HasPrefix(body, []byte("+q"))
 	case ']':
@@ -165,8 +177,12 @@ func dropCSI(seq []byte) bool {
 	case 't':
 		first, _, _ := strings.Cut(params, ";")
 		return reportCodes[first]
-	case 'n':
-		return params == "5" || params == "6" || params == "?6"
+	case 'n': // every DSR request: 5, 6, ?6, ?15, ?26, ?996 (colour scheme)... (foureyes)
+		return true
+	case 'p': // DECRQM: CSI Ps $ p, CSI ? Ps $ p
+		return strings.HasSuffix(params, "$")
+	case 'q': // XTVERSION: CSI > q, CSI > 0 q (CSI Ps SP q, the cursor style, passes)
+		return strings.HasPrefix(params, ">")
 	case 'c':
 		switch params {
 		case "", "0", ">", ">0", "=", "=0":

@@ -194,8 +194,12 @@ func TestHolderAttachEndsWithTheProgram(t *testing.T) {
 	}
 }
 
-// draftAfter's table (spec 4.5).
-func TestDraftAfter(t *testing.T) {
+// The viewer's input scanner (spec 4.5): what is typing and what ends a
+// draft, however the viewer's bytes are cut across frames (reviewer-codex:
+// a kitty Enter in two frames; foureyes: the viewer terminal's own replies
+// are no typing).
+func TestInputScan(t *testing.T) {
+	const st = "\x1b\\"
 	for _, c := range []struct {
 		before bool
 		in     string
@@ -208,17 +212,39 @@ func TestDraftAfter(t *testing.T) {
 		{false, "\rabc", true, true},
 		{true, "\x1b[13u", false, true},
 		{true, "\x1b[13;1u", false, true},
+		{true, "abc\x1b[13u", false, true},
 		{false, "\x1b[A", true, true},
+		{false, "\x1b[15~", true, true},
+		{false, "\x1bOP", true, true},
+		{false, "\x1bx", true, true},
+		{false, "\x1b[97u", true, true},
 		{false, "\x1b[<0;5;5M", false, false},
 		{true, "\x1b[<0;5;5m", true, false},
 		{false, "\x1b[M !!", false, false},
 		{false, "\x1b[I\x1b[O", false, false},
-		{false, "\x1b[97u", true, true},
+		// The viewer terminal's replies to queries: never typing.
+		{false, "\x1b[?2026;2$y", false, false},          // DECRQM
+		{false, "\x1bP>|ghostty 1.2" + st, false, false}, // XTVERSION
+		{false, "\x1b[?997;1n", false, false},            // colour scheme report
+		{false, "\x1b[0n", false, false},                 // DSR status
+		{false, "\x1b[12;40R", false, false},             // DSR cursor
+		{false, "\x1b[?62;22c", false, false},            // DA
+		{false, "\x1b[4;800;1200t", false, false},        // window size report
+		{false, "\x1b]11;rgb:0000/0000/0000\x07", false, false},
+		{false, "\x1b]11;rgb:0000/0000/0000" + st, false, false},
+		{false, "\x1b_Gi=1;OK" + st, false, false}, // kitty graphics reply
+		{true, "\x1b[?2026;2$y", true, false},      // a reply leaves a draft as it was
+		{false, "\x1b[?2026;2$yhi", true, true},
 		{false, "", false, false},
 	} {
-		d, ty := draftAfter(c.before, []byte(c.in))
-		if d != c.draft || ty != c.typed {
-			t.Errorf("draftAfter(%v, %q) = %v %v, want %v %v", c.before, c.in, d, ty, c.draft, c.typed)
+		for cut := 0; cut <= len(c.in); cut++ {
+			var s inputScan
+			d, t1 := s.feed(c.before, []byte(c.in[:cut]))
+			d, t2 := s.feed(d, []byte(c.in[cut:]))
+			if d != c.draft || (t1 || t2) != c.typed {
+				t.Errorf("%q (cut at %d) from %v: draft %v typed %v, want %v %v", c.in, cut, c.before, d, t1 || t2, c.draft, c.typed)
+				break
+			}
 		}
 	}
 }

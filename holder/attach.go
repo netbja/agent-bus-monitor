@@ -2,6 +2,7 @@ package holder
 
 import (
 	"net"
+	"strings"
 	"time"
 
 	"github.com/creack/pty"
@@ -21,6 +22,7 @@ type viewer struct {
 	out        chan []byte // filtered output, in order
 	repaint    bool        // fell behind: its next write is a first paint
 	filter     outputFilter
+	in         inputScan // its input read as a stream (t.mu held)
 }
 
 // addViewer registers v and queues its first paint, rendered from the
@@ -123,7 +125,7 @@ func (t *terminal) input(v *viewer, b []byte) {
 	t.inMu.Unlock()
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	draft, typed := draftAfter(t.draft, b)
+	draft, typed := v.in.feed(t.draft, b)
 	if typed {
 		t.typedAt = time.Now()
 		t.activeViewer(v)
@@ -134,49 +136,110 @@ func (t *terminal) input(v *viewer, b []byte) {
 	t.draft = draft
 }
 
-// draftAfter is the draft once b is typed (spec 4.5): any byte starts one,
-// an Enter (CR, or the kitty encoding CSI 13 u) ends it; SGR and X10 mouse
-// reports and focus reports are skipped. typed: b held a byte that is not
-// such a report.
-func draftAfter(draft bool, b []byte) (bool, bool) {
+// inputScan reads one viewer's input as a stream (spec 4.5): a sequence cut
+// across two frames is read as one (reviewer-codex). Any key starts a draft
+// and an Enter (CR, the kitty encoding CSI 13 u) ends it; what is not the
+// person typing is skipped: SGR and X10 mouse reports, focus reports, and the
+// viewer terminal's replies to queries (foureyes), which a key never
+// produces: a CSI ending in R, n, y, c or t (DSR, DECRPM, DA, window reports)
+// and any string (DCS, OSC, APC, PM, SOS: XTVERSION, colour reports, kitty
+// graphics replies). A lone ESC at a frame's end waits for the next byte.
+// xterm's modified F3 (CSI 1 ; m R) reads as a cursor report: no typing.
+type inputScan struct {
+	state  byte   // 0 ground, 'e' after ESC, '[' in a CSI, 'O' after SS3, 's' in a string, 'x' ESC in a string, 'm' X10 mouse bytes
+	params []byte // a CSI's parameters and intermediates
+	skip   int    // X10 mouse: bytes left
+	strBEL bool   // the string is an OSC: BEL ends it too
+}
+
+// csiMax bounds the parameters kept (a key's are a few bytes).
+const csiMax = 64
+
+func (s *inputScan) feed(draft bool, b []byte) (bool, bool) {
 	typed := false
-	for i := 0; i < len(b); i++ {
-		if b[i] == 0x1b && i+2 < len(b) && b[i+1] == '[' {
-			j := i + 2
+	key := func(enter bool) {
+		typed, draft = true, !enter
+	}
+	for _, c := range b {
+		switch s.state {
+		case 0:
+			switch c {
+			case 0x1b:
+				s.state = 'e'
+			case '\r':
+				key(true)
+			default:
+				key(false)
+			}
+		case 'e':
+			switch c {
+			case '[':
+				s.state, s.params = '[', s.params[:0]
+			case 'O':
+				s.state = 'O'
+			case 'P', ']', '_', '^', 'X':
+				s.state, s.strBEL = 's', c == ']'
+			case 0x1b: // ESC ESC: the first is the Esc key
+				key(false)
+			default: // Alt and a key
+				s.state = 0
+				key(c == '\r')
+			}
+		case 'O': // SS3 and its key (F1-F4, keypad)
+			s.state = 0
+			key(false)
+		case '[':
+			if c >= 0x20 && c <= 0x3f { // parameters and intermediates
+				if len(s.params) < csiMax {
+					s.params = append(s.params, c)
+				}
+				continue
+			}
+			s.state = 0
+			if c == 'M' && len(s.params) == 0 { // X10 mouse: three bytes follow
+				s.state, s.skip = 'm', 3
+				continue
+			}
+			if !csiReply(s.params, c) {
+				p := string(s.params)
+				key(c == 'u' && (p == "13" || strings.HasPrefix(p, "13;")))
+			}
+		case 'm':
+			if s.skip--; s.skip == 0 {
+				s.state = 0
+			}
+		case 's':
 			switch {
-			case b[j] == '<': // SGR mouse: CSI < … M or m
-				k := j + 1
-				for k < len(b) && b[k] != 'M' && b[k] != 'm' {
-					k++
-				}
-				if k < len(b) {
-					i = k
-					continue
-				}
-			case b[j] == 'M' && j+3 < len(b): // X10 mouse: CSI M and three bytes
-				i = j + 3
-				continue
-			case b[j] == 'I' || b[j] == 'O': // focus in, focus out
-				i = j
-				continue
+			case c == 0x07 && s.strBEL:
+				s.state = 0
+			case c == 0x1b:
+				s.state = 'x'
 			}
-			k := j
-			for k < len(b) && (b[k] >= '0' && b[k] <= '9' || b[k] == ';' || b[k] == ':') {
-				k++
+		case 'x':
+			if c == '\\' {
+				s.state = 0
+			} else if c != 0x1b {
+				s.state = 's'
 			}
-			if k < len(b) && b[k] == 'u' && (string(b[j:k]) == "13" || len(b[j:k]) > 3 && string(b[j:j+3]) == "13;") {
-				draft, typed, i = false, true, k // kitty Enter
-				continue
-			}
-		}
-		typed = true
-		if b[i] == '\r' {
-			draft = false
-		} else {
-			draft = true
 		}
 	}
 	return draft, typed
+}
+
+// csiReply: a CSI that is no key: a mouse or focus report, or a terminal's
+// reply (DSR R and n, DECRPM y, DA c, window reports t).
+func csiReply(params []byte, final byte) bool {
+	switch {
+	case len(params) > 0 && params[0] == '<' && (final == 'M' || final == 'm'): // SGR mouse
+		return true
+	case len(params) == 0 && (final == 'I' || final == 'O'): // focus in, out
+		return true
+	}
+	switch final {
+	case 'R', 'n', 'y', 'c', 't':
+		return true
+	}
+	return false
 }
 
 // activity is the terminal's ActivityInfo: its output, the viewers' typing

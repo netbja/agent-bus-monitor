@@ -512,14 +512,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   Step 5c, attach (spec 4.5, 4.6): an `attach` frame turns its connection into the viewer's: the
   reply, a first paint (`screen.Render`), then the output as data frames through the viewer's own
   `outputFilter` (security S3: OSC 52 unless `Config.OSC52`, OSC 8 links with their text kept,
-  window reports `CSI 11/13-16/18-21 t`, `DCS $ q` and `+ q`, OSC 4/10-19 `?` queries, DA, DSR
-  `5/6/?6 n`, `CSI ? u`; a sequence cut across reads is read as one, and one past 1 MiB is dropped
+  window reports `CSI 11/13-16/18-21 t`, `DCS $ q` and `+ q`, OSC 4/10-19 `?` queries, DA, every DSR
+  request `CSI … n`, DECRQM `CSI … $ p`, XTVERSION `CSI > q`, kitty graphics queries (APC `G … a=q`),
+  `CSI ? u`; a sequence cut across reads is read as one, and one past 1 MiB is dropped
   whole). A viewer's queue holds 256 chunks; one that falls behind is repainted from the emulator,
   never blocking the program. From the viewer: data frames are its input (an observer's are
   dropped), written under the terminal's input lock; `focus`, `resize` and `detach` control
-  frames. A viewer is focused from its attach until a focus-out; an observer never is. Any byte
-  starts a draft and an Enter (CR, kitty `CSI 13 u`) ends it; SGR and X10 mouse reports and focus
-  reports are no typing. The most recently active non-observer sets the size. `Activity` reports
+  frames. A viewer is focused from its attach until a focus-out; an observer never is. The viewer's
+  input is read as a stream (a sequence cut across frames is one): any key starts a draft and an Enter
+  (CR, kitty `CSI 13 u`) ends it; SGR and X10 mouse reports, focus reports and the viewer terminal's
+  replies (a CSI ending in R, n, y, c or t; any DCS, OSC, APC string) are no typing. The most recently active non-observer sets the size. `Activity` reports
   the viewers, the focused ones, the last typing and the draft.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
