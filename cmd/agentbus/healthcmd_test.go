@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -82,5 +85,82 @@ func TestHealthCommandNamedChecks(t *testing.T) {
 	out.Reset()
 	if code := runHealth(ctx, b, "coder", []string{"team-stall", "nope"}, &out, &errw); code != 2 || out.Len() != 0 {
 		t.Fatalf("unknown check: code=%d out=%q", code, out.String())
+	}
+}
+
+// health warns (sentinel's daily digest) and health accept (the person's):
+// a warn of 50 h is listed with its age; accepted, it is held back and
+// counted; an accept needs --as and no agent identity.
+func TestHealthWarnsAndAccept(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()) })
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	run := func(self string, args ...string) (int, string, string) {
+		var out, errw bytes.Buffer
+		code := runHealth(ctx, b, self, args, &out, &errw)
+		return code, out.String(), errw.String()
+	}
+	if code, out, _ := run("sentinel", "warns"); code != 0 || !strings.Contains(out, "no check in warn over 24 h") {
+		t.Fatalf("nothing: %d %q", code, out)
+	}
+	now, _ := b.ServerTime(ctx)
+	rec := health.Record{ID: "disk", Status: health.Warn, Detail: "data at 91%", Since: now.Add(-50 * time.Hour).UnixMilli(), ObservedAt: now.UnixMilli(), Fingerprint: "f"}
+	raw, _ := json.Marshal(rec)
+	if err := r.HSet(ctx, bus.HealthKey(b.Project()), "disk", raw).Err(); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := run("sentinel", "warns")
+	if code != 0 || !strings.HasPrefix(out, "Health digest: 1 checks in warn over 24 h") || !strings.Contains(out, "- disk warn 2d2h: data at 91%") {
+		t.Fatalf("a long warn: %d %q", code, out)
+	}
+	for _, c := range []struct {
+		self string
+		args []string
+	}{
+		{"anonymous", []string{"accept", "disk", "grows on purpose"}},      // no --as
+		{"coder", []string{"accept", "disk", "--as", "charlie", "x"}},      // an agent's
+		{"anonymous", []string{"accept", "nope", "--as", "charlie", "x"}},  // no such check
+		{"anonymous", []string{"accept", "disk", "--as", "charlie"}},       // no reason
+		{"anonymous", []string{"accept", "disk", "--as", "Bad Name", "x"}}, // not a name
+	} {
+		if code, _, _ := run(c.self, c.args...); code == 0 {
+			t.Errorf("%s %v accepted", c.self, c.args)
+		}
+	}
+	if code, out, errw := run("anonymous", "accept", "disk", "--as", "charlie", "the", "volume", "grows"); code != 0 || !strings.Contains(out, "accepted") {
+		t.Fatalf("accept: %d %q %q", code, out, errw)
+	}
+	if code, out, _ := run("sentinel", "warns"); code != 0 || !strings.Contains(out, "no check in warn over 24 h (1 accepted by the person this week)") {
+		t.Fatalf("accepted: %d %q", code, out)
+	}
+}
+
+// The sentinel skill's daily review sends the long warns as one digest and
+// never accepts a warn; every `agentbus health <sub>` it names exists.
+func TestSentinelSkillSendsOneWarnDigest(t *testing.T) {
+	raw, err := os.ReadFile("../../skills/agent-bus-sentinel/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(raw)
+	for _, want := range []string{"agentbus health warns", "**one** message", "never one message per warn",
+		"You never accept a warn yourself", "your\nallow-list is unchanged"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("the skill lacks %q", want)
+		}
+	}
+	var usage string
+	for _, c := range commands {
+		if c.Name == "health" {
+			usage = strings.Join(c.Usage, " ")
+		}
+	}
+	for _, m := range regexp.MustCompile("agentbus health ([a-z]+)").FindAllStringSubmatch(skill, -1) {
+		if _, isCheck := health.ByID(m[1]); !isCheck && !strings.Contains(usage, m[1]) {
+			t.Errorf("the skill names agentbus health %s, not in the help table", m[1])
+		}
 	}
 }

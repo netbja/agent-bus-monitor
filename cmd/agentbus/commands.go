@@ -271,9 +271,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo refresh -q"},
 	},
 	{
-		Name: "health", Text: true, Usage: []string{"health [list | <check>... | detail <id> | log [<after-id>] | note <id> <text...>]"},
-		Summary:  "the project's measured health and its notes; named checks: status, reason and detail only",
-		Examples: []string{"agentbus -p demo health", "agentbus -p demo health team-stall clear-stall", "agentbus -p demo health detail services"},
+		Name: "health", Text: true, Usage: []string{"health [list | <check>... | detail <id> | log [<after-id>] | note <id> <text...>]",
+			"health warns", "health accept <id> --as <person> <reason...>"},
+		Summary: "the project's measured health and its notes; named checks: status, reason and detail only; warns: the checks in warn over 24 h (sentinel's daily digest); accept: the person accepts a check's current warn for a week",
+		Flags:   []cli.Flag{{Long: "as", Short: 'a', Arg: "<person>", Help: "accept: your name (a person accepts a warn, never an agent)"}},
+		Examples: []string{"agentbus -p demo health", "agentbus -p demo health team-stall clear-stall", "agentbus -p demo health detail services",
+			"agentbus -p demo health warns", "agentbus -p demo health accept disk --as charlie the volume grows on purpose"},
 	},
 	{
 		Name: "pause", Text: true, Usage: []string{"pause --for <dur> | --until <HH:MM> | --until-reset [--to <agent>] [reason...]", "pause --status"},
@@ -541,7 +544,7 @@ var commands = []cli.Command{
 		Name: "notifications", NoProject: true, Usage: []string{"notifications status", "notifications test [<target>]",
 			"notifications setup", "notifications add ntfy|discord|desktop [--name N] …", "notifications remove <name> [--yes]",
 			"notifications rename <old> <new>", "notifications show-topic <name>"},
-		Summary:  "the notification targets of notify.toml (never a URL) and their last sends (no broker); test sends one message now; setup, add, remove, rename and show-topic write the file or show a topic on the terminal only: the person's acts (they read the broker's agents to refuse an agent's process)",
+		Summary: "the notification targets of notify.toml (never a URL) and their last sends (no broker); test sends one message now; setup, add, remove, rename and show-topic write the file or show a topic on the terminal only: the person's acts (they read the broker's agents to refuse an agent's process)",
 		Flags: []cli.Flag{
 			{Long: "name", Arg: "<target>", Help: "add: the target's name (phone, team or here by default)"},
 			{Long: "server", Arg: "<url>", Help: "add ntfy: your own server (ntfy.sh by default)"},

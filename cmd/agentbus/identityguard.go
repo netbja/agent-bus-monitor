@@ -53,7 +53,9 @@ func readOnlyCommand(cmd string, rest []string) bool {
 	case "plan":
 		return first == "" || first == "show"
 	case "health":
-		return first == "" || first == "list" || first == "detail" || first == "log"
+		// warns only reads; accept is the person's, by an explicit --as (as reload)
+		return first == "" || first == "list" || first == "detail" || first == "log" || first == "warns" ||
+			first == "accept" && slices.Contains(rest, "--as")
 	}
 	return false
 }
