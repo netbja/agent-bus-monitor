@@ -104,6 +104,14 @@ func TestProjectDirRefuses(t *testing.T) {
 			os.Chmod(filepath.Join(tmp, "agentbus-"+uid), 0o711)
 			return map[string]string{"TMPDIR": tmp}, "mode 0711"
 		},
+		"a narrower mode (foureyes, 5a)": func(t *testing.T) (map[string]string, string) {
+			xdg := t.TempDir()
+			os.Chmod(xdg, 0o700)
+			os.Mkdir(filepath.Join(xdg, "agentbus"), 0o700)
+			os.Chmod(filepath.Join(xdg, "agentbus"), 0o500)
+			t.Cleanup(func() { os.Chmod(filepath.Join(xdg, "agentbus"), 0o700) })
+			return map[string]string{"XDG_RUNTIME_DIR": xdg}, "mode 0500"
+		},
 		"a file, not a directory": func(t *testing.T) (map[string]string, string) {
 			xdg := t.TempDir()
 			os.Chmod(xdg, 0o700)

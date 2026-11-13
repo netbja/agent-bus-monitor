@@ -478,6 +478,29 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   refuses another uid both ways, and `InTree` reads a peer as inside a terminal when an ancestor is
   the holder by pid and start time; a chain that does not reach pid 1 within 32 ancestors is
   in-tree too (an unknown is refused the holder's writes, never let through).
+  Step 5b, the server (`holder.Server`; still nothing uses it): one per project, a subreaper
+  (`PR_SET_CHILD_SUBREAPER`, Linux), its socket 0600, a socket that still answers refused as
+  another holder of the build. A connection is the same uid (`CheckSameUser`), then `hello` in the
+  holder's protocol (else a refusal and the close), then one `reply` per control frame. `Start`
+  builds the command itself (`TemplateLaunch`: `env ROLES_TOML=<manifest> <agent-launch> <role>
+  <project> [--profile p] [--resume id]`, the role in the manifest, the profile its own or a
+  `fallback_profiles` one, a resume only for a client whose resume is verified), runs it on a new
+  PTY (never reused) with `AGENTBUS_TERM_ID` and `AGENTBUS_HOST`, and reports its pid and start
+  time. The holder always reads the output into the emulator (and a 1 MB raw tail) and writes the
+  emulator's answers to queries (DSR, DA) back, viewer or not. A terminal ends with its process
+  group: on Linux the wait loop learns the leader's exit with `waitid(WNOWAIT)`, leaving it unreaped
+  (so its pid, and its group's number, cannot be reused), ends what is left of the group (SIGHUP,
+  SIGKILL after the grace: a child that ignores SIGHUP never outlives its terminal, reviewer-codex),
+  then reaps it. The group always gets that SIGKILL: the `/proc` scan only spares the grace (a group
+  that looks empty is killed at once), it never decides that nothing is left, since one scan can miss
+  a process forked while it reads (reviewer-codex). `Close` is SIGHUP to the group, SIGKILL after the grace, and only while the leader is
+  unreaped: a terminal that ended is never signalled again, by one Close or many, since its group's
+  number may be another terminal's now (reviewer-codex). A descendant that left the group (setsid)
+  is not reached; off Linux (no `/proc`) the leftovers are not ended at the leader's exit. A terminal's own pid is reaped by its `Wait`, so its exit
+  status is kept; the reaper (on SIGCHLD, and a 5 s sweep) reaps only exited children it did not
+  start, never `wait(-1)`. An in-tree peer is refused `start`, `close`, `submit` and an attach
+  that types (`in_tree`); `submit` and `attach` answer `later` until step 5c. `holder.Client`
+  checks the holder's uid before it says hello.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
