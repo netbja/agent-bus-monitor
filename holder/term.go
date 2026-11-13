@@ -20,6 +20,7 @@ const tailMax = 1 << 20
 // queries back (DSR, DA: spec 4.6, S3), viewer or not.
 type terminal struct {
 	id, role string
+	profile  string // the client's agentstate profile ("" none: never prompted)
 	pid      int
 	start    uint64
 	cmd      *exec.Cmd
@@ -47,6 +48,7 @@ type terminal struct {
 	ended   bool                                    // the leader was reaped: its numbers may be reused, never signalled again
 	inMu    sync.Mutex                              // the input lock: every viewer byte, and Submit's critical section (step 5d)
 	holdState
+	leftBehind bool // a line may be left in the input: no submit until it reads empty
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
