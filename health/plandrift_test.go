@@ -15,7 +15,8 @@ func TestParseMerges(t *testing.T) {
 		"commit cccc3333\nFix the thing (#463)\n" +
 		"commit dddd4444\nMerge branch 'main' into feat/x\n" +
 		"commit eeee5555\nMerge pull request #0 from netbja/x\n" +
-		"commit ffff6666\nMerge pull request #462 from netbja/feat/a b\n"
+		"commit ffff6666\nMerge pull request #462 from netbja/feat/a b\n" +
+		"commit 99997777\nRevert \"Merge pull request #461 from netbja/spec/herdr-security\"\n"
 	got := ParseMerges(out)
 	if len(got) != 2 || got[0] != (Merge{PR: 465, Branch: "feat/self-repair-7", SHA: "aaaa1111"}) ||
 		got[1] != (Merge{PR: 464, Branch: "feat/herdr-5-emptyinput", SHA: "bbbb2222"}) {
@@ -70,6 +71,20 @@ func TestEvaluatePlanDrift(t *testing.T) {
 			in.Merges = append(in.Merges, Merge{PR: 462, Branch: "feat/herdr-5a-2"})
 			in.Ignored[462] = true // its unlinked warning is not the point here
 		}, Warn, []string{"task herdr-5a linked to #440, but #462 merged from feat/herdr-5a-2: relink"}},
+		// reviewer-codex on plan-drift: the linked PR in the list does not
+		// hide a later PR of its stem (the list is newest first).
+		{"superseded though its linked PR is in the list", func(in *PlanDriftInput) {
+			in.Links["x"] = 463
+			in.Branches["x"] = "feat/x-1"
+			in.Merges = []Merge{{PR: 466, Branch: "feat/x-2"}, {PR: 465, Branch: "feat/self-repair-7"}, {PR: 464, Branch: "feat/herdr-5-emptyinput"}, {PR: 463, Branch: "feat/x-1"}}
+			in.Ignored[466] = true
+		}, Warn, []string{"task x linked to #463, but #466 merged from feat/x-2: relink"}},
+		{"an older PR of its stem is no supersede", func(in *PlanDriftInput) {
+			in.Links["x"] = 466
+			in.Branches["x"] = "feat/x-2"
+			in.Merges = []Merge{{PR: 466, Branch: "feat/x-2"}, {PR: 465, Branch: "feat/self-repair-7"}, {PR: 464, Branch: "feat/herdr-5-emptyinput"}, {PR: 463, Branch: "feat/x-1"}}
+			in.Ignored[463] = true
+		}, OK, nil},
 		{"a stale fetch", func(in *PlanDriftInput) { in.FetchAge = 2 * time.Hour }, Unknown, []string{"origin/main last fetched 2h ago"}},
 		{"no fetch read", func(in *PlanDriftInput) { in.FetchKnown = false }, Unknown, []string{"FETCH_HEAD"}},
 		{"git unreadable", func(in *PlanDriftInput) { in.GitErr = "rev-list failed" }, Unknown, []string{"rev-list failed"}},

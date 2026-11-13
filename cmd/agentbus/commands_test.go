@@ -121,7 +121,7 @@ var foreignFlags = []string{
 	"--verify", "--quiet", // git rev-parse, verdict --head's commit check (forge-delivery)
 	"--roles",                        // roles template's team, the argv bootstrap builds (agentbus-start)
 	"--count", "--reverse", "--push", // git rev-list, git log and git remote get-url (deliver)
-	"--first-parent", "--git-path", // git rev-list and git rev-parse, plan-drift's read
+	"--first-parent", "--git-common-dir", "--path-format", // git rev-list and git rev-parse, plan-drift's read
 	"--body-file", "--output", "--source-branch", "--target-branch", "--description", // gh and glab (deliver)
 }
 

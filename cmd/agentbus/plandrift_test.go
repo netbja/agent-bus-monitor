@@ -145,6 +145,33 @@ func TestPlanDriftRealGit(t *testing.T) {
 	if age, err := fetchAgeIn(context.Background(), dir); err != nil || age > time.Minute {
 		t.Fatalf("age %v %v", age, err)
 	}
+	// FETCH_HEAD is per worktree (foureyes): a fetch in a linked worktree,
+	// where the agents work, makes origin/main fresh for the main tree too.
+	wt := filepath.Join(t.TempDir(), "wt")
+	git("worktree", "add", "-q", "--detach", wt)
+	if err := os.Remove(filepath.Join(dir, ".git", "FETCH_HEAD")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fetchAgeIn(context.Background(), dir); err == nil {
+		t.Fatal("an age with no FETCH_HEAD anywhere")
+	}
+	old := time.Now().Add(-3 * time.Hour)
+	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Chtimes(filepath.Join(dir, ".git", "FETCH_HEAD"), old, old)
+	wtGit, err := gitRead(context.Background(), wt, "rev-parse", "--absolute-git-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(strings.TrimSpace(wtGit), "FETCH_HEAD"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{dir, wt} {
+		if age, err := fetchAgeIn(context.Background(), root); err != nil || age > time.Minute {
+			t.Fatalf("from %s: age %v %v, want the worktree's fresh fetch", root, age, err)
+		}
+	}
 	if validCommit("--all") || validCommit("HEAD") || validCommit("abc") || !validCommit(base) {
 		t.Fatal("validCommit")
 	}
@@ -157,5 +184,15 @@ func TestPlanDriftRealGit(t *testing.T) {
 	git("commit", "-q", "-m", "big")
 	if _, err := gitRead(context.Background(), dir, "show", "HEAD:big"); err == nil || !strings.Contains(err.Error(), "past") {
 		t.Fatalf("an output past the cap: %v", err)
+	}
+	// reviewer-codex: the cap stops git while it writes, never after
+	// buffering everything: an output that never ends returns at the cap,
+	// long before the context's end.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err = gitRead(ctx, dir, "-c", "alias.flood=!yes", "flood")
+	if err == nil || !strings.Contains(err.Error(), "past") || time.Since(start) > 5*time.Second {
+		t.Fatalf("an endless output: %v after %v", err, time.Since(start))
 	}
 }

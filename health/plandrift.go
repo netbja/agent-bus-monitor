@@ -111,13 +111,21 @@ func planDrift(in PlanDriftInput) (lines []string, why string, ok bool) {
 		if branch == "" {
 			continue
 		}
+		newer := in.Merges // newest first: the merges after the linked one's
 		if m, merged := byPR[pr]; merged {
 			if m.Branch != branch {
 				lines = append(lines, fmt.Sprintf("task %s linked to #%d, merged from %s, delivered on %s", task, pr, m.Branch, branch))
 			}
-			continue
+			// Its own merge in the list does not hide a later PR of its stem
+			// (reviewer-codex): only the merges newer than it are looked at.
+			for i, n := range in.Merges {
+				if n.PR == pr {
+					newer = in.Merges[:i]
+					break
+				}
+			}
 		}
-		for _, m := range in.Merges {
+		for _, m := range newer {
 			if m.PR != pr && branchStem(m.Branch) == branchStem(branch) {
 				lines = append(lines, fmt.Sprintf("task %s linked to #%d, but #%d merged from %s: relink", task, pr, m.PR, m.Branch))
 				break
