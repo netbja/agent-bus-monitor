@@ -113,3 +113,48 @@ func TestSwapKindWord(t *testing.T) {
 		}
 	}
 }
+
+// The shadow's record (step 6): a would-relaunch ledger entry, kind
+// self-repair, written only by the dispatch lease holder; WouldRelaunchLogged
+// finds an episode's entry so a death is recorded once.
+func TestFencedWouldRelaunchRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	ev := SwapEvent{Role: "coder", By: "dispatch", Reason: "dead 2m", OldPID: 241, OldPane: "w1:p2", Episode: "241:99"}
+	if err := b.LogWouldRelaunch(ctx, "tok", ev); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("no lease: %v", err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := b.LogWouldRelaunch(ctx, "other", ev); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("another token: %v", err)
+	}
+	if logged, err := b.WouldRelaunchLogged(ctx, "coder", "241:99"); err != nil || logged {
+		t.Fatalf("before: %v %v", logged, err)
+	}
+	if err := b.LogWouldRelaunch(ctx, "tok", ev); err != nil {
+		t.Fatal(err)
+	}
+	got, err := b.SwapLog(ctx, "", 10)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("ledger %+v %v", got, err)
+	}
+	if e := got[0]; e.Event != SwapWouldRelaunch || e.Kind != SwapKindSelfRepair || e.Role != "coder" || e.Episode != "241:99" || e.OldPID != 241 || e.Reason != "dead 2m" {
+		t.Fatalf("entry %+v", e)
+	}
+	if logged, _ := b.WouldRelaunchLogged(ctx, "coder", "241:99"); !logged {
+		t.Fatal("the episode's entry not found")
+	}
+	for _, other := range [][2]string{{"coder", "242:1"}, {"foureyes", "241:99"}} {
+		if logged, _ := b.WouldRelaunchLogged(ctx, other[0], other[1]); logged {
+			t.Fatalf("%v read as logged", other)
+		}
+	}
+	if err := b.LogWouldRelaunch(ctx, "tok", SwapEvent{Role: "Bad Role", Episode: "1:1"}); err == nil {
+		t.Fatal("an invalid role accepted")
+	}
+	if err := b.LogWouldRelaunch(ctx, "tok", SwapEvent{Role: "coder"}); err == nil {
+		t.Fatal("no episode accepted")
+	}
+}

@@ -32,6 +32,9 @@ const (
 	// SwapReloaded ends a reload (lifecycle part C): the new process proved;
 	// unlike done and back, it never touches the fallback state.
 	SwapReloaded = "reloaded"
+	// SwapWouldRelaunch is the self-repair shadow's record (step 6): what the
+	// watcher would have done, never done.
+	SwapWouldRelaunch = "would-relaunch"
 )
 
 // SwapEvent is one ledger entry. Empty fields are not written.
@@ -104,7 +107,7 @@ func (e SwapEvent) valid() error {
 		return fmt.Errorf("invalid role %q", e.Role)
 	}
 	switch e.Event {
-	case SwapBegin, SwapDone, SwapFailed, SwapWarning, SwapBack, SwapRetire, SwapReloaded:
+	case SwapBegin, SwapDone, SwapFailed, SwapWarning, SwapBack, SwapRetire, SwapReloaded, SwapWouldRelaunch:
 		return nil
 	}
 	return fmt.Errorf("invalid swap event %q", e.Event)
