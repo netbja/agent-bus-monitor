@@ -239,11 +239,14 @@ review):
     Ctrl+Shift, so Ctrl+P reaches busmon. Ghostty's palette is Ctrl+Shift+P.
   - **Windows Terminal** binds its command palette to Ctrl+Shift+P, so Ctrl+P would pass through.
     Windows is out of scope (the person, 2026-11-11), so this is recorded, not tested.
-  - **The VS Code integrated terminal** forwards Ctrl+P to the shell by default. Its
-    `terminal.integrated.commandsToSkipShell` default lists `-workbench.action.quickOpen`, so that
-    Quick Open's shortcut reaches the terminal. A user setting or keybinding that takes Quick Open back
-    would capture it: that depends on the person's own configuration, not on a default. tmux and screen
-    bind no Ctrl+P by default.
+  - **The VS Code integrated terminal keeps Ctrl+P on Linux and Windows by default.**
+    `terminal.integrated.commandsToSkipShell` defaults to a hard-coded list of commands whose
+    shortcuts skip the shell, and Quick Open (`workbench.action.quickOpen`, Ctrl+P there) is in it.
+    The VS Code docs' example *removes* it with a leading `-`, commented "Send quick open's keyboard
+    shortcut to the shell" (code.visualstudio.com/docs/terminal/advanced, "Keyboard shortcuts and the
+    shell"). A person can give Ctrl+P to busmon with
+    `"terminal.integrated.commandsToSkipShell": ["-workbench.action.quickOpen"]`. On macOS Quick Open
+    is Cmd+P, so Ctrl+P passes. tmux and screen bind no Ctrl+P by default.
   - Wherever Ctrl+P does not arrive, `i` then `/` is the same palette, so Ctrl+P is a shortcut, never
     the only way in.
 - **How busmon finds `agentbus`** (class C, slice 2): the existing `agentbusBeside` (`pick.go`).
