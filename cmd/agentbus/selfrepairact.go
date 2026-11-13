@@ -81,11 +81,10 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 	}
 	session := relaunch.ProvedSession(snap)
 	err := c.relaunch(ctx, role, session, fence)
-	var proved bus.AgentSnapshot
-	ok := false
-	if err == nil {
-		proved, ok = c.prove(ctx, role, snap, r)
-	}
+	// The proof decides, the relaunch's error or not: Role can fail after
+	// the new agent came up (the old pane not closed), and an error before
+	// any split simply finds no proof.
+	proved, ok := c.prove(ctx, role, snap, r)
 	if ok {
 		fin := bus.SwapEvent{Role: role, Event: bus.SwapRelaunched, By: "dispatch", OldPID: snap.PID, OldPane: snap.Pane,
 			NewPID: proved.PID, NewPane: proved.Pane, Episode: ep}
@@ -102,7 +101,7 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 	}
 	why := fmt.Sprintf("failed its proof: no new process of %s/%s in a new pane after %d s", r.Own[role].Client, r.Own[role].Provider, c.tries())
 	if err != nil {
-		why = "failed: " + err.Error()
+		why = "failed: " + err.Error() + "; no proof"
 	}
 	fin := bus.SwapEvent{Role: role, Event: bus.SwapFailed, By: "dispatch", OldPID: snap.PID, OldPane: snap.Pane, Episode: ep, Error: why}
 	if ferr := c.b.FinishSelfRepair(ctx, token, nonce, fin); ferr != nil {

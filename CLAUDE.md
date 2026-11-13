@@ -69,7 +69,7 @@ Short forms; the full text, with the reasons, is in the two documents below.
   persisted times come from Redis `TIME`. Never add an unfenced write, and never let the dispatcher
   run repository code: the conductor alone runs a mission's tests.
 - **The dispatcher is the one automated pane writer**, and it types only the fixed wake line (and
-  `/clear` after a declared hand-off; once built, its self-repair runs a role's template command in
+  `/clear` after a declared hand-off; its self-repair (built in step 7b) runs a role's template command in
   a pane it has just created, never in an existing one, decision 2026-11-09). Don't add a second
   pane writer or make it type message text.
 - **A woken agent runs `subscribe --drain`**, never a plain `subscribe`, which acknowledges older

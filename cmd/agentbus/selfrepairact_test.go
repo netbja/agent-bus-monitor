@@ -273,3 +273,65 @@ func TestSelfRepairShadowActsOnNothing(t *testing.T) {
 		t.Fatalf("relaunched %q, master %q, ledger %q", w.relaunch, w.toMaster(), w.ledger())
 	}
 }
+
+// The proof decides (spec 4.1): a relaunch that errs after the new agent
+// came up (its old pane not closed) is relaunched, not failed.
+func TestSelfRepairProofDecides(t *testing.T) {
+	w := newActWorld(t)
+	w.onLaunch = func(role string, fence func(string) error) error {
+		w.mu.Lock()
+		s := w.snaps[role]
+		s.PID, s.PIDStart, s.Pane = 202, 77, "w1:p9"
+		w.snaps[role] = s
+		w.mu.Unlock()
+		return errors.New("herdr pane close w1:p102: refused")
+	}
+	w.passes(4)
+	if got := strings.Join(w.ledger(), " "); got != "begin relaunched" {
+		t.Fatalf("ledger %q", got)
+	}
+}
+
+// Another relauncher took the role between the read and the begin (an
+// intent the facts did not see): nothing is relaunched, nothing failed.
+func TestSelfRepairNeverNextToAnotherIntent(t *testing.T) {
+	w := newActWorld(t)
+	if err := w.b.BeginSwap(context.Background(), "coder", bus.SwapIntent{Kind: bus.SwapKindReload, By: "sentinel"}); err != nil {
+		t.Fatal(err)
+	}
+	w.passes(4) // srReads lists no intent: Decide relaunches, the begin is refused
+	if len(w.relaunch) != 0 {
+		t.Fatalf("relaunched next to a reload: %q", w.relaunch)
+	}
+	if got := strings.Join(w.ledger(), " "); got != "begin" { // the reload's own begin only
+		t.Fatalf("ledger %q", got)
+	}
+}
+
+// The proof is reload's (spec 4.1): a new pid is not enough; it must be
+// alive by its start time, in a new pane, on the role's own client and
+// provider. Each short of it fails the proof.
+func TestSelfRepairProofNeedsAllOfIt(t *testing.T) {
+	for name, set := range map[string]func(*bus.AgentSnapshot){
+		"the old pane":      func(s *bus.AgentSnapshot) { s.PID, s.PIDStart = 202, 77 },
+		"another provider":  func(s *bus.AgentSnapshot) { s.PID, s.PIDStart, s.Pane, s.Provider = 202, 77, "w1:p9", "openai" },
+		"not alive":         func(s *bus.AgentSnapshot) { s.PID, s.PIDStart, s.Pane = 303, 1, "w1:p9" },
+		"its start differs": func(s *bus.AgentSnapshot) { s.PID, s.PIDStart, s.Pane = 202, 1, "w1:p9" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newActWorld(t)
+			w.onLaunch = func(role string, _ func(string) error) error {
+				w.mu.Lock()
+				s := w.snaps[role]
+				set(&s)
+				w.snaps[role] = s
+				w.mu.Unlock()
+				return nil
+			}
+			w.passes(4)
+			if got := strings.Join(w.ledger(), " "); got != "begin failed" {
+				t.Fatalf("ledger %q", got)
+			}
+		})
+	}
+}

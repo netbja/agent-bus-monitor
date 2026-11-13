@@ -377,6 +377,17 @@ useful alone first, and nothing acts before step 7.
    split or the tab create, after the judgement: it is where step 7b checks `SelfRepairHeld`.
    Step 7b turns `on` into acting: `BeginSelfRepair`, `ServiceRole` with the fence, the proof,
    the finish, the crash-loop mark, and the notifications.
+   *As built (step 7b, on acts):* `cmd/agentbus/selfrepairact.go`. On mode (the default) runs the
+   pass, then applies its one allowed decision: the intent (`BeginSelfRepair`, a fresh nonce), the
+   service entry (`relaunch.ServiceRole`) with the fence `SelfRepairHeld`, a 60 s proof (reload's
+   `replaced`, against the role's own profile from `roles.toml`), `FinishSelfRepair` relaunched or
+   failed. Master gets one line per relaunch; a failure (no proof, or the relaunch's own error) is
+   escalated with the recovery line and rings the desktop, once, never retried for that death; a
+   spent day marks the crash loop and does the same. Reports (an optional tab missing, a client
+   without a verified resume, no proved session) reach master once per death. All messages are
+   fenced, once per episode. Not built in 7b: busmon's `relaunched by self-repair` row line, R3's
+   held-network notice and R4's workspace-not-open notice (step 8). The live kill check is the
+   person's.
 8. **R3 and R4:** hold relaunches while the network is lost; the notice when the workspace is not
    open after a start.
 9. **Start at login:** the `LoginStart` interface and its two backends (systemd, macOS

@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-11-09
-last_verified: 2026-11-09
+last_verified: 2026-11-13
 author: coder
 confidence: verified
 ---
@@ -15,7 +15,9 @@ confidence: verified
 **The dispatcher's self-repair may run the template command in a new pane it creates, to relaunch
 a dead agent; it still never types into an existing pane.** The person accepted it on 2026-11-09
 (the answers to the self-repair spec's part 8, Q2, relayed by master's directive of that day). It
-is decided, **not built**: nothing here describes running code yet.
+was decided then and is **built since step 7b** (2026-11-13): `dispatch.self_repair = on`, the default,
+relaunches a dead agent through `relaunch.ServiceRole`, which splits a new pane and runs the template
+command there; R3 and R4 (step 8) and start at login (step 9) follow their own steps.
 
 This is a third exception to "the dispatcher types only the fixed wake line", next to `/clear`
 after a declared hand-off. It **amends in writing** three texts, rather than working around them:
