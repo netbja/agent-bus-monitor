@@ -359,6 +359,22 @@ useful alone first, and nothing acts before step 7.
 7. **R1 and R2 on** (default `on`): the relaunch, the proof, budgets and `self-repair reset`,
    master first, required tabs recreated and optional ones reported, the notifications. Live
    check: kill an idle agent's client (SIGTERM) and watch it come back, resumed, in a new pane.
+   *As built (step 7a, what acting needs; nothing acts yet):* `bus/selfrepair.go`:
+   `FinishSelfRepair` ends a self-repair with `relaunched` (the proof) or `failed`, kind
+   `self-repair`, and ends its own intent in the same script, fenced on the lease and the nonce
+   (an expired intent still gets its entry). The budget's past is read from the ledger
+   (`SelfRepairPast`): a role's attempts are its self-repair begins (a failed proof spends the
+   budget too), its failed episodes those of its failed entries, both counted after its last
+   reset. `{p}:selfrepair` keeps the crash loop (`MarkCrashLoop`, fenced, set once so the
+   escalation is sent once) and the reset (`ResetSelfRepair`, the ledger id it counts from), for
+   `agentbus self-repair reset <agent>`. `Decide` gains `failed`: this death's relaunch failed its
+   proof, escalated, no retry for the episode until a reset; health fails on it, as on a crash
+   loop. The pass fills `Relaunches`, `CrashLoop`, `ProofFailed` and the project's
+   `LastRelaunch` (any role's attempt, for the 2-min pause) from it, so a shadow pass already
+   decides with the budgets. `relaunch.Options.Fence` (`Deps.Fence`) is read right before the
+   split or the tab create, after the judgement: it is where step 7b checks `SelfRepairHeld`.
+   Step 7b turns `on` into acting: `BeginSelfRepair`, `ServiceRole` with the fence, the proof,
+   the finish, the crash-loop mark, and the notifications.
 8. **R3 and R4:** hold relaunches while the network is lost; the notice when the workspace is not
    open after a start.
 9. **Start at login:** the `LoginStart` interface and its two backends (systemd, macOS

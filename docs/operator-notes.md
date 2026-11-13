@@ -939,6 +939,19 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `self-repair` is registered in every mode, the service's only (a foreground `agentbus dispatch`
   has no services env to reach herdr): `off` and `on` say so; shadow reports its last pass,
   unknown past 2 min without one. A would-relaunch is not an end: `Interrupted` looks past it.
+  Self-repair step 7a, what acting needs (acting on nothing yet): a self-repair ends with
+  `FinishSelfRepair` (`relaunched`, the proof, or `failed`, kind `self-repair`), its entry and the
+  end of its own intent in one script fenced on the lease and the nonce; an intent already expired
+  still gets the entry. The budget is read from the ledger, not kept in memory
+  (`SelfRepairPast`): a role's attempts are its self-repair `begin`s, its failed proofs the
+  episodes of its `failed` entries (no retry for those), both counted after its last reset, from
+  the ledger's last 1000 entries. `{p}:selfrepair` (a record key: a crash loop must outlive a
+  restore) holds `crashloop:<role>` (`MarkCrashLoop`, fenced, set once so the escalation is sent
+  once) and `reset:<role>`, the ledger id `agentbus self-repair reset <agent>` counted from
+  (`ResetSelfRepair`: a registered agent only; the crash loop cleared). `relaunch.Options.Fence`
+  (`Deps.Fence` for `Role`) is read right before an agent's split or tab create, after its tab is
+  judged: an error relaunches nothing for that role (`coder: not relaunched (…)`); the dry run
+  never reads it, and `up` and `reload` set none.
   `services.start_at_login` (off, the machine's file only; step 9, `service/login.go`): `agentbus up`
   writes its units for it and enables them after the install (`LoginStart.Enable`), or, off, disables
   an enabled project **before** the install (systemd disables by the `[Install]` section the new unit
