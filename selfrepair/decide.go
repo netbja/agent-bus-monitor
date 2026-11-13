@@ -64,6 +64,10 @@ type Agent struct {
 	// model: its endpoint answers); ProviderHeld: the coordinator holds it.
 	ProviderFresh bool
 	ProviderHeld  bool
+	// Provider names it (its own profile's), and ProviderSince is its last
+	// good reading (zero: none): a network hold tells master since when.
+	Provider      string
+	ProviderSince time.Time
 	// Fallback is the profile the role runs on in place of its own after a
 	// quota swap ({p}:fallback; "" none). A relaunch runs the own profile,
 	// so a role on a fallback is told to master, never relaunched: bringing
@@ -117,7 +121,20 @@ type Decision struct {
 	Kind   Kind
 	Reason string
 	Act    bool
+	// Hold is a hold's kind (step 8: R3, R4), "" otherwise; a network hold
+	// carries its Provider and Since, its last good reading.
+	Hold     string
+	Provider string
+	Since    time.Time
 }
+
+// A hold's kinds.
+const (
+	HoldHerdr     = "herdr"
+	HoldWorkspace = "workspace"
+	HoldQuota     = "quota"
+	HoldNetwork   = "network"
+)
 
 func short(d time.Duration) string {
 	switch {
@@ -161,6 +178,23 @@ func decideOne(f Facts, a Agent) Decision {
 	case a.ProofFailed:
 		return d(KindFailed, "its relaunch failed its proof: escalated, no retry for this death until agentbus self-repair reset %s", a.Name)
 	}
+	if a.Fallback != "" {
+		return d(KindReport, "on its quota fallback profile %s: a relaunch would run its own profile; master swaps it (agentbus swap %s)", a.Fallback, a.Name)
+	}
+	hold := func(kind, format string, args ...any) Decision {
+		r := d(KindHold, format, args...)
+		r.Hold = kind
+		if kind == HoldNetwork {
+			r.Provider, r.Since = a.Provider, a.ProviderSince
+		}
+		return r
+	}
+	switch { // herdr and the workspace first: the tab is judged only through them (R4)
+	case !f.HerdrUp:
+		return hold(HoldHerdr, "herdr does not answer")
+	case !f.WorkspaceOpen:
+		return hold(HoldWorkspace, "the workspace is not open")
+	}
 	switch a.Tab {
 	case relaunch.VerdictRelaunch, relaunch.VerdictCreate:
 	case relaunch.VerdictMissing:
@@ -168,18 +202,11 @@ func decideOne(f Facts, a Agent) Decision {
 	default:
 		return d(KindWait, "tab %s: waited on, never forced", a.Tab)
 	}
-	if a.Fallback != "" {
-		return d(KindReport, "on its quota fallback profile %s: a relaunch would run its own profile; master swaps it (agentbus swap %s)", a.Fallback, a.Name)
-	}
 	switch {
-	case !f.HerdrUp:
-		return d(KindHold, "herdr does not answer")
-	case !f.WorkspaceOpen:
-		return d(KindHold, "the workspace is not open")
 	case a.ProviderHeld:
-		return d(KindHold, "its provider's quota is held")
+		return hold(HoldQuota, "its provider's quota is held")
 	case !a.ProviderFresh:
-		return d(KindHold, "its provider unreachable (no fresh quota read in 5 min)")
+		return hold(HoldNetwork, "its provider unreachable (no fresh quota read in 5 min)")
 	}
 	switch {
 	case !a.Resumable:
