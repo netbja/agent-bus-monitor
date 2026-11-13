@@ -446,7 +446,9 @@ agent names, no project template):
   the plan) and **IDEAS** (the open questions in `docs/memory/open-questions/` that no plan task
   covers). The header's `decide` and `merge` count YOU's rows, so header, For you and Work agree.
   From 130 columns of busmon's pane the same page is a Kanban (For you, In progress, Next,
-  Ideas; `←→` between columns, wrapping around them, never into the other tabs: the digits change tab); `display.work_layout = "list"` or `"kanban"` (settings, `C`)
+  Ideas). On its tab `←→` step the tabs; `↓` goes to the column selector (`←→` choose a column),
+  `↓` again into the column (`↑↓` stay in it, Enter opens a card), Esc climbs back one level at a
+  time, and the digits change tab anywhere. `display.work_layout = "list"` or `"kanban"` (settings, `C`)
   keeps one layout at every width. A selected row or card whose title is cut with `…` scrolls it
   once after a short pause, holds its end, then shows the cut text again.
   The Projects page (`M`) counts each project's **for you** and **at work** by the same rule;

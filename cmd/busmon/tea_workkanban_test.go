@@ -110,55 +110,232 @@ func TestWorkKanbanTruncates(t *testing.T) {
 	}
 }
 
-// ←→ move between columns at the same rank and wrap around them (the person,
-// 2026-11-11): → on Ideas goes to For you, ← on For you to Ideas, and they
-// never change tab on the Kanban; the tabs keep their own keys. With no card
-// selected, → selects the first column's first card, ← the last column's.
-func TestWorkKanbanArrows(t *testing.T) {
+// The Kanban's focus levels (busmon-work-focus, the person's brief of
+// 2026-11-13): it is never a trap. On the tab, ←→ step the tabs; ↓ goes to
+// the column selector, where ←→ choose a column and its heading is drawn
+// selected; ↓ goes into the column, whose ↑↓ never leave it; Esc climbs one
+// level at a time, back to the tab.
+func TestWorkKanbanFocusLevels(t *testing.T) {
 	pinLocal(t)
 	m := kanbanShell(t, 130, 40)
-	m.lists.work.Select(m.work.You[0].Key)
-	var got []string
-	for i := 0; i < 3; i++ {
-		m = keys(t, m, kRight)
-		got = append(got, m.lists.work.Selected())
+	if m.ui.workLevel != workAtTabs {
+		t.Fatalf("3 lands at level %v, want the tab", m.ui.workLevel)
 	}
-	want := []string{"agent:coder", "plan:t8", "idea:2026-11-03-deepseek-superagent-ideas"}
-	if strings.Join(got, " ") != strings.Join(want, " ") || m.ui.focus != PanelWork {
-		t.Fatalf("→: %q (focus %v), want %q", got, m.ui.focus, want)
+	if r := keys(t, m, kRight); r.ui.focus != lowerTabs[0] { // the tab: → wraps to Activity
+		t.Fatalf("→ on Work's tab: focus %v", r.ui.focus)
 	}
-	if foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text(); !strings.Contains(foot, GlyphArrowL+GlyphArrowR+" column") {
-		t.Fatalf("footer %q", foot)
+	if r := keys(t, m, kLeft); r.ui.focus != PanelBoard {
+		t.Fatalf("← on Work's tab: focus %v", r.ui.focus)
 	}
-	if m = keys(t, m, kRight); m.ui.focus != PanelWork || m.lists.work.Selected() != m.work.You[0].Key { // past Ideas: For you
-		t.Fatalf("→ on Ideas: focus %v selected %q, want For you's %q", m.ui.focus, m.lists.work.Selected(), m.work.You[0].Key)
+	foot := func(m Model) string {
+		return footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text()
 	}
-	m = keys(t, m, kLeft, kLeft) // back over the edge to Ideas, then Next
-	if m.lists.work.Selected() != want[1] || m.ui.focus != PanelWork {
-		t.Fatalf("←: %q focus %v", m.lists.work.Selected(), m.ui.focus)
+	if strings.Contains(foot(m), GlyphArrowL+GlyphArrowR+" column") {
+		t.Fatalf("the tab's footer offers columns: %q", foot(m))
 	}
-	m.lists.work.Select(m.work.You[1].Key) // rank 1: the next column's rank 1
-	m = keys(t, m, kRight)
-	if m.lists.work.Selected() != "agent:foureyes" {
-		t.Fatalf("rank kept: %q", m.lists.work.Selected())
+	heading := func(m Model, c int) string {
+		ix, iy, iw, ih := m.lists.work.inner()
+		r := kanbanGrid(4, ix, iy, iw, ih)[c]
+		return string([]rune(strings.Split(m.grid().plain(), "\n")[r.y])[r.x : r.x+r.w])
 	}
-	m.lists.work.Select(m.work.You[0].Key)
-	if m = keys(t, m, kLeft); m.ui.focus != PanelWork || m.lists.work.Selected() != want[2] { // past For you: Ideas
-		t.Fatalf("← on For you: focus %v selected %q, want Ideas' %q", m.ui.focus, m.lists.work.Selected(), want[2])
-	}
+
+	// Down: the column selector, on For you (nothing selected yet).
 	m.lists.work.ClearSelection()
-	if m = keys(t, m, kRight); m.ui.focus != PanelWork || m.lists.work.Selected() != m.work.You[0].Key {
-		t.Fatalf("→ with no card: focus %v selected %q", m.ui.focus, m.lists.work.Selected())
+	m = keys(t, m, kDown)
+	if m.ui.workLevel != workAtCols || m.ui.workCol != 0 || !strings.Contains(heading(m, 0), GlyphSelect+" For you") {
+		t.Fatalf("↓: level %v col %d heading %q", m.ui.workLevel, m.ui.workCol, heading(m, 0))
 	}
-	m.lists.work.ClearSelection()
-	if m = keys(t, m, kLeft); m.ui.focus != PanelWork || m.lists.work.Selected() != want[2] {
-		t.Fatalf("← with no card: focus %v selected %q", m.ui.focus, m.lists.work.Selected())
+	if !strings.Contains(foot(m), GlyphArrowL+GlyphArrowR+" column") {
+		t.Fatalf("the selector's footer %q", foot(m))
 	}
-	if foot := footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text(); !strings.Contains(foot, GlyphArrowL+GlyphArrowR+" column") {
-		t.Fatalf("no card, footer %q", foot)
+	m = keys(t, m, kRight, kRight) // Next
+	if m.ui.workCol != 2 || m.ui.focus != PanelWork || !strings.Contains(heading(m, 2), GlyphSelect+" Next") || strings.Contains(heading(m, 0), GlyphSelect) {
+		t.Fatalf("→→: col %d focus %v", m.ui.workCol, m.ui.focus)
 	}
-	if r := keys(t, m, '1'); r.ui.focus != PanelActivity { // the tabs keep their own keys
-		t.Fatalf("1 on the Kanban: focus %v", r.ui.focus)
+	m = keys(t, m, kLeft, kLeft, kLeft) // wraps: Ideas
+	if m.ui.workCol != 3 {
+		t.Fatalf("←←← wraps: col %d", m.ui.workCol)
+	}
+	m = keys(t, m, kRight, kRight, kRight) // Next again
+
+	// Into the column: its first card; ↓↑ stay in it.
+	m = keys(t, m, kDown)
+	if m.ui.workLevel != workAtCards || m.lists.work.Selected() != m.work.Next[0].Key {
+		t.Fatalf("↓ into Next: level %v selected %q", m.ui.workLevel, m.lists.work.Selected())
+	}
+	m = keys(t, m, kDown, kDown, kDown) // past the last card: it stays
+	if m.lists.work.Selected() != m.work.Next[len(m.work.Next)-1].Key {
+		t.Fatalf("↓ past Next's end: %q, want its last %q", m.lists.work.Selected(), m.work.Next[len(m.work.Next)-1].Key)
+	}
+	m = keys(t, m, kUp, kUp, kUp, kUp)
+	if m.lists.work.Selected() != m.work.Next[0].Key {
+		t.Fatalf("↑ past Next's start: %q", m.lists.work.Selected())
+	}
+	// ←→ in a column: the next column's card at the same rank.
+	if m = keys(t, m, kRight); m.lists.work.Selected() != "idea:2026-11-03-deepseek-superagent-ideas" || m.ui.workCol != 3 {
+		t.Fatalf("→ from Next: %q col %d", m.lists.work.Selected(), m.ui.workCol)
+	}
+	m = keys(t, m, kLeft)
+
+	// Esc: the selector, on the card's column; again: the tab, whose ← steps the tabs.
+	m = keys(t, m, kEsc)
+	if m.ui.workLevel != workAtCols || m.ui.workCol != 2 || m.lists.work.Selected() != m.work.Next[0].Key {
+		t.Fatalf("esc: level %v col %d selected %q", m.ui.workLevel, m.ui.workCol, m.lists.work.Selected())
+	}
+	m = keys(t, m, kDown) // back in, on the card it kept
+	if m.ui.workLevel != workAtCards || m.lists.work.Selected() != m.work.Next[0].Key {
+		t.Fatalf("↓ again: level %v selected %q", m.ui.workLevel, m.lists.work.Selected())
+	}
+	m = keys(t, m, kEsc, kEsc)
+	if m.ui.workLevel != workAtTabs || m.ui.focus != PanelWork {
+		t.Fatalf("esc esc: level %v focus %v", m.ui.workLevel, m.ui.focus)
+	}
+	if m = keys(t, m, kLeft); m.ui.focus != PanelBoard {
+		t.Fatalf("← after esc esc: focus %v", m.ui.focus)
+	}
+	// ↑ from the selector climbs too; the digits work at every level.
+	m = keys(t, m, '3', kDown, kUp)
+	if m.ui.workLevel != workAtTabs {
+		t.Fatalf("↑ on the selector: level %v", m.ui.workLevel)
+	}
+	if r := keys(t, m, kDown, kDown, '1'); r.ui.focus != PanelActivity {
+		t.Fatalf("1 inside a column: focus %v", r.ui.focus)
+	}
+}
+
+// The level shows: the selected card is drawn so only inside its column,
+// the tab's pill is faded once the focus is below it.
+func TestWorkKanbanFocusShows(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	m.lists.work.Select(m.work.Next[0].Key)
+	m.refresh()
+	pill := func(m Model) bool { // the Work tab's pill is not faded
+		for _, s := range m.lists.work.title {
+			if s.Tab && strings.Contains(s.Text, "Work") {
+				return s.Fade == 0
+			}
+		}
+		t.Fatal("no Work tab in the title")
+		return false
+	}
+	if !pill(m) || m.lists.work.kanban.level != workAtTabs {
+		t.Fatal("at the tab: the pill faded")
+	}
+	m = keys(t, m, kDown)
+	if pill(m) || m.lists.work.kanban.level != workAtCols || m.lists.work.kanban.col != 2 {
+		t.Fatalf("at the selector: pill %v level %v col %d", pill(m), m.lists.work.kanban.level, m.lists.work.kanban.col)
+	}
+	m = keys(t, m, kDown)
+	if pill(m) || m.lists.work.kanban.level != workAtCards {
+		t.Fatal("in the column: the pill full")
+	}
+}
+
+// The selected card is drawn selected only inside its column: at the tab and
+// at the selector the selection is kept, not shown.
+func TestWorkKanbanCardDrawnOnlyInsideItsColumn(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	m.lists.work.Select("plan:t8") // Next's first card: its second line is the heading's row + 2
+	ix, iy, iw, ih := m.lists.work.inner()
+	r := kanbanGrid(4, ix, iy, iw, ih)[2]
+	selected := func(m Model) bool { return m.grid().at(r.x+3, r.y+2).st.Selected }
+	for lv, want := range map[workLevel]bool{workAtTabs: false, workAtCols: false, workAtCards: true} {
+		m.ui.workLevel, m.ui.workCol = lv, 2
+		m.refresh()
+		if got := selected(m); got != want {
+			t.Errorf("level %v: card drawn selected %v, want %v", lv, got, want)
+		}
+	}
+}
+
+// → from Board lands on Work's tab, so the next → steps on to Activity, the
+// focus never caught in the columns (the trap the person met).
+func TestWorkKanbanReachedByArrowIsItsTab(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	m = keys(t, m, kDown, kDown, '2') // inside a column, then Board
+	if m = keys(t, m, kRight); m.ui.focus != PanelWork || m.ui.workLevel != workAtTabs {
+		t.Fatalf("→ from Board: focus %v level %v", m.ui.focus, m.ui.workLevel)
+	}
+	if m = keys(t, m, kRight); m.ui.focus != PanelActivity {
+		t.Fatalf("→ again: focus %v", m.ui.focus)
+	}
+	m = keys(t, m, '3', kDown, kDown, kTab) // Tab cycles the panels: back on Work by Tab, its tab too
+	for i := 0; i < 8 && m.ui.focus != PanelWork; i++ {
+		m = keys(t, m, kTab)
+	}
+	if m.ui.focus != PanelWork || m.ui.workLevel != workAtTabs {
+		t.Fatalf("Work by Tab: focus %v level %v", m.ui.focus, m.ui.workLevel)
+	}
+}
+
+// The selector goes into its own column, not the selection's: with Next's
+// card selected and For you chosen, ↓ takes For you's first card.
+func TestWorkKanbanSelectorEntersItsColumn(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	m.lists.work.Select("plan:t8")
+	m = keys(t, m, kDown, kLeft, kLeft) // the selector on Next, then For you
+	if m.ui.workCol != 0 {
+		t.Fatalf("col %d", m.ui.workCol)
+	}
+	if m = keys(t, m, kDown); m.lists.work.Selected() != m.work.You[0].Key || m.ui.workLevel != workAtCards {
+		t.Fatalf("↓ into For you: %q level %v", m.lists.work.Selected(), m.ui.workLevel)
+	}
+}
+
+// A click on a card puts the focus in its column (Esc then on that column's
+// heading); a click on the tab bar at the tab.
+func TestWorkKanbanClickLevels(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	ix, iy, iw, ih := m.lists.work.inner()
+	r := kanbanGrid(4, ix, iy, iw, ih)[2]
+	m = step(t, m, tea.MouseClickMsg{X: r.x + 2, Y: r.y + 2, Button: tea.MouseLeft})
+	if m.ui.workLevel != workAtCards || m.lists.work.Selected() != "plan:t8" {
+		t.Fatalf("card click: level %v selected %q", m.ui.workLevel, m.lists.work.Selected())
+	}
+	if e := keys(t, m, kEsc); e.ui.workLevel != workAtCols || e.ui.workCol != 2 {
+		t.Fatalf("esc after the click: level %v col %d, want Next's heading", e.ui.workLevel, e.ui.workCol)
+	}
+	fr := m.layout.rect(PanelWork)
+	m = step(t, m, tea.MouseClickMsg{X: fr.X + 4, Y: fr.Y, Button: tea.MouseLeft})
+	if m.ui.workLevel != workAtTabs {
+		t.Fatalf("tab bar click: level %v focus %v", m.ui.workLevel, m.ui.focus)
+	}
+}
+
+// The column helpers alone.
+func TestKanbanColumnHelpers(t *testing.T) {
+	card := func(key string) kanbanCard { return kanbanCard{key: key, lines: []Line{{{Text: key}}}} }
+	k := kanbanView{cols: []kanbanCol{{title: "For you  2", cards: []kanbanCard{card("a0"), {}, card("a1")}}, {title: "Next  0"}}}
+	if c, r := k.cardPlace("a1"); c != 0 || r != 1 {
+		t.Fatalf("place a1: %d %d", c, r)
+	}
+	if c, r := k.cardPlace("nope"); c != -1 || r != -1 {
+		t.Fatalf("place nope: %d %d", c, r)
+	}
+	if c, _ := k.cardPlace(""); c != -1 {
+		t.Fatal("an empty key placed")
+	}
+	if k.cardOf(0, 1) != "a1" || k.cardOf(0, 2) != "" || k.cardOf(1, 0) != "" || k.cardOf(5, 0) != "" || k.cardCount(0) != 2 {
+		t.Fatal("cardOf / cardCount")
+	}
+	if k.colName(0) != "For you" || k.colName(1) != "Next" {
+		t.Fatalf("names %q %q", k.colName(0), k.colName(1))
+	}
+}
+
+// An empty column: the selector stays on it and says so.
+func TestWorkKanbanEmptyColumn(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	m.lists.work.kanban.cols[1].cards = nil
+	m.ui.workLevel, m.ui.workCol = workAtCols, 1
+	if !m.workKanbanKey(ActDown) || m.ui.workLevel != workAtCols || !strings.Contains(m.ui.flash, "nothing in In progress") {
+		t.Fatalf("level %v flash %q", m.ui.workLevel, m.ui.flash)
 	}
 }
 

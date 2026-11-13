@@ -117,18 +117,15 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 	if m.ui.focus == PanelAgents && movesSelection(act) {
 		m.ui.agentsTouched = true
 	}
+	if m.ui.focus == PanelWork && m.lists.work.kanban != nil && m.workKanbanKey(act) {
+		return nil
+	}
 	switch act {
 	case ActNextPanel, ActPrevPanel:
 		m.cyclePanel(act == ActNextPanel)
 	case ActTab1, ActTab2, ActTab3, ActTab4:
 		m.switchTab(int(act - ActTab1))
-	case ActTabNext, ActTabPrev:
-		if k := m.lists.work.kanban; m.ui.focus == PanelWork && k != nil { // the Kanban: ←→ move between columns
-			if key := k.step(m.lists.work.Selected(), act == ActTabNext); key != "" {
-				m.lists.work.Select(key)
-			}
-			break // wrapping around the columns, never into the tabs (the person, 2026-11-11): 1-4 change tab
-		}
+	case ActTabNext, ActTabPrev: // the Kanban's are workKanbanKey's
 		m.stepTab(act == ActTabNext)
 	case ActTab5:
 		m.switchTab(4)
@@ -405,6 +402,16 @@ func (m *Model) focusPanel(p PanelID) {
 	if isLowerTab(p) {
 		m.ui.tab = p
 	}
+	if p == PanelWork { // a card chosen for the person (4, a chip, esc from between agents): its column's level
+		m.ui.workLevel = workAtCards
+	}
+}
+
+// focusTab focuses tab p at its own level: on Work's Kanban, the tab, so ←→
+// keep stepping the tabs (busmon-work-focus).
+func (m *Model) focusTab(p PanelID) {
+	m.focusPanel(p)
+	m.ui.workLevel = workAtTabs
 }
 
 // cyclePanel walks the visible panels (Tab, Shift-Tab); the narrow tier walks
@@ -424,7 +431,7 @@ func (m *Model) cyclePanel(forward bool) {
 	if !forward {
 		step = len(order) - 1
 	}
-	m.focusPanel(order[(i+step)%len(order)])
+	m.focusTab(order[(i+step)%len(order)])
 }
 
 // switchTab is a digit: the tabbed panel's tab, or the narrow tier's view.
@@ -437,7 +444,7 @@ func (m *Model) switchTab(n int) {
 	case n == len(tabs): // 4 (6 at the narrow tier): Work, on NEXT (correction 8)
 		m.focusWorkNext()
 	case n < len(tabs):
-		m.focusPanel(tabs[n])
+		m.focusTab(tabs[n])
 	}
 }
 
@@ -456,7 +463,7 @@ func (m *Model) stepTab(next bool) {
 	if !next {
 		step = len(lowerTabs) - 1
 	}
-	m.focusPanel(lowerTabs[(i+step)%len(lowerTabs)])
+	m.focusTab(lowerTabs[(i+step)%len(lowerTabs)])
 }
 
 // askOrWrite is w: the open question as ! opens it, or, with none open, the
@@ -625,7 +632,7 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	}
 	if l.Tabs.H > 0 && ms.Y == l.Tabs.Y {
 		if p, ok := tabAt(narrowPanels, l.Active, m.width, 0, ms.X); ok {
-			m.focusPanel(p)
+			m.focusTab(p)
 			m.refresh()
 		}
 		return nil
@@ -644,7 +651,7 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 				p = tab
 			}
 		}
-		m.focusPanel(p)
+		m.focusTab(p)
 		m.refresh()
 		return nil
 	}
@@ -660,6 +667,9 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		cmd = m.openTracked(p, false)
 	} else {
 		lst.click(ms.X, ms.Y)
+	}
+	if p == PanelWork && lst.kanban != nil && lst.Selected() != "" { // a card clicked: its column's level
+		m.ui.workLevel = workAtCards
 	}
 	m.syncPause()
 	m.refresh()

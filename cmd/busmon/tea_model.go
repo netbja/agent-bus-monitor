@@ -84,10 +84,12 @@ type shellConfig struct {
 // uiState is the person's place on the screen.
 type uiState struct {
 	focus          PanelID
-	tab            PanelID // the tabbed panel's tab
-	view           PanelID // the narrow tier's view
-	showAll        bool    // dormant agents listed (a)
-	agentsTouched  bool    // the person moved in Agents: stop following the top row
+	tab            PanelID   // the tabbed panel's tab
+	view           PanelID   // the narrow tier's view
+	showAll        bool      // dormant agents listed (a)
+	agentsTouched  bool      // the person moved in Agents: stop following the top row
+	workLevel      workLevel // where the focus is on Work's Kanban: its tab, its column selector, a column's cards
+	workCol        int       // the Kanban's column the selector is on
 	filter         feedFilter
 	line           lineKind // what the input line edits (tea_input.go)
 	edit           string   // its text

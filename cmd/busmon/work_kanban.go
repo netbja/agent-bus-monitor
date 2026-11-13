@@ -20,10 +20,8 @@ import (
 // subject) cannot share the task's two lines at 31 cells (reviewer-codex).
 //
 // The folded lines close the Ideas column: between agents and done, two cards
-// Enter opens as on the list. On a selected card ←→ move between columns, to
-// the same rank (else the last card), and past the first or last column to
-// the next tab; with none selected they step the tabs. ↑↓ walk the cards in
-// reading order, column by column.
+// Enter opens as on the list. The keys depend on the focus level
+// (work_focus.go): the tab, the column selector, a column's cards.
 
 const (
 	kanbanMinWidth = 130 // busmon's pane width from which auto draws the Kanban
@@ -57,6 +55,11 @@ type kanbanCol struct {
 // kanbanView is the Kanban the Work list draws in place of its rows.
 type kanbanView struct {
 	cols []kanbanCol
+	// Where the focus is (work_focus.go): at the column selector, column col's
+	// heading is drawn selected; only at a column's cards is the selected card
+	// drawn so (at the tab, the selection is kept but not shown).
+	level workLevel
+	col   int
 }
 
 // workKanban builds the four columns from the model. Every card reads the
@@ -260,7 +263,11 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int) 
 		if r.w <= 0 || r.h <= 0 {
 			continue
 		}
-		drawLine(screen, r.x, r.y, r.w, Line{{Text: kc.title, Role: RoleText, Bold: true}}, false)
+		heading := Line{{Text: kc.title, Role: RoleText, Bold: true}}
+		if k.level == workAtCols && c == k.col {
+			heading = Line{{Text: GlyphSelect + " " + kc.title, Role: RoleAccent, Bold: true}}
+		}
+		drawLine(screen, r.x, r.y, r.w, heading, k.level == workAtCols && c == k.col)
 		if c > 0 && r.x > x { // the column apart: a rule in the rules' colour, inset one row at each end (the person)
 			for i := 0; i < r.h; i++ {
 				var rule Line
@@ -274,7 +281,7 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int) 
 		fits := kanbanFits(r.h, shown)
 		row := r.y + 1
 		for _, card := range shown[:fits] {
-			on := card.key != "" && card.key == sel
+			on := card.key != "" && card.key == sel && k.level == workAtCards
 			for _, l := range card.lines {
 				if on && off > 0 {
 					l = scrolled(l, r.w, off)

@@ -32,7 +32,7 @@ func TestKanbanMarqueeDraws(t *testing.T) {
 	v := kanbanView{cols: []kanbanCol{{title: "Next  2", cards: []kanbanCard{
 		{key: "a", lines: []Line{{{Text: "○ coder"}}, {{Text: "  " + longTitle}}}},
 		{key: "b", lines: []Line{{{Text: "○ coder"}}, {{Text: "  " + longTitle}}}},
-	}}}}
+	}}}, level: workAtCards} // a column's cards: the selected one is drawn so
 	l := listState{kanban: &v, rect: Rect{0, 0, 32, 12}, sel: "a"}
 	l.items = v.items()
 	rows := func() []string {
