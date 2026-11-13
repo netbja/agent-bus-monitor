@@ -32,10 +32,10 @@ The full table is in Appendix A. In summary:
 
 | Family | Where | How many | In the palette? |
 |---|---|---|---|
-| busmon panel actions (open a page, triage, sleep, follow, quit…) | `cmd/busmon/keys.go` `panelBindings`; all run through `panelKey` (`tea_update.go`) | ~30 | **yes**: class A (§4.2), no argument |
+| busmon panel actions (open a page, triage, sleep, follow, quit…) | `cmd/busmon/keys.go` `panelBindings`; on the panels `modeKey` runs them (`ActQuit` as `tea.Quit`, every other through `panelKey`, `tea_update.go`) | ~30 | **yes**: class A (§4.1), no argument |
 | busmon actions on the selected row (copy, delete, `+`/`-` priority, fold, enter) | same table, `Panels:` limited | ~12 | **no**: they need a selection, which a typed line does not have |
 | busmon page-local keys (reader, settings, projects, notify setup, ask panel, compose, tour) | the other 13 tables in `keys.go` | ~60 | **no**: they belong to a page that has the keyboard |
-| the person's `agentbus` commands (`reload --as`, `pause`, `resume`, `suspend`, `backup`, `self-repair reset`, `request priority`, `answer`, `identity set`) | `cmd/agentbus/commands.go` (`commands`, the one CLI table) | 9 | **yes**: class C (§4.2), an argument, run as `agentbus` argv, with `y` |
+| the person's `agentbus` commands (`reload --as`, `pause`, `resume`, `suspend`, `backup`, `self-repair reset`, `request priority`) | `cmd/agentbus/commands.go` (`commands`, the one CLI table) | 7 | **yes**: class C (§4.1), run as `agentbus` argv, with `y`. `answer --as` and `identity set` are the person's too, but stay on busmon's pages |
 | agents' and master's `agentbus` commands (`status`, `report`, `subscribe`, `challenge`, `verdict`, `deliver`, `bind`, `swap`, `retire`, `pilot`, `dispatch`, `missions`, `mission`, `up`, `shutdown`…) | same table | ~55 | **no**: an agent's identity and duties. The person asks master instead: `/master <text>` (class B) |
 | bus message kinds | `{p}:status`, `{p}:report` (note, auto), `{p}:notify`, and the `{p}:cmd` types `directive`, `reply`, `challenge`, `verdict`, `blocked`, `ask`, `handoff` (architecture.md "Stream layout") | 4 streams, 7 cmd types | only what the person already sends: a directive (`/write <agent>`), the answer to an ask (`/answer`) |
 | the self-repair watcher's acts (relaunch a dead agent, mark a crash loop, report to master) | `cmd/agentbus/selfrepairact.go`, `selfrepairchore.go` | 3 automatic acts, 1 command | the watcher acts by itself; only its **reset** is a person command (`/self-repair reset <agent>`, class C) |
@@ -44,8 +44,9 @@ The full table is in Appendix A. In summary:
 Two facts from the walk shape the design:
 
 - **The key table is already a registry.** Each binding has `Keys`, `Hint`, `Help` and an `Act`.
-  Every panel action is handled by one function (`panelKey`). A palette command that names an
-  `Act` and calls that function runs *exactly* what the key runs. No second handler can drift.
+  On the panels, `modeKey` dispatches every action: `ActQuit` itself, the rest through `panelKey`.
+  A palette command that names an `Act` and takes that same path (`runPanelAct`, §4.1) runs
+  *exactly* what the key runs. No second handler can drift.
 - **busmon already runs `agentbus` as a child process**: `Z` (`sleep.go`), the Projects page's
   `x`/`b` (`projects_admin.go`) and the picker's `up` (`pick.go`), all as argv with no shell. Class C
   reuses that path.
@@ -66,7 +67,7 @@ type command struct {
 	Aliases []string // "req", "f2"
 	Summary string   // one line, English
 	Args    []arg    // none for class A
-	Act     Action   // class A: the key's action, run through panelKey
+	Act     Action   // class A: the key's action, run by runPanelAct (§4.1)
 	Run     func(m *Model, args []string) tea.Cmd // class B and C
 	Confirm bool     // class C: shows the argv it will run, y runs it
 }
@@ -77,8 +78,23 @@ type arg struct {
 ```
 
 - **Class A** (an `Act`, no argument): `requests`, `services`, `health`, `help`, `plan`, `recap`,
-  `triage`, `tokens`, `settings`, `projects`, `history`, `about`, `tour`, `unread`, `follow`, `all`, `compose`, `sleep`
-  (it asks first, as the key does), `filter <words>` (it applies the filter directly), `quit`.
+  `triage`, `tokens`, `settings`, `projects`, `history`, `about`, `unread`, `follow`, `all`, `compose`, `sleep`
+  (it asks first, as the key does), `filter` (it opens the filter line, as `/` does), and `quit`.
+
+  **The route.** On the panels, a key goes through `modeKey`: `ActQuit` becomes `tea.Quit` there, and
+  every other action goes to `panelKey`. A page's own table does not carry these actions;
+  `readerKey` handles F5 and help, not F2. So a class A row runs as follows:
+  1. It leaves the line and closes any open page, so Ctrl+P from a page ends on the panels.
+  2. It calls `runPanelAct(act)`, the panel half of `modeKey` taken out as a function: `ActQuit` →
+     `tea.Quit`, else `panelKey(act)`.
+
+  `modeKey` itself calls `runPanelAct` on the panels, so a key and its command still share one path.
+  Work's Kanban intercepts only movement actions (`workKanbanKey`), none of them class A.
+- **Two rows with a Run of their own**, because no panel action takes their argument or path:
+  - `filter <words>` does what the filter line's Enter does (`editFilter`):
+    `m.ui.filter = parseFilter(words)`, then focus Activity. With no words it is the class A
+    `filter`.
+  - `tour` calls what the help page's `t` calls (`ActTour` is handled only in `readerKey`).
 - **Class B** (writes a message the way the line already does): `write <agent> <text>` is the same
   as `@agent text`; `master <text>` is a directive to master, the way to ask for an agent's or
   master's action; `answer` opens the ask panel (as `!`).
@@ -152,6 +168,7 @@ about 45 commands, no index is needed.
 - **Pure seam:** `paletteMatch(query, table) []row` and `parseCommandLine(line, table)
   (command, args, error)`. Table tests cover the rank order, aliases, `//`, the leading-only `/`,
   the argument checks, and an unknown command.
+- **Route test:** every class A row, run through `runPanelAct` on a test model, changes the same state as its key does through `modeKey`, `quit` included (it returns `tea.Quit`).
 - **Registry guard:** every class A `Act` exists in `panelBindings`, and every class C argv names a
   command in the `agentbus` `commands` table and uses only flags that entry or `globalFlags` declares (`--as`, `--for`,
   `--yes`, `--fresh`, `--project`). This is a test in the style of
@@ -199,7 +216,7 @@ about 45 commands, no index is needed.
 
 ## Appendix A. Inventory
 
-### A.1 busmon panel actions (`panelBindings`, run by `panelKey`, `cmd/busmon/tea_update.go`)
+### A.1 busmon panel actions (`panelBindings`, run by `modeKey` then `panelKey`, `cmd/busmon/tea_update.go`)
 
 | Key | Action | What it does | Argument | Palette |
 |---|---|---|---|---|
@@ -217,11 +234,11 @@ about 45 commands, no index is needed.
 | `M` | ActProjects | Projects page | — | `projects` |
 | `H` | ActHistory | History page | — | `history` |
 | `A` | ActAbout | About page | — | `about` |
-| `t` (help) | ActTour | the first-launch tour | — | `tour` |
+| `t` (help) | ActTour | the first-launch tour (handled in `readerKey` only) | — | `tour` (a Run, §4.1) |
 | `u` | ActNextUnread | next unread for you | — | `unread` |
 | `f` | ActFollow | auto-scroll on or off | — | `follow` |
 | `Z` | ActSleep | suspend or resume the project (asks first) | — | `sleep` |
-| `/` | ActFilter | filter Activity by @agent, thread or words | words | `filter <words>` |
+| `/` | ActFilter | open the filter line (@agent, thread or words) | — | `filter`; `filter <words>` is a Run (§4.1) |
 | `i` `:` | ActCompose | the one-line input | — | (the palette lives here) |
 | `I` | ActComposeOpen | the compose window | — | `compose` |
 | `@` | ActComposeAt | the line, prefilled with @ | agent | `write <agent>` |
@@ -234,7 +251,7 @@ about 45 commands, no index is needed.
 | `o` | ActFold | Requests: fold the answered threads | — | no (page-local) |
 | `+` `-` | ActPriorityUp/Down | a request's priority | row | class C `priority <task> <level>` |
 | `d` (Work) | ActShowDone | the plan with done tasks | — | no |
-| esc, `q` | ActEscape, ActQuit | back, quit | — | `quit` |
+| esc, `q` | ActEscape, ActQuit | back; quit (`modeKey` returns `tea.Quit`, not `panelKey`) | — | `quit` |
 
 Other tables (`keys.go`): input, filter, ask, compose, compose file (`composeFileBindings`, the @ popup), picker, overlay (pages),
 settings, notify setup, projects, project delete and tour. They are page-local and stay keys.
