@@ -917,8 +917,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   waits out `SwapTTL`. `up` (and `up --resume`) skips a role whose intent is held, of any kind:
   `coder: skipped (self-repair in progress)`; an unreadable intent is said and not checked, as an
   unreadable `{p}:agents` is.
-  Self-repair step 3, the settings (`config/keys.go`, read by nothing yet but `agentbus config`
-  and busmon's C page): `dev` is development mode, a **top-level** key (`dev = true`, above every
+  Self-repair step 3, the settings (`config/keys.go`, read by `agentbus config`, busmon's C page
+  and, since step 6b, the dispatch service at its start): `dev` is development mode, a **top-level** key (`dev = true`, above every
   table; `config.Set` writes such a key after the last top-level one) or `AGENT_BUS_DEV` (1 on,
   0 off, anything else skipped); it only unlocks values, never weakens a check, and busmon's
   header says `dev` while it is on. `dispatch.self_repair` (`AGENT_BUS_SELF_REPAIR`, on | off |
@@ -930,6 +930,15 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `config.SelfRepairMode`, which reads a refused switch as `off`: `Get`'s value for an invalid
   key is the default, `on`. The budgets `dispatch.self_repair_every` (30m) and
   `dispatch.self_repair_per_day` (3) take only values above 0 (an env 0 is skipped).
+  Self-repair step 6b, the shadow (`cmd/agentbus/selfrepairchore.go`, `dispatch/selfrepairchore.go`):
+  the dispatch service reads the switch once at its start (`serviceSelfRepair`). Only `shadow`
+  runs a pass, every 15 s while it holds the lease: the template's agent tabs, a death counted
+  per episode (`pid:start`) from its first read (the grace is Redis `TIME`), herdr read only when
+  one is dead (`relaunch.ServiceHerdr`, then `FindWorkspace`, `WorkspacePanes`, `JudgeTab`), then
+  `selfrepair.Decide`, and one fenced `would-relaunch` per death (`LogWouldRelaunch`). Health
+  `self-repair` is registered in every mode, the service's only (a foreground `agentbus dispatch`
+  has no services env to reach herdr): `off` and `on` say so; shadow reports its last pass,
+  unknown past 2 min without one. A would-relaunch is not an end: `Interrupted` looks past it.
   `services.start_at_login` (off, the machine's file only; step 9, `service/login.go`): `agentbus up`
   writes its units for it and enables them after the install (`LoginStart.Enable`), or, off, disables
   an enabled project **before** the install (systemd disables by the `[Install]` section the new unit
