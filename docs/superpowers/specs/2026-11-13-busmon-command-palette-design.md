@@ -82,13 +82,24 @@ type arg struct {
 - **Class B** (writes a message the way the line already does): `write <agent> <text>` is the same
   as `@agent text`; `master <text>` is a directive to master, the way to ask for an agent's or
   master's action; `answer` opens the ask panel (as `!`).
-- **Class C** (runs `agentbus` as the person, `--as identity.as`, after `y`):
-  - `reload <role> [--fresh]`;
-  - `pause <dur>` and `resume`;
-  - `suspend`;
-  - `backup`;
-  - `self-repair reset <agent>`;
-  - `priority <task> <low|normal|high>`.
+- **Class C** (runs `agentbus` after `y`). The exact argv each row builds, checked against the
+  usages in `commands.go`. `--as <identity.as>` goes only to the three commands that take it, and
+  `--yes` goes to those that ask for it, because busmon's `y` is the confirmation (as `Z` passes
+  `--project <p> suspend --yes`, `sleep.go`):
+
+  | Palette | argv after `agentbus --project <p>` |
+  |---|---|
+  | `reload <role> [fresh]` | `reload <role> [--fresh] --as <person>` |
+  | `pause <dur>` | `pause --for <dur>` |
+  | `resume` | `resume --yes` |
+  | `suspend` | `suspend --yes` (the same run as `Z`) |
+  | `backup` | `backup --project <p>` (as the Projects page's `b`) |
+  | `self-repair reset <agent>` | `self-repair reset <agent> --as <person>` |
+  | `priority <task> <low\|normal\|high>` | `request priority <task> <level> --as <person>` |
+
+  With no `identity.as` set, the three `--as` rows are refused before `y`, naming the setting. They
+  never fall back to a default name. The registry test (§5) parses every row's argv against the
+  flags of its `commands` entry, so a wrong flag fails the suite.
 
   The line under the list shows the exact argv before `y`. The outcome lands as a flash line, and
   failures keep their stderr, as `Z` does.
@@ -139,7 +150,8 @@ about 45 commands, no index is needed.
   (command, args, error)`. Table tests cover the rank order, aliases, `//`, the leading-only `/`,
   the argument checks, and an unknown command.
 - **Registry guard:** every class A `Act` exists in `panelBindings`, and every class C argv names a
-  command in the `agentbus` `commands` table. This is a test in the style of
+  command in the `agentbus` `commands` table and uses only flags that entry or `globalFlags` declares (`--as`, `--for`,
+  `--yes`, `--fresh`, `--project`). This is a test in the style of
   `TestEveryDispatchedCommandIsInTheTable`.
 - **Model tests** on the existing input tests (`tea_input_test.go`, `keys_test.go`):
   - `/req` + Enter opens Requests exactly as F2 does, compared on the resulting model state;
@@ -226,9 +238,16 @@ settings, notify setup, projects, project delete and tour. They are page-local a
 
 ### A.2 `agentbus` commands (`cmd/agentbus/commands.go`, `commands`)
 
-The person's commands, in the palette as class C (§4.1): `reload --as`, `pause`, `resume`,
-`suspend`, `backup`, `self-repair reset --as`, `request priority --as`, plus `answer --as` and
-`identity set`, which busmon already does on its pages.
+The person's commands, in the palette as class C, with their exact argv in §4.1:
+- `reload --as`;
+- `pause --for`;
+- `resume --yes`;
+- `suspend --yes`;
+- `backup --project`;
+- `self-repair reset --as`;
+- `request priority --as`.
+
+`answer --as` and `identity set` are the person's too, but busmon already does them on its pages.
 
 Agents' and master's commands stay out of the palette, which reaches them through `/master <text>`:
 
