@@ -183,3 +183,36 @@ func TestHealthDefinition(t *testing.T) {
 		t.Fatalf("definition %+v", d)
 	}
 }
+
+// Step 8 (R3, R4): a hold says which kind it is, so the act can tell master
+// once: a network hold carries its provider and the time of its last good
+// reading; a closed workspace is its own kind.
+func TestDecideHoldKinds(t *testing.T) {
+	since := t0.Add(-20 * time.Minute)
+	for _, c := range []struct {
+		name     string
+		change   func(*Facts, *Agent)
+		hold     string
+		provider string
+	}{
+		{"network", func(_ *Facts, a *Agent) { a.ProviderFresh, a.Provider, a.ProviderSince = false, "anthropic", since }, HoldNetwork, "anthropic"},
+		{"workspace", func(f *Facts, _ *Agent) { f.WorkspaceOpen = false }, HoldWorkspace, ""},
+		{"herdr", func(f *Facts, _ *Agent) { f.HerdrUp = false }, HoldHerdr, ""},
+		{"quota", func(_ *Facts, a *Agent) { a.ProviderHeld = true }, HoldQuota, ""},
+	} {
+		a := dead("coder")
+		f := facts()
+		c.change(&f, &a)
+		f.Agents = []Agent{a}
+		d := one(t, f)
+		if d.Kind != KindHold || d.Hold != c.hold || d.Provider != c.provider {
+			t.Errorf("%s: %+v", c.name, d)
+		}
+		if c.hold == HoldNetwork && !d.Since.Equal(since) {
+			t.Errorf("network: since %v", d.Since)
+		}
+	}
+	if d := one(t, Facts{Now: t0, Mode: ModeOn, HerdrUp: true, WorkspaceOpen: true, Grace: time.Minute, Agents: []Agent{dead("coder")}}); d.Hold != "" {
+		t.Errorf("no hold, a hold kind: %+v", d)
+	}
+}

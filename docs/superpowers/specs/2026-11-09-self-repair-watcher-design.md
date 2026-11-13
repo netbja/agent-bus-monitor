@@ -329,9 +329,10 @@ useful alone first, and nothing acts before step 7.
    `create`) with its reason, at most one `Act` per pass (master first, then the oldest death;
    none while a relaunch is in flight or within the 2-min project pause). R1's preconditions in
    the spec's order: alive and unknown first (unknown never acts), `off`, the grace (60 s, three
-   reads), a declared departure or another intent, the tab (`relaunch`/`create` go on, an optional
-   `missing` tab is reported, any other verdict is waited on), a role on a quota fallback
-   (reported), herdr and the workspace, the own profile's provider (fresh, not held), a resume-verified client with a proved session (else reported,
+   reads), a declared departure or another intent, a role on a quota fallback (reported), herdr and
+   the workspace (step 8: before the tab, which is judged only through them), the tab
+   (`relaunch`/`create` go on, an optional `missing` tab is reported, any other verdict is waited
+   on), the own profile's provider (fresh, not held), a resume-verified client with a proved session (else reported,
    never a fresh start), then the budget (a crash loop or the day's count escalates, the spacing
    waits). `Health(mode, decisions)`: ok when off or nothing to repair (a report stays ok); warn
    for the shadow's would-be act, a hold or a tab not settling; fail for a crash loop, but never
@@ -392,7 +393,12 @@ useful alone first, and nothing acts before step 7.
    held-network notice and R4's workspace-not-open notice (step 8). The live kill check is the
    person's.
 8. **R3 and R4:** hold relaunches while the network is lost; the notice when the workspace is not
-   open after a start.
+   open after a start. *Built:* a hold carries its kind (`Decision.Hold`: herdr, workspace, quota,
+   network; a network hold its provider and last good reading); master is told once per provider
+   and last good reading (`self-repair: holding relaunches, <provider> unreachable since HH:MM`),
+   and once per spell of a closed workspace (`run agentbus up <p> --resume`), fenced
+   (FencedCmdOnce). Herdr and the workspace are judged before the tab: with the workspace closed
+   the tab cannot be judged, which had left every dead agent waiting on "tab unknown".
 9. **Start at login:** the `LoginStart` interface and its two backends (systemd, macOS
    LaunchAgent), wired to the step 3 option. Elsewhere, enabling the option is refused with the
    reason ("no service manager to start at login").

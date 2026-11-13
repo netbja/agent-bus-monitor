@@ -101,6 +101,9 @@ type selfRepairChore struct {
 	out    health.Outcome
 	ran    bool
 	ranAt  time.Time
+	// wsClosed: when this spell of a closed workspace was first seen (R4:
+	// one notice per spell); zero once herdr says it is open.
+	wsClosed time.Time
 }
 
 // facts turns one pass's reads into selfrepair.Facts, counting each death
@@ -163,7 +166,7 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 			_, a.HandoffClear = bus.ParseClearMark(v)
 		}
 		a.Session, a.Resumable = relaunch.ProvedSession(snap), rolecfg.ResumeVerified(snap.Client)
-		a.ProviderFresh, a.ProviderHeld = providerFacts(r, role)
+		a.ProviderFresh, a.ProviderHeld, a.Provider, a.ProviderSince = providerFacts(r, role)
 		if fb, on := r.Fallbacks[role]; on {
 			a.Fallback = fb.Profile
 			if a.Fallback == "" {
@@ -205,26 +208,34 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 // a relaunch (a quota reading within providerFreshFor; a local model: its
 // endpoint check ok within that long) and whether the coordinator holds it.
 // An own profile not resolved is never fresh.
-func providerFacts(r selfRepairReads, role string) (fresh, held bool) {
+// The provider's name and its last good reading come back too (step 8, R3:
+// a network hold tells master since when; zero: no good reading).
+func providerFacts(r selfRepairReads, role string) (fresh, held bool, provider string, since time.Time) {
 	own, ok := r.Own[role]
 	if !ok {
-		return false, false
+		return false, false, "", time.Time{}
 	}
 	if own.Client == "local-llm" {
 		rec, ok := r.Health["llm-endpoint"]
-		return ok && rec.Status == health.OK && r.Now.Sub(time.UnixMilli(rec.ObservedAt)) <= providerFreshFor, false
+		if ok && rec.Status == health.OK {
+			since = time.UnixMilli(rec.ObservedAt)
+		}
+		return ok && rec.Status == health.OK && r.Now.Sub(time.UnixMilli(rec.ObservedAt)) <= providerFreshFor, false, "the local model", since
 	}
-	provider := bus.ProviderFor(own.Client, own.Provider)
+	provider = bus.ProviderFor(own.Client, own.Provider)
 	if provider == "" {
-		return false, false
+		return false, false, "", time.Time{}
 	}
 	row, ok := r.Budgets[provider]
 	at := row.ObservedAt
 	if at == 0 {
 		at = row.CollectedAt
 	}
+	if ok && !row.Unknown && at > 0 {
+		since = time.UnixMilli(at)
+	}
 	fresh = ok && !row.Unknown && at > 0 && r.Now.Sub(time.UnixMilli(at)) <= providerFreshFor
-	return fresh, r.Marks["hold:"+provider] != ""
+	return fresh, r.Marks["hold:"+provider] != "", provider, since
 }
 
 // pass is one shadow pass: read, decide, record the would-be act once per
@@ -236,6 +247,9 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 	}
 	c.mu.Lock()
 	f := c.facts(r)
+	if f.HerdrUp && f.WorkspaceOpen { // read, and open: a later closing is a new spell (R4)
+		c.wsClosed = time.Time{}
+	}
 	deaths := make(map[string]repairDeath, len(c.deaths))
 	for k, v := range c.deaths {
 		deaths[k] = v

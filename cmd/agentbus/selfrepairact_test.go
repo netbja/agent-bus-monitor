@@ -546,3 +546,54 @@ func TestSelfRepairFailResetSucceedSameDeath(t *testing.T) {
 		t.Fatalf("master told %q", got)
 	}
 }
+
+// Step 8, R3: while relaunches are held for an unreachable provider, master
+// is told once per episode (the provider and its last good reading); a
+// later reading that goes stale again is a new episode. Nothing relaunched.
+func TestSelfRepairNetworkHoldTold(t *testing.T) {
+	w := newActWorld(t)
+	stale := srT0.Add(-30 * time.Minute)
+	reading := stale
+	read := w.c.read
+	w.c.read = func(ctx context.Context) (selfRepairReads, error) {
+		r, err := read(ctx)
+		r.Budgets["anthropic"] = bus.BudgetSnapshot{Provider: "anthropic", ObservedAt: reading.UnixMilli()}
+		return r, err
+	}
+	w.passes(6)
+	msgs := w.only("holding relaunches")
+	if len(w.relaunch) != 0 || len(msgs) != 1 || !strings.Contains(msgs[0], "anthropic unreachable since "+stale.Local().Format("15:04")) ||
+		!strings.Contains(msgs[0], "coder") {
+		t.Fatalf("relaunched %q, master %q", w.relaunch, w.toMaster())
+	}
+	reading = srT0.Add(-20 * time.Minute) // a reading came, then went stale again: another episode
+	w.passes(2)
+	if msgs := w.only("holding relaunches"); len(msgs) != 2 {
+		t.Fatalf("a new episode not told: %q", msgs)
+	}
+}
+
+// Step 8, R4: started with the workspace closed, nothing is relaunched and
+// master is told once to run agentbus up --resume; open, then closed again,
+// is told again.
+func TestSelfRepairWorkspaceClosedTold(t *testing.T) {
+	w := newActWorld(t)
+	open := false
+	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
+		return selfRepairHerdr{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict {
+			return relaunch.VerdictBusy // open, the tab is waited on: nothing relaunched in this test
+		}}
+	}
+	w.passes(6)
+	msgs := w.only("workspace")
+	if len(w.relaunch) != 0 || len(msgs) != 1 || !strings.Contains(msgs[0], "agentbus up demo --resume") {
+		t.Fatalf("relaunched %q, master %q", w.relaunch, w.toMaster())
+	}
+	open = true
+	w.passes(1)
+	open = false
+	w.passes(2)
+	if msgs := w.only("workspace"); len(msgs) != 2 {
+		t.Fatalf("closed again, not told: %q", msgs)
+	}
+}
