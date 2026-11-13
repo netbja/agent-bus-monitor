@@ -2,11 +2,18 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revision 18 on 2026-11-13
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 and 19 on 2026-11-13
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
+- Revision 19 (correction): foureyes on r18 — the in-tree relay covered too few commands and
+  too few callers: `reload` (sentinel's job), `retire` and the pop are added to the closed op
+  set, and the dispatcher applies each command's own authorisation instead of "master or the
+  person"; the relay's reply, timeout, refusal text and expiry are stated. S1's fresh start on
+  an invalid session is limited to `up`: self-repair starts nothing and reports (the person, Q4
+  of the self-repair spec). The subreaper's reaping and the emulator-not-viewer meaning of the
+  holder's query answers are stated (§4.2, §4.4, §4.6, §4.7, §8)
 - Revision 18 (correction): the security role's review of r17 (reports 1794583768072-0 and
   1794583768090-0), every finding applied:
   - **S1** (high): a stored resume argv is never executed; `up` and self-repair rebuild it from
@@ -344,15 +351,32 @@ Interface rules (part of the interface, not comments):
   `Processes`, `Describe`, `Ping` and attach as an **observer**; the holder **refuses** its
   non-observer attach, `Start`, `Close` and `Submit`. The dispatcher (a service of its own),
   the person's shell, busmon and `ssh host agentbus …` are outside the tree and allowed.
-  - **Master's and agents' host commands** (`up`, `relaunch`, `swap`, `suspend`, `resume`,
-    `holder drain`, run from inside a terminal) are therefore **relayed to the dispatcher**: the
-    command sees `AGENTBUS_TERM_ID` in its environment (or the holder's in-tree refusal) and
-    sends a `host` directive to `dispatch` on `{p}:cmd` — `{op: start|relaunch|swap|suspend|
-    resume|drain, agent, profile?, from}`, a closed set, no argv — and waits for the
-    dispatcher's reply. The dispatcher acts only for `from` = master or the person, applies the
-    same rules as the command (background work §4.3b, `--ignore-background` only from master
-    or the person, proof before close), and records the act in `{p}:events`. The same commands
-    run from the person's own shell talk to the holder directly.
+  - **Master's and agents' host commands** are therefore **relayed to the dispatcher** when run
+    from inside a terminal. Every command that today starts or closes a pane is in the list:
+    `up`, the pop (`agent-spawn <role>`, which becomes `agentbus pop <role>` at the cutover),
+    `relaunch`, `reload`, `swap`, `suspend`, `resume`, `retire` and `holder drain`. (`restore`
+    and `forget` start and close nothing: `restore` only reads the host to prove a project is
+    not live, `forget` writes the bus; both stay direct.) The command sees `AGENTBUS_TERM_ID` in
+    its environment (or the holder's in-tree refusal) and sends a `host` directive to `dispatch`
+    on `{p}:cmd`: `{op: up|pop|relaunch|reload|swap|suspend|resume|retire|drain, agent,
+    profile?, ignore_background?, from}`, a closed set, no argv. The dispatcher checks `op`
+    against the set and then applies **that command's own authorisation**, unchanged, with
+    `from` as the caller: `reload` keeps `reload.go`'s rules (sentinel reloads the others,
+    master reloads only sentinel, `AGENT_BUS_RELOAD=off|propose` refuse an agent caller),
+    `retire` keeps its refusals, `--ignore-background` is honoured only from master or the
+    person (§4.3b), and every close keeps its proof (relaunch-close). It runs the operation
+    against the holder, as an outside peer, and records it in `{p}:events`. The same commands
+    run from the person's own shell talk to the holder directly, as they do today.
+  - **The reply.** The dispatcher answers on `{p}:cmd` with a `reply` entry to `from`, `ref` =
+    the directive's id: `accepted` with the event id, or the refusal text the command would
+    have printed. The command waits for it up to 10 s (it waits for the acceptance, not for the
+    new agent to be proved; the outcome follows as a report to `from` and an event). With no
+    reply in 10 s — the dispatch service stopped, paused, or not holding its lease — the command
+    exits non-zero with: `the dispatcher did not answer: from inside an agent's terminal, host
+    commands go through it. Start it (agentbus service start dispatch) or run the command from
+    your own shell.` The directive stays in the stream; a dispatcher that comes back later
+    **drops** a `host` directive older than 60 s (a late relaunch nobody is waiting for is not
+    run) and replies `expired`.
   - **Residual risk (stated, accepted with S1 fixed).** (1) A same-uid process can leave the
     tree through a service manager (`systemd-run --user`, `launchctl submit`, `at`) and then
     passes as outside. On macOS there is no subreaper: an orphan reparents to launchd and leaves
@@ -386,9 +410,9 @@ Where callers land (all in the cutover PR, §7 step 10, except the `Line` change
   typed), with a test that fails if any exported function of `dispatch` or `termhost` takes a
   `string` that reaches `Submit` or `Prompt`. `Inspection` keeps its fields; `State`, `Ready`,
   `Busy` come from `agentstate`, `Focused` becomes "person active".
-- `up`, `start`, `restore`, `relaunch`, `swap`, `suspend`, self-repair call `Start/List/Close`
-  only; run from inside an agent's terminal, they relay to the dispatcher (§4.2, "who may drive
-  the holder").
+- `up`, `start`, `restore`, `relaunch`, `reload`, `swap`, `suspend`, `retire`, the pop,
+  self-repair call `Start/List/Close` only; run from inside an agent's terminal, those that
+  start or close relay to the dispatcher (§4.2, "who may drive the holder").
 - Identity: `status`/`bind` record `AGENTBUS_TERM_ID` in the existing `pane` field; the verified
   pid+start rule is unchanged.
 
@@ -520,6 +544,12 @@ skips and each command refuses without the flag.
 - Owns the PTYs (creack/pty), is every agent's parent, reaps them, always reads output (a slow
   viewer never blocks a program: per-viewer bounded queue, a viewer that falls behind is
   repainted, herdr-core's rule).
+- **Reaping as a subreaper** (Linux, §4.2). Orphaned grandchildren become the holder's children,
+  so a `wait(-1)` reaper would race `os/exec`'s `Wait` on an agent's pid and could take its exit
+  status. The holder never calls `wait(-1)`. On `SIGCHLD` it lists its children (`/proc/self/
+  task/*/children`, or `waitid(P_ALL, …, WEXITED|WNOHANG|WNOWAIT)` to peek) and reaps with
+  `wait4(pid)` **only pids it did not start** (not an agent's tracked pid); each agent's pid
+  is reaped by its own `Wait`. A pid peeked but tracked is left for that `Wait`.
 - Keeps, per terminal, a pure-Go emulator (screen + N lines of scrollback, setting
   `holder.scrollback`, default 5 000) and a raw tail (~1 MB) for `agentbus term dump`.
 - Wire: length-prefixed frames on a unix socket; JSON control frames, raw bytes for terminal
@@ -711,7 +741,10 @@ meaning: a wake waiting on the person is shown in busmon.
     (`CSI c`, `CSI > c`, `CSI 5 n`, `CSI 6 n`) and the kitty keyboard query (`CSI ? u`).
     The holder's emulator **answers** DA, DSR, the cursor position and the kitty keyboard query
     itself, from its own state, whether a viewer is attached or not (a program waiting on a reply
-    must not hang because no one is watching); the other queries get no answer.
+    must not hang because no one is watching); the other queries get no answer. The answers
+    describe the **emulator**, not the viewer's terminal: a program told that kitty keyboard
+    flags are on may still receive legacy keys from a viewer whose terminal lacks the protocol;
+    the clients accept both encodings, as they do today under herdr.
   The first paint is rendered from the emulator's screen and carries none of these. The filter
   is in the holder's e2e suite (§8).
 - **The prefix key is a setting**, `attach.prefix`, shown and editable in busmon's config screen
@@ -834,12 +867,14 @@ meaning: a wake waiting on the person is shown in busmon.
     role, project, profile, session)`, which re-validates the session id
     (`sessionIDPattern`), the names and the absolute paths. The profile is the role's effective
     profile resolved at launch, as `up` resolves it today, not a value from the record;
-  - a session id that fails validation means a **fresh** start and a person notice, never a
-    refusal to start the agent;
+  - a session id that fails validation (or none recorded): on **`up`** a **fresh** start and a
+    person notice (the person or master asked for the agent); on **self-repair** no `Start` at
+    all and one report to master — self-repair never starts an agent fresh (the person, Q4 of
+    the self-repair spec, its §4.1 item 5; `selfrepair.Decide` already reports instead);
   - regression test: `HSET {p}:resume coder '{"argv":["sh","-c","touch /tmp/x"],"session":"abc"}'`,
     then the `up` path and the self-repair path against the fake host: the started command
     equals the template's resume command for session `abc`, and nothing else runs; with a
-    session `abc;rm` the start is fresh.
+    session `abc;rm`, `up` starts fresh and self-repair starts nothing and reports.
 - Cleared only by `agentbus forget <agent>` and replaced by the next proved session's report;
   an agent's death or a status never touches it.
 - **It must survive a reboot, so the broker must persist.** The shipped `docker-compose.yml`
@@ -1172,13 +1207,21 @@ step claims an improvement for herdr, and none exists after the cutover.
   writes nothing. The walk itself: table tests with an injected stat reader.
 - Security corrections (revision 18; holder e2e and unit tests):
   - **S1**: the forged-record test of §4.7 on the `up` and self-repair paths (the started
-    command equals the template's; an invalid session starts fresh);
+    command equals the template's; an invalid session: `up` starts fresh, self-repair starts
+    nothing and reports to master);
   - **S2**: from a process started inside a test terminal (and from its double-forked
     grandchild), a non-observer attach, a `Start`, a `Close` and a `Submit` are refused, an
     observer attach and `Screen` are accepted; the same calls from outside the tree are
     accepted; a `Start` frame with an `argv`, `env` or `cwd` field, an unknown role, or an
-    invalid profile is refused; the in-tree `relaunch` relays a `host` directive and the
-    dispatcher refuses one whose `from` is neither master nor the person;
+    invalid profile is refused; one relay test per op (`up`, `pop`, `relaunch`, `reload`,
+    `swap`, `suspend`, `resume`, `retire`, `drain`): run in-tree it sends one `host` directive
+    and the dispatcher applies that command's own authorisation — sentinel's `reload coder`
+    runs, sentinel's `reload sentinel` and coder's `reload reviewer` are refused, master's
+    `reload sentinel` and `retire architect` run, `--ignore-background` from an agent other than
+    master is refused; an unknown op is refused; with no dispatcher the command exits with the
+    refusal text after 10 s; a directive older than 60 s is dropped as `expired`;
+  - **subreaper**: a double-forked orphan inside a terminal exits and is reaped, and the
+    agent's own exit status is still observed by the holder;
   - **S3**: a program writes `ESC ] 52 ; c ; <b64> BEL`, an OSC 8 link, `CSI 21 t`, `CSI 6 n`,
     `DCS $ q`, an OSC 11 `?` query: the viewer's stream holds none of them (the link's text
     kept); with `attach.osc52 on` the OSC 52 passes; DSR and DA are answered by the holder with
