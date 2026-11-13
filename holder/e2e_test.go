@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -97,6 +98,8 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 			return Command{Argv: []string{self, "-test.run=^$"}, Env: []string{"HOLDER_TEST_MODE=client"}}, nil
 		case "forker": // its client is a double-forked grandchild, orphaned at once
 			return sh(`( HOLDER_TEST_MODE=client "` + self + `" -test.run='^$' & ) ; exec sleep 30`), nil
+		case "leaver": // its shell exits, a child that ignores SIGHUP stays in its process group
+			return sh(`trap '' HUP; sleep 60 & echo "CHILD $!"; exit 0`), nil
 		case "orphaner":
 			return sh(`( sleep 1.5 & ) ; exec sleep 30`), nil
 		case "tree":
@@ -464,6 +467,44 @@ func TestHolderCloseHangsUpFirst(t *testing.T) {
 	if d := time.Since(began); d > time.Second {
 		t.Fatalf("close took %v: no SIGHUP before the grace's SIGKILL", d)
 	}
+}
+
+// Close ends the terminal's whole process group, its leader gone or not
+// (reviewer-codex on 5b): a child that ignores SIGHUP and outlived its
+// shell is killed after the grace, never left running.
+func TestHolderCloseEndsAnExitedLeadersGroup(t *testing.T) {
+	_, sock := newTestHolder(t) // grace 2 s
+	cl := dial(t, sock)
+	x := startRole(t, cl, "leaver")
+	text := waitScreen(t, cl, x.ID, "CHILD ")
+	var child int
+	for _, l := range strings.Split(text, "\n") {
+		if n, ok := strings.CutPrefix(strings.TrimSpace(l), "CHILD "); ok {
+			child, _ = strconv.Atoi(n)
+		}
+	}
+	if child <= 0 {
+		t.Fatalf("no child pid in %q", text)
+	}
+	eventually := func(what string, cond func() bool) {
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+			if cond() {
+				return
+			}
+		}
+		t.Fatalf("never: %s", what)
+	}
+	eventually("the leader exited", func() bool { return !termOf(t, cl, x.ID).Alive })
+	if st, ok := readProcStat(child); !ok || st.state == 'Z' {
+		t.Fatalf("the child is not running before the close: %+v %v", st, ok)
+	}
+	if _, err := cl.Call(Close{Term: x.ID}); err != nil {
+		t.Fatal(err)
+	}
+	eventually("the child ended", func() bool {
+		st, ok := readProcStat(child)
+		return !ok || st.state == 'Z'
+	})
 }
 
 // Listen: a socket that answers is another holder (refused); a stale one is

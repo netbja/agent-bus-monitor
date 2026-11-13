@@ -488,7 +488,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   PTY (never reused) with `AGENTBUS_TERM_ID` and `AGENTBUS_HOST`, and reports its pid and start
   time. The holder always reads the output into the emulator (and a 1 MB raw tail) and writes the
   emulator's answers to queries (DSR, DA) back, viewer or not. `Close` is SIGHUP to the process
-  group, SIGKILL after the grace (5 s). A terminal's own pid is reaped by its `Wait`, so its exit
+  group, SIGKILL after the grace (5 s) to whatever is left of the group, its leader gone or not (a
+  child that ignores SIGHUP outlives an exited shell: reviewer-codex); a descendant that left the
+  group (setsid) is not reached. A terminal's own pid is reaped by its `Wait`, so its exit
   status is kept; the reaper (on SIGCHLD, and a 5 s sweep) reaps only exited children it did not
   start, never `wait(-1)`. An in-tree peer is refused `start`, `close`, `submit` and an attach
   that types (`in_tree`); `submit` and `attach` answer `later` until step 5c. `holder.Client`

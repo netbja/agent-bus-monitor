@@ -118,21 +118,29 @@ func (t *terminal) info(build string) TermInfo {
 	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Build: build}
 }
 
-// close ends the program: SIGHUP to its process group, then SIGKILL after
-// grace (spec 4.2). It returns once the program was waited for.
+// close ends the terminal's whole process group: SIGHUP, then SIGKILL to
+// what is left after grace (spec 4.2). The group, not only the program: a
+// descendant can outlive its leader (a shell that exited, a child that
+// ignores SIGHUP), and the leader's exit would otherwise leave it running
+// under the subreaper (reviewer-codex on 5b). It returns once the program
+// was waited for and the group is empty (or killed). A descendant that left
+// the group (setsid) is not reached: the residual of any group kill.
 func (t *terminal) close(grace time.Duration) {
 	t.mu.Lock()
-	alive := t.alive
 	t.closed = true
 	t.mu.Unlock()
-	if alive {
-		_ = syscall.Kill(-t.pid, syscall.SIGHUP)
-		select {
-		case <-t.done:
-		case <-time.After(grace):
-			_ = syscall.Kill(-t.pid, syscall.SIGKILL)
-			<-t.done
-		}
+	_ = syscall.Kill(-t.pid, syscall.SIGHUP)
+	deadline := time.Now().Add(grace)
+	for groupAlive(t.pid) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
 	}
+	if groupAlive(t.pid) {
+		_ = syscall.Kill(-t.pid, syscall.SIGKILL)
+	}
+	<-t.done
 	_ = t.pty.Close()
 }
+
+// groupAlive: a process of the group pgid still runs (a member that exited
+// and is not reaped yet counts until the reaper takes it).
+func groupAlive(pgid int) bool { return syscall.Kill(-pgid, 0) == nil }
