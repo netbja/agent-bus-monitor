@@ -158,3 +158,43 @@ func TestFencedWouldRelaunchRedis(t *testing.T) {
 		t.Fatal("no episode accepted")
 	}
 }
+
+// A would-relaunch is a record, not an end: written after a begin whose
+// caller died, it does not hide that begin from Interrupted, which
+// closeInterrupted closes (foureyes, self-repair 6a).
+func TestWouldRelaunchHidesNoInterruptedBeginRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := b.BeginSwap(ctx, "coder", SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.EndSwap(ctx, "coder"); err != nil { // the caller died: no terminal entry
+		t.Fatal(err)
+	}
+	if err := b.LogWouldRelaunch(ctx, "tok", SwapEvent{Role: "coder", By: "dispatch", Episode: "241:99"}); err != nil {
+		t.Fatal(err)
+	}
+	if bad, ev, err := b.Interrupted(ctx, "coder"); err != nil || !bad || ev.Event != SwapBegin {
+		t.Fatalf("interrupted = %v %+v %v", bad, ev, err)
+	}
+	// Only would-relaunch entries are looked past: a terminal entry still ends it.
+	if err := b.LogSwap(ctx, SwapEvent{Role: "coder", Event: SwapFailed, By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.LogWouldRelaunch(ctx, "tok", SwapEvent{Role: "coder", By: "dispatch", Episode: "242:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if bad, ev, err := b.Interrupted(ctx, "coder"); err != nil || bad {
+		t.Fatalf("a closed begin reads interrupted: %+v %v", ev, err)
+	}
+	// A role whose ledger holds only would-relaunch entries has nothing interrupted.
+	if err := b.LogWouldRelaunch(ctx, "tok", SwapEvent{Role: "foureyes", By: "dispatch", Episode: "7:7"}); err != nil {
+		t.Fatal(err)
+	}
+	if bad, _, err := b.Interrupted(ctx, "foureyes"); err != nil || bad {
+		t.Fatalf("foureyes: %v %v", bad, err)
+	}
+}
