@@ -160,3 +160,32 @@ func TestEncodeControlRoundTrips(t *testing.T) {
 		t.Fatal("an unknown type encoded")
 	}
 }
+
+// CodeQL on #471 (an allocation size that may overflow): the payload's
+// length is checked against the constant bound before any arithmetic. A
+// frame (type byte and payload) of MaxFrame-1 and MaxFrame bytes is
+// written and read back whole; one of MaxFrame+1 is refused, nothing
+// written.
+func TestWriteFrameAtTheBound(t *testing.T) {
+	for _, c := range []struct {
+		frame int
+		ok    bool
+	}{{MaxFrame - 1, true}, {MaxFrame, true}, {MaxFrame + 1, false}} {
+		payload := bytes.Repeat([]byte{'x'}, c.frame-1)
+		var buf bytes.Buffer
+		err := WriteFrame(&buf, FrameData, payload)
+		if !c.ok {
+			if !errors.Is(err, ErrFrameTooLarge) || buf.Len() != 0 {
+				t.Fatalf("frame %d: err %v, %d bytes written", c.frame, err, buf.Len())
+			}
+			continue
+		}
+		if err != nil || buf.Len() != 4+c.frame {
+			t.Fatalf("frame %d: err %v, %d bytes", c.frame, err, buf.Len())
+		}
+		typ, got, err := ReadFrame(&buf)
+		if err != nil || typ != FrameData || len(got) != len(payload) {
+			t.Fatalf("frame %d read back: %d %d %v", c.frame, typ, len(got), err)
+		}
+	}
+}
