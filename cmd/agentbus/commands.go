@@ -271,6 +271,21 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo refresh -q"},
 	},
 	{
+		Name: "idea", Text: true, Usage: []string{"idea add <title...> [--text <text>] [--source <where>] [--as <person>]",
+			"idea list [--state <state>] [--json]", "idea set <id> <state> [--from <state>] [--as <person>]"},
+		Summary: "the project's ideas: add one (anyone; it starts at 'to discuss'), list them, or set a state (to discuss, decided, doing, dropped: the person only, from their own shell)",
+		Flags: []cli.Flag{
+			{Long: "text", Short: 't', Arg: "<text>", Help: "add: what the idea is, in a few lines"},
+			{Long: "source", Arg: "<where>", Help: "add: where it came from (a file, a note, a thread)"},
+			{Long: "state", Arg: "<state>", Help: "list: only the ideas in this state"},
+			{Long: "from", Arg: "<state>", Help: "set: the state you saw; refused if it changed since"},
+			{Long: "as", Short: 'a', Arg: "<person>", Help: "your name (default identity.as); set: a person only, never an agent"},
+			{Long: "json", Help: "list: JSON"},
+		},
+		Examples: []string{"agentbus -p demo idea add busmon update without setup.sh --source memory",
+			"agentbus -p demo idea list --state discuss", "agentbus -p demo idea set i3 decided --as charlie"},
+	},
+	{
 		Name: "health", Text: true, Usage: []string{"health [list | <check>... | detail <id> | log [<after-id>] | note <id> <text...>]",
 			"health warns", "health accept <id> --as <person> <reason...>"},
 		Summary: "the project's measured health and its notes; named checks: status, reason and detail only; warns: the checks in warn over 24 h (sentinel's daily digest); accept: the person accepts a check's current warn for a week",
