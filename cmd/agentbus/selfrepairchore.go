@@ -247,14 +247,21 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 	}
 	c.mu.Lock()
 	f := c.facts(r)
+	clearSpell := false
 	if f.HerdrUp && f.WorkspaceOpen { // read, and open: a later closing is a new spell (R4)
 		c.wsClosed = time.Time{}
+		clearSpell = r.Marks[workspaceMark] != ""
 	}
 	deaths := make(map[string]repairDeath, len(c.deaths))
 	for k, v := range c.deaths {
 		deaths[k] = v
 	}
 	c.mu.Unlock()
+	if clearSpell && c.mode == selfrepair.ModeOn { // the durable mark too, fenced
+		if err := c.b.FencedQuotaDel(ctx, token, workspaceMark); err != nil {
+			return err
+		}
+	}
 	ds := selfrepair.Decide(f)
 	var first error
 	if c.mode == selfrepair.ModeOn {
