@@ -25,14 +25,7 @@ func TestArrowsStepTheLowerTabs(t *testing.T) {
 		}
 		n := len(lowerTabs)
 		for i := 1; i <= n; i++ {
-			if m.ui.focus == PanelWork && m.lists.work.kanban != nil { // the Kanban keeps ←→ for its columns (the person, 2026-11-11)
-				if m = keys(t, m, kRight, kLeft); m.ui.focus != PanelWork {
-					t.Fatalf("%v: the arrows left the Kanban for %v", size, m.ui.focus)
-				}
-				m = keys(t, m, rune('1'+slices.Index(tabs, lowerTabs[i%n]))) // its digit leaves it
-			} else {
-				m = keys(t, m, kRight)
-			}
+			m = keys(t, m, kRight) // the Kanban too: reached by its tab, ←→ step the tabs (busmon-work-focus)
 			if m.ui.focus != lowerTabs[i%n] {
 				t.Fatalf("%v: right #%d focused %v, want %v", size, i, m.ui.focus, lowerTabs[i%n])
 			}

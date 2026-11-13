@@ -150,6 +150,7 @@ func TestWorkTabEnter(t *testing.T) {
 	open := func(key string) Model {
 		m := keys(t, workShell(t, 140, 40), '3')
 		m.lists.work.Select(key)
+		m.ui.workLevel = workAtCards // on the card (the Kanban at 140 columns)
 		if m.lists.work.Selected() != key {
 			t.Fatalf("cannot select %q", key)
 		}

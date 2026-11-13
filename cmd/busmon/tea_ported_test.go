@@ -733,6 +733,7 @@ func TestShellDeleteClosesAnOpenThreadWithAReply(t *testing.T) {
 	fw := &fakeWriter{}
 	m := keys(t, shellOf(t, st, 160, 45, fw), '3') // Work, then its between-agents line: Requests
 	m.lists.work.Select(workFoldBetween)
+	m.ui.workLevel = workAtCards // on its card (the Kanban at 160 columns)
 	m = keys(t, m, kEnter)
 	m.lists.requests.Select("thr:" + id)
 	if m.lists.requests.Selected() != "thr:"+id {

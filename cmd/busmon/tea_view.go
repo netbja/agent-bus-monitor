@@ -268,6 +268,7 @@ func (m *Model) fillLists() {
 	wk.kanban = nil
 	if workKanbanOn(m.cfg.settings.WorkLayout, m.width) { // layout B: the same model as columns
 		v := workKanban(m.work, wd)
+		v.level, v.col = m.ui.workLevel, m.ui.workCol
 		wk.kanban = &v
 		wk.SetItems(v.items())
 	} else {
@@ -300,7 +301,10 @@ func (m *Model) lowerTitle(p PanelID, own Line) Line {
 	}
 	// The tabs get what the suffix leaves, so a name shortens rather than
 	// being cut by the frame (reviewer-codex).
-	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), m.ui.focus == p)
+	// Inside Work's Kanban columns the focus is below the tabs: the pill
+	// fades as for an unfocused panel (busmon-work-focus).
+	inside := p == PanelWork && m.lists.work.kanban != nil && m.ui.workLevel != workAtTabs
+	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), m.ui.focus == p && !inside)
 	return append(t, suffix...)
 }
 
