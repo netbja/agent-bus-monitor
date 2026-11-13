@@ -261,7 +261,9 @@ func runSwaps(ctx context.Context, b *bus.Bus, args []string, out, errw io.Write
 		if ev == bus.SwapBegin && !lastSeen[e.Role] && !live[e.Role] {
 			ev = "interrupted"
 		}
-		lastSeen[e.Role] = true
+		if e.Event != bus.SwapWouldRelaunch { // a shadow's record, not an end (bus.Interrupted)
+			lastSeen[e.Role] = true
+		}
 		at := ""
 		if ms, _, ok := strings.Cut(e.ID, "-"); ok {
 			var n int64

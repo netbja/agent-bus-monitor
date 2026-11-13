@@ -564,3 +564,26 @@ func TestSwapRefusesTheOwnProfilesProvider(t *testing.T) {
 		t.Fatal("a refused swap closed the pane")
 	}
 }
+
+// agentbus swaps shows a dead caller's begin as interrupted even when the
+// self-repair shadow's would-relaunch came after it: a record, not an end
+// (foureyes, self-repair 6b; bus.Interrupted reads it the same way).
+func TestSwapsShowsABeginInterruptedPastAWouldRelaunch(t *testing.T) {
+	w, _ := newSwapWorld(t)
+	ctx := context.Background()
+	if err := w.b.BeginSwap(ctx, "foureyes", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.b.EndSwap(ctx, "foureyes") // the swap's caller died
+	if ok, err := w.b.AcquireDispatch(ctx, "tok", time.Minute); err != nil || !ok {
+		t.Fatalf("lease %v %v", ok, err)
+	}
+	if err := w.b.LogWouldRelaunch(ctx, "tok", bus.SwapEvent{Role: "foureyes", By: "dispatch", Episode: "7:7"}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	if code := runSwaps(ctx, w.b, nil, &out, &errw); code != 0 || !strings.Contains(out.String(), "interrupted") ||
+		!strings.Contains(out.String(), "would-relaunch") {
+		t.Fatalf("swaps: %d %q", code, out.String())
+	}
+}

@@ -351,8 +351,11 @@ useful alone first, and nothing acts before step 7.
    Health `self-repair` (catalogue order 31, master's) is registered in every mode: `off` and
    `on` (nothing relaunches yet) say so, shadow reports its last pass, unknown after 2 min
    without one. The foreground `agentbus dispatch` has no services env to reach herdr, so it
-   runs neither. `Interrupted` looks past would-relaunch entries (foureyes), and busmon's help
-   says shadow records now and on relaunches nothing yet.
+   runs neither. `Interrupted`, and `agentbus swaps`' interrupted mark, look past
+   would-relaunch entries (foureyes), and busmon's help says shadow records now and on
+   relaunches nothing yet; the budgets are read, but with no relaunch recorded neither changes a
+   shadow decision. The death count lives in the service's memory: a dispatcher restart starts
+   a death's grace again (conservative; step 7 keeps it in mind).
 7. **R1 and R2 on** (default `on`): the relaunch, the proof, budgets and `self-repair reset`,
    master first, required tabs recreated and optional ones reported, the notifications. Live
    check: kill an idle agent's client (SIGTERM) and watch it come back, resumed, in a new pane.
