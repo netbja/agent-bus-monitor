@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -469,10 +471,11 @@ func TestHolderCloseHangsUpFirst(t *testing.T) {
 	}
 }
 
-// Close ends the terminal's whole process group, its leader gone or not
-// (reviewer-codex on 5b): a child that ignores SIGHUP and outlived its
-// shell is killed after the grace, never left running.
-func TestHolderCloseEndsAnExitedLeadersGroup(t *testing.T) {
+// A terminal ends with its whole process group (reviewer-codex on 5b): its
+// leader's exit ends what is left of the group (a child that ignores SIGHUP
+// gets SIGKILL after the grace), while the leader is unreaped and the
+// group's number still its own.
+func TestHolderEndsAnExitedLeadersGroup(t *testing.T) {
 	_, sock := newTestHolder(t) // grace 2 s
 	cl := dial(t, sock)
 	x := startRole(t, cl, "leaver")
@@ -486,25 +489,64 @@ func TestHolderCloseEndsAnExitedLeadersGroup(t *testing.T) {
 	if child <= 0 {
 		t.Fatalf("no child pid in %q", text)
 	}
-	eventually := func(what string, cond func() bool) {
-		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-			if cond() {
-				return
-			}
-		}
-		t.Fatalf("never: %s", what)
-	}
-	eventually("the leader exited", func() bool { return !termOf(t, cl, x.ID).Alive })
-	if st, ok := readProcStat(child); !ok || st.state == 'Z' {
-		t.Fatalf("the child is not running before the close: %+v %v", st, ok)
-	}
-	if _, err := cl.Call(Close{Term: x.ID}); err != nil {
-		t.Fatal(err)
-	}
-	eventually("the child ended", func() bool {
+	gone := func() bool {
 		st, ok := readProcStat(child)
 		return !ok || st.state == 'Z'
-	})
+	}
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && !gone(); time.Sleep(50 * time.Millisecond) {
+	}
+	if !gone() {
+		t.Fatal("the HUP-ignoring child outlived its terminal")
+	}
+	if x := termOf(t, cl, x.ID); x.Alive || x.Exit == nil || *x.Exit != 0 {
+		t.Fatalf("the leader's exit %+v", x)
+	}
+}
+
+// Close signals a group only while its leader is unreaped (reviewer-codex,
+// 5b round 2): a terminal that ended is never signalled again, by one Close
+// or many, since its group's number may belong to another terminal now.
+func TestHolderCloseNeverSignalsAnEndedTerminal(t *testing.T) {
+	type sent struct {
+		pid int
+		sig syscall.Signal
+	}
+	var mu sync.Mutex
+	var got []sent
+	record := func(pid int, sig syscall.Signal) error {
+		mu.Lock()
+		got = append(got, sent{pid, sig})
+		mu.Unlock()
+		return syscall.Kill(pid, sig)
+	}
+	_, sock := newTestHolderWith(t, func(c *Config) { c.kill = record })
+	cl := dial(t, sock)
+	e := startRole(t, cl, "exiter")
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && termOf(t, cl, e.ID).Alive; time.Sleep(50 * time.Millisecond) {
+	}
+	mu.Lock()
+	got = nil // whatever its exit sent to its own group
+	mu.Unlock()
+	for i := 0; i < 2; i++ {
+		if _, err := cl.Call(Close{Term: e.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mu.Lock()
+	if len(got) != 0 {
+		t.Fatalf("an ended terminal signalled: %+v", got)
+	}
+	mu.Unlock()
+	a := startRole(t, cl, "echoer")
+	waitScreen(t, cl, a.ID, "hello")
+	if _, err := cl.Call(Close{Term: a.ID}); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) == 0 || got[0] != (sent{-a.PID, syscall.SIGHUP}) {
+		t.Fatalf("a live terminal's close sent %+v", got)
+	}
 }
 
 // Listen: a socket that answers is another holder (refused); a stale one is

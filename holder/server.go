@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -34,6 +35,7 @@ type Config struct {
 	ancestors func(int) []dispatch.ProcID
 	procStart func(int) (uint64, error)
 	peerOf    func(*net.UnixConn) (Peer, error)
+	kill      func(pid int, sig syscall.Signal) error // nil: syscall.Kill (tests record the signals)
 }
 
 // Defaults.
@@ -382,7 +384,7 @@ func (s *Server) start(f Start) Reply {
 	}
 	trackedSet[c.Process.Pid] = true
 	trackMu.Unlock()
-	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true,
+	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true, grace: s.cfg.Grace, kill: s.cfg.kill,
 		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{})}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t

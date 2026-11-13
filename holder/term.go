@@ -33,6 +33,11 @@ type terminal struct {
 	exit   *int
 	closed bool
 
+	grace time.Duration                           // SIGHUP to SIGKILL for its group
+	kill  func(pid int, sig syscall.Signal) error // nil: syscall.Kill
+	sigMu sync.Mutex                              // a signal to the group never crosses the leader's reaping
+	ended bool                                    // the leader was reaped: its numbers may be reused, never signalled again
+
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
 }
@@ -95,7 +100,12 @@ func (t *terminal) replyLoop() {
 // waitLoop waits for the program and records its exit status; -1 when a
 // signal ended it.
 func (t *terminal) waitLoop() {
+	waitExited(t.pid) // Linux: the leader exited, still unreaped; elsewhere at once
+	t.endGroup(t.grace)
+	t.sigMu.Lock()
 	err := t.cmd.Wait()
+	t.ended = true
+	t.sigMu.Unlock()
 	code := 0
 	var ee *exec.ExitError
 	switch {
@@ -118,29 +128,61 @@ func (t *terminal) info(build string) TermInfo {
 	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Build: build}
 }
 
-// close ends the terminal's whole process group: SIGHUP, then SIGKILL to
-// what is left after grace (spec 4.2). The group, not only the program: a
-// descendant can outlive its leader (a shell that exited, a child that
-// ignores SIGHUP), and the leader's exit would otherwise leave it running
-// under the subreaper (reviewer-codex on 5b). It returns once the program
-// was waited for and the group is empty (or killed). A descendant that left
-// the group (setsid) is not reached: the residual of any group kill.
+// signal sends sig to pid (negative: a process group), through the
+// terminal's kill (tests record it).
+func (t *terminal) signal(pid int, sig syscall.Signal) {
+	kill := t.kill
+	if kill == nil {
+		kill = syscall.Kill
+	}
+	_ = kill(pid, sig)
+}
+
+// close ends the terminal (spec 4.2): SIGHUP to its process group, SIGKILL
+// to it after grace. Its group is signalled only while its leader is not
+// reaped, so its number cannot have been reused for another terminal
+// (reviewer-codex on 5b): once the terminal ended (its group was ended at
+// the leader's exit, waitLoop), a Close, a repeated one included, signals
+// nothing.
 func (t *terminal) close(grace time.Duration) {
 	t.mu.Lock()
 	t.closed = true
 	t.mu.Unlock()
-	_ = syscall.Kill(-t.pid, syscall.SIGHUP)
-	deadline := time.Now().Add(grace)
-	for groupAlive(t.pid) && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+	t.sigMu.Lock()
+	if t.ended {
+		t.sigMu.Unlock()
+		_ = t.pty.Close()
+		return
 	}
-	if groupAlive(t.pid) {
-		_ = syscall.Kill(-t.pid, syscall.SIGKILL)
+	t.signal(-t.pid, syscall.SIGHUP)
+	t.sigMu.Unlock()
+	select {
+	case <-t.done:
+	case <-time.After(grace):
+		t.sigMu.Lock()
+		if !t.ended {
+			t.signal(-t.pid, syscall.SIGKILL)
+		}
+		t.sigMu.Unlock()
+		<-t.done
 	}
-	<-t.done
 	_ = t.pty.Close()
 }
 
-// groupAlive: a process of the group pgid still runs (a member that exited
-// and is not reaped yet counts until the reaper takes it).
-func groupAlive(pgid int) bool { return syscall.Kill(-pgid, 0) == nil }
+// endGroup ends what is left of the terminal's process group once its
+// leader exited and before it is reaped (its pid, and so its group's, is
+// not reused while it is a zombie): SIGHUP, then SIGKILL after grace. A
+// child that ignores SIGHUP never outlives its terminal (reviewer-codex);
+// one that left the group (setsid) is not reached.
+func (t *terminal) endGroup(grace time.Duration) {
+	if !othersInGroup(t.pid) {
+		return
+	}
+	t.signal(-t.pid, syscall.SIGHUP)
+	for deadline := time.Now().Add(grace); othersInGroup(t.pid) && time.Now().Before(deadline); {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if othersInGroup(t.pid) {
+		t.signal(-t.pid, syscall.SIGKILL)
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // clockTicks is USER_HZ, the unit of /proc/<pid>/stat's times (100 on
@@ -11,11 +13,11 @@ import (
 const clockTicks = 100
 
 type procStat struct {
-	pid, ppid int
-	comm      string
-	state     byte
-	start     uint64
-	cpuTicks  int64
+	pid, ppid, pgrp int
+	comm            string
+	state           byte
+	start           uint64
+	cpuTicks        int64
 }
 
 // readProcStat reads /proc/<pid>/stat: its comm in parentheses may hold
@@ -35,10 +37,11 @@ func readProcStat(pid int) (procStat, bool) {
 		return procStat{}, false
 	}
 	ppid, _ := strconv.Atoi(f[1])
+	pgrp, _ := strconv.Atoi(f[2])
 	ut, _ := strconv.ParseInt(f[11], 10, 64)
 	st, _ := strconv.ParseInt(f[12], 10, 64)
 	start, _ := strconv.ParseUint(f[19], 10, 64)
-	return procStat{pid: pid, ppid: ppid, comm: s[l+1 : r], state: f[0][0], start: start, cpuTicks: ut + st}, true
+	return procStat{pid: pid, ppid: ppid, pgrp: pgrp, comm: s[l+1 : r], state: f[0][0], start: start, cpuTicks: ut + st}, true
 }
 
 // processTree is root and every descendant of it, root first, read from
@@ -99,4 +102,35 @@ func childrenOf(pid int) []int {
 		}
 	}
 	return out
+}
+
+// othersInGroup: a process of the group pgid, other than its leader
+// (pgid itself) and not a zombie, still runs.
+func othersInGroup(pgid int) bool {
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	for _, e := range ents {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid == pgid {
+			continue
+		}
+		if st, ok := readProcStat(pid); ok && st.pgrp == pgid && st.state != 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+// waitExited returns once pid exited, leaving it unreaped (WNOWAIT): its
+// own Wait reaps it after its group was ended.
+func waitExited(pid int) {
+	for {
+		var info unix.Siginfo
+		err := unix.Waitid(unix.P_PID, pid, &info, unix.WEXITED|unix.WNOWAIT, nil)
+		if err != unix.EINTR {
+			return
+		}
+	}
 }

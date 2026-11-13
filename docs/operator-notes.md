@@ -487,10 +487,14 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `fallback_profiles` one, a resume only for a client whose resume is verified), runs it on a new
   PTY (never reused) with `AGENTBUS_TERM_ID` and `AGENTBUS_HOST`, and reports its pid and start
   time. The holder always reads the output into the emulator (and a 1 MB raw tail) and writes the
-  emulator's answers to queries (DSR, DA) back, viewer or not. `Close` is SIGHUP to the process
-  group, SIGKILL after the grace (5 s) to whatever is left of the group, its leader gone or not (a
-  child that ignores SIGHUP outlives an exited shell: reviewer-codex); a descendant that left the
-  group (setsid) is not reached. A terminal's own pid is reaped by its `Wait`, so its exit
+  emulator's answers to queries (DSR, DA) back, viewer or not. A terminal ends with its process
+  group: on Linux the wait loop learns the leader's exit with `waitid(WNOWAIT)`, leaving it unreaped
+  (so its pid, and its group's number, cannot be reused), ends what is left of the group (SIGHUP,
+  SIGKILL after the grace: a child that ignores SIGHUP never outlives its terminal, reviewer-codex),
+  then reaps it. `Close` is SIGHUP to the group, SIGKILL after the grace, and only while the leader is
+  unreaped: a terminal that ended is never signalled again, by one Close or many, since its group's
+  number may be another terminal's now (reviewer-codex). A descendant that left the group (setsid)
+  is not reached; off Linux (no `/proc`) the leftovers are not ended at the leader's exit. A terminal's own pid is reaped by its `Wait`, so its exit
   status is kept; the reaper (on SIGCHLD, and a 5 s sweep) reaps only exited children it did not
   start, never `wait(-1)`. An in-tree peer is refused `start`, `close`, `submit` and an attach
   that types (`in_tree`); `submit` and `attach` answer `later` until step 5c. `holder.Client`
