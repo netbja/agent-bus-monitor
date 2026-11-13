@@ -256,7 +256,8 @@ func TestFinishSelfRepairRedis(t *testing.T) {
 
 // What the budget reads (4.5, step 7): each role's self-repair attempts (its
 // begins), the death episodes whose relaunch failed its proof, and the crash
-// loop the dispatcher marked, all counted from the role's last reset.
+// loop the dispatcher marked, all kept in {p}:selfrepair by the fenced
+// scripts that begin and end a self-repair, and cleared by a reset.
 func TestSelfRepairPastRedis(t *testing.T) {
 	b := dialDispatch(t)
 	ctx := context.Background()
@@ -337,12 +338,42 @@ func TestSelfRepairPastRedis(t *testing.T) {
 		t.Fatal("an invalid role reset")
 	}
 	past, _ = b.SelfRepairPast(ctx)
-	if c = past["coder"]; c.CrashLoop || len(c.Attempts) != 0 || len(c.Failed) != 0 || c.ResetAfter == "" {
+	if c = past["coder"]; c.CrashLoop || len(c.Attempts) != 0 || len(c.Failed) != 0 {
 		t.Fatalf("after reset %+v", c)
 	}
 	attempt("coder", "c", "4:4", SwapFailed)
 	if past, _ = b.SelfRepairPast(ctx); len(past["coder"].Attempts) != 1 || !past["coder"].Failed["4:4"] {
 		t.Fatalf("after reset, a new attempt: %+v", past["coder"])
+	}
+	// reviewer-codex (7a): the budget outlives the ledger's window. 1100
+	// unrelated entries trim the ledger past coder's begin; the attempt
+	// still counts.
+	for i := 0; i < 1100; i++ {
+		if err := b.LogSwap(ctx, SwapEvent{Role: "foureyes", Event: SwapWarning, By: "master"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if log, _ := b.SwapLog(ctx, "coder", 0); len(log) != 0 {
+		t.Fatalf("the ledger window still holds coder: %d entries", len(log))
+	}
+	if past, _ = b.SelfRepairPast(ctx); len(past["coder"].Attempts) != 1 || !past["coder"].Failed["4:4"] {
+		t.Fatalf("past lost with the ledger window: %+v", past["coder"])
+	}
+	// A refused begin or finish counts nothing.
+	if err := b.BeginSelfRepair(ctx, "other", "coder", "d", SwapEvent{By: "dispatch", Episode: "5:5"}); !errors.Is(err, ErrNotHolder) {
+		t.Fatal(err)
+	}
+	if err := b.BeginSelfRepair(ctx, "tok", "coder", "d", SwapEvent{By: "dispatch", Episode: "5:5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BeginSelfRepair(ctx, "tok", "coder", "e", SwapEvent{By: "dispatch", Episode: "5:5"}); !errors.Is(err, ErrSwapInProgress) {
+		t.Fatal(err)
+	}
+	if err := b.FinishSelfRepair(ctx, "tok", "wrong", SwapEvent{Role: "coder", Event: SwapFailed, Episode: "5:5"}); !errors.Is(err, ErrNotOwnIntent) {
+		t.Fatal(err)
+	}
+	if past, _ = b.SelfRepairPast(ctx); len(past["coder"].Attempts) != 2 || past["coder"].Failed["5:5"] {
+		t.Fatalf("a refused begin or finish counted: %+v", past["coder"])
 	}
 	if c, k := ClassOf(b.Project(), SelfRepairKey(b.Project())); c != KeyRecord || k != "selfrepair" {
 		t.Fatalf("selfrepair key class %v %q", c, k)

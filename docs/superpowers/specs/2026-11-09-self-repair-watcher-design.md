@@ -362,12 +362,14 @@ useful alone first, and nothing acts before step 7.
    *As built (step 7a, what acting needs; nothing acts yet):* `bus/selfrepair.go`:
    `FinishSelfRepair` ends a self-repair with `relaunched` (the proof) or `failed`, kind
    `self-repair`, and ends its own intent in the same script, fenced on the lease and the nonce
-   (an expired intent still gets its entry). The budget's past is read from the ledger
-   (`SelfRepairPast`): a role's attempts are its self-repair begins (a failed proof spends the
-   budget too), its failed episodes those of its failed entries, both counted after its last
-   reset. `{p}:selfrepair` keeps the crash loop (`MarkCrashLoop`, fenced, set once so the
-   escalation is sent once) and the reset (`ResetSelfRepair`, the ledger id it counts from), for
-   `agentbus self-repair reset <agent>`. `Decide` gains `failed`: this death's relaunch failed its
+   (an expired intent still gets its entry). The budget's past is its own record,
+   `{p}:selfrepair`, not the ledger, whose reads are bounded to its last 1000 entries
+   (reviewer-codex): the begin's script appends the attempt (a failed proof spends the budget
+   too), a failed finish's appends its episode, and `MarkCrashLoop` (fenced, set once so the
+   escalation is sent once) marks the crash loop; `SelfRepairPast` reads them.
+   `agentbus self-repair reset <agent> [--as <person>]` (`ResetSelfRepair`) clears all three;
+   only master or a person runs it, the caller read from its process ancestry (a registered
+   agent's verified process), else its environment, and any other agent refused. `Decide` gains `failed`: this death's relaunch failed its
    proof, escalated, no retry for the episode until a reset; health fails on it, as on a crash
    loop. The pass fills `Relaunches`, `CrashLoop`, `ProofFailed` and the project's
    `LastRelaunch` (any role's attempt, for the 2-min pause) from it, so a shadow pass already
