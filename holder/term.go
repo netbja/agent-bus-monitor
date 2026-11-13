@@ -46,6 +46,7 @@ type terminal struct {
 	sigMu   sync.Mutex                              // a signal to the group never crosses the leader's reaping
 	ended   bool                                    // the leader was reaped: its numbers may be reused, never signalled again
 	inMu    sync.Mutex                              // the input lock: every viewer byte, and Submit's critical section (step 5d)
+	holdState
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended

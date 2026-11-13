@@ -156,6 +156,23 @@ type Resize struct {
 
 type Detach struct{}
 
+// Release and Discard end a hold of the viewers' bytes (spec 4.2, S5): the
+// attach's <prefix> r delivers them in order, <prefix> x drops them.
+type Release struct{}
+
+type Discard struct{}
+
+// HoldNotice is the holder's word to each typing viewer (and to one that
+// attaches) while its bytes are held after a line that did not land: the
+// kind of line that may be left in the input ("wake" or "clear") and how
+// many bytes are held; Active false when the hold ended. The attach draws
+// it as its one line (`a /clear may be left in the input; N keys held: …`).
+type HoldNotice struct {
+	Kind   string `json:"kind"`
+	Held   int    `json:"held"`
+	Active bool   `json:"active"`
+}
+
 // op is each frame's name and its fields, the only keys it may carry.
 var ops = map[string]struct {
 	fields []string
@@ -176,6 +193,9 @@ var ops = map[string]struct {
 	"focus":     {[]string{"in"}, decodeAs[Focus]},
 	"resize":    {[]string{"cols", "rows"}, decodeAs[Resize]},
 	"detach":    {nil, decodeAs[Detach]},
+	"release":   {nil, decodeAs[Release]},
+	"discard":   {nil, decodeAs[Discard]},
+	"hold":      {[]string{"kind", "held", "active"}, decodeAs[HoldNotice]},
 }
 
 func opOf(v any) (string, bool) {
@@ -210,6 +230,12 @@ func opOf(v any) (string, bool) {
 		return "resize", true
 	case Detach:
 		return "detach", true
+	case Release:
+		return "release", true
+	case Discard:
+		return "discard", true
+	case HoldNotice:
+		return "hold", true
 	}
 	return "", false
 }
@@ -398,6 +424,10 @@ func validate(v any) error {
 			return err
 		}
 		return validSize(f.Cols, f.Rows)
+	case HoldNotice:
+		if f.Kind != "wake" && f.Kind != "clear" || f.Held < 0 {
+			return errors.New("holder: a hold notice of kind wake or clear, held >= 0")
+		}
 	case Resize:
 		if f.Cols == 0 && f.Rows == 0 {
 			return errors.New("holder: a resize without a size")

@@ -20,6 +20,7 @@ type viewer struct {
 	focused    bool // focused from the moment it attaches, until a focus-out (spec 4.5)
 	cols, rows int
 	out        chan []byte // filtered output, in order
+	ctl        chan []byte // the holder's control frames to it (hold notices)
 	repaint    bool        // fell behind: its next write is a first paint
 	filter     outputFilter
 	in         inputScan // its input read as a stream (t.mu held)
@@ -35,6 +36,9 @@ func (t *terminal) addViewer(v *viewer) {
 	}
 	t.viewers[v] = true
 	v.out <- t.scr.Render()
+	if t.holding && !v.observe {
+		t.noticeTo(v)
+	}
 	if !v.observe && v.cols > 0 {
 		t.activeViewer(v)
 	}
@@ -76,7 +80,7 @@ func (t *terminal) fanOut(chunk []byte) {
 // the screen rendered now, with t.mu held so nothing is lost or doubled)
 // when it fell behind, else its next chunk. ok is false once the terminal
 // ended and v's queue is empty, or the viewer left (stop).
-func (t *terminal) nextFor(v *viewer, done, stop <-chan struct{}) ([]byte, bool) {
+func (t *terminal) nextFor(v *viewer, done, stop <-chan struct{}) (byte, []byte, bool) {
 	t.mu.Lock()
 	if v.repaint {
 		for len(v.out) > 0 {
@@ -85,20 +89,22 @@ func (t *terminal) nextFor(v *viewer, done, stop <-chan struct{}) ([]byte, bool)
 		v.repaint, v.filter = false, outputFilter{osc52: v.filter.osc52}
 		b := t.scr.Render()
 		t.mu.Unlock()
-		return b, true
+		return FrameData, b, true
 	}
 	t.mu.Unlock()
 	select {
+	case b := <-v.ctl:
+		return FrameControl, b, true
 	case b := <-v.out:
-		return b, true
+		return FrameData, b, true
 	case <-stop:
-		return nil, false
+		return 0, nil, false
 	case <-done:
 		select {
 		case b := <-v.out:
-			return b, true
+			return FrameData, b, true
 		default:
-			return nil, false
+			return 0, nil, false
 		}
 	}
 }
@@ -123,11 +129,15 @@ func (t *terminal) resize(cols, rows int) {
 // lock Submit takes too, step 5d) and records the activity: the time it
 // typed and the draft (spec 4.5). Mouse and focus reports are no typing.
 func (t *terminal) input(v *viewer, b []byte) {
-	t.inMu.Lock()
-	_, _ = t.pty.Write(b)
-	t.inMu.Unlock()
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.typing(v, b)
+	t.mu.Unlock()
+	t.deliver(b)
+}
+
+// typing records a viewer's bytes as the person's activity (spec 4.5), at
+// their arrival, held or not. Called with t.mu held.
+func (t *terminal) typing(v *viewer, b []byte) {
 	now := time.Now()
 	t.settle(v, now, false)
 	draft, typed := v.in.feed(t.draft, b, now, t.escWait)
@@ -323,7 +333,7 @@ func (t *terminal) activity() *ActivityInfo {
 // focus, resize and detach frames.
 func (s *Server) attach(c *net.UnixConn, t *terminal, f Attach) {
 	v := &viewer{observe: f.Observe, focused: !f.Observe, cols: f.Cols, rows: f.Rows,
-		out: make(chan []byte, viewerQueue), filter: outputFilter{osc52: s.cfg.OSC52}}
+		out: make(chan []byte, viewerQueue), ctl: make(chan []byte, 16), filter: outputFilter{osc52: s.cfg.OSC52}}
 	if err := WriteFrame(c, FrameControl, Reply{}.encode()); err != nil {
 		return
 	}
@@ -350,6 +360,10 @@ func (s *Server) attach(c *net.UnixConn, t *terminal, f Attach) {
 			switch r := req.(type) {
 			case Detach:
 				return
+			case Release, Discard:
+				if !v.observe { // an observer holds no key and ends no hold
+					t.endHold(r == Release{})
+				}
 			case Focus:
 				t.mu.Lock()
 				if !r.In && !v.observe { // a lone ESC before a focus-out was the Escape key
@@ -371,11 +385,11 @@ func (s *Server) attach(c *net.UnixConn, t *terminal, f Attach) {
 		}
 	}()
 	for {
-		b, ok := t.nextFor(v, t.outDone, stop)
+		typ, b, ok := t.nextFor(v, t.outDone, stop)
 		if !ok {
 			return
 		}
-		if err := WriteFrame(c, FrameData, b); err != nil {
+		if err := WriteFrame(c, typ, b); err != nil {
 			return
 		}
 	}
