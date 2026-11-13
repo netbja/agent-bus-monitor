@@ -112,21 +112,38 @@ func (s *Server) Listen() error {
 		return err
 	}
 	s.ln = ln
-	go reapLoop(s.stop, s.tracked)
+	startReaper()
 	return nil
 }
 
-// tracked: pid is a terminal's program (its own Wait reaps it).
-func (s *Server) tracked(pid int) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, t := range s.terms {
-		if t.pid == pid {
-			return true
-		}
+// The subreaper is the process's, not one server's: every terminal program
+// of every server in the process is tracked in one registry, and one reaper
+// reads it (a server's reaper knowing only its own terminals would reap
+// another's program and take its exit status).
+var (
+	trackMu    sync.Mutex
+	trackedSet = map[int]bool{}
+	reaperOnce sync.Once
+)
+
+func track(pid int, on bool) {
+	trackMu.Lock()
+	defer trackMu.Unlock()
+	if on {
+		trackedSet[pid] = true
+	} else {
+		delete(trackedSet, pid)
 	}
-	return false
 }
+
+// tracked: pid is a terminal's program (its own Wait reaps it).
+func tracked(pid int) bool {
+	trackMu.Lock()
+	defer trackMu.Unlock()
+	return trackedSet[pid]
+}
+
+func startReaper() { reaperOnce.Do(func() { go reapLoop(nil, tracked) }) }
 
 // Serve accepts connections until ctx ends or Shutdown.
 func (s *Server) Serve(ctx context.Context) error {
@@ -354,18 +371,25 @@ func (s *Server) start(f Start) Reply {
 	c := exec.Command(cmd.Argv[0], cmd.Argv[1:]...)
 	c.Dir = cmd.Dir
 	c.Env = append(append(os.Environ(), cmd.Env...), "AGENTBUS_TERM_ID="+id, "AGENTBUS_HOST="+s.cfg.Socket)
+	// The registry's lock is held from the fork until the pid is tracked,
+	// so the reaper never takes the new program for an orphan.
+	trackMu.Lock()
 	f2, err := pty.StartWithSize(c, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
+		trackMu.Unlock()
 		s.mu.Unlock()
 		return errReply(CodeFailed, "start %s: %v", f.Role, err)
 	}
+	trackedSet[c.Process.Pid] = true
+	trackMu.Unlock()
 	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true,
-		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{})}
+		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{})}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t
 	s.order = append(s.order, id)
 	s.mu.Unlock()
 	go t.readLoop()
+	go t.replyLoop()
 	go t.waitLoop()
 	info := t.info(s.cfg.Build)
 	return Reply{Term: &info}

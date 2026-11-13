@@ -33,30 +33,61 @@ type terminal struct {
 	exit   *int
 	closed bool
 
-	done chan struct{} // closed once the program was waited for
+	done    chan struct{} // closed once the program was waited for
+	outDone chan struct{} // closed once its output ended
 }
 
 // readLoop reads the program's output until the PTY ends.
 func (t *terminal) readLoop() {
+	defer close(t.outDone)
 	buf := make([]byte, 32<<10)
 	for {
 		n, err := t.pty.Read(buf)
 		if n > 0 {
 			t.mu.Lock()
 			_, _ = t.scr.Write(buf[:n])
-			replies := t.scr.Replies()
 			t.tail = append(t.tail, buf[:n]...)
 			if len(t.tail) > tailMax {
 				t.tail = append([]byte(nil), t.tail[len(t.tail)-tailMax:]...)
 			}
 			t.outAt = time.Now()
 			t.mu.Unlock()
-			if len(replies) > 0 {
-				_, _ = t.pty.Write(replies)
-			}
+			t.answer()
 		}
 		if err != nil {
 			return
+		}
+	}
+}
+
+// replyEvery is how often the holder looks for the emulator's answers to
+// the program's queries: the emulator produces them asynchronously, so an
+// answer may be ready only after the output that asked for it was written,
+// and a program waiting for it writes nothing more.
+const replyEvery = 10 * time.Millisecond
+
+// answer writes the emulator's pending answers (DSR, DA, the cursor
+// position, the kitty keyboard query: spec 4.6, S3) to the program, viewer
+// or not.
+func (t *terminal) answer() {
+	t.mu.Lock()
+	replies := t.scr.Replies()
+	t.mu.Unlock()
+	if len(replies) > 0 {
+		_, _ = t.pty.Write(replies)
+	}
+}
+
+// replyLoop answers until the output ends.
+func (t *terminal) replyLoop() {
+	tick := time.NewTicker(replyEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-t.outDone:
+			return
+		case <-tick.C:
+			t.answer()
 		}
 	}
 }
@@ -76,6 +107,7 @@ func (t *terminal) waitLoop() {
 	t.mu.Lock()
 	t.alive, t.exit = false, &code
 	t.mu.Unlock()
+	track(t.pid, false)
 	close(t.done)
 }
 

@@ -111,6 +111,11 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 // newTestHolder serves a holder for project demo in a fresh run directory.
 func newTestHolder(t *testing.T) (*Server, string) {
 	t.Helper()
+	return newTestHolderWith(t, func(*Config) {})
+}
+
+func newTestHolderWith(t *testing.T, set func(*Config)) (*Server, string) {
+	t.Helper()
 	dir, err := os.MkdirTemp("", "hx") // short: a socket path holds 103 bytes
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +131,9 @@ func newTestHolder(t *testing.T) (*Server, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewServer(Config{Project: "demo", Build: "test", Socket: sock, Launch: testRoles(t), Grace: 2 * time.Second})
+	cfg := Config{Project: "demo", Build: "test", Socket: sock, Launch: testRoles(t), Grace: 2 * time.Second}
+	set(&cfg)
+	s, err := NewServer(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,12 +438,13 @@ func TestHolderHandshake(t *testing.T) {
 // Another uid is refused before any frame is read (security S6): the
 // connection closes with no welcome.
 func TestHolderRefusesAnotherUser(t *testing.T) {
-	s, sock := newTestHolder(t)
-	s.cfg.peerOf = func(c *net.UnixConn) (Peer, error) {
-		p, err := PeerOf(c)
-		p.UID++
-		return p, err
-	}
+	_, sock := newTestHolderWith(t, func(c *Config) {
+		c.peerOf = func(c *net.UnixConn) (Peer, error) {
+			p, err := PeerOf(c)
+			p.UID++
+			return p, err
+		}
+	})
 	if _, err := Dial(sock, "test"); err == nil {
 		t.Fatal("a peer of another uid was welcomed")
 	}
