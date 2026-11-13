@@ -397,6 +397,7 @@ var commands = []cli.Command{
 			"plan [show] [--json]",
 			"plan load <path>@<commit>",
 			"plan link <task> (--pr <n> | --ref <branch>@<sha>) | plan done <task> | plan note <task> <text...> | plan clear",
+			"plan ignore <pr>",
 		},
 		Summary: "the batch's plan, as busmon's Plan view (P) shows it",
 		Flags: []cli.Flag{
@@ -404,7 +405,8 @@ var commands = []cli.Command{
 			{Long: "pr", Arg: "<n>", Help: "link: the task's pull request"},
 			{Long: "ref", Arg: "<branch>@<sha>", Help: "link: the delivered commit, when no pull request was opened (agentbus deliver)"},
 		},
-		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles"},
+		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles",
+			"agentbus -p demo plan ignore 458"},
 	},
 	{
 		Name: "deliver", Usage: []string{"deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run]"},

@@ -622,7 +622,19 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   person's accept, kept in the notes hash under `accept:<check>` (so a sentinel note never replaces it and
   `HealthNotes` never reads it), Redis `TIME`: it counts only for the current warn (written at or after its since),
   holds it out of the digest for a week (counted, not repeated), then the digest lists it again with the accept. It
-  changes no measured status. An agent identity refuses the accept, `--as` is required (unproved, as reload's). busmon shows the health pill, F5
+  changes no measured status. An agent identity refuses the accept, `--as` is required (unproved, as reload's).
+  `plan-drift` (the architect's design, reports 1794586011340-0 and 1794586021722-0;
+  alert only, the person approved; `health/plandrift.go` pure, `cmd/agentbus/plandrift.go` the read) warns master,
+  never fails, on a merge of origin/main since the plan's load that no task links and no `agentbus plan ignore <pr>`
+  covers, a task whose merge came from another branch than its board entry records, and a task linked to a PR while a
+  later PR of its branch stem (`feat/x-2` for `feat/x`) merged. It reads local git only, in the dispatch service's
+  working directory, through the bounded exec (own process group, killed on its deadline, output capped at 256 KiB,
+  `-c core.fsmonitor=false -c core.pager=cat`): `rev-list --first-parent --format=%s --max-count=500
+  <plan commit>..origin/main`, the plan commit refused unless it is a commit id. Only GitHub's merge-commit subject
+  (`Merge pull request #N from owner/branch`) is a signal. Nothing fetches: older than an hour, FETCH_HEAD makes the
+  check unknown, never ok. It wakes master once per drift (mark `plan-drift`, episode a hash of the drift). It writes
+  nothing to the plan; a derived Done is a later step. `{p}:plan:ignore` (a set, a record key) is dropped by a new
+  `plan load` and by `plan clear`. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check

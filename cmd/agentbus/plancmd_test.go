@@ -50,7 +50,7 @@ func runPlanT(t *testing.T, b *bus.Bus, repo string, args ...string) (int, strin
 func TestPlanCLI(t *testing.T) {
 	b, r := dialMain(t)
 	ctx := context.Background()
-	t.Cleanup(func() { r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project())) })
+	t.Cleanup(func() { r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project()), bus.PlanIgnoreKey(b.Project())) })
 	t.Setenv("HERDR_ENV", "")
 	repo, sha := planRepo(t, testPlan)
 
@@ -72,6 +72,18 @@ func TestPlanCLI(t *testing.T) {
 	}
 	if code, _, _ := runPlanT(t, b, repo, "link", "nope", "--pr", "1"); code == 0 {
 		t.Fatal("a fact for an unknown task was accepted")
+	}
+	// plan ignore <pr> (plan-drift): a merge no task links, said on purpose.
+	if code, out, errw := runPlanT(t, b, repo, "ignore", "#458"); code != 0 || !strings.Contains(out, "#458 ignored") {
+		t.Fatalf("ignore: %d %s %s", code, out, errw)
+	}
+	if got, _ := b.PlanIgnored(ctx); !got[458] {
+		t.Fatalf("ignored %v", got)
+	}
+	for _, bad := range [][]string{{"ignore"}, {"ignore", "x"}, {"ignore", "0"}, {"ignore", "1", "2"}} {
+		if code, _, _ := runPlanT(t, b, repo, bad...); code == 0 {
+			t.Errorf("%v accepted", bad)
+		}
 	}
 	if code, _, errw := runPlanT(t, b, repo, "note", "roles", "rebased", "on", "main"); code != 0 {
 		t.Fatalf("note: %s", errw)

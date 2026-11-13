@@ -162,7 +162,7 @@ func (l *loop) healthLoop(ctx context.Context) error {
 						l.logError("", "health team-stall notice", err)
 					}
 				}
-				if id := check.Definition.ID; cfg.StallWake != nil && (id == "clear-stall" || id == "quiet-agent" || id == "review-queue" || id == "idle-implementer") {
+				if id := check.Definition.ID; cfg.StallWake != nil && (id == "clear-stall" || id == "quiet-agent" || id == "review-queue" || id == "idle-implementer" || id == "plan-drift") {
 					hctx, hcancel := context.WithTimeout(passCtx, 2*time.Second)
 					err := cfg.StallWake(hctx, l.token, id)
 					hcancel()
