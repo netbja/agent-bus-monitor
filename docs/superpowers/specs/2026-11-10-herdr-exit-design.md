@@ -2,11 +2,16 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 and 19 on 2026-11-13
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 20 on 2026-11-13
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
+- Revision 20 (correction): reviewer-codex on r19 — the relay's 10 s wait and 60 s expiry let
+  a directive run after the caller was told it failed: one 5 s acceptance deadline on Redis
+  `TIME`, checked and answered in one fenced script, and the caller fails only past it, so no
+  operation runs after a failure is announced; §4.7's last item no longer sends self-repair
+  through `up`'s fresh branch (§4.2, §4.7, §8)
 - Revision 19 (correction): foureyes on r18 — the in-tree relay covered too few commands and
   too few callers: `reload` (sentinel's job), `retire` and the pop are added to the closed op
   set, and the dispatcher applies each command's own authorisation instead of "master or the
@@ -367,16 +372,24 @@ Interface rules (part of the interface, not comments):
     person (§4.3b), and every close keeps its proof (relaunch-close). It runs the operation
     against the holder, as an outside peer, and records it in `{p}:events`. The same commands
     run from the person's own shell talk to the holder directly, as they do today.
-  - **The reply.** The dispatcher answers on `{p}:cmd` with a `reply` entry to `from`, `ref` =
-    the directive's id: `accepted` with the event id, or the refusal text the command would
-    have printed. The command waits for it up to 10 s (it waits for the acceptance, not for the
-    new agent to be proved; the outcome follows as a report to `from` and an event). With no
-    reply in 10 s — the dispatch service stopped, paused, or not holding its lease — the command
-    exits non-zero with: `the dispatcher did not answer: from inside an agent's terminal, host
-    commands go through it. Start it (agentbus service start dispatch) or run the command from
-    your own shell.` The directive stays in the stream; a dispatcher that comes back later
-    **drops** a `host` directive older than 60 s (a late relaunch nobody is waiting for is not
-    run) and replies `expired`.
+  - **The reply, and no operation after a failure was announced** (reviewer-codex on r19). One
+    deadline decides both sides, measured on one clock, Redis `TIME`, against the directive's
+    entry id (also Redis time): a `host` directive may be **accepted only within 5 s of its
+    entry id**. The dispatcher accepts in one Lua script, fenced by its lease like every
+    dispatcher write, that reads `TIME`, refuses when more than 5 s have passed, and otherwise
+    writes the `accepted` reply in the same step; it acts **only** after that script returned
+    accepted. So a directive is either accepted within 5 s, with its reply already written, or
+    never acted on: a dispatcher that comes back later finds it past its deadline and replies
+    `expired`, acting on nothing. The reply goes on `{p}:cmd` as a `reply` entry to `from`, `ref`
+    = the directive's id: `accepted` with the event id, or the refusal text the command would
+    have printed, or `expired`. The command waits for that reply, not for the new agent to be
+    proved (the outcome follows as a report to `from` and an event). It declares failure only
+    when the deadline has passed **by Redis `TIME`** and no reply is in the stream: it then
+    reads the stream for the reply once more, and only if there is none exits non-zero with:
+    `the dispatcher did not answer within 5 s: from inside an agent's terminal, host commands go
+    through it. Nothing was done. Start it (agentbus service start dispatch) or run the command
+    from your own shell.` The text says "Nothing was done" because, past the deadline, nothing
+    can be done for that directive.
   - **Residual risk (stated, accepted with S1 fixed).** (1) A same-uid process can leave the
     tree through a service manager (`systemd-run --user`, `launchctl submit`, `at`) and then
     passes as outside. On macOS there is no subreaper: an orphan reparents to launchd and leaves
@@ -884,7 +897,10 @@ meaning: a wake waiting on the person is shown in busmon.
   `{p}:resume` and agents start fresh; nothing worse.
 - `agentbus up` on a project whose holder has no terminal for a role starts it with the
   recorded session when one is recorded (the command rebuilt from the template, above), else
-  fresh. Self-repair (decision 2026-11-09) uses the same path.
+  fresh. Self-repair (decision 2026-11-09) shares **only** the command's construction (`Start`
+  with `resume_session`, the command rebuilt by the holder from the template): when the session
+  is missing or fails validation it calls no `Start` and reports to master, as above. It never
+  takes `up`'s fresh branch.
 
 ### 4.8 What the cutover deletes
 
@@ -1219,7 +1235,11 @@ step claims an improvement for herdr, and none exists after the cutover.
     runs, sentinel's `reload sentinel` and coder's `reload reviewer` are refused, master's
     `reload sentinel` and `retire architect` run, `--ignore-background` from an agent other than
     master is refused; an unknown op is refused; with no dispatcher the command exits with the
-    refusal text after 10 s; a directive older than 60 s is dropped as `expired`;
+    refusal text once the 5 s deadline has passed by Redis `TIME`; **a dispatcher paused past
+    the deadline** (resumed at 6 s, 15 s and 60 s on a fake clock) replies `expired` and starts
+    or closes nothing, and the command that already failed sees no later operation; a
+    dispatcher resumed at 4 s accepts and the command, still waiting, reports success; a
+    mutant that checks the deadline outside the accepting script, or acts before it, fails;
   - **subreaper**: a double-forked orphan inside a terminal exits and is reaped, and the
     agent's own exit status is still observed by the holder;
   - **S3**: a program writes `ESC ] 52 ; c ; <b64> BEL`, an OSC 8 link, `CSI 21 t`, `CSI 6 n`,
