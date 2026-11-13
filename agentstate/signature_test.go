@@ -175,7 +175,7 @@ func TestDialogSignatures(t *testing.T) {
 // A profile is refused when it names another client, holds an unknown key,
 // has no prompt marker or a pattern that does not compile.
 func TestParseProfileRefuses(t *testing.T) {
-	good := "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['>']\n"
+	good := "client = \"x\"\n[signature]\nprompt = '^>'\nbox_end = '^-'\nready = ['>']\n"
 	if _, err := parseProfile("x.toml", []byte(good)); err != nil {
 		t.Fatalf("good profile: %v", err)
 	}
@@ -183,7 +183,9 @@ func TestParseProfileRefuses(t *testing.T) {
 		"another client": {"y.toml", good},
 		"unknown key":    {"x.toml", good + "colour = 'x'\n"},
 		"no prompt":      {"x.toml", "client = \"x\"\n[signature]\nready = ['>']\n"},
-		"bad pattern":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['(']\n"},
+		"bad pattern":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nbox_end = '^-'\nready = ['(']\n"},
+		"no box end":     {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nready = ['>']\n"},
+		"bad box end":    {"x.toml", "client = \"x\"\n[signature]\nprompt = '^>'\nbox_end = '('\nready = ['>']\n"},
 	} {
 		if _, err := parseProfile(c.file, []byte(c.text)); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -224,6 +226,27 @@ func TestEmptyInputAndInputHolds(t *testing.T) {
 		if !strings.Contains(old, "agentbus#a1b2c3") || sig.InputHolds(old, "agentbus#a1b2c3") {
 			t.Errorf("%s: an old box's token read as the input's", c)
 		}
+	}
+	// foureyes: the region ends at the box's end. Claude's slash menu drawn
+	// under the box lists /clear while the input holds only /cl: not seen.
+	claudeTyped := readScreen(t, "claude-typed.txt")
+	menu := "\n  /clear            Clear conversation history and free up context\n  /compact          Clear history but keep a summary\n"
+	partial := strings.Replace(claudeTyped, "zz-probe", "/cl", 1) + menu
+	if sigs["claude"].InputHolds(partial, "/clear") {
+		t.Error("claude: the slash menu under the box read as the input")
+	}
+	if !sigs["claude"].InputHolds(strings.Replace(claudeTyped, "zz-probe", "/clear", 1)+menu, "/clear") {
+		t.Error("claude: /clear in the input, with the menu under it, not read")
+	}
+	for _, c := range []string{"codex", "kimi", "grok", "agy"} {
+		typed := readScreen(t, c+"-typed.txt")
+		if sigs[c].InputHolds(strings.Replace(typed, "zz-probe", "/cl", 1)+menu, "/clear") {
+			t.Errorf("%s: a line under the box read as the input", c)
+		}
+	}
+	// No box end on the screen: nothing is read as landed (fail closed).
+	if sigs["agy"].InputHolds("────\n> agentbus#a1b2c3", "agentbus#a1b2c3") {
+		t.Error("agy: an unclosed box read")
 	}
 	// A token wrapped inside a bordered box is still read (a long wake line
 	// wraps; the border and the blanks are not the token).

@@ -35,6 +35,11 @@ type Signature struct {
 	ANSI      bool
 	Prompt    *regexp.Regexp
 	RuleAbove bool
+	// BoxEnd matches the line that closes the input box, below the prompt
+	// line (stripped text): the closing rule, the bottom border, or the
+	// blank padding line. InputHolds reads the box only, never what a
+	// client draws under it (a slash-command menu: foureyes on 5d).
+	BoxEnd *regexp.Regexp
 }
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
@@ -124,8 +129,9 @@ func (s Signature) EmptyInput(screen string) bool {
 	return ready && !s.InDialog(Strip(strings.ReplaceAll(screen, "\r", "")))
 }
 
-// InputHolds reports token in the current input region only, never in an
-// older box in scrollback (spec 4.2 step 5, the landing check): the wake
+// InputHolds reports token in the current input box only: never in an older
+// box in scrollback, never under the box (spec 4.2 step 5, the landing
+// check; a box with no end on screen holds nothing): the wake
 // line's "agentbus#<nonce>", or "/clear". A token wrapped inside the box is
 // still read: the region is also compared with its blanks and box borders
 // removed. An empty token holds nothing.
@@ -133,11 +139,10 @@ func (s Signature) InputHolds(screen, token string) bool {
 	if token == "" {
 		return false
 	}
-	region, ok := s.inputRegion(strings.ReplaceAll(screen, "\r", ""))
+	region, ok := s.inputBox(strings.ReplaceAll(screen, "\r", ""))
 	if !ok {
 		return false
 	}
-	region = Strip(region)
 	if strings.Contains(region, token) {
 		return true
 	}
@@ -151,4 +156,31 @@ func (s Signature) InputHolds(screen, token string) bool {
 		}, x)
 	}
 	return strings.Contains(squeeze(region), squeeze(token))
+}
+
+// inputBox is the current input box, stripped: inputRegion's start through
+// the prompt line and the lines after it, up to (not including) the first
+// line BoxEnd matches. ok=false: no prompt line, or no end of the box.
+func (s Signature) inputBox(screen string) (string, bool) {
+	region, ok := s.inputRegion(screen)
+	if !ok || s.BoxEnd == nil {
+		return "", false
+	}
+	lines := strings.Split(Strip(region), "\n")
+	prompt := -1
+	for i, l := range lines {
+		if s.Prompt.MatchString(l) {
+			prompt = i // the region's last prompt line is its first one after any rule
+			break
+		}
+	}
+	if prompt < 0 {
+		return "", false
+	}
+	for i := prompt + 1; i < len(lines); i++ {
+		if s.BoxEnd.MatchString(lines[i]) {
+			return strings.Join(lines[:i], "\n"), true
+		}
+	}
+	return "", false
 }

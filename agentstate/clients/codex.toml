@@ -7,6 +7,8 @@ client = "codex"
 ansi = true
 prompt = '^›'
 rule_above = false
+# box_end: the blank padding line of the shaded input block.
+box_end = '^[ \t]*$'
 ready = ['(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m']
 busy = []
 modal = ['enter/esc latest']

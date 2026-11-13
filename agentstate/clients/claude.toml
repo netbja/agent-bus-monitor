@@ -11,6 +11,8 @@ client = "claude"
 ansi = true
 prompt = '^❯'
 rule_above = true
+# box_end: the closing rule under the input (InputHolds reads up to it, never a menu below).
+box_end = '^[ \t]*─{3,}'
 ready = ['(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?\n(?:\x1b\[[0-9;]*m)*─{3,}']
 busy = ['(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…']
 modal = []
