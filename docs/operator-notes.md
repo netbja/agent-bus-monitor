@@ -503,8 +503,24 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   is not reached; off Linux (no `/proc`) the leftovers are not ended at the leader's exit. A terminal's own pid is reaped by its `Wait`, so its exit
   status is kept; the reaper (on SIGCHLD, and a 5 s sweep) reaps only exited children it did not
   start, never `wait(-1)`. An in-tree peer is refused `start`, `close`, `submit` and an attach
-  that types (`in_tree`); `submit` and `attach` answer `later` until step 5c. `holder.Client`
-  checks the holder's uid before it says hello.
+  that types (`in_tree`); `submit` answers `later` until step 5d. `holder.Client` checks the
+  holder's uid before it says hello. x/vt answers a program's queries asynchronously, so the holder
+  pumps `Replies()` every 10 ms (`replyLoop`), not only after an output: a program waiting on its
+  DSR answer writes nothing more. The subreaper is the process's, so every server's terminal pids
+  live in one registry (`track`), held from the fork until the pid is recorded, and one reaper reads
+  it.
+  Step 5c, attach (spec 4.5, 4.6): an `attach` frame turns its connection into the viewer's: the
+  reply, a first paint (`screen.Render`), then the output as data frames through the viewer's own
+  `outputFilter` (security S3: OSC 52 unless `Config.OSC52`, OSC 8 links with their text kept,
+  window reports `CSI 11/13-16/18-21 t`, `DCS $ q` and `+ q`, OSC 4/10-19 `?` queries, DA, DSR
+  `5/6/?6 n`, `CSI ? u`; a sequence cut across reads is read as one, and one past 1 MiB is dropped
+  whole). A viewer's queue holds 256 chunks; one that falls behind is repainted from the emulator,
+  never blocking the program. From the viewer: data frames are its input (an observer's are
+  dropped), written under the terminal's input lock; `focus`, `resize` and `detach` control
+  frames. A viewer is focused from its attach until a focus-out; an observer never is. Any byte
+  starts a draft and an Enter (CR, kitty `CSI 13 u`) ends it; SGR and X10 mouse reports and focus
+  reports are no typing. The most recently active non-observer sets the size. `Activity` reports
+  the viewers, the focused ones, the last typing and the draft.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
