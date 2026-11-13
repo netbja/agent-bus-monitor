@@ -98,10 +98,10 @@ func (c *selfRepairChore) deliver(ctx context.Context, token, master string) err
 		return err
 	}
 	var first error
-	for role, raw := range owed {
+	for _, o := range owed { // oldest death first
 		var m owedMsg
-		if json.Unmarshal([]byte(raw), &m) != nil || m.Mark == "" {
-			_ = c.b.AckSelfRepairOwed(ctx, token, role, raw) // unreadable: nothing to send
+		if json.Unmarshal([]byte(o.Value), &m) != nil || m.Mark == "" {
+			_ = c.b.AckSelfRepairOwed(ctx, token, o) // unreadable: nothing to send
 			continue
 		}
 		wrote, err := c.sender()(ctx, token, m.Mark, m.Episode, master, m.Text)
@@ -115,9 +115,9 @@ func (c *selfRepairChore) deliver(ctx context.Context, token, master string) err
 			continue
 		}
 		if wrote && m.Ring {
-			c.ring(ctx, role+": self-repair failed", m.Text)
+			c.ring(ctx, o.Role+": self-repair failed", m.Text)
 		}
-		if err := c.b.AckSelfRepairOwed(ctx, token, role, raw); err != nil && first == nil {
+		if err := c.b.AckSelfRepairOwed(ctx, token, o); err != nil && first == nil {
 			first = err
 		}
 	}

@@ -439,3 +439,43 @@ func TestSelfRepairMessageWaitsOnASwappedMaster(t *testing.T) {
 		t.Fatalf("after the swap: %q", w.toMaster())
 	}
 }
+
+// Two ends of one role owed at once (reviewer-codex on 7b): the first still
+// waits (master being swapped) when the second is recorded; both reach
+// master once it can take them, none replacing the other.
+func TestSelfRepairTwoEndsOwed(t *testing.T) {
+	w := newActWorld(t)
+	ctx := context.Background()
+	if err := w.b.BeginSwap(ctx, "master", bus.SwapIntent{ToProfile: "opus", By: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, ep := range []string{"102:99", "202:77"} {
+		n := "n" + ep[:3]
+		if err := w.b.BeginSelfRepair(ctx, "tok", "coder", n, bus.SwapEvent{By: "dispatch", Episode: ep}); err != nil {
+			t.Fatal(err)
+		}
+		raw := `{"mark":"selfrepair-done:coder","episode":"` + ep + `","text":"self-repair: coder relaunched (` + ep + `)."}`
+		if err := w.b.FinishSelfRepairOwing(ctx, "tok", n, bus.SwapEvent{Role: "coder", Event: bus.SwapRelaunched, By: "dispatch", Episode: ep}, raw); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.c.deliver(ctx, "tok", "master"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.toMaster(); len(got) != 0 {
+		t.Fatalf("sent during the swap: %q", got)
+	}
+	if err := w.b.EndSwap(ctx, "master"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.c.deliver(ctx, "tok", "master"); err != nil {
+		t.Fatal(err)
+	}
+	got := w.toMaster()
+	if len(got) != 2 || !strings.Contains(got[0], "(102:99)") || !strings.Contains(got[1], "(202:77)") {
+		t.Fatalf("master told %q", got)
+	}
+	if owed, _ := w.b.SelfRepairOwed(ctx); len(owed) != 0 {
+		t.Fatalf("still owed %+v", owed)
+	}
+}

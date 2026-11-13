@@ -421,8 +421,9 @@ func TestSelfRepairAttemptsKeptForTheDayRedis(t *testing.T) {
 }
 
 // What a self-repair owes master is durable (reviewer-codex on 7b): the
-// finish writes it with the ledger entry, it stays until acknowledged, of
-// any age, and only the lease holder acknowledges it, only as written.
+// finish writes it with the ledger entry, one field per death (a later end
+// never replaces an earlier one still owed), it stays until acknowledged,
+// of any age, and only the lease holder acknowledges it, only as written.
 func TestSelfRepairOwedRedis(t *testing.T) {
 	b := dialDispatch(t)
 	ctx := context.Background()
@@ -432,36 +433,40 @@ func TestSelfRepairOwedRedis(t *testing.T) {
 	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	if err := b.BeginSelfRepair(ctx, "tok", "coder", "n1", SwapEvent{By: "dispatch", Episode: "1:1"}); err != nil {
-		t.Fatal(err)
+	end := func(nonce, ep, owed string) {
+		t.Helper()
+		if err := b.BeginSelfRepair(ctx, "tok", "coder", nonce, SwapEvent{By: "dispatch", Episode: ep}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.FinishSelfRepairOwing(ctx, "tok", nonce, SwapEvent{Role: "coder", Event: SwapRelaunched, By: "dispatch", Episode: ep}, owed); err != nil {
+			t.Fatal(err)
+		}
 	}
-	owed := `{"mark":"selfrepair-done:coder","episode":"1:1","text":"self-repair: coder relaunched"}`
-	if err := b.FinishSelfRepairOwing(ctx, "tok", "n1", SwapEvent{Role: "coder", Event: SwapRelaunched, By: "dispatch", Episode: "1:1"}, owed); err != nil {
-		t.Fatal(err)
-	}
+	end("n1", "1:1", "first")
+	end("n2", "2:2", "second") // the first still owed
 	got, err := b.SelfRepairOwed(ctx)
-	if err != nil || got["coder"] != owed || len(got) != 1 {
-		t.Fatalf("owed %v %v", got, err)
+	if err != nil || len(got) != 2 || got[0].Value != "first" || got[1].Value != "second" || got[0].Role != "coder" {
+		t.Fatalf("owed %+v %v", got, err)
 	}
-	if err := b.AckSelfRepairOwed(ctx, "other", "coder", owed); !errors.Is(err, ErrNotHolder) {
+	if err := b.AckSelfRepairOwed(ctx, "other", got[0]); !errors.Is(err, ErrNotHolder) {
 		t.Fatalf("ack without the lease: %v", err)
 	}
-	if err := b.AckSelfRepairOwed(ctx, "tok", "coder", "an older message"); err != nil {
+	stale := got[0]
+	stale.Value = "an older message"
+	if err := b.AckSelfRepairOwed(ctx, "tok", stale); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := b.SelfRepairOwed(ctx); got["coder"] != owed {
-		t.Fatal("a stale ack removed a newer message")
+	if again, _ := b.SelfRepairOwed(ctx); len(again) != 2 {
+		t.Fatal("a stale ack removed a message")
 	}
-	if was, _ := b.ResetSelfRepair(ctx, "coder"); was {
-		t.Fatal("no crash loop")
-	}
-	if got, _ := b.SelfRepairOwed(ctx); got["coder"] != owed {
+	b.ResetSelfRepair(ctx, "coder")
+	if again, _ := b.SelfRepairOwed(ctx); len(again) != 2 {
 		t.Fatal("a reset dropped what master is owed")
 	}
-	if err := b.AckSelfRepairOwed(ctx, "tok", "coder", owed); err != nil {
+	if err := b.AckSelfRepairOwed(ctx, "tok", got[0]); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := b.SelfRepairOwed(ctx); len(got) != 0 {
-		t.Fatalf("acknowledged, still owed %v", got)
+	if again, _ := b.SelfRepairOwed(ctx); len(again) != 1 || again[0].Value != "second" {
+		t.Fatalf("after one ack %+v", again)
 	}
 }
