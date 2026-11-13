@@ -38,7 +38,7 @@ func (c KeyClass) String() string {
 // it would re-run old operations, so runtime.
 var keyKinds = map[string]KeyClass{
 	"status": KeyRecord, "report": KeyRecord, "notify": KeyRecord, "cmd": KeyRecord,
-	"verdicts": KeyRecord, "board": KeyRecord, "asks": KeyRecord,
+	"verdicts": KeyRecord, "board": KeyRecord, "asks": KeyRecord, "ideas": KeyRecord,
 	"plan": KeyRecord, "plan:facts": KeyRecord, "gate:*": KeyRecord, "swaps": KeyRecord,
 	"health": KeyRecord, "health:log": KeyRecord, "health:notes": KeyRecord, "quota:hist": KeyRecord,
 	"change:*": KeyRecord, "missions:*": KeyRecord,

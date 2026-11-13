@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path"
 	"strings"
 )
 
@@ -158,11 +157,11 @@ func workKanban(w workModel, d workDraw) kanbanView {
 	ideas := kanbanCol{title: fmt.Sprintf("Ideas  %d", len(w.Ideas))}
 	if w.IdeasErr {
 		ideas.cards = append(ideas.cards, kanbanCard{lines: []Line{
-			head(noMark, GlyphIdea, RoleAttention, "unread"), title("the open questions could not be read", RoleAttention)}})
+			head(noMark, GlyphIdea, RoleAttention, "unread"), title("the ideas could not be read", RoleAttention)}})
 	}
 	for _, it := range w.Ideas {
 		ideas.cards = append(ideas.cards, kanbanCard{key: workIdeaPrefix + it.ID, lines: []Line{
-			head(noMark, GlyphIdea, RoleAccent, "idea", path.Base(it.Where)), title(it.Title, RoleText)}})
+			head(noMark, GlyphIdea, RoleAccent, "idea", it.ID), title(it.Title, RoleText)}})
 	}
 	ideas.cards = append(ideas.cards, kanbanCard{key: workFoldBetween, lines: []Line{
 		head(noMark, GlyphDash, RoleMuted, "between agents", fmt.Sprint(w.Between)), title("nobody waits on you (enter)", RoleMuted)}})

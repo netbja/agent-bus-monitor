@@ -275,7 +275,7 @@ func TestLookupMatrix(t *testing.T) {
 		{"overlay digit ignored", ModeOverlay, PanelAgents, TierMedium, rk('1'), ActNone},
 		{"overlay q closes", ModeOverlay, PanelAgents, TierWide, rk('q'), ActClose},
 		{"overlay Esc closes", ModeOverlay, PanelAgents, TierWide, kc(keyEscape), ActClose},
-		{"overlay Tab ignored", ModeOverlay, PanelAgents, TierWide, kc(keyTab), ActNone},
+		{"overlay Tab is a page's (F6's filter)", ModeOverlay, PanelAgents, TierWide, kc(keyTab), ActIdeaFilter},
 		{"overlay Y", ModeOverlay, PanelAgents, TierWide, rk('Y'), ActCopyThread},
 		{"overlay i replies", ModeOverlay, PanelAgents, TierWide, rk('i'), ActComposeOpen},
 		{"overlay Enter answers", ModeOverlay, PanelAgents, TierWide, kc(keyEnter), ActAsk},

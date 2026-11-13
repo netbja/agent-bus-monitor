@@ -37,4 +37,4 @@
                                                         │                                                                                  │
                                                         │                                                                                  │
                                                         ╰──────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health                                                               
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health   F6 ideas                                                    

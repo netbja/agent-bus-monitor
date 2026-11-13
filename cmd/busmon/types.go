@@ -27,6 +27,9 @@ type busWriter interface {
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 	Resume(ctx context.Context, by, message string) (bool, error)
 	SetRequestPriority(ctx context.Context, task, level, by string) (bool, error) // the person's, request-priority §6
+	AddIdea(ctx context.Context, d bus.IdeaDef) (string, error)
+	SetIdeaState(ctx context.Context, id, expect, to, by string) error // the person's (ideas slice 1)
+	Ideas(ctx context.Context) ([]bus.Idea, error)
 }
 
 // overlayKind is a reader page's kind (tea_reader.go): one per overlay that
@@ -58,7 +61,8 @@ const (
 	ovProjects      // projects (M): every project of this host, read once (projects_admin.go)
 	ovProjectDetail // one project of the Projects page: every column, read only
 	ovTriageEnd     // the triage walk's end page (busmon-queue-triage §4.4), its key the next plan task
-	ovIdea          // an idea of the Work tab: what it is and where it lives, its key the note's id
+	ovIdea          // an idea (Work, F6): its facts, text and changes, its key the idea's id
+	ovIdeas         // the Ideas page (F6): the project's ideas by state
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

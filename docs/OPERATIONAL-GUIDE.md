@@ -443,8 +443,8 @@ agent names, no project template):
   (what waits on you, each with its verb: `answer`, `merge`, `decide`, `review`, `check`, and
   why), **TEAM** (the agents at work, their task in hand and its progress, who reviews whom and
   since when; the free agents on one line), **NEXT** (the plan's next tasks, then requests not in
-  the plan) and **IDEAS** (the open questions in `docs/memory/open-questions/` that no plan task
-  covers). The header's `decide` and `merge` count YOU's rows, so header, For you and Work agree.
+  the plan) and **IDEAS** (the project's ideas still `to discuss`, read from the broker's
+  `{p}:ideas`, that no plan task covers; F6 lists every idea by state and sets one, the person only). The header's `decide` and `merge` count YOU's rows, so header, For you and Work agree.
   From 130 columns of busmon's pane the same page is a Kanban (For you, In progress, Next,
   Ideas). On its tab `←→` step the tabs; `↓` goes to the column selector (`←→` choose a column),
   `↓` again into the column (`↑↓` stay in it, Enter opens a card), Esc climbs back one level at a

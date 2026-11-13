@@ -241,9 +241,9 @@ func workRows(w workModel, d workDraw) []ListItem {
 
 	// IDEAS
 	out = append(out, ListItem{})
-	head("ideas", "IDEAS", len(w.Ideas), "not decided yet")
+	head("ideas", "IDEAS", len(w.Ideas), "to discuss (F6: all of them)")
 	if w.IdeasErr {
-		add(workHeadPrefix+"ideas-err", Line{{Text: "  the open questions could not be read: the list may be old", Role: RoleAttention}}, false)
+		add(workHeadPrefix+"ideas-err", Line{{Text: "  the ideas could not be read: the list may be old", Role: RoleAttention}}, false)
 	}
 	for _, it := range w.Ideas {
 		l := Line{noMark, col(GlyphIdea, 2, RoleAccent)}
@@ -252,7 +252,7 @@ func workRows(w workModel, d workDraw) []ListItem {
 			l = append(l, Seg{Text: Preview(it.Title), Role: RoleText})
 			fw = d.width - x
 		} else {
-			l = append(l, col(Preview(it.Title), 50, RoleText), Seg{Text: it.Where, Role: RoleMuted})
+			l = append(l, col(Preview(it.Title), 50, RoleText), Seg{Text: it.ID + " " + GlyphNone + " by " + it.By, Role: RoleMuted})
 		}
 		add(workIdeaPrefix+it.ID, l, true)
 		marq(x, fw, Preview(it.Title))

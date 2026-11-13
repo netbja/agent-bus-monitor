@@ -2,15 +2,13 @@ package main
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/netbja/agent-bus-monitor/memory"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -50,9 +48,11 @@ func workFixture(now time.Time) workInput {
 	}
 	return workInput{forYou: items, requests: reqs, agents: agents, pilot: "master", now: now,
 		plan: planState{loaded: true, rows: rows},
-		ideas: []memory.Question{
-			{ID: "2026-11-03-deepseek-superagent-ideas", Title: "Three ideas taken from DeepSeek's Super-Agent prototype", Path: "docs/memory/open-questions/2026-11-03-deepseek-superagent-ideas.md"},
-			{ID: "2026-11-01-notif", Title: "Notifications order", Path: "docs/memory/open-questions/2026-11-01-notif.md"}, // t5 covers it
+		ideas: []bus.Idea{
+			{ID: "i1", IdeaDef: bus.IdeaDef{Title: "Three ideas taken from DeepSeek's Super-Agent prototype", By: "master"}, State: bus.IdeaToDiscuss},
+			{ID: "i2", IdeaDef: bus.IdeaDef{Title: "Notifications order", By: "master"}, State: bus.IdeaToDiscuss}, // t5 covers it
+			{ID: "i3", IdeaDef: bus.IdeaDef{Title: "decided already", By: "master"}, State: bus.IdeaDecided},       // not to discuss: F6 only
+			{ID: "i4", IdeaDef: bus.IdeaDef{Title: "dropped", By: "master"}, State: bus.IdeaDropped},
 		}}
 }
 
@@ -110,14 +110,15 @@ func TestWorkNextSection(t *testing.T) {
 	}
 }
 
-// Q2: a note a plan task covers shows once, as the task.
+// Q2: an idea a plan task covers shows once, as the task; IDEAS holds the
+// ideas still to discuss only (F6 lists them all).
 func TestWorkIdeasDedupedAgainstThePlan(t *testing.T) {
 	w := workOf(workFixture(shellNow))
-	if len(w.Ideas) != 1 || w.Ideas[0].ID != "2026-11-03-deepseek-superagent-ideas" || w.Ideas[0].Where == "" {
+	if len(w.Ideas) != 1 || w.Ideas[0].ID != "i1" || w.Ideas[0].By != "master" {
 		t.Fatalf("IDEAS = %+v", w.Ideas)
 	}
 	in := workFixture(shellNow)
-	in.plan.rows = append(in.plan.rows, plan.Row{Task: plan.Task{ID: "t12", Title: "x", Owner: plan.Person, Board: "2026-11-03-deepseek-superagent-ideas"}, State: plan.Upcoming})
+	in.plan.rows = append(in.plan.rows, plan.Row{Task: plan.Task{ID: "t12", Title: "x", Owner: plan.Person, Board: "i1"}, State: plan.Upcoming})
 	if w := workOf(in); len(w.Ideas) != 0 {
 		t.Fatalf("a task whose board names the note covers it: %+v", w.Ideas)
 	}
@@ -193,9 +194,9 @@ func TestForYouWordsAreTheWorkVerbs(t *testing.T) {
 // A failed read keeps the last IDEAS and says so; the next good read clears
 // the flag.
 func TestReadIdeasKeepsTheLastOnFailure(t *testing.T) {
-	q := []memory.Question{{ID: "a", Title: "A", Path: "docs/memory/open-questions/a.md"}}
+	q := []bus.Idea{{ID: "i1", IdeaDef: bus.IdeaDef{Title: "A"}}}
 	var err error
-	st := &shared{ideasOf: func() ([]memory.Question, error) { return q, err }}
+	st := &shared{ideasOf: func() ([]bus.Idea, error) { return q, err }}
 	readIdeas(st)
 	if len(st.ideas) != 1 || st.ideasErr {
 		t.Fatalf("first read: %+v %v", st.ideas, st.ideasErr)
@@ -210,27 +211,6 @@ func TestReadIdeasKeepsTheLastOnFailure(t *testing.T) {
 	readIdeas(st)
 	if len(st.ideas) != 0 || st.ideasErr {
 		t.Fatalf("good read: %+v %v", st.ideas, st.ideasErr)
-	}
-}
-
-// IDEAS come from the template's working_dir on this host; no template, none.
-func TestLocalIdeasOfReadsTheTemplatesTree(t *testing.T) {
-	cfg, repo := t.TempDir(), t.TempDir()
-	dir := filepath.Join(cfg, "agentbus", "projects")
-	notes := filepath.Join(repo, "docs", "memory", "open-questions")
-	for _, d := range []string{dir, notes} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	os.WriteFile(filepath.Join(dir, "demo.toml"), []byte("name = \"demo\"\nworking_dir = \""+repo+"\"\n"), 0o644)
-	os.WriteFile(filepath.Join(notes, "q.md"), []byte("---\nid: q\nstatus: active\n---\n# Q\n"), 0o644)
-	env := func(k string) string { return map[string]string{"HOME": "/h", "XDG_CONFIG_HOME": cfg}[k] }
-	if got, err := localIdeasOf("demo", env)(); err != nil || len(got) != 1 || got[0].ID != "q" {
-		t.Fatalf("demo: %v %v", got, err)
-	}
-	if got, err := localIdeasOf("other", env)(); err != nil || len(got) != 0 {
-		t.Fatalf("no template: %v %v", got, err)
 	}
 }
 

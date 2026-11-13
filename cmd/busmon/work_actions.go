@@ -46,30 +46,25 @@ func (m *Model) openPlanDone() tea.Cmd {
 	return m.push(page{kind: ovPlan, drawer: true, expanded: true})
 }
 
-// pushIdea is an idea's page: what it is and where it lives. busmon reads
-// the note, never writes it; y copies the path.
+// pushIdea is an idea's page (Work's IDEAS, F6's enter): its facts, text
+// and changes, rebuilt at each poll; s sets its state, y copies its title.
 func (m *Model) pushIdea(id string) tea.Cmd {
-	for _, it := range m.work.Ideas {
-		if it.ID != id {
-			continue
+	for _, it := range m.snap.ideas {
+		if it.ID == id {
+			return m.push(page{kind: ovIdea, key: id})
 		}
-		var b body
-		b.seg(RoleMuted, "An open question recorded in the repository, not decided yet.").text("\n\n")
-		b.seg(RoleMuted, "where it lives  ").text(it.Where).text("\n\n")
-		b.seg(RoleMuted, "Read it in your editor or Obsidian. A plan task that names it (its id as the task's board, or its title as the task's) takes its place in Work.")
-		return m.push(page{kind: ovIdea, key: id, title: GlyphIdea + " " + Preview(it.Title), body: b.Lines(), plain: it.Where, plainWhat: "path", fixed: true})
 	}
 	return nil
 }
 
-// workCopy is y on a Work row: its text, an idea's path, an agent's name.
+// workCopy is y on a Work row: its text, an idea's title, an agent's name.
 func (m *Model) workCopy(key string) (text, what string) {
 	if it, ok := m.work.itemOf(key); ok {
 		return it.Text, "text"
 	}
 	for _, it := range m.work.Ideas {
 		if workIdeaPrefix+it.ID == key {
-			return it.Where, "path"
+			return it.Title, "title"
 		}
 	}
 	if a, ok := strings.CutPrefix(key, workAgentPrefix); ok {

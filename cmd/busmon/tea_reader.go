@@ -59,6 +59,9 @@ type page struct {
 	health healthView   // ovHealth: its rows open in place and a (sel: the selected row)
 	hitems []healthItem // ovHealth: its selectable rows
 
+	ideas  ideasView  // ovIdeas: its filter and picker (sel: the selected row); ovIdea: its picker
+	iitems []ideaItem // ovIdeas: its selectable rows
+
 	svc        *svcFacts   // ovServices: the facts the cards show (sel: the card selected)
 	about      *aboutState // ovAbout: the versions and the packet's run
 	svcBusy    bool        // ovServices, ovRedis: a refresh read is in flight
@@ -507,6 +510,33 @@ func (m *Model) buildPage() bool {
 		if p.sel < len(p.hitems) {
 			p.health.selID = p.hitems[p.sel].id
 		}
+	case ovIdeas:
+		v := p.ideas
+		p.title, p.body, p.iitems, p.plain = ideasPage(s.ideas, s.ideasErr, m.cfg.self, v, p.sel, now, width)
+		p.plainWhat = "title"
+		p.sel = clamp(p.sel, 0, max(0, len(p.iitems)-1))
+		for i, it := range p.iitems {
+			if it.id == v.selID {
+				p.sel = i
+			}
+		}
+		if p.sel < len(p.iitems) {
+			p.ideas.selID = p.iitems[p.sel].id
+		}
+		if v.selID == "" && len(p.iitems) > 0 { // drawn again with the mark where it is
+			p.title, p.body, p.iitems, p.plain = ideasPage(s.ideas, s.ideasErr, m.cfg.self, p.ideas, p.sel, now, width)
+		}
+	case ovIdea:
+		p.title, p.body, p.plain, p.plainWhat = GlyphIdea+" "+p.key+" (gone)", []Line{{S(RoleMuted, "this idea is no longer on the broker")}}, "", "title"
+		for _, it := range s.ideas {
+			if it.ID == p.key {
+				p.title, p.plain = GlyphIdea+" "+it.ID+"  "+Preview(it.Title), it.Title
+				p.body = ideaDetail(it, m.cfg.self, now, width)
+				if p.ideas.pick != nil {
+					p.body = append(p.body, ideaPicker(*p.ideas.pick, width)...)
+				}
+			}
+		}
 	case ovHelp:
 		p.title, p.body = helpTitle(), helpText()
 	case ovPlan:
@@ -836,6 +866,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 	}
+	if p.kind == ovIdeas || p.kind == ovIdea {
+		if cmd, done := m.ideasKey(p, act, k); done {
+			return cmd
+		}
+	}
 	if p.kind == ovHealth {
 		switch {
 		case act == ActShowAll:
@@ -873,6 +908,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
+	case ActIdeas:
+		if p.kind == ovIdeas {
+			return nil
+		}
+		return m.push(page{kind: ovIdeas})
 	case ActTour: // the help's: the tour from its first page
 		if p.kind == ovHelp {
 			m.closeReader()
@@ -1324,6 +1364,10 @@ func (m Model) pageOffers(act Action) bool {
 		return ok && p.kind == ovPlanTask
 	case ActShowAll:
 		return p.kind == ovHealth || p.kind == ovTokens
+	case ActIdeaAdd, ActIdeaFilter:
+		return p.kind == ovIdeas && p.ideas.pick == nil
+	case ActIdeaState:
+		return (p.kind == ovIdeas && len(p.iitems) > 0 || p.kind == ovIdea && p.plain != "") && p.ideas.pick == nil
 	case ActOlder:
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
 	case ActFilter:

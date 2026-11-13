@@ -24,6 +24,12 @@ const (
 	lineHistFilter       // the History page's filter (/ on that page)
 )
 
+// filterLike: the lines edited the filter's way (ModeFilter): Enter applies,
+// Esc cancels, no completions.
+func (k lineKind) filterLike() bool {
+	return k == lineFilter || k == lineHistFilter
+}
+
 // sendResultMsg is one send's outcome: the plan and its calls' errors.
 type sendResultMsg struct {
 	plan   sendPlan
@@ -100,7 +106,7 @@ func (m *Model) names(showAll bool) []string {
 
 // lineKey is a key while the line has the keyboard (ModeInput, ModeFilter).
 func (m *Model) lineKey(act Action, k Key) tea.Cmd {
-	if m.ui.line == lineFilter || m.ui.line == lineHistFilter {
+	if m.ui.line.filterLike() {
 		m.editFilter(act, k)
 		return nil
 	}

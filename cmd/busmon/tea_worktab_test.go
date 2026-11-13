@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -39,8 +38,8 @@ func workShared() *shared {
 		{Task: "kimi-quota", Tracked: true, State: "requested", From: "master", Target: "coder", Created: now.Add(-2 * time.Hour)},
 	}
 	st.cmdHistory = []bus.Event{{ID: msID(now.Add(-3 * time.Hour)), Kind: "cmd", Type: bus.CmdDirective, From: "master", Target: "charlie", Message: "which tag?"}}
-	st.ideas = []memory.Question{{ID: "2026-11-03-deepseek-superagent-ideas", Title: "Three ideas from DeepSeek's Super-Agent prototype",
-		Path: "docs/memory/open-questions/2026-11-03-deepseek-superagent-ideas.md"}}
+	st.ideas = []bus.Idea{{ID: "i7", IdeaDef: bus.IdeaDef{Title: "Three ideas from DeepSeek's Super-Agent prototype", By: "master", Source: "docs/memory/open-questions/2026-11-03-deepseek-superagent-ideas.md"},
+		State: bus.IdeaToDiscuss}}
 	return st
 }
 
@@ -162,8 +161,8 @@ func TestWorkTabEnter(t *testing.T) {
 	if p := open("agent:coder").rd.top(); p == nil || p.kind != ovAgent {
 		t.Fatalf("team row: %+v", p)
 	}
-	p := open("idea:2026-11-03-deepseek-superagent-ideas").rd.top()
-	if p == nil || p.kind != ovIdea || p.plain != "docs/memory/open-questions/2026-11-03-deepseek-superagent-ideas.md" {
+	p := open("idea:i7").rd.top()
+	if p == nil || p.kind != ovIdea || p.plain != "Three ideas from DeepSeek's Super-Agent prototype" {
 		t.Fatalf("idea row: %+v", p)
 	}
 	if p := open("req:kimi-quota").rd.top(); p == nil || p.kind != ovRequest {
@@ -213,10 +212,10 @@ func TestWorkTabPriorityTarget(t *testing.T) {
 	}
 }
 
-// y copies a row's text, an idea's path.
+// y copies a row's text, an idea's title.
 func TestWorkTabCopy(t *testing.T) {
 	m := keys(t, workShell(t, 140, 40), '3')
-	if text, what := m.workCopy("idea:2026-11-03-deepseek-superagent-ideas"); what != "path" || !strings.HasSuffix(text, "deepseek-superagent-ideas.md") {
+	if text, what := m.workCopy("idea:i7"); what != "title" || text != "Three ideas from DeepSeek's Super-Agent prototype" {
 		t.Fatalf("idea: %q %q", text, what)
 	}
 	if text, _ := m.workCopy("plan:t5"); text != "Decide: notifications order" {

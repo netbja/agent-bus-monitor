@@ -339,6 +339,7 @@ agentbus usage                                     # every agent's model and con
 agentbus agents                                    # every agent's declared state
 agentbus ask master --file questions.json          # put structured questions to the person (busmon answers them)
 agentbus asks --open                               # the open questions; agentbus answer <id> <q> --choice <label>
+agentbus idea add busmon update without setup.sh   # an idea, at 'to discuss'; idea list; idea set <id> <state> --as <you> (the person only)
 agentbus pause --for 2h "release window"           # nobody is woken until then; agentbus resume ends it
 agentbus health                                    # the project's measured health; health detail <id>
 agentbus quota                                     # every provider's usage windows, read now (no project needed)
@@ -645,6 +646,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | F2 `r` | tracked requests and unanswered threads, with their delivery evidence |
 | F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys), read again every 5 s while open; `↑↓` (or `←→` when side by side) choose a card, Enter or `l` opens a service's log, Enter on Redis its page (memory, persistence, clients, each project's keys and streams, the port bind, its last log lines) |
 | F5 | project health: each check, its detail and remediation |
+| F6 | the project's ideas by state: tab one state, enter an idea, `a` add one, `s` set its state (you only; `y` confirms) |
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
 | `p` `P` | the plan in a drawer (`d` shows what is done) |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |

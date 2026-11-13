@@ -596,6 +596,9 @@ func main() {
 	case "answer":
 		os.Exit(runAnswer(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
 
+	case "idea":
+		os.Exit(runIdea(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
+
 	case "swap":
 		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
 
