@@ -29,27 +29,44 @@ const SwapKindSelfRepair = "self-repair"
 // kind, or another nonce); nothing was changed.
 var ErrNotOwnIntent = errors.New("the role's intent is not this self-repair's")
 
-// selfRepairListMax bounds a role's kept attempts and failed episodes in
-// {p}:selfrepair (newest kept): far above any day's budget.
+// selfRepairListMax bounds a role's failed episodes in {p}:selfrepair
+// (newest kept: only the current death's is read).
 const selfRepairListMax = 64
+
+// selfRepairDayMs is how long an attempt counts (the per-day budget, 4.5):
+// the begin's script drops older ones. No count cap below a day's budget,
+// which takes any positive number (reviewer-codex); attemptsHardMax only
+// bounds the field far above the most a role can make in a day (one per
+// project pause of 2 min: 720).
+const (
+	selfRepairDayMs = 24 * 60 * 60 * 1000
+	attemptsHardMax = 4096
+)
 
 // beginSelfRepair: -1 the lease is not ARGV[1]'s; -2 the role has no
 // snapshot (a deleted project is never revived); 0 an intent exists; 1 the
 // intent set, its begin logged and the attempt counted (Redis TIME, ms, in
-// "attempts:<role>" of the self-repair hash, the newest ARGV[6] kept).
-// KEYS: dispatch lease, intent, ledger, agents, self-repair hash. ARGV:
-// token, role, intent, ttl ms, maxlen, list max, ledger fields...
+// "attempts:<role>" of the self-repair hash; attempts older than ARGV[7] ms
+// dropped, at most ARGV[6] kept). KEYS: dispatch lease, intent, ledger,
+// agents, self-repair hash. ARGV: token, role, intent, ttl ms, maxlen, hard
+// max, window ms, ledger fields...
 var beginSelfRepair = redis.NewScript(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 if redis.call('HEXISTS', KEYS[4], ARGV[2]) == 0 then return -2 end
 if redis.call('SET', KEYS[2], ARGV[3], 'NX', 'PX', ARGV[4]) == false then return 0 end
-redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[5], '*', unpack(ARGV, 7))
+redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[5], '*', unpack(ARGV, 8))
 local t = redis.call('TIME')
-local now = string.format('%d', tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000))
+local nowms = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+local now = string.format('%d', nowms)
 local f = 'attempts:' .. ARGV[2]
 local keep = {}
 local old = redis.call('HGET', KEYS[5], f)
-if old then for v in string.gmatch(old, '[^,]+') do table.insert(keep, v) end end
+if old then
+  for v in string.gmatch(old, '[^,]+') do
+    local n = tonumber(v)
+    if n and nowms - n < tonumber(ARGV[7]) then table.insert(keep, v) end
+  end
+end
 table.insert(keep, now)
 while #keep > tonumber(ARGV[6]) do table.remove(keep, 1) end
 redis.call('HSET', KEYS[5], f, table.concat(keep, ','))
@@ -88,7 +105,7 @@ func (b *Bus) BeginSelfRepair(ctx context.Context, token, role, nonce string, ev
 	if err := ev.valid(); err != nil {
 		return err
 	}
-	args := append([]interface{}{token, role, string(v), SwapTTL.Milliseconds(), streamMaxLen, selfRepairListMax}, ev.fields()...)
+	args := append([]interface{}{token, role, string(v), SwapTTL.Milliseconds(), streamMaxLen, attemptsHardMax, selfRepairDayMs}, ev.fields()...)
 	n, err := beginSelfRepair.Run(ctx, b.r,
 		[]string{DispatchKey(b.project), SwapKey(b.project, role), SwapsKey(b.project), AgentsKey(b.project), SelfRepairKey(b.project)}, args...).Int()
 	if err != nil {

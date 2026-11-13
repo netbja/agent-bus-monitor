@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -377,5 +378,44 @@ func TestSelfRepairPastRedis(t *testing.T) {
 	}
 	if c, k := ClassOf(b.Project(), SelfRepairKey(b.Project())); c != KeyRecord || k != "selfrepair" {
 		t.Fatalf("selfrepair key class %v %q", c, k)
+	}
+}
+
+// The attempts are pruned by age, never by a count below a day's budget
+// (reviewer-codex, 7a round 2): dispatch.self_repair_per_day takes any
+// positive number, so 70 attempts within 24 h all count; an attempt older
+// than 24 h is dropped at the next begin.
+func TestSelfRepairAttemptsKeptForTheDayRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "coder", "idle", "", AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	now, _ := b.ServerTime(ctx)
+	old := now.Add(-25 * time.Hour).UnixMilli()
+	recent := now.Add(-23 * time.Hour).UnixMilli()
+	b.r.HSet(ctx, SelfRepairKey(b.project), "attempts:coder", strconv.FormatInt(old, 10)+","+strconv.FormatInt(recent, 10))
+	for i := 0; i < 70; i++ {
+		nonce := "n" + strconv.Itoa(i)
+		if err := b.BeginSelfRepair(ctx, "tok", "coder", nonce, SwapEvent{By: "dispatch", Episode: "1:1"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.FinishSelfRepair(ctx, "tok", nonce, SwapEvent{Role: "coder", Event: SwapRelaunched, By: "dispatch", Episode: "1:1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past, err := b.SelfRepairPast(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := past["coder"].Attempts
+	if len(a) != 71 { // the 23-hour-old one and the 70 new ones; the 25-hour-old one dropped
+		t.Fatalf("%d attempts kept, want 71", len(a))
+	}
+	if !a[0].Equal(time.UnixMilli(recent)) {
+		t.Fatalf("oldest kept %v, want the 23-hour-old one", a[0])
 	}
 }

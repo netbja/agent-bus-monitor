@@ -946,7 +946,10 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   must outlive a restore), never the ledger, whose reads see only its last 1000 entries
   (reviewer-codex): `attempts:<role>` (each begin's Redis `TIME`, appended by `BeginSelfRepair`'s
   script), `failed:<role>` (a failed finish's episode, appended by `FinishSelfRepair`'s: no retry
-  for it), both bounded to the newest 64, and `crashloop:<role>` (`MarkCrashLoop`, fenced, set once
+  for it, the newest 64 kept). Attempts are dropped by age, never by a count below a day's budget
+  (`self_repair_per_day` takes any positive number, reviewer-codex): the begin's script keeps those
+  of the last 24 h by Redis `TIME`, at most 4096 (a role can make 720 a day, one per 2-min project
+  pause). And `crashloop:<role>` (`MarkCrashLoop`, fenced, set once
   so the escalation is sent once); `SelfRepairPast` reads them. `agentbus self-repair reset <agent>
   [--as <person>]` (`ResetSelfRepair`) deletes the three for a registered agent. Only master or a
   person runs it: the caller is the registered agent one of its ancestor processes is (verified pid
