@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -202,6 +204,21 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			s.IdentSession = ""
 			r.Snaps["coder"] = s
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Session == "" && a.Resumable }},
+		{"its budget's past (step 7)", func(r *selfRepairReads) {
+			r.Past = map[string]bus.SelfRepairRecord{"coder": {Attempts: []time.Time{srT0.Add(-3 * time.Hour), srT0.Add(-time.Hour)},
+				CrashLoop: true, Failed: map[string]bool{"7:7": true}}}
+		}, func(f selfrepair.Facts, a selfrepair.Agent) bool {
+			return len(a.Relaunches) == 2 && a.CrashLoop && !a.ProofFailed && f.LastRelaunch.Equal(srT0.Add(-time.Hour))
+		}},
+		{"this death's relaunch failed its proof", func(r *selfRepairReads) {
+			r.Past = map[string]bus.SelfRepairRecord{"coder": {Failed: map[string]bool{"102:99": true}}}
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.ProofFailed && !a.CrashLoop }},
+		{"the project's last relaunch is any role's", func(r *selfRepairReads) {
+			r.Past = map[string]bus.SelfRepairRecord{"retired-pop": {Attempts: []time.Time{srT0.Add(-time.Minute)}},
+				"coder": {Attempts: []time.Time{srT0.Add(-time.Hour)}}}
+		}, func(f selfrepair.Facts, a selfrepair.Agent) bool {
+			return f.LastRelaunch.Equal(srT0.Add(-time.Minute)) && len(a.Relaunches) == 1
+		}},
 		{"no snapshot", func(r *selfRepairReads) { delete(r.Snaps, "coder") },
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool {
 				return a.Life == relaunch.LifeUnknown && a.DeadReads == 0
@@ -346,5 +363,52 @@ func TestServiceSelfRepairByMode(t *testing.T) {
 		if tc.pass && (c.every != 45*time.Minute || c.perDay != 5 || cfg.Every != dispatch.SelfRepairEvery) {
 			t.Errorf("settings: every %s per day %d chore %s", c.every, c.perDay, cfg.Every)
 		}
+	}
+}
+
+// A pass's reads on a disposable broker: the template's roles, roles.toml's
+// required, each role's intent and (step 7) its self-repair past.
+func TestReadSelfRepairRedis(t *testing.T) {
+	b := notifyBus(t) // holds the lease as "tok"
+	ctx := context.Background()
+	cfg := t.TempDir()
+	dir := filepath.Join(cfg, "agentbus", "projects")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tpl := "name = \"" + b.Project() + "\"\n[[tabs]]\nname = \"coder\"\ncommand = \"agent-launch coder " + b.Project() + "\"\n" +
+		"[[tabs]]\nname = \"busmon\"\ncommand = \"busmon --project " + b.Project() + "\"\n"
+	if err := os.WriteFile(filepath.Join(dir, b.Project()+".toml"), []byte(tpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wd, _ := os.Getwd()
+	t.Setenv("ROLES_TOML", filepath.Join(wd, "..", "..", "roles.toml"))
+	if _, err := b.Status(ctx, "coder", "idle", "", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BeginSelfRepair(ctx, "tok", "coder", "n1", bus.SwapEvent{By: "dispatch", Episode: "5:5"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.MarkCrashLoop(ctx, "tok", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(k string) string {
+		if k == "XDG_CONFIG_HOME" {
+			return cfg
+		}
+		return ""
+	}
+	r, err := readSelfRepair(ctx, b, getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Tabs) != 2 || !r.Required["coder"] || r.Pops["coder"] || r.Intents["coder"].Kind != bus.SwapKindSelfRepair {
+		t.Fatalf("reads %+v", r)
+	}
+	if p := r.Past["coder"]; !p.CrashLoop || len(p.Attempts) != 1 {
+		t.Fatalf("past %+v", r.Past)
+	}
+	if _, ok := r.Snaps["coder"]; !ok || r.Now.IsZero() {
+		t.Fatalf("snaps %v now %v", r.Snaps, r.Now)
 	}
 }

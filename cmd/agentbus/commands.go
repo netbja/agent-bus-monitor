@@ -423,6 +423,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo swaps"},
 	},
 	{
+		Name: "self-repair", Usage: []string{"self-repair reset <agent>"},
+		Summary:  "clear an agent's self-repair crash loop and restart its budget (the person or master)",
+		Examples: []string{"agentbus -p demo self-repair reset coder"},
+	},
+	{
 		Name: "up", NoProject: true,
 		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags]"},
 		Summary: "provision a project, start its services, open its herdr workspace",

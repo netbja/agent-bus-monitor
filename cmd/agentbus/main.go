@@ -614,6 +614,9 @@ func main() {
 	case "swaps":
 		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
 
+	case "self-repair":
+		os.Exit(runSelfRepair(ctx, selfRepairCmdDeps{Agents: b.Agents, Reset: b.ResetSelfRepair}, rest, os.Stdout, os.Stderr))
+
 	case "plan":
 		wd, _ := os.Getwd()
 		os.Exit(runPlan(ctx, b, wd, rest, os.Stdout, os.Stderr))
