@@ -140,12 +140,17 @@ type arg struct {
   | Run row | `Key` | Hint shown |
   |---|---|---|
   | `write <agent> <text>` | `ActComposeAt` | `@` |
-  | `master <text>` | `ActAskOrWrite` | `w` |
+  | `master <text>` | `ActAskOrWrite`, **only while no ask is open** | `w`, or nothing |
   | `answer` | `ActAsk` | `F4 !` |
   | `filter <words>` | `ActFilter` | `/` |
   | `set <key>` | `ActSettings` | `C` |
   | `tour` | none in `panelBindings` (the help page's `t`) | `F1 t`, written in the row |
   | class C rows | none (no key today) | — |
+
+  `w` is not always `master`: `askOrWrite` opens the ask panel while any ask is open, and the
+  master composer only when none is. So the `master` row shows `w` only while no ask is open (the
+  same `openAsks` test `askOrWrite` makes, read at render). Otherwise it shows no key rather than one
+  that does something else. A model test covers both states.
 
   The registry test checks that every `Key` names an `Act` present in `panelBindings`.
 - **The help page (F1) gains a "Commands" section** generated from the same table.
@@ -194,7 +199,7 @@ review):
 | `filter` | — |
 | `quit` | `q`, `exit` |
 | `write` | `@` |
-| `master` | `w` |
+| `master` | — (`w` is shown as its key only while no ask is open, §4.1; as an alias it would mean two things) |
 | `set` | — |
 | `reload`, `pause`, `resume`, `suspend`, `backup` (slice 2) | — |
 | `self-repair reset` (slice 2) | — (`reset` alone would collide with the settings page's reset) |
@@ -234,9 +239,11 @@ review):
     Ctrl+Shift, so Ctrl+P reaches busmon. Ghostty's palette is Ctrl+Shift+P.
   - **Windows Terminal** binds its command palette to Ctrl+Shift+P, so Ctrl+P would pass through.
     Windows is out of scope (the person, 2026-11-11), so this is recorded, not tested.
-  - **The known exception is the VS Code integrated terminal on Linux and Windows**, where Ctrl+P is
-    Quick Open and VS Code keeps it. On macOS Quick Open is Cmd+P. tmux and screen bind no Ctrl+P by
-    default.
+  - **The VS Code integrated terminal** forwards Ctrl+P to the shell by default. Its
+    `terminal.integrated.commandsToSkipShell` default lists `-workbench.action.quickOpen`, so that
+    Quick Open's shortcut reaches the terminal. A user setting or keybinding that takes Quick Open back
+    would capture it: that depends on the person's own configuration, not on a default. tmux and screen
+    bind no Ctrl+P by default.
   - Wherever Ctrl+P does not arrive, `i` then `/` is the same palette, so Ctrl+P is a shortcut, never
     the only way in.
 - **How busmon finds `agentbus`** (class C, slice 2): the existing `agentbusBeside` (`pick.go`).
@@ -273,6 +280,7 @@ review):
   - the Enter rule: `/r` + Enter opens Requests (not recap); `/r`, ↓, Enter runs the second row;
     `/r`, ↓, then typing `e`, then Enter runs the typed line again;
   - `/R` + Enter opens the recap (case-sensitive letter alias);
+  - the `master` row shows `w` with no ask open and no key with one open;
   - Ctrl+P from a page opens the line with `/`;
   - Esc keeps the text;
   - `/filter coder` run from an open page (Ctrl+P) closes the page and shows Activity filtered;
@@ -331,7 +339,7 @@ The person's corrections are made in this head:
 | F3 `s` | ActServices | Services page (cards, logs) | — | `services` |
 | F4 `!` | ActAsk | answer the open questions | — | `answer` |
 | F5 | ActHealth | Health page | — | `health` |
-| `w` | ActAskOrWrite | answer, or write to master | — | `master` |
+| `w` | ActAskOrWrite | answer while an ask is open, else write to master | — | `master` (the hint `w` only while no ask is open, §4.1) |
 | `p` `P` | ActPlan | the plan drawer | — | `plan` |
 | `R` | ActRecap | the project recap | — | `recap` |
 | `T` | ActTriage | triage what waits for you | — | `triage` |
