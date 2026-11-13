@@ -1098,7 +1098,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   other than the configured person. busmon refuses a set or an add when it runs in an agent's
   environment (`AGENT_BUS_AGENT`: it would inherit the person's name; an agent adds with `idea add`
   under its own); a failed add keeps the window's text for the next `a`. An add is idempotent by
-  its request id (`IdeaDef.Request`, a `req|<id>` field expiring after a day): busmon reuses the id while
+  its request id (`IdeaDef.Request`, a `req|<id>` field holding the idea and its Redis time, dropped by the next add
+  after a day: no field TTL, the broker floor is 7.2): busmon reuses the id while
   the text sent is unchanged, and `idea add` always sends one and prints it on a failure (`--request <id>`
   retries), so a reply lost after the script committed never yields a second idea; it does not refuse a herdr pane, since the
   person's own busmon runs in one (the plugin). **The limit, said plainly: this is an

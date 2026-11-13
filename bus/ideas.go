@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/redis/go-redis/v9"
@@ -85,9 +86,9 @@ type IdeaDef struct {
 	Request string `json:"-"`
 }
 
-// ideaRequestTTL keeps an add's request id this long: retries come within
+// ideaRequestLife keeps an add's request id this long: retries come within
 // seconds, a day is plenty.
-const ideaRequestTTL = 24 * 60 * 60
+const ideaRequestLife = 24 * time.Hour
 
 var ideaRequestRE = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 
@@ -153,20 +154,31 @@ end
 `
 
 // ideaAdd: KEYS ideas. ARGV def JSON (no at), request id ("" none), its
-// TTL in seconds. Returns the id: the one this request made before, if any.
+// lifetime in ms. Returns the id: the one this request made, if it did so
+// within the lifetime. Only Redis 7.2 commands (the broker floor, herdr-exit
+// 6.3; foureyes): no field TTL, so req|<id> holds "<idea>|<ms>" and each add
+// drops the request fields older than the lifetime (ideas are few).
 var ideaAdd = redis.NewScript(ideaNowLua + `
+local now = nowms()
+local life = tonumber(ARGV[3])
+local all = redis.call('HGETALL', KEYS[1])
+for i = 1, #all, 2 do
+  if string.sub(all[i], 1, 4) == 'req|' then
+    local at = tonumber(string.match(all[i + 1], '|(%d+)$'))
+    if not at or at + life < now then redis.call('HDEL', KEYS[1], all[i]) end
+  end
+end
 if ARGV[2] ~= '' then
   local had = redis.call('HGET', KEYS[1], 'req|' .. ARGV[2])
-  if had then return had end
+  if had then return string.match(had, '^([^|]+)') end
 end
 local n = redis.call('HINCRBY', KEYS[1], 'seq', 1)
 local id = 'i' .. n
 local d = cjson.decode(ARGV[1])
-d['at'] = nowms()
+d['at'] = now
 redis.call('HSET', KEYS[1], id, cjson.encode(d), id .. '|s', 'to discuss')
 if ARGV[2] ~= '' then
-  redis.call('HSET', KEYS[1], 'req|' .. ARGV[2], id)
-  redis.call('HEXPIRE', KEYS[1], tonumber(ARGV[3]), 'FIELDS', 1, 'req|' .. ARGV[2])
+  redis.call('HSET', KEYS[1], 'req|' .. ARGV[2], id .. '|' .. now)
 end
 return id`)
 
@@ -238,7 +250,7 @@ func (b *Bus) AddIdea(ctx context.Context, d IdeaDef) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id, err := ideaAdd.Run(ctx, b.r, []string{IdeasKey(b.project)}, string(raw), d.Request, ideaRequestTTL).Text()
+	id, err := ideaAdd.Run(ctx, b.r, []string{IdeasKey(b.project)}, string(raw), d.Request, ideaRequestLife.Milliseconds()).Text()
 	return id, ideaErr(err)
 }
 

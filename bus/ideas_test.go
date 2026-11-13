@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -195,12 +196,31 @@ func TestAddIdeaRetryIsIdempotent(t *testing.T) {
 	if len(ideas) != 3 {
 		t.Fatalf("%d ideas, want 3: %+v", len(ideas), ideas)
 	}
+	if strings.Contains(fmt.Sprint(ideaAdd), "EXPIRE") {
+		t.Fatal("a field TTL command: the broker floor is 7.2")
+	}
 	raw, _ := b.r.HGet(ctx, IdeasKey(b.Project()), first).Result()
 	if strings.Contains(raw, req) || strings.Contains(raw, "request") {
 		t.Fatalf("the request id stored in the definition: %s", raw)
 	}
-	if ttl, err := b.r.HTTL(ctx, IdeasKey(b.Project()), "req|"+req).Result(); err != nil || len(ttl) != 1 || ttl[0] <= 0 {
-		t.Fatalf("the request field never expires: %v %v", ttl, err)
+	// Broker floor 7.2 (foureyes): no field TTL. The field holds the idea and
+	// its Redis time; an add drops the request fields older than a day, and
+	// an expired request is a new add.
+	v, _ := b.r.HGet(ctx, IdeasKey(b.Project()), "req|"+req).Result()
+	if idea, at, ok := strings.Cut(v, "|"); !ok || idea != first || at == "" {
+		t.Fatalf("the request field %q", v)
+	}
+	old := NewIntentNonce()
+	b.r.HSet(ctx, IdeasKey(b.Project()), "req|"+old, first+"|1000")
+	got, err := b.AddIdea(ctx, IdeaDef{Title: "after a day", By: "charlie", Request: old})
+	if err != nil || got == first {
+		t.Fatalf("an expired request: %q %v", got, err)
+	}
+	stale := NewIntentNonce()
+	b.r.HSet(ctx, IdeasKey(b.Project()), "req|"+stale, "i1|1000")
+	b.AddIdea(ctx, IdeaDef{Title: "sweeps", By: "charlie"})
+	if n, _ := b.r.HExists(ctx, IdeasKey(b.Project()), "req|"+stale).Result(); n {
+		t.Fatal("a request field older than a day was kept")
 	}
 	if _, err := b.AddIdea(ctx, IdeaDef{Title: "t", By: "charlie", Request: "not|valid"}); err == nil {
 		t.Fatal("a malformed request id accepted")
