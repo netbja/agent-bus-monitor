@@ -1,7 +1,9 @@
 # Claude Code. Empty input is `❯` + NBSP (optionally a dim `Try "…"` placeholder; the glyph
 # itself turns grey during a turn) directly under a `─` rule; typed text is not dim. A turn keeps
 # the input box empty, so the spinner line (`✶ Kneading… (2s · ↓ 91 tokens)`) is the busy
-# signature. Dialog: screens/claude-trust.txt.
+# signature. Dialog: screens/claude-trust.txt. Ready is anchored to the box's end (the empty `❯`
+# line directly followed by the closing rule): it is also the empty-input check (EmptyInput), and a
+# second input line must not read empty (screens/claude-multiline-typed.txt).
 
 client = "claude"
 
@@ -9,7 +11,7 @@ client = "claude"
 ansi = true
 prompt = '^❯'
 rule_above = true
-ready = ['(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?$']
+ready = ['(?m)^(?:\x1b\[[0-9;]*m)*─{3,}.*\n(?:\x1b\[[0-9;]*m)*❯[ \x{a0}]*(?:\x1b\[0m)?(?:\x1b\[2m[^\x1b\n]*\x1b\[0m)?[ \x{a0}]*(?:\x1b\[0m)?\n(?:\x1b\[[0-9;]*m)*─{3,}']
 busy = ['(?m)^[ \t]*[·✢✳✶✻✽*][ \t]+\S+…']
 modal = []
 dialog = ['(?s)Accessing workspace:.*Yes, I trust this folder']

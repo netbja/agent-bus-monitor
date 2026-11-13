@@ -111,3 +111,44 @@ const dialogLines = 14
 func (s Signature) InDialog(screen string) bool {
 	return anyMatch(s.Dialog, bottomLines(screen))
 }
+
+// EmptyInput reports the current input box empty to its end and
+// submittable (spec 4.2 step 1, the architect's ruling of 2026-11-13): Ready
+// on the current box, each client's Ready pattern anchored to the box's end
+// and pinned by its empty, typed, multiline-typed and returned fixtures,
+// with the Modal and Dialog vetoes. A client whose Ready cannot be anchored
+// to its box end is unsupported (never prompted). Mode 2004 is the holder's
+// to check beside it (screen.Modes).
+func (s Signature) EmptyInput(screen string) bool {
+	ready, _ := s.Match(screen)
+	return ready && !s.InDialog(Strip(strings.ReplaceAll(screen, "\r", "")))
+}
+
+// InputHolds reports token in the current input region only, never in an
+// older box in scrollback (spec 4.2 step 5, the landing check): the wake
+// line's "agentbus#<nonce>", or "/clear". A token wrapped inside the box is
+// still read: the region is also compared with its blanks and box borders
+// removed. An empty token holds nothing.
+func (s Signature) InputHolds(screen, token string) bool {
+	if token == "" {
+		return false
+	}
+	region, ok := s.inputRegion(strings.ReplaceAll(screen, "\r", ""))
+	if !ok {
+		return false
+	}
+	region = Strip(region)
+	if strings.Contains(region, token) {
+		return true
+	}
+	squeeze := func(x string) string {
+		return strings.Map(func(r rune) rune {
+			switch r {
+			case ' ', '\t', '\n', ' ', '│':
+				return -1
+			}
+			return r
+		}, x)
+	}
+	return strings.Contains(squeeze(region), squeeze(token))
+}

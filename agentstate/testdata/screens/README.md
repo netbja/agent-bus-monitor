@@ -44,3 +44,5 @@ not-found errors, `wait-output` timeout) except `prompt-ok.json` (trimmed real
 shape) and `prompt-stalled.json` (SYNTHETIC: the error object shape with code
 `agent_prompt_stalled`, seen in the Kimi probe but not saved then).
 `agent-get-claude.json` is the real reply from the probe pane.
+| `<client>-multiline-typed.txt` (claude, codex, kimi, grok, agy) | DERIVED (herdr exit 5d, the architect's EmptyInput ruling) — `<client>-empty.txt` with its prompt line empty and `second line` on a second input line inside the box; must read not ready and not empty. A real recording needs a logged-in client: a person's step-3 task |
+| `<client>-returned.txt` (same clients) | DERIVED — `<client>-typed.txt` with `zz-probe` replaced by `a queued message`, as the text a client puts back into its input (Esc on a queued message); must read not ready and not empty. A real recording (the client's own return) is a person's step-3 task |

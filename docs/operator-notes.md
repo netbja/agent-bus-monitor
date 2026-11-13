@@ -437,6 +437,15 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   interactive shell ignores SIGTERM). Without an emulator (step 4) the only judgement is on bytes:
   `dump --between` says what the client wrote between two marks. Tests run a fake client (the
   test binary under `TERMREC_FAKE`), never a real one.
+- **`EmptyInput` is `Ready` on the current input box** (herdr exit 5d, the architect's ruling of
+  2026-11-13): no separate `empty_input` pattern. Each client's Ready is anchored to the box's end
+  (claude: the empty `❯` line directly above the closing rule; kimi, grok: directly above the
+  bottom border; agy already was), so a second input line or text the client returned reads not
+  empty (`<client>-multiline-typed`, `<client>-returned`, DERIVED until a person records them).
+  `Signature.EmptyInput` adds the Dialog veto to Match's Modal one; `InputHolds(screen, token)`
+  reads a token (`agentbus#<nonce>`, `/clear`) in the current input region only, also with its
+  blanks and box borders removed (a wrapped line). Mode 2004 is the holder's to check beside it.
+  The anchoring reaches today's herdr dispatcher too: it can only wake less, never type into text.
 - **`screen` is the seam over the terminal emulator** (herdr exit step 4; `screen/BAKEOFF.md` has
   the bake-off and its numbers). Production is `charmbracelet/x/vt`; gostty (a native library) is
   only the test oracle, behind the `gostty` build tag (`go test ./screen -tags gostty -run
