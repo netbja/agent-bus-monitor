@@ -94,9 +94,14 @@ type arg struct {
 
   `modeKey` itself calls `runPanelAct` on the panels, so a key and its command still share one path.
   Work's Kanban intercepts only movement actions (`workKanbanKey`), none of them class A.
+- **Every row, Run rows included, starts the same way:** it leaves the line and closes every open
+  page (the reader stack, `m.rd`), then acts on the panels. A command run from a page with Ctrl+P
+  therefore shows its result, never the page it was started from. A model test runs each row from
+  an open page and checks that no page is left open, except one the row itself opens.
 - **Two rows with a Run of their own**, because no panel action takes their argument or path:
   - `filter <words>` does what the filter line's Enter does (`editFilter`):
-    `m.ui.filter = parseFilter(words)`, then focus Activity. With no words it is the class A
+    after the shared first step (pages closed), `m.ui.filter = parseFilter(words)`, then focus
+    Activity, so the filtered Activity is what the person sees. With no words it is the class A
     `filter`.
   - `tour` calls what the help page's `t` calls (`ActTour` is handled only in `readerKey`).
 - **Class B** (writes a message the way the line already does): `write <agent> <text>` is the same
@@ -270,6 +275,7 @@ review):
   - `/R` + Enter opens the recap (case-sensitive letter alias);
   - Ctrl+P from a page opens the line with `/`;
   - Esc keeps the text;
+  - `/filter coder` run from an open page (Ctrl+P) closes the page and shows Activity filtered;
   - Ctrl+P is ignored while the compose window, the settings line editor or a confirmation has the
     keyboard;
   - class C (slice 2) stops at the confirmation and runs a fake `agentbus` on PATH, as the Projects
