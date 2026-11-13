@@ -2,21 +2,24 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 23 on 2026-11-13
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
-- Revision 23 (correction): r22 claimed a pre-swap record would fail the session id pattern;
-  ids can look alike across clients, so a record older than the role's last swap is ignored
-  instead (§4.7, §8)
-- Revision 22 (correction): master's decision on the resume record — `{session, at}`, the
-  profile resolved at launch from the swap ledger (r21 had followed coder's
-  `{session, profile, at}`; coder aligns) (§4.7, §7, §8)
+- Revision 24 (correction): master's decision after the security role's confirmation
+  (s1-profile-confirm, report 1794585522550-0): the resume record stays `{session, profile,
+  at}` (r21; r22's `{session, at}` and r23 are withdrawn), with two conditions checked before
+  `Start` — the profile in the role's own plus `fallback_profiles` from the local manifest
+  only, and the session matching that profile's client (`ResumeVerified`) — the accepted
+  residual risk stated, and tests for both; r22's 10-minute outcome check kept (§4.2, §4.7, §7,
+  §8)
 - Revision 21 (correction): foureyes on r20 — the 5 s acceptance held only if acceptance never
   waits behind other work: `host` directives are read by their own goroutine and accepted
   operations run through one serial queue; the outcome report is the confirmation, and a
-  dispatcher that stopped reports unfinished accepted operations as not run (§4.2, §8)
+  dispatcher that stopped reports unfinished accepted operations as not run. The resume record
+  is `{session, profile, at}`, as coder's S1 branch (3999ca17) stores it: the session belongs
+  to the profile's client; the profile is re-validated against the manifest (§4.2, §4.7, §7, §8)
 - Revision 20 (correction): reviewer-codex on r19 — the relay's 10 s wait and 60 s expiry let
   a directive run after the caller was told it failed: one 5 s acceptance deadline on Redis
   `TIME`, checked and answered in one fenced script, and the caller fails only past it, so no
@@ -866,7 +869,7 @@ meaning: a wake waiting on the person is shown in busmon.
 - Process lifetime = holder lifetime. The holder survives busmon, ssh sessions and the person's
   terminal closing; it does not survive reboot, `agentbus down`, or (without linger) logout.
 - The resume the SessionStart hook reports today to herdr is written instead to a
-  **separate hash**, `{p}:resume` (field = agent, value = JSON `{session, at}`), not into
+  **separate hash**, `{p}:resume` (field = agent, value = JSON `{session, profile, at}`), not into
   the `{p}:agents` snapshot. Reason: a snapshot field would need a `mergeSnapshot` carry rule,
   and resume's is the opposite of every identity field there (BootID, Model, ClientFP follow the
   pid; resume must **outlive** the process and survive later statuses that do not carry it —
@@ -901,30 +904,54 @@ meaning: a wake waiting on the person is shown in busmon.
   write access to the broker (the laptop over the tunnel, any holder of the Redis password, any
   same-uid `HSET`, which skips the ancestor proof) into command execution on the host,
   automatically on self-repair. So:
-  - the record holds **the session id only**, never a command: `{session, at}` (master's
-    decision, 2026-11-13; coder's `fix/resume-argv-s1` aligns to it); step 8 drops `argv` from
-    `RecordResume` and from `ResumeRecord`. An old record still holding `argv` (or any other
-    field) is read for its `session` alone; the other fields are ignored, never displayed as a
-    command to run;
+  - the record is a closed set of names, **never a command**: `{session, profile, at}`;
+    step 8 drops `argv` from `RecordResume` and from `ResumeRecord` (coder's
+    `fix/resume-argv-s1`, 3999ca17, has this shape). `profile` is the profile the session ran on
+    (`""` = the role's own): a session belongs to its client, so a role swapped to another
+    client's profile must resume on that profile, not on the role's default. An old record still
+    holding `argv` is read for its `session` alone (profile `""`); the `argv` field is ignored,
+    never displayed as a command to run;
   - at launch, `up` and self-repair pass `resume_session` to `Start` (§4.2), and the holder
     rebuilds the command from the template — today's `rolecfg.ResumeArgv(launcher, manifest,
     role, project, profile, session)`, which re-validates the session id
-    (`sessionIDPattern`), the names and the absolute paths. The profile is **resolved at
-    launch**, not read from the record: the role's open swap in the swap ledger when there is
-    one, else the role's own profile — which is the profile the last proved session ran on,
-    since a swap relaunches the role and the new session replaces the record. A session belongs
-    to its profile's client, and session ids can look alike across clients (several are UUIDs),
-    so the pattern alone cannot tell them apart: a record whose `at` is **older than the start
-    of the role's open swap** (or of its last `--back`) is ignored and counts as no session
-    (next item). Both times are Redis `TIME`.
-  - a session id that fails validation (or none recorded): on **`up`** a **fresh** start and a
+    (`sessionIDPattern`), the names and the absolute paths. Two conditions on the record
+    (security, s1-profile-confirm, report 1794585522550-0), both checked **before** `Start`:
+    1. **Allowed profiles.** The record's `profile` (re-validated with `ValidName`) must be in
+       the role's **allowed set: its own profile plus its `fallback_profiles`, read from the
+       local manifest (`roles.toml`) only** — never from the broker, so neither from
+       `{p}:swap:*` (the swap intent) nor from `{p}:fallback`, both broker keys. Not "any
+       manifest profile": `rolecfg.ResolveWith(role, profile)` accepts any, because it serves
+       swap, and a broker writer could then start a read-only reviewer as a
+       `bypassPermissions` client. A profile outside the set is an **invalid record** (next
+       item). Cost, accepted: an agent that dies while swapped to an undeclared profile
+       (`swap --force`) restarts fresh on `up` and is reported, not resumed, by self-repair —
+       the safe direction;
+    2. **The session belongs to that profile's client.** The session id must match the
+       session pattern of the client the profile runs (§4.2's `resume_session` rule) and that
+       client must be resumable (`rolecfg.ResumeVerified(client)`, as `LaunchProfileResume`
+       already checks); otherwise an **invalid record**;
+  - **Accepted residual risk** (security). Within the allowed set, a broker writer can still
+    choose between the role's own profile and its declared fallbacks, and can name another
+    agent's session of the same client (session ids are not secret: a resume record holds
+    one). Both stay within launches the person configured for that role, and a broker writer
+    can already steer agents through directives, so this adds no new capability. Refusing a
+    resume on a profile more permissive (permission mode, sandbox) than the role's own is
+    optional hardening, not required;
+  - an invalid record — a session id or profile that fails validation or either condition —
+    or none recorded: on **`up`** a **fresh** start and a
     person notice (the person or master asked for the agent); on **self-repair** no `Start` at
     all and one report to master — self-repair never starts an agent fresh (the person, Q4 of
     the self-repair spec, its §4.1 item 5; `selfrepair.Decide` already reports instead);
   - regression test: `HSET {p}:resume coder '{"argv":["sh","-c","touch /tmp/x"],"session":"abc"}'`,
     then the `up` path and the self-repair path against the fake host: the started command
     equals the template's resume command for session `abc`, and nothing else runs; with a
-    session `abc;rm`, `up` starts fresh and self-repair starts nothing and reports.
+    session `abc;rm`, `up` starts fresh and self-repair starts nothing and reports. Condition
+    1: a record `{session, profile: "claude-opus"}` for `reviewer-codex` (a profile that is
+    neither its own nor a fallback) → `up` starts fresh on `codex-review` with a notice,
+    self-repair starts nothing and reports; a record on one of the role's `fallback_profiles`
+    resumes on it (an agent that died after a completed cross-client swap resumes on its
+    fallback). Condition 2: a Codex-shaped session id with a Claude profile is refused before
+    `Start`; so is a session on a client that `ResumeVerified` does not list.
 - Cleared only by `agentbus forget <agent>` and replaced by the next proved session's report;
   an agent's death or a status never touches it.
 - **It must survive a reboot, so the broker must persist.** The shipped `docker-compose.yml`
@@ -1199,9 +1226,9 @@ host, no shadow mode runs.
 | 5 | `agentbus holder` server alone + real-PTY e2e (wire frames, closed submit and `Start` sets, held viewer bytes and the hold after `ErrNotLanded`, mode-2004 requirement and the recheck, landing check, peer and in-tree checks with the subreaper, run-directory rules, build key, output filter and query answers, process facts) — after the **security review** of §4.4/§4.6, whose S2(a), S3–S7 corrections are in revision 18 | none (nothing uses it) | e2e green, security role approves |
 | 6 | Holder adapter of `termhost` (contract suite) + services: per-build units, launchd jobs, binary copy, restart policy, `services.manager` with the `none` supervisor (§4.4b), `service gc` with the two-upgrade test, rotate/upgrade paths skip the holder, `holder`/`holder_restarted`/`holder_draining`/`holder_leftovers` health, `holder drain`, sentinel runbook entry | none (no project runs on it) | contract suite and service tests (fake `systemctl`/`launchctl`, scripted supervisor) green |
 | 7 | `agentbus attach` + `attach.prefix` (the default settled by step 3's `f12-at-input` probe, F12 if it passes; both encodings) + busmon preview, attach key, draft/blocked/background on the row, the setting in the config screen | none (used only against a test holder) | attach tests; the person attaches to a scripted program in a test holder |
-| 8 | `{p}:resume` + hooks write it (ancestor-walk proof, macOS `Ancestors`) for each client whose row is verified; the record is `{session, at}`, the profile resolved at launch (`argv` dropped from `RecordResume`/`ResumeRecord`; `parseResume` ignores an old `argv`, S1); `broker_persistence` health; `{p}:events` with `resetKinds`/`survivesReset`; `valkey/valkey:9` in `docker-compose.yml` (§6.3) | the shipped broker image changes; resume is recorded beside herdr's | Redis tests of §8 on a disposable Valkey 9 and Valkey 7.2; the volume migration checked on a copy |
+| 8 | `{p}:resume` + hooks write it (ancestor-walk proof, macOS `Ancestors`) for each client whose row is verified; the record is `{session, profile, at}` (`argv` dropped from `RecordResume`/`ResumeRecord`; `parseResume` ignores an old `argv`, S1); `broker_persistence` health; `{p}:events` with `resetKinds`/`survivesReset`; `valkey/valkey:9` in `docker-compose.yml` (§6.3) | the shipped broker image changes; resume is recorded beside herdr's | Redis tests of §8 on a disposable Valkey 9 and Valkey 7.2; the volume migration checked on a copy |
 | 9 | Dispatcher on `termhost`+`agentstate` behind no switch: the code path exists and is covered by tests against the fake and a test holder; the blocked reports to master (§4.3a) and the background skip (§4.3b) wired in it | none (the running dispatcher still uses the herdr `Runtime`) | dispatch suite green on both paths |
-| 10 | **Cutover**: `up`/`start`/`restore`/`relaunch`/`swap`/`suspend`/`resume`/self-repair on `Host`, resuming through `Start`'s `resume_session` only (the S1 regression test), relayed to the dispatcher when run in-tree (§4.2); the dispatcher's herdr path removed; reporting callers on `Host.Describe`; herdr deleted (§4.8); decisions superseded; release note | **herdr gone** | the test forbidding any herdr exec, with no allowlist; scrub and the full suite green; the person's live check of the branch on one project before merge |
+| 10 | **Cutover**: `up`/`start`/`restore`/`relaunch`/`swap`/`suspend`/`resume`/self-repair on `Host`, resuming through `Start`'s `resume_session` only, after §4.7's two record conditions (allowed profiles from the local manifest, session of that profile's client), with the S1 tests, relayed to the dispatcher when run in-tree (§4.2); the dispatcher's herdr path removed; reporting callers on `Host.Describe`; herdr deleted (§4.8); decisions superseded; release note | **herdr gone** | the test forbidding any herdr exec, with no allowlist; scrub and the full suite green; the person's live check of the branch on one project before merge |
 
 **Before the cutover PR merges**, the person tags the current release on GitHub as **the last
 release with herdr**, with a release note saying so. Master never tags; this spec only states
@@ -1260,9 +1287,10 @@ step claims an improvement for herdr, and none exists after the cutover.
   writes nothing. The walk itself: table tests with an injected stat reader.
 - Security corrections (revision 18; holder e2e and unit tests):
   - **S1**: the forged-record test of §4.7 on the `up` and self-repair paths (the started
-    command equals the template's for the record's session on the role's effective profile
-    (its open swap, else its own); an invalid session, or a record older than the role's last
-    swap or `--back`: `up` starts fresh, self-repair starts nothing and reports to master);
+    command equals the template's for the record's session and profile; an invalid session,
+    a profile outside the role's own plus `fallback_profiles` (local manifest), or a session
+    not of that profile's client (`ResumeVerified`): `up` starts fresh, self-repair
+    starts nothing and reports to master);
   - **S2**: from a process started inside a test terminal (and from its double-forked
     grandchild), a non-observer attach, a `Start`, a `Close` and a `Submit` are refused, an
     observer attach and `Screen` are accepted; the same calls from outside the tree are
