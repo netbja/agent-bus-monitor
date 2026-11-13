@@ -36,8 +36,9 @@ type Signature struct {
 	Prompt    *regexp.Regexp
 	RuleAbove bool
 	// BoxEnd matches the line that closes the input box, below the prompt
-	// line (stripped text): the closing rule, the bottom border, or the
-	// blank padding line. InputHolds reads the box only, never what a
+	// line: the closing rule, the bottom border, or the first line out of
+	// a shaded input block. Matched on the raw line (escapes kept) when
+	// ANSI is set, else on the stripped text. InputHolds reads the box only, never what a
 	// client draws under it (a slash-command menu: foureyes on 5d).
 	BoxEnd *regexp.Regexp
 }
@@ -166,7 +167,11 @@ func (s Signature) inputBox(screen string) (string, bool) {
 	if !ok || s.BoxEnd == nil {
 		return "", false
 	}
-	lines := strings.Split(Strip(region), "\n")
+	raw := strings.Split(region, "\n")
+	lines := make([]string, len(raw))
+	for i, l := range raw {
+		lines[i] = Strip(l)
+	}
 	prompt := -1
 	for i, l := range lines {
 		if s.Prompt.MatchString(l) {
@@ -178,7 +183,11 @@ func (s Signature) inputBox(screen string) (string, bool) {
 		return "", false
 	}
 	for i := prompt + 1; i < len(lines); i++ {
-		if s.BoxEnd.MatchString(lines[i]) {
+		end := lines[i]
+		if s.ANSI {
+			end = raw[i]
+		}
+		if s.BoxEnd.MatchString(end) {
 			return strings.Join(lines[:i], "\n"), true
 		}
 	}

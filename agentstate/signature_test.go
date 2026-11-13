@@ -244,6 +244,12 @@ func TestEmptyInputAndInputHolds(t *testing.T) {
 			t.Errorf("%s: a line under the box read as the input", c)
 		}
 	}
+	// reviewer-codex: a blank line inside codex's input is not its box's end
+	// (the shaded padding is): a token after it is still in the input.
+	blank := readScreen(t, "codex-multiline-blank.txt")
+	if !sigs["codex"].InputHolds(blank, "agentbus#a1b2c3") || sigs["codex"].EmptyInput(blank) {
+		t.Error("codex: a token after a blank line inside the input not read")
+	}
 	// No box end on the screen: nothing is read as landed (fail closed).
 	if sigs["agy"].InputHolds("────\n> agentbus#a1b2c3", "agentbus#a1b2c3") {
 		t.Error("agy: an unclosed box read")
