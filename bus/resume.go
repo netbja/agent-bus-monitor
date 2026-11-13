@@ -12,8 +12,12 @@ import (
 )
 
 // {p}:resume (herdr exit step 8, spec 2026-11-10-herdr-exit-design.md 4.7):
-// the command that resumes each agent's last proved session, field = agent,
-// value = JSON {argv, session, at}. A hash of its own, not a field of the
+// how each agent resumes its last proved session, field = agent, value =
+// JSON {session, profile, at}. Never a command (security finding S1): a
+// consumer rebuilds the argv from the launch template with
+// rolecfg.ResumeArgv and the record's session and profile, both
+// re-validated on read, so a broker writer can never make the host run
+// anything. A hash of its own, not a field of the
 // {p}:agents snapshot: it must outlive the process and every later status
 // that does not carry it, which no merge rule there does. Cleared only by
 // forget; replaced by the next proved session's report.
@@ -21,12 +25,13 @@ import (
 // ResumeKey is the project's resume hash.
 func ResumeKey(project string) string { return project + ":resume" }
 
-// ResumeRecord is one agent's resume: the argv agent-launch runs, the session
-// it resumes, and when it was recorded (Redis TIME, ms).
+// ResumeRecord is one agent's resume, a closed set: the session it resumes,
+// the profile it ran on ("" its role's own), and when it was recorded
+// (Redis TIME, ms). An argv in a stored field is never read.
 type ResumeRecord struct {
-	Argv    []string `json:"argv"`
-	Session string   `json:"session"`
-	At      int64    `json:"at"`
+	Session string `json:"session"`
+	Profile string `json:"profile"`
+	At      int64  `json:"at"`
 }
 
 // ProcID is one process for its whole life: a pid and its start time.
@@ -39,7 +44,8 @@ type ProcID struct {
 // parent, or a few shells up, never 32 levels.
 const MaxResumeAncestors = 32
 
-// RecordResume records argv as the command that resumes agent's session. The
+// RecordResume records how agent resumes session: on profile ("" its role's
+// own, else a name; never a command). The
 // caller is the client's SessionStart hook, never the agent's process itself,
 // so the proof is its ancestor chain (nearest first): the write lands only
 // when one ancestor is the agent's stored verified process, pid and start
@@ -47,15 +53,15 @@ const MaxResumeAncestors = 32
 // transaction on {p}:agents; anything else is ErrNotProved and writes
 // nothing. The proof is self-attested like the turn hooks': it stops an
 // honest mistake, not a same-user process that lies.
-func (b *Bus) RecordResume(ctx context.Context, agent string, chain []ProcID, argv []string, session string) error {
+func (b *Bus) RecordResume(ctx context.Context, agent string, chain []ProcID, profile, session string) error {
 	if !ValidName(agent) {
 		return fmt.Errorf("invalid agent %q", agent)
 	}
 	if !ValidSessionID(session) {
 		return fmt.Errorf("record resume: %q is not a session id", session)
 	}
-	if len(argv) == 0 || argv[0] == "" {
-		return errors.New("record resume: no command")
+	if profile != "" && !ValidName(profile) {
+		return fmt.Errorf("record resume: %q is not a profile name", profile)
 	}
 	if len(chain) == 0 || len(chain) > MaxResumeAncestors {
 		return ErrNotProved
@@ -86,7 +92,7 @@ func (b *Bus) RecordResume(ctx context.Context, agent string, chain []ProcID, ar
 		if err != nil {
 			return err
 		}
-		rec, err := json.Marshal(ResumeRecord{Argv: argv, Session: session, At: now.UnixMilli()})
+		rec, err := json.Marshal(ResumeRecord{Session: session, Profile: profile, At: now.UnixMilli()})
 		if err != nil {
 			return err
 		}
@@ -110,10 +116,12 @@ func (b *Bus) RecordResume(ctx context.Context, agent string, chain []ProcID, ar
 	return redis.TxFailedErr
 }
 
-// parseResume reads a field; anything that is no usable record is none.
+// parseResume reads a field; anything that is no usable record is none: a
+// session that is no session id, a profile that is no name. Any other field
+// (an argv a hand-written field carries) is dropped.
 func parseResume(raw string) *ResumeRecord {
 	var r ResumeRecord
-	if json.Unmarshal([]byte(raw), &r) != nil || len(r.Argv) == 0 || r.Argv[0] == "" || !ValidSessionID(r.Session) {
+	if json.Unmarshal([]byte(raw), &r) != nil || !ValidSessionID(r.Session) || r.Profile != "" && !ValidName(r.Profile) {
 		return nil
 	}
 	return &r
