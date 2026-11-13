@@ -100,14 +100,14 @@ func TestHolderAttach(t *testing.T) {
 	if !a.Draft || a.DraftSince == 0 || a.ViewerTypedAt == 0 {
 		t.Fatalf("typed: %+v", a)
 	}
-	typedAt := a.ViewerTypedAt
 	send(t, v, FrameData, []byte("\r"))
 	eventually(t, "the draft ends at Enter", func() bool { return !activityOf(t, cl, x.ID).Draft })
-	time.Sleep(10 * time.Millisecond)
+	typedAt := activityOf(t, cl, x.ID).ViewerTypedAt
+	time.Sleep(20 * time.Millisecond) // a later typing would show a later time
 	send(t, v, FrameData, []byte("\x1b[<0;5;5M\x1b[<0;5;5m"))
 	time.Sleep(100 * time.Millisecond)
-	if a := activityOf(t, cl, x.ID); a.Draft || a.ViewerTypedAt < typedAt {
-		t.Fatalf("a mouse report started a draft: %+v", a)
+	if a := activityOf(t, cl, x.ID); a.Draft || a.ViewerTypedAt != typedAt {
+		t.Fatalf("a mouse report counted as typing: %+v (typed at %d)", a, typedAt)
 	}
 	control(t, v, Focus{In: false})
 	eventually(t, "focus-out", func() bool { return activityOf(t, cl, x.ID).FocusedViewers == 0 })
@@ -166,7 +166,8 @@ func TestHolderObserver(t *testing.T) {
 	if a := activityOf(t, cl, x.ID); a.Viewers != 1 || a.FocusedViewers != 0 || a.Draft || a.ViewerTypedAt != 0 {
 		t.Fatalf("an observer at the terminal: %+v", a)
 	}
-	if r, _ := cl.Call(ScreenReq{Term: x.ID}); strings.Contains(strings.Join(r.Screen.Lines, "\n"), "zzz") || strings.Contains(strings.Join(r.Screen.Lines, "\n"), "10 50") {
+	if r, _ := cl.Call(ScreenReq{Term: x.ID}); strings.Contains(strings.Join(r.Screen.Lines, "\n"), "zzz") || strings.Contains(strings.Join(r.Screen.Lines, "\n"), "10 50") ||
+		strings.Contains(strings.Join(r.Screen.Lines, "\n"), "20 70") {
 		t.Fatalf("the observer typed or resized:\n%s", strings.Join(r.Screen.Lines, "\n"))
 	}
 	v := attached(t, sock, Attach{Term: x.ID, Cols: 90, Rows: 30})

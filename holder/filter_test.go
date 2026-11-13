@@ -68,4 +68,9 @@ func TestFilterOutputBound(t *testing.T) {
 	if got != "ok" {
 		t.Fatalf("an overlong title: %.40q", got)
 	}
+	f = outputFilter{}
+	got = string(f.filter([]byte("\x1b[" + strings.Repeat("1;", seqMax) + "mok")))
+	if got != "ok" {
+		t.Fatalf("an overlong CSI: %.40q", got)
+	}
 }
