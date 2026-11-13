@@ -2,11 +2,14 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 22 on 2026-11-13
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 23 on 2026-11-13
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
+- Revision 23 (correction): r22 claimed a pre-swap record would fail the session id pattern;
+  ids can look alike across clients, so a record older than the role's last swap is ignored
+  instead (§4.7, §8)
 - Revision 22 (correction): master's decision on the resume record — `{session, at}`, the
   profile resolved at launch from the swap ledger (r21 had followed coder's
   `{session, profile, at}`; coder aligns) (§4.7, §7, §8)
@@ -909,10 +912,11 @@ meaning: a wake waiting on the person is shown in busmon.
     (`sessionIDPattern`), the names and the absolute paths. The profile is **resolved at
     launch**, not read from the record: the role's open swap in the swap ledger when there is
     one, else the role's own profile — which is the profile the last proved session ran on,
-    since a swap relaunches the role and the new session replaces the record. (A session
-    belongs to its profile's client: a record written before a swap that never relaunched
-    would name another client's session; the client profile's session id pattern then fails,
-    and the case is an invalid session, next item.)
+    since a swap relaunches the role and the new session replaces the record. A session belongs
+    to its profile's client, and session ids can look alike across clients (several are UUIDs),
+    so the pattern alone cannot tell them apart: a record whose `at` is **older than the start
+    of the role's open swap** (or of its last `--back`) is ignored and counts as no session
+    (next item). Both times are Redis `TIME`.
   - a session id that fails validation (or none recorded): on **`up`** a **fresh** start and a
     person notice (the person or master asked for the agent); on **self-repair** no `Start` at
     all and one report to master — self-repair never starts an agent fresh (the person, Q4 of
@@ -1257,8 +1261,8 @@ step claims an improvement for herdr, and none exists after the cutover.
 - Security corrections (revision 18; holder e2e and unit tests):
   - **S1**: the forged-record test of §4.7 on the `up` and self-repair paths (the started
     command equals the template's for the record's session on the role's effective profile
-    (its open swap, else its own); an invalid session: `up` starts fresh, self-repair starts
-    nothing and reports to master);
+    (its open swap, else its own); an invalid session, or a record older than the role's last
+    swap or `--back`: `up` starts fresh, self-repair starts nothing and reports to master);
   - **S2**: from a process started inside a test terminal (and from its double-forked
     grandchild), a non-observer attach, a `Start`, a `Close` and a `Submit` are refused, an
     observer attach and `Screen` are accepted; the same calls from outside the tree are
