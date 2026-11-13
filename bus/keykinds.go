@@ -44,6 +44,9 @@ var keyKinds = map[string]KeyClass{
 	"change:*": KeyRecord, "missions:*": KeyRecord,
 	"resume": KeyRecord, // how each agent resumes: it must outlive a reboot (herdr exit 4.7)
 	"events": KeyRecord, // the terminal timeline (herdr exit 6.5): history, like the activity streams
+	// self-repair's crash loops and resets (step 7): a crash loop holds until a
+	// person or master resets it, so it outlives a restore as the ledger does.
+	"selfrepair": KeyRecord,
 
 	"services": KeyRuntime, "agents": KeyRuntime, "wake:*": KeyRuntime, "handoff": KeyRuntime,
 	"quota": KeyRuntime, "pause": KeyRuntime, "fallback": KeyRuntime, "usage": KeyRuntime,

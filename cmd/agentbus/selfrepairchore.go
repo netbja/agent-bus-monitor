@@ -39,14 +39,15 @@ const (
 type selfRepairReads struct {
 	Now      time.Time // Redis TIME
 	Snaps    map[string]bus.AgentSnapshot
-	Pause    *bus.PauseRecord              // nil: none
-	Marks    map[string]string             // {p}:quota: holds, clears, pops told done
-	Budgets  map[string]bus.BudgetSnapshot // provider readings
-	Health   map[string]health.Record      // the stored checks (llm-endpoint)
-	Intents  map[string]bus.SwapIntent     // the template roles' held intents
-	Tabs     []relaunch.Tab                // the project's template
-	Required map[string]bool               // roles.toml's required
-	Pops     map[string]bool               // roles.toml's pop tier
+	Pause    *bus.PauseRecord                // nil: none
+	Marks    map[string]string               // {p}:quota: holds, clears, pops told done
+	Budgets  map[string]bus.BudgetSnapshot   // provider readings
+	Health   map[string]health.Record        // the stored checks (llm-endpoint)
+	Intents  map[string]bus.SwapIntent       // the template roles' held intents
+	Tabs     []relaunch.Tab                  // the project's template
+	Required map[string]bool                 // roles.toml's required
+	Pops     map[string]bool                 // roles.toml's pop tier
+	Past     map[string]bus.SelfRepairRecord // each role's attempts, failed proofs, crash loop (step 7)
 }
 
 // selfRepairHerdr is herdr as the pass sees it: the server answers, the
@@ -98,6 +99,13 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 		f.Suspended = r.Pause.Suspended()
 		f.Paused = !f.Suspended
 	}
+	for _, p := range r.Past { // any role's: the project's pause after a relaunch (4.5)
+		for _, at := range p.Attempts {
+			if at.After(f.LastRelaunch) {
+				f.LastRelaunch = at
+			}
+		}
+	}
 	for _, in := range r.Intents {
 		if in.Kind == bus.SwapKindSelfRepair {
 			f.InFlight = true // R1 never runs next to another self-repair
@@ -141,8 +149,11 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 		}
 		a.Session, a.Resumable = relaunch.ProvedSession(snap), rolecfg.ResumeVerified(snap.Client)
 		a.ProviderFresh, a.ProviderHeld = providerFacts(r, snap)
-		// Relaunches and CrashLoop stay empty: only step 7 relaunches, and
-		// writes them.
+		past := r.Past[role]
+		a.Relaunches, a.CrashLoop = past.Attempts, past.CrashLoop
+		if d, dead := c.deaths[role]; dead && a.Life == relaunch.LifeDead {
+			a.ProofFailed = past.Failed[d.episode]
+		}
 		f.Agents = append(f.Agents, a)
 	}
 	for role := range c.deaths { // a role gone from the template
@@ -315,6 +326,9 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	}
 	m, err := rolecfg.Load(path)
 	if err != nil {
+		return r, err
+	}
+	if r.Past, err = b.SelfRepairPast(ctx); err != nil {
 		return r, err
 	}
 	r.Required, r.Pops, r.Intents = map[string]bool{}, map[string]bool{}, map[string]bus.SwapIntent{}

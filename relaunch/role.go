@@ -27,6 +27,9 @@ type Deps struct {
 	ProcStart       func(int) (uint64, error) // nil off Linux: a snapshot then decides nothing
 	Sleep           func(time.Duration)       // nil: time.Sleep
 	Home            string                    // the template's ~
+	// Fence, when set, is Options.Fence: the service entry's check, right
+	// before the split, that the relaunch is still its own.
+	Fence func(role string) error
 }
 
 // SettleTries reads of the role's tab, SettleEvery apart (20 s), before a
@@ -100,7 +103,7 @@ func Role(d Deps, project, role, session string, tpl Template, stdout io.Writer)
 		sleep(SettleEvery)
 	}
 	verdicts := map[string]Verdict{}
-	o := Options{Resume: session != "", Create: true, Verdicts: verdicts,
+	o := Options{Resume: session != "", Create: true, Verdicts: verdicts, Fence: d.Fence,
 		Dir:   os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Home, 1)),
 		Prove: &Proof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}}
 	if err := Open(d.Herdr, snaps, true, d.ProcStart, project, ws, tpl, o, stdout); err != nil {

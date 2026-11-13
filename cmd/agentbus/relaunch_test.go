@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/netbja/agent-bus-monitor/relaunch"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -885,5 +886,81 @@ func TestPopRecoveryLine(t *testing.T) {
 	}
 	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "codex", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo" {
 		t.Fatalf("codex: %q", got)
+	}
+}
+
+// Self-repair spec 4.1 (step 7): the service's relaunch reads its fence (its
+// own intent, still the lease holder) right before it splits or creates a
+// tab, after the tab was judged. A refused fence relaunches nothing for that
+// role and says why; the dry run asks for no fence; a tab that is not a
+// relaunch is never fenced.
+func TestRelaunchOpenFencesRightBeforeTheSplit(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"busmon","tab_id":"w4:t1"},{"label":"coder","tab_id":"w4:t2"},{"label":"master","tab_id":"w4:t3"}`,
+		panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p2","tab_id":"w4:t2"},{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
+		fg:    map[string]string{"w4:p1": "busmon", "w4:p2": "bash", "w4:p3": "bash"},
+	}
+	var asked []string
+	fenced := map[string]int{} // role -> the herdr call count when its fence was read
+	o := relaunch.Options{Create: true, Fence: func(role string) error {
+		asked = append(asked, role)
+		fenced[role] = len(h.calls)
+		if role == "coder" {
+			return errors.New("the lease is lost")
+		}
+		return nil
+	}}
+	var out bytes.Buffer
+	err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), o, &out)
+	if err == nil || !strings.Contains(err.Error(), "the lease is lost") {
+		t.Fatalf("a refused fence is an error: %v", err)
+	}
+	got := strings.Join(h.ran(), "\n")
+	if strings.Contains(got, "coder") || strings.Contains(got, "w4:p2") {
+		t.Fatalf("a fenced-off role relaunched:\n%s", got)
+	}
+	if !strings.Contains(got, "agent-launch master demo") || !strings.Contains(got, "agent-launch sentinel demo") {
+		t.Fatalf("the others were not relaunched:\n%s", got)
+	}
+	if !strings.Contains(out.String(), "coder: not relaunched (the lease is lost)") {
+		t.Fatalf("output:\n%s", out.String())
+	}
+	if strings.Join(asked, ",") != "master,coder,foureyes,sentinel" {
+		t.Fatalf("fences read for %v", asked)
+	}
+	// Read after every judgement read, right before the split.
+	if i := fenced["master"]; i == 0 || !strings.HasPrefix(h.calls[i], "pane split w4:p3") {
+		t.Fatalf("master's fence not right before its split: %d %q", i, h.calls)
+	}
+	if i := fenced["sentinel"]; !strings.HasPrefix(h.calls[i], "tab create --workspace w4 --label sentinel") {
+		t.Fatalf("sentinel's fence not right before its tab: %q", h.calls[i:])
+	}
+	asked = nil
+	o.DryRun = true
+	if err := relaunch.Open(h.run, nil, false, nil, "demo", "w4", relaunchTemplate(), o, io.Discard); err != nil || len(asked) != 0 {
+		t.Fatalf("dry run: %v, fences %v", err, asked)
+	}
+}
+
+// Role (the core both entries call) hands its fence to Open.
+func TestRelaunchRoleCarriesItsFence(t *testing.T) {
+	h := &relaunchHerdr{
+		tabs:  `{"label":"coder","tab_id":"w4:t2"}`,
+		panes: `{"pane_id":"w4:p2","tab_id":"w4:t2"}`,
+		fg:    map[string]string{"w4:p2": "bash"},
+	}
+	run := func(args ...string) ([]byte, error) {
+		if strings.Join(args, " ") == "workspace list" {
+			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
+		}
+		return h.run(args...)
+	}
+	asked := ""
+	d := relaunch.Deps{Herdr: run, Sleep: func(time.Duration) {},
+		Agents: func(string) (map[string]bus.AgentSnapshot, error) { return map[string]bus.AgentSnapshot{}, nil },
+		Fence:  func(role string) error { asked = role; return errors.New("not ours any more") }}
+	err := relaunch.Role(d, "demo", "foureyes", "", upTemplate{Tabs: []upTab{{Name: "foureyes", Command: "/r/scripts/agent-launch foureyes demo"}}}, io.Discard)
+	if err == nil || asked != "foureyes" || len(h.ran()) != 0 {
+		t.Fatalf("err %v, fence for %q, ran %q", err, asked, h.ran())
 	}
 }

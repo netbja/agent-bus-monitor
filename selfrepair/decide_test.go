@@ -51,6 +51,8 @@ func TestDecideOneAgent(t *testing.T) {
 		{"paused", func(f *Facts, _ *Agent) { f.Paused = true }, KindSkip, "paused"},
 		{"suspended", func(f *Facts, _ *Agent) { f.Suspended = true }, KindSkip, "suspended"},
 		{"a hand-off clear in flight", func(_ *Facts, a *Agent) { a.HandoffClear = true }, KindSkip, "hand-off"},
+		{"its relaunch failed its proof", func(_ *Facts, a *Agent) { a.ProofFailed = true }, KindFailed, "no retry for this death"},
+		{"a failed proof waits on a declared departure first", func(_ *Facts, a *Agent) { a.ProofFailed, a.Intent = true, "retire" }, KindSkip, "retire"},
 		{"tab busy", func(_ *Facts, a *Agent) { a.Tab = relaunch.VerdictBusy }, KindWait, "tab"},
 		{"tab unknown", func(_ *Facts, a *Agent) { a.Tab = relaunch.VerdictUnknown }, KindWait, "tab"},
 		{"tab still shows the client", func(_ *Facts, a *Agent) { a.Tab = relaunch.VerdictAlive }, KindWait, "tab"},
@@ -153,6 +155,7 @@ func TestHealth(t *testing.T) {
 		{"held", ModeShadow, []Decision{{Agent: "coder", Kind: KindHold, Reason: "provider anthropic unreachable"}}, health.Warn, "held: coder"},
 		{"a tab not settling", ModeShadow, []Decision{{Agent: "coder", Kind: KindWait, Reason: "tab skipped (busy): waited on"}}, health.Warn, "coder"},
 		{"a crash loop", ModeOn, []Decision{{Agent: "coder", Kind: KindBudget, Reason: "crash loop"}}, health.Fail, "coder"},
+		{"a failed proof", ModeOn, []Decision{{Agent: "coder", Kind: KindFailed, Reason: "its relaunch failed its proof"}}, health.Fail, "coder: its relaunch failed"},
 		{"a report only", ModeShadow, []Decision{{Agent: "grok", Kind: KindReport, Reason: "no resume"}}, health.OK, "reported: grok"},
 	}
 	for _, c := range cases {

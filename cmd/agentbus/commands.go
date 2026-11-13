@@ -423,6 +423,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo swaps"},
 	},
 	{
+		Name: "self-repair", Usage: []string{"self-repair reset <agent> [--as <person>]"},
+		Summary:  "clear an agent's self-repair crash loop and restart its budget (master, or a person with --as)",
+		Flags:    []cli.Flag{{Long: "as", Short: 'a', Arg: "<person>", Help: "your name: a person resets, not an agent"}},
+		Examples: []string{"agentbus -p demo self-repair reset coder --as charlie"},
+	},
+	{
 		Name: "up", NoProject: true,
 		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags]"},
 		Summary: "provision a project, start its services, open its herdr workspace",
