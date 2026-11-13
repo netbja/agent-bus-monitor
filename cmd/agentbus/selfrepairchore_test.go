@@ -171,6 +171,29 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.ProviderHeld }},
 		{"another provider held", func(r *selfRepairReads) { r.Marks["hold:openai"] = "1799999999" },
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderHeld }},
+		{"on a quota fallback", func(r *selfRepairReads) {
+			r.Fallbacks = map[string]bus.FallbackRecord{"coder": {OwnProfile: "opus", OwnProvider: "anthropic", Profile: "kimi", Provider: "moonshot"}}
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Fallback == "kimi" }},
+		{"another role on a fallback", func(r *selfRepairReads) {
+			r.Fallbacks = map[string]bus.FallbackRecord{"foureyes": {Profile: "kimi", Provider: "moonshot"}}
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Fallback == "" }},
+		// The relaunch runs the role's own profile: its provider is the one
+		// judged, never the snapshot's (foureyes P2 on 7b).
+		{"its own provider held, the snapshot on another", func(r *selfRepairReads) {
+			s := r.Snaps["coder"]
+			s.Provider = "moonshot"
+			r.Snaps["coder"] = s
+			r.Budgets["moonshot"] = bus.BudgetSnapshot{Provider: "moonshot", ObservedAt: srT0.UnixMilli()}
+			r.Marks["hold:anthropic"] = "1799999999"
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.ProviderHeld }},
+		{"its own provider unread, the snapshot's fresh", func(r *selfRepairReads) {
+			s := r.Snaps["coder"]
+			s.Provider = "moonshot"
+			r.Snaps["coder"] = s
+			r.Budgets = map[string]bus.BudgetSnapshot{"moonshot": {Provider: "moonshot", ObservedAt: srT0.UnixMilli()}}
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
+		{"its own profile unresolved", func(r *selfRepairReads) { delete(r.Own, "coder") },
+			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
 		{"a reading 6 min old", func(r *selfRepairReads) {
 			r.Budgets["anthropic"] = bus.BudgetSnapshot{ObservedAt: srT0.Add(-6 * time.Minute).UnixMilli()}
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
@@ -183,6 +206,7 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			s := r.Snaps["coder"]
 			s.Client, s.Provider = "local-llm", ""
 			r.Snaps["coder"] = s
+			r.Own["coder"] = rolecfg.Profile{Client: "local-llm"}
 			r.Health["llm-endpoint"] = health.Record{Status: health.OK, ObservedAt: srT0.Add(-time.Minute).UnixMilli()}
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool {
 			return a.ProviderFresh && !a.Resumable && a.Session == ""
@@ -191,6 +215,7 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			s := r.Snaps["coder"]
 			s.Client, s.Provider = "local-llm", ""
 			r.Snaps["coder"] = s
+			r.Own["coder"] = rolecfg.Profile{Client: "local-llm"}
 			r.Health["llm-endpoint"] = health.Record{Status: health.Warn, ObservedAt: srT0.UnixMilli()}
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
 		{"a hand-off clear in flight", func(r *selfRepairReads) { r.Marks[bus.ClearMark("coder")] = srSession + "|1|1-0|1-0|3" },
@@ -396,6 +421,14 @@ func TestReadSelfRepairRedis(t *testing.T) {
 	if _, err := b.MarkCrashLoop(ctx, "tok", "coder"); err != nil {
 		t.Fatal(err)
 	}
+	raw, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if err := raw.HSet(ctx, bus.FallbackKey(b.Project()), "coder", `{"own_profile":"opus","profile":"kimi","provider":"moonshot"}`).Err(); err != nil {
+		t.Fatal(err)
+	}
 	getenv := func(k string) string {
 		if k == "XDG_CONFIG_HOME" {
 			return cfg
@@ -408,6 +441,9 @@ func TestReadSelfRepairRedis(t *testing.T) {
 	}
 	if len(r.Tabs) != 2 || !r.Required["coder"] || r.Pops["coder"] || r.Intents["coder"].Kind != bus.SwapKindSelfRepair {
 		t.Fatalf("reads %+v", r)
+	}
+	if r.Fallbacks["coder"].Profile != "kimi" {
+		t.Fatalf("fallbacks %+v", r.Fallbacks)
 	}
 	if p := r.Past["coder"]; !p.CrashLoop || len(p.Attempts) != 1 {
 		t.Fatalf("past %+v", r.Past)

@@ -38,18 +38,19 @@ const (
 
 // selfRepairReads are one pass's reads from the bus and the project's files.
 type selfRepairReads struct {
-	Now      time.Time // Redis TIME
-	Snaps    map[string]bus.AgentSnapshot
-	Pause    *bus.PauseRecord                // nil: none
-	Marks    map[string]string               // {p}:quota: holds, clears, pops told done
-	Budgets  map[string]bus.BudgetSnapshot   // provider readings
-	Health   map[string]health.Record        // the stored checks (llm-endpoint)
-	Intents  map[string]bus.SwapIntent       // the template roles' held intents
-	Tabs     []relaunch.Tab                  // the project's template
-	Required map[string]bool                 // roles.toml's required
-	Pops     map[string]bool                 // roles.toml's pop tier
-	Past     map[string]bus.SelfRepairRecord // each role's attempts, failed proofs, crash loop (step 7)
-	Own      map[string]rolecfg.Profile      // each role's own profile: what a relaunch must prove
+	Now       time.Time // Redis TIME
+	Snaps     map[string]bus.AgentSnapshot
+	Pause     *bus.PauseRecord                // nil: none
+	Marks     map[string]string               // {p}:quota: holds, clears, pops told done
+	Budgets   map[string]bus.BudgetSnapshot   // provider readings
+	Health    map[string]health.Record        // the stored checks (llm-endpoint)
+	Intents   map[string]bus.SwapIntent       // the template roles' held intents
+	Tabs      []relaunch.Tab                  // the project's template
+	Required  map[string]bool                 // roles.toml's required
+	Pops      map[string]bool                 // roles.toml's pop tier
+	Past      map[string]bus.SelfRepairRecord // each role's attempts, failed proofs, crash loop (step 7)
+	Own       map[string]rolecfg.Profile      // each role's own profile: what a relaunch must prove
+	Fallbacks map[string]bus.FallbackRecord   // roles on a quota fallback profile
 }
 
 // selfRepairHerdr is herdr as the pass sees it: the server answers, the
@@ -89,11 +90,11 @@ type selfRepairChore struct {
 	relaunch   func(ctx context.Context, role, session string, fence func(string) error) error
 	agents     func(ctx context.Context) (map[string]bus.AgentSnapshot, error)
 	notify     func(ctx context.Context, title, body string) error
-	proofTries int                 // reads of the proof, proofEvery apart (60: 60 s)
+	proofTries int // reads of the proof, proofEvery apart (60: 60 s)
 	// send writes one message to master once per (mark, episode), fenced;
 	// nil: FencedCmdOnce. wrote: this call wrote it.
-	send func(ctx context.Context, token, mark, episode, target, text string) (wrote bool, err error)
-	sleep      func(time.Duration) // nil: time.Sleep
+	send  func(ctx context.Context, token, mark, episode, target, text string) (wrote bool, err error)
+	sleep func(time.Duration) // nil: time.Sleep
 
 	mu     sync.Mutex
 	deaths map[string]repairDeath
@@ -162,7 +163,13 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 			_, a.HandoffClear = bus.ParseClearMark(v)
 		}
 		a.Session, a.Resumable = relaunch.ProvedSession(snap), rolecfg.ResumeVerified(snap.Client)
-		a.ProviderFresh, a.ProviderHeld = providerFacts(r, snap)
+		a.ProviderFresh, a.ProviderHeld = providerFacts(r, role)
+		if fb, on := r.Fallbacks[role]; on {
+			a.Fallback = fb.Profile
+			if a.Fallback == "" {
+				a.Fallback = "(unnamed)"
+			}
+		}
 		past := r.Past[role]
 		a.Relaunches, a.CrashLoop = past.Attempts, past.CrashLoop
 		if d, dead := c.deaths[role]; dead && a.Life == relaunch.LifeDead {
@@ -193,15 +200,21 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 	return f
 }
 
-// providerFacts: whether snap's provider can carry a relaunch (a quota
-// reading within providerFreshFor; a local model: its endpoint check ok
-// within that long) and whether the coordinator holds it.
-func providerFacts(r selfRepairReads, snap bus.AgentSnapshot) (fresh, held bool) {
-	if snap.Client == "local-llm" {
+// providerFacts: whether the provider of role's own profile (what a
+// relaunch runs, never the snapshot's, which may be a fallback's) can carry
+// a relaunch (a quota reading within providerFreshFor; a local model: its
+// endpoint check ok within that long) and whether the coordinator holds it.
+// An own profile not resolved is never fresh.
+func providerFacts(r selfRepairReads, role string) (fresh, held bool) {
+	own, ok := r.Own[role]
+	if !ok {
+		return false, false
+	}
+	if own.Client == "local-llm" {
 		rec, ok := r.Health["llm-endpoint"]
 		return ok && rec.Status == health.OK && r.Now.Sub(time.UnixMilli(rec.ObservedAt)) <= providerFreshFor, false
 	}
-	provider := bus.ProviderFor(snap.Client, snap.Provider)
+	provider := bus.ProviderFor(own.Client, own.Provider)
 	if provider == "" {
 		return false, false
 	}
@@ -350,6 +363,9 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 		return r, err
 	}
 	if r.Past, err = b.SelfRepairPast(ctx); err != nil {
+		return r, err
+	}
+	if r.Fallbacks, err = b.Fallbacks(ctx); err != nil {
 		return r, err
 	}
 	r.Required, r.Pops, r.Intents, r.Own = map[string]bool{}, map[string]bool{}, map[string]bus.SwapIntent{}, map[string]rolecfg.Profile{}

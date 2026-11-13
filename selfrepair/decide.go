@@ -64,6 +64,11 @@ type Agent struct {
 	// model: its endpoint answers); ProviderHeld: the coordinator holds it.
 	ProviderFresh bool
 	ProviderHeld  bool
+	// Fallback is the profile the role runs on in place of its own after a
+	// quota swap ({p}:fallback; "" none). A relaunch runs the own profile,
+	// so a role on a fallback is told to master, never relaunched: bringing
+	// it back is master's swap back.
+	Fallback string
 
 	// Relaunches are its self-repair relaunches, oldest first; CrashLoop: a
 	// spent day escalated, until `agentbus self-repair reset`.
@@ -162,6 +167,9 @@ func decideOne(f Facts, a Agent) Decision {
 		return d(KindReport, "its tab missing (an optional role: told, not recreated)")
 	default:
 		return d(KindWait, "tab %s: waited on, never forced", a.Tab)
+	}
+	if a.Fallback != "" {
+		return d(KindReport, "on its quota fallback profile %s: a relaunch would run its own profile; master swaps it (agentbus swap %s)", a.Fallback, a.Name)
 	}
 	switch {
 	case !f.HerdrUp:

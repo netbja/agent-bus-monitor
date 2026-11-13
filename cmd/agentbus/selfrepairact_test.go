@@ -285,6 +285,37 @@ func TestSelfRepairReports(t *testing.T) {
 	}
 }
 
+// foureyes' probe on 7b: coder dead on its quota fallback (moonshot, a
+// fresh reading) while its own provider is held. A relaunch would run its
+// own profile onto the held provider: told to master, never relaunched.
+func TestSelfRepairNeverOnAFallback(t *testing.T) {
+	for _, held := range []bool{true, false} {
+		w := newActWorld(t)
+		w.mu.Lock()
+		s := w.snaps["coder"]
+		s.Client, s.Provider = "claude-code", "moonshot"
+		w.snaps["coder"] = s
+		w.mu.Unlock()
+		read := w.c.read
+		w.c.read = func(ctx context.Context) (selfRepairReads, error) {
+			r, err := read(ctx)
+			r.Budgets["moonshot"] = bus.BudgetSnapshot{Provider: "moonshot", ObservedAt: w.now.UnixMilli()}
+			if held {
+				r.Marks["hold:anthropic"] = "1799999999"
+			}
+			r.Fallbacks = map[string]bus.FallbackRecord{"coder": {OwnProfile: "opus", OwnProvider: "anthropic", Profile: "kimi", Provider: "moonshot"}}
+			return r, err
+		}
+		w.passes(6)
+		if len(w.relaunch) != 0 {
+			t.Fatalf("held %v: relaunched %q", held, w.relaunch)
+		}
+		if msgs := w.only("coder not relaunched"); len(msgs) != 1 || !strings.Contains(msgs[0], "fallback profile kimi") {
+			t.Fatalf("held %v: master told %q", held, w.toMaster())
+		}
+	}
+}
+
 // Shadow still only records: never a relaunch, never a message.
 func TestSelfRepairShadowActsOnNothing(t *testing.T) {
 	w := newActWorld(t)

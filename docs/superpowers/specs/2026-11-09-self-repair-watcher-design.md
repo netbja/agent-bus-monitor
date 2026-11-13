@@ -82,7 +82,10 @@ with reload, restore and pop-retire: a pid is gone only by `pidListedNoMore` (PR
 4. **The network can carry it.** Its provider's quota reader succeeded in the last 5 min (a
    local model: `llm-endpoint` is ok), and the
    provider is not held by the quota coordinator. A relaunch into a dead network or a held quota
-   just dies again.
+   just dies again. The provider judged is the one of the role's **own** profile, the one a
+   relaunch runs, never the snapshot's. A role on a quota fallback (`{p}:fallback`) is only
+   reported to master, never relaunched: the relaunch would run its own profile, and bringing it
+   back is master's `swap` (foureyes, step 7b).
 5. **A session to resume.** Every client is relaunched **resuming** its proved session (the
    person, Q4): Claude Code (`--resume <id>`, as today), and Codex, Kimi and Gemini once their
    session ids are captured and proved (part 7, step 5). Never a fresh start. A client with no
@@ -327,8 +330,8 @@ useful alone first, and nothing acts before step 7.
    none while a relaunch is in flight or within the 2-min project pause). R1's preconditions in
    the spec's order: alive and unknown first (unknown never acts), `off`, the grace (60 s, three
    reads), a declared departure or another intent, the tab (`relaunch`/`create` go on, an optional
-   `missing` tab is reported, any other verdict is waited on), herdr and the workspace, the
-   provider (fresh, not held), a resume-verified client with a proved session (else reported,
+   `missing` tab is reported, any other verdict is waited on), a role on a quota fallback
+   (reported), herdr and the workspace, the own profile's provider (fresh, not held), a resume-verified client with a proved session (else reported,
    never a fresh start), then the budget (a crash loop or the day's count escalates, the spacing
    waits). `Health(mode, decisions)`: ok when off or nothing to repair (a report stays ok); warn
    for the shadow's would-be act, a hold or a tab not settling; fail for a crash loop, but never

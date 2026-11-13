@@ -63,6 +63,8 @@ func TestDecideOneAgent(t *testing.T) {
 		{"workspace closed", func(f *Facts, _ *Agent) { f.WorkspaceOpen = false }, KindHold, "workspace"},
 		{"provider not fresh", func(_ *Facts, a *Agent) { a.ProviderFresh = false }, KindHold, "provider"},
 		{"provider held", func(_ *Facts, a *Agent) { a.ProviderHeld = true }, KindHold, "quota"},
+		{"on a quota fallback", func(_ *Facts, a *Agent) { a.Fallback = "kimi" }, KindReport, "fallback profile kimi"},
+		{"on a quota fallback, its own provider fresh again", func(_ *Facts, a *Agent) { a.Fallback, a.ProviderHeld = "kimi", false }, KindReport, "swap"},
 		{"no proved session", func(_ *Facts, a *Agent) { a.Session = "" }, KindReport, "no session"},
 		{"a client whose resume is not verified", func(_ *Facts, a *Agent) { a.Resumable = false }, KindReport, "resume"},
 		{"a crash loop", func(_ *Facts, a *Agent) { a.CrashLoop = true }, KindBudget, "crash loop"},
