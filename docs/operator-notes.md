@@ -437,6 +437,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   interactive shell ignores SIGTERM). Without an emulator (step 4) the only judgement is on bytes:
   `dump --between` says what the client wrote between two marks. Tests run a fake client (the
   test binary under `TERMREC_FAKE`), never a real one.
+- **`screen` is the seam over the terminal emulator** (herdr exit step 4; `screen/BAKEOFF.md` has
+  the bake-off and its numbers). Production is `charmbracelet/x/vt`; gostty (a native library) is
+  only the test oracle, behind the `gostty` build tag (`go test ./screen -tags gostty -run
+  TestWriteOracle -update-oracle` rewrites `screen/testdata/oracle`), and
+  `TestProductionLinksNoOracle` fails if a binary links it. The bake-off itself runs with `-tags
+  bakeoff`. Plain and ANSI are rendered by the seam, one SGR sequence per attribute and color, so
+  agentstate's signatures read the same bytes whatever the emulator. x/vt's scrollback is not
+  used (about 12 KiB a line, trimmed by copying): scrolled-off lines go to a ring of rendered
+  strings, and writes reach x/vt in 4 KiB pieces. Its answers to queries are drained into
+  `Replies()`, else a query would block the write.
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
