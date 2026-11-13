@@ -627,12 +627,16 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   alert only, the person approved; `health/plandrift.go` pure, `cmd/agentbus/plandrift.go` the read) warns master,
   never fails, on a merge of origin/main since the plan's load that no task links and no `agentbus plan ignore <pr>`
   covers, a task whose merge came from another branch than its board entry records, and a task linked to a PR while a
-  later PR of its branch stem (`feat/x-2` for `feat/x`) merged. It reads local git only, in the dispatch service's
-  working directory, through the bounded exec (own process group, killed on its deadline, output capped at 256 KiB,
+  later PR of its branch stem (`feat/x-2` for `feat/x`) merged after it (its own merge in the list does not hide one). It reads local git only, in the dispatch service's
+  working directory, through the bounded exec (own process group, killed on its deadline, output capped at 256 KiB
+  while git writes, the group killed past it,
   `-c core.fsmonitor=false -c core.pager=cat`): `rev-list --first-parent --format=%s --max-count=500
   <plan commit>..origin/main`, the plan commit refused unless it is a commit id. Only GitHub's merge-commit subject
-  (`Merge pull request #N from owner/branch`) is a signal. Nothing fetches: older than an hour, FETCH_HEAD makes the
-  check unknown, never ok. It wakes master once per drift (mark `plan-drift`, episode a hash of the drift). It writes
+  (`Merge pull request #N from owner/branch`) is a signal. Nothing fetches: the newest FETCH_HEAD of the repository
+  (the common directory's and each linked worktree's: FETCH_HEAD is per worktree, and the agents fetch in
+  theirs) older than an hour makes the check unknown, never ok. A `git fetch origin <another branch>` writes
+  FETCH_HEAD without moving origin/main, so it reads fresh then. Load the plan from a commit on main: from a
+  branch, the merges of main since its fork point would warn as not in the plan. It wakes master once per drift (mark `plan-drift`, episode a hash of the drift). It writes
   nothing to the plan; a derived Done is a later step. `{p}:plan:ignore` (a set, a record key) is dropped by a new
   `plan load` and by `plan clear`. busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`

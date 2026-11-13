@@ -37,15 +37,48 @@ func gitRead(ctx context.Context, root string, args ...string) (string, error) {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	cmd.WaitDelay = time.Second
-	out, err := cmd.Output()
+	// The cap stops git while it writes (reviewer-codex): a writer that
+	// keeps at most the cap, and past it kills the group, so an endless or
+	// huge output is never buffered whole.
+	out := &capWriter{max: planDriftOutMax, over: func() {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+	}}
+	cmd.Stdout = out
+	err := cmd.Run()
+	if out.past {
+		return "", fmt.Errorf("git output past %d bytes", planDriftOutMax)
+	}
 	if err != nil {
 		return "", err
 	}
-	if len(out) > planDriftOutMax {
-		return "", fmt.Errorf("git output past %d bytes", planDriftOutMax)
-	}
-	return string(out), nil
+	return out.buf.String(), nil
 }
+
+// capWriter keeps up to max bytes; the first write past it calls over once
+// and fails, so the command's copy stops.
+type capWriter struct {
+	buf  strings.Builder
+	max  int
+	past bool
+	over func()
+}
+
+func (w *capWriter) Write(p []byte) (int, error) {
+	if w.past {
+		return 0, errCapPast
+	}
+	if w.buf.Len()+len(p) > w.max {
+		w.past = true
+		w.over()
+		return 0, errCapPast
+	}
+	w.buf.Write(p)
+	return len(p), nil
+}
+
+var errCapPast = errors.New("output past the cap")
 
 var gitSafe = []string{"-c", "core.fsmonitor=false", "-c", "core.pager=cat"}
 
@@ -68,22 +101,31 @@ func realFetchAge(ctx context.Context) (time.Duration, error) {
 	return fetchAgeIn(ctx, root)
 }
 
-// fetchAgeIn is how long ago FETCH_HEAD was written in root's repository
-// (its common directory for a worktree): the age of origin/main.
+// fetchAgeIn is how long ago origin was last fetched in root's repository:
+// the newest FETCH_HEAD across it. FETCH_HEAD is per worktree (foureyes):
+// the common directory's, and each linked worktree's under
+// <common>/worktrees/*, where the agents fetch; any fetch of origin moves
+// the shared origin/main.
 func fetchAgeIn(ctx context.Context, root string) (time.Duration, error) {
-	p, err := gitRead(ctx, root, append(append([]string{}, gitSafe...), "rev-parse", "--git-path", "FETCH_HEAD")...)
+	p, err := gitRead(ctx, root, append(append([]string{}, gitSafe...), "rev-parse", "--path-format=absolute", "--git-common-dir")...)
 	if err != nil {
 		return 0, err
 	}
-	p = strings.TrimSpace(p)
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(root, p)
+	common := strings.TrimSpace(p)
+	paths := []string{filepath.Join(common, "FETCH_HEAD")}
+	if more, err := filepath.Glob(filepath.Join(common, "worktrees", "*", "FETCH_HEAD")); err == nil {
+		paths = append(paths, more...)
 	}
-	st, err := os.Stat(p)
-	if err != nil {
-		return 0, err
+	var newest time.Time
+	for _, f := range paths {
+		if st, err := os.Lstat(f); err == nil && st.Mode().IsRegular() && st.ModTime().After(newest) {
+			newest = st.ModTime()
+		}
 	}
-	return time.Since(st.ModTime()), nil
+	if newest.IsZero() {
+		return 0, errors.New("no FETCH_HEAD in the repository")
+	}
+	return time.Since(newest), nil
 }
 
 // planDrift is the check plan-drift: the merges of origin/main since the
