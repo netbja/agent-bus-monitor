@@ -110,6 +110,18 @@ func (w *actWorld) toMaster() []string {
 	return out
 }
 
+// only is master's messages holding s (the crash-loop tests seed relaunch
+// entries of their own, which are owed messages too).
+func (w *actWorld) only(s string) []string {
+	var out []string
+	for _, m := range w.toMaster() {
+		if strings.Contains(m, s) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 func (w *actWorld) ledger() []string {
 	w.t.Helper()
 	log, _ := w.b.SwapLog(context.Background(), "coder", 0)
@@ -137,7 +149,7 @@ func TestSelfRepairRelaunches(t *testing.T) {
 		t.Fatal("the intent outlived the repair")
 	}
 	msgs := w.toMaster()
-	if len(msgs) != 1 || !strings.Contains(msgs[0], "self-repair: coder relaunched (pid 102 -> 202, pane w1:p102 -> w1:p9, resumed 58b5f18b)") {
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "self-repair: coder relaunched (pid 102 -> 202, pane w1:p102 -> w1:p9, resumed 58b5f18b, it was dead 1m0s).") {
 		t.Fatalf("master told %q", msgs)
 	}
 	if past, _ := w.b.SelfRepairPast(context.Background()); len(past["coder"].Attempts) != 1 {
@@ -231,7 +243,10 @@ func TestSelfRepairCrashLoop(t *testing.T) {
 	if past, _ := w.b.SelfRepairPast(ctx); !past["coder"].CrashLoop {
 		t.Fatal("no crash-loop mark")
 	}
-	if msgs := w.toMaster(); len(msgs) != 1 || !strings.Contains(msgs[0], "agentbus self-repair reset coder") {
+	if old := w.only("relaunched (pid"); len(old) > 1 { // only the newest end of a role is owed, once
+		t.Fatalf("older ends re-announced: %q", old)
+	}
+	if msgs := w.only("crash loop"); len(msgs) != 1 || !strings.Contains(msgs[0], "agentbus self-repair reset coder") {
 		t.Fatalf("master told %q", msgs)
 	}
 	if len(w.desktop) != 1 {
@@ -331,6 +346,61 @@ func TestSelfRepairProofNeedsAllOfIt(t *testing.T) {
 			w.passes(4)
 			if got := strings.Join(w.ledger(), " "); got != "begin failed" {
 				t.Fatalf("ledger %q", got)
+			}
+		})
+	}
+}
+
+// A message to master that could not be written (the lease lost, the
+// broker down) is sent at a later pass, from what is durable: the ledger's
+// entry for a relaunch or a failure, the crash-loop mark for a crash loop
+// (reviewer-codex on 7b). Once written, never again; the desktop rings once.
+func TestSelfRepairMessagesAreReplayed(t *testing.T) {
+	cases := map[string]struct {
+		setup func(w *actWorld)
+		want  string
+		rings int
+	}{
+		"relaunched": {func(*actWorld) {}, "self-repair: coder relaunched (pid 102 -> 202, pane w1:p102 -> w1:p9", 0},
+		"failed": {func(w *actWorld) {
+			w.onLaunch = func(string, func(string) error) error { return nil }
+		}, "self-repair: coder relaunch failed its proof", 1},
+		"crash loop": {func(w *actWorld) {
+			ctx := context.Background()
+			for _, n := range []string{"a", "b", "c"} {
+				w.b.BeginSelfRepair(ctx, "tok", "coder", n, bus.SwapEvent{By: "dispatch", Episode: "9:" + n})
+				w.b.FinishSelfRepair(ctx, "tok", n, bus.SwapEvent{Role: "coder", Event: bus.SwapRelaunched, By: "dispatch", Episode: "9:" + n})
+			}
+			w.c.every = time.Second
+		}, "agentbus self-repair reset coder", 1},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := newActWorld(t)
+			tc.setup(w)
+			failing := true
+			send := w.c.sender()
+			w.c.send = func(ctx context.Context, token, mark, episode, target, text string) (bool, error) {
+				if failing {
+					return false, errors.New("the broker is away")
+				}
+				return send(ctx, token, mark, episode, target, text)
+			}
+			for i := 0; i < 4; i++ { // the act, its send failing
+				_ = w.c.pass(context.Background(), "tok")
+				w.now = w.now.Add(20 * time.Second)
+			}
+			if got := w.toMaster(); len(got) != 0 {
+				t.Fatalf("sent while failing: %q", got)
+			}
+			failing = false
+			w.passes(3)
+			msgs := w.only(tc.want)
+			if len(msgs) != 1 {
+				t.Fatalf("master told %q", msgs)
+			}
+			if len(w.desktop) != tc.rings {
+				t.Fatalf("desktop %q", w.desktop)
 			}
 		})
 	}

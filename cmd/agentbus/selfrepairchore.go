@@ -90,6 +90,9 @@ type selfRepairChore struct {
 	agents     func(ctx context.Context) (map[string]bus.AgentSnapshot, error)
 	notify     func(ctx context.Context, title, body string) error
 	proofTries int                 // reads of the proof, proofEvery apart (60: 60 s)
+	// send writes one message to master once per (mark, episode), fenced;
+	// nil: FencedCmdOnce. wrote: this call wrote it.
+	send func(ctx context.Context, token, mark, episode, target, text string) (wrote bool, err error)
 	sleep      func(time.Duration) // nil: time.Sleep
 
 	mu     sync.Mutex

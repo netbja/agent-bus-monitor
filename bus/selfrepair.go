@@ -308,9 +308,10 @@ func (b *Bus) FinishSelfRepair(ctx context.Context, token, nonce string, ev Swap
 // death episodes whose relaunch failed its proof (no retry for those), and a
 // crash loop the dispatcher marked.
 type SelfRepairRecord struct {
-	Attempts  []time.Time
-	Failed    map[string]bool
-	CrashLoop bool
+	Attempts    []time.Time
+	Failed      map[string]bool
+	CrashLoop   bool
+	CrashLoopAt int64 // the mark's Redis TIME (ms): the crash loop's episode
 }
 
 // SelfRepairPast reads every role's SelfRepairRecord from {p}:selfrepair. A
@@ -333,6 +334,7 @@ func (b *Bus) SelfRepairPast(ctx context.Context) (map[string]SelfRepairRecord, 
 		switch kind {
 		case "crashloop":
 			r.CrashLoop = true
+			r.CrashLoopAt, _ = strconv.ParseInt(v, 10, 64)
 		case "attempts":
 			for _, ms := range strings.Split(v, ",") {
 				if n, err := strconv.ParseInt(ms, 10, 64); err == nil && n > 0 {
