@@ -306,9 +306,44 @@ redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(note))
 return 1
 `)
 
+// healthAcceptField is where a person's accept of a check's warn lives in
+// the notes hash: apart from the check's note (a sentinel note never
+// replaces it), and invisible to HealthNotes, which keeps only fields named
+// by their note's ID.
+func healthAcceptField(id string) string { return "accept:" + id }
+
+// PutHealthAccept stores the person's explicit accept of a check's current
+// warn, with its reason (sentinel-warn-digest): the digest holds the warn
+// back for health.AcceptFor, then reports it again. It changes no measured
+// status. The time is Redis TIME.
+func (b *Bus) PutHealthAccept(ctx context.Context, note health.Note) error {
+	return b.putNote(ctx, healthAcceptField(note.ID), note)
+}
+
+// HealthAccepts is each check's accept, by check id.
+func (b *Bus) HealthAccepts(ctx context.Context) (map[string]health.Note, error) {
+	raw, err := b.r.HGetAll(ctx, HealthNotesKey(b.project)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]health.Note{}
+	for field, value := range raw {
+		id, ok := strings.CutPrefix(field, "accept:")
+		var note health.Note
+		if ok && json.Unmarshal([]byte(value), &note) == nil && note.ID == id {
+			out[id] = note
+		}
+	}
+	return out, nil
+}
+
 // PutHealthNote stores a bounded sentinel annotation separately from measured
 // records. It has no ability to alter status or append transitions.
 func (b *Bus) PutHealthNote(ctx context.Context, note health.Note) error {
+	return b.putNote(ctx, note.ID, note)
+}
+
+func (b *Bus) putNote(ctx context.Context, field string, note health.Note) error {
 	if _, ok := health.ByID(note.ID); !ok || !ValidName(note.Author) {
 		return fmt.Errorf("invalid health note identity")
 	}
@@ -320,7 +355,7 @@ func (b *Bus) PutHealthNote(ctx context.Context, note health.Note) error {
 	if err != nil {
 		return err
 	}
-	n, err := putHealthNote.Run(ctx, b.r, []string{HealthNotesKey(b.project), ServicesKey(b.project)}, note.ID, string(raw)).Int()
+	n, err := putHealthNote.Run(ctx, b.r, []string{HealthNotesKey(b.project), ServicesKey(b.project)}, field, string(raw)).Int()
 	if err != nil {
 		return err
 	}

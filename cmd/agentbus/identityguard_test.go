@@ -15,7 +15,7 @@ func TestIdentityGuard(t *testing.T) {
 		{"status", "idle", "x"}, {"report", "coder", "x"}, {"notify", "x"}, {"cmd", "coder", "x"},
 		{"reply", "--ref", "1", "master", "x"}, {"challenge", "foureyes", "x"}, {"verdict", "--subject", "s", "coder", "approve"},
 		{"board", "claim", "t"}, {"request", "accept", "t"}, {"gate", "close", "--mine"}, {"pilot", "claim"},
-		{"plan", "done", "t"}, {"pause", "--for", "1h"}, {"shutdown"}, {"ask", "x"}, {"health", "note", "x"},
+		{"plan", "done", "t"}, {"pause", "--for", "1h"}, {"shutdown"}, {"ask", "x"}, {"health", "note", "x"}, {"health", "accept", "disk", "x"},
 		{"something-new"},
 	}
 	for _, w := range writes {
@@ -32,7 +32,7 @@ func TestIdentityGuard(t *testing.T) {
 	}
 	reads := [][]string{
 		{"reports"}, {"thread", "1"}, {"verdicts"}, {"agents"}, {"board"}, {"board", "--json"}, {"request"},
-		{"gate", "coder"}, {"pilot", "status"}, {"plan", "show"}, {"plan"}, {"health"}, {"health", "list"}, {"health", "detail", "services"}, {"health", "log"},
+		{"gate", "coder"}, {"pilot", "status"}, {"plan", "show"}, {"plan"}, {"health"}, {"health", "list"}, {"health", "detail", "services"}, {"health", "log"}, {"health", "warns"}, {"health", "accept", "disk", "--as", "charlie", "x"},
 		{"asks"}, {"swaps"}, {"usage"}, {"budget"}, {"listen"}, {"subscribe", "--drain", "coder"}, {"pane", "coder"},
 		{"roles", "doctor", "--publish"}, {"roles", "adopt", "x", "--ask", "1"}, // no sender in what they write
 	}

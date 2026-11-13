@@ -616,7 +616,13 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   it: intended). It wakes master once per implementer and requested set (mark `stall-implementer:<agent>`, one
   `{p}:quota` field each, so two implementers never alternate one field; episode a hash of the name and the sorted ids):
   idle, working, then idle again on the same set wakes nobody twice. Requests only, never ready plan tasks
-  (`team-stall` names those). busmon shows the health pill, F5
+  (`team-stall` names those). Long warns (sentinel-warn-digest): `agentbus health warns` is sentinel's daily digest,
+  one message to master, of the checks whose effective status is warn (a stale record is unknown) since more than 24 h,
+  each with its age and detail (`health.WarnDigest`). `agentbus health accept <check> --as <person> <reason>` is the
+  person's accept, kept in the notes hash under `accept:<check>` (so a sentinel note never replaces it and
+  `HealthNotes` never reads it), Redis `TIME`: it counts only for the current warn (written at or after its since),
+  holds it out of the digest for a week (counted, not repeated), then the digest lists it again with the accept. It
+  changes no measured status. An agent identity refuses the accept, `--as` is required (unproved, as reload's). busmon shows the health pill, F5
   details and retained transitions in its R recap. Each check has a place per status (`Definition.Place`: `Person`
   statuses with their `Command` are for you, any other warn or fail is in hand by its `Handler`, ok is fine, unknown
   not measured; `PlaceOf` adds the evaluator's fixed `Outcome.Reason` code, stored as `Record.Reason` only when the check

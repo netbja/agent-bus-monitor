@@ -161,7 +161,14 @@ The info line (`new: …`) is busmon's to show; it needs no report.
 ## Daily review
 
 On the daily directive, review `agentbus health list` and `agentbus health log` (a `model-catalogue`
-warn: see "Model catalogue" above), then read
+warn: see "Model catalogue" above). Then run `agentbus health warns`: when it prints a `Health
+digest:` (checks in warn for more than 24 h, each with its age and reason), send it to master as
+**one** message, verbatim (`agentbus cmd master "<the digest>"`), never one message per warn. It
+asks for nothing new from you: you fix nothing beyond what this skill already allows (your
+allow-list is unchanged). A warn leaves the digest when it is fixed, or when the person accepts it
+(`agentbus health accept <check> --as <person> <reason>`): an accept holds it out for a week, then
+it is listed again with the accept until fixed or accepted again. You never accept a warn yourself.
+`no check in warn over 24 h`: say nothing. Then read
 [`docs/memory/INDEX.md`](../../docs/memory/INDEX.md) and the project's `STATUS` file if present. Mention only requests that remain
 requested, blocked, or past deadline; do not chase them. List the popped roles (tier `pop` in
 `roles.toml`) idle for more than 2 h with no accepted task, in one `agentbus cmd master` line, so

@@ -13,7 +13,7 @@ import (
 
 func runHealth(ctx context.Context, b *bus.Bus, self string, args []string, out, errw io.Writer) int {
 	usage := func() int {
-		fmt.Fprintln(errw, "usage: health [list | <check>... | detail <id> | log [<after-stream-id>] | note <id> <text...>]")
+		fmt.Fprintln(errw, "usage: health [list | <check>... | detail <id> | log [<after-stream-id>] | note <id> <text...> | warns | accept <id> --as <person> <reason...>]")
 		return 2
 	}
 	if len(args) == 0 || args[0] == "list" {
@@ -97,6 +97,58 @@ func runHealth(ctx context.Context, b *bus.Bus, self string, args []string, out,
 		for _, row := range rows {
 			fmt.Fprintf(out, "%s\t%s\t%s\t%s -> %s\n", row.StreamID, time.UnixMilli(row.At).Format(time.RFC3339), row.ID, row.Previous, row.Status)
 		}
+		return 0
+	case "warns": // sentinel's daily digest of checks in warn over 24 h (sentinel-warn-digest)
+		if len(args) != 1 {
+			return usage()
+		}
+		records, err := b.Health(ctx)
+		if err != nil {
+			fmt.Fprintln(errw, "health: could not read health records")
+			return 1
+		}
+		accepts, err := b.HealthAccepts(ctx)
+		if err != nil {
+			fmt.Fprintln(errw, "health: could not read the accepts")
+			return 1
+		}
+		now, err := b.ServerTime(ctx)
+		if err != nil {
+			fmt.Fprintln(errw, "health: server time unavailable")
+			return 1
+		}
+		d := health.WarnDigest(records, accepts, now.UnixMilli())
+		if msg := d.Message(); msg != "" {
+			fmt.Fprintln(out, msg)
+			return 0
+		}
+		if d.Accepted > 0 {
+			fmt.Fprintf(out, "no check in warn over 24 h (%d accepted by the person this week)\n", d.Accepted)
+			return 0
+		}
+		fmt.Fprintln(out, "no check in warn over 24 h")
+		return 0
+	case "accept": // the person's explicit accept of a check's current warn
+		rest, person := extractFlag(args[1:], "--as")
+		if len(rest) < 2 {
+			return usage()
+		}
+		// The CLI cannot prove a person (as reload's --as); it refuses an
+		// agent that names itself.
+		if self != "" && self != "anonymous" {
+			fmt.Fprintf(errw, "health accept: %s is an agent: only the person accepts a warn (--as <person>, from their own shell)\n", self)
+			return 1
+		}
+		if !bus.ValidName(person) {
+			fmt.Fprintln(errw, "health accept: name yourself: --as <person>")
+			return 2
+		}
+		text := strings.TrimSpace(strings.Join(rest[1:], " "))
+		if err := b.PutHealthAccept(ctx, health.Note{ID: rest[0], Author: person, Text: text}); err != nil {
+			fmt.Fprintln(errw, "health accept: not saved (unknown check, empty or unsafe reason, or services are not installed)")
+			return 1
+		}
+		fmt.Fprintf(out, "%s's warn accepted by %s: held out of the daily digest for a week\n", rest[0], person)
 		return 0
 	case "note":
 		if len(args) < 3 {

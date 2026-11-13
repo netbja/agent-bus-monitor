@@ -224,3 +224,42 @@ func TestLegacyPasswordInUseComparesWithoutDisclosing(t *testing.T) {
 		}
 	}
 }
+
+// A person's accept of a warn (sentinel-warn-digest): kept apart from the
+// notes (sentinel's later note on the same check never replaces it, and the
+// notes' readers never see it), its time from Redis TIME.
+func TestHealthAcceptIsApartFromNotes(t *testing.T) {
+	b := dialHealth(t)
+	ctx := context.Background()
+	installHealthProject(t, b, "holder")
+	if err := b.PutHealthAccept(ctx, health.Note{ID: "disk", Author: "charlie", Text: "the volume grows on purpose"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.PutHealthNote(ctx, health.Note{ID: "disk", Author: "sentinel", Text: "checked the volume"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.PutHealthNote(ctx, health.Note{ID: "services", Author: "sentinel", Text: "a note, not an accept"}); err != nil {
+		t.Fatal(err)
+	}
+	accepts, err := b.HealthAccepts(ctx)
+	if _, noted := accepts["services"]; noted || len(accepts) != 1 {
+		t.Fatalf("a note read as an accept: %+v", accepts)
+	}
+	if err != nil || accepts["disk"].Author != "charlie" || accepts["disk"].Text != "the volume grows on purpose" || accepts["disk"].At == 0 {
+		t.Fatalf("accepts %+v %v", accepts, err)
+	}
+	notes, _ := b.HealthNotes(ctx)
+	if len(notes) != 2 || notes["disk"].Author != "sentinel" {
+		t.Fatalf("notes %+v", notes)
+	}
+	for _, bad := range []health.Note{
+		{ID: "nope", Author: "charlie", Text: "x"},
+		{ID: "disk", Author: "Bad Name", Text: "x"},
+		{ID: "disk", Author: "charlie", Text: " "},
+		{ID: "disk", Author: "charlie", Text: "password=hunter2"},
+	} {
+		if err := b.PutHealthAccept(ctx, bad); err == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+}
