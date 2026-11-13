@@ -559,6 +559,11 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 	}
 	s := &step{agent: agent, snap: snap, o: o, w: w, exists: exists}
 	s.x = Input{Obligation: o, Armed: armed, Snap: snap, Who: l.b.Project() + "/" + agent}
+	if snap == nil { // retired on purpose, its group kept (retire-forget-roster)
+		if s.x.Retired, err = l.b.RetiredForgotten(ctx, agent); err != nil {
+			return err
+		}
+	}
 	if exists {
 		s.x.Wake = &s.w
 	}

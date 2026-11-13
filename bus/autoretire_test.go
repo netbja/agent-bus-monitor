@@ -147,3 +147,28 @@ func hasGroup(groups []redis.XInfoGroup, name string) bool {
 	}
 	return false
 }
+
+// The last ledger entry decides; the self-repair shadow's records are
+// looked past; a kept retire (forgot=false) or a later begin is no retire.
+func TestRetiredForgotten(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, SwapsKey(b.Project())) })
+	if ok, _ := b.RetiredForgotten(ctx, "pop"); ok {
+		t.Fatal("no ledger read as retired")
+	}
+	b.RetireSwap(ctx, SwapEvent{Role: "pop", By: "master", Forgot: "false"})
+	if ok, _ := b.RetiredForgotten(ctx, "pop"); ok {
+		t.Fatal("a kept retire read as forgotten")
+	}
+	b.RetireSwap(ctx, SwapEvent{Role: "pop", By: "master", Forgot: "true"})
+	b.LogSwap(ctx, SwapEvent{Role: "pop", Event: SwapWouldRelaunch, Kind: SwapKindSelfRepair, By: "dispatch", Episode: "1:1"})
+	b.LogSwap(ctx, SwapEvent{Role: "other", Event: SwapBegin, By: "master"})
+	if ok, err := b.RetiredForgotten(ctx, "pop"); !ok || err != nil {
+		t.Fatalf("retired and forgotten: %v %v", ok, err)
+	}
+	b.LogSwap(ctx, SwapEvent{Role: "pop", Event: SwapBegin, By: "master"})
+	if ok, _ := b.RetiredForgotten(ctx, "pop"); ok {
+		t.Fatal("a later begin read as retired")
+	}
+}

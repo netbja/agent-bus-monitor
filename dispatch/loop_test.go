@@ -772,3 +772,26 @@ func TestRunNewMessageAfterEscalationReopens(t *testing.T) {
 		t.Fatalf("second escalation recorded high id %q, want %q", w.HighID, second)
 	}
 }
+
+// retire-forget-roster: a pop retire --forget unregistered keeps its group;
+// a message that lands in it later is no stall to defer or escalate.
+func TestRunQuietForARetiredAndForgottenPop(t *testing.T) {
+	b, _ := dialRun(t)
+	if err := b.RetireSwap(context.Background(), bus.SwapEvent{Role: "gone", By: "master", Forgot: "true", Kind: bus.SwapKindRetire}); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "gone", "after its retire")
+	rt := newFakeRT(alwaysReady)
+	start(t, b, rt, fastConfig())
+	waitFor(t, 3*time.Second, "gone group", func() bool { return hasGroup(t, b, "gone") })
+	time.Sleep(500 * time.Millisecond) // a few passes
+	if w, ok := wakeOf(t, b, "gone"); ok && (w.State == "deferred" || w.Escalated == "true") {
+		t.Fatalf("a retired and forgotten pop was judged a stall: %+v", w)
+	}
+	// Registered again (a respawn): judged as any agent.
+	send(t, b, "ghost2", "x")
+	waitFor(t, 3*time.Second, "an unretired ghost deferred", func() bool {
+		w, ok := wakeOf(t, b, "ghost2")
+		return ok && w.State == "deferred" && strings.Contains(w.Reason, "no snapshot")
+	})
+}

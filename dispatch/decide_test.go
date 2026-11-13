@@ -87,6 +87,12 @@ func TestDecide(t *testing.T) {
 			want{ActDefer, 6, false, false}},
 		{"rule6-no-snapshot-escalates-at-T", Input{Obligation: owed(), In: ready(), OldestAge: T + time.Second},
 			want{ActEscalate, 6, false, false}},
+		// retire-forget-roster: a pop retire --forget unregistered keeps its
+		// group by design (a respawn reads on); what lands in it is no stall.
+		{"rule6-retired-and-forgotten-is-quiet", Input{Obligation: owed(), In: ready(), OldestAge: 3 * T, Retired: true},
+			want{ActNone, 6, false, false}},
+		{"rule6-retired-but-registered-again-is-judged", Input{Obligation: owed(), Snap: &bus.AgentSnapshot{State: "idle", Pane: "w1:p1"},
+			In: ready(), OldestAge: T + time.Second, Retired: true}, want{ActEscalate, 6, false, false}},
 		{"restart-same-pid-new-start-defers", Input{Obligation: owed(), Snap: snap(), In: func() Inspection {
 			in := ready()
 			in.Starts[100] = 6
