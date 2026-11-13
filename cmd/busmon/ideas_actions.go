@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -66,7 +68,7 @@ func (m *Model) ideasKey(p *page, act Action, k Key) (tea.Cmd, bool) {
 		m.refresh()
 		return nil, true
 	case act == ActIdeaAdd:
-		m.openLine(lineIdeaTitle, "")
+		m.openIdeaCompose()
 		return nil, true
 	case k.Code == keyEnter:
 		if p.sel < len(p.iitems) {
@@ -104,6 +106,10 @@ func (m *Model) setIdeaState(p *page) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = pk.id+": already "+to, false
 		return nil
 	}
+	if a := m.env("AGENT_BUS_AGENT"); a != "" { // an agent's busmon inherits the person's name (reviewer-codex)
+		m.ui.flash, m.ui.flashErr = "this busmon runs in "+Preview(a)+"'s agent environment (AGENT_BUS_AGENT): only the person sets an idea's state", true
+		return nil
+	}
 	who := m.cfg.self
 	if who == "" || who == "pilot" {
 		m.ui.flash, m.ui.flashErr = "name yourself first (agentbus identity set <name>): only a person sets an idea's state", true
@@ -114,10 +120,40 @@ func (m *Model) setIdeaState(p *page) tea.Cmd {
 	})
 }
 
-// addIdea is the idea line's Enter: a new idea, by the person, at "to discuss".
-func (m *Model) addIdea(title string) tea.Cmd {
-	title = strings.TrimSpace(title)
-	if title == "" {
+// env reads busmon's environment (the shell config's, else the process's).
+func (m *Model) env(k string) string {
+	if m.cfg.getenv != nil {
+		return m.cfg.getenv(k)
+	}
+	return os.Getenv(k)
+}
+
+// openIdeaCompose is a on F6: the compose window for a new idea, on its
+// draft. A message being written is kept as the message draft.
+func (m *Model) openIdeaCompose() {
+	if c := m.ui.compose; c != nil && c.kind == composeMessage {
+		m.saveMessageCompose()
+	}
+	m.ui.compose = &composeState{kind: composeIdea, area: newField(m.ui.ideaDraft, bus.IdeaMaxTitle+1+bus.IdeaMaxText)}
+	m.ui.askDraft, m.ui.broadcastDraft = "", ""
+	if m.ui.line != lineNone {
+		m.leaveLine(true)
+	}
+	m.layoutCompose()
+}
+
+// sendIdeaCompose is Ctrl+S in the idea window: its first line the title,
+// the rest the text, added by the person at "to discuss". A title too long
+// or none keeps the window open and says why.
+func (m *Model) sendIdeaCompose(c *composeState) tea.Cmd {
+	title, text, _ := strings.Cut(strings.TrimLeft(c.area.value(), "\n "), "\n")
+	title, text = strings.TrimSpace(title), strings.TrimSpace(text)
+	switch {
+	case title == "":
+		m.ui.flash, m.ui.flashErr = "an idea needs a title: its first line", true
+		return nil
+	case len([]rune(title)) > bus.IdeaMaxTitle:
+		m.ui.flash, m.ui.flashErr = fmt.Sprintf("the title (the first line) is %d characters, at most %d: the rest goes on the next lines", len([]rune(title)), bus.IdeaMaxTitle), true
 		return nil
 	}
 	who := m.cfg.self
@@ -125,8 +161,9 @@ func (m *Model) addIdea(title string) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "name yourself first (agentbus identity set <name>)", true
 		return nil
 	}
+	m.ui.compose, m.ui.ideaDraft = nil, ""
 	return m.ideaWrite("added: "+Preview(title), func(ctx context.Context, w busWriter) error {
-		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, By: who})
+		_, err := w.AddIdea(ctx, bus.IdeaDef{Title: title, Text: text, By: who})
 		return err
 	})
 }

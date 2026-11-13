@@ -537,7 +537,9 @@ func (m *Model) closeCompose() {
 	if c == nil {
 		return
 	}
-	if c.kind == composeMessage {
+	if c.kind == composeIdea {
+		m.ui.ideaDraft = c.area.value()
+	} else if c.kind == composeMessage {
 		m.saveMessageCompose()
 	} else if t := c.area.value(); c.orphan && strings.TrimSpace(t) != "" {
 		// Its question is gone, so no ask opens its draft again: it is kept
@@ -783,6 +785,9 @@ func (m *Model) prefixToRecipient(c *composeState) bool {
 func (m *Model) composeSend() tea.Cmd {
 	c := m.ui.compose
 	body := normalizeCompose(c.area.value())
+	if c.kind == composeIdea {
+		return m.sendIdeaCompose(c)
+	}
 	if c.kind == composeAnswer {
 		if body == "" {
 			m.ui.flash, m.ui.flashErr = "nothing to send", true
@@ -906,8 +911,11 @@ func (m Model) drawCompose(g *grid) {
 		drawLine(g, f.X, y, f.W, nil, false)
 	}
 	title := "Compose"
-	if c.kind == composeAnswer {
+	switch c.kind {
+	case composeAnswer:
 		title = "Answer " + GlyphNone + " " + Preview(c.agent)
+	case composeIdea:
+		title = "New idea " + GlyphNone + " to discuss"
 	}
 	rows := c.area.rowsAt(tr.W)
 	drawFrame(g, f.X, f.Y, f.W, f.H, Frame{Title: Line{{Text: title, Role: RoleText}}, Focused: true, Hue: panelHue[PanelActivity],
@@ -928,12 +936,17 @@ func (m Model) drawCompose(g *grid) {
 		}
 		drawLine(g, f.X+2, f.Y+1, fw+4, to, false)
 		drawLine(g, f.X+2+fw+4, f.Y+1, iw-fw-4, tail, false)
+	} else if c.kind == composeIdea {
+		drawLine(g, f.X+2, f.Y+1, iw, Line{{Text: "the first line is its title, the rest what it is", Role: RoleMuted}}, false)
 	} else {
 		drawLine(g, f.X+2, f.Y+1, iw, Line{{Text: "Answer to ", Role: RoleMuted}, {Text: Preview(c.header), Role: RoleAccent}}, false)
 	}
 	placeholder := "Enter: new line " + GlyphNone + " Ctrl+S: send"
-	if c.kind == composeAnswer {
+	switch c.kind {
+	case composeAnswer:
 		placeholder = "your answer " + GlyphNone + " Ctrl+S: send"
+	case composeIdea:
+		placeholder = "its title, then what it is " + GlyphNone + " Ctrl+S: add"
 	}
 	for i, l := range c.area.lines(tr.W, tr.H, !c.onTo || c.kind != composeMessage, placeholder) {
 		drawLine(g, tr.X, tr.Y+i, tr.W, l, false)

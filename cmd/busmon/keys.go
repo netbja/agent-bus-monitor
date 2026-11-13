@@ -367,7 +367,7 @@ var (
 		{Keys: "/", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words", Act: ActFilter, OnPage: true, match: runeIs('/')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
-		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea, its title on the line (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
+		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
 		{Keys: "s", Hint: "state", Help: "Ideas (F6) or an idea's page: the state picker under the idea (" + arrows + " choose, y sets it as you, esc cancels)", Act: ActIdeaState, OnPage: true, match: runeIs('s')},
 		{Keys: "tab", Hint: "filter", Help: "Ideas (F6): show one state, then the next, then all", Act: ActIdeaFilter, OnPage: true, match: keyIs(keyTab)},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},

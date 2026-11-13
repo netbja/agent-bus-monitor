@@ -70,7 +70,7 @@ KEYS
   /                    History (H): filter by @agent, a thread id or words
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
-  a                    Ideas (F6): add an idea, its title on the line (it starts at to discuss)
+  a                    Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)
   s                    Ideas (F6) or an idea's page: the state picker under the idea (↑↓ choose, y sets it as you, esc cancels)
   tab                  Ideas (F6): show one state, then the next, then all
   o                    History (H): load the three days before; the recap (R): show For you's items older than a day

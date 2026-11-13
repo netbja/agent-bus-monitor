@@ -20,7 +20,8 @@ func ideasShell(t *testing.T, self string) (Model, *fakeWriter) {
 	st := workShared()
 	st.ideas = ideasFixture()
 	w := &fakeWriter{ideas: ideasFixture()}
-	m := newShell(shellConfig{project: "demo", self: self, st: st, w: w})
+	m := newShell(shellConfig{project: "demo", self: self, st: st, w: w,
+		getenv: func(string) string { return "" }}) // never the test runner's own (an agent's AGENT_BUS_AGENT)
 	m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 	return m, w
@@ -129,22 +130,88 @@ func TestIdeasRefusalSaid(t *testing.T) {
 	}
 }
 
-// a: the title on the line, Enter adds it as the person.
+// a: the compose window, its first line the title, the rest the text;
+// Ctrl+S adds it as the person (reviewer-codex: the design's compose window,
+// so an idea added from F6 keeps its context).
 func TestIdeasAdd(t *testing.T) {
 	m, w := ideasShell(t, "charlie")
 	m = keys(t, m, kF6, 'a')
-	if m.ui.line != lineIdeaTitle {
-		t.Fatalf("a: line %v", m.ui.line)
+	if c := m.ui.compose; c == nil || c.kind != composeIdea {
+		t.Fatalf("a: compose %+v", m.ui.compose)
+	}
+	if !strings.Contains(m.grid().plain(), "New idea") {
+		t.Fatalf("the window\n%s", m.grid().plain())
 	}
 	for _, r := range "voice notes" {
 		m = keys(t, m, r)
 	}
-	m = press1(t, m, kEnter)
-	if !slices.Contains(w.sent, "idea add charlie voice notes") || m.ui.line != lineNone {
-		t.Fatalf("sent %v line %v", w.sent, m.ui.line)
+	m = keys(t, m, kEnter)
+	for _, r := range "read reports aloud" {
+		m = keys(t, m, r)
 	}
-	if n := len(m.snap.ideas); n != 5 || m.snap.ideas[4].Title != "voice notes" {
-		t.Fatalf("ideas %d", n)
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if !slices.Contains(w.sent, "idea add charlie voice notes") || m.ui.compose != nil {
+		t.Fatalf("sent %v compose %+v", w.sent, m.ui.compose)
+	}
+	got := m.snap.ideas[len(m.snap.ideas)-1]
+	if got.Title != "voice notes" || got.Text != "read reports aloud" {
+		t.Fatalf("added %+v", got)
+	}
+}
+
+// Esc keeps the idea's draft for the next a; a title too long is said, not sent.
+func TestIdeasAddDraftAndLimits(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	m = keys(t, m, kF6, 'a')
+	for _, r := range "half an idea" {
+		m = keys(t, m, r)
+	}
+	m = keys(t, m, kEsc)
+	if m.ui.compose != nil {
+		t.Fatal("esc kept the window")
+	}
+	m = keys(t, m, 'a')
+	if c := m.ui.compose; c == nil || c.area.value() != "half an idea" {
+		t.Fatalf("the draft is lost: %+v", m.ui.compose)
+	}
+	m.ui.compose.area.set(strings.Repeat("t", bus.IdeaMaxTitle+1) + "\ntext")
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if len(w.sent) != 0 || !m.ui.flashErr || !strings.Contains(m.ui.flash, "title") || m.ui.compose == nil {
+		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
+	}
+	m.ui.compose.area.set("\n\n")
+	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
+	if len(w.sent) != 0 || m.ui.compose == nil {
+		t.Fatalf("an empty idea sent: %v", w.sent)
+	}
+}
+
+// busmon run from an agent's environment (AGENT_BUS_AGENT) inherits the
+// person's name: it never sets a state (reviewer-codex). A herdr pane alone
+// is not refused here: the person's own busmon runs in one (the plugin).
+func TestIdeasSetRefusedInAnAgentsEnv(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	m.cfg.getenv = func(k string) string {
+		if k == "AGENT_BUS_AGENT" {
+			return "coder"
+		}
+		return ""
+	}
+	m = keys(t, m, kF6, 's', kDown)
+	m = press1(t, m, 'y')
+	if len(w.sent) != 0 || !m.ui.flashErr || !strings.Contains(m.ui.flash, "agent") {
+		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
+	}
+	m.cfg.getenv = func(k string) string {
+		if k == "HERDR_PANE_ID" {
+			return "w1:p3"
+		}
+		return ""
+	}
+	m = keys(t, m, 's', kDown)
+	m = press1(t, m, 'y')
+	if len(w.sent) != 1 {
+		t.Fatalf("the person's busmon in a herdr pane: sent %v flash %q", w.sent, m.ui.flash)
 	}
 }
 
@@ -165,11 +232,11 @@ func TestIdeasKeysStayOnF6(t *testing.T) {
 	m = keys(t, m, tea.Key{Code: tea.KeyF5})
 	before := m.rd.top().health
 	m = keys(t, m, kTab, 's')
-	if p := m.rd.top(); p.kind != ovHealth || p.ideas.pick != nil || p.ideas.filter != 0 || m.ui.line != lineNone {
+	if p := m.rd.top(); p.kind != ovHealth || p.ideas.pick != nil || p.ideas.filter != 0 || m.ui.compose != nil {
 		t.Fatalf("tab/s on Health: %+v", p)
 	}
 	m = keys(t, m, 'a')
-	if p := m.rd.top(); p.health.all == before.all || m.ui.line == lineIdeaTitle {
+	if p := m.rd.top(); p.health.all == before.all || m.ui.compose != nil {
 		t.Fatal("a on Health is not its own 'all'")
 	}
 	if len(w.sent) != 0 {
