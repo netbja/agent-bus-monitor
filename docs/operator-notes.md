@@ -447,6 +447,24 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   used (about 12 KiB a line, trimmed by copying): scrolled-off lines go to a ring of rendered
   strings, and writes reach x/vt in 4 KiB pieces. Its answers to queries are drained into
   `Replies()`, else a query would block the write.
+- **The holder's foundations** (herdr exit step 5a, package `holder`; nothing uses it yet). One
+  function, `holder.ProjectDir`, is the run directory for the holder, the supervisor and every
+  client: `$XDG_RUNTIME_DIR`, else `$TMPDIR/agentbus-<uid>`, else `/tmp/agentbus-<uid>`; each level
+  (the fallback root, `agentbus`, the project) is made 0700 by `Mkdir` (which never follows a
+  symlink), then read once with `Lstat`: a symlink, another owner (`owned by uid N, not you: another
+  user created it; remove it or set TMPDIR`) or a mode other than 0700 is refused. `SocketPath`
+  adds `holder-<key>.sock` and refuses a path past 103 bytes (macOS's 104 with its NUL).
+  `service.BuildKey` is the one build key (security S7): lowered, reduced to `[a-z0-9.]`, cut to
+  40, `.` and 10 hex digits of the raw id's SHA-256. Frames are a 4-byte big-endian length
+  counting a type byte (control JSON or raw data) and the payload, at most 1 MiB. Control frames are
+  closed sets: `DecodeControl` reads one object, refuses a duplicate key, a case-folded key
+  (`encoding/json` alone would take `Kind` for `kind`), any field beyond its op's, and checks every
+  value (submit `{kind, term, nonce, count}` with no text or name, start `{role, profile?,
+  resume_session?, cols?, rows?}` with no argv, env or cwd). `PeerOf` reads the peer's pid and uid
+  from the kernel (`SO_PEERCRED`; macOS `LOCAL_PEERPID` and `LOCAL_PEERCRED`), `CheckSameUser`
+  refuses another uid both ways, and `InTree` reads a peer as inside a terminal when an ancestor is
+  the holder by pid and start time; a chain that does not reach pid 1 within 32 ancestors is
+  in-tree too (an unknown is refused the holder's writes, never let through).
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
