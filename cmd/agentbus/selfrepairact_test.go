@@ -597,3 +597,41 @@ func TestSelfRepairWorkspaceClosedTold(t *testing.T) {
 		t.Fatalf("closed again, not told: %q", msgs)
 	}
 }
+
+// reviewer-codex on step 8: the spell outlives a dispatcher restart: a
+// fresh chore (its memory empty) during the same closure reuses the
+// outstanding notice's episode, so master is told once; seen open, the
+// mark is cleared and a later closing is told again.
+func TestSelfRepairWorkspaceSpellOutlivesARestart(t *testing.T) {
+	w := newActWorld(t)
+	read := w.c.read
+	w.c.read = func(ctx context.Context) (selfRepairReads, error) { // the marks as stored, as readSelfRepair reads them
+		r, err := read(ctx)
+		if err == nil {
+			r.Marks, err = w.b.QuotaMarks(ctx)
+		}
+		return r, err
+	}
+	open := false
+	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
+		return selfRepairHerdr{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
+	}
+	w.passes(6)
+	w.c.mu.Lock()
+	w.c.wsClosed = time.Time{} // a restart: the chore's memory is gone
+	w.c.mu.Unlock()
+	w.passes(3)
+	if msgs := w.only("workspace"); len(msgs) != 1 {
+		t.Fatalf("one closure, a restart in it: told %d times: %q", len(msgs), msgs)
+	}
+	open = true
+	w.passes(1)
+	if marks, _ := w.b.QuotaMarks(context.Background()); marks["selfrepair-workspace"] != "" {
+		t.Fatalf("the spell's mark kept once open: %q", marks["selfrepair-workspace"])
+	}
+	open = false
+	w.passes(2)
+	if msgs := w.only("workspace"); len(msgs) != 2 {
+		t.Fatalf("a new closure not told: %q", msgs)
+	}
+}
