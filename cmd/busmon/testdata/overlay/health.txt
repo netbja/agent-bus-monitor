@@ -8,30 +8,31 @@
   In hand
   ● Context fill                     at or above 80%: coder 85%         (dispatch)               12m
   Not measured
-  ? Agent identity                   no current measurement                                         
-  ? Agent launch and identity        no current measurement                                         
-  ? Model drift                      no current measurement                                         
-  ? Runaway work                     no current measurement                                         
-  ? Cmd delivery                     no current measurement                                         
-  ? Cmd targets                      no current measurement                                         
-  ? Quota freshness                  no current measurement                                         
-  ? Redis exposure and password      no current measurement                                         
-  ? Service environment permissions  no current measurement                                         
-  ? Installed versions               no current measurement                                         
-  ? herdr command probe              no current measurement                                         
-  ? Client updates                   no current measurement                                         
-  ? Redis version                    no current measurement                                         
-  ? GitHub reachable                 no current measurement                                         
-  ? Team stall                       no current measurement                                         
-  ? Clear after hand-off             no current measurement                                         
-  ? Quiet agent                      no current measurement                                         
-  ? Disk space                       no current measurement                                         
-  ? Local model endpoint             no current measurement                                         
-  ? Finished pops                    no current measurement                                         
-  ? Backups                          no current measurement                                         
-  ? Notifications                    no current measurement                                         
-  ? Review queue                     no current measurement                                         
-  ? Merge queue                      no current measurement                                         
-  ? Idle implementer                 no current measurement                                         
-  ? Model catalogue                  no current measurement                                         
+  ? Agent identity                   no current measurement
+  ? Agent launch and identity        no current measurement
+  ? Model drift                      no current measurement
+  ? Runaway work                     no current measurement
+  ? Cmd delivery                     no current measurement
+  ? Cmd targets                      no current measurement
+  ? Quota freshness                  no current measurement
+  ? Redis exposure and password      no current measurement
+  ? Service environment permissions  no current measurement
+  ? Installed versions               no current measurement
+  ? herdr command probe              no current measurement
+  ? Client updates                   no current measurement
+  ? Redis version                    no current measurement
+  ? GitHub reachable                 no current measurement
+  ? Team stall                       no current measurement
+  ? Clear after hand-off             no current measurement
+  ? Quiet agent                      no current measurement
+  ? Disk space                       no current measurement
+  ? Local model endpoint             no current measurement
+  ? Finished pops                    no current measurement
+  ? Backups                          no current measurement
+  ? Notifications                    no current measurement
+  ? Review queue                     no current measurement
+  ? Merge queue                      no current measurement
+  ? Idle implementer                 no current measurement
+  ? Model catalogue                  no current measurement
+  ? Broker persistence               no current measurement
   ── fine · 1  (a shows them) ──

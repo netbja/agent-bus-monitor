@@ -166,6 +166,7 @@ func recapCaptureInput() recapInput {
 func TestOverlayCaptures(t *testing.T) {
 	dir := filepath.Join("testdata", "overlay")
 	for name, got := range overlayCaptures(t) {
+		got = trimLineEnds(got) // no trailing spaces in a committed file: git diff --check passes (master)
 		path := filepath.Join(dir, name+".txt")
 		if *updateOverlays {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -184,4 +185,14 @@ func TestOverlayCaptures(t *testing.T) {
 			t.Errorf("%s changed:\n--- want\n%s\n--- got\n%s", name, want, got)
 		}
 	}
+}
+
+// trimLineEnds drops each line's trailing spaces and tabs: the padding of a
+// drawn row carries nothing a capture checks.
+func trimLineEnds(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	return strings.Join(lines, "\n")
 }

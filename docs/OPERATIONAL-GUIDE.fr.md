@@ -585,6 +585,10 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   seulement nommée, car changer de majeure est votre décision. Sans vérification réussie depuis
   48 heures, elle est `unknown`. Vous mettez le broker à jour vous-même ; sentinel ne le redémarre
   ni ne le met à jour jamais.
+- **Persistance du broker.** La vérification `broker-persistence` avertit quand le broker n'a ni
+  AOF (`appendonly`) ni instantanés RDB (`save`) : un redémarrage de la machine perdrait l'état de
+  chaque projet, dont les enregistrements de reprise. Le `docker-compose.yml` fourni active l'AOF
+  sur un volume nommé. Un broker qui refuse `CONFIG` donne `unknown`, jamais un avertissement.
 - **Garde anti-blocage.** Trois vérifications, chacune après 15 minutes (`dispatch.stall_after`,
   `clear_stall_after`, `quiet_after` dans `config.toml` ; `0` en coupe une). `team-stall` échoue
   quand tous les agents sont inactifs, que rien n'est ouvert (requête, tâche acceptée, question,

@@ -1,18 +1,18 @@
- ━━━━━━━━━━━━━━━━ │ focus: groups · → or tab: the keys                                          
- › Display        │ Display  how busmon looks; theme, icons and fade apply at once              
-   Attention      │                                                                             
-   Identity       │     Fade and slide                  ● on                                    
-   Notifications  │   • Theme                           ‹ dark ›                                
-   Services       │ ▶ • Icons                           ‹ nerd ›                                
-   Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font                                   
-   Projects       │     @ inserts paths as              ‹ absolute ›                            
-                  │     Work layout                     ‹ auto ›                                
-                  │     Activity lines at start         25                                      
-                  │     Idle? hint after                10m                                     
-                  │     Screensaver (idle view) after   off                                     
-                  │                                                                             
-                  │ ─────────────────────────────────────────────────────────────────────────── 
-                  │ Icons · display.icons · from config.toml (default: off) · read by busmon    
-                  │ off: none · nerd: a lettered box per provider · agent-font: the maker's     
-                  │ logo                                                                        
-                  │                                                                             
+ ━━━━━━━━━━━━━━━━ │ focus: groups · → or tab: the keys
+ › Display        │ Display  how busmon looks; theme, icons and fade apply at once
+   Attention      │
+   Identity       │     Fade and slide                  ● on
+   Notifications  │   • Theme                           ‹ dark ›
+   Services       │ ▶ • Icons                           ‹ nerd ›
+   Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font     
+   Projects       │     @ inserts paths as              ‹ absolute ›
+                  │     Work layout                     ‹ auto ›
+                  │     Activity lines at start         25
+                  │     Idle? hint after                10m
+                  │     Screensaver (idle view) after   off
+                  │
+                  │ ───────────────────────────────────────────────────────────────────────────
+                  │ Icons · display.icons · from config.toml (default: off) · read by busmon
+                  │ off: none · nerd: a lettered box per provider · agent-font: the maker's
+                  │ logo
+                  │

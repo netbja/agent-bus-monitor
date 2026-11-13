@@ -172,7 +172,7 @@ STATES
   ● working            the state the agent DECLARED the last time it published a status.
   ○ idle               Silence never changes it: an agent that said working and went quiet
   ▲ blocked            still reads working. Any other recorded value is shown as written.
-  ✓ done               
+  ✓ done
   · no state declared  seen on the bus (a report, a lease) but it never published a state.
   updated              bar and age of that declaration: the bar empties over 10 minutes.
                        It measures freshness, not liveness - the bus has no heartbeat.
