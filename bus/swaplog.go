@@ -272,10 +272,23 @@ func swapEventFrom(m redis.XMessage) SwapEvent {
 
 // Interrupted reports whether role's last ledger entry is a begin with no
 // live intent: a swap whose caller died before a terminal entry (§11.2).
+// The self-repair shadow's would-relaunch entries are records, not ends: they
+// are looked past (foureyes, self-repair 6a), or one written after a dead
+// caller's begin would hide it.
 func (b *Bus) Interrupted(ctx context.Context, role string) (bool, SwapEvent, error) {
-	last, err := b.SwapLog(ctx, role, 1)
-	if err != nil || len(last) == 0 || last[0].Event != SwapBegin {
+	evs, err := b.SwapLog(ctx, role, 0)
+	if err != nil {
 		return false, SwapEvent{}, err
+	}
+	var last []SwapEvent
+	for _, e := range evs {
+		if e.Event != SwapWouldRelaunch {
+			last = append(last, e)
+			break
+		}
+	}
+	if len(last) == 0 || last[0].Event != SwapBegin {
+		return false, SwapEvent{}, nil
 	}
 	live, err := b.Swapping(ctx, role)
 	if err != nil {

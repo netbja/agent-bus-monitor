@@ -80,6 +80,9 @@ type Config struct {
 	Notify NotifyConfig
 	// MergeQueue is the merge queue's chore (mergequeuechore.go); off without a pass.
 	MergeQueue MergeQueueConfig
+	// SelfRepair is the self-repair watcher's chore (selfrepairchore.go); off
+	// without a pass.
+	SelfRepair SelfRepairConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -266,6 +269,14 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		go func() {
 			defer wg.Done()
 			l.mergeQueueLoop(inner)
+		}()
+	}
+
+	if cfg.SelfRepair.on() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.selfRepairLoop(inner)
 		}()
 	}
 

@@ -165,3 +165,16 @@ func TestHealth(t *testing.T) {
 		t.Errorf("shadow failed: %+v", out)
 	}
 }
+
+// The check is in the catalogue (spec 5), measured every minute, its
+// problems in master's hands: sentinel only annotates a fail and tells
+// master, it never retries.
+func TestHealthDefinition(t *testing.T) {
+	d, ok := health.ByID("self-repair")
+	if !ok || d.Handler != "master" || d.Interval != time.Minute || len(d.Person) != 0 {
+		t.Fatalf("definition %+v %v", d, ok)
+	}
+	if d.Place(health.Fail) == health.PlaceForYou || !strings.Contains(d.Remediation, "Shadow mode (development mode only) acts on nothing") {
+		t.Fatalf("definition %+v", d)
+	}
+}

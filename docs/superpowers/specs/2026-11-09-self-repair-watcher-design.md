@@ -336,6 +336,26 @@ useful alone first, and nothing acts before step 7.
    ledger entry (`would-relaunch`, kind `self-repair`, the death episode), fenced on the dispatch
    lease; `WouldRelaunchLogged` finds an episode's entry, so a death is recorded once. Step 6b
    wires the loop (gathering the facts, the health check, the shadow run) and the help text.
+   *As built (step 6b, the shadow run):* the dispatch service reads the switch once at its start
+   (`serviceSelfRepair`, `cmd/agentbus/selfrepairchore.go`); only `shadow` runs a pass, a
+   dispatch chore every 15 s while it holds the lease (`dispatch.SelfRepairConfig`, beside the
+   reconciliation, so a slow herdr never delays a wake). A pass reads the template's agent tabs,
+   the snapshots, the pause, the quota marks (holds, hand-off clears, pops told done), the
+   provider readings, the stored checks (`llm-endpoint` for a local model) and each role's
+   intent; it counts a death per episode (`pid:start`) from its first read, Redis `TIME`; it
+   reads herdr only when an agent is dead, the way the service entry of a relaunch does
+   (`relaunch.ServiceHerdr`, `FindWorkspace`, `WorkspacePanes`, `JudgeTab`, create for a
+   required role), any failure a hold. `Decide`, then one fenced `would-relaunch` per death,
+   kind `self-repair`, `by dispatch`. A failed read fails the pass, logged once: no facts, no
+   decision. Relaunches and the crash loop stay empty: only step 7 relaunches and records them.
+   Health `self-repair` (catalogue order 31, master's) is registered in every mode: `off` and
+   `on` (nothing relaunches yet) say so, shadow reports its last pass, unknown after 2 min
+   without one. The foreground `agentbus dispatch` has no services env to reach herdr, so it
+   runs neither. `Interrupted`, and `agentbus swaps`' interrupted mark, look past
+   would-relaunch entries (foureyes), and busmon's help says shadow records now and on
+   relaunches nothing yet; the budgets are read, but with no relaunch recorded neither changes a
+   shadow decision. The death count lives in the service's memory: a dispatcher restart starts
+   a death's grace again (conservative; step 7 keeps it in mind).
 7. **R1 and R2 on** (default `on`): the relaunch, the proof, budgets and `self-repair reset`,
    master first, required tabs recreated and optional ones reported, the notifications. Live
    check: kill an idle agent's client (SIGTERM) and watch it come back, resumed, in a new pane.
