@@ -81,6 +81,10 @@ func TestPopEndReJudgesAtEachCheck(t *testing.T) {
 			if ok, _ := w.b.Swapping(ctx, "security"); ok {
 				t.Errorf("%s at check %d: intent left behind", name, at)
 			}
+			// Not done at the first check: no begin, nothing in the ledger.
+			if log, _ := w.b.SwapLog(ctx, "security", 0); at == 1 && len(log) != 0 {
+				t.Errorf("%s at check 1 wrote the ledger: %+v", name, log)
+			}
 		}
 	}
 }
@@ -130,12 +134,28 @@ func TestPopEndRefusals(t *testing.T) {
 	}
 	w, d, _, _, _ = popEndWorld(t)
 	snaps, _ := w.b.Agents(ctx)
-	if r := popEnd(ctx, w.b, d, "tok", "foureyes", snaps["foureyes"].TS); r.Ended || r.Wait == "" || w.closed() {
+	if r := popEnd(ctx, w.b, d, "tok", "foureyes", snaps["foureyes"].TS); r.Ended || !strings.Contains(r.Wait, "boot role") || w.closed() {
 		t.Fatalf("a boot role: %+v closed=%v", r, w.closed())
 	}
 	w, d, _, _, ep = popEndWorld(t)
 	d.ProcStart = func(int) (uint64, error) { return 0, errors.New("permission denied") }
 	if r := popEnd(ctx, w.b, d, "tok", "security", ep); r.Ended || r.Wait == "" || w.closed() {
 		t.Fatalf("an unreadable process: %+v closed=%v", r, w.closed())
+	}
+}
+
+// The lease lost right before the close (another dispatcher took it): the
+// intent is no longer held, nothing is closed.
+func TestPopEndStopsWhenTheLeaseGoes(t *testing.T) {
+	w, d, rt, _, ep := popEndWorld(t)
+	ctx := context.Background()
+	rt.onInspect = func(n int) {
+		if n == 3 {
+			w.r.Set(ctx, bus.DispatchKey(w.b.Project()), "other", time.Minute)
+		}
+	}
+	r := popEnd(ctx, w.b, d, "tok", "security", ep)
+	if r.Ended || r.Wait == "" || w.closed() || !w.registered(t, "security") {
+		t.Fatalf("popEnd %+v closed=%v", r, w.closed())
 	}
 }

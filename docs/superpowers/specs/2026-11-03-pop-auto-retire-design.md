@@ -62,6 +62,12 @@ in focus is a pane they are reading, so it stays until they look away.
 
 Three options were weighed:
 
+> **Superseded on 2026-11-13 by B** (the person's decision, note
+> [2026-11-13-dispatcher-ends-done-pop](../../memory/decisions/2026-11-13-dispatcher-ends-done-pop.md)):
+> where the service reaches herdr, the dispatcher runs the same act as `retire --forget` itself
+> (`cmd/agentbus/popend.go`), every write fenced, and tells master with a wake=no notice; A remains
+> the path when no herdr session is named, and master's `retire` is unchanged.
+
 | | Who acts | For | Against |
 |---|---|---|---|
 | **A** (chosen) | The dispatcher sees the pop done and sends master **one waking directive**; master runs `agentbus retire <role> --forget --episode <ms>` | No new automated pane action: the dispatcher stays the writer of a wake line and a `/clear` only (decision 2026-10-10, lifecycle-4). The act re-judges the whole of §2 itself and forgets atomically (§4). Master can decline with a reason. | Needs master awake; a held master delays the end (§7) |

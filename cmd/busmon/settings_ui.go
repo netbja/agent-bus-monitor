@@ -999,6 +999,8 @@ var settingHelps = map[string]string{
 	"notify.quiet":                 "HH:MM-HH:MM; only the exempt events are sent then",
 	"notify.quiet_exempt":          "the events still sent in quiet hours, separated by commas",
 	"dispatch.self_repair":         "relaunches a dead agent in a new pane, resumed, master first. on or off; shadow (development mode only) decides what it would do and acts on nothing: on relaunches (R1; a missing required tab recreated, R2) and tells master; shadow records what it would do (health self-repair, agentbus swaps). The dispatch service reads it at its start",
+	"dispatch.pop_retire":          "a pop (security, docs...) that has finished, with nothing left for it, is ended by the dispatcher itself: its pane closed, unregistered, master told without waking (with no herdr session in the services' env, master is asked to end it); off: nobody does",
+	"dispatch.pop_retire_after":    "how long a pop stays idle or done, nothing left for it, before the dispatcher ends it; 0 is off",
 	"dispatch.self_repair_every":   "per agent: no second relaunch before this long; a duration above 0, such as 30m; counted from the relaunches on records",
 	"dispatch.self_repair_per_day": "per agent: past this many relaunches in 24 h it is a crash loop, escalated, not relaunched until agentbus self-repair reset; counted from the relaunches on records",
 	"services.start_at_login":      "starts each project's services when you log in (systemd or launchd; no linger); applies at the next agentbus up, or at once with agentbus service login",
