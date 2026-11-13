@@ -5,7 +5,7 @@ Author: architect. Requested by the person through master (task `slash-palette-s
 
 ## 1. Problem
 
-busmon has grown to about 90 actions on 15 key tables, plus the pages behind them (F1–F5, p, R, T,
+busmon has grown to about 90 actions on 14 key tables, plus the pages behind them (F1–F5, p, R, T,
 U, C, M, H, A, Z…). A key the person does not remember is a feature they do not have. The help page
 (F1) lists them all, but you cannot run anything from it, and it has no search. Some things the
 person does with `agentbus` in a terminal have no key at all: `reload --as`, `pause`,
@@ -34,7 +34,7 @@ The full table is in Appendix A. In summary:
 |---|---|---|---|
 | busmon panel actions (open a page, triage, sleep, follow, quit…) | `cmd/busmon/keys.go` `panelBindings`; all run through `panelKey` (`tea_update.go`) | ~30 | **yes**: class A (§4.2), no argument |
 | busmon actions on the selected row (copy, delete, `+`/`-` priority, fold, enter) | same table, `Panels:` limited | ~12 | **no**: they need a selection, which a typed line does not have |
-| busmon page-local keys (reader, settings, projects, notify setup, ask panel, compose, tour) | the other 14 tables in `keys.go` | ~60 | **no**: they belong to a page that has the keyboard |
+| busmon page-local keys (reader, settings, projects, notify setup, ask panel, compose, tour) | the other 13 tables in `keys.go` | ~60 | **no**: they belong to a page that has the keyboard |
 | the person's `agentbus` commands (`reload --as`, `pause`, `resume`, `suspend`, `backup`, `self-repair reset`, `request priority`, `answer`, `identity set`) | `cmd/agentbus/commands.go` (`commands`, the one CLI table) | 9 | **yes**: class C (§4.2), an argument, run as `agentbus` argv, with `y` |
 | agents' and master's `agentbus` commands (`status`, `report`, `subscribe`, `challenge`, `verdict`, `deliver`, `bind`, `swap`, `retire`, `pilot`, `dispatch`, `missions`, `mission`, `up`, `shutdown`…) | same table | ~55 | **no**: an agent's identity and duties. The person asks master instead: `/master <text>` (class B) |
 | bus message kinds | `{p}:status`, `{p}:report` (note, auto), `{p}:notify`, and the `{p}:cmd` types `directive`, `reply`, `challenge`, `verdict`, `blocked`, `ask`, `handoff` (architecture.md "Stream layout") | 4 streams, 7 cmd types | only what the person already sends: a directive (`/write <agent>`), the answer to an ask (`/answer`) |
@@ -91,11 +91,14 @@ type arg struct {
   |---|---|
   | `reload <role> [fresh]` | `reload <role> [--fresh] --as <person>` |
   | `pause <dur>` | `pause --for <dur>` |
-  | `resume` | `resume --yes` |
+  | `resume` | `resume --yes` (the same run as `Z` on a suspended project) |
   | `suspend` | `suspend --yes` (the same run as `Z`) |
   | `backup` | `backup --project <p>` (as the Projects page's `b`) |
   | `self-repair reset <agent>` | `self-repair reset <agent> --as <person>` |
   | `priority <task> <low\|normal\|high>` | `request priority <task> <level> --as <person>` |
+
+  `suspend` and `resume` are `Z` (`sleep`) by name: the palette rows call the same run, so the two
+  cannot differ.
 
   With no `identity.as` set, the three `--as` rows are refused before `y`, naming the setting. They
   never fall back to a default name. The registry test (§5) parses every row's argv against the
@@ -233,7 +236,7 @@ about 45 commands, no index is needed.
 | `d` (Work) | ActShowDone | the plan with done tasks | — | no |
 | esc, `q` | ActEscape, ActQuit | back, quit | — | `quit` |
 
-Other tables (`keys.go`): input, filter, ask, compose, compose @ popup, picker, overlay (pages),
+Other tables (`keys.go`): input, filter, ask, compose, compose file (`composeFileBindings`, the @ popup), picker, overlay (pages),
 settings, notify setup, projects, project delete and tour. They are page-local and stay keys.
 
 ### A.2 `agentbus` commands (`cmd/agentbus/commands.go`, `commands`)
