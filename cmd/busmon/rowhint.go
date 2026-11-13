@@ -115,8 +115,8 @@ func (m Model) selectedItem(p PanelID) ListItem {
 func (m Model) shellHint(act Action) string {
 	if m.mode() == ModeShell && m.ui.focus == PanelWork && m.lists.work.kanban != nil { // the Kanban's levels (work_focus.go)
 		switch {
-		case act == ActTabNext && m.ui.workLevel != workAtTabs:
-			return "column" // ←→ choose or change column
+		case (act == ActTabNext || act == ActNextPanel) && m.ui.workLevel != workAtTabs:
+			return "column" // ←→ and tab choose or change column
 		case act == ActOpen && m.ui.workLevel == workAtTabs:
 			return "columns"
 		case act == ActOpen && m.ui.workLevel == workAtCols:

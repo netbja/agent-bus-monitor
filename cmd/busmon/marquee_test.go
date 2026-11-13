@@ -166,7 +166,11 @@ func TestMarqueeOnePass(t *testing.T) {
 			t.Fatalf("%d: re-armed on the same row", w)
 		}
 		if w == 130 { // the focus on another panel, Work still shown: the pass stops
-			f := keys(t, m, tea.Key{Code: tea.KeyTab})
+			f := m
+			if f.lists.work.kanban != nil { // inside a column Tab is the next column: climb to the tab first
+				f = keys(t, f, kEsc, kEsc)
+			}
+			f = keys(t, f, tea.Key{Code: tea.KeyTab})
 			if f.ui.focus == PanelWork || f.layout.Active != PanelWork || f.lists.work.mq.key != "" {
 				t.Fatalf("focus away: focus %v active %v %+v", f.ui.focus, f.layout.Active, f.lists.work.mq)
 			}

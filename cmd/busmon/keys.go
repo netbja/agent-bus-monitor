@@ -218,7 +218,7 @@ var (
 	activityOnly  = []PanelID{PanelActivity}
 	arrows        = GlyphUp + GlyphDownArrow
 	panelBindings = []binding{
-		{Keys: "tab", Hint: "focus", Act: ActNextPanel, match: keyIs(keyTab)},
+		{Keys: "tab", Hint: "focus", Help: "focus the next panel; inside Work's columns (Kanban), the next column (shift-tab the previous)", Act: ActNextPanel, match: keyIs(keyTab)},
 		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(keyBacktab)},
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},

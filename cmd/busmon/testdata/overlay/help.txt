@@ -1,6 +1,6 @@
 KEYS
   panels
-  tab                  focus
+  tab                  focus the next panel; inside Work's columns (Kanban), the next column (shift-tab the previous)
   shift-tab            focus the previous panel
   F5                   health
   1-3                  view

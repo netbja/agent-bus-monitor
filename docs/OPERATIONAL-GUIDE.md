@@ -448,7 +448,9 @@ agent names, no project template):
   From 130 columns of busmon's pane the same page is a Kanban (For you, In progress, Next,
   Ideas). On its tab `←→` step the tabs; `↓` goes to the column selector (`←→` choose a column),
   `↓` again into the column (`↑↓` stay in it, Enter opens a card), Esc climbs back one level at a
-  time, and the digits change tab anywhere. `display.work_layout = "list"` or `"kanban"` (settings, `C`)
+  time, and the digits change tab anywhere. Inside the columns `tab`/`shift-tab` move between them
+  as `→`/`←` do (on the tab `tab` still moves to the next panel), and the column holding the cursor
+  has its heading in the Work tab's violet. `display.work_layout = "list"` or `"kanban"` (settings, `C`)
   keeps one layout at every width. A selected row or card whose title is cut with `…` scrolls it
   once after a short pause, holds its end, then shows the cut text again.
   The Projects page (`M`) counts each project's **for you** and **at work** by the same rule;

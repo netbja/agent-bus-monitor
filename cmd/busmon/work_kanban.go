@@ -252,6 +252,22 @@ func kanbanFits(h int, cards []kanbanCard) int {
 	return count(h - 2)
 }
 
+// heading is column c's heading: the column holding the cursor (at the
+// selector or in its cards) a pill in the Work tab's colour, so the person
+// always sees which column has the focus; at the selector its ▸ too. At the
+// tab level no column has it.
+func (k *kanbanView) heading(c int) Line {
+	title := k.cols[c].title
+	if k.level == workAtTabs || c != k.col {
+		return Line{{Text: title, Role: RoleText, Bold: true}}
+	}
+	if k.level == workAtCols {
+		title = GlyphSelect + " " + title
+	}
+	// A block as the tab label is, the rest of the row plain.
+	return Line{{Text: " " + title + " ", Role: panelHue[PanelWork], Bold: true, Pill: true}, {Text: " ", Role: RoleText}}
+}
+
 // draw draws the columns inside the list's inner area; sel is the list's
 // selection, off its marquee offset (each cut line of the selected card
 // moved left by it, never past its end).
@@ -263,11 +279,7 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int) 
 		if r.w <= 0 || r.h <= 0 {
 			continue
 		}
-		heading := Line{{Text: kc.title, Role: RoleText, Bold: true}}
-		if k.level == workAtCols && c == k.col {
-			heading = Line{{Text: GlyphSelect + " " + kc.title, Role: RoleAccent, Bold: true}}
-		}
-		drawLine(screen, r.x, r.y, r.w, heading, k.level == workAtCols && c == k.col)
+		drawLine(screen, r.x, r.y, r.w, k.heading(c), false)
 		if c > 0 && r.x > x { // the column apart: a rule in the rules' colour, inset one row at each end (the person)
 			for i := 0; i < r.h; i++ {
 				var rule Line

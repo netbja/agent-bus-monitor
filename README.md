@@ -582,8 +582,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     from the same model, a dim rule between them: two lines a card, the title cut with `…` at the column's width (the focused card's cut text scrolls once, then
     shows cut again; the list's selected row does the same with its title). Its focus has
     levels, so it is never a trap: on its tab, `←→` step the tabs; `↓` (or Enter) goes to the
-    column selector, where `←→` choose a column (its heading marked); `↓` goes into it, whose
-    `↑↓ j k` stay in that column, `←→` reach the next column's card, Enter opens as on the rows;
+    column selector, where `←→` (or `tab`, `shift-tab`) choose a column; `↓` goes into it, whose
+    `↑↓ j k` stay in that column, `←→` (or `tab`, `shift-tab`) reach the next column's card, Enter
+    opens as on the rows; the column holding the cursor has its heading in the Work tab's violet;
     Esc climbs one level at a time back to the tab, and the digits change tab anywhere. The tab's
     pill fades while the focus is inside the columns. Too narrow for four, the
     columns stack two by two. `display.work_layout` (`C`) picks `auto` (the default), `list` or

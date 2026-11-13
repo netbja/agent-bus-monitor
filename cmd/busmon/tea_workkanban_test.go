@@ -262,7 +262,7 @@ func TestWorkKanbanReachedByArrowIsItsTab(t *testing.T) {
 	if m = keys(t, m, kRight); m.ui.focus != PanelActivity {
 		t.Fatalf("→ again: focus %v", m.ui.focus)
 	}
-	m = keys(t, m, '3', kDown, kDown, kTab) // Tab cycles the panels: back on Work by Tab, its tab too
+	m = keys(t, m, '3', kDown, kDown, kEsc, kEsc, kTab) // Tab at the tab cycles the panels (inside the columns it is →): back on Work by Tab, its tab too
 	for i := 0; i < 8 && m.ui.focus != PanelWork; i++ {
 		m = keys(t, m, kTab)
 	}
@@ -643,5 +643,95 @@ func TestKanbanColumnRules(t *testing.T) {
 		if want := 4 - c.bands; seps != want {
 			t.Errorf("%s: %d rules, want %d", c.name, seps, want)
 		}
+	}
+}
+
+// The person's follow-up (busmon-work-tab-header): inside the columns Tab
+// and shift-Tab move between them; at the tab they still move the focus to
+// the next panel (the binding kept where it meant something).
+func TestWorkKanbanTabMovesColumns(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	if r := keys(t, m, kTab); r.ui.focus == PanelWork {
+		t.Fatal("Tab at Work's tab: the focus stayed (the panel binding is gone)")
+	}
+	m.lists.work.ClearSelection()
+	foot := func(m Model) string {
+		return footerHintsOn(m.mode(), m.ui.focus, m.layout.Tier, 400, m.pageOffers, m.pageHint).text()
+	}
+	if !strings.Contains(foot(m), "tab focus") {
+		t.Fatalf("the tab's footer: %q", foot(m))
+	}
+	m = keys(t, m, kDown) // the selector, on For you
+	if !strings.Contains(foot(m), "tab column") {
+		t.Fatalf("the selector's footer: %q", foot(m))
+	}
+	m = keys(t, m, kTab)
+	if m.ui.focus != PanelWork || m.ui.workLevel != workAtCols || m.ui.workCol != 1 {
+		t.Fatalf("Tab at the selector: focus %v level %v col %d", m.ui.focus, m.ui.workLevel, m.ui.workCol)
+	}
+	m = keys(t, m, kBacktab, kBacktab) // wraps: Ideas
+	if m.ui.workCol != 3 || m.ui.focus != PanelWork {
+		t.Fatalf("shift-Tab twice: col %d", m.ui.workCol)
+	}
+	m = keys(t, m, kTab, kTab, kTab) // Next
+	m = keys(t, m, kDown)            // into Next's cards
+	if m.ui.workLevel != workAtCards || m.ui.workCol != 2 {
+		t.Fatalf("↓ into Next: level %v col %d", m.ui.workLevel, m.ui.workCol)
+	}
+	// → on a twin shell (the lists are shared behind pointers: never step the same one twice)
+	twin := kanbanShell(t, 130, 40)
+	twin.lists.work.ClearSelection()
+	want := keys(t, twin, kDown, kTab, kBacktab, kBacktab, kTab, kTab, kTab, kDown, kRight)
+	m = keys(t, m, kTab)
+	if m.ui.focus != PanelWork || m.ui.workCol != want.ui.workCol || m.lists.work.Selected() != want.lists.work.Selected() {
+		t.Fatalf("Tab in the cards: col %d %q, → gives col %d %q", m.ui.workCol, m.lists.work.Selected(), want.ui.workCol, want.lists.work.Selected())
+	}
+	back := keys(t, m, kBacktab)
+	if back.ui.workCol != 2 {
+		t.Fatalf("shift-Tab in the cards: col %d", back.ui.workCol)
+	}
+	// Esc climbs as built: the selector, then the tab, where Tab leaves Work.
+	m = keys(t, m, kEsc, kEsc)
+	if m.ui.workLevel != workAtTabs {
+		t.Fatalf("Esc Esc: level %v", m.ui.workLevel)
+	}
+	if r := keys(t, m, kTab); r.ui.focus == PanelWork {
+		t.Fatal("Tab back at the tab keeps Work")
+	}
+}
+
+// The column holding the cursor has its heading in the Work tab's colour,
+// a pill; no other column has, and none at the tab level.
+func TestWorkKanbanFocusedHeading(t *testing.T) {
+	pinLocal(t)
+	m := kanbanShell(t, 130, 40)
+	pilled := func(m Model) []int {
+		ix, iy, iw, ih := m.lists.work.inner()
+		g := m.grid()
+		var out []int
+		for c, r := range kanbanGrid(4, ix, iy, iw, ih) {
+			cell := g.at(r.x+1, r.y)
+			if cell.st.Pill && cell.st.Role == panelHue[PanelWork] && !cell.st.Selected {
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	if got := pilled(m); len(got) != 0 {
+		t.Fatalf("at the tab: headings %v pilled", got)
+	}
+	m.lists.work.ClearSelection()
+	m = keys(t, m, kDown, kTab, kTab)
+	if got := pilled(m); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("selector on Next: headings %v pilled", got)
+	}
+	m = keys(t, m, kDown)
+	if got := pilled(m); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("in Next's cards: headings %v pilled", got)
+	}
+	m = keys(t, m, kRight)
+	if got := pilled(m); len(got) != 1 || got[0] != m.ui.workCol {
+		t.Fatalf("→ to col %d: headings %v pilled", m.ui.workCol, got)
 	}
 }
