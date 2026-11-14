@@ -3,7 +3,6 @@
 package dispatch
 
 import (
-	"errors"
 	"fmt"
 
 	"golang.org/x/sys/unix"
@@ -11,27 +10,28 @@ import (
 
 // procStat reads pid from the process table (sysctl kern.proc.pid; macOS has
 // no /proc, self-repair step 10): its parent, and its start time in
-// microseconds since the epoch, fixed for the process's life. The table
-// lists no such pid (the sysctl returns no record: SysctlKinfoProc's EIO, or
-// a record of another pid) is ErrNoProcess; any other failure proves
-// nothing.
+// microseconds since the epoch, fixed for the process's life. The answer is
+// read as records (SysctlKinfoProcSlice), so zero records — the one proof of
+// a process gone, ErrNoProcess — is told from a malformed answer, which
+// proves nothing (kinfoVerdict).
 func procStat(pid int) (statFields, error) {
 	if pid <= 0 {
 		return statFields{}, fmt.Errorf("pid %d: %w", pid, ErrNoProcess)
 	}
-	k, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
-	switch {
-	case errors.Is(err, unix.EIO), err == nil && int(k.Proc.P_pid) != pid:
-		return statFields{}, fmt.Errorf("pid %d: %w", pid, ErrNoProcess)
-	case err != nil:
+	ks, err := unix.SysctlKinfoProcSlice("kern.proc.pid", pid)
+	pids := make([]int, len(ks))
+	for i := range ks {
+		pids[i] = int(ks[i].Proc.P_pid)
+	}
+	if err := kinfoVerdict(pid, pids, err); err != nil {
 		return statFields{}, err
 	}
-	t := k.Proc.P_starttime
+	t := ks[0].Proc.P_starttime
 	start := uint64(t.Sec)*1_000_000 + uint64(t.Usec)
 	if start == 0 {
 		return statFields{}, fmt.Errorf("pid %d: no start time", pid)
 	}
-	return statFields{ppid: int(k.Eproc.Ppid), start: start}, nil
+	return statFields{ppid: int(ks[0].Eproc.Ppid), start: start}, nil
 }
 
 func bootID() (string, error) { return unix.Sysctl("kern.bootsessionuuid") }

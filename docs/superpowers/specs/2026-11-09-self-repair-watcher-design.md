@@ -404,7 +404,8 @@ useful alone first, and nothing acts before step 7.
    reason ("no service manager to start at login").
 10. **macOS process identity**, so R1 can act where there is no `/proc`: built 2026-11-14.
     `dispatch.procStat` reads `sysctl kern.proc.pid` (parent, start time in microseconds since the
-    epoch); no record is `ErrNoProcess`; `BootID` is `kern.bootsessionuuid`; `Ancestors` and
+    epoch), read as records: zero records is `ErrNoProcess`, a malformed answer or a record of another
+    pid proves nothing (`kinfoVerdict`); `BootID` is `kern.bootsessionuuid`; `Ancestors` and
     `AncestorAmong` walk it; `up` passes the identity on macOS too.
 
 ## 8. The person's answers (2026-11-09)
