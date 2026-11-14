@@ -323,6 +323,23 @@ var Keys = []*Key{
 			}
 			return nil, "want auto, systemd, launchd or none"
 		}},
+	// agentbus attach's prefix key (herdr exit spec 4.6): <prefix> d detaches,
+	// <prefix> <prefix> sends one. f1-f12 or ctrl+<letter>, ctrl+\, ctrl+];
+	// never ctrl+c/d/h/i/j/m/q/s/z. Gated per client at each attach.
+	{Name: "attach.prefix", Env: "AGENT_BUS_ATTACH_PREFIX", Kind: String, Default: "f12", ReadBy: "agentbus attach, busmon",
+		Invalid: "agentbus attach refuses to start",
+		env: func(raw string) (any, envResult) {
+			if AttachPrefixAllowed(raw) {
+				return raw, envUse
+			}
+			return nil, envInvalid
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && AttachPrefixAllowed(s) {
+				return s, ""
+			}
+			return nil, "want f1-f12, ctrl+<letter>, ctrl+\\ or ctrl+] (not ctrl+c/d/h/i/j/m/q/s/z)"
+		}},
 	// Start at login (the person, Q8): the project's services start when the
 	// person logs in: agentbus up and agentbus service login apply it through
 	// service.LoginStart (step 9: systemd, launchd; refused elsewhere).

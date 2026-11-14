@@ -23,3 +23,8 @@ blocked = []
 authoritative = []
 helpers = []
 screen = []
+
+# The attach prefix (herdr exit spec 4.6, 4.9): F12 is not in the client's key table
+# (verified offline in the spec; step 3's f12-at-input probe confirms it per version).
+[keys]
+f12 = "free"
