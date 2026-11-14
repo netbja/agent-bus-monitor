@@ -107,6 +107,16 @@ func (m *Model) modeKey(k Key) tea.Cmd {
 	if m.rd.open() {
 		return m.readerKey(act, k)
 	}
+	return m.runPanelAct(act)
+}
+
+// runPanelAct is the panel half of modeKey (palette spec §4.1): ActQuit is
+// tea.Quit, any other action goes to panelKey. A key on the panels and a
+// palette command of the same action take this one path.
+func (m *Model) runPanelAct(act Action) tea.Cmd {
+	if act == ActQuit {
+		return tea.Quit
+	}
 	return m.panelKey(act)
 }
 
@@ -159,6 +169,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.servicesCmd(0)
 	case ActHealth:
 		cmd = m.push(page{kind: ovHealth})
+	case ActPalette:
+		m.openPalette()
 	case ActIdeas:
 		cmd = m.push(page{kind: ovIdeas})
 	case ActHelp:

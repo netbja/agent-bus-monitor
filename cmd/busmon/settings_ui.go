@@ -48,6 +48,7 @@ type settingsPage struct {
 	backup    *backupFacts
 	backupAsk bool   // Back up now waits for its y
 	running   string // the backup running, as Back up now's line says it ("" = none)
+	want      string // a key to select once the rows are read (/set <key>), then ""
 }
 
 // selectable is how many lines the selected group can select: its keys, then
@@ -148,6 +149,16 @@ func (m *Model) gotSettings(msg settingsMsg) {
 	}
 	s := p.set
 	s.groups, s.targets, s.refs, s.backup, s.loaded, s.busy, p.dirty = msg.groups, msg.targets, msg.refs, msg.backup, true, false, true
+	if s.want != "" { // /set <key>: its group, the focus on its row
+		for g, grp := range s.groups {
+			for r, row := range grp.Rows {
+				if row.Key == s.want {
+					s.group, s.keys, p.sel = g, true, r
+				}
+			}
+		}
+		s.want = ""
+	}
 	var refused *config.RefusedError
 	switch {
 	case msg.err != nil && errors.As(msg.err, &refused):
@@ -216,6 +227,12 @@ func (m *Model) applySettings(key string) string {
 func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 	p := m.rd.top()
 	s := p.set
+	if act == ActPalette { // not while a value is edited or a y is awaited (palette §2)
+		if s.edit == "" && s.confirm == "" && s.reset == nil && !s.backupAsk {
+			m.openPalette()
+		}
+		return nil
+	}
 	if !s.loaded || s.busy || len(s.groups) == 0 { // a key waits for the rows a write reads again
 		if k.Code == keyEscape {
 			m.pop()

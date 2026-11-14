@@ -647,6 +647,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | F3 `s` | services: dispatch, missions and the Redis broker as cards (state, pid, last error, log size; Redis version, uptime, memory, keys), read again every 5 s while open; `↑↓` (or `←→` when side by side) choose a card, Enter or `l` opens a service's log, Enter on Redis its page (memory, persistence, clients, each project's keys and streams, the port bind, its last log lines) |
 | F5 | project health: each check, its detail and remediation |
 | F6 | the project's ideas by state: tab one state, enter an idea, `a` add one, `s` set its state (you only; `y` confirms) |
+| Ctrl+P, or `/` at the start of the line | the command palette: every page and panel action by name (`/requests`, `/health`...), `/write <agent> <text>`, `/master <text>`, `/filter <words>`, `/set <key>`, `/tour`; best match first, Tab completes, Enter runs, `//` sends a `/`; the F1 help lists them all |
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
 | `p` `P` | the plan in a drawer (`d` shows what is done) |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |

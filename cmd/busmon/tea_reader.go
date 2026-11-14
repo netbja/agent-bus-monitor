@@ -908,6 +908,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return m.readerStep(p, act == ActNextItem)
 	case ActHealth:
 		return m.push(page{kind: ovHealth})
+	case ActPalette: // the page stays behind the line; a command closes it (§4.1)
+		m.openPalette()
+		return nil
 	case ActIdeas:
 		if p.kind == ovIdeas {
 			return nil

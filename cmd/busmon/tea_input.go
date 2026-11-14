@@ -93,7 +93,7 @@ func (m *Model) editLine(k Key) bool {
 // completions are the line's "@" completions (recipientCompletions: the @all
 // targets, plus the dormant agents while a shows them).
 func (m *Model) completions() []string {
-	if m.ui.line != lineMessage {
+	if m.ui.line != lineMessage || m.paletteOn() {
 		return nil
 	}
 	return recipientCompletions(m.ui.edit, m.names(m.ui.showAll))
@@ -109,6 +109,9 @@ func (m *Model) lineKey(act Action, k Key) tea.Cmd {
 	if m.ui.line.filterLike() {
 		m.editFilter(act, k)
 		return nil
+	}
+	if cmd, done := m.paletteKey(act, k); done {
+		return cmd
 	}
 	cands := m.completions()
 	switch {
@@ -137,6 +140,7 @@ func (m *Model) lineKey(act Action, k Key) tea.Cmd {
 		m.leaveLine(true)
 	case m.editLine(k):
 		m.ui.pick = 0
+		m.ui.palSel, m.ui.palMoved, m.ui.palHidden = 0, false, false // a / typed first opens the list
 	}
 	return nil
 }
@@ -154,6 +158,9 @@ func (m *Model) sendLine() tea.Cmd {
 	if text == "" {
 		m.ui.broadcastDraft, m.ui.edit, m.ui.tail, m.ui.msgDraft = "", "", 0, ""
 		return nil
+	}
+	if strings.HasPrefix(text, "//") { // a literal / (palette §4.3)
+		text = text[1:]
 	}
 	tgt, body, directed := parseDirected(text)
 	if directed && m.pauseGate(draftKey(tgt, body), pauseRetry{kind: retryLine}) {

@@ -15,7 +15,7 @@ var teaKeys = map[rune]KeyCode{
 	tea.KeyF1: keyF1, tea.KeyF2: keyF2, tea.KeyF3: keyF3, tea.KeyF4: keyF4, tea.KeyF5: keyF5, tea.KeyF6: keyF6,
 }
 
-var teaCtrl = map[rune]KeyCode{'a': keyCtrlA, 'c': keyCtrlC, 'e': keyCtrlE, 'o': keyCtrlO, 's': keyCtrlS, 't': keyCtrlT, 'u': keyCtrlU, 'v': keyCtrlV, 'w': keyCtrlW, 'y': keyCtrlY, 'z': keyCtrlZ}
+var teaCtrl = map[rune]KeyCode{'a': keyCtrlA, 'c': keyCtrlC, 'e': keyCtrlE, 'o': keyCtrlO, 'p': keyCtrlP, 's': keyCtrlS, 't': keyCtrlT, 'u': keyCtrlU, 'v': keyCtrlV, 'w': keyCtrlW, 'y': keyCtrlY, 'z': keyCtrlZ}
 
 // keyOfTea is a bubbletea key press as a Key.
 func keyOfTea(msg tea.KeyPressMsg) Key {
