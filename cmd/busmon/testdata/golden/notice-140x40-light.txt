@@ -37,4 +37,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- T triage   p P plan   tab focus   1-4 tabs   ↑↓ j k select   y copy   f auto-scroll   ! answer   F1 help   F5 health      ✓ coder reloaded 
+ T triage   p P plan   tab focus   / ^P commands   1-4 tabs   ↑↓ j k select   y copy   f filter   F1 help   F5 health      ✓ coder reloaded 

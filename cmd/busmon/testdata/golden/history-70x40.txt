@@ -37,4 +37,4 @@
 │                                                                    │
 │                                                                    │
 ╰────────────────────────────────────────────────────────────────────╯
- ↑↓ j k scroll   y copy   n p ←→ next/prev   / filter   o older       
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   f filter   o older       

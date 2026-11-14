@@ -70,7 +70,6 @@ const (
 	ActDelete
 	ActShowAll
 	ActConfirm
-	ActFollow
 	ActNextUnread
 	ActTriage // T: walk what waits for the person (busmon-queue-triage §4)
 	ActAsk
@@ -227,7 +226,7 @@ var (
 		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(keyBacktab)},
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
-		{Keys: "^P", Help: "the command palette: the line opened with /, every command searchable (also i then /)", Act: ActPalette, match: keyIs(keyCtrlP)},
+		{Keys: "/ ^P", Hint: "commands", Help: "the command palette: the line opened with /, every command searchable (also i then /)", Act: ActPalette, match: either(runeIs('/'), keyIs(keyCtrlP))},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
 		{Keys: "2", Act: ActTab2, Tiers: []Tier{TierMedium, TierNarrow}, match: runeIs('2')},
@@ -244,7 +243,7 @@ var (
 		{Keys: "end G", Help: "last row", Act: ActLast, Panels: notActivity, match: either(keyIs(keyEnd), runeIs('G'))},
 		{Keys: "enter", Hint: "detail", Alt: "v", Act: ActOpen, match: either(keyIs(keyEnter), runeIs('v'))},
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
-		{Keys: "f", Hint: "auto-scroll", Act: ActFollow, match: runeIs('f')},
+		{Keys: "f", Hint: "filter", Act: ActFilter, match: runeIs('f')},
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
 		{Keys: "T", Hint: "triage", Help: "triage: open what waits for you one item at a time, the next after each answer or send (n next, p back, esc ends); not t, the tour", Act: ActTriage, match: runeIs('T')},
 		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
@@ -256,7 +255,6 @@ var (
 		// request-priority §6: on one tracked request, written at once (the opposite key undoes it).
 		{Keys: "+ -", Hint: "priority", Help: "Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first", Act: ActPriorityUp, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('+')},
 		{Keys: "-", Act: ActPriorityDown, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('-')},
-		{Keys: "/", Hint: "filter", Act: ActFilter, match: runeIs('/')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
 		{Keys: "I", Help: "write in the compose window (several lines, Ctrl+S sends)", Act: ActComposeOpen, match: runeIs('I')},
@@ -354,7 +352,7 @@ var (
 	overlayBindings = []binding{
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
-		{Keys: "^P", Help: "the command palette, from any page", Act: ActPalette, match: keyIs(keyCtrlP)},
+		{Keys: "/ ^P", Help: "the command palette, from any page", Act: ActPalette, match: either(runeIs('/'), keyIs(keyCtrlP))},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
 		{Keys: "pgup", Help: "page up", Act: ActPageUp, match: keyIs(keyPgUp)},
@@ -367,7 +365,7 @@ var (
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread", Act: ActTour, match: runeIs('t')},
-		{Keys: "/", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words", Act: ActFilter, OnPage: true, match: runeIs('/')},
+		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words", Act: ActFilter, OnPage: true, match: runeIs('f')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},

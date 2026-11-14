@@ -4,7 +4,7 @@ KEYS
   shift-tab            focus the previous panel
   F5                   health
   F6                   ideas
-  ^P                   the command palette: the line opened with /, every command searchable (also i then /)
+  / ^P                 the command palette: the line opened with /, every command searchable (also i then /)
   1-3                  view
   1-4                  view
   ←→                   the lower panel's previous or next tab (Activity, Board, Work), wrapping
@@ -16,7 +16,7 @@ KEYS
   end G                last row
   enter v              detail
   y                    copy
-  f                    auto-scroll
+  f                    filter
   u                    Activity: the next unread message for you (●), wrapping
   T                    triage: open what waits for you one item at a time, the next after each answer or send (n next, p back, esc ends); not t, the tour
   ! F4                 answer
@@ -26,7 +26,6 @@ KEYS
   a                    show or hide the agents silent for more than a day
   o                    Requests: show or hide the answered threads and those older than 7 days
   + -                  Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first
-  /                    filter
   i :                  write
   I                    write in the compose window (several lines, Ctrl+S sends)
   esc                  back
@@ -58,7 +57,7 @@ KEYS
   an open detail
   F5                   health
   F6                   ideas
-  ^P                   the command palette, from any page
+  / ^P                 the command palette, from any page
   ↑↓ j k               scroll
   pgup                 page up
   pgdn                 page down
@@ -69,7 +68,7 @@ KEYS
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions (w with none open: write to master)
   t                    in the help: the first-launch tour again; in History (H): the selected entry's thread
-  /                    History (H): filter by @agent, a thread id or words
+  f                    History (H): filter by @agent, a thread id or words
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)
   a                    Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)
@@ -177,7 +176,7 @@ KEYS
   ↑ vX.Y.Z             header: a newer release exists - run ./setup.sh update (checked once a day; AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 
 COMMANDS
-  / at the start of the line (i or :), or Ctrl+P anywhere; Tab completes, Enter runs, // sends a /
+  / or Ctrl+P on the panels and pages, or / at the start of the line (i or :); Tab completes, Enter runs, // sends a /
   /requests                who owes whom an answer (F2 r); also /f2, /r, /req
   /services                the project's services, their cards and logs (F3 s); also /f3, /s, /svc
   /health                  the project's measured checks (F5); also /f5
@@ -191,11 +190,11 @@ COMMANDS
   /history                 the archive and the streams, newest first (H); also /H
   /about                   versions and the bus line (A); also /A, /version
   /unread                  the next unread item for you (u); also /u
-  /follow                  auto-scroll on or off (f); also /f, /autoscroll
+  /follow                  auto-scroll on or off (the setting display.follow); also /autoscroll
   /all                     show or hide the agents silent for a day (a); also /a
   /compose                 the compose window (I); also /I
   /sleep                   suspend or resume the project (asks first) (Z); also /Z
-  /filter [words]          filter Activity by @agent, a thread or words (/)
+  /filter [words]          filter Activity by @agent, a thread or words (f); also /f
   /answer                  answer an agent's open questions (! F4); also /f4, /!
   /write <agent> <text>    a message to an agent (as @agent text) (@); also /@
   /master <text>           a directive to master: ask for an agent's or master's action (w)

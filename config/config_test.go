@@ -25,7 +25,7 @@ func writeFile(t *testing.T, name, body string) string {
 func TestRegistryRows(t *testing.T) {
 	want := []string{
 		"waiting.popup_after", "waiting.snooze", "waiting.bell", "waiting.fade", "recap.auto_after",
-		"display.theme", "display.icons", "compose.at_path", "display.work_layout", "display.limit", "display.idle_hint_after", "display.idle_view_after", "identity.as", "updates.check",
+		"display.theme", "display.icons", "compose.at_path", "display.work_layout", "display.follow", "display.limit", "display.idle_hint_after", "display.idle_view_after", "identity.as", "updates.check",
 		"dispatch.context_alert", "dispatch.prompt_grace", "dispatch.focus_notice", "dispatch.quota", "dispatch.quota_warn",
 		"dispatch.quota_hold", "dispatch.quota_max_age", "dispatch.quota_long_hold", "dispatch.tokens",
 		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.idle_after", "dispatch.turn_stale_after", "dispatch.pop_retire", "dispatch.pop_retire_after", "dev", "dispatch.self_repair", "dispatch.self_repair_every", "dispatch.self_repair_per_day", "holder.scrollback", "dispatch.submit_wait", "dispatch.person_quiet", "services.start_at_login", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "suspend.wait", "suspend.auto_resume", "delivery.forge", "delivery.base", "backup.schedule", "backup.dir", "backup.keep", "backup.warn_after", "backup.age_recipient", "backup.after_command", "backup.after_env", "backup.after_timeout", "notify.on", "notify.targets", "notify.events", "notify.detail", "notify.delay", "notify.max_per_hour", "notify.quiet", "notify.quiet_exempt", "bus.report_max", "bus.report_full_max", "bus.verdict_max", "projects.delete_files", "projects.delete_backups",

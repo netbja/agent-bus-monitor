@@ -304,7 +304,7 @@ func TestShellLineCursorAfterDraftCompletionAndPaste(t *testing.T) {
 // The filter line edits the same way.
 func TestShellFilterLineEditsAtItsCursor(t *testing.T) {
 	pinLocal(t)
-	m := typeText(t, keys(t, shellWith(t, 140, 40, shellConfig{}, false), '/'), "@codr")
+	m := typeText(t, keys(t, shellWith(t, 140, 40, shellConfig{}, false), 'f'), "@codr")
 	m = keys(t, m, kLeft, 'e', kHome, kDelete, '#', kEnd, kBackspce, 'r')
 	if m.mode() != ModeFilter || lineShown(m) != "#coder|" {
 		t.Fatalf("the filter line: mode %d, %q", m.mode(), lineShown(m))

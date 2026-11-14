@@ -34,9 +34,9 @@ func helpText() []Line {
 	row(GlyphUp+" vX.Y.Z", "header: a newer release exists - run ./setup.sh update (checked once a day; AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)")
 	blank()
 
-	// The palette's own table (palette spec §4.1): / in the line, Ctrl+P anywhere.
+	// The palette's own table (palette spec §4.1, §8.1): / or Ctrl+P.
 	head("COMMANDS")
-	sub("/ at the start of the line (i or :), or Ctrl+P anywhere; Tab completes, Enter runs, // sends a /")
+	sub("/ or Ctrl+P on the panels and pages, or / at the start of the line (i or :); Tab completes, Enter runs, // sends a /")
 	cmdRow := func(k, v string) { b.text("  ").text(Fit(k, 24)).text(" " + v + "\n") }
 	for _, c := range paletteTable {
 		desc := c.Summary

@@ -144,10 +144,13 @@ func TestPaletteKeyHints(t *testing.T) {
 		t.Fatalf("no %s", name)
 		return ""
 	}
-	for name, want := range map[string]string{"requests": "F2", "health": "F5", "write": "@", "filter": "/", "set": "C", "tour": "F1 t", "master": "w"} {
+	for name, want := range map[string]string{"requests": "F2", "health": "F5", "write": "@", "filter": "f", "set": "C", "tour": "F1 t", "master": "w"} {
 		if got := hint(name); !strings.Contains(got, want) {
 			t.Errorf("%s: hint %q, want %q", name, got, want)
 		}
+	}
+	if got := hint("follow"); got != "" { // a setting now, no key (palette spec §8.3)
+		t.Errorf("follow: hint %q, want none", got)
 	}
 	for _, c := range paletteTable {
 		if c.Name == "master" && paletteKeyHint(c, true) != "" {

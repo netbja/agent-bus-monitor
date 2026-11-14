@@ -33,12 +33,16 @@ type listState struct {
 	anchor       string // keyed item the anchored viewport is pinned to; "" = follow
 	anchorOff    int    // rows between that item and the top row
 	tail, live   bool
-	keep         int // rows after the selection kept in view with it (the shell's expansion), in every mode
-	onChange     func(key string, live bool)
-	lastSeen     string // the last item drawn while live (holdSelection)
-	onOpen       func(key string)
-	kanban       *kanbanView // set: the rows are a Kanban's cards, drawn as columns (the Work tab)
-	mq           marquee     // the selected row's scroll (Work, marquee.go)
+	// noFollow is display.follow off (palette spec §8.3): a tail list never
+	// turns live; jump is an End/G (or the start) to do at the next draw:
+	// the newest rows shown once, then held there while items arrive.
+	noFollow, jump bool
+	keep           int // rows after the selection kept in view with it (the shell's expansion), in every mode
+	onChange       func(key string, live bool)
+	lastSeen       string // the last item drawn while live (holdSelection)
+	onOpen         func(key string)
+	kanban         *kanbanView // set: the rows are a Kanban's cards, drawn as columns (the Work tab)
+	mq             marquee     // the selected row's scroll (Work, marquee.go)
 }
 
 func (l *listState) SetHeader(h Line) { l.header = h }
@@ -99,13 +103,47 @@ func (l *listState) Select(key string) {
 }
 
 // Resume returns a tail-mode list to live: no selection, last rows shown.
+// With follow off it is a jump instead: the newest rows once, not live.
 func (l *listState) Resume() {
+	if l.tail && l.noFollow {
+		l.sel, l.live, l.anchor, l.jump = "", false, "", true
+		l.changed()
+		return
+	}
 	if !l.tail || (l.live && l.sel == "") {
 		return
 	}
 	l.sel, l.live, l.anchor = "", true, ""
 	l.changed()
 }
+
+// SetFollow is display.follow: on, a tail list is live (as today); off, it
+// leaves live and jumps once to the newest rows (answer d).
+func (l *listState) SetFollow(on bool) {
+	if l.noFollow == !on {
+		return
+	}
+	l.noFollow = !on
+	if !l.tail {
+		return
+	}
+	if on {
+		l.sel, l.live, l.anchor, l.jump = "", true, "", false
+		l.changed()
+		return
+	}
+	l.live, l.anchor, l.jump = false, "", l.sel == ""
+	if l.sel != "" {
+		l.setAnchor()
+	}
+	l.changed()
+}
+
+// Follows: display.follow is on (a tail list may be live).
+func (l *listState) Follows() bool { return !l.noFollow }
+
+// JumpPending: an End/G (or the start) with follow off, not drawn yet.
+func (l *listState) JumpPending() bool { return l.jump }
 
 // Pause leaves live in tail mode without selecting anything: the viewport
 // stays where it is (anchored to its top item) while new items arrive below.
@@ -164,7 +202,7 @@ func (l *listState) Move(delta int) {
 	// A3: moving down onto the newest item of a paused tail list resumes it
 	// (the selection stays, as a selection made while live does).
 	l.setSel(i)
-	if step > 0 && l.tail && !l.live && i == l.lastSelectable() {
+	if step > 0 && l.tail && !l.live && !l.noFollow && i == l.lastSelectable() {
 		l.live = true
 		l.changed()
 	}
@@ -198,7 +236,7 @@ func (l *listState) ScrollBy(delta int) {
 	case l.tail && l.live && delta < 0:
 		l.live = false
 		l.changed()
-	case l.tail && !l.live && delta > 0 && l.top >= max(0, len(l.items)-l.rows()):
+	case l.tail && !l.live && !l.noFollow && delta > 0 && l.top >= max(0, len(l.items)-l.rows()):
 		// A3: the wheel back at the bottom resumes auto-scroll.
 		l.sel, l.live, l.anchor = "", true, ""
 		l.changed()
@@ -315,6 +353,10 @@ func (l *listState) viewport() {
 	// A wheel over a kept expansion anchors the list, in auto-scroll too:
 	// the wheel wins until the next key.
 	wheeled := l.keep > 0 && l.anchor != ""
+	if l.jump && n > 0 { // follow off: End/G, or the start, shows the newest rows once
+		l.top, l.jump = maxTop, false
+		l.setAnchor()
+	}
 	switch {
 	case l.Live() && !wheeled:
 		l.top = maxTop

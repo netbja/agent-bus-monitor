@@ -510,7 +510,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 │    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›
- tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f auto-scroll   ! answer   / filter   i write   F1 help   F5 health
+ tab focus   1-4 tabs   ↑↓ j k select   enter detail   y copy   f filter   ! answer   / commands   i write   F1 help   F5 health
 ```
 
 </details>
@@ -567,8 +567,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   wrapping as herdr's tabs do; on an opened page `←` `→` still step its list):
   - **Activity** — one line per event (`time · from · to · type · message`) with a day
     separator. Enter expands a line in place, a second Enter opens it in the reader (`n`/`p`
-    step to the next or previous one). It scrolls live; `f` or a wheel scroll up stops it, `End`
-    resumes it. `/` filters (`@agent`, a thread id, words), `u` jumps to the next unread line.
+    step to the next or previous one). It scrolls live (the setting `display.follow`, on by default); a wheel scroll up pauses it,
+    `End` resumes it. `f` filters (`@agent`, a thread id, words), `/` opens the command palette,
+    `u` jumps to the next unread line.
   - **Board** — the shared task board: `task · owner · state · age`; Enter opens a task.
   - **Work** — who owes what, top-down: **YOU** (what waits on you: `answer` an ask, a waiting
     agent or a request to you; `merge` a PR both reviewers approved on its pushed head; `decide` a
@@ -651,7 +652,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
 | `p` `P` | the plan in a drawer (`d` shows what is done) |
 | `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
-| `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `/` filters, `t` keeps the selected entry's thread) |
+| `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `f` filters, `t` keeps the selected entry's thread) |
 | `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |
 
 **Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From

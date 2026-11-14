@@ -1,7 +1,7 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
  1 For you   2 Agents   3 Activity   4 Board   5 Work       
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 31 d…─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 32 d…─╮
 │  focus: keys · ← or tab: the tabs                        ▲
 │  Display   Attention   Identity   Notifications  …       ┃
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
@@ -10,11 +10,11 @@
 │      Fade and slide                  ● on                ┃
 │    • Theme                           ‹ dark ›            ┃
 │  ▶ • Icons                           ‹ nerd ›            ┃
-│     off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font               ┃
+│     off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font               │
 │      @ inserts paths as              ‹ absolute ›        │
 │      Work layout                     ‹ auto ›            │
+│      Activity auto-scroll            ● on                │
 │      Activity lines at start         25                  │
-│      Idle? hint after                10m                 │
-│      Screensaver (idle view) after   off                 ▼
+│      Idle? hint after                10m                 ▼
 ╰──────────────────────────────────────────────────────────╯
  ↑↓ j k move   ←→ panel   tab focus   enter edit            

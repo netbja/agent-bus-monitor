@@ -293,7 +293,8 @@ func TestLookupMatrix(t *testing.T) {
 		{"Backtab prev", ModeShell, PanelAgents, TierWide, kc(keyBacktab), ActPrevPanel},
 		{"Enter opens", ModeShell, PanelBoard, TierWide, kc(keyEnter), ActOpen},
 		{"v opens", ModeShell, PanelBoard, TierWide, rk('v'), ActOpen},
-		{"slash filters", ModeShell, PanelAgents, TierWide, rk('/'), ActFilter},
+		{"slash opens the palette", ModeShell, PanelAgents, TierWide, rk('/'), ActPalette},
+		{"f filters", ModeShell, PanelAgents, TierWide, rk('f'), ActFilter},
 		{"i composes", ModeShell, PanelAgents, TierWide, rk('i'), ActCompose},
 		{"colon composes", ModeShell, PanelAgents, TierWide, rk(':'), ActCompose},
 		{"at composes", ModeShell, PanelAgents, TierWide, rk('@'), ActComposeAt},
@@ -797,8 +798,9 @@ func TestShellEscLadder(t *testing.T) {
 	if act.Selected() == "" || !act.Live() {
 		t.Fatalf("Up: sel %q live %v", act.Selected(), act.Live())
 	}
-	if m = keys(t, m, 'f'); act.Selected() == "" || act.Live() {
-		t.Fatalf("f: sel %q live %v", act.Selected(), act.Live())
+	x, y := inPanel(m, PanelActivity)
+	if m = wheelAt(t, m, x, y, true); act.Selected() == "" || act.Live() { // a wheel-up pauses, the selection kept
+		t.Fatalf("wheel up: sel %q live %v", act.Selected(), act.Live())
 	}
 	if m = keys(t, m, kEsc); act.Selected() != "" || act.Live() {
 		t.Fatalf("Esc 1: sel %q live %v", act.Selected(), act.Live())
@@ -825,7 +827,7 @@ func TestShellDraftsSeparate(t *testing.T) {
 	if m = keys(t, m, kEsc); m.mode() != ModeShell || m.ui.msgDraft != "hello q1" {
 		t.Fatalf("Esc: mode %v draft %q", m.mode(), m.ui.msgDraft)
 	}
-	m = keys(t, typeText(t, keys(t, m, '/'), "xyz"), kEsc) // cancel the filter edit
+	m = keys(t, typeText(t, keys(t, m, 'f'), "xyz"), kEsc) // cancel the filter edit
 	if !m.ui.filter.empty() || m.ui.focus != PanelActivity {
 		t.Fatalf("filter cancel: %q focus %v", m.ui.filter.raw, m.ui.focus)
 	}

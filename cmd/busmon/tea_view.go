@@ -257,6 +257,10 @@ func (m *Model) fillLists() {
 		}
 		m.ui.pause.Pause(at)
 	}
+	if act.JumpPending() { // follow off, End/G or the start: what comes after the jump is new
+		m.ui.pause.Resume()
+		m.ui.pause.Pause(m.feed.seq)
+	}
 	m.ui.pause.Recount(admitted)
 	at, al := activityFrame(&m.ui.pause, len(admitted), events, m.ui.filter)
 	act.SetFrame(m.lowerTitle(PanelActivity, at), al)

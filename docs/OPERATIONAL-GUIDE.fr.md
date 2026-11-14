@@ -455,10 +455,15 @@ noms d'onglets et d'agents, sans modèle de projet) :
 - **La jauge `updated`** d'Agents (`●●●●●●●○○○ 3m`) indique la fraîcheur du dernier état déclaré
   par l'agent : pleine juste après la déclaration, vide au bout de 10 minutes, puis l'âge seul.
   Elle ne mesure pas un travail en cours.
-- **Défilement automatique d'Activity.** Le titre d'Activity indique `auto-scroll on` tant que les
-  nouvelles lignes défilent. `f` le coupe (la vue reste en place et compte ce qui arrive :
-  `auto-scroll off · 3 new`) et le rétablit ; se déplacer, cliquer ou ouvrir une ligne le laisse actif. La
-  molette vers le haut le coupe (vous relisez), `Fin` le rétablit. Le séparateur du jour s'affiche `Wed 2026-10-14 - (today)`.
+- **Défilement automatique d'Activity** : c'est un réglage, `display.follow` (actif par défaut ;
+  `C`, groupe display, ou `/follow` dans la palette de commandes). Actif, le titre d'Activity
+  indique `auto-scroll on` tant que les nouvelles lignes défilent ; se déplacer, cliquer ou ouvrir
+  une ligne parmi les plus récentes le laisse actif. La molette vers le haut, ou une sélection
+  au-dessus des lignes les plus récentes, met la vue en pause pour le moment (elle reste en place
+  et compte ce qui arrive : `auto-scroll off · 3 new`) ; `Fin` ou `G` la relance, comme `↓` sur la
+  dernière ligne ou la molette revenue en bas. Inactif, Activity ne défile jamais seul : les
+  nouvelles lignes sont comptées, et `Fin` ou `G` saute une fois à la plus récente. `/` ouvre la
+  palette de commandes (comme Ctrl+P) ; `f` ouvre la ligne de filtre. Le séparateur du jour s'affiche `Wed 2026-10-14 - (today)`.
 - **Les agents disparus** (une équipe remplacée, un rôle renommé) gardent leur dernier état
   déclaré : rien ne devine qu'un agent est mort. busmon retire du panneau Agents, et de `@all`, un
   agent silencieux depuis plus d'un jour qui n'écoute pas et à qui rien n'est dû ; le panneau les

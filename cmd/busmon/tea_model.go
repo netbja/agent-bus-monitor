@@ -206,6 +206,7 @@ func newShell(cfg shellConfig) Model {
 		m.feed.unread.floor = c.LastVisit
 	}
 	m.lists.activity.SetTail(true)
+	m.lists.activity.SetFollow(!cfg.settings.NoFollow) // display.follow (palette spec §8.3)
 	for _, p := range shellPanels {
 		m.lists.of(p).SetHue(panelHue[p])
 	}
@@ -326,6 +327,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotRecap(msg)
 	case settingsMsg:
 		m.gotSettings(msg)
+	case followMsg:
+		m.gotFollow(msg)
 	case projectMemoryMsg:
 		m.gotMemory(msg)
 	case projectsMsg:
