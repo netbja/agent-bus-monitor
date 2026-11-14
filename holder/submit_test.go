@@ -275,11 +275,32 @@ func TestSubmitReleaseDelivers(t *testing.T) {
 	if _, err := cl.Call(wake("a1b2c3")); codeOf(err) != CodeNotLanded {
 		t.Fatalf("not seen: %v", err)
 	}
-	send(t, v, FrameData, []byte("\r")) // closes the menu once released
-	send(t, v, FrameData, []byte("after\r"))
-	readNotice(t, v, func(n HoldNotice) bool { return n.Held == 7 && n.Kind == "wake" })
+	send(t, v, FrameData, []byte("\rab")) // closes the menu once released
+	send(t, v, FrameData, []byte("cd"))
+	readNotice(t, v, func(n HoldNotice) bool { return n.Held == 5 && n.Kind == "wake" })
 	control(t, v, Release{})
-	waitScreen(t, cl, "t1", "SUBMITTED: after")
+	waitScreen(t, cl, "t1", "> abcd")
+}
+
+// The hold's own end (spec 4.2): bytes held when a settled screen shows the
+// input empty are delivered then, in order, and the mark lifts.
+func TestSubmitEmptyInputReleases(t *testing.T) {
+	sock := submitHolder(t)
+	cl := dial(t, sock)
+	startFake(t, cl, "fake-dialog-close") // the menu closes by itself after 1.5 s
+	v := attached(t, sock, Attach{Term: "t1", Cols: 200, Rows: 30})
+	control(t, v, Focus{In: false})
+	time.Sleep(300 * time.Millisecond)
+	if _, err := cl.Call(wake("a1b2c3")); codeOf(err) != CodeNotLanded {
+		t.Fatalf("not seen: %v", err)
+	}
+	send(t, v, FrameData, []byte("xyz"))
+	readNotice(t, v, func(n HoldNotice) bool { return n.Held == 3 })
+	readNotice(t, v, func(n HoldNotice) bool { return !n.Active })
+	waitScreen(t, cl, "t1", "> xyz")
+	if _, err := cl.Call(wake("d4e5f6")); codeOf(err) == CodeLeftBehind {
+		t.Fatal("the mark stands on an empty input")
+	}
 }
 
 // The landing check reads this line's own token (agentbus#<nonce>): another
@@ -374,7 +395,10 @@ func TestHoldBackPressure(t *testing.T) {
 	tm.inMu.Lock()
 	tm.startHold("wake")
 	tm.inMu.Unlock()
-	first := bytes.Repeat([]byte("a"), holdMax)
+	first := make([]byte, holdMax) // distinct bytes: a reordering shows
+	for i := range first {
+		first[i] = byte('a' + i%26)
+	}
 	tm.deliver(first)
 	done := make(chan struct{})
 	go func() { tm.deliver([]byte("bc")); close(done) }()
@@ -391,5 +415,20 @@ func TestHoldBackPressure(t *testing.T) {
 	b := <-got
 	if len(b) != holdMax+2 || !bytes.Equal(b[:holdMax], first) || string(b[holdMax:]) != "bc" {
 		t.Fatalf("delivered %d bytes, tail %q", len(b), b[max(0, len(b)-3):])
+	}
+}
+
+// submit_wait bounds the landing check (spec 4.2 step 5): a screen that
+// never settles after the paste does not stretch it by settleMax.
+func TestSubmitWaitBoundsTheLanding(t *testing.T) {
+	sock := submitHolder(t, func(c *Config) { c.SubmitWait = 300 * time.Millisecond })
+	cl := dial(t, sock)
+	startFake(t, cl, "fake-busy")
+	start := time.Now()
+	if _, err := cl.Call(wake("a1b2c3")); codeOf(err) != CodeNotLanded {
+		t.Fatalf("a busy screen: %v", err)
+	}
+	if d := time.Since(start); d > 300*time.Millisecond+2*settleQuiet+settleMax/2 {
+		t.Fatalf("the submit took %v for a submit_wait of 300ms", d)
 	}
 }

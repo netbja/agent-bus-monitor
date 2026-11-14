@@ -17,7 +17,10 @@ import (
 //   - fake-dialog: a paste opens a menu (> 1. Yes) in place of the input;
 //   - fake-return: after a submit, it puts text back into its input;
 //   - fake-slow: a paste shows in the input only after 300 ms;
-//   - fake-stale: a paste shows another wake line's token in the input.
+//   - fake-stale: a paste shows another wake line's token in the input;
+//   - fake-busy: a paste never shows, and a spinner redraws every 20 ms;
+//   - fake-dialog-close: as fake-dialog, the menu closing by itself after
+//     1.5 s (past the tests' submit_wait), the input empty again.
 func fakeClient() {
 	mode := os.Getenv("FAKE")
 	old, err := term.MakeRaw(0)
@@ -60,14 +63,24 @@ func fakeClient() {
 			switch {
 			case strings.HasPrefix(s, "\x1b[200~"):
 				pasting, pasted, s = true, "", s[6:]
-				if mode == "fake-dialog" {
+				if mode == "fake-dialog" || mode == "fake-dialog-close" {
 					dialog = true
+				}
+				if mode == "fake-dialog-close" {
+					go func() { time.Sleep(1500 * time.Millisecond); dialog = false; draw() }()
 				}
 				continue
 			case strings.HasPrefix(s, "\x1b[201~"):
 				pasting, s = false, s[6:]
 				switch mode {
-				case "fake-noland", "fake-dialog":
+				case "fake-busy":
+					go func() {
+						for i := 0; ; i++ {
+							os.Stdout.WriteString(fmt.Sprintf("\x1b[1;1H%c", "|/-\\"[i%4]))
+							time.Sleep(20 * time.Millisecond)
+						}
+					}()
+				case "fake-noland", "fake-dialog", "fake-dialog-close":
 				case "fake-stale": // the input shows another wake's token, never this one
 					input += "[agentbus#000000] an older wake line"
 				case "fake-slow":

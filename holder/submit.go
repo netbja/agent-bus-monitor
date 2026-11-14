@@ -29,9 +29,9 @@ var clientProfiles = map[string]string{"claude-code": "claude", "codex": "codex"
 
 // settled is the screen once no output came for settleQuiet, as the
 // signatures read it (ANSI lines), with its modes; ok false when the program
-// kept writing past settleMax (an unsettled screen proves nothing).
-func (t *terminal) settled() (screenText string, bracketed, ok bool) {
-	deadline := time.Now().Add(settleMax)
+// kept writing past limit (an unsettled screen proves nothing).
+func (t *terminal) settled(limit time.Duration) (screenText string, bracketed, ok bool) {
+	deadline := time.Now().Add(limit)
 	for {
 		t.mu.Lock()
 		quiet := time.Since(t.outAt) >= settleQuiet
@@ -76,7 +76,7 @@ func (t *terminal) personActive(quiet time.Duration) bool {
 // readyFor: the client's input is empty and submittable on a settled screen
 // with bracketed paste on (steps 1 and 3; security S4).
 func (t *terminal) readyFor(sig agentstate.Signature) bool {
-	screen, bracketed, ok := t.settled()
+	screen, bracketed, ok := t.settled(settleMax)
 	return ok && bracketed && sig.EmptyInput(screen)
 }
 
@@ -127,12 +127,12 @@ func (s *Server) submit(t *terminal, f Submit) Reply {
 	if _, err := t.pty.Write([]byte("\x1b[200~" + line.Text() + "\x1b[201~")); err != nil {
 		return errReply(CodeFailed, "the paste: %v", err)
 	}
-	for deadline := time.Now().Add(s.cfg.SubmitWait); ; {
-		if screen, _, settled := t.settled(); settled && sig.InputHolds(screen, token) {
+	for deadline := time.Now().Add(s.cfg.SubmitWait); ; { // never past submit_wait, however busy the screen
+		if screen, _, settled := t.settled(max(time.Until(deadline), 0)); settled && sig.InputHolds(screen, token) {
 			_, _ = t.pty.Write([]byte("\r"))
 			return Reply{}
 		}
-		if time.Now().After(deadline) {
+		if !time.Now().Before(deadline) {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -173,7 +173,7 @@ func (t *terminal) leftBehindLoop(sig agentstate.Signature, ok bool) {
 		if !left || !ok {
 			continue
 		}
-		if screen, _, settled := t.settled(); settled && sig.EmptyInput(screen) {
+		if screen, _, settled := t.settled(settleMax); settled && sig.EmptyInput(screen) {
 			t.mu.Lock()
 			t.leftBehind = false
 			t.mu.Unlock()
