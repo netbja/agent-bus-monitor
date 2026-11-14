@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r10, spec only (r10: the journal's guarantee is stated as process crash or kill; power loss is out of scope, with the manual README as the fallback; master's decision on reviewer-codex's r8 finding, replacing r9's fsyncs. r8: the journal is write-ahead, so a crash between a file write and its record is covered; reviewer-codex on r7. r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r11, spec only (r11: files and skill directories the update creates or deletes, journalled with `absent`; foureyes on r9. r10: the journal's guarantee is stated as process crash or kill; power loss is out of scope, with the manual README as the fallback; master's decision on reviewer-codex's r8 finding, replacing r9's fsyncs. r8: the journal is write-ahead, so a crash between a file write and its record is covered; reviewer-codex on r7. r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -161,6 +161,16 @@ neither write a snapshot nor restore one.
        README lists every file with its snapshot copy, and the person picks.
      - The README states this limit in its first lines.
 
+     **Created and deleted files.** `before` or `after` may be the reserved value `absent`:
+     - a file the update creates (a skill a release adds, a settings file a migration adds) has
+       `before: absent`;
+     - a file it deletes (a skill a release drops) has `after: absent`.
+
+     Skills are journalled **per file**: a skill directory is its files, each line naming one, and
+     a directory added or dropped is its files added or dropped. An empty directory left behind is
+     removed with its last file. The manifest's `before` hashes and the snapshot copies cover every
+     file of every installed skill.
+
      A crash anywhere leaves a journal line **before** the file could have changed, so no written
      file is ever unrecorded. A line without `done` is not trusted to say whether the write
      happened; the current hash decides (the three cases below):
@@ -238,14 +248,16 @@ The steps:
 2. **Binaries and tree:**
    - `git -C <src>/repo worktree add <from-tree> <rev>` if the from tree is missing;
    - then, for each binary, `cp <snapshot>/builds/<name> <target>.tmp` and `mv <target>.tmp <target>`.
-3. **Settings and skills:** each file with its `before` and `after` SHA-256 (manifest and
-   journal), and the command to check it (`sha256sum`, or `shasum -a 256` on macOS). Three cases:
-   - **current = after ≠ before:** the update changed it and nobody touched it since. It is copied
-     back.
-   - **current = before:** the update did not change it, or it was already put back. Nothing to
-     do.
-   - **any other hash:** the person changed it after the update. The README says to compare it with
-     the snapshot copy and keep the one they want. Nothing is copied.
+3. **Settings and skills:** each file with its `before` and `after` (a SHA-256 or `absent`) from
+   the manifest and journal, and the commands to check it: `sha256sum`, or `shasum -a 256` on
+   macOS; `test -e` for `absent`. The cases:
+   - **current = after:** the update's result is untouched, so undo it:
+     - `rm <path>` when `before` is `absent`;
+     - `cp <snapshot copy> <path>.tmp && mv <path>.tmp <path>` otherwise, which also recreates a
+       file the update deleted.
+   - **current = before:** nothing to do.
+   - **anything else:** the person changed it after the update. The README says to compare it with
+     the snapshot copy, if one exists, and keep the one they want. Nothing is copied or removed.
 4. **Units:** copy each unit file back, then `systemctl --user daemon-reload` (or `launchctl
    bootstrap`). **Do not start them yet.** The old holder build's unit is the exception: start it
    if it is not active. It serves terminals, not the broker.
@@ -268,8 +280,15 @@ The manifest is then marked incomplete, and the restorer refuses it too.
    - The from tree is checked against the recorded rev.
    - A from tree that is missing or moved is recreated with `git worktree add` at that rev,
      **before** the binaries are swapped.
-2. **Settings:** the same three cases as the README (below), on the manifest's `before` and the
-   journal's `after` hash.
+2. **Settings and skills:** the same cases as the README (below), on the manifest's `before` and
+   the journal's `after` hash, with `absent` as a value. "current" is the file's hash, or `absent`
+   when it does not exist.
+   - **current = after:** the update's result is untouched, so it is undone. A file with
+     `before: absent` is deleted. Any other file is copied back from the snapshot, recreated if
+     `after` is `absent`.
+   - **current = before:** nothing to do.
+   - **anything else:** the person changed it since (edited, created again or removed). It is kept
+     and listed.
    - A file goes back **only when its current hash is the `after` the update left**.
    - A file the person changed after the update (neither `before` nor `after`) is kept as it is,
      and listed with the path of the snapshot copy. The person decides; nothing is overwritten
@@ -404,6 +423,12 @@ format (the `.migrate` file says whether it does).
   - **after the intent, before the rename:** the file is still at `before`, and nothing is
     restored;
   - **after the rename, before `done`:** the file is at `after`, and it is restored to `before`.
+
+  Plus created and deleted files, in the restorer and the README harness:
+  - a skill the release adds is removed by rollback;
+  - a skill it drops is recreated from the snapshot;
+  - a skill the person deleted after the update stays deleted and is listed;
+  - a settings file a migration created and the person then edited is kept.
 
   These are process kills, the guarantee's scope; power loss is not simulated (out of scope, §4.3
   step 4).
