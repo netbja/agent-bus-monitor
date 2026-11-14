@@ -167,12 +167,18 @@ one would put the item onto an unchecked `B'` (reviewer-codex). So a queue item 
 **`agentbus merge-queue merge <branch>`**, which binds both:
 
 1. It reads the item's record: head `H'` and checked base `B`. The PR's head must still be `H'`.
+   If `H'` is already in the base (the PR was merged another way), it does nothing more than
+   record that, remove the hidden ref, and say so.
 2. It builds the merge commit `M` locally: `git merge --no-ff H'` on `B`. `H'` already sits on `B`,
    so `M`'s tree is `H'`'s tree: exactly what the checks ran on.
-3. It pushes `M:refs/heads/<base>` **without force**. Git accepts it only as a fast-forward of the
-   base, that is, only if the base is still `B`. If anything else merged meanwhile, the push is
-   refused, nothing changed, and the item goes back to step 1 of §3.2 (rebase and check on the new
-   base).
+3. It pushes `M:refs/heads/<base>` with **`--force-with-lease=<base>:<B>`**: an exact
+   compare-and-swap on the base ref. A plain fast-forward push is not enough: it only checks that
+   the current tip is an ancestor of `M`, and a base fast-forwarded to `H'` (this PR merged by the
+   forge meanwhile) is one (reviewer-codex). With the lease, the push lands only if the base is
+   still exactly `B`; `M` being a descendant of `B`, it is still a fast-forward and never rewrites
+   the base. Otherwise it is refused and nothing changes: if `H'` is now in the base, step 1's
+   "already merged" case applies; if not, the item goes back to step 1 of §3.2 (rebase and check
+   on the new base).
 4. The forge marks the PR merged, as it does for any push that brings its head into the base. The
    hidden ref of §3.1 is removed.
 
@@ -233,7 +239,8 @@ costs a review.
   `--stable` would have carried.
 - **Merge onto the checked base:** `merge-queue merge` pushes `M` when the base is still `B`; with
   another merge pushed meanwhile, the push is refused, nothing changes, and the item is queued for
-  rebase again. A forge-button merge is counted as outside the queue.
+  rebase again. With the base fast-forwarded to `H'` itself (the PR merged by the forge), the push
+  is refused too, no redundant merge commit is made, and the item is recorded as merged. A forge-button merge is counted as outside the queue.
 - **Hot paths by file:** `cmd/busmon/keys.go` hot; a `cmd/busmon/` task that does not name it
   is not hot, and its diff touching `keys.go` is refused by `verify` and `deliver` until named.
 - **Old head readable:** after the queue's force push, a fresh clone without `H` fetches
