@@ -34,8 +34,10 @@ A task declares the paths it expects to touch: its **footprint**, a list of **un
 
 - **Unit (package granularity):** a Go file's unit is its directory, written with a trailing `/`
   (`cmd/busmon/`). A path under a `testdata/` directory belongs to the package above it. Any
-  other file is its own unit (`CLAUDE.md`, `docs/operator-notes.md`). A footprint entry is
-  normalised by the same rule.
+  other file is its own unit (`CLAUDE.md`, `docs/operator-notes.md`). For the overlap, a
+  footprint entry is normalised by the same rule. An entry may still name a Go file
+  (`cmd/busmon/keys.go`): it then counts as its package for the overlap, and as that file for
+  the hot paths (§2.4).
 - **Overlap:** two footprints overlap when they share a unit.
 - **Where it lives:**
   - in the plan task, a new optional field `footprint` (`plan/plan.go:40`, `Task`);
@@ -73,15 +75,23 @@ the new footprint with that of every in-flight task **of another target**.
 
 ### 2.4 Hot paths
 
-`delivery.hot_paths` (one registry entry in `config/keys.go`; a list of units; default empty):
-**two tasks that both touch a hot path never run in parallel**, even on different hot paths.
-Hot files conflict in cascades, and the registries and notes are usually edited together. For
-this project its value is §1's list, until each file is refactored.
+`delivery.hot_paths` (one registry entry in `config/keys.go`; a list of **file paths**, not units;
+default empty): **two tasks that both touch a hot path never run in parallel**, even on
+different hot paths. Hot files conflict in cascades, and the registries and notes are usually
+edited together. For this project its value is §1's list, until each file is refactored.
+
+- **Matched by file, never normalised to a package:** `cmd/busmon/keys.go` being hot does not
+  make every `cmd/busmon/` task hot. A task touches a hot path only when its footprint names that
+  file (§2.1).
+- **A hot file touched without being named** is caught as outside the footprint (§2.5):
+  `footprint verify` and `deliver` compare the diff with the named hot files as well as with the
+  units.
 
 ### 2.5 A diff that leaves its footprint
 
 - **Before asking for review,** the coder runs `agentbus footprint verify <task>`. It maps
-  `git diff --name-only origin/<base>...HEAD` to units and lists those outside the footprint. The
+  `git diff --name-only origin/<base>...HEAD` to units and lists those outside the footprint,
+  and every hot path in the diff that the footprint does not name. The
   coder amends the footprint (§2.1), which tells master and re-runs the check. The agent-bus coder
   skill says so.
 - **`agentbus deliver` enforces it:** for the request whose branch it pushes, a unit outside the
@@ -101,6 +111,10 @@ that of `git diff <merge-base(base, H')> H'`.
 
 - `deliver` and the merge queue's derivation compute it themselves, at the moment they need it,
   from the two SHAs. Nothing is stored or trusted, and no verdict is written for a reviewer.
+- **`H` must stay readable** after the branch is force-pushed to `H'`. Before that push, the queue
+  pushes `H` to a hidden ref, `refs/agentbus/approved/<H>`, removed once the item is merged. A
+  reader that lacks `H` (the chore's working directory, a fresh clone) fetches that ref first. If
+  `H` still cannot be read, nothing carries: the item needs review again (fail closed).
 - A rebase with a conflict, or any edit, changes the patch-id. Review is then needed again, as
   today.
 - This amends the forge-delivery decision. It is the person's call (§5, question 4).
@@ -112,7 +126,14 @@ turn: `agentbus merge-queue rebase --next`, run by **master**, an agent. It is n
 which never runs repository code.
 
 1. **The item:** the oldest approved item (`ApprovedAt`) whose branch does not contain the base
-   tip. None: nothing to do.
+   tip, and that is not held. None: nothing to do.
+   - **One ready item at a time.** While an item rebased by the queue waits for its merge,
+     `--next` rebases nothing else: a second rebase onto the same base would be checked against a
+     base the first merge then changes. The queue's throughput is therefore one merge per check
+     run, and that is intended. The coders keep working on their next tasks meanwhile.
+   - **Held:** an item the person or master does not want merged now is held with `agentbus
+     merge-queue hold <branch>` (and `release`), a set on the bus. `--next` skips it, and a held
+     ready item no longer blocks the next one.
 2. **Rebase** in a temporary worktree beside master's: `git rebase origin/<base>`.
    - **Conflict:** abort. A request goes to the item's coder: "rebase `<branch>`: conflict in
      `<files>`". The conflict is recorded (§4), and the item waits for the coder's new head.
@@ -123,8 +144,14 @@ which never runs repository code.
    command, run in that worktree. This project's value is `go build ./... && go vet ./... && go
    test ./... -count=1`. With it empty, no check runs and the queue says so. Red: no push; a
    request to the coder with the output's tail; recorded.
-5. **Push** `H':refs/heads/<branch>` with `--force-with-lease=<branch>:<H>`, so a push by someone
-   else in between is not overwritten. Record the rebase (§4). The worktree is removed.
+5. **Push** `H` to `refs/agentbus/approved/<H>` (§3.1), then `H':refs/heads/<branch>` with
+   `--force-with-lease=<branch>:<H>`, so a push by someone else in between is not overwritten.
+   Record the rebase (§4). The worktree is removed.
+   - **The coder's worktree is now stale.** The queue tells the item's coder, without waking it:
+     "`<branch>` rebased to `<H'>` by the queue". From approval to merge, the branch belongs to
+     the queue: the coder makes no commit on it (coder skill). If the item is rejected later, the
+     coder first takes the queue's head, `git fetch` then `git reset --keep origin/<branch>`
+     (`--keep` refuses to drop uncommitted work), and then fixes it.
 6. The item is ready for the person's merge, or for master's under `delivery.automerge`. It is
    merged with `--match-head-commit <H'>`. Master runs `--next` again only after that merge, so
    **each item is checked on the base it is merged onto**: the checked result is the merged
@@ -174,11 +201,17 @@ costs a review.
 - **Patch-id carry:** on a disposable git repository, a clean rebase onto a moved base keeps the
   approval for `deliver` and the queue. A rebase that resolves a conflict, or adds a line, does
   not.
+- **Hot paths by file:** `cmd/busmon/keys.go` hot; a `cmd/busmon/` task that does not name it
+  is not hot, and its diff touching `keys.go` is refused by `verify` and `deliver` until named.
+- **Old head readable:** after the queue's force push, a fresh clone without `H` fetches
+  `refs/agentbus/approved/<H>` and the carry holds. With the ref deleted, nothing carries.
 - **Queue rebase:** on a fake forge and a disposable repository:
   - a conflict aborts, sends the request and records the files;
   - red checks never push;
   - a clean rebase pushes with the lease, and a branch moved meanwhile is not overwritten;
-  - `--next` takes the oldest approved item.
+  - `--next` takes the oldest approved item; while one ready item waits, it rebases nothing; a
+    held item is skipped;
+  - the coder is told of the rebase.
 - **Stats:** from scripted records and a scripted git log, the three numbers; busmon's line in a
   golden.
 
