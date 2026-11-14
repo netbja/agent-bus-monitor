@@ -78,7 +78,12 @@ func TestKeyScanner(t *testing.T) {
 		// never keys for the program (reviewer-codex).
 		"focus out and in":    {"f12", false, []string{"ab\x1b[Ocd\x1b[I"}, evs(send("ab"), ctl(keyFocusOut), send("cd"), ctl(keyFocusIn))},
 		"focus while pending": {"f12", false, []string{f12 + "\x1b[O" + "d"}, evs(ctl(keyPending), ctl(keyFocusOut), ctl(keyDetach))},
-		"escape then text":    {"f12", false, []string{"\x1b", "a"}, evs(send("\x1ba"))},
+		// The release or repeat of the key that ended a pending prefix never
+		// reaches the program (a release for a press it never saw; foureyes).
+		"release of the second key dropped": {"f12", true, []string{f12k + "\x1b[114;1:1u", "\x1b[114;1:3u", "z"}, evs(ctl(keyPending), ctl(keyRelease), send("z"))},
+		"repeat then release dropped":       {"f12", false, []string{f12k + "\x1b[113u\x1b[113;1:2u\x1b[113;1:3u", "z"}, evs(ctl(keyPending), ctl(keyBell), send("z"))},
+		"another key's release passes":      {"f12", false, []string{f12k + "\x1b[113u\x1b[97;1:3u"}, evs(ctl(keyPending), ctl(keyBell), send("\x1b[97;1:3u"))},
+		"escape then text":                  {"f12", false, []string{"\x1b", "a"}, evs(send("\x1ba"))},
 	} {
 		if got := merged(feed(t, c.key, c.held, c.chunks...)); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s:\n got %v\nwant %v", name, got, c.want)
@@ -86,5 +91,16 @@ func TestKeyScanner(t *testing.T) {
 	}
 	if _, err := newKeyScanner("ctrl+c"); err == nil {
 		t.Error("ctrl+c taken as a prefix")
+	}
+}
+
+// The program may turn focus reporting off on the outer terminal (?1004l in
+// its output); attach turns it back on, or the holder would never learn of a
+// blur again (foureyes).
+func TestFocusReportingReasserted(t *testing.T) {
+	for out, want := range map[string]bool{"hello": false, "a\x1b[?1004lb": true, "\x1b[?1004h": false, "\x1b[?1004;1049l": true, "\x1b[?10040l": false} {
+		if got := turnsFocusOff([]byte(out)); got != want {
+			t.Errorf("%q: %v, want %v", out, got, want)
+		}
 	}
 }
