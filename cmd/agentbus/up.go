@@ -661,24 +661,34 @@ func holderContext(d upDeps, workdir string, env map[string]string) {
 	set(service.HolderManifestEnv, manifest)
 }
 
-// holderReadyWait bounds waitHolder: 50 probes, 100 ms apart.
+// The readiness wait: one deadline for the whole wait, probes 100 ms apart;
+// each real probe is a dial bounded by holderProbeTimeout, so a socket that
+// accepts and stalls cannot stretch it (reviewer-codex).
 const (
-	holderReadyTries = 50
-	holderReadyEvery = 100 * time.Millisecond
+	holderReadyWithin  = 5 * time.Second
+	holderReadyEvery   = 100 * time.Millisecond
+	holderProbeTimeout = 500 * time.Millisecond
 )
 
-// waitHolder probes until the holder answers, at most holderReadyTries times.
-func waitHolder(ready func() bool, sleep func(time.Duration)) bool {
+// waitHolder probes until the holder answers or the deadline passes, on now's
+// clock (nil: the real one).
+func waitHolder(ready func() bool, sleep func(time.Duration), now func() time.Time) bool {
 	if sleep == nil {
 		sleep = time.Sleep
 	}
-	for i := 0; i < holderReadyTries; i++ {
+	if now == nil {
+		now = time.Now
+	}
+	deadline := now().Add(holderReadyWithin)
+	for {
 		if ready() {
 			return true
 		}
+		if !now().Add(holderReadyEvery).Before(deadline) {
+			return false
+		}
 		sleep(holderReadyEvery)
 	}
-	return ready()
 }
 
 // expandWorkDir is a template's working_dir as up reads it elsewhere: ~ is
@@ -724,7 +734,7 @@ func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io
 	// before the socket listens, and the dispatcher started next must find it
 	// answering. Bounded: a holder that never answers is reported by the
 	// holder check, and the services start anyway.
-	if !waitHolder(func() bool { return answers(key) }, d.Sleep) {
+	if !waitHolder(func() bool { return answers(key) }, d.Sleep, d.Now) {
 		fmt.Fprintf(stdout, "holder: build %s started as a %s service, not answering yet (agentbus health holder)\n", raw, m.Name())
 	} else {
 		fmt.Fprintf(stdout, "holder: build %s started as a %s service (no agent runs on it yet)\n", raw, m.Name())
@@ -808,7 +818,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 			if err != nil {
 				return false
 			}
-			c, err := net.DialTimeout("unix", sock, time.Second)
+			c, err := net.DialTimeout("unix", sock, holderProbeTimeout)
 			if err != nil {
 				return false
 			}

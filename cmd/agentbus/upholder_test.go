@@ -377,8 +377,9 @@ func TestUpHolderNeverReady(t *testing.T) {
 	deps.Services = func() (service.Manager, string) { return hm, "" }
 	deps.HolderBuild = func() string { return "v9" }
 	deps.HolderAnswers = func(string, string) bool { return false }
-	waited := time.Duration(0)
-	deps.Sleep = func(d time.Duration) { waited += d }
+	waited, now := time.Duration(0), time.Unix(1000, 0)
+	deps.Now = func() time.Time { return now }
+	deps.Sleep = func(d time.Duration) { waited += d; now = now.Add(d) }
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
@@ -388,5 +389,25 @@ func TestUpHolderNeverReady(t *testing.T) {
 	}
 	if !u.m.saw("start demo dispatch") || !strings.Contains(out.String(), "not answering yet") {
 		t.Fatalf("calls %v out %q", u.m.calls, out.String())
+	}
+}
+
+// One deadline bounds the whole wait, a slow probe included: a socket that
+// accepts but stalls cannot multiply it (reviewer-codex).
+func TestWaitHolderHasOneDeadline(t *testing.T) {
+	now := time.Unix(1000, 0)
+	clock := func() time.Time { return now }
+	probes := 0
+	stalled := func() bool { probes++; now = now.Add(2 * time.Second); return false }
+	if waitHolder(stalled, func(d time.Duration) { now = now.Add(d) }, clock) {
+		t.Fatal("a stalled holder read as ready")
+	}
+	if spent := now.Sub(time.Unix(1000, 0)); spent > 7*time.Second || probes > 4 {
+		t.Fatalf("waited %v over %d probes, want about 5 s", spent, probes)
+	}
+	now, probes = time.Unix(1000, 0), 0
+	ready := func() bool { probes++; return probes == 2 }
+	if !waitHolder(ready, func(d time.Duration) { now = now.Add(d) }, clock) || probes != 2 {
+		t.Fatalf("ready at the second probe: %d probes", probes)
 	}
 }
