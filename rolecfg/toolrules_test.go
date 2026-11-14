@@ -551,3 +551,36 @@ func TestBusmonDestructiveDenies(t *testing.T) {
 		}
 	}
 }
+
+// SpawnRules are LaunchRules' agent-spawn rules as role names: allow, and ask
+// (the person approves); none for a role that does not pop (roles doctor,
+// roles-doctor-pop-rules).
+func TestSpawnRules(t *testing.T) {
+	m, err := Load(writeConfig(t, legacyRules))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allow, ask, err := m.SpawnRules("master")
+	if err != nil || !reflect.DeepEqual(allow, []string{"coder", "architect"}) || !reflect.DeepEqual(ask, []string{"deploy"}) {
+		t.Fatalf("master: allow %v ask %v err %v", allow, ask, err)
+	}
+	if allow, ask, err := m.SpawnRules("coder"); err != nil || allow != nil || ask != nil {
+		t.Fatalf("coder pops nothing: allow %v ask %v err %v", allow, ask, err)
+	}
+	if _, _, err := m.SpawnRules("ghost"); err == nil {
+		t.Fatal("an unknown role: no error")
+	}
+}
+
+// A role that pops with no other role to pop has empty lists, not nil: it
+// still pops (reviewer-codex).
+func TestSpawnRulesPopsAlone(t *testing.T) {
+	m, err := Load(writeConfig(t, "[roles.master]\nmodel = \"sonnet\"\npermission = \"acceptEdits\"\ntier = \"boot\"\npops = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allow, ask, err := m.SpawnRules("master")
+	if err != nil || allow == nil || ask == nil || len(allow)+len(ask) != 0 {
+		t.Fatalf("allow %#v ask %#v err %v", allow, ask, err)
+	}
+}
