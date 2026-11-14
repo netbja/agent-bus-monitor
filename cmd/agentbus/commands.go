@@ -483,6 +483,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus start", "agentbus start ~/src/shop --yes", "agentbus start --roles master,coder,foureyes:review"},
 	},
 	{
+		Name: "holder", Usage: []string{"holder [--env <file>]"},
+		Summary:  "serve the project's agent terminals (what a holder unit runs; agentbus up installs it)",
+		Examples: []string{"agentbus -p demo holder --env ~/.config/agentbus/services/demo.env"},
+	},
+	{
 		Name: "down", NoProject: true, Usage: []string{"down <project>"},
 		Summary:  "stop a project's services; deletes nothing",
 		Examples: []string{"agentbus down demo"},
@@ -493,12 +498,14 @@ var commands = []cli.Command{
 			"service logs [dispatch|missions] [-n 50]",
 			"service list | service remove --all",
 			"service login",
+			"service restart holder --kill-agents",
 		},
 		Summary: "the project's user services (systemd --user, launchd)",
 		Flags: []cli.Flag{
 			{Long: "all", Short: 'a', Help: "remove: every project's services"},
 			{Long: "env", Arg: "<file>", Help: "service run (units only): the environment file"},
 			{Long: "stderr", Help: "service run (units only): log to stderr"},
+			{Long: "kill-agents", Help: "restart holder: kills every agent the holder holds (refused without it)"},
 		},
 		Examples: []string{"agentbus -p demo service status", "agentbus -p demo service logs dispatch -n 100", "agentbus service list"},
 	},

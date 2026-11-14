@@ -123,7 +123,7 @@ func TestUninstallAsks(t *testing.T) {
 			t.Errorf("missing %q in %s", l, out.String())
 		}
 	}
-	if !strings.Contains(shown.String(), "    ? stop and remove the 2 project services (dispatch/missions units; their data and logs are kept)? [Y/n] ") ||
+	if !strings.Contains(shown.String(), "    ? stop and remove the 2 project services (dispatch/missions/holder units; their data and logs are kept)? [Y/n] ") ||
 		!strings.Contains(shown.String(), "    ? remove the Redis container AND its data (every project on the bus)? [y/N] ") {
 		t.Fatalf("%q", shown.String())
 	}
@@ -208,5 +208,22 @@ func TestUninstallRechecksTheOwnerBeforeComposing(t *testing.T) {
 		if !strings.Contains(out.String(), "    ! Redis broker: the broker belongs to /data/projects/agent-bus-monitor: start or stop it from there.\n") || strings.Contains(out.String(), "Redis: ") {
 			t.Fatalf("purge=%v %q", purge, out.String())
 		}
+	}
+}
+
+// A holder is a project service too: an uninstall that finds only holders
+// still stops and removes them (foureyes).
+func TestUninstallRemovesAHolderOnlyInstall(t *testing.T) {
+	in, out, f, _ := uninstallWorld(t)
+	bin := in.Opt.BinDir
+	f.cmds[bin+"/agentbus service list"] = fakeCmd{out: "demo                     holder    active, build v1\n"}
+	tty := fakeTTY{strings.NewReader("y\nn\nn\nn\nn\nn\nn\nn\nn\nn\nn\n"), &bytes.Buffer{}}
+	in.Uninstall(context.Background(), &Prompter{TTY: tty})
+	ran := false
+	for _, r := range f.ran {
+		ran = ran || r == bin+"/agentbus service remove --all"
+	}
+	if !ran || !strings.Contains(out.String(), "removed 1 project services") {
+		t.Fatalf("ran %q\n%s", f.ran, out.String())
 	}
 }

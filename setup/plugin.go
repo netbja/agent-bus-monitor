@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -330,6 +331,14 @@ func (in *Installer) serviceLines(ctx context.Context) []string {
 	return nil
 }
 
+// isHolderLine: a holder instance, by kind (herdr exit spec 4.4a). It makes
+// no broker connection and a restart kills every agent it holds, so neither
+// a password change nor an upgrade restarts it, nor suggests it.
+func isHolderLine(l string) bool {
+	f := strings.Fields(l)
+	return len(f) >= 2 && (f[1] == "holder" || strings.HasPrefix(f[1], "holder."))
+}
+
 func isExec(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir() && st.Mode()&0o111 != 0
@@ -341,7 +350,7 @@ func (in *Installer) ServicesHint(ctx context.Context) {
 	if in.Opt.DryRun {
 		return
 	}
-	lines := in.serviceLines(ctx)
+	lines := slices.DeleteFunc(in.serviceLines(ctx), isHolderLine)
 	if len(lines) == 0 {
 		return
 	}

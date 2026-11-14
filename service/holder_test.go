@@ -44,7 +44,8 @@ func TestSystemdHolderUnit(t *testing.T) {
 			t.Fatalf("%s: %v %v", path, st.Mode(), err)
 		}
 	}
-	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p}); err != nil {
+	env, work := filepath.Join(p.ConfigHome, "agentbus", "demo.env"), "/work/100% demo"
+	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p, EnvFile: env, WorkDir: work}); err != nil {
 		t.Fatal(err)
 	}
 	name := HolderUnitName("demo", key)
@@ -59,7 +60,8 @@ func TestSystemdHolderUnit(t *testing.T) {
 	for _, want := range []string{
 		"X-Agentbus-Project=demo\n", "X-Agentbus-Build=" + key + "\n", "X-Agentbus-Build-Raw=" + raw + "\n",
 		"StartLimitIntervalSec=300\n", "StartLimitBurst=5\n",
-		`ExecStart="` + bin + `" "--project" "demo" "holder"` + "\n",
+		`ExecStart="` + bin + `" "--project" "demo" "holder" "--env" "` + env + `"` + "\n",
+		"WorkingDirectory=/work/100%% demo\n",
 		"Restart=on-failure\n", "RestartSec=2\n", "KillMode=control-group\n",
 	} {
 		if !strings.Contains(u, want) {
@@ -90,7 +92,8 @@ func TestLaunchdHolderJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p}); err != nil {
+	env, work := filepath.Join(p.ConfigHome, "agentbus", "demo.env"), "/work/a&b"
+	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p, EnvFile: env, WorkDir: work}); err != nil {
 		t.Fatal(err)
 	}
 	label := HolderLabel("demo", key)
@@ -101,7 +104,8 @@ func TestLaunchdHolderJob(t *testing.T) {
 	pl := string(b)
 	for _, want := range []string{
 		"<key>Label</key><string>com.agentbus.holder.demo." + key + "</string>",
-		"<string>" + bin + "</string><string>--project</string><string>demo</string><string>holder</string>",
+		"<string>" + bin + "</string><string>--project</string><string>demo</string><string>holder</string><string>--env</string><string>" + env + "</string></array>",
+		"<key>WorkingDirectory</key><string>/work/a&amp;b</string>",
 		"<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>",
 		"<key>ThrottleInterval</key><integer>10</integer>",
 		"<key>XAgentbusProject</key><string>demo</string>",
@@ -128,7 +132,7 @@ func TestHolderInstallRefusesAnotherRaw(t *testing.T) {
 	if _, err := InstallHolderBinary(p, raw, fakeExe(t, "A")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p}); err != nil {
+	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p, EnvFile: "/e/demo.env", WorkDir: "/w"}); err != nil {
 		t.Fatal(err)
 	}
 	// A raw id that reduces alike but differs: forge one with the same key
@@ -136,7 +140,7 @@ func TestHolderInstallRefusesAnotherRaw(t *testing.T) {
 	unit := filepath.Join(p.ConfigHome, "systemd", "user", HolderUnitName("demo", key))
 	b, _ := os.ReadFile(unit)
 	os.WriteFile(unit, []byte(strings.Replace(string(b), "X-Agentbus-Build-Raw="+raw, "X-Agentbus-Build-Raw=v1+ABC", 1)), 0o644)
-	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p}); err == nil || !strings.Contains(err.Error(), "recorded") {
+	if _, err := m.InstallHolder(HolderSpec{Project: "demo", Raw: raw, Paths: p, EnvFile: "/e/demo.env", WorkDir: "/w"}); err == nil || !strings.Contains(err.Error(), "recorded") {
 		t.Fatalf("unit: %v", err)
 	}
 	os.WriteFile(filepath.Join(HolderBinDir(p, key), "build-raw"), []byte("v1+ABC\n"), 0o600)
@@ -163,7 +167,7 @@ func install(t *testing.T, m HolderManager, p Paths, project, raw string) string
 	if _, err := InstallHolderBinary(p, raw, fakeExe(t, raw)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.InstallHolder(HolderSpec{Project: project, Raw: raw, Paths: p}); err != nil {
+	if _, err := m.InstallHolder(HolderSpec{Project: project, Raw: raw, Paths: p, EnvFile: "/e/demo.env", WorkDir: "/w"}); err != nil {
 		t.Fatal(err)
 	}
 	return BuildKey(raw)
@@ -478,5 +482,73 @@ func TestHolderGCWithTheBinaryGone(t *testing.T) {
 	os.RemoveAll(HolderBinDir(p, a))
 	if removed, err := GCHolders(m, p, "demo", cur, func(string) bool { return false }); err != nil || !slices.Equal(removed, []string{a}) {
 		t.Fatalf("removed %v, err %v", removed, err)
+	}
+}
+
+// The holder starts every agent: a unit without the project's environment
+// file or working directory could not launch one, so either missing (or
+// relative) is refused before anything is written.
+func TestHolderInstallNeedsEnvAndWorkDir(t *testing.T) {
+	p := holderPaths(t)
+	m := Systemd{Run: (&fakeRun{}).run, Paths: p}
+	raw := "v1"
+	if _, err := InstallHolderBinary(p, raw, fakeExe(t, "A")); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []HolderSpec{
+		{Project: "demo", Raw: raw, Paths: p, WorkDir: "/w"},
+		{Project: "demo", Raw: raw, Paths: p, EnvFile: "/e", WorkDir: "w"},
+		{Project: "demo", Raw: raw, Paths: p, EnvFile: "/e\n[Service]", WorkDir: "/w"},
+	} {
+		if _, err := m.InstallHolder(s); err == nil {
+			t.Errorf("installed %+v", s)
+		}
+	}
+	if units, _ := m.HolderUnits("demo"); len(units) != 0 {
+		t.Fatalf("a refused spec wrote %+v", units)
+	}
+}
+
+// RestartHolder restarts exactly its build's instance (the caller has the
+// person's --kill-agents): systemd restart of that unit, launchd kickstart -k
+// of that job.
+func TestRestartHolder(t *testing.T) {
+	p := holderPaths(t)
+	f := &fakeRun{}
+	if err := (Systemd{Run: f.run, Paths: p}).RestartHolder("demo", "v1.aaa.0123456789"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.calls, []string{"--user restart " + HolderUnitName("demo", "v1.aaa.0123456789")}) {
+		t.Fatalf("systemd calls %v", f.calls)
+	}
+	g := &fakeRun{}
+	if err := (Launchd{Run: g.run, Paths: p, UID: 501}).RestartHolder("demo", "k1"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(g.calls, []string{"kickstart -k gui/501/" + HolderLabel("demo", "k1")}) {
+		t.Fatalf("launchd calls %v", g.calls)
+	}
+}
+
+// StopHolder stops exactly its build's instance (down, remove): systemd stop
+// of that unit; launchd bootout of a loaded job, nothing for one not loaded.
+func TestStopHolder(t *testing.T) {
+	p := holderPaths(t)
+	f := &fakeRun{}
+	if err := (Systemd{Run: f.run, Paths: p}).StopHolder("demo", "v1.aaa.0123456789"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.calls, []string{"--user stop " + HolderUnitName("demo", "v1.aaa.0123456789")}) {
+		t.Fatalf("systemd calls %v", f.calls)
+	}
+	g := &fakeRun{answers: map[string]string{}, fails: map[string]bool{}}
+	ld := Launchd{Run: g.run, Paths: p, UID: 501}
+	g.answers["print gui/501/"+HolderLabel("demo", "k1")] = "state = running"
+	if err := ld.StopHolder("demo", "k1"); err != nil || !g.saw("bootout gui/501/"+HolderLabel("demo", "k1")) {
+		t.Fatalf("a loaded job: %v %v", err, g.calls)
+	}
+	g.out = map[string]fakeOut{"print gui/501/" + HolderLabel("demo", "k2"): {"Could not find service", true}}
+	if err := ld.StopHolder("demo", "k2"); err != nil || g.saw("bootout gui/501/"+HolderLabel("demo", "k2")) {
+		t.Fatalf("not loaded: %v %v", err, g.calls)
 	}
 }

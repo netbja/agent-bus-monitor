@@ -166,6 +166,11 @@ func main() {
 		}
 		os.Exit(runServiceCmd(project, args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
 	}
+	// holder is what a holder unit runs (herdr exit, spec 4.4): it loads the
+	// project's env file and serves the project's terminals; no broker.
+	if len(args) >= 1 && args[0] == "holder" {
+		os.Exit(mainHolder(project, args[1:], os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "down" {
 		os.Exit(runDown(args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
 	}

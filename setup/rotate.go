@@ -306,7 +306,7 @@ func (in *Installer) restartRunningServices(ctx context.Context) int {
 	code := 0
 	for _, l := range in.serviceLines(ctx) {
 		f := strings.Fields(l)
-		if len(f) < 3 || !(strings.HasPrefix(f[2], "active") || strings.HasPrefix(f[2], "running")) {
+		if isHolderLine(l) || len(f) < 3 || !(strings.HasPrefix(f[2], "active") || strings.HasPrefix(f[2], "running")) {
 			continue
 		}
 		if out, err := in.R.Run(ctx, Cmd{Name: ab, Args: []string{"--project", f[0], "service", "restart", f[1]}}); err != nil {

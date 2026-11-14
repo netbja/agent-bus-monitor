@@ -292,6 +292,16 @@ var Keys = []*Key{
 		env: envPositiveDuration, file: filePositiveDuration},
 	{Name: "dispatch.self_repair_per_day", Env: "AGENT_BUS_SELF_REPAIR_PER_DAY", Kind: Int, Default: 3, ReadBy: "dispatch",
 		env: envPositiveInt, file: filePositiveInt},
+	// The holder (herdr exit, spec 2026-11-10-herdr-exit-design.md, 4.2, 4.4,
+	// 4.5): each terminal's scrollback; how long a submit waits for the pasted
+	// text to show at the input before it refuses the Enter; how long after the
+	// person typed an agent is left alone. Read when the holder starts.
+	{Name: "holder.scrollback", Env: "AGENT_BUS_HOLDER_SCROLLBACK", Kind: Int, Default: 5000, ReadBy: "agentbus holder",
+		env: envPositiveInt, file: filePositiveInt},
+	{Name: "dispatch.submit_wait", Env: "AGENT_BUS_SUBMIT_WAIT", Kind: Duration, Default: 2 * time.Second, ReadBy: "agentbus holder",
+		env: envBoundedDuration(time.Minute), file: fileBoundedDuration(time.Minute)},
+	{Name: "dispatch.person_quiet", Env: "AGENT_BUS_PERSON_QUIET", Kind: Duration, Default: 3 * time.Second, ReadBy: "agentbus holder",
+		env: envBoundedDuration(time.Hour), file: fileBoundedDuration(time.Hour)},
 	// Start at login (the person, Q8): the project's services start when the
 	// person logs in: agentbus up and agentbus service login apply it through
 	// service.LoginStart (step 9: systemd, launchd; refused elsewhere).
@@ -573,6 +583,28 @@ func envPositiveDuration(raw string) (any, envResult) {
 		return d, envUse
 	}
 	return nil, envSkip
+}
+
+// envBoundedDuration: a Go duration above 0, at most max; anything else is skipped.
+func envBoundedDuration(max time.Duration) func(string) (any, envResult) {
+	return func(raw string) (any, envResult) {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 && d <= max {
+			return d, envUse
+		}
+		return nil, envSkip
+	}
+}
+
+// fileBoundedDuration is envBoundedDuration's rule for the file.
+func fileBoundedDuration(max time.Duration) func(any) (any, string) {
+	return func(v any) (any, string) {
+		if s, ok := v.(string); ok {
+			if d, err := time.ParseDuration(s); err == nil && d > 0 && d <= max {
+				return d, ""
+			}
+		}
+		return nil, "want a duration above 0, at most " + max.String() + ", such as \"2s\""
+	}
 }
 
 func isIcons(s string) bool { return s == "off" || s == "nerd" || s == "agent-font" }
