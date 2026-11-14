@@ -32,10 +32,16 @@ const (
 )
 
 // HolderSpec is one holder unit to install: the project and the raw build id
-// of the binary copy it runs (InstallHolderBinary).
+// of the binary copy it runs (InstallHolderBinary), the project's service
+// environment file and its working directory. The holder starts every agent:
+// it needs their environment (PATH to find the clients, the broker settings)
+// and their directory, which a service manager does not give (a systemd unit
+// has a minimal PATH). Like dispatch's, the env file is the project's, not the
+// build's: an old build's holder reads the current one.
 type HolderSpec struct {
-	Project, Raw string
-	Paths        Paths
+	Project, Raw     string
+	EnvFile, WorkDir string // both absolute
+	Paths            Paths
 }
 
 // HolderUnit is an installed holder unit, as its recorded values say.
@@ -75,7 +81,7 @@ func HolderBinDir(p Paths, key string) string {
 func holderBin(p Paths, key string) string { return filepath.Join(HolderBinDir(p, key), "agentbus") }
 
 func holderArgv(s HolderSpec) []string {
-	return []string{holderBin(s.Paths, BuildKey(s.Raw)), "--project", s.Project, Holder}
+	return []string{holderBin(s.Paths, BuildKey(s.Raw)), "--project", s.Project, Holder, "--env", s.EnvFile}
 }
 
 func checkHolderSpec(s HolderSpec) error {
@@ -84,6 +90,11 @@ func checkHolderSpec(s HolderSpec) error {
 	}
 	if s.Raw == "" || strings.ContainsAny(s.Raw, "\n\r") {
 		return fmt.Errorf("invalid build id %q", s.Raw)
+	}
+	for name, path := range map[string]string{"environment file": s.EnvFile, "working directory": s.WorkDir} {
+		if !filepath.IsAbs(path) || strings.ContainsAny(path, "\n\r") {
+			return fmt.Errorf("the holder's %s must be an absolute path, not %q", name, path)
+		}
 	}
 	if _, err := os.Stat(holderBin(s.Paths, BuildKey(s.Raw))); err != nil {
 		return fmt.Errorf("the holder binary of build %s is not installed: %w", s.Raw, err)
@@ -289,6 +300,7 @@ func systemdHolderUnit(s HolderSpec) string {
 	fmt.Fprintf(&b, "X-Agentbus-Project=%s\nX-Agentbus-Build=%s\nX-Agentbus-Build-Raw=%s\n", s.Project, key, pct.Replace(s.Raw))
 	fmt.Fprintf(&b, "StartLimitIntervalSec=%d\nStartLimitBurst=%d\n\n", holderStartInterval, holderStartBurst)
 	fmt.Fprintf(&b, "[Service]\nType=simple\nExecStart=%s\n", strings.Join(words, " "))
+	fmt.Fprintf(&b, "WorkingDirectory=%s\n", pct.Replace(s.WorkDir))
 	fmt.Fprintf(&b, "Restart=on-failure\nRestartSec=%d\nKillMode=control-group\n", holderRestartSec)
 	return b.String()
 }
@@ -432,6 +444,7 @@ func launchdHolderPlist(s HolderSpec) string {
 		fmt.Fprintf(&b, "<string>%s</string>", xmlEscape(a))
 	}
 	b.WriteString("</array>\n")
+	fmt.Fprintf(&b, "<key>WorkingDirectory</key><string>%s</string>\n", xmlEscape(s.WorkDir))
 	b.WriteString("<key>RunAtLoad</key><true/>\n")
 	b.WriteString("<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>\n")
 	fmt.Fprintf(&b, "<key>ThrottleInterval</key><integer>%d</integer>\n", holderThrottleSecond)
