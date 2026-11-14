@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -35,9 +36,20 @@ func (c *selfRepairChore) act(ctx context.Context, token string, ds []selfrepair
 			first = err
 		}
 	}
+	network := map[string][]string{} // provider|since: the agents its hold keeps
+	var networkOrder []string
+	workspace := false
 	for _, d := range ds {
 		ep := deaths[d.Agent].episode
 		switch {
+		case d.Kind == selfrepair.KindHold && d.Hold == selfrepair.HoldNetwork:
+			k := d.Provider + "|" + sinceKey(d.Since)
+			if _, seen := network[k]; !seen {
+				networkOrder = append(networkOrder, k)
+			}
+			network[k] = append(network[k], d.Agent)
+		case d.Kind == selfrepair.KindHold && d.Hold == selfrepair.HoldWorkspace:
+			workspace = true
 		case d.Act && (d.Kind == selfrepair.KindRelaunch || d.Kind == selfrepair.KindCreate):
 			keep(c.repair(ctx, token, d, r, ep, now.Sub(deaths[d.Agent].since)))
 		case d.Kind == selfrepair.KindBudget:
@@ -50,8 +62,51 @@ func (c *selfRepairChore) act(ctx context.Context, token string, ds []selfrepair
 			}
 		}
 	}
+	for _, k := range networkOrder { // R3: once per provider and last good reading
+		provider, ms, _ := strings.Cut(k, "|")
+		since := "it was never read"
+		if n, err := strconv.ParseInt(ms, 10, 64); err == nil && n > 0 {
+			since = "since " + time.UnixMilli(n).Local().Format("15:04")
+		}
+		_, err := c.sender()(ctx, token, "selfrepair-network:"+provider, ms, master,
+			fmt.Sprintf("self-repair: holding relaunches, %s unreachable %s (%s dead, relaunched once it answers, oldest first).",
+				provider, since, strings.Join(network[k], ", ")))
+		if !errors.Is(err, errNotYet) {
+			keep(err)
+		}
+	}
+	if workspace { // R4: once per spell of a closed workspace
+		c.mu.Lock()
+		if c.wsClosed.IsZero() { // after a restart, the outstanding spell's episode (its durable mark)
+			c.wsClosed = now
+			if ms, err := strconv.ParseInt(r.Marks[workspaceMark], 10, 64); err == nil && ms > 0 {
+				c.wsClosed = time.UnixMilli(ms)
+			}
+		}
+		ep := strconv.FormatInt(c.wsClosed.UnixMilli(), 10)
+		c.mu.Unlock()
+		_, err := c.sender()(ctx, token, workspaceMark, ep, master,
+			fmt.Sprintf("self-repair: the workspace of %s is not open: nothing is relaunched until it is. Run agentbus up %s --resume (or open it in herdr).",
+				c.project, c.project))
+		if !errors.Is(err, errNotYet) {
+			keep(err)
+		}
+	}
 	keep(c.deliver(ctx, token, master))
 	return first
+}
+
+// workspaceMark is R4's notice mark in {p}:quota: its value, the spell's
+// episode, outlives a dispatcher restart (reviewer-codex); cleared once
+// herdr says the workspace is open.
+const workspaceMark = "selfrepair-workspace"
+
+// sinceKey is a last good reading as an episode ("0": none).
+func sinceKey(t time.Time) string {
+	if t.IsZero() {
+		return "0"
+	}
+	return strconv.FormatInt(t.UnixMilli(), 10)
 }
 
 // crashLoop marks a spent day (fenced, once) and tells master, its episode

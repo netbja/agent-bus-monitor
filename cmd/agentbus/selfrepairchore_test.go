@@ -196,10 +196,13 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
 		{"a reading 6 min old", func(r *selfRepairReads) {
 			r.Budgets["anthropic"] = bus.BudgetSnapshot{ObservedAt: srT0.Add(-6 * time.Minute).UnixMilli()}
-		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool {
+			// step 8 (R3): the hold names the provider and its last good reading
+			return !a.ProviderFresh && a.Provider == "anthropic" && a.ProviderSince.Equal(srT0.Add(-6*time.Minute))
+		}},
 		{"a reading the reader could not read", func(r *selfRepairReads) {
 			r.Budgets["anthropic"] = bus.BudgetSnapshot{ObservedAt: srT0.UnixMilli(), Unknown: true}
-		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh && a.ProviderSince.IsZero() }},
 		{"no reading", func(r *selfRepairReads) { delete(r.Budgets, "anthropic") },
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderFresh }},
 		{"a local model whose endpoint answers", func(r *selfRepairReads) {
