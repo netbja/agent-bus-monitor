@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login | service restart holder --kill-agents"
+const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login | service restart holder --kill-agents | service start holder | service gc"
 
 // serviceCmdDeps: the manager (nil when none is usable, Why says why), the
 // user's directories and, for state reads, the project's bus.
@@ -38,6 +39,11 @@ type serviceCmdDeps struct {
 	// HolderTerms counts the terminals of the project's holder of build key.
 	HolderBuild func() string
 	HolderTerms func(project, key string) (int, error)
+	// HolderAnswers: project's holder of build key answers on its socket;
+	// HolderAnswersAny: a holder of build key answers for any project (a
+	// binary copy is shared by every project of a build).
+	HolderAnswers    func(project, key string) bool
+	HolderAnswersAny func(key string) bool
 }
 
 func realServiceCmdDeps(host string) serviceCmdDeps {
@@ -45,7 +51,10 @@ func realServiceCmdDeps(host string) serviceCmdDeps {
 	bin := service.ManagerBin(runtime.GOOS, os.Getenv)
 	m, why := service.Detect(runtime.GOOS, service.CommandRunner(bin), os.Getenv)
 	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, AtLogin: func() bool { return machineAtLogin(os.Getenv) },
-		HolderBuild: holder.BuildID, HolderTerms: holderTerms, Bus: func(project string) (*bus.Bus, error) {
+		HolderBuild: holder.BuildID, HolderTerms: holderTerms,
+		HolderAnswers:    func(project, key string) bool { _, err := holderTerms(project, key); return err == nil },
+		HolderAnswersAny: func(key string) bool { return holderAnswersAny(os.Getenv, key) },
+		Bus: func(project string) (*bus.Bus, error) {
 			c, err := bus.Connect(host)
 			if err != nil {
 				return nil, err
@@ -164,6 +173,12 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 	if !bus.ValidName(project) {
 		fmt.Fprintln(stderr, "error: project required: agentbus --project <p> service "+sub)
 		return 2
+	}
+	if sub == "start" && len(rest) == 1 && rest[0] == service.Holder {
+		return startHolderCmd(d, project, stdout, stderr)
+	}
+	if sub == "gc" && len(rest) == 0 {
+		return gcHolderCmd(d, project, stdout, stderr)
 	}
 	if sub == "restart" && len(rest) >= 1 && rest[0] == service.Holder {
 		return restartHolder(d, project, rest[1:], stdout, stderr)
@@ -466,6 +481,76 @@ func removeHolders(hm service.HolderManager, paths service.Paths, project string
 		errs = append(errs, fmt.Errorf("%d holder unit(s) still installed", len(left)))
 	}
 	return errors.Join(errs...)
+}
+
+// startHolderCmd is `service start holder`: the current build's installed
+// unit, started (sentinel's one action on a holder crit, spec 4.4a); a
+// running one is left as it is (StartHolder never restarts).
+func startHolderCmd(d serviceCmdDeps, project string, stdout, stderr io.Writer) int {
+	hm, ok := d.Manager.(service.HolderManager)
+	if !ok || d.HolderBuild == nil {
+		fmt.Fprintf(stderr, "agentbus service: %s has no holder units\n", d.Manager.Name())
+		return 1
+	}
+	raw := d.HolderBuild()
+	key := service.BuildKey(raw)
+	units, err := hm.HolderUnits(project)
+	if err != nil {
+		fmt.Fprintln(stderr, "error: holder units: "+err.Error())
+		return 1
+	}
+	if !slices.ContainsFunc(units, func(u service.HolderUnit) bool { return u.Key == key }) {
+		fmt.Fprintf(stderr, "no holder unit of build %s for %s: agentbus up %s installs it\n", raw, project, project)
+		return 1
+	}
+	if err := hm.StartHolder(project, key); err != nil {
+		fmt.Fprintf(stderr, "error: holder: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "holder (build %s): started\n", raw)
+	return 0
+}
+
+// gcHolderCmd is `service gc`: the project's older builds that no longer run
+// (unit, then binary copy; GCHolders), then the binary copies no unit
+// records (GCHolderBinaries). Never the current build, never a running or
+// answering one (spec 4.4a).
+func gcHolderCmd(d serviceCmdDeps, project string, stdout, stderr io.Writer) int {
+	hm, ok := d.Manager.(service.HolderManager)
+	if !ok || d.HolderBuild == nil {
+		fmt.Fprintf(stderr, "agentbus service: %s has no holder units\n", d.Manager.Name())
+		return 1
+	}
+	current := service.BuildKey(d.HolderBuild())
+	answers := func(key string) bool { return d.HolderAnswers != nil && d.HolderAnswers(project, key) }
+	any := func(key string) bool { return d.HolderAnswersAny != nil && d.HolderAnswersAny(key) }
+	raws := map[string]string{}
+	if units, err := hm.HolderUnits(project); err == nil {
+		for _, u := range units {
+			raws[u.Key] = u.Raw
+		}
+	}
+	code := 0
+	removed, err := service.GCHolders(hm, d.Paths, project, current, answers)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: gc: %v\n", err)
+		code = 1
+	}
+	for _, k := range removed {
+		fmt.Fprintf(stdout, "holder build %s: unit and binary removed\n", cmp.Or(raws[k], k))
+	}
+	bins, err := service.GCHolderBinaries(hm, d.Paths, current, any)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: gc: %v\n", err)
+		code = 1
+	}
+	for _, k := range bins {
+		fmt.Fprintf(stdout, "holder build %s: binary copy removed (no unit recorded it)\n", k)
+	}
+	if len(removed) == 0 && len(bins) == 0 && code == 0 {
+		fmt.Fprintln(stdout, "nothing to remove")
+	}
+	return code
 }
 
 // restartHolder is `service restart holder [--kill-agents]`: the current
