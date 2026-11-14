@@ -548,6 +548,7 @@ stamp, 2026-11-14, at `9479fc0b`). Each moves to Redis `TIME` in one small coder
 | `cmd/agentbus/main.go:711` | `{p}:usage` snapshot `ts` | `ServerNowMS` |
 | `cmd/agentbus/main.go:738` | `{p}:budget` snapshot `ts` | `ServerNowMS` |
 | `cmd/agentbus/pause.go:64` | `pause --for`: the deadline is the host's clock plus the duration (`SetPause` already reads `TIME`, `bus/pause.go:60`, but only to refuse a past deadline) | `ServerTime` plus the duration; `--until HH:MM` stays local wall clock (a window) |
+| `dispatch/quota.go:112`, through `budgetOf` (`dispatch/quota.go:330`) | the dispatcher's `{p}:budget` per provider: `ts` from the quota pass's host clock (`q.Now`, `dispatch/quota.go:73`), and `collected_at` and `observed_at` (each window's too) from the quota readers' host clock; judged against Redis time by the `quota` health check (`cmd/agentbus/healthchecks.go:470`, `now` from `ServerTime` at `:455`) and by self-repair's provider freshness (`cmd/agentbus/selfrepairchore.go:237`, `r.Now` from `ServerTime`) | `ts` from `ServerNowMS`; `collected_at` and `observed_at` moved to Redis time with their age kept, `redisNow - (hostNow - stamp)`, both read once per pass. A reading's age is a local fact; only its origin moves |
 | `cmd/agentbus/shutdown.go:32`, called at `cmd/agentbus/main.go:807` | a decision: an agent is "stale, not busy" when its Redis-time `ts` is older than 10 minutes by the host's clock | `ServerNowMS` as `now` |
 | `cmd/agentbus/agents.go:137` (`forget`) | refuses when the status `ts` is recent by the host's clock | one `ServerNowMS` for the comparison |
 | `cmd/agentbus/retire.go:117`, `:120`; `cmd/agentbus/swap.go:217`, `:220`; `cmd/agentbus/popend.go:56` | refuse while the pane runs a turn: the dispatcher's observation (`At` from `TIME`, `dispatch/observe.go:72`) is judged fresh, and a `working` status recent, by the host's clock | the same |
@@ -667,7 +668,8 @@ every 15 minutes:
   NTP-synchronised"; on macOS the detail says "NTP: unknown".
 - **Shared stamps:** for each inventory row, a disposable Redis whose `TIME` differs from the
   test's clock: the stored value follows Redis (board `ts`, usage and budget `ts`, the `pause
-  --for` deadline); `shutdownBlockers`, `forget`, `retire`, `swap`, the dispatcher's `popEnd`, `reload` and
+  --for` deadline, the dispatcher's budget `ts`, and its `collected_at` and `observed_at` at
+  Redis time minus their host-measured age); `shutdownBlockers`, `forget`, `retire`, `swap`, the dispatcher's `popEnd`, `reload` and
   `doctor` judge their stamps by Redis time (a status 5 minutes old by Redis is recent even when
   the host clock is 10 minutes ahead).
 - **Developer build:** `agentbus update` notifies only, and the checkout's HEAD is unchanged. An
@@ -736,6 +738,8 @@ None. The person answered r11's two (§2 decision 6; §6).
     `setup uninstall` is stated (§4.7);
   - (reviewer-codex on r13) `usage/ccstatusline.go:73` left the inventory: its stamp is never
     published (no production caller);
+  - (foureyes on r13) the dispatcher's quota budgets (`dispatch/quota.go`) join the inventory:
+    host-clock stamps judged against Redis time by the quota health check and self-repair;
   - no cron under `none`: the scheduled updater (systemd timer, launchd calendar job, nothing
     under `none`) is replaced by one `updater` service in every mode, a 5-minute ticker that
     compares the local wall clock with `updates.window`, records the last pass and runs
