@@ -77,7 +77,7 @@ func writeExe(t *testing.T, path, body string) {
 func (w *holderWorld) client(t *testing.T, tag string) string {
 	dir := filepath.Join(w.tmp, "clients-"+tag)
 	writeExe(t, filepath.Join(dir, "fake-client"),
-		"#!/bin/sh\necho \""+tag+" $* in $(pwd) roles=$ROLES_TOML\" > \"$HOLDER_TEST_MARK\"\nexec sleep 30\n")
+		"#!/bin/sh\necho \""+tag+" $* in $(pwd) roles=$ROLES_TOML secret=$HOLDER_TEST_SECRET\" > \"$HOLDER_TEST_MARK\"\nexec sleep 30\n")
 	return dir
 }
 
@@ -171,7 +171,7 @@ func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 	if _, err := cl.Call(holder.Start{Role: "coder"}); err != nil {
 		t.Fatalf("start: %v\n%s", err, w.out.String())
 	}
-	want := "a coder demo in " + realPath(t, work) + " roles=" + realPath(t, filepath.Join(w.repo, "roles.toml"))
+	want := "a coder demo in " + realPath(t, work) + " roles=" + realPath(t, filepath.Join(w.repo, "roles.toml")) + " secret="
 	if got := w.mark(t, mark); got != want {
 		t.Fatalf("the client ran as %q, want %q", got, want)
 	}
@@ -192,14 +192,14 @@ func TestHolderStartReadsTheLaunchContextAfresh(t *testing.T) {
 	}
 	mark1, mark2 := filepath.Join(w.tmp, "mark1"), filepath.Join(w.tmp, "mark2")
 	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "old"), service.HolderRepoEnv: w.repo,
-		"HOLDER_TEST_MARK": mark1, service.HolderDirEnv: work1})
+		"HOLDER_TEST_MARK": mark1, service.HolderDirEnv: work1, "HOLDER_TEST_SECRET": "s3cret"})
 	cl := w.start(t, work1)
 	first, err := cl.Call(holder.Start{Role: "coder"})
 	if err != nil || first.Term == nil {
 		t.Fatalf("start: %v\n%s", err, w.out.String())
 	}
 	roles := realPath(t, filepath.Join(w.repo, "roles.toml"))
-	if got, want := w.mark(t, mark1), "old coder demo in "+realPath(t, work1)+" roles="+roles; got != want {
+	if got, want := w.mark(t, mark1), "old coder demo in "+realPath(t, work1)+" roles="+roles+" secret=s3cret"; got != want {
 		t.Fatalf("first: %q, want %q", got, want)
 	}
 
@@ -219,7 +219,10 @@ func TestHolderStartReadsTheLaunchContextAfresh(t *testing.T) {
 	if _, err := cl.Call(holder.Start{Role: "coder"}); err != nil {
 		t.Fatalf("second start: %v\n%s", err, w.out.String())
 	}
-	if got, want := w.mark(t, mark2), "new coder demo in "+realPath(t, work2)+" roles="+realPath(t, manifest2); got != want {
+	if got, want := w.mark(t, mark2), "new coder demo in "+realPath(t, work2)+" roles="+realPath(t, manifest2)+" secret="; got != want {
+		// A variable removed from the env file (a secret, say) never reaches a
+		// new agent: the holder's own environment never takes the file's
+		// (reviewer-codex).
 		t.Fatalf("second: %q, want %q", got, want)
 	}
 	r, err := cl.Call(holder.List{})

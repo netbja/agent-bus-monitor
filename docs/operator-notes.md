@@ -198,7 +198,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   a manager that cannot say keeps the unit. `StartHolder` never restarts or kicks a running one.
   The unit runs `<copy> --project <p> holder --env <the project's env file>` in the project's
   `WorkingDirectory` (6b2): the holder starts every agent, and a service manager's PATH is minimal,
-  so `agentbus holder` loads the env file as `service run` does. Its launch context is in that file
+  so `agentbus holder` reads the env file, through an overlay and never into its own environment
+  (a variable removed from the file, a secret, must not reach a later agent; reviewer-codex): each
+  agent gets the holder's starting environment plus the file's current variables. Its launch context is in that file
   under names only the holder reads, written by `up`: `AGENTBUS_HOLDER_REPO` (the checkout whose
   `scripts/agent-launch` it runs), `AGENTBUS_HOLDER_MANIFEST` (the manifest up's template names) and
   `AGENTBUS_HOLDER_DIR` (the working directory, `~` expanded). Never `AGENTBUS_REPO` or
