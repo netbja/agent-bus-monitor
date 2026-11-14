@@ -3,7 +3,9 @@ package holder
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -18,6 +20,10 @@ import (
 //   - fake-return: after a submit, it puts text back into its input;
 //   - fake-slow: a paste shows in the input only after 300 ms;
 //   - fake-stale: a paste shows another wake line's token in the input;
+//   - fake-ctl: driven by files in $FAKE_CTL/$AGENTBUS_TERM_ID, read every
+//     20 ms: notready draws no input box, notempty puts text in the input,
+//     noland makes a paste open a menu, reset closes the menu and empties
+//     the input (once);
 //   - fake-busy: a paste never shows, and a spinner redraws every 20 ms;
 //   - fake-dialog-close: as fake-dialog, the menu closing by itself after
 //     1.5 s (past the tests' submit_wait), the input empty again.
@@ -34,11 +40,18 @@ func fakeClient() {
 	}
 	var history []string
 	input, dialog := "", false
+	var mu sync.Mutex
+	notReady := false
 	draw := func() {
 		var b strings.Builder
 		b.WriteString("\x1b[2J\x1b[H")
 		for _, h := range history {
 			b.WriteString("SUBMITTED: " + h + "\r\n")
+		}
+		if notReady {
+			b.WriteString("working…")
+			os.Stdout.WriteString(b.String())
+			return
 		}
 		b.WriteString("────────────\r\n")
 		if dialog {
@@ -49,7 +62,32 @@ func fakeClient() {
 		b.WriteString("────────────")
 		os.Stdout.WriteString(b.String())
 	}
+	if mode == "fake-ctl" {
+		dir := filepath.Join(os.Getenv("FAKE_CTL"), os.Getenv("AGENTBUS_TERM_ID"))
+		has := func(n string) bool { _, err := os.Stat(filepath.Join(dir, n)); return err == nil }
+		go func() {
+			for range time.Tick(20 * time.Millisecond) {
+				mu.Lock()
+				nr, ne := has("notready"), has("notempty")
+				changed := nr != notReady
+				notReady = nr
+				if has("reset") {
+					os.Remove(filepath.Join(dir, "reset"))
+					dialog, input, changed = false, "", true
+				}
+				if ne && input == "" {
+					input, changed = "a draft the program put back", true
+				}
+				if changed {
+					draw()
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	mu.Lock()
 	draw()
+	mu.Unlock()
 	buf := make([]byte, 4096)
 	pasting := false
 	var pasted string
@@ -59,11 +97,16 @@ func fakeClient() {
 			return
 		}
 		s := string(buf[:n])
+		mu.Lock()
+		noland := mode == "fake-ctl" && func() bool {
+			_, err := os.Stat(filepath.Join(os.Getenv("FAKE_CTL"), os.Getenv("AGENTBUS_TERM_ID"), "noland"))
+			return err == nil
+		}()
 		for len(s) > 0 {
 			switch {
 			case strings.HasPrefix(s, "\x1b[200~"):
 				pasting, pasted, s = true, "", s[6:]
-				if mode == "fake-dialog" || mode == "fake-dialog-close" {
+				if mode == "fake-dialog" || mode == "fake-dialog-close" || noland {
 					dialog = true
 				}
 				if mode == "fake-dialog-close" {
@@ -81,6 +124,10 @@ func fakeClient() {
 						}
 					}()
 				case "fake-noland", "fake-dialog", "fake-dialog-close":
+				case "fake-ctl":
+					if !noland {
+						input += pasted
+					}
 				case "fake-stale": // the input shows another wake's token, never this one
 					input += "[agentbus#000000] an older wake line"
 				case "fake-slow":
@@ -122,5 +169,6 @@ func fakeClient() {
 			s = s[1:]
 		}
 		draw()
+		mu.Unlock()
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/trust"
@@ -48,6 +50,12 @@ type upDeps struct {
 	// unknown: when it exists the units run it, whoever runs up.
 	Installed string
 	Environ   []string // the service environment is picked from it
+	// The holder (herdr exit, spec 4.4a): HolderBuild is the raw build id of
+	// the binary Exe returns (holder.BuildID), nil for no holder; HolderAnswers
+	// says whether a holder socket of the project's build key answers (the gc
+	// keeps that build).
+	HolderBuild   func() string
+	HolderAnswers func(project, key string) bool
 	// KeepEnv keeps the project's env file as it is, its herdr session
 	// excepted: a suspended project's resume never changes its configuration
 	// (suspend 3a). What Environ would have changed is named, never its value.
@@ -429,6 +437,10 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 			}
 		}
 	}
+	// The holder's launch context, read by the holder alone at each Start (it
+	// is never restarted for a new one; herdr exit 6b2): the checkout, the
+	// manifest this up's template names, the working directory.
+	holderContext(d, workdir, env)
 	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), env)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotInstalled, err)
@@ -508,6 +520,9 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		if st, err := m.State(project, k); err == nil && st.Active {
 			fmt.Fprintf(stdout, "%s: still running from before (stop it: agentbus --project %s service stop %s)\n", k, project, k)
 		}
+	}
+	if err := startHolder(d, m, project, workdir, stdout); err != nil {
+		errs = append(errs, fmt.Errorf("holder: %v", err))
 	}
 	if ls != nil && atLogin {
 		if err := ls.Enable(project); err != nil {
@@ -626,6 +641,70 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 	})
 }
 
+// holderContext records the holder's launch context in env (service.Holder*
+// names); a value up cannot tell is left out, and the holder falls back.
+func holderContext(d upDeps, workdir string, env map[string]string) {
+	set := func(k, v string) {
+		if filepath.IsAbs(v) {
+			env[k] = v
+		} else {
+			delete(env, k)
+		}
+	}
+	set(service.HolderDirEnv, expandWorkDir(d, workdir))
+	repo, _ := repoDir(d.Env)
+	set(service.HolderRepoEnv, repo)
+	manifest, _ := rolecfg.ManifestPath(d.Env)
+	set(service.HolderManifestEnv, manifest)
+}
+
+// expandWorkDir is a template's working_dir as up reads it elsewhere: ~ is
+// the home, variables expanded.
+func expandWorkDir(d upDeps, dir string) string {
+	return os.ExpandEnv(strings.Replace(dir, "~", d.Env("HOME"), 1))
+}
+
+// startHolder installs this build's holder (spec 4.4a): its binary copy, its
+// unit with the project's env file and working directory, then starts it and
+// gcs the project's older builds that no longer run. It never stops or
+// restarts a holder: an older build's agents live on in theirs. A manager
+// without holder units, or no build id, installs none.
+func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io.Writer) error {
+	hm, ok := m.(service.HolderManager)
+	if !ok || d.HolderBuild == nil {
+		return nil
+	}
+	raw := d.HolderBuild()
+	self, err := d.Exe()
+	if err != nil {
+		return fmt.Errorf("cannot find this agentbus: %v", err)
+	}
+	if strings.Contains(self, "go-build") || !filepath.IsAbs(self) {
+		// A developer's go run: the services run the installed agentbus, and no
+		// holder is installed from a temporary build (foureyes: not an error).
+		fmt.Fprintf(stdout, "holder: not installed from %s (a go run build); run the installed agentbus to install it\n", self)
+		return nil
+	}
+	if _, err := service.InstallHolderBinary(d.Paths, raw, self); err != nil {
+		return err
+	}
+	if _, err := hm.InstallHolder(service.HolderSpec{Project: project, Raw: raw, Paths: d.Paths,
+		EnvFile: d.Paths.EnvFile(project), WorkDir: expandWorkDir(d, workdir)}); err != nil {
+		return err
+	}
+	key := service.BuildKey(raw)
+	if err := hm.StartHolder(project, key); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "holder: build %s started as a %s service (no agent runs on it yet)\n", raw, m.Name())
+	answers := func(k string) bool { return d.HolderAnswers != nil && d.HolderAnswers(project, k) }
+	removed, err := service.GCHolders(hm, d.Paths, project, key, answers)
+	if len(removed) > 0 {
+		fmt.Fprintf(stdout, "holder: removed %d older build(s) that no longer run\n", len(removed))
+	}
+	return err
+}
+
 // templatePath is where bootstrap writes the project's template
 // (rolecfg.ProjectsDir, which scripts/bootstrap reads through roles projects-dir).
 func templatePath(d upDeps, project string) string {
@@ -690,8 +769,21 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 			}
 			return filepath.EvalSymlinks(exe)
 		},
-		Installed: buildinfo.Bin,
-		Environ:   os.Environ(),
+		Installed:   buildinfo.Bin,
+		Environ:     os.Environ(),
+		HolderBuild: holder.BuildID,
+		HolderAnswers: func(project, key string) bool {
+			sock, err := holder.SocketPath(os.Getenv, project, key)
+			if err != nil {
+				return false
+			}
+			c, err := net.DialTimeout("unix", sock, time.Second)
+			if err != nil {
+				return false
+			}
+			c.Close()
+			return true
+		},
 		Mark: func(project string, inst bus.ServicesInstall) error {
 			c, err := bus.Connect("")
 			if err != nil {

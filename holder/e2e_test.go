@@ -121,6 +121,8 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 			return sh(`( sleep 1.5 & ) ; exec sleep 30`), nil
 		case "tree":
 			return sh(`sleep 31 & sleep 32 & wait`), nil
+		case "hupper": // ignores SIGHUP: only the grace's SIGKILL ends it
+			return sh(`trap '' HUP; printf 'ready\n'; exec sleep 30`), nil
 		case "talker":
 			return sh(`printf 'ready\n'; exec cat`), nil
 		case "osc":

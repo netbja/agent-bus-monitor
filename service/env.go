@@ -26,6 +26,20 @@ var envKeys = []string{
 	"GOPATH", "GOCACHE", "GOMODCACHE", "GOTOOLCHAIN", "GOFLAGS",
 }
 
+// The holder's launch context, recorded by `agentbus up` in the env file and
+// read by the holder alone, at each Start (herdr exit 6b2): the checkout
+// whose scripts/agent-launch starts the agents, the role manifest the
+// project's template names, and the project's working directory. Their own
+// names, not AGENTBUS_REPO or ROLES_TOML: the env file is every service's,
+// and those would pin the dispatcher and the conductor too (foureyes). A
+// later up rewrites them, and the next Start takes the new values without a
+// holder restart.
+const (
+	HolderRepoEnv     = "AGENTBUS_HOLDER_REPO"
+	HolderManifestEnv = "AGENTBUS_HOLDER_MANIFEST"
+	HolderDirEnv      = "AGENTBUS_HOLDER_DIR"
+)
+
 // EscalateEnv names the agent the project's services escalate to (default
 // master), recorded by `agentbus up --escalate-to`.
 const EscalateEnv = "AGENT_BUS_ESCALATE_TO"

@@ -45,7 +45,7 @@ func (in *Installer) Uninstall(ctx context.Context, p *Prompter) int {
 	// The project services first, while an agentbus is still there to remove them.
 	if svcs := in.serviceLines(ctx); len(svcs) > 0 {
 		n := strconv.Itoa(len(svcs))
-		if ask("stop and remove the "+n+" project services (dispatch/missions units; their data and logs are kept)?", true) {
+		if ask("stop and remove the "+n+" project services (dispatch/missions/holder units; their data and logs are kept)?", true) {
 			ab := filepath.Join(in.Opt.BinDir, "agentbus")
 			if !isExec(ab) {
 				ab = filepath.Join(in.Repo, "agentbus")
