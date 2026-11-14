@@ -249,8 +249,10 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `--project`, `AGENT_BUS_PROJECT`, then the project last used against this broker
   (`last-project` beside the per-project caches, one line per broker, written at start; the key is
   the connected client's network, address, db and tls, never `-H` text or credentials), skipped
-  when it has no keys. Without any, busmon still prints how to name one; falling back to the
-  picker is deferred to the cutover, since `--pick` opens a project through `agentbus up` (herdr).
+  when it has no keys. Without any, busmon shows the picker's screen in open-here mode
+  (`newOpenHerePick`, `pickToOpen`): the same list and the same check on the broker, but Enter
+  records the project and busmon re-executes on it (`openPicked`), never `agentbus up` (that stays
+  `--pick`'s, reviewer-codex); without a terminal it prints how to name one.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (enabled at login only while `services.start_at_login` is on), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
