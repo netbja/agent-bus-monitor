@@ -11,8 +11,9 @@
 - Revision 25 (correction): foureyes on step 5d (0ceba37e): "stops reading the viewers'
   sockets" deadlocked the hold — a viewer's Release, Discard and Detach travel on the same socket,
   behind its data. Master's decision (option a): the holder never stops reading a viewer; past
-  1 MiB further bytes are refused, counted in the hold notice and never delivered; held bytes
-  are still never dropped (§4.2, §8)
+  1 MiB every further byte is refused until the hold ends (a smaller later chunk too, so nothing
+  is held behind the hole), counted in the hold notice and never delivered; held bytes are still
+  never dropped (§4.2, §8)
 - Revision 24 (correction): master's decision after the security role's confirmation
   (s1-profile-confirm, report 1794585522550-0): the resume record stays `{session, profile,
   at}` (r21; r22's `{session, at}` and r23 are withdrawn), with two conditions checked before
@@ -279,10 +280,9 @@ Interface rules (part of the interface, not comments):
      the line key by key: the wake line holds digits (the count, the nonce), and a menu that
      reads single keys would take them as choices (security S4);
   2. **holds** every viewer byte that arrives from now on (all viewers; a per-terminal queue,
-     never dropped: when the queue reaches 1 MiB, further bytes are refused, counted and told
-     in the hold notice (`M keys refused`), never delivered, and the client stops sending; the
-     holder never stops reading a viewer, so its Release, Discard and Detach always get
-     through — r25);
+     never dropped: when the queue reaches 1 MiB, every further byte is refused until the hold
+     ends, counted and told in the hold notice (`M keys refused`), never delivered; the holder
+     never stops reading a viewer, so its Release, Discard and Detach always get through — r25);
   3. **checks again**, still under the lock and with the bytes held, Ready, `EmptyInput` and
      mode 2004 on a newly settled screen — a dialog can open between step 1 and the hold (a
      subagent's permission request); failing → `ErrNotReady`, nothing typed, the held bytes

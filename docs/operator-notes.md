@@ -535,7 +535,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `EmptyInput` with mode 2004 on a settled screen (no output for 80 ms, else unsettled: `not_ready`), the same again after the hold, the line as a
   bracketed paste only, then the line's own token (`agentbus#<nonce>`, `/clear`) in the input box
   within `submit_wait` (2 s, the settling included: never longer): CR. Not seen: no CR, the terminal left behind, and the viewers' bytes
-  stay held after the lock (`not_landed`): a queue of at most 1 MiB (past it, further bytes are refused,
+  stay held after the lock (`not_landed`): a queue of at most 1 MiB (past it, every further byte is refused until the hold ends,
   counted in the notice's `refused` and never delivered; the holder never stops reading a viewer,
   so its `release`, `discard` and `detach` always get through, spec r25), a `hold` notice to each typing viewer (and one that attaches), `release` delivers them
   in order, `discard` drops them; a settled screen whose input reads empty lifts the mark and

@@ -471,3 +471,32 @@ func TestSubmitWaitBoundsTheLanding(t *testing.T) {
 		t.Fatalf("the submit took %v for a submit_wait of 300ms", d)
 	}
 }
+
+// Once a byte was refused, every later byte is refused until the hold ends
+// (spec r25, foureyes): a small chunk that would fit (an Enter after a
+// paste's refused tail) is never held behind the hole.
+func TestHoldRefusesAfterARefusal(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	tm := &terminal{pty: w, viewers: map[*viewer]bool{}, holdState: holdState{holdMax: 8}}
+	tm.inMu.Lock()
+	tm.startHold("wake")
+	tm.inMu.Unlock()
+	tm.deliver([]byte("abcdef"))
+	tm.deliver([]byte("GHIJ")) // past 8: refused
+	tm.deliver([]byte("\r"))   // would fit: refused too
+	if string(tm.held) != "abcdef" || tm.refused != 5 {
+		t.Fatalf("held %q, refused %d", tm.held, tm.refused)
+	}
+	got := make(chan []byte)
+	go func() { b, _ := io.ReadAll(r); got <- b }()
+	tm.endHold(true)
+	tm.deliver([]byte("k")) // the hold over: delivered
+	w.Close()
+	if b := <-got; string(b) != "abcdefk" {
+		t.Fatalf("delivered %q", b)
+	}
+}

@@ -1,8 +1,8 @@
 package holder
 
 // holdMax bounds the held viewer bytes of a terminal (spec 4.2, correction
-// r25): what is held is never dropped; past 1 MiB a viewer's further bytes
-// are refused, counted and told, and the holder keeps reading every viewer,
+// r25): what is held is never dropped; past 1 MiB every further byte is
+// refused until the hold ends, counted and told, and the holder keeps reading every viewer,
 // so its Release, Discard and Detach always get through.
 const holdMax = 1 << 20
 
@@ -24,7 +24,8 @@ type holdState struct {
 // deliver writes a viewer's bytes to the program, or queues them while a
 // hold stands. The input lock is taken first and the hold read under it, so
 // a byte never overtakes one held before it. Bytes that would take the
-// queue past its bound are refused and counted, and the viewers told: deliver
+// queue past its bound are refused and counted, and so is every later byte
+// until the hold ends (never held behind the hole), and the viewers told: deliver
 // never waits, so the viewer's next frame (its Release, Discard, Detach) is
 // always read.
 func (t *terminal) deliver(b []byte) {
@@ -37,7 +38,7 @@ func (t *terminal) deliver(b []byte) {
 		return
 	}
 	defer t.mu.Unlock()
-	if len(t.held)+len(b) <= t.holdMax {
+	if t.refused == 0 && len(t.held)+len(b) <= t.holdMax { // once refused, refused until the hold ends: nothing queued behind a hole
 		t.held = append(t.held, b...)
 	} else {
 		t.refused += len(b)
