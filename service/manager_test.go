@@ -249,3 +249,38 @@ func TestLocal(t *testing.T) {
 		t.Fatalf("an unknown system = %v, %v", m, err)
 	}
 }
+
+// services.manager in config.toml chooses the manager when the environment
+// does not (herdr exit 4.4b); the environment still wins.
+func TestDetectReadsServicesManagerFromTheFile(t *testing.T) {
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, "agentbus"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "agentbus", "config.toml"), []byte("[services]\nmanager = \"none\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"HOME": t.TempDir(), "XDG_CONFIG_HOME": cfg}
+	getenv := func(k string) string { return env[k] }
+	ok := func(args ...string) ([]byte, error) { return nil, nil }
+	if m, why := Detect("linux", ok, getenv); m != nil || !strings.Contains(why, "none") {
+		t.Fatalf("file none: %v %q", m, why)
+	}
+	if m, err := Local("linux", ok, getenv); m != nil || err != nil {
+		t.Fatalf("Local with the file's none: %v %v", m, err)
+	}
+	env["AGENTBUS_SERVICE_MANAGER"] = "systemd"
+	if m, _ := Detect("darwin", ok, getenv); m == nil || m.Name() != "systemd" {
+		t.Fatalf("env systemd over the file: %v", m)
+	}
+	if ManagerBin("darwin", getenv) != "systemctl" {
+		t.Fatal("ManagerBin ignores the env")
+	}
+	delete(env, "AGENTBUS_SERVICE_MANAGER")
+	if err := os.WriteFile(filepath.Join(cfg, "agentbus", "config.toml"), []byte("[services]\nmanager = \"launchd\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ManagerBin("linux", getenv) != "launchctl" {
+		t.Fatal("ManagerBin ignores the file")
+	}
+}
