@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r8, spec only (r8: the journal is write-ahead, so a crash between a file write and its record is covered; reviewer-codex on r7. r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r9, spec only (r9: each write is made durable (fsync the staged file, rename, fsync the directory) before `done`; reviewer-codex on r8. r8: the journal is write-ahead, so a crash between a file write and its record is covered; reviewer-codex on r7. r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -149,8 +149,18 @@ neither write a snapshot nor restore one.
      changes. The order is:
      1. Append `{path, before, after}` with both SHA-256s to `<snapshot>/written.jsonl`, and fsync
         it (and its directory, on the first line).
-     2. Write the file: a copy beside it, then a rename.
-     3. Append `{path, done}`, then go on to the next file.
+     2. Write the file durably:
+        - write the new content to a file beside it and fsync that file;
+        - rename it over the target;
+        - fsync the parent directory.
+
+        `InstallFile` gains these two fsyncs; it renames today but does not fsync.
+     3. Only then append `{path, done}` and fsync the journal. Go on to the next file.
+
+     So after a power loss the file is either the whole `before` or the whole `after`: a rename is
+     atomic, and its content was on disk before it. A third hash can only come from someone writing
+     the file, which is the person. Where the file system does not honour fsync, the guarantee falls
+     back to process termination only; the README says so.
 
      A crash anywhere leaves a journal line **before** the file could have changed, so no written
      file is ever unrecorded. A line without `done` is not trusted to say whether the write
@@ -394,7 +404,9 @@ format (the `.migrate` file says whether it does).
   point:
   - **after the intent, before the rename:** the file is still at `before`, and nothing is
     restored;
-  - **after the rename, before `done`:** the file is at `after`, and it is restored to `before`.
+  - **after the rename, before `done`:** the file is at `after`, and it is restored to `before`;
+  - **the durability order**, with a fake file system that records calls: the staged file's fsync
+    comes before the rename, the directory's fsync after it, and both before the `done` append.
 
   Both are checked in the restorer and the README harness.
 - **Team on rollback:** a role that died during the update is relaunched with its resume session.
