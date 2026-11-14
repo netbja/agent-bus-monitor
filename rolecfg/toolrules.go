@@ -296,6 +296,28 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 	return out, nil
 }
 
+// SpawnRules are role's agent-spawn rules (LaunchRules') as the roles they
+// name: allow, and ask (the person approves each pop). Both nil for a role
+// that does not pop; a role missing from the manifest has no rule at all, so
+// its spawn prompts (roles doctor shows it, roles-doctor-pop-rules).
+func (m *Manifest) SpawnRules(role string) (allow, ask []string, err error) {
+	r, err := m.LaunchRules(role)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := func(rules []string) (out []string) {
+		for _, rule := range rules {
+			if s, ok := strings.CutPrefix(rule, "Bash(agent-spawn "); ok {
+				if name, ok := strings.CutSuffix(s, " *)"); ok {
+					out = append(out, name)
+				}
+			}
+		}
+		return out
+	}
+	return names(r.Allow), names(r.Ask), nil
+}
+
 // MayDeliver is the rule agentbus deliver reads itself, whatever the
 // command's spelling (reviewer-codex, master: no pattern covers every project
 // name or flag order): a role delivers only with delivers = true (master and

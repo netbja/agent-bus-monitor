@@ -401,3 +401,58 @@ func TestJudgeModelOldSource(t *testing.T) {
 		t.Fatalf("an unknown source age withheld: %+v", j)
 	}
 }
+
+// The person: roles doctor shows, for a role that pops, the agent-spawn rule
+// its session starts with for each other role (allow, or ask when the person
+// approves it), so a role missing from roles.toml (coder2) shows as not
+// covered; nothing for a role that does not pop.
+func TestDoctorShowsPopRules(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()) })
+	manifest := strings.Replace(doctorManifest, "required = true\n", "required = true\npops = true\n", 1)
+	manifest = strings.Replace(manifest, "[roles.deploy]\ntier = \"pop\"\n", "[roles.deploy]\ntier = \"pop\"\napproval = \"person\"\n", 1)
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(path, []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"coder", "master"} {
+		if _, err := b.Status(ctx, a, "idle", "", bus.AgentIdent{Pane: "p-" + a, PID: 1, PIDStart: 1, Model: "claude-opus-5-5", Client: "claude-code", Provider: "anthropic"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := doctorDeps{
+		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
+		ProcStart:  func(int) (uint64, error) { return 1, nil },
+		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
+		Transcript: func(string) (usage.UsedModel, error) { return usage.UsedModel{}, errors.New("none") },
+		Now:        time.Now,
+	}
+	var out, errw bytes.Buffer
+	runDoctor(ctx, b, d, nil, &out, &errw)
+	got := out.String()
+	want := "pops: allow coder, foureyes, sentinel, architect, docs; ask deploy (the person approves); any other role is not covered"
+	if !strings.Contains(got, want) || strings.Count(got, "pops:") != 1 {
+		t.Fatalf("want %q once:\n%s", want, got)
+	}
+	out.Reset()
+	runDoctor(ctx, b, d, []string{"--json"}, &out, &errw)
+	var rows []struct {
+		Agent string `json:"agent"`
+		Pops  *struct {
+			Allow []string `json:"allow"`
+			Ask   []string `json:"ask"`
+		} `json:"pops"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		switch {
+		case row.Agent == "master" && (row.Pops == nil || len(row.Pops.Allow) != 5 || len(row.Pops.Ask) != 1 || row.Pops.Ask[0] != "deploy"):
+			t.Fatalf("master's pops: %+v", row.Pops)
+		case row.Agent == "coder" && row.Pops != nil:
+			t.Fatalf("coder pops nothing: %+v", row.Pops)
+		}
+	}
+}
