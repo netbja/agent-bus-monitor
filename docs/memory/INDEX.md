@@ -41,6 +41,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 - [Adoption and recovery decisions still to verify](open-questions/2026-09-19-adoption.md)
 - [Three ideas from DeepSeek's Super-Agent prototype, waiting for the person (open)](open-questions/2026-11-03-deepseek-superagent-ideas.md)
 - [Journal index](journal/INDEX.md)
+- [Hot files: what every PR edits, and a proposal for config/keys.go (waiting for the person)](open-questions/2026-11-14-hot-files.md)
 
 Current state must be reread from its owner: Git/PR for merge, runtime for deployed
 version, board for tracked requests. A dated memory does not certify that state
