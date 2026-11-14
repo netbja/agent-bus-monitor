@@ -41,19 +41,26 @@ reset.
      - a draft stands: a compose window, a line being typed, or an ask answer
        ("a draft is open: send it or clear it first"). Drafts are in memory only, and a switch
        never drops one silently.
-  2. Save the current project's local cache (read marks, snoozes, `last_visit`) through the
-     model's `saveCache`, as quit does (`tea_signals.go` sets `LastVisit`).
-  3. Return `tea.Quit`; `main` gets the target from the model after `prog.Run` returns, with the
-     terminal already restored.
+  2. Return `tea.Quit`, with the target recorded in the model. Nothing is saved in `Update`:
+     the model's `saveCache` is an asynchronous `tea.Cmd`, and batched with `tea.Quit` nothing
+     guarantees it runs before the program exits.
+  3. In `main`, after `prog.Run` returns (the terminal already restored), write the old project's
+     local cache (read marks, snoozes, `last_visit`) **synchronously**, from the final model,
+     with `busmonCache.save` (copy and rename). If the write fails, do not exec: print the error
+     and the command to type (`busmon --project <p> …`) on stderr and exit 1, so the person sees
+     that the read marks were not saved.
   4. `syscall.Exec` of `os.Executable()` with the rebuilt argv (below) and the same environment.
-  5. If the exec fails, print the error and the command to type (`busmon --project <p> …`) on
-     stderr and exit 1. Nothing else to undo: the old project's cache is already saved.
+  5. If the exec fails, print the error and the command to type on stderr and exit 1. Nothing
+     else to undo: the old project's cache is already on disk.
+- **A switch is also an upgrade.** `os.Executable` names the installed path (on Linux it trims
+  a `(deleted)` suffix), so after a quiet update has replaced the binary, the switch execs the new
+  busmon, and the header's "restart busmon to use it" clears. This is intended.
 - **The argv is rebuilt from the parsed options, not edited as text.** busmon's flags go through
   Go's `flag` package, which accepts many spellings (`-p x`, `-p=x`, `--p x`, `-project x`,
   `--project=x`…), so text surgery would miss one. `parseFlags` already knows which flags were set
   (its `set` map). The new argv is `--<long>=<value>` for each set flag, then
   `--project=<target>`. Left out: `project` itself, and the one-shot actions, even though they
-  never reach the TUI: `reset`, `delete`, `yes`, `list`, `pick`. Kept: `host`, `as`, `theme`,
+  never reach the TUI: `reset`, `delete`, `yes`, `list`, `pick`, `version`. Kept: `host`, `as`, `theme`,
   `limit` and any later flag, by default. `--project` wins over `AGENT_BUS_PROJECT`, so the
   environment needs no change.
 - **Attach.** While busmon runs an attach (`tea.ExecProcess`), it reads no keys, so there is no
@@ -91,8 +98,15 @@ reset.
   `enter` opens one in this busmon by the same exec.
 - **Last used:** the project busmon last opened against that broker, on this machine. busmon
   writes it **at start**, once the project is open, not at quit, so a crash or a closed terminal
-  still records it. One small file in busmon's cache directory, one line per broker host:
-  `<host> <project>`, written by copy and rename. A last-used project that has no keys on the
+  still records it. One small file in busmon's cache directory, one line per broker:
+  `<broker> <project>`, written by copy and rename. `<broker>` names the **effective** endpoint,
+  never the `-H` text or a raw `REDIS_URL`: `bus.Connect` prefers `REDIS_URL` over `-H` and
+  `REDIS_HOST`, so only the connected client knows where it went. It is built from the client's
+  `Options()`: network, address, database number, and `tls` when `TLSConfig` is set, as
+  `tcp vdr:6380 db0` or `tcp vdr:6380 db0 tls` or `unix /run/redis.sock db0`. So `-H vdr`,
+  `REDIS_HOST=vdr` and `REDIS_URL=redis://vdr:6380` give one key, and two `REDIS_URL`s that
+  reach different brokers give two, whatever `REDIS_HOST` says. **No username or password** is
+  ever written: they are not part of the key, and the file holds nothing else. A last-used project that has no keys on the
   broker any more is skipped, to the picker.
 - `noProjectText` is then shown only when the broker cannot be reached to check anything.
 - The CLAUDE.md rule "the project is required" stays true for writes: busmon always runs with
@@ -104,11 +118,16 @@ reset.
 - **argv:** for each spelling Go's `flag` accepts (`-p x`, `-p=x`, `--project x`,
   `--project=x`, `-project x`), the rebuilt argv holds one `--project=<target>`; `-H`, `--as`,
   `--theme`, `--limit` come back as `--<long>=<value>`; `reset`, `delete`, `yes`, `list`, `pick`
-  are never carried, even if set; re-parsing the rebuilt argv gives the same options but the
+  and `version` are never carried, even if set; re-parsing the rebuilt argv gives the same options but the
   project.
 - **Exec seam:** `main` calls an `execFn(path, argv, env)` that a test replaces: the switch calls
-  it once, after the program quit and after the old project's cache file was written (its `read`
-  list and `last_visit` on disk).
+  it once, after the program quit and after the old project's cache file was written
+  synchronously (its `read` list and `last_visit` on disk when `execFn` is entered). A cache
+  write that fails means no exec, the error on stderr, exit 1.
+- **Last used key:** `-H vdr`, `REDIS_HOST=vdr` and `REDIS_URL=redis://vdr:6380` write one
+  line, not three. Two `REDIS_URL`s to different brokers (or the same address with another
+  database, or `rediss://`) with the same `REDIS_HOST` write two lines. A
+  `REDIS_URL=redis://user:secret@vdr:6380/2` leaves neither `user` nor `secret` in the file.
 - **Refusals** (no exec, no cache write, flash text): the same project; a project with no keys;
   an open compose window; a typed line; an open ask answer.
 - **Both gestures** produce the same action and target: M with `o` on a row, `/project <name>`;
