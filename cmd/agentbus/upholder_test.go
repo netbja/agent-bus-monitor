@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,5 +116,60 @@ func TestUpWithoutAHolderManagerInstallsNoHolder(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(u.paths.DataHome, "agentbus", "holder")); !os.IsNotExist(err) {
 		t.Fatalf("a holder binary was copied: %v", err)
+	}
+}
+
+func (f *fakeHolderManager) RestartHolder(project, key string) error {
+	f.calls = append(f.calls, "restart-holder "+project+" "+key)
+	return nil
+}
+
+// `service restart holder` kills every agent the holder holds: refused
+// unless --kill-agents is given, and it says how many (spec 4.4a).
+func TestServiceRestartHolderNeedsKillAgents(t *testing.T) {
+	raw := "v9"
+	key := service.BuildKey(raw)
+	newDeps := func(terms int, err error) (serviceCmdDeps, *fakeHolderManager) {
+		hm := &fakeHolderManager{fakeManager: newFakeManager(), holders: map[string]service.HolderSpec{}, active: map[string]bool{key: true},
+			units: []service.HolderUnit{{Project: "demo", Key: key, Raw: raw}}}
+		return serviceCmdDeps{Manager: hm, HolderBuild: func() string { return raw },
+			HolderTerms: func(project, k string) (int, error) {
+				if project != "demo" || k != key {
+					t.Errorf("counted %s %s", project, k)
+				}
+				return terms, err
+			}}, hm
+	}
+	d, hm := newDeps(3, nil)
+	var out, errw bytes.Buffer
+	if code := runServiceCmd("demo", []string{"restart", "holder"}, d, &out, &errw); code == 0 {
+		t.Fatalf("restarted without --kill-agents: %s", out.String())
+	}
+	if !strings.Contains(errw.String(), "3 agent") || !strings.Contains(errw.String(), "--kill-agents") {
+		t.Fatalf("stderr %q", errw.String())
+	}
+	if strings.Contains(strings.Join(hm.calls, " "), "restart-holder") {
+		t.Fatalf("restarted: %v", hm.calls)
+	}
+
+	d, hm = newDeps(0, errors.New("no holder answers"))
+	errw.Reset()
+	if code := runServiceCmd("demo", []string{"restart", "holder"}, d, &out, &errw); code == 0 || strings.Contains(strings.Join(hm.calls, " "), "restart-holder") {
+		t.Fatalf("an uncounted holder restarted: %v", hm.calls)
+	}
+	if !strings.Contains(errw.String(), "no holder answers") {
+		t.Fatalf("stderr %q", errw.String())
+	}
+
+	d, hm = newDeps(3, nil)
+	out.Reset()
+	if code := runServiceCmd("demo", []string{"restart", "holder", "--kill-agents"}, d, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if !hm.saw("restart-holder demo " + key) {
+		t.Fatalf("calls %v", hm.calls)
+	}
+	if !strings.Contains(out.String(), "holder: restarted") {
+		t.Fatalf("out %q", out.String())
 	}
 }

@@ -15,12 +15,13 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
 )
 
-const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login"
+const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login | service restart holder --kill-agents"
 
 // serviceCmdDeps: the manager (nil when none is usable, Why says why), the
 // user's directories and, for state reads, the project's bus.
@@ -30,19 +31,24 @@ type serviceCmdDeps struct {
 	Paths   service.Paths
 	Bus     func(project string) (*bus.Bus, error)
 	AtLogin func() bool // services.start_at_login (service login); nil reads as off
+	// The holder (herdr exit, spec 4.4a): HolderBuild is this build's raw id;
+	// HolderTerms counts the terminals of the project's holder of build key.
+	HolderBuild func() string
+	HolderTerms func(project, key string) (int, error)
 }
 
 func realServiceCmdDeps(host string) serviceCmdDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
 	bin := service.ManagerBin(runtime.GOOS, os.Getenv)
 	m, why := service.Detect(runtime.GOOS, service.CommandRunner(bin), os.Getenv)
-	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, AtLogin: func() bool { return machineAtLogin(os.Getenv) }, Bus: func(project string) (*bus.Bus, error) {
-		c, err := bus.Connect(host)
-		if err != nil {
-			return nil, err
-		}
-		return bus.Open(c, project)
-	}}
+	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, AtLogin: func() bool { return machineAtLogin(os.Getenv) },
+		HolderBuild: holder.BuildID, HolderTerms: holderTerms, Bus: func(project string) (*bus.Bus, error) {
+			c, err := bus.Connect(host)
+			if err != nil {
+				return nil, err
+			}
+			return bus.Open(c, project)
+		}}
 }
 
 // projectKinds are the kinds installed for project, in start order.
@@ -127,6 +133,9 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 	if !bus.ValidName(project) {
 		fmt.Fprintln(stderr, "error: project required: agentbus --project <p> service "+sub)
 		return 2
+	}
+	if sub == "restart" && len(rest) >= 1 && rest[0] == service.Holder {
+		return restartHolder(d, project, rest[1:], stdout, stderr)
 	}
 	kinds, err := projectKinds(m, project)
 	if err != nil {
@@ -335,6 +344,43 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. The agents and the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again.\n", p, p)
 	return code
+}
+
+// restartHolder is `service restart holder [--kill-agents]`: the current
+// build's instance. The holder is every agent's parent, so a restart kills
+// them all: refused unless --kill-agents is given, saying how many (spec
+// 4.4a). A holder whose terminals cannot be counted is refused as well.
+func restartHolder(d serviceCmdDeps, project string, args []string, stdout, stderr io.Writer) int {
+	kill := len(args) == 1 && args[0] == "--kill-agents"
+	if len(args) > 1 || (len(args) == 1 && !kill) {
+		fmt.Fprintln(stderr, "usage: agentbus --project <p> service restart holder [--kill-agents]")
+		return 2
+	}
+	hm, ok := d.Manager.(service.HolderManager)
+	if !ok || d.HolderBuild == nil {
+		fmt.Fprintf(stderr, "agentbus service: %s has no holder units\n", d.Manager.Name())
+		return 1
+	}
+	key := service.BuildKey(d.HolderBuild())
+	if !kill {
+		if d.HolderTerms == nil {
+			fmt.Fprintf(stderr, "refused: restarting the holder kills every agent it holds; add --kill-agents to do it anyway\n")
+			return 1
+		}
+		n, err := d.HolderTerms(project, key)
+		if err != nil {
+			fmt.Fprintf(stderr, "refused: restarting the holder kills every agent it holds, and they could not be counted (%v); add --kill-agents to do it anyway\n", err)
+			return 1
+		}
+		fmt.Fprintf(stderr, "refused: restarting the holder kills its %d agent(s) of project %s; add --kill-agents to do it anyway\n", n, project)
+		return 1
+	}
+	if err := hm.RestartHolder(project, key); err != nil {
+		fmt.Fprintf(stderr, "error: holder: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "holder: restarted (build %s); its agents were killed: agentbus up %s brings them back\n", key, project)
+	return 0
 }
 
 // mainServiceRun is `agentbus --project P service run <kind> [--stderr] …`,

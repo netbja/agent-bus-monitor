@@ -127,3 +127,22 @@ func holderConfig(project string, args []string) (holder.Config, error) {
 		PersonQuiet: r.Duration("dispatch.person_quiet"),
 	}, nil
 }
+
+// holderTerms counts the terminals of project's holder of build key, asked
+// over its socket; an error when none answers.
+func holderTerms(project, key string) (int, error) {
+	sock, err := holder.SocketPath(os.Getenv, project, key)
+	if err != nil {
+		return 0, err
+	}
+	cl, err := holder.Dial(sock, holder.BuildID())
+	if err != nil {
+		return 0, fmt.Errorf("no holder answers at %s: %w", sock, err)
+	}
+	defer cl.Close()
+	r, err := cl.Call(holder.List{})
+	if err != nil {
+		return 0, err
+	}
+	return len(r.Terms), nil
+}

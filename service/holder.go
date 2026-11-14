@@ -54,6 +54,9 @@ type HolderManager interface {
 	InstallHolder(s HolderSpec) (bool, error)
 	// StartHolder starts that build's unit; it never stops or restarts another.
 	StartHolder(project, key string) error
+	// RestartHolder restarts that build's instance, killing every agent it
+	// holds: only `service restart holder --kill-agents`, the person's word.
+	RestartHolder(project, key string) error
 	// HolderActive: the build's instance runs or is starting. An error means
 	// the manager could not say (never "inactive").
 	HolderActive(project, key string) (bool, error)
@@ -323,6 +326,10 @@ func (m Systemd) StartHolder(project, key string) error {
 	return m.ctl("start", HolderUnitName(project, key))
 }
 
+func (m Systemd) RestartHolder(project, key string) error {
+	return m.ctl("restart", HolderUnitName(project, key))
+}
+
 func (m Systemd) HolderActive(project, key string) (bool, error) {
 	out, err := m.Run("--user", "is-active", HolderUnitName(project, key))
 	switch s := strings.TrimSpace(string(out)); s {
@@ -475,6 +482,11 @@ func (m Launchd) StartHolder(project, key string) error {
 		return err
 	}
 	return m.ctl("bootstrap", "gui/"+strconv.Itoa(m.UID), m.holderPath(project, key))
+}
+
+// RestartHolder kills and restarts the build's job (kickstart -k).
+func (m Launchd) RestartHolder(project, key string) error {
+	return m.ctl("kickstart", "-k", m.holderTarget(project, key))
 }
 
 // HolderActive: the job is loaded (spec 4.4a: launchd "not loaded" is the

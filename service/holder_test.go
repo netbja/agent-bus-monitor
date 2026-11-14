@@ -508,3 +508,24 @@ func TestHolderInstallNeedsEnvAndWorkDir(t *testing.T) {
 		t.Fatalf("a refused spec wrote %+v", units)
 	}
 }
+
+// RestartHolder restarts exactly its build's instance (the caller has the
+// person's --kill-agents): systemd restart of that unit, launchd kickstart -k
+// of that job.
+func TestRestartHolder(t *testing.T) {
+	p := holderPaths(t)
+	f := &fakeRun{}
+	if err := (Systemd{Run: f.run, Paths: p}).RestartHolder("demo", "v1.aaa.0123456789"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.calls, []string{"--user restart " + HolderUnitName("demo", "v1.aaa.0123456789")}) {
+		t.Fatalf("systemd calls %v", f.calls)
+	}
+	g := &fakeRun{}
+	if err := (Launchd{Run: g.run, Paths: p, UID: 501}).RestartHolder("demo", "k1"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(g.calls, []string{"kickstart -k gui/501/" + HolderLabel("demo", "k1")}) {
+		t.Fatalf("launchd calls %v", g.calls)
+	}
+}
