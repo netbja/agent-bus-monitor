@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
@@ -227,4 +228,24 @@ func holderTerms(project, key string) (int, error) {
 		return 0, err
 	}
 	return len(r.Terms), nil
+}
+
+// holderReady is up's readiness probe: project's holder of build key
+// completes its handshake within timeout. The welcome comes from the
+// holder's accept loop, so a socket that only listens (its connections
+// queued by the kernel) or accepts and stays silent is not ready
+// (reviewer-codex).
+func holderReady(getenv func(string) string, project, key string, timeout time.Duration) bool {
+	sock, err := holder.SocketPath(getenv, project, key)
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cl, err := holder.DialContext(ctx, sock, holder.BuildID())
+	if err != nil {
+		return false
+	}
+	cl.Close()
+	return true
 }

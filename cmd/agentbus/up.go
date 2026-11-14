@@ -8,7 +8,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"maps"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -662,7 +661,8 @@ func holderContext(d upDeps, workdir string, env map[string]string) {
 }
 
 // The readiness wait: one deadline for the whole wait, probes 100 ms apart;
-// each real probe is a dial bounded by holderProbeTimeout, so a socket that
+// each real probe is the holder's handshake (holderReady) bounded by
+// holderProbeTimeout, so a socket that
 // accepts and stalls cannot stretch it (reviewer-codex).
 const (
 	holderReadyWithin  = 5 * time.Second
@@ -810,21 +810,10 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 			}
 			return filepath.EvalSymlinks(exe)
 		},
-		Installed:   buildinfo.Bin,
-		Environ:     os.Environ(),
-		HolderBuild: holder.BuildID,
-		HolderAnswers: func(project, key string) bool {
-			sock, err := holder.SocketPath(os.Getenv, project, key)
-			if err != nil {
-				return false
-			}
-			c, err := net.DialTimeout("unix", sock, holderProbeTimeout)
-			if err != nil {
-				return false
-			}
-			c.Close()
-			return true
-		},
+		Installed:     buildinfo.Bin,
+		Environ:       os.Environ(),
+		HolderBuild:   holder.BuildID,
+		HolderAnswers: func(project, key string) bool { return holderReady(os.Getenv, project, key, holderProbeTimeout) },
 		Mark: func(project string, inst bus.ServicesInstall) error {
 			c, err := bus.Connect("")
 			if err != nil {
