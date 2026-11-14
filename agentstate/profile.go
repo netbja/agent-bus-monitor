@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 //go:embed clients/*.toml
@@ -27,6 +29,18 @@ type Profile struct {
 	Client     string
 	Signature  Signature
 	Background Background
+	// Keys is the attach prefix's status per key, as step 3's probe settled
+	// it (spec 4.6): "free" or "bound"; a key not listed is unknown.
+	Keys map[string]string
+}
+
+// KeyStatus is key's status for this client: free, bound or unknown (not
+// probed, or no profile).
+func (p Profile) KeyStatus(key string) string {
+	if s, ok := p.Keys[key]; ok {
+		return s
+	}
+	return "unknown"
 }
 
 type profileFile struct {
@@ -47,6 +61,7 @@ type profileFile struct {
 		Helpers       []string `toml:"helpers"`
 		Screen        []string `toml:"screen"`
 	} `toml:"background"`
+	Keys map[string]string `toml:"keys"`
 }
 
 // parseProfile reads one profile: every key known, the client named as its
@@ -115,7 +130,15 @@ func parseProfile(name string, data []byte) (Profile, error) {
 		}
 		seen[a] = true
 	}
-	return Profile{Client: f.Client, Signature: s, Background: bg}, nil
+	for k, v := range f.Keys {
+		if !config.AttachKeyName(k) {
+			return Profile{}, fmt.Errorf("%s: [keys] %q is not a key name (f1-f12, ctrl+<letter>, ctrl+\\, ctrl+])", name, k)
+		}
+		if v != "free" && v != "bound" {
+			return Profile{}, fmt.Errorf("%s: [keys] %s = %q: want free or bound", name, k, v)
+		}
+	}
+	return Profile{Client: f.Client, Signature: s, Background: bg, Keys: f.Keys}, nil
 }
 
 // loadProfiles reads every embedded profile.
