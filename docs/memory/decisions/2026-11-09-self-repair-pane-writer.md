@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-11-09
-last_verified: 2026-11-13
+last_verified: 2026-11-14
 author: coder
 confidence: verified
 ---
@@ -61,7 +61,7 @@ What the person decided with it (same answers):
 ## When it applies
 
 The dispatch service's self-repair loop, once built, on a host where process identity is
-verified (`/proc` today; macOS needs its own before R1 acts there). The rules, preconditions,
+verified: Linux (`/proc`) and, since step 10, macOS (`sysctl kern.proc.pid`, `dispatch.procStat`). The rules, preconditions,
 intent, budgets and proof are the spec's:
 [self-repair watcher](../../superpowers/specs/2026-11-09-self-repair-watcher-design.md).
 

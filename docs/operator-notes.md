@@ -123,7 +123,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   detaches (`dispatch.Ancestors`; lifecycle spec part D): `Bus.ProveSession` moves `IdentSession`
   only when the stored verified pid and start are in that chain and the hook's foreground stamp is newer
   than the stored `ident_session_at` (a new process resets it), so the session follows `/clear`
-  (Linux only, like every verified identity: `/proc`; on macOS no agent is verified, so nothing is proved).
+  (Linux and macOS, like every verified identity: `/proc`, or `sysctl kern.proc.pid` since self-repair step 10).
   The sender re-reads the stored identity and that its pid is alive with that start, but trusts the chain:
   a documented residual, since the bus is no boundary against the local user (as with `status`).
   Since herdr exit step 8 the same hook, inside herdr or not, also hands the session, the profile
