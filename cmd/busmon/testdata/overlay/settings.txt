@@ -7,6 +7,7 @@
    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font     
    Projects       │     @ inserts paths as              ‹ absolute ›
                   │     Work layout                     ‹ auto ›
+                  │     Activity auto-scroll            ● on
                   │     Activity lines at start         25
                   │     Idle? hint after                10m
                   │     Screensaver (idle view) after   off

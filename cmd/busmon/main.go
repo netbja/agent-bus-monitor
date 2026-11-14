@@ -18,8 +18,8 @@
 // The layout is responsive: wide (≥120 columns) shows all four panels, medium
 // (80–119) keeps Agents and puts the others behind tabs 1–3, narrow (<80)
 // shows one view at a time (tabs 1–4). Tab / 1–4 move between panels, Enter
-// opens the selected agent or message in an overlay, y copies (OSC52), /
-// filters, i or @ writes on the bus, r/F2 lists requests, ?/F1 shows every key,
+// opens the selected agent or message in an overlay, y copies (OSC52), f
+// filters, / or Ctrl+P opens the command palette, i or @ writes on the bus, r/F2 lists requests, ?/F1 shows every key,
 // q quits. Themes: inherited dark (default), light, and NO_COLOR.
 //
 // Project is required: -p/--project or AGENT_BUS_PROJECT. -H/--host overrides

@@ -57,4 +57,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- enter task   T triage   p P plan   tab column   1-4 tabs   ←→ column   ↑↓ j k select   y copy   f auto-scroll   F1 help   F5 health        
+ enter task   T triage   p P plan   tab column   / ^P commands   1-4 tabs   ←→ column   ↑↓ j k select   y copy   F1 help   F5 health        

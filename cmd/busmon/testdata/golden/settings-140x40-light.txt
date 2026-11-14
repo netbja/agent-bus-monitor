@@ -12,7 +12,7 @@
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 31 default ──────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 32 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │                   │ focus: keys · ← or tab: the groups ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
@@ -22,6 +22,7 @@
 │    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         │
 │    Projects       │     @ inserts paths as              ‹ absolute ›                                                                     │
 │                   │     Work layout                     ‹ auto ›                                                                         │
+│                   │     Activity auto-scroll            ● on                                                                             │
 │                   │     Activity lines at start         25                                                                               │
 │                   │     Idle? hint after                10m                                                                              │
 │                   │     Screensaver (idle view) after   off                                                                              │
@@ -30,7 +31,6 @@
 │                   │ Icons · display.icons · from config.toml (default: off) · read by busmon                                             │
 │                   │ off: none · nerd: a lettered box per provider · agent-font: the maker's logo                                         │
 │                   │                                                                                                                      │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

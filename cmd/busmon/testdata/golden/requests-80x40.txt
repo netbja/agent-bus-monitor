@@ -37,4 +37,4 @@
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- T triage   p P plan   tab focus   1-4 tabs   ←→ tab   F1 help   F5 health      
+ T triage   p P plan   tab focus   / ^P commands   F1 help   F5 health          

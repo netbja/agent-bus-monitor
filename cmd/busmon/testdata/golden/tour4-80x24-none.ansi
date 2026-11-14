@@ -8,7 +8,7 @@
 [1m╰───[m[1m│[m   [1mu[m      the next unread line for you                                [1m│[m[1m───╯[m
 ╭─ A[1m│[m   [1mR[m      where was I? the recap since your last visit                [1m│[m …─╮
 │[7m▶ [m[7m♙[m[1m│[m   [1mp P[m    the plan, in a drawer (d shows what is done)                [1m│[m[7mle [m▲
-│  ♙[1m│[m   [1m/[m      filter Activity                                             [1m│[m   ┃
+│  ♙[1m│[m   [1mf[m      filter Activity                                             [1m│[m   ┃
 │  ♙[1m│[m   [1m+ -[m    Requests: a tracked request's priority; agents take high    [1m│[m   ▼
 ╰───[1m│[m          first                                                       [1m│[m───╯
 ╭─ [1;7m [m[1m│[m   [1mF1 ?[m   help, every key                                             [1m│[me ─╮

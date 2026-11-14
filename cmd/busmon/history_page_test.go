@@ -163,7 +163,7 @@ func loadedHistory(t *testing.T, es []history.Entry) Model {
 	return next.(Model)
 }
 
-// / filters the page as Activity's filter reads it; t narrows it to the
+// f filters the page as Activity's filter reads it; t narrows it to the
 // selected entry's thread; an empty filter shows everything again.
 func TestHistoryPageFilterAndThread(t *testing.T) {
 	es := histFixture()
@@ -171,13 +171,13 @@ func TestHistoryPageFilterAndThread(t *testing.T) {
 	es = append(es, history.Entry{Stream: "cmd", ID: histID(history.At(root).Add(5 * time.Minute)),
 		F: map[string]string{"from": "coder", "target": "master", "type": "reply", "ref": root.ID, "command": "done with it"}})
 	m := loadedHistory(t, es)
-	m, _ = pressCmd(t, m, '/')
+	m, _ = pressCmd(t, m, 'f')
 	m = typeText(t, m, "@foureyes")
 	m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyEnter})
 	if p := m.rd.top(); p.kind != ovHistory || len(p.hrows) != 1 || p.hrows[0].e.Stream != "verdicts" || !strings.Contains(p.title, "filter: @foureyes") {
 		t.Fatalf("filtered: %q %+v", p.title, p.hrows)
 	}
-	m, _ = pressCmd(t, m, '/')
+	m, _ = pressCmd(t, m, 'f')
 	for range len("@foureyes") {
 		m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyBackspace})
 	}

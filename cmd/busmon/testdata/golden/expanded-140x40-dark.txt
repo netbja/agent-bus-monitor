@@ -37,4 +37,4 @@
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ›                                                                                                                                           
- enter full text   T triage   p P plan   tab focus   1-4 tabs   ←→ tab   ↑↓ j k select   end G live   y copy   F1 help   F5 health          
+ enter full text   T triage   p P plan   tab focus   / ^P commands   1-4 tabs   ←→ tab   ↑↓ j k select   end G live   F1 help   F5 health   

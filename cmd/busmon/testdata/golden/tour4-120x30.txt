@@ -12,7 +12,7 @@
 │    time   from      │   u      the next unread line for you                                    │                     │
 │  ── Mon 2026-10-26 -│   R      where was I? the recap since your last visit                    │─────────────────────│
 │    14:24  architect │   p P    the plan, in a drawer (d shows what is done)                    │                     │
-│    14:50  ♙ Charlie │   /      filter Activity                                                 │                     │
+│    14:50  ♙ Charlie │   f      filter Activity                                                 │                     │
 │    14:51  coder     │   + -    Requests: a tracked request's priority; agents take high first  │                     │
 │  ○ 14:52  master    │   F1 ?   help, every key                                                 │                     │
 │  ● 14:56  dispatch  │   F2 F3  requests, services                                              │                     │

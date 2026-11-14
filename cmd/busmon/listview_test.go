@@ -332,3 +332,56 @@ func TestTailResumesAtTheBottom(t *testing.T) {
 		t.Fatal("a plain list went live")
 	}
 }
+
+// display.follow off (palette spec §8.3, answer d): the list never scrolls by
+// itself; End/G jumps to the newest item once and stays there while new items
+// arrive; neither the selection nor the wheel at the bottom resumes it (A3
+// off). Turned on again, it is live as before.
+func TestTailWithFollowOff(t *testing.T) {
+	l := newList(30, 6, numbered(10)) // 4 rows
+	l.SetTail(true)
+	l.SetFollow(false)
+	if l.Live() {
+		t.Fatal("follow off starts live")
+	}
+	if !l.JumpPending() {
+		t.Fatal("no jump to the newest items at the start")
+	}
+	drawList(t, l)
+	if top := l.Scroll().Top; top != 6 || l.JumpPending() {
+		t.Fatalf("start: top %d (want the newest rows, 6), pending %v", top, l.JumpPending())
+	}
+	l.SetItems(numbered(14)) // new items: the view stays
+	drawList(t, l)
+	if top := l.Scroll().Top; top != 6 || l.Live() {
+		t.Fatalf("new items scrolled it: top %d live %v", top, l.Live())
+	}
+	l.ScrollBy(10) // the wheel at the bottom: no resume
+	if l.Live() {
+		t.Fatal("the wheel at the bottom resumed")
+	}
+	l.Select("k12")
+	l.Move(1) // down onto the newest item: no resume
+	if l.Live() || l.Selected() != "k13" {
+		t.Fatalf("the selection on the newest item resumed: live %v sel %q", l.Live(), l.Selected())
+	}
+	l.ScrollBy(-8)
+	l.Last() // end/G: a jump to the newest items, once, not live
+	if l.Live() || l.Selected() != "" {
+		t.Fatalf("G: live %v sel %q", l.Live(), l.Selected())
+	}
+	drawList(t, l)
+	if top := l.Scroll().Top; top != 10 {
+		t.Fatalf("G: top %d, want 10", top)
+	}
+	l.SetItems(numbered(16))
+	drawList(t, l)
+	if top := l.Scroll().Top; top != 10 || l.Live() {
+		t.Fatalf("after G new items scrolled it: top %d live %v", top, l.Live())
+	}
+	l.SetFollow(true)
+	drawList(t, l)
+	if !l.Live() || l.Scroll().Top != 12 {
+		t.Fatalf("follow on again: live %v top %d", l.Live(), l.Scroll().Top)
+	}
+}

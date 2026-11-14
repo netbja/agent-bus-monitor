@@ -146,6 +146,10 @@ var Keys = []*Key{
 			}
 			return nil, "want auto, list or kanban"
 		}},
+	// Activity's auto-scroll (palette spec §8.3): on, it scrolls with new
+	// lines (a wheel up or a selection above the live window pauses it); off,
+	// it never scrolls by itself and end/G jumps to the newest line once.
+	{Name: "display.follow", Kind: Bool, Default: true, ReadBy: "busmon", file: fileBool},
 	{Name: "display.limit", Env: "AGENT_BUS_BUSMON_LIMIT", Kind: Int, Default: 25, ReadBy: "busmon", Legacy: true, Flag: "busmon --limit",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {

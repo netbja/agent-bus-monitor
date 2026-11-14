@@ -169,8 +169,8 @@ busmon est l'écran de la personne : ce qui vous attend, qui fait quoi, et ce qu
   (jamais écrasé par le silence), son âge, la file, le contexte, des indicateurs en toutes
   lettres et le message. Entrée ouvre sa page ; `i` y écrit.
 - **Les onglets du panneau du bas** (`1`–`4`, ou `←` `→` quand l'un d'eux a le focus, en boucle
-  comme les onglets de herdr) : **Activity** (le fil en direct ; Entrée déplie une ligne, `/`
-  filtre, `f` arrête le défilement), **Board** (les tâches), **Requests** (qui doit une réponse à
+  comme les onglets de herdr) : **Activity** (le fil en direct ; Entrée déplie une ligne, `f`
+  filtre, `/` ouvre la palette de commandes ; le défilement est le réglage `display.follow`), **Board** (les tâches), **Requests** (qui doit une réponse à
   qui), **Plan** (le plan du lot).
 - **Saisie** : `i` ou `:` pour écrire, `@<agent> <texte>` réveille cet agent, `@all <texte>`
   tous les agents enregistrés ; `I` ouvre la fenêtre de rédaction sur plusieurs lignes (Ctrl+S

@@ -25,10 +25,10 @@ type palCmd struct {
 	Aliases []string // a one-letter alias matches exactly and case-sensitively, as its key
 	Summary string
 	Args    []palArg
-	Act     Action                              // class A: the key's action
+	Act     Action                                // class A: the key's action
 	Run     func(m *Model, args []string) tea.Cmd // the others
-	Key     Action                              // a Run row: the action whose key the row shows (0 none)
-	KeyText string                              // a key written in the row (tour: the help page's t)
+	Key     Action                                // a Run row: the action whose key the row shows (0 none)
+	KeyText string                                // a key written in the row (tour: the help page's t)
 	// InLine: the row writes through the line itself (class B): the line
 	// becomes "@agent text" and is sent as Enter sends it, its holds and
 	// confirmations included (an open question, a pause).
@@ -84,11 +84,11 @@ func init() {
 		a("history", "the archive and the streams, newest first", ActHistory, "H"),
 		a("about", "versions and the bus line", ActAbout, "A", "version"),
 		a("unread", "the next unread item for you", ActNextUnread, "u"),
-		a("follow", "auto-scroll on or off", ActFollow, "f", "autoscroll"),
+		{Name: "follow", Summary: "auto-scroll on or off (the setting display.follow)", Aliases: []string{"autoscroll"}, Run: (*Model).palFollow},
 		a("all", "show or hide the agents silent for a day", ActShowAll, "a"),
 		a("compose", "the compose window", ActComposeOpen, "I"),
 		a("sleep", "suspend or resume the project (asks first)", ActSleep, "Z"),
-		{Name: "filter", Summary: "filter Activity by @agent, a thread or words", Act: ActNone, Key: ActFilter,
+		{Name: "filter", Summary: "filter Activity by @agent, a thread or words", Act: ActNone, Key: ActFilter, Aliases: []string{"f"},
 			Args: []palArg{{Name: "words", Rest: true, Optional: true}}, Run: (*Model).palFilter},
 		a("answer", "answer an agent's open questions", ActAsk, "f4", "!"),
 		{Name: "write", Summary: "a message to an agent (as @agent text)", Key: ActComposeAt, Aliases: []string{"@"},
@@ -278,6 +278,39 @@ func (m *Model) palFilter(args []string) tea.Cmd {
 	m.ui.filter = parseFilter(args[0])
 	m.focusPanel(PanelActivity)
 	return nil
+}
+
+// followMsg is /follow's write of display.follow done (on: its new value).
+type followMsg struct {
+	on  bool
+	err error
+}
+
+// palFollow is follow: display.follow flipped through the settings page's
+// own way (config.Set, then applySettings), the new value flashed (palette
+// spec §8.3).
+func (m *Model) palFollow([]string) tea.Cmd {
+	path, on := config.Path(m.settingsGetenv()), m.cfg.settings.NoFollow
+	return func() tea.Msg {
+		if path == "" {
+			return followMsg{on: on, err: errors.New("no config.toml to write (no HOME)")}
+		}
+		return followMsg{on: on, err: config.Set(path, "display.follow", on)}
+	}
+}
+
+// gotFollow applies /follow's write.
+func (m *Model) gotFollow(msg followMsg) {
+	if msg.err != nil {
+		m.ui.flash, m.ui.flashErr = "display.follow: "+msg.err.Error(), true
+		return
+	}
+	m.applySettings("display.follow")
+	state := "on"
+	if m.cfg.settings.NoFollow {
+		state = "off"
+	}
+	m.ui.flash, m.ui.flashErr = "auto-scroll "+state+" (display.follow, saved)", false
 }
 
 // palWrite is write <agent> <text>: the line becomes @agent text and is

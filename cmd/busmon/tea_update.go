@@ -199,14 +199,6 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.askOrWrite()
 	case ActSleep:
 		cmd = m.sleepKey()
-	case ActFollow:
-		if act := &m.lists.activity; act.Live() {
-			act.Pause()
-			m.ui.flash = "auto-scroll off: f or end resumes"
-		} else {
-			act.Resume()
-			m.ui.flash = "auto-scroll on"
-		}
 	case ActNextUnread:
 		m.goNextUnread()
 	case ActShowAll:
@@ -506,7 +498,7 @@ func (m *Model) escape() {
 		m.lists.work.Select(workFoldBetween)
 	case l.Selected() != "":
 		l.ClearSelection()
-	case !act.Live():
+	case !act.Live() && act.Follows(): // follow off: there is no live to return to
 		act.Resume()
 	case !m.ui.filter.empty():
 		m.ui.filter = feedFilter{}

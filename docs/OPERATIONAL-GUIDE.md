@@ -428,10 +428,14 @@ agent names, no project template):
 - **The `updated` gauge** in Agents (`●●●●●●●○○○ 3m`) is how fresh the agent's last declared
   state is: full right after the declaration, empty after 10 minutes, then the age alone. It does
   not measure work in progress.
-- **Activity auto-scroll.** The Activity title reads `auto-scroll on` while new lines scroll into
-  view. `f` turns it off (the view stays put and counts what arrives: `auto-scroll off · 3 new`)
-  and on again; moving, clicking or opening a line keeps it on. A wheel scroll up turns it off
-  (you are reading back), `End` turns it on. Today's day separator
+- **Activity auto-scroll** is a setting, `display.follow` (on by default; `C`, the display group,
+  or `/follow` in the command palette). On, the Activity title reads `auto-scroll on` while new
+  lines scroll into view; moving, clicking or opening a line inside the newest lines keeps it on.
+  A wheel scroll up, or a selection above the newest lines, pauses the view for the moment (it
+  stays put and counts what arrives: `auto-scroll off · 3 new`); `End` or `G` resumes it, and so
+  does `↓` onto the newest line or the wheel back to the bottom. Off, Activity never scrolls by
+  itself: new lines are counted, and `End` or `G` jumps to the newest line once. `/` opens the
+  command palette (as Ctrl+P does); `f` opens the filter line. Today's day separator
   reads `Wed 2026-10-14 - (today)`.
 - **Agents that are gone** (a replaced team, a renamed role) keep their last declared state:
   nothing guesses that an agent died. busmon leaves out of the Agents panel, and out of `@all`, an

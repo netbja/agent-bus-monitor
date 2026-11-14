@@ -24,6 +24,7 @@ type busmonSettings struct {
 	Icons       string        // display.icons: off, nerd or agent-font (busmon-icons)
 	AtPath      string        // compose.at_path: absolute or relative (compose-at-file §5)
 	WorkLayout  string        // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
+	NoFollow    bool          // display.follow off: Activity never scrolls by itself (palette spec §8.3); the zero value is the default, on
 	// projects.delete_files and delete_backups: what a delete also removes
 	// from disk (projects-admin §5.5)
 	DeleteFiles, DeleteBackups bool
@@ -57,6 +58,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		Icons:       r.String("display.icons"),
 		AtPath:      r.String("compose.at_path"),
 		WorkLayout:  r.String("display.work_layout"),
+		NoFollow:    !r.Bool("display.follow"),
 		DeleteFiles: r.Bool("projects.delete_files"), DeleteBackups: r.Bool("projects.delete_backups"),
 		Dev: r.Bool("dev"),
 	}

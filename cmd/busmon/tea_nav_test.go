@@ -195,7 +195,8 @@ func TestShellActivityTail(t *testing.T) {
 	if !m.lists.activity.Live() {
 		t.Fatal("selecting a line left live")
 	}
-	m = keys(t, m, 'f')
+	ax, ay := inPanel(m, PanelActivity)
+	m = wheelAt(t, m, ax, ay, true) // a wheel-up pauses (f is the filter now, palette spec §8.2)
 	top := m.lists.activity.top
 	m = more(m, 5, time.Minute)
 	if m.lists.activity.Live() || m.lists.activity.top != top || m.ui.pause.New() != 5 {
@@ -212,9 +213,9 @@ func TestShellActivityTail(t *testing.T) {
 	if m = wheelAt(t, m, x, y, true); m.lists.activity.Live() {
 		t.Fatal("a wheel-up kept live")
 	}
-	m = keys(t, m, 'f')
+	m = keys(t, m, 'G')
 	if !m.lists.activity.Live() {
-		t.Fatal("f did not resume")
+		t.Fatal("G did not resume")
 	}
 	// A click on a line keeps it live.
 	if m = clickAt(t, m, x, y); !m.lists.activity.Live() || m.lists.activity.Selected() == "" {
@@ -246,14 +247,14 @@ func TestShellShowAllDormant(t *testing.T) {
 	}
 }
 
-// / edits the filter in the input line, Enter applies it to Activity, Esc
+// f edits the filter in the input line, Enter applies it to Activity, Esc
 // clears it after the selection and the pause.
 func TestShellFilter(t *testing.T) {
 	pinLocal(t)
 	m := fixtureShell(t, 140, 40)
-	m = keys(t, m, '/')
+	m = keys(t, m, 'f')
 	if m.mode() != ModeFilter || m.ui.focus != PanelActivity || m.layout.Input.H == 0 {
-		t.Fatalf("/ : mode %d focus %d", m.mode(), m.ui.focus)
+		t.Fatalf("f : mode %d focus %d", m.mode(), m.ui.focus)
 	}
 	m = keys(t, m, '@', 'c', 'o', 'd', 'e', 'r', 'x', kBackspce)
 	if !strings.Contains(m.grid().rowText(m.layout.Input.Y), "filter"+GlyphPrompt+" @coder") {
@@ -268,7 +269,9 @@ func TestShellFilter(t *testing.T) {
 			t.Errorf("filtered row without coder: %q", it.Line.text())
 		}
 	}
-	m = keys(t, m, kUp, 'f', kEsc) // a selection, a pause: Esc clears the selection first
+	m = keys(t, m, kUp)
+	fx, fy := inPanel(m, PanelActivity)
+	m = keys(t, wheelAt(t, m, fx, fy, true), kEsc) // a selection, a pause (wheel up): Esc clears the selection first
 	if m.lists.activity.Selected() != "" || m.ui.filter.empty() {
 		t.Fatal("esc did not clear the selection first")
 	}
@@ -280,7 +283,7 @@ func TestShellFilter(t *testing.T) {
 		t.Fatal("esc did not clear the filter third")
 	}
 	// Esc while editing cancels the edit and keeps the applied filter.
-	m = keys(t, m, '/', 'x', kEsc)
+	m = keys(t, m, 'f', 'x', kEsc)
 	if m.mode() != ModeShell || !m.ui.filter.empty() {
 		t.Fatal("esc in the filter line applied it")
 	}
