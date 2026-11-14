@@ -25,19 +25,27 @@ type terminal struct {
 	cmd      *exec.Cmd
 	pty      *os.File
 
-	mu     sync.Mutex
-	scr    screen.Screen
-	tail   []byte
-	outAt  time.Time
-	alive  bool
-	exit   *int
-	closed bool
+	mu         sync.Mutex
+	scr        screen.Screen
+	tail       []byte
+	outAt      time.Time
+	alive      bool
+	exit       *int
+	closed     bool
+	cols, rows int
+	viewers    map[*viewer]bool
+	last       *viewer // the most recently active viewer: its size is the terminal's
+	typedAt    time.Time
+	draft      bool
+	draftSince time.Time
 
-	grace  time.Duration                           // SIGHUP to SIGKILL for its group
-	kill   func(pid int, sig syscall.Signal) error // nil: syscall.Kill
-	others func(pgid int) bool                     // nil: othersInGroup
-	sigMu  sync.Mutex                              // a signal to the group never crosses the leader's reaping
-	ended  bool                                    // the leader was reaped: its numbers may be reused, never signalled again
+	grace   time.Duration                           // SIGHUP to SIGKILL for its group
+	kill    func(pid int, sig syscall.Signal) error // nil: syscall.Kill
+	others  func(pgid int) bool                     // nil: othersInGroup
+	escWait time.Duration                           // a lone ESC's wait for a sequence (escWait; tests set it)
+	sigMu   sync.Mutex                              // a signal to the group never crosses the leader's reaping
+	ended   bool                                    // the leader was reaped: its numbers may be reused, never signalled again
+	inMu    sync.Mutex                              // the input lock: every viewer byte, and Submit's critical section (step 5d)
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
@@ -57,6 +65,7 @@ func (t *terminal) readLoop() {
 				t.tail = append([]byte(nil), t.tail[len(t.tail)-tailMax:]...)
 			}
 			t.outAt = time.Now()
+			t.fanOut(buf[:n])
 			t.mu.Unlock()
 			t.answer()
 		}
@@ -80,7 +89,9 @@ func (t *terminal) answer() {
 	replies := t.scr.Replies()
 	t.mu.Unlock()
 	if len(replies) > 0 {
+		t.inMu.Lock() // never inside a viewer's bytes or a submit
 		_, _ = t.pty.Write(replies)
+		t.inMu.Unlock()
 	}
 }
 
@@ -126,7 +137,7 @@ func (t *terminal) waitLoop() {
 func (t *terminal) info(build string) TermInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Build: build}
+	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build}
 }
 
 // signal sends sig to pid (negative: a process group), through the

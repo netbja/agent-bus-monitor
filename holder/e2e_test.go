@@ -53,9 +53,21 @@ func insideClient() {
 		}
 		return "error"
 	}
+	results := []string{code(Start{Role: "echoer"}), code(Close{Term: self}), code(Submit{Kind: "clear", Term: self}),
+		code(Attach{Term: self}), code(ScreenReq{Term: self}), code(List{})}
+	observe := "error" // an observer attach makes its connection a stream: its own connection
+	if ob, err := Dial(os.Getenv("AGENTBUS_HOST"), "test"); err == nil {
+		_, err := ob.Call(Attach{Term: self, Observe: true})
+		var re *RemoteError
+		switch {
+		case err == nil:
+			observe = "ok"
+		case errors.As(err, &re):
+			observe = re.Code
+		}
+	}
 	fmt.Printf("RESULT start=%s close=%s submit=%s type=%s observe=%s screen=%s list=%s end\n",
-		code(Start{Role: "echoer"}), code(Close{Term: self}), code(Submit{Kind: "clear", Term: self}),
-		code(Attach{Term: self}), code(Attach{Term: self, Observe: true}), code(ScreenReq{Term: self}), code(List{}))
+		results[0], results[1], results[2], results[3], observe, results[4], results[5])
 	time.Sleep(30 * time.Second)
 }
 
@@ -106,6 +118,12 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 			return sh(`( sleep 1.5 & ) ; exec sleep 30`), nil
 		case "tree":
 			return sh(`sleep 31 & sleep 32 & wait`), nil
+		case "talker":
+			return sh(`printf 'ready\n'; exec cat`), nil
+		case "osc":
+			return sh(`printf 'ready\n'; read x; printf '\033]52;c;aGk=\007|\033]8;;https://evil.example\033\\link\033]8;;\033\\|\033[21t|\033[6n|end\n'; exec sleep 30`), nil
+		case "winch":
+			return sh(`trap 'stty size' WINCH; printf 'w\n'; while :; do sleep 0.05; done`), nil
 		case "dsr":
 			return Command{Argv: []string{self, "-test.run=^$"}, Env: []string{"HOLDER_TEST_MODE=dsr"}}, nil
 		}
@@ -339,17 +357,18 @@ func TestHolderRefusesInTree(t *testing.T) {
 	for _, role := range []string{"insider", "forker"} {
 		x := startRole(t, cl, role)
 		text := waitScreen(t, cl, x.ID, " end")
-		want := "RESULT start=in_tree close=in_tree submit=in_tree type=in_tree observe=later screen=ok list=ok end"
+		want := "RESULT start=in_tree close=in_tree submit=in_tree type=in_tree observe=ok screen=ok list=ok end"
 		if !strings.Contains(strings.ReplaceAll(text, "\n", ""), want) {
 			t.Fatalf("%s:\n%s\nwant %q", role, text, want)
 		}
 	}
 	e := startRole(t, cl, "echoer")
 	var re *RemoteError
-	for _, req := range []any{Submit{Kind: "clear", Term: e.ID}, Attach{Term: e.ID}} {
-		if _, err := cl.Call(req); !errors.As(err, &re) || re.Code != CodeLater {
-			t.Fatalf("%+v from outside: %v", req, err)
-		}
+	if _, err := cl.Call(Submit{Kind: "clear", Term: e.ID}); !errors.As(err, &re) || re.Code != CodeLater {
+		t.Fatalf("submit from outside: %v", err)
+	}
+	if _, err := dial(t, sock).Call(Attach{Term: e.ID}); err != nil {
+		t.Fatalf("an attach that types, from outside: %v", err)
 	}
 	if terms := termOf(t, cl, e.ID); !terms.Alive {
 		t.Fatal("the in-tree close ended a terminal")

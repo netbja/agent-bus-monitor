@@ -76,6 +76,10 @@ func TestDecodeControl(t *testing.T) {
 		`{"op":"submit","kind":"clear","term":"t1"}`:                                       Submit{Kind: "clear", Term: "t1"},
 		`{"op":"attach","term":"t1","observe":true}`:                                       Attach{Term: "t1", Observe: true},
 		`{"op":"attach","term":"t1","cols":80,"rows":24}`:                                  Attach{Term: "t1", Cols: 80, Rows: 24},
+		`{"op":"focus","in":true}`:                                                         Focus{In: true},
+		`{"op":"focus","in":false}`:                                                        Focus{},
+		`{"op":"resize","cols":90,"rows":30}`:                                              Resize{Cols: 90, Rows: 30},
+		`{"op":"detach"}`:                                                                  Detach{},
 	}
 	for raw, want := range ok {
 		got, err := DecodeControl([]byte(raw))
@@ -118,19 +122,23 @@ func TestDecodeControl(t *testing.T) {
 		"a huge size":   `{"op":"start","role":"coder","cols":100000,"rows":40}`,
 		"a half size":   `{"op":"start","role":"coder","cols":80}`,
 		// the others
-		"an unknown op":     `{"op":"exec","cmd":"id"}`,
-		"no op":             `{"term":"t1"}`,
-		"a close's extra":   `{"op":"close","term":"t1","signal":"KILL"}`,
-		"a ping's extra":    `{"op":"ping","x":1}`,
-		"screen lines < 0":  `{"op":"screen","term":"t1","lines":-1}`,
-		"screen lines huge": `{"op":"screen","term":"t1","lines":1000000}`,
-		"hello no proto":    `{"op":"hello","build":"v1"}`,
-		"hello no build":    `{"op":"hello","proto":1}`,
-		"a duplicate op":    `{"op":"ping","op":"start","role":"coder"}`,
-		"two objects":       `{"op":"ping"}{"op":"ping"}`,
-		"not an object":     `["ping"]`,
-		"a case-folded key": `{"op":"submit","Kind":"wake","term":"t1","nonce":"a1b2c3","count":1}`,
-		"a case-folded op":  `{"OP":"ping"}`,
+		"an unknown op":      `{"op":"exec","cmd":"id"}`,
+		"no op":              `{"term":"t1"}`,
+		"a close's extra":    `{"op":"close","term":"t1","signal":"KILL"}`,
+		"a ping's extra":     `{"op":"ping","x":1}`,
+		"screen lines < 0":   `{"op":"screen","term":"t1","lines":-1}`,
+		"screen lines huge":  `{"op":"screen","term":"t1","lines":1000000}`,
+		"hello no proto":     `{"op":"hello","build":"v1"}`,
+		"hello no build":     `{"op":"hello","proto":1}`,
+		"a duplicate op":     `{"op":"ping","op":"start","role":"coder"}`,
+		"two objects":        `{"op":"ping"}{"op":"ping"}`,
+		"not an object":      `["ping"]`,
+		"a case-folded key":  `{"op":"submit","Kind":"wake","term":"t1","nonce":"a1b2c3","count":1}`,
+		"a case-folded op":   `{"OP":"ping"}`,
+		"a focus's extra":    `{"op":"focus","in":true,"data":"x"}`,
+		"a resize of 0":      `{"op":"resize","cols":0,"rows":0}`,
+		"a resize too large": `{"op":"resize","cols":80,"rows":5000}`,
+		"a detach's extra":   `{"op":"detach","term":"t1"}`,
 	}
 	for name, raw := range bad {
 		if got, err := DecodeControl([]byte(raw)); err == nil {

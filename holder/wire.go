@@ -138,6 +138,19 @@ type Attach struct {
 	Rows    int    `json:"rows,omitempty"`
 }
 
+// During an attach (spec 4.5, 4.6): the viewer's focus reports (control
+// frames, never program input), its terminal's size, and the detach.
+type Focus struct {
+	In bool `json:"in"`
+}
+
+type Resize struct {
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
+type Detach struct{}
+
 // op is each frame's name and its fields, the only keys it may carry.
 var ops = map[string]struct {
 	fields []string
@@ -155,6 +168,9 @@ var ops = map[string]struct {
 	"processes": {[]string{"term"}, decodeAs[Processes]},
 	"submit":    {[]string{"kind", "term", "nonce", "count"}, decodeAs[Submit]},
 	"attach":    {[]string{"term", "observe", "cols", "rows"}, decodeAs[Attach]},
+	"focus":     {[]string{"in"}, decodeAs[Focus]},
+	"resize":    {[]string{"cols", "rows"}, decodeAs[Resize]},
+	"detach":    {nil, decodeAs[Detach]},
 }
 
 func opOf(v any) (string, bool) {
@@ -183,6 +199,12 @@ func opOf(v any) (string, bool) {
 		return "submit", true
 	case Attach:
 		return "attach", true
+	case Focus:
+		return "focus", true
+	case Resize:
+		return "resize", true
+	case Detach:
+		return "detach", true
 	}
 	return "", false
 }
@@ -369,6 +391,11 @@ func validate(v any) error {
 	case Attach:
 		if err := validTerm(f.Term); err != nil {
 			return err
+		}
+		return validSize(f.Cols, f.Rows)
+	case Resize:
+		if f.Cols == 0 && f.Rows == 0 {
+			return errors.New("holder: a resize without a size")
 		}
 		return validSize(f.Cols, f.Rows)
 	case Submit:
