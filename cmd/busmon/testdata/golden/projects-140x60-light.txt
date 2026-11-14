@@ -57,4 +57,4 @@
 │                                                                                                                                          │
 │                                                                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k move   enter detail   Z sleep   x stop   b back up   d del delete   R read again   esc back   q quit   F1 help                      
+ ↑↓ j k move   enter detail   Z sleep   o open here   x stop   b back up   d del delete   R read again   esc back   q quit   F1 help        

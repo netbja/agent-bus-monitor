@@ -21,4 +21,4 @@
 │   old                stopped     ?/?  0/2    dispatch ○            40d ago   │
 │   newone             template    —    —      —                     —         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
- ↑↓ j k move   enter detail   Z sleep   x stop   b back up   q quit   F1 help   
+ ↑↓ j k move   enter detail   Z sleep   o open here   x stop   F1 help          

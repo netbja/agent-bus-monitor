@@ -78,3 +78,20 @@ func cutLast(line string) (string, string, bool) {
 	}
 	return line[:i], line[i+1:], true
 }
+
+// startProject is the project busmon opens (project-switch note §2.5):
+// --project, then AGENT_BUS_PROJECT, then last used when it still has keys
+// on this broker; "" when none (busmon then says how to name one).
+func startProject(flag, env, last string, hasKeys func(string) (bool, error)) string {
+	switch {
+	case flag != "":
+		return flag
+	case env != "":
+		return env
+	case last != "":
+		if ok, err := hasKeys(last); err == nil && ok {
+			return last
+		}
+	}
+	return ""
+}

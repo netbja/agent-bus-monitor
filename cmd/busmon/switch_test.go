@@ -15,7 +15,7 @@ import (
 // the project.
 func TestSwitchArgv(t *testing.T) {
 	for _, spelling := range [][]string{{"-p", "a"}, {"-p=a"}, {"--project", "a"}, {"--project=a"}, {"-project", "a"}} {
-		args := append(append([]string{}, spelling...), "-H", "vdr", "--as=bernard", "-t", "dark", "--limit", "50")
+		args := append(append([]string{}, spelling...), "-H", "vdr", "--as=charlie", "-t", "dark", "--limit", "50")
 		o, set, err := parseFlags(args, io.Discard)
 		if err != nil {
 			t.Fatal(err)
@@ -25,7 +25,7 @@ func TestSwitchArgv(t *testing.T) {
 			slices.ContainsFunc(got[n+1:], func(a string) bool { return strings.Contains(a, "project") }) {
 			t.Fatalf("%v: %v", spelling, got)
 		}
-		for _, want := range []string{"--host=vdr", "--as=bernard", "--theme=dark", "--limit=50"} {
+		for _, want := range []string{"--host=vdr", "--as=charlie", "--theme=dark", "--limit=50"} {
 			if !slices.Contains(got, want) {
 				t.Errorf("%v: %v lacks %s", spelling, got, want)
 			}
