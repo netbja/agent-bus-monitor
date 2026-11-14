@@ -177,6 +177,9 @@ func runAttach(s attachSession) error {
 			}
 			if typ == holder.FrameData {
 				write(b)
+				if turnsFocusOff(b) {
+					write([]byte("\x1b[?1004h"))
+				}
 				continue
 			}
 			if v, err := holder.DecodeControl(b); err == nil {

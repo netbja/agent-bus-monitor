@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -85,6 +86,10 @@ type keyScanner struct {
 	pending bool
 	buf     []byte // an escape sequence not complete yet
 	held    bool
+	// echoOf is the kitty code of the key that ended the last pending prefix
+	// (-1 none): its repeats and release are dropped, never sent to a program
+	// that did not see its press (foureyes).
+	echoOf int
 }
 
 func newKeyScanner(prefix string) (*keyScanner, error) {
@@ -92,7 +97,7 @@ func newKeyScanner(prefix string) (*keyScanner, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &keyScanner{key: k}, nil
+	return &keyScanner{key: k, echoOf: -1}, nil
 }
 
 // match says what unit is to the prefix: not it, its press, or a release or
@@ -178,6 +183,44 @@ func (s *keyScanner) match(u []byte) match {
 	return prefixEcho
 }
 
+// kittyKey reads a kitty CSI u unit: its key code and event (1 press, 2
+// repeat, 3 release), any modifier.
+func kittyKey(u []byte) (code, event int, ok bool) {
+	ps, final, isCSI := csiParams(u)
+	if !isCSI || final != 'u' || len(ps) > 3 {
+		return 0, 0, false
+	}
+	code, err := strconv.Atoi(strings.Split(ps[0], ":")[0])
+	if err != nil {
+		return 0, 0, false
+	}
+	event = 1
+	if len(ps) >= 2 {
+		if _, ev, has := strings.Cut(ps[1], ":"); has {
+			if event, err = strconv.Atoi(ev); err != nil {
+				return 0, 0, false
+			}
+		}
+	}
+	return code, event, true
+}
+
+// turnsFocusOff: the program's output turns the outer terminal's focus
+// reporting off (CSI ? … 1004 … l); attach then turns it back on, or the
+// holder would never learn of a blur again (foureyes).
+func turnsFocusOff(b []byte) bool {
+	for _, m := range decPrivateReset.FindAllSubmatch(b, -1) {
+		for _, p := range strings.Split(string(m[1]), ";") {
+			if p == "1004" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+var decPrivateReset = regexp.MustCompile(`\x1b\[\?([0-9;]*)l`)
+
 // plainKey is the letter a unit types, legacy or kitty (CSI <code> u, no
 // modifier, a press); 0 for anything else.
 func plainKey(u []byte) byte {
@@ -255,6 +298,15 @@ func (s *keyScanner) Feed(b []byte) []keyEvent {
 			out = append(out, keyEvent{Kind: map[bool]keyEventKind{true: keyFocusIn, false: keyFocusOut}[u[2] == 'I']})
 			continue
 		}
+		if s.echoOf >= 0 {
+			if code, ev, ok := kittyKey(u); ok && code == s.echoOf && ev != 1 {
+				if ev == 3 {
+					s.echoOf = -1 // the release ends it
+				}
+				continue
+			}
+			s.echoOf = -1
+		}
 		m := s.match(u)
 		if !s.pending {
 			switch m {
@@ -283,6 +335,9 @@ func (s *keyScanner) Feed(b []byte) []keyEvent {
 			out = append(out, keyEvent{Kind: keyBell})
 		}
 		s.pending = false
+		if code, _, ok := kittyKey(u); ok && m == notPrefix {
+			s.echoOf = code
+		}
 	}
 	flush()
 	return out
