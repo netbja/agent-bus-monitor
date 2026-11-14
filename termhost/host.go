@@ -16,13 +16,14 @@ import (
 // TermID identifies one terminal, unique for its host's lifetime.
 type TermID string
 
-// Spec is a terminal to start: one program in its own PTY, named name in
-// project (both bus.ValidName).
+// Spec is a terminal to start: role Name's launch in project (both
+// bus.ValidName), optionally under another of its profiles and resuming a
+// recorded session. It carries no argv, env or cwd (security S2a): the host
+// builds the command from the role's launch template.
 type Spec struct {
 	Project, Name string
-	Cwd           string
-	Argv          []string
-	Env           []string
+	Profile       string // "": the role's own
+	ResumeSession string // "": a fresh session
 	Cols, Rows    int
 }
 

@@ -558,6 +558,14 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   Not wired yet: `submit_wait` and `person_quiet` are `holder.Config` fields only (no
   `config/keys.go` entry, no production caller); they are registered as `dispatch.submit_wait`
   and `dispatch.person_quiet` when the holder's main lands (step 6).
+  Step 6a, the adapter (`holder.Host`, `holder/host.go`; nothing calls it yet): `termhost.Spec`
+  is `{project, name (the role), profile, resume_session, size}` — no argv, env or cwd (S2a). A
+  `TermID` is `<build key>/<terminal id>`: `Start` goes to the current build's socket, `List`
+  and `Describe` read every holder socket of the project (an older build listed as draining),
+  and the other calls reach the terminal's own holder. `Submit` sends the line's kind, nonce and
+  count only, and refuses a wake line built for another project or agent than the terminal's
+  (the holder would type its own). It passes the termhost contract on a real test holder
+  (`TestHostContract`, a fake client driven by files).
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
