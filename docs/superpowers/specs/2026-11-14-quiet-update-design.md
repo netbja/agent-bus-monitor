@@ -380,7 +380,13 @@ The steps (R*n* is restorer step *n*):
      of a dead holder would then no longer end an agent gracefully. So each of them installs a
      SIGHUP handler at start (`signal.Notify`) and keeps it for its whole life: the supervisor
      treats SIGHUP as nothing, the holder as nothing. A process with a handler execs its children
-     with SIGHUP at its default, whatever the launching shell did. This makes the README's `nohup`
+     with SIGHUP at its default, whatever the launching shell did. This holds for a program
+     started with SIGHUP ignored: the `os/signal` documentation says "If the program was started
+     with SIGHUP or SIGINT ignored, and Notify is called for either signal, a signal handler will
+     be installed for that signal and it will no longer be ignored", and that `Reset`, `Ignore`,
+     or `Stop` on every channel puts the ignore back, hence "keeps it for its whole life".
+     Measured with go1.26 on Linux under `nohup`: without `Notify` a child shows `SigIgn ...01`;
+     with it, `SigIgn ...00`. The §5 test asserts this at run time on both systems. This makes the README's `nohup`
      start equivalent to `up`'s. It must be in every build that has a holder. No release has one
      yet (v0.28.0, the newest tag, has no `holdercmd.go`), and today's holder handles only
      SIGINT and SIGTERM, so the handler is added to the holder and to `service supervise` now,
@@ -558,7 +564,8 @@ scheduler is, and its fallback is above.
   - Every command the README names is in the portable list (§4.5.3), checked for a Linux and a
     macOS snapshot; the `none` harness runs with a PATH that has no `setsid`.
   - Under that `nohup` start, an agent the holder starts has SIGHUP at its default (on Linux, bit 1
-    of `SigIgn` in `/proc/<pid>/status` is clear), and the holder's close ends it within the
+    of `SigIgn` in `/proc/<pid>/status` is clear; on macOS, `ps -o ignored= -p <pid>` has the
+    SIGHUP bit clear), and the holder's close ends it within the
     grace on SIGHUP, not on the SIGKILL. A holder or supervisor built without the handler fails
     this test.
 - **First upgrade from a pre-feature binary:**
@@ -614,7 +621,8 @@ None. The person answered r11's two (§2 decision 6; §6).
     stock macOS lacks; the README keeps to a list of portable commands, with a test;
   - (foureyes on r12) `nohup` passes SIGHUP ignored down to the agents: the supervisor and the
     holder must install a SIGHUP handler at start, a requirement on the herdr exit's holder step,
-    with a test.
+    with a test; the `os/signal` rule that makes `Notify` lift an inherited ignore is quoted,
+    with a measurement (reviewer-codex had read the opposite).
 - **r11:** files and skill directories the update creates or deletes, journalled with `absent`
   (foureyes on r9).
 - **r10:** the journal's guarantee is a process crash or kill; power loss is out of scope, with
