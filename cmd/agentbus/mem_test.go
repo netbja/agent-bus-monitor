@@ -118,3 +118,34 @@ func TestMemNewThenSync(t *testing.T) {
 		t.Fatalf("existing note: %d %q", code, errOut)
 	}
 }
+
+// mem notes assembles docs/operator-notes.md from its fragments (at a
+// release), needs no project, and refuses a malformed fragment without
+// touching the file (operator-notes-fragments).
+func TestMemNotes(t *testing.T) {
+	root := memtest.WriteTree(t)
+	dir := filepath.Join(root, "docs", "operator-notes.d")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "_header.md"), []byte("# Operator notes\n\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "0010-a.md"), []byte("- **A.** one\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "my-task.md"), []byte("- **B.** two\n"), 0o644)
+	if code, out, errOut := mem(t, root, "notes"); code != 0 || !strings.Contains(out, "assembled") {
+		t.Fatalf("notes: %d %q %q", code, out, errOut)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "docs", "operator-notes.md")); string(b) != "# Operator notes\n\n- **A.** one\n- **B.** two\n" {
+		t.Fatalf("assembled %q", b)
+	}
+	if code, out, _ := mem(t, root, "notes"); code != 0 || !strings.Contains(out, "already up to date") {
+		t.Fatalf("again: %d %q", code, out)
+	}
+	os.WriteFile(filepath.Join(dir, "bad.md"), []byte("not a bullet\n"), 0o644)
+	if code, _, errOut := mem(t, root, "notes"); code != 1 || !strings.Contains(errOut, "bad.md") {
+		t.Fatalf("a bad fragment: %d %q", code, errOut)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "docs", "operator-notes.md")); !strings.HasSuffix(string(b), "- **B.** two\n") {
+		t.Fatalf("the file changed after a refusal: %q", b)
+	}
+	if code, _, _ := mem(t, root, "notes", "extra"); code != 2 {
+		t.Fatal("notes takes no argument")
+	}
+}
