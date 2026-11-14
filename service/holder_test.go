@@ -461,7 +461,22 @@ func TestInstallHolderBinaryRefusesASymlink(t *testing.T) {
 	if _, err := InstallHolderBinary(p, "v1+aaa", fakeExe(t, "A")); err == nil {
 		t.Fatal("installed through a symlink")
 	}
-	if _, err := os.Stat(filepath.Join(outside, BuildKey("v1+aaa"), "agentbus")); err == nil {
-		t.Fatal("a binary was written outside")
+	if _, err := os.Lstat(filepath.Join(outside, BuildKey("v1+aaa"))); err == nil {
+		t.Fatal("a directory was made outside")
+	}
+}
+
+// A build whose binary directory is already gone is no gc error (foureyes):
+// its unit goes, there is nothing below to remove.
+func TestHolderGCWithTheBinaryGone(t *testing.T) {
+	p := holderPaths(t)
+	f := fakeSystemd(nil)
+	m := Systemd{Run: f.run, Paths: p}
+	a := install(t, m, p, "demo", "v1+aaa")
+	cur := install(t, m, p, "demo", "v3+ccc")
+	f.answers["--user is-active "+HolderUnitName("demo", a)] = "inactive"
+	os.RemoveAll(HolderBinDir(p, a))
+	if removed, err := GCHolders(m, p, "demo", cur, func(string) bool { return false }); err != nil || !slices.Equal(removed, []string{a}) {
+		t.Fatalf("removed %v, err %v", removed, err)
 	}
 }

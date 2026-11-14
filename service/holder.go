@@ -113,10 +113,10 @@ func InstallHolderBinary(p Paths, raw, src string) (string, error) {
 	}
 	key := BuildKey(raw)
 	dir := HolderBinDir(p, key)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(p.DataHome, 0o700); err != nil {
 		return "", err
 	}
-	if err := realDirs(p.DataHome, "agentbus", "holder", key); err != nil {
+	if _, err := realDirs(true, p.DataHome, "agentbus", "holder", key); err != nil { // each level checked before the next is made
 		return "", err
 	}
 	if err := os.Chmod(dir, 0o700); err != nil {
@@ -141,21 +141,32 @@ func InstallHolderBinary(p Paths, raw, src string) (string, error) {
 }
 
 // realDirs checks each level under root (agentbus, holder, the key) with
-// Lstat: a symlink, or anything but a directory, is refused, so a removal
-// never follows a link out of the per-build directory (reviewer-codex).
-func realDirs(root string, levels ...string) error {
+// Lstat: a symlink, or anything but a directory, is refused, so nothing is
+// written or removed through a link (reviewer-codex). With create, a missing
+// level is made (0700) and checked again before the next one; without, a
+// missing level reports gone: there is nothing below it.
+func realDirs(create bool, root string, levels ...string) (gone bool, err error) {
 	path := root
 	for _, l := range levels {
 		path = filepath.Join(path, l)
 		st, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			if !create {
+				return true, nil
+			}
+			if err := os.Mkdir(path, 0o700); err != nil && !os.IsExist(err) {
+				return false, err
+			}
+			st, err = os.Lstat(path)
+		}
 		if err != nil {
-			return err
+			return false, err
 		}
 		if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
-			return fmt.Errorf("%s is not a plain directory (a symlink is never followed)", path)
+			return false, fmt.Errorf("%s is not a plain directory (a symlink is never followed)", path)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
@@ -245,9 +256,11 @@ func GCHolders(m HolderManager, p Paths, project, current string, answers func(k
 			errs = append(errs, fmt.Errorf("build key %q is not a build key: its binary is kept", key))
 			continue
 		}
-		if err := realDirs(p.DataHome, "agentbus", "holder", key); err != nil {
+		if gone, err := realDirs(false, p.DataHome, "agentbus", "holder", key); err != nil {
 			errs = append(errs, fmt.Errorf("the binary of build %s is kept: %w", key, err))
 			continue
+		} else if gone {
+			continue // no binary left: nothing to remove
 		}
 		if err := os.RemoveAll(dir); err != nil {
 			errs = append(errs, err)
