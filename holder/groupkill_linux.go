@@ -65,7 +65,11 @@ func readEntry(pid int) (procEntry, error) {
 }
 
 // NowTicks is the time since boot in /proc's clock ticks (USER_HZ, 100): the
-// cutoff KillRecordedGroups takes, once, when the holder's exit is seen.
+// cutoff KillRecordedGroups takes, once, when the holder's exit is seen. It
+// is the last tick that is surely over: the one being read is uncertain (a
+// group made after the capture may start in it), so it is excluded
+// (reviewer-codex). The price: a survivor that started in the last tick or
+// two before the holder died (10-20 ms) is not killed.
 func NowTicks() uint64 {
 	b, err := os.ReadFile("/proc/uptime")
 	if err != nil {
@@ -75,7 +79,11 @@ func NowTicks() uint64 {
 	if err != nil || secs < 0 {
 		return 0
 	}
-	return uint64(secs*100) + 1 // rounded up: a process started this tick counts
+	t := uint64(secs * 100) // the tick being read
+	if t < 2 {
+		return 0
+	}
+	return t - 1
 }
 
 func killGroupMembers(pgid int, from, to uint64) (int, error) {
