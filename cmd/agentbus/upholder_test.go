@@ -85,6 +85,11 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 	if !ok || s.Project != "demo" || s.Raw != raw || s.EnvFile != u.paths.EnvFile("demo") || s.WorkDir != work {
 		t.Fatalf("holder spec %+v (installed: %v)", s, ok)
 	}
+	// The directory is in the env file too: a holder already running reads it
+	// at its next Start (reviewer-codex).
+	if env, err := service.LoadEnvFile(u.paths.EnvFile("demo")); err != nil || env[service.WorkDirEnv] != work {
+		t.Fatalf("env file %v %v", env, err)
+	}
 	if b, err := os.ReadFile(filepath.Join(service.HolderBinDir(u.paths, key), "agentbus")); err != nil || string(b) != "#!/bin/sh\n" {
 		t.Fatalf("the binary copy: %q %v", b, err)
 	}

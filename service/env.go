@@ -29,6 +29,11 @@ var envKeys = []string{
 	"AGENTBUS_REPO", "ROLES_TOML",
 }
 
+// WorkDirEnv is the project's working directory, recorded by `agentbus up`:
+// the holder reads it at each Start, so a directory changed by a later up
+// reaches the next agent without restarting the holder (herdr exit 6b2).
+const WorkDirEnv = "AGENTBUS_WORKDIR"
+
 // EscalateEnv names the agent the project's services escalate to (default
 // master), recorded by `agentbus up --escalate-to`.
 const EscalateEnv = "AGENT_BUS_ESCALATE_TO"

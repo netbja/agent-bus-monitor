@@ -201,8 +201,13 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   so `agentbus holder` loads the env file as `service run` does, then finds the launcher
   (`<repo>/scripts/agent-launch`, the repo from `AGENTBUS_REPO` or the stamped checkout) and the
   manifest (`rolecfg.ManifestPath`) from it; the env file now carries `AGENTBUS_REPO` and
-  `ROLES_TOML`. Like dispatch's, it is the project's file, not the build's: an old build's holder
-  reads the current one. An invalid configuration exits 0 (not restarted). `agentbus up` copies
+  `ROLES_TOML`, and `up` records the expanded working directory there as `AGENTBUS_WORKDIR`. Like
+  dispatch's, it is the project's file, not the build's: an old build's holder reads the current one.
+  **Each Start reads that launch context afresh** (env file, launcher, manifest, directory) and gives
+  the new agent the file's variables: `up` never restarts a running holder (it would kill its
+  agents), so a changed PATH or directory reaches the next agent while running ones keep theirs; a
+  context that cannot be read refuses the Start (reviewer-codex). The settings are read once, at
+  start. An invalid configuration exits 0 (not restarted). `agentbus up` copies
   the running build, installs and starts its unit, then runs `GCHolders` (no agent runs on the
   holder before the cutover). A password rotation and an upgrade's hint skip holder lines by kind;
   `service restart holder` is refused unless `--kill-agents` is given and says how many agents

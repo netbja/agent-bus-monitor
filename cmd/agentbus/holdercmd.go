@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -61,8 +63,9 @@ func mainHolder(project string, args []string, stderr io.Writer) int {
 	return 0
 }
 
-// holderConfig loads the env file into this process's environment (the
-// agents inherit it) and builds the holder's Config from it.
+// holderConfig loads the env file into this process's environment (for the
+// socket, the settings and the directories) and builds the holder's Config.
+// Its Launch reads the launch context afresh at each Start (holderLaunch).
 func holderConfig(project string, args []string) (holder.Config, error) {
 	if !bus.ValidName(project) {
 		return holder.Config{}, fmt.Errorf("invalid project %q", project)
@@ -82,7 +85,17 @@ func holderConfig(project string, args []string) (holder.Config, error) {
 		}
 		envFile = paths.EnvFile(project)
 	}
-	env, err := service.LoadEnvFile(envFile)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return holder.Config{}, err
+	}
+	l := holderLaunch{project: project, envFile: envFile, cwd: cwd, base: map[string]string{}}
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			l.base[k] = v
+		}
+	}
+	env, _, err := l.context() // the configuration is checked once before serving
 	if err != nil {
 		return holder.Config{}, err
 	}
@@ -91,41 +104,93 @@ func holderConfig(project string, args []string) (holder.Config, error) {
 			return holder.Config{}, err
 		}
 	}
-	repo, err := repoDir(os.Getenv)
-	if err != nil {
-		return holder.Config{}, err
-	}
-	launcher := filepath.Join(repo, "scripts", "agent-launch")
-	if st, err := os.Stat(launcher); err != nil || st.IsDir() || st.Mode()&0o111 == 0 {
-		return holder.Config{}, fmt.Errorf("no executable launcher at %s", launcher)
-	}
-	manifest, err := rolecfg.ManifestPath(os.Getenv)
-	if err != nil {
-		return holder.Config{}, err
-	}
-	if _, err := rolecfg.Load(manifest); err != nil {
-		return holder.Config{}, fmt.Errorf("the role manifest: %w", err)
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return holder.Config{}, err
-	}
 	build := holder.BuildID()
 	sock, err := holder.SocketPath(os.Getenv, project, service.BuildKey(build))
 	if err != nil {
 		return holder.Config{}, err
 	}
 	r := config.Resolver{Getenv: os.Getenv, Files: []*config.File{config.Load(config.Path(os.Getenv), "config.toml")}}
-	launch := holder.TemplateLaunch{Project: project, Launcher: launcher, Manifest: manifest, Dir: dir}
 	return holder.Config{
 		Project:     project,
 		Build:       build,
 		Socket:      sock,
-		Launch:      launch.Command,
+		Launch:      l.command,
 		Scrollback:  r.Int("holder.scrollback"),
 		SubmitWait:  r.Duration("dispatch.submit_wait"),
 		PersonQuiet: r.Duration("dispatch.person_quiet"),
 	}, nil
+}
+
+// holderLaunch turns a Start into a command with the project's launch context
+// as it is now. `agentbus up` may rewrite the env file and the working
+// directory while this build's holder runs, and the holder is never restarted
+// for it (that would kill its agents): so each Start reads the env file again
+// and takes from it the PATH, the launcher (AGENTBUS_REPO), the manifest
+// (ROLES_TOML) and the directory (service.WorkDirEnv, else the unit's); the
+// new agent gets those variables. A running terminal keeps its own. A context
+// that cannot be read refuses the Start, never falls back to the old one.
+type holderLaunch struct {
+	project, envFile, cwd string
+	base                  map[string]string // the holder's environment before any env file
+}
+
+// context is the env file's variables and the TemplateLaunch they give.
+func (l holderLaunch) context() (map[string]string, holder.TemplateLaunch, error) {
+	env, err := service.LoadEnvFile(l.envFile)
+	if err != nil {
+		return nil, holder.TemplateLaunch{}, err
+	}
+	getenv := func(k string) string {
+		if v, ok := env[k]; ok {
+			return v
+		}
+		return l.base[k]
+	}
+	repo, err := repoDir(getenv)
+	if err != nil {
+		return nil, holder.TemplateLaunch{}, err
+	}
+	launcher := filepath.Join(repo, "scripts", "agent-launch")
+	if st, err := os.Stat(launcher); err != nil || st.IsDir() || st.Mode()&0o111 == 0 {
+		return nil, holder.TemplateLaunch{}, fmt.Errorf("no executable launcher at %s", launcher)
+	}
+	manifest, err := rolecfg.ManifestPath(getenv)
+	if err != nil {
+		return nil, holder.TemplateLaunch{}, err
+	}
+	if _, err := rolecfg.Load(manifest); err != nil {
+		return nil, holder.TemplateLaunch{}, fmt.Errorf("the role manifest: %w", err)
+	}
+	dir := l.cwd
+	if d := env[service.WorkDirEnv]; d != "" {
+		dir = d
+	}
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() || !filepath.IsAbs(dir) {
+		return nil, holder.TemplateLaunch{}, fmt.Errorf("the working directory %q is not an absolute directory", dir)
+	}
+	return env, holder.TemplateLaunch{Project: l.project, Launcher: launcher, Manifest: manifest, Dir: dir}, nil
+}
+
+func (l holderLaunch) command(s holder.Start) (holder.Command, error) {
+	env, tl, err := l.context()
+	if err != nil {
+		return holder.Command{}, fmt.Errorf("holder: the launch context: %w", err)
+	}
+	c, err := tl.Command(s)
+	if err != nil {
+		return holder.Command{}, err
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	fresh := make([]string, 0, len(env)+len(c.Env))
+	for _, k := range keys {
+		fresh = append(fresh, k+"="+env[k])
+	}
+	c.Env = append(fresh, c.Env...) // after the holder's own environment: these win
+	return c, nil
 }
 
 // holderTerms counts the terminals of project's holder of build key, asked

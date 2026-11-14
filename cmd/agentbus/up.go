@@ -437,6 +437,13 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 			}
 		}
 	}
+	// The holder reads its agents' directory here at each Start (it is never
+	// restarted for a new one; herdr exit 6b2).
+	if dir := expandWorkDir(d, workdir); filepath.IsAbs(dir) {
+		env[service.WorkDirEnv] = dir
+	} else {
+		delete(env, service.WorkDirEnv)
+	}
 	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), env)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotInstalled, err)
@@ -637,6 +644,12 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 	})
 }
 
+// expandWorkDir is a template's working_dir as up reads it elsewhere: ~ is
+// the home, variables expanded.
+func expandWorkDir(d upDeps, dir string) string {
+	return os.ExpandEnv(strings.Replace(dir, "~", d.Env("HOME"), 1))
+}
+
 // startHolder installs this build's holder (spec 4.4a): its binary copy, its
 // unit with the project's env file and working directory, then starts it and
 // gcs the project's older builds that no longer run. It never stops or
@@ -659,7 +672,7 @@ func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io
 		return err
 	}
 	if _, err := hm.InstallHolder(service.HolderSpec{Project: project, Raw: raw, Paths: d.Paths,
-		EnvFile: d.Paths.EnvFile(project), WorkDir: workdir}); err != nil {
+		EnvFile: d.Paths.EnvFile(project), WorkDir: expandWorkDir(d, workdir)}); err != nil {
 		return err
 	}
 	key := service.BuildKey(raw)

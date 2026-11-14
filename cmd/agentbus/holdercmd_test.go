@@ -23,40 +23,33 @@ func TestHolderHelperProcess(t *testing.T) {
 	os.Exit(mainHolder("demo", os.Args[len(os.Args)-2:], os.Stderr))
 }
 
-// A holder started by a service manager has a minimal PATH; it loads the
-// project's env file (as `service run` does) and launches through it: the
-// launcher is found from the env file's AGENTBUS_REPO, the client from the
-// env file's PATH, and the agent runs in the unit's working directory.
-func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
+// holderWorld is a checkout (bootstrap, agent-launch, roles.toml), a client
+// directory reachable only through the env file's PATH, and the env file.
+type holderWorld struct {
+	tmp, repo, envFile, run string
+	out                     *strings.Builder
+	cmd                     *exec.Cmd
+}
+
+func newHolderWorld(t *testing.T) *holderWorld {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("starts a holder process")
 	}
 	tmp := t.TempDir()
-	repo, clientDir, work := filepath.Join(tmp, "repo"), filepath.Join(tmp, "clients"), filepath.Join(tmp, "work")
-	for _, d := range []string{filepath.Join(repo, "scripts"), clientDir, work} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
+	w := &holderWorld{tmp: tmp, repo: filepath.Join(tmp, "repo"), envFile: filepath.Join(tmp, "env", "demo.env")}
+	if err := os.MkdirAll(filepath.Join(w.repo, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 	manifest, err := os.ReadFile(filepath.Join("..", "..", "roles.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeExe := func(path, body string) {
-		t.Helper()
-		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(repo, "roles.toml"), manifest, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(w.repo, "roles.toml"), manifest, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeExe(filepath.Join(repo, "scripts", "bootstrap"), "#!/bin/sh\nexit 1\n") // how repoDir knows a checkout
-	writeExe(filepath.Join(repo, "scripts", "agent-launch"), "#!/bin/sh\nexec fake-client \"$@\"\n")
-	mark := filepath.Join(tmp, "mark")
-	writeExe(filepath.Join(clientDir, "fake-client"), "#!/bin/sh\necho \"$* in $(pwd) roles=$ROLES_TOML\" > \"$HOLDER_TEST_MARK\"\nexec sleep 30\n")
-
-	home := filepath.Join(tmp, "home")
+	writeExe(t, filepath.Join(w.repo, "scripts", "bootstrap"), "#!/bin/sh\nexit 1\n") // how repoDir knows a checkout
+	writeExe(t, filepath.Join(w.repo, "scripts", "agent-launch"), "#!/bin/sh\nexec fake-client \"$@\"\n")
 	run, err := os.MkdirTemp("", "hb") // short: a socket path fits in 104 bytes
 	if err != nil {
 		t.Fatal(err)
@@ -65,23 +58,49 @@ func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 	if err := os.Chmod(run, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	envFile := filepath.Join(tmp, "env", "demo.env")
-	if _, err := service.WriteEnvFile(envFile, map[string]string{
-		"PATH":             "/usr/bin:/bin:" + clientDir,
-		"AGENTBUS_REPO":    repo,
-		"HOLDER_TEST_MARK": mark,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	w.run = run
+	return w
+}
 
-	cmd := exec.Command(os.Args[0], "-test.run=^TestHolderHelperProcess$", "--", "--env", envFile)
-	cmd.Dir = work
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home, "XDG_RUNTIME_DIR=" + run, "AGENTBUS_HOLDER_HELPER=1"}
-	var out strings.Builder
-	cmd.Stdout, cmd.Stderr = &out, &out
-	if err := cmd.Start(); err != nil {
+func writeExe(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// client makes a client directory whose fake-client writes what it saw
+// (args, directory, manifest, a tag) to $HOLDER_TEST_MARK, then stays.
+func (w *holderWorld) client(t *testing.T, tag string) string {
+	dir := filepath.Join(w.tmp, "clients-"+tag)
+	writeExe(t, filepath.Join(dir, "fake-client"),
+		"#!/bin/sh\necho \""+tag+" $* in $(pwd) roles=$ROLES_TOML\" > \"$HOLDER_TEST_MARK\"\nexec sleep 30\n")
+	return dir
+}
+
+func (w *holderWorld) writeEnv(t *testing.T, env map[string]string) {
+	t.Helper()
+	if _, err := service.WriteEnvFile(w.envFile, env); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// start runs the holder as a service manager would: a minimal PATH, the
+// unit's working directory.
+func (w *holderWorld) start(t *testing.T, cwd string) *holder.Client {
+	t.Helper()
+	w.out = &strings.Builder{}
+	w.cmd = exec.Command(os.Args[0], "-test.run=^TestHolderHelperProcess$", "--", "--env", w.envFile)
+	w.cmd.Dir = cwd
+	w.cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + filepath.Join(w.tmp, "home"), "XDG_RUNTIME_DIR=" + w.run, "AGENTBUS_HOLDER_HELPER=1"}
+	w.cmd.Stdout, w.cmd.Stderr = w.out, w.out
+	if err := w.cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	cmd := w.cmd
 	t.Cleanup(func() {
 		_ = cmd.Process.Signal(syscall.SIGTERM)
 		done := make(chan struct{})
@@ -93,46 +112,128 @@ func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 			<-done
 		}
 	})
-
 	sock, err := holder.SocketPath(func(k string) string {
 		if k == "XDG_RUNTIME_DIR" {
-			return run
+			return w.run
 		}
 		return ""
 	}, "demo", service.BuildKey(holder.BuildID()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cl *holder.Client
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		if cl, err = holder.Dial(sock, "test"); err == nil {
-			break
+		cl, err := holder.Dial(sock, "test")
+		if err == nil {
+			t.Cleanup(func() { cl.Close() })
+			return cl
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no holder at %s: %v\n%s", sock, err, out.String())
+			t.Fatalf("no holder at %s: %v\n%s", sock, err, w.out.String())
 		}
 	}
-	defer cl.Close()
+}
+
+// mark waits for a client's line in path.
+func (w *holderWorld) mark(t *testing.T, path string) string {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		if b, _ := os.ReadFile(path); strings.TrimSpace(string(b)) != "" {
+			return strings.TrimSpace(string(b))
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the client never wrote %s (not found through the env file's PATH?)\n%s", path, w.out.String())
+		}
+	}
+}
+
+func realPath(t *testing.T, p string) string {
+	t.Helper()
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// A holder started by a service manager has a minimal PATH; it loads the
+// project's env file (as `service run` does) and launches through it: the
+// launcher is found from the env file's AGENTBUS_REPO, the client from the
+// env file's PATH, and the agent runs in the unit's working directory.
+func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
+	w := newHolderWorld(t)
+	work := filepath.Join(w.tmp, "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mark := filepath.Join(w.tmp, "mark")
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "a"), "AGENTBUS_REPO": w.repo, "HOLDER_TEST_MARK": mark})
+	cl := w.start(t, work)
 	if _, err := cl.Call(holder.Start{Role: "coder"}); err != nil {
-		t.Fatalf("start: %v\n%s", err, out.String())
+		t.Fatalf("start: %v\n%s", err, w.out.String())
 	}
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		b, _ := os.ReadFile(mark)
-		got := strings.TrimSpace(string(b))
-		if got != "" {
-			realWork, _ := filepath.EvalSymlinks(work)
-			want := "coder demo in " + realWork + " roles=" + filepath.Join(repo, "roles.toml")
-			if r, err := filepath.EvalSymlinks(filepath.Join(repo, "roles.toml")); err == nil {
-				want = "coder demo in " + realWork + " roles=" + r
-			}
-			if got != want {
-				t.Fatalf("the client ran as %q, want %q", got, want)
-			}
-			return
+	want := "a coder demo in " + realPath(t, work) + " roles=" + realPath(t, filepath.Join(w.repo, "roles.toml"))
+	if got := w.mark(t, mark); got != want {
+		t.Fatalf("the client ran as %q, want %q", got, want)
+	}
+}
+
+// up may change the env file and the working directory while this build's
+// holder runs (it is never restarted: that would kill its agents). Each Start
+// reads its launch context afresh: a new terminal gets the new PATH, the new
+// variables and the new directory; one already running is left as it is
+// (reviewer-codex).
+func TestHolderStartReadsTheLaunchContextAfresh(t *testing.T) {
+	w := newHolderWorld(t)
+	work1, work2 := filepath.Join(w.tmp, "work1"), filepath.Join(w.tmp, "work2")
+	for _, d := range []string{work1, work2} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the client never ran (not found through the env file's PATH?)\n%s", out.String())
+	}
+	mark1, mark2 := filepath.Join(w.tmp, "mark1"), filepath.Join(w.tmp, "mark2")
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "old"), "AGENTBUS_REPO": w.repo,
+		"HOLDER_TEST_MARK": mark1, service.WorkDirEnv: work1})
+	cl := w.start(t, work1)
+	first, err := cl.Call(holder.Start{Role: "coder"})
+	if err != nil || first.Term == nil {
+		t.Fatalf("start: %v\n%s", err, w.out.String())
+	}
+	roles := realPath(t, filepath.Join(w.repo, "roles.toml"))
+	if got, want := w.mark(t, mark1), "old coder demo in "+realPath(t, work1)+" roles="+roles; got != want {
+		t.Fatalf("first: %q, want %q", got, want)
+	}
+
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "new"), "AGENTBUS_REPO": w.repo,
+		"HOLDER_TEST_MARK": mark2, service.WorkDirEnv: work2})
+	if _, err := cl.Call(holder.Start{Role: "coder"}); err != nil {
+		t.Fatalf("second start: %v\n%s", err, w.out.String())
+	}
+	if got, want := w.mark(t, mark2), "new coder demo in "+realPath(t, work2)+" roles="+roles; got != want {
+		t.Fatalf("second: %q, want %q", got, want)
+	}
+	r, err := cl.Call(holder.List{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	alive := 0
+	for _, ti := range r.Terms {
+		if ti.Alive {
+			alive++
 		}
+		if ti.ID == first.Term.ID && !ti.Alive {
+			t.Fatalf("the first terminal died: %+v", r.Terms)
+		}
+	}
+	if alive != 2 {
+		t.Fatalf("terms %+v", r.Terms)
+	}
+
+	// An env file that cannot be read refuses the Start: never the stale context.
+	if err := os.Chmod(w.envFile, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.Call(holder.Start{Role: "coder"}); err == nil {
+		t.Fatal("a Start with an unreadable env file was served")
 	}
 }
 
