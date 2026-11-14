@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r3, spec only (r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r4, spec only (r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -98,6 +98,7 @@ any part cannot be written. The snapshot holds:
 | **service units** | each unit file (dispatch, missions, holder per build) with its enabled and active state, per project | `service list`, the unit directory (systemd) or LaunchAgents (launchd) |
 | **team** | per project: the roster from `{p}:agents` (role, profile, client, holder build), the `{p}:resume` records (`{session, profile, at}`), pause and suspend state, and the current holder build | the broker, read only |
 | **broker** | a `agentbus backup` archive of the record keys of every project, made by the existing backup code; secrets left out as backup does | `backup` (2026-11-01 spec) |
+| **restorer** | a copy of the new `agentbus` that writes the snapshot, plus a `README` with the manual steps (§4.5) | the staged build (§4.3) |
 | **manifest** | `manifest.json`: a **format version**, the parts, their hashes, the from and to tags, and whether the release declares a **broker migration** (§4.6) | written last; a snapshot with no manifest is incomplete and never restored |
 
 Retention: the last `updates.keep` snapshots (default 3). An older one is removed only after a newer
@@ -105,22 +106,37 @@ update has succeeded.
 
 ### 4.3 The update, step by step
 
-**Who runs what.** The running (old) binary does steps 1 to 3 only: check, snapshot, stage. It
-never installs. `setup/update.go` keeps the same rule: "the pull may change the steps, so this
-running binary never installs". After staging, it execs the **staged new binary**:
-`<builds>/<buildkey>/agentbus update --apply <snapshot-id>`. That binary runs steps 4 to 8.
-Rollback is run by the snapshot's **own copy** of the old binary (§4.5), which wrote the manifest
-and knows its format. A binary refuses a manifest whose format version it does not know.
+**Who runs what.** The **new** version does everything that writes or reads a snapshot. The running
+(old) binary may be older than this feature and may have no `agentbus update` at all, so it can
+neither write a snapshot nor restore one.
 
-1. **Check.** Find the release (§4.1). Already there: done. Developer build: notify only.
-2. **Snapshot** (§4.2).
-3. **Stage.**
+- **The old binary checks and stages only** (steps 1 and 2), then execs the staged new binary:
+  `<builds>/<buildkey>/agentbus update --apply`. It never installs. `setup/update.go` keeps the
+  same rule: "the pull may change the steps, so this running binary never installs".
+- **The new binary** writes the snapshot of the state still in place (step 3: old binaries, old
+  tree, settings, units, team, broker archive), then runs steps 4 to 8.
+- **The new binary copies itself into the snapshot as its restorer**, `<snapshot>/restorer/agentbus`.
+  It wrote the manifest, so it always knows the manifest's format.
+- **A rollback** of that snapshot runs that restorer (§4.5). The old binaries in the snapshot are
+  only the files to put back; they never have to understand anything.
+- **The first update into this feature, from a binary without `agentbus update`:**
+  - On a developer build, `./setup.sh update` pulls, then execs the pulled installer
+    (`setup/update.go`).
+  - On a managed tree, the person re-runs `install.sh`.
+  - Either way, the binary that runs is the new one, so it can snapshot first, and the snapshot can
+    be rolled back.
+
+1. **Check** (old binary). Find the release (§4.1). Already there: done. Developer build: notify
+   only.
+2. **Stage** (old binary), then exec the staged binary with `--apply`. Staging changes nothing in
+   place, so the snapshot taken next still sees the whole old state. In detail:
    - Add the tag's source tree (`git worktree add <src>/<tag> <tag>` in the managed clone), and
      build the stamped binaries into `<datadir>/agentbus/builds/<buildkey>/`. Their
      `buildinfo.Repo` is that tree.
    - Run the new `agentbus version` and `busmon --version`.
-   - Any failure: nothing has changed. The new tree and the snapshot are dropped, and For you says
-     why.
+   - Any failure: nothing has changed. The new tree and build are dropped, and For you says why.
+3. **Snapshot** (the new binary, §4.2), before any change, with the restorer copy. If it cannot be
+   written completely, the new tree and build are dropped and nothing has changed.
 4. **Swap the commands** (the new binary from here on).
    - Install the new binaries with `InstallFile`, which copies beside the target and then renames
      (verified: `setup/build.go`). A running agent keeps the file it started; the next call runs
@@ -172,9 +188,15 @@ quiet condition: the person chose the moment.
 `agentbus update --rollback [<id>] [--dry-run]` restores a snapshot, step by step. It never stops a
 running agent.
 
-Rollback is run by the snapshot's own copy of the old binary:
-`<snapshot>/builds/agentbus update --restore <id>`. `agentbus update --rollback` (whatever binary
-is installed) only finds the snapshot and execs it.
+Rollback is run by the snapshot's **restorer**, the binary that wrote it:
+`<snapshot>/restorer/agentbus update --restore <id>`. `agentbus update --rollback`, run with
+whatever binary is installed, only finds the snapshot and execs its restorer. An older binary
+that predates the feature cannot run `--rollback`; the person runs the restorer path directly, and
+`--list` and the For you item print it.
+
+If the restorer itself cannot run (a broken build), the snapshot is plain files: `README` in the
+snapshot gives the manual steps. Copy the old binaries back beside the targets and rename them over,
+then `service restart`. The old binary then behaves as before the update.
 
 1. **Builds and tree:** the snapshot's binaries go back in place with `InstallFile` (copy beside,
    then rename). They are stamped with the from tree, which is still there (§4.1), so the binaries
@@ -297,10 +319,16 @@ format (the `.migrate` file says whether it does).
   - After a rollback, the installed binaries read the old tree again.
   - A rollback with the from tree removed recreates it at the recorded rev.
 - **Who runs:**
-  - the old binary never calls `InstallFile` on the bin dir (a fake runner records the calls);
-  - `--apply` runs from the staged binary;
-  - `--restore` runs from the snapshot's copy;
+  - the old binary never calls `InstallFile` on the bin dir and never writes a snapshot (a fake
+    runner records the calls);
+  - `--apply` runs from the staged binary and writes the snapshot with its restorer;
+  - `--restore` runs from the snapshot's restorer;
   - a manifest with an unknown format version is refused.
+- **First upgrade from a pre-feature binary:**
+  - a stub old `agentbus` with no `update` command;
+  - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
+    any change;
+  - the restorer rolls back to the stub's binaries, which run again (`version`).
 - **Atomic swap:** a reader process that runs `agentbus version` in a loop during the swap never
   fails.
 
