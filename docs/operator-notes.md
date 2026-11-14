@@ -279,7 +279,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   reused; reviewer-codex): it kills, each pinned by a pidfd and re-read through /proc after the
   pin, the processes of that group that started between the recorded leader and now, so the
   survivors of a gone leader die (foureyes) while a group made after a reuse is spared, and touches
-  nothing when a live process holds the leader's pid with another start time. Linux only
+  nothing when a live process holds the leader's pid with another start time. pidfd needs Linux
+  5.3: a pidfd call failing for another reason than a process gone (ENOSYS, EPERM) is an error,
+  and `KillRecordedGroups` then keeps the record, the only trace of what is left (reviewer-codex). Linux only
   (`groupkill_linux.go`): without /proc there is no start time, the holder records nothing and
   nothing is killed. It reads the record only from a checked run directory and never through a symlink
   (`O_NOFOLLOW`, regular, ours, private), and removes it.
