@@ -106,8 +106,14 @@ review again. This is the cascade.
 ### 3.1 An approval survives a clean rebase
 
 **An approve of head `H` also covers head `H'` when `H'` is `H` replayed on a newer base with the
-same patch.** Concretely, `git patch-id --stable` of `git diff <merge-base(base, H)> H` equals
+same patch.** Concretely, `git patch-id --verbatim` of `git diff <merge-base(base, H)> H` equals
 that of `git diff <merge-base(base, H')> H'`.
+
+- **`--verbatim`, never `--stable`:** `--stable` strips whitespace, so two different indentation
+  changes give one id (reviewer-codex; checked with git 2.56: Python's `return` indented by 8
+  spaces and by 2 both gave `f29971edb6c5` under `--stable`, and `5668c6048cde` and
+  `701a0f0dc182` under `--verbatim`). Whitespace matters in Python, YAML, Makefiles and Go's
+  raw strings.
 
 - `deliver` and the merge queue's derivation compute it themselves, at the moment they need it,
   from the two SHAs. Nothing is stored or trusted, and no verdict is written for a reviewer.
@@ -152,16 +158,39 @@ which never runs repository code.
      the queue: the coder makes no commit on it (coder skill). If the item is rejected later, the
      coder first takes the queue's head, `git fetch` then `git reset --keep origin/<branch>`
      (`--keep` refuses to drop uncommitted work), and then fixes it.
-6. The item is ready for the person's merge, or for master's under `delivery.automerge`. It is
-   merged with `--match-head-commit <H'>`. Master runs `--next` again only after that merge, so
-   **each item is checked on the base it is merged onto**: the checked result is the merged
-   result.
+6. **The item is ready**, checked on base tip `B`, which is recorded with the rebase (§4).
+
+### 3.3 The merge: onto the checked base, or not at all
+
+`--match-head-commit` pins the PR's head, not its base: another merge between the check and this
+one would put the item onto an unchecked `B'` (reviewer-codex). So a queue item is merged by
+**`agentbus merge-queue merge <branch>`**, which binds both:
+
+1. It reads the item's record: head `H'` and checked base `B`. The PR's head must still be `H'`.
+2. It builds the merge commit `M` locally: `git merge --no-ff H'` on `B`. `H'` already sits on `B`,
+   so `M`'s tree is `H'`'s tree: exactly what the checks ran on.
+3. It pushes `M:refs/heads/<base>` **without force**. Git accepts it only as a fast-forward of the
+   base, that is, only if the base is still `B`. If anything else merged meanwhile, the push is
+   refused, nothing changed, and the item goes back to step 1 of §3.2 (rebase and check on the new
+   base).
+4. The forge marks the PR merged, as it does for any push that brings its head into the base. The
+   hidden ref of §3.1 is removed.
+
+**Who runs it:** the person, or master under `delivery.automerge` when that spec is built, which
+would then merge through this command. The guard of the auto-merge spec applies: master holding
+the pilot lease, or the person outside the agents' panes.
+
+**The guarantee, stated exactly:** every merge made by `merge-queue merge` lands a tree that passed
+`delivery.check`. A merge made another way (the forge's button) moves the base under the ready
+item. The queue then sees that the item's branch no longer contains the base tip and redoes its
+rebase and check, but the merge made elsewhere was not checked on its merged result. busmon's
+`merges` line counts such merges ("merged outside the queue").
 
 ## 4. Measures
 
 - **Records:** each `merge-queue rebase` appends one entry to `{p}:rebases`, a capped stream:
-  `{subject, branch, from, to, result: clean|conflict|checks-red|patch-changed, files}`, with
-  Redis `TIME`.
+  `{subject, branch, from, to, base, result: clean|conflict|checks-red|patch-changed, files}`,
+  with Redis `TIME`. `base` is the checked tip `B` (§3.3).
 - **Per day:** the merge queue's chore (it already reads git in the services' directory every 5
   minutes) adds a `stats` field to `{p}:mergequeue` (additive):
   - **PRs merged per hour:** first-parent merges into the base over the day, and per active hour;
@@ -200,7 +229,11 @@ costs a review.
   outside; `deliver` refuses a push that leaves the footprint.
 - **Patch-id carry:** on a disposable git repository, a clean rebase onto a moved base keeps the
   approval for `deliver` and the queue. A rebase that resolves a conflict, or adds a line, does
-  not.
+  not, and neither does a **whitespace-only** change (indentation 4 to 8 versus 4 to 2), which
+  `--stable` would have carried.
+- **Merge onto the checked base:** `merge-queue merge` pushes `M` when the base is still `B`; with
+  another merge pushed meanwhile, the push is refused, nothing changes, and the item is queued for
+  rebase again. A forge-button merge is counted as outside the queue.
 - **Hot paths by file:** `cmd/busmon/keys.go` hot; a `cmd/busmon/` task that does not name it
   is not hot, and its diff touching `keys.go` is refused by `verify` and `deliver` until named.
 - **Old head readable:** after the queue's force push, a fresh clone without `H` fetches
