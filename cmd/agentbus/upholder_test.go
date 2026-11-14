@@ -16,8 +16,9 @@ import (
 type fakeHolderManager struct {
 	*fakeManager
 	holders map[string]service.HolderSpec // by key
-	units   []service.HolderUnit
-	active  map[string]bool
+	units    []service.HolderUnit
+	active   map[string]bool
+	failStop map[string]bool // StopHolder fails for these keys
 }
 
 func (f *fakeHolderManager) InstallHolder(s service.HolderSpec) (bool, error) {
@@ -143,6 +144,9 @@ func TestUpWithoutAHolderManagerInstallsNoHolder(t *testing.T) {
 
 func (f *fakeHolderManager) StopHolder(project, key string) error {
 	f.calls = append(f.calls, "stop-holder "+project+" "+key)
+	if f.failStop[key] {
+		return errors.New("manager error")
+	}
 	f.active[key] = false
 	return nil
 }
@@ -313,5 +317,25 @@ func TestHolderUnitsOnTheRemovalPaths(t *testing.T) {
 	}
 	if _, err := os.Stat(service.HolderBinDir(paths, k1)); !os.IsNotExist(err) {
 		t.Fatalf("v1's binary kept: %v", err)
+	}
+}
+
+// A holder that could not be stopped is never reported as stopped: down
+// names it, and its agents may still run (reviewer-codex).
+func TestDownSaysWhichHoldersDidNotStop(t *testing.T) {
+	k1, k2 := service.BuildKey("v1"), service.BuildKey("v2")
+	hm := &fakeHolderManager{fakeManager: newFakeManager(), holders: map[string]service.HolderSpec{},
+		active: map[string]bool{k1: true, k2: true}, failStop: map[string]bool{k2: true},
+		units: []service.HolderUnit{{Project: "demo", Key: k1, Raw: "v1"}, {Project: "demo", Key: k2, Raw: "v2"}}}
+	d := serviceCmdDeps{Manager: hm, Bus: func(string) (*bus.Bus, error) { return nil, errors.New("no broker") }}
+	var out, errw bytes.Buffer
+	if code := runDown([]string{"demo"}, d, &out, &errw); code == 0 {
+		t.Fatal("a failed stop exited 0")
+	}
+	if !strings.Contains(out.String(), "holder (build v1): stopped") || !strings.Contains(errw.String(), "holder (build v2): manager error") {
+		t.Fatalf("out %q err %q", out.String(), errw.String())
+	}
+	if strings.Contains(out.String(), "the agents the holder ran were stopped with it") || !strings.Contains(out.String(), "1 holder could not be stopped (build v2)") {
+		t.Fatalf("summary %q", out.String())
 	}
 }

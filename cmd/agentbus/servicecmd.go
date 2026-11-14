@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -384,12 +385,15 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "no service installed for %s: nothing to stop\n", p)
 		return 0
 	}
+	var stopped, notStopped []string // build ids
 	for _, u := range holders {
 		if err := hm.StopHolder(p, u.Key); err != nil {
 			fmt.Fprintf(stderr, "error: holder (build %s): %v\n", u.Raw, err)
+			notStopped = append(notStopped, u.Raw)
 			code = 1
 			continue
 		}
+		stopped = append(stopped, u.Raw)
 		fmt.Fprintf(stdout, "holder (build %s): stopped\n", u.Raw)
 	}
 	var recs map[string]bus.ServiceRecord
@@ -407,10 +411,18 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  missions was %s: a check or integration in progress was interrupted (its tests killed with their process group); the conductor redoes it at the next start\n", r.Detail)
 		}
 	}
-	if len(holders) > 0 {
+	switch {
+	case len(notStopped) > 0:
+		// Only what was stopped is said stopped (reviewer-codex).
+		fmt.Fprintf(stdout, "%s: nothing deleted; %d holder could not be stopped (build %s): its agents may still run (errors above; agentbus service list).", p, len(notStopped), strings.Join(notStopped, ", "))
+		if len(stopped) > 0 {
+			fmt.Fprintf(stdout, " The agents of the holder(s) stopped (build %s) were stopped with them.", strings.Join(stopped, ", "))
+		}
+		fmt.Fprintln(stdout)
+	case len(holders) > 0:
 		// A holder is its agents' parent: stopping it stopped them.
 		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted; the agents the holder ran were stopped with it. Agents in the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again; the holder restarts empty.\n", p, p)
-	} else {
+	default:
 		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. The agents and the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again.\n", p, p)
 	}
 	return code
