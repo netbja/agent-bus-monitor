@@ -58,6 +58,9 @@ type MergeQueueRecord struct {
 	Reason      string      `json:"reason,omitempty"`
 	Items       []MergeItem `json:"items"`
 	Unapproved  int         `json:"unapproved"` // open PRs not on an approved head
+	// Conflicting are the approved PRs that conflict with the base: no merge
+	// for the person, a rebase for master. Not in Items.
+	Conflicting []int `json:"conflicting,omitempty"`
 }
 
 // MergeQueue reads the cache; a missing key is the zero record (unknown).
@@ -70,6 +73,11 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 	rec.AttemptedAt, _ = strconv.ParseInt(h["attempted_at"], 10, 64)
 	rec.ItemsAt, _ = strconv.ParseInt(h["items_at"], 10, 64)
 	rec.Unapproved, _ = strconv.Atoi(h["unapproved"])
+	if s := h["conflicting"]; s != "" {
+		if err := json.Unmarshal([]byte(s), &rec.Conflicting); err != nil {
+			return MergeQueueRecord{}, fmt.Errorf("merge queue: a corrupt conflicting field: %w", err)
+		}
+	}
 	if s := h["items"]; s != "" {
 		if err := json.Unmarshal([]byte(s), &rec.Items); err != nil {
 			return MergeQueueRecord{}, fmt.Errorf("merge queue: a corrupt items field: %w", err)
@@ -81,14 +89,14 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 // mergeQueuePut: KEYS[1] the dispatch lease, KEYS[2] the cache; ARGV[1]
 // token, ARGV[2] "1" a success, ARGV[3] source, ARGV[4] reason, ARGV[5] items
 // (JSON, kept opaque), ARGV[6] unapproved, ARGV[7] ttl ms, ARGV[8] forge,
-// ARGV[9] base. A failure writes
+// ARGV[9] base, ARGV[10] conflicting (JSON). A failure writes
 // the attempt, the source and the reason only.
 var mergeQueuePut = redis.NewScript(fenceCheck + `
 local t = redis.call('TIME')
 local now = tostring(tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000))
 redis.call('HSET', KEYS[2], 'attempted_at', now, 'source', ARGV[3], 'reason', ARGV[4], 'forge', ARGV[8], 'base', ARGV[9])
 if ARGV[2] == '1' then
-  redis.call('HSET', KEYS[2], 'items_at', now, 'items', ARGV[5], 'unapproved', ARGV[6])
+  redis.call('HSET', KEYS[2], 'items_at', now, 'items', ARGV[5], 'unapproved', ARGV[6], 'conflicting', ARGV[10])
 end
 redis.call('PEXPIRE', KEYS[2], ARGV[7])
 return 1`)
@@ -105,10 +113,18 @@ func (b *Bus) FencedPutMergeQueue(ctx context.Context, token string, rec MergeQu
 	if err != nil {
 		return err
 	}
+	conflicting := rec.Conflicting
+	if conflicting == nil {
+		conflicting = []int{}
+	}
+	cjs, err := json.Marshal(conflicting)
+	if err != nil {
+		return err
+	}
 	ok := "0"
 	if rec.Reason == "" {
 		ok = "1"
 	}
 	return notHolder(mergeQueuePut.Run(ctx, b.r, []string{DispatchKey(b.project), MergeQueueKey(b.project)},
-		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base).Err())
+		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base, string(cjs)).Err())
 }

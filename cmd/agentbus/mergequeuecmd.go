@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -96,6 +97,13 @@ func printMergeQueue(rec bus.MergeQueueRecord, asJSON bool, out io.Writer) int {
 			s = ""
 		}
 		fmt.Fprintf(out, "%d open PR%s not on an approved head (a newer push, no review, an approve no longer retained)\n", rec.Unapproved, s)
+	}
+	if len(rec.Conflicting) > 0 {
+		nums := make([]string, len(rec.Conflicting))
+		for i, n := range rec.Conflicting {
+			nums[i] = fmt.Sprintf("#%d", n)
+		}
+		fmt.Fprintf(out, "approved but conflicting with %s, to rebase: %s\n", cmp.Or(rec.Base, "the base"), strings.Join(nums, ", "))
 	}
 	return code
 }

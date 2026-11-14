@@ -27,24 +27,25 @@ func fakeGH(t *testing.T, out string, code int) (dir string, env []string) {
 }
 
 func prJSON(n int, head string) string {
-	return fmt.Sprintf(`{"number":%d,"title":"t%d","url":"https://github.com/o/r/pull/%d","headRefName":"b%d","headRefOid":%q,"baseRefName":"main","isDraft":false}`, n, n, n, n, head)
+	return fmt.Sprintf(`{"number":%d,"title":"t%d","url":"https://github.com/o/r/pull/%d","headRefName":"b%d","headRefOid":%q,"baseRefName":"main","isDraft":false,"mergeable":"MERGEABLE"}`, n, n, n, n, head)
 }
 
 func TestReadGitHub(t *testing.T) {
-	out := "[" + prJSON(1, hA) + `,{"number":2,"title":"draft \u001b[31mred","url":"u","headRefName":"d","headRefOid":"` + hB + `","baseRefName":"main","isDraft":true}]`
+	out := "[" + prJSON(1, hA) + `,{"number":2,"title":"draft \u001b[31mred","url":"u","headRefName":"d","headRefOid":"` + hB + `","baseRefName":"main","isDraft":true,"mergeable":"CONFLICTING"}]`
 	dir, env := fakeGH(t, out, 0)
 	prs, err := ReadGitHub(context.Background(), dir, env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prs) != 2 || prs[0].Number != 1 || prs[0].Head != hA || prs[0].Branch != "b1" || prs[0].URL != "https://github.com/o/r/pull/1" || !prs[1].Draft {
+	if len(prs) != 2 || prs[0].Number != 1 || prs[0].Head != hA || prs[0].Branch != "b1" || prs[0].URL != "https://github.com/o/r/pull/1" || !prs[1].Draft ||
+		prs[0].Conflicting || !prs[1].Conflicting {
 		t.Fatalf("%+v", prs)
 	}
 	if strings.ContainsRune(prs[1].Title, 0x1b) {
 		t.Fatalf("a control reached the title: %q", prs[1].Title)
 	}
 	args, _ := os.ReadFile(filepath.Join(dir, "args.txt"))
-	if want := "pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft --limit 1000"; strings.TrimSpace(string(args)) != want {
+	if want := "pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable --limit 1000"; strings.TrimSpace(string(args)) != want {
 		t.Fatalf("args %q", args)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "env.txt"))
