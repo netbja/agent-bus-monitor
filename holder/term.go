@@ -19,6 +19,7 @@ const tailMax = 1 << 20
 // output, feeds its emulator, and writes the emulator's answers to its
 // queries back (DSR, DA: spec 4.6, S3), viewer or not.
 type terminal struct {
+	onEnd    func() // after the program ended (the server's group record)
 	id, role string
 	profile  string // the client's agentstate profile ("" none: never prompted)
 	pid      int
@@ -133,6 +134,9 @@ func (t *terminal) waitLoop() {
 	t.alive, t.exit = false, &code
 	t.mu.Unlock()
 	track(t.pid, false)
+	if t.onEnd != nil {
+		t.onEnd()
+	}
 	close(t.done)
 }
 

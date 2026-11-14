@@ -226,6 +226,18 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   per project its keys and stream lengths, `docker port` for the loopback bind, `bus.LegacyPasswordInUse`,
   a `docker logs --tail 20` bounded to 8 KiB; unknown read `?`); `busmon --delete` removes the local
   units before the keys.
+- **Without a service manager (herdr exit step 6c1; the `none` manager is 6c2, not wired yet).**
+  `services.manager` (`auto`, `systemd`, `launchd`, `none`; `MachineOnly`) is the registry key of the
+  old `AGENTBUS_SERVICE_MANAGER`: `service.ManagerChoice` reads the environment, then config.toml,
+  and `Detect`, `Local`, `ManagerBin` and `restore` go through it (today `none` still means herdr
+  tabs). `service.Supervisor` is the units' policy for a supervisor process: restart after 2 s on a
+  non-zero exit, at most 5 starts in 300 s (judged at the next start, so a spent burst gives up at
+  once), an exit 0 is final, a stop sends the service SIGTERM; `AfterExit` runs after each exit.
+  A holder with `Config.Pgids` set rewrites `<rundir>/agentbus/<p>/holder-<key>.pgids`
+  (`PgidsPath`, 0600, atomic) with each live terminal's leader pid and start time at every start
+  and end; `KillRecordedGroups` SIGKILLs a group only when its leader's pid and start time both
+  still match, reads the record only from a checked run directory and never through a symlink
+  (`O_NOFOLLOW`, regular, ours, private), and removes it.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails
   silently and only adds a muted `↑ vX.Y.Z` to the header. Don't make it block startup or nag.
