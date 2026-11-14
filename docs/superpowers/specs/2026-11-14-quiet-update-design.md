@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r4, spec only (r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r5, spec only (r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -223,8 +223,21 @@ then `service restart`. The old binary then behaves as before the update.
    - With a migration, the broker part is **never automatic**: it needs a project that is not live
      and the person's `y`. `backup.Restore` refuses a live project, meaning a lease held, services
      active or an agent alive. `restoreRedis` asks the person to confirm before replacing keys.
-     - It runs only as `agentbus update --rollback <id> --broker`, with every migrated project
-       suspended (§4.6), so restore is never over a live project.
+     - It runs only as `agentbus update --rollback <id> --broker`, and only when restore's own
+       live test (`projectLive`, `cmd/agentbus/restorecmd.go`) finds nothing for every migrated
+       project. That test checks four things:
+       - no dispatch or conductor lease held;
+       - no service active;
+       - **no herdr workspace open with the project's label**, while herdr is in use;
+       - no registered agent's pid alive.
+     - `agentbus suspend` clears the leases, the services and the agents, but **not the herdr
+       workspace**. So before restoring, `--broker` runs the same live test and stops on the first
+       reason. It prints that reason, as `projectLive` words it ("its herdr workspace is open"),
+       with the step that clears it: close that workspace in herdr. Nothing is restored until every
+       migrated project passes.
+     - After the herdr exit, the workspace check becomes the holder's: no terminal of the project
+       on any holder build. `suspend` already ends those terminals, so `--broker` needs no extra
+       step there.
      - It restores the record keys from the snapshot's archive through `agentbus restore --force`,
        with the person's `y`. The confirmation names the time span lost: what was written since the
        update.
@@ -249,8 +262,10 @@ format (the `.migrate` file says whether it does).
   scheduled updater notifies instead: "vX needs you: it migrates the broker", with the release
   notes' path.
 - **A manual update of a migrating release** requires every project it migrates to be suspended
-  (`agentbus suspend`; resume brings the agents back on their resume sessions). Otherwise it
-  refuses, names the projects, and gives the command.
+  (`agentbus suspend`; resume brings the agents back on their resume sessions), and not live by
+  restore's test (§4.5 step 5: while herdr is in use, its workspace closed too). The migration and
+  its rollback then share one precondition. Otherwise it refuses, names the projects with the
+  reason the live test gives, and gives the step.
   - Suspension makes those projects not live, so both the migration and a later broker rollback
     run against a keyspace nothing else writes.
   - Step 5 restarts only the services of projects that are not suspended.
@@ -297,7 +312,10 @@ format (the `.migrate` file says whether it does).
   - a manual update refuses while a migrated project is live;
   - an automatic rollback after a red check restores builds, tree, settings and units, leaves the
     broker and the suspension as they are, and opens the For you item;
-  - `--broker` refuses on a live project and without `y` (fakes for `Live` and `Confirm`).
+  - `--broker` refuses on a live project and without `y` (fakes for `Live` and `Confirm`). That
+    includes a suspended project whose herdr workspace is still open: refused with "its herdr
+    workspace is open" and the step. Once the fake workspace list no longer shows it, the restore
+    goes ahead.
 - **Automatic rollback:** a service that stays red after its restart rolls everything back, and
   the binaries are v1's again.
 - **Settings on rollback:** a file the person changed after the update is kept and listed; an
