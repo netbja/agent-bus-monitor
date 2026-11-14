@@ -1,7 +1,7 @@
 # busmon command palette: `/` and Ctrl+P open it; `f` filters; auto-scroll is a setting
 
 Status: r9, spec only. The person answered §7 on 2026-11-13 (§7 records the answers). r9 folds in
-the person's change request of 2026-11-14 (§8). Slice 1 is built (PR 470 merged the spec; `cmd/busmon/palette.go`).
+the person's change request of 2026-11-14 (§8). Slice 1 is built (PR 470 merged the spec; `cmd/busmon/palette.go`), slice 1b (PR 488), and class C, slice 2 (`cmd/busmon/palette_c.go`).
 Base: origin/main `8a79182f`.
 Author: architect. Requested by the person through master (task `slash-palette-spec`).
 

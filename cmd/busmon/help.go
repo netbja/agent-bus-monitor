@@ -37,7 +37,11 @@ func helpText() []Line {
 	// The palette's own table (palette spec §4.1, §8.1): / or Ctrl+P.
 	head("COMMANDS")
 	sub("/ or Ctrl+P on the panels and pages, or / at the start of the line (i or :); Tab completes, Enter runs, // sends a /")
-	cmdRow := func(k, v string) { b.text("  ").text(Fit(k, 24)).text(" " + v + "\n") }
+	usageW := 0 // the longest usage, so none is cut (/self-repair reset <agent>)
+	for _, c := range paletteTable {
+		usageW = max(usageW, Width(paletteUsage(c)))
+	}
+	cmdRow := func(k, v string) { b.text("  ").text(Fit(k, usageW)).text(" " + v + "\n") }
 	for _, c := range paletteTable {
 		desc := c.Summary
 		if key := paletteKeyHint(c, false); key != "" {

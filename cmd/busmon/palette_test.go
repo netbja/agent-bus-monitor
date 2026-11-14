@@ -121,8 +121,14 @@ func TestPaletteRegistry(t *testing.T) {
 		if c.Key != ActNone && !bound[c.Key] {
 			t.Errorf("%s: its key's action is bound on no panel key", c.Name)
 		}
-		if (c.Act == ActNone) == (c.Run == nil) {
-			t.Errorf("%s: an Act or a Run, exactly one", c.Name)
+		kinds := 0
+		for _, set := range []bool{c.Act != ActNone, c.Run != nil, c.Argv != nil} {
+			if set {
+				kinds++
+			}
+		}
+		if kinds != 1 {
+			t.Errorf("%s: an Act, a Run or an Argv, exactly one", c.Name)
 		}
 		for _, n := range append([]string{c.Name}, c.Aliases...) {
 			if other, dup := seen[n]; dup {

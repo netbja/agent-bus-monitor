@@ -119,6 +119,13 @@ func (m *Model) sleepConfirm(k Key) tea.Cmd {
 		return nil
 	}
 	m.ui.flash, m.ui.flashErr = "", false
+	if a.args != nil && a.project == "" { // a palette command on the open project: startSleepOf's run
+		if m.cfg.sleepLog == nil {
+			m.ui.flash, m.ui.flashErr = "no agentbus to run "+a.verb+" with", true
+			return nil
+		}
+		return m.startRun(a.verb, a.args, m.cfg.sleepLog(m.cfg.project))
+	}
 	if a.args != nil {
 		return m.startRunFor(a.project, a.verb, a.args)
 	}
