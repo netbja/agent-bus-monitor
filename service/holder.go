@@ -86,6 +86,14 @@ func HolderBinDir(p Paths, key string) string {
 // holderBin is the binary copy a unit runs.
 func holderBin(p Paths, key string) string { return filepath.Join(HolderBinDir(p, key), "agentbus") }
 
+// HolderBin is the binary copy of build key that a holder instance runs.
+func HolderBin(p Paths, key string) string { return holderBin(p, key) }
+
+// CheckHolderSpec is InstallHolder's check of s, for a manager outside this
+// package (holder.Supervised): a valid project and raw id, absolute
+// directories, the build's binary copy in place.
+func CheckHolderSpec(s HolderSpec) error { return checkHolderSpec(s) }
+
 func holderArgv(s HolderSpec) []string {
 	return []string{holderBin(s.Paths, BuildKey(s.Raw)), "--project", s.Project, Holder, "--env", s.EnvFile}
 }

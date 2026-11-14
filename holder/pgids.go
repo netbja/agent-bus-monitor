@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -94,22 +93,14 @@ func KillRecordedGroups(getenv func(string) string, project, key string, cutoff 
 	if err != nil {
 		return 0, err
 	}
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, err := openPrivate(path, "the group record")
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, nil
 	}
 	if err != nil {
-		return 0, fmt.Errorf("holder: the group record %s: %w", path, err)
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
 		return 0, err
 	}
-	sys, ok := st.Sys().(*syscall.Stat_t)
-	if !st.Mode().IsRegular() || !ok || int(sys.Uid) != os.Getuid() || st.Mode().Perm()&0o077 != 0 {
-		return 0, fmt.Errorf("holder: the group record %s is not a private file of yours: left alone", path)
-	}
+	defer f.Close()
 	n := 0
 	var errs []error
 	sc := bufio.NewScanner(f)

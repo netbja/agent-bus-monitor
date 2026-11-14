@@ -65,6 +65,12 @@ func (p Paths) LogFile(project, kind string) string {
 	return filepath.Join(p.StateDir(project), kind+".log")
 }
 
+// SuperviseLog is where a supervisor and the service it runs log without a
+// service manager (herdr exit spec 4.4b): <state>/agentbus/logs/<project>-<kind>.log.
+func (p Paths) SuperviseLog(project, kind string) string {
+	return filepath.Join(p.StateHome, "agentbus", "logs", project+"-"+kind+".log")
+}
+
 // BudgetFile holds a service's recent failed starts.
 func (p Paths) BudgetFile(project, kind string) string {
 	return filepath.Join(p.StateDir(project), kind+".restarts")
