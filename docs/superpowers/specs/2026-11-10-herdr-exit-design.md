@@ -8,10 +8,9 @@
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
-- Revision 26 (correction): the SIGHUP requirement on the holder and `service supervise`, moved
-  here from the quiet-update spec (r12, §4.5.3 step 4) at the person's request (task
-  `quiet-update-r13`): a process started with SIGHUP ignored (by `nohup`, the manual restore's
-  start) must not hand the ignore down to the agents (§4.4b, §8)
+- Revision 26 (correction): the SIGHUP requirement, moved here from the quiet-update spec (r12,
+  §4.5.3 step 4) at the person's request (task `quiet-update-r13`). The holder already meets it
+  (`holder/sigdefault.go`, built in step 6); `service supervise` must meet it too (§4.4b, §8)
 - Revision 25 (correction): foureyes on step 5d (0ceba37e): "stops reading the viewers'
   sockets" deadlocked the hold — a viewer's Release, Discard and Detach travel on the same socket,
   behind its data. Master's decision (option a): the holder never stops reading a viewer; past
@@ -734,37 +733,30 @@ With `none`:
 - **What does not exist without a manager.** No start at login (`services.start_at_login` is
   refused with the reason), and whether the processes survive a logout depends on the system
   (logind with `KillUserProcesses=yes` ends them). Both are stated by `agentbus service status`.
-- **SIGHUP: a handler for life, in the holder and the supervisor** (revision 26). A supervisor
-  may be started with SIGHUP **ignored**: the quiet-update spec's manual restore starts one with
-  `nohup`, as stock macOS has no `setsid` command. An ignored signal survives `exec`, so without a
-  handler the holder and every agent it starts would inherit it, and the holder's `Close` (SIGHUP,
-  then SIGKILL after the grace) and the PTY hangup of a dead holder would no longer end an agent
-  gracefully. So `agentbus holder` and `agentbus service supervise` each install a SIGHUP handler
-  at start (`signal.Notify`) and keep it for their whole life; both treat SIGHUP as nothing. A
-  process with a handler execs its children with SIGHUP at its default, whatever the launching
-  shell did. The `os/signal` documentation states it: "If the program was started with SIGHUP or
-  SIGINT ignored, and Notify is called for either signal, a signal handler will be installed for
-  that signal and it will no longer be ignored"; `Reset`, `Ignore`, or `Stop` on every channel
-  puts the ignore back, hence "for their whole life". Measured with go1.26 on Linux under `nohup`:
-  without `Notify` a child shows `SigIgn ...01`, with it `...00`. Today's holder
-  (`cmd/agentbus/holdercmd.go`) handles only SIGINT and SIGTERM. No release has a holder yet
-  (v0.28.0), so the handler goes in before the first one.
+- **SIGHUP: never hand an ignored hangup down** (revision 26). A process may be started with
+  SIGHUP **ignored**: under `nohup` (the quiet-update spec's manual restore starts a supervisor
+  that way, as stock macOS has no `setsid` command), or by a runner that ignores it. An ignored
+  signal survives `exec`, so every program started below would ignore it too, and `Close`'s
+  SIGHUP and the PTY hangup of a dead holder would no longer end an agent gracefully.
+  - **The holder meets this today:** `unignoreTermSignals` (`holder/sigdefault.go`, called at
+    `holder/server.go:80`) installs a handler for SIGHUP, SIGINT and SIGQUIT when the process was
+    started with them ignored (`signal.Ignored`), and never stops it. The `os/signal`
+    documentation: "If the program was started with SIGHUP or SIGINT ignored, and Notify is
+    called for either signal, a signal handler will be installed for that signal and it will no
+    longer be ignored"; a caught signal is reset to its default by `exec`. Tested by
+    `TestHolderHangsUpWhenStartedWithSIGHUPIgnored` and `TestUnignoreTermSignals`.
+  - **`service supervise` does the same,** with the same function (moved where both can call it),
+    at its start: the dispatcher, the conductor and the programs a mission's tests run then never
+    inherit an ignored SIGHUP from a `nohup` start, whatever the program below does itself.
 - Tests: the supervisor's restart, burst and exit-0 rules with a scripted program; the
   process-group kill skips a reused pid; `up` twice starts one supervisor; an upgrade starts a
-  second supervisor and leaves the first. SIGHUP, one test per process, each started with
-  SIGHUP ignored (under `nohup`) and nothing else between it and the child it is judged on, since
-  either handler alone would lift the ignore for the whole chain:
-  - **supervisor alone:** `service supervise` runs a scripted program (not the holder) that
-    reports its own SIGHUP disposition and is then sent SIGHUP: the disposition is default and
-    the program dies by SIGHUP;
-  - **holder alone:** `agentbus holder` started directly, with no supervisor, starts a scripted
-    agent; the agent's disposition is default, and the holder's `Close` ends it within the grace
-    by SIGHUP (its wait status says so), not by the SIGKILL;
-  - **the chain:** the README's `nohup` start of supervisor and holder, the same agent check.
-  The disposition is read from bit 1 of `SigIgn` in `/proc/<pid>/status` on Linux; on macOS,
-  where stock `ps` has no ignored-signal keyword, the death by SIGHUP is the assertion. A
-  supervisor built without its handler fails the first test, a holder without its own the
-  second, whatever the other does.
+  second supervisor and leaves the first. SIGHUP, judged on each process alone, since either
+  handler would lift the ignore for the whole chain: `service supervise` started under `nohup`
+  runs a scripted program (not the holder) that reports its own SIGHUP disposition and is then
+  sent SIGHUP; the disposition is default (on Linux, bit 1 of `SigIgn` in `/proc/<pid>/status`
+  is clear) and the program dies by SIGHUP (the assertion on macOS, whose stock `ps` has no
+  ignored-signal keyword). A supervisor built without the call fails it. The holder's own test
+  exists (above).
 
 ### 4.5 The focus rule and drafts, restated for a host without focus
 

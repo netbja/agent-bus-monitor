@@ -378,8 +378,8 @@ The steps (R*n* is restorer step *n*):
      both systems. The supervisor is then not a session leader, as `up` makes it, but it ignores
      the hangup when the person's terminal closes, and the shell's background job keeps it out of
      the terminal's Ctrl-C. It ends at the next `agentbus down`, like any supervisor.
-   - `nohup` leaves SIGHUP ignored; the supervisor and the holder lift that for the agents they
-     start, by herdr exit §4.4b's SIGHUP requirement, so this start is equivalent to `up`'s.
+   - `nohup` leaves SIGHUP ignored; the holder and the supervisor take that back for what they
+     start (herdr exit §4.4b, SIGHUP), so this start is equivalent to `up`'s.
 
    Every name, key, raw id and path is written into the README by the restorer; none comes from
    a command the old binary may lack.
@@ -475,6 +475,15 @@ three service modes, in pure standard-library Go.
   the next pass changes nothing and puts one For you item with `agentbus update --rollback <id>`.
 - **`stage`** does steps 1 to 3 and stops. It tells the person a build is ready, and
   `agentbus update` then installs it without rebuilding.
+- **Its lifecycle,** as a host service beside the project ones:
+  - `agentbus up <p>` starts it if it is not running; `agentbus down <p>` stops only that
+    project's services and leaves the updater, which belongs to no project;
+  - `agentbus service status` and `service list` show it on a line of its own, with its last
+    pass; `agentbus service stop updater` and `start updater` stop and start it by hand;
+  - `service gc` never touches it: it runs from the bin dir, not from a per-build copy, so there
+    is no old build of it to collect;
+  - `setup uninstall` stops it, then removes its unit or job (or its pidfile under `none`), the
+    `last-pass` file and the lock, before the binaries.
 - **Its definition is setup's,** not the update's: an update and a rollback never rewrite the
   updater's unit or job, and the snapshot does not hold it.
 - **Health:** `agentbus service status` lists the updater, and the `updater` health check is
@@ -529,8 +538,9 @@ Leases and fencing are already safe from drift: their expiry is Redis's own (`PE
 dispatcher and the conductor read `TIME` (for instance `dispatch/popretire.go:86`). Status `ts` is
 the stream entry id's time (`bus/stream.go:67`). 26 files of `bus/` read `TIME`.
 
-**Shared data stamped with the host's clock today** (a search of `time.Now()` outside tests,
-2026-11-14, at `9479fc0b`). Each moves to Redis `TIME` in one small coder task, ahead of this spec:
+**Shared data stamped with, or judged by, the host's clock today** (a search outside tests of
+`time.Now()`, of an injected `Now()` compared with a stored stamp, and of `time.Since` of a stored
+stamp, 2026-11-14, at `9479fc0b`). Each moves to Redis `TIME` in one small coder task, ahead of this spec:
 
 | Where | What | Fix |
 |---|---|---|
@@ -538,14 +548,25 @@ the stream entry id's time (`bus/stream.go:67`). 26 files of `bus/` read `TIME`.
 | `cmd/agentbus/main.go:711` | `{p}:usage` snapshot `ts` | `ServerNowMS` |
 | `cmd/agentbus/main.go:738` | `{p}:budget` snapshot `ts` | `ServerNowMS` |
 | `cmd/agentbus/pause.go:64` | `pause --for`: the deadline is the host's clock plus the duration (`SetPause` already reads `TIME`, `bus/pause.go:60`, but only to refuse a past deadline) | `ServerTime` plus the duration; `--until HH:MM` stays local wall clock (a window) |
+| `usage/ccstatusline.go:73` | `{p}:budget` snapshot `ts` from Claude Code's status line | `ServerNowMS` |
 | `cmd/agentbus/shutdown.go:32`, called at `cmd/agentbus/main.go:807` | a decision: an agent is "stale, not busy" when its Redis-time `ts` is older than 10 minutes by the host's clock | `ServerNowMS` as `now` |
+| `cmd/agentbus/agents.go:137` (`forget`) | refuses when the status `ts` is recent by the host's clock | one `ServerNowMS` for the comparison |
+| `cmd/agentbus/retire.go:117`, `:120`; `cmd/agentbus/swap.go:217`, `:220`; `cmd/agentbus/popend.go:56` | refuse while the pane runs a turn: the dispatcher's observation (`At` from `TIME`, `dispatch/observe.go:72`) is judged fresh, and a `working` status recent, by the host's clock | the same |
+| `cmd/agentbus/reload.go:201`, `:304` | an observation judged fresh by the host's clock | the same |
+| `cmd/agentbus/doctor.go:226`, `:231` | a model in use judged stale, and a model error expired, after 24 hours by the host's clock | the same |
+
+In these commands `d.Now` also paces their own waits (`Sleep`), which stay on the host's
+monotonic clock: only the comparison with a stored stamp takes Redis time.
 
 **Display only, allowed:** ages shown against the host's clock (`agents`, `usage`, `budget`,
 `board` tables at `cmd/agentbus/main.go:668`, `701`, `728`, `756`; `service status` at
-`cmd/agentbus/servicecmd.go:255`; busmon, e.g. `cmd/busmon/header.go:386`). They decide nothing;
+`cmd/agentbus/servicecmd.go:255`; `handoff` list at `cmd/agentbus/handoff.go:102`; asks and
+ideas at `cmd/agentbus/askcmd.go:131`, `cmd/agentbus/ideacmd.go:128`; busmon, e.g.
+`cmd/busmon/header.go:386`). They decide nothing;
 their error is the drift, which the clock check bounds. **Not time:** `genRef`
 (`cmd/agentbus/parse.go:32`) uses the nanoseconds for uniqueness only; logs and local caches are
-the host's own. **Durations:** in `bus/`, `dispatch/`, `service/` and `termhost/`, every
+the host's own (the quota cache's age, `quota/config.go:203`; busmon's read marks,
+`cmd/busmon/localcache.go:52`). **Durations:** in `bus/`, `dispatch/`, `service/` and `termhost/`, every
 in-process deadline is `time.Now().Add(...)` compared with `time.Now()` (for instance
 `bus/delivery.go:63`, `dispatch/health.go:64`), which Go compares on the monotonic reading. The
 rule for new code is in the table; a reviewer checks it, as no linter can tell a stored stamp
@@ -645,7 +666,9 @@ every 15 minutes:
   NTP-synchronised"; on macOS the detail says "NTP: unknown".
 - **Shared stamps:** for each inventory row, a disposable Redis whose `TIME` differs from the
   test's clock: the stored value follows Redis (board `ts`, usage and budget `ts`, the `pause
-  --for` deadline), and `shutdownBlockers` judges staleness by Redis time.
+  --for` deadline); `shutdownBlockers`, `forget`, `retire`, `swap`, the dispatcher's `popEnd`, `reload` and
+  `doctor` judge their stamps by Redis time (a status 5 minutes old by Redis is recent even when
+  the host clock is 10 minutes ahead).
 - **Developer build:** `agentbus update` notifies only, and the checkout's HEAD is unchanged. An
   empty `buildinfo.Repo` counts as a developer build.
 - **Trees:**
@@ -671,9 +694,8 @@ every 15 minutes:
     runs again, in each service mode.
   - Every command the README names is in the portable list (§4.5.3), checked for a Linux and a
     macOS snapshot; the `none` harness runs with a PATH that has no `setsid`.
-  - The README's `nohup` start passes herdr exit §4.4b's chain test (an agent of the restored
-    holder ends by SIGHUP on the holder's close); each process's own handler is proved by that
-    section's per-process tests.
+  - Under the README's `nohup` start, an agent of the restored holder ends by SIGHUP on the
+    holder's close; each process's own handler is proved by herdr exit §4.4b's tests.
 - **First upgrade from a pre-feature binary:**
   - a stub old `agentbus` with no `update` command;
   - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
@@ -703,9 +725,14 @@ None. The person answered r11's two (§2 decision 6; §6).
 - **r13** (the person's review of r12, task `quiet-update-r13`):
   - the SIGHUP requirement on the holder and `service supervise` moved to herdr exit §4.4b
     (revision 26, with its tests); README step 4 and §5 keep a one-line reference;
-  - (reviewer-codex on r13) the SIGHUP test is one per process: either handler alone lifts the
-    ignore for the whole chain, so the supervisor and the holder are each tested started under
-    `nohup` on their own, plus the chain;
+  - (reviewer-codex on r13) the SIGHUP test is judged on each process alone: either handler lifts
+    the ignore for the whole chain;
+  - (foureyes on r13) the holder already takes back an ignored SIGHUP (`holder/sigdefault.go`,
+    tested); revision 26 says so and asks it of `service supervise` only. The time inventory
+    gains the budget stamp of `usage/ccstatusline.go:73` and the decisions that compare a Redis
+    stamp with the host clock (`agents.go`, `retire.go`, `swap.go`, `popend.go`, `reload.go`,
+    `doctor.go`). The updater's lifecycle under `up`, `down`, `service list`, `service gc` and
+    `setup uninstall` is stated (§4.7);
   - no cron under `none`: the scheduled updater (systemd timer, launchd calendar job, nothing
     under `none`) is replaced by one `updater` service in every mode, a 5-minute ticker that
     compares the local wall clock with `updates.window`, records the last pass and runs
