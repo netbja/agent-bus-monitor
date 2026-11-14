@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -85,7 +87,18 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 	}
 	raw := "v9.9.9+abc"
 	deps.HolderBuild = func() string { return raw }
-	deps.HolderAnswers = func(project, key string) bool { return false }
+	// The new build's socket answers only at the third probe (a listener
+	// slower than the manager's start): up waits for it before the dispatcher.
+	probes := 0
+	deps.HolderAnswers = func(project, key string) bool {
+		if key != service.BuildKey(raw) {
+			return false
+		}
+		probes++
+		hm.calls = append(hm.calls, fmt.Sprintf("probe %d", probes))
+		return probes >= 3
+	}
+	deps.Sleep = func(time.Duration) {}
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
@@ -121,6 +134,11 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 	// answering, or it fails holder for agents never lost (foureyes).
 	if h, d := strings.Index(calls, "start-holder"), strings.Index(calls, "start demo dispatch"); h < 0 || d < 0 || h > d {
 		t.Fatalf("the holder starts after the dispatcher:\n%s", calls)
+	}
+	// Ready, not only started (reviewer-codex): the answering probe comes
+	// before the dispatcher.
+	if p, d := strings.Index(calls, "probe 3"), strings.Index(calls, "start demo dispatch"); p < 0 || p > d {
+		t.Fatalf("the dispatcher started before the holder answered:\n%s", calls)
 	}
 	if strings.Index(calls, "start-holder") > strings.Index(calls, "remove-holder") {
 		t.Fatalf("the gc ran before the new build started:\n%s", calls)
@@ -342,5 +360,33 @@ func TestDownSaysWhichHoldersDidNotStop(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "the agents the holder ran were stopped with it") || !strings.Contains(out.String(), "1 holder could not be stopped (build v2)") {
 		t.Fatalf("summary %q", out.String())
+	}
+}
+
+// A holder that never answers bounds the wait: up says so and starts the
+// services anyway (the holder check then reports it).
+func TestUpHolderNeverReady(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	exe := filepath.Join(t.TempDir(), "agentbus")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	u.exe = exe
+	hm := &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{}}
+	deps.Services = func() (service.Manager, string) { return hm, "" }
+	deps.HolderBuild = func() string { return "v9" }
+	deps.HolderAnswers = func(string, string) bool { return false }
+	waited := time.Duration(0)
+	deps.Sleep = func(d time.Duration) { waited += d }
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if waited < 4*time.Second || waited > 6*time.Second {
+		t.Fatalf("waited %v, want about 5 s", waited)
+	}
+	if !u.m.saw("start demo dispatch") || !strings.Contains(out.String(), "not answering yet") {
+		t.Fatalf("calls %v out %q", u.m.calls, out.String())
 	}
 }

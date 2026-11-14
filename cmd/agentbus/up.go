@@ -661,6 +661,26 @@ func holderContext(d upDeps, workdir string, env map[string]string) {
 	set(service.HolderManifestEnv, manifest)
 }
 
+// holderReadyWait bounds waitHolder: 50 probes, 100 ms apart.
+const (
+	holderReadyTries = 50
+	holderReadyEvery = 100 * time.Millisecond
+)
+
+// waitHolder probes until the holder answers, at most holderReadyTries times.
+func waitHolder(ready func() bool, sleep func(time.Duration)) bool {
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	for i := 0; i < holderReadyTries; i++ {
+		if ready() {
+			return true
+		}
+		sleep(holderReadyEvery)
+	}
+	return ready()
+}
+
 // expandWorkDir is a template's working_dir as up reads it elsewhere: ~ is
 // the home, variables expanded.
 func expandWorkDir(d upDeps, dir string) string {
@@ -699,8 +719,16 @@ func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io
 	if err := hm.StartHolder(project, key); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "holder: build %s started as a %s service (no agent runs on it yet)\n", raw, m.Name())
 	answers := func(k string) bool { return d.HolderAnswers != nil && d.HolderAnswers(project, k) }
+	// Ready, not only started (reviewer-codex): a manager's start returns
+	// before the socket listens, and the dispatcher started next must find it
+	// answering. Bounded: a holder that never answers is reported by the
+	// holder check, and the services start anyway.
+	if !waitHolder(func() bool { return answers(key) }, d.Sleep) {
+		fmt.Fprintf(stdout, "holder: build %s started as a %s service, not answering yet (agentbus health holder)\n", raw, m.Name())
+	} else {
+		fmt.Fprintf(stdout, "holder: build %s started as a %s service (no agent runs on it yet)\n", raw, m.Name())
+	}
 	removed, err := service.GCHolders(hm, d.Paths, project, key, answers)
 	if len(removed) > 0 {
 		fmt.Fprintf(stdout, "holder: removed %d older build(s) that no longer run\n", len(removed))
