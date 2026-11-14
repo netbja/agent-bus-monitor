@@ -274,11 +274,14 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   wait: a wait that overran may have freed the window; reviewer-codex), an exit 0 is final, a stop sends the service SIGTERM; `AfterExit` runs after each exit.
   A holder with `Config.Pgids` set rewrites `<rundir>/agentbus/<p>/holder-<key>.pgids`
   (`PgidsPath`, 0600, atomic) with each live terminal's leader pid and start time at every start
-  and end; `KillRecordedGroups` SIGKILLs a group when its leader is the recorded one (pid and
-  start time match) or is gone (`ErrNoProcess`: after a crash the leaders usually died of the
-  hangup while children in their groups live on, and a pid is not reused while its group has
-  members; foureyes), never when another process now has that pid or it cannot tell. Linux only:
-  without /proc there is no start time, the holder records nothing and nothing is killed. It reads the record only from a checked run directory and never through a symlink
+  and end; `KillRecordedGroups` (called as soon as the holder's exit is seen) hands each line to
+  `KillGroup`, which never signals the group number (after a group empties its number may be
+  reused; reviewer-codex): it kills, each pinned by a pidfd and re-read through /proc after the
+  pin, the processes of that group that started between the recorded leader and now, so the
+  survivors of a gone leader die (foureyes) while a group made after a reuse is spared, and touches
+  nothing when a live process holds the leader's pid with another start time. Linux only
+  (`groupkill_linux.go`): without /proc there is no start time, the holder records nothing and
+  nothing is killed. It reads the record only from a checked run directory and never through a symlink
   (`O_NOFOLLOW`, regular, ours, private), and removes it.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails
