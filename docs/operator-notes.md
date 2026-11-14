@@ -236,7 +236,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   A holder with `Config.Pgids` set rewrites `<rundir>/agentbus/<p>/holder-<key>.pgids`
   (`PgidsPath`, 0600, atomic) with each live terminal's leader pid and start time at every start
   and end; `KillRecordedGroups` takes one cutoff (`NowTicks`, captured by the caller when the holder's exit
-  is seen, the same for every group; reviewer-codex) and hands each line to `KillGroup`, which never signals the group number (after a group empties its number may be
+  is seen, the same for every group, and short of the tick being read, so nothing born after the
+  capture is reached; a survivor started in the last 10-20 ms before the death is missed;
+  reviewer-codex) and hands each line to `KillGroup`, which never signals the group number (after a group empties its number may be
   reused; reviewer-codex): it kills, each pinned by a pidfd and re-read through /proc after the
   pin, the processes of that group that started between the recorded leader and the cutoff, so the
   survivors of a gone leader die (foureyes) while a group made after a reuse is spared, and touches

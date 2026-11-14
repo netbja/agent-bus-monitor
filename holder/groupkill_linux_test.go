@@ -36,6 +36,7 @@ func TestKillGroupMembersReportsAPidfdFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			time.Sleep(50 * time.Millisecond) // past the cutoff's excluded ticks
 			if _, err := killGroupMembers(pg, start, NowTicks()); err == nil {
 				t.Fatal("a pidfd failure passed for success")
 			}
@@ -47,6 +48,7 @@ func TestKillGroupMembersReportsAPidfdFailure(t *testing.T) {
 	pidfdOpen = func(int, int) (int, error) { return -1, unix.ESRCH }
 	_, start, member := groupLeader(t, "0", "0")
 	pg, _ := syscall.Getpgid(member)
+	time.Sleep(50 * time.Millisecond)
 	if _, err := killGroupMembers(pg, start, NowTicks()); err != nil && !errors.Is(err, unix.ESRCH) {
 		t.Fatalf("ESRCH: %v", err)
 	} else if err != nil {
@@ -120,4 +122,27 @@ func groupMembers(t *testing.T, pg int) []int {
 		}
 	}
 	return out
+}
+
+// The cutoff never reaches a process started after it was taken: the tick it
+// was read in is uncertain and excluded (reviewer-codex). Repeated, since a
+// start in the same tick is what the old rounding let through.
+func TestNowTicksExcludesWhatStartsAfter(t *testing.T) {
+	needProc(t)
+	for i := 0; i < 50; i++ {
+		cut := NowTicks()
+		c := exec.Command("/bin/sleep", "5")
+		if err := c.Start(); err != nil {
+			t.Fatal(err)
+		}
+		start, err := dispatch.ProcStart(c.Process.Pid)
+		c.Process.Kill()
+		c.Wait()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if start <= cut {
+			t.Fatalf("run %d: a process started after the cutoff %d has start %d <= it", i, cut, start)
+		}
+	}
 }
