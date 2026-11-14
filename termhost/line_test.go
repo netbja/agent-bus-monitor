@@ -110,3 +110,18 @@ func TestSubmitTakesNoText(t *testing.T) {
 		t.Fatalf("Submit %v", ft)
 	}
 }
+
+// A Spec carries a role and its options, never a command (spec 4.2, security
+// S2a): no argv, env or cwd crosses the seam; the host builds the command
+// from the role's launch template.
+func TestSpecCarriesNoCommand(t *testing.T) {
+	want := []string{"Project", "Name", "Profile", "ResumeSession", "Cols", "Rows"}
+	typ := reflect.TypeOf(Spec{})
+	var got []string
+	for i := range typ.NumField() {
+		got = append(got, typ.Field(i).Name)
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("Spec's fields %v, want %v", got, want)
+	}
+}

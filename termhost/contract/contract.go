@@ -37,7 +37,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	ctx := context.Background()
 	start := func(t *testing.T, h Harness, name string) termhost.Term {
 		t.Helper()
-		term, err := h.Host().Start(ctx, termhost.Spec{Project: "demo", Name: name, Argv: []string{"agent"}, Cols: 80, Rows: 24})
+		term, err := h.Host().Start(ctx, termhost.Spec{Project: "demo", Name: name, Cols: 80, Rows: 24})
 		if err != nil {
 			t.Fatalf("Start %s: %v", name, err)
 		}
@@ -111,6 +111,12 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		if err := h.Host().Submit(ctx, a.ID, l); err != nil {
 			t.Fatal(err)
 		}
+		// A real program redraws on its own time after the CR: until its input
+		// reads empty again, a host refuses the next line (ErrNotReady). Wait
+		// for the first line to show as submitted, as a caller would.
+		for deadline := time.Now().Add(3 * time.Second); len(h.Submitted(a.ID)) == 0 && time.Now().Before(deadline); {
+			time.Sleep(20 * time.Millisecond)
+		}
 		if err := h.Host().Submit(ctx, a.ID, termhost.ClearLine()); err != nil {
 			t.Fatal(err)
 		}
@@ -172,10 +178,20 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		if got := h.Submitted(a.ID); len(got) != 0 {
 			t.Fatalf("typed after a left-behind line: %q", got)
 		}
-		// The mark clears once a settled screen shows the input empty.
+		// The mark clears once a settled screen shows the input empty: a host
+		// that watches the screen lifts it on its own time, so the submit may
+		// be refused as left behind until then, never longer than 5 s.
 		h.SetInputEmpty(a.ID, true)
-		if err := h.Host().Submit(ctx, a.ID, wake(t, "abc124")); err != nil {
-			t.Fatalf("input empty again: %v", err)
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			err := h.Host().Submit(ctx, a.ID, wake(t, "abc124"))
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, termhost.ErrLeftBehind) || time.Now().After(deadline) {
+				t.Fatalf("input empty again: %v", err)
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
 	})
 	t.Run("Ping", func(t *testing.T) {
