@@ -250,18 +250,16 @@ against a migrated keyspace.
 - **The broker is never automatic.** It is restored only when the manifest declares a migration
   (§4.6), only for a project that is not live (below), and only with the person's `y`. Messages
   written since the update otherwise stay.
-- **Not live** is restore's own test, `projectLive` (`cmd/agentbus/restorecmd.go`), which after
-  the herdr exit checks:
+- **Not live** is restore's own test, `projectLive` (`cmd/agentbus/restorecmd.go`). It checks
+  these four, and nothing else:
   - no dispatch or conductor lease held;
   - no service active;
   - **no terminal of the project on any holder build** (`termhost` `List` for the project, on every
     build whose holder answers);
   - no registered agent's verified pid alive.
 
-  The herdr workspace check in today's `projectLive` goes with herdr: the herdr exit's cutover PR
-  replaces it with the holder check (that file is not in the herdr exit's inventory table, §2;
-  this spec names it). `agentbus suspend` ends the project's terminals, its services and its
-  leases, so a suspended project passes with no extra step.
+  `agentbus suspend` ends the project's terminals, its services and its leases, so a suspended
+  project passes with no extra step.
 
 #### 4.5.2 Restorer
 
@@ -282,10 +280,17 @@ incomplete, is refused.
 3. **Settings and skills,** by the three cases (§4.5.1).
 4. **Services' definitions.** Under systemd and launchd, the unit files are rewritten from the
    snapshot (`daemon-reload` under systemd); they are **not started yet**. Under `none` there is
-   nothing to rewrite. The snapshot's holder build becomes current again; its holder is started
-   if it is not running, from the build copy in the snapshot if its binary directory was removed.
-   It serves terminals, not the broker. The newer holder build then drains, by the same rule as an
-   upgrade.
+   nothing to rewrite. The snapshot's holder build becomes current again, and its holder is
+   started if it is not running. It serves terminals, not the broker. The old build may have been
+   collected since the update (`service.GCHolders` removes a drained build's unit and its
+   `<datadir>/agentbus/holder/<key>/` once its holder exits), so the restorer first puts it back:
+   - its binary copy, from the snapshot's `agentbus`, through `service.InstallHolderBinary` (the
+     directory at 0700, the binary, and `build-raw`), as `up`'s `startHolder` does;
+   - its unit or job, from the snapshot (systemd, launchd);
+   - then `StartHolder` for that build key (systemd, launchd), or its supervisor (`none`).
+
+   The newer holder build then drains, by the same rule as an upgrade. No new command is needed:
+   this is the restorer's own code.
 5. **Broker, only when the manifest declares a migration,** and only as `agentbus update --rollback
    <id> --broker`.
    - Every migrated project must be not live (§4.5.1). `--broker` runs the test first and stops on
@@ -350,8 +355,19 @@ The steps (R*n* is restorer step *n*):
    - launchd: copy each plist back; do not load it;
    - `none`: nothing.
 
-   Then start the old holder build if it is not running:
-   `agentbus --project <p> service start holder` (the old binary, now installed).
+   The holder unit or plist of the old build is among the files copied back: the holder's gc
+   may have removed it. Then, for each project, if the old holder build is not running:
+   - if `<datadir>/agentbus/holder/<key>/agentbus` is missing (gc'd after the drain), put the
+     build back by hand, as `service.InstallHolderBinary` does: `mkdir -p -m 700
+     <datadir>/agentbus/holder/<key>`, `cp <snapshot>/builds/agentbus
+     <datadir>/agentbus/holder/<key>/agentbus`, `chmod 700` it, and write the build's raw id
+     (printed in the README) to `<datadir>/agentbus/holder/<key>/build-raw`;
+   - start it: systemd `systemctl --user start <holder unit>`; launchd `launchctl bootstrap
+     gui/<uid> <plist>`; `none` `setsid <datadir>/agentbus/holder/<key>/agentbus service supervise
+     holder <p> <key> >> <log> 2>&1 < /dev/null &` (herdr exit §4.4b's supervisor).
+
+   Every name, key, raw id and path is written into the README by the restorer; none comes from
+   a command the old binary may lack.
 5. **Broker** (R5), only when the manifest declares a migration; otherwise the README says the
    broker is not touched:
    - `agentbus suspend <p>` for each migrated project, if it is not suspended;
@@ -516,6 +532,9 @@ scheduler is, and its fallback is above.
     services, broker keys and the roster brought back.
   - Its steps are in the restorer's order and each names its R step; no old service starts before
     the broker step.
+  - An old holder build gc'd before the rollback (binary directory and unit removed): the README
+    and the restorer both put the binary copy, `build-raw` and the unit back, and the old holder
+    runs again, in each service mode.
 - **First upgrade from a pre-feature binary:**
   - a stub old `agentbus` with no `update` command;
   - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
@@ -559,7 +578,12 @@ None. The person answered r11's two (§2 decision 6; §6).
     and the README regenerated after step 4 and before each rollback (it is written once). Kept:
     `absent`, per-file skills, the three cases, and the process-crash guarantee. Added: a check
     before each write that the file is still at `before`;
-  - §7 answered: release notes are only the version in For you; the agent automaton is dropped.
+  - §7 answered: release notes are only the version in For you; the agent automaton is dropped;
+  - (foureyes on r12) README R4 no longer names a `service start holder` command that does not
+    exist; R4 in both the restorer and the README puts back an old holder build gc'd after its
+    drain (binary copy, `build-raw`, unit), with a test.
+  - (reviewer-codex on r12) §4.5.1 states only the target live test, the four checks; the note
+    on today's herdr workspace check is gone.
 - **r11:** files and skill directories the update creates or deletes, journalled with `absent`
   (foureyes on r9).
 - **r10:** the journal's guarantee is a process crash or kill; power loss is out of scope, with
