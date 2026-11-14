@@ -407,7 +407,12 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  missions was %s: a check or integration in progress was interrupted (its tests killed with their process group); the conductor redoes it at the next start\n", r.Detail)
 		}
 	}
-	fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. The agents and the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again.\n", p, p)
+	if len(holders) > 0 {
+		// A holder is its agents' parent: stopping it stopped them.
+		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted; the agents the holder ran were stopped with it. Agents in the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again; the holder restarts empty.\n", p, p)
+	} else {
+		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. The agents and the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again.\n", p, p)
+	}
 	return code
 }
 

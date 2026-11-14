@@ -281,6 +281,11 @@ func TestHolderUnitsOnTheRemovalPaths(t *testing.T) {
 	if !strings.Contains(out.String(), "holder (build v1): stopped") {
 		t.Fatalf("down: %s", out.String())
 	}
+	// Stopping a holder stops the agents it runs: down says so, never that
+	// they stay open (reviewer-codex).
+	if !strings.Contains(out.String(), "the agents the holder ran were stopped with it") || strings.Contains(out.String(), "The agents and the herdr workspace stay open") {
+		t.Fatalf("down: %s", out.String())
+	}
 
 	out.Reset()
 	if code := runServiceCmd("demo", []string{"remove"}, d, &out, &errw); code != 0 {
