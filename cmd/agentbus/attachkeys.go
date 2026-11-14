@@ -28,7 +28,9 @@ const (
 	keyDetach
 	keyRelease
 	keyDiscard
-	keyBell // the key after the prefix is dropped
+	keyBell     // the key after the prefix is dropped
+	keyFocusIn  // the outer terminal's focus report: the holder's, never the program's
+	keyFocusOut //
 )
 
 type keyEvent struct {
@@ -37,7 +39,7 @@ type keyEvent struct {
 }
 
 func (e keyEvent) String() string {
-	names := [...]string{"send", "pending", "done", "detach", "release", "discard", "bell"}
+	names := [...]string{"send", "pending", "done", "detach", "release", "discard", "bell", "focus-in", "focus-out"}
 	if e.Kind == keySend {
 		return fmt.Sprintf("send(%q)", e.Data)
 	}
@@ -245,6 +247,14 @@ func (s *keyScanner) Feed(b []byte) []keyEvent {
 			break
 		}
 		s.buf = s.buf[len(u):]
+		// The outer terminal's focus reports (attach asks for them) tell the
+		// holder whether the person looks at this terminal; they are never
+		// keys for the program, and a pending prefix keeps waiting.
+		if string(u) == "\x1b[I" || string(u) == "\x1b[O" {
+			flush()
+			out = append(out, keyEvent{Kind: map[bool]keyEventKind{true: keyFocusIn, false: keyFocusOut}[u[2] == 'I']})
+			continue
+		}
 		m := s.match(u)
 		if !s.pending {
 			switch m {

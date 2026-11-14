@@ -74,7 +74,11 @@ func TestKeyScanner(t *testing.T) {
 		"f12 with ctrl is not f12": {"f12", false, []string{"\x1b[24;5~d"}, evs(send("\x1b[24;5~d"))},
 		"kitty d after prefix":     {"f12", false, []string{f12 + "\x1b[100u"}, evs(ctl(keyPending), ctl(keyDetach))},
 		"lone escape flushed":      {"f12", false, []string{"\x1b"}, evs(send("\x1b"))},
-		"escape then text":         {"f12", false, []string{"\x1b", "a"}, evs(send("\x1ba"))},
+		// The outer terminal's focus reports are the holder's (holder.Focus),
+		// never keys for the program (reviewer-codex).
+		"focus out and in":    {"f12", false, []string{"ab\x1b[Ocd\x1b[I"}, evs(send("ab"), ctl(keyFocusOut), send("cd"), ctl(keyFocusIn))},
+		"focus while pending": {"f12", false, []string{f12 + "\x1b[O" + "d"}, evs(ctl(keyPending), ctl(keyFocusOut), ctl(keyDetach))},
+		"escape then text":    {"f12", false, []string{"\x1b", "a"}, evs(send("\x1ba"))},
 	} {
 		if got := merged(feed(t, c.key, c.held, c.chunks...)); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s:\n got %v\nwant %v", name, got, c.want)
