@@ -223,7 +223,7 @@ func (h Herdr) ForegroundProcs(ctx context.Context, pane string) ([]Proc, string
 		return nil, "", err
 	}
 	for i := range procs {
-		if f, err := readStat(procs[i].PID); err == nil {
+		if f, err := procStat(procs[i].PID); err == nil {
 			procs[i].PPID = f.ppid
 		}
 	}

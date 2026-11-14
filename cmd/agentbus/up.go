@@ -946,10 +946,13 @@ var (
 // upCacheDir is ~/.cache/agentbus (or $XDG_CACHE_HOME/agentbus).
 func upCacheDir(env func(string) string) string { return relaunch.CacheDir(env) }
 
-// procStartFn is the dispatcher's process identity, on Linux only: elsewhere
-// a snapshot proves nothing and the panes decide.
-func procStartFn() func(int) (uint64, error) {
-	if runtime.GOOS != "linux" {
+// procStartFn is the dispatcher's process identity, where the system lists
+// processes with a start time: Linux (/proc) and macOS (sysctl, self-repair
+// step 10). Elsewhere a snapshot proves nothing and the panes decide.
+func procStartFn() func(int) (uint64, error) { return procStartFnFor(runtime.GOOS) }
+
+func procStartFnFor(goos string) func(int) (uint64, error) {
+	if goos != "linux" && goos != "darwin" {
 		return nil
 	}
 	return dispatch.ProcStart

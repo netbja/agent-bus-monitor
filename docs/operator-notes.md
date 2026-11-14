@@ -123,7 +123,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   detaches (`dispatch.Ancestors`; lifecycle spec part D): `Bus.ProveSession` moves `IdentSession`
   only when the stored verified pid and start are in that chain and the hook's foreground stamp is newer
   than the stored `ident_session_at` (a new process resets it), so the session follows `/clear`
-  (Linux only, like every verified identity: `/proc`; on macOS no agent is verified, so nothing is proved).
+  (Linux and macOS, like every verified identity: `/proc`, or `sysctl kern.proc.pid` since self-repair step 10).
   The sender re-reads the stored identity and that its pid is alive with that start, but trusts the chain:
   a documented residual, since the bus is no boundary against the local user (as with `status`).
   Since herdr exit step 8 the same hook, inside herdr or not, also hands the session, the profile
@@ -135,7 +135,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   role's own profile, reviewer-codex) only when one ancestor (at most 32) is the stored
   verified process, pid and start alike, in a `WATCH {p}:agents` transaction. The record outlives the
   process (a status, a hand-off, a relaunch leave it); only `forget` clears it, and the next proved
-  session replaces it. No chain (macOS) records nothing. It is a backup record and a project kind. The hook
+  session replaces it. No chain (a system with neither /proc nor sysctl's process table) records nothing. It is a backup record and a project kind. The hook
   never prints on stdout and always exits 0 (spec
   `docs/superpowers/specs/2026-10-21-launcher-resume-design.md`). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the

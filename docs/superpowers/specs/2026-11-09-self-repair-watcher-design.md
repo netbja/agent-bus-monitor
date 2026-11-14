@@ -402,7 +402,11 @@ useful alone first, and nothing acts before step 7.
 9. **Start at login:** the `LoginStart` interface and its two backends (systemd, macOS
    LaunchAgent), wired to the step 3 option. Elsewhere, enabling the option is refused with the
    reason ("no service manager to start at login").
-10. **macOS process identity** (later), so R1 can act where there is no `/proc`.
+10. **macOS process identity**, so R1 can act where there is no `/proc`: built 2026-11-14.
+    `dispatch.procStat` reads `sysctl kern.proc.pid` (parent, start time in microseconds since the
+    epoch), read as records: zero records is `ErrNoProcess`, a malformed answer or a record of another
+    pid proves nothing (`kinfoVerdict`); `BootID` is `kern.bootsessionuuid`; `Ancestors` and
+    `AncestorAmong` walk it; `up` passes the identity on macOS too.
 
 ## 8. The person's answers (2026-11-09)
 

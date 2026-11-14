@@ -3,7 +3,6 @@ package dispatch
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -11,10 +10,14 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// statFields is what process identity needs from /proc/<pid>/stat.
+// statFields is what process identity needs of a process: its parent and
+// its start time, a value fixed for the process's life that a recycled pid
+// never repeats (Linux: /proc/<pid>/stat field 22, clock ticks since boot;
+// macOS: sysctl kern.proc.pid, microseconds since the epoch; self-repair
+// step 10). procStat reads it, per system.
 type statFields struct {
 	ppid  int
-	start uint64 // field 22: start time in clock ticks since boot
+	start uint64
 }
 
 // parseStat reads one /proc/<pid>/stat line. The comm field (2) is in
@@ -48,36 +51,32 @@ func readStat(pid int) (statFields, error) {
 	return parseStat(string(b))
 }
 
-// ErrNoProcess: /proc, readable on this system, lists no such pid. Only it
-// proves a process gone; any other error (no /proc, as on macOS, or a
-// failed read) proves nothing (pop-closed-by-hand, reviewer-codex).
+// ErrNoProcess: the system's process table, readable here, lists no such
+// pid (Linux /proc, macOS sysctl). Only it proves a process gone; any other
+// error (a system with neither, a failed read) proves nothing
+// (pop-closed-by-hand, reviewer-codex).
 var ErrNoProcess = errors.New("no such process")
 
-// ProcStart is pid's start time (field 22 of /proc/<pid>/stat). With the pid it
+// ProcStart is pid's start time (statFields.start). With the pid it
 // identifies one process for its whole life: a recycled pid gets a new value.
+// A pid the system lists no more is ErrNoProcess.
 func ProcStart(pid int) (uint64, error) {
-	f, err := readStat(pid)
+	f, err := procStat(pid)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			if _, serr := os.Stat("/proc/self/stat"); serr == nil {
-				return 0, fmt.Errorf("pid %d: %w", pid, ErrNoProcess)
-			}
-		}
 		return 0, err
 	}
 	return f.start, nil
 }
 
-// BootID is this host's boot id (/proc/sys/kernel/random/boot_id): one per
-// kernel boot. With a pid and its start time (ticks since that boot) it
-// names one process on one host (first-run-trust).
+// BootID is this host's boot id, one per boot (Linux
+// /proc/sys/kernel/random/boot_id, macOS kern.bootsessionuuid). With a pid
+// and its start time it names one process on one host (first-run-trust).
 func BootID() (string, error) {
-	b, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	id, err := bootID()
 	if err != nil {
 		return "", err
 	}
-	id := strings.TrimSpace(string(b))
-	if id == "" {
+	if id = strings.TrimSpace(id); id == "" {
 		return "", fmt.Errorf("empty boot id")
 	}
 	return id, nil
@@ -89,7 +88,7 @@ func BootID() (string, error) {
 // one furthest up, so the walk keeps the last match on its way to init.
 func AncestorAmong(candidates []int, self int) (int, bool) {
 	return ancestorAmong(candidates, self, func(pid int) (int, error) {
-		f, err := readStat(pid)
+		f, err := procStat(pid)
 		return f.ppid, err
 	})
 }
@@ -124,10 +123,10 @@ type ProcID struct {
 
 // Ancestors is self's ancestor chain, nearest first, self excluded, each with
 // its start time: up to init, or to the first process that cannot be read.
-// Like ProcStart it reads /proc, so it is Linux only: elsewhere it is empty,
-// and no agent has a verified identity to prove a session against anyway.
+// Like ProcStart it reads the system's process table (procStat): Linux and
+// macOS; elsewhere it is empty.
 func Ancestors(self int) []ProcID {
-	return ancestors(self, readStat)
+	return ancestors(self, procStat)
 }
 
 func ancestors(self int, statOf func(int) (statFields, error)) []ProcID {
