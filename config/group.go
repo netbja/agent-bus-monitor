@@ -29,7 +29,7 @@ var groups = map[string]Group{
 	"identity.as": GroupIdentity, "start.team": GroupIdentity,
 	"dispatch.context_alert": GroupServices, "dispatch.prompt_grace": GroupServices, "dispatch.quota": GroupServices,
 	"dispatch.quota_warn": GroupServices, "dispatch.quota_hold": GroupServices, "dispatch.quota_max_age": GroupServices,
-	"dispatch.quota_long_hold": GroupServices, "dispatch.tokens": GroupServices, "dispatch.auto_clear": GroupServices,
+	"dispatch.quota_long_hold": GroupServices, "quota.claude.probe": GroupServices, "dispatch.tokens": GroupServices, "dispatch.auto_clear": GroupServices,
 	"dispatch.pop_retire": GroupServices, "dispatch.pop_retire_after": GroupServices, "dispatch.stall_after": GroupServices, "dispatch.clear_stall_after": GroupServices, "dispatch.quiet_after": GroupServices, "dispatch.idle_after": GroupServices,
 	"dispatch.turn_stale_after": GroupServices, "dev": GroupServices, "dispatch.self_repair": GroupServices, "dispatch.self_repair_every": GroupServices, "dispatch.self_repair_per_day": GroupServices, "services.start_at_login": GroupServices, "services.manager": GroupServices, "history.keep_days": GroupServices, "history.max_mb": GroupServices, "sentinel.reload": GroupServices, "suspend.wait": GroupServices, "suspend.auto_resume": GroupServices,
 	"holder.scrollback": GroupServices, "dispatch.submit_wait": GroupServices, "dispatch.person_quiet": GroupServices,

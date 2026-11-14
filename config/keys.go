@@ -232,6 +232,11 @@ var Keys = []*Key{
 			return nil, envSkip
 		},
 		file: fileDuration(true)},
+	// claude-usage-probe: Claude's windows from the CLI's get_usage first,
+	// the statusline as the fallback; 0 turns the probe off.
+	{Name: "quota.claude.probe", Env: "AGENT_BUS_QUOTA_CLAUDE_PROBE", Kind: Bool, Default: true, ReadBy: "quota",
+		env:  func(raw string) (any, envResult) { return raw != "0", envUse },
+		file: fileBool},
 	{Name: "dispatch.tokens", Env: "AGENT_BUS_TOKENS", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "0", envUse }, // 0 turns it off
 		file: fileBool},

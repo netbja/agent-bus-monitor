@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -215,11 +216,15 @@ func writeAtomic(path string, b []byte) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// ClaudeReader reads the statusline file and the transcript backstop.
+// ClaudeReader reads the account's windows from the CLI's get_usage first
+// (Probe, when set: Source cli-usage), then the statusline file and the
+// transcript backstop. Per window the newer observation wins, as in
+// MergeWindows; a probe that fails leaves the statusline reading as it was.
 type ClaudeReader struct {
 	Cache       string // the statusline file
 	Transcripts string // ~/.claude/projects
 	Now         func() time.Time
+	Probe       *ClaudeProbe // nil: no probe (quota.claude.probe off, no CLI)
 }
 
 func (ClaudeReader) Provider() string { return "anthropic" }
@@ -234,6 +239,18 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 			stored = st.Windows
 		}
 	}
+	probeNote := ""
+	if c.Probe != nil {
+		ws, at, note := c.Probe.Windows(ctx)
+		probeNote = note
+		for _, w := range ws {
+			if s, ok := stored[w.Name]; ok && s.ObservedAt > at {
+				continue // a statusline reading after the probe's
+			}
+			stored[w.Name] = storedWindow{Window: w, ObservedAt: at}
+			r.Source = "cli-usage"
+		}
+	}
 	hits, served := transcriptRejections(c.Transcripts, now)
 	r.AvailableAt = served
 	for name, hit := range hits {
@@ -241,10 +258,13 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 			continue // a fresher statusline reading outranks the backstop
 		}
 		stored[name] = hit
-		r.Source = "statusline+transcript"
+		r.Source = strings.TrimSuffix(r.Source, "+transcript") + "+transcript"
 	}
 	if len(stored) == 0 {
 		u := Unknown("anthropic", "statusline", "no statusline reading yet (agentbus statusline --print-install)")
+		if probeNote != "" {
+			u.Note += "; " + probeNote
+		}
 		u.AvailableAt = served
 		return u, nil
 	}
