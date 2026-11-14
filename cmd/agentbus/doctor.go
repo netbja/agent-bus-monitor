@@ -41,9 +41,18 @@ type doctorRow struct {
 	// Risk is an agy role's elevated options and the denies agy cannot
 	// enforce, in its launch's words (agy-client §4.2, §4.4); never a verdict.
 	Risk string `json:"risk,omitempty"`
+	// Pops is, for a role that pops, the roles its session may spawn without
+	// a prompt (allow) and with the person's yes (ask): the agent-spawn rules
+	// it launches with (rolecfg.SpawnRules). A role in neither is not covered.
+	Pops *doctorPops `json:"pops,omitempty"`
 	// usedAt is when the transcript last showed Used (Unix ms; 0 = none):
 	// recordAliases trusts only a fresh one.
 	usedAt int64
+}
+
+type doctorPops struct {
+	Allow []string `json:"allow"`
+	Ask   []string `json:"ask"`
 }
 
 type doctorDeps struct {
@@ -193,6 +202,9 @@ func doctorRows(ctx context.Context, b *bus.Bus, d doctorDeps) ([]doctorRow, err
 		} else {
 			r.Risk = risk
 		}
+		if allow, ask, err := m.SpawnRules(n); err == nil && (allow != nil || ask != nil) {
+			r.Pops = &doctorPops{Allow: allow, Ask: ask}
+		}
 		if cur.Tier != "" { // the model the tier stands for now (§10.3)
 			r.Configured = "tier " + cur.Tier
 			if d.Table != nil {
@@ -318,11 +330,29 @@ func runDoctor(ctx context.Context, b *bus.Bus, d doctorDeps, args []string, out
 		if r.Risk != "" {
 			fmt.Fprintf(out, "%12s risk: %s\n", "", r.Risk)
 		}
+		if p := r.Pops; p != nil {
+			fmt.Fprintf(out, "%12s pops: %s\n", "", popsLine(p))
+		}
 	}
 	if len(rows) == 0 {
 		fmt.Fprintln(out, "no registered agent has a role in roles.toml")
 	}
 	return code
+}
+
+// popsLine is a popping role's spawn rules in words.
+func popsLine(p *doctorPops) string {
+	var parts []string
+	if len(p.Allow) > 0 {
+		parts = append(parts, "allow "+strings.Join(p.Allow, ", "))
+	}
+	if len(p.Ask) > 0 {
+		parts = append(parts, "ask "+strings.Join(p.Ask, ", ")+" (the person approves)")
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "none") // it pops, but roles.toml has no other role to pop
+	}
+	return strings.Join(parts, "; ") + "; any other role is not covered"
 }
 
 // catalogueVerdict (v0.15.2 §10.4, §12): what the model table says about a
