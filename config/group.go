@@ -32,6 +32,7 @@ var groups = map[string]Group{
 	"dispatch.quota_long_hold": GroupServices, "dispatch.tokens": GroupServices, "dispatch.auto_clear": GroupServices,
 	"dispatch.pop_retire": GroupServices, "dispatch.pop_retire_after": GroupServices, "dispatch.stall_after": GroupServices, "dispatch.clear_stall_after": GroupServices, "dispatch.quiet_after": GroupServices, "dispatch.idle_after": GroupServices,
 	"dispatch.turn_stale_after": GroupServices, "dev": GroupServices, "dispatch.self_repair": GroupServices, "dispatch.self_repair_every": GroupServices, "dispatch.self_repair_per_day": GroupServices, "services.start_at_login": GroupServices, "history.keep_days": GroupServices, "history.max_mb": GroupServices, "sentinel.reload": GroupServices, "suspend.wait": GroupServices, "suspend.auto_resume": GroupServices,
+	"holder.scrollback": GroupServices, "dispatch.submit_wait": GroupServices, "dispatch.person_quiet": GroupServices,
 	"delivery.forge": GroupServices, "delivery.base": GroupServices,
 	"health.disk_warn_pct": GroupHealth, "health.disk_warn_gib": GroupHealth, "health.disk_fail_pct": GroupHealth,
 	"health.disk_fail_gib": GroupHealth, "health.runaway.silent_after": GroupHealth, "health.runaway.context_growth": GroupHealth,
