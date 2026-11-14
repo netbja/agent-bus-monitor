@@ -46,10 +46,22 @@ func (t *terminal) settled() (screenText string, bracketed, ok bool) {
 	}
 }
 
-// personActive: a draft stands, a viewer typed within quiet, or a typing
-// viewer is attached and not proven unfocused (spec 4.5). Called with t.mu
-// held.
+// personActive: a draft stands, a viewer typed within quiet, a typing
+// viewer is attached and not proven unfocused, or a viewer's lone ESC still
+// waits for its sequence (spec 4.5; 5c's escWait: the Escape key or a key
+// still arriving, never nobody). A pending ESC past escWait is settled first,
+// as the Escape key. Called with t.mu held.
 func (t *terminal) personActive(quiet time.Duration) bool {
+	now := time.Now()
+	for v := range t.viewers {
+		if v.observe {
+			continue
+		}
+		t.settle(v, now, false)
+		if v.in.state == 'e' {
+			return true
+		}
+	}
 	if t.draft || !t.typedAt.IsZero() && time.Since(t.typedAt) < quiet {
 		return true
 	}

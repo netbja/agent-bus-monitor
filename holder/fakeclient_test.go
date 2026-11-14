@@ -93,6 +93,9 @@ func fakeClient() {
 				dialog = true
 			case s[0] == 0x15: // ctrl+u
 				input = ""
+			case strings.HasPrefix(s, "\x1b[13u"): // kitty's Enter: as a CR
+				s = "\r" + s[5:]
+				continue
 			case s[0] == 0x1b: // another sequence: skipped
 				end := 1
 				for end < len(s) && (s[end] < 0x40 || s[end] > 0x7e || end == 1) {

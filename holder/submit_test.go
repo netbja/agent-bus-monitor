@@ -1,7 +1,10 @@
 package holder
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -290,5 +293,103 @@ func TestSubmitLandsOnlyItsOwnToken(t *testing.T) {
 	}
 	if got := submitted(t, cl, "t1"); len(got) != 0 {
 		t.Fatalf("a CR was sent: %q", got)
+	}
+}
+
+// A lone ESC still waiting for its sequence (5c's escWait) is the person at
+// the terminal: the Escape key or a key's sequence still arriving, never
+// nobody (spec 4.5). Once it resolves as the Escape key, typed and draft
+// stand as for any key.
+func TestSubmitRefusesAPendingEscape(t *testing.T) {
+	sock := submitHolder(t, func(c *Config) { c.escWait = time.Hour })
+	cl := dial(t, sock)
+	startFake(t, cl, "fake")
+	v := attached(t, sock, Attach{Term: "t1", Cols: 200, Rows: 30})
+	control(t, v, Focus{In: false})
+	time.Sleep(50 * time.Millisecond)
+	send(t, v, FrameData, []byte{0x1b})
+	time.Sleep(50 * time.Millisecond)
+	if _, err := cl.Call(wake("a1b2c3")); codeOf(err) != CodePersonActive {
+		t.Fatalf("a pending ESC: %v", err)
+	}
+	if got := submitted(t, cl, "t1"); len(got) != 0 {
+		t.Fatalf("submitted %q", got)
+	}
+}
+
+// The same with kitty's Enter encoding (CSI 13 u, spec 8): held, then after
+// the CR, and it ends the draft as a CR does.
+func TestSubmitHoldsAKittyEnter(t *testing.T) {
+	sock := submitHolder(t)
+	cl := dial(t, sock)
+	startFake(t, cl, "fake-slow")
+	v := attached(t, sock, Attach{Term: "t1", Cols: 200, Rows: 30})
+	control(t, v, Focus{In: false})
+	time.Sleep(50 * time.Millisecond)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var err error
+	go func() { defer wg.Done(); _, err = cl.Call(wake("a1b2c3")) }()
+	time.Sleep(150 * time.Millisecond)
+	send(t, v, FrameData, []byte("hello\x1b[13u"))
+	wg.Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitScreen(t, cl, "t1", "SUBMITTED: hello")
+	slowText := strings.ReplaceAll(wakeText, "fake", "fake-slow")
+	if got := submitted(t, cl, "t1"); len(got) != 2 || got[0] != slowText || got[1] != "hello" {
+		t.Fatalf("submitted %q", got)
+	}
+	time.Sleep(400 * time.Millisecond) // past person_quiet: no draft stands
+	if _, err := cl.Call(wake("d4e5f6")); err != nil {
+		t.Fatalf("after a kitty Enter: %v", err)
+	}
+}
+
+// An observer never blocks a submit (spec 8, focus rule): it sends no focus
+// report and the line still goes.
+func TestSubmitIgnoresAnObserver(t *testing.T) {
+	sock := submitHolder(t)
+	cl := dial(t, sock)
+	startFake(t, cl, "fake")
+	attached(t, sock, Attach{Term: "t1", Observe: true, Cols: 200, Rows: 30})
+	time.Sleep(50 * time.Millisecond)
+	if _, err := cl.Call(wake("a1b2c3")); err != nil {
+		t.Fatalf("an observer: %v", err)
+	}
+	waitScreen(t, cl, "t1", "SUBMITTED: "+wakeText)
+}
+
+// A full hold queue back-pressures the viewer (spec 4.2): past holdMax the
+// next bytes wait, none dropped, and a release delivers all of them in
+// order.
+func TestHoldBackPressure(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	tm := &terminal{pty: w, viewers: map[*viewer]bool{}}
+	tm.inMu.Lock()
+	tm.startHold("wake")
+	tm.inMu.Unlock()
+	first := bytes.Repeat([]byte("a"), holdMax)
+	tm.deliver(first)
+	done := make(chan struct{})
+	go func() { tm.deliver([]byte("bc")); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("a full queue took more bytes")
+	case <-time.After(100 * time.Millisecond):
+	}
+	got := make(chan []byte)
+	go func() { b, _ := io.ReadAll(r); got <- b }()
+	tm.endHold(true)
+	<-done
+	w.Close()
+	b := <-got
+	if len(b) != holdMax+2 || !bytes.Equal(b[:holdMax], first) || string(b[holdMax:]) != "bc" {
+		t.Fatalf("delivered %d bytes, tail %q", len(b), b[max(0, len(b)-3):])
 	}
 }

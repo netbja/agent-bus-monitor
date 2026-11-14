@@ -531,7 +531,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   profile; none: `not_ready`, never prompted). Under the input lock, which every viewer byte also
   takes (so the lock is the hold during a submit and bytes follow the CR in order): no person
   (`person_active`: a draft however old, typing within `person_quiet`, a typing viewer not proven
-  unfocused), not left behind (`left_behind`), `EmptyInput` with mode 2004 on a settled screen
+  unfocused, a viewer's lone ESC still inside its 100 ms wait), not left behind (`left_behind`), `EmptyInput` with mode 2004 on a settled screen
   (no output for 80 ms, else unsettled: `not_ready`), the same again after the hold, the line as a
   bracketed paste only, then the line's own token (`agentbus#<nonce>`, `/clear`) in the input box
   within `submit_wait` (2 s): CR. Not seen: no CR, the terminal left behind, and the viewers' bytes
