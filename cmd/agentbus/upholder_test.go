@@ -117,6 +117,11 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 			t.Fatalf("missing %q in\n%s", c, calls)
 		}
 	}
+	// The holder first: the dispatcher's first health pass must find it
+	// answering, or it fails holder for agents never lost (foureyes).
+	if h, d := strings.Index(calls, "start-holder"), strings.Index(calls, "start demo dispatch"); h < 0 || d < 0 || h > d {
+		t.Fatalf("the holder starts after the dispatcher:\n%s", calls)
+	}
 	if strings.Index(calls, "start-holder") > strings.Index(calls, "remove-holder") {
 		t.Fatalf("the gc ran before the new build started:\n%s", calls)
 	}

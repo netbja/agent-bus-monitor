@@ -471,6 +471,12 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 			}
 		}
 	}
+	// The holder before the services: it makes no broker connection, and the
+	// dispatcher's first health pass must find it answering, or holder fails
+	// for agents that were never lost (foureyes).
+	if err := startHolder(d, m, project, workdir, stdout); err != nil {
+		errs = append(errs, fmt.Errorf("holder: %v", err))
+	}
 	for _, k := range kinds {
 		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths, EnvFile: d.Paths.EnvFile(project),
 			AtLogin: atLogin && ls != nil}
@@ -520,9 +526,6 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		if st, err := m.State(project, k); err == nil && st.Active {
 			fmt.Fprintf(stdout, "%s: still running from before (stop it: agentbus --project %s service stop %s)\n", k, project, k)
 		}
-	}
-	if err := startHolder(d, m, project, workdir, stdout); err != nil {
-		errs = append(errs, fmt.Errorf("holder: %v", err))
 	}
 	if ls != nil && atLogin {
 		if err := ls.Enable(project); err != nil {
