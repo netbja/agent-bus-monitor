@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -318,7 +319,7 @@ func (in *Installer) serviceLines(ctx context.Context) []string {
 		out, _ := in.R.Run(ctx, Cmd{Name: ab, Args: []string{"service", "list"}, Stdout: true})
 		var lines []string
 		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			if !strings.HasPrefix(l, "no ") && !isHolderLine(l) {
+			if !strings.HasPrefix(l, "no ") {
 				lines = append(lines, l)
 			}
 		}
@@ -349,7 +350,7 @@ func (in *Installer) ServicesHint(ctx context.Context) {
 	if in.Opt.DryRun {
 		return
 	}
-	lines := in.serviceLines(ctx)
+	lines := slices.DeleteFunc(in.serviceLines(ctx), isHolderLine)
 	if len(lines) == 0 {
 		return
 	}

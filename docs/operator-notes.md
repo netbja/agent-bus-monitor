@@ -198,21 +198,26 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   a manager that cannot say keeps the unit. `StartHolder` never restarts or kicks a running one.
   The unit runs `<copy> --project <p> holder --env <the project's env file>` in the project's
   `WorkingDirectory` (6b2): the holder starts every agent, and a service manager's PATH is minimal,
-  so `agentbus holder` loads the env file as `service run` does, then finds the launcher
-  (`<repo>/scripts/agent-launch`, the repo from `AGENTBUS_REPO` or the stamped checkout) and the
-  manifest (`rolecfg.ManifestPath`) from it; the env file now carries `AGENTBUS_REPO` and
-  `ROLES_TOML`, and `up` records the expanded working directory there as `AGENTBUS_WORKDIR`. Like
-  dispatch's, it is the project's file, not the build's: an old build's holder reads the current one.
-  **Each Start reads that launch context afresh** (env file, launcher, manifest, directory) and gives
-  the new agent the file's variables: `up` never restarts a running holder (it would kill its
-  agents), so a changed PATH or directory reaches the next agent while running ones keep theirs; a
-  context that cannot be read refuses the Start (reviewer-codex). The settings are read once, at
-  start. An invalid configuration exits 0 (not restarted). `agentbus up` copies
-  the running build, installs and starts its unit, then runs `GCHolders` (no agent runs on the
-  holder before the cutover). A password rotation and an upgrade's hint skip holder lines by kind;
-  `service restart holder` is refused unless `--kill-agents` is given and says how many agents
-  it would kill (`RestartHolder`: systemd `restart`, launchd `kickstart -k`). Settings:
-  `holder.scrollback`, `dispatch.submit_wait`, `dispatch.person_quiet`.
+  so `agentbus holder` loads the env file as `service run` does. Its launch context is in that file
+  under names only the holder reads, written by `up`: `AGENTBUS_HOLDER_REPO` (the checkout whose
+  `scripts/agent-launch` it runs), `AGENTBUS_HOLDER_MANIFEST` (the manifest up's template names) and
+  `AGENTBUS_HOLDER_DIR` (the working directory, `~` expanded). Never `AGENTBUS_REPO` or
+  `ROLES_TOML`: the env file is every service's, and those would pin the dispatcher too (foureyes).
+  Like dispatch's, the file is the project's, not the build's: an old build's holder reads the
+  current one. **Each Start reads that context afresh** and gives the new agent the file's
+  variables: `up` never restarts a running holder (it would kill its agents), so a changed PATH,
+  manifest or directory reaches the next agent while running ones keep theirs; a context that
+  cannot be read refuses the Start (reviewer-codex). The settings (`holder.scrollback`,
+  `dispatch.submit_wait`, `dispatch.person_quiet`) are read once, at start. An invalid
+  configuration exits 0 (not restarted). `agentbus up` copies the running build, installs and
+  starts its unit, then runs `GCHolders`; a `go run` build installs none, with a notice. No agent
+  runs on the holder before the cutover. Holder units are on every service path (foureyes):
+  `service list` shows them (`<p> holder active, build <raw>`); `down` stops every instance of the
+  project (`StopHolder`: systemd `stop`, launchd `bootout`); `service remove` (whole project) and
+  `remove --all`, hence `setup uninstall`, stop and remove them and the binary copies no other
+  project's unit records. A password rotation and an upgrade's hint skip holder lines by kind;
+  `service restart holder` is refused unless `--kill-agents` is given and says how many agents it
+  would kill (`RestartHolder`: systemd `restart`, launchd `kickstart -k`).
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (enabled at login only while `services.start_at_login` is on), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

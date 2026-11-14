@@ -340,12 +340,12 @@ func TestServicesHintSkipsTheHolder(t *testing.T) {
 	ab := in.Opt.BinDir + "/agentbus"
 	_ = os.MkdirAll(in.Opt.BinDir, 0o755)
 	_ = os.WriteFile(ab, []byte("#!/bin/sh\n"), 0o755)
-	f.cmds[ab+" service list"] = fakeCmd{out: "demo holder running since 2h\n"}
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo                     holder    active, build v1\n"}
 	in.ServicesHint(context.Background())
 	if out.String() != "" {
 		t.Fatalf("%q", out.String())
 	}
-	f.cmds[ab+" service list"] = fakeCmd{out: "demo dispatch running since 2h\ndemo holder running since 2h\n"}
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo dispatch running since 2h\ndemo                     holder    active, build v1\n"}
 	in.ServicesHint(context.Background())
 	if strings.Contains(out.String(), "holder") || !strings.Contains(out.String(), "demo dispatch") {
 		t.Fatalf("%q", out.String())

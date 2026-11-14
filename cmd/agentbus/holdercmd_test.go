@@ -157,7 +157,7 @@ func realPath(t *testing.T, p string) string {
 
 // A holder started by a service manager has a minimal PATH; it loads the
 // project's env file (as `service run` does) and launches through it: the
-// launcher is found from the env file's AGENTBUS_REPO, the client from the
+// launcher is found from the env file's holder repo, the client from the
 // env file's PATH, and the agent runs in the unit's working directory.
 func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 	w := newHolderWorld(t)
@@ -166,7 +166,7 @@ func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	mark := filepath.Join(w.tmp, "mark")
-	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "a"), "AGENTBUS_REPO": w.repo, "HOLDER_TEST_MARK": mark})
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "a"), service.HolderRepoEnv: w.repo, "HOLDER_TEST_MARK": mark})
 	cl := w.start(t, work)
 	if _, err := cl.Call(holder.Start{Role: "coder"}); err != nil {
 		t.Fatalf("start: %v\n%s", err, w.out.String())
@@ -191,8 +191,8 @@ func TestHolderStartReadsTheLaunchContextAfresh(t *testing.T) {
 		}
 	}
 	mark1, mark2 := filepath.Join(w.tmp, "mark1"), filepath.Join(w.tmp, "mark2")
-	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "old"), "AGENTBUS_REPO": w.repo,
-		"HOLDER_TEST_MARK": mark1, service.WorkDirEnv: work1})
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "old"), service.HolderRepoEnv: w.repo,
+		"HOLDER_TEST_MARK": mark1, service.HolderDirEnv: work1})
 	cl := w.start(t, work1)
 	first, err := cl.Call(holder.Start{Role: "coder"})
 	if err != nil || first.Term == nil {
@@ -203,12 +203,23 @@ func TestHolderStartReadsTheLaunchContextAfresh(t *testing.T) {
 		t.Fatalf("first: %q, want %q", got, want)
 	}
 
-	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "new"), "AGENTBUS_REPO": w.repo,
-		"HOLDER_TEST_MARK": mark2, service.WorkDirEnv: work2})
+	manifest2 := filepath.Join(w.tmp, "other", "roles.toml")
+	b, err := os.ReadFile(filepath.Join(w.repo, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(manifest2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest2, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "new"), service.HolderRepoEnv: w.repo,
+		service.HolderManifestEnv: manifest2, "HOLDER_TEST_MARK": mark2, service.HolderDirEnv: work2})
 	if _, err := cl.Call(holder.Start{Role: "coder"}); err != nil {
 		t.Fatalf("second start: %v\n%s", err, w.out.String())
 	}
-	if got, want := w.mark(t, mark2), "new coder demo in "+realPath(t, work2)+" roles="+roles; got != want {
+	if got, want := w.mark(t, mark2), "new coder demo in "+realPath(t, work2)+" roles="+realPath(t, manifest2); got != want {
 		t.Fatalf("second: %q, want %q", got, want)
 	}
 	r, err := cl.Call(holder.List{})

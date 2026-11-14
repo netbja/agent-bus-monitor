@@ -523,7 +523,7 @@ func TestRotatePasswordAsksTheBrokerAfterAnAmbiguousError(t *testing.T) {
 // it (a restart kills every agent it holds; herdr exit spec 4.4a).
 func TestRotateNeverRestartsTheHolder(t *testing.T) {
 	in, out, f, _, ab := rotateWorld(t, map[string]string{})
-	f.cmds[ab+" service list"] = fakeCmd{out: "demo                     dispatch  active (running), pid 7\ndemo                     holder    active (running), pid 8\n"}
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo                     dispatch  active (running), pid 7\ndemo                     holder    active, build v1\n"}
 	b := &fakeBroker{pw: bus.LegacyPassword}
 	if code := in.RotateRedisPassword(context.Background(), &Prompter{Yes: true}, b.dial); code != 0 {
 		t.Fatalf("exit %d: %s", code, out)

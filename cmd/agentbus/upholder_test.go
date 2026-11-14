@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -73,6 +74,14 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 	hm := &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{running: true},
 		units: []service.HolderUnit{{Project: "demo", Key: gone, Raw: "v1"}, {Project: "demo", Key: running, Raw: "v2"}}}
 	deps.Services = func() (service.Manager, string) { return hm, "" }
+	deps.Environ = append(deps.Environ, "ROLES_TOML=/m/roles.toml", "AGENTBUS_REPO=/r")
+	env0 := deps.Env
+	deps.Env = func(k string) string {
+		if k == "ROLES_TOML" {
+			return "/m/roles.toml"
+		}
+		return env0(k)
+	}
 	raw := "v9.9.9+abc"
 	deps.HolderBuild = func() string { return raw }
 	deps.HolderAnswers = func(project, key string) bool { return false }
@@ -87,8 +96,16 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 	}
 	// The directory is in the env file too: a holder already running reads it
 	// at its next Start (reviewer-codex).
-	if env, err := service.LoadEnvFile(u.paths.EnvFile("demo")); err != nil || env[service.WorkDirEnv] != work {
+	env, err := service.LoadEnvFile(u.paths.EnvFile("demo"))
+	if err != nil || env[service.HolderDirEnv] != work || env[service.HolderManifestEnv] != "/m/roles.toml" {
 		t.Fatalf("env file %v %v", env, err)
+	}
+	// Under the holder's own names only: the env file is every service's, and
+	// ROLES_TOML or AGENTBUS_REPO would pin the dispatcher too (foureyes).
+	for _, k := range []string{"ROLES_TOML", "AGENTBUS_REPO"} {
+		if _, ok := env[k]; ok {
+			t.Fatalf("%s in the shared env file: %v", k, env)
+		}
 	}
 	if b, err := os.ReadFile(filepath.Join(service.HolderBinDir(u.paths, key), "agentbus")); err != nil || string(b) != "#!/bin/sh\n" {
 		t.Fatalf("the binary copy: %q %v", b, err)
@@ -122,6 +139,12 @@ func TestUpWithoutAHolderManagerInstallsNoHolder(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(u.paths.DataHome, "agentbus", "holder")); !os.IsNotExist(err) {
 		t.Fatalf("a holder binary was copied: %v", err)
 	}
+}
+
+func (f *fakeHolderManager) StopHolder(project, key string) error {
+	f.calls = append(f.calls, "stop-holder "+project+" "+key)
+	f.active[key] = false
+	return nil
 }
 
 func (f *fakeHolderManager) RestartHolder(project, key string) error {
@@ -176,5 +199,114 @@ func TestServiceRestartHolderNeedsKillAgents(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "holder: restarted") {
 		t.Fatalf("out %q", out.String())
+	}
+}
+
+// holderSystemd is the real systemd manager over a fake systemctl that keeps
+// which holder units run: stop makes one inactive.
+func holderSystemd(t *testing.T) (service.Systemd, service.Paths, map[string]bool, *[]string) {
+	t.Helper()
+	root := t.TempDir()
+	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
+	active := map[string]bool{}
+	calls := &[]string{}
+	run := func(args ...string) ([]byte, error) {
+		*calls = append(*calls, strings.Join(args, " "))
+		if len(args) == 3 && args[1] == "is-active" {
+			if active[args[2]] {
+				return []byte("active\n"), nil
+			}
+			return []byte("inactive\n"), errors.New("exit status 3")
+		}
+		if len(args) == 3 && args[1] == "stop" {
+			active[args[2]] = false
+		}
+		return nil, nil
+	}
+	return service.Systemd{Run: run, Paths: paths}, paths, active, calls
+}
+
+func installTestHolder(t *testing.T, m service.Systemd, paths service.Paths, active map[string]bool, project, raw string) string {
+	t.Helper()
+	src := filepath.Join(t.TempDir(), "agentbus")
+	if err := os.WriteFile(src, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InstallHolderBinary(paths, raw, src); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.InstallHolder(service.HolderSpec{Project: project, Raw: raw, Paths: paths, EnvFile: "/e/" + project + ".env", WorkDir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	key := service.BuildKey(raw)
+	active[service.HolderUnitName(project, key)] = true
+	return key
+}
+
+// Every path that lists, stops or removes services sees the holder units
+// (foureyes): service list shows them, down stops the project's, remove
+// removes the project's units and the binaries no other project runs, and
+// remove --all (setup uninstall) leaves none. On the real systemd manager,
+// a project with a '-' in its name included.
+func TestHolderUnitsOnTheRemovalPaths(t *testing.T) {
+	m, paths, active, calls := holderSystemd(t)
+	k1 := installTestHolder(t, m, paths, active, "demo", "v1")
+	k2 := installTestHolder(t, m, paths, active, "demo", "v2")
+	installTestHolder(t, m, paths, active, "agent-bus-monitor", "v1")
+	d := serviceCmdDeps{Manager: m, Paths: paths, Bus: func(string) (*bus.Bus, error) { return nil, errors.New("no broker") }}
+
+	var out, errw bytes.Buffer
+	if code := runServiceCmd("", []string{"list"}, d, &out, &errw); code != 0 {
+		t.Fatalf("list: %d %s", code, errw.String())
+	}
+	for _, want := range []string{"demo                     holder    active, build v1", "demo                     holder    active, build v2",
+		"agent-bus-monitor        holder    active, build v1"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("list lacks %q:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	if code := runDown([]string{"demo"}, d, &out, &errw); code != 0 {
+		t.Fatalf("down: %d %s", code, errw.String())
+	}
+	for _, k := range []string{k1, k2} {
+		if active[service.HolderUnitName("demo", k)] {
+			t.Fatalf("down left %s running: %v", k, *calls)
+		}
+	}
+	if !active[service.HolderUnitName("agent-bus-monitor", k1)] {
+		t.Fatal("down demo stopped another project's holder")
+	}
+	if !strings.Contains(out.String(), "holder (build v1): stopped") {
+		t.Fatalf("down: %s", out.String())
+	}
+
+	out.Reset()
+	if code := runServiceCmd("demo", []string{"remove"}, d, &out, &errw); code != 0 {
+		t.Fatalf("remove: %d %s", code, errw.String())
+	}
+	if u, _ := m.HolderUnits("demo"); len(u) != 0 {
+		t.Fatalf("remove kept %+v", u)
+	}
+	if _, err := os.Stat(service.HolderBinDir(paths, k2)); !os.IsNotExist(err) {
+		t.Fatalf("v2's binary kept: %v", err)
+	}
+	if _, err := os.Stat(service.HolderBinDir(paths, k1)); err != nil {
+		t.Fatalf("v1's binary, still run by agent-bus-monitor, removed: %v", err)
+	}
+
+	out.Reset()
+	if code := runServiceCmd("", []string{"remove", "--all"}, d, &out, &errw); code != 0 {
+		t.Fatalf("remove --all: %d %s", code, errw.String())
+	}
+	if u, _ := m.HolderUnits(""); len(u) != 0 {
+		t.Fatalf("remove --all kept %+v", u)
+	}
+	if active[service.HolderUnitName("agent-bus-monitor", k1)] {
+		t.Fatal("remove --all left a holder running")
+	}
+	if _, err := os.Stat(service.HolderBinDir(paths, k1)); !os.IsNotExist(err) {
+		t.Fatalf("v1's binary kept: %v", err)
 	}
 }

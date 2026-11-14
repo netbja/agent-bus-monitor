@@ -529,3 +529,26 @@ func TestRestartHolder(t *testing.T) {
 		t.Fatalf("launchd calls %v", g.calls)
 	}
 }
+
+// StopHolder stops exactly its build's instance (down, remove): systemd stop
+// of that unit; launchd bootout of a loaded job, nothing for one not loaded.
+func TestStopHolder(t *testing.T) {
+	p := holderPaths(t)
+	f := &fakeRun{}
+	if err := (Systemd{Run: f.run, Paths: p}).StopHolder("demo", "v1.aaa.0123456789"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.calls, []string{"--user stop " + HolderUnitName("demo", "v1.aaa.0123456789")}) {
+		t.Fatalf("systemd calls %v", f.calls)
+	}
+	g := &fakeRun{answers: map[string]string{}, fails: map[string]bool{}}
+	ld := Launchd{Run: g.run, Paths: p, UID: 501}
+	g.answers["print gui/501/"+HolderLabel("demo", "k1")] = "state = running"
+	if err := ld.StopHolder("demo", "k1"); err != nil || !g.saw("bootout gui/501/"+HolderLabel("demo", "k1")) {
+		t.Fatalf("a loaded job: %v %v", err, g.calls)
+	}
+	g.out = map[string]fakeOut{"print gui/501/" + HolderLabel("demo", "k2"): {"Could not find service", true}}
+	if err := ld.StopHolder("demo", "k2"); err != nil || g.saw("bootout gui/501/"+HolderLabel("demo", "k2")) {
+		t.Fatalf("not loaded: %v %v", err, g.calls)
+	}
+}

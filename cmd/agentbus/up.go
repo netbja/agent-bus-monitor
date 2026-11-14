@@ -437,13 +437,10 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 			}
 		}
 	}
-	// The holder reads its agents' directory here at each Start (it is never
-	// restarted for a new one; herdr exit 6b2).
-	if dir := expandWorkDir(d, workdir); filepath.IsAbs(dir) {
-		env[service.WorkDirEnv] = dir
-	} else {
-		delete(env, service.WorkDirEnv)
-	}
+	// The holder's launch context, read by the holder alone at each Start (it
+	// is never restarted for a new one; herdr exit 6b2): the checkout, the
+	// manifest this up's template names, the working directory.
+	holderContext(d, workdir, env)
 	envChanged, err := service.WriteEnvFile(d.Paths.EnvFile(project), env)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotInstalled, err)
@@ -644,6 +641,23 @@ func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
 	})
 }
 
+// holderContext records the holder's launch context in env (service.Holder*
+// names); a value up cannot tell is left out, and the holder falls back.
+func holderContext(d upDeps, workdir string, env map[string]string) {
+	set := func(k, v string) {
+		if filepath.IsAbs(v) {
+			env[k] = v
+		} else {
+			delete(env, k)
+		}
+	}
+	set(service.HolderDirEnv, expandWorkDir(d, workdir))
+	repo, _ := repoDir(d.Env)
+	set(service.HolderRepoEnv, repo)
+	manifest, _ := rolecfg.ManifestPath(d.Env)
+	set(service.HolderManifestEnv, manifest)
+}
+
 // expandWorkDir is a template's working_dir as up reads it elsewhere: ~ is
 // the home, variables expanded.
 func expandWorkDir(d upDeps, dir string) string {
@@ -666,7 +680,10 @@ func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io
 		return fmt.Errorf("cannot find this agentbus: %v", err)
 	}
 	if strings.Contains(self, "go-build") || !filepath.IsAbs(self) {
-		return fmt.Errorf("not installed: a holder must run an installed agentbus, not %s", self)
+		// A developer's go run: the services run the installed agentbus, and no
+		// holder is installed from a temporary build (foureyes: not an error).
+		fmt.Fprintf(stdout, "holder: not installed from %s (a go run build); run the installed agentbus to install it\n", self)
+		return nil
 	}
 	if _, err := service.InstallHolderBinary(d.Paths, raw, self); err != nil {
 		return err

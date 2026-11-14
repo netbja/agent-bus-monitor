@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"syscall"
 	"time"
@@ -94,12 +96,22 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			fmt.Fprintln(stderr, "error: "+err.Error())
 			return 1
 		}
-		if len(units) == 0 {
+		var holders []service.HolderUnit
+		if hm, ok := m.(service.HolderManager); ok {
+			if holders, err = hm.HolderUnits(""); err != nil {
+				fmt.Fprintln(stderr, "error: holder units: "+err.Error())
+				return 1
+			}
+		}
+		if len(units) == 0 && len(holders) == 0 {
 			fmt.Fprintf(stdout, "no agentbus service installed (%s)\n", m.Name())
 		}
 		for _, u := range units {
 			st, _ := m.State(u.Project, u.Kind)
 			fmt.Fprintf(stdout, "%-24s %-9s %s\n", u.Project, u.Kind, describeState(st))
+		}
+		for _, u := range holders {
+			fmt.Fprintf(stdout, "%-24s %-9s %s, build %s\n", u.Project, service.Holder, holderState(m.(service.HolderManager), u), u.Raw)
 		}
 		return 0
 	case "remove":
@@ -110,6 +122,24 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 				return 1
 			}
 			code := 0
+			if hm, ok := m.(service.HolderManager); ok { // first: their units name the env files
+				holders, err := hm.HolderUnits("")
+				if err != nil {
+					fmt.Fprintln(stderr, "error: holder units: "+err.Error())
+					return 1
+				}
+				done := map[string]bool{}
+				for _, u := range holders {
+					if done[u.Project] {
+						continue
+					}
+					done[u.Project] = true
+					if err := removeHolders(hm, d.Paths, u.Project, stdout); err != nil {
+						fmt.Fprintf(stderr, "error: %s holder: %v\n", u.Project, err)
+						code = 1
+					}
+				}
+			}
 			cleared := map[string]bool{}
 			for _, u := range units {
 				if err := removeProjectService(m, d.Paths, u.Project, u.Kind); err != nil {
@@ -136,6 +166,21 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 	}
 	if sub == "restart" && len(rest) >= 1 && rest[0] == service.Holder {
 		return restartHolder(d, project, rest[1:], stdout, stderr)
+	}
+	removedHolders := false
+	if hm, ok := m.(service.HolderManager); ok && sub == "remove" && len(rest) == 0 {
+		units, err := hm.HolderUnits(project)
+		if err != nil {
+			fmt.Fprintln(stderr, "error: holder units: "+err.Error())
+			return 1
+		}
+		if len(units) > 0 {
+			if err := removeHolders(hm, d.Paths, project, stdout); err != nil {
+				fmt.Fprintf(stderr, "error: holder: %v\n", err)
+				return 1
+			}
+			removedHolders = true
+		}
 	}
 	kinds, err := projectKinds(m, project)
 	if err != nil {
@@ -165,7 +210,9 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 		kinds = []string{rest[0]}
 	}
 	if len(kinds) == 0 {
-		fmt.Fprintf(stdout, "no service installed for %s (agentbus up %s installs them)\n", project, project)
+		if !removedHolders {
+			fmt.Fprintf(stdout, "no service installed for %s (agentbus up %s installs them)\n", project, project)
+		}
 		return 0
 	}
 	code := 0
@@ -322,15 +369,33 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: "+err.Error())
 		return 1
 	}
-	if len(kinds) == 0 {
+	// Spec 4.4a: down stops every holder instance of the project (each
+	// exits 0, so none comes back); up starts the current one again.
+	code := 0
+	var holders []service.HolderUnit
+	hm, isHM := d.Manager.(service.HolderManager)
+	if isHM {
+		if holders, err = hm.HolderUnits(p); err != nil {
+			fmt.Fprintln(stderr, "error: holder units: "+err.Error())
+			return 1
+		}
+	}
+	if len(kinds) == 0 && len(holders) == 0 {
 		fmt.Fprintf(stdout, "no service installed for %s: nothing to stop\n", p)
 		return 0
+	}
+	for _, u := range holders {
+		if err := hm.StopHolder(p, u.Key); err != nil {
+			fmt.Fprintf(stderr, "error: holder (build %s): %v\n", u.Raw, err)
+			code = 1
+			continue
+		}
+		fmt.Fprintf(stdout, "holder (build %s): stopped\n", u.Raw)
 	}
 	var recs map[string]bus.ServiceRecord
 	if b, err := d.Bus(p); err == nil {
 		_, recs, _ = b.ServiceStates(context.Background())
 	}
-	code := 0
 	for _, k := range kinds {
 		if err := d.Manager.Stop(p, k); err != nil {
 			fmt.Fprintf(stderr, "error: %s: %v\n", k, err)
@@ -344,6 +409,46 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. The agents and the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again.\n", p, p)
 	return code
+}
+
+// holderState is a holder unit's state as list prints it.
+func holderState(hm service.HolderManager, u service.HolderUnit) string {
+	switch on, err := hm.HolderActive(u.Project, u.Key); {
+	case err != nil:
+		return "unknown"
+	case on:
+		return "active"
+	}
+	return "inactive"
+}
+
+// removeHolders stops and removes every holder unit of project, then the
+// binary copies no other project's unit records (service.GCHolders, with no
+// current build). Spec 4.4a: remove and uninstall leave no holder behind.
+func removeHolders(hm service.HolderManager, paths service.Paths, project string, stdout io.Writer) error {
+	units, err := hm.HolderUnits(project)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, u := range units {
+		if err := hm.StopHolder(project, u.Key); err != nil {
+			errs = append(errs, fmt.Errorf("build %s: %v", u.Raw, err))
+		}
+	}
+	removed, err := service.GCHolders(hm, paths, project, "", func(string) bool { return false })
+	if err != nil {
+		errs = append(errs, err)
+	}
+	for _, u := range units {
+		if slices.Contains(removed, u.Key) {
+			fmt.Fprintf(stdout, "holder (build %s): removed\n", u.Raw)
+		}
+	}
+	if left, err := hm.HolderUnits(project); err == nil && len(left) > 0 && len(errs) == 0 {
+		errs = append(errs, fmt.Errorf("%d holder unit(s) still installed", len(left)))
+	}
+	return errors.Join(errs...)
 }
 
 // restartHolder is `service restart holder [--kill-agents]`: the current

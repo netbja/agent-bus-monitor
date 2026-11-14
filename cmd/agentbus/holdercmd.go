@@ -125,9 +125,10 @@ func holderConfig(project string, args []string) (holder.Config, error) {
 // as it is now. `agentbus up` may rewrite the env file and the working
 // directory while this build's holder runs, and the holder is never restarted
 // for it (that would kill its agents): so each Start reads the env file again
-// and takes from it the PATH, the launcher (AGENTBUS_REPO), the manifest
-// (ROLES_TOML) and the directory (service.WorkDirEnv, else the unit's); the
-// new agent gets those variables. A running terminal keeps its own. A context
+// and takes from it the PATH, the launcher (service.HolderRepoEnv, else the
+// checkout repoDir finds), the manifest (service.HolderManifestEnv, else
+// rolecfg.ManifestPath) and the directory (service.HolderDirEnv, else the
+// unit's); the new agent gets the file's variables. A running terminal keeps its own. A context
 // that cannot be read refuses the Start, never falls back to the old one.
 type holderLaunch struct {
 	project, envFile, cwd string
@@ -146,23 +147,33 @@ func (l holderLaunch) context() (map[string]string, holder.TemplateLaunch, error
 		}
 		return l.base[k]
 	}
-	repo, err := repoDir(getenv)
-	if err != nil {
-		return nil, holder.TemplateLaunch{}, err
+	repo := env[service.HolderRepoEnv]
+	if repo == "" {
+		if repo, err = repoDir(getenv); err != nil {
+			return nil, holder.TemplateLaunch{}, err
+		}
 	}
 	launcher := filepath.Join(repo, "scripts", "agent-launch")
 	if st, err := os.Stat(launcher); err != nil || st.IsDir() || st.Mode()&0o111 == 0 {
 		return nil, holder.TemplateLaunch{}, fmt.Errorf("no executable launcher at %s", launcher)
 	}
-	manifest, err := rolecfg.ManifestPath(getenv)
-	if err != nil {
-		return nil, holder.TemplateLaunch{}, err
+	manifest := env[service.HolderManifestEnv]
+	if manifest == "" { // the launcher's own rule, its repo the one above
+		withRepo := func(k string) string {
+			if k == "AGENTBUS_REPO" && getenv(k) == "" {
+				return repo
+			}
+			return getenv(k)
+		}
+		if manifest, err = rolecfg.ManifestPath(withRepo); err != nil {
+			return nil, holder.TemplateLaunch{}, err
+		}
 	}
 	if _, err := rolecfg.Load(manifest); err != nil {
 		return nil, holder.TemplateLaunch{}, fmt.Errorf("the role manifest: %w", err)
 	}
 	dir := l.cwd
-	if d := env[service.WorkDirEnv]; d != "" {
+	if d := env[service.HolderDirEnv]; d != "" {
 		dir = d
 	}
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() || !filepath.IsAbs(dir) {

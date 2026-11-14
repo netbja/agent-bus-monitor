@@ -54,6 +54,9 @@ type HolderManager interface {
 	InstallHolder(s HolderSpec) (bool, error)
 	// StartHolder starts that build's unit; it never stops or restarts another.
 	StartHolder(project, key string) error
+	// StopHolder stops that build's instance, killing its agents: down,
+	// remove and uninstall only (spec 4.4a: down stops every instance).
+	StopHolder(project, key string) error
 	// RestartHolder restarts that build's instance, killing every agent it
 	// holds: only `service restart holder --kill-agents`, the person's word.
 	RestartHolder(project, key string) error
@@ -326,6 +329,10 @@ func (m Systemd) StartHolder(project, key string) error {
 	return m.ctl("start", HolderUnitName(project, key))
 }
 
+func (m Systemd) StopHolder(project, key string) error {
+	return m.ctl("stop", HolderUnitName(project, key))
+}
+
 func (m Systemd) RestartHolder(project, key string) error {
 	return m.ctl("restart", HolderUnitName(project, key))
 }
@@ -482,6 +489,14 @@ func (m Launchd) StartHolder(project, key string) error {
 		return err
 	}
 	return m.ctl("bootstrap", "gui/"+strconv.Itoa(m.UID), m.holderPath(project, key))
+}
+
+// StopHolder boots out the build's job when it is loaded.
+func (m Launchd) StopHolder(project, key string) error {
+	if ok, err := m.HolderActive(project, key); err != nil || !ok {
+		return err
+	}
+	return m.ctl("bootout", m.holderTarget(project, key))
 }
 
 // RestartHolder kills and restarts the build's job (kickstart -k).
