@@ -34,8 +34,13 @@ func TestLastUsedPerBroker(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "last-project")
 	secret := mustURL(t, "redis://user:s3cret@vdr:6380/2")
-	for broker, project := range map[*redis.Options]string{url: "alpha", hostFlag: "beta", secret: "gamma"} {
-		if err := writeLastUsed(path, brokerKey(broker), project); err != nil {
+	// In this order: the URL then -H share a broker, so the later wins (a
+	// map would write them in a random order; master caught the flake).
+	for _, w := range []struct {
+		broker  *redis.Options
+		project string
+	}{{url, "alpha"}, {hostFlag, "beta"}, {secret, "gamma"}} {
+		if err := writeLastUsed(path, brokerKey(w.broker), w.project); err != nil {
 			t.Fatal(err)
 		}
 	}
