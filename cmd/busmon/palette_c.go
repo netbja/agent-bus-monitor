@@ -41,8 +41,8 @@ func classCRows() []palCmd {
 		return nil
 	}}
 	task := palArg{Name: "task", Check: func(s string) error {
-		if strings.HasPrefix(s, "-") {
-			return fmt.Errorf("%q is not a task", s)
+		if !bus.ValidName(s) { // SetRequestPriority's own check, here before y (reviewer-codex)
+			return fmt.Errorf("%q is not a task name", s)
 		}
 		return nil
 	}, Complete: func(m *Model) []string {

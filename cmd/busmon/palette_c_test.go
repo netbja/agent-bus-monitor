@@ -156,6 +156,8 @@ func TestPaletteClassCChecksArguments(t *testing.T) {
 		"/priority t1":          "needs its level",
 		"/priority t1 urgent":   "low, normal or high",
 		"/priority --as x high": "not a task",
+		"/priority bad! high":   "not a task name",
+		"/priority Task1 high":  "not a task name",
 		"/backup now":           "takes no argument",
 	} {
 		w := newPalCWorld(t, "charlie")
