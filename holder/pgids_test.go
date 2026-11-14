@@ -166,6 +166,18 @@ func needProc(t *testing.T) {
 	}
 }
 
+// waitCmd waits for cmd's exit. In this test binary the holder's reaper
+// (startReaper, process-wide once any holder test ran) reaps every untracked
+// child, a test's own included: a Wait it beat answers ECHILD, and the
+// process has exited all the same (killgroup flake: "waitid: no child
+// processes" in full runs only).
+func waitCmd(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+	if err := cmd.Wait(); err != nil && !errors.Is(err, syscall.ECHILD) {
+		t.Fatal(err)
+	}
+}
+
 func waitGone(t *testing.T, pid int) bool {
 	t.Helper()
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -181,10 +193,10 @@ func waitGone(t *testing.T, pid int) bool {
 // pinned by a pidfd, never the group number blindly (reviewer-codex).
 func TestKillGroupMembersKillsTheSurvivorsOfAGoneLeader(t *testing.T) {
 	needProc(t)
+	startReaper() // as any holder test before it in this binary does: it may reap the leader first
 	leader, start, member := groupLeader(t, "0", "0.2")
-	if err := leader.Wait(); err != nil { // the leader exited and is reaped
-		t.Fatal(err)
-	}
+	time.Sleep(300 * time.Millisecond) // late to Wait, as under load: the reaper may be first
+	waitCmd(t, leader)
 	if st := procState(member); st == "" || st == "Z" {
 		t.Fatalf("the member is not running before the kill: %q", st)
 	}

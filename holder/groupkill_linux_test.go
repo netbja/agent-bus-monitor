@@ -72,9 +72,7 @@ func TestKillGroupMembersGoesOnPastARefusal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := leader.Wait(); err != nil {
-		t.Fatal(err)
-	}
+	waitCmd(t, leader)
 	send := pidfdSend
 	t.Cleanup(func() { pidfdSend = send })
 	refused := 0
