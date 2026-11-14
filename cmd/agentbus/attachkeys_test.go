@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -102,5 +103,36 @@ func TestFocusReportingReasserted(t *testing.T) {
 		if got := turnsFocusOff([]byte(out)); got != want {
 			t.Errorf("%q: %v, want %v", out, got, want)
 		}
+	}
+}
+
+// The program's ?1004l may be split anywhere between two output frames (they
+// are PTY reads, not sequences): the watcher keeps an incomplete sequence
+// across frames and sees it exactly once (reviewer-codex).
+func TestFocusWatchAcrossFrames(t *testing.T) {
+	for _, out := range []string{"abc\x1b[?1004lxyz", "\x1b[?1049;1004l", "x\x1b[?1004l"} {
+		for cut := 0; cut <= len(out); cut++ {
+			var w focusWatch
+			n := 0
+			for _, part := range []string{out[:cut], out[cut:]} {
+				if w.Feed([]byte(part)) {
+					n++
+				}
+			}
+			if n != 1 {
+				t.Errorf("%q cut at %d: seen %d times", out, cut, n)
+			}
+		}
+	}
+	var w focusWatch
+	for _, part := range []string{"\x1b[?10", "04h", "\x1b[?1004", "x"} { // a set, and a broken sequence
+		if w.Feed([]byte(part)) {
+			t.Errorf("%q read as a reset", part)
+		}
+	}
+	long := strings.Repeat("\x1b[1;2", 100) // an endless parameter run never grows the tail without bound
+	w.Feed([]byte(long))
+	if len(w.tail) > focusWatchMax {
+		t.Fatalf("tail %d bytes", len(w.tail))
 	}
 }
