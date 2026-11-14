@@ -64,8 +64,9 @@ func readEntry(pid int) (procEntry, error) {
 	return procEntry{pgrp: pgrp, start: start}, nil
 }
 
-// nowTicks is the time since boot in /proc's clock ticks (USER_HZ, 100).
-func nowTicks() uint64 {
+// NowTicks is the time since boot in /proc's clock ticks (USER_HZ, 100): the
+// cutoff KillRecordedGroups takes, once, when the holder's exit is seen.
+func NowTicks() uint64 {
 	b, err := os.ReadFile("/proc/uptime")
 	if err != nil {
 		return 0
@@ -84,21 +85,28 @@ func killGroupMembers(pgid int, from, to uint64) (int, error) {
 	if e, err := readEntry(pgid); err == nil && e.start != from {
 		return 0, nil // the leader's pid is another process's now
 	}
-	killed := map[int]bool{}
+	killed, refused := map[int]bool{}, map[int]error{}
 	for pass := 0; pass < 5; pass++ {
-		n, err := killPass(pgid, from, to, killed)
+		n, err := killPass(pgid, from, to, killed, refused)
 		if err != nil {
-			return len(killed), err
+			return len(killed), err // no pidfd at all: every member would fail alike
 		}
 		if n == 0 {
 			break
 		}
 	}
-	return len(killed), nil
+	errs := make([]error, 0, len(refused))
+	for _, err := range refused {
+		errs = append(errs, err)
+	}
+	return len(killed), errors.Join(errs...)
 }
 
-// killPass scans /proc once and kills the members it finds.
-func killPass(pgid int, from, to uint64, killed map[int]bool) (int, error) {
+// killPass scans /proc once and kills the members it finds. A member that
+// refuses (EPERM: a root child of sudo) is recorded in refused and skipped,
+// never an end to the scan: the others still die (foureyes). Only ENOSYS (no
+// pidfd on this kernel) ends it.
+func killPass(pgid int, from, to uint64, killed map[int]bool, refused map[int]error) (int, error) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return 0, err
@@ -106,7 +114,7 @@ func killPass(pgid int, from, to uint64, killed map[int]bool) (int, error) {
 	n := 0
 	for _, d := range entries {
 		pid, err := strconv.Atoi(d.Name())
-		if err != nil || killed[pid] {
+		if err != nil || killed[pid] || refused[pid] != nil {
 			continue
 		}
 		e, err := readEntry(pid)
@@ -114,13 +122,16 @@ func killPass(pgid int, from, to uint64, killed map[int]bool) (int, error) {
 			continue
 		}
 		fd, err := pidfdOpen(pid, 0)
-		if errors.Is(err, unix.ESRCH) {
+		switch {
+		case errors.Is(err, unix.ESRCH):
 			continue // gone
-		}
-		if err != nil {
-			// No pidfd (a kernel before 5.3: ENOSYS), or refused: the kill
-			// cannot be done safely, never a silent skip (reviewer-codex).
-			return n, fmt.Errorf("holder: pidfd_open %d: %w", pid, err)
+		case errors.Is(err, unix.ENOSYS):
+			return n, fmt.Errorf("holder: pidfd_open: %w (Linux 5.3 or later is needed)", err)
+		case err != nil:
+			// Refused: never a silent skip (reviewer-codex), never the end
+			// of the scan (foureyes).
+			refused[pid] = fmt.Errorf("holder: pidfd_open %d: %w", pid, err)
+			continue
 		}
 		// The pin may have caught a process that took the pid after the scan:
 		// the same start time proves it is the one scanned.
@@ -130,9 +141,11 @@ func killPass(pgid int, from, to uint64, killed map[int]bool) (int, error) {
 			case err == nil:
 				killed[pid] = true
 				n++
-			case !errors.Is(err, unix.ESRCH):
+			case errors.Is(err, unix.ENOSYS):
 				unix.Close(fd)
-				return n, fmt.Errorf("holder: pidfd_send_signal %d: %w", pid, err)
+				return n, fmt.Errorf("holder: pidfd_send_signal: %w (Linux 5.1 or later is needed)", err)
+			case !errors.Is(err, unix.ESRCH):
+				refused[pid] = fmt.Errorf("holder: pidfd_send_signal %d: %w", pid, err)
 			}
 		}
 		unix.Close(fd)

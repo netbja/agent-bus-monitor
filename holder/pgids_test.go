@@ -78,13 +78,15 @@ func TestKillRecordedGroupsReadsTheRecord(t *testing.T) {
 	if err := os.WriteFile(path, []byte("100 5000\n200 6000\n1 7\n300 0\nnot a line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// One cutoff for every group, taken once when the holder's death was seen
+	// (reviewer-codex): never a later "now" per group.
 	var asked []string
-	killGroup := func(pgid int, from uint64) (int, error) {
-		asked = append(asked, fmt.Sprintf("%d@%d", pgid, from))
+	killGroup := func(pgid int, from, to uint64) (int, error) {
+		asked = append(asked, fmt.Sprintf("%d@%d-%d", pgid, from, to))
 		return 2, nil
 	}
-	n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup)
-	if err != nil || n != 4 || !slices.Equal(asked, []string{"100@5000", "200@6000"}) {
+	n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", 9000, killGroup)
+	if err != nil || n != 4 || !slices.Equal(asked, []string{"100@5000-9000", "200@6000-9000"}) {
 		t.Fatalf("killed %d, asked %v, %v", n, asked, err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -99,12 +101,12 @@ func TestKillRecordedGroupsReadsTheRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	asked = nil
-	if _, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup); err == nil || len(asked) != 0 {
+	if _, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", 9000, killGroup); err == nil || len(asked) != 0 {
 		t.Fatalf("followed a symlink: %v %v", asked, err)
 	}
 	// No record: nothing to kill, no error.
 	os.Remove(path)
-	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup); n != 0 || err != nil {
+	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", 9000, killGroup); n != 0 || err != nil {
 		t.Fatalf("%d %v", n, err)
 	}
 }
@@ -186,7 +188,7 @@ func TestKillGroupMembersKillsTheSurvivorsOfAGoneLeader(t *testing.T) {
 	if st := procState(member); st == "" || st == "Z" {
 		t.Fatalf("the member is not running before the kill: %q", st)
 	}
-	if k, err := killGroupMembers(leader.Process.Pid, start, nowTicks()); err != nil || k != 1 {
+	if k, err := killGroupMembers(leader.Process.Pid, start, NowTicks()); err != nil || k != 1 {
 		t.Fatalf("killed %d, %v", k, err)
 	}
 	if !waitGone(t, member) {
@@ -222,7 +224,7 @@ func TestKillGroupMembersSparesWhatIsNotTheRecordedGroup(t *testing.T) {
 	for _, pid := range groupPids(t, member2) {
 		pid2 = pid
 	}
-	if k, err := killGroupMembers(pid2, start2-1, nowTicks()); err != nil || k != 0 {
+	if k, err := killGroupMembers(pid2, start2-1, NowTicks()); err != nil || k != 0 {
 		t.Fatalf("killed %d in another's group, %v", k, err)
 	}
 	if st := procState(member2); st == "" || st == "Z" {
@@ -262,13 +264,13 @@ func TestKillRecordedGroupsKeepsTheRecordOnAFailure(t *testing.T) {
 	if err := os.WriteFile(path, []byte("100 5000\n200 6000\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	killGroup := func(pgid int, from uint64) (int, error) {
+	killGroup := func(pgid int, from, to uint64) (int, error) {
 		if pgid == 200 {
 			return 0, errors.New("pidfd_open: function not implemented")
 		}
 		return 1, nil
 	}
-	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup); err == nil || n != 1 {
+	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", 9000, killGroup); err == nil || n != 1 {
 		t.Fatalf("%d %v", n, err)
 	}
 	if _, err := os.Stat(path); err != nil {
