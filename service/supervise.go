@@ -70,6 +70,13 @@ func (s Supervisor) Run(ctx context.Context) (gaveUp bool) {
 		if ctx.Err() != nil {
 			return false
 		}
+		// Judged at the start's real time, after the wait: a wait that
+		// overran may have let the oldest start leave the window
+		// (reviewer-codex).
+		if spent(now()) {
+			fmt.Fprintf(log, "supervise: gave up: %d starts in %v\n", SuperviseBurst, SuperviseWindow)
+			return true
+		}
 		starts = append(starts, now())
 		code, err := s.runOnce(ctx)
 		if s.AfterExit != nil {
@@ -86,11 +93,6 @@ func (s Supervisor) Run(ctx context.Context) (gaveUp bool) {
 			return false
 		default:
 			fmt.Fprintf(log, "supervise: the service exited %d\n", code)
-		}
-		// Judged at the next start's time, so a spent burst gives up at once.
-		if spent(now().Add(SuperviseRestartDelay)) {
-			fmt.Fprintf(log, "supervise: gave up: %d starts in %v\n", SuperviseBurst, SuperviseWindow)
-			return true
 		}
 		fmt.Fprintf(log, "supervise: restart in %v\n", SuperviseRestartDelay)
 		if !sleep(ctx, SuperviseRestartDelay) {

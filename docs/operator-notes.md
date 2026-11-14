@@ -231,8 +231,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   old `AGENTBUS_SERVICE_MANAGER`: `service.ManagerChoice` reads the environment, then config.toml,
   and `Detect`, `Local`, `ManagerBin` and `restore` go through it (today `none` still means herdr
   tabs). `service.Supervisor` is the units' policy for a supervisor process: restart after 2 s on a
-  non-zero exit, at most 5 starts in 300 s (judged at the next start, so a spent burst gives up at
-  once), an exit 0 is final, a stop sends the service SIGTERM; `AfterExit` runs after each exit.
+  non-zero exit, at most 5 starts in 300 s (judged when the next start really happens, after the
+  wait: a wait that overran may have freed the window; reviewer-codex), an exit 0 is final, a stop sends the service SIGTERM; `AfterExit` runs after each exit.
   A holder with `Config.Pgids` set rewrites `<rundir>/agentbus/<p>/holder-<key>.pgids`
   (`PgidsPath`, 0600, atomic) with each live terminal's leader pid and start time at every start
   and end; `KillRecordedGroups` SIGKILLs a group only when its leader's pid and start time both
