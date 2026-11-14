@@ -54,10 +54,10 @@ func TestHolderRecordsItsTerminalsGroups(t *testing.T) {
 	}
 }
 
-// The supervisor kills a recorded group only when its leader's pid AND start
-// time still match (a reused pid, or a group whose leader changed, is left
-// alone), from a checked run directory, never through a symlink.
-func TestKillRecordedGroupsSkipsAReusedPid(t *testing.T) {
+// KillRecordedGroups reads the record (from a checked run directory, never
+// through a symlink) and hands each line's group to the killer, which decides
+// process by process (killGroupMembers); a line it cannot read is skipped.
+func TestKillRecordedGroupsReadsTheRecord(t *testing.T) {
 	run, err := os.MkdirTemp("", "hk")
 	if err != nil {
 		t.Fatal(err)
@@ -74,37 +74,21 @@ func TestKillRecordedGroupsSkipsAReusedPid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("100 5000\n200 6000\n300 7000\n400 8000\nnot a line\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("100 5000\n200 6000\n1 7\n300 0\nnot a line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// 100 the same leader; 200 reused by another process; 300 gone (its
-	// group may outlive it); 400 unreadable (no decision: left alone).
-	starts := map[int]uint64{100: 5000, 200: 6001}
-	procStart := func(pid int) (uint64, error) {
-		if s, ok := starts[pid]; ok {
-			return s, nil
-		}
-		if pid == 300 {
-			return 0, fmt.Errorf("pid %d: %w", pid, dispatch.ErrNoProcess)
-		}
-		return 0, os.ErrPermission
+	var asked []string
+	killGroup := func(pgid int, from uint64) (int, error) {
+		asked = append(asked, fmt.Sprintf("%d@%d", pgid, from))
+		return 2, nil
 	}
-	var killed []int
-	kill := func(pid int, sig syscall.Signal) error {
-		if sig != syscall.SIGKILL {
-			t.Errorf("signal %v", sig)
-		}
-		killed = append(killed, pid)
-		return nil
-	}
-	n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", procStart, kill)
-	if err != nil || n != 2 || !slices.Equal(killed, []int{-100, -300}) {
-		t.Fatalf("killed %v (%d) %v", killed, n, err)
+	n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup)
+	if err != nil || n != 4 || !slices.Equal(asked, []string{"100@5000", "200@6000"}) {
+		t.Fatalf("killed %d, asked %v, %v", n, asked, err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("the record stays: %v", err)
 	}
-
 	// A symlink in the record's place is never followed.
 	target := filepath.Join(t.TempDir(), "elsewhere")
 	if err := os.WriteFile(target, []byte("100 5000\n"), 0o600); err != nil {
@@ -113,13 +97,13 @@ func TestKillRecordedGroupsSkipsAReusedPid(t *testing.T) {
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	killed = nil
-	if _, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", procStart, kill); err == nil || len(killed) != 0 {
-		t.Fatalf("followed a symlink: %v %v", killed, err)
+	asked = nil
+	if _, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup); err == nil || len(asked) != 0 {
+		t.Fatalf("followed a symlink: %v %v", asked, err)
 	}
 	// No record: nothing to kill, no error.
 	os.Remove(path)
-	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", procStart, kill); n != 0 || err != nil {
+	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup); n != 0 || err != nil {
 		t.Fatalf("%d %v", n, err)
 	}
 }
@@ -137,28 +121,18 @@ func procState(pid int) string {
 	return ""
 }
 
-// After a holder crash the leaders are usually gone (the hangup), while
-// children in their groups live on: those are killed (foureyes). A pid is
-// not reused while its process group has members, so the group reached is
-// the recorded one. Real processes, Linux (ProcStart reads /proc; on macOS
-// it has no start time, the holder records nothing and nothing is killed).
-func TestKillRecordedGroupsKillsTheSurvivorsOfAGoneLeader(t *testing.T) {
-	if _, err := os.Stat("/proc/self/stat"); err != nil {
-		t.Skip("no /proc: no start time, no record")
+// groupLeader starts a session leader that ignores SIGHUP, starts a member
+// in its group after delay, prints the member's pid, then exits after linger
+// (0: stays). It returns the leader, its start time and the member's pid.
+func groupLeader(t *testing.T, delay, linger string) (*exec.Cmd, uint64, int) {
+	t.Helper()
+	script := "trap '' HUP; sleep " + delay + "; sleep 300 & echo $!; "
+	if linger == "0" {
+		script += "exec sleep 300"
+	} else {
+		script += "sleep " + linger + "; exit 0"
 	}
-	run, err := os.MkdirTemp("", "hk")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(run) })
-	os.Chmod(run, 0o700)
-	getenv := func(k string) string {
-		if k == "XDG_RUNTIME_DIR" {
-			return run
-		}
-		return ""
-	}
-	leader := exec.Command("/bin/sh", "-c", "trap '' HUP; sleep 300 & echo $!; sleep 0.3; exit 0")
+	leader := exec.Command("/bin/sh", "-c", script)
 	leader.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	out, err := leader.StdoutPipe()
 	if err != nil {
@@ -167,6 +141,7 @@ func TestKillRecordedGroupsKillsTheSurvivorsOfAGoneLeader(t *testing.T) {
 	if err := leader.Start(); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { syscall.Kill(-leader.Process.Pid, syscall.SIGKILL); leader.Wait() })
 	start, err := dispatch.ProcStart(leader.Process.Pid)
 	if err != nil {
 		t.Fatal(err)
@@ -178,28 +153,88 @@ func TestKillRecordedGroupsKillsTheSurvivorsOfAGoneLeader(t *testing.T) {
 		t.Fatalf("member pid %q: %v", line[:n], err)
 	}
 	t.Cleanup(func() { syscall.Kill(member, syscall.SIGKILL) })
+	return leader, start, member
+}
+
+func needProc(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat("/proc/self/stat"); err != nil {
+		t.Skip("no /proc: no start time, no record")
+	}
+}
+
+func waitGone(t *testing.T, pid int) bool {
+	t.Helper()
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if st := procState(pid); st == "" || st == "Z" {
+			return true
+		}
+	}
+	return false
+}
+
+// After a holder crash the leaders are usually gone (the hangup), while
+// children in their groups live on: those are killed (foureyes), each one
+// pinned by a pidfd, never the group number blindly (reviewer-codex).
+func TestKillGroupMembersKillsTheSurvivorsOfAGoneLeader(t *testing.T) {
+	needProc(t)
+	leader, start, member := groupLeader(t, "0", "0.2")
 	if err := leader.Wait(); err != nil { // the leader exited and is reaped
-		t.Fatal(err)
-	}
-	path, err := PgidsPath(getenv, "demo", "k1.0123456789")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(strconv.Itoa(leader.Process.Pid)+" "+strconv.FormatUint(start, 10)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if st := procState(member); st == "" || st == "Z" {
 		t.Fatalf("the member is not running before the kill: %q", st)
 	}
-	if k, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", dispatch.ProcStart, syscall.Kill); err != nil || k != 1 {
+	if k, err := killGroupMembers(leader.Process.Pid, start, nowTicks()); err != nil || k != 1 {
 		t.Fatalf("killed %d, %v", k, err)
 	}
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		if st := procState(member); st == "" || st == "Z" {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the member of the gone leader's group survived (%s)", procState(member))
-		}
+	if !waitGone(t, member) {
+		t.Fatalf("the member of the gone leader's group survived (%s)", procState(member))
 	}
+}
+
+// A process of that group number that started after the cutoff (the moment
+// the holder's death was seen) is not the recorded group's: a group made
+// after the old one emptied and its number was reused. It is left alone
+// (reviewer-codex), as is everything when another process now holds the
+// leader's pid.
+func TestKillGroupMembersSparesWhatIsNotTheRecordedGroup(t *testing.T) {
+	needProc(t)
+	_, start, member := groupLeader(t, "0.3", "0")
+	cutoff := start + 10 // 100 ms after the leader: before the member (300 ms)
+	time.Sleep(500 * time.Millisecond)
+	leaderPid := 0
+	for _, pid := range groupPids(t, member) {
+		leaderPid = pid
+	}
+	if k, err := killGroupMembers(leaderPid, start, cutoff); err != nil || k != 1 { // the leader only
+		t.Fatalf("killed %d, %v", k, err)
+	}
+	if st := procState(member); st == "" || st == "Z" {
+		t.Fatal("a member started after the cutoff was killed")
+	}
+
+	// The leader's pid held by a process with another start time: the group
+	// is another's, nothing in it is touched.
+	_, start2, member2 := groupLeader(t, "0", "0")
+	pid2 := 0
+	for _, pid := range groupPids(t, member2) {
+		pid2 = pid
+	}
+	if k, err := killGroupMembers(pid2, start2-1, nowTicks()); err != nil || k != 0 {
+		t.Fatalf("killed %d in another's group, %v", k, err)
+	}
+	if st := procState(member2); st == "" || st == "Z" {
+		t.Fatal("a member of another's group was killed")
+	}
+}
+
+// groupPids is the pgid of pid, as a one-element list (the leader's pid).
+func groupPids(t *testing.T, pid int) []int {
+	t.Helper()
+	g, err := syscall.Getpgid(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []int{g}
 }
