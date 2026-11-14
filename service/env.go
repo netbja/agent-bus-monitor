@@ -24,6 +24,9 @@ var envKeys = []string{
 	"HERDR_SESSION", "HERDR_SOCKET_PATH", "HERDR_BIN", "HERDR_BIN_PATH",
 	"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
 	"GOPATH", "GOCACHE", "GOMODCACHE", "GOTOOLCHAIN", "GOFLAGS",
+	// The holder starts the agents with the checkout's launcher and manifest
+	// (it runs a binary copy, whose directory is neither).
+	"AGENTBUS_REPO", "ROLES_TOML",
 }
 
 // EscalateEnv names the agent the project's services escalate to (default

@@ -483,6 +483,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus start", "agentbus start ~/src/shop --yes", "agentbus start --roles master,coder,foureyes:review"},
 	},
 	{
+		Name: "holder", Usage: []string{"holder [--env <file>]"},
+		Summary:  "serve the project's agent terminals (what a holder unit runs; agentbus up installs it)",
+		Examples: []string{"agentbus -p demo holder --env ~/.config/agentbus/services/demo.env"},
+	},
+	{
 		Name: "down", NoProject: true, Usage: []string{"down <project>"},
 		Summary:  "stop a project's services; deletes nothing",
 		Examples: []string{"agentbus down demo"},
