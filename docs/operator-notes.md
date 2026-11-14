@@ -187,7 +187,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `BuildKey`) and `-Build-Raw` (plist: `XAgentbus*` keys), found by those values, never by a name
   prefix (`a` never matches `a-b`), and only when they are a `ValidBuildKey` and a valid project and
   the file's name is the one they give (a record of `..` is ignored: gc never removes outside
-  `<datadir>/agentbus/holder/<key>`). Each runs its build's binary copy,
+  `<datadir>/agentbus/holder/<key>`; each level is checked with `Lstat` before the copy is written and
+  before it is removed: a symlink is never followed). Each runs its build's binary copy,
   `<datadir>/agentbus/holder/<key>/agentbus` (0700, raw id recorded in `build-raw`); a key recorded
   with another raw id is refused (S7). Restart on failure after 2 s, 5 starts in 300 s,
   `KillMode=control-group` (launchd: `KeepAlive` on failure, `ThrottleInterval` 10). `GCHolders`

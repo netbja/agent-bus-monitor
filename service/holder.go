@@ -116,6 +116,9 @@ func InstallHolderBinary(p Paths, raw, src string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
+	if err := realDirs(p.DataHome, "agentbus", "holder", key); err != nil {
+		return "", err
+	}
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return "", err
 	}
@@ -135,6 +138,24 @@ func InstallHolderBinary(p Paths, raw, src string) (string, error) {
 		return "", err
 	}
 	return dst, nil
+}
+
+// realDirs checks each level under root (agentbus, holder, the key) with
+// Lstat: a symlink, or anything but a directory, is refused, so a removal
+// never follows a link out of the per-build directory (reviewer-codex).
+func realDirs(root string, levels ...string) error {
+	path := root
+	for _, l := range levels {
+		path = filepath.Join(path, l)
+		st, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
+			return fmt.Errorf("%s is not a plain directory (a symlink is never followed)", path)
+		}
+	}
+	return nil
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
@@ -222,6 +243,10 @@ func GCHolders(m HolderManager, p Paths, project, current string, answers func(k
 		dir := HolderBinDir(p, key)
 		if !ValidBuildKey(key) || !strings.HasPrefix(dir, base) || filepath.Dir(dir)+string(filepath.Separator) != base {
 			errs = append(errs, fmt.Errorf("build key %q is not a build key: its binary is kept", key))
+			continue
+		}
+		if err := realDirs(p.DataHome, "agentbus", "holder", key); err != nil {
+			errs = append(errs, fmt.Errorf("the binary of build %s is kept: %w", key, err))
 			continue
 		}
 		if err := os.RemoveAll(dir); err != nil {

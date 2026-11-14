@@ -415,3 +415,53 @@ func TestHolderUnitsIgnoreANameRecordMismatch(t *testing.T) {
 		t.Fatalf("a mismatched unit removed: %v", removed)
 	}
 }
+
+// gc never follows a symlink (reviewer-codex): <datadir>/agentbus/holder, or
+// a build's own directory, pointing elsewhere keeps what is behind it.
+func TestHolderGCNeverFollowsASymlink(t *testing.T) {
+	for _, level := range []string{"holder", "key"} {
+		p := holderPaths(t)
+		f := fakeSystemd(nil)
+		m := Systemd{Run: f.run, Paths: p}
+		a := install(t, m, p, "demo", "v1+aaa")
+		cur := install(t, m, p, "demo", "v3+ccc")
+		f.answers["--user is-active "+HolderUnitName("demo", a)] = "inactive"
+		outside := t.TempDir()
+		var link, target string
+		if level == "holder" {
+			link, target = filepath.Join(p.DataHome, "agentbus", "holder"), outside
+			os.MkdirAll(filepath.Join(outside, a), 0o700)
+			os.WriteFile(filepath.Join(outside, a, "sentinel"), []byte("x"), 0o600)
+			os.MkdirAll(filepath.Join(outside, cur), 0o700)
+		} else {
+			link, target = HolderBinDir(p, a), outside
+			os.WriteFile(filepath.Join(outside, "sentinel"), []byte("x"), 0o600)
+		}
+		os.RemoveAll(link)
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		_, err := GCHolders(m, p, "demo", cur, func(string) bool { return false })
+		sentinel := filepath.Join(outside, "sentinel")
+		if level == "holder" {
+			sentinel = filepath.Join(outside, a, "sentinel")
+		}
+		if _, serr := os.Stat(sentinel); serr != nil || err == nil {
+			t.Fatalf("%s symlink: sentinel %v, gc error %v", level, serr, err)
+		}
+	}
+}
+
+// The binary copy is never written through a symlinked holder directory.
+func TestInstallHolderBinaryRefusesASymlink(t *testing.T) {
+	p := holderPaths(t)
+	outside := t.TempDir()
+	os.MkdirAll(filepath.Join(p.DataHome, "agentbus"), 0o700)
+	os.Symlink(outside, filepath.Join(p.DataHome, "agentbus", "holder"))
+	if _, err := InstallHolderBinary(p, "v1+aaa", fakeExe(t, "A")); err == nil {
+		t.Fatal("installed through a symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, BuildKey("v1+aaa"), "agentbus")); err == nil {
+		t.Fatal("a binary was written outside")
+	}
+}
