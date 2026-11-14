@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -81,8 +82,11 @@ func writePrivate(path, content string) error {
 }
 
 // KillRecordedGroups kills, with SIGKILL, each recorded group whose leader
-// still has the recorded pid AND start time (procStart: dispatch.ProcStart);
-// a reused pid, a gone leader or a line it cannot read is left alone. The
+// still has the recorded pid AND start time, or is gone (procStart:
+// dispatch.ProcStart, ErrNoProcess); a pid now another process's, one it
+// cannot judge, or a line it cannot read, is left alone. Linux: ProcStart
+// reads /proc; elsewhere the holder has no start time, records nothing, and
+// nothing is killed. The
 // record is read from a checked run directory, never through a symlink, and
 // removed after. No record: nothing, no error. It returns the groups killed.
 func KillRecordedGroups(getenv func(string) string, project, key string, procStart func(int) (uint64, error), kill func(int, syscall.Signal) error) (int, error) {
@@ -118,8 +122,18 @@ func KillRecordedGroups(getenv func(string) string, project, key string, procSta
 		if err1 != nil || err2 != nil || pid <= 1 || start == 0 {
 			continue
 		}
-		if now, err := procStart(pid); err != nil || now != start {
-			continue // gone, or another process now
+		switch now, err := procStart(pid); {
+		case err == nil && now != start:
+			continue // another process has this pid now: never its group
+		case err == nil:
+			// the recorded leader itself
+		case errors.Is(err, dispatch.ErrNoProcess):
+			// The leader is gone, usually (the hangup), while children in its
+			// group live on: those are what the kill is for (foureyes). A pid
+			// is not handed out while a process group of that number has
+			// members, so -pid reaches the recorded group or nothing (ESRCH).
+		default:
+			continue // cannot tell: left alone
 		}
 		if kill(-pid, syscall.SIGKILL) == nil {
 			n++
