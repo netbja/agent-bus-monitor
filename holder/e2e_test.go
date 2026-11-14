@@ -30,6 +30,9 @@ func TestMain(m *testing.M) {
 	case "dsr": // asks the terminal where its cursor is, as a client's startup does
 		askCursor()
 		return
+	case "fake": // a client's input box, as agy draws it (its signature judges it)
+		fakeClient()
+		return
 	}
 	os.Exit(m.Run())
 }
@@ -124,6 +127,8 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 			return sh(`printf 'ready\n'; read x; printf '\033]52;c;aGk=\007|\033]8;;https://evil.example\033\\link\033]8;;\033\\|\033[21t|\033[6n|end\n'; exec sleep 30`), nil
 		case "winch":
 			return sh(`trap 'stty size' WINCH; printf 'w\n'; while :; do sleep 0.05; done`), nil
+		case "fake", "fake-no2004", "fake-noland", "fake-dialog", "fake-return", "fake-slow", "fake-stale", "fake-dialog-close", "fake-busy":
+			return Command{Argv: []string{self, "-test.run=^$"}, Env: []string{"HOLDER_TEST_MODE=fake", "FAKE=" + s.Role}, Client: "agy"}, nil
 		case "dsr":
 			return Command{Argv: []string{self, "-test.run=^$"}, Env: []string{"HOLDER_TEST_MODE=dsr"}}, nil
 		}
@@ -364,8 +369,8 @@ func TestHolderRefusesInTree(t *testing.T) {
 	}
 	e := startRole(t, cl, "echoer")
 	var re *RemoteError
-	if _, err := cl.Call(Submit{Kind: "clear", Term: e.ID}); !errors.As(err, &re) || re.Code != CodeLater {
-		t.Fatalf("submit from outside: %v", err)
+	if _, err := cl.Call(Submit{Kind: "clear", Term: e.ID}); !errors.As(err, &re) || re.Code != CodeNotReady {
+		t.Fatalf("submit from outside, to a program of no client: %v", err) // served, not in-tree
 	}
 	if _, err := dial(t, sock).Call(Attach{Term: e.ID}); err != nil {
 		t.Fatalf("an attach that types, from outside: %v", err)

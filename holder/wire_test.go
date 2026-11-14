@@ -197,3 +197,18 @@ func TestWriteFrameAtTheBound(t *testing.T) {
 		}
 	}
 }
+
+// A hold notice carries the refused count (spec 4.2, r25), never negative.
+func TestHoldNoticeRefused(t *testing.T) {
+	b, err := EncodeControl(HoldNotice{Kind: "wake", Held: 8, Active: true, Refused: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := DecodeControl(b)
+	if n, ok := v.(HoldNotice); err != nil || !ok || n.Refused != 3 {
+		t.Fatalf("decoded %+v %v", v, err)
+	}
+	if _, err := DecodeControl([]byte(`{"op":"hold","kind":"wake","held":0,"active":true,"refused":-1}`)); err == nil {
+		t.Fatal("a negative refused count decoded")
+	}
+}

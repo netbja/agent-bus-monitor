@@ -264,7 +264,7 @@ func TestSlowViewerIsRepainted(t *testing.T) {
 	if len(v.out) != 2 {
 		t.Fatalf("queue %d", len(v.out))
 	}
-	b, ok := term.nextFor(v, nil, nil)
+	_, b, ok := term.nextFor(v, nil, nil)
 	if !ok || v.repaint || len(v.out) != 0 || !strings.Contains(string(b), "\x1b[") {
 		t.Fatalf("repaint %q ok %v queue %d", b, ok, len(v.out))
 	}

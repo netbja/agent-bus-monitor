@@ -12,9 +12,10 @@ import (
 // Command is what a terminal runs: its argv, the environment added to the
 // holder's own, and its directory.
 type Command struct {
-	Argv []string
-	Env  []string
-	Dir  string
+	Argv   []string
+	Env    []string
+	Dir    string
+	Client string // rolecfg's client name: which signature judges its screen
 }
 
 // TemplateLaunch is how the holder turns a Start frame into a command (spec
@@ -69,11 +70,11 @@ func (l TemplateLaunch) Command(s Start) (Command, error) {
 		if err != nil {
 			return Command{}, fmt.Errorf("holder: %w", err)
 		}
-		return Command{Argv: argv, Dir: l.Dir}, nil
+		return Command{Argv: argv, Dir: l.Dir, Client: p.Client}, nil
 	}
 	argv := []string{"env", "ROLES_TOML=" + l.Manifest, l.Launcher, s.Role, l.Project}
 	if profile != "" {
 		argv = append(argv, "--profile", profile)
 	}
-	return Command{Argv: argv, Dir: l.Dir}, nil
+	return Command{Argv: argv, Dir: l.Dir, Client: p.Client}, nil
 }

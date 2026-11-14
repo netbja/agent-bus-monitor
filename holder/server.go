@@ -14,6 +14,7 @@ import (
 
 	"github.com/creack/pty"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/screen"
@@ -23,13 +24,15 @@ import (
 // (SocketPath), how a Start frame becomes a command (TemplateLaunch.Command
 // in production), the screens' scrollback and the close grace.
 type Config struct {
-	Project    string
-	Build      string
-	Socket     string
-	Launch     func(Start) (Command, error)
-	Scrollback int           // holder.scrollback, default 5000
-	Grace      time.Duration // SIGHUP to SIGKILL, default 5 s
-	OSC52      bool          // attach.osc52: pass OSC 52 to viewers (default off, spec 4.6)
+	Project     string
+	Build       string
+	Socket      string
+	Launch      func(Start) (Command, error)
+	Scrollback  int           // holder.scrollback, default 5000
+	Grace       time.Duration // SIGHUP to SIGKILL, default 5 s
+	OSC52       bool          // attach.osc52: pass OSC 52 to viewers (default off, spec 4.6)
+	SubmitWait  time.Duration // dispatch.submit_wait, default 2 s
+	PersonQuiet time.Duration // dispatch.person_quiet, default 3 s
 
 	// ancestors is dispatch.Ancestors; procStart dispatch.ProcStart (tests
 	// replace them).
@@ -39,6 +42,10 @@ type Config struct {
 	kill      func(pid int, sig syscall.Signal) error // nil: syscall.Kill (tests record the signals)
 	others    func(pgid int) bool                     // nil: othersInGroup (a test makes the scan miss)
 	escWait   time.Duration                           // 0: escWait (a test sets it long)
+	holdMax   int                                     // 0: holdMax (a test sets it small)
+	// afterCheck runs between submit's step 1 and its step-3 recheck
+	// (tests: a dialog opening in that window).
+	afterCheck func(t *terminal)
 }
 
 // Defaults.
@@ -80,8 +87,17 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.escWait <= 0 {
 		cfg.escWait = escWait
 	}
+	if cfg.holdMax <= 0 {
+		cfg.holdMax = holdMax
+	}
 	if cfg.Grace <= 0 {
 		cfg.Grace = DefaultGrace
+	}
+	if cfg.SubmitWait <= 0 {
+		cfg.SubmitWait = DefaultSubmitWait
+	}
+	if cfg.PersonQuiet <= 0 {
+		cfg.PersonQuiet = DefaultPersonQuiet
 	}
 	if cfg.ancestors == nil {
 		cfg.ancestors = dispatch.Ancestors
@@ -336,7 +352,11 @@ func (s *Server) handle(v any, inTree bool) Reply {
 		if inTree {
 			return refuseInTree("submit")
 		}
-		return errReply(CodeLater, "submit is not served yet")
+		t, ok := s.term(f.Term)
+		if !ok {
+			return errReply(CodeUnknown, "no terminal %s", f.Term)
+		}
+		return s.submit(t, f)
 	case Attach: // served by serveConn; here only when refused
 		return refuseInTree("an attach that types")
 	case Focus, Resize, Detach:
@@ -390,14 +410,16 @@ func (s *Server) start(f Start) Reply {
 	}
 	trackedSet[c.Process.Pid] = true
 	trackMu.Unlock()
-	t := &terminal{id: id, role: f.Role, pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others, escWait: s.cfg.escWait,
-		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{})}
+	t := &terminal{id: id, role: f.Role, profile: clientProfiles[cmd.Client], pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others, escWait: s.cfg.escWait,
+		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{}), holdState: holdState{holdMax: s.cfg.holdMax}}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t
 	s.order = append(s.order, id)
 	s.mu.Unlock()
 	go t.readLoop()
 	go t.replyLoop()
+	sig, sigOK := agentstate.Signatures()[t.profile]
+	go t.leftBehindLoop(sig, sigOK)
 	go t.waitLoop()
 	info := t.info(s.cfg.Build)
 	return Reply{Term: &info}

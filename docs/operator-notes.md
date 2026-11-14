@@ -525,6 +525,24 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   100 ms for the rest of a sequence; nothing follows, it was the Escape key, counted at its own time
   (resolved by the next frame, when Activity is read, or at once on a focus-out or a detach). The most recently active non-observer sets the size. `Activity` reports
   the viewers, the focused ones, the last typing and the draft.
+  Step 5d, submit (spec 4.2): the frame is `{kind, term, nonce, count}`; the holder composes the
+  line (`termhost.WakeLine` with its own project and the terminal's role, or `/clear`) and judges
+  the screen with the terminal's client signature (`Command.Client`, mapped to its agentstate
+  profile; none: `not_ready`, never prompted). Under the input lock, which every viewer byte also
+  takes (so the lock is the hold during a submit and bytes follow the CR in order): no person
+  (`person_active`: a draft however old, typing within `person_quiet`, a typing viewer not proven
+  unfocused, a viewer's lone ESC still inside its 100 ms wait), not left behind (`left_behind`),
+  `EmptyInput` with mode 2004 on a settled screen (no output for 80 ms, else unsettled: `not_ready`), the same again after the hold, the line as a
+  bracketed paste only, then the line's own token (`agentbus#<nonce>`, `/clear`) in the input box
+  within `submit_wait` (2 s, the settling included: never longer): CR. Not seen: no CR, the terminal left behind, and the viewers' bytes
+  stay held after the lock (`not_landed`): a queue of at most 1 MiB (past it, every further byte is refused until the hold ends,
+  counted in the notice's `refused` and never delivered; the holder never stops reading a viewer,
+  so its `release`, `discard` and `detach` always get through, spec r25), a `hold` notice to each typing viewer (and one that attaches), `release` delivers them
+  in order, `discard` drops them; a settled screen whose input reads empty lifts the mark and
+  delivers them (`leftBehindLoop`, every 250 ms). Tests drive a fake client drawn as agy's box.
+  Not wired yet: `submit_wait` and `person_quiet` are `holder.Config` fields only (no
+  `config/keys.go` entry, no production caller); they are registered as `dispatch.submit_wait`
+  and `dispatch.person_quiet` when the holder's main lands (step 6).
 - **`AGENT_BUS_PROJECT` is required.** Both binaries die with an error if the project is missing.
   Pass `--project <p>` or set the env var. There is no global default namespace — that was the old
   pub/sub collision bug. The **one** exception is `busmon --list`, which exists precisely to answer
