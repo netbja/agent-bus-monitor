@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/service"
+	"golang.org/x/sys/unix"
 )
 
 // supervisedFixture is a Supervised over temp directories whose Spawn starts
@@ -287,3 +288,48 @@ func TestSupervisedRecordRefusesASymlink(t *testing.T) {
 }
 
 func sortedKeys(k ...string) []string { return slices.Sorted(slices.Values(k)) }
+
+// The real spawn: the supervisor runs detached in its own session, in the
+// recorded directory, its output in the log; a stop ends it with SIGTERM.
+func TestSupervisedRealSpawnAndStop(t *testing.T) {
+	f := newSupervised(t)
+	f.m.Spawn = nil
+	key := f.install(t, "demo", "v1.0.0")
+	bin := service.HolderBin(f.m.Paths, key)
+	script := "#!/bin/sh\ntrap 'echo stopped; exit 0' TERM\necho \"supervise $* in $(pwd)\"\nwhile :; do sleep 0.05; done\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.m.StartHolder("demo", key); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := f.m.recordPath("demo", key)
+	r, err := readSupervisedRecord(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(r.PID, syscall.SIGKILL) })
+	if sid, err := unix.Getsid(r.PID); err != nil || sid != r.PID {
+		t.Fatalf("session %d %v, want its own (%d)", sid, err, r.PID)
+	}
+	if !active(t, f.m, "demo", key) {
+		t.Fatal("not active after start")
+	}
+	log := f.m.Paths.SuperviseLog("demo", service.Holder)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) { // its trap is set
+		if b, _ := os.ReadFile(log); strings.HasSuffix(string(b), "\n") || time.Now().After(deadline) {
+			break
+		}
+	}
+	if err := f.m.StopHolder("demo", key); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(log)
+	want := "supervise --project demo service supervise holder demo " + key + " in " + f.dir + "\nstopped\n"
+	if string(b) != want {
+		t.Fatalf("log %q, want %q", b, want)
+	}
+	if st, err := os.Stat(log); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("log mode %v %v", st.Mode(), err)
+	}
+}

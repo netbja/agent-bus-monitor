@@ -285,7 +285,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   per project its keys and stream lengths, `docker port` for the loopback bind, `bus.LegacyPasswordInUse`,
   a `docker logs --tail 20` bounded to 8 KiB; unknown read `?`); `busmon --delete` removes the local
   units before the keys.
-- **Without a service manager (herdr exit step 6c1; the `none` manager is 6c2, not wired yet).**
+- **Without a service manager (herdr exit steps 6c1 and 6c2; `Detect`, `up` and `down` choose it in 6c3, not wired yet).**
   `services.manager` (`auto`, `systemd`, `launchd`, `none`; `MachineOnly`) is the registry key of the
   old `AGENTBUS_SERVICE_MANAGER`: `service.ManagerChoice` reads the environment, then config.toml,
   and `Detect`, `Local`, `ManagerBin` and `restore` go through it (today `none` still means herdr
@@ -308,6 +308,19 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   (`groupkill_linux.go`): without /proc there is no start time, the holder records nothing and
   nothing is killed. It reads the record only from a checked run directory and never through a symlink
   (`O_NOFOLLOW`, regular, ours, private), and removes it.
+  6c2: `holder.Supervised` is the holder's `service.HolderManager` without a manager. Its "unit" is a
+  record, `<rundir>/agentbus/<p>/holder-<key>.pid` (0600, read like the group record): `InstallHolder`
+  writes project, build key, raw id, env file, working directory and binary copy (another raw id for a
+  key is refused, S7); `StartHolder`, under a `flock` on `holder-<key>.lock` (two `up` start one),
+  spawns `<binary copy> --project <p> service supervise holder <p> <key>` in its own session (`setsid`),
+  output appended to `<state>/agentbus/logs/<p>-holder.log`, and records its pid and start time. A
+  supervisor is alive only while that pid holds that start time (a reused pid, a zombie: gone);
+  `StopHolder` sends SIGTERM pinned by a pidfd and waits (15 s); `RemoveHolder` refuses a live one, so
+  `service.GCHolders` works on it unchanged. Linux only for now: elsewhere `ProcStart` must be given
+  (no start time, nothing judged). `agentbus service supervise` (`supervisecmd.go`) runs
+  `service.Supervisor` on `holder --env <file> --record-groups` (the holder then sets `Config.Pgids`)
+  and, after each exit, `KillRecordedGroups` with the cutoff taken first and the run directory the
+  holder's env file gives it; it exits 1 when it gave up. Only the holder kind is accepted yet.
 - **busmon's update check never runs on a `dev` build** (or with `AGENT_BUS_NO_UPDATE_CHECK=1`):
   `cmd/busmon/update.go` asks GitHub once a day, caches in `~/.cache/agentbus/latest.json`, fails
   silently and only adds a muted `↑ vX.Y.Z` to the header. Don't make it block startup or nag.

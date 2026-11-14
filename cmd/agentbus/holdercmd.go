@@ -74,13 +74,17 @@ func holderConfig(project string, args []string) (holder.Config, func(string) st
 	if !bus.ValidName(project) {
 		return holder.Config{}, nil, fmt.Errorf("invalid project %q", project)
 	}
-	envFile := ""
-	switch {
-	case len(args) == 0:
-	case len(args) == 2 && args[0] == "--env":
-		envFile = args[1]
-	default:
-		return holder.Config{}, nil, errors.New("usage: agentbus --project <p> holder [--env <file>]")
+	envFile, recordGroups := "", false
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--env" && i+1 < len(args) && envFile == "":
+			envFile = args[i+1]
+			i++
+		case args[i] == "--record-groups" && !recordGroups:
+			recordGroups = true
+		default:
+			return holder.Config{}, nil, errors.New("usage: agentbus --project <p> holder [--env <file>] [--record-groups]")
+		}
 	}
 	if envFile == "" {
 		paths, err := service.PathsFrom(os.Getenv)
@@ -114,8 +118,17 @@ func holderConfig(project string, args []string) (holder.Config, func(string) st
 	if err != nil {
 		return holder.Config{}, nil, err
 	}
+	// --record-groups: its supervisor (no service manager, spec 4.4b) kills
+	// the recorded groups when it dies; under a unit the cgroup does.
+	pgids := ""
+	if recordGroups {
+		if pgids, err = holder.PgidsPath(getenv, project, service.BuildKey(build)); err != nil {
+			return holder.Config{}, nil, err
+		}
+	}
 	r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
 	return holder.Config{
+		Pgids:       pgids,
 		Project:     project,
 		Build:       build,
 		Socket:      sock,

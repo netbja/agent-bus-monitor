@@ -228,6 +228,25 @@ func (m Supervised) RestartHolder(project, key string) error {
 	return m.StartHolder(project, key)
 }
 
+// HolderCommand is what the build's supervisor runs: the build's binary copy
+// as the holder, with its env file, recording its terminals' process groups
+// (--record-groups) for the kill after an exit — in the recorded working
+// directory. The record must be installed.
+func (m Supervised) HolderCommand(project, key string) (argv []string, dir, envFile string, err error) {
+	path, err := m.recordPath(project, key)
+	if err != nil {
+		return nil, "", "", err
+	}
+	r, err := readSupervisedRecord(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, "", "", fmt.Errorf("the holder of project %s, build %s is not installed", project, key)
+	}
+	if err != nil {
+		return nil, "", "", err
+	}
+	return []string{r.Bin, "--project", project, service.Holder, "--env", r.Env, "--record-groups"}, r.WorkDir, r.Env, nil
+}
+
 // HolderActive: the build's supervisor is alive. No record: inactive.
 func (m Supervised) HolderActive(project, key string) (bool, error) {
 	_, ok, err := m.running(project, key)
