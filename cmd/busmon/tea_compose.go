@@ -40,6 +40,13 @@ type textArea struct {
 	// deletions), "" once anything else happened.
 	undo, redo []areaState
 	run        string
+
+	// A multi-line paste is shown as a placeholder, "[Pasted text #n +k
+	// lines]", and kept here whole: value gives it back in its place. Numbered
+	// per field from 1; set starts again. An entry is never removed, so undo
+	// brings a removed placeholder back with its text.
+	pasted map[string]string
+	pastes int
 }
 
 // undoMax bounds the edit history: the oldest steps go first.
@@ -107,7 +114,68 @@ func (t *textArea) redoStep() bool {
 // wrapCalls counts the wraps: a key wraps the text once (the cost test).
 var wrapCalls int
 
-func (t *textArea) value() string { return string(t.text) }
+// value is the text with each paste in its placeholder's place.
+func (t *textArea) value() string {
+	s := string(t.text)
+	for ph, text := range t.pasted {
+		s = strings.ReplaceAll(s, ph, text)
+	}
+	return s
+}
+
+// size is the text's length in runes, pastes counted whole: what the limit
+// bounds.
+func (t *textArea) size() int {
+	n := len(t.text)
+	for ph, text := range t.pasted {
+		if c := strings.Count(string(t.text), ph); c > 0 {
+			n += c * (utf8.RuneCountInString(text) - utf8.RuneCountInString(ph))
+		}
+	}
+	return n
+}
+
+// placeholderAt is the length in runes of the placeholder that ends at the
+// cursor (before) or starts at it (!before), 0 when none does.
+func (t *textArea) placeholderAt(before bool) int {
+	for ph := range t.pasted {
+		r := []rune(ph)
+		if before && t.cur >= len(r) && string(t.text[t.cur-len(r):t.cur]) == ph ||
+			!before && t.cur+len(r) <= len(t.text) && string(t.text[t.cur:t.cur+len(r)]) == ph {
+			return len(r)
+		}
+	}
+	return 0
+}
+
+// insertPaste is a paste: one with a line break goes in as a placeholder
+// (the person: Claude Code's "[Pasted text #1 +9 lines]"), any other as
+// typed text. It reports the runes the limit dropped.
+func (t *textArea) insertPaste(s string) (dropped int) {
+	s = agreeWidths(DetailText(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\t", "    ")))
+	if !strings.Contains(s, "\n") {
+		return t.insert(s)
+	}
+	t.cutSelection()
+	rs := []rune(s)
+	if room := max(t.limit-t.size(), 0); len(rs) > room {
+		dropped, rs = len(rs)-room, rs[:room]
+	}
+	s = string(rs)
+	if !strings.Contains(s, "\n") {
+		return dropped + t.insert(s)
+	}
+	t.pastes++
+	ph := fmt.Sprintf("[Pasted text #%d +%d lines]", t.pastes, strings.Count(s, "\n"))
+	if t.pasted == nil {
+		t.pasted = map[string]string{}
+	}
+	t.pasted[ph] = s
+	t.text = append(t.text[:t.cur:t.cur], append([]rune(ph), t.text[t.cur:]...)...)
+	t.cur += len([]rune(ph))
+	t.changed()
+	return dropped
+}
 
 func (t *textArea) changed() { t.rev++ }
 
@@ -143,7 +211,7 @@ func (t *textArea) insert(s string) (dropped int) {
 	t.cutSelection()
 	s = agreeWidths(DetailText(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\t", "    ")))
 	rs := []rune(s)
-	if room := t.limit - len(t.text); len(rs) > room {
+	if room := t.limit - t.size(); len(rs) > room {
 		dropped, rs = len(rs)-max(room, 0), rs[:max(room, 0)]
 	}
 	if len(rs) == 0 {
@@ -160,6 +228,7 @@ func (t *textArea) insert(s string) (dropped int) {
 func (t *textArea) set(s string) {
 	t.text, t.cur, t.top, t.mark = nil, 0, 0, false
 	t.undo, t.redo, t.run = nil, nil, ""
+	t.pasted, t.pastes = nil, 0
 	t.changed()
 	t.insert(s)
 }
@@ -255,6 +324,10 @@ func (t *textArea) left(rs []row) {
 	if t.cur == 0 {
 		return
 	}
+	if n := t.placeholderAt(true); n > 0 { // a paste's placeholder is one step
+		t.cur -= n
+		return
+	}
 	r := rs[rowOf(rs, t.cur)]
 	if t.cur == r.from { // the end of the row above (its newline or last cluster)
 		r = rs[rowOf(rs, t.cur-1)]
@@ -269,6 +342,10 @@ func (t *textArea) left(rs []row) {
 
 func (t *textArea) right(rs []row) {
 	if t.cur >= len(t.text) {
+		return
+	}
+	if n := t.placeholderAt(false); n > 0 {
+		t.cur += n
 		return
 	}
 	r := rs[rowOf(rs, t.cur)]
@@ -754,7 +831,7 @@ func (m *Model) pasteCompose(s string) {
 		return
 	}
 	n := 0
-	c.area.edit("", func() { n = c.area.insert(s) })
+	c.area.edit("", func() { n = c.area.insertPaste(s) })
 	if n > 0 {
 		m.ui.flash, m.ui.flashErr = fmt.Sprintf("limit %d characters: %d dropped from the paste", c.area.limit, n), true
 	}

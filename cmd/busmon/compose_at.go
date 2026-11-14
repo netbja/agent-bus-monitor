@@ -74,7 +74,7 @@ func (t *textArea) replaceAt(start, cur int, s string) bool {
 	if cur == len(t.text) || !unicode.IsSpace(t.text[cur]) && !unicode.IsPunct(t.text[cur]) {
 		add = append(add, ' ')
 	}
-	if t.limit > 0 && len(t.text)-(cur-start)+len(add) > t.limit {
+	if t.limit > 0 && t.size()-(cur-start)+len(add) > t.limit {
 		return false
 	}
 	t.edit("", func() {
