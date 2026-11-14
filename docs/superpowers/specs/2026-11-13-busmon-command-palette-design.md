@@ -231,7 +231,7 @@ letter alias `f`, its key.
 
 #### 4.3.1 The Enter rule (r9: replaces the r8 sentence and §4.4's last line)
 
-Three cases, checked in this order:
+Four cases, checked in this order:
 
 1. **The selection was moved with ↑↓ since the last edit:** the chosen row wins. Its name replaces
    the typed name, the typed arguments stay, and the line is parsed again.
@@ -239,13 +239,17 @@ Three cases, checked in this order:
    parse. If an argument is missing or invalid (`/reload` with no role, `/write` with no agent, `/set nosuch`),
    **nothing runs**: the flash line says what is missing or wrong, and the text stays in the line
    to be fixed.
-3. **The typed word is only part of a name** (`/requ`, `/he`) or matches no name: Enter takes the
-   **top row**, the best match, with the typed arguments.
+3. **The typed word is not a name but still matches rows** (a prefix, a word start or a
+   subsequence: `/requ`, `/he`, `/rq`): Enter takes the **top row**, the best match, with the typed
+   arguments.
+4. **The typed word matches no row at all** (`/zzz`): **nothing runs**. The flash says "no command
+   matches: / alone lists them", and the text stays.
 
 Case 2 is what §4.4 meant by "a failed parse runs nothing". Case 3 is what r8's "otherwise the chosen
 (top) row" meant. They no longer read as two rules. This is the order `paletteEnter` already
 follows: `palMoved`, then `parseCommandLine`, whose `errNoCommand` alone falls through to the top
-row. Every other error is flashed with the line kept.
+row. Every other error is flashed with the line kept. With no rows, the fall-through (`chosen`)
+flashes and runs nothing: that is case 4.
 - **Ctrl+P inside busmon** is free: busmon binds Ctrl A, C, E, O, S, T, U, V, W, Y and Z. The key
   decoder gains `keyCtrlP`: the legacy byte 0x10, and the kitty form `CSI 112;5u`.
 - **Ctrl+P outside busmon: holder and attach.** herdr is gone in the next version, so no
@@ -313,6 +317,8 @@ row. Every other error is flashed with the line kept.
     - case 2: `/write` + Enter (no agent) runs nothing, the flash names the missing `agent`, and
       the line still reads `/write`. When class C lands, `/reload` + Enter is checked the same way;
     - case 3: `/requ` + Enter opens Requests (the top row);
+    - case 4: `/zzz` + Enter runs nothing, flashes "no command matches", and the line still reads
+      `/zzz`;
   - r9 keys: `/` on the panels opens the line with `/` (the same model state as Ctrl+P); `f` opens
     the filter line; `f` on History opens History's filter; `G` resumes live with
     `display.follow` off; `/follow` flips `display.follow` and its flash says the new value;
@@ -450,11 +456,11 @@ One PR from main, before class C (slice 2):
 5. Text: `README.md`, the two operational guides and `main.go`'s comment (§8.3).
 6. Tests:
    - the r9 model tests of §5 (`/`, `f`, History `f`, `G` with follow off, `/follow`);
-   - one test per §4.3.1 case;
+   - one test per §4.3.1 case (four);
    - the updated "slash filters" row.
 
-The §4.3.1 Enter rule is already what `paletteEnter` does. 1b adds only its three tests, plus a
-check that case 2 keeps the text.
+The §4.3.1 Enter rule is already what `paletteEnter` does. 1b adds only its four tests, which
+check that cases 2 and 4 keep the text.
 
 ## Appendix A. Inventory
 
