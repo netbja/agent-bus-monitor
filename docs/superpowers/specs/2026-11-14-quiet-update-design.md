@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r2, spec only (r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r3, spec only (r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -49,7 +49,7 @@ The person wants an update that works like a router's firmware update:
   3. It swaps the commands, then restarts the project services one at a time, each checked by
      health.
   4. Agents keep running. They move to the new build only when they are next relaunched.
-  5. If any check fails, the update rolls itself back and says why in For you.
+  5. If any check fails, the update rolls itself back and says why in For you (except a migrating release's broker, which is the person's step, §4.5).
 - **Rollback:** `agentbus update --rollback` restores the last snapshot. `--list` shows the
   snapshots, and `--rollback <id>` restores an older one.
 
@@ -198,13 +198,23 @@ is installed) only finds the snapshot and execs it.
 5. **Broker:**
    - **Untouched** unless the manifest says the release migrated it (§4.6). Messages written since
      the update stay.
-   - With a migration, rollback restores the record keys from the snapshot's archive through
-     `agentbus restore`. That needs `--force` and the person's `y`, because it drops what was
-     written since the update; the confirmation names the time span.
+   - With a migration, the broker part is **never automatic**: it needs a project that is not live
+     and the person's `y`. `backup.Restore` refuses a live project, meaning a lease held, services
+     active or an agent alive. `restoreRedis` asks the person to confirm before replacing keys.
+     - It runs only as `agentbus update --rollback <id> --broker`, with every migrated project
+       suspended (§4.6), so restore is never over a live project.
+     - It restores the record keys from the snapshot's archive through `agentbus restore --force`,
+       with the person's `y`. The confirmation names the time span lost: what was written since the
+       update.
 6. **Record** the rollback in the history, and report to master and the person.
 
 An automatic rollback after a red check (§4.3 step 5) is the same procedure, limited to what the
-update had already done.
+update had already done, **without the broker part**. For a release with no migration that is
+everything, because the broker was not touched. For a migrating release (§4.6), the automatic
+rollback restores builds, tree, settings and units, and leaves the migrated projects suspended. It
+then puts one For you item with the exact `agentbus update --rollback <id> --broker` command. The
+person runs it, or resumes the projects on the old build if the old build reads the migrated
+format (the `.migrate` file says whether it does).
 
 ### 4.6 Broker migrations
 
@@ -213,6 +223,18 @@ update had already done.
   rollback needs the archive.
 - With no such file, the update never writes to the broker beyond what the new services write in
   normal running.
+- **A migrating release is never installed automatically.** With `updates.auto = install`, the
+  scheduled updater notifies instead: "vX needs you: it migrates the broker", with the release
+  notes' path.
+- **A manual update of a migrating release** requires every project it migrates to be suspended
+  (`agentbus suspend`; resume brings the agents back on their resume sessions). Otherwise it
+  refuses, names the projects, and gives the command.
+  - Suspension makes those projects not live, so both the migration and a later broker rollback
+    run against a keyspace nothing else writes.
+  - Step 5 restarts only the services of projects that are not suspended.
+  - A migrated project's services start at `agentbus resume`, with the same health check. A red
+    check there is reported, and the person rolls back with `--broker`, suspending the project
+    again first.
 - The subscribe JSON's additive-only rule (`"v"`) already keeps most releases migration-free.
 
 ### 4.7 The scheduled updater
@@ -248,6 +270,12 @@ update had already done.
 - **Two updates in a row:** v1 to v2 to v3. Then:
   - v1's and v2's holder builds drain while v3 serves;
   - a rollback goes to v2, with v2 current and v3 draining.
+- **Migrating release:**
+  - it is not installed by the scheduled updater (a notice instead);
+  - a manual update refuses while a migrated project is live;
+  - an automatic rollback after a red check restores builds, tree, settings and units, leaves the
+    broker and the suspension as they are, and opens the For you item;
+  - `--broker` refuses on a live project and without `y` (fakes for `Live` and `Confirm`).
 - **Automatic rollback:** a service that stays red after its restart rolls everything back, and
   the binaries are v1's again.
 - **Settings on rollback:** a file the person changed after the update is kept and listed; an
