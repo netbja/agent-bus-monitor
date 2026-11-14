@@ -158,6 +158,10 @@ func runAttach(s attachSession) error {
 	}
 	title := func(t string) { write([]byte("\x1b]2;" + t + "\x07")) }
 	defer write([]byte(attachRestore))
+	// Focus reports from the outer terminal (attachRestore turns them off):
+	// the holder's person-active judgement needs to know when the person
+	// looks away (reviewer-codex).
+	write([]byte("\x1b[?1004h"))
 	if s.Warn != "" {
 		title("agentbus attach: " + s.Warn)
 	}
@@ -228,6 +232,8 @@ func runAttach(s attachSession) error {
 			case keyBell:
 				title("")
 				write([]byte("\a"))
+			case keyFocusIn, keyFocusOut:
+				err = cl.SendControl(holder.Focus{In: e.Kind == keyFocusIn})
 			}
 			if err != nil {
 				return true, err
