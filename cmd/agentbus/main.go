@@ -166,6 +166,15 @@ func main() {
 		}
 		os.Exit(runServiceCmd(project, args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
 	}
+	// attach puts the person's terminal on an agent's terminal in the
+	// project's holder (herdr exit 4.6); no broker.
+	if len(args) >= 1 && args[0] == "attach" {
+		if !bus.ValidName(project) {
+			fmt.Fprintln(os.Stderr, "error: project required: agentbus --project <p> attach <agent>")
+			os.Exit(2)
+		}
+		os.Exit(runAttachCmd(project, args[1:], os.Stdout, os.Stderr))
+	}
 	// holder is what a holder unit runs (herdr exit, spec 4.4): it loads the
 	// project's env file and serves the project's terminals; no broker.
 	if len(args) >= 1 && args[0] == "holder" {

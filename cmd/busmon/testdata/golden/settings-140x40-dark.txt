@@ -26,6 +26,7 @@
 │                   │     Activity lines at start         25                                                                               │
 │                   │     Idle? hint after                10m                                                                              │
 │                   │     Screensaver (idle view) after   off                                                                              │
+│                   │     Attach prefix key               f12                                                                              │
 │                   │                                                                                                                      │
 │                   │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────  │
 │                   │ Icons · display.icons · from config.toml (default: off) · read by busmon                                             │
