@@ -46,11 +46,10 @@ func WriteFrame(w io.Writer, typ byte, payload []byte) error {
 	if n > maxPayload {
 		return ErrFrameTooLarge
 	}
-	buf := make([]byte, 5+n)
-	binary.BigEndian.PutUint32(buf, uint32(n+1))
-	buf[4] = typ
-	copy(buf[5:], payload)
-	_, err := w.Write(buf)
+	var hdr [5]byte // no size arithmetic in the allocation: append sizes it (CodeQL)
+	binary.BigEndian.PutUint32(hdr[:4], uint32(n)+1)
+	hdr[4] = typ
+	_, err := w.Write(append(hdr[:], payload...))
 	return err
 }
 
