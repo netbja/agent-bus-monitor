@@ -181,6 +181,18 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `--profile` (`ownprofile.go`: `tabLaunch`, `launchProfile` = own or a fallback, `ownProfile`); `tabProfile`, doctor,
   swap and reload read it there, and `up`'s `checkProfiles` stops before anything starts on a profile `roles.toml` no
   longer allows. Tests stub up, herdr and the bus (`startDeps`); none starts a real session.
+- **The holder's services (herdr exit step 6b, `service/holder.go`; not wired yet).** One unit per
+  (project, build), never a template and never restarted to upgrade: `agentbus-holder.<p>.<key>.service`
+  / launchd `com.agentbus.holder.<p>.<key>`, recording `X-Agentbus-Project`, `-Build` (the
+  `BuildKey`) and `-Build-Raw` (plist: `XAgentbus*` keys), found by those values, never by a name
+  prefix (`a` never matches `a-b`). Each runs its build's binary copy,
+  `<datadir>/agentbus/holder/<key>/agentbus` (0700, raw id recorded in `build-raw`); a key recorded
+  with another raw id is refused (S7). Restart on failure after 2 s, 5 starts in 300 s,
+  `KillMode=control-group` (launchd: `KeepAlive` on failure, `ThrottleInterval` 10). `GCHolders`
+  removes a non-current build's unit (systemd `disable`, file, `daemon-reload`; launchd only when
+  not loaded) and then its binary — only when the instance is inactive and no socket of that build
+  answers, never a running or the current one, and never a binary another project's unit records;
+  a manager that cannot say keeps the unit. `StartHolder` never restarts or kicks a running one.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (enabled at login only while `services.start_at_login` is on), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
