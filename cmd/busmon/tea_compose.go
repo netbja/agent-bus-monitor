@@ -148,6 +148,39 @@ func (t *textArea) placeholderAt(before bool) int {
 	return 0
 }
 
+// settle puts the cursor and the selection's other end out of any
+// placeholder, at its nearer end: an edit then never cuts one, so a paste is
+// never lost (reviewer-codex). A move calls it after, an edit before.
+func (t *textArea) settle() {
+	if len(t.pasted) == 0 {
+		return
+	}
+	t.cur, t.anchor = t.outOfPlaceholder(t.cur), t.outOfPlaceholder(t.anchor)
+}
+
+// outOfPlaceholder is pos, or the nearer end of the placeholder it is inside.
+func (t *textArea) outOfPlaceholder(pos int) int {
+	s := string(t.text)
+	for ph := range t.pasted {
+		n := len([]rune(ph))
+		for off := 0; ; {
+			i := strings.Index(s[off:], ph)
+			if i < 0 {
+				break
+			}
+			from := utf8.RuneCountInString(s[:off+i])
+			if pos > from && pos < from+n {
+				if pos-from <= from+n-pos {
+					return from
+				}
+				return from + n
+			}
+			off += i + len(ph)
+		}
+	}
+	return pos
+}
+
 // insertPaste is a paste: one with a line break goes in as a placeholder
 // (the person: Claude Code's "[Pasted text #1 +9 lines]"), any other as
 // typed text. It reports the runes the limit dropped.
@@ -193,6 +226,7 @@ func (t *textArea) unmark() { t.mark = false }
 // cutSelection removes the selected runes and puts the cursor where they
 // were; it reports whether there was a selection.
 func (t *textArea) cutSelection() bool {
+	t.settle()
 	from, to, ok := t.selection()
 	t.mark = false
 	if !ok {
@@ -321,6 +355,7 @@ func (t *textArea) clusterStarts(from, to int) []int {
 
 // left and right move by cluster, scanning the cursor's row only.
 func (t *textArea) left(rs []row) {
+	t.settle()
 	if t.cur == 0 {
 		return
 	}
@@ -341,6 +376,7 @@ func (t *textArea) left(rs []row) {
 }
 
 func (t *textArea) right(rs []row) {
+	t.settle()
 	if t.cur >= len(t.text) {
 		return
 	}
@@ -401,10 +437,11 @@ func (t *textArea) vertical(rs []row, delta int) {
 	if j := clamp(i+delta, 0, len(rs)-1); j != i {
 		t.cur = t.colIn(rs[j], col)
 	}
+	t.settle()
 }
 
 // home and end are the current visual row's ends.
-func (t *textArea) home(rs []row) { t.cur = rs[rowOf(rs, t.cur)].from }
+func (t *textArea) home(rs []row) { t.cur = rs[rowOf(rs, t.cur)].from; t.settle() }
 
 func (t *textArea) end(rs []row) {
 	r := rs[rowOf(rs, t.cur)]
@@ -412,6 +449,7 @@ func (t *textArea) end(rs []row) {
 	if r.to > r.from && r.to < len(t.text) && t.text[r.to-1] == ' ' && t.text[r.to] != '\n' {
 		t.cur = r.to - 1 // a wrapped row ends before its space
 	}
+	t.settle()
 }
 
 // keepCursor scrolls so the cursor's row is among the height rows shown.
@@ -432,6 +470,7 @@ func (t *textArea) clickAt(width, col, rowIdx int) {
 	t.mark, t.run = false, "" // a click ends a run, as a move does
 	rs := t.prepare(width)
 	t.cur = t.colIn(rs[clamp(t.top+rowIdx, 0, len(rs)-1)], col)
+	t.settle()
 }
 
 // lines are the height rows shown from top, the cursor cell reversed when

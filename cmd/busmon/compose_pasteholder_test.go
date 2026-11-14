@@ -122,3 +122,41 @@ func TestComposeShiftHomeEndSelect(t *testing.T) {
 		t.Fatalf("typing over: %q", got)
 	}
 }
+
+// A cursor put inside a placeholder (a click, Up/Down, a wrapped row's Home)
+// lands at its nearer end, so typing never breaks it and the paste is never
+// lost (reviewer-codex); a selection's ends land on its ends too.
+func TestComposePlaceholderStaysWhole(t *testing.T) {
+	m := composeWith(t, "")
+	m = step(t, m, tea.PasteMsg{Content: "a\nb"})
+	a := &m.ui.compose.area
+	ph := string(a.text)
+	_, tr := m.composeRects()
+	a.clickAt(tr.W, 3, 0) // inside, nearer its start
+	if a.cur != 0 {
+		t.Fatalf("a click inside: cursor %d", a.cur)
+	}
+	a.clickAt(tr.W, len(ph)-3, 0) // nearer its end
+	if a.cur != len([]rune(ph)) {
+		t.Fatalf("a click near the end: cursor %d", a.cur)
+	}
+	a.cur = 3 // however it got there
+	m = keys(t, m, 'X')
+	if got := m.ui.compose.area.value(); got != "Xa\nb" {
+		t.Fatalf("typed inside: %q", got)
+	}
+	// A selection from inside the placeholder to the end takes it whole.
+	a = &m.ui.compose.area
+	a.cur, a.anchor, a.mark = len(a.text), 5, true
+	m = keys(t, m, kBackspce)
+	if got := m.ui.compose.area.value(); got != "X" {
+		t.Fatalf("a selection from inside: %q", got)
+	}
+	m = keys(t, m, tea.Key{Code: 'z', Mod: tea.ModCtrl})
+	a = &m.ui.compose.area
+	a.cur, a.anchor, a.mark = 0, len(a.text)-4, true // from the start into it: nearer its end
+	m = keys(t, m, 'Y')
+	if got := m.ui.compose.area.value(); got != "Y" {
+		t.Fatalf("a selection into it: %q", got)
+	}
+}
