@@ -1,6 +1,7 @@
 package holder
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,12 +23,45 @@ type RemoteError struct{ Code, Msg string }
 func (e *RemoteError) Error() string { return "holder: " + e.Msg + " (" + e.Code + ")" }
 
 // Dial connects to the holder at socket, checks its uid, says hello with
-// build, and reads its welcome.
+// build, and reads its welcome, within 5 s.
 func Dial(socket, build string) (*Client, error) {
-	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: socket, Net: "unix"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return DialContext(ctx, socket, build)
+}
+
+// DialContext is Dial bounded by ctx: the connection, the hello and the
+// welcome all end at ctx's deadline or cancellation (reviewer-codex).
+func DialContext(ctx context.Context, socket, build string) (*Client, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", socket)
 	if err != nil {
 		return nil, err
 	}
+	c := conn.(*net.UnixConn)
+	if dl, ok := ctx.Deadline(); ok {
+		_ = c.SetDeadline(dl)
+	}
+	stop := context.AfterFunc(ctx, func() { _ = c.SetDeadline(time.Now()) })
+	cl, err := handshake(c, build)
+	if !stop() || ctx.Err() != nil { // ctx ended during the handshake
+		if cl != nil {
+			cl.Close()
+		}
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		if dl, ok := ctx.Deadline(); ok && !time.Now().Before(dl) {
+			return nil, context.DeadlineExceeded // the socket's deadline fired before ctx's own timer
+		}
+		return nil, err
+	}
+	_ = c.SetDeadline(time.Time{})
+	return cl, nil
+}
+
+// handshake checks the server's uid, says hello and reads the welcome.
+func handshake(c *net.UnixConn, build string) (*Client, error) {
 	peer, err := PeerOf(c)
 	if err == nil {
 		err = CheckSameUser(peer)
@@ -42,9 +76,7 @@ func Dial(socket, build string) (*Client, error) {
 		c.Close()
 		return nil, err
 	}
-	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
 	typ, body, err := ReadFrame(c)
-	_ = c.SetReadDeadline(time.Time{})
 	if err != nil || typ != FrameControl {
 		c.Close()
 		return nil, fmt.Errorf("holder: no welcome: %v", err)

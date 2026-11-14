@@ -3,6 +3,7 @@ package holder
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,5 +255,40 @@ func TestHostCloseWaitsForTheEnd(t *testing.T) {
 	terms, _ := h.List(ctx, "demo")
 	if d := time.Since(start); d < 900*time.Millisecond || len(terms) != 1 || terms[0].Alive {
 		t.Fatalf("Close returned after %v; %+v", d, terms)
+	}
+}
+
+// The context bounds the dial and the welcome too (reviewer-codex): a
+// socket that accepts but never welcomes ends a call at ctx's deadline.
+func TestHostCallHonoursTheContextInTheHandshake(t *testing.T) {
+	_, getenv := shortRundir(t)
+	sock, err := SocketPath(getenv, "demo", service.BuildKey("new"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close() // accepted, never welcomed
+		}
+	}()
+	h, _ := NewHost("demo", "new", getenv)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err = h.Ping(ctx)
+	if d := time.Since(start); err == nil || d > time.Second {
+		t.Fatalf("Ping returned %v after %v", err, d)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("not the context's error: %v", err)
 	}
 }

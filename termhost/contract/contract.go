@@ -120,6 +120,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		if err := h.Host().Submit(ctx, a.ID, termhost.ClearLine()); err != nil {
 			t.Fatal(err)
 		}
+		for deadline := time.Now().Add(3 * time.Second); len(h.Submitted(a.ID)) < 2 && time.Now().Before(deadline); {
+			time.Sleep(20 * time.Millisecond) // the program shows it on its own time
+		}
 		if got := h.Submitted(a.ID); !slices.Equal(got, []string{l.Text(), "/clear"}) {
 			t.Fatalf("submitted %q", got)
 		}

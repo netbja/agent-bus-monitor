@@ -80,7 +80,7 @@ func (h *Host) call(ctx context.Context, key string, req any) (Reply, error) {
 	if err != nil {
 		return Reply{}, err
 	}
-	cl, err := Dial(sock, h.build)
+	cl, err := DialContext(ctx, sock, h.build)
 	if err != nil {
 		return Reply{}, err
 	}
