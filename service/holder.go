@@ -411,23 +411,33 @@ func (m Launchd) InstallHolder(s HolderSpec) (bool, error) {
 // StartHolder loads the build's job (RunAtLoad starts it); a loaded job is
 // left as it is — never kicked, which would restart a running holder.
 func (m Launchd) StartHolder(project, key string) error {
-	if ok, _ := m.HolderActive(project, key); ok {
-		return nil
+	if ok, err := m.HolderActive(project, key); err != nil || ok {
+		return err
 	}
 	return m.ctl("bootstrap", "gui/"+strconv.Itoa(m.UID), m.holderPath(project, key))
 }
 
 // HolderActive: the job is loaded (spec 4.4a: launchd "not loaded" is the
-// inactive state gc may remove).
+// inactive state gc may remove). Not loaded is launchd's own answer ("Could
+// not find service"); any other failure of print is a manager that cannot
+// say, an error, never "inactive" (reviewer-codex).
 func (m Launchd) HolderActive(project, key string) (bool, error) {
-	_, err := m.Run("print", m.holderTarget(project, key))
-	return err == nil, nil
+	out, err := m.Run("print", m.holderTarget(project, key))
+	switch {
+	case err == nil:
+		return true, nil
+	case strings.Contains(string(out), "Could not find service"):
+		return false, nil
+	}
+	return false, fmt.Errorf("launchctl print %s: %s", m.holderTarget(project, key), firstLine(out, err))
 }
 
 // RemoveHolder deletes a job that is not loaded: there is nothing to boot
 // out, and a loaded one is never removed (a gc never stops a holder).
 func (m Launchd) RemoveHolder(project, key string) error {
-	if ok, _ := m.HolderActive(project, key); ok {
+	if ok, err := m.HolderActive(project, key); err != nil {
+		return err
+	} else if ok {
 		return fmt.Errorf("launchd job %s is loaded: not removed", HolderLabel(project, key))
 	}
 	if err := os.Remove(m.holderPath(project, key)); err != nil && !os.IsNotExist(err) {

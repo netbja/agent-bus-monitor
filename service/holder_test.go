@@ -279,7 +279,7 @@ func TestLaunchdHolderGC(t *testing.T) {
 	a := install(t, m, p, "demo", "v1+aaa")
 	b := install(t, m, p, "demo", "v2+bbb")
 	c := install(t, m, p, "demo", "v3+ccc")
-	f.fails["print gui/501/"+HolderLabel("demo", a)] = true // not loaded
+	f.out = map[string]fakeOut{"print gui/501/" + HolderLabel("demo", a): {"Could not find service", true}} // not loaded
 	f.answers["print gui/501/"+HolderLabel("demo", b)] = "state = running"
 	removed, err := GCHolders(m, p, "demo", c, func(string) bool { return false })
 	if err != nil || !slices.Equal(removed, []string{a}) || !slices.Equal(keysOf(t, m, "demo"), sorted(b, c)) || binExists(p, a) {
@@ -333,8 +333,30 @@ func TestStartHolder(t *testing.T) {
 	if err := ld.StartHolder("demo", "k1"); err != nil || g.saw("bootstrap") || g.saw("kickstart") {
 		t.Fatalf("a loaded job: %v %v", err, g.calls)
 	}
-	g.fails["print gui/501/"+HolderLabel("demo", "k2")] = true
+	g.out = map[string]fakeOut{"print gui/501/" + HolderLabel("demo", "k2"): {"Could not find service", true}}
 	if err := ld.StartHolder("demo", "k2"); err != nil || !g.saw("bootstrap gui/501 ") {
 		t.Fatalf("not loaded: %v %v", err, g.calls)
+	}
+}
+
+// launchd's "not loaded" is its own answer (Could not find service); any
+// other print failure is a manager that cannot say: gc keeps the job and its
+// binary, and StartHolder bootstraps nothing (reviewer-codex).
+func TestLaunchdHolderUncertainManager(t *testing.T) {
+	p := holderPaths(t)
+	f := &fakeRun{answers: map[string]string{}}
+	m := Launchd{Run: f.run, Paths: p, UID: 501}
+	a := install(t, m, p, "demo", "v1+aaa")
+	c := install(t, m, p, "demo", "v3+ccc")
+	f.out = map[string]fakeOut{"print gui/501/" + HolderLabel("demo", a): {"Unhandled error: permission denied", true}}
+	if removed, err := GCHolders(m, p, "demo", c, func(string) bool { return false }); err == nil || len(removed) != 0 || !binExists(p, a) {
+		t.Fatalf("an uncertain manager: removed %v, err %v", removed, err)
+	}
+	if err := m.StartHolder("demo", a); err == nil || f.saw("bootstrap") {
+		t.Fatalf("start on an uncertain manager: %v %v", err, f.calls)
+	}
+	f.out["print gui/501/"+HolderLabel("demo", a)] = fakeOut{`Could not find service "` + HolderLabel("demo", a) + `" in domain for port`, true}
+	if removed, err := GCHolders(m, p, "demo", c, func(string) bool { return false }); err != nil || !slices.Equal(removed, []string{a}) {
+		t.Fatalf("not loaded: removed %v %v", removed, err)
 	}
 }

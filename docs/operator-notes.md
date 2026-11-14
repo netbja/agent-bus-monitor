@@ -190,7 +190,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   with another raw id is refused (S7). Restart on failure after 2 s, 5 starts in 300 s,
   `KillMode=control-group` (launchd: `KeepAlive` on failure, `ThrottleInterval` 10). `GCHolders`
   removes a non-current build's unit (systemd `disable`, file, `daemon-reload`; launchd only when
-  not loaded) and then its binary — only when the instance is inactive and no socket of that build
+  not loaded, launchd's own "Could not find service"; any other print failure keeps it) and then its binary — only when the instance is inactive and no socket of that build
   answers, never a running or the current one, and never a binary another project's unit records;
   a manager that cannot say keeps the unit. `StartHolder` never restarts or kicks a running one.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`

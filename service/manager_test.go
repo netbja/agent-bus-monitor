@@ -14,11 +14,26 @@ type fakeRun struct {
 	calls   []string
 	answers map[string]string
 	fails   map[string]bool
+	out     map[string]fakeOut // a prefix's output, failed or not
+}
+
+// fakeOut is an output and whether the call failed.
+type fakeOut struct {
+	text   string
+	failed bool
 }
 
 func (f *fakeRun) run(args ...string) ([]byte, error) {
 	c := strings.Join(args, " ")
 	f.calls = append(f.calls, c)
+	for p, o := range f.out {
+		if strings.HasPrefix(c, p) {
+			if o.failed {
+				return []byte(o.text), errors.New("exit status 113")
+			}
+			return []byte(o.text), nil
+		}
+	}
 	for p := range f.fails {
 		if strings.HasPrefix(c, p) {
 			return []byte("failed"), errors.New("exit status 1")
