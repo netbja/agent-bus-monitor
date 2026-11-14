@@ -114,7 +114,7 @@ func TestComposePageUpDown(t *testing.T) {
 	}
 	m := fixtureShell(t, 120, 40)
 	m.openMessageCompose("", "coder")
-	m.pasteCompose(strings.Join(lines, "\n"))
+	m.ui.compose.area.set(strings.Join(lines, "\n")) // the text, typed: a paste would be one placeholder
 	_, tr := m.composeRects()
 	a := &m.ui.compose.area
 	last, _ := a.cursorAt(a.prepare(tr.W))

@@ -609,7 +609,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
   reads: the first Enter says so, a second one sends it. **`I`** opens the compose window for
   several lines (Ctrl+S sends, Tab moves to the recipient, Esc keeps the draft, Ctrl+V pastes the
   clipboard's image: saved privately under `~/.cache/agentbus/attachments`, its path put in the text,
-  nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). In the window's text, a typed
+  nothing uploaded; it needs `wl-paste`, `xclip` or `pngpaste`). A paste of several lines shows as
+  `[Pasted text #1 +9 lines]`, numbered per field, and is sent whole; Backspace on it removes the whole
+  paste. Shift with the arrows, Home or End selects; typing replaces the selection. In the window's text, a typed
   **`@`** (at the start or after a space or `(` `[` `"` `'`, so never in `a@b.c`) lists the
   project's files under the cursor: `↑` `↓` choose, Enter puts the selected file's or folder's
   **path** in place of the `@query` (never its content; a path with a space in backticks), Tab
