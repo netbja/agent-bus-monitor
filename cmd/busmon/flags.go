@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"io"
+	"strconv"
 
 	"github.com/netbja/agent-bus-monitor/cli"
 )
@@ -49,10 +50,7 @@ type busmonOpts struct {
 // flag.ErrHelp after printing the help to out.
 func parseFlags(args []string, out io.Writer) (busmonOpts, map[string]bool, error) {
 	o := busmonOpts{}
-	ptr := map[string]any{
-		"project": &o.project, "host": &o.host, "limit": &o.limit, "reset": &o.reset, "yes": &o.yes,
-		"list": &o.list, "delete": &o.delete, "theme": &o.theme, "as": &o.as, "version": &o.version, "pick": &o.pick,
-	}
+	ptr := optPtrs(&o)
 	fs := flag.NewFlagSet("busmon", flag.ContinueOnError)
 	fs.SetOutput(out)
 	fs.Usage = func() { cli.Render(out, "busmon", busmonHelp) }
@@ -79,4 +77,41 @@ func parseFlags(args []string, out io.Writer) (busmonOpts, map[string]bool, erro
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[long[f.Name]] = true })
 	return o, set, nil
+}
+
+// optPtrs is each flag's variable, by long name: parseFlags fills them, the
+// project switch reads them back (switchArgv).
+func optPtrs(o *busmonOpts) map[string]any {
+	return map[string]any{
+		"project": &o.project, "host": &o.host, "limit": &o.limit, "reset": &o.reset, "yes": &o.yes,
+		"list": &o.list, "delete": &o.delete, "theme": &o.theme, "as": &o.as, "version": &o.version, "pick": &o.pick,
+	}
+}
+
+// switchOneShot are the flags a project switch never carries: actions that
+// end busmon before its screen, and the project itself.
+var switchOneShot = map[string]bool{"project": true, "reset": true, "delete": true, "yes": true, "list": true, "pick": true, "version": true}
+
+// switchArgv is the command line busmon re-executes itself with to open
+// target (project-switch note §2.2): rebuilt from the parsed options, never
+// edited as text (Go's flag accepts too many spellings), --<long>=<value>
+// for each flag given that is not a one-shot, then --project=<target>. A
+// flag added later is carried by default.
+func switchArgv(o busmonOpts, set map[string]bool, target string) []string {
+	var argv []string
+	ptr := optPtrs(&o)
+	for _, f := range busmonFlags {
+		if !set[f.Long] || switchOneShot[f.Long] {
+			continue
+		}
+		switch p := ptr[f.Long].(type) {
+		case *string:
+			argv = append(argv, "--"+f.Long+"="+*p)
+		case *int:
+			argv = append(argv, "--"+f.Long+"="+strconv.Itoa(*p))
+		case *bool:
+			argv = append(argv, "--"+f.Long+"="+strconv.FormatBool(*p))
+		}
+	}
+	return append(argv, "--project="+target)
 }
