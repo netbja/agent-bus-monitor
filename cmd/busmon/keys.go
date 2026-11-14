@@ -76,63 +76,63 @@ const (
 	ActAskNext
 	ActAskPrev
 	ActAskPick
-	ActComposeOpen  // open the compose window
-	ActComposeField // the window: text <-> recipient
-	ActComposeAsk   // the window: answer the open question in its panel
-	ActPasteImage   // the window: paste the clipboard's image (saved locally, its path inserted)
-	ActUndo         // the window: take back the last edit (a paste, a run of typing)
-	ActRedo         // the window: do again what undo took back
-	ActRecap        // open the deterministic project recap
-	ActHealth       // open project health details
-	ActPickType     // the picker: a typed character or backspace edits the filter
-	ActPlan         // open the batch's plan: the drawer (p, P; home-inbox-drawer §4.4)
-	ActShowDone     // the plan board: show or fold DONE (d)
-	ActTab5         // the shell's narrow tier: the fifth view
-	ActTab6         // the shell's narrow tier: the sixth view (Plan)
-	ActTabNext      // the lower panel's next tab, wrapping (busmon-keys)
-	ActFieldNext    // the notifications setup: the next field (tab)
-	ActFieldPrev    // the notifications setup: the field before (shift-tab)
-	ActShowCode     // the notifications setup: the code alone, until any key (c)
-	ActTestAgain    // the notifications setup: send the test again (t)
-	ActEditSetup    // the notifications setup: back to the first step, values kept (e)
-	ActRemoveTarget // a target's page: remove it, y/n (x)
-	ActRenameTarget // a target's page: rename it (n)
-	ActShowTopic    // an ntfy target's page: its topic and code (s)
-	ActShowFormat   // the setup's first screen: the file's format, to write it by hand (?)
-	ActTabPrev      // the lower panel's previous tab, wrapping
-	ActAskOrWrite   // w: the open question, or with none the compose window to master
-	ActSleep        // Z: suspend the open project, or resume it when it is suspended (agentbus suspend/resume)
-	ActNextItem     // reader: the next item of the list the page came from (A5)
-	ActPrevItem     // reader: the previous one
-	ActAskOther     // the shell's ask: a free answer ("Other") in the compose window
-	ActFold         // Requests: show or hide the answered and older threads
-	ActTour         // the help: the first-launch tour again
-	ActComplete     // the line: complete the @agent (the field does it)
-	ActServiceLog   // Services (F3): the selected service's log
-	ActPlanStart    // a plan task waiting for the person: write to master that they start it
-	ActTokens       // open the tokens page (U)
-	ActSettings     // open the settings page (C)
-	ActHistory      // open the history page (H)
-	ActAbout        // open About (A): the versions and the bus line
-	ActReplay       // About: play the packet's run again (r)
-	ActOlder        // History: load the days before
-	ActLineEdit     // the line: move its cursor or delete at it (the field does it)
-	ActGroupNext    // settings (C): → into the keys (or the next tab on a narrow page)
-	ActGroupPrev    // settings (C): ← back to the groups (or the previous tab on a narrow page)
-	ActFocusToggle  // settings (C): tab moves the focus between the groups and the keys
-	ActReset        // settings (C): remove the selected key from config.toml (asks y)
-	ActResetGroup   // settings (C): remove the group's keys from config.toml (asks y)
-	ActPriorityUp   // Requests or a request's page: raise a tracked request's priority (the person's)
-	ActPriorityDown // and lower it
-	ActProjects     // open the Projects page (M)
+	ActComposeOpen   // open the compose window
+	ActComposeField  // the window: text <-> recipient
+	ActComposeAsk    // the window: answer the open question in its panel
+	ActPasteImage    // the window: paste the clipboard's image (saved locally, its path inserted)
+	ActUndo          // the window: take back the last edit (a paste, a run of typing)
+	ActRedo          // the window: do again what undo took back
+	ActRecap         // open the deterministic project recap
+	ActHealth        // open project health details
+	ActPickType      // the picker: a typed character or backspace edits the filter
+	ActPlan          // open the batch's plan: the drawer (p, P; home-inbox-drawer §4.4)
+	ActShowDone      // the plan board: show or fold DONE (d)
+	ActTab5          // the shell's narrow tier: the fifth view
+	ActTab6          // the shell's narrow tier: the sixth view (Plan)
+	ActTabNext       // the lower panel's next tab, wrapping (busmon-keys)
+	ActFieldNext     // the notifications setup: the next field (tab)
+	ActFieldPrev     // the notifications setup: the field before (shift-tab)
+	ActShowCode      // the notifications setup: the code alone, until any key (c)
+	ActTestAgain     // the notifications setup: send the test again (t)
+	ActEditSetup     // the notifications setup: back to the first step, values kept (e)
+	ActRemoveTarget  // a target's page: remove it, y/n (x)
+	ActRenameTarget  // a target's page: rename it (n)
+	ActShowTopic     // an ntfy target's page: its topic and code (s)
+	ActShowFormat    // the setup's first screen: the file's format, to write it by hand (?)
+	ActTabPrev       // the lower panel's previous tab, wrapping
+	ActAskOrWrite    // w: the open question, or with none the compose window to master
+	ActSleep         // Z: suspend the open project, or resume it when it is suspended (agentbus suspend/resume)
+	ActNextItem      // reader: the next item of the list the page came from (A5)
+	ActPrevItem      // reader: the previous one
+	ActAskOther      // the shell's ask: a free answer ("Other") in the compose window
+	ActFold          // Requests: show or hide the answered and older threads
+	ActTour          // the help: the first-launch tour again
+	ActComplete      // the line: complete the @agent (the field does it)
+	ActServiceLog    // Services (F3): the selected service's log
+	ActPlanStart     // a plan task waiting for the person: write to master that they start it
+	ActTokens        // open the tokens page (U)
+	ActSettings      // open the settings page (C)
+	ActHistory       // open the history page (H)
+	ActAbout         // open About (A): the versions and the bus line
+	ActReplay        // About: play the packet's run again (r)
+	ActOlder         // History: load the days before
+	ActLineEdit      // the line: move its cursor or delete at it (the field does it)
+	ActGroupNext     // settings (C): → into the keys (or the next tab on a narrow page)
+	ActGroupPrev     // settings (C): ← back to the groups (or the previous tab on a narrow page)
+	ActFocusToggle   // settings (C): tab moves the focus between the groups and the keys
+	ActReset         // settings (C): remove the selected key from config.toml (asks y)
+	ActResetGroup    // settings (C): remove the group's keys from config.toml (asks y)
+	ActPriorityUp    // Requests or a request's page: raise a tracked request's priority (the person's)
+	ActPriorityDown  // and lower it
+	ActProjects      // open the Projects page (M)
 	ActSwitchProject // projects (M): open the selected project in this busmon (project-switch note)
-	ActStopServices // projects (M): stop the selected project's services here (agentbus down)
-	ActBackupNow    // projects (M): back the selected project up (agentbus backup --project)
-	ActPalette      // Ctrl+P: the command palette, the line opened with / (palette spec §4.3)
-	ActIdeas        // open the Ideas page (F6)
-	ActIdeaFilter   // Ideas (F6): tab, the next state shown
-	ActIdeaAdd      // Ideas (F6): a, add an idea (its title on the line)
-	ActIdeaState    // Ideas (F6) or an idea's page: s, the state picker (y sets it)
+	ActStopServices  // projects (M): stop the selected project's services here (agentbus down)
+	ActBackupNow     // projects (M): back the selected project up (agentbus backup --project)
+	ActPalette       // Ctrl+P: the command palette, the line opened with / (palette spec §4.3)
+	ActIdeas         // open the Ideas page (F6)
+	ActIdeaFilter    // Ideas (F6): tab, the next state shown
+	ActIdeaAdd       // Ideas (F6): a, add an idea (its title on the line)
+	ActIdeaState     // Ideas (F6) or an idea's page: s, the state picker (y sets it)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
