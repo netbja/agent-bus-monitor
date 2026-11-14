@@ -177,30 +177,37 @@ KEYS
 
 COMMANDS
   / or Ctrl+P on the panels and pages, or / at the start of the line (i or :); Tab completes, Enter runs, // sends a /
-  /requests                who owes whom an answer (F2 r); also /f2, /r, /req
-  /services                the project's services, their cards and logs (F3 s); also /f3, /s, /svc
-  /health                  the project's measured checks (F5); also /f5
-  /help                    every key, and these commands (F1 ?); also /f1, /?
-  /plan                    the plan's tasks (p P); also /p
-  /recap                   what happened while you were away (R); also /R
-  /triage                  walk what waits for you (T); also /T
-  /tokens                  tokens per project and agent (U); also /U
-  /settings                the settings page (C); also /C, /config
-  /projects                every project of this host (M); also /M
-  /history                 the archive and the streams, newest first (H); also /H
-  /about                   versions and the bus line (A); also /A, /version
-  /unread                  the next unread item for you (u); also /u
-  /follow                  auto-scroll on or off (the setting display.follow); also /autoscroll
-  /all                     show or hide the agents silent for a day (a); also /a
-  /compose                 the compose window (I); also /I
-  /sleep                   suspend or resume the project (asks first) (Z); also /Z
-  /filter [words]          filter Activity by @agent, a thread or words (f); also /f
-  /answer                  answer an agent's open questions (! F4); also /f4, /!
-  /write <agent> <text>    a message to an agent (as @agent text) (@); also /@
-  /master <text>           a directive to master: ask for an agent's or master's action (w)
-  /set [key]               jump to a setting on the settings page (C)
-  /tour                    the first-launch tour again (F1 t); also /t
-  /quit                    leave busmon (q); also /q, /exit
+  /requests                  who owes whom an answer (F2 r); also /f2, /r, /req
+  /services                  the project's services, their cards and logs (F3 s); also /f3, /s, /svc
+  /health                    the project's measured checks (F5); also /f5
+  /help                      every key, and these commands (F1 ?); also /f1, /?
+  /plan                      the plan's tasks (p P); also /p
+  /recap                     what happened while you were away (R); also /R
+  /triage                    walk what waits for you (T); also /T
+  /tokens                    tokens per project and agent (U); also /U
+  /settings                  the settings page (C); also /C, /config
+  /projects                  every project of this host (M); also /M
+  /history                   the archive and the streams, newest first (H); also /H
+  /about                     versions and the bus line (A); also /A, /version
+  /unread                    the next unread item for you (u); also /u
+  /follow                    auto-scroll on or off (the setting display.follow); also /autoscroll
+  /all                       show or hide the agents silent for a day (a); also /a
+  /compose                   the compose window (I); also /I
+  /sleep                     suspend or resume the project (asks first) (Z); also /Z
+  /filter [words]            filter Activity by @agent, a thread or words (f); also /f
+  /answer                    answer an agent's open questions (! F4); also /f4, /!
+  /write <agent> <text>      a message to an agent (as @agent text) (@); also /@
+  /master <text>             a directive to master: ask for an agent's or master's action (w)
+  /set [key]                 jump to a setting on the settings page (C)
+  /tour                      the first-launch tour again (F1 t); also /t
+  /quit                      leave busmon (q); also /q, /exit
+  /reload <role> [fresh]     restart an idle agent on its role, resuming its session (fresh: without)
+  /pause <duration>          nobody is woken for that long
+  /resume                    end the pause; a suspended project comes back (as Z)
+  /suspend                   put the project to sleep (as Z)
+  /backup                    one archive of the project
+  /self-repair reset <agent> clear an agent's crash loop and restart its budget
+  /priority <task> <level>   a request's priority: low, normal or high; also /prio
 
 STATES
   ● working            the state the agent DECLARED the last time it published a status.

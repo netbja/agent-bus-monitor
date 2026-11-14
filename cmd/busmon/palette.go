@@ -17,7 +17,8 @@ import (
 // opens it from the panels and the pages. Class A rows run a panel key's
 // own action through runPanelAct (the path its key takes), class B rows
 // write as the line does, and three rows (filter <words>, tour, set <key>)
-// have a Run of their own. Class C (agentbus commands) is slice 2.
+// have a Run of their own. Class C rows (slice 2, palette_c.go) run the
+// person's agentbus commands as argv, after y.
 
 // palCmd is one palette command.
 type palCmd struct {
@@ -33,6 +34,10 @@ type palCmd struct {
 	// becomes "@agent text" and is sent as Enter sends it, its holds and
 	// confirmations included (an open question, a pause).
 	InLine bool
+	// Argv: a class C row (§4.1): the agentbus argv after the global
+	// --project, from the checked args; shown first, run after y.
+	Argv func(args []string) []string
+	As   bool // class C: --as <identity.as> is appended, refused without one
 }
 
 // palArg is one argument; Rest takes the rest of the line (a text).
@@ -42,6 +47,7 @@ type palArg struct {
 	Optional bool
 	Check    func(string) error
 	Complete func(m *Model) []string
+	Literal  string // a fixed word (self-repair's reset): typed as is, shown as is
 }
 
 // paletteTable is the one table (§4.1, §4.2's aliases), in its order.
@@ -100,6 +106,7 @@ func init() {
 		{Name: "tour", Summary: "the first-launch tour again", KeyText: "F1 t", Aliases: []string{"t"}, Run: (*Model).palTour},
 		a("quit", "leave busmon", ActQuit, "q", "exit"),
 	}
+	paletteTable = append(paletteTable, classCRows()...)
 }
 
 // paletteAliasMatch: a one-letter alias is exact and case-sensitive (busmon
@@ -211,6 +218,9 @@ func parseCommandLine(line string) (*palCmd, []string, error) {
 			}
 			return nil, nil, fmt.Errorf("%s needs its %s", c.Name, a.Name)
 		}
+		if a.Literal != "" && v != a.Literal {
+			return nil, nil, fmt.Errorf("%s: %q is not %s", c.Name, v, a.Literal)
+		}
 		if a.Check != nil {
 			if err := a.Check(v); err != nil {
 				return nil, nil, err
@@ -260,6 +270,9 @@ func (m *Model) runPalette(c *palCmd, args []string) tea.Cmd {
 	if c.InLine {
 		m.closeReader()
 		return c.Run(m, args)
+	}
+	if c.Argv != nil {
+		return m.palAgentbus(c, args) // leaves the line only once the question is asked
 	}
 	m.leaveLine(false) // the command is spent; a message draft kept for i stays
 	m.closeReader()
@@ -504,7 +517,13 @@ func (m *Model) paletteLines(width, room int) []Line {
 func paletteUsage(c palCmd) string {
 	u := "/" + c.Name
 	for _, a := range c.Args {
-		if a.Optional {
+		if a.Literal != "" && !a.Optional {
+			u += " " + a.Literal
+			continue
+		}
+		if a.Optional && a.Literal != "" {
+			u += " [" + a.Literal + "]"
+		} else if a.Optional {
 			u += " [" + a.Name + "]"
 		} else {
 			u += " <" + a.Name + ">"
