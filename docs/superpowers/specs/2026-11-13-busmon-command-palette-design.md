@@ -1,7 +1,8 @@
-# busmon command palette: `/` in the input line, Ctrl+P anywhere
+# busmon command palette: `/` and Ctrl+P open it; `f` filters; auto-scroll is a setting
 
-Status: draft, spec only; the person answered §7 on 2026-11-13 (§7 now records the answers). Base:
-origin/main `af6dffa0`.
+Status: r9, spec only. The person answered §7 on 2026-11-13 (§7 records the answers). r9 folds in
+the person's change request of 2026-11-14 (§8). Slice 1 is built (PR 470 merged the spec; `cmd/busmon/palette.go`).
+Base: origin/main `8a79182f`.
 Author: architect. Requested by the person through master (task `slash-palette-spec`).
 
 ## 1. Problem
@@ -26,8 +27,11 @@ person does with `agentbus` in a terminal have no key at all: `reload --as`, `pa
 - Commands with an argument complete it from what busmon already knows (agents, roles, plan
   tasks, settings keys). A command that changes something shows what it will do and asks
   `y` first, as `Z` does today.
-- The Activity filter stays where it is: `/` pressed on the panels still opens the filter line.
-  The palette exists only *inside* the input line, so the two never meet.
+- **`/` belongs to the palette** (r9, §8): `/` on the panels opens the one-line input with `/`
+  typed, exactly as Ctrl+P does. The Activity filter line moves to **`f`**.
+- **Auto-scroll is a setting** (r9, §8): `display.follow`, on or off, on the settings page (C),
+  display group. It has no key and no hint in the bottom bar. `G`/end still jumps to the newest
+  line, and the palette's `/follow` flips the setting.
 
 ## 3. Inventory (what exists today)
 
@@ -53,8 +57,9 @@ Four facts from the walk shape the design:
 - **busmon already runs `agentbus` as a child process**: `Z` (`sleep.go`), the Projects page's
   `x`/`b` (`projects_admin.go`) and the picker's `up` (`pick.go`), all as argv with no shell. Class C
   reuses that path.
-- The `/` filter is **not** a category filter. It matches `@agent`, a thread id or free words
-  (`filter.go` `parseFilter`). It is unaffected either way.
+- The Activity filter is **not** a category filter. It matches `@agent`, a thread id or free words
+  (`filter.go` `parseFilter`). r9 moves its key from `/` to `f`; the line itself is unchanged
+  (§8, answer b).
 - The input line already has a candidate list: the `@agent` completion (`completions`,
   `recipientCompletions`, ↑↓, Tab and Enter pick). The palette is a second source for that same list,
   not a new widget or a new key mode.
@@ -82,8 +87,9 @@ type arg struct {
 ```
 
 - **Class A** (an `Act`, no argument): `requests`, `services`, `health`, `help`, `plan`, `recap`,
-  `triage`, `tokens`, `settings`, `projects`, `history`, `about`, `unread`, `follow`, `all`, `compose`, `sleep`
-  (it asks first, as the key does), `filter` (it opens the filter line, as `/` does), and `quit`.
+  `triage`, `tokens`, `settings`, `projects`, `history`, `about`, `unread`, `all`, `compose`, `sleep`
+  (it asks first, as the key does), `filter` (it opens the filter line, as `f` does), and `quit`.
+  `follow` is no longer class A: r9 removes `ActFollow` and makes `follow` a Run row (§8.3).
 
   **The route.** On the panels, a key goes through `modeKey`: `ActQuit` becomes `tea.Quit` there, and
   every other action goes to `panelKey`. A page's own table does not carry these actions;
@@ -142,7 +148,7 @@ type arg struct {
   | `write <agent> <text>` | `ActComposeAt` | `@` |
   | `master <text>` | `ActAskOrWrite`, **only while no ask is open** | `w`, or nothing |
   | `answer` | `ActAsk` | `F4 !` |
-  | `filter <words>` | `ActFilter` | `/` |
+  | `filter <words>` | `ActFilter` | `f` (r9; was `/`) |
   | `set <key>` | `ActSettings` | `C` |
   | `tour` | none in `panelBindings` (the help page's `t`) | `F1 t`, written in the row |
   | class C rows | none (no key today) | — |
@@ -192,11 +198,11 @@ review):
 | `about` | `A`, `version` |
 | `tour` | `t` |
 | `unread` | `u` |
-| `follow` | `f`, `autoscroll` |
+| `follow` | `autoscroll` (r9: `f` is the filter's key now, so it is no longer `follow`'s alias) |
 | `all` | `a` |
 | `compose` | `I` |
 | `sleep` | `Z` |
-| `filter` | — |
+| `filter` | `f` |
 | `quit` | `q`, `exit` |
 | `write` | `@` |
 | `master` | — (`w` is shown as its key only while no ask is open, §4.1; as an alias it would mean two things) |
@@ -205,7 +211,8 @@ review):
 | `self-repair reset` (slice 2) | — (`reset` alone would collide with the settings page's reset) |
 | `priority` (slice 2) | `prio` |
 
-`filter` has no `/` alias: in the line, `//` already means a literal `/` (answer 6).
+`filter` has no `/` alias: in the line, `//` already means a literal `/` (answer 6). r9 gives it the
+letter alias `f`, its key.
 
 ### 4.3 Keys in the line
 
@@ -213,14 +220,36 @@ review):
 |---|---|---|
 | ↑ ↓ | choose a row | (unchanged) |
 | Tab | complete the chosen name; on an argument, complete it from `arg.Complete` | (unchanged: `@agent`) |
-| Enter | if ↑↓ moved the selection since the last edit, the **chosen row** wins; otherwise the **typed line** runs when it parses; otherwise the chosen (top) row | send (unchanged) |
+| Enter | the rule in §4.3.1 | send (unchanged) |
 | Esc | close the list, keep the text; Esc again leaves the line (unchanged) | (unchanged) |
-| Ctrl+P | (from the panels or a page) open the line with `/` typed | — |
+| Ctrl+P, and `/` on the panels (r9) | open the line with `/` typed | — |
 
 - A line that starts with `//` is sent as text that starts with `/` (answer 6).
 - `@coder /something` is unchanged: only a **leading** `/` opens the palette.
 - Typing or deleting clears "moved", so the typed line counts again. Example: `/r` + Enter runs
   `requests` (the exact alias `r`). `/r`, ↓, Enter runs the second row.
+
+#### 4.3.1 The Enter rule (r9: replaces the r8 sentence and §4.4's last line)
+
+Four cases, checked in this order:
+
+1. **The selection was moved with ↑↓ since the last edit:** the chosen row wins. Its name replaces
+   the typed name, the typed arguments stay, and the line is parsed again.
+2. **The typed name is a complete command name or alias.** Its line runs when its arguments
+   parse. If an argument is missing or invalid (`/reload` with no role, `/write` with no agent, `/set nosuch`),
+   **nothing runs**: the flash line says what is missing or wrong, and the text stays in the line
+   to be fixed.
+3. **The typed word is not a name but still matches rows** (a prefix, a word start or a
+   subsequence: `/requ`, `/he`, `/rq`): Enter takes the **top row**, the best match, with the typed
+   arguments.
+4. **The typed word matches no row at all** (`/zzz`): **nothing runs**. The flash says "no command
+   matches: / alone lists them", and the text stays.
+
+Case 2 is what §4.4 meant by "a failed parse runs nothing". Case 3 is what r8's "otherwise the chosen
+(top) row" meant. They no longer read as two rules. This is the order `paletteEnter` already
+follows: `palMoved`, then `parseCommandLine`, whose `errNoCommand` alone falls through to the top
+row. Every other error is flashed with the line kept. With no rows, the fall-through (`chosen`)
+flashes and runs nothing: that is case 4.
 - **Ctrl+P inside busmon** is free: busmon binds Ctrl A, C, E, O, S, T, U, V, W, Y and Z. The key
   decoder gains `keyCtrlP`: the legacy byte 0x10, and the kitty form `CSI 112;5u`.
 - **Ctrl+P outside busmon: holder and attach.** herdr is gone in the next version, so no
@@ -266,7 +295,8 @@ review):
   priority through its three words. Nothing typed reaches a shell.
 - Class C never offers what is not the person's (agents' commands, master's `swap`, `deliver` or
   `pilot`). The person asks master with `/master`.
-- A failed parse runs nothing and says why on the flash line.
+- A known command with a missing or invalid argument runs nothing and says why on the flash line,
+  the text kept (§4.3.1 case 2).
 
 ## 5. Testing
 
@@ -282,6 +312,18 @@ review):
   - `/req` + Enter opens Requests exactly as F2 does, compared on the resulting model state;
   - the Enter rule: `/r` + Enter opens Requests (not recap); `/r`, ↓, Enter runs the second row;
     `/r`, ↓, then typing `e`, then Enter runs the typed line again;
+  - §4.3.1, one test per case:
+    - case 1: `/he`, ↓, Enter runs the second row and not `help`;
+    - case 2: `/write` + Enter (no agent) runs nothing, the flash names the missing `agent`, and
+      the line still reads `/write`. When class C lands, `/reload` + Enter is checked the same way;
+    - case 3: `/requ` + Enter opens Requests (the top row);
+    - case 4: `/zzz` + Enter runs nothing, flashes "no command matches", and the line still reads
+      `/zzz`;
+  - r9 keys: `/` on the panels opens the line with `/` (the same model state as Ctrl+P); `f` opens
+    the filter line; `f` on History opens History's filter; with `display.follow` on, ↑ above the
+    live window or a click on an older row pauses the viewport and the setting stays on; `G` with
+    `display.follow` off jumps to the newest line and does **not** resume live (new lines are counted
+    after it); with it on, `G` resumes live as today; `/follow` flips `display.follow` and its flash says the new value;
   - `/R` + Enter opens the recap (case-sensitive letter alias);
   - the `master` row shows `w` with no ask open and no key with one open;
   - Ctrl+P from a page opens the line with `/`;
@@ -331,6 +373,110 @@ The person's corrections are made in this head:
 - "Four facts" (§3);
 - Ctrl+P across terminals, and how busmon finds `agentbus` (§4.3).
 
+## 8. Change request (the person, 2026-11-14): `/`, `f` and auto-scroll
+
+### 8.1 `/` opens the palette
+
+- On the panels, `/` binds `ActPalette`, the action Ctrl+P already has (`openPalette`): the
+  one-line input opens with `/` typed. The panel binding `/` → `ActFilter` goes.
+- **On pages** (`overlayBindings`), History's `/` filter (`OnPage`) moves to `f` too, so `/` means
+  the palette everywhere it is a key (answer c, recommended). That page's `/` then binds
+  `ActPalette` like its `^P` row.
+- Inside the one-line input, `/` is text. A leading `/` is what makes the line a command line,
+  unchanged. The filter line, the compose window and the picker's type-to-filter are unaffected.
+
+### 8.2 `f` opens the filter line
+
+- `f` binds `ActFilter` on the panels. It is free once `ActFollow` goes. On History it replaces
+  `/`. `f` is bound nowhere else on pages, and the settings, projects, notify setup and tour tables
+  do not use it.
+- The palette's `/filter <words>` stays; its key hint becomes `f`, derived from the binding, and
+  `f` becomes its alias.
+
+### 8.3 Auto-scroll becomes the setting `display.follow`
+
+- **Registry:** `display.follow` in `config/keys.go`, a boolean, `ReadBy: "busmon"`, shown on
+  the settings page (C) in the display group. It is applied by `applySettings` like
+  `display.work_layout`.
+- **No key:** `ActFollow` leaves `panelBindings`, so the bottom bar and the help lose `f
+  auto-scroll`, and the `case ActFollow` in `panelKey` goes. `G`/end (`ActLive`) still jumps to
+  the newest line.
+- **What on and off mean** (answer d, recommended):
+  - **on**, today's behaviour: Activity scrolls with new lines. The **setting stays on**, but the
+    viewport pauses for the moment (the title counts `· N new`) in two cases:
+    - a wheel scroll up (`listState.ScrollBy` with a negative delta);
+    - **a selection above the live window**, however it got there: ↑, Home, `g`, `u`, a click on
+      an older row, new lines pushing it up, or a smaller frame. `holdSelection` decides this on
+      each draw (`tea_view.go` → `listState.holdSelection`, `outsideLive`). It is the
+      activity-scroll fix of 2026-11-07: a pinned window would hide that selection.
+
+    Moving, clicking or opening **inside** the live window keeps it live, and so does an open
+    expansion. Today `f` pauses it too; r9 removes `f`. `G`/end resumes (`Last` calls `Resume`), and
+    so do ↓ onto the newest line and the wheel back to the bottom while paused (A3). Slice 1b keeps
+    all of this unchanged for `on`; it is not a new behaviour.
+  - **off:** Activity never scrolls by itself. New lines are counted, and the view stays. The
+    pauses above have nothing to pause.
+    `G`/end jumps to the newest line once and stays put there. A3's automatic resume is off.
+  - The title keeps saying which (`auto-scroll on` / `auto-scroll off · N new`), so the setting's
+    effect is visible without opening C.
+- **Palette:**
+  - `/follow` (alias `autoscroll`) becomes a Run row, with `Key` none and the summary "auto-scroll
+    on or off (the setting display.follow)". It flips the setting through the same code as Enter on
+    that key in the settings page (`config.Set` then `applySettings`), and flashes the new value.
+  - `/set display.follow` jumps to the key.
+- **What still teaches the old keys, all updated in the same slice:**
+  - the bottom hint bar and the F1 help: both derived from `keys.go`, so they follow the
+    bindings;
+  - the tour: its filter row reads `ky(ModeShell, ActFilter)`, so it follows; no tour row shows
+    follow;
+  - `README.md`: the screen sample's hint line ("`f auto-scroll` … `/ filter`"), the Activity
+    paragraph ("`/` filters"), and History's "`/` filters" row;
+  - `docs/OPERATIONAL-GUIDE.md` and `docs/OPERATIONAL-GUIDE.fr.md`: the "Activity auto-scroll"
+    paragraph. `f` turns it off there; that becomes the setting. Its "moving, clicking or opening a
+    line keeps it on" also gains "inside the live window": a selection above it pauses, as above;
+  - the tests: `tea_ported_test.go` "slash filters" (`/` → `ActFilter`, now `ActPalette`), plus any
+    `keys_test.go` row on `f` or `/`;
+  - `cmd/busmon/main.go`'s header comment ("/ filters").
+
+### 8.4 Questions for the person (answered in busmon)
+
+a. **Default of `display.follow`:** *recommended* **on**, today's behaviour, so nothing changes
+   for someone who never opens C.
+b. **The filter line once opened:** *recommended* **unchanged**. Enter applies (`parseFilter`:
+   `@agent`, a thread id, words), Esc cancels, and the filter shows in Activity's title. Only the
+   key that opens it changes.
+c. **History's `/`:** *recommended* it moves to `f` like the panels', and `/` opens the palette
+   on that page too, so `/` has one meaning wherever it is a key. Alternative: History keeps `/` as
+   its filter, and `/` means two things.
+d. **`display.follow` off:** *recommended* as in §8.3: no scrolling by itself, `G`/end a one-time
+   jump, no A3 resume. Alternative: off only changes the start-up state, and A3 still resumes.
+
+### 8.5 The slice for coder (slice 1b)
+
+One PR from main, before class C (slice 2):
+
+1. `keys.go`:
+   - `/` → `ActPalette` on the panels and on pages;
+   - `f` → `ActFilter` on the panels and History;
+   - `ActFollow` removed, with its `panelKey` case.
+2. `config/keys.go`: `display.follow` (bool, default per answer a). `settings.go` reads it, the
+   settings page shows it in display, and `applySettings` applies it.
+3. Activity's list: the start-up state and the A3 resume read `display.follow` (answer d).
+   `G`/end jumps to the newest line. With follow on it resumes live as today (`Last` →
+   `Resume`); with follow off it does not resume. The view stays on the newest line, and lines
+   arriving after it are counted. So `Last` needs the setting, not just `Resume`.
+4. `palette.go`:
+   - `follow` becomes a Run flipping the setting, alias `autoscroll` only;
+   - `filter` gets the alias `f`, and its hint derives `f`.
+5. Text: `README.md`, the two operational guides and `main.go`'s comment (§8.3).
+6. Tests:
+   - the r9 model tests of §5 (`/`, `f`, History `f`, `G` with follow off, `/follow`);
+   - one test per §4.3.1 case (four);
+   - the updated "slash filters" row.
+
+The §4.3.1 Enter rule is already what `paletteEnter` does. 1b adds only its four tests, which
+check that cases 2 and 4 keep the text.
+
 ## Appendix A. Inventory
 
 ### A.1 busmon panel actions (`panelBindings`, run by `modeKey` then `panelKey`, `cmd/busmon/tea_update.go`)
@@ -353,9 +499,10 @@ The person's corrections are made in this head:
 | `A` | ActAbout | About page | — | `about` |
 | `t` (help) | ActTour | the first-launch tour (handled in `readerKey` only) | — | `tour` (a Run, §4.1) |
 | `u` | ActNextUnread | next unread for you | — | `unread` |
-| `f` | ActFollow | auto-scroll on or off | — | `follow` |
+| `f` | ActFollow → **removed in r9** | auto-scroll on or off | — | `follow` (a Run row flipping `display.follow`, §8.3) |
 | `Z` | ActSleep | suspend or resume the project (asks first) | — | `sleep` |
-| `/` | ActFilter | open the filter line (@agent, thread or words) | — | `filter`; `filter <words>` is a Run (§4.1) |
+| `/` → **`f` in r9** | ActFilter | open the filter line (@agent, thread or words) | — | `filter`; `filter <words>` is a Run (§4.1) |
+| `/` (r9) | ActPalette | the palette: the line with `/` typed, as Ctrl+P | — | — |
 | `i` `:` | ActCompose | the one-line input | — | (the palette lives here) |
 | `I` | ActComposeOpen | the compose window | — | `compose` |
 | `@` | ActComposeAt | the line, prefilled with @ | agent | `write <agent>` |
@@ -370,8 +517,14 @@ The person's corrections are made in this head:
 | `d` (Work) | ActShowDone | the plan with done tasks | — | no |
 | esc, `q` | ActEscape, ActQuit | back; quit (`modeKey` returns `tea.Quit`, not `panelKey`) | — | `quit` |
 
-Other tables (`keys.go`): input, filter, ask, compose, compose file (`composeFileBindings`, the @ popup), picker, overlay (pages),
-settings, notify setup, projects, project delete and tour. They are page-local and stay keys.
+Other tables (`keys.go`), 13 in all:
+- the shell's tab keys (`shellTabs`);
+- input, filter, ask, compose, compose file (`composeFileBindings`, the @ popup);
+- picker, overlay (pages), settings, notify setup;
+- projects, project delete and tour.
+
+They are page-local and stay keys. `shellBindings` and `shellAskBindings` are built from
+`panelBindings`, `shellTabs` and `askBindings`, not tables of their own.
 
 ### A.2 `agentbus` commands (`cmd/agentbus/commands.go`, `commands`)
 
@@ -380,7 +533,7 @@ The person's commands, in the palette as class C, with their exact argv in §4.1
 - `pause --for`;
 - `resume --yes`;
 - `suspend --yes`;
-- `backup --project`;
+- `backup` (the project given once, as the global `--project` before the command, §4.1);
 - `self-repair reset --as`;
 - `request priority --as`.
 
