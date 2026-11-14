@@ -179,3 +179,32 @@ func TestServiceGC(t *testing.T) {
 		t.Errorf("out %q", out.String())
 	}
 }
+
+// A build shared with another project keeps its binary when this project's
+// unit goes: gc says so, never "binary removed" (reviewer-codex).
+func TestServiceGCSaysASharedCopyIsKept(t *testing.T) {
+	root := t.TempDir()
+	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
+	shared := service.BuildKey("v1")
+	src := filepath.Join(t.TempDir(), "agentbus")
+	if err := os.WriteFile(src, []byte("v1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.InstallHolderBinary(paths, "v1", src); err != nil {
+		t.Fatal(err)
+	}
+	hm := &fakeHolders{fakeManager: newFakeManager(), active: map[string]bool{},
+		units: []service.HolderUnit{{Project: "demo", Key: shared, Raw: "v1"}, {Project: "other", Key: shared, Raw: "v1"}}}
+	d := serviceCmdDeps{Manager: hm, Paths: paths, HolderBuild: func() string { return "v2" },
+		HolderAnswers: func(string, string) bool { return false }, HolderAnswersAny: func(string) bool { return false }}
+	var out, errw strings.Builder
+	if code := runServiceCmd("demo", []string{"gc"}, d, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if _, err := os.Stat(service.HolderBinDir(paths, shared)); err != nil {
+		t.Fatalf("the shared copy was removed: %v", err)
+	}
+	if strings.Contains(out.String(), "binary removed") || !strings.Contains(out.String(), "binary kept") {
+		t.Fatalf("out %q", out.String())
+	}
+}

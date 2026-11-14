@@ -537,7 +537,13 @@ func gcHolderCmd(d serviceCmdDeps, project string, stdout, stderr io.Writer) int
 		code = 1
 	}
 	for _, k := range removed {
-		fmt.Fprintf(stdout, "holder build %s: unit and binary removed\n", cmp.Or(raws[k], k))
+		// GCHolders keeps a copy another project's unit still runs: say what
+		// is on disk now, never what was tried (reviewer-codex).
+		what := "unit and binary removed"
+		if _, err := os.Stat(service.HolderBinDir(d.Paths, k)); err == nil {
+			what = "unit removed, binary kept (another project's holder runs this build)"
+		}
+		fmt.Fprintf(stdout, "holder build %s: %s\n", cmp.Or(raws[k], k), what)
 	}
 	bins, err := service.GCHolderBinaries(hm, d.Paths, current, any)
 	if err != nil {
