@@ -483,6 +483,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus start", "agentbus start ~/src/shop --yes", "agentbus start --roles master,coder,foureyes:review"},
 	},
 	{
+		Name: "attach", Usage: []string{"attach <agent> [--observe] [--prefix <key>]"},
+		Summary: "put this terminal on an agent's terminal in the project's holder; <prefix> d detaches, <prefix> <prefix> sends one (attach.prefix, default f12)",
+		Flags: []cli.Flag{
+			{Long: "observe", Help: "watch only: never types or resizes"},
+			{Long: "prefix", Arg: "<key>", Help: "this attach's prefix key: f1-f12, ctrl+<letter>, ctrl+\\, ctrl+] (needed when attach.prefix is not verified for the agent's client)"},
+		},
+		Examples: []string{"agentbus -p demo attach coder", "agentbus -p demo attach coder --observe"},
+	},
+	{
 		Name: "holder", Usage: []string{"holder [--env <file>]"},
 		Summary:  "serve the project's agent terminals (what a holder unit runs; agentbus up installs it)",
 		Examples: []string{"agentbus -p demo holder --env ~/.config/agentbus/services/demo.env"},
