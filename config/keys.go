@@ -292,6 +292,23 @@ var Keys = []*Key{
 		env: envPositiveDuration, file: filePositiveDuration},
 	{Name: "dispatch.self_repair_per_day", Env: "AGENT_BUS_SELF_REPAIR_PER_DAY", Kind: Int, Default: 3, ReadBy: "dispatch",
 		env: envPositiveInt, file: filePositiveInt},
+	// The machine's service manager (herdr exit, spec 4.4b): auto (systemd
+	// when systemctl --user answers, launchd on macOS), systemd, launchd or
+	// none. The variable is the one it has always been.
+	{Name: "services.manager", Env: "AGENTBUS_SERVICE_MANAGER", Kind: String, Default: "auto", MachineOnly: true,
+		ReadBy: "agentbus up, service, down, health, restore, suspend; busmon",
+		env: func(raw string) (any, envResult) {
+			if isServicesManager(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && isServicesManager(s) {
+				return s, ""
+			}
+			return nil, "want auto, systemd, launchd or none"
+		}},
 	// Start at login (the person, Q8): the project's services start when the
 	// person logs in: agentbus up and agentbus service login apply it through
 	// service.LoginStart (step 9: systemd, launchd; refused elsewhere).
@@ -562,6 +579,10 @@ func Lookup(name string) (*Key, bool) {
 // validName is bus.ValidName's rule, repeated because bus reads its caps from
 // this package; TestValidNameIsTheBusRule keeps the two equal.
 var validName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString
+
+func isServicesManager(s string) bool {
+	return s == "auto" || s == "systemd" || s == "launchd" || s == "none"
+}
 
 func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" }
 

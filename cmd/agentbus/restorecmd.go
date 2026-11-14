@@ -123,11 +123,11 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 		return 1
 	}
 	// The services' state must be known (reviewer-codex): no manager found
-	// refuses, unless AGENTBUS_SERVICE_MANAGER=none says this host runs none.
+	// refuses, unless services.manager = none says this host runs none.
 	mgr, noMgr := d.Services()
-	if mgr == nil && d.Getenv("AGENTBUS_SERVICE_MANAGER") != "none" {
+	if mgr == nil && service.ManagerChoice(d.Getenv) != "none" {
 		noMgr = "no service manager to ask (" + noMgr + "): stop the project's services first (agentbus down <p>), " +
-			"or set AGENTBUS_SERVICE_MANAGER=none if this host runs none"
+			"or set services.manager = none (" + config.EnvName("services.manager") + "=none) if this host runs none"
 	} else {
 		noMgr = ""
 	}
