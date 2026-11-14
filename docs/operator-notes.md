@@ -181,7 +181,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   `--profile` (`ownprofile.go`: `tabLaunch`, `launchProfile` = own or a fallback, `ownProfile`); `tabProfile`, doctor,
   swap and reload read it there, and `up`'s `checkProfiles` stops before anything starts on a profile `roles.toml` no
   longer allows. Tests stub up, herdr and the bus (`startDeps`); none starts a real session.
-- **The holder's services (herdr exit step 6b, `service/holder.go`; not wired yet).** One unit per
+- **The holder's services (herdr exit steps 6b and 6b2, `service/holder.go`, `cmd/agentbus/holdercmd.go`).** One unit per
   (project, build), never a template and never restarted to upgrade: `agentbus-holder.<p>.<key>.service`
   / launchd `com.agentbus.holder.<p>.<key>`, recording `X-Agentbus-Project`, `-Build` (the
   `BuildKey`) and `-Build-Raw` (plist: `XAgentbus*` keys), found by those values, never by a name
@@ -196,6 +196,18 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   not loaded, launchd's own "Could not find service"; any other print failure keeps it) and then its binary — only when the instance is inactive and no socket of that build
   answers, never a running or the current one, and never a binary another project's unit records;
   a manager that cannot say keeps the unit. `StartHolder` never restarts or kicks a running one.
+  The unit runs `<copy> --project <p> holder --env <the project's env file>` in the project's
+  `WorkingDirectory` (6b2): the holder starts every agent, and a service manager's PATH is minimal,
+  so `agentbus holder` loads the env file as `service run` does, then finds the launcher
+  (`<repo>/scripts/agent-launch`, the repo from `AGENTBUS_REPO` or the stamped checkout) and the
+  manifest (`rolecfg.ManifestPath`) from it; the env file now carries `AGENTBUS_REPO` and
+  `ROLES_TOML`. Like dispatch's, it is the project's file, not the build's: an old build's holder
+  reads the current one. An invalid configuration exits 0 (not restarted). `agentbus up` copies
+  the running build, installs and starts its unit, then runs `GCHolders` (no agent runs on the
+  holder before the cutover). A password rotation and an upgrade's hint skip holder lines by kind;
+  `service restart holder` is refused unless `--kill-agents` is given and says how many agents
+  it would kill (`RestartHolder`: systemd `restart`, launchd `kickstart -k`). Settings:
+  `holder.scrollback`, `dispatch.submit_wait`, `dispatch.person_quiet`.
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (enabled at login only while `services.start_at_login` is on), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P
