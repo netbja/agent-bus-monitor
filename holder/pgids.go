@@ -82,12 +82,14 @@ func writePrivate(path, content string) error {
 
 // KillRecordedGroups hands each recorded group (its leader's pid and start
 // time) to killGroup — KillGroup in production, which decides process by
-// process — and returns the processes killed. The record is read from a
+// process — with one cutoff for every group: NowTicks taken once, when the
+// holder's exit was seen, never a later "now" per group (reviewer-codex). It
+// returns the processes killed. The record is read from a
 // checked run directory, never through a symlink, and removed after, unless
 // a kill failed (it is then kept and the error returned); a line it cannot
 // read is skipped. No record: nothing, no error. Call it as soon as
 // the holder's exit is seen: what started after that is not the holder's.
-func KillRecordedGroups(getenv func(string) string, project, key string, killGroup func(pgid int, leaderStart uint64) (int, error)) (int, error) {
+func KillRecordedGroups(getenv func(string) string, project, key string, cutoff uint64, killGroup func(pgid int, leaderStart, cutoff uint64) (int, error)) (int, error) {
 	path, err := PgidsPath(getenv, project, key)
 	if err != nil {
 		return 0, err
@@ -121,7 +123,7 @@ func KillRecordedGroups(getenv func(string) string, project, key string, killGro
 		if err1 != nil || err2 != nil || pid <= 1 || start == 0 {
 			continue
 		}
-		k, err := killGroup(pid, start)
+		k, err := killGroup(pid, start, cutoff)
 		n += k
 		if err != nil {
 			errs = append(errs, err)
@@ -141,7 +143,7 @@ func KillRecordedGroups(getenv func(string) string, project, key string, killGro
 
 // KillGroup kills what is left of a dead holder's terminal group: the
 // processes of group pgid that started between the leader (leaderStart) and
-// now (killGroupMembers).
-func KillGroup(pgid int, leaderStart uint64) (int, error) {
-	return killGroupMembers(pgid, leaderStart, nowTicks())
+// cutoff (killGroupMembers).
+func KillGroup(pgid int, leaderStart, cutoff uint64) (int, error) {
+	return killGroupMembers(pgid, leaderStart, cutoff)
 }

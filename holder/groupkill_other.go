@@ -6,4 +6,5 @@ package holder
 // nothing is killed.
 func killGroupMembers(pgid int, from, to uint64) (int, error) { return 0, nil }
 
-func nowTicks() uint64 { return 0 }
+// NowTicks is 0: no start time without /proc.
+func NowTicks() uint64 { return 0 }
