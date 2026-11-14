@@ -563,9 +563,20 @@ func main() {
 		return
 	}
 
-	project := opts.project
+	// The project (project-switch note §2.5): --project, AGENT_BUS_PROJECT,
+	// then the one last used against this broker, when it still has keys.
+	project := startProject(opts.project, os.Getenv("AGENT_BUS_PROJECT"), "", nil)
+	var client *redis.Client
 	if project == "" {
-		project = os.Getenv("AGENT_BUS_PROJECT")
+		if client, err = bus.Connect(opts.host); err == nil {
+			last := readLastUsed(lastUsedPath(), brokerKey(client.Options()))
+			project = startProject("", "", last, func(p string) (bool, error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				keys, err := bus.ProjectKeys(ctx, client, p)
+				return len(keys) > 0, err
+			})
+		}
 	}
 	if project == "" {
 		fmt.Fprint(os.Stderr, noProjectText())
@@ -578,16 +589,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := bus.Connect(opts.host)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: Redis connection failed: %v\n", err)
-		os.Exit(1)
+	if client == nil {
+		if client, err = bus.Connect(opts.host); err != nil {
+			fmt.Fprintf(os.Stderr, "error: Redis connection failed: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	b, err := bus.Open(client, project)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+	// Last used, at start (a crash or a closed terminal still records it).
+	_ = writeLastUsed(lastUsedPath(), brokerKey(client.Options()), project)
 	ctx := context.Background()
 
 	// --reset purges the project's streams before the TUI starts (terminal still
@@ -654,7 +668,19 @@ func main() {
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 		},
 		sleepRunner: realSleepRunner(agentbusBeside()), sleepLog: realSleepLog(os.Getenv), sleepWait: realSleepWait(os.Getenv),
-		admin: adminSourceFor(client, os.Getenv, self), files: atSourceFor(project, os.Getenv)})
+		admin: adminSourceFor(client, os.Getenv, self), files: atSourceFor(project, os.Getenv),
+		projectHasKeys: func(ctx context.Context, p string) (bool, error) {
+			keys, err := bus.ProjectKeys(ctx, client, p)
+			return len(keys) > 0, err
+		},
+		listProjects: func(ctx context.Context) ([]string, error) {
+			sums, err := bus.Projects(ctx, client)
+			names := make([]string, 0, len(sums))
+			for _, s := range sums {
+				names = append(names, s.Project)
+			}
+			return names, err
+		}})
 	prog := tea.NewProgram(shell, tea.WithContext(ctx))
 
 	// Backfill, then live-tail. With a limit, fetch the last N merged entries up
@@ -711,6 +737,9 @@ func main() {
 	}
 	if fm, ok := final.(Model); ok && fm.exitNote != "" { // the open project deleted (projects-admin §5.2.3)
 		fmt.Println(fm.exitNote)
+	}
+	if fm, ok := final.(Model); ok && fm.switchTo != "" { // the project switch: save, then re-execute
+		os.Exit(finishSwitch(fm, opts, set, os.Stderr))
 	}
 }
 

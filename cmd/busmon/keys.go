@@ -126,6 +126,7 @@ const (
 	ActPriorityUp   // Requests or a request's page: raise a tracked request's priority (the person's)
 	ActPriorityDown // and lower it
 	ActProjects     // open the Projects page (M)
+	ActSwitchProject // projects (M): open the selected project in this busmon (project-switch note)
 	ActStopServices // projects (M): stop the selected project's services here (agentbus down)
 	ActBackupNow    // projects (M): back the selected project up (agentbus backup --project)
 	ActPalette      // Ctrl+P: the command palette, the line opened with / (palette spec §4.3)
@@ -432,6 +433,7 @@ var (
 		{Keys: "end", Act: ActLast, match: keyIs(keyEnd)},
 		{Keys: "enter", Hint: "detail", Help: "the selected project: every column, its streams, its pause or suspend record, its template and workspace", Act: ActOpen, match: keyIs(keyEnter)},
 		{Keys: "Z", Hint: "sleep", Help: "put the selected project to sleep (agentbus suspend), or wake it when it is suspended (resume); asks first", Act: ActSleep, match: runeIs('Z')},
+		{Keys: "o", Hint: "open here", Help: "open the selected project in this busmon: it starts again on it (refused while a draft is open)", Act: ActSwitchProject, match: runeIs('o')},
 		{Keys: "x", Hint: "stop", Help: "stop the selected project's services on this machine (agentbus down; deletes nothing); asks first", Act: ActStopServices, match: runeIs('x')},
 		{Keys: "b", Hint: "back up", Help: "back the selected project up now (agentbus backup --project); the archive is the notice", Act: ActBackupNow, match: runeIs('b')},
 		{Keys: "d del", Hint: "delete", Help: "delete the selected project's keys (refused while it is live; a backup offered first, its name typed)", Act: ActDelete, match: either(runeIs('d'), keyIs(keyDelete))},

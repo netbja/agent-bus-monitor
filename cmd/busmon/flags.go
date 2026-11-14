@@ -12,7 +12,7 @@ import (
 // is registered under its long and its short name. Go's flag package also
 // keeps the single-dash long forms (-project) working.
 var busmonFlags = []cli.Flag{
-	{Long: "project", Short: 'p', Arg: "<project>", Help: "project namespace (or AGENT_BUS_PROJECT)"},
+	{Long: "project", Short: 'p', Arg: "<project>", Help: "project namespace (or AGENT_BUS_PROJECT, else the one last used on this broker)"},
 	{Long: "host", Short: 'H', Arg: "<host>", Help: "Redis host (overrides REDIS_HOST)"},
 	{Long: "limit", Short: 'n', Arg: "<n>", Help: "ACTIVITY backfill: replay the last N lines on launch (0 = all history; or AGENT_BUS_BUSMON_LIMIT)"},
 	{Long: "reset", Short: 'r', Help: "purge the project's streams before launching (asks to confirm)"},

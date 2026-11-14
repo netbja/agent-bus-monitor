@@ -76,6 +76,10 @@ type shellConfig struct {
 	sleepWait   func() time.Duration
 	// admin is the Projects page's sources (M); nil = every part unknown.
 	admin *adminSource
+	// The project switch (project-switch note): the target's keys on this
+	// broker, and the broker's projects (/project's completions).
+	projectHasKeys func(ctx context.Context, project string) (bool, error)
+	listProjects   func(ctx context.Context) ([]string, error)
 	// files is where the compose window's @ lists from; nil = no checkout
 	// and no home on this machine (compose-at-file).
 	files *atSource
@@ -192,6 +196,10 @@ type Model struct {
 	// exitNote is printed once busmon has left the screen (the open
 	// project deleted, projects-admin §5.2.3).
 	exitNote string
+	// switchTo is the project busmon ends to re-execute on (main finishes
+	// the switch); knownProjects the broker's, for /project's completions.
+	switchTo      string
+	knownProjects []string
 }
 
 // newShell is the shell before its first poll and size.
@@ -212,7 +220,7 @@ func newShell(cfg shellConfig) Model {
 	return m
 }
 
-func (m Model) Init() tea.Cmd { return m.pollCmd(1) }
+func (m Model) Init() tea.Cmd { return tea.Batch(m.pollCmd(1), m.projectNamesCmd()) }
 
 // pollCmd runs today's pollOnce against the reader and returns its snapshot.
 func (m Model) pollCmd(tick int) tea.Cmd {
@@ -326,6 +334,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotRecap(msg)
 	case settingsMsg:
 		m.gotSettings(msg)
+	case switchCheckedMsg:
+		return m.gotSwitchChecked(msg)
+	case projectNamesMsg:
+		m.knownProjects = msg.names
 	case projectMemoryMsg:
 		m.gotMemory(msg)
 	case projectsMsg:
