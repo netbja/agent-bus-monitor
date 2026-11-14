@@ -54,6 +54,11 @@ type stallReader struct {
 	lastQuiet  *health.QuietAgentInput
 	lastReview *health.ReviewQueueInput
 	lastIdle   *health.IdleImplementerInput
+	lastDrift  *health.PlanDriftInput
+	// planGit and fetchAge read the repository (plan-drift); nil: the
+	// service's working directory, read-only.
+	planGit  func(ctx context.Context, args ...string) (string, error)
+	fetchAge func(ctx context.Context) (time.Duration, error)
 	// implementers are the roles with the implement skill (idle-implementer);
 	// nil reads them from the role manifest.
 	implementers func() ([]string, error)
@@ -492,6 +497,8 @@ func (s *stallReader) stallWake(ctx context.Context, token, check string) error 
 		wakes = health.ReviewQueueWakes(*s.lastReview, s.escalateTo())
 	case check == "idle-implementer" && s.lastIdle != nil:
 		wakes = health.IdleImplementerWakes(*s.lastIdle, s.escalateTo())
+	case check == "plan-drift" && s.lastDrift != nil:
+		wakes = health.PlanDriftWakes(*s.lastDrift, s.escalateTo())
 	}
 	s.mu.Unlock()
 	for _, w := range wakes {
@@ -514,6 +521,7 @@ func stallChecks(s *stallReader) []dispatch.HealthCheck {
 		healthOutcomeTask("team-stall", s.teamStall),
 		healthOutcomeTask("review-queue", s.reviewQueue),
 		healthOutcomeTask("idle-implementer", s.idleImplementer),
+		healthOutcomeTask("plan-drift", s.planDrift),
 	}
 }
 

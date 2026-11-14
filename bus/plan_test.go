@@ -7,7 +7,7 @@ import (
 )
 
 func cleanPlan(t *testing.T, b *Bus) {
-	t.Cleanup(func() { b.r.Del(context.Background(), PlanKey(b.Project()), PlanFactsKey(b.Project())) })
+	t.Cleanup(func() { b.r.Del(context.Background(), PlanKey(b.Project()), PlanFactsKey(b.Project()), PlanIgnoreKey(b.Project())) })
 }
 
 func TestPlanLoadIsRefusedForAnUnknownProject(t *testing.T) {
@@ -172,5 +172,51 @@ func TestPlanLinkRef(t *testing.T) {
 		if err := b.PlanLinkRef(ctx, "a", bad); err == nil {
 			t.Errorf("ref %q accepted", bad)
 		}
+	}
+}
+
+// plan ignore <pr> (plan-drift): a PR master says belongs to no task (notes,
+// a release, a hotfix) warns no more. It needs a plan, and a new load or a
+// clear drops it with the plan (its merges came before the new load).
+func TestPlanIgnore(t *testing.T) {
+	b := dialTest(t)
+	cleanPlan(t, b)
+	ctx := context.Background()
+	if err := b.PlanIgnore(ctx, 458); err == nil || !strings.Contains(err.Error(), "no plan is loaded") {
+		t.Fatalf("no plan: %v", err)
+	}
+	if _, err := b.Status(ctx, "master", "idle", "x", AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.LoadPlan(ctx, "p.json", "abc", []byte(`{}`), []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, pr := range []int{458, 460, 458} {
+		if err := b.PlanIgnore(ctx, pr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.PlanIgnore(ctx, 0); err == nil {
+		t.Fatal("PR 0 ignored")
+	}
+	got, err := b.PlanIgnored(ctx)
+	if err != nil || len(got) != 2 || !got[458] || !got[460] {
+		t.Fatalf("ignored %v %v", got, err)
+	}
+	if err := b.LoadPlan(ctx, "p.json", "def", []byte(`{}`), []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := b.PlanIgnored(ctx); len(got) != 0 {
+		t.Fatalf("a new load kept %v", got)
+	}
+	b.PlanIgnore(ctx, 461)
+	if err := b.ClearPlan(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := b.PlanIgnored(ctx); len(got) != 0 {
+		t.Fatalf("a clear kept %v", got)
+	}
+	if c, k := ClassOf(b.Project(), PlanIgnoreKey(b.Project())); c != KeyRecord || k != "plan:ignore" {
+		t.Fatalf("class %v %q", c, k)
 	}
 }

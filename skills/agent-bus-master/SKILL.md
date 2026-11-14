@@ -339,6 +339,10 @@ The person cannot see the plan in your conversation; busmon shows it (`P`, the h
   --pr <n>|--ref <branch>@<sha>` only for a request opened another way; `agentbus plan done <task>` when the
   person says they merged it (or did their own step), `agentbus plan note <task> <text>` for a
   one-line note. A recorded done shows as `merged (recorded 2h ago)`: a claim with its age.
+  Health `plan-drift` wakes you when a merge since the plan's load is linked by no task (or came
+  from another branch than the task's): link it (`plan link <task> --pr <n>`), or, for a merge that
+  belongs to no task (notes, a release, a hotfix), `agentbus plan ignore <pr>`. It reads local git:
+  `unknown` means origin/main was not fetched in the last hour.
 - A question to the person about a task names it: `agentbus ask master --task <plan-task> …`.
   The plan matches asks by that field only, never by the words.
 - A task added or dropped is a new commit and a new `plan load`; facts of the tasks kept stay.
