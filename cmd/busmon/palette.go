@@ -104,6 +104,13 @@ func init() {
 		{Name: "set", Summary: "jump to a setting on the settings page", Key: ActSettings,
 			Args: []palArg{keyArg}, Run: (*Model).palSet},
 		{Name: "tour", Summary: "the first-launch tour again", KeyText: "F1 t", Aliases: []string{"t"}, Run: (*Model).palTour},
+		{Name: "project", Summary: "open another project of this broker in this busmon", Run: (*Model).palProject,
+			Args: []palArg{{Name: "project", Check: func(s string) error {
+				if !bus.ValidName(s) {
+					return fmt.Errorf("%q is not a project name", s)
+				}
+				return nil
+			}, Complete: func(m *Model) []string { return m.knownProjects }}}},
 		a("quit", "leave busmon", ActQuit, "q", "exit"),
 	}
 	paletteTable = append(paletteTable, classCRows()...)

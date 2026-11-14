@@ -22,6 +22,7 @@ import (
 
 // pickShell is the picker's model.
 type pickShell struct {
+	verb           string // what an open runs, as the person reads it: "agentbus up", or "opening" (newOpenHerePick)
 	dir            string
 	rows           []projlist.Row
 	filter, status string
@@ -66,7 +67,7 @@ type pickSpinMsg time.Time
 
 func newPickShell(ctx context.Context, dir string, rows []projlist.Row, listErr error, keys projlist.KeysFunc, run func(string) error) pickShell {
 	m := pickShell{dir: dir, rows: rows, checking: true, timeout: pickTimeout, list: &listState{}, keys: keys, run: run,
-		ctx: ctx, paint: newPainter(th), connFailed: func() error { return nil }}
+		ctx: ctx, paint: newPainter(th), connFailed: func() error { return nil }, verb: "agentbus up"}
 	m.list.SetHue(RoleAccent)
 	if listErr != nil {
 		m.status, m.statusErr = "cannot read "+dir+": "+listErr.Error(), true
@@ -119,7 +120,7 @@ func (m pickShell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pickUpMsg:
 		m.busy = ""
 		if msg.err != nil {
-			m.status, m.statusErr = fmt.Sprintf("agentbus up %s: %v", msg.name, msg.err), true
+			m.status, m.statusErr = fmt.Sprintf("%s %s: %v", m.verb, msg.name, msg.err), true
 			break
 		}
 		m.closed = true
@@ -247,7 +248,7 @@ func (m *pickShell) checked(msg pickCheckedMsg) tea.Cmd {
 		m.status, m.statusErr = fmt.Sprintf("cannot check %s on the broker: %v", msg.name, err), true
 		return nil
 	}
-	m.busy = "agentbus up " + msg.name
+	m.busy = m.verb + " " + msg.name
 	run, name := m.run, msg.name
 	return func() tea.Msg { return pickUpMsg{name: name, err: run(name)} }
 }

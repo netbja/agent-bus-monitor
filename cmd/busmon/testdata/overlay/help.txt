@@ -107,6 +107,7 @@ KEYS
   home end             the first or the last project
   enter                the selected project: every column, its streams, its pause or suspend record, its template and workspace
   Z                    put the selected project to sleep (agentbus suspend), or wake it when it is suspended (resume); asks first
+  o                    open the selected project in this busmon: it starts again on it (refused while a draft is open)
   x                    stop the selected project's services on this machine (agentbus down; deletes nothing); asks first
   b                    back the selected project up now (agentbus backup --project); the archive is the notice
   d del                delete the selected project's keys (refused while it is live; a backup offered first, its name typed)
@@ -200,6 +201,7 @@ COMMANDS
   /master <text>             a directive to master: ask for an agent's or master's action (w)
   /set [key]                 jump to a setting on the settings page (C)
   /tour                      the first-launch tour again (F1 t); also /t
+  /project <project>         open another project of this broker in this busmon
   /quit                      leave busmon (q); also /q, /exit
   /reload <role> [fresh]     restart an idle agent on its role, resuming its session (fresh: without)
   /pause <duration>          nobody is woken for that long
