@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r5, spec only (r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r6, spec only (r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -194,9 +194,42 @@ whatever binary is installed, only finds the snapshot and execs its restorer. An
 that predates the feature cannot run `--rollback`; the person runs the restorer path directly, and
 `--list` and the For you item print it.
 
-If the restorer itself cannot run (a broken build), the snapshot is plain files: `README` in the
-snapshot gives the manual steps. Copy the old binaries back beside the targets and rename them over,
-then `service restart`. The old binary then behaves as before the update.
+**If the restorer itself cannot run** (a broken build), the snapshot is plain files, and its
+`README` is a complete manual restore of **every** part.
+
+- **Written per snapshot.** The restorer writes the README from the manifest, so every path, rev,
+  hash, unit name and project in it is the snapshot's own. Nothing in it needs the new binary.
+- **The same order as the restorer**, and in particular **no old service is started while a
+  migrated broker is still in place**. Otherwise old binaries would run against a migrated
+  keyspace.
+
+The steps:
+
+1. **Stop:** `systemctl --user stop` (or `launchctl bootout`) each dispatch and missions unit the
+   update restarted. The units are listed by name. Agents keep running.
+2. **Binaries and tree:**
+   - `git -C <src>/repo worktree add <from-tree> <rev>` if the from tree is missing;
+   - then, for each binary, `cp <snapshot>/builds/<name> <target>.tmp` and `mv <target>.tmp <target>`.
+3. **Settings and skills:** each file with its recorded SHA-256 after the update, and the command
+   to check it (`sha256sum`, or `shasum -a 256` on macOS).
+   - A file whose hash still matches is copied back.
+   - A file that differs was changed by the person after the update; the README says to compare it
+     with the snapshot copy and keep the one they want.
+4. **Units:** copy each unit file back, then `systemctl --user daemon-reload` (or `launchctl
+   bootstrap`). **Do not start them yet.** The old holder build's unit is the exception: start it
+   if it is not active. It serves terminals, not the broker.
+5. **Broker, only when the manifest declares a migration:**
+   - suspend each migrated project and close its herdr workspace (§4.5 step 5);
+   - then run the **old** binary's own `agentbus restore <snapshot>/broker.tar… --project <p>
+     --force`, with the person's `y`. `restore` predates this feature, since the 2026-11-01 backup
+     spec.
+   - With no migration, the README says the broker is not touched.
+6. **Start** the dispatch and missions units, then check `agentbus health`.
+7. **Team:** `agentbus up <project> --resume` for each project whose roster in the snapshot has
+   roles that are not running. A running agent is never touched.
+
+A README whose steps cannot all be followed, such as a missing snapshot part, says so at its top.
+The manifest is then marked incomplete, and the restorer refuses it too.
 
 1. **Builds and tree:** the snapshot's binaries go back in place with `InstallFile` (copy beside,
    then rename). They are stamped with the from tree, which is still there (§4.1), so the binaries
@@ -209,7 +242,9 @@ then `service restart`. The old binary then behaves as before the update.
    The person decides; nothing is overwritten silently. Skills go back the same way.
 3. **Units:**
    - The dispatch and missions units are rewritten from the snapshot, then restarted one at a time
-     with the same health check.
+     with the same health check. A migrated project's units are rewritten but **not started**: it
+     stays suspended until its broker is restored (step 5) and the person resumes it. No old service
+     ever runs against a migrated keyspace.
    - The snapshot's holder build becomes current again. Its unit is started if it is not active,
      using the build copy in the snapshot if its binary directory was removed.
    - The newer build then drains, by the same rule as an upgrade.
@@ -342,6 +377,12 @@ format (the `.migrate` file says whether it does).
   - `--apply` runs from the staged binary and writes the snapshot with its restorer;
   - `--restore` runs from the snapshot's restorer;
   - a manifest with an unknown format version is refused.
+- **README fallback:**
+  - Generated for a migrating and a non-migrating snapshot, its commands are run by a test
+    harness with fake `systemctl` and `launchctl` and a disposable Redis.
+  - The resulting state equals the restorer's on the same snapshot: binaries, tree, settings,
+    units, broker keys and the roster brought back.
+  - No old service starts before the broker step.
 - **First upgrade from a pre-feature binary:**
   - a stub old `agentbus` with no `update` command;
   - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
