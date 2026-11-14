@@ -2,12 +2,16 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13, revision 25
-  on 2026-11-14
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13, revisions 25
+  and 26 on 2026-11-14
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
+- Revision 26 (correction): the SIGHUP requirement on the holder and `service supervise`, moved
+  here from the quiet-update spec (r12, §4.5.3 step 4) at the person's request (task
+  `quiet-update-r13`): a process started with SIGHUP ignored (by `nohup`, the manual restore's
+  start) must not hand the ignore down to the agents (§4.4b, §8)
 - Revision 25 (correction): foureyes on step 5d (0ceba37e): "stops reading the viewers'
   sockets" deadlocked the hold — a viewer's Release, Discard and Detach travel on the same socket,
   behind its data. Master's decision (option a): the holder never stops reading a viewer; past
@@ -730,9 +734,29 @@ With `none`:
 - **What does not exist without a manager.** No start at login (`services.start_at_login` is
   refused with the reason), and whether the processes survive a logout depends on the system
   (logind with `KillUserProcesses=yes` ends them). Both are stated by `agentbus service status`.
+- **SIGHUP: a handler for life, in the holder and the supervisor** (revision 26). A supervisor
+  may be started with SIGHUP **ignored**: the quiet-update spec's manual restore starts one with
+  `nohup`, as stock macOS has no `setsid` command. An ignored signal survives `exec`, so without a
+  handler the holder and every agent it starts would inherit it, and the holder's `Close` (SIGHUP,
+  then SIGKILL after the grace) and the PTY hangup of a dead holder would no longer end an agent
+  gracefully. So `agentbus holder` and `agentbus service supervise` each install a SIGHUP handler
+  at start (`signal.Notify`) and keep it for their whole life; both treat SIGHUP as nothing. A
+  process with a handler execs its children with SIGHUP at its default, whatever the launching
+  shell did. The `os/signal` documentation states it: "If the program was started with SIGHUP or
+  SIGINT ignored, and Notify is called for either signal, a signal handler will be installed for
+  that signal and it will no longer be ignored"; `Reset`, `Ignore`, or `Stop` on every channel
+  puts the ignore back, hence "for their whole life". Measured with go1.26 on Linux under `nohup`:
+  without `Notify` a child shows `SigIgn ...01`, with it `...00`. Today's holder
+  (`cmd/agentbus/holdercmd.go`) handles only SIGINT and SIGTERM. No release has a holder yet
+  (v0.28.0), so the handler goes in before the first one.
 - Tests: the supervisor's restart, burst and exit-0 rules with a scripted program; the
   process-group kill skips a reused pid; `up` twice starts one supervisor; an upgrade starts a
-  second supervisor and leaves the first.
+  second supervisor and leaves the first. SIGHUP: a supervisor started under `nohup` starts a
+  holder whose scripted agent has SIGHUP at its default (on Linux, bit 1 of `SigIgn` in
+  `/proc/<pid>/status` is clear); on both systems, the holder's `Close` ends that agent within
+  the grace by SIGHUP (its wait status says so), not by the SIGKILL. On macOS the behavioural
+  check is the assertion, as stock `ps` has no ignored-signal keyword. A holder or supervisor
+  built without the handler fails it.
 
 ### 4.5 The focus rule and drafts, restated for a host without focus
 
