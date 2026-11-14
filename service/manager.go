@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"github.com/netbja/agent-bus-monitor/config"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,18 +72,33 @@ func CommandRunner(bin string) Runner {
 	}
 }
 
-// Detect finds the manager to use: AGENTBUS_SERVICE_MANAGER (systemd, launchd
-// or none) forces one; otherwise systemd --user on Linux when its user
-// instance answers, launchd on macOS. With none, why says what is missing,
-// for the explicit fallback to herdr tabs.
+// ManagerChoice is the machine's services.manager: the environment, then
+// config.toml, then auto (herdr exit, spec 4.4b).
+func ManagerChoice(getenv func(string) string) string {
+	r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
+	return r.String("services.manager")
+}
+
+// managerReason names where a forced choice came from, for why.
+func managerReason(getenv func(string) string, choice string) string {
+	if env := config.EnvName("services.manager"); getenv(env) == choice {
+		return env + "=" + choice
+	}
+	return "services.manager = " + choice + " (config.toml)"
+}
+
+// Detect finds the manager to use: services.manager (systemd, launchd or
+// none) forces one; auto is systemd --user on Linux when its user instance
+// answers, launchd on macOS. With none, why says what is missing, for the
+// explicit fallback to herdr tabs.
 func Detect(goos string, run Runner, getenv func(string) string) (m Manager, why string) {
 	paths, err := PathsFrom(getenv)
 	if err != nil {
 		return nil, err.Error()
 	}
-	switch getenv("AGENTBUS_SERVICE_MANAGER") {
+	switch choice := ManagerChoice(getenv); choice {
 	case "none":
-		return nil, "AGENTBUS_SERVICE_MANAGER=none"
+		return nil, managerReason(getenv, choice)
 	case "systemd":
 		goos = "linux"
 	case "launchd":
@@ -105,23 +121,23 @@ func Detect(goos string, run Runner, getenv func(string) string) (m Manager, why
 }
 
 // Local is the manager a check may trust (reviewer-codex): nil without an
-// error only when the person chose none (AGENTBUS_SERVICE_MANAGER=none); a
-// manager that cannot be reached, or a system with none, is an error, never
-// "no unit here".
+// error only when the person chose none (services.manager); a manager that
+// cannot be reached, or a system with none, is an error, never "no unit
+// here".
 func Local(goos string, run Runner, getenv func(string) string) (Manager, error) {
 	m, why := Detect(goos, run, getenv)
 	switch {
 	case m != nil:
 		return m, nil
-	case getenv("AGENTBUS_SERVICE_MANAGER") == "none":
+	case ManagerChoice(getenv) == "none":
 		return nil, nil
 	}
-	return nil, errors.New(why + "; AGENTBUS_SERVICE_MANAGER=none says this machine runs no services")
+	return nil, errors.New(why + "; services.manager = none (" + config.EnvName("services.manager") + "=none) says this machine runs no services")
 }
 
 // ManagerBin is the CLI Detect's runner should call on goos.
 func ManagerBin(goos string, getenv func(string) string) string {
-	switch getenv("AGENTBUS_SERVICE_MANAGER") {
+	switch ManagerChoice(getenv) {
 	case "systemd":
 		goos = "linux"
 	case "launchd":

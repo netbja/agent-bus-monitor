@@ -33,6 +33,9 @@ type Config struct {
 	OSC52       bool          // attach.osc52: pass OSC 52 to viewers (default off, spec 4.6)
 	SubmitWait  time.Duration // dispatch.submit_wait, default 2 s
 	PersonQuiet time.Duration // dispatch.person_quiet, default 3 s
+	// Pgids is the record of the terminals' process groups (PgidsPath), for
+	// a supervisor without a cgroup (spec 4.4b); "" keeps none.
+	Pgids string
 
 	// ancestors is dispatch.Ancestors; procStart dispatch.ProcStart (tests
 	// replace them).
@@ -423,7 +426,9 @@ func (s *Server) start(f Start) Reply {
 	go t.replyLoop()
 	sig, sigOK := agentstate.Signatures()[t.profile]
 	go t.leftBehindLoop(sig, sigOK)
+	t.onEnd = s.recordGroups
 	go t.waitLoop()
+	s.recordGroups()
 	info := t.info(s.cfg.Build)
 	return Reply{Term: &info}
 }
