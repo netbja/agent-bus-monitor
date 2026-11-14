@@ -63,7 +63,7 @@ func TestSupervisorGivesUpAfterTheBurst(t *testing.T) {
 	if !gaveUp || runs() != 5 {
 		t.Fatalf("gave up %v after %d runs", gaveUp, runs())
 	}
-	if len(c.sleeps) != 4 || c.sleeps[0] != 2*time.Second {
+	if len(c.sleeps) != 5 || c.sleeps[0] != 2*time.Second { // the burst is judged at the next start's real time
 		t.Fatalf("sleeps %v", c.sleeps)
 	}
 	if len(exits) != 5 || exits[0] != 1 {
@@ -118,5 +118,24 @@ func TestSupervisorStopsItsService(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(mark); strings.TrimSpace(string(b)) != "term" {
 		t.Fatalf("the service got no SIGTERM: %q", b)
+	}
+}
+
+// The burst is judged when the next start would really happen, not at a
+// projected time: a sleep that overruns until the oldest start left the
+// window lets the service start again (reviewer-codex).
+func TestSupervisorJudgesTheBurstAtTheRealStart(t *testing.T) {
+	cmd, runs := script(t, 1, 1, 1, 1, 1, 0)
+	c := &fakeClock{now: time.Unix(1000, 0), step: 60 * time.Second} // starts at 0, 60, 120, 180, 240
+	sleep := func(ctx context.Context, d time.Duration) bool {
+		if len(c.sleeps) == 4 { // the fifth wait overruns to t=300+: the start at 0 has left the window
+			c.sleeps = append(c.sleeps, d)
+			c.now = time.Unix(1000+301, 0)
+			return true
+		}
+		return c.Sleep(ctx, d)
+	}
+	if gaveUp := (Supervisor{Command: cmd, Now: c.Now, Sleep: sleep}).Run(context.Background()); gaveUp || runs() != 6 {
+		t.Fatalf("gave up %v after %d runs", gaveUp, runs())
 	}
 }
