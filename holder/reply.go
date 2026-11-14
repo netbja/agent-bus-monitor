@@ -44,6 +44,9 @@ type TermInfo struct {
 	Exit     *int   `json:"exit,omitempty"` // the program's exit status once it ended (-1: by a signal)
 	Viewers  int    `json:"viewers"`
 	Build    string `json:"build"`
+	// Profile is the client's agentstate profile (claude, codex, …; "" none):
+	// agentbus attach gates its prefix on it (spec 4.6).
+	Profile string `json:"profile,omitempty"`
 }
 
 // ScreenInfo is a terminal's screen.

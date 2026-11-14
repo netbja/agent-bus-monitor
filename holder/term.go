@@ -140,7 +140,7 @@ func (t *terminal) waitLoop() {
 func (t *terminal) info(build string) TermInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build}
+	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build, Profile: t.profile}
 }
 
 // signal sends sig to pid (negative: a process group), through the

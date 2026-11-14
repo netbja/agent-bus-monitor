@@ -124,3 +124,22 @@ func (cl *Client) Call(req any) (Reply, error) {
 
 // Close ends the connection.
 func (cl *Client) Close() error { return cl.c.Close() }
+
+// After an Attach call the connection is the terminal's stream (spec 4.6):
+// data frames both ways, control frames for the rest.
+
+// ReadFrame reads the stream's next frame: the program's output (FrameData)
+// or a control frame (a hold notice).
+func (cl *Client) ReadFrame() (byte, []byte, error) { return ReadFrame(cl.c) }
+
+// SendData sends the person's keys to the program.
+func (cl *Client) SendData(b []byte) error { return WriteFrame(cl.c, FrameData, b) }
+
+// SendControl sends a control frame: Resize, Focus, Release, Discard, Detach.
+func (cl *Client) SendControl(v any) error {
+	b, err := EncodeControl(v)
+	if err != nil {
+		return err
+	}
+	return WriteFrame(cl.c, FrameControl, b)
+}
