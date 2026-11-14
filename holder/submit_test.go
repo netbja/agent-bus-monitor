@@ -500,3 +500,19 @@ func TestHoldRefusesAfterARefusal(t *testing.T) {
 		t.Fatalf("delivered %q", b)
 	}
 }
+
+// A viewer is at the terminal from the moment its Attach is answered: a
+// submit sent right after the answer is refused, whatever runs between the
+// answer and the stream (holder-submit-flake: the reply went out before the
+// viewer was registered, and a wake slipped through 1 run in 100).
+func TestSubmitRefusesAViewerJustAttached(t *testing.T) {
+	sock := submitHolder(t, func(c *Config) {
+		c.afterAttachReply = func() { time.Sleep(200 * time.Millisecond) }
+	})
+	cl := dial(t, sock)
+	startFake(t, cl, "fake")
+	attached(t, sock, Attach{Term: "t1", Cols: 200, Rows: 30})
+	if _, err := cl.Call(wake("a1b2c3")); codeOf(err) != CodePersonActive {
+		t.Fatalf("a viewer just attached: %v", err)
+	}
+}
