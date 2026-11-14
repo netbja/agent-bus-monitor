@@ -168,7 +168,8 @@ func runAttach(s attachSession) error {
 
 	var heldMu sync.Mutex
 	ended := make(chan error, 1)
-	go func() { // the program's output, and the holder's notices
+	var focus focusWatch // the program's focus-reporting resets, across frames
+	go func() {          // the program's output, and the holder's notices
 		for {
 			typ, b, err := cl.ReadFrame()
 			if err != nil {
@@ -177,7 +178,7 @@ func runAttach(s attachSession) error {
 			}
 			if typ == holder.FrameData {
 				write(b)
-				if turnsFocusOff(b) {
+				if focus.Feed(b) {
 					write([]byte("\x1b[?1004h"))
 				}
 				continue
