@@ -231,7 +231,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   reads, a kitty release or repeat of it dropped; a lone ESC goes after 30 ms. Attach asks the outer
   terminal for focus reports (`?1004h`) and turns `ESC[I`/`ESC[O` into `holder.Focus`, never keys:
   the holder's person-active judgement sees a blur (reviewer-codex); a program that enabled focus
-  reporting gets none through attach. **Gated per
+  reporting gets none through attach, and one that turns it off (`?1004l` in its output) has it
+  turned back on at once. In kitty mode the repeat or release of the key that ended a pending
+  prefix is dropped too (foureyes). **Gated per
   client**: the client profiles' `[keys]` table records `free`/`bound` per key as step 3 settled
   it (claude and grok: `f12` free, verified offline; every other is unknown until the
   `term record <client> f12-at-input` probe is run and recorded); bound is refused naming the
