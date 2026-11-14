@@ -347,3 +347,18 @@ func TestClaudeProbeLeavesTheOtherReadersAlone(t *testing.T) {
 		t.Errorf("quota.claude.probe on: probe %+v, want the claude on PATH", p)
 	}
 }
+
+// A statusline file holding no windows ("{}") reads as an empty store, not a
+// nil map the probe's windows would panic on (foureyes).
+func TestClaudeReaderProbeOverAnEmptyStatuslineFile(t *testing.T) {
+	bin, _ := fakeClaude(t, "normal")
+	now := time.Unix(1794690000, 0)
+	cache := filepath.Join(t.TempDir(), "sl.json")
+	if err := os.WriteFile(cache, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := ClaudeReader{Cache: cache, Transcripts: t.TempDir(), Now: func() time.Time { return now }, Probe: probeAt(t, bin, now)}.Read(context.Background())
+	if err != nil || r.Source != "cli-usage" || len(r.Windows) != 3 {
+		t.Fatalf("%+v %v", r, err)
+	}
+}

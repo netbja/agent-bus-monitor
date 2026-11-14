@@ -235,7 +235,7 @@ func (c ClaudeReader) Read(ctx context.Context) (Reading, error) {
 	stored := map[string]storedWindow{}
 	if b, err := os.ReadFile(c.Cache); err == nil {
 		var st claudeStore
-		if json.Unmarshal(b, &st) == nil {
+		if json.Unmarshal(b, &st) == nil && st.Windows != nil { // "{}" holds none: kept empty, never nil (foureyes)
 			stored = st.Windows
 		}
 	}
