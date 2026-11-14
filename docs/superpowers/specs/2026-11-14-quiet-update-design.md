@@ -330,6 +330,10 @@ reads the migrated format (the `.migrate` file says whether it does).
 - **Commands for this host's service mode only,** taken from the snapshot: the README never lists
   a command the host cannot run.
 - **Hash commands:** `sha256sum` on Linux, `shasum -a 256` on macOS; `test -e` for `absent`.
+- **Portable commands only:** besides the service manager's own (`systemctl`, `launchctl`) and the
+  old `agentbus`, the README uses only commands stock Linux and stock macOS both have: `cp`, `mv`,
+  `rm`, `mkdir`, `chmod`, `printf`, `test`, `ps`, `kill`, `nohup`, `git`, and the hash command
+  above. No `setsid`, no GNU-only flags.
 
 The steps (R*n* is restorer step *n*):
 
@@ -363,8 +367,12 @@ The steps (R*n* is restorer step *n*):
      <datadir>/agentbus/holder/<key>/agentbus`, `chmod 700` it, and write the build's raw id
      (printed in the README) to `<datadir>/agentbus/holder/<key>/build-raw`;
    - start it: systemd `systemctl --user start <holder unit>`; launchd `launchctl bootstrap
-     gui/<uid> <plist>`; `none` `setsid <datadir>/agentbus/holder/<key>/agentbus service supervise
-     holder <p> <key> >> <log> 2>&1 < /dev/null &` (herdr exit §4.4b's supervisor).
+     gui/<uid> <plist>`; `none` `nohup <datadir>/agentbus/holder/<key>/agentbus service supervise
+     holder <p> <key> >> <log> 2>&1 < /dev/null &` (herdr exit §4.4b's supervisor). `none` runs on
+     macOS by choice too, and stock macOS has no `setsid` command, so the README uses `nohup`, on
+     both systems. The supervisor is then not a session leader, as `up` makes it, but it ignores
+     the hangup when the person's terminal closes, and the shell's background job keeps it out of
+     the terminal's Ctrl-C. It ends at the next `agentbus down`, like any supervisor.
 
    Every name, key, raw id and path is written into the README by the restorer; none comes from
    a command the old binary may lack.
@@ -535,6 +543,8 @@ scheduler is, and its fallback is above.
   - An old holder build gc'd before the rollback (binary directory and unit removed): the README
     and the restorer both put the binary copy, `build-raw` and the unit back, and the old holder
     runs again, in each service mode.
+  - Every command the README names is in the portable list (§4.5.3), checked for a Linux and a
+    macOS snapshot; the `none` harness runs with a PATH that has no `setsid`.
 - **First upgrade from a pre-feature binary:**
   - a stub old `agentbus` with no `update` command;
   - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
@@ -583,7 +593,9 @@ None. The person answered r11's two (§2 decision 6; §6).
     exist; R4 in both the restorer and the README puts back an old holder build gc'd after its
     drain (binary copy, `build-raw`, unit), with a test.
   - (reviewer-codex on r12) §4.5.1 states only the target live test, the four checks; the note
-    on today's herdr workspace check is gone.
+    on today's herdr workspace check is gone;
+  - (reviewer-codex on r12) the README starts a `none` supervisor with `nohup`, not `setsid`, which
+    stock macOS lacks; the README keeps to a list of portable commands, with a test.
 - **r11:** files and skill directories the update creates or deletes, journalled with `absent`
   (foureyes on r9).
 - **r10:** the journal's guarantee is a process crash or kill; power loss is out of scope, with
