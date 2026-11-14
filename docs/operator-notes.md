@@ -311,7 +311,8 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   6c2: `holder.Supervised` is the holder's `service.HolderManager` without a manager. Its "unit" is a
   record, `<rundir>/agentbus/<p>/holder-<key>.pid` (0600, read like the group record): `InstallHolder`
   writes project, build key, raw id, env file, working directory and binary copy (another raw id for a
-  key is refused, S7); `StartHolder`, under a `flock` on `holder-<key>.lock` (two `up` start one),
+  key is refused, S7); `StartHolder`, under a `flock` on `holder-<key>.lock` (two `up` start one; the lock file is never
+  removed, even by `RemoveHolder`, so every waiter shares one inode: reviewer-codex),
   spawns `<binary copy> --project <p> service supervise holder <p> <key>` in its own session (`setsid`),
   output appended to `<state>/agentbus/logs/<p>-holder.log`, and records its pid and start time. A
   supervisor is alive only while that pid holds that start time (a reused pid, a zombie: gone);

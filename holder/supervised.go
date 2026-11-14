@@ -102,7 +102,9 @@ func (m Supervised) alive(r supervisedRecord) (bool, error) {
 
 // lock holds an exclusive lock on the build's record while a start, an
 // install or a removal reads and rewrites it: two `up` at once start one
-// supervisor.
+// supervisor. The lock file is never removed, not even with the record: its
+// inode must stay the one every waiter queues on (an empty 0600 file per
+// build in the run directory, gone with it).
 func (m Supervised) lock(project, key string) (func(), error) {
 	path, err := m.recordPath(project, key)
 	if err != nil {
@@ -289,7 +291,9 @@ func (m Supervised) RemoveHolder(project, key string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	_ = os.Remove(strings.TrimSuffix(path, ".pid") + ".lock")
+	// The lock file stays (reviewer-codex): a start queued on its inode
+	// must share it with every later install and start. Unlinked, a new
+	// file at the same path would let two of them each find no supervisor.
 	return nil
 }
 

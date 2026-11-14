@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -21,7 +22,9 @@ import (
 // spawns: what is alive is judged on real /proc entries.
 type supervisedFixture struct {
 	m      Supervised
+	mu     sync.Mutex
 	spawns []string // the argv of each spawn, joined
+	pids   []int
 	env    string
 	dir    string
 }
@@ -42,6 +45,8 @@ func newSupervised(t *testing.T) *supervisedFixture {
 		Paths:  paths,
 		Getenv: envOf(map[string]string{"XDG_RUNTIME_DIR": xdg}),
 		Spawn: func(argv []string, dir, log string) (int, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
 			f.spawns = append(f.spawns, strings.Join(argv, " "))
 			c := exec.Command("sleep", "60")
 			c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -50,6 +55,7 @@ func newSupervised(t *testing.T) *supervisedFixture {
 			}
 			t.Cleanup(func() { _ = c.Process.Kill(); _ = c.Wait() })
 			go func() { _ = c.Wait() }()
+			f.pids = append(f.pids, c.Process.Pid)
 			return c.Process.Pid, nil
 		},
 		StopWait: 3 * time.Second,
@@ -331,5 +337,58 @@ func TestSupervisedRealSpawnAndStop(t *testing.T) {
 	}
 	if st, err := os.Stat(log); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf("log mode %v %v", st.Mode(), err)
+	}
+}
+
+// The lock file is never unlinked (reviewer-codex): a start queued on its
+// inode during a removal must share it with every later install and start,
+// or two of them could each find no supervisor and both spawn one.
+func TestSupervisedRemoveKeepsTheLockInode(t *testing.T) {
+	f := newSupervised(t)
+	key := f.install(t, "demo", "v1.0.0")
+	path, _ := f.m.recordPath("demo", key)
+	lock := strings.TrimSuffix(path, ".pid") + ".lock"
+	before, err := os.Stat(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.m.RemoveHolder("demo", key); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(lock)
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatalf("the lock's inode changed across a removal: %v", err)
+	}
+}
+
+// Removals, installs and starts of one build racing (a gc beside an up):
+// never more than one supervisor alive.
+func TestSupervisedRacingRemoveInstallStartKeepOne(t *testing.T) {
+	f := newSupervised(t)
+	key := f.install(t, "demo", "v1.0.0")
+	spec := service.HolderSpec{Project: "demo", Raw: "v1.0.0", EnvFile: f.env, WorkDir: f.dir, Paths: f.m.Paths}
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 15; i++ {
+				_ = f.m.RemoveHolder("demo", key)
+				_, _ = f.m.InstallHolder(spec)
+				_ = f.m.StartHolder("demo", key)
+			}
+		}()
+	}
+	wg.Wait()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	alive := 0
+	for _, pid := range f.pids {
+		if _, err := procStartOf(pid); err == nil {
+			alive++
+		}
+	}
+	if alive > 1 {
+		t.Fatalf("%d supervisors alive for one build (%d spawned)", alive, len(f.pids))
 	}
 }
