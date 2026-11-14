@@ -221,6 +221,38 @@ func turnsFocusOff(b []byte) bool {
 
 var decPrivateReset = regexp.MustCompile(`\x1b\[\?([0-9;]*)l`)
 
+// focusWatch is turnsFocusOff across output frames: a frame is one PTY read,
+// so the program's CSI ? … 1004 … l may be split between two (reviewer-codex).
+// The incomplete CSI at a frame's end is kept and read with the next one.
+type focusWatch struct{ tail []byte }
+
+// focusWatchMax bounds the kept tail: a reset is a few bytes, and a run of
+// parameters that never ends is not one.
+const focusWatchMax = 64
+
+// Feed reads one frame; true when it completes a reset of focus reporting.
+func (w *focusWatch) Feed(b []byte) bool {
+	data := append(w.tail, b...)
+	w.tail = nil
+	found := turnsFocusOff(data)
+	// Keep an escape sequence still open at the end (ESC, ESC [, or ESC [ ?
+	// and parameters, no final byte yet).
+	if i := bytes.LastIndexByte(data, 0x1b); i >= 0 {
+		rest := data[i:]
+		open := len(rest) == 1 || rest[1] == '['
+		for _, c := range rest[min(2, len(rest)):] {
+			if c >= 0x40 && c <= 0x7e { // a final byte: complete
+				open = false
+				break
+			}
+		}
+		if open && len(rest) <= focusWatchMax {
+			w.tail = append([]byte(nil), rest...)
+		}
+	}
+	return found
+}
+
 // plainKey is the letter a unit types, legacy or kitty (CSI <code> u, no
 // modifier, a press); 0 for anything else.
 func plainKey(u []byte) byte {
