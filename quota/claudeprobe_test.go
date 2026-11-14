@@ -81,13 +81,17 @@ func TestParseClaudeUsageLimitsOnly(t *testing.T) {
 // error answer: no window, a note saying why.
 func TestParseClaudeUsageNothing(t *testing.T) {
 	for name, body := range map[string]string{
-		"not available": `{"subscription_type":null,"rate_limits_available":false,"rate_limits":null}`,
-		"unknown":       `{"something_else":{"a":1}}`,
-		"not json":      `get_usage is not supported in this context`,
+		"not available":                 `{"subscription_type":null,"rate_limits_available":false,"rate_limits":null}`,
+		"not available, windows anyway": `{"rate_limits_available":false,"rate_limits":{"five_hour":{"utilization":3,"resets_at":"2026-11-14T22:50:00Z"}}}`,
+		"unknown":                       `{"something_else":{"a":1}}`,
+		"not json":                      `get_usage is not supported in this context`,
 	} {
 		ws, note := parseClaudeUsage([]byte(body))
 		if len(ws) != 0 || note == "" {
 			t.Errorf("%s: windows %+v note %q", name, ws, note)
+		}
+		if strings.HasPrefix(name, "not available") && !strings.Contains(note, "no rate limits") {
+			t.Errorf("%s: note %q does not say the account has no rate limits", name, note)
 		}
 	}
 }
