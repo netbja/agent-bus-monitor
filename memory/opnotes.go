@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -22,6 +24,9 @@ import (
 const (
 	NotesDir  = "docs/operator-notes.d"
 	NotesFile = "docs/operator-notes.md"
+	// notesStamp is the hash of the file mem notes last wrote: a file that
+	// no longer has it was edited by hand (foureyes).
+	notesStamp = "_assembled.sha256"
 )
 
 // fragmentName is a fragment's name: a migrated one's number and slug, or a
@@ -44,7 +49,7 @@ func AssembleNotes(root string) (string, error) {
 	}
 	var names []string
 	for _, e := range entries {
-		if e.Name() == "_header.md" {
+		if strings.HasPrefix(e.Name(), "_") { // the header (read above) and the stamp
 			continue
 		}
 		if e.IsDir() || !fragmentName.MatchString(e.Name()) {
@@ -85,16 +90,55 @@ func checkFragment(s string) error {
 	return nil
 }
 
-// WriteNotes writes the assembled notes to root's NotesFile; it writes
-// nothing when they are already current.
+func digest(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
+
+// NotesCurrent is nil when root's NotesFile is what mem notes last wrote
+// (its hash is the stamp's), or does not exist yet; else the file was edited
+// by hand, which no PR does: the edit belongs in a fragment.
+func NotesCurrent(root string) error {
+	b, err := os.ReadFile(filepath.Join(root, NotesFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	stamp, err := os.ReadFile(filepath.Join(root, NotesDir, notesStamp))
+	if err != nil || strings.TrimSpace(string(stamp)) != digest(b) {
+		return fmt.Errorf("%s was edited by hand since the last agentbus mem notes: move the edit into its fragment in %s (git diff %s), put the file back, then run it again", NotesFile, NotesDir, NotesFile)
+	}
+	return nil
+}
+
+// WriteNotes writes the assembled notes to root's NotesFile and its stamp;
+// it writes nothing when they are already current, and refuses to overwrite
+// a file edited by hand (NotesCurrent): that edit would be lost.
 func WriteNotes(root string) (changed bool, err error) {
 	s, err := AssembleNotes(root)
 	if err != nil {
 		return false, err
 	}
 	path := filepath.Join(root, NotesFile)
-	if old, err := os.ReadFile(path); err == nil && string(old) == s {
-		return false, nil
+	old, err := os.ReadFile(path)
+	switch {
+	case err == nil && string(old) == s:
+		return false, writeStamp(root, s)
+	case err == nil:
+		if err := NotesCurrent(root); err != nil {
+			return false, err
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return false, err
 	}
-	return true, os.WriteFile(path, []byte(s), 0o644)
+	if err := os.WriteFile(path, []byte(s), 0o644); err != nil {
+		return false, err
+	}
+	return true, writeStamp(root, s)
+}
+
+func writeStamp(root, s string) error {
+	return os.WriteFile(filepath.Join(root, NotesDir, notesStamp), []byte(digest([]byte(s))+"\n"), 0o644)
 }

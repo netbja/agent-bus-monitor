@@ -85,4 +85,44 @@ func TestRepositoryNotesAssemble(t *testing.T) {
 	if !strings.HasPrefix(got, "# Operator notes\n") {
 		t.Fatalf("no header: %.80q", got)
 	}
+	// No PR edits the shared file: it is what the last mem notes wrote.
+	if err := NotesCurrent(".."); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The file is never edited by hand: mem notes keeps the hash of what it
+// wrote, and refuses to overwrite a file that no longer has it, so an edit
+// made there is never lost silently (foureyes); the hash file is no
+// fragment.
+func TestWriteNotesRefusesAHandEdit(t *testing.T) {
+	root := writeNotes(t, map[string]string{"_header.md": "# Operator notes\n\n", "0010-a.md": "- **A.** one\n"})
+	if _, err := WriteNotes(root); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, NotesFile)
+	if err := NotesCurrent(root); err != nil {
+		t.Fatalf("just written: %v", err)
+	}
+	os.WriteFile(path, []byte("# Operator notes\n\n- **A.** one\n- **Hand.** edited\n"), 0o644)
+	if err := NotesCurrent(root); err == nil || !strings.Contains(err.Error(), "by hand") {
+		t.Fatalf("a hand edit: %v", err)
+	}
+	if _, err := WriteNotes(root); err == nil {
+		t.Fatal("a hand edit was overwritten")
+	}
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "Hand") {
+		t.Fatal("the hand edit is gone")
+	}
+	// Moved into a fragment and the file put back, it assembles again.
+	os.WriteFile(filepath.Join(root, NotesDir, "hand-edit.md"), []byte("- **Hand.** edited\n"), 0o644)
+	os.WriteFile(path, []byte("# Operator notes\n\n- **A.** one\n"), 0o644)
+	if changed, err := WriteNotes(root); err != nil || !changed {
+		t.Fatalf("after the move: %v %v", changed, err)
+	}
+	// No file yet: written (a first assembly).
+	os.Remove(path)
+	if _, err := WriteNotes(root); err != nil {
+		t.Fatalf("no file: %v", err)
+	}
 }

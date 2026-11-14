@@ -24,8 +24,12 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - The operational guides, in English **and** in French when both exist (`*.md` /
      `*.fr.md`); keep them saying the same thing.
    - `CLAUDE.md` / `AGENTS.md`: only durable facts an agent needs; in a project that splits
-     them out, the architecture and operator notes they link (here `docs/architecture.md`,
-     `docs/operator-notes.md`).
+     them out, the architecture and operator notes they link (here `docs/architecture.md`, and
+     the operator notes as **fragments**: add `docs/operator-notes.d/<change>.md`, one bullet, or
+     edit the fragment that holds the bullet; never `docs/operator-notes.md` itself).
+   - **At a release only:** `go run ./cmd/agentbus mem notes` assembles `docs/operator-notes.md`
+     from its fragments (and its stamp); commit both in the release's docs PR. It refuses a file
+     edited by hand: move that edit into its fragment first.
 4. **Check before you deliver:**
    - every command you document runs;
    - every link resolves;
