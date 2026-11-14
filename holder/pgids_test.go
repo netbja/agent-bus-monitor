@@ -1,6 +1,7 @@
 package holder
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -237,4 +238,40 @@ func groupPids(t *testing.T, pid int) []int {
 		t.Fatal(err)
 	}
 	return []int{g}
+}
+
+// A kill that could not be done keeps the record, the only trace of the
+// groups to kill (reviewer-codex).
+func TestKillRecordedGroupsKeepsTheRecordOnAFailure(t *testing.T) {
+	run, err := os.MkdirTemp("", "hk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(run) })
+	os.Chmod(run, 0o700)
+	getenv := func(k string) string {
+		if k == "XDG_RUNTIME_DIR" {
+			return run
+		}
+		return ""
+	}
+	path, err := PgidsPath(getenv, "demo", "k1.0123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("100 5000\n200 6000\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	killGroup := func(pgid int, from uint64) (int, error) {
+		if pgid == 200 {
+			return 0, errors.New("pidfd_open: function not implemented")
+		}
+		return 1, nil
+	}
+	if n, err := KillRecordedGroups(getenv, "demo", "k1.0123456789", killGroup); err == nil || n != 1 {
+		t.Fatalf("%d %v", n, err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the record was removed after a failed kill: %v", err)
+	}
 }

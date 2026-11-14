@@ -83,8 +83,9 @@ func writePrivate(path, content string) error {
 // KillRecordedGroups hands each recorded group (its leader's pid and start
 // time) to killGroup — KillGroup in production, which decides process by
 // process — and returns the processes killed. The record is read from a
-// checked run directory, never through a symlink, and removed after; a line
-// it cannot read is skipped. No record: nothing, no error. Call it as soon as
+// checked run directory, never through a symlink, and removed after, unless
+// a kill failed (it is then kept and the error returned); a line it cannot
+// read is skipped. No record: nothing, no error. Call it as soon as
 // the holder's exit is seen: what started after that is not the holder's.
 func KillRecordedGroups(getenv func(string) string, project, key string, killGroup func(pgid int, leaderStart uint64) (int, error)) (int, error) {
 	path, err := PgidsPath(getenv, project, key)
@@ -129,8 +130,13 @@ func KillRecordedGroups(getenv func(string) string, project, key string, killGro
 	if err := sc.Err(); err != nil {
 		errs = append(errs, err)
 	}
+	if len(errs) > 0 {
+		// The record is the only trace of what is left to kill: kept, so the
+		// failure is seen and the kill can be done again (reviewer-codex).
+		return n, fmt.Errorf("%w (the record %s is kept)", errors.Join(errs...), path)
+	}
 	_ = os.Remove(path)
-	return n, errors.Join(errs...)
+	return n, nil
 }
 
 // KillGroup kills what is left of a dead holder's terminal group: the

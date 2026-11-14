@@ -4,6 +4,7 @@ package holder
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -23,6 +24,12 @@ import (
 // the leader's pid with another start time, the number is another's now and
 // nothing is touched. A member forked during the scan is found by the next
 // pass.
+
+// The pidfd calls (tests make them fail).
+var (
+	pidfdOpen = unix.PidfdOpen
+	pidfdSend = unix.PidfdSendSignal
+)
 
 // procEntry is what the kill needs of /proc/<pid>/stat.
 type procEntry struct {
@@ -106,16 +113,26 @@ func killPass(pgid int, from, to uint64, killed map[int]bool) (int, error) {
 		if err != nil || e.pgrp != pgid || e.start < from || e.start > to {
 			continue
 		}
-		fd, err := unix.PidfdOpen(pid, 0)
-		if err != nil {
+		fd, err := pidfdOpen(pid, 0)
+		if errors.Is(err, unix.ESRCH) {
 			continue // gone
+		}
+		if err != nil {
+			// No pidfd (a kernel before 5.3: ENOSYS), or refused: the kill
+			// cannot be done safely, never a silent skip (reviewer-codex).
+			return n, fmt.Errorf("holder: pidfd_open %d: %w", pid, err)
 		}
 		// The pin may have caught a process that took the pid after the scan:
 		// the same start time proves it is the one scanned.
 		if again, err := readEntry(pid); err == nil && again == e {
-			if unix.PidfdSendSignal(fd, unix.SIGKILL, nil, 0) == nil {
+			err := pidfdSend(fd, unix.SIGKILL, nil, 0)
+			switch {
+			case err == nil:
 				killed[pid] = true
 				n++
+			case !errors.Is(err, unix.ESRCH):
+				unix.Close(fd)
+				return n, fmt.Errorf("holder: pidfd_send_signal %d: %w", pid, err)
 			}
 		}
 		unix.Close(fd)
