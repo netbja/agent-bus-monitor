@@ -320,8 +320,9 @@ flashes and runs nothing: that is case 4.
     - case 4: `/zzz` + Enter runs nothing, flashes "no command matches", and the line still reads
       `/zzz`;
   - r9 keys: `/` on the panels opens the line with `/` (the same model state as Ctrl+P); `f` opens
-    the filter line; `f` on History opens History's filter; `G` resumes live with
-    `display.follow` off; `/follow` flips `display.follow` and its flash says the new value;
+    the filter line; `f` on History opens History's filter; `G` with
+    `display.follow` off jumps to the newest line and does **not** resume live (new lines are counted
+    after it); with it on, `G` resumes live as today; `/follow` flips `display.follow` and its flash says the new value;
   - `/R` + Enter opens the recap (case-sensitive letter alias);
   - the `master` row shows `w` with no ask open and no key with one open;
   - Ctrl+P from a page opens the line with `/`;
@@ -400,9 +401,12 @@ The person's corrections are made in this head:
   auto-scroll`, and the `case ActFollow` in `panelKey` goes. `G`/end (`ActLive`) still jumps to
   the newest line.
 - **What on and off mean** (answer d, recommended):
-  - **on**, today's behaviour: Activity scrolls with new lines. Moving up or the wheel pauses it for
-    the moment (the title counts `· N new`). `G`/end, or ↓ or the wheel back onto the newest line
-    (A3), resumes.
+  - **on**, today's behaviour: Activity scrolls with new lines. **Only a wheel scroll up pauses
+    it** for the moment (`listState.ScrollBy` with a negative delta; the title counts `· N new`).
+    Moving the selection, clicking or opening a line keeps it on (`listState.Move` never pauses;
+    OPERATIONAL-GUIDE "Activity auto-scroll"). Today `f` pauses it too; r9 removes `f`, so the wheel
+    is the only way left. `G`/end resumes (`Last` calls `Resume`), and so does ↓ onto the newest line
+    or the wheel back to the bottom while paused (A3).
   - **off:** Activity never scrolls by itself. New lines are counted, and the view stays.
     `G`/end jumps to the newest line once and stays put there. A3's automatic resume is off.
   - The title keeps saying which (`auto-scroll on` / `auto-scroll off · N new`), so the setting's
@@ -448,8 +452,10 @@ One PR from main, before class C (slice 2):
    - `ActFollow` removed, with its `panelKey` case.
 2. `config/keys.go`: `display.follow` (bool, default per answer a). `settings.go` reads it, the
    settings page shows it in display, and `applySettings` applies it.
-3. Activity's list: the start-up state and the A3 resume read `display.follow` (answer d); `G`
-   unchanged.
+3. Activity's list: the start-up state and the A3 resume read `display.follow` (answer d).
+   `G`/end jumps to the newest line. With follow on it resumes live as today (`Last` →
+   `Resume`); with follow off it does not resume. The view stays on the newest line, and lines
+   arriving after it are counted. So `Last` needs the setting, not just `Resume`.
 4. `palette.go`:
    - `follow` becomes a Run flipping the setting, alias `autoscroll` only;
    - `filter` gets the alias `f`, and its hint derives `f`.
