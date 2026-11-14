@@ -44,6 +44,18 @@ type MergeConflict struct {
 	Base   string `json:"base"`
 }
 
+// UnmarshalJSON also reads the field's first form, a bare PR number: a
+// conflict with no base named (reviewer-codex: a cache it wrote still reads).
+func (c *MergeConflict) UnmarshalJSON(b []byte) error {
+	var n int
+	if err := json.Unmarshal(b, &n); err == nil {
+		*c = MergeConflict{Number: n}
+		return nil
+	}
+	type plain MergeConflict
+	return json.Unmarshal(b, (*plain)(c))
+}
+
 // MergeQueueKey is {p}:mergequeue: the dispatch service's cache of the
 // derivation (a hash), replaced by every pass; runtime, not in projectKinds,
 // ignored by HasKeysBesidesDispatch.

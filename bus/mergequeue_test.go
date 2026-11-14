@@ -70,3 +70,18 @@ func TestMergeQueueKeyIsRuntime(t *testing.T) {
 		t.Fatalf("class %v", c)
 	}
 }
+
+// The first form of the field held bare PR numbers ([500]): read as conflicts
+// with no base named, never a corrupt record (reviewer-codex), so a cache
+// written by it still reads until the next success replaces it.
+func TestMergeQueueReadsBareConflictNumbers(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if err := b.r.HSet(ctx, MergeQueueKey(b.Project()), "items_at", "1", "items", "[]", "conflicting", "[500, 512]").Err(); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := b.MergeQueue(ctx)
+	if err != nil || len(rec.Conflicting) != 2 || rec.Conflicting[0] != (MergeConflict{Number: 500}) || rec.Conflicting[1] != (MergeConflict{Number: 512}) {
+		t.Fatalf("%+v %v", rec.Conflicting, err)
+	}
+}
