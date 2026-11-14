@@ -660,6 +660,7 @@ var commands = []cli.Command{
 			"mem check [--stale-after <dur>] [--strict]",
 			"mem new <lesson|decision|question> <slug> --title <title> [--scope <scope>] [--note-project <p>]",
 			"mem sync   (all: [--root <dir>])",
+			"mem notes   (assembles docs/operator-notes.md from docs/operator-notes.d/, at a release)",
 		},
 		Summary: "the repository's shared memory: check, new note, sync AGENTS.md",
 		Flags: []cli.Flag{

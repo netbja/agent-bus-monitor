@@ -90,6 +90,9 @@ Short forms; the full text, with the reasons, is in the two documents below.
   fails the suite.
 - **AGENTS.md carries a copy of the memory index**: edit `docs/memory/INDEX.md`, then run
   `agentbus mem sync`.
+- **No PR edits a shared notes file.** An operator note is a fragment: add
+  `docs/operator-notes.d/<task>.md` (one bullet), or edit the fragment that holds the bullet you change;
+  never `docs/operator-notes.md`, which `agentbus mem notes` assembles at a release.
 
 ## Where the rest lives
 
@@ -98,6 +101,7 @@ Moved unchanged from this file on 2026-11-06:
 - [docs/architecture.md](docs/architecture.md): Architecture (`bus/`, `dispatch/`, `mission/`,
   `plan/`, `bus/projects.go`), Stream layout, Budget vs usage, the `ValidAgents` allowlist, The two
   binaries (`agentbus`, `busmon`), and How the bus is actually consumed.
-- [docs/operator-notes.md](docs/operator-notes.md): Things that bite (services, installer, roles
+- [docs/operator-notes.md](docs/operator-notes.md) (as of the last release; newer notes in
+  [docs/operator-notes.d/](docs/operator-notes.d/)): Things that bite (services, installer, roles
   and launcher, settings, health, history, backups, notifications, quotas, asks, pause and suspend,
   fencing, versioning, request priority, merge queue, reports).

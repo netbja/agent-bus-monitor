@@ -75,6 +75,13 @@ When reporting a handoff, link the note you used or changed and disclose if it i
 still local/uncommitted. Do not claim all agents have read it merely because the
 file exists. The board remains the source for operational request states.
 
+## Operator notes
+
+No PR edits a shared notes file: an operator note is a fragment,
+`docs/operator-notes.d/<task>.md` (one bullet), or the fragment that already
+holds the bullet you change. `docs/operator-notes.md` is assembled from them at a
+release (`agentbus mem notes`); until then the newest notes are in the fragments.
+
 ## Code discovery
 
 Prefer codebase-memory-mcp over grep/glob for code discovery. Index the repository

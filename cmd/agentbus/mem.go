@@ -12,7 +12,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/memory"
 )
 
-const memUsage = `usage: agentbus mem check [--stale-after 60d] [--strict] | mem new <lesson|decision|question> <slug> --title "<title>" [--scope transferable] [--note-project P] | mem sync   (all: [--root DIR])`
+const memUsage = `usage: agentbus mem check [--stale-after 60d] [--strict] | mem new <lesson|decision|question> <slug> --title "<title>" [--scope transferable] [--note-project P] | mem sync | mem notes   (all: [--root DIR])`
 
 // runMem is `agentbus mem`: the shared-memory tooling. It reads and writes
 // files under the repository root only — no project, no broker — so main runs
@@ -55,7 +55,7 @@ func runMem(args []string, getenv func(string) string, cwd string, today time.Ti
 			return usage()
 		}
 		newOpts.Kind, newOpts.Slug, newOpts.Title = rest[0], rest[1], title
-	case "sync":
+	case "sync", "notes":
 		if len(rest) != 0 {
 			return usage()
 		}
@@ -107,6 +107,16 @@ func runMem(args []string, getenv func(string) string, cwd string, today time.Ti
 			fmt.Fprintln(stdout, "AGENTS.md: index block updated")
 		} else {
 			fmt.Fprintln(stdout, "AGENTS.md: index block already up to date")
+		}
+	case "notes": // at a release: the fragments, one per change, into the one file
+		changed, err := memory.WriteNotes(root)
+		if err != nil {
+			return fail(err)
+		}
+		if changed {
+			fmt.Fprintln(stdout, memory.NotesFile+": assembled from "+memory.NotesDir)
+		} else {
+			fmt.Fprintln(stdout, memory.NotesFile+": already up to date")
 		}
 	}
 	return 0
