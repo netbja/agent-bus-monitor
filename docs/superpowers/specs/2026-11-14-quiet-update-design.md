@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r6, spec only (r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r7, spec only (r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -144,6 +144,15 @@ neither write a snapshot nor restore one.
    - Install the role skills.
    - `config.toml` and the env files are touched only by a migration the release declares, and
      that is recorded in the manifest.
+   - **The written-files journal.** Each settings or skills file the update writes (step 4, or a
+     migration) is recorded in `<snapshot>/written.jsonl` **as soon as it is written**:
+     `{path, before, after}` with both SHA-256s, appended and fsynced before the next file is
+     touched.
+     - The snapshot's manifest holds the `before` hash of every file. The journal adds the `after`
+       hash of the files the update actually changed.
+     - A file the update never wrote has no journal line; its `after` is its `before`.
+     - When step 4 ends, and again before any rollback starts, the restorer regenerates the README
+       from the manifest and the journal. Its hashes are then those the update left.
 5. **Services,** one project at a time and one service at a time (dispatch, then missions).
    - `service restart`, then wait for `agentbus health` to show that service green within
      `updates.health_wait` (default 60 s).
@@ -210,11 +219,14 @@ The steps:
 2. **Binaries and tree:**
    - `git -C <src>/repo worktree add <from-tree> <rev>` if the from tree is missing;
    - then, for each binary, `cp <snapshot>/builds/<name> <target>.tmp` and `mv <target>.tmp <target>`.
-3. **Settings and skills:** each file with its recorded SHA-256 after the update, and the command
-   to check it (`sha256sum`, or `shasum -a 256` on macOS).
-   - A file whose hash still matches is copied back.
-   - A file that differs was changed by the person after the update; the README says to compare it
-     with the snapshot copy and keep the one they want.
+3. **Settings and skills:** each file with its `before` and `after` SHA-256 (manifest and
+   journal), and the command to check it (`sha256sum`, or `shasum -a 256` on macOS). Three cases:
+   - **current = after ≠ before:** the update changed it and nobody touched it since. It is copied
+     back.
+   - **current = before:** the update did not change it, or it was already put back. Nothing to
+     do.
+   - **any other hash:** the person changed it after the update. The README says to compare it with
+     the snapshot copy and keep the one they want. Nothing is copied.
 4. **Units:** copy each unit file back, then `systemctl --user daemon-reload` (or `launchctl
    bootstrap`). **Do not start them yet.** The old holder build's unit is the exception: start it
    if it is not active. It serves terminals, not the broker.
@@ -237,9 +249,15 @@ The manifest is then marked incomplete, and the restorer refuses it too.
    - The from tree is checked against the recorded rev.
    - A from tree that is missing or moved is recreated with `git worktree add` at that rev,
      **before** the binaries are swapped.
-2. **Settings:** each file goes back **only if it still has the hash the update left**. A file the
-   person changed after the update is kept as it is, and listed with the path of the snapshot copy.
-   The person decides; nothing is overwritten silently. Skills go back the same way.
+2. **Settings:** the same three cases as the README (below), on the manifest's `before` and the
+   journal's `after` hash.
+   - A file goes back **only when its current hash is the `after` the update left**.
+   - A file the person changed after the update (neither `before` nor `after`) is kept as it is,
+     and listed with the path of the snapshot copy. The person decides; nothing is overwritten
+     silently.
+   - Skills go back the same way.
+   - An interrupted update's journal stops at the last file written. Every file it lists has its
+     `after`; the others were never touched.
 3. **Units:**
    - The dispatch and missions units are rewritten from the snapshot, then restarted one at a time
      with the same health check. A migrated project's units are rewritten but **not started**: it
@@ -353,8 +371,15 @@ format (the `.migrate` file says whether it does).
     goes ahead.
 - **Automatic rollback:** a service that stays red after its restart rolls everything back, and
   the binaries are v1's again.
-- **Settings on rollback:** a file the person changed after the update is kept and listed; an
-  unchanged one is restored.
+- **Settings on rollback**, in both the restorer test and the README harness, with the same
+  results. Take a config that the snapshot records as h0, a migration that changes it to h1
+  (journal: before h0, after h1), and three cases:
+  - left at h1: restored to h0;
+  - edited by the person to h2: kept at h2 and listed;
+  - a file the update never wrote: untouched.
+
+  Plus an update interrupted after one of two files: the journal holds one line, and rollback
+  restores only that one.
 - **Team on rollback:** a role that died during the update is relaunched with its resume session.
   A running agent is not touched; the test checks that no Start or Close was sent for it.
 - **Broker:** with no `.migrate` file, rollback leaves the keyspace as it is. With one, it refuses
