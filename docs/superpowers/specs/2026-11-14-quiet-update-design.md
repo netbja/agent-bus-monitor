@@ -548,7 +548,6 @@ stamp, 2026-11-14, at `9479fc0b`). Each moves to Redis `TIME` in one small coder
 | `cmd/agentbus/main.go:711` | `{p}:usage` snapshot `ts` | `ServerNowMS` |
 | `cmd/agentbus/main.go:738` | `{p}:budget` snapshot `ts` | `ServerNowMS` |
 | `cmd/agentbus/pause.go:64` | `pause --for`: the deadline is the host's clock plus the duration (`SetPause` already reads `TIME`, `bus/pause.go:60`, but only to refuse a past deadline) | `ServerTime` plus the duration; `--until HH:MM` stays local wall clock (a window) |
-| `usage/ccstatusline.go:73` | `{p}:budget` snapshot `ts` from Claude Code's status line | `ServerNowMS` |
 | `cmd/agentbus/shutdown.go:32`, called at `cmd/agentbus/main.go:807` | a decision: an agent is "stale, not busy" when its Redis-time `ts` is older than 10 minutes by the host's clock | `ServerNowMS` as `now` |
 | `cmd/agentbus/agents.go:137` (`forget`) | refuses when the status `ts` is recent by the host's clock | one `ServerNowMS` for the comparison |
 | `cmd/agentbus/retire.go:117`, `:120`; `cmd/agentbus/swap.go:217`, `:220`; `cmd/agentbus/popend.go:56` | refuse while the pane runs a turn: the dispatcher's observation (`At` from `TIME`, `dispatch/observe.go:72`) is judged fresh, and a `working` status recent, by the host's clock | the same |
@@ -566,7 +565,9 @@ ideas at `cmd/agentbus/askcmd.go:131`, `cmd/agentbus/ideacmd.go:128`; busmon, e.
 their error is the drift, which the clock check bounds. **Not time:** `genRef`
 (`cmd/agentbus/parse.go:32`) uses the nanoseconds for uniqueness only; logs and local caches are
 the host's own (the quota cache's age, `quota/config.go:203`; busmon's read marks,
-`cmd/busmon/localcache.go:52`). **Durations:** in `bus/`, `dispatch/`, `service/` and `termhost/`, every
+`cmd/busmon/localcache.go:52`). `usage/ccstatusline.go:73` stamps a budget with the host's
+clock, but nothing publishes it: its only caller, `collectBudgets` (`cmd/agentbus/budget.go:81`),
+has no caller outside tests. **Durations:** in `bus/`, `dispatch/`, `service/` and `termhost/`, every
 in-process deadline is `time.Now().Add(...)` compared with `time.Now()` (for instance
 `bus/delivery.go:63`, `dispatch/health.go:64`), which Go compares on the monotonic reading. The
 rule for new code is in the table; a reviewer checks it, as no linter can tell a stored stamp
@@ -729,10 +730,12 @@ None. The person answered r11's two (§2 decision 6; §6).
     the ignore for the whole chain;
   - (foureyes on r13) the holder already takes back an ignored SIGHUP (`holder/sigdefault.go`,
     tested); revision 26 says so and asks it of `service supervise` only. The time inventory
-    gains the budget stamp of `usage/ccstatusline.go:73` and the decisions that compare a Redis
+    gains the decisions that compare a Redis
     stamp with the host clock (`agents.go`, `retire.go`, `swap.go`, `popend.go`, `reload.go`,
     `doctor.go`). The updater's lifecycle under `up`, `down`, `service list`, `service gc` and
     `setup uninstall` is stated (§4.7);
+  - (reviewer-codex on r13) `usage/ccstatusline.go:73` left the inventory: its stamp is never
+    published (no production caller);
   - no cron under `none`: the scheduled updater (systemd timer, launchd calendar job, nothing
     under `none`) is replaced by one `updater` service in every mode, a 5-minute ticker that
     compares the local wall clock with `updates.window`, records the last pass and runs
