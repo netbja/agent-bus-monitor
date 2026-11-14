@@ -2,12 +2,15 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13, revision 25
-  on 2026-11-14
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13, revisions 25
+  and 26 on 2026-11-14
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
+- Revision 26 (correction): the SIGHUP requirement, moved here from the quiet-update spec (r12,
+  §4.5.3 step 4) at the person's request (task `quiet-update-r13`). The holder already meets it
+  (`holder/sigdefault.go`, built in step 6); `service supervise` must meet it too (§4.4b, §8)
 - Revision 25 (correction): foureyes on step 5d (0ceba37e): "stops reading the viewers'
   sockets" deadlocked the hold — a viewer's Release, Discard and Detach travel on the same socket,
   behind its data. Master's decision (option a): the holder never stops reading a viewer; past
@@ -730,9 +733,30 @@ With `none`:
 - **What does not exist without a manager.** No start at login (`services.start_at_login` is
   refused with the reason), and whether the processes survive a logout depends on the system
   (logind with `KillUserProcesses=yes` ends them). Both are stated by `agentbus service status`.
+- **SIGHUP: never hand an ignored hangup down** (revision 26). A process may be started with
+  SIGHUP **ignored**: under `nohup` (the quiet-update spec's manual restore starts a supervisor
+  that way, as stock macOS has no `setsid` command), or by a runner that ignores it. An ignored
+  signal survives `exec`, so every program started below would ignore it too, and `Close`'s
+  SIGHUP and the PTY hangup of a dead holder would no longer end an agent gracefully.
+  - **The holder meets this today:** `unignoreTermSignals` (`holder/sigdefault.go`, called at
+    `holder/server.go:80`) installs a handler for SIGHUP, SIGINT and SIGQUIT when the process was
+    started with them ignored (`signal.Ignored`), and never stops it. The `os/signal`
+    documentation: "If the program was started with SIGHUP or SIGINT ignored, and Notify is
+    called for either signal, a signal handler will be installed for that signal and it will no
+    longer be ignored"; a caught signal is reset to its default by `exec`. Tested by
+    `TestHolderHangsUpWhenStartedWithSIGHUPIgnored` and `TestUnignoreTermSignals`.
+  - **`service supervise` does the same,** with the same function (moved where both can call it),
+    at its start: the dispatcher, the conductor and the programs a mission's tests run then never
+    inherit an ignored SIGHUP from a `nohup` start, whatever the program below does itself.
 - Tests: the supervisor's restart, burst and exit-0 rules with a scripted program; the
   process-group kill skips a reused pid; `up` twice starts one supervisor; an upgrade starts a
-  second supervisor and leaves the first.
+  second supervisor and leaves the first. SIGHUP, judged on each process alone, since either
+  handler would lift the ignore for the whole chain: `service supervise` started under `nohup`
+  runs a scripted program (not the holder) that reports its own SIGHUP disposition and is then
+  sent SIGHUP; the disposition is default (on Linux, bit 1 of `SigIgn` in `/proc/<pid>/status`
+  is clear) and the program dies by SIGHUP (the assertion on macOS, whose stock `ps` has no
+  ignored-signal keyword). A supervisor built without the call fails it. The holder's own test
+  exists (above).
 
 ### 4.5 The focus rule and drafts, restated for a host without focus
 
