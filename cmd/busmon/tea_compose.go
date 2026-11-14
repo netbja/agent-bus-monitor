@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -42,11 +43,19 @@ type textArea struct {
 	run        string
 
 	// A multi-line paste is shown as a placeholder, "[Pasted text #n +k
-	// lines]", and kept here whole: value gives it back in its place. Numbered
-	// per field from 1; set starts again. An entry is never removed, so undo
-	// brings a removed placeholder back with its text.
-	pasted map[string]string
+	// lines]": spans are where the placeholders are in text, in order, each
+	// with its paste; value gives the paste back in its place. A span is a
+	// position, never a match of the words, so the same words typed are text
+	// (reviewer-codex). Every change of text goes through splice, which moves
+	// the spans. Numbered per field from 1; set starts again.
+	spans  []pasteSpan
 	pastes int
+}
+
+// pasteSpan is one placeholder's runes [from, to) and the paste it stands for.
+type pasteSpan struct {
+	from, to int
+	text     string
 }
 
 // undoMax bounds the edit history: the oldest steps go first.
@@ -55,16 +64,37 @@ const undoMax = 100
 // areaState is what undo restores: the text, the cursor and the selection.
 type areaState struct {
 	text        []rune
+	spans       []pasteSpan
 	cur, anchor int
 	mark        bool
 }
 
 func (t *textArea) state() areaState {
-	return areaState{text: append([]rune(nil), t.text...), cur: t.cur, anchor: t.anchor, mark: t.mark}
+	return areaState{text: append([]rune(nil), t.text...), spans: slices.Clone(t.spans), cur: t.cur, anchor: t.anchor, mark: t.mark}
 }
 
 func (t *textArea) restore(st areaState) {
-	t.text, t.cur, t.anchor, t.mark = st.text, st.cur, st.anchor, st.mark
+	t.text, t.spans, t.cur, t.anchor, t.mark = st.text, st.spans, st.cur, st.anchor, st.mark
+	t.changed()
+}
+
+// splice replaces the runes [from, to) with rs, the one change of text:
+// a span after it moves, a span it touches is no paste any more (settle keeps
+// an edit from cutting one; a span removed whole goes with its paste).
+func (t *textArea) splice(from, to int, rs []rune) {
+	t.text = append(append(append([]rune(nil), t.text[:from]...), rs...), t.text[to:]...)
+	d := len(rs) - (to - from)
+	kept := t.spans[:0:0]
+	for _, sp := range t.spans {
+		switch {
+		case sp.to <= from: // before the change, or ending where it starts
+			kept = append(kept, sp)
+		case sp.from >= to: // after it, or starting where it ends
+			sp.from, sp.to = sp.from+d, sp.to+d
+			kept = append(kept, sp)
+		}
+	}
+	t.spans = kept
 	t.changed()
 }
 
@@ -116,21 +146,23 @@ var wrapCalls int
 
 // value is the text with each paste in its placeholder's place.
 func (t *textArea) value() string {
-	s := string(t.text)
-	for ph, text := range t.pasted {
-		s = strings.ReplaceAll(s, ph, text)
+	var b strings.Builder
+	at := 0
+	for _, sp := range t.spans {
+		b.WriteString(string(t.text[at:sp.from]))
+		b.WriteString(sp.text)
+		at = sp.to
 	}
-	return s
+	b.WriteString(string(t.text[at:]))
+	return b.String()
 }
 
 // size is the text's length in runes, pastes counted whole: what the limit
 // bounds.
 func (t *textArea) size() int {
 	n := len(t.text)
-	for ph, text := range t.pasted {
-		if c := strings.Count(string(t.text), ph); c > 0 {
-			n += c * (utf8.RuneCountInString(text) - utf8.RuneCountInString(ph))
-		}
+	for _, sp := range t.spans {
+		n += utf8.RuneCountInString(sp.text) - (sp.to - sp.from)
 	}
 	return n
 }
@@ -138,11 +170,9 @@ func (t *textArea) size() int {
 // placeholderAt is the length in runes of the placeholder that ends at the
 // cursor (before) or starts at it (!before), 0 when none does.
 func (t *textArea) placeholderAt(before bool) int {
-	for ph := range t.pasted {
-		r := []rune(ph)
-		if before && t.cur >= len(r) && string(t.text[t.cur-len(r):t.cur]) == ph ||
-			!before && t.cur+len(r) <= len(t.text) && string(t.text[t.cur:t.cur+len(r)]) == ph {
-			return len(r)
+	for _, sp := range t.spans {
+		if before && sp.to == t.cur || !before && sp.from == t.cur {
+			return sp.to - sp.from
 		}
 	}
 	return 0
@@ -152,30 +182,17 @@ func (t *textArea) placeholderAt(before bool) int {
 // placeholder, at its nearer end: an edit then never cuts one, so a paste is
 // never lost (reviewer-codex). A move calls it after, an edit before.
 func (t *textArea) settle() {
-	if len(t.pasted) == 0 {
-		return
-	}
 	t.cur, t.anchor = t.outOfPlaceholder(t.cur), t.outOfPlaceholder(t.anchor)
 }
 
 // outOfPlaceholder is pos, or the nearer end of the placeholder it is inside.
 func (t *textArea) outOfPlaceholder(pos int) int {
-	s := string(t.text)
-	for ph := range t.pasted {
-		n := len([]rune(ph))
-		for off := 0; ; {
-			i := strings.Index(s[off:], ph)
-			if i < 0 {
-				break
+	for _, sp := range t.spans {
+		if pos > sp.from && pos < sp.to {
+			if pos-sp.from <= sp.to-pos {
+				return sp.from
 			}
-			from := utf8.RuneCountInString(s[:off+i])
-			if pos > from && pos < from+n {
-				if pos-from <= from+n-pos {
-					return from
-				}
-				return from + n
-			}
-			off += i + len(ph)
+			return sp.to
 		}
 	}
 	return pos
@@ -200,13 +217,14 @@ func (t *textArea) insertPaste(s string) (dropped int) {
 	}
 	t.pastes++
 	ph := fmt.Sprintf("[Pasted text #%d +%d lines]", t.pastes, strings.Count(s, "\n"))
-	if t.pasted == nil {
-		t.pasted = map[string]string{}
+	n := len([]rune(ph))
+	t.splice(t.cur, t.cur, []rune(ph))
+	i := 0
+	for i < len(t.spans) && t.spans[i].from < t.cur {
+		i++
 	}
-	t.pasted[ph] = s
-	t.text = append(t.text[:t.cur:t.cur], append([]rune(ph), t.text[t.cur:]...)...)
-	t.cur += len([]rune(ph))
-	t.changed()
+	t.spans = slices.Insert(t.spans, i, pasteSpan{t.cur, t.cur + n, s})
+	t.cur += n
 	return dropped
 }
 
@@ -232,9 +250,8 @@ func (t *textArea) cutSelection() bool {
 	if !ok {
 		return false
 	}
-	t.text = append(t.text[:from:from], t.text[to:]...)
+	t.splice(from, to, nil)
 	t.cur = from
-	t.changed()
 	return true
 }
 
@@ -251,9 +268,8 @@ func (t *textArea) insert(s string) (dropped int) {
 	if len(rs) == 0 {
 		return dropped
 	}
-	t.text = append(t.text[:t.cur:t.cur], append(rs, t.text[t.cur:]...)...)
+	t.splice(t.cur, t.cur, rs)
 	t.cur += len(rs)
-	t.changed()
 	return dropped
 }
 
@@ -262,7 +278,7 @@ func (t *textArea) insert(s string) (dropped int) {
 func (t *textArea) set(s string) {
 	t.text, t.cur, t.top, t.mark = nil, 0, 0, false
 	t.undo, t.redo, t.run = nil, nil, ""
-	t.pasted, t.pastes = nil, 0
+	t.spans, t.pastes = nil, 0
 	t.changed()
 	t.insert(s)
 }
@@ -399,8 +415,7 @@ func (t *textArea) backspace(rs []row) {
 	end := t.cur
 	t.left(rs)
 	if t.cur < end {
-		t.text = append(t.text[:t.cur:t.cur], t.text[end:]...)
-		t.changed()
+		t.splice(t.cur, end, nil)
 	}
 }
 
@@ -411,8 +426,7 @@ func (t *textArea) del(rs []row) {
 	start := t.cur
 	t.right(rs)
 	if t.cur > start {
-		t.text = append(t.text[:start:start], t.text[t.cur:]...)
-		t.changed()
+		t.splice(start, t.cur, nil)
 	}
 	t.cur = start
 }

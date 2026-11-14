@@ -160,3 +160,28 @@ func TestComposePlaceholderStaysWhole(t *testing.T) {
 		t.Fatalf("a selection into it: %q", got)
 	}
 }
+
+// A placeholder's words typed by hand are text, never the paste: only a
+// paste's own span is expanded, counted and kept whole (reviewer-codex).
+func TestComposeTypedPlaceholderIsText(t *testing.T) {
+	m := composeWith(t, "")
+	m = step(t, m, tea.PasteMsg{Content: "a\nb"})
+	ph := string(m.ui.compose.area.text)
+	m = typeText(t, m, " "+ph)
+	a := &m.ui.compose.area
+	if got := a.value(); got != "a\nb "+ph {
+		t.Fatalf("value %q", got)
+	}
+	if a.size() != len("a\nb ")+len(ph) {
+		t.Fatalf("size %d", a.size())
+	}
+	m = keys(t, m, kBackspce) // a typed "]" goes alone
+	if got := m.ui.compose.area.value(); got != "a\nb "+ph[:len(ph)-1] {
+		t.Fatalf("backspace on the typed one: %q", got)
+	}
+	// Undo and redo keep the paste's span.
+	m = keys(t, m, tea.Key{Code: 'z', Mod: tea.ModCtrl}, tea.Key{Code: 'z', Mod: tea.ModCtrl})
+	if got := m.ui.compose.area.value(); !strings.HasPrefix(got, "a\nb") {
+		t.Fatalf("after undo: %q", got)
+	}
+}

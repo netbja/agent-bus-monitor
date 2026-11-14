@@ -439,9 +439,8 @@ func (m *Model) atDescend(c *composeState, r atRow) tea.Cmd {
 	t := &c.area
 	t.edit("", func() {
 		t.unmark()
-		t.text = append(append(append([]rune(nil), t.text[:p.start+1]...), []rune(q)...), t.text[t.cur:]...)
+		t.splice(p.start+1, t.cur, []rune(q))
 		t.cur = p.start + 1 + len([]rune(q))
-		t.changed()
 	})
 	p.sel, p.top = 0, 0
 	m.layoutCompose()

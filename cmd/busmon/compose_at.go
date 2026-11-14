@@ -79,9 +79,8 @@ func (t *textArea) replaceAt(start, cur int, s string) bool {
 	}
 	t.edit("", func() {
 		t.unmark()
-		t.text = append(append(append([]rune(nil), t.text[:start]...), add...), t.text[cur:]...)
+		t.splice(start, cur, add)
 		t.cur = start + len(add)
-		t.changed()
 	})
 	return true
 }
