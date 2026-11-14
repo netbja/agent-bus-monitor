@@ -1,6 +1,6 @@
 # One-command setup and quiet update, with a snapshot to roll back to
 
-Status: r7, spec only (r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
+Status: r8, spec only (r8: the journal is write-ahead, so a crash between a file write and its record is covered; reviewer-codex on r7. r7: each file's hash is recorded right after the update writes it, in a journal the restorer and the README read; reviewer-codex on r6. r6: the snapshot README is a complete, ordered manual restore of every part, written per snapshot; reviewer-codex on r4. r5: `--broker` needs restore's whole live test cleared, the herdr workspace included, and says how; reviewer-codex on r3. r4: the new version writes the snapshot and keeps itself in it as the restorer, so the first update from a version without `agentbus update` works; reviewer-codex on r2. r3: a broker migration is manual and needs its projects suspended, and its broker rollback is always the person's step; reviewer-codex on r1. r2: one source tree per release, the new binary installs, the snapshot's binary rolls back; foureyes on r1). Base: origin/main `c7279bea`. Author: architect, from the ruflo analysis the
 person approved on 2026-11-14 (task `quiet-update-spec`). Low priority: it comes after the herdr
 exit work.
 
@@ -144,10 +144,20 @@ neither write a snapshot nor restore one.
    - Install the role skills.
    - `config.toml` and the env files are touched only by a migration the release declares, and
      that is recorded in the manifest.
-   - **The written-files journal.** Each settings or skills file the update writes (step 4, or a
-     migration) is recorded in `<snapshot>/written.jsonl` **as soon as it is written**:
-     `{path, before, after}` with both SHA-256s, appended and fsynced before the next file is
-     touched.
+   - **The written-files journal, write-ahead.** For each settings or skills file the update writes
+     (step 4, or a migration), the new content is built first, so its hash is known before anything
+     changes. The order is:
+     1. Append `{path, before, after}` with both SHA-256s to `<snapshot>/written.jsonl`, and fsync
+        it (and its directory, on the first line).
+     2. Write the file: a copy beside it, then a rename.
+     3. Append `{path, done}`, then go on to the next file.
+
+     A crash anywhere leaves a journal line **before** the file could have changed, so no written
+     file is ever unrecorded. A line without `done` is not trusted to say whether the write
+     happened; the current hash decides (the three cases below):
+     - `before` means it never happened;
+     - `after` means it did;
+     - anything else means the person edited the file since.
      - The snapshot's manifest holds the `before` hash of every file. The journal adds the `after`
        hash of the files the update actually changed.
      - A file the update never wrote has no journal line; its `after` is its `before`.
@@ -256,8 +266,9 @@ The manifest is then marked incomplete, and the restorer refuses it too.
      and listed with the path of the snapshot copy. The person decides; nothing is overwritten
      silently.
    - Skills go back the same way.
-   - An interrupted update's journal stops at the last file written. Every file it lists has its
-     `after`; the others were never touched.
+   - An interrupted update's journal ends at the last intent recorded. A file it does not list was
+     never touched, because its intent would have been written first. A listed file is decided by
+     its current hash, whether or not its `done` line made it to disk.
 3. **Units:**
    - The dispatch and missions units are rewritten from the snapshot, then restarted one at a time
      with the same health check. A migrated project's units are rewritten but **not started**: it
@@ -378,8 +389,14 @@ format (the `.migrate` file says whether it does).
   - edited by the person to h2: kept at h2 and listed;
   - a file the update never wrote: untouched.
 
-  Plus an update interrupted after one of two files: the journal holds one line, and rollback
-  restores only that one.
+  Plus an update interrupted after one of two files: the journal holds one intent, and rollback
+  restores only that one. Plus the crash windows, each simulated by stopping the writer at that
+  point:
+  - **after the intent, before the rename:** the file is still at `before`, and nothing is
+    restored;
+  - **after the rename, before `done`:** the file is at `after`, and it is restored to `before`.
+
+  Both are checked in the restorer and the README harness.
 - **Team on rollback:** a role that died during the update is relaunched with its resume session.
   A running agent is not touched; the test checks that no Start or Close was sent for it.
 - **Broker:** with no `.migrate` file, rollback leaves the keyspace as it is. With one, it refuses
