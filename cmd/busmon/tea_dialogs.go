@@ -402,12 +402,7 @@ func (m *Model) saveCache(note string) tea.Cmd {
 	if path == "" {
 		return nil
 	}
-	c := *m.cache_()
-	c.Snoozes = make(map[string]int64, len(m.sig.cache.Snoozes))
-	for k, v := range m.sig.cache.Snoozes {
-		c.Snoozes[k] = v
-	}
-	c.Read = append([]string(nil), m.sig.cache.Read...)
+	c := m.cacheSnapshot()
 	return func() tea.Msg { return cacheSavedMsg{err: c.save(path), note: note} }
 }
 

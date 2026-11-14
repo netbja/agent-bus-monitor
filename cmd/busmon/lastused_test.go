@@ -53,3 +53,28 @@ func TestLastUsedPerBroker(t *testing.T) {
 		t.Fatalf("no file: %q", got)
 	}
 }
+
+// The start order (project-switch note §2.5): --project, then
+// AGENT_BUS_PROJECT, then last used; a last used with no keys on this broker
+// any more (or whose keys cannot be read) is skipped.
+func TestStartProject(t *testing.T) {
+	keys := map[string]bool{"alpha": true}
+	has := func(p string) (bool, error) {
+		if p == "broken" {
+			return false, os.ErrPermission
+		}
+		return keys[p], nil
+	}
+	for name, c := range map[string]struct{ flag, env, last, want string }{
+		"flag first":           {"f", "e", "alpha", "f"},
+		"env next":             {"", "e", "alpha", "e"},
+		"last used":            {"", "", "alpha", "alpha"},
+		"last used gone":       {"", "", "gone", ""},
+		"last used unreadable": {"", "", "broken", ""},
+		"nothing":              {"", "", "", ""},
+	} {
+		if got := startProject(c.flag, c.env, c.last, has); got != c.want {
+			t.Errorf("%s: %q, want %q", name, got, c.want)
+		}
+	}
+}

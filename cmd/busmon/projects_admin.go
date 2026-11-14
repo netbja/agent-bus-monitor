@@ -894,6 +894,15 @@ func (m *Model) projectsKey(act Action, _ Key) tea.Cmd {
 		if p.sel < len(p.proj.rows) {
 			return m.projectDelete(p.proj.rows[p.sel])
 		}
+	case ActSwitchProject:
+		if p.sel < len(p.proj.rows) {
+			r := p.proj.rows[p.sel]
+			if !r.onBroker {
+				m.ui.flash, m.ui.flashErr = r.name+" is not on this broker: agentbus up "+r.name+" first", true
+				return nil
+			}
+			return m.switchProject(r.name)
+		}
 	case ActSleep, ActStopServices, ActBackupNow:
 		if p.sel < len(p.proj.rows) {
 			return m.projectAction(act, p.proj.rows[p.sel])
