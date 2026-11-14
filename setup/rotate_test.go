@@ -518,3 +518,22 @@ func TestRotatePasswordAsksTheBrokerAfterAnAmbiguousError(t *testing.T) {
 		}
 	}
 }
+
+// The holder makes no broker connection: a password change never restarts
+// it (a restart kills every agent it holds; herdr exit spec 4.4a).
+func TestRotateNeverRestartsTheHolder(t *testing.T) {
+	in, out, f, _, ab := rotateWorld(t, map[string]string{})
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo                     dispatch  active (running), pid 7\ndemo                     holder    active (running), pid 8\n"}
+	b := &fakeBroker{pw: bus.LegacyPassword}
+	if code := in.RotateRedisPassword(context.Background(), &Prompter{Yes: true}, b.dial); code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	for _, r := range f.ran {
+		if strings.Contains(r, "restart holder") {
+			t.Fatalf("the holder was restarted: %q", f.ran)
+		}
+	}
+	if !strings.Contains(out.String(), "restarted demo dispatch") {
+		t.Fatalf("%s", out)
+	}
+}

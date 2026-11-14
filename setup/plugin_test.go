@@ -332,3 +332,22 @@ func TestKeyBindingLeavesAReadOnlyConfig(t *testing.T) {
 		}
 	}
 }
+
+// An upgrade never suggests restarting the holder: a new build starts its
+// own instance and the old one drains (herdr exit spec 4.4a).
+func TestServicesHintSkipsTheHolder(t *testing.T) {
+	in, out, f, _ := pluginWorld(t, "")
+	ab := in.Opt.BinDir + "/agentbus"
+	_ = os.MkdirAll(in.Opt.BinDir, 0o755)
+	_ = os.WriteFile(ab, []byte("#!/bin/sh\n"), 0o755)
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo holder running since 2h\n"}
+	in.ServicesHint(context.Background())
+	if out.String() != "" {
+		t.Fatalf("%q", out.String())
+	}
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo dispatch running since 2h\ndemo holder running since 2h\n"}
+	in.ServicesHint(context.Background())
+	if strings.Contains(out.String(), "holder") || !strings.Contains(out.String(), "demo dispatch") {
+		t.Fatalf("%q", out.String())
+	}
+}
