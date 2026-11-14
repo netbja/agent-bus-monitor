@@ -1502,8 +1502,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   whose head is a subject's deciding approved head (`bus.RollUp` APPROVED, the decider's `Head`, `deliver`'s own rule);
   every other open PR is counted (`Unapproved`: a newer push, no review, an approve trimmed out, a late approve on an
   older head), never silent. An approved PR that GitHub reports `mergeable: CONFLICTING` is no item either: the
-  person cannot merge it; it is listed in the record's `conflicting` (PR numbers; `agentbus merge-queue` prints
-  "approved but conflicting with <base>, to rebase") for master to have it rebased. `UNKNOWN` (not computed yet)
+  person cannot merge it; it is listed in the record's `conflicting` (PR number and the PR's own base, which may differ
+  from `delivery.base`; `agentbus merge-queue` prints "approved but conflicting with their base, to rebase:
+  #500 onto main") for master to have it rebased. `UNKNOWN` (not computed yet)
   stays an item. A closed or merged PR is not in the open list, so never an item. Sources: `gh pr list --state open --json … --limit 1000` (`ReadGitHub`; a list of exactly
   the limit is `ErrIncomplete`, a pass read as unknown), else the git fallback (GitHub without `gh`, GitLab and
   Bitbucket for now, local): `RemoteTips` (`ls-remote --heads`), `FetchBase` (`--no-write-fetch-head --no-tags

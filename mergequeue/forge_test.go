@@ -41,6 +41,11 @@ func TestReadGitHub(t *testing.T) {
 		prs[0].Conflicting || !prs[1].Conflicting {
 		t.Fatalf("%+v", prs)
 	}
+	// UNKNOWN (GitHub has not computed it yet) is no conflict.
+	dir2, env2 := fakeGH(t, "["+strings.Replace(prJSON(3, hA), "MERGEABLE", "UNKNOWN", 1)+"]", 0)
+	if prs, err := ReadGitHub(context.Background(), dir2, env2); err != nil || len(prs) != 1 || prs[0].Conflicting {
+		t.Fatalf("unknown: %+v %v", prs, err)
+	}
 	if strings.ContainsRune(prs[1].Title, 0x1b) {
 		t.Fatalf("a control reached the title: %q", prs[1].Title)
 	}

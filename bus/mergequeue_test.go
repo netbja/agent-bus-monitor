@@ -18,11 +18,11 @@ func TestMergeQueueRecord(t *testing.T) {
 	}
 	items := []MergeItem{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: "f98091be429b220f63dc8b4b2dde3ef7d6d832a5",
 		Subjects: []string{"request-priority"}, Approvals: []MergeApproval{{Reviewer: "foureyes", At: 1, Message: "suites pass"}}, ApprovedAt: 1}}
-	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh", Items: items, Unapproved: 2, Conflicting: []int{500}}); err != nil {
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh", Items: items, Unapproved: 2, Conflicting: []MergeConflict{{Number: 500, Base: "release"}}}); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := b.MergeQueue(ctx)
-	if err != nil || rec.Reason != "" || rec.Source != "gh" || rec.Unapproved != 2 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != 500 || len(rec.Items) != 1 || rec.Items[0].Number != 309 ||
+	if err != nil || rec.Reason != "" || rec.Source != "gh" || rec.Unapproved != 2 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != (MergeConflict{Number: 500, Base: "release"}) || len(rec.Items) != 1 || rec.Items[0].Number != 309 ||
 		rec.ItemsAt == 0 || rec.AttemptedAt != rec.ItemsAt {
 		t.Fatalf("after a success: %+v %v", rec, err)
 	}

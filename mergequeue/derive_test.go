@@ -128,7 +128,7 @@ func TestDeriveConflictingPR(t *testing.T) {
 		v("3-0", "feat-c", "foureyes", "approve", hC),
 	}
 	prs := []PR{
-		{Number: 500, Branch: "feat/a", Head: hA, Conflicting: true},
+		{Number: 500, Branch: "feat/a", Head: hA, Base: "release", Conflicting: true}, // its own base, not delivery.base (reviewer-codex)
 		{Number: 501, Branch: "feat/b", Head: hB},
 		{Number: 502, Branch: "feat/c", Head: hC},                    // mergeable not known yet
 		{Number: 503, Branch: "feat/u", Head: hD, Conflicting: true}, // unapproved: counted there, not here
@@ -137,7 +137,7 @@ func TestDeriveConflictingPR(t *testing.T) {
 	if len(got.Items) != 2 || got.Items[0].Number != 501 || got.Items[1].Number != 502 {
 		t.Fatalf("items %+v", got.Items)
 	}
-	if len(got.Conflicting) != 1 || got.Conflicting[0] != 500 || got.Unapproved != 1 {
+	if len(got.Conflicting) != 1 || got.Conflicting[0] != (bus.MergeConflict{Number: 500, Base: "release"}) || got.Unapproved != 1 {
 		t.Fatalf("conflicting %v unapproved %d", got.Conflicting, got.Unapproved)
 	}
 }

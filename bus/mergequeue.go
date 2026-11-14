@@ -36,6 +36,14 @@ type MergeItem struct {
 	ApprovedAt int64           `json:"approved_at"` // Unix ms of the deciding approve
 }
 
+// MergeConflict is an approved PR the forge reports conflicting with its own
+// base (the PR's, which may differ from delivery.base: reviewer-codex): a
+// rebase onto Base for master, never a merge for the person.
+type MergeConflict struct {
+	Number int    `json:"number"`
+	Base   string `json:"base"`
+}
+
 // MergeQueueKey is {p}:mergequeue: the dispatch service's cache of the
 // derivation (a hash), replaced by every pass; runtime, not in projectKinds,
 // ignored by HasKeysBesidesDispatch.
@@ -58,9 +66,9 @@ type MergeQueueRecord struct {
 	Reason      string      `json:"reason,omitempty"`
 	Items       []MergeItem `json:"items"`
 	Unapproved  int         `json:"unapproved"` // open PRs not on an approved head
-	// Conflicting are the approved PRs that conflict with the base: no merge
-	// for the person, a rebase for master. Not in Items.
-	Conflicting []int `json:"conflicting,omitempty"`
+	// Conflicting are the approved PRs that conflict with their base: no
+	// merge for the person, a rebase for master. Not in Items.
+	Conflicting []MergeConflict `json:"conflicting,omitempty"`
 }
 
 // MergeQueue reads the cache; a missing key is the zero record (unknown).
@@ -115,7 +123,7 @@ func (b *Bus) FencedPutMergeQueue(ctx context.Context, token string, rec MergeQu
 	}
 	conflicting := rec.Conflicting
 	if conflicting == nil {
-		conflicting = []int{}
+		conflicting = []MergeConflict{}
 	}
 	cjs, err := json.Marshal(conflicting)
 	if err != nil {

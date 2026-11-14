@@ -56,6 +56,23 @@ func TestMergeQueueChoreGitHub(t *testing.T) {
 	if rec.Source != "gh" || rec.Reason != "" || len(rec.Items) != 1 || rec.Items[0].Number != 309 || rec.Items[0].Subjects[0] != "request-priority" {
 		t.Fatalf("%+v", rec)
 	}
+	// The same approved PR conflicting with its base: no item, recorded for a
+	// rebase with its own base (foureyes: the chore passes it on).
+	c.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
+		return []mergequeue.PR{{Number: 309, Branch: "feat/request-priority", Head: mqHead, Base: "release", Conflicting: true}}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); len(rec.Items) != 0 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != (bus.MergeConflict{Number: 309, Base: "release"}) {
+		t.Fatalf("conflicting: %+v", rec)
+	}
+	c.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
+		return []mergequeue.PR{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: mqHead}}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
 	// gh fails: unknown, the items kept (the bus keeps them), the reason said.
 	c.github = func(context.Context, string, []string) ([]mergequeue.PR, error) { return nil, mergequeue.ErrIncomplete }
 	if err := c.pass(ctx, "mq"); err != nil {

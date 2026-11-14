@@ -41,7 +41,7 @@ type Result struct {
 	// Conflicting are the approved PRs the forge cannot merge (they conflict
 	// with their base): never an item, the person cannot merge them; master
 	// has them rebased (the person, merge-queue-stale-rows).
-	Conflicting []int
+	Conflicting []bus.MergeConflict
 }
 
 // approved is a subject's deciding approve.
@@ -112,7 +112,7 @@ func Derive(in Input) Result {
 			continue
 		}
 		if pr.Conflicting {
-			res.Conflicting = append(res.Conflicting, pr.Number)
+			res.Conflicting = append(res.Conflicting, bus.MergeConflict{Number: pr.Number, Base: pr.Base})
 			continue
 		}
 		add(bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head}, a)
