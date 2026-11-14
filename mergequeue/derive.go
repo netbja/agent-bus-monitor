@@ -16,6 +16,7 @@ type PR struct {
 	Title, URL, Branch, Head string
 	Base                     string
 	Draft                    bool
+	Conflicting              bool // the forge says it conflicts with its base: no merge before a rebase
 }
 
 // Tip is a branch and its tip commit (the git fallback: a remote branch, or a
@@ -37,6 +38,10 @@ type Input struct {
 type Result struct {
 	Items      []bus.MergeItem
 	Unapproved int
+	// Conflicting are the approved PRs the forge cannot merge (they conflict
+	// with their base): never an item, the person cannot merge them; master
+	// has them rebased (the person, merge-queue-stale-rows).
+	Conflicting []bus.MergeConflict
 }
 
 // approved is a subject's deciding approve.
@@ -104,6 +109,10 @@ func Derive(in Input) Result {
 		a := cand[pr.Head]
 		if pr.Head == "" || a == nil {
 			res.Unapproved++
+			continue
+		}
+		if pr.Conflicting {
+			res.Conflicting = append(res.Conflicting, bus.MergeConflict{Number: pr.Number, Base: pr.Base})
 			continue
 		}
 		add(bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head}, a)

@@ -18,11 +18,11 @@ func TestMergeQueueRecord(t *testing.T) {
 	}
 	items := []MergeItem{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: "f98091be429b220f63dc8b4b2dde3ef7d6d832a5",
 		Subjects: []string{"request-priority"}, Approvals: []MergeApproval{{Reviewer: "foureyes", At: 1, Message: "suites pass"}}, ApprovedAt: 1}}
-	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh", Items: items, Unapproved: 2}); err != nil {
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh", Items: items, Unapproved: 2, Conflicting: []MergeConflict{{Number: 500, Base: "release"}}}); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := b.MergeQueue(ctx)
-	if err != nil || rec.Reason != "" || rec.Source != "gh" || rec.Unapproved != 2 || len(rec.Items) != 1 || rec.Items[0].Number != 309 ||
+	if err != nil || rec.Reason != "" || rec.Source != "gh" || rec.Unapproved != 2 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != (MergeConflict{Number: 500, Base: "release"}) || len(rec.Items) != 1 || rec.Items[0].Number != 309 ||
 		rec.ItemsAt == 0 || rec.AttemptedAt != rec.ItemsAt {
 		t.Fatalf("after a success: %+v %v", rec, err)
 	}
@@ -68,5 +68,20 @@ func TestMergeQueueKeyIsRuntime(t *testing.T) {
 	}
 	if c, _ := ClassOf(b.project, MergeQueueKey(b.project)); c != KeyRuntime {
 		t.Fatalf("class %v", c)
+	}
+}
+
+// The first form of the field held bare PR numbers ([500]): read as conflicts
+// with no base named, never a corrupt record (reviewer-codex), so a cache
+// written by it still reads until the next success replaces it.
+func TestMergeQueueReadsBareConflictNumbers(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if err := b.r.HSet(ctx, MergeQueueKey(b.Project()), "items_at", "1", "items", "[]", "conflicting", "[500, 512]").Err(); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := b.MergeQueue(ctx)
+	if err != nil || len(rec.Conflicting) != 2 || rec.Conflicting[0] != (MergeConflict{Number: 500}) || rec.Conflicting[1] != (MergeConflict{Number: 512}) {
+		t.Fatalf("%+v %v", rec.Conflicting, err)
 	}
 }
