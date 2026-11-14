@@ -96,6 +96,30 @@ func TestAttachSession(t *testing.T) {
 			t.Fatalf("no echo: %q", out.String())
 		}
 	}
+	// The outer terminal's focus reports reach the holder as Focus, never
+	// as keys: the terminal reads no viewer focused after a blur.
+	focused := func() int {
+		r, err := cl.Call(holder.ActivityReq{Term: term.ID})
+		if err != nil || r.Activity == nil {
+			t.Fatalf("activity: %+v %v", r, err)
+		}
+		return r.Activity.FocusedViewers
+	}
+	if !strings.Contains(out.String(), "\x1b[?1004h") {
+		t.Error("attach did not ask the outer terminal for focus reports")
+	}
+	io.WriteString(typed, "\x1b[O")
+	for deadline := time.Now().Add(5 * time.Second); focused() != 0; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a blur left the viewer focused")
+		}
+	}
+	io.WriteString(typed, "\x1b[I")
+	for deadline := time.Now().Add(5 * time.Second); focused() != 1; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a focus-in did not focus the viewer")
+		}
+	}
 	io.WriteString(typed, "\x1b[24~d")
 	select {
 	case err := <-done:
