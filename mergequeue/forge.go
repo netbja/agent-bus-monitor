@@ -33,6 +33,7 @@ type ghPR struct {
 	HeadRefOid  string `json:"headRefOid"`
 	BaseRefName string `json:"baseRefName"`
 	IsDraft     bool   `json:"isDraft"`
+	Mergeable   string `json:"mergeable"` // MERGEABLE, CONFLICTING or UNKNOWN (not computed yet)
 }
 
 // ReadGitHub lists the open PRs of the repository in dir with gh, run with
@@ -41,7 +42,7 @@ type ghPR struct {
 // own credentials. Bounded by ctx.
 func ReadGitHub(ctx context.Context, dir string, env []string) ([]PR, error) {
 	out, err := run(ctx, dir, env, "gh", "pr", "list", "--state", "open",
-		"--json", "number,title,url,headRefName,headRefOid,baseRefName,isDraft", "--limit", fmt.Sprint(ghLimit))
+		"--json", "number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable", "--limit", fmt.Sprint(ghLimit))
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,8 @@ func ReadGitHub(ctx context.Context, dir string, env []string) ([]PR, error) {
 			return nil, errors.New("gh listed a PR with no valid number or head")
 		}
 		prs = append(prs, PR{Number: p.Number, Title: cleanText(p.Title), URL: cleanText(p.URL), Branch: cleanText(p.HeadRefName),
-			Head: p.HeadRefOid, Base: cleanText(p.BaseRefName), Draft: p.IsDraft})
+			Head: p.HeadRefOid, Base: cleanText(p.BaseRefName), Draft: p.IsDraft,
+			Conflicting: p.Mergeable == "CONFLICTING"})
 	}
 	return prs, nil
 }

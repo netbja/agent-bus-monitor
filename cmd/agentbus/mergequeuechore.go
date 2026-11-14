@@ -199,5 +199,5 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 		in.Tips, in.Merged = tips, func(h string) bool { return in2[h] }
 	}
 	res := mergequeue.Derive(in)
-	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved}
+	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting}
 }

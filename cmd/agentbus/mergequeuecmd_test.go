@@ -11,7 +11,7 @@ import (
 )
 
 func mqCmdRecord() bus.MergeQueueRecord {
-	return bus.MergeQueueRecord{AttemptedAt: 1793830000000, ItemsAt: 1793830000000, Source: "gh", Forge: "github", Base: "main", Unapproved: 1,
+	return bus.MergeQueueRecord{AttemptedAt: 1793830000000, ItemsAt: 1793830000000, Source: "gh", Forge: "github", Base: "main", Unapproved: 1, Conflicting: []bus.MergeConflict{{Number: 500, Base: "main"}, {Number: 512, Base: "release"}},
 		Items: []bus.MergeItem{{Number: 309, Title: "request priority", URL: "https://github.com/o/r/pull/309", Branch: "feat/request-priority",
 			Head: mqHead, Subjects: []string{"request-priority"}, ApprovedAt: 1793820000000,
 			Approvals: []bus.MergeApproval{{Reviewer: "foureyes"}, {Reviewer: "reviewer-codex"}}}}}
@@ -22,7 +22,8 @@ func TestMergeQueueCmdOutput(t *testing.T) {
 	code := printMergeQueue(mqCmdRecord(), false, &out)
 	got := out.String()
 	if code != 0 || !strings.Contains(got, "#309  request-priority  f98091b  approved by foureyes, reviewer-codex  https://github.com/o/r/pull/309") ||
-		!strings.Contains(got, "source gh") || !strings.Contains(got, "1 open PR not on an approved head") {
+		!strings.Contains(got, "source gh") || !strings.Contains(got, "1 open PR not on an approved head") ||
+		!strings.Contains(got, "approved but conflicting with their base, to rebase: #500 onto main, #512 onto release") {
 		t.Fatalf("code %d\n%s", code, got)
 	}
 	out.Reset()
