@@ -214,11 +214,17 @@ func GCHolders(m HolderManager, p Paths, project, current string, answers func(k
 	if err != nil {
 		return removed, errors.Join(append(errs, err)...)
 	}
+	base := filepath.Join(p.DataHome, "agentbus", "holder") + string(filepath.Separator)
 	for _, key := range removed {
 		if slices.ContainsFunc(all, func(u HolderUnit) bool { return u.Key == key }) {
 			continue // another project's unit runs this build
 		}
-		if err := os.RemoveAll(HolderBinDir(p, key)); err != nil {
+		dir := HolderBinDir(p, key)
+		if !ValidBuildKey(key) || !strings.HasPrefix(dir, base) || filepath.Dir(dir)+string(filepath.Separator) != base {
+			errs = append(errs, fmt.Errorf("build key %q is not a build key: its binary is kept", key))
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -347,7 +353,10 @@ func holderUnits(dir, suffix, project string, read func(string) (HolderUnit, boo
 			continue
 		}
 		u, ok := read(filepath.Join(dir, e.Name()))
-		if !ok || project != "" && u.Project != project {
+		if !ok || !ValidBuildKey(u.Key) || !validProject(u.Project) { // a record is trusted only as a key and a project: never "..", "/" (foureyes)
+			continue
+		}
+		if project != "" && u.Project != project {
 			continue
 		}
 		if e.Name() != HolderUnitName(u.Project, u.Key) && e.Name() != HolderLabel(u.Project, u.Key)+".plist" {

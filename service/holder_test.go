@@ -360,3 +360,58 @@ func TestLaunchdHolderUncertainManager(t *testing.T) {
 		t.Fatalf("not loaded: removed %v %v", removed, err)
 	}
 }
+
+// A recorded value is trusted only when it is a build key and a project
+// (foureyes): a unit recording "..", "../x", "/" or nothing is ignored, so
+// gc never removes outside the per-build directory.
+func TestHolderGCIgnoresAForeignRecord(t *testing.T) {
+	for _, bad := range []string{"..", "../x", "/", "", "v1.aaa.0123456789/../.."} {
+		p := holderPaths(t)
+		f := fakeSystemd(nil)
+		m := Systemd{Run: f.run, Paths: p}
+		cur := install(t, m, p, "demo", "v3+ccc")
+		precious := filepath.Join(p.DataHome, "agentbus", "precious")
+		os.MkdirAll(precious, 0o700)
+		unit := "[Unit]\nX-Agentbus-Project=demo\nX-Agentbus-Build=" + bad + "\nX-Agentbus-Build-Raw=x\n"
+		os.WriteFile(filepath.Join(p.ConfigHome, "systemd", "user", HolderUnitName("demo", bad)), []byte(unit), 0o644)
+		f.answers["--user is-active "+HolderUnitName("demo", bad)] = "inactive"
+		removed, _ := GCHolders(m, p, "demo", cur, func(string) bool { return false })
+		if _, err := os.Stat(precious); err != nil || len(removed) != 0 {
+			t.Fatalf("key %q: removed %v, precious %v", bad, removed, err)
+		}
+		if keys := keysOf(t, m, "demo"); !slices.Equal(keys, []string{cur}) {
+			t.Fatalf("key %q listed: %v", bad, keys)
+		}
+	}
+	// a project outside ValidName is ignored too
+	p := holderPaths(t)
+	m := Systemd{Run: fakeSystemd(nil).run, Paths: p}
+	key := BuildKey("v1+aaa")
+	os.MkdirAll(filepath.Join(p.ConfigHome, "systemd", "user"), 0o755)
+	os.WriteFile(filepath.Join(p.ConfigHome, "systemd", "user", HolderUnitName("Demo", key)), []byte("[Unit]\nX-Agentbus-Project=Demo\nX-Agentbus-Build="+key+"\n"), 0o644)
+	if units, _ := m.HolderUnits(""); len(units) != 0 {
+		t.Fatalf("an invalid project listed: %+v", units)
+	}
+}
+
+// A unit whose file name says another key than its record is not ours to
+// judge: never listed, never removed (foureyes P3).
+func TestHolderUnitsIgnoreANameRecordMismatch(t *testing.T) {
+	p := holderPaths(t)
+	f := fakeSystemd(nil)
+	m := Systemd{Run: f.run, Paths: p}
+	a := install(t, m, p, "demo", "v1+aaa")
+	cur := install(t, m, p, "demo", "v3+ccc")
+	dir := filepath.Join(p.ConfigHome, "systemd", "user")
+	b, _ := os.ReadFile(filepath.Join(dir, HolderUnitName("demo", a)))
+	other := BuildKey("v2+bbb")
+	os.WriteFile(filepath.Join(dir, HolderUnitName("demo", other)), b, 0o644) // named other, records a
+	os.Remove(filepath.Join(dir, HolderUnitName("demo", a)))
+	if keys := keysOf(t, m, "demo"); !slices.Equal(keys, []string{cur}) {
+		t.Fatalf("a mismatched unit listed: %v", keys)
+	}
+	f.answers["--user is-active "+HolderUnitName("demo", a)] = "inactive"
+	if removed, _ := GCHolders(m, p, "demo", cur, func(string) bool { return false }); len(removed) != 0 || !binExists(p, a) {
+		t.Fatalf("a mismatched unit removed: %v", removed)
+	}
+}
