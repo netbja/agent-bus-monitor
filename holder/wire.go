@@ -35,16 +35,21 @@ const MaxFrame = 1 << 20
 // ErrFrameTooLarge: a frame past MaxFrame, refused from its header alone.
 var ErrFrameTooLarge = errors.New("holder: frame too large")
 
-// WriteFrame writes one frame of type typ.
+// maxPayload is a frame's largest payload: MaxFrame less the type byte.
+const maxPayload = MaxFrame - 1
+
+// WriteFrame writes one frame of type typ. The payload's length is compared
+// with the constant bound before any arithmetic, so the sizes below are at
+// most MaxFrame+4 and cannot overflow (CodeQL on #471).
 func WriteFrame(w io.Writer, typ byte, payload []byte) error {
-	if len(payload)+1 > MaxFrame {
+	n := len(payload)
+	if n > maxPayload {
 		return ErrFrameTooLarge
 	}
-	buf := make([]byte, 5+len(payload))
-	binary.BigEndian.PutUint32(buf, uint32(len(payload)+1))
-	buf[4] = typ
-	copy(buf[5:], payload)
-	_, err := w.Write(buf)
+	var hdr [5]byte // no size arithmetic in the allocation: append sizes it (CodeQL)
+	binary.BigEndian.PutUint32(hdr[:4], uint32(n)+1)
+	hdr[4] = typ
+	_, err := w.Write(append(hdr[:], payload...))
 	return err
 }
 
