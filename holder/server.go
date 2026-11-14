@@ -49,6 +49,9 @@ type Config struct {
 	// afterCheck runs between submit's step 1 and its step-3 recheck
 	// (tests: a dialog opening in that window).
 	afterCheck func(t *terminal)
+	// afterAttachReply runs right after an Attach is answered, before its
+	// stream starts (tests: the viewer must be registered by then).
+	afterAttachReply func()
 }
 
 // Defaults.

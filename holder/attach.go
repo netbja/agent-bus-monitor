@@ -334,11 +334,17 @@ func (t *terminal) activity() *ActivityInfo {
 func (s *Server) attach(c *net.UnixConn, t *terminal, f Attach) {
 	v := &viewer{observe: f.Observe, focused: !f.Observe, cols: f.Cols, rows: f.Rows,
 		out: make(chan []byte, viewerQueue), ctl: make(chan []byte, 16), filter: outputFilter{osc52: s.cfg.OSC52}}
+	// Registered before the answer (holder-submit-flake): once its Attach is
+	// answered, the viewer is a person at the terminal for every submit. Its
+	// first paint waits in v.out until the stream starts, after the answer.
+	t.addViewer(v)
+	defer t.removeViewer(v)
 	if err := WriteFrame(c, FrameControl, Reply{}.encode()); err != nil {
 		return
 	}
-	t.addViewer(v)
-	defer t.removeViewer(v)
+	if s.cfg.afterAttachReply != nil {
+		s.cfg.afterAttachReply()
+	}
 	stop := make(chan struct{})
 	go func() {
 		defer close(stop)
