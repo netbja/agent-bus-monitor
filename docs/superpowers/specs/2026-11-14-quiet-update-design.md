@@ -373,6 +373,18 @@ The steps (R*n* is restorer step *n*):
      both systems. The supervisor is then not a session leader, as `up` makes it, but it ignores
      the hangup when the person's terminal closes, and the shell's background job keeps it out of
      the terminal's Ctrl-C. It ends at the next `agentbus down`, like any supervisor.
+   - **Requirement on the supervisor and the holder** (herdr exit §4.4b `service supervise`, and
+     `agentbus holder`, today `cmd/agentbus/holdercmd.go`): `nohup` leaves SIGHUP **ignored**, and
+     an ignored signal survives `exec`, so without a handler the holder and every agent it starts
+     would inherit it. The holder's close (SIGHUP, then SIGKILL after the grace) and the PTY hangup
+     of a dead holder would then no longer end an agent gracefully. So each of them installs a
+     SIGHUP handler at start (`signal.Notify`) and keeps it for its whole life: the supervisor
+     treats SIGHUP as nothing, the holder as nothing. A process with a handler execs its children
+     with SIGHUP at its default, whatever the launching shell did. This makes the README's `nohup`
+     start equivalent to `up`'s. It must be in every build that has a holder. No release has one
+     yet (v0.28.0, the newest tag, has no `holdercmd.go`), and today's holder handles only
+     SIGINT and SIGTERM, so the handler is added to the holder and to `service supervise` now,
+     ahead of the rest of this spec: a small change, routed by master to coder.
 
    Every name, key, raw id and path is written into the README by the restorer; none comes from
    a command the old binary may lack.
@@ -545,6 +557,10 @@ scheduler is, and its fallback is above.
     runs again, in each service mode.
   - Every command the README names is in the portable list (§4.5.3), checked for a Linux and a
     macOS snapshot; the `none` harness runs with a PATH that has no `setsid`.
+  - Under that `nohup` start, an agent the holder starts has SIGHUP at its default (on Linux, bit 1
+    of `SigIgn` in `/proc/<pid>/status` is clear), and the holder's close ends it within the
+    grace on SIGHUP, not on the SIGKILL. A holder or supervisor built without the handler fails
+    this test.
 - **First upgrade from a pre-feature binary:**
   - a stub old `agentbus` with no `update` command;
   - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
@@ -595,7 +611,10 @@ None. The person answered r11's two (§2 decision 6; §6).
   - (reviewer-codex on r12) §4.5.1 states only the target live test, the four checks; the note
     on today's herdr workspace check is gone;
   - (reviewer-codex on r12) the README starts a `none` supervisor with `nohup`, not `setsid`, which
-    stock macOS lacks; the README keeps to a list of portable commands, with a test.
+    stock macOS lacks; the README keeps to a list of portable commands, with a test;
+  - (foureyes on r12) `nohup` passes SIGHUP ignored down to the agents: the supervisor and the
+    holder must install a SIGHUP handler at start, a requirement on the herdr exit's holder step,
+    with a test.
 - **r11:** files and skill directories the update creates or deletes, journalled with `absent`
   (foureyes on r9).
 - **r10:** the journal's guarantee is a process crash or kill; power loss is out of scope, with
