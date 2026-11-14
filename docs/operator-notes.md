@@ -135,7 +135,7 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   role's own profile, reviewer-codex) only when one ancestor (at most 32) is the stored
   verified process, pid and start alike, in a `WATCH {p}:agents` transaction. The record outlives the
   process (a status, a hand-off, a relaunch leave it); only `forget` clears it, and the next proved
-  session replaces it. No chain (macOS) records nothing. It is a backup record and a project kind. The hook
+  session replaces it. No chain (a system with neither /proc nor sysctl's process table) records nothing. It is a backup record and a project kind. The hook
   never prints on stdout and always exits 0 (spec
   `docs/superpowers/specs/2026-10-21-launcher-resume-design.md`). Units always run `buildinfo.Bin` (setup's
   `$BIN_DIR/agentbus`) when it exists. `agentbus projects` and `agentbus identity` sit above the
