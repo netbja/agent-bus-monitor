@@ -320,7 +320,8 @@ flashes and runs nothing: that is case 4.
     - case 4: `/zzz` + Enter runs nothing, flashes "no command matches", and the line still reads
       `/zzz`;
   - r9 keys: `/` on the panels opens the line with `/` (the same model state as Ctrl+P); `f` opens
-    the filter line; `f` on History opens History's filter; `G` with
+    the filter line; `f` on History opens History's filter; with `display.follow` on, ↑ above the
+    live window or a click on an older row pauses the viewport and the setting stays on; `G` with
     `display.follow` off jumps to the newest line and does **not** resume live (new lines are counted
     after it); with it on, `G` resumes live as today; `/follow` flips `display.follow` and its flash says the new value;
   - `/R` + Enter opens the recap (case-sensitive letter alias);
@@ -401,13 +402,20 @@ The person's corrections are made in this head:
   auto-scroll`, and the `case ActFollow` in `panelKey` goes. `G`/end (`ActLive`) still jumps to
   the newest line.
 - **What on and off mean** (answer d, recommended):
-  - **on**, today's behaviour: Activity scrolls with new lines. **Only a wheel scroll up pauses
-    it** for the moment (`listState.ScrollBy` with a negative delta; the title counts `· N new`).
-    Moving the selection, clicking or opening a line keeps it on (`listState.Move` never pauses;
-    OPERATIONAL-GUIDE "Activity auto-scroll"). Today `f` pauses it too; r9 removes `f`, so the wheel
-    is the only way left. `G`/end resumes (`Last` calls `Resume`), and so does ↓ onto the newest line
-    or the wheel back to the bottom while paused (A3).
-  - **off:** Activity never scrolls by itself. New lines are counted, and the view stays.
+  - **on**, today's behaviour: Activity scrolls with new lines. The **setting stays on**, but the
+    viewport pauses for the moment (the title counts `· N new`) in two cases:
+    - a wheel scroll up (`listState.ScrollBy` with a negative delta);
+    - **a selection above the live window**, however it got there: ↑, Home, `g`, `u`, a click on
+      an older row, new lines pushing it up, or a smaller frame. `holdSelection` decides this on
+      each draw (`tea_view.go` → `listState.holdSelection`, `outsideLive`). It is the
+      activity-scroll fix of 2026-11-07: a pinned window would hide that selection.
+
+    Moving, clicking or opening **inside** the live window keeps it live, and so does an open
+    expansion. Today `f` pauses it too; r9 removes `f`. `G`/end resumes (`Last` calls `Resume`), and
+    so do ↓ onto the newest line and the wheel back to the bottom while paused (A3). Slice 1b keeps
+    all of this unchanged for `on`; it is not a new behaviour.
+  - **off:** Activity never scrolls by itself. New lines are counted, and the view stays. The
+    pauses above have nothing to pause.
     `G`/end jumps to the newest line once and stays put there. A3's automatic resume is off.
   - The title keeps saying which (`auto-scroll on` / `auto-scroll off · N new`), so the setting's
     effect is visible without opening C.
@@ -424,7 +432,8 @@ The person's corrections are made in this head:
   - `README.md`: the screen sample's hint line ("`f auto-scroll` … `/ filter`"), the Activity
     paragraph ("`/` filters"), and History's "`/` filters" row;
   - `docs/OPERATIONAL-GUIDE.md` and `docs/OPERATIONAL-GUIDE.fr.md`: the "Activity auto-scroll"
-    paragraph (`f` turns it off), which becomes the setting;
+    paragraph. `f` turns it off there; that becomes the setting. Its "moving, clicking or opening a
+    line keeps it on" also gains "inside the live window": a selection above it pauses, as above;
   - the tests: `tea_ported_test.go` "slash filters" (`/` → `ActFilter`, now `ActPalette`), plus any
     `keys_test.go` row on `f` or `/`;
   - `cmd/busmon/main.go`'s header comment ("/ filters").
