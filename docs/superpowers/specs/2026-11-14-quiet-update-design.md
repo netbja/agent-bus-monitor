@@ -671,8 +671,9 @@ every 15 minutes:
     runs again, in each service mode.
   - Every command the README names is in the portable list (§4.5.3), checked for a Linux and a
     macOS snapshot; the `none` harness runs with a PATH that has no `setsid`.
-  - The README's `nohup` start passes herdr exit §4.4b's SIGHUP test (an agent of the restored
-    holder ends by SIGHUP on the holder's close).
+  - The README's `nohup` start passes herdr exit §4.4b's chain test (an agent of the restored
+    holder ends by SIGHUP on the holder's close); each process's own handler is proved by that
+    section's per-process tests.
 - **First upgrade from a pre-feature binary:**
   - a stub old `agentbus` with no `update` command;
   - `setup.sh update`, then the managed `install.sh` path, each produce a complete snapshot before
@@ -701,7 +702,10 @@ None. The person answered r11's two (§2 decision 6; §6).
 
 - **r13** (the person's review of r12, task `quiet-update-r13`):
   - the SIGHUP requirement on the holder and `service supervise` moved to herdr exit §4.4b
-    (revision 26, with its test); README step 4 and §5 keep a one-line reference;
+    (revision 26, with its tests); README step 4 and §5 keep a one-line reference;
+  - (reviewer-codex on r13) the SIGHUP test is one per process: either handler alone lifts the
+    ignore for the whole chain, so the supervisor and the holder are each tested started under
+    `nohup` on their own, plus the chain;
   - no cron under `none`: the scheduled updater (systemd timer, launchd calendar job, nothing
     under `none`) is replaced by one `updater` service in every mode, a 5-minute ticker that
     compares the local wall clock with `updates.window`, records the last pass and runs

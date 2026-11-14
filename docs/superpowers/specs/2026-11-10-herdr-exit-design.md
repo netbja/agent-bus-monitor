@@ -751,12 +751,20 @@ With `none`:
   (v0.28.0), so the handler goes in before the first one.
 - Tests: the supervisor's restart, burst and exit-0 rules with a scripted program; the
   process-group kill skips a reused pid; `up` twice starts one supervisor; an upgrade starts a
-  second supervisor and leaves the first. SIGHUP: a supervisor started under `nohup` starts a
-  holder whose scripted agent has SIGHUP at its default (on Linux, bit 1 of `SigIgn` in
-  `/proc/<pid>/status` is clear); on both systems, the holder's `Close` ends that agent within
-  the grace by SIGHUP (its wait status says so), not by the SIGKILL. On macOS the behavioural
-  check is the assertion, as stock `ps` has no ignored-signal keyword. A holder or supervisor
-  built without the handler fails it.
+  second supervisor and leaves the first. SIGHUP, one test per process, each started with
+  SIGHUP ignored (under `nohup`) and nothing else between it and the child it is judged on, since
+  either handler alone would lift the ignore for the whole chain:
+  - **supervisor alone:** `service supervise` runs a scripted program (not the holder) that
+    reports its own SIGHUP disposition and is then sent SIGHUP: the disposition is default and
+    the program dies by SIGHUP;
+  - **holder alone:** `agentbus holder` started directly, with no supervisor, starts a scripted
+    agent; the agent's disposition is default, and the holder's `Close` ends it within the grace
+    by SIGHUP (its wait status says so), not by the SIGKILL;
+  - **the chain:** the README's `nohup` start of supervisor and holder, the same agent check.
+  The disposition is read from bit 1 of `SigIgn` in `/proc/<pid>/status` on Linux; on macOS,
+  where stock `ps` has no ignored-signal keyword, the death by SIGHUP is the assertion. A
+  supervisor built without its handler fails the first test, a holder without its own the
+  second, whatever the other does.
 
 ### 4.5 The focus rule and drafts, restated for a host without focus
 
