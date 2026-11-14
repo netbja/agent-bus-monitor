@@ -571,3 +571,16 @@ func TestSpawnRules(t *testing.T) {
 		t.Fatal("an unknown role: no error")
 	}
 }
+
+// A role that pops with no other role to pop has empty lists, not nil: it
+// still pops (reviewer-codex).
+func TestSpawnRulesPopsAlone(t *testing.T) {
+	m, err := Load(writeConfig(t, "[roles.master]\nmodel = \"sonnet\"\npermission = \"acceptEdits\"\ntier = \"boot\"\npops = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allow, ask, err := m.SpawnRules("master")
+	if err != nil || allow == nil || ask == nil || len(allow)+len(ask) != 0 {
+		t.Fatalf("allow %#v ask %#v err %v", allow, ask, err)
+	}
+}

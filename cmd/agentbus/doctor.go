@@ -349,6 +349,9 @@ func popsLine(p *doctorPops) string {
 	if len(p.Ask) > 0 {
 		parts = append(parts, "ask "+strings.Join(p.Ask, ", ")+" (the person approves)")
 	}
+	if len(parts) == 0 {
+		parts = append(parts, "none") // it pops, but roles.toml has no other role to pop
+	}
 	return strings.Join(parts, "; ") + "; any other role is not covered"
 }
 

@@ -1286,7 +1286,8 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   row. Under a role that pops (master), a `pops:` line lists the agent-spawn rules its session starts
   with (`rolecfg.SpawnRules`, from `LaunchRules`): `allow` roles pop without a prompt, `ask` roles with
   the person's yes (`approval = "person"`); a role in neither (not in roles.toml) is not covered, its
-  spawn prompts. `--json` has them as `pops.allow` / `pops.ask`. Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
+  spawn prompts. A role that pops with no other role to pop shows `pops: none`. `--json` has them as
+  `pops.allow` / `pops.ask` (empty lists for `none`, no `pops` for a role that does not pop). Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
   the table's lock (skipped when held), 10 s in all, a late reader keeping its rows and named in
   `refresh incomplete: <provider> <reason>`. The daily refresh no longer waits for services. A
   source older than `models.source_max_age` (7 d) withholds every verdict. The `model-catalogue`

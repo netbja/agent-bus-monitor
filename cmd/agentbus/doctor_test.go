@@ -456,3 +456,42 @@ func TestDoctorShowsPopRules(t *testing.T) {
 		}
 	}
 }
+
+// A role that pops with no other role in roles.toml: "pops: none", and
+// empty lists in JSON, never the silence of a role that does not pop
+// (reviewer-codex).
+func TestDoctorPopsNone(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()) })
+	path := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(path, []byte("schema_version = 2\n[profiles.main]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"claude-opus-5-5\"\noptions = { permission = \"manual\" }\n[roles.master]\nprofile = \"main\"\ntier = \"boot\"\npops = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Status(ctx, "master", "idle", "", bus.AgentIdent{Pane: "p-master", PID: 1, PIDStart: 1, Model: "claude-opus-5-5", Client: "claude-code", Provider: "anthropic"}); err != nil {
+		t.Fatal(err)
+	}
+	d := doctorDeps{
+		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
+		ProcStart:  func(int) (uint64, error) { return 1, nil },
+		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
+		Transcript: func(string) (usage.UsedModel, error) { return usage.UsedModel{}, errors.New("none") },
+		Now:        time.Now,
+	}
+	var out, errw bytes.Buffer
+	runDoctor(ctx, b, d, nil, &out, &errw)
+	if !strings.Contains(out.String(), "pops: none; any other role is not covered") {
+		t.Fatalf("text:\n%s%s", out.String(), errw.String())
+	}
+	out.Reset()
+	runDoctor(ctx, b, d, []string{"--json"}, &out, &errw)
+	var rows []struct {
+		Pops *struct {
+			Allow []string `json:"allow"`
+			Ask   []string `json:"ask"`
+		} `json:"pops"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil || len(rows) != 1 || rows[0].Pops == nil || rows[0].Pops.Allow == nil || rows[0].Pops.Ask == nil {
+		t.Fatalf("json rows %+v %v: %s", rows, err, out.String())
+	}
+}

@@ -298,14 +298,23 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 
 // SpawnRules are role's agent-spawn rules (LaunchRules') as the roles they
 // name: allow, and ask (the person approves each pop). Both nil for a role
-// that does not pop; a role missing from the manifest has no rule at all, so
-// its spawn prompts (roles doctor shows it, roles-doctor-pop-rules).
+// that does not pop, empty (never nil) for one that pops with no other role
+// to pop (reviewer-codex); a role missing from the manifest has no rule at
+// all, so its spawn prompts (roles doctor shows it, roles-doctor-pop-rules).
 func (m *Manifest) SpawnRules(role string) (allow, ask []string, err error) {
+	p, err := m.Resolve(role)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !p.Pops {
+		return nil, nil, nil
+	}
 	r, err := m.LaunchRules(role)
 	if err != nil {
 		return nil, nil, err
 	}
-	names := func(rules []string) (out []string) {
+	names := func(rules []string) []string {
+		out := []string{}
 		for _, rule := range rules {
 			if s, ok := strings.CutPrefix(rule, "Bash(agent-spawn "); ok {
 				if name, ok := strings.CutSuffix(s, " *)"); ok {
