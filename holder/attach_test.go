@@ -341,3 +341,42 @@ func TestHolderLoneEscThenFocusOut(t *testing.T) {
 		t.Fatalf("an Escape older than escWait not counted: %+v", a)
 	}
 }
+
+// A terminal names its client's profile (agentbus attach gates the prefix
+// on it, spec 4.6), and an attach is driven through the client's exported
+// stream: SendData, SendControl, ReadFrame.
+func TestAttachStreamAndProfile(t *testing.T) {
+	_, sock := newTestHolder(t)
+	cl := dial(t, sock)
+	fake := startRole(t, cl, "fake")
+	if fake.Profile != "agy" {
+		t.Fatalf("profile %q, want agy", fake.Profile)
+	}
+	if plain := startRole(t, cl, "talker"); plain.Profile != "" {
+		t.Fatalf("a terminal with no client: profile %q", plain.Profile)
+	}
+	talker := startRole(t, cl, "talker")
+	v := dial(t, sock)
+	if _, err := v.Call(Attach{Term: talker.ID, Cols: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SendData([]byte("ping\r")); err != nil {
+		t.Fatal(err)
+	}
+	var seen strings.Builder
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(seen.String(), "ping"); {
+		if time.Now().After(deadline) {
+			t.Fatalf("no echo: %q", seen.String())
+		}
+		typ, b, err := v.ReadFrame()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if typ == FrameData {
+			seen.Write(b)
+		}
+	}
+	if err := v.SendControl(Detach{}); err != nil {
+		t.Fatal(err)
+	}
+}

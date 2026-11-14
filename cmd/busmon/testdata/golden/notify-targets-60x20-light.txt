@@ -1,7 +1,7 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
  1 For you   2 Agents   3 Activity   4 Board   5 Work       
-╭─ Settings · 2 set here · 1 elsewhere · 33 default ─ esc…─╮
+╭─ Settings · 2 set here · 1 elsewhere · 34 default ─ esc…─╮
 │  focus: keys · ← or tab: the tabs                        ▲
 │ …  Identity   Notifications   Services   Backup  …       ┃
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
