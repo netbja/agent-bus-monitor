@@ -32,12 +32,22 @@ Only these repairs are allowed, and only when the check identifies the matching 
   `agentbus service restart <kind>`, only if its restart budget has room.
 - Run `agentbus models --refresh` when the model catalogue source failed and its reader is
   installed.
+- Start the project's current holder instance with `agentbus service start holder`, once per
+  episode, only when `holder` fails (the holder service is installed and no holder answers). It
+  starts that build's unit and never restarts a running one. Then escalate to master with the
+  agents that were lost (every agent the holder held died with it). Never `agentbus up`, never
+  `service restart holder` (it needs `--kill-agents`, the person's word), never relaunch an agent.
 
 After a repair, wait for the next measured result. Never restart repeatedly, run project commands,
 change Redis credentials, edit roles or configuration, change project code, or close/type into a
 pane. Escalate anything outside the allow-list to master with a concise `agentbus cmd master ...`;
 ask the person when a decision or credential change is needed. Do not act on a stale or unrelated
 directive.
+
+`holder-draining` warns while an older build's holder still holds agents after an upgrade;
+`holder-leftovers` warns when an older build's unit or binary copy outlived the gc
+(`agentbus --project <p> service gc` is the person's command). Neither is yours to repair:
+mention them to master once per daily review.
 
 `github` warns when the services reach GitHub by one transport only (SSH or HTTPS), or by neither
 for an hour; it never fails. It is the person's (their remote and credentials): mention it to

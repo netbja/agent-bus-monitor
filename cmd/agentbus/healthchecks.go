@@ -25,6 +25,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -75,7 +76,28 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 	runawayThresholds, runawayThresholdsOK := runawayThresholdsFromEnv(os.Getenv)
 	var probeMu sync.Mutex
 	probeFailures := 0
+	// The holder's three checks read one evidence (herdr exit 4.4a): units,
+	// sockets and binary copies of this project's builds.
+	holderNow := func() (health.HolderEvidence, error) {
+		e := holderEvidence(manager, paths, b.Project(), holder.BuildID(), realHolderProbe(os.Getenv))
+		if !e.Known {
+			return e, errors.New("holder units, sockets or binary copies unavailable")
+		}
+		return e, nil
+	}
 	return []dispatch.HealthCheck{
+		healthOutcomeTask("holder", func(ctx context.Context) (health.Outcome, error) {
+			e, err := holderNow()
+			return health.EvaluateHolder(e), err
+		}),
+		healthOutcomeTask("holder-draining", func(ctx context.Context) (health.Outcome, error) {
+			e, err := holderNow()
+			return health.EvaluateHolderDraining(e), err
+		}),
+		healthOutcomeTask("holder-leftovers", func(ctx context.Context) (health.Outcome, error) {
+			e, err := holderNow()
+			return health.EvaluateHolderLeftovers(e), err
+		}),
 		healthOutcomeTask("services", func(ctx context.Context) (health.Outcome, error) {
 			installed, err := b.ServicesInstalled(ctx)
 			if err != nil {

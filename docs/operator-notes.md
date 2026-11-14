@@ -220,6 +220,21 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   project's unit records. A password rotation and an upgrade's hint skip holder lines by kind;
   `service restart holder` is refused unless `--kill-agents` is given and says how many agents it
   would kill (`RestartHolder`: systemd `restart`, launchd `kickstart -k`).
+- **The holder's health and its two commands (herdr exit step 6d1).** One evidence per project
+  (`cmd/agentbus/holderhealth.go`, `holderEvidence`): per build key, its unit and whether the
+  manager runs it, its socket in `<rundir>/agentbus/<p>/` (answering, terminals, age from the
+  socket's mtime) and its binary copy; a copy that another project's unit records is that project's,
+  never this one's leftover; a manager that cannot say makes it unknown. Three checks read it
+  (`health/holder.go`): `holder` fails when the current build's unit is installed and no holder
+  answers (sentinel's one action: `agentbus service start holder`, once per episode, then escalate
+  the agents lost); `holder-draining` warns while an older build still holds terminals (master's,
+  never a fail); `holder-leftovers` warns when an older build that neither runs nor answers keeps
+  its unit or copy (the person's: `agentbus --project <p> service gc`). `service start holder`
+  starts the current build's installed unit only (`StartHolder` never restarts); `service gc` runs
+  `GCHolders`, then `GCHolderBinaries` (copies no unit of any project records, kept when a holder
+  of that build answers for any project, found through `holder.RunAgentbusDir`, which checks the
+  run directory without creating a project's). Deferred to the cutover: `holder_restarted` (no
+  agent is tied to a holder terminal before it) and `holder drain` (no agent to drain).
 - **Project services (v0.12): the OS manager supervises, nothing of ours does.** `service/`
   writes systemd `--user` units / launchd plists (enabled at login only while `services.start_at_login` is on), the 0600 env file the
   services load, the rotating log and the restart budget. Every unit runs `agentbus --project P

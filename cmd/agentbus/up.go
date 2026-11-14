@@ -8,7 +8,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"maps"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -471,6 +470,12 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 			}
 		}
 	}
+	// The holder before the services: it makes no broker connection, and the
+	// dispatcher's first health pass must find it answering, or holder fails
+	// for agents that were never lost (foureyes).
+	if err := startHolder(d, m, project, workdir, stdout); err != nil {
+		errs = append(errs, fmt.Errorf("holder: %v", err))
+	}
 	for _, k := range kinds {
 		spec := service.Spec{Project: project, Kind: k, Exe: exe, WorkDir: workdir, Paths: d.Paths, EnvFile: d.Paths.EnvFile(project),
 			AtLogin: atLogin && ls != nil}
@@ -520,9 +525,6 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		if st, err := m.State(project, k); err == nil && st.Active {
 			fmt.Fprintf(stdout, "%s: still running from before (stop it: agentbus --project %s service stop %s)\n", k, project, k)
 		}
-	}
-	if err := startHolder(d, m, project, workdir, stdout); err != nil {
-		errs = append(errs, fmt.Errorf("holder: %v", err))
 	}
 	if ls != nil && atLogin {
 		if err := ls.Enable(project); err != nil {
@@ -658,6 +660,37 @@ func holderContext(d upDeps, workdir string, env map[string]string) {
 	set(service.HolderManifestEnv, manifest)
 }
 
+// The readiness wait: one deadline for the whole wait, probes 100 ms apart;
+// each real probe is the holder's handshake (holderReady) bounded by
+// holderProbeTimeout, so a socket that
+// accepts and stalls cannot stretch it (reviewer-codex).
+const (
+	holderReadyWithin  = 5 * time.Second
+	holderReadyEvery   = 100 * time.Millisecond
+	holderProbeTimeout = 500 * time.Millisecond
+)
+
+// waitHolder probes until the holder answers or the deadline passes, on now's
+// clock (nil: the real one).
+func waitHolder(ready func() bool, sleep func(time.Duration), now func() time.Time) bool {
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	if now == nil {
+		now = time.Now
+	}
+	deadline := now().Add(holderReadyWithin)
+	for {
+		if ready() {
+			return true
+		}
+		if !now().Add(holderReadyEvery).Before(deadline) {
+			return false
+		}
+		sleep(holderReadyEvery)
+	}
+}
+
 // expandWorkDir is a template's working_dir as up reads it elsewhere: ~ is
 // the home, variables expanded.
 func expandWorkDir(d upDeps, dir string) string {
@@ -696,8 +729,16 @@ func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io
 	if err := hm.StartHolder(project, key); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "holder: build %s started as a %s service (no agent runs on it yet)\n", raw, m.Name())
 	answers := func(k string) bool { return d.HolderAnswers != nil && d.HolderAnswers(project, k) }
+	// Ready, not only started (reviewer-codex): a manager's start returns
+	// before the socket listens, and the dispatcher started next must find it
+	// answering. Bounded: a holder that never answers is reported by the
+	// holder check, and the services start anyway.
+	if !waitHolder(func() bool { return answers(key) }, d.Sleep, d.Now) {
+		fmt.Fprintf(stdout, "holder: build %s started as a %s service, not answering yet (agentbus health holder)\n", raw, m.Name())
+	} else {
+		fmt.Fprintf(stdout, "holder: build %s started as a %s service (no agent runs on it yet)\n", raw, m.Name())
+	}
 	removed, err := service.GCHolders(hm, d.Paths, project, key, answers)
 	if len(removed) > 0 {
 		fmt.Fprintf(stdout, "holder: removed %d older build(s) that no longer run\n", len(removed))
@@ -769,21 +810,10 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 			}
 			return filepath.EvalSymlinks(exe)
 		},
-		Installed:   buildinfo.Bin,
-		Environ:     os.Environ(),
-		HolderBuild: holder.BuildID,
-		HolderAnswers: func(project, key string) bool {
-			sock, err := holder.SocketPath(os.Getenv, project, key)
-			if err != nil {
-				return false
-			}
-			c, err := net.DialTimeout("unix", sock, time.Second)
-			if err != nil {
-				return false
-			}
-			c.Close()
-			return true
-		},
+		Installed:     buildinfo.Bin,
+		Environ:       os.Environ(),
+		HolderBuild:   holder.BuildID,
+		HolderAnswers: func(project, key string) bool { return holderReady(os.Getenv, project, key, holderProbeTimeout) },
 		Mark: func(project string, inst bus.ServicesInstall) error {
 			c, err := bus.Connect("")
 			if err != nil {

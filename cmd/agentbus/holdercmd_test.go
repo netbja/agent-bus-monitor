@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -261,5 +262,66 @@ func TestHolderRefusesAMissingEnvFile(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "invalid configuration") {
 		t.Fatalf("no reason given: %q", out.String())
+	}
+}
+
+// holderReady is up's readiness probe: the holder's handshake, bounded, not
+// a bare dial (a socket listening before its accept loop serves nothing yet;
+// reviewer-codex). A listener that never accepts, or accepts and says
+// nothing, is not ready, within the timeout; a real holder is.
+func TestHolderReadyProbesTheProtocol(t *testing.T) {
+	run, err := os.MkdirTemp("", "hr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(run) })
+	os.Chmod(run, 0o700)
+	getenv := func(k string) string {
+		if k == "XDG_RUNTIME_DIR" {
+			return run
+		}
+		return ""
+	}
+	key := service.BuildKey("v1")
+	sock, err := holder.SocketPath(getenv, "demo", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if holderReady(getenv, "demo", key, 300*time.Millisecond) {
+		t.Fatal("a listener that never accepts read as ready")
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("the probe took %v", d)
+	}
+	go func() { // accepts and says nothing
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+		}
+	}()
+	if holderReady(getenv, "demo", key, 300*time.Millisecond) {
+		t.Fatal("a silent listener read as ready")
+	}
+	ln.Close()
+
+	w := newHolderWorld(t)
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin", service.HolderRepoEnv: w.repo})
+	w.start(t, w.tmp)
+	wenv := func(k string) string {
+		if k == "XDG_RUNTIME_DIR" {
+			return w.run
+		}
+		return ""
+	}
+	if !holderReady(wenv, "demo", service.BuildKey(holder.BuildID()), 2*time.Second) {
+		t.Fatalf("a serving holder read as not ready\n%s", w.out.String())
 	}
 }

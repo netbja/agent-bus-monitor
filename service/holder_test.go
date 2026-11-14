@@ -552,3 +552,28 @@ func TestStopHolder(t *testing.T) {
 		t.Fatalf("not loaded: %v %v", err, g.calls)
 	}
 }
+
+// GCHolderBinaries removes the binary copies no unit records (any project),
+// never the current build's and never one whose holder answers.
+func TestGCHolderBinaries(t *testing.T) {
+	p := holderPaths(t)
+	m := Systemd{Run: (&fakeRun{}).run, Paths: p}
+	for _, raw := range []string{"cur", "used", "live", "orphan"} {
+		if _, err := InstallHolderBinary(p, raw, fakeExe(t, raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.InstallHolder(HolderSpec{Project: "other", Raw: "used", Paths: p, EnvFile: "/e", WorkDir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	live := BuildKey("live")
+	removed, err := GCHolderBinaries(m, p, BuildKey("cur"), func(key string) bool { return key == live })
+	if err != nil || len(removed) != 1 || removed[0] != BuildKey("orphan") {
+		t.Fatalf("removed %v, %v", removed, err)
+	}
+	for raw, want := range map[string]bool{"cur": true, "used": true, "live": true, "orphan": false} {
+		if _, err := os.Stat(HolderBinDir(p, BuildKey(raw))); (err == nil) != want {
+			t.Errorf("%s: present %v, want %v", raw, err == nil, want)
+		}
+	}
+}

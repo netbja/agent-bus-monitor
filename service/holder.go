@@ -263,24 +263,66 @@ func GCHolders(m HolderManager, p Paths, project, current string, answers func(k
 	if err != nil {
 		return removed, errors.Join(append(errs, err)...)
 	}
-	base := filepath.Join(p.DataHome, "agentbus", "holder") + string(filepath.Separator)
 	for _, key := range removed {
 		if slices.ContainsFunc(all, func(u HolderUnit) bool { return u.Key == key }) {
 			continue // another project's unit runs this build
 		}
-		dir := HolderBinDir(p, key)
-		if !ValidBuildKey(key) || !strings.HasPrefix(dir, base) || filepath.Dir(dir)+string(filepath.Separator) != base {
-			errs = append(errs, fmt.Errorf("build key %q is not a build key: its binary is kept", key))
-			continue
-		}
-		if gone, err := realDirs(false, p.DataHome, "agentbus", "holder", key); err != nil {
-			errs = append(errs, fmt.Errorf("the binary of build %s is kept: %w", key, err))
-			continue
-		} else if gone {
-			continue // no binary left: nothing to remove
-		}
-		if err := os.RemoveAll(dir); err != nil {
+		if _, err := removeHolderBinary(p, key); err != nil {
 			errs = append(errs, err)
+		}
+	}
+	slices.Sort(removed)
+	return removed, errors.Join(errs...)
+}
+
+// removeHolderBinary deletes key's binary copy, each level checked first
+// (realDirs: never through a symlink, never outside the holder directory).
+// It reports whether something was removed.
+func removeHolderBinary(p Paths, key string) (bool, error) {
+	base := filepath.Join(p.DataHome, "agentbus", "holder") + string(filepath.Separator)
+	dir := HolderBinDir(p, key)
+	if !ValidBuildKey(key) || !strings.HasPrefix(dir, base) || filepath.Dir(dir)+string(filepath.Separator) != base {
+		return false, fmt.Errorf("build key %q is not a build key: its binary is kept", key)
+	}
+	if gone, err := realDirs(false, p.DataHome, "agentbus", "holder", key); err != nil {
+		return false, fmt.Errorf("the binary of build %s is kept: %w", key, err)
+	} else if gone {
+		return false, nil // no binary left: nothing to remove
+	}
+	return true, os.RemoveAll(dir)
+}
+
+// GCHolderBinaries removes the binary copies that no unit of any project
+// records (a gc that removed the unit but failed on the copy, or an install
+// that never got its unit): never the current build's, never one whose
+// holder answers. It returns the keys removed.
+func GCHolderBinaries(m HolderManager, p Paths, current string, answers func(key string) bool) ([]string, error) {
+	all, err := m.HolderUnits("")
+	if err != nil {
+		return nil, err
+	}
+	ents, err := os.ReadDir(filepath.Join(p.DataHome, "agentbus", "holder"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var removed []string
+	var errs []error
+	for _, d := range ents {
+		key := d.Name()
+		if !d.IsDir() || key == current || !ValidBuildKey(key) ||
+			slices.ContainsFunc(all, func(u HolderUnit) bool { return u.Key == key }) || answers(key) {
+			continue
+		}
+		done, err := removeHolderBinary(p, key)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if done {
+			removed = append(removed, key)
 		}
 	}
 	slices.Sort(removed)

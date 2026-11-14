@@ -52,12 +52,27 @@ func ProjectDir(getenv func(string) string, project string) (string, error) {
 	if !bus.ValidName(project) {
 		return "", fmt.Errorf("holder: invalid project %q", project)
 	}
+	dir, err := RunAgentbusDir(getenv)
+	if err != nil {
+		return "", err
+	}
+	p := filepath.Join(dir, project)
+	if err := ensureLevel(p); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+// RunAgentbusDir is <rundir>/agentbus, each level checked as ProjectDir
+// checks it: the parent of every project's directory (a gc lists the
+// projects there without creating one).
+func RunAgentbusDir(getenv func(string) string) (string, error) {
 	root := runDir(getenv)
 	var levels []string
 	if root.fallback {
 		levels = append(levels, root.path)
 	}
-	levels = append(levels, filepath.Join(root.path, "agentbus"), filepath.Join(root.path, "agentbus", project))
+	levels = append(levels, filepath.Join(root.path, "agentbus"))
 	for _, l := range levels {
 		if err := ensureLevel(l); err != nil {
 			return "", err
