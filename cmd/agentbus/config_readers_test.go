@@ -182,3 +182,27 @@ func TestServicePopRetire(t *testing.T) {
 		t.Errorf("30m = %+v", c)
 	}
 }
+
+// pop-retire-auto: the dispatcher ends a done pop itself when it can reach
+// the project's herdr session (the services' env names it); without one,
+// End stays nil and master is told as before. Off, nothing is set.
+func TestWithPopEnd(t *testing.T) {
+	missions := func(context.Context, string) ([]string, error) { return nil, nil }
+	c := servicePopRetire(withConfig(t, "", nil), missions)
+	if withPopEnd(c, nil, nil, func(string) string { return "" }).End != nil {
+		t.Error("an End with no herdr session named")
+	}
+	env := func(k string) string {
+		if k == "HERDR_SESSION" {
+			return "agent-bus-monitor"
+		}
+		return ""
+	}
+	if withPopEnd(c, nil, nil, env).End == nil {
+		t.Error("no End with a herdr session")
+	}
+	off := servicePopRetire(withConfig(t, "[dispatch]\npop_retire = false\n", nil), missions)
+	if withPopEnd(off, nil, nil, env).End != nil {
+		t.Error("an End with pop_retire off")
+	}
+}

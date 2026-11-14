@@ -988,8 +988,18 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   retire <role>` closes one role's tab with the same checks (not `shutdown`, which is team-wide;
   pop-auto-retire, spec `docs/superpowers/specs/2026-11-03-pop-auto-retire-design.md`: the dispatch
   pass `popRetirePass` judges every pop (`AgentSnapshot.Tier` from the launcher's `AGENT_BUS_TIER`,
-  set only with a proof) with the pure `dispatch.PopDone` over `ReadPopFacts`, and sends master one
-  waking directive per idle episode (mark `popdone:<a>` = the declaration's `ts`); master runs
+  set only with a proof) with the pure `dispatch.PopDone` over `ReadPopFacts`. Since pop-retire-auto
+  (decision 2026-11-13-dispatcher-ends-done-pop) the dispatcher ends a done pop itself where the service
+  reaches herdr (`withPopEnd`: a session named in the env, `relaunch.ServiceHerdr`): `popEnd`, the
+  steps of `retire --forget` with every write fenced (`BeginAutoRetire`, `AutoRetireHeld`,
+  `EndAutoRetire`, `FencedLogSwap`, `FencedRetireSwap`, `ForgetIfClearFenced`), by `dispatch`, never a
+  boot role or a running turn; its herdr pane close is bounded (10 s, `serviceClosePane` over
+  `relaunch.ServiceHerdrContext`, the herdr process group killed at the deadline), so a hung herdr
+  never holds the pass; master gets one wake=no notice once ended (`PopEndedText`), the waking
+  directive with the reason once it failed after the close (`PopEndFailedText`), nothing on a wait
+  (a turn, a wake being typed, a re-judgement that no longer holds: the next pass judges again); one
+  per episode (mark `popdone:<a>`). Without a herdr session it sends master one waking directive per
+  idle episode (mark `popdone:<a>` = the declaration's `ts`); master runs
   `retire <role> --forget --episode <ms>`, which re-judges the whole predicate before its `begin`,
   after it and before the close, holds a `kind=retire` intent with a nonce (only that exact intent
   passes), then `Bus.ForgetIfClear`: one script that unregisters the pop only if the stored
@@ -997,7 +1007,9 @@ The "Things that bite" section of [CLAUDE.md](../CLAUDE.md), moved here unchange
   floor, open ask, owned board task not `done`, gate), and keeps its consumer group so a respawn
   reads on; busmon drops a row whose agent was registered and has left `{p}:agents` (unless an armed
   subscriber still listens), so a retired pop leaves the Agents panel at the next poll instead of
-  showing its last state until it turns dormant (retire-forget-roster); `dispatch.pop_retire`/`pop_retire_after` (on, 15 min), busmon `done Nm`/`retiring`,
+  showing its last state until it turns dormant, and the dispatcher's rule 6 stays quiet (no "no
+  snapshot, escalating") for a role whose last ledger entry is a retire that forgot it
+  (`Bus.RetiredForgotten`): its kept group waits for a respawn (retire-forget-roster); `dispatch.pop_retire`/`pop_retire_after` (on, 15 min), busmon `done Nm`/`retiring`,
   health `pop-done`; pop-closed-by-hand: a plain `retire` of a pop ends with the same `ForgetIfClear`
   under a retire intent (a boot role never), and a pop closed by hand, its verified process proved gone
   (`dispatch.ProcGone`: only `ErrNoProcess`, a pid readable `/proc` lists no more, or a recycled pid; any

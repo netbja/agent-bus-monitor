@@ -70,8 +70,9 @@ Short forms; the full text, with the reasons, is in the two documents below.
   run repository code: the conductor alone runs a mission's tests.
 - **The dispatcher is the one automated pane writer**, and it types only the fixed wake line (and
   `/clear` after a declared hand-off; its self-repair (built in step 7b) runs a role's template command in
-  a pane it has just created, never in an existing one, decision 2026-11-09). Don't add a second
-  pane writer or make it type message text.
+  a pane it has just created, never in an existing one, decision 2026-11-09; and it closes the pane of a
+  pop judged done, the same act as `retire --forget`, decision 2026-11-13). Don't add a second pane
+  writer or make it type message text.
 - **A woken agent runs `subscribe --drain`**, never a plain `subscribe`, which acknowledges older
   entries unseen.
 - **Never write a board entry from a Go struct** (`json.Marshal` + `HSET` drops unknown fields);

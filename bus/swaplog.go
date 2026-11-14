@@ -274,6 +274,23 @@ func swapEventFrom(m redis.XMessage) SwapEvent {
 		Kind: s("kind"), Forgot: s("forgot")}
 }
 
+// RetiredForgotten reports whether role's last ledger entry (the self-repair
+// shadow's records looked past) is a retire that unregistered it: retire
+// --forget, by master or the dispatcher. Its consumer group is kept by
+// design; the dispatcher does not count what lands there as a stall.
+func (b *Bus) RetiredForgotten(ctx context.Context, role string) (bool, error) {
+	evs, err := b.SwapLog(ctx, role, 0)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range evs {
+		if e.Event != SwapWouldRelaunch {
+			return e.Event == SwapRetire && e.Forgot == "true", nil
+		}
+	}
+	return false, nil
+}
+
 // Interrupted reports whether role's last ledger entry is a begin with no
 // live intent: a swap whose caller died before a terminal entry (§11.2).
 // The self-repair shadow's would-relaunch entries are records, not ends: they

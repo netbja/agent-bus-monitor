@@ -14,9 +14,11 @@ import (
 
 // A pop's end (spec docs/superpowers/specs/2026-11-03-pop-auto-retire-design.md):
 // the dispatcher judges every registered pop with PopDone and, once one is
-// done, sends the escalation target (master) one waking directive per
-// episode to run `agentbus retire <role> --forget --episode <ms>`. It closes
-// and types nothing new: retire re-judges the whole of §2 at the act.
+// done, either ends it itself (End set: pop-retire-auto, decision
+// 2026-11-13-dispatcher-ends-done-pop) and tells the escalation target
+// (master) with one notice that wakes nobody, or sends master one waking
+// directive per episode to run `agentbus retire <role> --forget --episode
+// <ms>`. Either way the act re-judges the whole of §2.
 
 // PopRetireConfig is the pass's switch and delay.
 type PopRetireConfig struct {
@@ -28,6 +30,32 @@ type PopRetireConfig struct {
 	// ProcStart reads a pid's start time; nil never judges a pop closed
 	// (pop-closed-by-hand).
 	ProcStart func(pid int) (uint64, error)
+	// End, when set, ends a done pop as `retire --forget` does, every write
+	// fenced by token (the service's popEnd); nil: master is told to run it.
+	End func(ctx context.Context, token, role string, episode int64) PopEnd
+}
+
+// PopEnd is what End did: Ended; Wait, nothing done and nobody told (a turn
+// running, a wake being typed: the next pass judges again); or Failed, once
+// it began, which wakes master with the reason.
+type PopEnd struct {
+	Ended  bool
+	Detail string // Ended: what was closed and forgotten
+	Wait   string
+	Failed string
+}
+
+// PopEndedText is the notice master gets (wake=no) once the dispatcher ended
+// a pop itself.
+func PopEndedText(role string, episode int64, detail string) string {
+	return fmt.Sprintf("%s was ended by the dispatcher (episode %d): it had finished, no task, gate, ask or message left; %s.", role, episode, detail)
+}
+
+// PopEndFailedText is the directive master gets when the dispatcher could
+// not end a done pop: why, and the command that ends it by hand.
+func PopEndFailedText(role string, episode int64, why string) string {
+	return fmt.Sprintf("The dispatcher could not end %s, which has finished: %s. End it by hand: agentbus retire %s --forget --episode %d --reason \"work done\"",
+		role, why, role, episode)
 }
 
 // PopRetireText is the directive master gets for a done pop.
@@ -114,11 +142,14 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 		l.logOnce("pop-kept:"+a, map[string]any{"agent": a, "action": "pop-kept", "reason": why})
 		return nil
 	}
+	episode := PopEpisode(f.Snap)
+	if c.End != nil { // the dispatcher ends it itself (pop-retire-auto)
+		return l.popEnd(ctx, a, episode)
+	}
 	if cannot := l.recipientCannotAct(a); cannot != "" {
 		l.logOnce("pop-kept:"+a, map[string]any{"agent": a, "action": "pop-kept", "reason": "done, but " + cannot})
 		return nil
 	}
-	episode := PopEpisode(f.Snap)
 	text := PopRetireText(a, episode, now.Sub(time.UnixMilli(episode)))
 	if f.Closed {
 		text = PopClosedText(a, episode, f.HandoffReport)
@@ -130,6 +161,38 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	}
 	if sent {
 		l.log(map[string]any{"agent": a, "action": "pop-done", "to": l.cfg.EscalateTo, "episode": episode})
+	}
+	return nil
+}
+
+// popEnd ends a done pop through End: a notice (wake=no) once ended, the
+// waking directive with the reason once failed, nothing on a wait. The
+// episode's mark keeps either from being sent twice, and a failed episode
+// is not tried again (master ends it by hand).
+func (l *loop) popEnd(ctx context.Context, a string, episode int64) error {
+	r := l.cfg.PopRetire.End(ctx, l.token, a, episode)
+	var text string
+	noWake := false
+	switch {
+	case r.Wait != "":
+		l.logOnce("pop-kept:"+a, map[string]any{"agent": a, "action": "pop-wait", "reason": r.Wait})
+		return nil
+	case r.Ended:
+		text, noWake = PopEndedText(a, episode, r.Detail), true
+	default:
+		text = PopEndFailedText(a, episode, r.Failed)
+	}
+	sent, err := l.b.FencedCmdOnce(ctx, l.token, bus.PopDoneMark(a), strconv.FormatInt(episode, 10), dispatchFrom,
+		l.cfg.EscalateTo, bus.CmdDirective, text, noWake)
+	if err != nil {
+		return err
+	}
+	if sent {
+		action := "pop-ended"
+		if !r.Ended {
+			action = "pop-end-failed"
+		}
+		l.log(map[string]any{"agent": a, "action": action, "to": l.cfg.EscalateTo, "episode": episode, "reason": r.Failed})
 	}
 	return nil
 }

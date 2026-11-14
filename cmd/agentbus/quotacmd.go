@@ -17,6 +17,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/quota"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
@@ -282,6 +283,49 @@ func servicePopRetire(getenv func(string) string, missions func(context.Context,
 	after := r.Duration("dispatch.pop_retire_after")
 	return dispatch.PopRetireConfig{On: r.Bool("dispatch.pop_retire") && after > 0, After: after, Missions: missions,
 		ProcStart: dispatch.ProcStart}
+}
+
+// withPopEnd lets the dispatcher end a done pop itself (pop-retire-auto,
+// decision 2026-11-13-dispatcher-ends-done-pop) when it reaches the project's
+// herdr session the way a service does (relaunch.ServiceHerdr: the session
+// the env names); without one, or with pop_retire off, master is told to run
+// retire --forget as before.
+func withPopEnd(c dispatch.PopRetireConfig, b *bus.Bus, rt dispatch.Runtime, getenv func(string) string) dispatch.PopRetireConfig {
+	if !c.On {
+		return c
+	}
+	closePane, err := serviceClosePane(getenv, popEndCloseTimeout)
+	if err != nil {
+		return c
+	}
+	d := swapDeps{Env: getenv, ProcStart: c.ProcStart, Runtime: rt, PopRetireAfter: c.After,
+		Now: time.Now, Sleep: time.Sleep, PIDGone: 15 * time.Second, Recent: 2 * time.Minute,
+		ClosePane: closePane}
+	c.End = func(ctx context.Context, token, role string, episode int64) dispatch.PopEnd {
+		return popEnd(ctx, b, d, token, role, episode)
+	}
+	return c
+}
+
+// popEndCloseTimeout bounds the dispatcher's herdr pane close.
+const popEndCloseTimeout = 10 * time.Second
+
+// serviceClosePane closes a pane through the herdr session the service's env
+// names, every call bounded by timeout and cancelled with its context
+// (reviewer-codex: a hung herdr never holds the dispatcher's pass).
+func serviceClosePane(getenv func(string) string, timeout time.Duration) (func(context.Context, string) error, error) {
+	herdr, err := relaunch.ServiceHerdrContext(getenv)
+	if err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context, pane string) error {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		if out, err := herdr(ctx, "pane", "close", pane); err != nil {
+			return fmt.Errorf("herdr pane close %s: %v: %s", pane, err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}, nil
 }
 
 // desktopNotify runs notify-send, bounded to 5 s; nil when it is not on PATH.

@@ -441,7 +441,7 @@ func mainServiceRun(project, host string, args []string) int {
 			// The self-repair watcher: shadow passes only (step 6); its check in every mode.
 			repair, repairCfg := serviceSelfRepair(b, os.Getenv, &cfg.EscalateTo)
 			cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
-			cfg.PopRetire = servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) })
+			cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, h, os.Getenv)
 			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project)) // read at each client-update send (auto-reload)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo

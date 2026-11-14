@@ -204,3 +204,68 @@ func TestPopRetirePassNamesAClosedPopsHandoff(t *testing.T) {
 		t.Fatalf("directives %q, want the hand-off report named", got)
 	}
 }
+
+// pop-retire-auto: with End set the dispatcher ends a done pop itself and
+// tells master with one notice that wakes nobody; once per episode.
+func TestPopRetireEndsThePopItself(t *testing.T) {
+	w := newPopWorld(t, "pop")
+	var calls []string
+	w.l.cfg.PopRetire.End = func(_ context.Context, token, role string, episode int64) PopEnd {
+		calls = append(calls, token+" "+role+" "+strconv.FormatInt(episode, 10))
+		return PopEnd{Ended: true, Detail: "pane w1:p3 closed, pid gone, unregistered (its consumer group kept)"}
+	}
+	w.pass()
+	snaps, _ := w.b.Agents(context.Background())
+	ep := strconv.FormatInt(snaps["security"].TS, 10)
+	if len(calls) != 1 || calls[0] != "pop-holder security "+ep {
+		t.Fatalf("End called %q", calls)
+	}
+	got := w.directives()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "no|") || !strings.Contains(got[0], "security was ended by the dispatcher") ||
+		!strings.Contains(got[0], "pane w1:p3 closed") || strings.Contains(got[0], "agentbus retire") {
+		t.Fatalf("master told %q", got)
+	}
+	w.pass() // the fake End unregisters nothing: the same episode is not ended twice
+	if len(calls) != 1 || len(w.directives()) != 1 {
+		t.Fatalf("a second pass: calls %q, master %q", calls, w.directives())
+	}
+}
+
+// A wait (a turn running, a wake being typed) does nothing and tells nobody:
+// the next pass judges again. A failure after the begin wakes master with the
+// reason and the command to end it by hand.
+func TestPopRetireEndWaitsOrFails(t *testing.T) {
+	w := newPopWorld(t, "pop")
+	n := 0
+	w.l.cfg.PopRetire.End = func(context.Context, string, string, int64) PopEnd {
+		n++
+		if n == 1 {
+			return PopEnd{Wait: "its pane runs a turn"}
+		}
+		return PopEnd{Failed: "pane w1:p3 closed but pid 4242 is still running after 15s"}
+	}
+	w.pass()
+	if len(w.directives()) != 0 {
+		t.Fatalf("a wait told master %q", w.directives())
+	}
+	w.pass()
+	got := w.directives()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "|") || !strings.Contains(got[0], "could not end security") ||
+		!strings.Contains(got[0], "still running") || !strings.Contains(got[0], "agentbus retire security --forget --episode") {
+		t.Fatalf("master told %q", got)
+	}
+	w.pass()
+	if n != 2 || len(w.directives()) != 1 {
+		t.Fatalf("after a failure the episode is told once and not retried: calls %d, master %q", n, w.directives())
+	}
+}
+
+// Never a boot role: PopDone judges pops only, End is never called.
+func TestPopRetireEndNeverABootRole(t *testing.T) {
+	w := newPopWorld(t, "boot")
+	w.l.cfg.PopRetire.End = func(context.Context, string, string, int64) PopEnd {
+		t.Fatal("End called for a boot role")
+		return PopEnd{}
+	}
+	w.pass()
+}

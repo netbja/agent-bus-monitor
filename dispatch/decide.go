@@ -89,6 +89,10 @@ type Input struct {
 	OldestAge  time.Duration // age of the oldest obligation entry, from its id
 	SinceWake  time.Duration
 	Who        string // "<project>/<agent>": whom a restarted process must name itself
+	// Retired: the role's last ledger entry is a retire that unregistered it
+	// (forgot); with no snapshot, its kept group waits for a respawn and what
+	// lands in it is no stall (retire-forget-roster).
+	Retired bool
 }
 
 // workingFactor: an agent herdr reports as working never escalates before
@@ -182,6 +186,9 @@ func Decide(p Policy, x Input) Decision {
 	// Rule 6 (no usable snapshot) before rule 7, but an identity mismatch is
 	// only judged against a successful inspection: a gone pane is rule 7.
 	if x.Snap == nil {
+		if x.Retired {
+			return d(ActNone, 6, "retired and unregistered: its kept group waits for a respawn")
+		}
 		return wait(6, "no snapshot", T)
 	}
 	if x.Snap.PID == 0 {
