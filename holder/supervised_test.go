@@ -53,8 +53,9 @@ func newSupervised(t *testing.T) *supervisedFixture {
 			if err := c.Start(); err != nil {
 				return 0, err
 			}
-			t.Cleanup(func() { _ = c.Process.Kill(); _ = c.Wait() })
-			go func() { _ = c.Wait() }()
+			done := make(chan struct{}) // one Wait, in the goroutine (foureyes: -race)
+			go func() { _ = c.Wait(); close(done) }()
+			t.Cleanup(func() { _ = c.Process.Kill(); <-done })
 			f.pids = append(f.pids, c.Process.Pid)
 			return c.Process.Pid, nil
 		},
@@ -390,5 +391,63 @@ func TestSupervisedRacingRemoveInstallStartKeepOne(t *testing.T) {
 	}
 	if alive > 1 {
 		t.Fatalf("%d supervisors alive for one build (%d spawned)", alive, len(f.pids))
+	}
+}
+
+// A record whose recorded project disagrees with the directory it sits in
+// is not that project's unit (foureyes: a surviving mutant).
+func TestSupervisedUnitsSkipAMisplacedRecord(t *testing.T) {
+	f := newSupervised(t)
+	key := f.install(t, "a", "v1.0.0")
+	src, _ := f.m.recordPath("a", key)
+	r, err := readSupervisedRecord(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst, _ := f.m.recordPath("b", key) // project b's place, a's record
+	if err := writeSupervisedRecord(dst, r); err != nil {
+		t.Fatal(err)
+	}
+	units, err := f.m.HolderUnits("b")
+	if err != nil || len(units) != 0 {
+		t.Fatalf("project b lists %v (%v)", units, err)
+	}
+}
+
+// A value holding a line break would forge a field: refused, nothing written
+// (foureyes: a surviving mutant).
+func TestSupervisedRecordRefusesALineBreak(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "holder-x.pid")
+	r := supervisedRecord{Project: "demo", Key: "k", Raw: "v1", Env: "/e", WorkDir: "/w\npid 1", Bin: "/b"}
+	if err := writeSupervisedRecord(path, r); err == nil {
+		t.Fatal("a line break in a value was written")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("a refused record left a file: %v", err)
+	}
+}
+
+// A zombie is not a live supervisor (foureyes: a surviving mutant).
+func TestProcStartOfAZombieIsGone(t *testing.T) {
+	c := exec.Command("true")
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := c.Process.Pid
+	defer c.Wait()
+	for deadline := time.Now().Add(3 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		st, ok := readProcStat(pid)
+		if !ok {
+			t.Skip("reaped before it could be seen as a zombie (the package's in-process reaper)")
+		}
+		if st.state == 'Z' {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("never a zombie: %c", st.state)
+		}
+	}
+	if _, err := procStartOf(pid); err != errNoProcess {
+		t.Fatalf("a zombie read as %v, want errNoProcess", err)
 	}
 }
