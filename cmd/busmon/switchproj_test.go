@@ -180,3 +180,52 @@ func TestFinishSwitch(t *testing.T) {
 		t.Fatalf("exit %d, %d execs, %q", code, len(calls), errw.String())
 	}
 }
+
+// The start fallback (project-switch note §2.5): with nothing naming a
+// project, the picker's screen opens one in this busmon. Its Enter checks
+// the project on the broker as always, then records the choice instead of
+// running agentbus up; an absent project is still refused.
+func TestPickerOpensHere(t *testing.T) {
+	var chosen string
+	m := newOpenHerePick(context.Background(), "/tmp/templates", pickFixture(), nil,
+		func(context.Context, string) ([]string, error) { return []string{"agent-bus-monitor:cmd"}, nil }, &chosen)
+	m.width, m.height = 120, 30
+	m.refresh()
+	m, cmd := pickPress(t, m, kEnter)
+	m, quit := pickRun(t, m, cmd)
+	if !quit || chosen != "agent-bus-monitor" {
+		t.Fatalf("quit %v chosen %q status %q", quit, chosen, m.status)
+	}
+	if strings.Contains(m.busy+m.status, "agentbus up") {
+		t.Fatalf("the open-here picker speaks of agentbus up: %q %q", m.busy, m.status)
+	}
+	chosen = ""
+	m = newOpenHerePick(context.Background(), "/tmp/templates", pickFixture(), nil,
+		func(context.Context, string) ([]string, error) { return nil, nil }, &chosen)
+	m.width, m.height = 120, 30
+	m.refresh()
+	m, cmd = pickPress(t, m, kEnter)
+	if m, quit = pickRun(t, m, cmd); quit || chosen != "" {
+		t.Fatalf("an absent project was opened: quit %v chosen %q", quit, chosen)
+	}
+}
+
+// The picked project is opened by the same exec as a switch; an exec that
+// fails says the command to type.
+func TestOpenPicked(t *testing.T) {
+	opts, set, err := parseFlags([]string{"-H", "vdr"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := execFn
+	t.Cleanup(func() { execFn = saved })
+	var argv []string
+	execFn = func(_ string, a, _ []string) error { argv = a; return errors.New("exec failed") }
+	var errw strings.Builder
+	if code := openPicked("trading", opts, set, &errw); code != 1 || !slices.Equal(argv[1:], []string{"--host=vdr", "--project=trading"}) {
+		t.Fatalf("exit %d argv %v", code, argv)
+	}
+	if !strings.Contains(errw.String(), "busmon --host=vdr --project=trading") {
+		t.Fatalf("stderr %q", errw.String())
+	}
+}
