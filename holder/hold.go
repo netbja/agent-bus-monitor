@@ -1,10 +1,9 @@
 package holder
 
-import "sync"
-
-// holdMax bounds the held viewer bytes of a terminal (spec 4.2: never
-// dropped; past 1 MiB the holder stops reading the viewers, which
-// back-pressures them).
+// holdMax bounds the held viewer bytes of a terminal (spec 4.2, correction
+// r25): what is held is never dropped; past 1 MiB a viewer's further bytes
+// are refused, counted and told, and the holder keeps reading every viewer,
+// so its Release, Discard and Detach always get through.
 const holdMax = 1 << 20
 
 // The hold (spec 4.2, security S5). During a submit's critical section the
@@ -18,41 +17,32 @@ type holdState struct {
 	holding  bool
 	holdKind string // "wake" or "clear"
 	held     []byte
-	room     *sync.Cond // on terminal.mu: signalled when held shrinks or the hold ends
+	holdMax  int // the bound (holdMax; a test sets it small)
+	refused  int // bytes refused since the hold began: never delivered
 }
 
 // deliver writes a viewer's bytes to the program, or queues them while a
 // hold stands. The input lock is taken first and the hold read under it, so
-// a byte never overtakes one held before it; a full queue waits (the viewer
-// is no longer read) without the input lock, which release needs.
+// a byte never overtakes one held before it. Bytes that would take the
+// queue past its bound are refused and counted, and the viewers told: deliver
+// never waits, so the viewer's next frame (its Release, Discard, Detach) is
+// always read.
 func (t *terminal) deliver(b []byte) {
-	for {
-		t.inMu.Lock()
-		t.mu.Lock()
-		if !t.holding {
-			t.mu.Unlock()
-			_, _ = t.pty.Write(b)
-			t.inMu.Unlock()
-			return
-		}
-		if len(t.held)+len(b) <= holdMax {
-			t.held = append(t.held, b...)
-			t.noticeAll()
-			t.mu.Unlock()
-			t.inMu.Unlock()
-			return
-		}
-		t.inMu.Unlock()
-		t.cond().Wait() // releases t.mu while it waits
+	t.inMu.Lock()
+	defer t.inMu.Unlock()
+	t.mu.Lock()
+	if !t.holding {
 		t.mu.Unlock()
+		_, _ = t.pty.Write(b)
+		return
 	}
-}
-
-func (t *terminal) cond() *sync.Cond {
-	if t.room == nil {
-		t.room = sync.NewCond(&t.mu)
+	defer t.mu.Unlock()
+	if len(t.held)+len(b) <= t.holdMax {
+		t.held = append(t.held, b...)
+	} else {
+		t.refused += len(b)
 	}
-	return t.room
+	t.noticeAll()
 }
 
 // startHold begins a hold for a line of kind that did not land; the caller
@@ -75,9 +65,8 @@ func (t *terminal) endHold(release bool) {
 		return
 	}
 	b := t.held
-	t.holding, t.held = false, nil
+	t.holding, t.held, t.refused = false, nil, 0
 	t.noticeAll()
-	t.cond().Broadcast()
 	t.mu.Unlock()
 	if release && len(b) > 0 {
 		_, _ = t.pty.Write(b)
@@ -100,7 +89,7 @@ func (t *terminal) noticeTo(v *viewer) {
 	if kind == "" {
 		kind = "clear"
 	}
-	b, err := EncodeControl(HoldNotice{Kind: kind, Held: len(t.held), Active: t.holding})
+	b, err := EncodeControl(HoldNotice{Kind: kind, Held: len(t.held), Active: t.holding, Refused: t.refused})
 	if err != nil {
 		return
 	}

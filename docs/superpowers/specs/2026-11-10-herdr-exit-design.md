@@ -2,11 +2,17 @@
 
 - Status: **frozen after revision 14** — corrections only, no new features in this spec. For
   review (coder, foureyes, reviewer-codex); the person's decisions are recorded in §10.
-- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13
+- Date: 2026-11-10, revisions 14 to 17 on 2026-11-11, revisions 18 to 24 on 2026-11-13, revision 25
+  on 2026-11-14
 - Author: architect
 - Task: `herdr-exit-spec`; revision 18: `herdr-spec-security`
 - Base: `origin/main` at a3e60956 (revision 13 merged as PR 428); revision 18 from `origin/main`
   at c2047e83
+- Revision 25 (correction): foureyes on step 5d (0ceba37e): "stops reading the viewers'
+  sockets" deadlocked the hold — a viewer's Release, Discard and Detach travel on the same socket,
+  behind its data. Master's decision (option a): the holder never stops reading a viewer; past
+  1 MiB further bytes are refused, counted in the hold notice and never delivered; held bytes
+  are still never dropped (§4.2, §8)
 - Revision 24 (correction): master's decision after the security role's confirmation
   (s1-profile-confirm, report 1794585522550-0): the resume record stays `{session, profile,
   at}` (r21; r22's `{session, at}` and r23 are withdrawn), with two conditions checked before
@@ -273,8 +279,10 @@ Interface rules (part of the interface, not comments):
      the line key by key: the wake line holds digits (the count, the nonce), and a menu that
      reads single keys would take them as choices (security S4);
   2. **holds** every viewer byte that arrives from now on (all viewers; a per-terminal queue,
-     never dropped: when the queue reaches 1 MiB the holder stops reading the viewers' sockets,
-     which back-pressures them);
+     never dropped: when the queue reaches 1 MiB, further bytes are refused, counted and told
+     in the hold notice (`M keys refused`), never delivered, and the client stops sending; the
+     holder never stops reading a viewer, so its Release, Discard and Detach always get
+     through — r25);
   3. **checks again**, still under the lock and with the bytes held, Ready, `EmptyInput` and
      mode 2004 on a newly settled screen — a dialog can open between step 1 and the hold (a
      subagent's permission request); failing → `ErrNotReady`, nothing typed, the held bytes
@@ -289,8 +297,8 @@ Interface rules (part of the interface, not comments):
   **Held bytes after `ErrNotLanded` (security S5).** A line that did not land may land late
   (the person's held Enter would then submit a left-behind `/clear` and lose the conversation),
   or may sit in a dialog (the person's held keys would answer a prompt they never saw). So the
-  hold stays on for every viewer, and new viewer bytes join the queue (same 1 MiB bound and
-  back-pressure, never dropped). Every non-observer viewer, and every one that attaches while
+  hold stays on for every viewer, and new viewer bytes join the queue (same 1 MiB bound; past
+  it, refused and told, never delivered, r25). Every non-observer viewer, and every one that attaches while
   the hold stands, sees one line: `a /clear may be left in the input; N keys held: <prefix> r
   releases, <prefix> x discards` (`a wake line` for a wake). `<prefix> r` delivers the held
   bytes in order and ends the hold; `<prefix> x` drops them and ends the hold — then the person
@@ -1254,8 +1262,9 @@ step claims an improvement for herdr, and none exists after the cutover.
 - Submit (holder, contract suite):
   - a viewer typing a sentence and Enter during the submit → the line is submitted alone, then
     the viewer's bytes arrive in order after the CR, Enter included; no byte lost;
-  - the same with the kitty Enter encoding and with a large paste filling the hold queue (the
-    viewer is back-pressured, nothing dropped);
+  - the same with the kitty Enter encoding and with a large paste filling the hold queue (what
+    is held is delivered in order; the bytes past the bound are refused and told, never
+    delivered; the same viewer's Release still gets through, r25);
   - a dialog drawn between the step-3 recheck and the paste → the line is not seen in the input, **no CR**,
     `ErrNotLanded`, notice naming the kind (wake line / `/clear`);
   - a draft standing (any viewer byte since the last CR, mouse and focus reports excepted) →

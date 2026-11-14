@@ -42,6 +42,7 @@ type Config struct {
 	kill      func(pid int, sig syscall.Signal) error // nil: syscall.Kill (tests record the signals)
 	others    func(pgid int) bool                     // nil: othersInGroup (a test makes the scan miss)
 	escWait   time.Duration                           // 0: escWait (a test sets it long)
+	holdMax   int                                     // 0: holdMax (a test sets it small)
 	// afterCheck runs between submit's step 1 and its step-3 recheck
 	// (tests: a dialog opening in that window).
 	afterCheck func(t *terminal)
@@ -85,6 +86,9 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	if cfg.escWait <= 0 {
 		cfg.escWait = escWait
+	}
+	if cfg.holdMax <= 0 {
+		cfg.holdMax = holdMax
 	}
 	if cfg.Grace <= 0 {
 		cfg.Grace = DefaultGrace
@@ -407,7 +411,7 @@ func (s *Server) start(f Start) Reply {
 	trackedSet[c.Process.Pid] = true
 	trackMu.Unlock()
 	t := &terminal{id: id, role: f.Role, profile: clientProfiles[cmd.Client], pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others, escWait: s.cfg.escWait,
-		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{})}
+		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{}), holdState: holdState{holdMax: s.cfg.holdMax}}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t
 	s.order = append(s.order, id)

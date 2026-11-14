@@ -382,16 +382,17 @@ func TestSubmitIgnoresAnObserver(t *testing.T) {
 	waitScreen(t, cl, "t1", "SUBMITTED: "+wakeText)
 }
 
-// A full hold queue back-pressures the viewer (spec 4.2): past holdMax the
-// next bytes wait, none dropped, and a release delivers all of them in
-// order.
-func TestHoldBackPressure(t *testing.T) {
+// A full hold queue refuses further bytes, never stops reading the viewer
+// (spec 4.2, correction r25): what is held stays held and is delivered in
+// order; the refused bytes are counted, never delivered; the count ends with
+// the hold.
+func TestHoldFullRefuses(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	tm := &terminal{pty: w, viewers: map[*viewer]bool{}}
+	tm := &terminal{pty: w, viewers: map[*viewer]bool{}, holdState: holdState{holdMax: holdMax}}
 	tm.inMu.Lock()
 	tm.startHold("wake")
 	tm.inMu.Unlock()
@@ -404,18 +405,56 @@ func TestHoldBackPressure(t *testing.T) {
 	go func() { tm.deliver([]byte("bc")); close(done) }()
 	select {
 	case <-done:
-		t.Fatal("a full queue took more bytes")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
+		t.Fatal("a full queue blocks its viewer")
+	}
+	tm.mu.Lock()
+	refused := tm.refused
+	tm.mu.Unlock()
+	if refused != 2 {
+		t.Fatalf("refused %d", refused)
 	}
 	got := make(chan []byte)
 	go func() { b, _ := io.ReadAll(r); got <- b }()
 	tm.endHold(true)
-	<-done
+	if tm.refused != 0 {
+		t.Fatalf("refused %d after the hold", tm.refused)
+	}
 	w.Close()
-	b := <-got
-	if len(b) != holdMax+2 || !bytes.Equal(b[:holdMax], first) || string(b[holdMax:]) != "bc" {
+	if b := <-got; !bytes.Equal(b, first) {
 		t.Fatalf("delivered %d bytes, tail %q", len(b), b[max(0, len(b)-3):])
 	}
+}
+
+// End to end (foureyes P1): one viewer fills the queue past its bound, then
+// sends Release on the same socket: the Release gets through, the held bytes
+// arrive in order, the refused ones never, and the viewer was told.
+func TestHoldFullViewerStillReleases(t *testing.T) {
+	sock := submitHolder(t, func(c *Config) { c.holdMax = 8 })
+	cl := dial(t, sock)
+	startFake(t, cl, "fake-dialog")
+	v := attached(t, sock, Attach{Term: "t1", Cols: 200, Rows: 30})
+	control(t, v, Focus{In: false})
+	time.Sleep(300 * time.Millisecond)
+	if _, err := cl.Call(wake("a1b2c3")); codeOf(err) != CodeNotLanded {
+		t.Fatalf("not seen: %v", err)
+	}
+	send(t, v, FrameData, []byte("\rabc")) // the \r closes the menu once released
+	send(t, v, FrameData, []byte("defg"))
+	send(t, v, FrameData, []byte("XYZ")) // past 8: refused
+	n := readNotice(t, v, func(n HoldNotice) bool { return n.Refused > 0 })
+	if !n.Active || n.Held != 8 || n.Refused != 3 {
+		t.Fatalf("notice %+v", n)
+	}
+	control(t, v, Release{})
+	readNotice(t, v, func(n HoldNotice) bool { return !n.Active })
+	waitScreen(t, cl, "t1", "> abcdefg")
+	time.Sleep(200 * time.Millisecond)
+	if r, _ := cl.Call(ScreenReq{Term: "t1"}); strings.Contains(strings.Join(r.Screen.Lines, "\n"), "XYZ") {
+		t.Fatal("a refused byte was delivered")
+	}
+	control(t, v, Detach{}) // and the viewer is still read: its detach ends the attach
+	eventually(t, "the detach", func() bool { return activityOf(t, cl, "t1").Viewers == 0 })
 }
 
 // submit_wait bounds the landing check (spec 4.2 step 5): a screen that
