@@ -32,6 +32,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"golang.org/x/term"
 	"io"
 	"os"
 	"runtime"
@@ -579,8 +580,17 @@ func main() {
 		}
 	}
 	if project == "" {
-		fmt.Fprint(os.Stderr, noProjectText())
-		os.Exit(1)
+		// Nothing names one: the picker's screen opens one here (§2.5); with
+		// no terminal to show it, how to name one.
+		if !term.IsTerminal(int(os.Stdin.Fd())) {
+			fmt.Fprint(os.Stderr, noProjectText())
+			os.Exit(1)
+		}
+		chosen, code := runOpenHerePick(opts.host, settings.Theme)
+		if chosen == "" {
+			os.Exit(code)
+		}
+		os.Exit(openPicked(chosen, opts, set, os.Stderr))
 	}
 	// busmon writes as a person, never as an agent: --as, AGENT_BUS_HUMAN, else "pilot".
 	self, err := humanIdentity(settings.Identity, "")

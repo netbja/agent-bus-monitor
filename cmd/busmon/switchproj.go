@@ -11,6 +11,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/projlist"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
 // The project switch (spec 2026-11-14-busmon-project-switch-design.md): o on
@@ -144,5 +146,55 @@ func finishSwitch(fm Model, opts busmonOpts, set map[string]bool, stderr io.Writ
 		err = execFn(exe, append([]string{exe}, argv...), os.Environ())
 	}
 	fmt.Fprintf(stderr, "error: cannot open %s: %v\nopen it with: %s\n", fm.switchTo, err, again)
+	return 1
+}
+
+// newOpenHerePick is the picker's screen as busmon's start fallback (§2.5):
+// the same list and the same check on the broker, but Enter records the
+// project in chosen, for this busmon to open, instead of running agentbus up.
+func newOpenHerePick(ctx context.Context, dir string, rows []projlist.Row, listErr error, keys projlist.KeysFunc, chosen *string) pickShell {
+	m := newPickShell(ctx, dir, rows, listErr, keys, func(name string) error { *chosen = name; return nil })
+	m.verb = "opening"
+	return m
+}
+
+// runOpenHerePick is main's entry to it (a test replaces it): the project
+// chosen ("" none) and the exit code when none was.
+var runOpenHerePick = pickToOpen
+
+// pickToOpen runs the open-here picker full screen.
+func pickToOpen(host, theme string) (string, int) {
+	dir := rolecfg.ProjectsDir(os.Getenv)
+	rows, listErr := projlist.Templates(dir)
+	_, noColor := os.LookupEnv("NO_COLOR")
+	t, err := ResolveTheme(theme, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return "", 2
+	}
+	th = t
+	conn := dialBroker(host)
+	defer conn.shutdown()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var chosen string
+	m := newOpenHerePick(ctx, dir, rows, listErr, conn.keys, &chosen)
+	m.connFailed = conn.failed
+	m.status, m.statusErr = "no project named (--project, AGENT_BUS_PROJECT, none used before): choose one to open", false
+	if _, err := tea.NewProgram(m, tea.WithContext(ctx)).Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return "", 1
+	}
+	return chosen, 0
+}
+
+// openPicked opens the picked project by the same exec as a switch.
+func openPicked(project string, opts busmonOpts, set map[string]bool, stderr io.Writer) int {
+	argv := switchArgv(opts, set, project)
+	exe, err := os.Executable()
+	if err == nil {
+		err = execFn(exe, append([]string{exe}, argv...), os.Environ())
+	}
+	fmt.Fprintf(stderr, "error: cannot open %s: %v\nopen it with: busmon %s\n", project, err, strings.Join(argv, " "))
 	return 1
 }
