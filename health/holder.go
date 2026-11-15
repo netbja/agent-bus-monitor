@@ -22,7 +22,6 @@ type HolderBuild struct {
 	Terms    int           // its terminals, when it answers
 	Since    time.Duration // how long its socket has existed, when it answers
 	Binary   bool          // its binary copy is on disk
-	Live     []string      // its live terminals' ids, when it answers
 }
 
 // HolderAgent is an agent whose last proved identity is a holder terminal
@@ -33,23 +32,30 @@ type HolderAgent struct {
 }
 
 // HolderProof is an agent's last proved identity as {p}:agents records it:
-// its pane, its verified pid (0: unproved) and when (ms, Redis time).
+// its pane, its verified pid (0: unproved) and when (ms, Redis time), its
+// declared state, and whether that process still runs on this host (same
+// pid and start time, same boot).
 type HolderProof struct {
-	Name, Pane string
-	PID        int
-	IdentTS    int64
+	Name, Pane, State string
+	PID               int
+	IdentTS           int64
+	Alive             bool
 }
 
 // WithHolderAgents adds to e the agents proved in a holder terminal (their
-// pane "<build key>/<terminal>"), each with its proof's age on Redis's
-// clock (redisNow), for holder_restarted; any other agent is left out.
+// pane "<build key>/<terminal>") whose proved process no longer runs, each
+// with its proof's age on Redis's clock (redisNow), for holder_restarted.
+// Left out: an agent whose process still runs (a restart kills every
+// process the holder held, so a live one was not lost; a terminal id reused
+// after the restart changes nothing), one declared done (its terminal ended
+// by itself), and any other.
 func WithHolderAgents(e HolderEvidence, proofs []HolderProof, redisNow time.Time) HolderEvidence {
 	e.AgentsKnown = true
 	sorted := slices.Clone(proofs)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 	for _, p := range sorted {
 		key, term, ok := HolderPane(p.Pane)
-		if !ok || p.PID <= 0 || p.IdentTS <= 0 {
+		if !ok || p.PID <= 0 || p.IdentTS <= 0 || p.Alive || p.State == "done" {
 			continue
 		}
 		e.Agents = append(e.Agents, HolderAgent{Name: p.Name, Key: key, Term: term, ProvedAgo: redisNow.Sub(time.UnixMilli(p.IdentTS))})
@@ -115,8 +121,8 @@ func EvaluateHolder(e HolderEvidence) Outcome {
 
 // holderRestarted is the holder_restarted warning (spec 4.4a), "" when
 // none: a holder that answers started after an agent's last proof in one of
-// its terminals, and that terminal is gone, so the agent died with the
-// holder's old process. The socket's age (this host's clock) and the proof's
+// its terminals, and that agent's process is gone (WithHolderAgents keeps
+// only those), so it died with the holder's old process. The socket's age (this host's clock) and the proof's
 // (Redis's) are each measured on their own clock.
 func holderRestarted(e HolderEvidence) string {
 	if !e.AgentsKnown {
@@ -129,7 +135,7 @@ func holderRestarted(e HolderEvidence) string {
 		}
 		var lost []string
 		for _, a := range e.Agents {
-			if a.Key == b.Key && a.ProvedAgo > b.Since && !slices.Contains(b.Live, a.Term) {
+			if a.Key == b.Key && a.ProvedAgo > b.Since {
 				lost = append(lost, a.Name)
 			}
 		}

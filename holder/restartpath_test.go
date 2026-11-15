@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
@@ -88,7 +89,25 @@ func TestHolderRestartedAgainstARealHolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Status(ctx, "coder", "idle", "", bus.AgentIdent{Pane: string(term.ID), PID: term.PID, PIDStart: term.PIDStart}); err != nil {
+	boot, _ := dispatch.BootID()
+	prove := func(agent, state string, tm termhost.Term) {
+		t.Helper()
+		if _, err := b.Status(ctx, agent, state, "", bus.AgentIdent{Pane: string(tm.ID), PID: tm.PID, PIDStart: tm.PIDStart, BootID: boot}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prove("coder", "idle", term)
+	// docs ended by itself before the restart (reviewer-codex): its terminal
+	// closed, its last status done; its proof stays in the snapshot.
+	docs, err := h.Start(ctx, termhost.Spec{Project: project, Name: "docs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prove("docs", "idle", docs)
+	if err := h.Close(ctx, docs.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Status(ctx, "docs", "done", "", bus.AgentIdent{}); err != nil {
 		t.Fatal(err)
 	}
 	judge := func() health.Outcome {
@@ -103,19 +122,15 @@ func TestHolderRestartedAgainstARealHolder(t *testing.T) {
 		}
 		cur := health.HolderBuild{Key: key, Raw: build, Current: true, Unit: true, Active: true, Answers: true,
 			Terms: len(terms), Since: time.Since(info.ModTime())}
-		for _, tm := range terms {
-			if tm.Alive {
-				_, id, _ := strings.Cut(string(tm.ID), "/")
-				cur.Live = append(cur.Live, id)
-			}
-		}
 		snaps, err := b.Agents(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var proofs []health.HolderProof
 		for n, s := range snaps {
-			proofs = append(proofs, health.HolderProof{Name: n, Pane: s.Pane, PID: s.PID, IdentTS: s.IdentTS})
+			start, err := dispatch.ProcStart(s.PID)
+			alive := s.PID > 0 && err == nil && start == s.PIDStart
+			proofs = append(proofs, health.HolderProof{Name: n, Pane: s.Pane, State: s.State, PID: s.PID, IdentTS: s.IdentTS, Alive: alive})
 		}
 		now, err := b.ServerTime(ctx)
 		if err != nil {
@@ -129,6 +144,16 @@ func TestHolderRestartedAgainstARealHolder(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond) // the new socket is younger than the proof
 	stop()
 	serve()
+	// foureyes starts after the restart: the new holder numbers from the
+	// first id again, so its terminal takes coder's old id (foureyes).
+	fe, err := h.Start(ctx, termhost.Spec{Project: project, Name: "foureyes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fe.ID != term.ID {
+		t.Logf("the restarted holder did not reuse %s (got %s): the reuse case is not exercised", term.ID, fe.ID)
+	}
+	prove("foureyes", "idle", fe)
 	got := judge()
 	if got.Status != health.Warn || !strings.Contains(got.Detail, "restarted") || !strings.Contains(got.Detail, "1 agent(s) lost: coder") {
 		t.Fatalf("after the restart: %+v", got)

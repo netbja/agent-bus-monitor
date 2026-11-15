@@ -91,7 +91,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err == nil { // holder_restarted: the agents proved in a holder terminal (unread: the base judgement alone)
 				if snaps, aerr := b.Agents(ctx); aerr == nil {
 					if now, terr := b.ServerTime(ctx); terr == nil {
-						e = withHolderAgents(e, snaps, now)
+						e = withHolderAgents(e, snaps, now, provedAlive(hostBootID(), dispatch.ProcStart))
 					}
 				}
 			}

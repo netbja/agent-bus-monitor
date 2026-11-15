@@ -75,25 +75,24 @@ func TestEvaluateHolderLeftovers(t *testing.T) {
 	}
 }
 
-// holder_restarted (spec 4.4a): a holder that answers came back after an
-// agent's last proof in one of its terminals, and that terminal is gone:
-// the agent died with the old process. Each age on its own clock (the
-// socket's on this host, the proof's on Redis's): no clock offset.
+// holder_restarted (spec 4.4a): a holder that answers came back after the
+// last proof of an agent whose process is gone (WithHolderAgents keeps only
+// those): the agent died with the old process. Each age on its own clock
+// (the socket's on this host, the proof's on Redis's): no clock offset.
 func TestEvaluateHolderRestarted(t *testing.T) {
-	cur := HolderBuild{Key: "k1", Raw: "v1", Current: true, Unit: true, Answers: true, Terms: 1, Since: 2 * time.Minute, Live: []string{"t9"}}
-	old := HolderBuild{Key: "k0", Raw: "v0", Unit: true, Answers: true, Terms: 1, Since: time.Hour, Live: []string{"t1"}}
+	cur := HolderBuild{Key: "k1", Raw: "v1", Current: true, Unit: true, Answers: true, Terms: 1, Since: 2 * time.Minute}
+	old := HolderBuild{Key: "k0", Raw: "v0", Unit: true, Answers: true, Terms: 1, Since: time.Hour}
 	gone := HolderBuild{Key: "k7", Raw: "v7", Unit: true} // installed, does not answer
 	e := HolderEvidence{Known: true, Builds: []HolderBuild{cur, old, gone}, AgentsKnown: true, Agents: []HolderAgent{
-		{Name: "coder", Key: "k1", Term: "t3", ProvedAgo: 10 * time.Minute},    // proved before the restart, terminal gone: lost
-		{Name: "foureyes", Key: "k1", Term: "t4", ProvedAgo: 20 * time.Minute}, // lost too
-		{Name: "master", Key: "k1", Term: "t9", ProvedAgo: 10 * time.Minute},   // its terminal still runs
-		{Name: "sentinel", Key: "k1", Term: "t5", ProvedAgo: time.Minute},      // proved after the start: not this restart
-		{Name: "architect", Key: "k0", Term: "t1", ProvedAgo: 2 * time.Hour},   // the old build answers it
-		{Name: "docs", Key: "k7", Term: "t1", ProvedAgo: 2 * time.Hour},        // a build that does not answer: the fail's business
+		{Name: "coder", Key: "k1", Term: "t3", ProvedAgo: 10 * time.Minute},     // proved before the restart: lost
+		{Name: "foureyes", Key: "k1", Term: "t4", ProvedAgo: 20 * time.Minute},  // lost too
+		{Name: "sentinel", Key: "k1", Term: "t5", ProvedAgo: time.Minute},       // proved after the start: not this restart
+		{Name: "architect", Key: "k0", Term: "t1", ProvedAgo: 30 * time.Minute}, // its build has run for an hour
+		{Name: "docs", Key: "k7", Term: "t1", ProvedAgo: 2 * time.Hour},         // a build that does not answer: the fail's business
 	}}
 	got := EvaluateHolder(e)
 	if got.Status != Warn || !strings.Contains(got.Detail, "restarted") || !strings.Contains(got.Detail, "2 agent(s) lost: coder, foureyes") || !strings.Contains(got.Detail, "v1") ||
-		strings.Contains(got.Detail, "docs") || strings.Contains(got.Detail, "architect") || strings.Contains(got.Detail, "master") || strings.Contains(got.Detail, "sentinel") {
+		strings.Contains(got.Detail, "docs") || strings.Contains(got.Detail, "architect") || strings.Contains(got.Detail, "sentinel") {
 		t.Fatalf("%+v", got)
 	}
 	// The agents unread: the base judgement alone.
@@ -113,11 +112,31 @@ func TestEvaluateHolderRestarted(t *testing.T) {
 		t.Fatalf("down: %+v", got)
 	}
 	// An old build that restarted (crashed and came back) counts too.
-	old.Since, old.Live = time.Minute, nil
+	old.Since = time.Minute
 	e2 := HolderEvidence{Known: true, AgentsKnown: true, Builds: []HolderBuild{cur, old},
 		Agents: []HolderAgent{{Name: "architect", Key: "k0", Term: "t1", ProvedAgo: 2 * time.Hour}}}
 	if got := EvaluateHolder(e2); got.Status != Warn || !strings.Contains(got.Detail, "v0") || !strings.Contains(got.Detail, "architect") {
 		t.Fatalf("old build: %+v", got)
+	}
+}
+
+// The agents holder_restarted weighs: proved in a holder terminal, their
+// process gone, not done (reviewer-codex: a terminal that ended by itself
+// was not lost; foureyes: a reused terminal id does not hide a dead one).
+func TestWithHolderAgents(t *testing.T) {
+	now := time.UnixMilli(10_000_000)
+	pane := "v0.29.0.0123456789/t1"
+	at := now.Add(-5 * time.Minute).UnixMilli()
+	e := WithHolderAgents(HolderEvidence{Known: true}, []HolderProof{
+		{Name: "coder", Pane: pane, State: "idle", PID: 7, IdentTS: at},                    // dead: weighed
+		{Name: "foureyes", Pane: pane, State: "working", PID: 8, IdentTS: at, Alive: true}, // runs (in the reused t1 or elsewhere): not lost
+		{Name: "docs", Pane: pane, State: "done", PID: 9, IdentTS: at},                     // ended by itself
+		{Name: "sentinel", Pane: pane, State: "idle", IdentTS: at},                         // never proved
+		{Name: "master", Pane: "w1:p2", State: "idle", PID: 10, IdentTS: at},               // a herdr pane
+		{Name: "architect", Pane: pane, State: "idle", PID: 11},                            // no proof time
+	}, now)
+	if !e.AgentsKnown || len(e.Agents) != 1 || e.Agents[0] != (HolderAgent{Name: "coder", Key: "v0.29.0.0123456789", Term: "t1", ProvedAgo: 5 * time.Minute}) {
+		t.Fatalf("%+v", e)
 	}
 }
 

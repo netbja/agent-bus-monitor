@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -93,10 +92,10 @@ func TestHolderEvidence(t *testing.T) {
 	for _, b := range e.Builds {
 		by[b.Raw] = b
 	}
-	if b := by["v3"]; !b.Current || !b.Unit || !b.Active || !b.Answers || b.Terms != 1 || !b.Binary || !slices.Equal(b.Live, []string{"t1"}) {
+	if b := by["v3"]; !b.Current || !b.Unit || !b.Active || !b.Answers || b.Terms != 1 || !b.Binary {
 		t.Errorf("v3 %+v", b)
 	}
-	if b := by["v2"]; b.Current || !b.Unit || !b.Answers || b.Terms != 2 || b.Since != 30*time.Hour || b.Binary || !slices.Equal(b.Live, []string{"t1"}) {
+	if b := by["v2"]; b.Current || !b.Unit || !b.Answers || b.Terms != 2 || b.Since != 30*time.Hour || b.Binary {
 		t.Errorf("v2 %+v", b)
 	}
 	// v1's binary copy is run by another project's unit: never this project's leftover.
@@ -212,20 +211,34 @@ func TestServiceGCSaysASharedCopyIsKept(t *testing.T) {
 	}
 }
 
-// holder_restarted's agents: those proved in a holder terminal, each with
-// its proof's age on Redis's clock; a herdr pane, an unproved agent or a
-// pane that is not a terminal is left out.
-func TestWithHolderAgents(t *testing.T) {
+// holder_restarted's agents from the snapshots: the proved process is
+// alive only with the same pid, start time and boot; a reboot since the
+// proof means gone.
+func TestWithHolderAgentsFromSnapshots(t *testing.T) {
 	key := service.BuildKey("v3")
 	now := time.UnixMilli(10_000_000)
-	snaps := map[string]bus.AgentSnapshot{
-		"coder":    {Pane: key + "/t3", PID: 7, PIDStart: 1, IdentTS: now.Add(-5 * time.Minute).UnixMilli()},
-		"master":   {Pane: "w1:p2", PID: 8, PIDStart: 1, IdentTS: now.UnixMilli()},
-		"foureyes": {Pane: key + "/t4"}, // never proved
-		"docs":     {Pane: "nokey/t5", PID: 9, PIDStart: 1, IdentTS: now.UnixMilli()},
+	at := now.Add(-5 * time.Minute).UnixMilli()
+	running := map[int]uint64{7: 70, 8: 80}
+	start := func(pid int) (uint64, error) {
+		if s, ok := running[pid]; ok {
+			return s, nil
+		}
+		return 0, errors.New("no such process")
 	}
-	e := withHolderAgents(health.HolderEvidence{Known: true}, snaps, now)
-	if !e.AgentsKnown || len(e.Agents) != 1 || e.Agents[0] != (health.HolderAgent{Name: "coder", Key: key, Term: "t3", ProvedAgo: 5 * time.Minute}) {
-		t.Fatalf("%+v", e)
+	snaps := map[string]bus.AgentSnapshot{
+		"coder":     {Pane: key + "/t3", State: "idle", PID: 5, PIDStart: 50, IdentTS: at, BootID: "b1"}, // gone
+		"foureyes":  {Pane: key + "/t4", State: "idle", PID: 7, PIDStart: 70, IdentTS: at, BootID: "b1"}, // runs
+		"master":    {Pane: key + "/t5", State: "idle", PID: 8, PIDStart: 81, IdentTS: at, BootID: "b1"}, // pid reused
+		"docs":      {Pane: key + "/t6", State: "idle", PID: 7, PIDStart: 70, IdentTS: at, BootID: "b0"}, // another boot
+		"sentinel":  {Pane: key + "/t7", State: "idle", PID: 7, PIDStart: 70, IdentTS: at},               // boot unknown, runs
+		"architect": {Pane: key + "/t8", State: "done", PID: 6, PIDStart: 60, IdentTS: at, BootID: "b1"}, // gone, but done by itself
+	}
+	e := withHolderAgents(health.HolderEvidence{Known: true}, snaps, now, provedAlive("b1", start))
+	var names []string
+	for _, a := range e.Agents {
+		names = append(names, a.Name)
+	}
+	if got := strings.Join(names, ","); got != "coder,docs,master" {
+		t.Fatalf("weighed %s", got)
 	}
 }
