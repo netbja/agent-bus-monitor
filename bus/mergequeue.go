@@ -73,7 +73,7 @@ type MergeQueueRecord struct {
 	AttemptedAt int64       `json:"attempted_at"`
 	ItemsAt     int64       `json:"items_at"`
 	Source      string      `json:"source"` // gh, or git
-	Forge       string      `json:"forge"`  // github, gitlab, bitbucket or local (forge.Resolve's kind)
+	Forge       string      `json:"forge"`  // github, gitlab, bitbucket, none or local (forge.Resolve's kind)
 	Base        string      `json:"base"`   // the base branch (delivery.base)
 	Reason      string      `json:"reason,omitempty"`
 	Items       []MergeItem `json:"items"`
