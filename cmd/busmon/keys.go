@@ -107,6 +107,7 @@ const (
 	ActAskOther      // the shell's ask: a free answer ("Other") in the compose window
 	ActFold          // Requests: show or hide the answered and older threads
 	ActTour          // the help: the first-launch tour again
+	ActAttach        // Agents: agentbus attach to the selected agent's terminal (t)
 	ActComplete      // the line: complete the @agent (the field does it)
 	ActServiceLog    // Services (F3): the selected service's log
 	ActPlanStart     // a plan task waiting for the person: write to master that they start it
@@ -252,6 +253,7 @@ var (
 		{Keys: "Z", Help: "put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first", Act: ActSleep, match: runeIs('Z')},
 		{Keys: "d del", Hint: "remove", Act: ActDelete, Panels: []PanelID{PanelAgents, PanelRequests}, match: either(runeIs('d'), keyIs(keyDelete))},
 		{Keys: "a", Help: "show or hide the agents silent for more than a day", Act: ActShowAll, Panels: []PanelID{PanelAgents}, match: runeIs('a')},
+		{Keys: "t", Help: "Agents: attach to the selected agent's terminal on a holder (agentbus attach; the prefix then d returns here)", Act: ActAttach, Panels: []PanelID{PanelAgents}, match: runeIs('t')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 7 days", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},
 		// request-priority §6: on one tracked request, written at once (the opposite key undoes it).
 		{Keys: "+ -", Hint: "priority", Help: "Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first", Act: ActPriorityUp, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('+')},
@@ -365,7 +367,7 @@ var (
 		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
-		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread", Act: ActTour, match: runeIs('t')},
+		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread; on an agent's page: attach to its terminal", Act: ActTour, match: runeIs('t')},
 		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words", Act: ActFilter, OnPage: true, match: runeIs('f')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},

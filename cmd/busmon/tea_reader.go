@@ -47,6 +47,8 @@ type page struct {
 
 	projRow adminRow // ovProjectDetail: the row it shows, rebuilt when its memory is read
 
+	term *termView // ovAgent: the last read of its terminal on a holder (termpreview.go); nil none yet
+
 	sel      int        // ovPlan: the selected item; ovRecap: the cursor's row
 	expanded bool       // ovPlan: the done group is open
 	items    []planItem // ovPlan
@@ -261,6 +263,9 @@ func (m *Model) push(p page) tea.Cmd {
 	if p.kind == ovMessage && p.thread.ID != "" && !p.thread.Loaded {
 		return m.threadCmd(p.serial, p.thread.ID)
 	}
+	if p.kind == ovAgent { // its terminal's preview, read while the page is open
+		return m.termRead(p.serial)
+	}
 	return nil
 }
 
@@ -458,6 +463,9 @@ func (m *Model) buildPage() bool {
 		}
 		snap, has := s.budgets[a.provider]
 		until, isHeld := held(s.holds, a.provider, now)
+		if p.term != nil {
+			b.join(termPreviewLines(*p.term, width))
+		}
 		b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
 		p.title, p.body, p.plain = title, b.Lines(), agentDetailPlain(a)
 		p.plainWhat, p.threadWhat, p.threadPlain = "status", "report", ""
@@ -916,7 +924,10 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 		return m.push(page{kind: ovIdeas})
-	case ActTour: // the help's: the tour from its first page
+	case ActTour: // the help's: the tour from its first page; an agent's page: attach
+		if p.kind == ovAgent {
+			return m.attachCmd(p.key)
+		}
 		if p.kind == ovHelp {
 			m.closeReader()
 			m.openTour(true)

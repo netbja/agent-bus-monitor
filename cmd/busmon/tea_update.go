@@ -203,6 +203,10 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.goNextUnread()
 	case ActShowAll:
 		m.ui.showAll = !m.ui.showAll
+	case ActAttach:
+		if m.ui.focus == PanelAgents {
+			cmd = m.attachCmd(m.lists.agents.Selected())
+		}
 	case ActFilter:
 		if m.ui.line == lineMessage {
 			m.leaveLine(true)

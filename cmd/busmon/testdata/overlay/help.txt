@@ -24,6 +24,7 @@ KEYS
   Z                    put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first
   d del                remove
   a                    show or hide the agents silent for more than a day
+  t                    Agents: attach to the selected agent's terminal on a holder (agentbus attach; the prefix then d returns here)
   o                    Requests: show or hide the answered threads and those older than 7 days
   + -                  Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first
   i :                  write
@@ -67,7 +68,7 @@ KEYS
   Y                    copy the whole thread (a message's page) or the whole report (an agent's page, a recap item's)
   n p ←→               the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)
   enter ! w            answer the agent's open questions (w with none open: write to master)
-  t                    in the help: the first-launch tour again; in History (H): the selected entry's thread
+  t                    in the help: the first-launch tour again; in History (H): the selected entry's thread; on an agent's page: attach to its terminal
   f                    History (H): filter by @agent, a thread id or words
   enter s              on a plan task waiting for you: start the discussion with master (the compose window, prefilled)
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)

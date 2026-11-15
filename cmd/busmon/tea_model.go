@@ -74,6 +74,10 @@ type shellConfig struct {
 	sleepRunner func(args []string, log string) (<-chan error, error)
 	sleepLog    func(project string) string
 	sleepWait   func() time.Duration
+	// terms reads the project's holder terminals for an agent page's preview
+	// (termpreview.go); nil = no preview. agentbusBin runs attach (t).
+	terms       termReader
+	agentbusBin string
 	// admin is the Projects page's sources (M); nil = every part unknown.
 	admin *adminSource
 	// The project switch (project-switch note): the target's keys on this
@@ -297,6 +301,15 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.gotServices(msg)
 	case svcTickMsg:
 		return m.svcRefresh(msg.serial)
+	case termTickMsg:
+		return m.termRead(msg.serial)
+	case termViewMsg:
+		return m.gotTermView(msg)
+	case attachDoneMsg:
+		if f := attachFlash(msg.agent, msg.err, msg.stderr); f != "" {
+			m.ui.flash = f
+		}
+		m.refresh()
 	case serviceLogMsg:
 		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
 	case redisPageMsg:
