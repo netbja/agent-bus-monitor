@@ -1,9 +1,9 @@
 # A run budget: stop cleanly after a duration, a number of deliveries, or a quota (run-budget)
 
-Status: spec, for review (subject `run-budget-spec`), r5. Not built. It depends on master-idle-spec
-§3.1 (the git test, `-U0` patch-ids, r7 in review). From the person's review of
-master-idle-spec (2026-11-15, thread `1794733043827-0`, its §2 and §4), relayed by master. §8 holds
-the person's open questions.
+Status: spec, for review (subject `run-budget-spec`), r6. Not built. It depends on master-idle-spec
+§3.1 (the git test, `-U0` patch-ids; master-idle r8). From the person's review of
+master-idle-spec (2026-11-15, thread `1794733043827-0`, its §2 and §4), relayed by master; r6 folds
+in the person's second review and answers (thread `1794734231604-0`). §8 records the answers.
 
 ## 1. What exists, and what is missing
 
@@ -43,15 +43,24 @@ the next pass starts a new run with a new baseline.
 
 **Duration.** `elapsed = now − started_at − paused_ms`, all Redis time. Each pass adds `now −
 seen_at` to `paused_ms` when the project is paused (a person's pause, a quota pause or a suspend),
-then sets `seen_at`. The clock stops while the project is paused, to within one pass. Time with
-no dispatcher at all (the service stopped, the host asleep) counts as run time: no pass sees it,
-and the run measures wall time since its start less the pauses it saw.
+then sets `seen_at`. The clock stops while the project is paused, to within one pass.
+
+**A gap with no pass** (the service stopped, the host asleep) counts as paused when it is longer
+than 3 passes (`now − seen_at` > 15 min, the pass being 5 min): the whole gap is added to
+`paused_ms` (the person's answer: a night of sleep must not consume `max_duration`). A shorter gap
+(a restart, a slow pass) counts as run time. Both are Redis time, so a sleeping host's own clock
+plays no part.
 
 **Deliveries.** A delivery is an approved head that the git test of master-idle-spec §3.1
 (`mergequeue.Delivered`: in the base, squash, or rebase-merge) finds in the base. The merge-queue
 pass (every 5 min) adds one per head not yet counted, with its `d:<head>` field, in its fenced
 write. Forge-independent: an opened PR or a push does not count, and the same head never counts
 twice. `run reset` clears the fields with the record.
+
+**The 72 h window.** The git test judges approved heads within 72 h (`ReviewQueueWindow`, as
+master-idle §3). A head approved more than 72 h before it is merged is never counted. Accepted as a
+limit: a branch that waits three days after its approval is rare here, and counting it would mean
+running the git test on every head ever approved, each pass.
 
 **The pass.** The checks above run in the merge-queue pass, which already holds the lease, has the
 git test and runs every 5 minutes. Limits are therefore seen within 5 minutes.
@@ -123,14 +132,28 @@ Master still gets its own line. If the provider is master's, the run enters `dra
 unchanged.
 
 **A client that gives no warning.** No reading, so the hold is seen only when it happens. One
-source is added: a client profile in `agentstate` may declare a `limit` signature (its "usage
-limit reached" screen), matched on a settled screen like `ready` and `busy`; none declared, never
-seen. Today's `hold:<p>` field stores a reset in Unix seconds and every release path needs a
+source is added: a client profile in `agentstate` may declare `Limit` patterns (its "usage limit
+reached" screen); none declared, never seen.
+
+**Where it matches (blocking in the person's review).** The agents work on this very repository,
+whose code, tests and diffs contain "usage limit reached". So `Limit` is never matched on the
+screen as a whole, nor on the conversation: only on the client's own status area, as `Ready` is
+matched only in the input box (`inputRegion`). For a client that prints the limit as a status line
+under or just above its input box, the match is on those lines only, outside the box itself (so
+text the person or the agent types never matches), with whole-line patterns (`^…$`) pinned by a
+captured screen (`agentstate/testdata/screens`, as every signature is). For a client that replaces
+the whole screen with a limit page, the match is on the bottom lines, as `Dialog` is
+(`bottomLines`), and the page must also show no input box. A client whose limit screen fits
+neither declares no `Limit` and is never held from its screen. Today's `hold:<p>` field stores a reset in Unix seconds and every release path needs a
 reading, so a silent client's hold gets its own field and its own release:
 
 - A match on an agent's settled pane writes `hold-screen:<p>:<agent>` in `{p}:quota` (fenced) = the
   hold's start (Unix s, Redis `TIME`), and, when the signature captures a reset time (an optional
-  `reset` group, `15:40` read in the host's local zone, the next such time), `<start>:<reset>`.
+  `reset` group, the next such clock time), `<start>:<reset>`. **Its zone is the pane host's.**
+  The dispatcher reads a pane through its own host's runtime (`herdr` or the holder, a local
+  socket), so the process that reads the screen runs on the pane's host; it converts the captured
+  clock time with its local zone to Unix seconds before anything is written to Redis. A remote
+  broker changes nothing: the broker stores only the converted value.
   The provider counts as held (`l.quota.held[p]`) while any such field exists, as for `hold:<p>`.
 - The hold is the provider's, but the screens are the agents': `hold-screen:<p>:<agent>` (one
   field per agent whose pane showed the signature, same value) records which panes showed it, and
@@ -192,7 +215,8 @@ agentbus run reset      # the person only: deletes {p}:run, lifts a kind-run pau
 ## 7. Tests
 
 - **Duration**: elapsed excludes paused passes; a limit of 3h is reached at 3h of unpaused time;
-  `0` never limits; a stretch with no dispatcher pass counts as run time.
+  `0` never limits. **Gap**: no pass for 10 min counts as run time; no pass for 8 h (a host
+  asleep) adds the 8 h to `paused_ms`, so a 3h limit is not reached by the night.
 - **Deliveries**: a merge, a squash and a rebase-merge each count once; the same head on the next
   pass does not count again; a pushed head or an open PR does not count. **Baseline**: a new run,
   or `run reset`, with N approved heads already merged starts at 0, and the next merge counts 1.
@@ -209,7 +233,11 @@ agentbus run reset      # the person only: deletes {p}:run, lifts a kind-run pau
   `draining` with `quota:<p>`, and its release sets `running`.
 - **Quota, silent client**: a `limit` signature on a settled screen holds the provider; `{p}:held`
   records the agent's accepted tasks and branches; master gets one directive; the release deletes
-  the field; a client without a `limit` signature is never held from its screen. **Screen hold
+  the field; a client without a `limit` signature is never held from its screen. **Not the agent's
+  own output**: a pane whose conversation shows a diff, a test or a log line with "usage limit
+  reached", and whose status area does not, is not held; the same words typed in the input box
+  are not a match either; the captured limit screen is. **Zone**: a reset `15:40` captured with
+  `TZ=Asia/Tokyo` on the reading process is stored as 15:40 Tokyo time in Unix seconds. **Screen hold
   release**: the limit screen, then 3 settled reads without it → released, resume directive sent;
   a captured `reset` → released at reset + margin; 2 settled reads without it then the screen
   again → still held. **Two agents on one provider**, both showing the limit: one clears 3 times,
@@ -222,17 +250,14 @@ agentbus run reset      # the person only: deletes {p}:run, lifts a kind-run pau
   field has none and still shows the limit: still held.
 - Settings in the registry with their env names (registry test).
 
-## 8. Questions for the person
+## 8. The person's answers (2026-11-15)
 
-1. **Who may reset the run.** Recommended: you only (`run reset` refused to agents). Or master too.
-2. **Drain or hard stop.** Recommended: drain, then pause when nothing is in flight or after
-   `run.drain_max` (2h). Or a hard stop: pause at once.
-3. **The quota threshold.** Recommended: reuse `dispatch.quota_warn` (85 % used, i.e. 15 % left),
-   one setting with one meaning, "start nothing new". Or a separate `run.quota_drain_at`, as your
-   review names it (e.g. 10 % left).
-4. **When a run starts.** Recommended: by itself, at the first pass with no record, and again
-   after `run reset`; with both limits at `0` it only counts. Or only by an explicit `agentbus run
-   start`.
+1. **Who may reset the run:** the person only (§5).
+2. **Drain or hard stop:** drain, then pause when nothing is in flight or after `run.drain_max`
+   (2h) (§3).
+3. **The quota threshold:** reuse `dispatch.quota_warn`; no separate `run.quota_drain_at` (§4).
+4. **When a run starts:** by itself, at the first pass with no record, and after `run reset` (§2).
+5. **A gap with no dispatcher pass:** counted as paused beyond a few passes: 3, i.e. 15 min (§2).
 
 ## 9. Not in scope
 
