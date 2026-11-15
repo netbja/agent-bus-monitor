@@ -1,11 +1,15 @@
 # After a reboot: ask after an intentional one, restart after an unplanned one (reboot-resume)
 
-Status: spec, r3. r1 foureyes: the record names whether an unplanned reboot is being restarted;
-self-repair must be `on` to restart; the dispatcher's suspend record has its fields named (r2).
-r1 reviewer-codex: the broker's persistence cannot hold the counter through a power cut (AOF
-fsyncs every second at best, RDB is a snapshot); the counter moves to a local fsync'd file,
-written before any relaunch, failing closed (r3). Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
-answer 1794777093334-0 to the ask `autoresume10b`). Low priority; it does not block herdr-10b.
+Status: spec, r4. Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
+answer 1794777093334-0 to the ask `autoresume10b`), then `reboot-resume-r4` (the person's review of
+r2, human directive 1794778417884-0). Low priority; it does not block herdr-10b.
+
+Revisions: r2 foureyes (the verdicts name whether a restart happens; self-repair must be `on`; the
+dispatcher's suspend fields). r3 reviewer-codex (the counter leaves the broker for a local fsync'd
+file, failing closed). r4 reviewer-codex (the counter file's bootstrap and loss, §3.2; the complete
+`{p}:reboot` schema, §3) and the person's review: services started at boot (§6.1), a repository
+integrity check before a restart (§3.1), the broker at boot (§6.2), platforms (§2.3), suspend and
+hibernate (§2.3), one notice per reboot (§3.3), and the person's decisions (§8).
 
 ## 1. Why, and what the person asked
 
@@ -23,8 +27,9 @@ The person's answer, in substance:
 - unplanned: agentbus **restarts the project by itself**, under a setting;
 - after **3 unplanned restarts** the project is **stopped**, to protect its integrity.
 
-Not a reboot, and not covered here: a network cut (the holder keeps the agents; busmon
-reconnects), a crash of one service (its manager restarts it; self-repair handles dead agents),
+Not a reboot, and not covered here: a network loss (a Wi-Fi cut that disconnects the LLM
+clients; the person's point 5: a separate spec, network-resume), a sleep or hibernation (§2.3),
+a crash of one service (its manager restarts it; self-repair handles dead agents),
 a logout without reboot (unchanged: the services stop and start again at login as today).
 
 ## 2. Telling the two apart
@@ -69,6 +74,16 @@ A pure function, `lifecycle.Judge(prev, boot)`, used by the dispatch service and
 | other boot, `stopped`, cause `signal` | `intentional` |
 | other boot, `running` | `unplanned` |
 
+### 2.3 Platforms, sleep and hibernation
+
+- **Where the boot id is unknown, nothing happens.** `BootID()` reads Linux and macOS only. On the
+  BSDs (and Windows, out of scope since 2026-11-11) it is unknown, so the verdict is always `none`:
+  nothing breaks, nothing restarts, nothing is asked. The operator note says so.
+- **Sleep and hibernation are not a reboot.** The boot id survives them (Linux keeps
+  `boot_id` in the kernel's memory, which hibernation restores; macOS keeps `kern.bootsessionuuid`
+  across sleep), so the run record reads the same boot: `none`. Self-repair's own rule for a
+  resume from sleep (a monotonic jump, same boot id) is unchanged.
+
 Residual, stated: a dispatch service already dead when the machine shuts down cleanly (its
 restart budget spent) leaves `running`, and the next boot reads `unplanned`: at worst one
 automatic restart, counted (§3.2). A SIGTERM from `systemctl --user stop` by hand, then a reboot,
@@ -81,8 +96,21 @@ Only then does it write `running` for this boot, so a crash in between judges ag
 write below is fenced and keyed by the boot, so a second judgement of the same boot changes
 nothing.
 
-It records the verdict in `{p}:reboot` (a JSON string, fenced): `{boot, verdict, why, at}`
-(`at` Redis TIME). `none` writes nothing. The verdicts, a closed set, each with what busmon and
+It records the verdict in `{p}:reboot` (a JSON string, fenced). `none` writes nothing. The
+complete schema:
+
+| Field | Type | Present |
+|---|---|---|
+| `boot` | string, the boot id judged | always |
+| `verdict` | one of the table below | always |
+| `why` | string, one of the closed reasons of §3.1 | `unplanned` and `stopped` only |
+| `n` | int, restarts counted in the window, this one included | `restarting` and `stopped` only |
+| `max` | int, `services.unplanned_max` when judged | `restarting` and `stopped` only |
+| `window` | int, `services.unplanned_window` in ms when judged | `restarting` and `stopped` only |
+| `at` | int, Redis TIME (ms) of the judgement | always |
+
+busmon renders `n of max in <window>` (`2 of 3 in 24 h`) from these three fields, and nothing else;
+a record missing one of them where it must be present is shown as `restarting (count unknown)`. The verdicts, a closed set, each with what busmon and
 self-repair do:
 
 | `verdict` | Meaning | busmon (§4) | self-repair (§5) |
@@ -90,8 +118,8 @@ self-repair do:
 | `intentional` | clean shutdown | popup: relaunch | holds |
 | `suspended` | suspended before the shutdown | popup: resume | holds (the suspend already holds it) |
 | `restarting` | unplanned, restarted by itself (§3.1) | no popup; a header line `restarting after an unexpected stop (2 of 3 in 24 h)` | relaunches |
-| `unplanned` | unplanned, **not** restarted; `why` names the first failing condition of §3.1 (`setting off`, `self-repair off`, `self-repair in shadow mode`, `counter not written`) | popup: relaunch, with `why` | holds |
-| `stopped` | the limit was passed (§3.2) | popup: stopped | holds (the suspend holds it) |
+| `unplanned` | unplanned, **not** restarted; `why` names the failing condition (§3.1: 1, 2 or 4) | popup: relaunch, with `why` | holds |
+| `stopped` | the repository check failed, or the limit was passed (§3.1: 3 or 5); `why` says which | popup: stopped | holds (the suspend holds it) |
 
  The record is deleted (fenced) by the dispatcher once every required agent of the
 template is alive, the project has been relaunched, whoever did it.
@@ -100,12 +128,21 @@ template is alive, the project has been relaunched, whoever did it.
 
 When every condition holds, in this order (the first that fails is `why`):
 
-1. `services.unplanned_restart` is on;
-2. self-repair's mode is `on` (`off` relaunches nothing, `shadow` only reports: neither can
+1. `services.unplanned_restart` is on (`why`: `setting off`);
+2. self-repair's mode is `on` (`self-repair off`, `self-repair in shadow mode`: neither can
    restart a team, so the verdict says so rather than claiming a restart);
-3. this restart is counted, durably, before anything is relaunched (§3.2; a write that fails is
-   `counter not written`: no restart, fail closed);
-4. the counter allows it (§3.2; when it does not, the verdict is `stopped`),
+3. **the repository is intact** (the person's point 2), a read-only check of the project's
+   repository: no `index.lock` in its git directory or in any of its worktrees' (`git worktree
+   list --porcelain`, then a stat of each `index.lock`), and `git fsck --no-dangling --no-progress`
+   exits 0. It runs as `git -c core.fsmonitor=false -c core.hooksPath=/dev/null …` in the
+   project's directory, with a 5-minute limit, so no repository-configured program runs (the
+   dispatcher never runs repository code). On failure the verdict is **`stopped`** (§3.2's
+   stop), `why` `index.lock present: <path>`, `git fsck failed (exit <n>)` or `git fsck timed
+   out`: agents never restart on a damaged repository, and nothing is counted;
+4. this restart is counted, durably, before anything is relaunched (§3.2; `counter not written`
+   or `counter missing`: no restart, fail closed);
+5. the counter allows it (§3.2; when it does not, the verdict is `stopped`, `why` `limit: <n> in
+   <window>`),
 
 the verdict is `restarting` and the dispatcher
 **relaunches the agents through self-repair**, the existing path: a new terminal in the holder per
@@ -115,8 +152,13 @@ not count in self-repair's per-agent budgets (R5); the reboot counter counts the
 The escalation target is told (`restarted after an unplanned stop of this machine (2 of 3 in
 24 h)`), and the person gets one notice (`FencedNotifyOnceForPerson`, mark `reboot:<boot>`).
 
-Otherwise (1 to 3 fail) the verdict is `unplanned` with its `why`, treated as intentional: busmon
-asks (§4), self-repair holds (§5), and nothing is counted (only a restart counts).
+When 1, 2 or 4 fails, the verdict is `unplanned` with its `why`, treated as intentional: busmon
+asks (§4), self-repair holds (§5), and nothing is counted (only a restart counts). When 3 or 5
+fails, the verdict is `stopped`.
+
+The closed set of `why`: `setting off`, `self-repair off`, `self-repair in shadow mode`,
+`index.lock present: <path>`, `git fsck failed (exit <n>)`, `git fsck timed out`, `counter not
+written`, `counter missing`, `limit: <n> in <window>`.
 
 ### 3.2 The counter, and "stopped"
 
@@ -132,18 +174,28 @@ listed is not added again, so a second judgement of the same boot counts nothing
 Redis TIME read at the judgement (the persisted-time rule); the window is judged against Redis
 TIME too. Entries older than `services.unplanned_window` (24 h) are dropped at each write.
 
-Order: conditions 1 and 2 hold; read the file (unreadable or malformed: `counter not written`, no
-restart, the person told: fail closed, never a reset); add this boot; count within the window:
+**Bootstrap and loss.** The file is created, as `[]`, by whoever creates `run.json` (the dispatch
+service on its first start, or `agentbus up`), in the same step and before `run.json` is renamed
+into place: so `run.json` present means the counter was created. Then:
 
-Conditions 1 and 2 are checked first, so the file counts only restarts the dispatcher would make.
+- `run.json` missing (first start, or an install older than this): verdict `none` (§2.2), both
+  files created; nothing to count.
+- `run.json` present, `unplanned.json` **missing**: the counter was lost or deleted. Never read as
+  empty (that would reset the budget): `why` `counter missing`, verdict `unplanned`, no restart,
+  the person told. `agentbus up` or `agentbus resume`, the person's acts, recreate it as `[]`.
+- unreadable or malformed: `counter not written`, as above. Never a reset.
+
+Order: conditions 1 to 3 hold; read the file; add this boot; count within the window:
+
+Conditions 1 to 3 are checked first, so the file counts only restarts the dispatcher would make.
 
 - count ≤ `services.unplanned_max` (3): write the file (failure: `counter not written`), then
   relaunch (§3.1);
 - count > 3: **the project is stopped** (the file is written too; its failure does not undo the
   stop).
 
-`{p}:reboot` carries `n` and `max` for busmon's line (`2 of 3 in 24 h`); the file is the count's
-only source.
+`{p}:reboot` carries `n`, `max` and `window` for busmon's line (§3's schema); the file is the
+count's only source.
 
 **Stopped** means: the dispatcher writes a suspend record in `{p}:pause`, through a fenced
 variant of `Suspend`'s script (`FencedSuspend`: the lease check, then the same body), with the
@@ -154,7 +206,7 @@ fields `agentbus resume` reads:
 | `kind` | `suspend` |
 | `by` | `dispatch` |
 | `notify` | the escalation target (who gets the resume directive) |
-| `reason` | `stopped after 4 unplanned restarts of this machine in 24 h` |
+| `reason` | `stopped after 4 unplanned restarts of this machine in 24 h`, or `stopped: the repository needs a check (<why>)` |
 | `host`, `boot` | this host, this boot |
 | `services` | `{dispatch: true, missions: <active now>, holder: true}`: the services running when it stopped, so `resume` starts any that has stopped since and stops none |
 | `at`, `until` | set by the script from Redis TIME, as for the person's suspend |
@@ -166,6 +218,16 @@ existing suspend rules then apply: nobody is woken, self-repair relaunches nothi
 by the dispatcher), so health, busmon and notifications still work. Verdict in `{p}:reboot`:
 `stopped`. The escalation target is told, the person gets one notice and busmon's popup (§4) says
 why, with `git status` and `git fsck` as the first checks.
+
+### 3.3 One notice per reboot
+
+For every verdict but `none`, the dispatcher sends the person one notice
+(`FencedNotifyOnceForPerson`, mark `reboot:<boot>`), so a reboot is never silent when busmon is
+not opened afterwards (the person's point 5): the popup's text (§4), or for `restarting` the line
+`<p> restarted after an unexpected stop of this machine (n of max in 24 h)`. It needs a dispatch
+service running after the reboot (§6.1); without one, only busmon's popup tells.
+
+### 3.4 Lifting a stop
 
 **Only the person lifts it**: `agentbus resume` (the existing command, from busmon's popup or
 palette) ends the suspend, relaunches with `--resume`, and **empties `unplanned.json`** (it runs on the project's host): the
@@ -184,10 +246,10 @@ At start, for each project of the list on this host:
 - `restarting`: no popup; the header line of §3's table until the record goes.
 - `suspended`: **Resume `<p>`?** `<p> was suspended before the restart.` Enter runs `agentbus
   resume -p <p> --yes`.
-- `stopped`: **`<p>` is stopped.** `4 unplanned restarts in 24 h. Check the repository first (git
-  status, git fsck), then resume.` Enter runs `agentbus resume -p <p> --yes`.
-- **The services did not start** (no dispatcher: `services.start_at_login` off, or `none`
-  manager): no record exists, so busmon judges `run.json` itself, read-only, with the same
+- `stopped`: **`<p>` is stopped.** `<why>. Check the repository first (git status, git fsck),
+  then resume.` Enter runs `agentbus resume -p <p> --yes`.
+- **The services did not start** (no dispatcher: neither `services.start_at_boot` nor
+  `services.start_at_login` on): no record exists, so busmon judges `run.json` itself, read-only, with the same
   function, and offers the same popup for `intentional`, `unplanned` and `suspended`. busmon never
   counts, never writes `{p}:reboot`, never relaunches by itself.
 
@@ -197,18 +259,55 @@ there; it runs nothing.
 ## 5. Self-repair after a reboot
 
 After the herdr cutover, agents come back "through `up` or self-repair with their recorded
-resume" (herdr exit §4.4a), and the holder service starts with the others at login. After a
+resume" (herdr exit §4.4a), and the holder service starts with the others at boot or login. After a
 reboot the holder answers empty and every agent is dead, so self-repair would relaunch the team
 after **any** reboot, intentional or not. This spec gates it: a new hold kind `reboot`
 (`selfrepair.HoldReboot`) while `{p}:reboot` stands for this boot with any verdict but
 `restarting` (§3's table). The hold ends when the record is deleted (every required agent alive,
 §3). A death of the current boot after that is ordinary self-repair.
 
-## 6. Settings (`config/keys.go`, group Services, machine-only like `services.start_at_login`)
+## 6. Starting without the person
+
+### 6.1 `services.start_at_boot` (the person's point 1)
+
+With services started at login only, an unplanned reboot stops at the login screen: nothing runs
+until the person logs in, and then the popup does the same job. For an unattended restart the
+services must start at boot. A new setting, `services.start_at_boot` (Bool, default off,
+machine-only), applied by `agentbus service boot` (enable or disable, as `agentbus service login`
+applies `start_at_login`; `agentbus up` applies both), one backend per platform behind the same
+interface as `LoginStart`:
+
+| Platform | Mechanism | Needs root |
+|---|---|---|
+| Linux with systemd | `loginctl enable-linger <user>`, and the units enabled as for `start_at_login` (the user manager then starts at boot) | no, where polkit allows a user to linger itself; otherwise the command says so and prints the line to run |
+| Linux without systemd (`services.manager = none`) | a system service of the init (OpenRC, runit…) running as the user; fallback, an `@reboot` line in the user's crontab running `agentbus --project <p> service start` (services only, never agents) | the system service yes; the crontab no |
+| macOS | a LaunchDaemon in `/Library/LaunchDaemons` with `UserName` set to the person, instead of the LaunchAgent | yes |
+| Windows, BSDs | out of scope (a boot id is unknown there, §2.3) | |
+
+A step that needs root is never run by agentbus: `agentbus service boot` and busmon's C page print
+what to run. Linger changes one thing the herdr exit decided (Q5, "without linger"): with
+`start_at_boot` on, logging out no longer ends the team. It is opt-in and said on the C page.
+
+**busmon's C page warns** when `services.unplanned_restart` is on and neither `start_at_boot` nor
+`start_at_login` is: `unplanned restart cannot act: the services start neither at boot nor at
+login`; with `start_at_login` only: `unplanned restart acts only once you log in`. No coupling
+(the person's answer 2): turning one setting on never turns another on.
+
+### 6.2 The broker at boot (the person's point 3)
+
+The broker must be up before the dispatcher can judge. It is a requirement, stated, not managed:
+the shipped compose's `restart: unless-stopped` brings it back only when the container engine
+starts at boot (Docker's daemon enabled; rootless Podman needs a user unit or quadlet, and linger).
+The C page says so next to `start_at_boot`. A dispatch service started before the broker judges
+nothing: it judges only once it holds the lease (§3), so it retries its connection as today, leaves
+`run.json` untouched, relaunches nothing, and judges once the broker answers.
+
+### 6.3 Settings (`config/keys.go`, group Services, machine-only)
 
 | Name | Env | Kind | Default | Rule |
 |---|---|---|---|---|
-| `services.unplanned_restart` | `AGENT_BUS_UNPLANNED_RESTART` | Bool | `true` | effective only where services start at login |
+| `services.start_at_boot` | — | Bool | `false` | machine-only, file only, as `start_at_login` |
+| `services.unplanned_restart` | `AGENT_BUS_UNPLANNED_RESTART` | Bool | `true` | acts only where the services start at boot (or at login, after the login) |
 | `services.unplanned_max` | `AGENT_BUS_UNPLANNED_MAX` | Int | 3 | 1 to 10 |
 | `services.unplanned_window` | `AGENT_BUS_UNPLANNED_WINDOW` | Duration | 24h | 1h to 7 days |
 
@@ -220,7 +319,22 @@ longer read; the operator note says so.
 ## 7. Tests and footprint
 
 Tests:
-- `lifecycle.Judge`: every row of §2.2; unreadable and unknown boot → `none`.
+- `lifecycle.Judge`: every row of §2.2; unreadable and unknown boot → `none`; a fake suspend and
+  a fake hibernation (same boot id, a monotonic jump) → `none`.
+- `{p}:reboot`: each verdict's fields exactly as §3's schema (`why` only with `unplanned` and
+  `stopped`; `n`, `max`, `window` only with `restarting` and `stopped`).
+- counter bootstrap: first start creates both files, `unplanned.json` before `run.json`; `run.json`
+  present and `unplanned.json` missing → `counter missing`, no restart, never a reset; `up` and
+  `resume` recreate it.
+- integrity: an `index.lock` in the main git directory, then in a worktree's → `stopped` with its
+  path; `git fsck` failing → `stopped`, exit code in `why`; a timeout (fake clock) → `stopped`;
+  `core.fsmonitor` and hooks configured in the repository never run (a fake that records argv and
+  a repository whose fsmonitor would write a file); nothing counted.
+- broker: the dispatch service started with no broker judges nothing and writes nothing, then
+  judges once when the broker answers.
+- notice: every verdict but `none` sends one notice per boot; `restarting`'s carries `n of max`.
+- `service boot`: each backend's files or commands with fakes (no `loginctl`, `launchctl` or
+  crontab is run for real); root steps printed, never run; the C page's two warnings.
 - run record: the SIGTERM handler writes `stopped` only over `running` of this boot (never over
   `down` or `suspend`); `up`, `down`, `suspend` write theirs before acting (order checked with fakes);
   the file is 0600 and replaced atomically.
@@ -246,21 +360,19 @@ Footprint (two PRs):
   `suspend` writes, `bus/reboot.go` (`{p}:reboot`, fenced scripts, the
   dispatcher's suspend), dispatch start, `selfrepair/decide.go` (`HoldReboot`) and the chore's
   reboot deaths, `agentbus resume` (counter reset), `config/keys.go` (three keys, one retired),
-  `bus/keykinds.go` (`{p}:reboot`), operator note fragment.
+  `bus/keykinds.go` (`{p}:reboot`), the integrity check, the notice, operator note fragment.
 - B: busmon popup and For-you item.
+- C: `services.start_at_boot`, `agentbus service boot` and its backends (`service/`), the C page's
+  warnings and broker line.
 
-## 8. Questions for the person
+## 8. The person's decisions (directive 1794778417884-0)
 
-1. **"After 3"**: proposed, three automatic restarts in 24 h are allowed and a fourth unplanned
-   stop in that window stops the project. Or should the third already stop it?
-2. **Default of `services.unplanned_restart`**: proposed on. It acts only where the services start
-   at login (`services.start_at_login`, off by default): with that off, an unplanned reboot gets
-   the popup like an intentional one. Should turning on unplanned restart also turn on start at
-   login?
-3. **Stopped**: proposed, a suspend by the dispatcher with the services left running so you are
-   told; only your `agentbus resume` lifts it and resets the counter. Or should it stop the
-   services as well?
-4. **`suspend.auto_resume` retired**, a suspended project gets the popup after a reboot. Or should a
-   suspended project restart by itself like an unplanned stop?
-5. **A network cut is not a reboot** here (agents keep running in the holder). Did you mean the
-   machine itself losing power or network, or something else (an SSH session to a remote host)?
+1. Three automatic restarts in 24 h; the fourth stops the project.
+2. No coupling: turning on unplanned restart turns on neither start at login nor start at boot;
+   the C page warns instead (§6.1).
+3. Stopped: the services keep running so the person is told; only `agentbus resume` lifts it.
+4. A suspended project gets the popup; it never restarts by itself.
+5. The network loss meant a Wi-Fi cut that disconnects the LLM clients: not a reboot, out of
+   scope here, for a separate spec (network-resume).
+
+No question left open.
