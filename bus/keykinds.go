@@ -47,6 +47,9 @@ var keyKinds = map[string]KeyClass{
 	// self-repair's crash loops and resets (step 7): a crash loop holds until a
 	// person or master resets it, so it outlives a restore as the ledger does.
 	"selfrepair": KeyRecord,
+	// a head master withdrew (master-idle §3.1): a decision, kept by a
+	// restore so the guard does not ask again; pruned after 72 h.
+	"mergequeue:dropped": KeyRecord,
 
 	"services": KeyRuntime, "agents": KeyRuntime, "wake:*": KeyRuntime, "handoff": KeyRuntime,
 	"quota": KeyRuntime, "pause": KeyRuntime, "fallback": KeyRuntime, "usage": KeyRuntime,

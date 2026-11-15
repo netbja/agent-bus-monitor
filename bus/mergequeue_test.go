@@ -85,3 +85,73 @@ func TestMergeQueueReadsBareConflictNumbers(t *testing.T) {
 		t.Fatalf("%+v %v", rec.Conflicting, err)
 	}
 }
+
+// master-idle §3.1: a success writes the undelivered heads; a failure keeps
+// the last list, as it keeps the items.
+func TestMergeQueueUndelivered(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "mq", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch %v %v", ok, err)
+	}
+	u := []MergeUndelivered{{Subject: "herdr-6c2-2", Head: "fa2d796f00000000000000000000000000000000", Branch: "feat/herdr-6c2-2", ApprovedAt: 7}}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "git", Undelivered: u}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, err := b.MergeQueue(ctx); err != nil || len(rec.Undelivered) != 1 || rec.Undelivered[0] != u[0] {
+		t.Fatalf("after a success: %+v %v", rec, err)
+	}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "git", Reason: "fetch failed"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); len(rec.Undelivered) != 1 {
+		t.Fatalf("a failure lost the list: %+v", rec)
+	}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "git"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Undelivered == nil || len(rec.Undelivered) != 0 {
+		t.Fatalf("an empty success: %+v", rec.Undelivered)
+	}
+}
+
+// Dropped heads: one field per head, its time Redis's; undrop deletes it;
+// the merge-queue pass prunes a drop older than MergeDropKeep in its fenced
+// write, a failed pass too.
+func TestMergeQueueDropped(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	h := "9b7106db00000000000000000000000000000000"
+	if err := b.DropHead(ctx, h, "redundant after operator-notes-fragments", "master"); err != nil {
+		t.Fatal(err)
+	}
+	ds, err := b.DroppedHeads(ctx)
+	if d := ds[h]; err != nil || d.Reason != "redundant after operator-notes-fragments" || d.By != "master" || d.At <= 0 {
+		t.Fatalf("dropped %+v %v", ds, err)
+	}
+	if ok, err := b.UndropHead(ctx, h); err != nil || !ok {
+		t.Fatalf("undrop %v %v", ok, err)
+	}
+	if ok, _ := b.UndropHead(ctx, h); ok {
+		t.Fatal("undrop of a head not dropped says it was")
+	}
+	if ds, _ := b.DroppedHeads(ctx); len(ds) != 0 {
+		t.Fatalf("after undrop %+v", ds)
+	}
+	// Prune: an old drop goes, a fresh one stays.
+	old := "1111111111111111111111111111111111111111"
+	b.r.HSet(ctx, MergeQueueDroppedKey(b.project), old, `{"reason":"old","by":"master","at":1}`)
+	if err := b.DropHead(ctx, h, "fresh", "master"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "mq", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch %v %v", ok, err)
+	}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "git", Reason: "a failed pass prunes too"}); err != nil {
+		t.Fatal(err)
+	}
+	ds, _ = b.DroppedHeads(ctx)
+	if _, ok := ds[old]; ok || len(ds) != 1 || ds[h].Reason != "fresh" {
+		t.Fatalf("after the pass: %+v", ds)
+	}
+}
