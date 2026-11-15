@@ -65,8 +65,8 @@ func (b *Bus) SetCheckback(ctx context.Context, agent string, d time.Duration, w
 	switch {
 	case !ValidName(agent):
 		return Checkback{}, fmt.Errorf("invalid agent %q", agent)
-	case d <= 0:
-		return Checkback{}, errors.New("a check-back is due after a positive duration")
+	case d < time.Millisecond: // the record's times are whole ms: due must be after set (reviewer-codex)
+		return Checkback{}, errors.New("a check-back is due after at least a millisecond")
 	case what == "" || utf8.RuneCountInString(what) > CheckbackTextMax || !health.SafeText(what) || strings.ContainsAny(what, "\n\t"):
 		return Checkback{}, fmt.Errorf("a check-back says what is in flight in one line of plain text, at most %d characters, with no credential", CheckbackTextMax)
 	}

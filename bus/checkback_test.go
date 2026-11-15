@@ -44,8 +44,16 @@ func TestCheckback(t *testing.T) {
 			t.Errorf("accepted %q", bad)
 		}
 	}
-	if _, err := b.SetCheckback(ctx, "master", 0, "x"); err == nil {
-		t.Error("accepted a zero duration")
+	for _, d := range []time.Duration{0, time.Nanosecond, time.Millisecond - 1} {
+		if _, err := b.SetCheckback(ctx, "master", d, "x"); err == nil {
+			t.Errorf("accepted %v: its record would not be complete", d)
+		}
+	}
+	if _, err := b.SetCheckback(ctx, "master", time.Millisecond, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Checkbacks(ctx); err != nil {
+		t.Fatalf("the shortest check-back reads back as %v", err)
 	}
 	// Forgetting the agent clears its check-back.
 	if _, err := b.Cmd(ctx, "master", "coder", "directive", "", "a stream to forget from"); err != nil {
