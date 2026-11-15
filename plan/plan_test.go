@@ -71,3 +71,48 @@ func TestParseRefuses(t *testing.T) {
 		}
 	}
 }
+
+// plan-chantier §2.1: groups listed once, a task's group names one of them;
+// at most 12, a ValidName id unique, a one-line title of 1 to 40
+// characters; a listed group with no task is refused (a typo would hide
+// it). A plan without groups parses as before.
+func TestParseGroups(t *testing.T) {
+	grouped := func(groups, taskGroup string) string {
+		return `{"plan": "v0.29", "goal": "g", "groups": [` + groups + `], "tasks": [
+  {"id": "a", "title": "A", "owner": "coder", "group": "` + taskGroup + `"},
+  {"id": "b", "title": "B", "owner": "coder"}]}`
+	}
+	f, err := Parse([]byte(grouped(`{"id": "herdr-exit", "title": "Leave herdr"}`, "herdr-exit")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Groups) != 1 || f.Groups[0] != (Group{ID: "herdr-exit", Title: "Leave herdr"}) || f.Tasks[0].Group != "herdr-exit" || f.Tasks[1].Group != "" {
+		t.Fatalf("got %+v", f)
+	}
+	var many []string
+	for i := 0; i < 13; i++ {
+		many = append(many, fmt.Sprintf(`{"id": "g%d", "title": "G"}`, i))
+	}
+	for name, data := range map[string]string{
+		"unknown group":  grouped(`{"id": "herdr-exit", "title": "Leave herdr"}`, "self-repair"),
+		"duplicate id":   grouped(`{"id": "herdr-exit", "title": "A"}, {"id": "herdr-exit", "title": "B"}`, "herdr-exit"),
+		"invalid id":     grouped(`{"id": "Herdr Exit", "title": "A"}`, "Herdr Exit"),
+		"41-char title":  grouped(`{"id": "herdr-exit", "title": "`+strings.Repeat("x", 41)+`"}`, "herdr-exit"),
+		"empty title":    grouped(`{"id": "herdr-exit", "title": ""}`, "herdr-exit"),
+		"two-line title": grouped(`{"id": "herdr-exit", "title": "a\nb"}`, "herdr-exit"),
+		"13 groups":      grouped(strings.Join(many, ", "), "g0"),
+		"an empty group": grouped(`{"id": "herdr-exit", "title": "A"}, {"id": "self-repair", "title": "B"}`, "herdr-exit"),
+		"group, no list": `{"plan": "v0.29", "goal": "g", "tasks": [{"id": "a", "title": "A", "owner": "coder", "group": "x"}]}`,
+		"unknown field":  `{"plan": "v0.29", "goal": "g", "groups": [{"id": "x", "title": "X", "owner": "coder"}], "tasks": [{"id": "a", "title": "A", "owner": "coder", "group": "x"}]}`,
+	} {
+		if _, err := Parse([]byte(data)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, err := Parse([]byte(grouped(`{"id": "herdr-exit", "title": "`+strings.Repeat("é", 40)+`"}`, "herdr-exit"))); err != nil {
+		t.Fatalf("a 40-character title: %v", err)
+	}
+	if f, err := Parse([]byte(sample)); err != nil || f.Groups != nil {
+		t.Fatalf("no groups: %+v %v", f.Groups, err)
+	}
+}

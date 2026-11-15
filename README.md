@@ -599,7 +599,10 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     each project's **for you** and **at work** by the same rule (`♙/●` under 90 columns); `?` when a
     count was not read or is more than a minute old (`R` reads them again). `p` (or `P`) opens the
     plan as a drawer: the progress, then **NOW**, **NEXT**, **LATER** and **DONE** (folded until
-    `d`), at 120 columns and more right of For you with the selected task's panel. Enter opens a
+    `d`), at 120 columns and more right of For you with the selected task's panel. A plan whose
+    file lists `groups` (chantiers) is drawn by group instead: one header per group with a bar
+    (done, then approved and waiting for a merge), `done/total`, its task in progress and what waits
+    for you, then its open rows; done rows fold into one DONE line until `d` shows them under their group. Enter opens a
     task: its review, PR, asks and notes. A task waiting for you has an `Action:` row: Enter or
     `s` opens the compose window to master, prefilled, to start it.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
