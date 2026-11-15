@@ -3,9 +3,9 @@
   answered (`WaitAnswered`) for `dispatch.master_idle_after` (15m, `0` off: `unknown`, `off`), a fresh observation
   not busy (unseen: `unknown`), no wakeable message (`Obligation(...).Wakes()`: the dispatcher's own wake covers
   it), not paused, its provider not held, and something in hand: the merge queue's `undelivered` heads (a pass
-  older than three passes, or none, makes that source `unknown`: named beside other items, `unknown` alone), its
-  board requests (`requested`, `accepted`, `working`), its check-back once due. An open `waiting` is the
-  person's turn (`ok`). The hook (`idle-master` joined the StallWake ids in `dispatch/health.go`) wakes master
+  older than three passes, or none, makes that source `unknown`: named beside other items, `unknown` alone), the
+  requests addressed to it (board entries with a request, `requested` or `accepted`; a claimed task is not), its
+  check-back once due. An open `waiting` is the person's turn (`ok`). The hook (`idle-master` joined the StallWake ids in `dispatch/health.go`) wakes master
   once per episode (8 bytes of SHA-256 of the sorted item keys `head:`/`req:`/`cb:`) through
   `bus.FencedCmdOnceAt`: mark `stall-master` and `stall-master:at` (the entry's id, Redis time) written with the
   entry in one script, so the cmd stream's cap or `busmon --reset` never loses the wake's time. Same episode, the

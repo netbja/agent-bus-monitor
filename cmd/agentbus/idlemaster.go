@@ -103,9 +103,10 @@ func (s *stallReader) idleMaster(ctx context.Context) (health.Outcome, error) {
 		return fail("board unavailable")
 	}
 	for task, e := range board {
-		// A request's owner is its target (bus/requests.go); working is an
-		// accepted task under way.
-		if e.Owner == master && (e.State == "requested" || e.State == "accepted" || e.State == "working") {
+		// A request's owner is its target (bus/requests.go). Only a request
+		// counts (§3): a task master claims (BoardClaim, working) is a plan
+		// task, team-stall's (foureyes).
+		if e.Request != nil && e.Owner == master && (e.State == "requested" || e.State == "accepted") {
 			in.Requests = append(in.Requests, task)
 		}
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -193,5 +194,106 @@ func TestIdleMasterUsesRedisTime(t *testing.T) {
 	}
 	if out := w.run(w.s.idleMaster); out.Status != health.OK || out.Detail != "master idle 0m" {
 		t.Fatalf("host clock ahead: %+v, want master idle 0m by Redis time", out)
+	}
+}
+
+// §3 (foureyes): only a request addressed to master is in its hand, in
+// state requested or accepted: a task master claimed on the board (working,
+// a plan task: team-stall's) and a request for coder are not.
+func TestIdleMasterCountsOnlyItsRequests(t *testing.T) {
+	w := idleMasterWorld(t)
+	ctx := context.Background()
+	if err := w.b.FencedPutMergeQueue(ctx, "stall-holder", bus.MergeQueueRecord{Source: "git", Forge: "none", Base: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.b.BoardClaim(ctx, "plan-task", "master", "feat/x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.Request(ctx, "for-coder", "master", "coder", "", "build it", 0); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.idleMaster); out.Status != health.OK || out.Detail != "nothing in master's hand" {
+		t.Fatalf("a claim and coder's request: %+v", out)
+	}
+	if _, err := w.b.Request(ctx, "for-master", "coder", "master", "", "release", 0); err != nil {
+		t.Fatal(err)
+	}
+	w.drain("master")
+	if err := w.b.AcceptRequest(ctx, "for-master", "master"); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.idleMaster); out.Status != health.Warn || out.Detail != "master idle 12m; requested: for-master" {
+		t.Fatalf("an accepted request for master: %+v", out)
+	}
+}
+
+// §3.1: a pass older than three passes is no source: unknown, never ok.
+func TestIdleMasterStaleMergeQueue(t *testing.T) {
+	w := idleMasterWorld(t)
+	ctx := context.Background()
+	if err := w.b.FencedPutMergeQueue(ctx, "stall-holder", bus.MergeQueueRecord{Source: "git", Forge: "none", Base: "main",
+		Undelivered: []bus.MergeUndelivered{{Subject: "s", Head: "fa2d796f0123456789abcdef0123456789abcdef"}}}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := w.b.MergeQueue(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.at(time.Now().Add(20 * time.Minute))
+	want := "merge queue not read since " + time.UnixMilli(rec.ItemsAt).Local().Format("15:04")
+	if out := w.run(w.s.idleMaster); out.Status != health.Unknown || out.Detail != want {
+		t.Fatalf("stale pass: %+v, want unknown %q", out, want)
+	}
+}
+
+// §2 item 1: master's waiting, its ask open, is the person's turn; answered,
+// master is idle since the answer and its work in hand warns.
+func TestIdleMasterAnsweredWait(t *testing.T) {
+	w := idleMasterWorld(t)
+	ctx := context.Background()
+	if err := w.b.FencedPutMergeQueue(ctx, "stall-holder", bus.MergeQueueRecord{Source: "git", Forge: "none", Base: "main",
+		Undelivered: []bus.MergeUndelivered{{Subject: "herdr-6c2-2", Head: "fa2d796f0123456789abcdef0123456789abcdef"}}}); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := w.b.Ask(ctx, bus.AskDef{From: "master", Title: "Merge?", Questions: []bus.AskQuestion{{
+		ID: "q1", Header: "Merge", Question: "Merge PR 1?", Options: []bus.AskOption{{Label: "yes"}, {Label: "no"}}}}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.b.Status(ctx, "master", "waiting", "1 question(s): Merge?", bus.AgentIdent{PID: os.Getpid(), Provider: "anthropic"}); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.idleMaster); out.Status != health.OK || out.Detail != "master waits for you (1 ask open)" {
+		t.Fatalf("open ask: %+v", out)
+	}
+	time.Sleep(2 * time.Millisecond) // the answer strictly after the declaration
+	if _, _, err := w.b.Answer(ctx, id, "q1", "charlie", "yes", ""); err != nil {
+		t.Fatal(err)
+	}
+	w.drain("master")
+	w.at(time.Now().Add(12 * time.Minute))
+	if out := w.run(w.s.idleMaster); out.Status != health.Warn || out.Detail != "master idle 12m; approved, not pushed: herdr-6c2-2 (fa2d796f)" {
+		t.Fatalf("answered: %+v", out)
+	}
+}
+
+// §4: the postponement notice fires with idle-master off.
+func TestCheckbackPostponedWithTheCheckOff(t *testing.T) {
+	w := idleMasterWorld(t)
+	ctx := context.Background()
+	w.env["AGENT_BUS_MASTER_IDLE_AFTER"] = "0"
+	for i := 0; i < 4; i++ {
+		if _, err := w.b.SetCheckback(ctx, "master", time.Hour, "k1/k2 checks"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out := w.run(w.s.idleMaster); out.Status != health.Unknown || out.Detail != "off (master_idle_after = 0)" {
+		t.Fatalf("off: %+v", out)
+	}
+	if err := w.s.stallWake(ctx, "stall-holder", "idle-master"); err != nil {
+		t.Fatal(err)
+	}
+	if n := w.personNotices(); len(n) != 1 || !strings.Contains(n[0], `master has postponed "k1/k2 checks" 4 times`) {
+		t.Fatalf("person told %q", n)
 	}
 }
