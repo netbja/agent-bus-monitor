@@ -1,9 +1,11 @@
 # A guard for master left idle with work in hand (idle-master)
 
-Status: spec, for review (subject `master-idle-spec`), r6 (r5 after the person's review of 2026-11-15
-(forge-agnostic delivery §3.1, postponed check-backs §4); r6: `-U0` patch-ids). Not built. Task `master-stall-guard`
+Status: spec, for review (subject `master-idle-spec`), r8. Not built. Task `master-stall-guard`
 (master's directive of 2026-11-15, at the person's request: "a reliable and durable fix").
-§8 holds the questions for the person.
+Revisions: r1-r4 the reviewers' rounds; r5 the person's first review (forge-agnostic delivery
+§3.1, postponed check-backs §4); r6 `-U0` patch-ids; r7 the rebase step skips heads with merge
+commits; r8 the person's second review (residual risk and cache in §3.1, §6 sentences) and the
+person's answers (§8).
 
 ## 1. What happened on 2026-11-14/15
 
@@ -110,11 +112,19 @@ within 72 h, cheapest first; a head matched by any step is delivered:
    a conflict resolution that no single commit holds, and `--no-merges` would skip it, so a head
    that contains one is judged by steps 1 and 2 only, else dropped by hand (reviewer-codex on r6).
 
-**The base's patch-ids**, computed once per pass, not per head: `git log -p -U0 --no-merges
---no-ext-diff --no-textconv <oldest fork>..<base tip> | git patch-id --stable`, the oldest fork
-among the heads judged. The range is the commits the base gained since the branches forked: no
-date and no writer clock bound it. One set, two commands per head at most, each within the pass's
-per-command budget (`mergeQueueCall`).
+**The base's patch-ids**, one set per pass, not per head: the patch-ids of the non-merge commits
+of `<oldest fork>..<base tip>`, the oldest fork among the heads judged. The range is the commits
+the base gained since the branches forked: no date and no writer clock bound it.
+
+**Cached by SHA.** A commit's patch-id never changes, so the dispatcher keeps, in memory, a map
+commit SHA → `-U0` patch-id (and, for step 2, (fork, head) → the branch's patch-id). Each pass
+lists the range (`git rev-list --no-merges <oldest fork>..<base tip>`, cheap) and computes patch-ids
+only for the SHAs not yet in the map (`git show -U0 --no-ext-diff --no-textconv <new shas> | git
+patch-id --stable`). An old approved branch widens the list, not the work: after the first pass,
+only the base's new commits are read. Entries for SHAs no longer in any range are dropped at the
+end of the pass, so the map stays the size of the range. A restart empties it; the next pass
+recomputes the range once. Each command stays within the pass's per-command budget
+(`mergeQueueCall`).
 
 **Zero context** (`-U0`, foureyes on r5): `patch-id` hashes context lines, so a base commit that
 changed a line within three lines of the branch's change after the fork gives a clean squash or
@@ -125,6 +135,15 @@ code. `--stable` is right here (not `--verbatim`, which the conflict-dispatch sp
 an approval): it detects a delivery, and a forge's squash may differ in whitespace only. A squash
 that resolved a conflict, or that the person edited, has other changed lines and is not seen: that
 is what `merge-queue drop` is for.
+
+**Residual risk: a false "delivered".** With zero context, two unrelated changes of the same lines
+to the same text share a patch-id (a version bump `1.2.3` → `1.2.4` made twice). For step 2 that
+needs the base to hold one commit equal to the whole branch's change: unlikely. For step 3 a
+one-commit head whose single change equals an unrelated base commit reads delivered. The cost is
+bounded: the guard stays silent about that one head, master is not woken for it, and nothing is
+pushed, merged or dropped on that reading; `agentbus merge-queue` still lists it while its PR is
+open. A head of several commits needs every one of them matched, so a single coincidence never
+delivers it. Accepted (the person, 2026-11-15), and pinned by a test (§7).
 
 **The adapter** (`forge.Adapter`, the seam):
 
@@ -275,11 +294,21 @@ night is a different fact (a directive unanswered, a coder passed over), with it
 | `dispatch.checkback_max` | `AGENT_BUS_CHECKBACK_MAX` | 3 | never tell the person about postponements |
 | `delivery.forge` | (existing) | `auto` | gains the value `none` (§3.1) |
 
-A duration in the registry (`config/keys.go`), `ReadBy: "dispatch"`, the env rule of the other
-stall durations. 15m, the default of `stall_after` and `idle_after`, so every stall guard waits
-the same. Its own key all the same, as `idle_after` is: each measures a different wait (a whole
-team, an implementer passed over, master with work in hand), and the person may want master's
-shorter. busmon's C page lists it.
+`dispatch.master_idle_after` is a duration in the registry (`config/keys.go`), `ReadBy:
+"dispatch"`, the env rule of the other stall durations. 15m (the person's answer), the default of
+`stall_after` and `idle_after`, so every stall guard waits the same. Its own key all the same, as
+`idle_after` is: each measures a different wait (a whole team, an implementer passed over, master
+with work in hand).
+
+`dispatch.checkback_max` is an integer, `ReadBy: "dispatch"`: how many check-backs on the same
+`what` master may set before the person is told once (§4); 3 (the person's answer), `0` never
+tells.
+
+`delivery.forge` keeps its key and its machine-wide scope; it gains the value `none`, a remote
+with no forge adapter: `deliver` pushes the branch and prints no page, and the git test of §3.1
+alone decides delivery. `auto` resolves an origin on a host no adapter knows to `none` (the
+person's answer), where it resolved to `local` before; an origin that is a path, or no origin,
+stays `local`. busmon's C page lists the three.
 
 ## 7. Tests
 
@@ -311,7 +340,13 @@ shorter. busmon's C page lists it.
   the fork; a squash that also resolved a conflict is not (drop covers it); a head holding a
   merge commit whose resolution is absent from the base is not delivered by step 3, even when all
   its ordinary commits are in the base; an unrelated commit
-  with the same message is not. A diff driver set in the repository's config (`textconv`,
+  with the same message is not. **Residual risk, pinned**: a one-commit head whose `-U0` diff
+  equals an unrelated base commit's (the same version bump made twice) reads delivered; a head of
+  two commits where only one has such a twin does not.
+- **Cache**: the second pass over the same base computes no patch-id for a SHA already seen; a
+  new base commit is the only one computed; an old approved branch widens the listed range but
+  not the patch-ids computed after the first pass; a SHA that left every range is dropped from
+  the map; a restart recomputes once. A diff driver set in the repository's config (`textconv`,
   `diff.external`) never runs in any step (a driver that would fail the test). The base's set is
   read once per pass for several heads.
 - **`undelivered`**: a head that is a tip on origin, or delivered by the git test, is left out; a
@@ -328,21 +363,15 @@ shorter. busmon's C page lists it.
   sees only the wake line.
 - The setting is in the registry (registry test), with its env name.
 
-## 8. Questions for the person
+## 8. The person's answers (2026-11-15)
 
-1. **The threshold.** Recommended: 15 minutes, as the other stall guards. Or 30 (master's own
-   proposal), at the cost of fifteen more minutes per stall; or 10, at the cost of nudging master
-   between two steps of one task.
-2. **`agentbus checkback`.** Recommended: yes, it is the only way the guard can see background
-   work for every client (Codex, Grok, agy, Kimi as master, not only Claude). Or no: the guard then
-   sees only approved heads and requests, and background work rests on master's rule alone.
-3. **The second tier.** Recommended: one notice to you per episode when master was woken and
-   nothing moved. Or none: master's wake only.
-4. **A remote on a host no adapter knows.** Recommended: `auto` resolves it to `none` (push to
-   origin, the git test decides delivery), as your review asks. This changes today's `local`
-   fallback, which pushes nothing for such a remote (forge-delivery, 2026-11-02). Or keep `local`
-   for `auto`, and `none` only when `delivery.forge = none` is set.
-5. **Postponements before you are told.** Recommended: 3 check-backs on the same work. Or 2, or 5.
+1. **Threshold:** 15 minutes (`dispatch.master_idle_after`).
+2. **`agentbus checkback`:** yes (§4).
+3. **Second tier:** yes, one notice per episode (§5).
+4. **A remote on a host no adapter knows:** `auto` resolves it to `none` (§3.1, §6). This revises
+   the `local` fallback of the forge-delivery decision (2026-11-02) for such a remote; the
+   decision note is amended when this is built.
+5. **Postponements before the person is told:** 3 (`dispatch.checkback_max`).
 
 ## 9. Not in scope
 
