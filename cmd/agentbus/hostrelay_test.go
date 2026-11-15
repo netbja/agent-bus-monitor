@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -109,5 +112,28 @@ func TestRelayHostOpLastRead(t *testing.T) {
 	code := relayHostOp(ctx, b, bus.HostOp{Op: bus.HostUp, From: "master"}, 50*time.Millisecond, &out, &errw)
 	if code != 1 || reads != 2 || !strings.Contains(errw.String(), "up: refused: too late to tell") || strings.Contains(errw.String(), relayFailText) {
 		t.Fatalf("%d after %d reads: %q", code, reads, errw.String())
+	}
+}
+
+// security S10a-1: a forged entry an hour ahead pushes every later id
+// forward; the command's deadline is still 5 s by Redis TIME at its send,
+// not its own id's: no dispatcher, it fails within the window.
+func TestRelayHostOpDeadlineFromTheSend(t *testing.T) {
+	ctx := context.Background()
+	b, r := dialMain(t)
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := strconv.FormatInt(now.Add(time.Hour).UnixMilli(), 10) + "-0"
+	if err := r.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(b.Project(), "cmd"), ID: future,
+		Values: map[string]interface{}{"from": "coder", "target": "master", "type": "directive", "command": "x"}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	var out, errw bytes.Buffer
+	code := relayHostOp(ctx, b, bus.HostOp{Op: bus.HostUp, From: "master"}, 300*time.Millisecond, &out, &errw)
+	if code != 1 || !strings.Contains(errw.String(), relayFailText) || time.Since(start) > 5*time.Second {
+		t.Fatalf("%d after %s: %q", code, time.Since(start), errw.String())
 	}
 }

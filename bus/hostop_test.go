@@ -226,3 +226,37 @@ func TestHostOpOutcomeWakes(t *testing.T) {
 		t.Fatal("accepted taken for an outcome")
 	}
 }
+
+// security S10a-1: a directive whose entry id is ahead of the broker's
+// clock (an explicit XADD id) is never accepted: refused, once, its record
+// kept, so the 5 s window holds whatever id the stream gives.
+func TestHostOpFutureIDRefused(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := strconv.FormatInt(now.Add(time.Hour).UnixMilli(), 10) + "-0"
+	o := HostOp{ID: future, Op: HostUp, From: "master"}
+	if st, err := b.FencedHostAccept(ctx, "tok", o, HostAcceptWindow); err != nil || st != HostRefused {
+		t.Fatalf("an id an hour ahead = %q, %v", st, err)
+	}
+	if r := hostReplies(t, b, future); len(r) != 1 || r[0]["command"] != "refused: the directive's id is ahead of the server clock" {
+		t.Fatalf("replies %v", r)
+	}
+	if st, err := b.FencedHostAccept(ctx, "tok", o, HostAcceptWindow); err != nil || st != HostSeen {
+		t.Fatalf("again = %q, %v", st, err)
+	}
+	if open, _ := b.UnfinishedHostOps(ctx); len(open) != 0 {
+		t.Fatalf("a refused directive is unfinished: %+v", open)
+	}
+	// Within a second ahead (the clocks of one broker): accepted.
+	near := strconv.FormatInt(now.Add(500*time.Millisecond).UnixMilli(), 10) + "-0"
+	if st, err := b.FencedHostAccept(ctx, "tok", HostOp{ID: near, Op: HostUp, From: "master"}, HostAcceptWindow); err != nil || st != HostAccepted {
+		t.Fatalf("half a second ahead = %q, %v", st, err)
+	}
+}

@@ -161,8 +161,10 @@ const (
 // ARGV[1] token, ARGV[2] the directive id, ARGV[3] the window ms, ARGV[4]
 // its sender, ARGV[5] the stream cap, ARGV[6] the record kept when
 // accepted (JSON, without its time). A directive already in {p}:hostops is
-// seen; past the window by Redis TIME it is expired (reply written); else it
-// is accepted, its record and its reply written in this one step.
+// seen; one whose id is more than a second ahead of Redis TIME (an explicit
+// XADD id: security S10a-1) is refused; past the window by Redis TIME it is
+// expired; else it is accepted. The record and the reply are written in
+// this one step.
 var hostAccept = redis.NewScript(fenceCheck + `
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -170,7 +172,11 @@ local ms = tonumber(string.match(ARGV[2], '^(%d+)%-%d+$'))
 if not ms then return redis.error_reply('host: bad directive id') end
 if redis.call('HEXISTS', KEYS[3], ARGV[2]) == 1 then return 'seen' end
 local state, text = 'accepted', 'accepted: queued; its outcome follows as a reply'
-if now - ms > tonumber(ARGV[3]) then state, text = 'expired', 'expired' end
+if ms - now > 1000 then
+  state, text = 'refused', "refused: the directive's id is ahead of the server clock"
+elseif now - ms > tonumber(ARGV[3]) then
+  state, text = 'expired', 'expired'
+end
 local rec = cjson.decode(ARGV[6])
 rec['state'], rec['at'] = state, now
 redis.call('HSET', KEYS[3], ARGV[2], cjson.encode(rec))
@@ -189,7 +195,9 @@ type hostRecord struct {
 
 // FencedHostAccept accepts o (validated by the caller) within window of its
 // entry id, by Redis TIME: HostAccepted (reply written, record kept),
-// HostExpired (reply written, nothing to run) or HostSeen (handled before).
+// HostExpired (reply written, nothing to run), HostRefused (its id ahead of
+// the server clock: reply written, nothing to run) or HostSeen (handled
+// before).
 // Only the lease holder writes.
 func (b *Bus) FencedHostAccept(ctx context.Context, token string, o HostOp, window time.Duration) (string, error) {
 	if !ValidName(o.From) {

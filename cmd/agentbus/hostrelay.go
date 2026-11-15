@@ -36,6 +36,14 @@ func relayHostOp(ctx context.Context, b *bus.Bus, o bus.HostOp, window time.Dura
 	if o.Agent != "" {
 		what += " " + o.Agent
 	}
+	// The deadline is Redis TIME at the send, never later than the entry's
+	// own id: a forged entry ahead of the clock pushes every later id
+	// forward (security S10a-1), and must not stretch the wait.
+	sent, err := b.ServerTime(ctx)
+	if err != nil {
+		fmt.Fprintf(errw, "%s: the broker's clock: %v\n", what, err)
+		return 1
+	}
 	id, err := b.SendHostOp(ctx, o)
 	if err != nil {
 		fmt.Fprintf(errw, "%s: %v\n", what, err)
@@ -46,7 +54,7 @@ func relayHostOp(ctx context.Context, b *bus.Bus, o bus.HostOp, window time.Dura
 		fmt.Fprintf(errw, "%s: unreadable directive id %q\n", what, id)
 		return 1
 	}
-	deadline := ms + window.Milliseconds()
+	deadline := min(ms, sent.UnixMilli()) + window.Milliseconds()
 	for {
 		reply, ok, err := hostReply(ctx, b, id, o.From)
 		if err == nil && ok {
