@@ -57,7 +57,9 @@ func (l *loop) loginHolds(ctx context.Context, results []LoginExpiry, now time.T
 				return err
 			}
 			l.loginHeld[r.Agent] = true
-		case marks[field] != "" && (r.Status == health.OK || r.Status == health.Warn) && r.Expiry.UnixMilli() > recorded:
+		// A renewed login: ok or warn is an expiry still ahead, so later than
+		// the held one, which had passed; unknown and fail keep the hold.
+		case marks[field] != "" && (r.Status == health.OK || r.Status == health.Warn):
 			if work == nil {
 				if work, err = l.readAgentWork(ctx); err != nil {
 					return err
