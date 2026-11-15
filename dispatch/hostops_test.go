@@ -145,3 +145,54 @@ func TestHostOpsStartReportsUnfinished(t *testing.T) {
 		t.Fatal("queued an unfinished operation")
 	}
 }
+
+// reviewer-codex on 10a: the dispatcher loses its lease while an operation
+// runs. The old worker runs nothing more; the next dispatcher reports the
+// one that was running as unknown (it may have run, never "not run"), and
+// the one still queued, never started, as not run.
+func TestHostOpsFailover(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "host-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	var ran []string
+	old := hostLoop(b, func(_ context.Context, _ string, o bus.HostOp) (string, string) {
+		ran = append(ran, o.Agent)
+		close(started)
+		<-release
+		return bus.HostDone, "relaunched"
+	})
+	st := old.newHostOpsState(ctx)
+	for _, a := range []string{"coder", "foureyes"} {
+		if _, err := b.SendHostOp(ctx, bus.HostOp{Op: bus.HostRelaunch, Agent: a, From: "master"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.hostOpsPass(ctx, st)
+	done := make(chan struct{})
+	go func() { old.hostOpsWork(ctx, st, 1); close(done) }()
+	<-started
+	// The lease moves to another dispatcher while coder's relaunch runs.
+	if err := r.Set(ctx, bus.DispatchKey(b.Project()), "new-holder", time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-done
+	old.hostOpsWork(ctx, st, 1) // foureyes, queued: the old worker must not run it
+	if len(ran) != 1 {
+		t.Fatalf("ran %v after the lease moved", ran)
+	}
+	next := hostLoop(b, func(context.Context, string, bus.HostOp) (string, string) { t.Fatal("ran late"); return "", "" })
+	next.token = "new-holder"
+	next.hostOpsPass(ctx, next.newHostOpsState(ctx))
+	r1 := hostReplies(t, b, "master")
+	got := strings.Join(r1, "\n")
+	if !strings.Contains(got, "unknown: the dispatcher stopped while running it") || !strings.Contains(got, "not-run: the dispatcher stopped before running it") {
+		t.Fatalf("replies %q", r1)
+	}
+	if strings.Contains(got, "done: relaunched") {
+		t.Fatal("the old worker's outcome was written without the lease")
+	}
+}

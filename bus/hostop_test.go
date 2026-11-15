@@ -161,3 +161,45 @@ func TestHostOpRefuse(t *testing.T) {
 		t.Fatalf("replies %v", r)
 	}
 }
+
+// reviewer-codex on 10a: an operation is marked running, under the lease,
+// before it runs; only an accepted one can be; the sweep tells running
+// (it may have run: unknown) from accepted (it never started: not run).
+func TestHostOpRunning(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	var ops []HostOp
+	for _, a := range []string{"coder", "foureyes"} {
+		id, err := b.SendHostOp(ctx, HostOp{Op: HostRelaunch, Agent: a, From: "master"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		o := HostOp{ID: id, Op: HostRelaunch, Agent: a, From: "master"}
+		if st, err := b.FencedHostAccept(ctx, "tok", o, HostAcceptWindow); err != nil || st != HostAccepted {
+			t.Fatalf("accept %q %v", st, err)
+		}
+		ops = append(ops, o)
+	}
+	if err := b.FencedHostRunning(ctx, "bad", ops[0]); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("running without the lease: %v", err)
+	}
+	if err := b.FencedHostRunning(ctx, "tok", ops[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.FencedHostRunning(ctx, "tok", ops[0]); err == nil {
+		t.Fatal("marked running twice")
+	}
+	open, err := b.UnfinishedHostOps(ctx)
+	if err != nil || len(open) != 2 || open[0].State != HostRunning || open[1].State != HostAccepted {
+		t.Fatalf("unfinished %+v %v", open, err)
+	}
+	if err := b.FencedHostOutcome(ctx, "tok", ops[0], HostUnknown, "it may have run"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.FencedHostRunning(ctx, "tok", ops[0]); err == nil {
+		t.Fatal("a closed operation marked running")
+	}
+}

@@ -14,8 +14,11 @@ import (
 // each one is checked against the closed set, accepted (or expired) by a
 // fenced script on Redis TIME that writes its reply in the same step, and
 // only then queued on one serial worker that runs it and writes its
-// outcome. A dispatcher starting reports each operation accepted and never
-// finished as not run.
+// outcome. The worker marks an operation running, under the lease, before
+// it runs it, and runs nothing without the lease; a dispatcher starting
+// reports each one accepted and never started as not run, and each one
+// that was running as unknown (it may have acted: check before asking
+// again), never as not run.
 
 // HostOpsPoll is how often the directives are read.
 const HostOpsPoll = 250 * time.Millisecond
@@ -56,11 +59,14 @@ func (l *loop) newHostOpsState(ctx context.Context) *hostOpsState {
 // hostOpsLoop reads and accepts on one goroutine, runs on another.
 func (l *loop) hostOpsLoop(ctx context.Context) {
 	st := l.newHostOpsState(ctx)
+	worker := make(chan struct{})
 	go func() {
+		defer close(worker)
 		for ctx.Err() == nil {
 			l.hostOpsWork(ctx, st, 1)
 		}
 	}()
+	defer func() { <-worker }() // joined: the loop ends once the worker has
 	every := l.cfg.HostOps.Poll
 	if every <= 0 {
 		every = HostOpsPoll
@@ -131,6 +137,16 @@ func (l *loop) hostOpsWork(ctx context.Context, st *hostOpsState, n int) {
 			return
 		case o = <-st.queue:
 		}
+		// Under the lease, marked before it runs: without the lease (moved,
+		// or ctx ended) it is not run, and stays accepted for the next
+		// dispatcher to report as not run.
+		if ctx.Err() != nil {
+			return
+		}
+		if err := l.b.FencedHostRunning(ctx, l.token, o); err != nil {
+			l.hostWrite(o, err)
+			continue
+		}
 		state, text := l.cfg.HostOps.Run(ctx, l.token, o)
 		switch state {
 		case bus.HostDone, bus.HostRefused, bus.HostFailed:
@@ -145,15 +161,21 @@ func (l *loop) hostOpsWork(ctx context.Context, st *hostOpsState, n int) {
 	}
 }
 
-// hostOpsSweep reports each accepted operation with no outcome as not run,
-// to its sender and to the escalation target.
+// hostOpsSweep reports each operation with no outcome, to its sender and to
+// the escalation target: one never started as not run, one that was running
+// as unknown (it may have acted).
 func (l *loop) hostOpsSweep(ctx context.Context) error {
 	open, err := l.b.UnfinishedHostOps(ctx)
 	if err != nil {
 		return err
 	}
 	for _, o := range open {
-		if err := l.b.FencedHostOutcome(ctx, l.token, o, bus.HostNotRun, "the dispatcher stopped before running it"); err != nil {
+		state, text, tell := bus.HostNotRun, "the dispatcher stopped before running it", "was not run: the dispatcher stopped before running it; ask again if it is still wanted"
+		if o.State == bus.HostRunning {
+			state, text, tell = bus.HostUnknown, "the dispatcher stopped while running it: it may have run; check before asking again",
+				"may or may not have run: the dispatcher stopped while running it; check before asking again"
+		}
+		if err := l.b.FencedHostOutcome(ctx, l.token, o, state, text); err != nil {
 			return err
 		}
 		if master := l.cfg.EscalateTo; master != "" && master != o.From {
@@ -161,8 +183,7 @@ func (l *loop) hostOpsSweep(ctx context.Context) error {
 			if o.Agent != "" {
 				what += " " + o.Agent
 			}
-			if _, err := l.b.FencedCmd(ctx, l.token, bus.HostTarget, master, bus.CmdDirective,
-				"host "+what+" from "+o.From+" was not run: the dispatcher stopped before running it; ask again if it is still wanted"); err != nil {
+			if _, err := l.b.FencedCmd(ctx, l.token, bus.HostTarget, master, bus.CmdDirective, "host "+what+" from "+o.From+" "+tell); err != nil {
 				return err
 			}
 		}

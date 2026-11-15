@@ -63,6 +63,7 @@ type HostOp struct {
 	Profile          string // swap and pop only: the profile asked for
 	IgnoreBackground bool   // honoured only from master or the person (§4.3b), at run time
 	From             string // who sent it: self-attested, as every bus entry
+	State            string // UnfinishedHostOps only: HostAccepted or HostRunning
 }
 
 // Validate is the closed set: a known op, an agent exactly when the op
@@ -147,11 +148,13 @@ func HostOpsKey(project string) string { return project + ":hostops" }
 const (
 	HostAccepted = "accepted"
 	HostExpired  = "expired"
-	HostSeen     = "seen" // handled already: nothing written
+	HostSeen     = "seen"    // handled already: nothing written
+	HostRunning  = "running" // its worker started it (it may have acted)
 	HostRefused  = "refused"
 	HostDone     = "done"
 	HostFailed   = "failed"
 	HostNotRun   = "not-run"
+	HostUnknown  = "unknown" // the dispatcher stopped while running it: it may have run
 )
 
 // hostAccept: KEYS[1] the lease, KEYS[2] {p}:cmd, KEYS[3] {p}:hostops;
@@ -246,19 +249,41 @@ func (b *Bus) FencedHostRefuse(ctx context.Context, token string, o HostOp, why 
 
 // FencedHostOutcome ends an accepted operation: HostDone (a reply that does
 // not wake), HostRefused or HostFailed at run time, HostNotRun (the
-// dispatcher stopped first); the last three wake the sender, who has
-// something to do.
+// dispatcher stopped before it started), HostUnknown (it stopped while the
+// operation ran: it may have acted); all but HostDone wake the sender, who
+// has something to do.
 func (b *Bus) FencedHostOutcome(ctx context.Context, token string, o HostOp, state, text string) error {
 	switch state {
-	case HostDone, HostRefused, HostFailed, HostNotRun:
+	case HostDone, HostRefused, HostFailed, HostNotRun, HostUnknown:
 	default:
 		return fmt.Errorf("host: %q is not an outcome", state)
 	}
 	return b.hostClose(ctx, token, o, state, state+": "+text, state != HostDone, false)
 }
 
-// UnfinishedHostOps are the accepted directives with no outcome, oldest
-// first: a dispatcher starting reports each one as not run.
+// hostRunning: KEYS[1] the lease, KEYS[2] {p}:hostops; ARGV[1] token,
+// ARGV[2] the id. Only an accepted directive becomes running.
+var hostRunning = redis.NewScript(fenceCheck + `
+local t = redis.call('TIME')
+local raw = redis.call('HGET', KEYS[2], ARGV[2])
+if not raw then return redis.error_reply('host: no such operation') end
+local rec = cjson.decode(raw)
+if rec['state'] ~= 'accepted' then return redis.error_reply('host: the operation is ' .. tostring(rec['state']) .. ', not accepted') end
+rec['state'], rec['at'] = 'running', tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+redis.call('HSET', KEYS[2], ARGV[2], cjson.encode(rec))
+return 1`)
+
+// FencedHostRunning marks an accepted operation running, under the lease,
+// before its worker runs it: a dispatcher without the lease runs nothing,
+// and the next one can tell an operation that may have acted (running)
+// from one that never started (accepted).
+func (b *Bus) FencedHostRunning(ctx context.Context, token string, o HostOp) error {
+	return notHolder(hostRunning.Run(ctx, b.r, []string{DispatchKey(b.project), HostOpsKey(b.project)}, token, o.ID).Err())
+}
+
+// UnfinishedHostOps are the accepted or running directives with no
+// outcome, oldest first, their State set: a dispatcher starting reports an
+// accepted one as not run, a running one as unknown.
 func (b *Bus) UnfinishedHostOps(ctx context.Context) ([]HostOp, error) {
 	h, err := b.r.HGetAll(ctx, HostOpsKey(b.project)).Result()
 	if err != nil {
@@ -267,10 +292,10 @@ func (b *Bus) UnfinishedHostOps(ctx context.Context) ([]HostOp, error) {
 	var out []HostOp
 	for id, raw := range h {
 		var r hostRecord
-		if json.Unmarshal([]byte(raw), &r) != nil || r.State != HostAccepted {
+		if json.Unmarshal([]byte(raw), &r) != nil || r.State != HostAccepted && r.State != HostRunning {
 			continue
 		}
-		out = append(out, HostOp{ID: id, Op: r.Op, Agent: r.Agent, From: r.From})
+		out = append(out, HostOp{ID: id, Op: r.Op, Agent: r.Agent, From: r.From, State: r.State})
 	}
 	sort.Slice(out, func(i, j int) bool { return idLess(out[i].ID, out[j].ID) })
 	return out, nil
