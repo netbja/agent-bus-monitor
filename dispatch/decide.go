@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -27,6 +28,27 @@ type Inspection struct {
 	ScreenHash string // opaque hash of a stable screen; the text itself is never retained
 	Gone       bool
 	Err        error
+
+	// A terminal host's facts (herdr exit step 9, HostRuntime); herdr's
+	// Runtime judges neither, so both stay nil there and skip nothing.
+	// Blocked is this look for the blocked episode (spec 4.3a); Background
+	// the background-work judgement (4.3b), whose Blocks() makes /clear and
+	// pop-retire skip the agent.
+	Blocked    *agentstate.Observation
+	Background *agentstate.Judgement
+}
+
+// BackgroundSkip is why a host's background work skips the agent, or "":
+// unknown counts as running (fail closed, spec 4.3b).
+func (in Inspection) BackgroundSkip() string {
+	j := in.Background
+	if j == nil || !j.Blocks() {
+		return ""
+	}
+	if w := j.What(); w != "" {
+		return "background work: " + w
+	}
+	return "background work: unknown"
 }
 
 // Action is what the dispatcher should do for one agent now.

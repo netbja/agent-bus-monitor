@@ -92,22 +92,46 @@ func eventDetail(s string) string {
 
 // AppendEvent writes one event, unfenced: for a person's own process
 // (attach, detach) and the commands a person runs (up, holder drain, service
-// gc). The dispatcher's events will go through its fenced writes (step 9).
+// gc). The dispatcher's go through FencedAppendEvent.
 func (b *Bus) AppendEvent(ctx context.Context, e TermEvent) (string, error) {
-	if !eventKinds[e.Kind] {
-		return "", fmt.Errorf("event: unknown kind %q", e.Kind)
-	}
-	if e.Agent != "" && !ValidName(e.Agent) {
-		return "", fmt.Errorf("event: invalid agent %q", e.Agent)
-	}
-	if e.Term != "" && !termNamePattern.MatchString(e.Term) {
-		return "", fmt.Errorf("event: invalid terminal %q", e.Term)
-	}
-	if e.By != "" && !ValidName(e.By) {
-		return "", fmt.Errorf("event: invalid author %q", e.By)
+	if err := e.check(); err != nil {
+		return "", err
 	}
 	return b.r.XAdd(ctx, &redis.XAddArgs{Stream: EventsKey(b.project), MaxLen: eventsMaxLen, Approx: true,
 		Values: map[string]any{"kind": e.Kind, "agent": e.Agent, "term": e.Term, "by": e.By, "detail": eventDetail(e.Detail)}}).Result()
+}
+
+// FencedAppendEvent is AppendEvent written only while token holds the
+// dispatch lease (herdr exit step 9): the dispatcher's events.
+func (b *Bus) FencedAppendEvent(ctx context.Context, token string, e TermEvent) (string, error) {
+	if err := e.check(); err != nil {
+		return "", err
+	}
+	v, err := fencedAdd.Run(ctx, b.r, []string{DispatchKey(b.project), EventsKey(b.project)}, token, eventsMaxLen,
+		"kind", e.Kind, "agent", e.Agent, "term", e.Term, "by", e.By, "detail", eventDetail(e.Detail)).Result()
+	if err != nil {
+		return "", err
+	}
+	id, ok := v.(string)
+	if !ok {
+		return "", ErrNotHolder
+	}
+	return id, nil
+}
+
+// check is what an event must be to be written.
+func (e TermEvent) check() error {
+	switch {
+	case !eventKinds[e.Kind]:
+		return fmt.Errorf("event: unknown kind %q", e.Kind)
+	case e.Agent != "" && !ValidName(e.Agent):
+		return fmt.Errorf("event: invalid agent %q", e.Agent)
+	case e.Term != "" && !termNamePattern.MatchString(e.Term):
+		return fmt.Errorf("event: invalid terminal %q", e.Term)
+	case e.By != "" && !ValidName(e.By):
+		return fmt.Errorf("event: invalid author %q", e.By)
+	}
+	return nil
 }
 
 // RecentEvents are the last n events, newest first.
