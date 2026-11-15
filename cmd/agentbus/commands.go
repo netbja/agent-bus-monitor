@@ -94,6 +94,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
 	},
 	{
+		Name: "pop", Usage: []string{"pop <role> [--profile <profile>] [--resume <session-id>]"},
+		Summary:  "start a role as a new terminal of the project's holder (the master's pop; agent-spawn's successor)",
+		Examples: []string{"agentbus -p demo pop docs", "agentbus -p demo pop reviewer-codex --profile codex-review"},
+	},
+	{
 		Name: "checkback", Usage: []string{"checkback <duration> \"<what is in flight>\"", "checkback --clear", "checkback"},
 		Summary: "say when to look again at work in flight off the bus (a test run, a build), so the stall guard sees it; no argument lists them",
 		Flags: []cli.Flag{

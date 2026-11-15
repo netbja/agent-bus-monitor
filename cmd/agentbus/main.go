@@ -643,6 +643,13 @@ func main() {
 		}
 		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
 
+	case "pop":
+		h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+		if err != nil {
+			die("pop: " + err.Error())
+		}
+		os.Exit(runPop(ctx, h, project, rest, os.Stdout, os.Stderr))
+
 	case "retire":
 		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
 
