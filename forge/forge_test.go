@@ -4,7 +4,7 @@ import "testing"
 
 // The forge from origin (forge-delivery, "The setting"): each URL form, a
 // self-hosted GitLab by its first label, user info dropped, an unknown host
-// local with its note, no remote local; a set value wins over auto.
+// none with its note (it was local before master-idle), no remote local; a set value wins over auto.
 func TestResolve(t *testing.T) {
 	for _, c := range []struct {
 		setting, url string
@@ -19,7 +19,9 @@ func TestResolve(t *testing.T) {
 		{"auto", "ssh://git@gitlab.com:2222/grp/sub/r.git", true, GitLab, "gitlab.com", "grp/sub", "r", ""},
 		{"auto", "git@gitlab.example.org:team/r.git", true, GitLab, "gitlab.example.org", "team", "r", ""},
 		{"auto", "https://bitbucket.org/ws/r.git", true, Bitbucket, "bitbucket.org", "ws", "r", ""},
-		{"auto", "git@git.example.org:team/r.git", true, Local, "git.example.org", "team", "r", "origin is on git.example.org: not a known forge, so local mode; give it a recognisable host name (gitlab.<domain>, or the forge's own), or set delivery.forge, which applies to every project on this machine"},
+		// a host no adapter knows: none, pushed with no request page (master-idle §3.1, the person's answer 4)
+		{"auto", "git@git.example.org:team/r.git", true, None, "git.example.org", "team", "r", "origin is on git.example.org: no forge adapter, so none mode (the branch is pushed, no request page); set delivery.forge if it is a GitLab or Bitbucket under another name, which applies to every project on this machine"},
+		{"none", "git@github.com:o/r.git", true, None, "github.com", "o", "r", ""},
 		{"auto", "", false, Local, "", "", "", ""},
 		// git's scp-like form with no user (an ssh config supplies it), foureyes
 		{"auto", "github.com:o/r.git", true, GitHub, "github.com", "o", "r", ""},

@@ -400,7 +400,7 @@ var Keys = []*Key{
 			if s, ok := v.(string); ok && isForge(s) {
 				return s, ""
 			}
-			return nil, "want auto, github, gitlab, bitbucket or local"
+			return nil, "want auto, github, gitlab, bitbucket, none or local"
 		}},
 	{Name: "delivery.base", Env: "AGENT_BUS_DELIVERY_BASE", Kind: String, Default: "main", ReadBy: "agentbus deliver", MachineOnly: true,
 		env: func(raw string) (any, envResult) {

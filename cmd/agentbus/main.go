@@ -505,7 +505,7 @@ func main() {
 		fmt.Printf("verdict recorded: %s %s on %s\n", decision, subject, author)
 
 	case "merge-queue":
-		os.Exit(runMergeQueue(ctx, b, rest, os.Stdout))
+		os.Exit(runMergeQueue(ctx, b, self, rest, os.Stdout))
 	case "verdicts":
 		rest, asJSON := extractBool(rest, "--json")
 		if asJSON {

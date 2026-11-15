@@ -3,7 +3,7 @@ package config
 import "strings"
 
 func isForge(s string) bool {
-	return s == "auto" || s == "github" || s == "gitlab" || s == "bitbucket" || s == "local"
+	return s == "auto" || s == "github" || s == "gitlab" || s == "bitbucket" || s == "none" || s == "local"
 }
 
 // ValidBranchName is git check-ref-format --branch's rule for a branch name,

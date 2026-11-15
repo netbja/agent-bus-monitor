@@ -56,6 +56,72 @@ func (c *MergeConflict) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, (*plain)(c))
 }
 
+// MergeUndelivered is an approved head master has not delivered
+// (master-idle §3.1): no branch tip on origin, and the base holds none of
+// its change (mergequeue.Delivery). Subject is the first of its subjects;
+// Branch a local branch whose tip it is, or "".
+type MergeUndelivered struct {
+	Subject    string `json:"subject"`
+	Head       string `json:"head"`
+	Branch     string `json:"branch"`
+	ApprovedAt int64  `json:"approved_at"` // Unix ms of the deciding approve
+}
+
+// MergeDrop is a head master withdrew: it will never be delivered
+// (master-idle §3.1, merge-queue drop). At is Redis TIME, Unix ms.
+type MergeDrop struct {
+	Reason string `json:"reason"`
+	By     string `json:"by"`
+	At     int64  `json:"at"`
+}
+
+// MergeQueueDroppedKey is {p}:mergequeue:dropped, one field per dropped head
+// (the full SHA): an agent's write (drop, undrop), pruned by the merge-queue
+// pass past MergeDropKeep.
+func MergeQueueDroppedKey(project string) string { return project + ":mergequeue:dropped" }
+
+// MergeDropKeep: a drop older than this is pruned (the 72 h an approve is
+// counted, health.ReviewQueueWindow): past it the head is out anyway.
+const MergeDropKeep = 72 * time.Hour
+
+// mergeDrop: KEYS[1] the dropped hash; ARGV[1] head, ARGV[2] reason, ARGV[3] by.
+var mergeDrop = redis.NewScript(`
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+redis.call('HSET', KEYS[1], ARGV[1], cjson.encode({reason = ARGV[2], by = ARGV[3], at = now}))
+return 1`)
+
+// DropHead withdraws head (a full SHA) with its reason, as by; the time is
+// Redis's. The caller checks the head and who may drop.
+func (b *Bus) DropHead(ctx context.Context, head, reason, by string) error {
+	if !ValidHead(head) {
+		return fmt.Errorf("invalid head %q", head)
+	}
+	return mergeDrop.Run(ctx, b.r, []string{MergeQueueDroppedKey(b.project)}, head, reason, by).Err()
+}
+
+// UndropHead puts a dropped head back; false when it was not dropped.
+func (b *Bus) UndropHead(ctx context.Context, head string) (bool, error) {
+	n, err := b.r.HDel(ctx, MergeQueueDroppedKey(b.project), head).Result()
+	return n > 0, err
+}
+
+// DroppedHeads are the dropped heads; a corrupt field is skipped.
+func (b *Bus) DroppedHeads(ctx context.Context) (map[string]MergeDrop, error) {
+	h, err := b.r.HGetAll(ctx, MergeQueueDroppedKey(b.project)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]MergeDrop{}
+	for head, js := range h {
+		var d MergeDrop
+		if json.Unmarshal([]byte(js), &d) == nil && ValidHead(head) {
+			out[head] = d
+		}
+	}
+	return out, nil
+}
+
 // MergeQueueKey is {p}:mergequeue: the dispatch service's cache of the
 // derivation (a hash), replaced by every pass; runtime, not in projectKinds,
 // ignored by HasKeysBesidesDispatch.
@@ -73,7 +139,7 @@ type MergeQueueRecord struct {
 	AttemptedAt int64       `json:"attempted_at"`
 	ItemsAt     int64       `json:"items_at"`
 	Source      string      `json:"source"` // gh, or git
-	Forge       string      `json:"forge"`  // github, gitlab, bitbucket or local (forge.Resolve's kind)
+	Forge       string      `json:"forge"`  // github, gitlab, bitbucket, none or local (forge.Resolve's kind)
 	Base        string      `json:"base"`   // the base branch (delivery.base)
 	Reason      string      `json:"reason,omitempty"`
 	Items       []MergeItem `json:"items"`
@@ -81,6 +147,9 @@ type MergeQueueRecord struct {
 	// Conflicting are the approved PRs that conflict with their base: no
 	// merge for the person, a rebase for master. Not in Items.
 	Conflicting []MergeConflict `json:"conflicting,omitempty"`
+	// Undelivered are the approved heads master has not delivered (forge
+	// and none modes; empty in local mode): master-idle's first source.
+	Undelivered []MergeUndelivered `json:"undelivered,omitempty"`
 }
 
 // MergeQueue reads the cache; a missing key is the zero record (unknown).
@@ -98,6 +167,11 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 			return MergeQueueRecord{}, fmt.Errorf("merge queue: a corrupt conflicting field: %w", err)
 		}
 	}
+	if s := h["undelivered"]; s != "" {
+		if err := json.Unmarshal([]byte(s), &rec.Undelivered); err != nil {
+			return MergeQueueRecord{}, fmt.Errorf("merge queue: a corrupt undelivered field: %w", err)
+		}
+	}
 	if s := h["items"]; s != "" {
 		if err := json.Unmarshal([]byte(s), &rec.Items); err != nil {
 			return MergeQueueRecord{}, fmt.Errorf("merge queue: a corrupt items field: %w", err)
@@ -109,16 +183,25 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 // mergeQueuePut: KEYS[1] the dispatch lease, KEYS[2] the cache; ARGV[1]
 // token, ARGV[2] "1" a success, ARGV[3] source, ARGV[4] reason, ARGV[5] items
 // (JSON, kept opaque), ARGV[6] unapproved, ARGV[7] ttl ms, ARGV[8] forge,
-// ARGV[9] base, ARGV[10] conflicting (JSON). A failure writes
-// the attempt, the source and the reason only.
+// ARGV[9] base, ARGV[10] conflicting (JSON), ARGV[11] undelivered (JSON).
+// A failure writes the attempt, the source and the reason only. Either way
+// KEYS[3], the dropped heads, loses each drop older than ARGV[12] ms (a
+// corrupt one too).
 var mergeQueuePut = redis.NewScript(fenceCheck + `
 local t = redis.call('TIME')
 local now = tostring(tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000))
 redis.call('HSET', KEYS[2], 'attempted_at', now, 'source', ARGV[3], 'reason', ARGV[4], 'forge', ARGV[8], 'base', ARGV[9])
 if ARGV[2] == '1' then
-  redis.call('HSET', KEYS[2], 'items_at', now, 'items', ARGV[5], 'unapproved', ARGV[6], 'conflicting', ARGV[10])
+  redis.call('HSET', KEYS[2], 'items_at', now, 'items', ARGV[5], 'unapproved', ARGV[6], 'conflicting', ARGV[10], 'undelivered', ARGV[11])
 end
 redis.call('PEXPIRE', KEYS[2], ARGV[7])
+local drops = redis.call('HGETALL', KEYS[3])
+for i = 1, #drops, 2 do
+  local ok, d = pcall(cjson.decode, drops[i + 1])
+  if not ok or type(d) ~= 'table' or type(d.at) ~= 'number' or d.at < tonumber(now) - tonumber(ARGV[12]) then
+    redis.call('HDEL', KEYS[3], drops[i])
+  end
+end
 return 1`)
 
 // FencedPutMergeQueue stores one pass: a success (rec.Reason == "") replaces
@@ -141,10 +224,18 @@ func (b *Bus) FencedPutMergeQueue(ctx context.Context, token string, rec MergeQu
 	if err != nil {
 		return err
 	}
+	undelivered := rec.Undelivered
+	if undelivered == nil {
+		undelivered = []MergeUndelivered{}
+	}
+	ujs, err := json.Marshal(undelivered)
+	if err != nil {
+		return err
+	}
 	ok := "0"
 	if rec.Reason == "" {
 		ok = "1"
 	}
-	return notHolder(mergeQueuePut.Run(ctx, b.r, []string{DispatchKey(b.project), MergeQueueKey(b.project)},
-		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base, string(cjs)).Err())
+	return notHolder(mergeQueuePut.Run(ctx, b.r, []string{DispatchKey(b.project), MergeQueueKey(b.project), MergeQueueDroppedKey(b.project)},
+		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base, string(cjs), string(ujs), MergeDropKeep.Milliseconds()).Err())
 }

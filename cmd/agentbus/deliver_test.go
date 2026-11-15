@@ -686,3 +686,23 @@ func TestDeliverBodyBoundsAnOversizedRecord(t *testing.T) {
 		t.Errorf("%d runes, %d bytes", n, len(b))
 	}
 }
+
+// none (master-idle §3.1): an origin on a host no adapter knows is pushed to,
+// no forge CLI runs, and no page is printed: the person merges the branch.
+func TestDeliverNonePushesWithoutAPage(t *testing.T) {
+	w := newDeliverWorld(t, "git@git.example.org:team/r.git")
+	w.r.cmds["git push origin "+dlvH+":refs/heads/coder/x"] = dlvOut{}
+	code, out, errw := w.run("master", "coder/x", "--task", "t1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
+	}
+	if !w.r.did("git push origin "+dlvH) || w.r.did("gh ") || w.r.did("glab ") {
+		t.Errorf("ran %v", w.r.ran)
+	}
+	if !strings.Contains(errw, "none mode") || !strings.Contains(out, "pushed coder/x@"+dlvH+" (no forge): the person merges it into main") || strings.Contains(out, "http") {
+		t.Errorf("out %q err %q", out, errw)
+	}
+	if w.linkRef["t1"] != "coder/x@"+dlvH {
+		t.Errorf("link %v", w.linkRef)
+	}
+}

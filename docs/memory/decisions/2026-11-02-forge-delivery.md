@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-11-02
-last_verified: 2026-11-02
+last_verified: 2026-11-15
 author: coder
 confidence: verified
 ---
@@ -41,6 +41,11 @@ mode, pushes nothing and leaves the merge to the person.
   asked for is that nothing unreviewed reaches the forge, and that a push needs no hand on every
   delivery. Binding the push to the reviewed SHA gives both. The person keeps the merge: deliver
   never merges, never touches the base, and in local mode pushes and fetches nothing.
+- **Amended 2026-11-15 (master-idle, the person's answer 4): a remote no adapter knows is
+  `none`, no longer local.** `auto` resolves an `origin` on a host no forge adapter knows to
+  `none`: deliver pushes the branch and prints no page, and the person merges it. Local stays for
+  no `origin` or an `origin` that is a path. Whether master's part is done is then judged by git
+  alone, the same for every forge (`mergequeue.Delivery`, master-idle §3.1).
 - **Defence in depth, not a boundary.** The bus is no boundary against the local user: the caller
   is the `AGENT_BUS_AGENT` an agent's environment states, and an agent that sets another name, or
   runs `git push` itself, is held by neither check. The client's rules match command text only
@@ -57,6 +62,8 @@ branch.
 
 - Spec: [forge delivery](../../superpowers/specs/2026-11-01-forge-delivery-design.md), its "Answers"
   section (the person, 2026-11-02, answers 1 to 4).
+- The amendment: [master-idle](../../superpowers/specs/2026-11-15-master-idle-design.md) §3.1
+  and §8 answer 4 (the person, 2026-11-15); code `forge.Resolve` (`None`).
 - Related: the [dogfood team decision](2026-10-20-dogfood-team.md) (4-eyes on the bus).
 - Master's directive `1793653379935-0` (task forge-delivery, this note).
 - Code (built with this decision): `agentbus deliver`, `verdict --head`, `plan link --ref`, the

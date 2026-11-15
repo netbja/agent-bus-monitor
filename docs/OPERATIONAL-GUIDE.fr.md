@@ -892,9 +892,12 @@ l'exécute étape par étape.
      ou `glab` s'ils sont installés et connectés (`gh auth login`, `glab auth login`) ; sinon il
      pousse et vous donne la page pour l'ouvrir ;
    - **Bitbucket** : il pousse et vous donne la page ;
-   - **local** (pas d'`origin`, ou `forge = "local"`) : rien n'est poussé ni récupéré ; master vous
-     donne `git switch main && git merge --no-ff <sha>` et note la fusion quand vous l'annoncez.
-   Un GitLab auto-hébergé dont le nom d'hôte ne commence pas par `gitlab.` est lu comme local :
+   - **none** (un `origin` sur un hôte qu'aucun adaptateur de forge ne connaît, ou `forge = "none"`) :
+     il pousse la branche, sans page ; vous la fusionnez dans la base ;
+   - **local** (pas d'`origin`, un `origin` qui est un chemin, ou `forge = "local"`) : rien n'est
+     poussé ni récupéré ; master vous donne `git switch main && git merge --no-ff <sha>` et note la
+     fusion quand vous l'annoncez.
+   Un GitLab auto-hébergé dont le nom d'hôte ne commence pas par `gitlab.` est lu comme none :
    donnez-lui un tel nom, ou réglez `delivery.forge`, qui vaut alors pour tous les projets de la
    machine.
 

@@ -52,3 +52,11 @@ func TestIdentityGuard(t *testing.T) {
 		t.Errorf("explicit anonymous refused: %v", err)
 	}
 }
+
+// merge-queue reads, but drop and undrop write as their caller (master-idle):
+// the identity guard checks them.
+func TestMergeQueueDropIsNotReadOnly(t *testing.T) {
+	if !readOnlyCommand("merge-queue", []string{"--json"}) || readOnlyCommand("merge-queue", []string{"drop", "9b7106db", "x"}) || readOnlyCommand("merge-queue", []string{"undrop", "9b7106db"}) {
+		t.Fatal("merge-queue drop/undrop read as read-only, or the listing not")
+	}
+}

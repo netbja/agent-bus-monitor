@@ -386,6 +386,14 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		tell(fmt.Sprintf("delivered %s@%s: %s", o.branch, h, prURL))
 		return code
 	}
+	// None: a remote with no forge adapter (master-idle §3.1): pushed, no
+	// request page; the person merges the branch.
+	if f.Kind == forge.None {
+		code := link(0)
+		fmt.Fprintf(out, "pushed %s@%s (no forge): the person merges it into %s\n", o.branch, h, o.base)
+		tell(fmt.Sprintf("pushed %s@%s (no forge): the person merges it into %s", o.branch, h, o.base))
+		return code
+	}
 	// Link mode: the forge's own new-request page.
 	page := linkPage(f, o.base, o.branch)
 	code := link(0)

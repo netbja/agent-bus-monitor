@@ -12,7 +12,9 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/forge"
+	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/mergequeue"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // The merge queue's chore (spec docs/superpowers/specs/2026-11-05-merge-queue-design.md §3c):
@@ -45,6 +47,10 @@ type mergeQueueChore struct {
 	localTips  func(ctx context.Context, dir string, env []string, base string) ([]mergequeue.Tip, string, error)
 	fetchBase  func(ctx context.Context, dir string, env []string, base string) error
 	inBase     func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
+	// master-idle §3.1: the git test of delivery (a mergequeue.Delivery,
+	// kept across passes for its cache) and the plan's done subjects.
+	delivered func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
+	done      func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error)
 }
 
 // serviceMergeQueue is the dispatch service's chore, in its working directory.
@@ -63,6 +69,8 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 	if err != nil {
 		return nil
 	}
+	delivery := mergequeue.NewDelivery()
+	delivery.Call = mergeQueueCall
 	return &mergeQueueChore{b: b, dir: dir, getenv: getenv, environ: os.Environ,
 		repo:   gitRepoCheck,
 		origin: gitOrigin,
@@ -71,7 +79,33 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 			return err == nil
 		},
 		github: mergequeue.ReadGitHub, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips,
-		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase}
+		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase,
+		delivered: delivery.Delivered,
+		done: func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error) {
+			return planDoneSubjects(ctx, b, vs)
+		},
+	}
+}
+
+// planDoneSubjects are the review subjects of the active plan's tasks
+// recorded done (review-queue's DoneSubjects, without its pr:<n>): none
+// without a plan.
+func planDoneSubjects(ctx context.Context, b *bus.Bus, vs []bus.Verdict) (map[string]bool, error) {
+	out := map[string]bool{}
+	act, ok, err := plan.Load(ctx, b)
+	if err != nil || !ok {
+		return out, err
+	}
+	pin, errs := plan.ReadWithVerdicts(ctx, b, act.File, plan.BySubject(vs, nil), true)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	for _, r := range plan.Derive(act.File, pin) {
+		if sub := r.Task.ReviewSubject(); r.State == plan.Done && sub != "" {
+			out[sub] = true
+		}
+	}
+	return out, nil
 }
 
 // mergeQueueEnv is every command's environment: no askpass program and no
@@ -154,6 +188,24 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 	}
 	in := mergequeue.Input{Verdicts: vs}
 	source := "git"
+	// Origin's tips and the fetched base, in every mode that pushes (the gh
+	// path too, for master-idle's undelivered heads).
+	var remote []mergequeue.Tip
+	remoteBase := ""
+	if f.Kind != forge.Local {
+		cctx, cancel = call()
+		remote, remoteBase, err = c.remoteTips(cctx, c.dir, env, base)
+		cancel()
+		if err != nil {
+			return fail(source, "branches unreadable: "+err.Error())
+		}
+		cctx, cancel = call()
+		err = c.fetchBase(cctx, c.dir, env, base)
+		cancel()
+		if err != nil {
+			return fail(source, "the base's fetch failed: "+err.Error())
+		}
+	}
 	switch {
 	case f.Kind == forge.GitHub && c.hasGH(env):
 		source = "gh"
@@ -165,22 +217,13 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 		}
 		in.PRs = prs
 	default: // the git fallback: GitHub without gh, GitLab and Bitbucket (no reader yet), local
-		read := c.remoteTips
+		tips, baseTip := remote, remoteBase
 		if f.Kind == forge.Local {
-			read = c.localTips
-		}
-		cctx, cancel = call()
-		tips, baseTip, err := read(cctx, c.dir, env, base)
-		cancel()
-		if err != nil {
-			return fail(source, "branches unreadable: "+err.Error())
-		}
-		if f.Kind != forge.Local {
 			cctx, cancel = call()
-			err = c.fetchBase(cctx, c.dir, env, base)
+			tips, baseTip, err = c.localTips(cctx, c.dir, env, base)
 			cancel()
 			if err != nil {
-				return fail(source, "the base's fetch failed: "+err.Error())
+				return fail(source, "branches unreadable: "+err.Error())
 			}
 		}
 		approved := mergequeue.ApprovedHeads(vs)
@@ -199,5 +242,58 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 		in.Tips, in.Merged = tips, func(h string) bool { return in2[h] }
 	}
 	res := mergequeue.Derive(in)
-	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting}
+	var undelivered []bus.MergeUndelivered
+	if f.Kind != forge.Local {
+		u, why := c.undelivered(ctx, env, vs, remote, remoteBase, base)
+		if why != "" {
+			return fail(source, why)
+		}
+		undelivered = u
+	}
+	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting,
+		Undelivered: undelivered}
+}
+
+// undelivered are the approved heads master has not delivered (master-idle
+// §3.1): no tip on origin, not dropped, not done, and not found in the
+// fetched base by the git test; why is the failed read, or "".
+func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bus.Verdict, remote []mergequeue.Tip, baseTip, base string) ([]bus.MergeUndelivered, string) {
+	cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
+	local, _, err := c.localTips(cctx, c.dir, env, base)
+	cancel()
+	if err != nil {
+		local = nil // only names a head's branch: a head without one is still listed
+	}
+	dropped, err := c.b.DroppedHeads(ctx)
+	if err != nil {
+		return nil, "dropped heads unavailable"
+	}
+	done, err := c.done(ctx, vs)
+	if err != nil {
+		return nil, "plan unavailable"
+	}
+	isDropped := map[string]bool{}
+	for h := range dropped {
+		isDropped[h] = true
+	}
+	cands := mergequeue.UndeliveredCandidates(mergequeue.UndeliveredInput{Verdicts: vs, Now: time.Now(), Window: health.ReviewQueueWindow,
+		Remote: remote, Local: local, Dropped: isDropped, Done: done})
+	if len(cands) == 0 {
+		return []bus.MergeUndelivered{}, ""
+	}
+	heads := make([]string, len(cands))
+	for i, u := range cands {
+		heads[i] = u.Head
+	}
+	in, err := c.delivered(ctx, c.dir, env, baseTip, heads)
+	if err != nil {
+		return nil, "an approved head's delivery cannot be judged: " + err.Error()
+	}
+	out := []bus.MergeUndelivered{}
+	for _, u := range cands {
+		if !in[u.Head] {
+			out = append(out, u)
+		}
+	}
+	return out, ""
 }

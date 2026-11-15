@@ -9,13 +9,15 @@ import (
 	"strings"
 )
 
-// Kind is a forge, or local (no forge: nothing pushed).
+// Kind is a forge, none (a remote no adapter knows: pushed, no request
+// page), or local (no remote: nothing pushed).
 type Kind string
 
 const (
 	GitHub    Kind = "github"
 	GitLab    Kind = "gitlab"
 	Bitbucket Kind = "bitbucket"
+	None      Kind = "none"
 	Local     Kind = "local"
 )
 
@@ -23,12 +25,12 @@ const (
 type Forge struct {
 	Kind              Kind
 	Host, Owner, Repo string
-	// Note says why auto chose local for a remote it could not place, or "".
+	// Note says why auto chose none or local for a remote it could not place, or "".
 	Note string
 }
 
 // Resolve is the forge for setting (auto | github | gitlab | bitbucket |
-// local) and origin's URL (has: an origin remote exists).
+// none | local) and origin's URL (has: an origin remote exists).
 func Resolve(setting, origin string, has bool) Forge {
 	var f Forge
 	local := false
@@ -36,7 +38,7 @@ func Resolve(setting, origin string, has bool) Forge {
 		f.Host, f.Owner, f.Repo, local = parse(origin)
 	}
 	switch Kind(setting) {
-	case GitHub, GitLab, Bitbucket, Local:
+	case GitHub, GitLab, Bitbucket, None, Local:
 		f.Kind = Kind(setting)
 		return f
 	}
@@ -52,15 +54,16 @@ func Resolve(setting, origin string, has bool) Forge {
 	case local:
 		f.Kind, f.Note = Local, "origin is a local path: local mode (nothing pushed)"
 	default:
-		f.Kind = Local
+		// A remote on a host no adapter knows is pushed to, with no request
+		// page: none, no longer local (master-idle §3.1, the person's answer
+		// 4); the git test alone then judges its delivery.
+		f.Kind = None
 		host := f.Host
 		if host == "" {
 			host = "an unreadable host"
 		}
-		// Both fixes, and the cost of the second (foureyes on the spec):
-		// the machine's forge wins over auto for every project.
-		f.Note = "origin is on " + host + ": not a known forge, so local mode; give it a recognisable host name " +
-			"(gitlab.<domain>, or the forge's own), or set delivery.forge, which applies to every project on this machine"
+		f.Note = "origin is on " + host + ": no forge adapter, so none mode (the branch is pushed, no request page); " +
+			"set delivery.forge if it is a GitLab or Bitbucket under another name, which applies to every project on this machine"
 	}
 	return f
 }

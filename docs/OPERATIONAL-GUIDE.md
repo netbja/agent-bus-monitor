@@ -869,9 +869,12 @@ session restarts. The plan therefore lives in Git, and the conductor carries it 
      `gh` or `glab` when installed and logged in (`gh auth login`, `glab auth login`); otherwise it
      pushes and gives you the page to open it;
    - **Bitbucket**: it pushes and gives you the page;
-   - **local** (no `origin`, or `forge = "local"`): nothing is pushed or fetched; master gives you
-     `git switch main && git merge --no-ff <sha>` and records the merge once you say it is done.
-   A self-hosted GitLab whose host name does not start with `gitlab.` reads as local: give it such
+   - **none** (an `origin` on a host no forge adapter knows, or `forge = "none"`): it pushes the
+     branch and gives no page; you merge it into the base;
+   - **local** (no `origin`, an `origin` that is a path, or `forge = "local"`): nothing is pushed
+     or fetched; master gives you `git switch main && git merge --no-ff <sha>` and records the
+     merge once you say it is done.
+   A self-hosted GitLab whose host name does not start with `gitlab.` reads as none: give it such
    a name, or set `delivery.forge`, which then applies to every project on this machine.
 
 ---

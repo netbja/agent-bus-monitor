@@ -32,7 +32,7 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		}
 	}
 	switch cmd {
-	case "reports", "thread", "history", "merge-queue", "verdicts", "asks", "swaps", "agents", "pane", "usage", "budget", "listen",
+	case "reports", "thread", "history", "verdicts", "asks", "swaps", "agents", "pane", "usage", "budget", "listen",
 		"subscribe", "watch", // the agent is named on the command line
 		"bind", "dispatch", "missions", // the launcher's and the services' own identities
 		"answer", // a person (--as, AGENT_BUS_HUMAN), never the agent
@@ -41,6 +41,8 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		return true
 	case "gate":
 		return first != "close"
+	case "merge-queue": // drop and undrop write, as their caller (master-idle)
+		return first != "drop" && first != "undrop"
 	case "reload": // a person, by an explicit --as (lifecycle part C), never the pane's agent
 		return slices.Contains(rest, "--as")
 	case "pilot":
