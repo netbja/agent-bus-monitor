@@ -41,3 +41,18 @@ func TestUndeliveredCandidates(t *testing.T) {
 		t.Fatalf("candidates %+v", got)
 	}
 }
+
+// run-budget §2: the heads a run judges are every approved deciding head
+// within the window, sorted, whatever else is true of them.
+func TestRecentApprovedHeads(t *testing.T) {
+	h := func(c string) string { return strings.Repeat(c, 40) }
+	now := time.UnixMilli(1_000_000_000_000)
+	ok := func(subject, head string, ago time.Duration) bus.Verdict {
+		return bus.Verdict{Subject: subject, Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: head, TS: now.Add(-ago).UnixMilli()}
+	}
+	vs := []bus.Verdict{ok("b", h("b"), time.Hour), ok("a", h("a"), 71*time.Hour), ok("old", h("c"), 73*time.Hour),
+		{Subject: "rejected", Author: "coder", Reviewer: "foureyes", Decision: "reject", Head: h("9"), TS: now.UnixMilli()}}
+	if got := strings.Join(RecentApprovedHeads(vs, now, 72*time.Hour), ","); got != h("a")+","+h("b") {
+		t.Fatalf("heads %s", got)
+	}
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -248,7 +249,11 @@ func TestMergeQueueChoreUndelivered(t *testing.T) {
 		fetched, judged := false, []string{}
 		c.fetchBase = func(context.Context, string, []string, string) error { fetched = true; return nil }
 		c.delivered = func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
-			judged = append(judged, heads...)
+			// The run's judgement (run-budget §2) takes every approved head,
+			// mqHead included; undelivered's never does (it is on origin).
+			if !slices.Contains(heads, mqHead) {
+				judged = append(judged, heads...)
+			}
 			return map[string]bool{}, nil
 		}
 		return c, b, &fetched, &judged
@@ -314,5 +319,62 @@ func TestMergeQueueChoreUndelivered(t *testing.T) {
 	}
 	if rec, _ := b.MergeQueue(ctx); rec.Reason != "" || len(rec.Undelivered) != 0 || len(*judged) != 0 {
 		t.Fatalf("local: %+v judged %v", rec, *judged)
+	}
+}
+
+// run-budget §2: each pass hands the run the approved heads (within 72 h)
+// the git test finds in the base: the first starts the run with them as its
+// baseline, a later one counts each new head once, in every mode; a pass
+// that cannot judge them counts nothing and starts no run.
+func TestMergeQueueChoreRun(t *testing.T) {
+	for _, origin := range []string{"git@github.com:netbja/agent-bus-monitor.git", ""} {
+		c, b := mqChore(t, origin)
+		ctx := context.Background()
+		var judged [][]string
+		in := map[string]bool{}
+		fail := errors.New("git broke")
+		var err error
+		c.delivered = func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
+			judged = append(judged, heads)
+			return in, err
+		}
+		err = fail
+		if perr := c.pass(ctx, "mq"); perr != nil {
+			t.Fatal(perr)
+		}
+		if rec, _ := b.Run(ctx); rec != nil {
+			t.Fatalf("%q: a run started without its baseline: %+v", origin, rec)
+		}
+		err, in[mqHead] = nil, true
+		if perr := c.pass(ctx, "mq"); perr != nil {
+			t.Fatal(perr)
+		}
+		rec, _ := b.Run(ctx)
+		if rec == nil || rec.Deliveries != 0 || !rec.Counted[mqHead] {
+			t.Fatalf("%q: started %+v, want mqHead as the baseline", origin, rec)
+		}
+		head2 := strings.Repeat("e", 40)
+		if _, verr := b.AppendVerdict(ctx, bus.Verdict{Subject: "run-budget-1", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: head2, Message: "ok"}); verr != nil {
+			t.Fatal(verr)
+		}
+		in[head2] = true
+		for i := 0; i < 2; i++ {
+			if perr := c.pass(ctx, "mq"); perr != nil {
+				t.Fatal(perr)
+			}
+		}
+		if rec, _ = b.Run(ctx); rec.Deliveries != 1 {
+			t.Fatalf("%q: %d deliveries, want 1", origin, rec.Deliveries)
+		}
+		if last := judged[len(judged)-1]; len(last) != 2 {
+			t.Fatalf("%q: judged %v, want both approved heads", origin, last)
+		}
+		err = fail
+		if perr := c.pass(ctx, "mq"); perr != nil {
+			t.Fatal(perr)
+		}
+		if rec, _ = b.Run(ctx); rec == nil || rec.Deliveries != 1 {
+			t.Fatalf("%q: a failed judgement changed the run: %+v", origin, rec)
+		}
 	}
 }

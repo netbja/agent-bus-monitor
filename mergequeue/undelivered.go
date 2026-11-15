@@ -55,3 +55,17 @@ func UndeliveredCandidates(in UndeliveredInput) []bus.MergeUndelivered {
 	})
 	return out
 }
+
+// RecentApprovedHeads are the approved deciding heads whose approve is
+// within window of now, sorted: the heads a run's deliveries are judged on
+// (run-budget §2), pushed, dropped or done alike.
+func RecentApprovedHeads(vs []bus.Verdict, now time.Time, window time.Duration) []string {
+	var out []string
+	for head, a := range candidates(vs) {
+		if now.Sub(time.UnixMilli(a.at)) <= window {
+			out = append(out, head)
+		}
+	}
+	sort.Strings(out)
+	return out
+}

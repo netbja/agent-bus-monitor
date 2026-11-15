@@ -407,6 +407,14 @@ agent names, no project template):
   `paused · resumes in 1h52 (quota)`. At the deadline the dispatcher ends the pause and sends master
   one resume directive. `agentbus --project myapp resume` ends it early; `pause --status` shows it.
   master does this itself when sentinel warns that the session budget is at 90%.
+- **The run** (`agentbus --project myapp run`). The dispatch service counts a run from its first
+  merge-queue pass: its time, without the paused intervals (a pause, a suspend, or more than 15
+  minutes with no pass, such as a host asleep), and its deliveries, approved heads that reached the
+  base (merge, squash or rebase-merge, judged by git, whatever the forge), each once. A new run starts
+  at 0: what was merged before it is its baseline. `run.max_duration` and `run.max_deliveries` in
+  `config.toml` (`0`, the default, is no limit) set its budget; `agentbus run` shows the run against
+  them and names a limit reached. Stopping cleanly at a limit comes next: for now nothing acts on it.
+  `agentbus --project myapp run reset` (yours only, refused in an agent's environment) starts a new run.
 - **`@all`** reaches the agents listed in Agents (not the conductor, which only reports). It is still
   one message per agent, so each is delivered on its own, but Activity shows a single
   `→ @all (6)` line.

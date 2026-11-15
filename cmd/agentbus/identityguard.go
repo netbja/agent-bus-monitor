@@ -45,6 +45,8 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		return first != "drop" && first != "undrop"
 	case "checkback": // set and --clear write as the caller; the bare list reads (master-idle)
 		return len(rest) == 0
+	case "run": // reset is the person's write (run-budget §5); the bare command reads
+		return len(rest) == 0
 	case "reload": // a person, by an explicit --as (lifecycle part C), never the pane's agent
 		return slices.Contains(rest, "--as")
 	case "pilot":
