@@ -632,7 +632,7 @@ func main() {
 		os.Exit(runIdea(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
 
 	case "swap":
-		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
 
 	case "health":
 		os.Exit(runHealth(ctx, b, self, rest, os.Stdout, os.Stderr))
@@ -644,7 +644,7 @@ func main() {
 		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
 
 	case "retire":
-		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
 
 	case "swaps":
 		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
