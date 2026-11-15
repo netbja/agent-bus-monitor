@@ -91,7 +91,7 @@ func (w *suspendWorld) deps() suspendDeps {
 		Bus:      func(string) (*bus.Bus, error) { return w.b, nil },
 		Projects: func(context.Context) ([]string, error) { return []string{w.b.Project()}, nil },
 		Services: func() (service.Manager, string) { return w.mgr, "" },
-		Inspect: func(_ context.Context, pane string) dispatch.Inspection {
+		Inspect: func(_ context.Context, _, pane string) dispatch.Inspection {
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			return w.panes[pane]

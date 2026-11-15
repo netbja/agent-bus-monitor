@@ -17,7 +17,7 @@ func (w *resumeWorld) all(args ...string) (int, string, string) {
 	var out, errw bytes.Buffer
 	d := w.resumeDeps()
 	d.Projects = func(context.Context) ([]string, error) { return []string{w.b.Project()}, nil }
-	d.WorkspaceOpen = func(string, string) (bool, error) { return w.wsOpen, nil }
+	d.ProjectOpen = func(string) (bool, error) { return w.wsOpen, nil }
 	code := runResumeAll(context.Background(), append([]string{"--all"}, args...), d, &out, &errw)
 	return code, out.String(), errw.String()
 }
@@ -47,7 +47,7 @@ func TestResumeAllAfterACrash(t *testing.T) {
 	if !w.mgr.active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 1 {
 		t.Fatalf("services %v, up %v", w.mgr.active, w.upArgs)
 	}
-	if want := w.b.Project() + " --resume --no-dispatch --no-missions"; strings.Join(w.upArgs[0], " ") != want {
+	if want := w.b.Project() + " --no-dispatch --no-missions"; strings.Join(w.upArgs[0], " ") != want {
 		t.Fatalf("up = %q", w.upArgs[0])
 	}
 	last := w.lastCmd()
@@ -65,9 +65,10 @@ func TestResumeAllAfterACrash(t *testing.T) {
 	}
 }
 
-// A crash never opens a workspace the person had closed: the command is
-// named, master is not told, and a timed pause is left to run its course.
-func TestResumeAllCrashWithTheWorkspaceClosed(t *testing.T) {
+// A crash never opens a project the person had brought down (its holder
+// does not answer): the command is named, master is not told, and a timed
+// pause is left to run its course.
+func TestResumeAllCrashWithTheProjectDown(t *testing.T) {
 	w := newResumeWorld(t, "master", "coder")
 	until := time.Now().Add(time.Hour)
 	if _, err := w.b.SetPause(context.Background(), "dana", "master", "lunch", until); err != nil {
@@ -76,7 +77,7 @@ func TestResumeAllCrashWithTheWorkspaceClosed(t *testing.T) {
 	w.kill("coder")
 	before := len(mustRecent(t, w.b))
 	code, out, _ := w.all("--yes")
-	if code != 1 || len(w.upArgs) != 0 || !strings.Contains(out, "agentbus up "+w.b.Project()+" --resume") {
+	if code != 1 || len(w.upArgs) != 0 || !strings.Contains(out, "its holder does not answer: agentbus up "+w.b.Project()+" starts them") {
 		t.Fatalf("resume --all = %d %q, up %v", code, out, w.upArgs)
 	}
 	if after := len(mustRecent(t, w.b)); after != before {

@@ -47,7 +47,7 @@ type suspendDeps struct {
 	Bus       func(project string) (*bus.Bus, error)
 	Projects  func(ctx context.Context) ([]string, error)
 	Services  func() (service.Manager, string)
-	Inspect   func(ctx context.Context, pane string) dispatch.Inspection
+	Inspect   func(ctx context.Context, project, pane string) dispatch.Inspection // the agent's terminal on its project's holder
 	ProcStart func(int) (uint64, error)
 	Lock      func(project string) (func(), error)
 	Hostname  func() (string, error)
@@ -66,7 +66,6 @@ type suspendDeps struct {
 
 func realSuspendDeps(host string) suspendDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
-	h := dispatch.Herdr{Bin: herdrBin(os.Getenv)}
 	return suspendDeps{
 		Getenv: os.Getenv,
 		Bus: func(project string) (*bus.Bus, error) {
@@ -87,7 +86,13 @@ func realSuspendDeps(host string) suspendDeps {
 		Services: func() (service.Manager, string) {
 			return service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 		},
-		Inspect:   h.Inspect,
+		Inspect: func(ctx context.Context, project, pane string) dispatch.Inspection {
+			rt, err := dispatchRuntime(project, os.Getenv)
+			if err != nil {
+				return dispatch.Inspection{Err: err}
+			}
+			return rt.Inspect(ctx, pane)
+		},
 		ProcStart: dispatch.ProcStart,
 		Lock: func(project string) (func(), error) {
 			return upLock(upCacheDir(os.Getenv))(project, false)
@@ -330,7 +335,7 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 	}
 	mgr, why := d.Services()
 	if mgr == nil {
-		say("no service manager (%s): dispatch and missions run as herdr tabs; they stay, and paused they wake nobody", why)
+		say("no service manager (%s): no service to stop; paused, the agents are woken by nobody", why)
 	}
 	if o.dryRun {
 		say("would pause, wait up to %s for quiet, stop the services and write %s", o.wait, snapPath)
@@ -576,7 +581,7 @@ func readQuietFacts(ctx context.Context, p string, b *bus.Bus, mgr service.Manag
 		if snap.Pane == "" || snap.PID == 0 || d.Inspect == nil {
 			continue
 		}
-		in := d.Inspect(ctx, snap.Pane)
+		in := d.Inspect(ctx, p, snap.Pane)
 		if in.Err != nil || !dispatch.IdentityOK(&snap, in) {
 			continue // a pane not running the agent's verified process proves nothing about it
 		}
