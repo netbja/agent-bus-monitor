@@ -1,6 +1,6 @@
 # A run budget: stop cleanly after a duration, a number of deliveries, or a quota (run-budget)
 
-Status: spec, for review (subject `run-budget-spec`), r4. Not built. It depends on master-idle-spec
+Status: spec, for review (subject `run-budget-spec`), r5. Not built. It depends on master-idle-spec
 §3.1 (the git test, `-U0` patch-ids, r7 in review). From the person's review of
 master-idle-spec (2026-11-15, thread `1794733043827-0`, its §2 and §4), relayed by master. §8 holds
 the person's open questions.
@@ -136,11 +136,11 @@ reading, so a silent client's hold gets its own field and its own release:
   field per agent whose pane showed the signature, same value) records which panes showed it, and
   a counter of settled reads without it per agent is kept in the dispatcher's memory (a restart
   starts it again at 0, which only delays a release).
-- **Release**, with evidence only, the first of: the captured reset plus `resumeMargin` has passed
-  (for every agent field that captured one); **every** agent with a field has been seen settled
-  without the `limit` signature on 3 observe passes in a row (the observe pass keeps inspecting a
-  held agent's pane; it only skips the wake), so one pane clearing never resumes another that
-  still shows the limit; a reading of the provider that releases it as today. The release goes
+- **Release**, with evidence only: a reading of the provider that releases it as today; or
+  **every** agent field has its own evidence, either its captured reset plus `resumeMargin` has
+  passed, or its pane has been seen settled without the `limit` signature on 3 observe passes in a
+  row (the observe pass keeps inspecting a held agent's pane; it only skips the wake). So one
+  pane's clear screen or captured reset never resumes another that still shows the limit. The release goes
   through `release` as today: resume directives, then the fields deleted last.
 - **No release by time alone.** A provider's windows run from five hours to seven days (Claude's
   `seven_day`), so an unknown reset has no safe bound. At `run.screen_hold_max` (default 5h) the
@@ -156,7 +156,12 @@ episode the hold's start): `coder is held (anthropic, since
 14:02, released when its screen clears): accepted wiki-3 (feat/wiki-3). Reassign it, or wait for the reset.` The
 field is deleted by the release, or by `retire --forget`.
 
-**Master held.** As today: the project pauses until the reset. Added: the person's notice lists
+**Master held.** As today: the project pauses until the reset. For a screen hold of master's
+provider, the pause's deadline is the latest captured reset plus `resumeMargin` when every field
+captured one; otherwise there is no reset to wait for, and the quota pause is written with a
+deadline one year ahead (kind quota, as today), ended only by that provider's `release` (screens
+clear, or a reading). `coordinatorMoved`'s `resetOf` follows the same rule, so a deadline is never
+computed from an absent `hold:<p>` (which would be 1970 and pause nothing). Added: the person's notice lists
 what is in flight (the same list as §3's stop).
 
 **At the reset.** As today: the release sends each held agent its resume directive and ends
@@ -211,6 +216,10 @@ agentbus run reset      # the person only: deletes {p}:run, lifts a kind-run pau
   the other still shows it → still held, nobody resumed; both clear → released. **Long hold**: at
   `screen_hold_max` with no evidence → still held, one person notice, none on the next pass.
 - **Master held**: the project pauses (as today), and the notice lists the work in flight.
+  Master's provider screen-held without a captured reset: the project stays paused across passes
+  (deadline a year ahead, never 1970), and resumes when the screen clears; with captured resets:
+  paused until the latest one plus the margin. One agent's captured reset passed while another
+  field has none and still shows the limit: still held.
 - Settings in the registry with their env names (registry test).
 
 ## 8. Questions for the person
