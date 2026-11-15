@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end checks of the role scripts (agent-launch, agent-spawn, bootstrap,
+# End-to-end checks of the role scripts (agent-launch, bootstrap,
 # link-role-skills.sh) over `agentbus roles`, with fake clients: never a model, never the bus.
 # Ported from the former tests/test_role_config.py; the unit cases live in rolecfg/.
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,43 +51,23 @@ err="$("$L" coder demo 2>&1)"; rc=$?
 assert_eq "$rc" "1" "a table where a string belongs exits 1"
 assert_contains "$err" "agent roles: codex option sandbox must be a non-empty string" "and says why"
 
-# agent-spawn quotes the manifest and refuses an injected project name
-config claude-code
-out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo 2>&1)"; rc=$?
-assert_eq "$rc" "0" "agent-spawn dry run exits 0"
-assert_contains "$out" "$(printf '%q' "ROLES_TOML=$manifest")" "the manifest path is shell-quoted"
-assert_exit 1 "an injected project name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder 'demo;touch injected'"
-assert_eq "$([[ -e "$root/injected" ]] && echo yes || echo no)" "no" "nothing was injected"
-
 # v0.15: a role launched on another profile, a fallback list, and swap mode's fatal bind
 config claude-code '[profiles.alt]
 client = "codex"
 provider = "other-provider"
 model = "alt-model"'
 sed -i 's/^skills = \["test-skill"\]$/skills = ["test-skill"]\nfallback_profiles = ["alt"]/' "$manifest"
-out="$(env -u HERDR_ENV "$L" coder demo --profile alt 2>&1)"; rc=$?
+out="$(env -u AGENTBUS_TERM_ID "$L" coder demo --profile alt 2>&1)"; rc=$?
 assert_eq "$rc" "0" "agent-launch --profile exits 0"
 assert_contains "$out" "AGENT_BUS_PROVIDER=other-provider" "and runs the other profile's provider"
 assert_contains "$out" "AGENT_BUS_PROFILE=alt" "under that profile's name"
-out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 AGENT_LAUNCH_REQUIRE_BIND=1 "$REPO/scripts/agent-spawn" coder demo --profile alt 2>&1)"
-assert_contains "$out" "--profile alt" "agent-spawn passes the profile on"
-assert_contains "$out" "AGENT_LAUNCH_REQUIRE_BIND=1" "and swap mode"
-assert_exit 1 "an injected profile name is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --profile 'alt;touch injected'"
-out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf 2>&1)"
-assert_contains "$out" "--resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf" "agent-spawn passes --resume on (reload of a pop)"
-out="$(cd "$root" && HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf --profile alt 2>&1)"
-assert_contains "$out" "--profile alt --resume 93ff25bd-34d8-4077-bf6c-65e6cb135bbf" "with a profile, in either order"
-assert_exit 1 "an injected session id is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --resume 'x;touch injected'"
-assert_exit 1 "an unknown agent-spawn flag is refused" -- env HERDR_ENV=1 AGENT_SPAWN_DRYRUN=1 bash -c "cd '$root' && '$REPO/scripts/agent-spawn' coder demo --nope"
-assert_exit 1 "swap mode outside a herdr pane fails" -- env -u HERDR_ENV AGENT_LAUNCH_REQUIRE_BIND=1 "$L" coder demo --profile alt
-out="$(cd "$root" && env -u HERDR_ENV AGENT_SPAWN_DRYRUN=1 "$REPO/scripts/agent-spawn" coder demo 2>&1)"
-assert_contains "$out" "agentbus up demo" "agent-spawn outside herdr points at agentbus up <project>"
+assert_exit 1 "swap mode outside a holder terminal fails" -- env -u AGENTBUS_TERM_ID AGENT_LAUNCH_REQUIRE_BIND=1 "$L" coder demo --profile alt
 out="$("$AGENTBUS_BIN" roles fallbacks coder 2>&1)"
 assert_contains "$out" "fallback alt" "roles fallbacks lists the fallback"
 config claude-code
 
 # bootstrap writes a template whose tab command runs the launcher with the selected manifest
-printf '#!/bin/sh\nexit 0\n' > "$root/bin/docker"; printf '#!/bin/sh\nexit 0\n' > "$root/bin/herdr"; chmod +x "$root/bin/docker" "$root/bin/herdr"
+printf '#!/bin/sh\nexit 0\n' > "$root/bin/docker"; chmod +x "$root/bin/docker"
 project="$root/project \"quoted\" \$literal 🧪"; mkdir -p "$project"
 out="$(AGENTBUS_PROJECTS_DIR="$root/templates" "$REPO/scripts/bootstrap" new demo "$project" 2>&1)"; rc=$?
 assert_eq "$rc" "0" "bootstrap with a hostile project path exits 0"
@@ -161,18 +141,15 @@ out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo 2>&1)"
 assert_contains "$out" "report-resume $REPO/scripts/agent-launch" "a Claude launch carries the resume hook"
 assert_contains "$out" "roles turn start" "a Claude launch carries the turn-start hook (auto-state)"
 assert_contains "$out" "roles turn end" "and the turn-end hook"
-# The hook returns at once and prints nothing; a detached sender reports to a fake herdr.
-printf '#!/usr/bin/env bash\nsleep 2\necho "$*" > "%s/herdr.calls"\necho %s\n' "$T" "'{\"result\":{}}'" > "$T/herdr"
+# The hook returns at once and prints nothing; it never calls herdr (herdr exit).
+printf '#!/usr/bin/env bash\necho "$*" > "%s/herdr.calls"\n' "$T" > "$T/herdr"
 chmod +x "$T/herdr"
 start=$(date +%s%N)
-hook_out="$(echo '{"session_id":"5f0c-11","hook_event_name":"SessionStart","source":"startup"}' | HERDR_ENV=1 HERDR_PANE_ID=w1:p2 \
-  HERDR_BIN_PATH="$T/herdr" AGENT_BUS_AGENT=coder AGENT_BUS_PROJECT=demo XDG_STATE_HOME="$T/state" "$AGENTBUS_BIN" roles report-resume "$L")"
+hook_out="$(echo '{"session_id":"5f0c-11","hook_event_name":"SessionStart","source":"startup"}' | AGENTBUS_TERM_ID=w1:p2 \
+  PATH="$T:$PATH" AGENT_BUS_AGENT=coder AGENT_BUS_PROJECT=demo XDG_STATE_HOME="$T/state" "$AGENTBUS_BIN" roles report-resume "$L")"
 elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
 assert_eq "$hook_out" "" "the hook prints nothing on stdout"
-assert_eq "$([[ $elapsed -lt 1500 ]] && echo fast || echo "slow ${elapsed}ms")" "fast" "the hook returns before herdr answers"
-for _ in $(seq 50); do [[ -s "$T/state/agentbus/demo/resume.log" ]] && break; sleep 0.2; done
-calls="$(cat "$T/herdr.calls" 2>/dev/null)"
-assert_contains "$calls" "pane report-agent-session w1:p2 --source agentbus --agent claude --seq" "the sender reports to herdr"
-assert_contains "$calls" "-- env ROLES_TOML=$manifest $L coder demo --resume 5f0c-11" "with the launcher's resume command"
-assert_contains "$(cat "$T/state/agentbus/demo/resume.log" 2>/dev/null)" "accepted" "and logs the outcome"
+assert_eq "$([[ $elapsed -lt 1500 ]] && echo fast || echo "slow ${elapsed}ms")" "fast" "the hook returns at once"
+sleep 1
+assert_eq "$([[ -e "$T/herdr.calls" ]] && echo called || echo never)" "never" "herdr is never called"
 finish

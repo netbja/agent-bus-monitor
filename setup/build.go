@@ -123,11 +123,17 @@ func InstallFile(src, dst string) error {
 	return os.Rename(tmp, dst)
 }
 
-// RoleScriptLinks is setup.sh's install_role_script_links: agent-launch and
-// agent-spawn linked into the bin dir; only links to these exact files are
-// ours, anything else there is left with a warning.
+// RoleScriptLinks is setup.sh's install_role_script_links: agent-launch
+// linked into the bin dir; only a link to this exact file is ours, anything
+// else there is left with a warning. agent-spawn went with herdr (agentbus
+// pop is its successor): a link an older setup made to it is removed.
 func (in *Installer) RoleScriptLinks() {
-	for _, script := range []string{"agent-launch", "agent-spawn"} {
+	if old := filepath.Join(in.Opt.BinDir, "agent-spawn"); OurScriptLink(old, in.Repo) && !in.Opt.DryRun {
+		if os.Remove(old) == nil {
+			defer in.O.OK("agent-spawn: removed " + old + " (gone with herdr: agentbus pop starts a role)")
+		}
+	}
+	for _, script := range []string{"agent-launch"} {
 		target := filepath.Join(in.Opt.BinDir, script)
 		source := filepath.Join(in.Repo, "scripts", script)
 		_, lerr := os.Lstat(target)

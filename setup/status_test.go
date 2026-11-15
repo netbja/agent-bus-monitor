@@ -27,7 +27,7 @@ func TestStatusAllInstalled(t *testing.T) {
 	for _, b := range []string{bin + "/agentbus", bin + "/busmon"} {
 		_ = os.WriteFile(b, []byte("#!/bin/sh\n"), 0o755)
 	}
-	for _, s := range []string{"agent-launch", "agent-spawn"} {
+	for _, s := range []string{"agent-launch"} {
 		_ = os.WriteFile(in.Repo+"/scripts/"+s, []byte("#!/bin/sh\n"), 0o755)
 		_ = os.Symlink(in.Repo+"/scripts/"+s, bin+"/"+s)
 	}
@@ -56,7 +56,6 @@ func TestStatusAllInstalled(t *testing.T) {
 		"    • busmon: not installed at " + in.Repo + "/busmon\n" +
 		"    ! busmon on PATH is /usr/bin/busmon (shadows " + bin + "/busmon)\n" +
 		"    ✓ agent-launch: " + bin + "/agent-launch -> " + in.Repo + "/scripts/agent-launch\n" +
-		"    ✓ agent-spawn: " + bin + "/agent-spawn -> " + in.Repo + "/scripts/agent-spawn\n" +
 		"    ✓ external skills: v1.3.1 at " + skills + "\n" +
 		"    • role skill links: 2\n" +
 		"    • project service: demo dispatch running\n" +
@@ -84,7 +83,6 @@ func TestStatusNothingInstalled(t *testing.T) {
 		"    • busmon: not installed at " + bin + "/busmon\n" +
 		"    • busmon: not installed at " + in.Repo + "/busmon\n" +
 		"    • agent-launch: not installed at " + bin + "/agent-launch\n" +
-		"    • agent-spawn: not installed at " + bin + "/agent-spawn\n" +
 		"    • external skills: not installed (" + skills + ")\n" +
 		"    • role skill links: 0\n" +
 		"    • project services: none\n" +

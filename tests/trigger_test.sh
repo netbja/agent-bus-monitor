@@ -13,22 +13,28 @@ stub="$tmp/bin"
 # inside its .local/bin so the stub wins regardless of what's really installed.
 home="$tmp/home"; localbin="$home/.local/bin"; mkdir -p "$localbin"
 
-# (a) dry-run prints pane + message when the sentinel is up.
+# (a) dry-run prints the directive when the sentinel is up.
 make_stub "$localbin" agentbus 0 "w3:p2"    # `agentbus pane sentinel` -> w3:p2
-out="$(HOME="$home" AGENT_BUS_PROJECT=demo HERDR_SESSION=s DAILY_REVIEW_DRYRUN=1 "$T")"
-assert_contains "$out" "pane=w3:p2"                 "trigger resolved pane"
+out="$(HOME="$home" AGENT_BUS_PROJECT=demo DAILY_REVIEW_DRYRUN=1 "$T")"
+assert_contains "$out" "would send: agentbus --project demo cmd sentinel" "trigger names the directive"
 assert_contains "$out" "agent-bus-sentinel skill"   "trigger message references the skill"
 
-# (b) sentinel down -> skip, exit 0, do not call herdr.
-make_stub "$localbin" agentbus 1            # pane lookup fails
+# (b) sentinel up: the review is a bus directive to sentinel (the dispatcher wakes it); herdr is
+# never called (herdr exit).
+rm -f "$localbin/agentbus.calls"
 make_stub "$localbin" herdr 0
-assert_exit 0 "skips cleanly when sentinel down" -- \
-  bash -c "HOME='$home' AGENT_BUS_PROJECT=demo HERDR_SESSION=s '$T'"
-if [[ ! -f "$localbin/herdr.calls" ]]; then _ok "herdr never called when sentinel down"; else _bad "herdr called despite no pane"; fi
+HOME="$home" AGENT_BUS_PROJECT=demo "$T"
+assert_contains "$(cat "$localbin/agentbus.calls")" "--project demo cmd sentinel [cron review]" "the review is sent to sentinel on the bus"
+assert_eq "$([[ -f "$localbin/herdr.calls" ]] && echo called || echo never)" "never" "herdr never called"
+
+# (c0) sentinel down -> skip, exit 0, nothing sent.
+make_stub "$localbin" agentbus 1            # pane lookup fails
+rm -f "$localbin/agentbus.calls"
+assert_exit 0 "skips cleanly when sentinel down" -- bash -c "HOME='$home' AGENT_BUS_PROJECT=demo '$T'"
+assert_eq "$(grep -c ' cmd ' "$localbin/agentbus.calls")" "0" "nothing sent when sentinel down"
 
 # (c) crontab install is idempotent.
 make_stub "$stub" docker 0
-make_stub "$stub" herdr 0            # bootstrap's link_plugin calls `herdr plugin link` — stub it out
 cronfile="$tmp/cron.txt"; : > "$cronfile"
 cat > "$stub/crontab" <<EOF
 #!/usr/bin/env bash
@@ -41,6 +47,7 @@ for s in agent-bus agent-bus-master agent-bus-sentinel agent-bus-security agent-
 run_cron() { PATH="$stub:$PATH" AGENTBUS_PROJECTS_DIR="$tmp/projects" "$B" new demo --cron >/dev/null; }
 run_cron; run_cron
 assert_eq "$(grep -c 'daily-review: demo' "$cronfile")" "1" "cron line installed exactly once"
+assert_eq "$(grep -c 'HERDR' "$cronfile")" "0" "the cron line carries no herdr session"
 
 # (d) prefix collision: "dem" is a substring of "demo" — whole-line tag match must still install it
 #     (regression guard for grep -qxF vs -qF).

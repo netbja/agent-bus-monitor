@@ -116,7 +116,7 @@ func (in *Installer) Status(ctx context.Context) int {
 		}
 		in.shadowed(name, filepath.Join(in.Opt.BinDir, name))
 	}
-	for _, script := range []string{"agent-launch", "agent-spawn"} {
+	for _, script := range []string{"agent-launch"} {
 		p := filepath.Join(in.Opt.BinDir, script)
 		_, lerr := os.Lstat(p)
 		switch {

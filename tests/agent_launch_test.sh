@@ -48,11 +48,11 @@ assert_contains "$out" "TOKEN=tok"                 "ANTHROPIC_AUTH_TOKEN preserv
 out="$(PATH="$tmp:$PATH" AGENT_LAUNCH_KEEP_API_KEY=1 ANTHROPIC_API_KEY=sk-keep "$L" master demo)"
 assert_contains "$out" "KEY=sk-keep"          "AGENT_LAUNCH_KEEP_API_KEY=1 keeps the key"
 
-# --- bind before exec (v0.10.1): inside herdr the launcher binds its own pid, which exec hands to the client
-out="$(HERDR_ENV=1 HERDR_PANE_ID=w9:p9 AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
+# --- bind before exec (v0.10.1): in a holder terminal the launcher binds its own pid, which exec hands to the client
+out="$(AGENTBUS_TERM_ID=w9:p9 AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
 assert_contains "$out" "agentbus --project demo bind master --pid" "dry-run shows the bind"
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
-assert_eq "$([[ "$out" == *" bind "* ]] && echo bind || echo none)" "none" "no bind outside herdr"
+assert_eq "$([[ "$out" == *" bind "* ]] && echo bind || echo none)" "none" "no bind outside a terminal"
 
 # A wrapper around the real agentbus: it records the bind and passes everything else on.
 REAL_AGENTBUS="$AGENTBUS_BIN"
@@ -62,10 +62,10 @@ if [[ "\$3" == bind ]]; then echo "\$*" > "\$BIND_LOG"; exit "\${BIND_RC:-0}"; f
 exec "$REAL_AGENTBUS" "\$@"
 ASTUB
 chmod +x "$tmp/agentbus"
-out="$(AGENTBUS_BIN="$tmp/agentbus" PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
+out="$(AGENTBUS_BIN="$tmp/agentbus" PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" AGENTBUS_TERM_ID=w9:p9 "$L" master demo 2>&1)"
 assert_contains "$(cat "$tmp/bind.log")" "--project demo bind master --pid " "launcher binds itself"
 assert_contains "$out" "KEY=" "client starts after the bind"
-out="$(AGENTBUS_BIN="$tmp/agentbus" PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" BIND_RC=1 HERDR_ENV=1 HERDR_PANE_ID=w9:p9 "$L" master demo 2>&1)"
+out="$(AGENTBUS_BIN="$tmp/agentbus" PATH="$tmp:$PATH" BIND_LOG="$tmp/bind.log" BIND_RC=1 AGENTBUS_TERM_ID=w9:p9 "$L" master demo 2>&1)"
 assert_contains "$out" "warning: agentbus bind failed" "a failed bind is reported"
 assert_contains "$out" "KEY=" "and the client still starts"
 finish
