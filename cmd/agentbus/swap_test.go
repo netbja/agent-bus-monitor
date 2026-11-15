@@ -233,14 +233,14 @@ func TestSwapNowAndForce(t *testing.T) {
 // prints the recovery.
 func TestSwapFailureAfterTheClose(t *testing.T) {
 	for name, spawn := range map[string]func(string, string) error{
-		"launch fails": func(string, string) error { return errors.New("agent-spawn: herdr refused") },
+		"launch fails": func(string, string) error { return errors.New("pop: the holder refused") },
 		"no proof":     func(string, string) error { return nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			w, d := newSwapWorld(t)
 			w.spawnFn = spawn
 			code, out := w.swap(d, "foureyes", "--profile", "opus")
-			if code == 0 || !strings.Contains(out, "recover with: agent-spawn foureyes") {
+			if code == 0 || !strings.Contains(out, "recover with: agentbus --project "+w.b.Project()+" pop foureyes") {
 				t.Fatalf("exit %d, %q", code, out)
 			}
 			if w.intent() {
@@ -540,7 +540,7 @@ func TestSwapReadsTheTemplatesOwnProfile(t *testing.T) {
 	w, d = newSwapWorld(t)
 	d = withTemplate(t, w, d, "opus")
 	w.spawnFn = func(string, string) error { return errors.New("spawn failed") }
-	if code, out := w.swap(d, "foureyes", "--profile", "review"); code == 0 || !strings.Contains(out, "agent-spawn foureyes "+w.b.Project()+" --profile opus") {
+	if code, out := w.swap(d, "foureyes", "--profile", "review"); code == 0 || !strings.Contains(out, "agentbus --project "+w.b.Project()+" pop foureyes --profile opus") {
 		t.Fatalf("recovery: exit %d, %q", code, out)
 	}
 }

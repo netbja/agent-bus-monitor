@@ -131,8 +131,8 @@ tier = "pop"
 deny = ["Read(**/.env)", "Edit(**/.env)"]'
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" coder demo 2>&1)"
 assert_contains "$out" "--settings" "a popping role launches with --settings"
-assert_contains "$out" '"allow": ["Bash(agent-spawn architect *)", "Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)"]' "an ordinary role is allowed, then every pop's end (pop-auto-retire)"
-assert_contains "$out" '"ask": ["Bash(agent-spawn deploy *)"]' "an approval role is asked"
+assert_contains "$out" '"allow": ["Bash(agentbus pop architect)", "Bash(agentbus pop architect *)", "Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)"]' "an ordinary role is allowed, then every pop's end (pop-auto-retire)"
+assert_contains "$out" '"ask": ["Bash(agentbus pop deploy)", "Bash(agentbus pop deploy *)"]' "an approval role is asked"
 assert_contains "$out" '"deny": ["Read(**/.env)", "Edit(**/.env)"]' "shared rules reach the dry-run launch"
 
 # v0.21.1: every Claude launch carries the SessionStart hook that reports its resume command

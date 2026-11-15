@@ -22,7 +22,7 @@ assert_contains "$r" "agentbus health"                    "sentinel role prompt 
 
 m="$(cat "$REPO/skills/agent-bus-master/SKILL.md")"
 assert_contains "$m" "Spawn a peer"                       "master skill has Spawn a peer section"
-assert_contains "$m" "agent-spawn"                        "master skill documents agent-spawn"
+assert_contains "$m" "agentbus pop"                       "master skill documents agentbus pop"
 assert_contains "$m" "agentbus budget"                    "master skill reads the account budget"
 assert_contains "$m" "## Client update"                   "master's part in a client reload"
 assert_contains "$m" "agentbus reload sentinel"           "master reloads sentinel, and only sentinel"

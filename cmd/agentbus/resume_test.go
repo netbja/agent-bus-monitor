@@ -225,7 +225,7 @@ func TestResumeNamesPopsAndRefusesAnAgent(t *testing.T) {
 	}
 	delete(w.env, "AGENT_BUS_AGENT")
 	code, out, errw := w.resume()
-	if code != 0 || !strings.Contains(out, "agent-spawn ui-kimi "+w.b.Project()) {
+	if code != 0 || !strings.Contains(out, "agentbus --project "+w.b.Project()+" pop ui-kimi") {
 		t.Fatalf("resume = %d\n%s\n%s", code, out, errw)
 	}
 }

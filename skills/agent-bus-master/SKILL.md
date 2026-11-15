@@ -11,7 +11,7 @@ agents' herdr panes over the Agent Bus.
 ## Client portability
 
 Roles are independent of clients/providers. Use the configured launch profile via
-`agent-spawn`; do not choose a model inside this skill. Skill invocation, background
+`agentbus pop`; do not choose a model inside this skill. Skill invocation, background
 wake support and session reset commands differ between clients. References to `/clear`
 below describe Claude Code: for another client, use its verified native reset procedure
 after the same hand-off, and never inject an unsupported slash command into its pane.
@@ -45,7 +45,7 @@ The model follows the role (`roles.toml`): you never name a model. To get a stro
 task, give it to a role that runs one (`agentbus roles fallbacks <role>` and the manifest show
 which).
 
-- **Pop architect** (`agent-spawn architect <project>`) for: a design or architecture choice; a spec
+- **Pop architect** (`agentbus pop architect`) for: a design or architecture choice; a spec
   touching several modules or services; a disagreement between coder and foureyes that survived
   one round; a cross-cutting risk (security, data loss, deployment, money). Not for a routine
   change: that stays with coder.
@@ -86,24 +86,28 @@ on its own.
 ## Spawn a peer
 The team's boot roles (coder, foureyes, sentinel) come up with the workspace. When you need a
 role that isn't up — design work, or surge capacity — **pop** it. Popping runs the *exact* boot
-recipe (`agent-launch`), so a popped agent is identical to a booted one:
+recipe (the role's launch template on the project's holder), so a popped agent is identical to a
+booted one:
 ```bash
-agent-spawn architect "$AGENT_BUS_PROJECT"   # design work -> architect (model per roles.toml)
-agent-spawn coder "$AGENT_BUS_PROJECT"       # surge -> a second implementer
+agentbus pop architect      # design work -> architect (model per roles.toml)
+agentbus pop coder2         # surge -> a second implementer
 ```
-`agent-spawn <role> <project>` opens a new herdr tab running `agent-launch <role> <project>`;
-it requires `HERDR_ENV=1` (you're inside herdr) and a role defined in `roles.toml`. The new
-agent arms its own `subscribe` and publishes `status`, so it shows up in busmon and in
-`agentbus agents` within a few seconds — dispatch to it once it reports `online`.
+`agentbus pop <role> [--profile <profile>] [--resume <session-id>]` starts the role as a new
+terminal of the project's holder (`agentbus attach <role>` shows it); the role must be defined in
+`roles.toml`. From inside your own terminal the command goes through the dispatcher, which must be
+up: the holder refuses a start from an agent's terminal. The new agent publishes `status`, so it
+shows up in busmon and in `agentbus agents` within a few seconds — dispatch to it once it reports
+`online`.
 
-To resume a Claude Code session, run `agent-launch <role> "$AGENT_BUS_PROJECT" --resume <session-id>`
-so the role's settings and Agent Bus identity are restored; never run `claude --resume` by hand.
+To resume a session, use `agentbus pop <role> --resume <session-id>` so the role's settings and
+Agent Bus identity are restored; never run `claude --resume` by hand.
 
-Call `agent-spawn` by its bare name, never by path: your session allows `agent-spawn <role> *` for
-each ordinary role, so a path, a quoted role or a variable falls back to a prompt or the classifier.
+Write `agentbus pop <role>` exactly, with `AGENT_BUS_PROJECT` set as it is in your session: your
+session allows `agentbus pop <role>` (with or without flags) for each ordinary role, so a
+`--project` flag, a path, a quoted role or a variable falls back to a prompt or the classifier.
 
 **A role marked `approval = "person"` (deploy) is asked, not allowed.** Write exactly
-`agent-spawn deploy "$AGENT_BUS_PROJECT"`: that form brings up a permission prompt in your pane; say
+`agentbus pop deploy`: that form brings up a permission prompt in your pane; say
 in your status why you pop it and wait for the person's answer there. The prompt matches that
 command text only — another form (a quoted role, a variable, a path, `bash -c`) is not guaranteed to
 prompt or be denied, and in auto mode the classifier may run it unasked. Never use one to get round
@@ -555,7 +559,7 @@ agentbus retire security --forget --episode 1793647000000 --reason "work done"
   at its next idle episode.
 - After the close, it unregisters the pop in one step that keeps its message queue. If something
   arrived in between, it exits 1 with `registration is kept` and the entry ids: the pop is closed
-  but still registered, the dispatcher escalates what waits to you, and a new `agent-spawn` of the
+  but still registered, the dispatcher escalates what waits to you, and a new `agentbus pop` of the
   role reads it. Spawn it when the work needs it.
 - **To keep a pop** (the person wants it): do not run the command; say so with `agentbus report`
   so the person sees why. The directive does not come back until the pop works and idles again.
@@ -604,7 +608,7 @@ This changes how you dispatch:
 
   Never chain the two: injecting after a bare existence check is how you type a directive into
   whatever process inherited that id. If the pane is gone the peer is not asleep, it is gone —
-  pop the role again (`agent-spawn <role> "$AGENT_BUS_PROJECT"`); it boots, reads the board,
+  pop the role again (`agentbus pop <role>`); it boots, reads the board,
   and finds its work.
 
 **You are the exception: you stay armed — unless `agentbus dispatch --status` reports `dispatch

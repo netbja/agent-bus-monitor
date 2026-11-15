@@ -616,7 +616,7 @@ func TestTierValidation(t *testing.T) {
 
 const popsRoles = "pops = true\n[roles.coder.tool_rules]\ndeny = [\"WebFetch\"]\n[roles.deploy]\ntier = \"pop\"\napproval = \"person\"\n[roles.architect]\ntier = \"pop\"\n"
 
-const popsSettings = `{"permissions": {"allow": ["Bash(agent-spawn architect *)", "Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)"], "ask": ["Bash(agent-spawn deploy *)"], "deny": ["WebFetch"]}}`
+const popsSettings = `{"permissions": {"allow": ["Bash(agentbus pop architect)", "Bash(agentbus pop architect *)", "Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)"], "ask": ["Bash(agentbus pop deploy)", "Bash(agentbus pop deploy *)"], "deny": ["WebFetch"]}}`
 
 func TestLaunchSettingsFlag(t *testing.T) {
 	f := newLaunchFixture(t)
@@ -658,7 +658,7 @@ func TestElevatedAnnouncesAllow(t *testing.T) {
 	m := f.config("claude-code", "", popsRoles, "")
 	_, errOut, err := f.launch(m, "coder")
 	must(t, err)
-	if !strings.Contains(errOut, "notice: coder runs claude-code with elevated allow=3 rules") {
+	if !strings.Contains(errOut, "notice: coder runs claude-code with elevated allow=4 rules") {
 		t.Fatalf("stderr = %q", errOut)
 	}
 }

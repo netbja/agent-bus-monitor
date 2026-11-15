@@ -128,7 +128,7 @@ func peerStartCheck(ctx context.Context, c peer.Client, out io.Writer) {
 
 // peerRoot is the folder the peer's tools read under (SEC-LLM-3): the
 // project's path, its template's working_dir, else the Git top-level of the
-// launch folder; never the launch folder itself, which agent-spawn takes from
+// launch folder; never the launch folder itself, which a pop takes from
 // its caller. The filesystem root, the home directory and a folder holding
 // it are refused: read_file and grep would reach every credential in it.
 func peerRoot(project, cwd string, getenv func(string) string) (string, error) {

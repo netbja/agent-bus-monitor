@@ -177,8 +177,8 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		return fail("no verified pane recorded for %s (agentbus agents): nothing to replace", role)
 	}
 	if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
-		return fail("its recorded process (pid %d) is not running any more: start it with agent-spawn %s %s --profile %s",
-			snap.PID, role, b.Project(), profile)
+		return fail("its recorded process (pid %d) is not running any more: start it with agentbus --project %s pop %s --profile %s",
+			snap.PID, b.Project(), role, profile)
 	}
 	if term := d.Env("AGENTBUS_TERM_ID"); term != "" && (term == snap.Pane || strings.HasSuffix(snap.Pane, "/"+term)) {
 		return fail("an agent cannot swap itself: run it from master's terminal or your own")
@@ -254,9 +254,9 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		}
 	}
 	defer end()
-	recovery := fmt.Sprintf("recover with: agent-spawn %s %s (its own profile, %s)", role, b.Project(), own.Profile)
+	recovery := fmt.Sprintf("recover with: agentbus --project %s pop %s (its own profile, %s)", b.Project(), role, own.Profile)
 	if own.Profile != manifestOwn.Profile { // the project's own profile, not roles.toml's
-		recovery = fmt.Sprintf("recover with: agent-spawn %s %s --profile %s (its own profile)", role, b.Project(), own.Profile)
+		recovery = fmt.Sprintf("recover with: agentbus --project %s pop %s --profile %s (its own profile)", b.Project(), role, own.Profile)
 	}
 	// With the intent written, no request or challenge opens on it any more
 	// (refuseWhileSwapping): look again for what opened since the first scan.

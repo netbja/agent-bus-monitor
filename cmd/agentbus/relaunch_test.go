@@ -172,10 +172,10 @@ func TestProvedSession(t *testing.T) {
 // by the launcher.
 func TestPopRecoveryLine(t *testing.T) {
 	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
-	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "claude-code", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo --resume "+id {
+	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "claude-code", IdentSession: id}); got != "pop ui not relaunched: agentbus --project demo pop ui --resume "+id {
 		t.Fatalf("claude: %q", got)
 	}
-	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "codex", IdentSession: id}); got != "pop ui not relaunched: agent-spawn ui demo" {
+	if got := popRecovery("ui", "demo", bus.AgentSnapshot{Client: "codex", IdentSession: id}); got != "pop ui not relaunched: agentbus --project demo pop ui" {
 		t.Fatalf("codex: %q", got)
 	}
 }

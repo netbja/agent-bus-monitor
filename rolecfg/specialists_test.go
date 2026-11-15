@@ -39,12 +39,12 @@ func TestSpecialistsExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, role := range []string{"support", "web-design", "backend"} {
-		if !slices.Contains(r.Allow, "Bash(agent-spawn "+role+" *)") {
+		if !slices.Contains(r.Allow, "Bash(agentbus pop "+role+" *)") {
 			t.Errorf("master cannot pop %s without an ask: allow %v", role, r.Allow)
 		}
 	}
 	for _, role := range []string{"dba", "os-expert", "cicd"} {
-		if !slices.Contains(r.Ask, "Bash(agent-spawn "+role+" *)") {
+		if !slices.Contains(r.Ask, "Bash(agentbus pop "+role+" *)") {
 			t.Errorf("master pops %s without the person: ask %v", role, r.Ask)
 		}
 	}
