@@ -1285,11 +1285,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   every roles.toml profile and fallback, used or not (`ok`, `gone`, `newer`, `newer?` = a listed
   higher version not stated as a successor and never a failure, `not listed (partial)`,
   `untiered`, `unknown`; exit 3 on gone, newer, untiered); `roles doctor --agent <name>` shows one
-  row. Under a role that pops (master), a `pops:` line lists the agent-spawn rules its session starts
-  with (`rolecfg.SpawnRules`, from `LaunchRules`): `allow` roles pop without a prompt, `ask` roles with
-  the person's yes (`approval = "person"`); a role in neither (not in roles.toml) is not covered, its
-  spawn prompts. A role that pops with no other role to pop shows `pops: none`. `--json` has them as
-  `pops.allow` / `pops.ask` (empty lists for `none`, no `pops` for a role that does not pop). Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
+  row. Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
   the table's lock (skipped when held), 10 s in all, a late reader keeping its rows and named in
   `refresh incomplete: <provider> <reason>`. The daily refresh no longer waits for services. A
   source older than `models.source_max_age` (7 d) withholds every verdict. The `model-catalogue`
@@ -1525,11 +1521,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   the verdict ledger with the open PRs **by head commit**, never by `pr:<n>` subject: an item is an open, non-draft PR
   whose head is a subject's deciding approved head (`bus.RollUp` APPROVED, the decider's `Head`, `deliver`'s own rule);
   every other open PR is counted (`Unapproved`: a newer push, no review, an approve trimmed out, a late approve on an
-  older head), never silent. An approved PR that GitHub reports `mergeable: CONFLICTING` is no item either: the
-  person cannot merge it; it is listed in the record's `conflicting` (PR number and the PR's own base, which may differ
-  from `delivery.base`; `agentbus merge-queue` prints "approved but conflicting with their base, to rebase:
-  #500 onto main") for master to have it rebased. `UNKNOWN` (not computed yet)
-  stays an item. A closed or merged PR is not in the open list, so never an item. Sources: `gh pr list --state open --json … --limit 1000` (`ReadGitHub`; a list of exactly
+  older head), never silent. Sources: `gh pr list --state open --json … --limit 1000` (`ReadGitHub`; a list of exactly
   the limit is `ErrIncomplete`, a pass read as unknown), else the git fallback (GitHub without `gh`, GitLab and
   Bitbucket for now, local): `RemoteTips` (`ls-remote --heads`), `FetchBase` (`--no-write-fetch-head --no-tags
   --refmap=`: the empty refmap stops git moving `refs/remotes/origin/<base>`; no ref written, tested byte for byte),
