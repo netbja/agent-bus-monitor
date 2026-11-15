@@ -271,14 +271,17 @@ var Keys = []*Key{
 	// warnings off (an expired login still fails).
 	{Name: "dispatch.login_expiry_warn", Env: "AGENT_BUS_LOGIN_EXPIRY_WARN", Kind: Duration, Default: 72 * time.Hour, ReadBy: "dispatch",
 		env: envNonNegativeDuration, file: fileDuration(true)},
-	// The run budget (spec 2026-11-15-run-budget-design.md §3): a run stops
-	// by itself after this much unpaused time, or this many deliveries; 0
-	// is no limit (the default). Step 1 only shows them (agentbus run); the
-	// dispatcher reads them from step 2, the drain.
-	{Name: "run.max_duration", Env: "AGENT_BUS_RUN_MAX_DURATION", Kind: Duration, Default: time.Duration(0), ReadBy: "agentbus run",
+	// The run budget (spec 2026-11-15-run-budget-design.md §3): a run drains
+	// after this much unpaused time, or this many deliveries; 0 is no limit
+	// (the default). agentbus run shows them; the dispatcher acts on them.
+	{Name: "run.max_duration", Env: "AGENT_BUS_RUN_MAX_DURATION", Kind: Duration, Default: time.Duration(0), ReadBy: "dispatch",
 		env: envNonNegativeDuration, file: fileDuration(true)},
-	{Name: "run.max_deliveries", Env: "AGENT_BUS_RUN_MAX_DELIVERIES", Kind: Int, Default: 0, ReadBy: "agentbus run",
+	{Name: "run.max_deliveries", Env: "AGENT_BUS_RUN_MAX_DELIVERIES", Kind: Int, Default: 0, ReadBy: "dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 for no limit")},
+	// A draining run stops (the project pauses) when nothing is in flight,
+	// or this long after the drain began; 0 drains until nothing is in flight.
+	{Name: "run.drain_max", Env: "AGENT_BUS_RUN_DRAIN_MAX", Kind: Duration, Default: 2 * time.Hour, ReadBy: "dispatch",
+		env: envNonNegativeDuration, file: fileDuration(true)},
 	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
 	// working seen ready this long reads idle for team-stall; 0 turns it off.
 	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",
