@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: r8, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: r9, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0). r7: §3 rewritten on the person's decision
 (thread 1794762002143-0).
 
@@ -148,8 +148,24 @@ pass reads a credential file.
 
 - One function per platform, returning `(expiry time, reason)`.
   - It reads at most 64 KiB and decodes into a struct holding only `refreshTokenExpiresAt`.
-  - The reason is from a closed set: `no file`, `not owned`, `unreadable`, `no field`,
-    `not a number`, `not a time`, `keychain: <exit status>`.
+  - The reason is a constant from one closed set (reviewer-codex on r7), and each case maps to
+    exactly one:
+
+    | Case | Reason |
+    |---|---|
+    | the path is not absolute or not clean (3.2) | `invalid path` |
+    | no file at the path | `no file` |
+    | a directory, symlink, device or anything not a regular file | `not a regular file` |
+    | owned by another user than the dispatcher's | `not owned` |
+    | open or read fails | `unreadable` |
+    | larger than 64 KiB | `too large` |
+    | not JSON, or no `claudeAiOauth.refreshTokenExpiresAt` | `no field` |
+    | the field is not a JSON number | `not a number` |
+    | before 2020-01-01 or more than two years ahead (3.1) | `not a time` |
+    | macOS, service name not yet verified (3.1) | `keychain entry not verified` |
+    | macOS, `security` exits non-zero or prints nothing | `keychain: exit <n>` (`<n>` the exit status, an integer) |
+
+    The reason never carries anything read from the file or the Keychain.
   - It never wraps or prints the decoder's error, the file's bytes or the Keychain's output. Those
     bytes stay in the function's local buffer.
 - **Never logged, copied, stored or put on the bus**: any token, any other field, the file's
@@ -283,8 +299,9 @@ Running `claude` or any client to ask its login state; refreshing a token; readi
   - 2 days → `warn` and one notice, none on the next pass;
   - expired → `fail`, a hold field, a `{p}:held` record, one directive to master, no wake;
   - a later date → a new episode, the hold released, the resume directive sent;
-  - a missing file, a missing field, a string value, a file owned by another user, a relative
-    path → `unknown` with that reason;
+  - each row of 3.3's reason table → `unknown` with exactly that reason (a relative path →
+    `invalid path`, a symlink (read with `Lstat`) → `not a regular file`, a 65 KiB file →
+    `too large`, a string value → `not a number`, …), one test per row;
   - `0` → no warn and no warning notice, while `fail` still holds;
   - two agents sharing a directory → one read;
   - a non-Claude agent → not checked.
