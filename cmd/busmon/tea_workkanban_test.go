@@ -702,7 +702,7 @@ func TestWorkKanbanTabMovesColumns(t *testing.T) {
 }
 
 // The column holding the cursor has its heading in the Work tab's colour,
-// a pill; no other column has, and none at the tab level.
+// a bright pill; no other column has (theirs are dimmed), and none at the tab level.
 func TestWorkKanbanFocusedHeading(t *testing.T) {
 	pinLocal(t)
 	m := kanbanShell(t, 130, 40)
@@ -712,7 +712,7 @@ func TestWorkKanbanFocusedHeading(t *testing.T) {
 		var out []int
 		for c, r := range kanbanGrid(4, ix, iy, iw, ih) {
 			cell := g.at(r.x+1, r.y)
-			if cell.st.Pill && cell.st.Role == panelHue[PanelWork] && !cell.st.Selected {
+			if cell.st.Pill && cell.st.Role == panelHue[PanelWork] && cell.st.Fade == 0 && !cell.st.Selected { // the bright pill: the others are dimmed (work-title-dark)
 				out = append(out, c)
 			}
 		}
@@ -746,7 +746,7 @@ func TestWorkKanbanPillFollowsTheCard(t *testing.T) {
 		g := m.grid()
 		var out []int
 		for c, r := range kanbanGrid(4, ix, iy, iw, ih) {
-			if cell := g.at(r.x+1, r.y); cell.st.Pill && cell.st.Role == panelHue[PanelWork] {
+			if cell := g.at(r.x+1, r.y); cell.st.Pill && cell.st.Role == panelHue[PanelWork] && cell.st.Fade == 0 {
 				out = append(out, c)
 			}
 		}
@@ -771,5 +771,25 @@ func TestWorkKanbanPillFollowsTheCard(t *testing.T) {
 	m = keys(t, m, kTab)
 	if c, _ := m.lists.work.kanban.cardPlace(m.lists.work.Selected()); m.ui.workCol != c {
 		t.Fatalf("Tab after the click: workCol %d, card column %d", m.ui.workCol, c)
+	}
+}
+
+// An unfocused column's heading is a pill in the Work tab's colour dimmed as
+// the tab is when its panel has not the focus (the person, work-title-dark):
+// readable without the focus; the focused one stays the bright pill.
+func TestKanbanHeadingUnfocusedIsDimPill(t *testing.T) {
+	k := &kanbanView{cols: []kanbanCol{{title: "For you  9"}, {title: "Next  5"}}, level: workAtCards, col: 1}
+	dim := k.heading(0)
+	if len(dim) == 0 || !dim[0].Pill || !dim[0].Soft || dim[0].Fade != frameFade || dim[0].Role != panelHue[PanelWork] || dim[0].Text != " For you  9 " {
+		t.Fatalf("unfocused heading %+v, want the Work pill faded by frameFade", dim)
+	}
+	if on := k.heading(1); !on[0].Pill || on[0].Fade != 0 {
+		t.Fatalf("focused heading %+v, want the bright pill", on)
+	}
+	k.level = workAtTabs // no column has the focus: every heading dim
+	for c := range k.cols {
+		if h := k.heading(c); !h[0].Pill || h[0].Fade != frameFade {
+			t.Fatalf("at the tab, heading %d %+v", c, h)
+		}
 	}
 }

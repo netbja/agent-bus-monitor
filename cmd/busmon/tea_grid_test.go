@@ -100,3 +100,28 @@ func sameColor(lc interface{ RGBA() (r, g, b, a uint32) }, tc tcell.Color) bool 
 	r2, g2, b2, a2 := want.RGBA()
 	return r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2
 }
+
+// A soft pill (an unfocused kanban heading, work-title-dark) is the faded
+// pill with true colour; without it, where a fade cannot show, it is plain
+// bold text, so the focused heading's pill stays the only one.
+func TestSoftPillWithoutTrueColour(t *testing.T) {
+	soft := cellStyle{Role: RoleAccent, Bold: true, Pill: true, Fade: frameFade, Soft: true}
+	for _, pal := range []struct {
+		noCol  bool
+		colors int
+	}{{false, 16}, {true, 1 << 24}} {
+		tt, _ := ResolveTheme("dark", "", "", pal.noCol, pal.colors)
+		if got, want := tt.tcellStyle(soft), tt.Style(RoleText).Bold(true); got != want {
+			t.Errorf("palette %v: soft pill %v, want plain bold text %v", tt.Palette(), got, want)
+		}
+		if tt.tcellStyle(soft) == tt.tcellStyle(cellStyle{Role: RoleAccent, Bold: true, Pill: true}) {
+			t.Errorf("palette %v: the soft pill looks like the focused one", tt.Palette())
+		}
+	}
+	tt, _ := ResolveTheme("dark", "", "", false, 1<<24)
+	hard := soft
+	hard.Soft = false
+	if tt.tcellStyle(soft) != tt.tcellStyle(hard) {
+		t.Error("true colour: a soft pill is the faded pill")
+	}
+}

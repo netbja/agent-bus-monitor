@@ -285,6 +285,9 @@ func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 		if c.Fade > 0 && t.Animated() { // the active tab of an unfocused panel: dimmed like its frame
 			style = style.Background(t.Faded(c.Role, c.Fade))
 		}
+		if c.Soft && !t.Animated() { // no fade to show: a reverse block would look focused
+			style = t.Style(RoleText).Bold(true)
+		}
 	}
 	return style
 }
