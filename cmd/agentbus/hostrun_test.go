@@ -51,7 +51,6 @@ func TestHostRunnerArgsPerOp(t *testing.T) {
 		{bus.HostOp{Op: bus.HostResume, From: "master"}, nil},
 		{bus.HostOp{Op: bus.HostRetire, Agent: "architect", From: "master"}, []string{"architect"}},
 		{bus.HostOp{Op: bus.HostDrain, From: "master"}, []string{"demo"}},
-		{bus.HostOp{Op: bus.HostDrain, From: "master", IgnoreBackground: true}, []string{"demo", "--ignore-background"}},
 	}
 	for _, c := range cases {
 		var calls []call
@@ -87,7 +86,8 @@ func TestHostRunnerOutcome(t *testing.T) {
 // What the relay cannot carry is refused before any command runs: an
 // agent's own terminal is never closed from the relay (the command's
 // own-pane check, which the dispatcher's environment cannot see),
-// --ignore-background is honoured only from master (§4.3b), and relaunch
+// --ignore-background is never honoured (security S10a-3: the person's
+// only, and the sender is self-attested), and relaunch
 // is no command since the herdr exit.
 func TestHostRunnerRefusesBeforeRunning(t *testing.T) {
 	for _, o := range []bus.HostOp{
@@ -95,6 +95,7 @@ func TestHostRunnerRefusesBeforeRunning(t *testing.T) {
 		{Op: bus.HostSwap, Agent: "coder", Profile: "kimi", From: "coder"},
 		{Op: bus.HostRetire, Agent: "coder", From: "coder"},
 		{Op: bus.HostDrain, From: "coder", IgnoreBackground: true},
+		{Op: bus.HostDrain, From: "master", IgnoreBackground: true},
 		{Op: bus.HostRelaunch, Agent: "coder", From: "master"},
 		{Op: "format-disk", From: "master"},
 	} {

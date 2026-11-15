@@ -156,7 +156,6 @@ func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, proje
 		if len(words) > 0 && !strings.HasPrefix(words[0], "-") {
 			project, words = words[0], words[1:]
 		}
-		words, o.IgnoreBackground = extractBool(words, "--ignore-background")
 	default:
 		return o, "", false, nil
 	}
@@ -173,7 +172,7 @@ func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, proje
 var relayWords = map[string]string{
 	bus.HostUp: "up <project>", bus.HostPop: "pop <role> [--profile <profile>]", bus.HostReload: "reload <role>",
 	bus.HostRetire: "retire <role>", bus.HostSwap: "swap <role> (--profile <profile> | --back)",
-	bus.HostSuspend: "suspend [--project <p>]", bus.HostResume: "resume", bus.HostDrain: "holder drain <project> [--ignore-background]",
+	bus.HostSuspend: "suspend [--project <p>]", bus.HostResume: "resume", bus.HostDrain: "holder drain <project>",
 }
 
 func relayRefusal(cmd, takes string) error {

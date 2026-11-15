@@ -26,7 +26,6 @@ func TestHostOpFromArgs(t *testing.T) {
 		{[]string{"suspend", "--project", "other"}, "other", bus.HostOp{Op: bus.HostSuspend, From: "coder"}},
 		{[]string{"resume"}, "env", bus.HostOp{Op: bus.HostResume, From: "coder"}},
 		{[]string{"holder", "drain", "demo"}, "demo", bus.HostOp{Op: bus.HostDrain, From: "coder"}},
-		{[]string{"holder", "drain", "demo", "--ignore-background"}, "demo", bus.HostOp{Op: bus.HostDrain, IgnoreBackground: true, From: "coder"}},
 	}
 	for _, c := range cases {
 		o, project, ok, err := hostOpFromArgs(c.args, "env", "coder")
@@ -44,7 +43,7 @@ func TestHostOpFromArgsElse(t *testing.T) {
 			t.Errorf("%q: relayed (%v, %v), want run as it is", args, ok, err)
 		}
 	}
-	for _, args := range [][]string{{"reload", "coder", "--fresh"}, {"retire", "architect", "--now"}, {"swap", "coder"}, {"up", "demo", "--resume"}, {"pop"}} {
+	for _, args := range [][]string{{"reload", "coder", "--fresh"}, {"retire", "architect", "--now"}, {"swap", "coder"}, {"up", "demo", "--resume"}, {"pop"}, {"holder", "drain", "demo", "--ignore-background"}} {
 		_, _, ok, err := hostOpFromArgs(args, "env", "coder")
 		if !ok || err == nil || !strings.Contains(err.Error(), "inside an agent's terminal") {
 			t.Errorf("%q: got ok=%v err=%v, want a refusal", args, ok, err)

@@ -19,7 +19,8 @@ import (
 // terminal, so the holder accepts it), with the directive's sender as the
 // caller: each command keeps its own authorisation, unchanged. The closed
 // set carries no flags beyond a profile and --ignore-background, so a
-// relayed command runs with its defaults.
+// relayed command runs with its defaults. --ignore-background, which the
+// set carries, is refused (security S10a-3).
 
 // hostCmd runs one command as self with its words; its exit code as the CLI's.
 type hostCmd func(ctx context.Context, self string, args []string, out, errw io.Writer) int
@@ -45,8 +46,8 @@ func (h hostRunner) Run(ctx context.Context, _ string, o bus.HostOp) (string, st
 		return bus.HostRefused, "relaunch: no such command since the herdr exit: reload <role> relaunches an agent"
 	case ownTerminal[o.Op] && o.Agent == o.From:
 		return bus.HostRefused, o.Op + " " + o.Agent + ": an agent cannot " + o.Op + " itself from its own terminal: master or a person runs it"
-	case o.IgnoreBackground && o.From != "master":
-		return bus.HostRefused, o.Op + ": --ignore-background is honoured only from master or the person"
+	case o.IgnoreBackground: // security S10a-3: the person's only, and the sender is self-attested
+		return bus.HostRefused, o.Op + ": --ignore-background is the person's, from their own shell: the relay never honours it"
 	}
 	run, ok := h.Cmds[o.Op]
 	if !ok {
@@ -77,9 +78,6 @@ func (h hostRunner) args(o bus.HostOp) []string {
 		a = append(a, "--profile", o.Profile)
 	case o.Op == bus.HostSwap:
 		a = append(a, "--back")
-	}
-	if o.IgnoreBackground {
-		a = append(a, "--ignore-background")
 	}
 	return a
 }
