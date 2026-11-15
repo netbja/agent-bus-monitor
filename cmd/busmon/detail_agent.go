@@ -111,6 +111,23 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	default:
 		row("Observed", text("not running a turn "+GlyphNone+" "+ago(a.obsAt)))
 	}
+	if h := a.host; h.blocked {
+		why := "its client's prompt"
+		if h.blockedWhy != "" {
+			why = Preview(h.blockedWhy)
+		}
+		rowWrap("Blocked on", RoleError, why+" "+GlyphNone+" "+ago(h.blockedAt)+": answer it in its terminal (t on a holder)")
+	}
+	if h := a.host; h.draft {
+		since := ""
+		if !h.draftSince.IsZero() {
+			since = " " + GlyphNone + " since " + ago(h.draftSince)
+		}
+		rowWrap("Draft", RoleAttention, "a line typed in its input, unsent"+since+": the dispatcher does not wake it over it")
+	}
+	if h := a.host; h.skip != "" {
+		rowWrap("Background", RoleMuted, Preview(h.skip)+" "+GlyphNone+" "+ago(h.skipAt))
+	}
 	if clientOutdated(a, now) { // client reload spec: propose only
 		u := a.clientUpdate
 		ver := func(v string) string {

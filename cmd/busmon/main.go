@@ -425,6 +425,7 @@ type agentState struct {
 	obsState      string              // herdr's status of the pane at that inspection
 	obsAt         time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
 	clientUpdate  *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
+	host          hostFacts           // its terminal on a holder: blocked, draft, background skip (hostfacts.go)
 	obsSince      time.Time           // first reading of that state (an episode, v0.15)
 	obsPrompt     bool                // its pane was seen blocked, fresh: its client asks something
 	swapping      bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
@@ -673,6 +674,7 @@ func main() {
 		go checkForUpdate(ctx, st)             // at most once a day; silent offline (updates.check, AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
 		go watchCodex(ctx, st, true, b.Agents) // a newer Codex than its agents run (login-updates 4), same opt-out
 	}
+	go watchHostFacts(ctx, st, b, busmonActivity(project), project) // blocked, draft, background skip on the row (herdr exit 7b2)
 
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.
