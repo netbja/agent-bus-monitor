@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/holder"
 )
 
 // About (A, about-page; the v0.27 plan, item 6): the versions of agentbus,
@@ -60,7 +59,7 @@ type aboutVersions struct {
 	Lines   []string
 	Project string
 	Build   []aboutRow // busmon, agentbus, protocol, go, updates
-	Host    []aboutRow // redis, herdr, plugin
+	Host    []aboutRow // redis, holder
 }
 
 // aboutRow is a label, its value and an optional note after it (the
@@ -97,11 +96,10 @@ type aboutVersionsMsg struct {
 // aboutSources is where About reads what it cannot know itself (a test
 // replaces it).
 type aboutSources struct {
-	agentbus func() string // `agentbus version`'s line
-	herdr    func() string // `herdr --version`'s line
-	plugin   func() string // herdr-plugin.toml's version
-	update   func() string // the update check's cached state
-	codex    func() string // a newer Codex published, its line ("" = none)
+	agentbus func() string               // `agentbus version`'s line
+	holder   func(project string) string // the project's holder: its terminals and builds
+	update   func() string               // the update check's cached state
+	codex    func() string               // a newer Codex published, its line ("" = none)
 }
 
 // openAbout opens the page, reads the versions and lets the fade schedule
@@ -131,8 +129,11 @@ func (m *Model) openAbout() tea.Cmd {
 			}
 			cancel()
 		}
-		agentbus, herdr := or(src.agentbus, "agentbus ?"), or(src.herdr, "herdr ?")
-		plugin, update := or(src.plugin, "?"), or(src.update, "update unknown")
+		agentbus, update := or(src.agentbus, "agentbus ?"), or(src.update, "update unknown")
+		holderInfo := "?"
+		if src.holder != nil {
+			holderInfo = src.holder(project)
+		}
 		codex := or(src.codex, "")
 		goLine := runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH
 		return aboutVersionsMsg{serial: serial, v: withCodexRow(codex, aboutVersions{
@@ -142,8 +143,7 @@ func (m *Model) openAbout() tea.Cmd {
 				agentbus,
 				fmt.Sprintf("protocol v%d", bus.ProtocolVersion),
 				"redis " + redis,
-				herdr,
-				"plugin " + plugin,
+				"holder " + holderInfo,
 				update,
 				goLine,
 				"license " + buildinfo.License + " " + GlyphNone + " " + buildinfo.Copyright(),
@@ -159,8 +159,7 @@ func (m *Model) openAbout() tea.Cmd {
 			},
 			Host: []aboutRow{
 				{Label: "redis", Value: redis},
-				{Label: "herdr", Value: strings.TrimPrefix(herdr, "herdr ")},
-				{Label: "plugin", Value: plugin},
+				{Label: "holder", Value: holderInfo},
 			},
 		})}
 	}
@@ -379,14 +378,7 @@ func realAboutSources(getenv func(string) string) aboutSources {
 		agentbus: func() string {
 			return versionLine(agentbusBeside(), []string{"version"}, "agentbus version ", "agentbus ?")
 		},
-		herdr: func() string {
-			bin := getenv("HERDR_BIN_PATH")
-			if bin == "" {
-				bin = "herdr"
-			}
-			return versionLine(bin, []string{"--version"}, "herdr ", "herdr ?")
-		},
-		plugin: func() string { return pluginVersion(pluginDirs(getenv)) },
+		holder: func(project string) string { return holderLine(project, getenv) },
 		update: func() string { return updateState(updateCachePath(), buildinfo.Version) },
 	}
 }
@@ -408,39 +400,25 @@ func versionLine(bin string, args []string, prefix, unknown string) string {
 	return unknown
 }
 
-// pluginDirs are where herdr-plugin.toml may be, as agentbus up finds the
-// repository: AGENTBUS_REPO, the build's repository, the binary's folder.
-func pluginDirs(getenv func(string) string) []string {
-	var dirs []string
-	if d := getenv("AGENTBUS_REPO"); d != "" {
-		dirs = append(dirs, d)
+// holderLine is the project's holder as About says it: "3 terminals, build
+// <key>" ("+N draining" when older builds still hold some), or ? when no
+// holder answers within 2 s.
+func holderLine(project string, getenv func(string) string) string {
+	h, err := holder.NewHost(project, holder.BuildID(), getenv)
+	if err != nil {
+		return "?"
 	}
-	if buildinfo.Repo != "" {
-		dirs = append(dirs, buildinfo.Repo)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	info, err := h.Describe(ctx)
+	if err != nil || len(info.Builds) == 0 {
+		return "?"
 	}
-	if exe, err := os.Executable(); err == nil {
-		if r, err := filepath.EvalSymlinks(exe); err == nil {
-			exe = r
-		}
-		dirs = append(dirs, filepath.Dir(exe))
+	line := fmt.Sprintf("%d terminals, build %s", info.Terms, info.Builds[0])
+	if n := len(info.Draining); n > 0 {
+		line += fmt.Sprintf(" (+%d draining)", n)
 	}
-	return dirs
-}
-
-var pluginVersionRE = regexp.MustCompile(`(?m)^version\s*=\s*"([^"]+)"`)
-
-// pluginVersion is the first herdr-plugin.toml's version among dirs, or ?.
-func pluginVersion(dirs []string) string {
-	for _, d := range dirs {
-		b, err := os.ReadFile(filepath.Join(d, "herdr-plugin.toml"))
-		if err != nil {
-			continue
-		}
-		if m := pluginVersionRE.FindSubmatch(b); m != nil {
-			return string(m[1])
-		}
-	}
-	return "?"
+	return line
 }
 
 // updateState is the update check's cached answer, never a network call: a

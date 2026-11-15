@@ -75,7 +75,7 @@ func TestAboutLayout(t *testing.T) {
 	}
 	a := aboutState{loaded: true, versions: aboutVersions{Project: "ansible-devtools",
 		Build: []aboutRow{{Label: "busmon", Value: "v1.0.0"}, agentbusRow("v1.0.0", "v1.0.0"), {Label: "protocol", Value: "v1"}},
-		Host:  []aboutRow{{Label: "redis", Value: "8.10.2"}, {Label: "herdr", Value: "0.9.5"}}}}
+		Host:  []aboutRow{{Label: "redis", Value: "8.10.2"}, {Label: "holder", Value: "3 terminals, build 5a1b2c3d"}}}}
 	lines := strings.Split(tokLinesText(aboutBody(a, 0, true, 100)), "\n")
 	logo := -1
 	for i, l := range lines {
@@ -171,8 +171,7 @@ func aboutShell(t *testing.T, fade bool) Model {
 	m.cfg.settings.Fade, m.cfg.settings.UpdateCheck = fade, true
 	m.cfg.about = aboutSources{
 		agentbus: func() string { return "agentbus version v9.9.9" },
-		herdr:    func() string { return "herdr 0.9.5" },
-		plugin:   func() string { return "0.26.1" },
+		holder:   func(string) string { return "3 terminals, build 5a1b2c3d" },
 		update:   func() string { return "update v9.9.10 available" },
 	}
 	return m
@@ -231,7 +230,7 @@ func TestAboutPageRidesTheFadeSchedule(t *testing.T) {
 	if p == nil || p.kind != ovAbout {
 		t.Fatal("A opened no About page")
 	}
-	for _, s := range []string{"project agent-bus-monitor", "busmon ", "agentbus version v9.9.9", "protocol v", "redis ", "herdr 0.9.5", "plugin 0.26.1", "update v9.9.10 available"} {
+	for _, s := range []string{"project agent-bus-monitor", "busmon ", "agentbus version v9.9.9", "protocol v", "redis ", "holder 3 terminals, build 5a1b2c3d", "update v9.9.10 available"} {
 		if !strings.Contains(p.plain, s) {
 			t.Errorf("y copies no %q:\n%s", s, p.plain)
 		}
@@ -306,16 +305,11 @@ func TestAboutStillWithoutMotion(t *testing.T) {
 	}
 }
 
-// The plugin's version from the first herdr-plugin.toml found; the update
-// state from the cache only.
+// The update state from the cache only; no holder answering reads ?.
 func TestAboutSources(t *testing.T) {
-	a, b := t.TempDir(), t.TempDir()
-	os.WriteFile(filepath.Join(b, "herdr-plugin.toml"), []byte("id = \"x\"\nversion = \"1.2.3\"  # bumped\n"), 0o600)
-	if v := pluginVersion([]string{a, b}); v != "1.2.3" {
-		t.Fatalf("plugin %q", v)
-	}
-	if v := pluginVersion([]string{a}); v != "?" {
-		t.Fatalf("no file: %q", v)
+	a := t.TempDir()
+	if v := holderLine("demo", func(k string) string { return map[string]string{"XDG_RUNTIME_DIR": a}[k] }); v != "?" {
+		t.Fatalf("no holder: %q", v)
 	}
 	cache := filepath.Join(a, "latest.json")
 	if s := updateState(cache, "v1.0.0"); !strings.Contains(s, "unknown") {

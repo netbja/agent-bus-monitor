@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -40,8 +42,8 @@ func adminFixture(now time.Time) adminSource {
 		services: func(context.Context) (map[string]map[string]bool, error) {
 			return map[string]map[string]bool{"agent-bus-monitor": {"dispatch": true, "missions": false}, "old": {"dispatch": false}}, nil
 		},
-		herdr: func(context.Context) (map[string]adminWorkspace, error) {
-			return map[string]adminWorkspace{"agent-bus-monitor": {id: "w1", panes: 6}}, nil
+		holder: func(context.Context) (map[string]adminTerms, error) {
+			return map[string]adminTerms{"agent-bus-monitor": {live: 6}}, nil
 		},
 		host: "vdr",
 		counts: func(_ context.Context, p string) (workCounts, error) { // the open project's are the shell's
@@ -85,7 +87,7 @@ func TestAdminRows(t *testing.T) {
 		}
 	}
 	abm := rowNamed(t, v, "agent-bus-monitor")
-	if !abm.open || abm.live != 3 || abm.total != 7 || abm.keys != 1204 || !abm.svcKnown || !abm.svc["dispatch"] || abm.ws.panes != 6 || !abm.herdrKnown || abm.template {
+	if !abm.open || abm.live != 3 || abm.total != 7 || abm.keys != 1204 || !abm.svcKnown || !abm.svc["dispatch"] || abm.terms.live != 6 || !abm.holderKnown || abm.template {
 		t.Errorf("open row %+v", abm)
 	}
 	if d := rowNamed(t, v, "demo"); !d.template || d.templatePath == "" || !d.onBroker || len(d.svc) != 0 || !d.svcKnown {
@@ -101,13 +103,13 @@ func TestAdminRowsUnknowns(t *testing.T) {
 	now := shellNow
 	src := adminFixture(now)
 	src.broker = func(context.Context) ([]adminFacts, error) { return nil, errors.New("connection refused") }
-	src.services, src.herdr = nil, func(context.Context) (map[string]adminWorkspace, error) { return nil, errors.New("no server") }
+	src.services, src.holder = nil, func(context.Context) (map[string]adminTerms, error) { return nil, errors.New("no server") }
 	v := gatherAdmin(context.Background(), src, "agent-bus-monitor", now)
-	if v.brokerErr == "" || v.herdrErr == "" || v.svcErr == "" {
+	if v.brokerErr == "" || v.holderErr == "" || v.svcErr == "" {
 		t.Fatalf("errors %+v", v)
 	}
 	for _, r := range v.rows {
-		if r.state != "?" || r.svcKnown || r.herdrKnown {
+		if r.state != "?" || r.svcKnown || r.holderKnown {
 			t.Errorf("%s: %+v", r.name, r)
 		}
 	}
@@ -122,7 +124,7 @@ func TestAdminRowsUnknowns(t *testing.T) {
 			t.Errorf("an unknown read as none: %q", lt)
 		}
 	}
-	for _, want := range []string{"broker: connection refused", "herdr: no server", "services: no service manager"} {
+	for _, want := range []string{"broker: connection refused", "holder: no server", "services: no service manager"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("no %q:\n%s", want, text)
 		}
@@ -148,7 +150,7 @@ func TestProjectsPageFlow(t *testing.T) {
 		t.Fatalf("M opened %+v", p)
 	}
 	screen := m.grid().plain()
-	for _, want := range []string{"Projects", "agent-bus-monitor", GlyphOpenHere + " open", "suspended", "template", "3/7", "1204", "open (6 panes)", "read just now"} {
+	for _, want := range []string{"Projects", "agent-bus-monitor", GlyphOpenHere + " open", "suspended", "template", "3/7", "1204", "6 terminals", "read just now"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("no %q:\n%s", want, screen)
 		}
@@ -201,8 +203,8 @@ func TestProjectsTiers(t *testing.T) {
 		body      []Line
 		has, hasn []string
 	}{
-		{"wide", wide, []string{"KEYS", "HERDR", "TEMPLATE", "1204", "open (6 panes)"}, nil},
-		{"medium", medium, []string{"STATE", "AGENTS", "SERVICES", "LAST"}, []string{"KEYS", "HERDR", "1204"}},
+		{"wide", wide, []string{"KEYS", "HOLDER", "TEMPLATE", "1204", "6 terminals"}, nil},
+		{"medium", medium, []string{"STATE", "AGENTS", "SERVICES", "LAST"}, []string{"KEYS", "HOLDER", "1204"}},
 		{"narrow", narrow, []string{"3/7 agents"}, []string{"KEYS", "STATE"}},
 	} {
 		text := tokLinesText(c.body)
@@ -244,8 +246,8 @@ func (f fakeManager) State(p, k string) (service.State, error) {
 	return service.State{Installed: true, Active: f.active[p+"/"+k]}, nil
 }
 
-// The real readers: this machine's units by project and kind; herdr's
-// workspaces whose label is a project, with their panes.
+// The real readers: this machine's units by project and kind; the holders
+// of this machine (a socket that does not answer is unread, never none).
 func TestAdminLocalReaders(t *testing.T) {
 	got, err := readAdminServices(fakeManager{units: []service.Unit{{Project: "demo", Kind: "dispatch"}, {Project: "demo", Kind: "missions"}},
 		active: map[string]bool{"demo/dispatch": true}})
@@ -255,21 +257,25 @@ func TestAdminLocalReaders(t *testing.T) {
 	if _, err := readAdminServices(fakeManager{err: errors.New("systemctl down")}); err == nil {
 		t.Fatal("a failed list read as none")
 	}
-	run := func(_ context.Context, args ...string) ([]byte, error) {
-		switch strings.Join(args, " ") {
-		case "workspace list":
-			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w7"},{"label":"Not A Project","workspace_id":"w8"}]}}`), nil
-		case "pane list --workspace w7":
-			return []byte(`{"result":{"panes":[{"pane_id":"p1"},{"pane_id":"p2"}]}}`), nil
-		}
-		return nil, errors.New("unexpected " + strings.Join(args, " "))
+	run, err := os.MkdirTemp("/tmp", "abh")
+	if err != nil {
+		t.Fatal(err)
 	}
-	ws, err := readAdminHerdr(context.Background(), run)
-	if err != nil || len(ws) != 1 || ws["demo"] != (adminWorkspace{id: "w7", panes: 2}) {
-		t.Fatalf("herdr %v %v", ws, err)
+	t.Cleanup(func() { os.RemoveAll(run) })
+	os.Chmod(run, 0o700)
+	env := func(k string) string { return map[string]string{"XDG_RUNTIME_DIR": run}[k] }
+	if got, err := readAdminHolders(context.Background(), env); err != nil || len(got) != 0 {
+		t.Fatalf("no holder: %v %v", got, err)
 	}
-	if _, err := readAdminHerdr(context.Background(), func(context.Context, ...string) ([]byte, error) { return nil, errors.New("no server") }); err == nil {
-		t.Fatal("herdr down read as no workspace")
+	sock, err := holder.SocketPath(env, "demo", service.BuildKey(holder.BuildID()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sock, nil, 0o600); err != nil { // a socket file nothing answers on
+		t.Fatal(err)
+	}
+	if got, err := readAdminHolders(context.Background(), env); err != nil || !got["demo"].unread {
+		t.Fatalf("a holder that does not answer: %v %v", got, err)
 	}
 }
 
@@ -365,7 +371,7 @@ func TestAdminReviewFixes(t *testing.T) {
 	src.host = "laptop"
 	pinLocal(t)
 	body, _ := projectsBody(gatherAdmin(context.Background(), src, "agent-bus-monitor", now), 0, TierWide, 130, now, "")
-	if !strings.Contains(tokLinesText(body), "services and herdr: this machine (laptop)") {
+	if !strings.Contains(tokLinesText(body), "services and holders: this machine (laptop)") {
 		t.Errorf("no note:\n%s", tokLinesText(body))
 	}
 

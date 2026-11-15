@@ -488,10 +488,10 @@ func (m Model) deletePanelLines(w int) []Line {
 	if r.svcKnown && len(r.svc) == 0 {
 		svc = "services: none here"
 	}
-	herdr := "herdr: " + adminHerdrCell(r)
+	holderCell := "holder: " + adminHolderCell(r)
 	lines := []Line{
 		muted(fmt.Sprintf("%d %s %s %d agents (%d live) %s last activity %s %s %s %s %s",
-			r.keys, plural(r.keys, "key"), GlyphNone, r.total, r.live, GlyphNone, adminLast(r, m.now), GlyphNone, svc, GlyphNone, herdr)),
+			r.keys, plural(r.keys, "key"), GlyphNone, r.total, r.live, GlyphNone, adminLast(r, m.now), GlyphNone, svc, GlyphNone, holderCell)),
 	}
 	if d.unchecked {
 		lines = append(lines, Line{{Text: "agents: not checkable on this host (no /proc): only the leases, the services' records and the scan after the delete see them", Role: RoleAttention}})
@@ -650,12 +650,15 @@ func realQuiet(client *redis.Client, getenv func(string) string) func(ctx contex
 			}
 			return fmt.Sprintf("%d agents are live here: Z puts the project to sleep", live), nil
 		}
-		ws, err := readAdminHerdr(ctx, herdrRunner(getenv))
+		terms, err := readAdminHolders(ctx, getenv)
 		if err != nil {
 			return "", err
 		}
-		if w, ok := ws[p]; ok {
-			return fmt.Sprintf("close its herdr workspace first (%d %s)", w.panes, plural(w.panes, "pane")), nil
+		switch t, ok := terms[p]; {
+		case ok && t.unread:
+			return "its holder does not answer: agentbus down " + p + " first", nil
+		case ok && t.live > 0:
+			return fmt.Sprintf("its holder runs %d %s: agentbus down %s first", t.live, plural(t.live, "terminal"), p), nil
 		}
 		return "", nil
 	}

@@ -96,7 +96,7 @@ func TestProjectsDeleteRefusedWhileLive(t *testing.T) {
 		"a dispatcher runs for old (host vdr): agentbus down old there, or Z",
 		"stop its services first: x",
 		"2 agents are live: Z puts the project to sleep",
-		"close its herdr workspace first (3 panes)",
+		"its holder runs 3 terminals: agentbus down old first",
 		"cannot check that old is quiet (connection refused)",
 	} {
 		w := newDeleteWorld(t)

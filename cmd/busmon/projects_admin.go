@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -43,10 +43,11 @@ type adminFacts struct {
 	conductor bool
 }
 
-// adminWorkspace is a project's herdr workspace on this machine.
-type adminWorkspace struct {
-	id    string
-	panes int
+// adminTerms is a project's holder on this machine: its live terminals,
+// or unread when its holder did not answer.
+type adminTerms struct {
+	live   int
+	unread bool
 }
 
 // adminSource is what the page reads; a nil part is unknown (?), never none.
@@ -54,7 +55,7 @@ type adminSource struct {
 	broker    func(ctx context.Context) ([]adminFacts, error)
 	templates func() ([]projlist.Row, error)
 	services  func(ctx context.Context) (map[string]map[string]bool, error) // project -> kind -> active, this machine
-	herdr     func(ctx context.Context) (map[string]adminWorkspace, error)  // project -> its workspace, this machine
+	holder    func(ctx context.Context) (map[string]adminTerms, error)      // project -> its holder's terminals, this machine
 	host      string                                                        // this machine's name
 	// quiet is §5.1's live check ("" = quiet), remove the delete (§5.3).
 	quiet  func(ctx context.Context, project string) (string, error)
@@ -98,8 +99,8 @@ type adminRow struct {
 	conductor    bool
 	svc          map[string]bool // kind -> active, this machine
 	svcKnown     bool
-	ws           adminWorkspace
-	herdrKnown   bool
+	terms        adminTerms
+	holderKnown  bool
 	lastTS       int64
 	template     bool
 	templatePath string
@@ -110,11 +111,11 @@ type adminRow struct {
 
 // adminView is the page's read: its rows and what failed.
 type adminView struct {
-	rows                                 []adminRow
-	agentsUnchecked                      bool // no /proc here: the delete cannot see this host's agents
-	readAt                               time.Time
-	brokerErr, svcErr, herdrErr, tmplErr string
-	host                                 string
+	rows                                  []adminRow
+	agentsUnchecked                       bool // no /proc here: the delete cannot see this host's agents
+	readAt                                time.Time
+	brokerErr, svcErr, holderErr, tmplErr string
+	host                                  string
 }
 
 // gatherAdmin reads every part within the page's deadline; each part fails
@@ -149,16 +150,16 @@ func gatherAdmin(ctx context.Context, src adminSource, open string, now time.Tim
 	} else {
 		svc, svcOK = s, true
 	}
-	var ws map[string]adminWorkspace
-	herdrOK := false
-	if src.herdr == nil {
-		v.herdrErr = "not read"
-	} else if w, err := src.herdr(c); err != nil {
-		v.herdrErr = err.Error()
+	var terms map[string]adminTerms
+	holderOK := false
+	if src.holder == nil {
+		v.holderErr = "not read"
+	} else if t, err := src.holder(c); err != nil {
+		v.holderErr = err.Error()
 	} else {
-		ws, herdrOK = w, true
+		terms, holderOK = t, true
 	}
-	v.rows = adminRows(facts, brokerOK, tmpls, svc, svcOK, ws, herdrOK, open)
+	v.rows = adminRows(facts, brokerOK, tmpls, svc, svcOK, terms, holderOK, open)
 	// The counts last, each alone: one that fails or runs out of time is ?,
 	// never the page's other columns nor another project's (reviewer-codex):
 	// each read has its own deadline, from the caller's context rather than
@@ -192,13 +193,13 @@ func gatherAdmin(ctx context.Context, src adminSource, open string, now time.Tim
 // adminRows is the union of the broker's projects and the templates, the
 // open project always among them (§3.1), each named only when valid.
 func adminRows(facts []adminFacts, brokerOK bool, tmpls []projlist.Row, svc map[string]map[string]bool, svcOK bool,
-	ws map[string]adminWorkspace, herdrOK bool, open string) []adminRow {
+	terms map[string]adminTerms, holderOK bool, open string) []adminRow {
 	byName := map[string]*adminRow{}
 	row := func(name string) *adminRow {
 		if r := byName[name]; r != nil {
 			return r
 		}
-		r := &adminRow{name: name, open: name == open, svcKnown: svcOK, herdrKnown: herdrOK, brokerKnown: brokerOK}
+		r := &adminRow{name: name, open: name == open, svcKnown: svcOK, holderKnown: holderOK, brokerKnown: brokerOK}
 		byName[name] = r
 		return r
 	}
@@ -223,7 +224,7 @@ func adminRows(facts []adminFacts, brokerOK bool, tmpls []projlist.Row, svc map[
 	out := make([]adminRow, 0, len(byName))
 	for _, r := range byName {
 		r.svc = svc[r.name]
-		r.ws = ws[r.name]
+		r.terms = terms[r.name]
 		r.state = adminState(*r, brokerOK)
 		out = append(out, *r)
 	}
@@ -271,14 +272,14 @@ func adminState(r adminRow, brokerOK bool) string {
 // --- the real sources
 
 // realAdminSource reads through client and this machine's service manager
-// and herdr.
+// and holders.
 func realAdminSource(client *redis.Client, getenv func(string) string) adminSource {
 	host, _ := os.Hostname()
 	src := adminSource{host: host,
 		broker:    func(ctx context.Context) ([]adminFacts, error) { return readAdminBroker(ctx, client) },
 		templates: func() ([]projlist.Row, error) { return projlist.Templates(rolecfg.ProjectsDir(getenv)) },
-		herdr: func(ctx context.Context) (map[string]adminWorkspace, error) {
-			return readAdminHerdr(ctx, herdrRunner(getenv))
+		holder: func(ctx context.Context) (map[string]adminTerms, error) {
+			return readAdminHolders(ctx, getenv)
 		},
 	}
 	src.quiet, src.remove = realQuiet(client, getenv), realRemove(client)
@@ -407,59 +408,54 @@ func readAdminServices(m service.Manager) (map[string]map[string]bool, error) {
 	return out, nil
 }
 
-// herdrRunner runs this machine's herdr CLI: HERDR_BIN_PATH, else HERDR_BIN,
-// else herdr on PATH (agentbus's herdrBin).
-func herdrRunner(getenv func(string) string) func(ctx context.Context, args ...string) ([]byte, error) {
-	bin := getenv("HERDR_BIN_PATH")
-	if bin == "" {
-		bin = getenv("HERDR_BIN")
-	}
-	if bin == "" {
-		bin = "herdr"
-	}
-	return func(ctx context.Context, args ...string) ([]byte, error) {
-		return exec.CommandContext(ctx, bin, args...).Output()
-	}
-}
-
-// readAdminHerdr maps each workspace whose label is a valid project name to
-// its id and pane count.
-func readAdminHerdr(ctx context.Context, run func(ctx context.Context, args ...string) ([]byte, error)) (map[string]adminWorkspace, error) {
-	out, err := run(ctx, "workspace", "list")
+// readAdminHolders is every project with a holder run directory on this
+// machine (spec decision Q4: <rundir>/agentbus/<project>/holder-*.sock,
+// the project validated before use) and its live terminals; a holder that
+// does not answer is unread, never none.
+func readAdminHolders(ctx context.Context, getenv func(string) string) (map[string]adminTerms, error) {
+	dir, err := holder.RunAgentbusDir(getenv)
 	if err != nil {
-		return nil, fmt.Errorf("herdr workspace list: %w", err)
+		return nil, err
 	}
-	var v struct {
-		Result struct {
-			Workspaces []struct {
-				Label       string `json:"label"`
-				WorkspaceID string `json:"workspace_id"`
-			} `json:"workspaces"`
-		} `json:"result"`
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return map[string]adminTerms{}, nil
+	} else if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(out, &v); err != nil {
-		return nil, fmt.Errorf("herdr workspace list: %w", err)
-	}
-	ws := map[string]adminWorkspace{}
-	for _, w := range v.Result.Workspaces {
-		if !bus.ValidName(w.Label) || w.WorkspaceID == "" {
+	out := map[string]adminTerms{}
+	for _, e := range entries {
+		p := e.Name()
+		if !e.IsDir() || !bus.ValidName(p) {
 			continue
 		}
-		out, err := run(ctx, "pane", "list", "--workspace", w.WorkspaceID)
+		socks, _ := filepath.Glob(filepath.Join(dir, p, "holder-*.sock"))
+		if len(socks) == 0 {
+			continue
+		}
+		h, err := holder.NewHost(p, holder.BuildID(), getenv)
 		if err != nil {
-			return nil, fmt.Errorf("herdr pane list: %w", err)
+			out[p] = adminTerms{unread: true}
+			continue
 		}
-		var p struct {
-			Result struct {
-				Panes []json.RawMessage `json:"panes"`
-			} `json:"result"`
+		// A socket nothing answers on: unread (List would skip it).
+		c, cancel := context.WithTimeout(ctx, 2*time.Second)
+		info, derr := h.Describe(c)
+		terms, err := h.List(c, p)
+		cancel()
+		if derr != nil || len(info.Builds) == 0 || err != nil {
+			out[p] = adminTerms{unread: true}
+			continue
 		}
-		if err := json.Unmarshal(out, &p); err != nil {
-			return nil, fmt.Errorf("herdr pane list: %w", err)
+		n := 0
+		for _, t := range terms {
+			if t.Alive {
+				n++
+			}
 		}
-		ws[w.Label] = adminWorkspace{id: w.WorkspaceID, panes: len(p.Result.Panes)}
+		out[p] = adminTerms{live: n}
 	}
-	return ws, nil
+	return out, nil
 }
 
 // --- drawing
@@ -491,14 +487,14 @@ func adminServicesCell(r adminRow) Line {
 	return l
 }
 
-func adminHerdrCell(r adminRow) string {
+func adminHolderCell(r adminRow) string {
 	switch {
-	case !r.herdrKnown:
+	case !r.holderKnown || r.terms.unread:
 		return "?"
-	case r.ws.id == "":
+	case r.terms.live == 0:
 		return GlyphDash
 	}
-	return fmt.Sprintf("open (%d %s)", r.ws.panes, plural(r.ws.panes, "pane"))
+	return fmt.Sprintf("%d %s", r.terms.live, plural(r.terms.live, "terminal"))
 }
 
 func adminStateRole(s string) Role {
@@ -567,7 +563,7 @@ func adminCols(tier Tier, width int, now time.Time, running string) []adminCol {
 	agents := adminCol{"AGENTS", 7, text(adminAgents)}
 	keys := adminCol{"KEYS", 7, text(adminKeys)}
 	services := adminCol{"SERVICES", 22, adminServicesCell}
-	herdr := adminCol{"HERDR", 16, text(adminHerdrCell)}
+	holderCol := adminCol{"HOLDER", 16, text(adminHolderCell)}
 	last := adminCol{"LAST", 8, text(func(r adminRow) string { return adminLast(r, now) })}
 	forYou := adminCol{"FOR YOU", 7, text(func(r adminRow) string { return adminForYou(r, now) })}
 	atWork := adminCol{"AT WORK", 7, text(func(r adminRow) string { return adminAtWork(r, now) })}
@@ -586,7 +582,7 @@ func adminCols(tier Tier, width int, now time.Time, running string) []adminCol {
 		return ""
 	})}
 	if tier == TierWide {
-		return []adminCol{project, state, forYou, atWork, agents, keys, services, herdr, last, tmpl}
+		return []adminCol{project, state, forYou, atWork, agents, keys, services, holderCol, last, tmpl}
 	}
 	if width < countsSplitW { // the cells their values need, so the name keeps its 80-column room
 		agents.w, services.w = 6, 21
@@ -615,8 +611,8 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 	if v.svcErr != "" {
 		note("services: " + v.svcErr)
 	}
-	if v.herdrErr != "" {
-		note("herdr: " + v.herdrErr)
+	if v.holderErr != "" {
+		note("holder: " + v.holderErr)
 	}
 	if v.tmplErr != "" {
 		note("templates: " + v.tmplErr)
@@ -625,9 +621,9 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 		body = append(body, FitLine(Line{{Text: n, Role: RoleMuted}}, width))
 	}
 	// Always: busmon cannot tell a tunnel (localhost:6380 to another host's
-	// broker) from a local broker, and services and herdr are this machine's
+	// broker) from a local broker, and services and holders are this machine's
 	// (foureyes).
-	body = append(body, FitLine(Line{{Text: "services and herdr: this machine (" + or(v.host, "?") + "); " + GlyphDash + " means not here", Role: RoleMuted}}, width), nil)
+	body = append(body, FitLine(Line{{Text: "services and holders: this machine (" + or(v.host, "?") + "); " + GlyphDash + " means not here", Role: RoleMuted}}, width), nil)
 	lines := make([]int, 0, len(v.rows))
 	mark := func(i int) Seg {
 		if i == sel {
@@ -762,11 +758,7 @@ func adminDetail(r adminRow, v adminView, now time.Time, mem string) []Line {
 		kv("pause", line)
 	}
 	kv("services", adminServicesCell(r).text()+" (this machine, "+or(v.host, "?")+")")
-	herdr := adminHerdrCell(r)
-	if r.ws.id != "" {
-		herdr += ", workspace " + r.ws.id
-	}
-	kv("herdr", herdr)
+	kv("holder", adminHolderCell(r)+" (this machine)")
 	tmpl := GlyphDash
 	if r.template {
 		tmpl = r.templatePath
