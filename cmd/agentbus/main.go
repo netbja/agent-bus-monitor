@@ -147,11 +147,7 @@ func main() {
 	if len(args) >= 1 && args[0] == "resume" && slices.Contains(args[1:], "--all") {
 		os.Exit(runResumeAll(context.Background(), args[1:], realResumeDeps(host), os.Stdout, os.Stderr))
 	}
-	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
-	if len(args) >= 1 && args[0] == "plugin" {
-		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))
-	}
-	// up provisions a project and opens its herdr workspace: no project flag, no broker of its own.
+	// up provisions a project and starts its team on the holder: no project flag, no broker of its own.
 	if len(args) >= 1 && args[0] == "up" {
 		os.Exit(runUp(args[1:], realUpDeps(os.Stdout, os.Stderr), os.Stdout, os.Stderr))
 	}

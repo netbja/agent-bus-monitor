@@ -13,11 +13,12 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [herdr is gone: the holder hosts every agent's terminal (active)](decisions/2026-11-15-herdr-exit.md)
 - [A finished pop is ended by the dispatcher itself, master told without waking (active)](decisions/2026-11-13-dispatcher-ends-done-pop.md)
 - [The dispatcher's self-repair may relaunch a dead agent in a new pane; services may start at login (option); R1-R4 built (steps 7b, 8), macOS identity (step 10) (active)](decisions/2026-11-09-self-repair-pane-writer.md)
 - [Only master and docs deliver, push included, with the 4-eyes proof bound to the head (active)](decisions/2026-11-02-forge-delivery.md)
 - [agent-bus is developed as an agent-bus project: worktrees, installed release, 4-eyes on the bus (active)](decisions/2026-10-20-dogfood-team.md)
-- [agent-bus as a herdr plugin: linked, Go, own templates, the picker never provisions (active)](decisions/2026-10-19-herdr-plugin.md)
+- [agent-bus as a herdr plugin: linked, Go, own templates, the picker never provisions (superseded by the herdr exit)](decisions/2026-10-19-herdr-plugin.md)
 - [One dispatcher per host, conductor stays per project; decided, not built (active)](decisions/2026-10-26-host-dispatcher.md)
 - [After a declared hand-off the dispatcher may type /clear; reload is sentinel's job (active, auto-clear on by default)](decisions/2026-10-28-agent-lifecycle.md)
 - [For you shows only gates that concern the person; a verdict closes the reviewer's gate (active)](decisions/2026-10-27-foryou-gates.md)

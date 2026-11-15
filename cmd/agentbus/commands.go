@@ -732,12 +732,6 @@ var commands = []cli.Command{
 
 	// --- internal entry points: long flags only, no expansion
 	{
-		Name: "plugin", NoProject: true, Internal: true,
-		Usage:    []string{"plugin projects|busmon|busmon-pane|workspace-event"},
-		Summary:  "herdr's entry points",
-		Examples: []string{"agentbus plugin projects"},
-	},
-	{
 		Name: "peer", NoProject: true, Internal: true,
 		Usage:   []string{"peer --spec-file <launch.json>", "peer --check <endpoint>"},
 		Summary: "a local model as a read-only test peer (launched by agent-launch through scripts/local-llm-peer); --check asks config.toml's [llm.<endpoint>] whether it serves its model",

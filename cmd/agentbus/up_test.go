@@ -395,23 +395,7 @@ func TestUpNamesTheExpectedTemplatePath(t *testing.T) {
 	}
 }
 
-func TestHerdrBinOrder(t *testing.T) {
-	cases := []struct {
-		env  map[string]string
-		want string
-	}{
-		{map[string]string{"HERDR_BIN_PATH": "/p/herdr", "HERDR_BIN": "/b/herdr"}, "/p/herdr"},
-		{map[string]string{"HERDR_BIN": "/b/herdr"}, "/b/herdr"},
-		{map[string]string{}, "herdr"},
-	}
-	for _, c := range cases {
-		if got := herdrBin(func(k string) string { return c.env[k] }); got != c.want {
-			t.Errorf("herdrBin(%v) = %q, want %q", c.env, got, c.want)
-		}
-	}
-}
-
-// Whichever agentbus runs up (the plugin's ./agentbus, the repo's), the units
+// Whichever agentbus runs up (the repo's, a worktree's), the units
 // run the one setup.sh installed, so a machine's services name one binary.
 func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
