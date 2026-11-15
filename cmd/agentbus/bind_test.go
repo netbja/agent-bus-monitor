@@ -108,7 +108,7 @@ func TestBindRecordsClaudeConfigDir(t *testing.T) {
 	f := &fakeBind{}
 	d := f.deps(codexProcs, map[int]uint64{1930926: 42})
 	d.Env = func(k string) string {
-		return map[string]string{"HERDR_ENV": "1", "HERDR_PANE_ID": "w2:p1", "CLAUDE_CONFIG_DIR": "/srv/claude-b"}[k]
+		return map[string]string{"AGENTBUS_TERM_ID": "w2:p1", "CLAUDE_CONFIG_DIR": "/srv/claude-b"}[k]
 	}
 	var out, errw bytes.Buffer
 	if code := runBind(context.Background(), d, []string{"codex", "--pid", "1930926"}, &out, &errw); code != 0 {
