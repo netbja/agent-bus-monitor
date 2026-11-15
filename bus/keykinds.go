@@ -52,7 +52,8 @@ var keyKinds = map[string]KeyClass{
 	"mergequeue:dropped": KeyRecord,
 
 	"services": KeyRuntime, "agents": KeyRuntime, "wake:*": KeyRuntime, "handoff": KeyRuntime,
-	"quota": KeyRuntime, "pause": KeyRuntime, "fallback": KeyRuntime, "usage": KeyRuntime,
+	"checkback": KeyRuntime, // an agent's own reminder (master-idle §4): what is in flight now
+	"quota":     KeyRuntime, "pause": KeyRuntime, "fallback": KeyRuntime, "usage": KeyRuntime,
 	"budget": KeyRuntime, "tokens": KeyRuntime, "sessions": KeyRuntime, "doctor": KeyRuntime,
 	"pilot": KeyRuntime, "dispatch": KeyRuntime, "conductor": KeyRuntime, "receiver:*": KeyRuntime,
 	"armed:*": KeyRuntime, "swap:*": KeyRuntime, "observed": KeyRuntime, "context": KeyRuntime,

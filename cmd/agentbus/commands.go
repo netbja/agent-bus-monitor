@@ -89,6 +89,14 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo cmd coder \"run the suite\"", "agentbus -p demo cmd -r 1792537337865-0 coder \"and the vet\""},
 	},
 	{
+		Name: "checkback", Usage: []string{"checkback <duration> \"<what is in flight>\"", "checkback --clear", "checkback"},
+		Summary: "say when to look again at work in flight off the bus (a test run, a build), so the stall guard sees it; no argument lists them",
+		Flags: []cli.Flag{
+			{Long: "clear", Arg: "", Help: "delete your check-back (the work is done, or no longer yours)"},
+		},
+		Examples: []string{"agentbus -p demo checkback 30m \"k1/k2 checks on 7d27262c\"", "agentbus -p demo checkback --clear"},
+	},
+	{
 		Name: "merge-queue", Usage: []string{"merge-queue [--json] [--live]", "merge-queue drop <head> \"<reason>\"", "merge-queue undrop <head>"},
 		Summary: "what waits for the person's merge: open PRs on an approved head, approved heads not pushed; drop withdraws a head nobody will deliver (master, docs, the person)",
 		Flags: []cli.Flag{

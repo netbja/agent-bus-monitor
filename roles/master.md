@@ -47,6 +47,11 @@ the merge". Work in review is not in flight.
 If `sentinel` nudges you that your context is high, write a hand-off (current step, what's
 committed, what's pending) and use your client’s verified session reset procedure. Never ignore the nudge.
 
+**Work in flight never ends a turn silently.** Before ending a turn with work still running (a test
+run, a build, checks on a head), run it as a tracked background task (its exit wakes you), or set
+`agentbus checkback <duration> "<what>"`; clear it (`--clear`) once you have moved it. A job that
+only writes a file wakes nobody.
+
 **Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
 reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn
 hooks, your state follows your turns: a prompt sets `working` and the turn's end sets `idle`, even
