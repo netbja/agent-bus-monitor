@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: draft r1, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: draft r2, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0).
 
 Three small slices: tell the person when an agent's login **has expired** (all four clients), warn
@@ -27,7 +27,7 @@ no outage tracking).
 | Client | Source | Why it cannot be an agent's text |
 |---|---|---|
 | Claude Code | its transcripts, the scan `quota.transcriptRejections` already makes (`~/.claude/projects/*/*.jsonl`, files touched in the last 6 h, 256 KiB tail): an entry with `isApiErrorMessage: true` and `error: "authentication_failed"` | both fields are set by the client, never by the model; the transcript is not a credential |
-| Codex, Grok, agy | the screen, from a captured fixture (2.3); a client-written session log is preferred if the fixture work finds one with a client-set error field, as for Claude | the pattern carries the client's own error mark (2.2) |
+| Codex, Grok, agy | the screen, from a captured fixture (2.3); a client-written session log is preferred if the fixture work finds one with a client-set error field, as for Claude | the pattern carries the client's own error style, proven by a spoof fixture (2.2) |
 
 Claude's expiry is one fact for the host's account, not per pane: every Claude agent shares
 `~/.claude/`. It holds until a newer **served** answer appears in any transcript (the same
@@ -39,10 +39,14 @@ A new profile list, `[signature] auth = [...]` in `agentstate/clients/<client>.t
 `blocked`. A read counts only when **all** hold:
 
 - the pattern matches within `bottomLines` (the last lines, as `BlockedOn`), above the input box;
-- the pattern includes the client's own error mark as the fixture shows it: an escape sequence the
-  client applies to its errors (raw screen, before `Strip`) or a prefix glyph the client draws. An
-  agent's text cannot carry a raw escape sequence through the client's renderer. **If a fixture
-  shows no such mark, that client gets no `auth` pattern** (no loosened pattern);
+- the pattern includes the client's own **error style**, the raw escape sequence (before `Strip`)
+  the client applies to its error lines as the fixture shows it. A glyph or any printable prefix is
+  never enough: a model can print it (reviewer-codex on r1);
+- the style is proven unforgeable for that client by a **spoof fixture** (2.3): the same client,
+  asked to print the exact error line, its glyph and a literal escape sequence for that style,
+  renders a screen the pattern does not match (the client escapes, strips or restyles model
+  output). **If the fixture shows no error style, or the spoof fixture matches, that client gets no
+  `auth` pattern** (no loosened pattern): its only signal stays the stuck agent, as today;
 - two settled reads in a row, as the `Blocked` signature (`Episode.Step`'s rule).
 
 A misread costs one notice, nothing else: nothing is retried, held, restarted or typed.
@@ -52,8 +56,10 @@ A misread costs one notice, nothing else: nothing is retried, held, restarted or
 Captured into `agentstate/testdata/screens/<client>-auth-*.txt`, the same way as the other screens.
 A "not logged in" screen can be made without touching the person's login: launch the client with an
 empty config home in a scratch pane (`CODEX_HOME=<empty dir> codex`; `HOME=<empty dir>` for Grok and
-agy). A mid-session expiry screen is captured at its first real occurrence and added then. The
-fixture README records which case each file is.
+agy). A mid-session expiry screen is captured at its first real occurrence and added then. With
+each, a `<client>-auth-spoof.txt`: in a logged-in scratch pane the client is asked to print, as its
+answer, the captured error line verbatim with its glyph, then the same line wrapped in the literal
+escape sequence of the error style. The fixture README records which case each file is.
 
 ### 2.4 Notice
 
@@ -114,7 +120,7 @@ None new. `updates.check` gates 4; 2 and 3 are notices with once-marks and need 
   it clears it; an older one does not; a text entry whose content says "Login expired" without the
   error fields reads nothing; a file older than 6 h is skipped.
 - Screen auth, per client with a fixture: the fixture matches on two settled reads; one read does
-  not; the same sentence as plain agent text (fixture with the error mark removed) does not; a
+  not; the spoof fixture (agent text carrying the exact line, glyph and escape) does not; a
   ready box below an old error line does not (the error is above the current box, older than it:
   covered by `bottomLines` and the box rule, as `BlockedOn`).
 - Banner: the fixture matches below the box with N parsed; the same sentence above the box (agent
