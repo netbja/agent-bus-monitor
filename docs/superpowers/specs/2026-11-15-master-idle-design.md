@@ -105,7 +105,10 @@ within 72 h, cheapest first; a head matched by any step is delivered:
    tip> <head>`, is one of the base's patch-ids (below).
 3. **Rebase-merge:** the zero-context patch-id of every non-merge commit of `<fork>..<head>`
    (`git log -p -U0 --no-merges --no-ext-diff --no-textconv <fork>..<head> | git patch-id
-   --stable`) is among the base's patch-ids.
+   --stable`) is among the base's patch-ids. Only for a head with no merge commit in
+   `<fork>..<head>` (`git rev-list --min-parents=2 <fork>..<head>` empty): a merge commit may carry
+   a conflict resolution that no single commit holds, and `--no-merges` would skip it, so a head
+   that contains one is judged by steps 1 and 2 only, else dropped by hand (reviewer-codex on r6).
 
 **The base's patch-ids**, computed once per pass, not per head: `git log -p -U0 --no-merges
 --no-ext-diff --no-textconv <oldest fork>..<base tip> | git patch-id --stable`, the oldest fork
@@ -305,7 +308,9 @@ shorter. busmon's C page lists it.
   fast-forward, a squash-merge (one commit on the base with the branch's whole diff) and a
   rebase-merge (each commit replayed) are each delivered; the same squash and rebase-merge are
   still delivered when the base changed a line within three lines of the branch's change after
-  the fork; a squash that also resolved a conflict is not (drop covers it); an unrelated commit
+  the fork; a squash that also resolved a conflict is not (drop covers it); a head holding a
+  merge commit whose resolution is absent from the base is not delivered by step 3, even when all
+  its ordinary commits are in the base; an unrelated commit
   with the same message is not. A diff driver set in the repository's config (`textconv`,
   `diff.external`) never runs in any step (a driver that would fail the test). The base's set is
   read once per pass for several heads.
