@@ -42,6 +42,8 @@ type Config struct {
 	// Quota, when its Read is set, collects provider readings and holds the
 	// agents of a provider near its limit (v0.13).
 	Quota QuotaConfig
+	// Login tells the person of an expired login (login-updates 2).
+	Login LoginConfig
 	// Context publishes each verified agent's context fill to {p}:context
 	// (context-alert); a nil Read turns it off.
 	Context ContextConfig
@@ -368,6 +370,7 @@ type loop struct {
 
 	episodes map[string]agentstate.Episode // each agent's blocked episode, on a host (hostevents.go)
 	bgSkips  map[string]string             // the last background skip per agent and action
+	loginAt  time.Time                     // the last login-expiry read (local clock: a throttle)
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -405,6 +408,13 @@ func (l *loop) reconcile(ctx context.Context) error {
 			return err
 		}
 		l.logError("", "handoff", err)
+	}
+	// Before the pause: the person learns of an expired login either way.
+	if err := l.loginPass(ctx); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "login", err)
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
 		return err
