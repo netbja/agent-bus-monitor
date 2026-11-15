@@ -706,6 +706,7 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg := dispatchBaseConfig()
 			cfg.Log, cfg.OnLease = log, onLease
 			cfg.Quota = serviceQuota(os.Getenv, log)
+			cfg.Login = serviceLoginExpiry(os.Getenv)                        // an expired login told to the person (login-updates)
 			cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
 			cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)
 			cfg.History = serviceHistory(os.Getenv, paths.StateDir(project)) // the streams archived to day files (history)
