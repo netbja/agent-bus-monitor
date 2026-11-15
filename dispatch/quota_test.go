@@ -841,8 +841,15 @@ func lastTo(t *testing.T, b *bus.Bus, target string) string {
 }
 
 // reviewer-codex: a quota drain committed whose announcement was not
-// written is told on a later pass, once.
+// written is told on a later pass, once, whether the provider still reads
+// high or its reading is gone.
 func TestRunQuotaDrainAnnouncementRetried(t *testing.T) {
+	for _, unknown := range []bool{false, true} {
+		t.Run(strconv.FormatBool(unknown), func(t *testing.T) { quotaDrainRetried(t, unknown) })
+	}
+}
+
+func quotaDrainRetried(t *testing.T, unknownReading bool) {
 	b, _ := dialRun(t)
 	cleanupQuota(t, b)
 	ctx := context.Background()
@@ -861,6 +868,9 @@ func TestRunQuotaDrainAnnouncementRetried(t *testing.T) {
 	}
 	f := &fakeQuota{}
 	f.set(reading("anthropic", 88))
+	if unknownReading { // reviewer-codex: the reading gone after the failed write
+		f.set(quota.Unknown("anthropic", "x", "gone"))
+	}
 	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
 	count := func() int {
 		evs, _, _ := b.Recent(ctx, []string{"cmd"}, 200)

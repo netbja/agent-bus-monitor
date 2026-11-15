@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -239,6 +240,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			}
 		}
 	}
+	// A quota drain's announcement, from the run's state alone: a failed
+	// write is retried even when no reading warns any more (reviewer-codex).
+	if err := l.quotaDrainTell(ctx, ""); err != nil {
+		return err
+	}
 	return l.coordinatorMoved(ctx, paused, coord, resetOf)
 }
 
@@ -452,21 +458,32 @@ func (l *loop) quotaDrainRun(ctx context.Context, p string, w quota.Window) erro
 	if _, _, err := l.b.FencedRunDrain(ctx, l.token, bus.RunWhyQuota(p)); err != nil {
 		return err
 	}
-	// Told on each pass while the run drains for this quota, by its
-	// once-marks: an announcement whose write failed is retried, none sent
-	// twice (reviewer-codex).
+	return l.quotaDrainTell(ctx, fmt.Sprintf("%.0f%%, %s, resets %s", w.UsedPct, w.Name, w.Reset().Local().Format("15:04")))
+}
+
+// quotaDrainTell tells master and the person that the run drains for a
+// quota, on each pass while it does, by the drain's once-marks: an
+// announcement whose write failed is retried from the run's own state,
+// whatever the provider reads now (reviewer-codex), and none is sent twice.
+// detail is the reading's, "" when the pass has none.
+func (l *loop) quotaDrainTell(ctx context.Context, detail string) error {
 	run, err := l.b.Run(ctx)
-	if err != nil || run == nil || run.State != bus.RunDraining || run.Why != bus.RunWhyQuota(p) {
+	if err != nil || run == nil || run.State != bus.RunDraining {
 		return nil
 	}
+	p, ok := strings.CutPrefix(run.Why, "quota:")
+	if !ok {
+		return nil
+	}
+	if detail != "" {
+		detail = " (" + detail + ")"
+	}
 	ep := fmt.Sprintf("%d:%d", run.StartedAt, run.Drains)
-	directive := fmt.Sprintf("Run draining for %s's quota (%.0f%%, %s, resets %s): dispatch no new task; finish and deliver what is in flight; the run goes on at the quota's release.",
-		p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
+	directive := fmt.Sprintf("Run draining for %s's quota%s: dispatch no new task; finish and deliver what is in flight; the run goes on at the quota's release.", p, detail)
 	if _, err := l.b.FencedCmdOnce(ctx, l.token, "run-drain", ep, dispatchFrom, l.cfg.EscalateTo, bus.CmdDirective, directive, false); err != nil {
 		return err
 	}
-	notice := fmt.Sprintf("%s: the run drains for %s's quota (%.0f%%, resets %s): no new task but yours; it goes on at the quota's release (agentbus run)",
-		l.b.Project(), p, w.UsedPct, w.Reset().Local().Format("15:04"))
+	notice := fmt.Sprintf("%s: the run drains for %s's quota%s: no new task but yours; it goes on at the quota's release (agentbus run)", l.b.Project(), p, detail)
 	_, err = l.b.FencedNotifyOnceForPerson(ctx, l.token, "run-drain-person", ep, dispatchFrom, notice)
 	return err
 }
