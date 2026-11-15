@@ -395,7 +395,7 @@ func TestReloadRechecksOpenWorkAfterTheIntent(t *testing.T) {
 // From a pane without AGENT_BUS_AGENT, a person may reload with an explicit
 // --as (as with answer --as); without it the guard refuses, like any write.
 func TestReloadPassesTheIdentityGuardOnlyWithAs(t *testing.T) {
-	get := func(k string) string { return map[string]string{"HERDR_PANE_ID": "w1:p9"}[k] }
+	get := func(k string) string { return map[string]string{"AGENTBUS_TERM_ID": "w1:p9"}[k] }
 	if err := identityGuard(get, "reload", []string{"coder", "--as", "charlie"}); err != nil {
 		t.Fatalf("reload --as refused: %v", err)
 	}

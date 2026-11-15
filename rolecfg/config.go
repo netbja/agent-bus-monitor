@@ -37,7 +37,7 @@ var forbiddenEnvRefs = map[string]bool{
 
 // GIT_CONFIG covers GIT_CONFIG_COUNT/KEY_n/VALUE_n and GIT_CONFIG_PARAMETERS, which set any git
 // option (core.sshCommand, core.hooksPath) and so bypass the names above.
-var forbiddenEnvRefPrefixes = []string{"AGENT_BUS_", "AGENT_LAUNCH_", "LD_", "DYLD_", "HERDR_", "PYTHON", "GIT_CONFIG"}
+var forbiddenEnvRefPrefixes = []string{"AGENT_BUS_", "AGENT_LAUNCH_", "LD_", "DYLD_", "AGENTBUS_", "PYTHON", "GIT_CONFIG"}
 
 func envRefForbidden(key string) bool {
 	if forbiddenEnvRefs[key] {

@@ -322,10 +322,10 @@ func TestLaunchDryRun(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.root, "cache")); err == nil {
 		t.Fatal("dry run wrote the cache")
 	}
-	out, _, err = f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1", "HERDR_ENV=1", "HERDR_PANE_ID=w9:p9", "AGENTBUS_BIN=/x/agentbus")
+	out, _, err = f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1", "AGENTBUS_TERM_ID=w9:p9", "AGENTBUS_BIN=/x/agentbus")
 	must(t, err)
 	if first := strings.SplitN(out, "\n", 2)[0]; !strings.HasPrefix(first, "/x/agentbus --project demo bind coder --pid ") {
-		t.Fatalf("dry run inside herdr: first line %q", first)
+		t.Fatalf("dry run inside a terminal: first line %q", first)
 	}
 	cm := f.config("claude-code", "", "", "")
 	out, _, err = f.launch(cm, "coder", "AGENT_LAUNCH_DRYRUN=1")
@@ -341,8 +341,8 @@ func TestLaunchBindChild(t *testing.T) {
 	log := filepath.Join(f.root, "bind.log")
 	stub := filepath.Join(f.root, "agentbus-stub")
 	must(t, os.WriteFile(stub, []byte("#!/bin/sh\necho \"$@\" > \""+log+"\"\necho \"$AGENT_BUS_AGENT\" >> \""+log+"\"\nexit ${BIND_RC:-0}\n"), 0o755))
-	herdr := []string{"HERDR_ENV=1", "HERDR_PANE_ID=w9:p9", "AGENTBUS_BIN=" + stub}
-	_, errOut, err := f.launch(m, "coder", herdr...)
+	term := []string{"AGENTBUS_TERM_ID=w9:p9", "AGENTBUS_BIN=" + stub}
+	_, errOut, err := f.launch(m, "coder", term...)
 	must(t, err)
 	b, _ := os.ReadFile(log)
 	if lines := strings.Split(string(b), "\n"); !strings.HasPrefix(lines[0], "--project demo bind coder --pid ") || lines[1] != "coder" {
@@ -351,7 +351,7 @@ func TestLaunchBindChild(t *testing.T) {
 	if errOut != "" || f.execed == nil {
 		t.Fatalf("stderr %q, execed %v", errOut, f.execed)
 	}
-	_, errOut, err = f.launch(m, "coder", append(herdr, "BIND_RC=1")...)
+	_, errOut, err = f.launch(m, "coder", append(term, "BIND_RC=1")...)
 	must(t, err)
 	if !strings.Contains(errOut, "warning: agentbus bind failed; the dispatcher will not wake coder until it is bound (agentbus --project demo bind coder --pane w9:p9)") || f.execed == nil {
 		t.Fatalf("failed bind: stderr %q, execed %v", errOut, f.execed)
@@ -361,7 +361,7 @@ func TestLaunchBindChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(log); err == nil {
-		t.Fatal("bound outside herdr")
+		t.Fatal("bound outside a terminal")
 	}
 }
 

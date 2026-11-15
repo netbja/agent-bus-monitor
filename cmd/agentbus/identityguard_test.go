@@ -9,7 +9,7 @@ import (
 // as the sender would post as the default "anonymous" (the agent's own name
 // lost); it is refused with the fix, while read-only commands still run.
 func TestIdentityGuard(t *testing.T) {
-	pane := map[string]string{"HERDR_PANE_ID": "w2:pA"}
+	pane := map[string]string{"AGENTBUS_TERM_ID": "w2:pA"}
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	writes := [][]string{
 		{"status", "idle", "x"}, {"report", "coder", "x"}, {"notify", "x"}, {"cmd", "coder", "x"},
@@ -42,13 +42,13 @@ func TestIdentityGuard(t *testing.T) {
 		}
 	}
 	// Outside a pane, or with an identity, nothing is refused.
-	for _, m := range []map[string]string{{}, {"HERDR_PANE_ID": "w2:pA", "AGENT_BUS_AGENT": "coder"}} {
+	for _, m := range []map[string]string{{}, {"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "coder"}} {
 		if err := identityGuard(env(m), "status", []string{"idle", "x"}); err != nil {
 			t.Errorf("env %v: %v", m, err)
 		}
 	}
 	// AGENT_BUS_AGENT=anonymous said on purpose is an identity, not the default.
-	if err := identityGuard(env(map[string]string{"HERDR_PANE_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err != nil {
+	if err := identityGuard(env(map[string]string{"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err != nil {
 		t.Errorf("explicit anonymous refused: %v", err)
 	}
 }

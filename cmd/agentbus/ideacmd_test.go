@@ -30,7 +30,7 @@ func runIdeaT(t *testing.T, b *bus.Bus, env func(string) string, args ...string)
 // always starts at "to discuss", whatever is typed.
 func TestIdeaAdd(t *testing.T) {
 	b := notifyBus(t)
-	agent := ideaEnv("AGENT_BUS_AGENT", "coder", "HERDR_PANE_ID", "w1:p2")
+	agent := ideaEnv("AGENT_BUS_AGENT", "coder", "AGENTBUS_TERM_ID", "w1:p2")
 	code, out, errw := runIdeaT(t, b, agent, "add", "busmon", "update", "without", "setup.sh", "--text", "why not", "--source", "memory")
 	if code != 0 || !strings.Contains(out, "i1") {
 		t.Fatalf("add %d %q %q", code, out, errw)
@@ -68,7 +68,7 @@ func TestIdeaSet(t *testing.T) {
 	id, _ := b.AddIdea(ctx, bus.IdeaDef{Title: "t", By: "coder"})
 	for _, env := range []func(string) string{
 		ideaEnv("AGENT_BUS_AGENT", "coder"),
-		ideaEnv("HERDR_PANE_ID", "w1:p2"),
+		ideaEnv("AGENTBUS_TERM_ID", "w1:p2"),
 		ideaEnv("AGENT_BUS_AGENT", "anonymous"),
 	} {
 		if code, _, errw := runIdeaT(t, b, env, "set", id, "decided", "--as", "charlie"); code == 0 || !strings.Contains(errw, "person") {
@@ -126,7 +126,7 @@ func TestIdeaList(t *testing.T) {
 }
 
 func TestIdeaGuard(t *testing.T) {
-	pane := ideaEnv("HERDR_PANE_ID", "w1:p2")
+	pane := ideaEnv("AGENTBUS_TERM_ID", "w1:p2")
 	if identityGuard(pane, "idea", []string{"list"}) != nil {
 		t.Fatal("list only reads")
 	}

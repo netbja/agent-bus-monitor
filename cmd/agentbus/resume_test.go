@@ -412,12 +412,12 @@ func TestResumeArgs(t *testing.T) {
 	}
 }
 
-// From a herdr pane with no AGENT_BUS_AGENT (the person's own pane after a
+// From a terminal with no AGENT_BUS_AGENT (the person's own pane after a
 // reboot), the resume of a suspended project runs: the identity guard would
 // refuse it, and its advice (export AGENT_BUS_AGENT) would then make resume
 // refuse the caller as an agent (foureyes). A timed pause keeps the guard.
-func TestSuspendedResumeRunsFromAHerdrPane(t *testing.T) {
-	env := map[string]string{"HERDR_PANE_ID": "p-x"}
+func TestSuspendedResumeRunsFromATerminal(t *testing.T) {
+	env := map[string]string{"AGENTBUS_TERM_ID": "p-x"}
 	getenv := func(k string) string { return env[k] }
 	full := 0
 	run := func(context.Context, []string) int { full++; return 0 }

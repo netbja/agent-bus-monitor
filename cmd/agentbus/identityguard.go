@@ -7,18 +7,18 @@ import (
 )
 
 // identityGuard refuses (A8) a command that writes as the sender when it runs
-// inside a herdr pane (HERDR_PANE_ID) with AGENT_BUS_AGENT unset: it would
-// post as the default "anonymous", the pane's agent losing its name (the lost
+// inside an agent's terminal (AGENTBUS_TERM_ID) with AGENT_BUS_AGENT unset: it
+// would post as the default "anonymous", the terminal's agent losing its name (the lost
 // master of 2026-10-27). Read-only commands still run; a command this table
 // does not know counts as a write, so a new one fails safe. An explicit
 // AGENT_BUS_AGENT, even "anonymous", is an identity and never refused.
 func identityGuard(getenv func(string) string, cmd string, rest []string) error {
-	if getenv("HERDR_PANE_ID") == "" || getenv("AGENT_BUS_AGENT") != "" || readOnlyCommand(cmd, rest) {
+	if getenv("AGENTBUS_TERM_ID") == "" || getenv("AGENT_BUS_AGENT") != "" || readOnlyCommand(cmd, rest) {
 		return nil
 	}
-	return fmt.Errorf("refusing to write as the default identity \"anonymous\" from herdr pane %s: AGENT_BUS_AGENT is not set, "+
-		"so this pane's agent would post under another name. Fix: relaunch the agent through its launcher "+
-		"(agentbus up <project> --resume), or export AGENT_BUS_AGENT=<agent> in this pane", getenv("HERDR_PANE_ID"))
+	return fmt.Errorf("refusing to write as the default identity \"anonymous\" from terminal %s: AGENT_BUS_AGENT is not set, "+
+		"so this terminal's agent would post under another name. Fix: relaunch the agent through its launcher "+
+		"(agentbus up <project> --resume), or export AGENT_BUS_AGENT=<agent> in this terminal", getenv("AGENTBUS_TERM_ID"))
 }
 
 // readOnlyCommand reports a command (and subcommand) that writes nothing as

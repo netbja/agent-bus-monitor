@@ -87,7 +87,7 @@ func TestHandoffListsPendingAndVoidRecords(t *testing.T) {
 }
 
 func TestHandoffPassesTheIdentityGuardOnlyToList(t *testing.T) {
-	env := map[string]string{"HERDR_PANE_ID": "w1:p2"}
+	env := map[string]string{"AGENTBUS_TERM_ID": "w1:p2"}
 	get := func(k string) string { return env[k] }
 	if err := identityGuard(get, "handoff", nil); err != nil {
 		t.Fatalf("list refused: %v", err)
