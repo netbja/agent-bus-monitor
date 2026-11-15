@@ -17,5 +17,6 @@
   line" or "/clear may be left unsent in <agent>'s input"); skips **auto-clear and pop-retire on
   background work** (`background work: process 'pytest'`; unknown counts as running, so Claude
   Code, whose subagent hooks are authoritative and not wired to the bus yet, is always skipped
-  there); and writes `{p}:events` (`wake`, `wake-refused`, `wake-not-landed`, `blocked`,
+  there: unless that wiring lands first, auto-clear and pop-retire pause for every Claude agent at
+  the cutover); and writes `{p}:events` (`wake`, `wake-refused`, `wake-not-landed`, `blocked`,
   `unblocked`, `background-skip`) through `bus.FencedAppendEvent`, fenced by the dispatch lease.

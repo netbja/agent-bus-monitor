@@ -119,6 +119,9 @@ func (r *HostRuntime) Inspect(ctx context.Context, pane string) Inspection {
 		err = termhost.ErrUnknownTerm // its program ended: nothing to wake there
 	}
 	if err != nil {
+		if errors.Is(err, termhost.ErrUnknownTerm) {
+			r.forget(termhost.TermID(pane))
+		}
 		return hostFailed(in, err)
 	}
 	id := t.ID
@@ -177,6 +180,14 @@ func (r *HostRuntime) Inspect(ctx context.Context, pane string) Inspection {
 		in.State = "idle"
 	}
 	return in
+}
+
+// forget drops a gone terminal's CPU samples (foureyes: a long-lived
+// dispatcher outlives many terminals).
+func (r *HostRuntime) forget(id termhost.TermID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.samples, id)
 }
 
 // identity: the host's child and every process of its tree, with their start

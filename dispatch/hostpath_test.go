@@ -2,11 +2,14 @@ package dispatch
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/termhost"
 	"github.com/netbja/agent-bus-monitor/termhost/fake"
@@ -171,6 +174,10 @@ func TestHostPathReportsBlockedToMaster(t *testing.T) {
 		t.Fatalf("leave %+v", leave)
 	}
 	waitFor(t, 2*time.Second, "the unblocked event", func() bool { return len(w.events(bus.EventUnblocked)) == 1 })
+	marks, err := w.b.QuotaMarks(context.Background())
+	if err != nil || marks[blockedMark("coder")] == "" || marks[unblockedMark("coder")] != marks[blockedMark("coder")] {
+		t.Fatalf("the leave's mark names another episode than its enter: %v %v", marks, err)
+	}
 	if b := w.events(bus.EventBlocked); len(b) != 1 || b[0].Detail != enter.Message {
 		t.Fatalf("blocked events %+v", b)
 	}
@@ -253,5 +260,52 @@ func TestHostPathAttachedViewerDefersTheWake(t *testing.T) {
 	}
 	if c := w.cmdsTo("master"); len(c) != 0 {
 		t.Fatalf("escalated: %+v", c)
+	}
+}
+
+// foureyes on herdr-9: a blocked screen in a terminal whose process is not
+// the agent's verified one (another program, a reused pid) is no fact about
+// the agent: master is told nothing.
+func TestHostPathBlockedScreenOfAnotherProcessIsNotReported(t *testing.T) {
+	w := newHostWorld(t)
+	if _, err := w.b.Status(context.Background(), "coder", "idle", "",
+		bus.AgentIdent{Pane: string(w.term.ID), PID: w.term.PID, PIDStart: w.term.PIDStart + 1}); err != nil {
+		t.Fatal(err)
+	}
+	w.show("claude-modal.txt")
+	cfg := fastConfig()
+	cfg.Observe = 30 * time.Millisecond
+	start(t, w.b, w.rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if c := w.cmdsTo("master"); len(c) != 0 {
+		t.Fatalf("reported another process's screen: %+v", c)
+	}
+}
+
+// foureyes on herdr-9: a report that fails to be written does not move the
+// episode on, so the next look sends it.
+func TestBlockedReportFailureIsRetried(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	l := &loop{b: b, token: "holder", last: map[string]string{}, cfg: Config{EscalateTo: "master", Log: io.Discard}}
+	look := func(at time.Time) error {
+		return l.blockedLook(ctx, "coder", "claude", agentstate.Observation{PID: 7, At: at, Settled: true, Screen: true, What: "Pick?"})
+	}
+	t0 := time.UnixMilli(1_800_000_000_000)
+	if err := look(t0); err != nil { // the first settled look: no report yet
+		t.Fatal(err)
+	}
+	if err := look(t0.Add(time.Second)); !errors.Is(err, bus.ErrNotHolder) { // the report fails: no lease
+		t.Fatalf("report without the lease: %v", err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "holder", time.Minute); err != nil || !ok {
+		t.Fatalf("acquire: %v %v", ok, err)
+	}
+	if err := look(t0.Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	evs, _, err := b.Recent(ctx, []string{"cmd"}, 10)
+	if err != nil || len(evs) != 1 || evs[0].Target != "master" || !strings.HasPrefix(evs[0].Message, "blocked: coder (claude) since ") {
+		t.Fatalf("the report after the failure: %+v %v", evs, err)
 	}
 }

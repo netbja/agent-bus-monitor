@@ -253,3 +253,18 @@ func TestHostRuntimeHelperCountsOnlyWhenActive(t *testing.T) {
 		t.Fatalf("an active helper: %q", in.BackgroundSkip())
 	}
 }
+
+// A terminal found gone drops its CPU samples (foureyes on herdr-9).
+func TestHostRuntimeForgetsAGoneTerminal(t *testing.T) {
+	f := newHostFixture(t)
+	f.inspect()
+	if err := f.h.Close(context.Background(), f.term.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.inspect()
+	f.rt.mu.Lock()
+	defer f.rt.mu.Unlock()
+	if n := len(f.rt.samples); n != 0 {
+		t.Fatalf("%d terminals' samples kept", n)
+	}
+}

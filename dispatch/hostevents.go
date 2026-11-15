@@ -69,6 +69,8 @@ func (l *loop) blockedLook(ctx context.Context, agent, client string, o agentsta
 	var err error
 	switch {
 	case ev.Kind == agentstate.Unblocked:
+		// The closing episode (Step returns it with Since cleared), so the
+		// leave's mark names the same episode as its enter.
 		ep := episodeKey(before)
 		if agent == to {
 			sent, err = l.b.FencedNotifyOnceForPerson(ctx, l.token, unblockedMark(agent), ep, dispatchFrom, line)

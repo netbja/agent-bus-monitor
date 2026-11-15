@@ -749,9 +749,6 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 	if ctx.Err() != nil {
 		return ctx.Err() // stopping: the reservation already bounds a retry
 	}
-	if err := l.promptOutcome(ctx, s.agent, observed, perr); err != nil {
-		return err
-	}
 	l.logDecision(s, d)
 	r := stored
 	r.State = "prompted"
@@ -762,7 +759,11 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 		r.Reason = "prompt error: " + perr.Error()
 		l.logError(s.agent, "prompt", perr)
 	}
-	return l.put(ctx, s, r)
+	if err := l.put(ctx, s, r); err != nil {
+		return err
+	}
+	// After the record (foureyes): a failed notice never leaves it "prompting".
+	return l.promptOutcome(ctx, s.agent, observed, perr)
 }
 
 // escalate is spec §3.4: escalated=pending (fenced) → escalation cmd to the
