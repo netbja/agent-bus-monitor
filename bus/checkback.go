@@ -82,6 +82,14 @@ func (b *Bus) SetCheckback(ctx context.Context, agent string, d time.Duration, w
 	return c, nil
 }
 
+// complete: every field present and consistent, as the script writes them
+// (reviewer-codex: valid JSON may still omit fields, which would read as a
+// blank check-back and restart the count).
+func (c Checkback) complete() bool {
+	return c.What != "" && c.Norm == strings.ToLower(strings.TrimSpace(c.What)) && c.Count >= 1 &&
+		c.SetID > 0 && c.FirstSetID > 0 && c.FirstSetID <= c.SetID && c.DueMs > c.SetID
+}
+
 // ClearCheckback deletes agent's check-back; false when it had none.
 func (b *Bus) ClearCheckback(ctx context.Context, agent string) (bool, error) {
 	n, err := b.r.HDel(ctx, CheckbackKey(b.project), agent).Result()
@@ -99,7 +107,7 @@ func (b *Bus) Checkbacks(ctx context.Context) (map[string]Checkback, error) {
 	out := map[string]Checkback{}
 	for agent, raw := range h {
 		var c Checkback
-		if err := json.Unmarshal([]byte(raw), &c); err != nil || !ValidName(agent) || c.SetID <= 0 || c.DueMs <= 0 {
+		if err := json.Unmarshal([]byte(raw), &c); err != nil || !ValidName(agent) || !c.complete() {
 			return nil, fmt.Errorf("check-backs: a corrupt field %q (its next checkback replaces it)", agent)
 		}
 		c.Agent = agent

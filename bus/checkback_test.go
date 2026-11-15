@@ -80,9 +80,24 @@ func TestForgetIfClearClearsTheCheckback(t *testing.T) {
 func TestCheckbacksCorruptIsAnError(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	b.r.HSet(ctx, CheckbackKey(b.project), "master", "{not json")
-	if all, err := b.Checkbacks(ctx); err == nil || !strings.Contains(err.Error(), "master") {
-		t.Fatalf("a corrupt field read as %+v, %v", all, err)
+	for _, raw := range []string{
+		"{not json",
+		`{"set_id":1,"due_ms":1}`, // valid JSON, incomplete (reviewer-codex)
+		`{"due_ms":120,"what":"x","set_id":100,"count":0,"first_set_id":100,"norm":"x"}`, // count 0
+		`{"due_ms":120,"what":"x","set_id":100,"count":2,"first_set_id":101,"norm":"x"}`, // first after set
+		`{"due_ms":120,"what":"X","set_id":100,"count":1,"first_set_id":100,"norm":"y"}`, // norm not what's
+		`{"due_ms":100,"what":"x","set_id":100,"count":1,"first_set_id":100,"norm":"x"}`, // due not after set
+		`{"due_ms":120,"what":"","set_id":100,"count":1,"first_set_id":100,"norm":""}`,   // no what
+		`{"due_ms":120,"what":"x","set_id":100,"count":1,"first_set_id":0,"norm":"x"}`,   // no first
+	} {
+		b.r.HSet(ctx, CheckbackKey(b.project), "master", raw)
+		if all, err := b.Checkbacks(ctx); err == nil || !strings.Contains(err.Error(), "master") {
+			t.Fatalf("%s read as %+v, %v", raw, all, err)
+		}
+	}
+	b.r.HSet(ctx, CheckbackKey(b.project), "master", `{"due_ms":120,"what":" K1 ","set_id":100,"count":3,"first_set_id":90,"norm":"k1"}`)
+	if all, err := b.Checkbacks(ctx); err != nil || all["master"].Count != 3 {
+		t.Fatalf("a complete record refused: %+v %v", all, err)
 	}
 	if c, err := b.SetCheckback(ctx, "master", time.Minute, "x"); err != nil || c.Count != 1 {
 		t.Fatalf("a set over a corrupt field: %+v %v", c, err)
