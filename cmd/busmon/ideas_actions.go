@@ -22,19 +22,20 @@ type ideaMsg struct {
 }
 
 // ideasKey is a key on F6 or an idea's page; done when it was the page's.
-// While the picker is open it takes every key: the arrows choose, y sets,
-// esc (or q) cancels.
+// While the picker is open it takes every key: ← → choose (the states are
+// laid across), enter sets, esc (or q) cancels (the person,
+// idea-state-keys: no y to type).
 func (m *Model) ideasKey(p *page, act Action, k Key) (tea.Cmd, bool) {
 	if pk := p.ideas.pick; pk != nil {
 		n := len(bus.IdeaStates)
-		switch act {
-		case ActUp:
+		switch {
+		case k.Code == keyLeft:
 			pk.sel = (pk.sel + n - 1) % n
-		case ActDown:
+		case k.Code == keyRight:
 			pk.sel = (pk.sel + 1) % n
-		case ActCopy:
+		case k.Code == keyEnter:
 			return m.setIdeaState(p), true
-		case ActClose:
+		case act == ActClose:
 			p.ideas.pick = nil
 		}
 		p.dirty = true
@@ -96,7 +97,7 @@ func ideaLines(p *page) func() []int {
 	}
 }
 
-// setIdeaState is y in the picker: the state chosen, set as the person,
+// setIdeaState is enter in the picker: the state chosen, set as the person,
 // the state the picker opened on as the expected one (a change made
 // meanwhile elsewhere is refused, never overwritten).
 func (m *Model) setIdeaState(p *page) tea.Cmd {

@@ -91,7 +91,7 @@ func TestIdeasPageFilter(t *testing.T) {
 }
 
 // s: the four states under the selected row, its own marked, the cursor on
-// one; y confirms (the page says so).
+// one; ← → choose and enter confirms (the page says so).
 func TestIdeasPagePicker(t *testing.T) {
 	v := ideasView{pick: &ideaPick{id: "i2", from: bus.IdeaDecided, sel: 2}}
 	_, body, items, _ := ideasPage(ideasFixture(), false, "charlie", v, 2, ideasT0, 100)
@@ -102,7 +102,7 @@ func TestIdeasPagePicker(t *testing.T) {
 			t.Fatalf("no %q under the row\n%s", st, text)
 		}
 	}
-	if !strings.Contains(text, "(now)") || !strings.Contains(text, "y sets") || !strings.Contains(text, "esc") {
+	if !strings.Contains(text, "(now)") || !strings.Contains(text, GlyphArrowL+GlyphArrowR+" choose") || !strings.Contains(text, "enter sets it") || !strings.Contains(text, "esc") {
 		t.Fatalf("picker\n%s", text)
 	}
 	// The cursor is the reversed or pill segment on "doing".

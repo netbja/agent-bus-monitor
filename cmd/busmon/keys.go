@@ -132,7 +132,7 @@ const (
 	ActIdeas         // open the Ideas page (F6)
 	ActIdeaFilter    // Ideas (F6): tab, the next state shown
 	ActIdeaAdd       // Ideas (F6): a, add an idea (its title on the line)
-	ActIdeaState     // Ideas (F6) or an idea's page: s, the state picker (y sets it)
+	ActIdeaState     // Ideas (F6) or an idea's page: s, the state picker (←→ choose, enter sets it)
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -370,7 +370,7 @@ var (
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
-		{Keys: "s", Hint: "state", Help: "Ideas (F6) or an idea's page: the state picker under the idea (" + arrows + " choose, y sets it as you, esc cancels)", Act: ActIdeaState, OnPage: true, match: runeIs('s')},
+		{Keys: "s", Hint: "state", Help: "Ideas (F6) or an idea's page: the state picker under the idea (" + GlyphArrowL + GlyphArrowR + " choose, enter sets it as you, esc cancels)", Act: ActIdeaState, OnPage: true, match: runeIs('s')},
 		{Keys: "tab", Hint: "filter", Help: "Ideas (F6): show one state, then the next, then all", Act: ActIdeaFilter, OnPage: true, match: keyIs(keyTab)},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
