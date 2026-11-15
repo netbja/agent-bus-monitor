@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,30 @@ func TestRunPausedTime(t *testing.T) {
 	rec = runPass(t, b, true)
 	if got := rec.PausedMs - before; got < (4 * time.Minute).Milliseconds() {
 		t.Fatalf("paused 4m: added %dms", got)
+	}
+	// A suspend counts as paused (a pass may still run during it).
+	if err := b.r.Set(ctx, PauseKey(b.project), `{"kind":"suspend","until":0}`, 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	before = rec.PausedMs
+	moveSeen(t, b, 4*time.Minute)
+	rec = runPass(t, b, true)
+	if got := rec.PausedMs - before; got < (4 * time.Minute).Milliseconds() {
+		t.Fatalf("suspended 4m: added %dms", got)
+	}
+	// A pause that ended within the interval: paused at its start, so the
+	// whole interval is paused (to within one pass, §2).
+	before = rec.PausedMs
+	moveSeen(t, b, 4*time.Minute)
+	if rec, err := b.Run(ctx); err != nil || b.r.Set(ctx, PauseKey(b.project), fmt.Sprintf(`{"until":%d}`, rec.SeenAt+time.Minute.Milliseconds()), 0).Err() != nil {
+		t.Fatalf("pause ended in the interval: %v", err)
+	}
+	rec = runPass(t, b, true)
+	if got := rec.PausedMs - before; got < (4 * time.Minute).Milliseconds() {
+		t.Fatalf("a pause ended within the interval: added %dms, want the interval", got)
+	}
+	if err := b.r.Del(ctx, PauseKey(b.project)).Err(); err != nil {
+		t.Fatal(err)
 	}
 	now, err := b.ServerTime(ctx)
 	if err != nil {

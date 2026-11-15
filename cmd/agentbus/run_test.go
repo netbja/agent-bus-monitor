@@ -6,13 +6,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // agentbus run (run-budget §5): no run yet; a run's state, elapsed and
 // deliveries against the limits, a limit reached named; run reset refused to
 // an agent, allowed to the person, after which a new run starts.
 func TestRunCmd(t *testing.T) {
-	b, _ := dialMain(t)
+	b, rdb := dialMain(t)
 	ctx := context.Background()
 	env := map[string]string{"HOME": t.TempDir(), "XDG_CONFIG_HOME": t.TempDir()}
 	run := func(args ...string) (int, string) {
@@ -43,6 +45,18 @@ func TestRunCmd(t *testing.T) {
 		!strings.Contains(msg, "limit reached: deliveries") {
 		t.Fatalf("limits: %d %q", code, msg)
 	}
+	// Two hours on, past a 1h limit: the duration named too.
+	rec, err := b.Run(ctx)
+	if err != nil || rec == nil {
+		t.Fatalf("Run %v %v", rec, err)
+	}
+	if err := rdb.HSet(ctx, bus.RunKey(b.Project()), "started_at", rec.StartedAt-(2*time.Hour).Milliseconds()).Err(); err != nil {
+		t.Fatal(err)
+	}
+	env["AGENT_BUS_RUN_MAX_DURATION"] = "1h"
+	if code, msg = run(); code != 0 || !strings.Contains(msg, "elapsed     2h of 1h") || !strings.Contains(msg, "limit reached: duration") {
+		t.Fatalf("duration reached: %d %q", code, msg)
+	}
 	env["AGENT_BUS_AGENT"] = "master"
 	if code, msg := run("reset"); code != 2 || !strings.Contains(msg, "only the person") {
 		t.Fatalf("an agent's reset: %d %q", code, msg)
@@ -56,6 +70,9 @@ func TestRunCmd(t *testing.T) {
 	}
 	if rec, _ := b.Run(ctx); rec != nil {
 		t.Fatalf("after reset: %+v", rec)
+	}
+	if !readOnlyCommand("run", nil) || readOnlyCommand("run", []string{"reset"}) {
+		t.Fatal("the identity guard: run reads, run reset writes")
 	}
 	if code, _ := run("bogus"); code != 2 {
 		t.Fatalf("a bad argument: %d", code)

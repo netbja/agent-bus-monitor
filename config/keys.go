@@ -268,10 +268,11 @@ var Keys = []*Key{
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 never tells the person")},
 	// The run budget (spec 2026-11-15-run-budget-design.md §3): a run stops
 	// by itself after this much unpaused time, or this many deliveries; 0
-	// is no limit (the default).
-	{Name: "run.max_duration", Env: "AGENT_BUS_RUN_MAX_DURATION", Kind: Duration, Default: time.Duration(0), ReadBy: "dispatch, agentbus run",
+	// is no limit (the default). Step 1 only shows them (agentbus run); the
+	// dispatcher reads them from step 2, the drain.
+	{Name: "run.max_duration", Env: "AGENT_BUS_RUN_MAX_DURATION", Kind: Duration, Default: time.Duration(0), ReadBy: "agentbus run",
 		env: envNonNegativeDuration, file: fileDuration(true)},
-	{Name: "run.max_deliveries", Env: "AGENT_BUS_RUN_MAX_DELIVERIES", Kind: Int, Default: 0, ReadBy: "dispatch, agentbus run",
+	{Name: "run.max_deliveries", Env: "AGENT_BUS_RUN_MAX_DELIVERIES", Kind: Int, Default: 0, ReadBy: "agentbus run",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 for no limit")},
 	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
 	// working seen ready this long reads idle for team-stall; 0 turns it off.

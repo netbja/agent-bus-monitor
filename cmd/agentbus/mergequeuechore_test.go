@@ -334,7 +334,12 @@ func TestMergeQueueChoreRun(t *testing.T) {
 		in := map[string]bool{}
 		fail := errors.New("git broke")
 		var err error
-		c.delivered = func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
+		c.delivered = func(_ context.Context, _ string, _ []string, baseTip string, heads []string) (map[string]bool, error) {
+			// Origin's base, or the local one in local mode: never none
+			// (foureyes, M20).
+			if baseTip != "1111111111111111111111111111111111111111" {
+				t.Errorf("%q: judged against base %q", origin, baseTip)
+			}
 			judged = append(judged, heads)
 			return in, err
 		}
@@ -358,6 +363,12 @@ func TestMergeQueueChoreRun(t *testing.T) {
 			t.Fatal(verr)
 		}
 		in[head2] = true
+		// An approved head the git test does not find in the base: never a
+		// delivery (foureyes, M11b).
+		head3 := strings.Repeat("f", 40)
+		if _, verr := b.AppendVerdict(ctx, bus.Verdict{Subject: "run-budget-2", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: head3, Message: "ok"}); verr != nil {
+			t.Fatal(verr)
+		}
 		for i := 0; i < 2; i++ {
 			if perr := c.pass(ctx, "mq"); perr != nil {
 				t.Fatal(perr)
@@ -366,8 +377,11 @@ func TestMergeQueueChoreRun(t *testing.T) {
 		if rec, _ = b.Run(ctx); rec.Deliveries != 1 {
 			t.Fatalf("%q: %d deliveries, want 1", origin, rec.Deliveries)
 		}
-		if last := judged[len(judged)-1]; len(last) != 2 {
-			t.Fatalf("%q: judged %v, want both approved heads", origin, last)
+		if rec.Counted[head3] {
+			t.Fatalf("%q: a head not in the base counted", origin)
+		}
+		if last := judged[len(judged)-1]; len(last) != 3 {
+			t.Fatalf("%q: judged %v, want the three approved heads", origin, last)
 		}
 		err = fail
 		if perr := c.pass(ctx, "mq"); perr != nil {
@@ -419,5 +433,43 @@ func TestMergeQueueChoreWindowOnBrokerTime(t *testing.T) {
 	}
 	if rec, _ = b.MergeQueue(ctx); len(rec.Undelivered) != 1 || len(judged) == 0 {
 		t.Fatalf("the broker's clock: undelivered %+v judged %v", rec.Undelivered, judged)
+	}
+}
+
+// run-budget §2 (foureyes, M14): the pass counts a gap as paused only past
+// three passes (15 min): 10 min without a pass is run time, 20 min paused.
+func TestMergeQueueChoreRunGap(t *testing.T) {
+	c, b := mqChore(t, "git@git.example.org:o/r.git")
+	ctx := context.Background()
+	rdb, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rdb.Close()
+	back := func(d time.Duration) {
+		rec, err := b.Run(ctx)
+		if err != nil || rec == nil {
+			t.Fatalf("Run %v %v", rec, err)
+		}
+		if err := rdb.HSet(ctx, bus.RunKey(b.Project()), "seen_at", rec.SeenAt-d.Milliseconds()).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	back(10 * time.Minute)
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.Run(ctx); rec.PausedMs != 0 {
+		t.Fatalf("10m without a pass: paused %dms, want run time", rec.PausedMs)
+	}
+	back(20 * time.Minute)
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.Run(ctx); rec.PausedMs < (20 * time.Minute).Milliseconds() {
+		t.Fatalf("20m without a pass: paused %dms, want the gap", rec.PausedMs)
 	}
 }
