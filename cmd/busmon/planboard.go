@@ -93,6 +93,21 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 		emit(Line{{Text: "a read failed: states unknown", Role: RoleMuted}})
 	}
 	var selRow *plan.Row
+	row := func(r plan.Row) {
+		idx := len(v.items)
+		v.items = append(v.items, planItem{task: r.Task.ID, line: len(v.lines)})
+		if idx == sel {
+			selRow = &r
+		}
+		emit(planBoardRow(p, r, idx == sel, now, width))
+		if l, ok := planProgressLine(r, reqs, paces, now); ok { // progress-line §3: not a row
+			emit(FitLine(append(Line{{Text: "      ", Role: RoleDim}}, l...), width))
+		}
+	}
+	if len(p.file.Groups) > 0 && !unknownOnly { // plan-chantier §3: one block per group
+		planGroupBlocks(p, showDone, width, tier, emit, row)
+		secs = nil
+	}
 	for _, sec := range secs {
 		if len(sec.rows) == 0 {
 			continue
@@ -107,15 +122,7 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 			emit(Line{{Text: fmt.Sprintf("%s  %d", sec.name, len(sec.rows)), Role: RoleText, Bold: true}})
 		}
 		for _, r := range sec.rows {
-			idx := len(v.items)
-			v.items = append(v.items, planItem{task: r.Task.ID, line: len(v.lines)})
-			if idx == sel {
-				selRow = &r
-			}
-			emit(planBoardRow(p, r, idx == sel, now, width))
-			if l, ok := planProgressLine(r, reqs, paces, now); ok { // progress-line §3: not a row
-				emit(FitLine(append(Line{{Text: "      ", Role: RoleDim}}, l...), width))
-			}
+			row(r)
 		}
 	}
 	v.lines = append(v.lines, nil)

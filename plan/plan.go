@@ -24,6 +24,12 @@ const Person = "person"
 
 const maxTitle = 120
 
+// MaxGroups and maxGroupTitle bound a plan's chantiers (plan-chantier §2.1).
+const (
+	MaxGroups     = 12
+	maxGroupTitle = 40
+)
+
 var (
 	planName    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
 	subjectForm = regexp.MustCompile(`^[a-z][a-z0-9_-]*:[A-Za-z0-9_./@-]+$`)
@@ -31,9 +37,19 @@ var (
 
 // File is docs/plans/<name>.json.
 type File struct {
-	Plan  string `json:"plan"`
-	Goal  string `json:"goal"`
-	Tasks []Task `json:"tasks"`
+	Plan string `json:"plan"`
+	Goal string `json:"goal"`
+	// Groups are the plan's chantiers (efforts), listed once, in the order
+	// busmon draws them; optional: a plan without them is drawn as before
+	// (plan-chantier §2.1).
+	Groups []Group `json:"groups,omitempty"`
+	Tasks  []Task  `json:"tasks"`
+}
+
+// Group is one chantier: an id its tasks name, and its title.
+type Group struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 // Task is one line of the plan.
@@ -46,6 +62,7 @@ type Task struct {
 	Merge   *bool    `json:"merge,omitempty"`
 	After   []string `json:"after,omitempty"`
 	Mission string   `json:"mission,omitempty"`
+	Group   string   `json:"group,omitempty"` // a listed group's id, or "" (Other)
 }
 
 // MergeTask reports whether the task ends with a merge by the person: an
@@ -122,6 +139,9 @@ func Validate(f File) error {
 			}
 		}
 	}
+	if err := validateGroups(f); err != nil {
+		return err
+	}
 	for _, t := range f.Tasks {
 		for _, a := range t.After {
 			if !ids[a] {
@@ -131,6 +151,41 @@ func Validate(f File) error {
 	}
 	if c := cycle(f.Tasks); c != "" {
 		return fmt.Errorf("plan: a cycle through %s", c)
+	}
+	return nil
+}
+
+// validateGroups: at most MaxGroups, each id a ValidName and unique, each
+// title one line of 1 to maxGroupTitle characters; every task's group
+// listed, and every listed group used by a task (a typo would hide it).
+func validateGroups(f File) error {
+	if len(f.Groups) > MaxGroups {
+		return fmt.Errorf("plan: at most %d groups, got %d", MaxGroups, len(f.Groups))
+	}
+	used := map[string]bool{}
+	for _, t := range f.Tasks {
+		if t.Group != "" {
+			used[t.Group] = true
+		}
+	}
+	listed := map[string]bool{}
+	for _, g := range f.Groups {
+		switch {
+		case !bus.ValidName(g.ID):
+			return fmt.Errorf("plan: invalid group id %q", g.ID)
+		case listed[g.ID]:
+			return fmt.Errorf("plan: duplicate group id %q", g.ID)
+		case g.Title == "" || !oneLine(g.Title, maxGroupTitle):
+			return fmt.Errorf("plan: group %s: the title must be one line of 1 to %d characters", g.ID, maxGroupTitle)
+		case !used[g.ID]:
+			return fmt.Errorf("plan: group %s has no task", g.ID)
+		}
+		listed[g.ID] = true
+	}
+	for _, t := range f.Tasks {
+		if t.Group != "" && !listed[t.Group] {
+			return fmt.Errorf("plan: task %s: unknown group %q", t.ID, t.Group)
+		}
 	}
 	return nil
 }
