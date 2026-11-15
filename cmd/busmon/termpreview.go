@@ -50,8 +50,8 @@ type termView struct {
 	err   error
 }
 
-// readTermView reads agent's newest live terminal in project; a nil host or
-// no terminal is an empty view, a failed read its error.
+// readTermView reads agent's terminal in project (holderTerm: the one attach
+// picks); a nil host or no terminal is an empty view, a failed read its error.
 func readTermView(ctx context.Context, h termReader, project, agent string, rows int) termView {
 	if h == nil {
 		return termView{}
@@ -60,22 +60,19 @@ func readTermView(ctx context.Context, h termReader, project, agent string, rows
 	if err != nil {
 		return termView{err: err}
 	}
-	for i := len(terms) - 1; i >= 0; i-- { // the newest first
-		t := terms[i]
-		if t.Project != project || t.Name != agent || !t.Alive {
-			continue
-		}
-		sc, err := h.Screen(ctx, t.ID, rows)
-		if err != nil {
-			return termView{err: err}
-		}
-		lines := sc.Lines
-		for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-			lines = lines[:len(lines)-1]
-		}
-		return termView{found: true, lines: lines}
+	t, ok := holderTerm(terms, project, agent)
+	if !ok {
+		return termView{}
 	}
-	return termView{}
+	sc, err := h.Screen(ctx, t.ID, rows)
+	if err != nil {
+		return termView{err: err}
+	}
+	lines := sc.Lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return termView{found: true, lines: lines}
 }
 
 // termPreviewLines is the page's Screen section: nothing when the agent has
