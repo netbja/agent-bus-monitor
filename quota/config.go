@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // Config is ~/.config/agentbus/quota.toml (spec §5): built-in readers are on
@@ -143,7 +144,11 @@ func Readers(cfg map[string]ProviderConfig, now func() time.Time) []Reader {
 			if claudeHome == "" {
 				claudeHome = filepath.Join(home, ".claude")
 			}
-			r = ClaudeReader{Cache: ClaudeCachePath(), Transcripts: filepath.Join(claudeHome, "projects"), Now: now}
+			c := ClaudeReader{Cache: ClaudeCachePath(), Transcripts: filepath.Join(claudeHome, "projects"), Now: now}
+			if bin, err := exec.LookPath("claude"); err == nil && claudeProbeOn(os.Getenv) {
+				c.Probe = NewClaudeProbe(bin, os.Getenv("CLAUDE_CONFIG_DIR"), now)
+			}
+			r = c
 		case "codex":
 			codexHome := os.Getenv("CODEX_HOME")
 			if codexHome == "" {
@@ -230,3 +235,10 @@ func ReadAll(ctx context.Context, rs []Reader) []Reading {
 }
 
 func exists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// claudeProbeOn is quota.claude.probe (on by default): the claude reader asks
+// the CLI's get_usage first.
+func claudeProbeOn(getenv func(string) string) bool {
+	r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
+	return r.Bool("quota.claude.probe")
+}

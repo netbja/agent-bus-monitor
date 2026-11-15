@@ -1,6 +1,13 @@
 - **Quotas (v0.13): first-party readers behind one contract, policy in the dispatcher.**
   Package `quota/`: `Reading` (provider, windows: used %, reset, minutes; observed_at vs
-  collected_at; unknown/unlimited) and readers — Claude via `agentbus statusline` (Claude Code's
+  collected_at; unknown/unlimited) and readers — Claude first via the CLI's `get_usage` control
+  request (claude-usage-probe, `quota/claudeprobe.go`, `quota.claude.probe`, on by default: `claude -p`
+  in stream-json from an empty temp dir, `--setting-sources local --strict-mcp-config`, hooks off, no
+  session kept, the account's `CLAUDE_CONFIG_DIR`, 20 s bound, process group killed after the answer;
+  at most once per 5 min per account, a failure cached too, in `~/.cache/agentbus/quota-claude-usage-<hash>.json`;
+  `five_hour`/`seven_day` → `5h`/`7d`, `weekly_scoped` → `7d-<model>`; Source `cli-usage`; the SDK
+  calls the request experimental, so `rate_limits_available: false`, an unknown answer or a failure
+  falls back, and per window the newer observation wins), then via `agentbus statusline` (Claude Code's
   `statusLine` stdin `rate_limits` merged into `~/.cache/agentbus/quota-claude.json`, plus a
   transcript backstop for a live rejection), Codex via `codex app-server` `account/rateLimits/read`
   (session logs as fallback), declarative file readers (Grok's billing log line is one, built in),
@@ -228,7 +235,11 @@
   every roles.toml profile and fallback, used or not (`ok`, `gone`, `newer`, `newer?` = a listed
   higher version not stated as a successor and never a failure, `not listed (partial)`,
   `untiered`, `unknown`; exit 3 on gone, newer, untiered); `roles doctor --agent <name>` shows one
-  row. Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
+  row. Under a role that pops (master), a `pops:` line lists the agent-spawn rules its session starts
+  with (`rolecfg.SpawnRules`, from `LaunchRules`): `allow` roles pop without a prompt, `ask` roles with
+  the person's yes (`approval = "person"`); a role in neither (not in roles.toml) is not covered, its
+  spawn prompts. A role that pops with no other role to pop shows `pops: none`. `--json` has them as
+  `pops.allow` / `pops.ask` (empty lists for `none`, no `pops` for a role that does not pop). Any `agentbus models` form refreshes a table whose last attempt is 24 h old first: under
   the table's lock (skipped when held), 10 s in all, a late reader keeping its rows and named in
   `refresh incomplete: <provider> <reason>`. The daily refresh no longer waits for services. A
   source older than `models.source_max_age` (7 d) withholds every verdict. The `model-catalogue`
