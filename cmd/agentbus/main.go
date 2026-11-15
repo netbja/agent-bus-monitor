@@ -504,6 +504,8 @@ func main() {
 		}
 		fmt.Printf("verdict recorded: %s %s on %s\n", decision, subject, author)
 
+	case "checkback":
+		os.Exit(runCheckback(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "merge-queue":
 		os.Exit(runMergeQueue(ctx, b, self, rest, os.Stdout))
 	case "verdicts":

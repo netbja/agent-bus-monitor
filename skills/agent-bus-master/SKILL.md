@@ -299,6 +299,21 @@ agentbus background master --clear                         # when you are notifi
 It is its own record, not your status message (your turn hooks rewrite that at every turn), and
 it disappears by itself once `--for` runs out (30m by default, at most 24h). Any agent may use it.
 
+**Never end a turn with work in flight that nothing will wake you for** (master-idle, the person,
+2026-11-15). Before ending the turn, either run it as a tracked background task of your client (one
+whose exit wakes you), or set a check-back:
+
+```bash
+agentbus checkback 30m "k1/k2 checks on 7d27262c, fa2d796f"   # when to look again, and at what
+agentbus checkback --clear                                      # once you have looked and moved it
+agentbus checkback                                              # every agent's, soonest due first
+```
+
+A shell job that only writes a `.done` file wakes nobody: on 2026-11-14 the checks ended at 00:33
+and the project stood still until 09:09. The check-back never expires by itself: clear it once you
+have looked. Unlike `background`, it is not a display but a promise others can read
+(`agentbus checkback` lists it, with how many times the same one was set again).
+
 ## Write reports people can read
 
 busmon renders reports as Markdown, and the person reads yours most. Use this shape (busmon's
