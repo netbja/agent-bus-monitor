@@ -1,6 +1,6 @@
 # A run budget: stop cleanly after a duration, a number of deliveries, or a quota (run-budget)
 
-Status: spec, for review (subject `run-budget-spec`), r3. Not built. It depends on master-idle-spec
+Status: spec, for review (subject `run-budget-spec`), r4. Not built. It depends on master-idle-spec
 §3.1 (the git test, `-U0` patch-ids, r7 in review). From the person's review of
 master-idle-spec (2026-11-15, thread `1794733043827-0`, its §2 and §4), relayed by master. §8 holds
 the person's open questions.
@@ -63,7 +63,7 @@ git test and runs every 5 minutes. Limits are therefore seen within 5 minutes.
 | `run.max_duration` | `AGENT_BUS_RUN_MAX_DURATION` | 0 | no limit |
 | `run.max_deliveries` | `AGENT_BUS_RUN_MAX_DELIVERIES` | 0 | no limit |
 | `run.drain_max` | `AGENT_BUS_RUN_DRAIN_MAX` | 2h | drain until nothing is in flight |
-| `run.screen_hold_max` | `AGENT_BUS_RUN_SCREEN_HOLD_MAX` | 5h | a screen hold ends only by its screen or a reading (§4) |
+| `run.screen_hold_max` | `AGENT_BUS_RUN_SCREEN_HOLD_MAX` | 5h | no notice for a long screen hold (§4); it never releases one |
 
 The registry (`config/keys.go`), `ReadBy: "dispatch"`; busmon's C page lists them. The first
 limit reached wins.
@@ -128,23 +128,32 @@ limit reached" screen), matched on a settled screen like `ready` and `busy`; non
 seen. Today's `hold:<p>` field stores a reset in Unix seconds and every release path needs a
 reading, so a silent client's hold gets its own field and its own release:
 
-- A match on a held agent's settled pane writes `hold-screen:<p>` in `{p}:quota` (fenced) = the
+- A match on an agent's settled pane writes `hold-screen:<p>:<agent>` in `{p}:quota` (fenced) = the
   hold's start (Unix s, Redis `TIME`), and, when the signature captures a reset time (an optional
   `reset` group, `15:40` read in the host's local zone, the next such time), `<start>:<reset>`.
-  The provider counts as held (`l.quota.held[p]`) while the field exists, as for `hold:<p>`.
-- **Release**, the first of: the captured reset plus `resumeMargin` has passed; the agent's pane is
-  seen settled **without** the `limit` signature on 3 observe passes in a row (the observe pass
-  keeps inspecting a held agent's pane; it only skips the wake); `run.screen_hold_max` (default
-  5h, the longest common provider window) since the start; a reading of the provider that
-  releases it as today. The release goes through `release` as today: resume directives, then the
-  field deleted last.
+  The provider counts as held (`l.quota.held[p]`) while any such field exists, as for `hold:<p>`.
+- The hold is the provider's, but the screens are the agents': `hold-screen:<p>:<agent>` (one
+  field per agent whose pane showed the signature, same value) records which panes showed it, and
+  a counter of settled reads without it per agent is kept in the dispatcher's memory (a restart
+  starts it again at 0, which only delays a release).
+- **Release**, with evidence only, the first of: the captured reset plus `resumeMargin` has passed
+  (for every agent field that captured one); **every** agent with a field has been seen settled
+  without the `limit` signature on 3 observe passes in a row (the observe pass keeps inspecting a
+  held agent's pane; it only skips the wake), so one pane clearing never resumes another that
+  still shows the limit; a reading of the provider that releases it as today. The release goes
+  through `release` as today: resume directives, then the fields deleted last.
+- **No release by time alone.** A provider's windows run from five hours to seven days (Claude's
+  `seven_day`), so an unknown reset has no safe bound. At `run.screen_hold_max` (default 5h) the
+  hold stays, and the person gets **one** notice (mark `screen-hold-person`, episode the hold's
+  start): `coder has shown anthropic's usage limit since 14:02 and its reset is unknown. It
+  resumes when its screen clears; open its pane to see the reset.`
 
 **What a held agent had.** When a hold begins for an agent with work (from either source), the
 dispatcher writes one field of `{p}:held`, fenced: agent → `{provider, since, tasks, branches,
 report}`: its accepted tasks (board), their `branch` field where the board has one, and the id of
 its last report. Master gets one directive per agent and episode (mark `run-held:<agent>`,
 episode the hold's start): `coder is held (anthropic, since
-14:02, released when its screen clears, at most 5h): accepted wiki-3 (feat/wiki-3). Reassign it, or wait for the reset.` The
+14:02, released when its screen clears): accepted wiki-3 (feat/wiki-3). Reassign it, or wait for the reset.` The
 field is deleted by the release, or by `retire --forget`.
 
 **Master held.** As today: the project pauses until the reset. Added: the person's notice lists
@@ -197,8 +206,10 @@ agentbus run reset      # the person only: deletes {p}:run, lifts a kind-run pau
   records the agent's accepted tasks and branches; master gets one directive; the release deletes
   the field; a client without a `limit` signature is never held from its screen. **Screen hold
   release**: the limit screen, then 3 settled reads without it → released, resume directive sent;
-  a captured `reset` → released at reset + margin; neither → released at `screen_hold_max`; 2
-  settled reads without it then the screen again → still held.
+  a captured `reset` → released at reset + margin; 2 settled reads without it then the screen
+  again → still held. **Two agents on one provider**, both showing the limit: one clears 3 times,
+  the other still shows it → still held, nobody resumed; both clear → released. **Long hold**: at
+  `screen_hold_max` with no evidence → still held, one person notice, none on the next pass.
 - **Master held**: the project pauses (as today), and the notice lists the work in flight.
 - Settings in the registry with their env names (registry test).
 
