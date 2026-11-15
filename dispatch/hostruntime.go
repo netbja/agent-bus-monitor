@@ -22,13 +22,13 @@ import (
 // What changes from herdr's: the client comes from the agent's launch
 // profile (Client), never from the screen; a screen is settled when the
 // program has written nothing for Settle (not two equal reads); Focused is
-// "a person is active" (a draft, or a viewer's key within PersonQuiet); the
+// "a person is active" (see below); the
 // identity is the host's own child and its tree; and each look also carries
 // the blocked observation (4.3a) and the background judgement (4.3b).
 //
-// A focused viewer attached (4.5) is not in termhost.Activity: the host's
-// Submit refuses it (ErrPersonActive), so the wake is refused there, not
-// deferred here.
+// A person active is a draft, a key within PersonQuiet, or a non-observer
+// viewer attached and not proven unfocused (Activity.FocusedViewers, 4.5):
+// the wake then waits under the focus rule, never attempted.
 type HostRuntime struct {
 	Host    termhost.Host
 	Project string

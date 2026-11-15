@@ -106,7 +106,8 @@ func (h *Host) Screen(_ context.Context, id termhost.TermID, lines int) (termhos
 	return termhost.Screen{Lines: slices.Clone(l), Styled: slices.Clone(l), CursorRow: len(l)}, nil
 }
 
-// Activity is what SetActivity set.
+// Activity is what SetActivity set; a person set active by SetPersonActive
+// is a focused viewer attached.
 func (h *Host) Activity(_ context.Context, id termhost.TermID) (termhost.Activity, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -114,7 +115,11 @@ func (h *Host) Activity(_ context.Context, id termhost.TermID) (termhost.Activit
 	if err != nil {
 		return termhost.Activity{}, err
 	}
-	return t.activity, nil
+	a := t.activity
+	if t.personActive {
+		a.FocusedViewers = max(a.FocusedViewers, 1)
+	}
+	return a, nil
 }
 
 // Processes is what SetProcesses set.

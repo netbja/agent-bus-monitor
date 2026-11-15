@@ -229,3 +229,29 @@ func TestHerdrPathWritesNoEvents(t *testing.T) {
 		t.Fatalf("events on herdr's path: %+v %v", evs, err)
 	}
 }
+
+// reviewer-codex on herdr-9: a viewer attached and not proven unfocused is a
+// person at the terminal (spec 4.5). The wake waits there as under herdr's
+// focus rule (rule 8, "pane focused"): nothing reserved, nothing submitted,
+// no refusal turned into tries and an escalation.
+func TestHostPathAttachedViewerDefersTheWake(t *testing.T) {
+	w := newHostWorld(t)
+	w.h.SetActivity(w.term.ID, termhost.Activity{OutputAt: time.Now().Add(-time.Hour), FocusedViewers: 1})
+	send(t, w.b, "coder", "build it")
+	start(t, w.b, w.rt, fastConfig())
+	waitFor(t, 3*time.Second, "a deferred record", func() bool {
+		r, ok := wakeOf(t, w.b, "coder")
+		return ok && r.State == "deferred" && r.Reason == "pane focused"
+	})
+	time.Sleep(300 * time.Millisecond)
+	r, _ := wakeOf(t, w.b, "coder")
+	if got := w.h.Submitted(w.term.ID); len(got) != 0 || r.Tries != 0 || r.Escalated != "" {
+		t.Fatalf("submitted %q, record %+v", got, r)
+	}
+	if n := len(w.events(bus.EventWakeRefused)); n != 0 {
+		t.Fatalf("%d refusals: the wake was attempted", n)
+	}
+	if c := w.cmdsTo("master"); len(c) != 0 {
+		t.Fatalf("escalated: %+v", c)
+	}
+}

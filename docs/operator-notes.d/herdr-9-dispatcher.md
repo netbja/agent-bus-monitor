@@ -4,8 +4,10 @@
   cutover (step 10), and on herdr none of what follows happens. A pane is a `termhost.TermID`; the
   client comes from the launch profile (`Client`), never the screen; a screen is settled when the
   program wrote nothing for 800 ms (and nothing while it was read); `Focused` is a person active
-  (a draft, or a key within 3 s); the identity is the host's child and its process tree. A focused
-  attached viewer is not in `Activity`: the holder's `Submit` refuses it (`wake-refused`). On a host
+  (a draft, a key within 3 s, or a non-observer viewer attached and not proven unfocused:
+  `termhost.Activity.FocusedViewers`, from the holder's `focused_viewers`), so the wake waits as
+  under herdr's focus rule ("pane focused"), never attempted; the identity is the host's child and
+  its process tree. On a host
   the loop also: reports a **blocked** episode to master (enter: a waking directive `blocked: <agent>
   (<client>) since … — screen: "…"` after two settled looks of the `Blocked` signature in the
   observation pass; leave: `unblocked: <agent> after …`, `wake=no`; the escalation target itself
