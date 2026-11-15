@@ -163,7 +163,7 @@ func TestServiceCmdWithoutAManagerSaysWhy(t *testing.T) {
 	_, d := cmdFixture(t)
 	d.Manager, d.Why = nil, "systemd --user is not available"
 	var out, errw bytes.Buffer
-	if code := runServiceCmd("demo", []string{"start"}, d, &out, &errw); code != 1 || !strings.Contains(errw.String(), "systemd --user is not available") || !strings.Contains(errw.String(), "herdr tabs") {
+	if code := runServiceCmd("demo", []string{"start"}, d, &out, &errw); code != 1 || !strings.Contains(errw.String(), "systemd --user is not available") || !strings.Contains(errw.String(), "services.manager = none") {
 		t.Fatalf("code %d, stderr %q", code, errw.String())
 	}
 	if code := runServiceCmd("", []string{"list"}, d, &out, &errw); code != 0 {

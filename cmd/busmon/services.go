@@ -13,7 +13,7 @@ import (
 const serviceStale = 20 * time.Second
 
 // serviceRunning are the states a live process refreshes.
-var serviceRunning = map[string]bool{"starting": true, "ready": true, "waiting-herdr": true, "waiting-git": true, "idle": true, "busy": true}
+var serviceRunning = map[string]bool{"starting": true, "ready": true, "waiting-holder": true, "waiting-git": true, "idle": true, "busy": true}
 
 // serviceFact is what the header shows for one service kind. legacy is the
 // tab-mode fact ("up"/"down" from the lease, "" when nothing to show): it
@@ -60,8 +60,8 @@ func serviceSeg(word, short, state string, compact bool) Line {
 		glyph, role = GlyphWorking, RoleOK
 	case "starting":
 		glyph, role = GlyphIdle, RoleAttention
-	case "waiting-herdr":
-		glyph, role, text = GlyphBlocked, RoleAttention, "waiting herdr"
+	case "waiting-holder":
+		glyph, role, text = GlyphBlocked, RoleAttention, "waiting for the holder"
 	case "waiting-git":
 		glyph, role, text = GlyphBlocked, RoleAttention, "waiting git"
 	case "failed":
