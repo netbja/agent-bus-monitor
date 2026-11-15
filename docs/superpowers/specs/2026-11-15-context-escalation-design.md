@@ -2,7 +2,7 @@
 
 Status: spec, r4 (r3 foureyes: the `below-compaction` notice gets a writer, the dispatcher; the
 ceiling is compared in tokens, never a share of one window against a share of another, §4.3).
-r3 was Task `context-escalation-r3` (master's directive of 2026-11-15, after the person's
+Task `context-escalation-r3` (master's directive of 2026-11-15, after the person's
 review of r2, human directive 1794777873906-0). r2 (d9610408, PR 540) was approved by both
 reviewers; r3 answers the person's review:
 
