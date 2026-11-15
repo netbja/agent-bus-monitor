@@ -1,7 +1,10 @@
 # After a reboot: ask after an intentional one, restart after an unplanned one (reboot-resume)
 
-Status: spec, r2 (r1 foureyes: the record names whether an unplanned reboot is being restarted;
-self-repair must be `on` to restart; the dispatcher's suspend record has its fields named). Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
+Status: spec, r3. r1 foureyes: the record names whether an unplanned reboot is being restarted;
+self-repair must be `on` to restart; the dispatcher's suspend record has its fields named (r2).
+r1 reviewer-codex: the broker's persistence cannot hold the counter through a power cut (AOF
+fsyncs every second at best, RDB is a snapshot); the counter moves to a local fsync'd file,
+written before any relaunch, failing closed (r3). Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
 answer 1794777093334-0 to the ask `autoresume10b`). Low priority; it does not block herdr-10b.
 
 ## 1. Why, and what the person asked
@@ -87,7 +90,7 @@ self-repair do:
 | `intentional` | clean shutdown | popup: relaunch | holds |
 | `suspended` | suspended before the shutdown | popup: resume | holds (the suspend already holds it) |
 | `restarting` | unplanned, restarted by itself (§3.1) | no popup; a header line `restarting after an unexpected stop (2 of 3 in 24 h)` | relaunches |
-| `unplanned` | unplanned, **not** restarted; `why` names the first failing condition of §3.1 (`setting off`, `self-repair off`, `self-repair in shadow mode`, `broker persistence unknown`, `broker persistence off`) | popup: relaunch, with `why` | holds |
+| `unplanned` | unplanned, **not** restarted; `why` names the first failing condition of §3.1 (`setting off`, `self-repair off`, `self-repair in shadow mode`, `counter not written`) | popup: relaunch, with `why` | holds |
 | `stopped` | the limit was passed (§3.2) | popup: stopped | holds (the suspend holds it) |
 
  The record is deleted (fenced) by the dispatcher once every required agent of the
@@ -100,9 +103,8 @@ When every condition holds, in this order (the first that fails is `why`):
 1. `services.unplanned_restart` is on;
 2. self-repair's mode is `on` (`off` relaunches nothing, `shadow` only reports: neither can
    restart a team, so the verdict says so rather than claiming a restart);
-3. the broker persists (the `broker-persistence` check's reading: AOF or RDB on; unknown counts
-   as no, since without persistence the counter is lost with the reboot and the limit means
-   nothing);
+3. this restart is counted, durably, before anything is relaunched (§3.2; a write that fails is
+   `counter not written`: no restart, fail closed);
 4. the counter allows it (§3.2; when it does not, the verdict is `stopped`),
 
 the verdict is `restarting` and the dispatcher
@@ -118,14 +120,30 @@ asks (§4), self-repair holds (§5), and nothing is counted (only a restart coun
 
 ### 3.2 The counter, and "stopped"
 
-`{p}:unplanned`, a sorted set: member the boot id, score Redis TIME (ms) of the judgement,
-`ZADD NX` (one boot counts once). Before relaunching, the dispatcher counts the members within
-`services.unplanned_window` (24 h). With this boot counted:
+**Not in the broker.** A power cut is the very event counted, and the broker cannot promise the
+count survives one: AOF with `appendfsync everysec` loses up to a second, `no` leaves it to the
+OS, RDB keeps a periodic snapshot. A crash soon after each restart could then erase every count
+and pass the limit forever. The counter lives beside the run record, in a local file the
+dispatcher fsyncs **before** relaunching anything:
 
-Conditions 1 to 3 are checked first, so the set counts only restarts the dispatcher would make.
+`<statedir>/agentbus/<p>/unplanned.json`, mode 0600, write-to-temp, fsync the file, rename, fsync
+the directory: `[{"boot": "<boot id>", "at": <ms>}, …]`, one entry per restart (a boot already
+listed is not added again, so a second judgement of the same boot counts nothing). `at` is
+Redis TIME read at the judgement (the persisted-time rule); the window is judged against Redis
+TIME too. Entries older than `services.unplanned_window` (24 h) are dropped at each write.
 
-- count ≤ `services.unplanned_max` (3): relaunch (§3.1);
-- count > 3: **the project is stopped**.
+Order: conditions 1 and 2 hold; read the file (unreadable or malformed: `counter not written`, no
+restart, the person told: fail closed, never a reset); add this boot; count within the window:
+
+Conditions 1 and 2 are checked first, so the file counts only restarts the dispatcher would make.
+
+- count ≤ `services.unplanned_max` (3): write the file (failure: `counter not written`), then
+  relaunch (§3.1);
+- count > 3: **the project is stopped** (the file is written too; its failure does not undo the
+  stop).
+
+`{p}:reboot` carries `n` and `max` for busmon's line (`2 of 3 in 24 h`); the file is the count's
+only source.
 
 **Stopped** means: the dispatcher writes a suspend record in `{p}:pause`, through a fenced
 variant of `Suspend`'s script (`FencedSuspend`: the lease check, then the same body), with the
@@ -150,7 +168,7 @@ by the dispatcher), so health, busmon and notifications still work. Verdict in `
 why, with `git status` and `git fsck` as the first checks.
 
 **Only the person lifts it**: `agentbus resume` (the existing command, from busmon's popup or
-palette) ends the suspend, relaunches with `--resume`, and **clears `{p}:unplanned`**: the
+palette) ends the suspend, relaunches with `--resume`, and **empties `unplanned.json`** (it runs on the project's host): the
 person's resume resets the counter, as the person alone resets a run budget. Older members also
 age out of the window by themselves.
 
@@ -208,22 +226,27 @@ Tests:
   the file is 0600 and replaced atomically.
 - dispatch start: an unplanned stop with every condition → `restarting`, self-repair relaunches,
   reboot deaths not counted in R5; each failing condition alone (setting off, self-repair `off`,
-  `shadow`, persistence unknown, off) → `unplanned` with that `why`, no relaunch, hold, nothing
+  `shadow`, counter not written) → `unplanned` with that `why`, no relaunch, hold, nothing
   counted; the fourth restart in the window → `stopped`, a suspend record with every field of
   §3.2's table, services left running, nothing relaunched, notices once; an existing suspend of
   the person's left as it is; `agentbus resume` on the dispatcher's suspend starts no stopped
   service it should not and lifts it; `intentional` → hold, record written; a second start on the same boot changes nothing; lost lease writes nothing;
   the record deleted once every required agent is alive.
-- `agentbus resume` clears `{p}:unplanned`.
+- `agentbus resume` empties `unplanned.json`.
+- counter: written and fsync'd before the relaunch (a fake relaunch records the order); a write
+  failure → `counter not written`, no relaunch; an unreadable or malformed file → no restart,
+  never a reset; the same boot judged twice counts once; entries outside the window dropped; a
+  restart, kill, restart sequence across simulated boots stops at the fourth with the broker
+  flushed between boots (the count does not depend on the broker).
 - busmon: each verdict's popup or header line, text and command; no record + services down → local judgement; remote
   host → command shown, nothing run.
 
 Footprint (two PRs):
-- A: `lifecycle/` (run record, `Judge`), SIGTERM handling in the dispatch service, `up`/`down`/
-  `suspend` writes, `bus/reboot.go` (`{p}:reboot`, `{p}:unplanned`, fenced scripts, the
+- A: `lifecycle/` (run record, counter file, `Judge`), SIGTERM handling in the dispatch service, `up`/`down`/
+  `suspend` writes, `bus/reboot.go` (`{p}:reboot`, fenced scripts, the
   dispatcher's suspend), dispatch start, `selfrepair/decide.go` (`HoldReboot`) and the chore's
   reboot deaths, `agentbus resume` (counter reset), `config/keys.go` (three keys, one retired),
-  `bus/keykinds.go` (two keys), operator note fragment.
+  `bus/keykinds.go` (`{p}:reboot`), operator note fragment.
 - B: busmon popup and For-you item.
 
 ## 8. Questions for the person
