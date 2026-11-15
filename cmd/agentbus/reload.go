@@ -7,20 +7,19 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/BurntSushi/toml"
-
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/clientfp"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // `agentbus reload <role> [--fresh] [--dry-run] [--reason <text>] [--as <person>]`
@@ -39,13 +38,16 @@ type reloadDeps struct {
 	ProcStart func(pid int) (uint64, error)
 	Terminate func(pid int) error // SIGTERM, never SIGKILL
 	// CheckRelaunch says, before anything is signalled, whether Relaunch can
-	// run for role: inside herdr, the workspace open, its template tab or its
-	// pop path (reload-fix-2: a reload killed agents it could not relaunch).
+	// run for role: the project's holder answers and the role is in the
+	// manifest (reload-fix-2: a reload killed agents it could not relaunch).
 	CheckRelaunch func(ctx context.Context, role string) error
-	// Relaunch runs the role's template command in a new pane of the open
-	// workspace (a pop: agent-spawn, a new tab), resuming session ("" =
-	// fresh), and closes the old pane once the new agent is proven.
-	Relaunch    func(ctx context.Context, role, session string) error
+	// Relaunch starts role as a new terminal of the project's holder (herdr
+	// exit §4.2), on profile ("" its own) resuming session ("" = fresh); a
+	// pop starts the same way.
+	Relaunch func(ctx context.Context, role, profile, session string) error
+	// CloseOld closes the old agent's terminal once the new agent is proven
+	// (relaunch-close).
+	CloseOld    func(ctx context.Context, pane string) error
 	AfterIntent func() // tests: work that opens between the two readiness reads
 	Now         func() time.Time
 	Sleep       func(time.Duration)
@@ -77,28 +79,38 @@ func realReloadDeps(env []string, project string, stdout, stderr io.Writer) relo
 		LookPath:  exec.LookPath,
 		ProcStart: dispatch.ProcStart,
 		Terminate: func(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) },
-		CheckRelaunch: func(_ context.Context, role string) error {
-			pop, err := popRole(env, role)
+		CheckRelaunch: func(ctx context.Context, role string) error {
+			m, err := rolecfg.Load(mustManifest(env))
 			if err != nil {
 				return err
 			}
-			_, err = planRelaunch(realUpDeps(stdout, stderr), project, role, pop)
-			return err
+			if !slices.Contains(m.RoleNames(), role) {
+				return fmt.Errorf("%s is not in roles.toml", role)
+			}
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+			if err != nil {
+				return err
+			}
+			return h.Ping(ctx)
 		},
-		Relaunch: func(ctx context.Context, role, session string) error {
-			ud := realUpDeps(stdout, stderr)
-			pop, err := popRole(env, role)
+		Relaunch: func(ctx context.Context, role, profile, session string) error {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
 			if err != nil {
 				return err
 			}
-			plan, err := planRelaunch(ud, project, role, pop)
+			t, err := h.Start(ctx, termhost.Spec{Project: project, Name: role, Profile: profile, ResumeSession: session})
 			if err != nil {
 				return err
 			}
-			if plan.Pop {
-				return spawnPop(ctx, ud, project, role, session, stdout)
+			fmt.Fprintf(stdout, "%s: relaunched (%s)\n", role, t.ID)
+			return nil
+		},
+		CloseOld: func(ctx context.Context, pane string) error {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+			if err != nil {
+				return err
 			}
-			return relaunchRole(ud, project, role, session, stdout)
+			return h.Close(ctx, termhost.TermID(pane))
 		},
 		Now: time.Now, Sleep: time.Sleep,
 		PIDGone: 15 * time.Second, Proof: 60 * time.Second, Recent: 2 * time.Minute,
@@ -182,7 +194,7 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 	if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
 		return fail("its recorded process (pid %d) is not running: agentbus up %s --resume relaunches it", snap.PID, b.Project())
 	}
-	if pane := d.Env("HERDR_PANE_ID"); pane != "" && pane == snap.Pane {
+	if term := d.Env("AGENTBUS_TERM_ID"); term != "" && (term == snap.Pane || strings.HasSuffix(snap.Pane, "/"+term)) {
 		return fail("an agent cannot be reloaded from its own pane: run it from another pane or a terminal")
 	}
 	fallbacks, err := b.Fallbacks(ctx)
@@ -331,7 +343,11 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 	if session != "" {
 		recovery += " --resume " + session
 	}
-	if err := d.Relaunch(ctx, role, session); err != nil {
+	profile := ""
+	if own.Profile != manifestOwn.Profile {
+		profile = own.Profile
+	}
+	if err := d.Relaunch(ctx, role, profile, session); err != nil {
 		return failed("relaunch", "the old client is gone and the relaunch failed: %v; recover with %s in pane %s, or agentbus up %s --resume",
 			err, recovery, snap.Pane, b.Project())
 	}
@@ -354,6 +370,13 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 		if fp, err := clientfp.Decode(proved.ClientFP); err != nil || fp.Hash() != o.Update.Hash {
 			return failed("proof", "the new process (pid %d) does not run the installed client %s (its client_fp %s); check the launcher's PATH, then reload again",
 				proved.PID, dash(o.Update.Installed), dash(fpHash(proved.ClientFP)))
+		}
+	}
+	// relaunch-close: the old terminal goes once the new agent is proven; a
+	// failed close is said, the reload stands.
+	if d.CloseOld != nil && proved.Pane != snap.Pane {
+		if err := d.CloseOld(ctx, snap.Pane); err != nil {
+			fmt.Fprintf(errw, "reload: the old terminal %s was not closed: %v\n", snap.Pane, err)
 		}
 	}
 	if err := b.FinishReload(ctx, bus.SwapEvent{Role: role, FromProfile: own.Profile, ToProfile: own.Profile, ToProvider: own.Provider,
@@ -412,131 +435,9 @@ func reloadOpenWork(ctx context.Context, b *bus.Bus, agent string, fresh bool, f
 	return fail("it has work in flight; finish or hand it over first:\n  %s", strings.Join(open, "\n  "))
 }
 
-// relaunchRole is `agentbus up`'s relaunch for one role of the open
-// workspace: the role's tab only, its template command resuming session (""
-// = fresh) in a new pane, the old pane closed once the new agent is proven.
-// It takes up's lock, so it never splits a tab while an up does.
-func relaunchRole(d upDeps, project, role, session string, stdout io.Writer) error {
-	if d.Env("HERDR_ENV") != "1" {
-		return fmt.Errorf("not inside herdr: run it in the project's herdr session")
-	}
-	if d.Lock != nil {
-		unlock, err := d.Lock(project, false)
-		if err != nil {
-			return err
-		}
-		defer unlock()
-	}
-	var tpl upTemplate
-	if _, err := toml.DecodeFile(templatePath(d, project), &tpl); err != nil {
-		return fmt.Errorf("template: %w", err)
-	}
-	return relaunch.Role(relaunch.Deps{Herdr: d.Herdr, IgnoreWorkspace: d.IgnoreWorkspace, Agents: d.Agents,
-		ProcStart: d.ProcStart, Sleep: d.Sleep, Home: d.Env("HOME")}, project, role, session, tpl, stdout)
-}
-
-// popRole says whether the manifest declares role as a pop (agent-spawn, no
-// template tab).
-func popRole(env []string, role string) (bool, error) {
-	path, err := manifestPath(env)
-	if err != nil {
-		return false, err
-	}
-	m, err := rolecfg.Load(path)
-	if err != nil {
-		return false, err
-	}
-	tier, ok, err := m.Field(role, "tier")
-	if err != nil {
-		return false, err
-	}
-	return ok && len(tier) == 1 && tier[0] == "pop", nil
-}
-
-// relaunchPlan is how a reloaded role comes back: its template tab
-// (relaunchRole), or for a pop with no tab, agent-spawn in a new tab, the
-// way it was started and the way swap relaunches.
-type relaunchPlan struct{ Pop bool }
-
-// planRelaunch checks everything the relaunch needs, changing nothing:
-// reload runs it before the kill (reload-fix-2), and again after.
-func planRelaunch(d upDeps, project, role string, pop bool) (relaunchPlan, error) {
-	if d.Env("HERDR_ENV") != "1" {
-		return relaunchPlan{}, fmt.Errorf("not inside herdr: run it from a pane of the project's herdr session")
-	}
-	var tpl upTemplate
-	if _, err := toml.DecodeFile(templatePath(d, project), &tpl); err != nil {
-		return relaunchPlan{}, fmt.Errorf("template: %w", err)
-	}
-	tabs := 0
-	for _, t := range tpl.Tabs {
-		if r, ok := relaunch.LaunchRole(t.Command, project); ok && r == role {
-			tabs++
-		}
-	}
-	ws, err := findWorkspace(d, project)
-	if err != nil {
-		return relaunchPlan{}, err
-	}
-	if ws == "" {
-		return relaunchPlan{}, fmt.Errorf("the workspace of %s is not open (agentbus up %s)", project, project)
-	}
-	switch {
-	case tabs == 1:
-		return relaunchPlan{}, nil
-	case tabs > 1:
-		return relaunchPlan{}, fmt.Errorf("the template has %d tabs launching %s, want 1", tabs, role)
-	case !pop:
-		return relaunchPlan{}, fmt.Errorf("the template has no tab launching %s and it is not a pop role", role)
-	}
-	// A pop comes back through agent-spawn, which opens its tab in the
-	// caller's workspace: the caller must be in the project's.
-	repo, err := repoDir(d.Env)
-	if err != nil {
-		return relaunchPlan{}, err
-	}
-	if st, err := os.Stat(filepath.Join(repo, "scripts", "agent-spawn")); err != nil || st.IsDir() {
-		return relaunchPlan{}, fmt.Errorf("no scripts/agent-spawn in %s to relaunch the pop %s", repo, role)
-	}
-	panes, err := relaunch.WorkspacePanes(d.Herdr, ws)
-	if err != nil {
-		return relaunchPlan{}, err
-	}
-	here := d.Env("HERDR_PANE_ID")
-	for _, ref := range panes {
-		if slices.Contains(ref.All, here) {
-			return relaunchPlan{Pop: true}, nil
-		}
-	}
-	return relaunchPlan{}, fmt.Errorf("%s is a pop: agent-spawn opens its tab where it runs, so run reload from a pane of the %s workspace", role, project)
-}
-
-// spawnPop relaunches a pop the way it was started: agent-spawn, a new tab in
-// the caller's workspace, resuming session ("" = fresh), the bind required
-// (AGENT_LAUNCH_REQUIRE_BIND=1); reload proves the new agent itself. It takes
-// up's lock, like relaunchRole.
-func spawnPop(ctx context.Context, d upDeps, project, role, session string, stdout io.Writer) error {
-	if d.Lock != nil {
-		unlock, err := d.Lock(project, false)
-		if err != nil {
-			return err
-		}
-		defer unlock()
-	}
-	repo, err := repoDir(d.Env)
-	if err != nil {
-		return err
-	}
-	args := []string{role, project}
-	if session != "" {
-		args = append(args, "--resume", session)
-	}
-	c := exec.CommandContext(ctx, filepath.Join(repo, "scripts", "agent-spawn"), args...)
-	c.Env = append(os.Environ(), "AGENT_LAUNCH_REQUIRE_BIND=1", "AGENT_SPAWN_WAIT=0")
-	out, err := c.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("agent-spawn: %v: %s", err, strings.TrimSpace(string(out)))
-	}
-	fmt.Fprintf(stdout, "%s: relaunched (new tab, agent-spawn)\n", role)
-	return nil
+// mustManifest is the manifest path the environment names ("" when none:
+// rolecfg.Load then says so).
+func mustManifest(env []string) string {
+	path, _ := manifestPath(env)
+	return path
 }

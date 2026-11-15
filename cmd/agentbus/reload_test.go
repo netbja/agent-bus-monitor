@@ -115,7 +115,7 @@ func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
 			return nil
 		},
 		CheckRelaunch: func(context.Context, string) error { w.mu.Lock(); defer w.mu.Unlock(); return w.check },
-		Relaunch: func(_ context.Context, role, session string) error {
+		Relaunch: func(_ context.Context, role, profile, session string) error {
 			w.mu.Lock()
 			w.calls = append(w.calls, "relaunch "+role+" "+session)
 			fail, none, fp := w.relaunch, w.noProof, w.launched
@@ -131,6 +131,12 @@ func newReloadWorld(t *testing.T) (*reloadWorld, reloadDeps) {
 				client, provider = "codex", "openai"
 			}
 			return b.Bind(context.Background(), role, bus.AgentIdent{Pane: "p-new", PID: 5151, PIDStart: 9, Client: client, Provider: provider, ClientFP: fp})
+		},
+		CloseOld: func(_ context.Context, pane string) error {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			w.calls = append(w.calls, "close "+pane)
+			return nil
 		},
 		Now: time.Now, Sleep: func(time.Duration) { time.Sleep(5 * time.Millisecond) },
 		PIDGone: 200 * time.Millisecond, Proof: 200 * time.Millisecond, Recent: 2 * time.Minute,
@@ -194,7 +200,8 @@ func TestReloadRelaunchesTheAgentResumed(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("reload: %d %s", code, out)
 	}
-	if got := w.callList(); got != "term 4242;relaunch coder "+coderSession {
+	// relaunch-close: the old terminal closes once the new agent is proven.
+	if got := w.callList(); got != "term 4242;relaunch coder "+coderSession+";close p-old" {
 		t.Fatalf("calls %q", got)
 	}
 	log := w.ledger("coder")
@@ -225,7 +232,7 @@ func TestReloadPreflightRefusesWithoutChangingAnything(t *testing.T) {
 		"reloads are proposed":        {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.env["AGENT_BUS_RELOAD"] = "propose" }, "propose"},
 		"master under propose":        {"master", []string{"sentinel"}, func(w *reloadWorld) { reloadableSentinel(w); w.env["AGENT_BUS_RELOAD"] = "propose" }, "propose"},
 		"unknown role":                {"sentinel", []string{"ghost"}, nil, "unknown role"},
-		"its own pane":                {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.env["HERDR_PANE_ID"] = "p-old" }, "own pane"},
+		"its own pane":                {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.env["AGENTBUS_TERM_ID"] = "p-old" }, "own pane"},
 		"its process is gone":         {"sentinel", []string{"coder"}, func(w *reloadWorld) { delete(w.procs, 4242) }, "not running"},
 		"on a fallback":               {"sentinel", []string{"coder"}, onFallback, "swap coder --back"},
 		"working":                     {"sentinel", []string{"coder"}, func(w *reloadWorld) { w.status("coder", "working") }, "working"},
@@ -311,7 +318,7 @@ func TestReloadCallerTable(t *testing.T) {
 	if code, out := w.run(d, "coder", "foureyes", "--as", "charlie", "--fresh"); code != 0 {
 		t.Fatalf("a person's reload: %d %s", code, out)
 	}
-	if got := w.callList(); got != "term 6060;relaunch foureyes " {
+	if got := w.callList(); got != "term 6060;relaunch foureyes ;close p-four" {
 		t.Fatalf("fresh relaunch calls %q", got)
 	}
 	if code, out := w.run(d, "master", "coder", "--as", "Not A Name"); code == 0 || !strings.Contains(out, "--as") {
@@ -418,7 +425,7 @@ func TestReloadMasterReloadsSentinel(t *testing.T) {
 	if code, out := w.run(d, "master", "sentinel"); code != 0 {
 		t.Fatalf("reload: %d %s", code, out)
 	}
-	if got := w.callList(); got != "term 8080;relaunch sentinel 5e5e5e5e-0000-4000-8000-000000000001" {
+	if got := w.callList(); got != "term 8080;relaunch sentinel 5e5e5e5e-0000-4000-8000-000000000001;close p-sent" {
 		t.Fatalf("calls %q", got)
 	}
 }
@@ -537,8 +544,8 @@ func TestReloadProvesTheTemplatesProfile(t *testing.T) {
 	}
 	w.env["AGENTBUS_PROJECTS_DIR"] = projects
 	relaunch := d.Relaunch
-	d.Relaunch = func(ctx context.Context, role, session string) error {
-		if err := relaunch(ctx, role, session); err != nil {
+	d.Relaunch = func(ctx context.Context, role, profile, session string) error {
+		if err := relaunch(ctx, role, profile, session); err != nil {
 			return err
 		}
 		return w.b.Bind(context.Background(), role, bus.AgentIdent{Pane: "p-new", PID: 5151, PIDStart: 9, Client: "codex", Provider: "openai", ClientFP: w.launched})
