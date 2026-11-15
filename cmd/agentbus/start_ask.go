@@ -25,7 +25,6 @@ type asker struct {
 	env    func(string) string
 	look   func(exe string) (string, error) // the agent CLI lookup up uses
 	live   map[string]relaunch.Life         // an existing project's agents; nil unknown
-	busmon relaunch.Verdict                 // what up would do to its busmon tab; "" unknown
 	short  bool                             // an existing project: the short screen until c or a digit
 
 	chosenTeam bool // the person changed the team: start.team follows
@@ -126,7 +125,7 @@ func (a *asker) screen(p startPlan) {
 	if p.TeamAsk != "" {
 		fmt.Fprintf(a.out, "                ? %s\n", p.TeamAsk)
 	}
-	if p.Existing && (a.live != nil || a.busmonDown() != "") {
+	if p.Existing && a.live != nil {
 		status, enter := a.openState(p)
 		fmt.Fprintf(a.out, "\n  %s\n  Enter: %s   1-4: change   q: quit\n", status, enter)
 		return
@@ -145,30 +144,11 @@ func (a *asker) shortScreen(p startPlan) {
 	fmt.Fprintf(a.out, "  %s\n  Enter: %s   c: change project, name or team   q: quit\n", status, enter)
 }
 
-// busmonDown says why busmon's tab would be reopened, "" when it would not
-// or is unknown.
-func (a *asker) busmonDown() string {
-	switch a.busmon {
-	case relaunch.VerdictRelaunch:
-		return "busmon not running (its pane is a shell)"
-	case relaunch.VerdictCreate:
-		return "busmon's tab is missing"
-	}
-	return ""
-}
-
 // openState is an existing project's status line and what Enter does: the
-// agents by their life, busmon by up's own judgement of its tab, which
-// needs herdr only, so it is said even when the agents cannot be read.
+// agents by their life (busmon is the person's own window, herdr exit §4.6).
 func (a *asker) openState(p startPlan) (status, enter string) {
-	busmon := a.busmonDown()
 	if a.live == nil {
-		status, enter = p.Project+": its agents' state cannot be read", "open it (agentbus up's rule)"
-		if busmon != "" {
-			status += "; " + busmon
-			enter = "reopen busmon, and relaunch any agent that is gone (agentbus up's rule)"
-		}
-		return status + ".", enter
+		return p.Project + ": its agents' state cannot be read.", "start any agent that is not running, then open busmon (agentbus up's rule)"
 	}
 	var dead []string
 	for _, r := range p.Team {
@@ -176,20 +156,11 @@ func (a *asker) openState(p startPlan) (status, enter string) {
 			dead = append(dead, r.Role)
 		}
 	}
-	if len(dead) == 0 && busmon == "" {
-		return fmt.Sprintf("%s is running: %d of %d agents live.", p.Project, len(p.Team), len(p.Team)), "focus its workspace"
+	if len(dead) == 0 {
+		return fmt.Sprintf("%s is running: %d of %d agents live.", p.Project, len(p.Team), len(p.Team)), "open busmon on it"
 	}
-	status = fmt.Sprintf("%s is open: %d of %d agents live", p.Project, len(p.Team)-len(dead), len(p.Team))
-	var does []string
-	if len(dead) > 0 {
-		status += " (" + strings.Join(dead, ", ") + " not)"
-		does = append(does, "relaunch "+strings.Join(dead, " and ")+" in new panes")
-	}
-	if busmon != "" {
-		status += ", " + busmon
-		does = append(does, "reopen busmon")
-	}
-	return status + ".", strings.Join(does, ", ")
+	status = fmt.Sprintf("%s is open: %d of %d agents live (%s not).", p.Project, len(p.Team)-len(dead), len(p.Team), strings.Join(dead, ", "))
+	return status, "start " + strings.Join(dead, " and ") + " on the holder, then open busmon"
 }
 
 // clientLines says, per client of the team, whether it is installed.
