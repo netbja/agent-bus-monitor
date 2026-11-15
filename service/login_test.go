@@ -368,3 +368,18 @@ func TestSystemdRemoveDisablesByTheState(t *testing.T) {
 		}
 	}
 }
+
+type detachedManager struct{ Manager }
+
+func (detachedManager) Limits() string { return "no start at login here" }
+
+// A manager without a login backend that states its limits gives them as the
+// reason (herdr exit 6c3): start_at_login is refused with it.
+func TestLoginStartOfADetachedManager(t *testing.T) {
+	if ls, why := LoginStartOf(detachedManager{}); ls != nil || why != "no start at login here" {
+		t.Fatalf("%v %q", ls, why)
+	}
+	if _, why := LoginStartOf(nil); why != NoLoginStart {
+		t.Fatalf("nil: %q", why)
+	}
+}

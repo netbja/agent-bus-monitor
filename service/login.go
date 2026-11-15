@@ -25,10 +25,22 @@ type LoginStart interface {
 // NoLoginStart is why the option cannot be honoured without a backend.
 const NoLoginStart = "no service manager to start at login"
 
+// Detached is a manager whose services run as detached supervisors, no
+// service manager above them (holder.Supervised; herdr exit 6c3): Limits
+// states what does not exist then, for service status and as the reason
+// start_at_login is refused.
+type Detached interface {
+	Manager
+	Limits() string
+}
+
 // LoginStartOf is m's login backend, or nil and why there is none.
 func LoginStartOf(m Manager) (LoginStart, string) {
 	if ls, ok := m.(LoginStart); ok {
 		return ls, ""
+	}
+	if dm, ok := m.(Detached); ok {
+		return nil, dm.Limits()
 	}
 	return nil, NoLoginStart
 }
