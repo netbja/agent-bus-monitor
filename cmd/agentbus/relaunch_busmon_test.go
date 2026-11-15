@@ -6,9 +6,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // busmonQuit is an open workspace whose busmon tab holds one pane, w4:p1,
@@ -215,31 +212,5 @@ func TestIsBusmonTab(t *testing.T) {
 	}
 	if relaunch.IsBusmonTab(upTab{Name: "monitor", Command: "/r/busmon --project demo"}, "demo") {
 		t.Error("a tab not named busmon")
-	}
-}
-
-// Through up on an open workspace, with the agents unreadable: busmon's old
-// shell is still closed, since it needs herdr only (foureyes on the spec).
-func TestUpClosesBusmonsOldShell(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	h, _ := busmonQuit()
-	deps.Herdr = func(args ...string) ([]byte, error) {
-		if strings.Join(args, " ") == "workspace list" {
-			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
-		}
-		return h.run(args...)
-	}
-	deps.Agents = func(string) (map[string]bus.AgentSnapshot, error) { return nil, errors.New("broker down") }
-	deps.Sleep = func(time.Duration) {}
-	deps.Lock = func(string, bool) (func(), error) { return func() {}, nil }
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	if got := h.closes(); len(got) != 1 || got[0] != "w4:p1" || !strings.Contains(out.String(), "busmon: old pane w4:p1 closed") {
-		t.Fatalf("closed %q\n%s", got, out.String())
-	}
-	if bad := h.typedIntoExisting(); len(bad) != 0 {
-		t.Fatalf("typed into an existing pane: %q", bad)
 	}
 }

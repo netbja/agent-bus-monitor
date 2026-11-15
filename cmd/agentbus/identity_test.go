@@ -98,7 +98,7 @@ func TestUpDefaultsAsToTheRecordedName(t *testing.T) {
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	runUp([]string{"demo", work, "--as", "pilot"}, deps, &out, &errw)
-	if len(*boot) < 2 || (*boot)[0] != "demo "+work+" --as charlie" || !strings.HasSuffix((*boot)[len(*boot)-1], "--as pilot") ||
+	if len(*boot) < 2 || !strings.HasPrefix((*boot)[0], "demo "+work+" --as charlie") || !strings.Contains((*boot)[len(*boot)-1], "--as pilot") ||
 		strings.Contains((*boot)[len(*boot)-1], "charlie") {
 		t.Fatalf("bootstrap calls = %q", *boot)
 	}

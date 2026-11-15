@@ -269,57 +269,24 @@ func TestRelaunchOpenWithoutCreateLeavesMissingTabs(t *testing.T) {
 	}
 }
 
-func TestUpRelaunchesInAnOpenWorkspace(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	h := &relaunchHerdr{
-		tabs:  `{"label":"busmon","tab_id":"w4:t1"},{"label":"master","tab_id":"w4:t3"}`,
-		panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
-		fg:    map[string]string{"w4:p1": "bash", "w4:p3": "bash"},
-	}
-	deps.Herdr = func(args ...string) ([]byte, error) {
-		if strings.Join(args, " ") == "workspace list" {
-			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
-		}
-		return h.run(args...)
-	}
-	locked := 0
-	deps.Lock = func(string, bool) (func(), error) { locked++; return func() {}, nil }
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	got := strings.Join(h.ran(), "\n")
-	if !strings.Contains(got, "pane split w4:p3 --direction right --cwd "+work) ||
-		!strings.Contains(got, "pane run w4:p3s env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch master demo") ||
-		!strings.Contains(got, "pane run w4:p1s /r/busmon --project demo") || locked != 1 {
-		t.Fatalf("calls:\n%s\nlocked %d out %s", got, locked, out.String())
-	}
-}
-
 func TestUpDryRunProvisionsNothing(t *testing.T) {
 	_, templates, _, boot, deps := upFixture(t)
 	if err := os.MkdirAll(templates, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "name = \"demo\"\n[[tabs]]\nname = \"master\"\ncommand = \"agent-launch master demo\"\n"
+	body := "name = \"demo\"\n[[tabs]]\nname = \"master\"\ncommand = \"" + agentTab(templates, "master") + "\"\n"
 	if err := os.WriteFile(templates+"/demo.toml", []byte(body), 0o644); err != nil {
 		t.Fatal(err)
-	}
-	h := &relaunchHerdr{tabs: `{"label":"master","tab_id":"w4:t3"}`, panes: `{"pane_id":"w4:p3","tab_id":"w4:t3"}`, fg: map[string]string{"w4:p3": "bash"}}
-	deps.Herdr = func(args ...string) ([]byte, error) {
-		if strings.Join(args, " ") == "workspace list" {
-			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
-		}
-		return h.run(args...)
 	}
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", "--dry-run"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if len(*boot) != 0 || len(h.ran()) != 0 || strings.Contains(strings.Join(h.calls, " "), "workspace focus") {
-		t.Fatalf("boot %q calls %q", *boot, h.calls)
+	h, _ := deps.Team("demo")
+	if len(*boot) != 0 || len(h.(*recHost).specs) != 0 {
+		t.Fatalf("boot %q started %v", *boot, h.(*recHost).started())
 	}
-	if !strings.Contains(out.String(), "master: would relaunch") {
+	if !strings.Contains(out.String(), "dry run: master: would start fresh") {
 		t.Fatalf("out = %s", out.String())
 	}
 }
@@ -361,8 +328,8 @@ func TestUpLockFailsClosed(t *testing.T) {
 	work, _, h, _, deps := upFixture(t)
 	deps.Lock = lock
 	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || len(h.calls) != 0 {
-		t.Fatalf("up without its lock: code %d calls %q", code, h.calls)
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || len(h.specs) != 0 {
+		t.Fatalf("up without its lock: code %d started %v", code, h.started())
 	}
 }
 
@@ -705,41 +672,6 @@ func TestRelaunchOpenClosesOnlyTheRecordedPane(t *testing.T) {
 	}
 }
 
-// up wires the proof: its own snapshot reads prove the relaunched master
-// before the old pane is closed.
-func TestUpClosesTheOldPaneOfAProvenRelaunch(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	h, _, _ := deadMaster()
-	deps.Herdr = func(args ...string) ([]byte, error) {
-		if strings.Join(args, " ") == "workspace list" {
-			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
-		}
-		return h.run(args...)
-	}
-	reads := 0
-	deps.Agents = func(string) (map[string]bus.AgentSnapshot, error) {
-		reads++
-		if reads == 1 {
-			return map[string]bus.AgentSnapshot{"master": {PID: 30, PIDStart: 7, Pane: "w4:p3"}}, nil
-		}
-		return map[string]bus.AgentSnapshot{"master": {PID: 31, PIDStart: 9, Pane: "w4:p3s"}}, nil
-	}
-	deps.ProcStart = procs
-	deps.Sleep = func(time.Duration) {}
-	deps.Lock = func(string, bool) (func(), error) { return func() {}, nil }
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	// busmon's tab, a plain shell in deadMaster, is closed too (start-busmon-pane).
-	if got := h.closes(); strings.Join(got, " ") != "w4:p1 w4:p3" || !strings.Contains(out.String(), "master: old pane w4:p3 closed") {
-		t.Fatalf("closed %q\n%s", got, out.String())
-	}
-	if bad := h.typedIntoExisting(); len(bad) != 0 {
-		t.Fatalf("typed into an existing pane: %q", bad)
-	}
-}
-
 // The proof needs a new process: the dead agent's own identity, even read
 // alive again in the new pane (a pid reused with the same start, or a stale
 // read), proves nothing, and the old pane stays.
@@ -801,55 +733,6 @@ func TestRelaunchOpenSkipsARoleWhoseIntentIsHeld(t *testing.T) {
 		if slices.Contains(asked, "busmon") {
 			t.Errorf("busmon's tab, no agent, was asked for an intent: %v", asked)
 		}
-	}
-}
-
-// up reads each role's intent from the broker right before it acts on it.
-func TestUpSkipsARoleUnderSelfRepair(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	h := &relaunchHerdr{
-		tabs:  `{"label":"busmon","tab_id":"w4:t1"},{"label":"master","tab_id":"w4:t3"}`,
-		panes: `{"pane_id":"w4:p1","tab_id":"w4:t1"},{"pane_id":"w4:p3","tab_id":"w4:t3"}`,
-		fg:    map[string]string{"w4:p1": "bash", "w4:p3": "bash"},
-	}
-	deps.Herdr = func(args ...string) ([]byte, error) {
-		if strings.Join(args, " ") == "workspace list" {
-			return []byte(`{"result":{"workspaces":[{"label":"demo","workspace_id":"w4"}]}}`), nil
-		}
-		return h.run(args...)
-	}
-	deps.Lock = func(string, bool) (func(), error) { return func() {}, nil }
-	deps.Intent = func(project, role string) (bus.SwapIntent, bool, error) {
-		if project == "demo" && role == "master" {
-			return bus.SwapIntent{Kind: bus.SwapKindSelfRepair, Nonce: "n1"}, true, nil
-		}
-		return bus.SwapIntent{}, false, nil
-	}
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	if got := strings.Join(h.ran(), "\n"); strings.Contains(got, "agent-launch master") {
-		t.Fatalf("master relaunched under a self-repair:\n%s", got)
-	}
-	if !strings.Contains(out.String(), "master: skipped (self-repair in progress)") {
-		t.Fatalf("out:\n%s", out.String())
-	}
-	// An unreadable intent is said, and up goes on as when the agents are unreadable.
-	deps.Intent = func(string, string) (bus.SwapIntent, bool, error) {
-		return bus.SwapIntent{}, false, errors.New("connection refused")
-	}
-	out.Reset()
-	before := len(h.ran())
-	if code := runUp([]string{"demo", work, "--resume"}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	if !strings.Contains(out.String(), "master: intent unreadable (connection refused)") {
-		t.Fatalf("out:\n%s", out.String())
-	}
-	// foureyes (step 2): not checked is not skipped: master is relaunched.
-	if got := strings.Join(h.ran()[before:], "\n"); !strings.Contains(got, "agent-launch master") {
-		t.Fatalf("master not relaunched with its intent unreadable:\n%s", got)
 	}
 }
 

@@ -124,11 +124,8 @@ func TestUpRefusesLoginStartWithoutABackend(t *testing.T) {
 	deps.AtLogin = func() bool { return true }
 	out.Reset()
 	errw.Reset()
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up in tab mode = %d: %s", code, errw.String())
-	}
-	if !strings.Contains(errw.String(), service.NoLoginStart) {
-		t.Fatalf("tab mode stderr = %q", errw.String())
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || !strings.Contains(errw.String(), "no service manager") {
+		t.Fatalf("up without a manager = %d: %s", code, errw.String()) // herdr exit §4.4b: no tab mode any more
 	}
 }
 
