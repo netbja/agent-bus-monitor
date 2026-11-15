@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: draft r5, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: draft r6, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0).
 
 Three small slices: tell the person when an agent's login **has expired** (all four clients), warn
@@ -63,7 +63,10 @@ A new profile list, `[signature] auth = [...]` in `agentstate/clients/<client>.t
 - **not already reported**: the dispatcher keeps, in memory, per agent, the pid and a hash of the
   matched raw region it last notified for; the same pid with the same region is not counted again.
   So an error left on screen after the person's /login (nothing printed since) notifies once, not
-  each day. A restarted dispatcher may send it once more: accepted;
+  each day. **The entry is cleared by the first settled read of that agent that does not match**
+  (the error is no longer the last output, or the pane shows no error): that ends the episode, so a
+  later expiry of the same long-lived process, even with the same text, is a new non-match→match
+  episode and notifies (reviewer-codex on r5). A restarted dispatcher may send one more: accepted;
 - two settled reads in a row, as the `Blocked` signature (`Episode.Step`'s rule).
 
 A misread costs one notice, nothing else: nothing is retried, held, restarted or typed.
@@ -145,7 +148,8 @@ None new. `updates.check` gates 4; 2 and 3 are notices with once-marks and need 
   fresh error directly above a ready empty box **does** match (the real case); an old error line
   followed by a later answer, then the ready box, does not (that exact fixture through the auth
   matcher); the same pid and region on the next day does not notify again; a new pid with the same
-  screen does.
+  screen does; the same pid after recovery (a settled non-matching read) and a later expiry with the
+  same region notifies again.
 - Banner: the fixture matches below the box with N parsed; the same sentence above the box (agent
   text) does not; an unbounded box reads nothing.
 - Notices: two passes the same day send one notice per client; the next day sends again; ten panes
