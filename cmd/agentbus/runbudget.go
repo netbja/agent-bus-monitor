@@ -49,10 +49,9 @@ func runTotals(run bus.RunRecord, nowMs int64, l runLimits) string {
 	if l.maxDeliveries > 0 {
 		d += fmt.Sprintf(" of %d", l.maxDeliveries)
 	}
-	e := run.Elapsed(nowMs).Truncate(time.Minute).String()
-	e = strings.TrimSuffix(e, "0s")
+	e := runDuration(run.Elapsed(nowMs))
 	if l.maxDuration > 0 {
-		e += " of " + strings.TrimSuffix(l.maxDuration.String(), "0s")
+		e += " of " + runDuration(l.maxDuration)
 	}
 	return d + ", " + e
 }

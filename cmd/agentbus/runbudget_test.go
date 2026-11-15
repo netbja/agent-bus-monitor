@@ -146,7 +146,7 @@ func TestRunStepStopsWhenNothingIsInFlight(t *testing.T) {
 	if rec := w.pass(t, bus.MergeUndelivered{Subject: "s", Head: strings.Repeat("f", 40)}); rec.State != bus.RunDraining {
 		t.Fatalf("an undelivered head stopped the run: %+v", rec)
 	}
-	if _, err := w.b.Request(w.ctx, "wiki-3", "master", "coder", "", "do it", 0); err != nil {
+	if _, err := w.b.RequestBy(w.ctx, "wiki-3", "charlie", "coder", "", "do it", 0, true); err != nil { // the person: the run drains
 		t.Fatal(err)
 	}
 	if rec := w.pass(t); rec.State != bus.RunDraining {
