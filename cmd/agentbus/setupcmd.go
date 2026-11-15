@@ -18,7 +18,7 @@ import (
 // `agentbus setup [--repo <dir>] install|update|uninstall|status [setup.sh's
 // flags]` (spec docs/superpowers/specs/2026-10-28-go-installer-design.md):
 // the installer, run by the thin ./setup.sh since the switch (rollout step
-// 2); the bash one it replaces stays one release as scripts/setup-legacy.sh.
+// 2).
 
 // execRunner is the real setup.Runner, the only one: every external command
 // setup runs goes through it.
@@ -102,9 +102,7 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 	}
 	defer os.RemoveAll(tmp)
 	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Tmp: tmp, Getenv: getenv, Now: time.Now, Setenv: os.Setenv}
-	o.Step("2/5 Checking herdr workspace manager")
-	in.CheckHerdr(ctx)
-	o.Step("3/5 Building and installing agentbus & busmon, linking the herdr plugin")
+	o.Step("2/4 Building and installing agentbus & busmon")
 	in.Rev = in.RepoRev(ctx)
 	if !opt.DryRun {
 		if err := os.MkdirAll(opt.BinDir, 0o755); err != nil {
@@ -118,12 +116,11 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 		}
 	}
 	in.RoleScriptLinks()
-	in.KeyBinding(ctx, in.LinkPlugin(ctx))
 	in.ServicesHint(ctx)
 	in.CheckPath(getenv("PATH"))
 	in.ExternalSkills(ctx)
 	in.RoleSkills(ctx)
-	o.Step("4/5 Checking Redis broker service")
+	o.Step("3/4 Checking Redis broker service")
 	in.Redis(ctx, docker)
 	in.Clients()
 	var tty io.ReadWriter

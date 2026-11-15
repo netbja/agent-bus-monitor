@@ -19,7 +19,7 @@ func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, go
 		s, _, _ := strings.Cut(strings.TrimRight(string(out), "\n"), "\n")
 		return s
 	}
-	o.Step("1/5 Checking system platform & toolchain")
+	o.Step("1/4 Checking system platform & toolchain")
 	o.OK(fmt.Sprintf("Platform: %s / %s", goos, goarch))
 
 	if _, err := r.LookPath("git"); err == nil {
@@ -30,18 +30,6 @@ func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, go
 		o.OK("git: " + v)
 	} else {
 		need("git is required but not installed.")
-	}
-
-	if opt.InstallHerdr {
-		if _, err := r.LookPath("curl"); err == nil {
-			v := "installed"
-			if out, err := r.Run(ctx, Cmd{Name: "curl", Args: []string{"--version"}}); err == nil {
-				v = first(out)
-			}
-			o.OK("curl: " + v)
-		} else {
-			need("curl is required by --install-herdr but not installed.")
-		}
 	}
 
 	if _, err := r.LookPath("go"); err == nil {

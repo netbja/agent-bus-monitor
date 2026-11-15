@@ -26,11 +26,10 @@ func TestPreflightAllPresent(t *testing.T) {
 			"docker info":            {},
 			"docker compose version": {},
 		}}
-	out, errw, missing := preflightRun(t, f, Options{InstallHerdr: true})
-	want := "\n==> 1/5 Checking system platform & toolchain\n" +
+	out, errw, missing := preflightRun(t, f, Options{})
+	want := "\n==> 1/4 Checking system platform & toolchain\n" +
 		"    ✓ Platform: linux / amd64\n" +
 		"    ✓ git: git version 2.47.0\n" +
-		"    ✓ curl: curl 8.9.1 (x86_64)\n" +
 		"    ✓ go: 1.26.2 (go.mod requires 1.26)\n" +
 		"    ✓ docker: daemon is running\n" +
 		"    ✓ docker compose: plugin available\n"
@@ -43,17 +42,16 @@ func TestPreflightAllPresent(t *testing.T) {
 // with setup.sh's words.
 func TestPreflightListsEveryGap(t *testing.T) {
 	f := &fakeRunner{t: t, paths: map[string]string{}, cmds: map[string]fakeCmd{}}
-	out, errw, missing := preflightRun(t, f, Options{InstallHerdr: true})
+	out, errw, missing := preflightRun(t, f, Options{})
 	for _, w := range []string{
 		"    ✗ git is required but not installed.\n",
-		"    ✗ curl is required by --install-herdr but not installed.\n",
 		"    ✗ Go 1.26 or newer is required to build busmon and agentbus: https://go.dev/dl/\n",
 	} {
 		if !strings.Contains(errw, w) {
 			t.Errorf("missing %q in\n%s", w, errw)
 		}
 	}
-	if !strings.Contains(out, "    ! docker is not installed. Redis broker container requires Docker: https://docs.docker.com/engine/install/\n") || missing != 3 {
+	if !strings.Contains(out, "    ! docker is not installed. Redis broker container requires Docker: https://docs.docker.com/engine/install/\n") || missing != 2 { // git and go
 		t.Fatalf("out:\n%s\nmissing %d", out, missing)
 	}
 }

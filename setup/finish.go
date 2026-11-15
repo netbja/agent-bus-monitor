@@ -16,7 +16,7 @@ import (
 // warning, never a failure (installer-no-client): the bus and busmon work
 // without one, and nothing is installed for the person.
 func (in *Installer) Clients() {
-	in.O.Step("5/5 Scanning installed AI coding agents")
+	in.O.Step("4/4 Scanning installed AI coding agents")
 	found := false
 	for _, c := range rolecfg.Clients {
 		if p, err := in.R.LookPath(c.Exe); err == nil {

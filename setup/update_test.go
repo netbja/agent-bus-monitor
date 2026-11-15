@@ -12,7 +12,7 @@ import (
 
 func updateWorld(t *testing.T) (*Installer, *bytes.Buffer, *bytes.Buffer, *fakeRunner, *[]string) {
 	t.Helper()
-	in, _, f, _ := pluginWorld(t, "")
+	in, _, f, _ := installWorld(t)
 	var out, errw bytes.Buffer
 	in.O = NewOutput(&out, &errw, false)
 	g := "git -C " + in.Repo + " "
@@ -44,7 +44,7 @@ func TestUpdateFastForwards(t *testing.T) {
 	f.cmds[g+"diff --name-only aaa HEAD -- skills/"] = fakeCmd{out: "skills/agent-bus/SKILL.md\nskills/tdd/x.md\nskills/agent-bus/y\n"}
 	_ = os.MkdirAll(in.Repo+"/docs/releases", 0o755)
 	_ = os.WriteFile(in.Repo+"/docs/releases/v1.1.0.md", nil, 0o644)
-	in.Opt.InstallHerdr, in.Opt.Yes, in.Opt.StartDocker, in.Opt.InstallSkills = true, true, false, true
+	in.Opt.Yes, in.Opt.StartDocker, in.Opt.InstallSkills = true, false, true
 	in.Script = "/r/setup.sh"
 	if code := in.Update(context.Background()); code != 0 {
 		t.Fatalf("exit %d", code)
@@ -57,7 +57,7 @@ func TestUpdateFastForwards(t *testing.T) {
 	if out.String() != want {
 		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)
 	}
-	if w := []string{"/r/setup.sh", "install", "--bin-dir", in.Opt.BinDir, "--install-herdr", "--no-docker", "--yes", "AGENTBUS_SETUP_FROM=v1.0.0"}; !reflect.DeepEqual(*exec, w) {
+	if w := []string{"/r/setup.sh", "install", "--bin-dir", in.Opt.BinDir, "--no-docker", "--yes", "AGENTBUS_SETUP_FROM=v1.0.0"}; !reflect.DeepEqual(*exec, w) {
 		t.Fatalf("exec %q", *exec)
 	}
 }

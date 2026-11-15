@@ -12,7 +12,7 @@ import (
 func TestClients(t *testing.T) {
 	in, out, _, _ := skillsWorld(t, nil, map[string]string{"claude": "/b/claude"})
 	in.Clients()
-	want := "\n==> 5/5 Scanning installed AI coding agents\n" +
+	want := "\n==> 4/4 Scanning installed AI coding agents\n" +
 		"    ✓ claude: available (/b/claude)\n" +
 		"    • codex: not installed (optional)\n" +
 		"    • kimi: not installed (optional)\n" +
