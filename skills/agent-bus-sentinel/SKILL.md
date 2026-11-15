@@ -37,6 +37,9 @@ Only these repairs are allowed, and only when the check identifies the matching 
   starts that build's unit and never restarts a running one. Then escalate to master with the
   agents that were lost (every agent the holder held died with it). Never `agentbus up`, never
   `service restart holder` (it needs `--kill-agents`, the person's word), never relaunch an agent.
+  When `holder` warns instead (`holder_restarted`: a holder came back after a crash, and the
+  agents named in it died with its old process), there is nothing to start: escalate to master
+  with that list, once per episode, and do nothing else.
 
 After a repair, wait for the next measured result. Never restart repeatedly, run project commands,
 change Redis credentials, edit roles or configuration, change project code, or close/type into a

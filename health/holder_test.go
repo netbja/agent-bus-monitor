@@ -74,3 +74,65 @@ func TestEvaluateHolderLeftovers(t *testing.T) {
 		t.Fatalf("the current build counted: %+v", got)
 	}
 }
+
+// holder_restarted (spec 4.4a): a holder that answers came back after an
+// agent's last proof in one of its terminals, and that terminal is gone:
+// the agent died with the old process. Each age on its own clock (the
+// socket's on this host, the proof's on Redis's): no clock offset.
+func TestEvaluateHolderRestarted(t *testing.T) {
+	cur := HolderBuild{Key: "k1", Raw: "v1", Current: true, Unit: true, Answers: true, Terms: 1, Since: 2 * time.Minute, Live: []string{"t9"}}
+	old := HolderBuild{Key: "k0", Raw: "v0", Unit: true, Answers: true, Terms: 1, Since: time.Hour, Live: []string{"t1"}}
+	gone := HolderBuild{Key: "k7", Raw: "v7", Unit: true} // installed, does not answer
+	e := HolderEvidence{Known: true, Builds: []HolderBuild{cur, old, gone}, AgentsKnown: true, Agents: []HolderAgent{
+		{Name: "coder", Key: "k1", Term: "t3", ProvedAgo: 10 * time.Minute},    // proved before the restart, terminal gone: lost
+		{Name: "foureyes", Key: "k1", Term: "t4", ProvedAgo: 20 * time.Minute}, // lost too
+		{Name: "master", Key: "k1", Term: "t9", ProvedAgo: 10 * time.Minute},   // its terminal still runs
+		{Name: "sentinel", Key: "k1", Term: "t5", ProvedAgo: time.Minute},      // proved after the start: not this restart
+		{Name: "architect", Key: "k0", Term: "t1", ProvedAgo: 2 * time.Hour},   // the old build answers it
+		{Name: "docs", Key: "k7", Term: "t1", ProvedAgo: 2 * time.Hour},        // a build that does not answer: the fail's business
+	}}
+	got := EvaluateHolder(e)
+	if got.Status != Warn || !strings.Contains(got.Detail, "restarted") || !strings.Contains(got.Detail, "2 agent(s) lost: coder, foureyes") || !strings.Contains(got.Detail, "v1") ||
+		strings.Contains(got.Detail, "docs") || strings.Contains(got.Detail, "architect") || strings.Contains(got.Detail, "master") || strings.Contains(got.Detail, "sentinel") {
+		t.Fatalf("%+v", got)
+	}
+	// The agents unread: the base judgement alone.
+	e.AgentsKnown = false
+	if got := EvaluateHolder(e); got.Status != OK {
+		t.Fatalf("agents unread: %+v", got)
+	}
+	// No lost agent: OK.
+	e.AgentsKnown, e.Agents = true, e.Agents[2:]
+	if got := EvaluateHolder(e); got.Status != OK {
+		t.Fatalf("nothing lost: %+v", got)
+	}
+	// A holder that does not answer stays a fail.
+	down := HolderEvidence{Known: true, AgentsKnown: true, Builds: []HolderBuild{{Key: "k1", Raw: "v1", Current: true, Unit: true}},
+		Agents: []HolderAgent{{Name: "coder", Key: "k1", Term: "t3", ProvedAgo: time.Hour}}}
+	if got := EvaluateHolder(down); got.Status != Fail {
+		t.Fatalf("down: %+v", got)
+	}
+	// An old build that restarted (crashed and came back) counts too.
+	old.Since, old.Live = time.Minute, nil
+	e2 := HolderEvidence{Known: true, AgentsKnown: true, Builds: []HolderBuild{cur, old},
+		Agents: []HolderAgent{{Name: "architect", Key: "k0", Term: "t1", ProvedAgo: 2 * time.Hour}}}
+	if got := EvaluateHolder(e2); got.Status != Warn || !strings.Contains(got.Detail, "v0") || !strings.Contains(got.Detail, "architect") {
+		t.Fatalf("old build: %+v", got)
+	}
+}
+
+func TestHolderPane(t *testing.T) {
+	for pane, want := range map[string][2]string{
+		"v0.29.0.0123456789/t3": {"v0.29.0.0123456789", "t3"},
+		"w1:p3":                 {"", ""},
+		"":                      {"", ""},
+		"a/b/c":                 {"", ""},
+		"NOTAKEY/t3":            {"", ""},
+		"v0.29.0.0123456789/":   {"", ""},
+	} {
+		key, term, ok := HolderPane(pane)
+		if [2]string{key, term} != want || ok != (want[0] != "") {
+			t.Errorf("%q: %q %q %v", pane, key, term, ok)
+		}
+	}
+}

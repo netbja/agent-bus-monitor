@@ -17,7 +17,7 @@ import (
 // one (and since when), and whether each answers, with its terminals.
 type holderProbe struct {
 	sockets func(project string) (map[string]time.Duration, error)
-	answer  func(project, key string) (terms int, ok bool)
+	answer  func(project, key string) (terms []holder.TermInfo, ok bool)
 }
 
 // realHolderProbe lists <rundir>/agentbus/<project>/holder-<key>.sock (the
@@ -45,9 +45,9 @@ func realHolderProbe(getenv func(string) string) holderProbe {
 			}
 			return out, nil
 		},
-		answer: func(project, key string) (int, bool) {
-			n, err := holderTerms(project, key)
-			return n, err == nil
+		answer: func(project, key string) ([]holder.TermInfo, bool) {
+			terms, err := holderTermList(project, key)
+			return terms, err == nil
 		},
 	}
 }
@@ -93,9 +93,14 @@ func holderEvidence(m service.Manager, paths service.Paths, project, currentRaw 
 		return health.HolderEvidence{}
 	}
 	for key, age := range socks {
-		if n, ok := probe.answer(project, key); ok {
+		if terms, ok := probe.answer(project, key); ok {
 			b := get(key)
-			b.Answers, b.Terms, b.Since = true, n, age
+			b.Answers, b.Terms, b.Since = true, len(terms), age
+			for _, t := range terms {
+				if t.Alive {
+					b.Live = append(b.Live, t.ID)
+				}
+			}
 		}
 	}
 	base := filepath.Join(paths.DataHome, "agentbus", "holder")
@@ -153,4 +158,13 @@ func holderAnswersAny(getenv func(string) string, key string) bool {
 		}
 	}
 	return false
+}
+
+// withHolderAgents is health.WithHolderAgents of the agents' snapshots.
+func withHolderAgents(e health.HolderEvidence, snaps map[string]bus.AgentSnapshot, redisNow time.Time) health.HolderEvidence {
+	proofs := make([]health.HolderProof, 0, len(snaps))
+	for n, s := range snaps {
+		proofs = append(proofs, health.HolderProof{Name: n, Pane: s.Pane, PID: s.PID, IdentTS: s.IdentTS})
+	}
+	return health.WithHolderAgents(e, proofs, redisNow)
 }

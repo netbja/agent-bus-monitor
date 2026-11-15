@@ -4,11 +4,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -72,14 +75,14 @@ func TestHolderEvidence(t *testing.T) {
 		sockets: func(project string) (map[string]time.Duration, error) {
 			return map[string]time.Duration{cur: time.Minute, old: 30 * time.Hour}, nil
 		},
-		answer: func(project, key string) (int, bool) {
+		answer: func(project, key string) ([]holder.TermInfo, bool) {
 			switch key {
 			case cur:
-				return 1, true
+				return []holder.TermInfo{{ID: "t1", Alive: true}}, true
 			case old:
-				return 2, true
+				return []holder.TermInfo{{ID: "t1", Alive: true}, {ID: "t2"}}, true
 			}
-			return 0, false
+			return nil, false
 		},
 	}
 	e := holderEvidence(hm, paths, "demo", "v3", probe)
@@ -90,10 +93,10 @@ func TestHolderEvidence(t *testing.T) {
 	for _, b := range e.Builds {
 		by[b.Raw] = b
 	}
-	if b := by["v3"]; !b.Current || !b.Unit || !b.Active || !b.Answers || b.Terms != 1 || !b.Binary {
+	if b := by["v3"]; !b.Current || !b.Unit || !b.Active || !b.Answers || b.Terms != 1 || !b.Binary || !slices.Equal(b.Live, []string{"t1"}) {
 		t.Errorf("v3 %+v", b)
 	}
-	if b := by["v2"]; b.Current || !b.Unit || !b.Answers || b.Terms != 2 || b.Since != 30*time.Hour || b.Binary {
+	if b := by["v2"]; b.Current || !b.Unit || !b.Answers || b.Terms != 2 || b.Since != 30*time.Hour || b.Binary || !slices.Equal(b.Live, []string{"t1"}) {
 		t.Errorf("v2 %+v", b)
 	}
 	// v1's binary copy is run by another project's unit: never this project's leftover.
@@ -206,5 +209,23 @@ func TestServiceGCSaysASharedCopyIsKept(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "binary removed") || !strings.Contains(out.String(), "binary kept") {
 		t.Fatalf("out %q", out.String())
+	}
+}
+
+// holder_restarted's agents: those proved in a holder terminal, each with
+// its proof's age on Redis's clock; a herdr pane, an unproved agent or a
+// pane that is not a terminal is left out.
+func TestWithHolderAgents(t *testing.T) {
+	key := service.BuildKey("v3")
+	now := time.UnixMilli(10_000_000)
+	snaps := map[string]bus.AgentSnapshot{
+		"coder":    {Pane: key + "/t3", PID: 7, PIDStart: 1, IdentTS: now.Add(-5 * time.Minute).UnixMilli()},
+		"master":   {Pane: "w1:p2", PID: 8, PIDStart: 1, IdentTS: now.UnixMilli()},
+		"foureyes": {Pane: key + "/t4"}, // never proved
+		"docs":     {Pane: "nokey/t5", PID: 9, PIDStart: 1, IdentTS: now.UnixMilli()},
+	}
+	e := withHolderAgents(health.HolderEvidence{Known: true}, snaps, now)
+	if !e.AgentsKnown || len(e.Agents) != 1 || e.Agents[0] != (health.HolderAgent{Name: "coder", Key: key, Term: "t3", ProvedAgo: 5 * time.Minute}) {
+		t.Fatalf("%+v", e)
 	}
 }
