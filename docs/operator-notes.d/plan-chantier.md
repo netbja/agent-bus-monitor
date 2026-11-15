@@ -8,6 +8,8 @@
   group waiting for the person, then one with a task in hand, then the rest in list order, `Other` (no group), then
   finished groups as one line. Unknown reads and plans without `groups` draw as before. `plan.Parse` refuses
   unknown fields, so an older `agentbus plan load` refuses a grouped plan and an older busmon fails to parse one:
-  add `groups` to a plan only once a release carrying this is installed and the dispatch service restarted
-  (`agentbus up`): the service parses the plan too (`plan.Load` in the stall checks, review-queue, the notify
-  facts), and a service still on the old binary fails those reads (team-stall, review-queue, plan-drift unknown).
+  add `groups` to a plan only once a release carrying this is installed and the dispatch service restarted on it
+  (`agentbus --project <p> service restart dispatch`: `agentbus up` leaves a running service whose unit did not
+  change in its old process, even when the binary was replaced in place): the service parses the plan too
+  (`plan.Load` in the stall checks, review-queue, the notify facts), and a service still on the old binary fails
+  those reads (team-stall, review-queue, plan-drift unknown).
