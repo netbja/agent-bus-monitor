@@ -1,6 +1,8 @@
 # The context alert gets teeth (context-escalation)
 
-Status: spec, r3. Task `context-escalation-r3` (master's directive of 2026-11-15, after the person's
+Status: spec, r4 (r3 foureyes: the `below-compaction` notice gets a writer, the dispatcher; the
+ceiling is compared in tokens, never a share of one window against a share of another, §4.3).
+r3 was Task `context-escalation-r3` (master's directive of 2026-11-15, after the person's
 review of r2, human directive 1794777873906-0). r2 (d9610408, PR 540) was approved by both
 reviewers; r3 answers the person's review:
 
@@ -194,56 +196,76 @@ measures instead (§4.2) and bounds (§4.3).
   `context_window_size`.
 - The dispatcher's transcript reader (the one that reads Claude transcripts for quota) also keeps,
   per session, the last `compact_boundary` with `trigger: auto`: `preTokens` and its time. The
-  **observed compaction point** of an agent is `preTokens / Window × 100`, for the last automatic
-  compaction of a session of that agent on the same `Window` (kept in `{p}:context` as
-  `compact_pct`; absent until one happened).
+  **observed compaction point** of an agent is that `preTokens`, **in tokens**, for the last
+  automatic compaction of a session of that agent on the same `Window` (kept in `{p}:context` as
+  `compact_tokens`; absent until one happened).
+- A fill in tokens is `Pct × Window / 100`: `used_percentage` is a share of `context_window_size`
+  (§4.1), so this conversion is exact.
 
-### 4.3 Bound: `dispatch.context_compact_at`, and the order of the steps
+### 4.3 Bound, compared in tokens
 
-- **The launcher exports `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=<n>`** in each Claude Code agent's
-  process environment (`rolecfg/launch.go`, the role environment it already builds), from
-  `dispatch.context_compact_at` (default 92; 0 = not set). Since it can only lower the threshold,
-  it guarantees compaction **no later than** n% of the effective window; the client may still
-  compact earlier.
-- **The ceiling of an agent** is the lowest known of: `context_compact_at` (Claude Code, when set)
-  and its observed compaction point (§4.2). Unknown: no ceiling, the steps judged by the fill alone.
-- **Order checked at start** (settings only): `context_alert < context_urgent < context_compact_at`.
-  A step that does not fit is off, logged once with the settings' values, as r2's rule for urgent
-  (`context_urgent ≥ context_compact_at`: urgent off, the deadline still applies; `context_alert ≥
-  context_compact_at`: the ladder off).
-- **Per agent, at each pass**: `urgent(a)` is `context_urgent` when it is below the agent's
-  ceiling, else 0 (the deadline still applies). An agent whose ceiling is at or below the alert
-  cannot be alerted before it compacts: the check (§5) says so, `warn`, reason `below-compaction`,
-  **For you**: `coder compacts near 48% of its window, below the alert (80%): lower
-  dispatch.context_alert, or raise autoCompactWindow`. Nothing changes a threshold by itself.
-- **Per client profile** (`agentstate/clients/*.toml`), a new key `auto_compact`: `env:<NAME>` (the
-  client honours a lowering override in its process environment: Claude Code,
-  `env:CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`), `observed` (its compaction is read, not set), `unknown`
-  (Codex, agy, Kimi, Grok today: no ceiling until one is verified).
+**Two windows, one unit.** A fill is a share of `context_window_size`; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`
+is a share of the compaction window (`autoCompactWindow`, `auto` by default, which the bus does not
+know). A percentage of one is never compared with a percentage of the other: every comparison
+below is in tokens.
+
+- **The launcher exports**, in each Claude Code agent's process environment (`rolecfg/launch.go`,
+  the role environment it already builds): `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=<n>` from
+  `dispatch.context_compact_at` (default 92; 0 = not exported), and, only when
+  `dispatch.context_compact_window` is set (W tokens; default 0 = the client's own window),
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW=<W>`. The override can only lower the threshold, so with both
+  set the client compacts **no later than n% of W tokens**.
+- **What the agent runs with is published, not assumed**: the agent's status publish (as
+  `claude_config_dir` is, login-expiry) carries the two values read from its own environment,
+  `compact_at` and `compact_window`; a setting changed after its launch does not apply to it, and
+  the bus knows.
+- **The ceiling of an agent, in tokens**, the lowest known of: its observed compaction point
+  (§4.2), and `compact_at / 100 × compact_window` when the agent published both. With
+  `compact_at` alone (no window), the bound is not converted and does not count. None known: no
+  ceiling, the steps are judged by the fill alone.
+- **Per agent, at each pass**, a step's threshold in tokens is `t × Window / 100`:
+  - `urgent(a)` is `context_urgent` when its tokens are below the ceiling, else 0 (the deadline
+    still applies);
+  - when the alert's tokens are at or above the ceiling, the agent will compact before any step:
+    **`below-compaction`**. The dispatcher writes it (the check only reads, §5): in `contextAlerts`,
+    for each agent with a known fill and a known ceiling, it sets the mark `context-below:<agent>`
+    = `<Window>|<ceiling tokens>` and sends one `FencedNotifyOnceForPerson` with that mark and
+    episode: `<agent> compacts near <240k> tokens, below the alert at <80>% of its <1000k> window
+    (<800k>): lower dispatch.context_alert, or set dispatch.context_compact_window`. The mark is
+    deleted (fenced) when a fresh reading puts the alert below the ceiling. Nothing changes a
+    threshold by itself.
+- **At start** only r2's rule stays (`context_alert < context_urgent`, else urgent off, logged
+  once). The person's order `alert < urgent < compact_at` is checked per agent in tokens, above,
+  because `compact_at` is a share of another window.
+- **Per client profile** (`agentstate/clients/*.toml`), a new key `auto_compact`: `env` (the
+  client honours a lowering override and a window in its process environment: Claude Code),
+  `observed` (its compaction is read, not set), `unknown` (Codex, agy, Kimi, Grok today: no
+  ceiling until one is verified).
 
 **Before the build (coder, one check, no pane typed into):** on the installed Claude Code, a
 throwaway headless session (`claude -p`, its own `CLAUDE_CONFIG_DIR`) launched with
 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000`, fed until it
-compacts: its `compact_boundary.preTokens` must be ≤ 100k, and its statusLine `context_window_size`
-recorded. If the override does not hold, `context_compact_at` ships with default 0 and the ceiling
-is the observed point only; the spec's report says which.
+compacts: its `compact_boundary.preTokens` must be ≤ 100k (50% of W), and its statusLine
+`context_window_size` recorded. If the bound does not hold, both settings ship with default 0 and
+the ceiling is the observed point only; the build's report says which.
 
 ## 5. The check `context` (`health/evaluate.go`, `health/health.go`)
 
 Evidence per agent: `Escalated` (as r2: an escalation mark of the fill's session, no hand-off
-standing, by `VoidFor` against `{p}:agents`), `Told` (the nudge's `delivered_at`), `Ceiling` (§4.3).
-The check reads what the dispatcher wrote; it never judges thresholds itself.
+standing, by `VoidFor` against `{p}:agents`), `Told` (the nudge's `delivered_at`), `Below` (the
+mark `context-below:<agent>` for the fill's `Window`, §4.3). The check reads what the dispatcher
+wrote; it never judges thresholds itself and never writes.
 
 - **warn, reason `escalated`**, For you: `escalated: coder 91% (no hand-off 27 min, told mid-turn
   21:31)`;
-- **warn, reason `below-compaction`**, For you: §4.3's sentence;
+- **warn, reason `below-compaction`**, For you: the sentence of §4.3's notice;
 - warn, no reason, in hand: agents at or above the alert, none escalated (today);
 - ok and unknown as today.
 
 `Reasons: {"escalated": "interrupt the agent (Esc) and tell it: hand off now", "below-compaction":
 "agentbus config"}`. The relay skips `context`'s For-you event (r2): the
-dispatcher's per-agent notice is the one ring for `escalated`; `below-compaction` rings through one
-`FencedNotifyOnceForPerson`, mark `context-below:<agent>` = its window. Never a fail.
+dispatcher's per-agent notices are the only rings (§3.2 for `escalated`, §4.3 for
+`below-compaction`). Never a fail.
 
 ## 6. Roles
 
@@ -262,9 +284,11 @@ dispatcher's per-agent notice is the one ring for `escalated`; `below-compaction
 |---|---|---|---|---|
 | `dispatch.context_urgent` | `AGENT_BUS_CONTEXT_URGENT` | Float | 90 | 0 = off; 0 to 100; applied only above the alert and below the ceiling (§4.3) |
 | `dispatch.context_handoff_deadline` | `AGENT_BUS_CONTEXT_HANDOFF_DEADLINE` | Duration | 20m | 0 = off; at least 1m |
-| `dispatch.context_compact_at` | `AGENT_BUS_CONTEXT_COMPACT_AT` | Float | 92 | 0 = not set; otherwise 50 to 99; read by `dispatch` and the launcher (`agentbus up`, self-repair, relaunch) |
+| `dispatch.context_compact_at` | `AGENT_BUS_CONTEXT_COMPACT_AT` | Float | 92 | 0 = not exported; otherwise 50 to 99; read by the launcher (`agentbus up`, self-repair, relaunch) |
+| `dispatch.context_compact_window` | `AGENT_BUS_CONTEXT_COMPACT_WINDOW` | Int (tokens) | 0 | 0 = not exported (the client's own window); otherwise 100000 to 1000000, the client's own range; read by the launcher |
 
-`context_alert = 0` turns the ladder off, as today. A changed `context_compact_at` applies to agents
+`context_alert = 0` turns the ladder off, as today. A changed `context_compact_at` or
+`context_compact_window` applies to agents
 launched after the change (the environment of a running process does not change); busmon's C page
 says so.
 
@@ -274,19 +298,24 @@ Tests (r2's kept, plus):
 - **the 2026-11-15 replay**: alert at 21:30 at 80%, fill +0.37 points a minute (80% to 90% in 27
   min): the deadline escalates at 21:50 at about 87%, before 90%; the nudge's step 1 is delivered at
   the first tool call after 21:30, step 2 at the first after 21:50; one directive each.
-- **a 200k-window agent**: `Window` 200000, observed compaction at 83%: `urgent(a)` is 0, no step
-  fires at or above 83%, the deadline still escalates; with no observed point and
-  `context_compact_at` 92: urgent 90 applies. An agent observed at 48% with the alert at 80:
-  `below-compaction`, For you, one notice.
+- **a 200k-window agent**: `Window` 200000, observed compaction at 166k tokens: urgent 90% is
+  180k ≥ 166k, so `urgent(a)` is 0, no step fires at or above 166k, the deadline still escalates;
+  the alert (160k) applies.
+- **one unit**: `Window` 1M, published `compact_at` 92 and `compact_window` 200000: ceiling 184k;
+  the alert at 80% (800k) is above it → `below-compaction`, the mark written by the dispatcher,
+  one notice, the check For you; the same agent with `compact_at` 92 and no window: no ceiling
+  (the bound is never compared as 92% of the fill's window); observed at 240k on a 1M `Window`:
+  `below-compaction`; a later reading with a ceiling above the alert deletes the mark.
+- the check never writes (`EvaluateContext` is given marks, returns an outcome).
 - the hook: delivers step 1 then step 2 once each per session; a subagent's event, another session,
   a missing variable, a down broker (budget 300 ms) print nothing and exit 0; its output is exactly
   the fixed sentence with numbers and names only (a `{p}:nudge` value carrying any other field is
   ignored); it never exits 2.
 - compaction: same session, fill below the alert, no hand-off: one `wake=no` notice, once per
-  episode; a new session (clear, relaunch): none; `compact_boundary` read into `compact_pct`.
-- launcher: a Claude Code agent's environment holds `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` from the
-  setting; 0 sets nothing; another client never gets it.
-- settings order: `urgent ≥ compact_at` → urgent off, logged once; `alert ≥ compact_at` → ladder off.
+  episode; a new session (clear, relaunch): none; `compact_boundary` read into `compact_tokens`.
+- launcher: a Claude Code agent's environment holds `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` and, when
+  set, `CLAUDE_CODE_AUTO_COMPACT_WINDOW` from the settings; 0 exports nothing; another client never
+  gets them; the agent's status publish carries the two values from its own environment.
 
 Footprint, two PRs:
 - **A (ladder, r2's footprint, plus the compaction notice):** `dispatch/contextalert.go`,
@@ -296,8 +325,9 @@ Footprint, two PRs:
 - **B (the hook and the ceiling):** `{p}:nudge` in `bus/context.go` and `bus/keykinds.go`;
   `cmd/agentbus/turnhook.go` (`turn tool`); `rolecfg` (the Claude Code `PostToolUse` hook; the
   launcher's export in `rolecfg/launch.go`); `quota/context.go` (`Window`) and the transcript
-  reader (`compact_boundary`); `agentstate/clients/*.toml` (`auto_compact`); the check's
-  `below-compaction`. B starts with the pre-build check of §4.3.
+  reader (`compact_boundary`); the status publish's `compact_at`/`compact_window` (`bus/stream.go`,
+  through `putSnapshot`); `agentstate/clients/*.toml` (`auto_compact`); `below-compaction` (the
+  dispatcher's mark and notice, the check's reason); `config/keys.go` (`context_compact_window`). B starts with the pre-build check of §4.3.
 
 ## 9. Questions for the person
 
@@ -305,7 +335,10 @@ Footprint, two PRs:
    "### The person's answers (§8)". Please send them again (defaults 90% / 20 min; master woken at
    80% or not; your notice at step 2 only).
 2. **`context_compact_at` 92 by default**, exported to every Claude Code agent: it can only make
-   compaction earlier, never later. Agree, or default 0 until the pre-build check (§4.3) has run?
+   compaction earlier, never later. Alone it gives the bus no ceiling (§4.3: it is a share of a
+   window the bus does not know). **`context_compact_window`**, default 0 (the client's own
+   window): set it (e.g. 200000) only if you want the bus to know the bound exactly, at the cost of
+   fixing the window the client compacts against. Agree with both defaults?
 3. **`below-compaction`**: an agent that compacts below the alert is For you, and nothing changes a
    threshold by itself. Agree?
 4. **The interrupt** (Esc, then a fixed line typed into the pane at `dispatch.context_interrupt`):
