@@ -1,6 +1,7 @@
 # After a reboot: ask after an intentional one, restart after an unplanned one (reboot-resume)
 
-Status: spec, r4. Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
+Status: spec, r5 (r4 reviewer-codex: an unattended relaunch needs the holder, not herdr, §3.1
+condition 2b; the count is absent for a stop by the repository check, §3). r4: Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
 answer 1794777093334-0 to the ask `autoresume10b`), then `reboot-resume-r4` (the person's review of
 r2, human directive 1794778417884-0). Low priority; it does not block herdr-10b.
 
@@ -104,14 +105,17 @@ complete schema:
 | `boot` | string, the boot id judged | always |
 | `verdict` | one of the table below | always |
 | `why` | string, one of the closed reasons of §3.1 | `unplanned` and `stopped` only |
-| `n` | int, restarts counted in the window, this one included | `restarting` and `stopped` only |
-| `max` | int, `services.unplanned_max` when judged | `restarting` and `stopped` only |
-| `window` | int, `services.unplanned_window` in ms when judged | `restarting` and `stopped` only |
+| `n` | int, restarts counted in the window, this one included | `restarting`, and `stopped` by the limit (`why` `limit: …`) only |
+| `max` | int, `services.unplanned_max` when judged | as `n` |
+| `window` | int, `services.unplanned_window` in ms when judged | as `n` |
 | `at` | int, Redis TIME (ms) of the judgement | always |
 
 busmon renders `n of max in <window>` (`2 of 3 in 24 h`) from these three fields, and nothing else;
-a record missing one of them where it must be present is shown as `restarting (count unknown)`. The verdicts, a closed set, each with what busmon and
-self-repair do:
+a record missing one of them where it must be present is shown as `count unknown`. A `stopped` by
+the repository check (§3.1, condition 3) is judged before the counter is read: it carries no `n`,
+`max` or `window`, and busmon shows its `why` only.
+
+The verdicts, a closed set, each with what busmon and self-repair do:
 
 | `verdict` | Meaning | busmon (§4) | self-repair (§5) |
 |---|---|---|---|
@@ -131,6 +135,14 @@ When every condition holds, in this order (the first that fails is `why`):
 1. `services.unplanned_restart` is on (`why`: `setting off`);
 2. self-repair's mode is `on` (`self-repair off`, `self-repair in shadow mode`: neither can
    restart a team, so the verdict says so rather than claiming a restart);
+   2b. **self-repair can relaunch without a person's session**: its relaunch path is the holder's
+   `Start` (herdr exit, step 10: a new terminal in the project's holder service, started at boot
+   with the other services, §6.1), and the holder answers. Before that cutover, self-repair creates
+   panes through herdr and refuses without a herdr session (`relaunch.ErrNoSession`), which no boot
+   service, linger, cron line or LaunchDaemon provides: `why` `relaunch needs an interactive
+   session`; and with a holder that does not answer, `why` `holder not answering`. So an
+   unattended restart is promised only after the herdr-10 cutover; before it, an unplanned reboot
+   gets the popup, as an intentional one;
 3. **the repository is intact** (the person's point 2), a read-only check of the project's
    repository: no `index.lock` in its git directory or in any of its worktrees' (`git worktree
    list --porcelain`, then a stat of each `index.lock`), and `git fsck --no-dangling --no-progress`
@@ -152,11 +164,12 @@ not count in self-repair's per-agent budgets (R5); the reboot counter counts the
 The escalation target is told (`restarted after an unplanned stop of this machine (2 of 3 in
 24 h)`), and the person gets one notice (`FencedNotifyOnceForPerson`, mark `reboot:<boot>`).
 
-When 1, 2 or 4 fails, the verdict is `unplanned` with its `why`, treated as intentional: busmon
+When 1, 2, 2b or 4 fails, the verdict is `unplanned` with its `why`, treated as intentional: busmon
 asks (§4), self-repair holds (§5), and nothing is counted (only a restart counts). When 3 or 5
 fails, the verdict is `stopped`.
 
 The closed set of `why`: `setting off`, `self-repair off`, `self-repair in shadow mode`,
+`relaunch needs an interactive session`, `holder not answering`,
 `index.lock present: <path>`, `git fsck failed (exit <n>)`, `git fsck timed out`, `counter not
 written`, `counter missing`, `limit: <n> in <window>`.
 
@@ -322,7 +335,11 @@ Tests:
 - `lifecycle.Judge`: every row of §2.2; unreadable and unknown boot → `none`; a fake suspend and
   a fake hibernation (same boot id, a monotonic jump) → `none`.
 - `{p}:reboot`: each verdict's fields exactly as §3's schema (`why` only with `unplanned` and
-  `stopped`; `n`, `max`, `window` only with `restarting` and `stopped`).
+  `stopped`; `n`, `max`, `window` only with `restarting` and a `stopped` by the limit; a `stopped`
+  by the repository check has none, and busmon renders its `why` alone).
+- relaunch path: self-repair on herdr (before the cutover) → `unplanned`, `relaunch needs an
+  interactive session`, nothing counted; on the holder with no holder answering → `holder not
+  answering`; on the holder answering → `restarting`.
 - counter bootstrap: first start creates both files, `unplanned.json` before `run.json`; `run.json`
   present and `unplanned.json` missing → `counter missing`, no restart, never a reset; `up` and
   `resume` recreate it.
