@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: draft r3, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: draft r4, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0).
 
 Three small slices: tell the person when an agent's login **has expired** (all four clients), warn
@@ -52,6 +52,16 @@ A new profile list, `[signature] auth = [...]` in `agentstate/clients/<client>.t
   renders a screen the pattern does not match (the client escapes, strips or restyles model
   output). **If the fixture shows no error style, or the spoof fixture matches, that client gets no
   `auth` pattern** (no loosened pattern): its only signal stays the stuck agent, as today;
+- **the error is the client's last output**: between the matching line and the input box's top
+  (the rule above the box) there is only blank space, the client's own status lines and nothing
+  the conversation printed after it. A ready box is *not* a veto, unlike `BlockedOn`: after an
+  auth failure the client returns to an empty, ready box under the error, which is the very case to
+  catch. An old error followed by any later answer, tool line or message is no longer last and
+  never matches (reviewer-codex on r3);
+- **not already reported**: the dispatcher keeps, in memory, per agent, the pid and a hash of the
+  matched raw region it last notified for; the same pid with the same region is not counted again.
+  So an error left on screen after the person's /login (nothing printed since) notifies once, not
+  each day. A restarted dispatcher may send it once more: accepted;
 - two settled reads in a row, as the `Blocked` signature (`Episode.Step`'s rule).
 
 A misread costs one notice, nothing else: nothing is retried, held, restarted or typed.
@@ -130,8 +140,10 @@ None new. `updates.check` gates 4; 2 and 3 are notices with once-marks and need 
   error fields reads nothing; a file older than 6 h is skipped.
 - Screen auth, per client with a fixture: the fixture matches on two settled reads; one read does
   not; the spoof fixture (agent text carrying the exact line, glyph and escape) does not; a
-  ready box below an old error line does not (the error is above the current box, older than it:
-  covered by `bottomLines` and the box rule, as `BlockedOn`).
+  fresh error directly above a ready empty box **does** match (the real case); an old error line
+  followed by a later answer, then the ready box, does not (that exact fixture through the auth
+  matcher); the same pid and region on the next day does not notify again; a new pid with the same
+  screen does.
 - Banner: the fixture matches below the box with N parsed; the same sentence above the box (agent
   text) does not; an unbounded box reads nothing.
 - Notices: two passes the same day send one notice per client; the next day sends again; ten panes
