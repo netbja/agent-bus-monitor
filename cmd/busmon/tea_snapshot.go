@@ -15,6 +15,7 @@ import (
 // than mutating them, so a shallow copy of each agent's state is enough.
 type snapshot struct {
 	person, pilot, update, configNote string
+	codexUpdate                       string
 	dispatch, missions                string
 	health                            health
 	guardian                          guardianSummary
@@ -59,7 +60,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		guardNow = guardNow.Add(now.Sub(st.guardianNowAt))
 	}
 	s := snapshot{
-		person: st.person, pilot: st.pilot, update: st.update, configNote: st.configNote,
+		person: st.person, pilot: st.pilot, update: st.update, configNote: st.configNote, codexUpdate: st.codexUpdate,
 		dispatch: st.dispatch, missions: st.missions, health: st.health,
 		guardian: summarizeGuardian(st.guardianHealth, guardNow),
 		agents:   make(map[string]*agentState, len(st.agents)),
