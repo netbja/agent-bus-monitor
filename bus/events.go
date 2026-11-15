@@ -41,12 +41,13 @@ const (
 	EventHolderDraining  = "holder-draining"
 	EventHolderDrained   = "holder-drained"
 	EventHolderGC        = "holder-gc"
+	EventHostOp          = "host-op" // a relayed host operation: accepted, then its outcome (§4.2)
 )
 
 var eventKinds = map[string]bool{
 	EventWakeTyped: true, EventWakeRefused: true, EventWakeNotLanded: true, EventBlocked: true, EventUnblocked: true,
 	EventDraftWaiting: true, EventBackgroundSkip: true, EventAttach: true, EventDetach: true, EventRelaunch: true,
-	EventHolderStarted: true, EventHolderRestarted: true, EventHolderDraining: true, EventHolderDrained: true, EventHolderGC: true,
+	EventHolderStarted: true, EventHolderRestarted: true, EventHolderDraining: true, EventHolderDrained: true, EventHolderGC: true, EventHostOp: true,
 }
 
 // eventsMaxLen caps the stream (XADD MAXLEN ~).

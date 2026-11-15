@@ -86,6 +86,9 @@ type Config struct {
 	// SelfRepair is the self-repair watcher's chore (selfrepairchore.go); off
 	// without a pass.
 	SelfRepair SelfRepairConfig
+	// HostOps is the relay of host commands run inside an agent's terminal
+	// (hostops.go, herdr exit §4.2); off when its Run is nil.
+	HostOps HostOpsConfig
 }
 
 // DefaultConfig returns the spec's pinned values.
@@ -280,6 +283,14 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		go func() {
 			defer wg.Done()
 			l.selfRepairLoop(inner)
+		}()
+	}
+
+	if cfg.HostOps.on() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.hostOpsLoop(inner)
 		}()
 	}
 
