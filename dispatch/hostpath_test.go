@@ -170,7 +170,62 @@ func TestHostPathReportsBlockedToMaster(t *testing.T) {
 	if !strings.HasPrefix(leave.Message, "unblocked: coder after ") || !leave.NoWake {
 		t.Fatalf("leave %+v", leave)
 	}
-	if b, u := w.events(bus.EventBlocked), w.events(bus.EventUnblocked); len(b) != 1 || len(u) != 1 || b[0].Detail != enter.Message {
-		t.Fatalf("events blocked %+v unblocked %+v", b, u)
+	waitFor(t, 2*time.Second, "the unblocked event", func() bool { return len(w.events(bus.EventUnblocked)) == 1 })
+	if b := w.events(bus.EventBlocked); len(b) != 1 || b[0].Detail != enter.Message {
+		t.Fatalf("blocked events %+v", b)
+	}
+}
+
+// The escalation target blocked itself: only the person can answer, so both
+// reports are notices for the person, never a cmd to itself.
+func TestHostPathBlockedTargetTellsThePerson(t *testing.T) {
+	w := newHostWorld(t)
+	w.show("claude-modal.txt")
+	cfg := fastConfig()
+	cfg.Observe, cfg.EscalateTo = 30*time.Millisecond, "coder"
+	start(t, w.b, w.rt, cfg)
+	waitFor(t, 3*time.Second, "the person's blocked notice", func() bool {
+		ns, _, _ := w.b.Recent(context.Background(), []string{"notify"}, 20)
+		for _, n := range ns {
+			if strings.HasPrefix(n.Message, "blocked: coder (claude) since ") && n.For == bus.ForPerson {
+				return true
+			}
+		}
+		return false
+	})
+	if c := w.cmdsTo("coder"); len(c) != 0 {
+		t.Fatalf("cmds to the blocked target itself: %+v", c)
+	}
+}
+
+// A terminal that ends while blocked ends the episode: the leave is sent.
+func TestHostPathGoneTerminalEndsTheEpisode(t *testing.T) {
+	w := newHostWorld(t)
+	w.show("claude-modal.txt")
+	cfg := fastConfig()
+	cfg.Observe = 30 * time.Millisecond
+	start(t, w.b, w.rt, cfg)
+	waitFor(t, 3*time.Second, "the blocked report", func() bool { return len(w.cmdsTo("master")) == 1 })
+	if err := w.h.Close(context.Background(), w.term.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, "the unblocked report", func() bool {
+		c := w.cmdsTo("master")
+		return len(c) == 2 && strings.HasPrefix(c[1].Message, "unblocked: coder after ")
+	})
+}
+
+// herdr's Runtime (the running dispatcher until the cutover) writes no
+// {p}:events: a wake typed through it changes nothing of before.
+func TestHerdrPathWritesNoEvents(t *testing.T) {
+	b, _ := dialRun(t)
+	register(t, b, "coder", "p-coder")
+	send(t, b, "coder", "build it")
+	rt := newFakeRT(alwaysReady)
+	start(t, b, rt, fastConfig())
+	waitFor(t, 3*time.Second, "a prompt", func() bool { return len(rt.Prompts()) == 1 })
+	time.Sleep(100 * time.Millisecond)
+	if evs, err := b.RecentEvents(context.Background(), 10); err != nil || len(evs) != 0 {
+		t.Fatalf("events on herdr's path: %+v %v", evs, err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // judged is a host's background judgement: running (a 'pytest' child), none
@@ -89,4 +90,26 @@ func TestClearPassSkipsBackgroundWork(t *testing.T) {
 	if n := w.clears(); n != 1 {
 		t.Fatalf("%d clears once the work ended", n)
 	}
+}
+
+// A /clear pasted and not seen in the input (spec 4.2): the person is told
+// it may be left there, as submitting it clears the conversation.
+func TestClearNotLandedTellsThePerson(t *testing.T) {
+	w := newClearWorld(t, true)
+	w.rt.clearErr = termhost.ErrNotLanded
+	snaps, err := w.b.Agents(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.l.clearPass(context.Background(), snaps) // the clear's error is logged by the pass
+	ns, _, err := w.b.Recent(context.Background(), []string{"notify"}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range ns {
+		if n.Message == NotLandedText("coder", "clear") && n.For == bus.ForPerson {
+			return
+		}
+	}
+	t.Fatalf("no notice for the person: %+v", ns)
 }

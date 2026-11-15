@@ -209,3 +209,47 @@ func TestHostRuntimeSubmits(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// movingHost is a host whose program writes while its screen is read: each
+// Activity reports a later output than the one before.
+type movingHost struct {
+	*fake.Host
+	at time.Time
+}
+
+func (m *movingHost) Activity(ctx context.Context, id termhost.TermID) (termhost.Activity, error) {
+	m.at = m.at.Add(time.Millisecond)
+	return termhost.Activity{OutputAt: m.at}, nil
+}
+
+// Output during the read: whatever the screen shows, it is not settled.
+func TestHostRuntimeOutputDuringTheReadIsNotSettled(t *testing.T) {
+	f := newHostFixture(t)
+	f.rt.Host = &movingHost{Host: f.h, at: f.now.Add(-time.Hour)}
+	if in := f.inspect(); in.Ready || in.Blocked.Settled {
+		t.Fatalf("output while reading: %+v", in)
+	}
+}
+
+// A helper (an MCP server the launcher configured) is no background work
+// while idle; one whose CPU grew past agentstate.helper_cpu of the window is.
+func TestHostRuntimeHelperCountsOnlyWhenActive(t *testing.T) {
+	f := newHostFixture(t)
+	f.rt.Hooks = func(string) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
+	f.rt.ExtraHelpers = func(string) []string { return []string{"mcp-server"} }
+	p := f.term.PID
+	at := func(cpu time.Duration) Inspection {
+		f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude"},
+			termhost.Proc{PID: p + 1, PPID: p, Start: 9, Command: "mcp-server", CPU: cpu})
+		return f.inspect()
+	}
+	at(time.Second)
+	f.now = f.now.Add(10 * time.Second)
+	if in := at(time.Second + 100*time.Millisecond); in.BackgroundSkip() != "" { // 1 % of the window
+		t.Fatalf("an idle helper: %q", in.BackgroundSkip())
+	}
+	f.now = f.now.Add(10 * time.Second)
+	if in := at(4 * time.Second); in.BackgroundSkip() != "background work: process 'mcp-server'" { // 29 %
+		t.Fatalf("an active helper: %q", in.BackgroundSkip())
+	}
+}
