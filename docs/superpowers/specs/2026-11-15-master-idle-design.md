@@ -1,7 +1,7 @@
 # A guard for master left idle with work in hand (idle-master)
 
-Status: spec, for review (subject `master-idle-spec`), r5 after the person's review of 2026-11-15
-(forge-agnostic delivery §3.1, postponed check-backs §4). Not built. Task `master-stall-guard`
+Status: spec, for review (subject `master-idle-spec`), r6 (r5 after the person's review of 2026-11-15
+(forge-agnostic delivery §3.1, postponed check-backs §4); r6: `-U0` patch-ids). Not built. Task `master-stall-guard`
 (master's directive of 2026-11-15, at the person's request: "a reliable and durable fix").
 §8 holds the questions for the person.
 
@@ -100,19 +100,28 @@ within 72 h, cheapest first; a head matched by any step is delivered:
 
 1. **Merge commit or fast-forward:** `InBase` (`git merge-base --is-ancestor <head> <base tip>`),
    as today.
-2. **Squash-merge:** the patch-id of the whole branch, `git diff --no-ext-diff --no-textconv
-   <fork>..<head> | git patch-id --stable`, with `<fork>` = `git merge-base <base tip> <head>`,
-   matches the patch-id of one commit of `<fork>..<base tip>` (`git log -p --no-merges
-   --no-ext-diff --no-textconv <fork>..<base tip> | git patch-id --stable`). The range is the
-   commits the base gained since the branch forked: no date and no writer clock bound it.
-3. **Rebase-merge:** `git cherry <base tip> <head>` prints no `+` line: every commit of the head
-   has an equivalent in the base.
+2. **Squash-merge:** the zero-context patch-id of the whole branch, `git diff -U0 --no-ext-diff
+   --no-textconv <fork>..<head> | git patch-id --stable`, with `<fork>` = `git merge-base <base
+   tip> <head>`, is one of the base's patch-ids (below).
+3. **Rebase-merge:** the zero-context patch-id of every non-merge commit of `<fork>..<head>`
+   (`git log -p -U0 --no-merges --no-ext-diff --no-textconv <fork>..<head> | git patch-id
+   --stable`) is among the base's patch-ids.
 
-`--no-ext-diff --no-textconv` keep any diff driver of the repository's configuration from running:
-the dispatcher never runs the repository's code. `--stable` is right here (not `--verbatim`, which
-the conflict-dispatch spec needs to carry an approval): it detects a delivery, and a forge's
-squash may differ in whitespace only. A squash that also resolved conflicts has another patch-id
-and is not seen: that is what `merge-queue drop` is for.
+**The base's patch-ids**, computed once per pass, not per head: `git log -p -U0 --no-merges
+--no-ext-diff --no-textconv <oldest fork>..<base tip> | git patch-id --stable`, the oldest fork
+among the heads judged. The range is the commits the base gained since the branches forked: no
+date and no writer clock bound it. One set, two commands per head at most, each within the pass's
+per-command budget (`mergeQueueCall`).
+
+**Zero context** (`-U0`, foureyes on r5): `patch-id` hashes context lines, so a base commit that
+changed a line within three lines of the branch's change after the fork gives a clean squash or
+rebase another patch-id with the default context. With `-U0` only the changed lines count. `git
+cherry` takes no diff options, so it is not used. `--no-ext-diff --no-textconv` keep any diff
+driver of the repository's configuration from running: the dispatcher never runs the repository's
+code. `--stable` is right here (not `--verbatim`, which the conflict-dispatch spec needs to carry
+an approval): it detects a delivery, and a forge's squash may differ in whitespace only. A squash
+that resolved a conflict, or that the person edited, has other changed lines and is not seen: that
+is what `merge-queue drop` is for.
 
 **The adapter** (`forge.Adapter`, the seam):
 
@@ -171,14 +180,16 @@ agentbus checkback 30m "k1/k2 checks on 7d27262c, fa2d796f"
 agentbus checkback --clear
 ```
 
-- It writes one field per agent in `{p}:checkback`: `{due_ms, what, set_id}`. `due_ms` is
+- It writes one field per agent in `{p}:checkback`: `{due_ms, what, set_id, count,
+  first_set_id}` (`count` and `first_set_id` below). `due_ms` is
   Redis `TIME` plus the duration, `set_id` the time of the write, from the same `TIME`. It is an
   agent's write (no lease, like `status`). A new one replaces the old one; `--clear` deletes it.
   `retire --forget` deletes it too.
 - **Postponed again and again.** A new check-back replaces the old one and is a new episode, so a
   master that keeps postponing would never reach the second tier. The field also keeps `count`:
   a check-back whose `what` equals the previous one's (trimmed, case folded) adds one, another
-  `what` or `--clear` starts again at 1. When `count` exceeds `dispatch.checkback_max` (default 3,
+  `what` or `--clear` starts again at 1, and `first_set_id` is the `set_id` of the check-back that
+  started the count (kept while `count` grows). When `count` exceeds `dispatch.checkback_max` (default 3,
   `0` = never), the stall hook sends the person **one** notice for that `what` (mark
   `checkback-person`, episode a hash of the agent, the `what` and the first `set_id`), on any pass,
   whether `idle-master` warns or not: `master has postponed "k1/k2 checks" 4 times since 00:21`.
@@ -292,9 +303,12 @@ shorter. busmon's C page lists it.
   every item dropped the check reads `ok` and wakes nothing.
 - **Delivered, `none` adapter, a disposable repository with a bare origin**: a merge commit, a
   fast-forward, a squash-merge (one commit on the base with the branch's whole diff) and a
-  rebase-merge (each commit replayed) are each delivered; a squash that also resolved a conflict
-  is not (drop covers it); an unrelated commit with the same message is not. A diff driver set in
-  the repository's config never runs (a `textconv` that would fail the test).
+  rebase-merge (each commit replayed) are each delivered; the same squash and rebase-merge are
+  still delivered when the base changed a line within three lines of the branch's change after
+  the fork; a squash that also resolved a conflict is not (drop covers it); an unrelated commit
+  with the same message is not. A diff driver set in the repository's config (`textconv`,
+  `diff.external`) never runs in any step (a driver that would fail the test). The base's set is
+  read once per pass for several heads.
 - **`undelivered`**: a head that is a tip on origin, or delivered by the git test, is left out; a
   head on neither is listed with its local branch; an approve older than 72 h is left out; a done
   plan subject is left out. The same input gives the same list with the `github` adapter and with
