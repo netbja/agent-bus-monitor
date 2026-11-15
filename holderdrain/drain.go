@@ -3,8 +3,10 @@ package holderdrain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"time"
 
@@ -13,39 +15,50 @@ import (
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
-// `agentbus holder drain <project>` (herdr exit spec 4.4): an older build's
-// holder never ends by itself while its agents live (/clear ends no
-// terminal), so the person finishes the drain: a rolling relaunch of each
-// terminal still on an old build, one agent at a time, through the
-// relaunch-close order (start the new terminal, wait for the agent's proof,
-// close the old one). An agent working, with a person active or a draft, or
-// with background work (4.3b, unknown counts as running) is skipped; the
-// command says so and is run again later. Never automatic.
+// An older build's holder never ends by itself while its agents live (/clear
+// ends no terminal), so the person finishes the drain: each terminal still on
+// an old build is moved to the current one, one agent at a time, by the
+// reload protocol (agentbus reload) on the holder: the reload intent first,
+// so the dispatcher neither wakes nor clears the agent; a wake being typed
+// waited out; the same idle process re-checked; the old terminal closed and
+// its program gone; then the new terminal started with the agent's resume
+// session, so two clients never run one session; the proof; the ledger's
+// reloaded entry. An agent working, blocked, with a person active or a
+// draft, or with background work (4.3b, unknown counts as running) is
+// skipped; the command says so and is run again later. Never automatic.
 
-// Deps is what the drain reads and does; production wires the
-// project's holders, the bus and the service gc (cmd/agentbus).
+// Ledger is the bus part the drain uses; *bus.Bus is one.
+type Ledger interface {
+	Agents(ctx context.Context) (map[string]bus.AgentSnapshot, error)
+	ResumeOf(ctx context.Context, agent string) (*bus.ResumeRecord, error)
+	BeginSwap(ctx context.Context, role string, in bus.SwapIntent, ev ...bus.SwapEvent) error
+	EndSwap(ctx context.Context, role string) error
+	LogSwap(ctx context.Context, e bus.SwapEvent) error
+	FinishReload(ctx context.Context, e bus.SwapEvent) error
+	Wake(ctx context.Context, agent string) (bus.WakeRecord, bool, error)
+	AppendEvent(ctx context.Context, e bus.TermEvent) (string, error)
+}
+
+// Deps is what the drain reads and does; NewDeps wires production's.
 type Deps struct {
 	Project string
 	Host    termhost.Host
+	Bus     Ledger
 	// Old: the terminal is on a build other than the current one.
 	Old func(termhost.Term) bool
+	// Sockets is every holder socket of the project on disk: the drain acts
+	// only when each one answers (Describe), so no terminal is unseen.
+	Sockets func() ([]string, error)
 	// Inspect is the dispatcher's look at a terminal (HostRuntime.Inspect):
 	// its state, a person active, its background work.
 	Inspect func(ctx context.Context, t termhost.Term) dispatch.Inspection
-	// Declared is each agent's declared state.
-	Declared func(ctx context.Context) (map[string]string, error)
-	// Resume is the agent's {p}:resume record (nil: a fresh session).
-	Resume func(ctx context.Context, agent string) (*bus.ResumeRecord, error)
-	// Proved: the agent proved its identity from the new terminal.
-	Proved func(ctx context.Context, agent string, t termhost.Term) (bool, error)
-	Event  func(ctx context.Context, e bus.TermEvent) error
-	GC     func() error
-	Sleep  func(time.Duration)
-	Now    func() time.Time
+	GC      func() error
+	Sleep   func(time.Duration)
+	Now     func() time.Time
 	// Window is the background judgement's CPU window: the old terminals are
 	// looked at once, then again a window later.
-	Window               time.Duration
-	ProofWait, ProofPoll time.Duration
+	Window                         time.Duration
+	WakeWait, ProofWait, ProofPoll time.Duration
 	// IgnoreBackground is the person's --ignore-background (spec 4.3b, as
 	// for relaunch, swap and suspend): a client with no authoritative
 	// source (Codex, Grok, Kimi, agy) is never judged free of background
@@ -54,11 +67,41 @@ type Deps struct {
 	IgnoreBackground bool
 }
 
-// drainBy is the events' author.
+// drainBy is the author of the drain's ledger entries and events.
 const drainBy = "holder-drain"
 
 // Exit codes: 0 drained, 1 failed, 3 agents skipped (run it again later).
 const Skipped = 3
+
+// errSkip is an agent left for a later run, with why.
+type errSkip struct{ why string }
+
+func (e errSkip) Error() string { return e.why }
+
+// inventory refuses a drain while a holder socket of the project does not
+// answer: its terminals would be unseen, and the drain would call the
+// project drained with agents still on it.
+func inventory(ctx context.Context, d Deps) error {
+	files, err := d.Sockets()
+	if err != nil {
+		return fmt.Errorf("the holder sockets: %w", err)
+	}
+	info, err := d.Host.Describe(ctx)
+	if err != nil {
+		return fmt.Errorf("the holders: %w", err)
+	}
+	var silent []string
+	for _, f := range files {
+		if !slices.Contains(info.Sockets, f) {
+			silent = append(silent, f)
+		}
+	}
+	if len(silent) > 0 {
+		sort.Strings(silent)
+		return fmt.Errorf("holder socket(s) that do not answer: %v; their terminals cannot be seen, so nothing is done", silent)
+	}
+	return nil
+}
 
 // oldTerms is the project's live terminals on an old build, by agent.
 func oldTerms(ctx context.Context, d Deps) ([]termhost.Term, error) {
@@ -76,9 +119,29 @@ func oldTerms(ctx context.Context, d Deps) ([]termhost.Term, error) {
 	return out, nil
 }
 
-// drainSkip is why the agent's terminal is not relaunched now, or "".
-func drainSkip(ctx context.Context, d Deps, t termhost.Term, declared map[string]string) string {
-	if declared[t.Name] == "working" {
+// inTerm: snapshot s's verified process is t's program or in its tree.
+func inTerm(ctx context.Context, h termhost.Host, s bus.AgentSnapshot, t termhost.Term) (bool, error) {
+	if s.PID <= 0 || s.PIDStart == 0 {
+		return false, nil
+	}
+	if s.PID == t.PID && s.PIDStart == t.PIDStart {
+		return true, nil
+	}
+	procs, err := h.Processes(ctx, t.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, p := range procs {
+		if p.PID == s.PID && p.Start == s.PIDStart {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// skipWhy is why the agent's terminal is not moved now, or "".
+func skipWhy(ctx context.Context, d Deps, t termhost.Term, s bus.AgentSnapshot) string {
+	if s.State == "working" {
 		return "it declares working"
 	}
 	in := d.Inspect(ctx, t)
@@ -91,9 +154,9 @@ func drainSkip(ctx context.Context, d Deps, t termhost.Term, declared map[string
 		return "a person is active in its terminal"
 	case d.IgnoreBackground:
 	case in.Background == nil:
-		return "its background work is unknown (--ignore-background to relaunch it anyway)"
+		return "its background work is unknown (--ignore-background to move it anyway)"
 	case in.BackgroundSkip() != "":
-		return in.BackgroundSkip() + " (--ignore-background to relaunch it anyway)"
+		return in.BackgroundSkip() + " (--ignore-background to move it anyway)"
 	}
 	a, err := d.Host.Activity(ctx, t.ID)
 	if err != nil {
@@ -105,44 +168,104 @@ func drainSkip(ctx context.Context, d Deps, t termhost.Term, declared map[string
 	return ""
 }
 
-// drainRelaunch starts the agent's new terminal on the current build, waits for
-// its proof and closes the old one; an unproved new terminal is closed and
-// the old one kept.
-func drainRelaunch(ctx context.Context, d Deps, old termhost.Term) error {
-	spec := termhost.Spec{Project: d.Project, Name: old.Name}
-	rec, err := d.Resume(ctx, old.Name)
+// move runs the reload protocol for old's agent; an errSkip leaves it.
+func move(ctx context.Context, d Deps, old termhost.Term) error {
+	agent := old.Name
+	snaps, err := d.Bus.Agents(ctx)
+	if err != nil {
+		return fmt.Errorf("the agents: %w", err)
+	}
+	snap, ok := snaps[agent]
+	if in, err := inTerm(ctx, d.Host, snap, old); !ok || err != nil || !in {
+		return errSkip{"its proved process is not this terminal's (agentbus up relaunches an agent the bus does not know)"}
+	}
+	if why := skipWhy(ctx, d, old, snap); why != "" {
+		return errSkip{why}
+	}
+	rec, err := d.Bus.ResumeOf(ctx, agent)
 	if err != nil {
 		return fmt.Errorf("its resume record: %w", err)
 	}
+	spec := termhost.Spec{Project: d.Project, Name: agent}
 	if rec != nil {
 		spec.Profile, spec.ResumeSession = rec.Profile, rec.Session
 	}
-	nt, err := d.Host.Start(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("start on the current build: %w", err)
+	ev := bus.SwapEvent{Kind: bus.SwapKindReload, FromProfile: spec.Profile, ToProfile: spec.Profile, By: drainBy,
+		Reason: "holder drain", OldPID: snap.PID, OldPane: snap.Pane}
+	err = d.Bus.BeginSwap(ctx, agent, bus.SwapIntent{Kind: bus.SwapKindReload, ToProfile: spec.Profile, By: drainBy,
+		OldPID: snap.PID, OldStart: snap.PIDStart}, ev)
+	if errors.Is(err, bus.ErrSwapInProgress) {
+		return errSkip{"a swap or reload of it is in progress"}
 	}
-	deadline := d.Now().Add(d.ProofWait)
-	for {
-		ok, err := d.Proved(ctx, old.Name, nt)
-		if err == nil && ok {
+	if err != nil {
+		return fmt.Errorf("its reload intent: %w", err)
+	}
+	defer func() { _ = d.Bus.EndSwap(context.Background(), agent) }()
+	failed := func(step string, err error) error {
+		_ = d.Bus.LogSwap(context.Background(), bus.SwapEvent{Role: agent, Event: bus.SwapFailed, Kind: bus.SwapKindReload,
+			ToProfile: spec.Profile, By: drainBy, Error: step + ": " + err.Error()})
+		return err
+	}
+	// A wake reserved before the intent may still be typing: let it land in
+	// the old terminal rather than in a closing one.
+	for deadline := d.Now().Add(d.WakeWait); ; d.Sleep(200 * time.Millisecond) {
+		w, ok, err := d.Bus.Wake(ctx, agent)
+		if err != nil {
+			return failed("wake record", fmt.Errorf("cannot read its wake record (%v); nothing was closed", err))
+		}
+		if !ok || w.State != "prompting" {
 			break
 		}
-		if !d.Now().Before(deadline) || ctx.Err() != nil {
-			_ = d.Host.Close(ctx, nt.ID)
-			return fmt.Errorf("its new terminal was not proved within %s; closed it, the old one kept", d.ProofWait)
+		if !d.Now().Before(deadline) {
+			_ = failed("wake in progress", errors.New("a wake is still being typed"))
+			return errSkip{"a wake is being typed into its terminal"}
 		}
-		d.Sleep(d.ProofPoll)
+	}
+	// The same idle process as checked, or nothing is closed.
+	if now, err := d.Bus.Agents(ctx); err != nil {
+		return failed("stop", fmt.Errorf("%v; nothing was closed", err))
+	} else if s := now[agent]; s.PID != snap.PID || s.PIDStart != snap.PIDStart {
+		_ = failed("stop", errors.New("its process changed since the check"))
+		return errSkip{"its process changed since the check"}
+	} else if why := skipWhy(ctx, d, old, s); why != "" {
+		_ = failed("stop", errors.New(why))
+		return errSkip{why}
 	}
 	if err := d.Host.Close(ctx, old.ID); err != nil {
-		return fmt.Errorf("proved on %s, but its old terminal %s did not close: %w", nt.ID, old.ID, err)
+		return failed("close", fmt.Errorf("its old terminal %s did not close (%v); nothing was started", old.ID, err))
 	}
-	_ = d.Event(ctx, bus.TermEvent{Kind: bus.EventRelaunch, Agent: old.Name, By: drainBy,
-		Detail: fmt.Sprintf("holder drain: from build %s to %s", old.Build, nt.Build)})
-	return nil
+	recovery := fmt.Sprintf("recover with agentbus up %s --resume", d.Project)
+	nt, err := d.Host.Start(ctx, spec)
+	if err != nil {
+		return failed("start", fmt.Errorf("its old terminal is closed and the start on the current build failed: %v; %s", err, recovery))
+	}
+	for deadline := d.Now().Add(d.ProofWait); ; d.Sleep(d.ProofPoll) {
+		if now, err := d.Bus.Agents(ctx); err == nil {
+			if s, ok := now[agent]; ok {
+				if in, err := inTerm(ctx, d.Host, s, nt); err == nil && in {
+					if err := d.Bus.FinishReload(ctx, bus.SwapEvent{Role: agent, FromProfile: spec.Profile, ToProfile: spec.Profile,
+						By: drainBy, Reason: "holder drain", NewPID: s.PID, NewPane: string(nt.ID)}); err != nil {
+						return fmt.Errorf("moved to %s (pid %d), but the ledger was not written: %w", nt.ID, s.PID, err)
+					}
+					_, _ = d.Bus.AppendEvent(ctx, bus.TermEvent{Kind: bus.EventRelaunch, Agent: agent, By: drainBy,
+						Detail: fmt.Sprintf("holder drain: from build %s to %s", old.Build, nt.Build)})
+					return nil
+				}
+			}
+		}
+		if !d.Now().Before(deadline) || ctx.Err() != nil {
+			return failed("proof", fmt.Errorf("no proof from its new terminal %s after %s; that terminal is left running (check agentbus agents), %s",
+				nt.ID, d.ProofWait, recovery))
+		}
+	}
 }
 
 // Run runs the drain and returns its exit code.
 func Run(ctx context.Context, d Deps, out io.Writer) int {
+	if err := inventory(ctx, d); err != nil {
+		fmt.Fprintf(out, "holder drain: %v\n", err)
+		return 1
+	}
 	olds, err := oldTerms(ctx, d)
 	if err != nil {
 		fmt.Fprintf(out, "holder drain: the holders: %v\n", err)
@@ -154,35 +277,41 @@ func Run(ctx context.Context, d Deps, out io.Writer) int {
 		}
 		d.Sleep(d.Window)
 	}
-	declared, err := d.Declared(ctx)
-	if err != nil {
-		fmt.Fprintf(out, "holder drain: the agents' states: %v\n", err)
-		return 1
-	}
 	skipped := 0
 	for _, t := range olds {
-		if why := drainSkip(ctx, d, t, declared); why != "" {
-			fmt.Fprintf(out, "%s skipped: %s (build %s); run holder drain again later\n", t.Name, why, t.Build)
+		err := move(ctx, d, t)
+		var skip errSkip
+		switch {
+		case errors.As(err, &skip):
+			fmt.Fprintf(out, "%s skipped: %s (build %s); run holder drain again later\n", t.Name, skip.why, t.Build)
 			skipped++
-			continue
-		}
-		fmt.Fprintf(out, "%s: relaunching on the current build\n", t.Name)
-		if err := drainRelaunch(ctx, d, t); err != nil {
+		case err != nil:
 			fmt.Fprintf(out, "%s: %v\nholder drain stopped\n", t.Name, err)
 			return 1
+		default:
+			fmt.Fprintf(out, "%s: moved to the current build, its old terminal closed\n", t.Name)
 		}
-		fmt.Fprintf(out, "%s: relaunched, its old terminal closed\n", t.Name)
 	}
 	if skipped > 0 {
 		fmt.Fprintf(out, "holder drain: %d agent(s) left on an old build\n", skipped)
 		return Skipped
+	}
+	// Drained only if every holder still answers and none holds an old
+	// terminal now: a holder that went silent meanwhile may hold one.
+	if err := inventory(ctx, d); err != nil {
+		fmt.Fprintf(out, "holder drain: %v\n", err)
+		return 1
+	}
+	if left, err := oldTerms(ctx, d); err != nil || len(left) > 0 {
+		fmt.Fprintf(out, "holder drain: %d terminal(s) still on an old build (%v); run it again\n", len(left), err)
+		return 1
 	}
 	if err := d.GC(); err != nil {
 		fmt.Fprintf(out, "holder drain: drained, but the gc failed: %v\n", err)
 		return 1
 	}
 	if len(olds) > 0 {
-		_ = d.Event(ctx, bus.TermEvent{Kind: bus.EventHolderDrained, By: drainBy, Detail: fmt.Sprintf("%d agent(s) relaunched", len(olds))})
+		_, _ = d.Bus.AppendEvent(ctx, bus.TermEvent{Kind: bus.EventHolderDrained, By: drainBy, Detail: fmt.Sprintf("%d agent(s) moved", len(olds))})
 	}
 	fmt.Fprintln(out, "holder drain: nothing left on an old build")
 	return 0

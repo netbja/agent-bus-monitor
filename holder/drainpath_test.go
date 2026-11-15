@@ -42,9 +42,10 @@ func serveBuild(t *testing.T, project, build string, getenv func(string) string)
 
 // The drain against real holders (herdr exit 6d2): agent fake runs on the old
 // build's holder; the current build's holder is up beside it. holder drain
-// starts fake on the current build, waits for its proof (the agent's
-// verified status from its new terminal, as agentbus status writes it),
-// closes the old terminal, runs the gc and writes the events. Redis is the
+// moves fake by the reload protocol: its reload intent, its old terminal
+// closed, its new one started on the current build, its proof (the agent's
+// verified status from the new terminal, as agentbus status writes it), the
+// reloaded entry; then the gc and the events. Redis is the
 // disposable test broker.
 func TestHolderDrainAgainstRealHolders(t *testing.T) {
 	testredis.Configure(t)
@@ -97,7 +98,7 @@ func TestHolderDrainAgainstRealHolders(t *testing.T) {
 	}()
 
 	gcs := 0
-	d := holderdrain.NewDeps(project, cur, b, "cur", func() error { gcs++; return nil })
+	d := holderdrain.NewDeps(project, cur, b, "cur", cur.SocketFiles, func() error { gcs++; return nil })
 	d.ProofWait = 20 * time.Second
 	var out bytes.Buffer
 	// agy has no authoritative background source: unknown, so skipped,
@@ -151,5 +152,19 @@ func TestHolderDrainAgainstRealHolders(t *testing.T) {
 	}
 	if got := strings.Join(kinds, ","); got != "holder-drained:,relaunch:fake" {
 		t.Fatalf("events %s\n%s", got, out.String())
+	}
+	log, err := b.SwapLog(ctx, "fake", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var swaps []string
+	for _, e := range log {
+		swaps = append(swaps, e.Event+"/"+e.Kind)
+	}
+	if got := strings.Join(swaps, ","); got != "reloaded/reload,begin/reload" {
+		t.Fatalf("swap ledger %s", got)
+	}
+	if on, err := b.Swapping(ctx, "fake"); err != nil || on {
+		t.Fatalf("the reload intent was left: %v %v", on, err)
 	}
 }
