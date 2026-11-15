@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: draft r2, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: draft r3, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0).
 
 Three small slices: tell the person when an agent's login **has expired** (all four clients), warn
@@ -26,19 +26,24 @@ no outage tracking).
 
 | Client | Source | Why it cannot be an agent's text |
 |---|---|---|
-| Claude Code | its transcripts, the scan `quota.transcriptRejections` already makes (`~/.claude/projects/*/*.jsonl`, files touched in the last 6 h, 256 KiB tail): an entry with `isApiErrorMessage: true` and `error: "authentication_failed"` | both fields are set by the client, never by the model; the transcript is not a credential |
+| Claude Code | its transcripts, the scan `quota.transcriptRejections` already makes (`~/.claude/projects/*/*.jsonl`, files touched in the last 6 h, 256 KiB tail): an entry with `isApiErrorMessage: true`, `error: "authentication_failed"` and model `<synthetic>` | both fields are set by the client, never by the model; the transcript is not a credential |
 | Codex, Grok, agy | the screen, from a captured fixture (2.3); a client-written session log is preferred if the fixture work finds one with a client-set error field, as for Claude | the pattern carries the client's own error style, proven by a spoof fixture (2.2) |
 
 Claude's expiry is one fact for the host's account, not per pane: every Claude agent shares
 `~/.claude/`. It holds until a newer **served** answer appears in any transcript (the same
 `servedAt` rule the limit backstop uses): a /login in any session clears it.
+An expiry followed by no Claude activity leaves the 6 h scan window: it is not re-notified the next
+day, which is accepted (one notice already went out, and any new turn writes a fresh error entry).
 
 ### 2.2 Screen rule (Codex, Grok, agy)
 
 A new profile list, `[signature] auth = [...]` in `agentstate/clients/<client>.toml`, compiled like
 `blocked`. A read counts only when **all** hold:
 
-- the pattern matches within `bottomLines` (the last lines, as `BlockedOn`), above the input box;
+- the pattern matches within the **raw** bottom region: the same last non-blank lines as
+  `bottomLines` (blankness judged on the stripped text, as there), returned **without** `Strip`, so
+  the escape sequence below can match (`bottomLines` itself strips: foureyes on r2), above the input
+  box;
 - the pattern includes the client's own **error style**, the raw escape sequence (before `Strip`)
   the client applies to its error lines as the fixture shows it. A glyph or any printable prefix is
   never enough: a model can print it (reviewer-codex on r1);
@@ -65,9 +70,13 @@ escape sequence of the error style. The fixture README records which case each f
 
 `FencedNotifyOnceForPerson`, `for=person`:
 
-- mark `login-expired:<client>`, episode the host's local date (`YYYY-MM-DD`): at most one notice
+- mark `login-expired:<client>`, episode the date (`YYYY-MM-DD`) of Redis `TIME` in the
+  dispatcher host's local zone (a once-mark episode, not a persisted time): at most one notice
   per client per day per project, however many panes show it;
-- text: `<client> login expired (seen on <agent>[, <agent>…]): run /login in one <client> pane; restart a pane that still fails after it.`
+- text, Codex, Grok, agy: `<client> login expired (seen on <agent>[, <agent>…]): run /login in one <client> pane; restart a pane that still fails after it.`
+- text, Claude Code: `Claude Code login expired (seen <HH:MM> in a Claude session; the login is the account's, so every Claude agent is affected): run /login in one Claude pane; restart a pane that still fails after it.`
+  No agent is named: the transcript scan is account-wide and no transcript is mapped to an agent.
+  An expiry seen in a Claude session outside the bus notifies too, rightly: the login is shared.
   (Codex: `codex login`; Grok: `grok login`; agy: as its fixture says.)
 
 The dispatcher's wakes do not change: waking an expired agent costs one failed turn, and adding a
@@ -86,7 +95,7 @@ hold would add a state to clear.
 - Read on the screens the dispatcher's pass already captures; no extra read. A pass that reads no
   Claude pane sees nothing: the banner lasts days.
 - Notice: `FencedNotifyOnceForPerson`, mark `login-expiry:claude-code`, episode the host's local
-  date: **one per day**. Text: `Claude Code login expires in <N> days (seen on <agent>): run /login in one Claude pane at a quiet moment; restart a pane that then fails auth.`
+  date (Redis `TIME`, host zone, as 2.4): **one per day**. Text: `Claude Code login expires in <N> days (seen on <agent>): run /login in one Claude pane at a quiet moment; restart a pane that then fails auth.`
 
 Not done: reading `~/.claude/.credentials.json` or any other client's auth file (a credential; and
 its stored expiry is probably the short access token's, not the login's); running `codex login
