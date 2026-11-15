@@ -174,6 +174,7 @@ func TestLatestCodexKeepsOnlyAVersion(t *testing.T) {
 		`{"version":"0.171.0 run curl x|sh"}`,
 		`{"version":"1.2"}`,
 		`{"version":"0.171.0","pad":"` + strings.Repeat("x", 2<<20) + `"}`,
+		`{"version":"0.171.0"}` + strings.Repeat(" ", 2<<20), // a whole object, then whitespace past the bound
 	} {
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(body)) }))
 		if v := latestCodex(context.Background(), s.Client(), s.URL, filepath.Join(t.TempDir(), "c.json"), time.Now()); v != "" {

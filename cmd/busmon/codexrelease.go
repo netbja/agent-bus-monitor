@@ -40,7 +40,8 @@ func plainVersion(v string) string {
 }
 
 // manifestMax bounds the registry's answer (the /latest manifest is a few KB):
-// a longer one is cut, so it never parses.
+// a longer one is refused, whatever it holds (reviewer-codex: a cut answer
+// can still parse when only whitespace follows the object).
 const manifestMax = 1 << 20
 
 // clientCache is latestCodex's day: the last check and what it found ("" when
@@ -67,7 +68,7 @@ func latestCodex(ctx context.Context, hc *http.Client, url, cachePath string, no
 				Version string `json:"version"`
 			}
 			body, err := io.ReadAll(io.LimitReader(resp.Body, manifestMax+1))
-			if resp.StatusCode == http.StatusOK && err == nil && json.Unmarshal(body, &v) == nil {
+			if resp.StatusCode == http.StatusOK && err == nil && len(body) <= manifestMax && json.Unmarshal(body, &v) == nil {
 				c.Version = plainVersion(v.Version)
 			}
 			resp.Body.Close()
