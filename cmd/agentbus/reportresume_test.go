@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,7 +35,7 @@ func newResumeFixture(t *testing.T) *resumeFixture {
 		t.Fatal(err)
 	}
 	return &resumeFixture{t: t, manifest: manifest, env: []string{
-		"HERDR_ENV=1", "HERDR_PANE_ID=w1:p2", "HERDR_BIN_PATH=/opt/herdr", "AGENT_BUS_AGENT=coder",
+		"AGENTBUS_TERM_ID=t2", "AGENT_BUS_AGENT=coder",
 		"AGENT_BUS_PROJECT=demo", "AGENT_BUS_PROFILE=main", "ROLES_TOML=" + manifest, "XDG_STATE_HOME=" + filepath.Join(dir, "state"),
 	}}
 }
@@ -57,33 +56,15 @@ func (f *resumeFixture) hook(stdin string, env ...string) string {
 	return errw.String()
 }
 
-func TestReportResumeSpawnsTheSenderWithTheLaunchCommand(t *testing.T) {
-	f := newResumeFixture(t)
-	f.hook(sessionStart)
-	if len(f.spawned) != 1 {
-		t.Fatalf("spawned %q", f.spawned)
-	}
-	want := []string{"roles", "report-resume-send", filepath.Join(filepath.Dir(f.manifest), "state", "agentbus", "demo", "resume.log"),
-		"/opt/herdr", "w1:p2", "--", "env", "ROLES_TOML=" + f.manifest, "/r/scripts/agent-launch", "coder", "demo", "--resume", "5f0c-11"}
-	if got := f.spawned[0]; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
-		t.Fatalf("sender argv\n got %q\nwant %q", got, want)
-	}
-	// A swapped role resumes on the profile it runs on.
-	f.hook(sessionStart, "AGENT_BUS_PROFILE=alt")
-	if got := strings.Join(f.spawned[0], " "); !strings.HasSuffix(got, "coder demo --profile alt --resume 5f0c-11") {
-		t.Fatalf("swapped: %s", got)
-	}
-}
-
 func TestReportResumeGate(t *testing.T) {
 	f := newResumeFixture(t)
-	for _, v := range []string{"HERDR_ENV", "HERDR_PANE_ID", "HERDR_BIN_PATH", "AGENT_BUS_AGENT", "AGENT_BUS_PROJECT", "ROLES_TOML"} {
+	f.chain = []dispatch.ProcID{{PID: 40, Start: 400}}
+	for _, v := range []string{"AGENT_BUS_AGENT", "AGENT_BUS_PROJECT", "ROLES_TOML"} {
 		f.hook(sessionStart, v+"=")
 		if len(f.spawned) != 0 {
 			t.Errorf("without %s: spawned %q", v, f.spawned)
 		}
 	}
-	f.hook(sessionStart, "HERDR_ENV=0")
 	for name, stdin := range map[string]string{
 		"other event": strings.Replace(sessionStart, "SessionStart", "Stop", 1),
 		"no session":  `{"hook_event_name":"SessionStart"}`,
@@ -99,92 +80,6 @@ func TestReportResumeGate(t *testing.T) {
 	f.hook(sessionStart, "AGENT_BUS_AGENT=nobody") // not a role of the manifest
 	if len(f.spawned) != 0 {
 		t.Errorf("unknown role: spawned %q", f.spawned)
-	}
-}
-
-// fakeResumeHerdr answers `resume_not_accepted` the first n calls, then accepts;
-// it records each call's arguments, one line per call.
-func fakeResumeHerdr(t *testing.T, refusals int, code string) (bin, calls string) {
-	t.Helper()
-	dir := t.TempDir()
-	calls = filepath.Join(dir, "calls")
-	bin = filepath.Join(dir, "herdr")
-	script := "#!/bin/sh\necho \"$@\" >> " + calls + "\nn=$(wc -l < " + calls + ")\n" +
-		"if [ \"$n\" -le " + strconv.Itoa(refusals) + " ]; then echo '{\"error\":{\"code\":\"" + code + "\",\"message\":\"no\"}}'; exit 1; fi\necho '{\"result\":{}}'\n"
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return bin, calls
-}
-
-func sendResume(t *testing.T, herdr string, budget time.Duration) string {
-	t.Helper()
-	log := filepath.Join(t.TempDir(), "state", "resume.log")
-	clock := time.Unix(1_800_000_000, 0)
-	d := senderDeps{
-		now:   func() time.Time { return clock },
-		sleep: func(d time.Duration) { clock = clock.Add(d) },
-		run: func(ctx context.Context, bin string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, bin, args...).CombinedOutput()
-		},
-		budget: budget,
-	}
-	argv := []string{"env", "ROLES_TOML=/r/roles.toml", "/r/scripts/agent-launch", "coder", "demo", "--resume", "5f0c-11"}
-	reportResumeSend(append([]string{log, herdr, "w1:p2", "--"}, argv...), d)
-	if st, err := os.Stat(log); err != nil || st.Mode().Perm() != 0o600 {
-		t.Fatalf("log %v %v", st, err)
-	}
-	b, _ := os.ReadFile(log)
-	return string(b)
-}
-
-func TestReportResumeSendRetriesUntilAccepted(t *testing.T) {
-	herdr, calls := fakeResumeHerdr(t, 2, "resume_not_accepted")
-	logged := sendResume(t, herdr, 15*time.Second)
-	b, _ := os.ReadFile(calls)
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("calls %q", lines)
-	}
-	var seqs []string
-	for _, l := range lines {
-		f := strings.Fields(l)
-		i := indexOfStr(f, "--seq")
-		if !strings.HasPrefix(l, "pane report-agent-session w1:p2 --source agentbus --agent claude --seq ") || i < 0 ||
-			!strings.HasSuffix(l, " -- env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch coder demo --resume 5f0c-11") {
-			t.Fatalf("call %q", l)
-		}
-		seqs = append(seqs, f[i+1])
-	}
-	if !(seqs[0] < seqs[1] && seqs[1] < seqs[2]) || len(seqs[0]) != len(seqs[2]) {
-		t.Fatalf("seq not increasing: %v", seqs)
-	}
-	if !strings.Contains(logged, "accepted") || !strings.Contains(logged, "--resume 5f0c-11") {
-		t.Fatalf("log %q", logged)
-	}
-}
-
-func TestReportResumeSendGivesUpAfterItsBudget(t *testing.T) {
-	herdr, calls := fakeResumeHerdr(t, 9, "resume_not_accepted")
-	logged := sendResume(t, herdr, 3*time.Second)
-	b, _ := os.ReadFile(calls)
-	if n := strings.Count(string(b), "\n"); n != 4 { // at 0, 1, 2 and 3 s
-		t.Fatalf("%d calls within a 3 s budget", n)
-	}
-	if !strings.Contains(logged, "not accepted") {
-		t.Fatalf("log %q", logged)
-	}
-}
-
-func TestReportResumeSendStopsOnAnotherError(t *testing.T) {
-	herdr, calls := fakeResumeHerdr(t, 9, "pane_not_found")
-	logged := sendResume(t, herdr, 15*time.Second)
-	b, _ := os.ReadFile(calls)
-	if n := strings.Count(string(b), "\n"); n != 1 {
-		t.Fatalf("%d calls after a final error", n)
-	}
-	if !strings.Contains(logged, "pane_not_found") {
-		t.Fatalf("log %q", logged)
 	}
 }
 
@@ -241,8 +136,8 @@ func TestReportResumeHandsItsAncestryToTheProver(t *testing.T) {
 	if got := f.spawnedVerb("prove-session"); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("prover argv\n got %q\nwant %q", got, want)
 	}
-	if f.spawnedVerb("report-resume-send") == nil {
-		t.Fatal("the resume report is no longer sent")
+	if f.spawnedVerb("record-resume") == nil {
+		t.Fatal("the resume is no longer recorded")
 	}
 
 	for name, c := range map[string]struct {
@@ -320,7 +215,7 @@ func TestReportResumeWithoutProcSpawnsNoProver(t *testing.T) {
 	if got := f.spawnedVerb("prove-session"); got != nil {
 		t.Fatalf("prover spawned %q", got)
 	}
-	if f.spawnedVerb("report-resume-send") == nil {
-		t.Fatal("the resume report was dropped")
+	if f.spawnedVerb("record-resume") != nil {
+		t.Fatal("recorded without a chain to prove it")
 	}
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,31 +19,27 @@ import (
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
-// The resume hook (v0.21.1, spec
-// docs/superpowers/specs/2026-10-21-launcher-resume-design.md): the launcher
-// gives every Claude Code session a SessionStart hook running `agentbus roles
-// report-resume <agent-launch>`. It tells herdr the command that resumes the
-// session through agent-launch, so herdr's native restore brings the agent
-// back with its role, rules and identity instead of a bare `claude --resume`.
-// It reports no state and takes no authority over the pane: only a resume
-// command, which herdr accepts from a source whose agent label matches the
-// one it detects. If herdr never accepts it, herdr:claude's own resume
-// applies, as before.
-
-// reportResume is the hook. It never prints on stdout (a SessionStart hook's
-// stdout becomes Claude's context) and always exits 0: it hands the report to
-// a detached sender and returns at once, so Claude's start never waits on
-// herdr. It also hands the session to a detached prover (lifecycle spec, part
-// D), with its ancestors read here: once detached, the sender is reparented
-// and its own ancestry proves nothing. Linux only, like every process
-// identity here (/proc): without a chain no prover is spawned.
+// The resume hook (v0.21.1; herdr exit §4.7): the launcher gives every
+// Claude Code session a SessionStart hook running `agentbus roles
+// report-resume <agent-launch>`. It records how the session resumes, a
+// closed set of names in {p}:resume (never a command: security S1), proved
+// by the hook's ancestry; up and self-repair start the agent again on the
+// holder from that record. Inside a terminal the holder started it also
+// hands the session to the prover (lifecycle spec, part D).
+//
+// The hook never prints on stdout (a SessionStart hook's stdout becomes
+// Claude's context) and always exits 0: it hands its work to detached
+// helpers and returns at once, so Claude's start never waits on the bus. The
+// ancestors are read here: once detached, a helper is reparented and its
+// own ancestry proves nothing. Linux only, like every process identity here
+// (/proc): without a chain nothing is spawned.
 func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer, spawn func(argv []string) error, fg hookFacts) int {
 	get := func(k string) string { v, _ := lookupEnv(env, k); return v }
-	pane, herdr, role, project, manifest := get("HERDR_PANE_ID"), get("HERDR_BIN_PATH"), get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
+	role, project, manifest := get("AGENT_BUS_AGENT"), get("AGENT_BUS_PROJECT"), get("ROLES_TOML")
 	if len(args) != 1 || role == "" || project == "" || manifest == "" {
 		return 0 // not a launched agent: nothing to report
 	}
-	inHerdr := get("HERDR_ENV") == "1" && pane != "" && herdr != "" // herdr's report and its prover: inside herdr only, as before
+	inTerm := get("AGENTBUS_TERM_ID") != "" // the prover: inside a terminal the holder started
 	var in struct {
 		Event     string `json:"hook_event_name"`
 		SessionID string `json:"session_id"`
@@ -63,7 +58,7 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 	}
 	logPath := filepath.Join(paths.StateDir(project), "resume.log")
 	chain := fg.Ancestors() // read once, in the hook's foreground
-	if inHerdr {
+	if inTerm {
 		handToProver(logPath, project, role, in.SessionID, spawn, chain, fg.Now())
 	}
 	profile, err := resumeProfile(manifest, role, get("AGENT_BUS_PROFILE"))
@@ -71,18 +66,13 @@ func reportResume(args, env []string, stdin io.Reader, stdout, stderr io.Writer,
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
 		return 0
 	}
-	argv, err := rolecfg.ResumeArgv(args[0], manifest, role, project, profile, in.SessionID)
-	if err != nil {
+	// The resume command must be one the launcher can build (the names and
+	// the session id re-validated), though the record holds none of it.
+	if _, err := rolecfg.ResumeArgv(args[0], manifest, role, project, profile, in.SessionID); err != nil {
 		resumeLog(logPath, time.Now(), "refused: "+err.Error())
 		return 0
 	}
 	handToRecorder(logPath, project, role, in.SessionID, profile, spawn, chain)
-	if !inHerdr {
-		return 0
-	}
-	if err := spawn(append([]string{"roles", "report-resume-send", logPath, herdr, pane, "--"}, argv...)); err != nil {
-		resumeLog(logPath, time.Now(), "sender not started: "+err.Error())
-	}
 	return 0
 }
 
@@ -222,52 +212,6 @@ func spawnDetached(argv []string) error {
 		return err
 	}
 	return cmd.Process.Release()
-}
-
-// senderDeps is what the sender reads and runs, injected for tests.
-type senderDeps struct {
-	now    func() time.Time
-	sleep  func(time.Duration)
-	run    func(ctx context.Context, bin string, args ...string) ([]byte, error)
-	budget time.Duration // how long herdr may answer resume_not_accepted
-}
-
-func defaultSenderDeps() senderDeps {
-	return senderDeps{now: time.Now, sleep: time.Sleep, budget: 15 * time.Second,
-		run: func(ctx context.Context, bin string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, bin, args...).CombinedOutput()
-		}}
-}
-
-// reportResumeSend reports the resume command to herdr: <log> <herdr> <pane>
-// -- <argv...>. While Claude is not yet detected in the pane herdr answers
-// resume_not_accepted; it retries once a second within the budget. Every
-// outcome is one line of the log.
-func reportResumeSend(args []string, d senderDeps) int {
-	if len(args) < 5 || args[3] != "--" {
-		return 0
-	}
-	logPath, herdr, pane, argv := args[0], args[1], args[2], args[4:]
-	deadline := d.now().Add(d.budget)
-	for {
-		call := append([]string{"pane", "report-agent-session", pane, "--source", "agentbus", "--agent", "claude",
-			"--seq", strconv.FormatInt(d.now().UnixNano(), 10), "--"}, argv...)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		out, err := d.run(ctx, herdr, call...)
-		cancel()
-		switch {
-		case err == nil:
-			resumeLog(logPath, d.now(), "accepted: "+rolecfg.ShellJoin(argv))
-			return 0
-		case !bytes.Contains(out, []byte("resume_not_accepted")):
-			resumeLog(logPath, d.now(), "herdr refused: "+oneLine(out, err))
-			return 0
-		case !d.now().Before(deadline):
-			resumeLog(logPath, d.now(), "not accepted within "+d.budget.String()+"; herdr's own resume applies")
-			return 0
-		}
-		d.sleep(time.Second)
-	}
 }
 
 // sessionProver is the bus as the prover needs it.

@@ -60,13 +60,10 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, rolecfg.ProjectsDir(func(k string) string { v, _ := lookupEnv(env, k); return v }))
 		return nil
 	}
-	switch action { // Claude's SessionStart hook and its sender: silent, never failing
+	switch action { // Claude's SessionStart hook and its helpers: silent, never failing
 	case "report-resume":
 		reportResume(rest, env, os.Stdin, stdout, stderr, spawnDetached,
 			hookFacts{Ancestors: func() []dispatch.ProcID { return dispatch.Ancestors(os.Getpid()) }, Now: time.Now})
-		return nil
-	case "report-resume-send":
-		reportResumeSend(rest, defaultSenderDeps())
 		return nil
 	case "prove-session":
 		proveSessionSend(rest, openProver, dispatch.ProcStart)
