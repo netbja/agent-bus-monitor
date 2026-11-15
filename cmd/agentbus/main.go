@@ -164,6 +164,9 @@ func main() {
 		if len(args) >= 2 && args[1] == "run" {
 			os.Exit(mainServiceRun(project, host, args[2:]))
 		}
+		if len(args) >= 2 && args[1] == "supervise" { // herdr exit 4.4b: no service manager
+			os.Exit(runSupervise(project, args[2:], realSuperviseDeps(), os.Stderr))
+		}
 		os.Exit(runServiceCmd(project, args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
 	}
 	// attach puts the person's terminal on an agent's terminal in the

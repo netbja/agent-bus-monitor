@@ -1,4 +1,4 @@
-- **Without a service manager (herdr exit step 6c1; the `none` manager is 6c2, not wired yet).**
+- **Without a service manager (herdr exit steps 6c1 and 6c2; `Detect`, `up` and `down` choose it in 6c3, not wired yet).**
   `services.manager` (`auto`, `systemd`, `launchd`, `none`; `MachineOnly`) is the registry key of the
   old `AGENTBUS_SERVICE_MANAGER`: `service.ManagerChoice` reads the environment, then config.toml,
   and `Detect`, `Local`, `ManagerBin` and `restore` go through it (today `none` still means herdr
@@ -21,3 +21,17 @@
   (`groupkill_linux.go`): without /proc there is no start time, the holder records nothing and
   nothing is killed. It reads the record only from a checked run directory and never through a symlink
   (`O_NOFOLLOW`, regular, ours, private), and removes it.
+  6c2: `holder.Supervised` is the holder's `service.HolderManager` without a manager. Its "unit" is a
+  record, `<rundir>/agentbus/<p>/holder-<key>.pid` (0600, read like the group record): `InstallHolder`
+  writes project, build key, raw id, env file, working directory and binary copy (another raw id for a
+  key is refused, S7); `StartHolder`, under a `flock` on `holder-<key>.lock` (two `up` start one; the lock file is never
+  removed, even by `RemoveHolder`, so every waiter shares one inode: reviewer-codex),
+  spawns `<binary copy> --project <p> service supervise holder <p> <key>` in its own session (`setsid`),
+  output appended to `<state>/agentbus/logs/<p>-holder.log`, and records its pid and start time. A
+  supervisor is alive only while that pid holds that start time (a reused pid, a zombie: gone);
+  `StopHolder` sends SIGTERM pinned by a pidfd and waits (15 s); `RemoveHolder` refuses a live one, so
+  `service.GCHolders` works on it unchanged. Linux only for now: elsewhere `ProcStart` must be given
+  (no start time, nothing judged). `agentbus service supervise` (`supervisecmd.go`) runs
+  `service.Supervisor` on `holder --env <file> --record-groups` (the holder then sets `Config.Pgids`)
+  and, after each exit, `KillRecordedGroups` with the cutoff taken first and the run directory the
+  holder's env file gives it; it exits 1 when it gave up. Only the holder kind is accepted yet.

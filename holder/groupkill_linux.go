@@ -160,3 +160,24 @@ func killPass(pgid int, from, to uint64, killed map[int]bool, refused map[int]er
 	}
 	return n, nil
 }
+
+// signalPinned sends sig to pid only while it is the process started at
+// start: pinned by a pidfd, its start time read again after the pin (a pid
+// reused between the check and the signal is never reached).
+func signalPinned(pid int, start uint64, sig unix.Signal, startOf func(int) (uint64, error)) error {
+	fd, err := pidfdOpen(pid, 0)
+	if errors.Is(err, unix.ESRCH) {
+		return nil // gone
+	}
+	if err != nil {
+		return fmt.Errorf("pidfd_open: %w", err)
+	}
+	defer unix.Close(fd)
+	if now, err := startOf(pid); err != nil || now != start {
+		return nil // gone, or another process now
+	}
+	if err := pidfdSend(fd, sig, nil, 0); err != nil && !errors.Is(err, unix.ESRCH) {
+		return fmt.Errorf("pidfd_send_signal: %w", err)
+	}
+	return nil
+}

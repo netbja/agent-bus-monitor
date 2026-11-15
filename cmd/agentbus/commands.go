@@ -492,8 +492,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo attach coder", "agentbus -p demo attach coder --observe"},
 	},
 	{
-		Name: "holder", Usage: []string{"holder [--env <file>]"},
-		Summary:  "serve the project's agent terminals (what a holder unit runs; agentbus up installs it)",
+		Name: "holder", Usage: []string{"holder [--env <file>] [--record-groups]"},
+		Summary: "serve the project's agent terminals (what a holder unit runs; agentbus up installs it)",
+		Flags: []cli.Flag{
+			{Long: "env", Arg: "<file>", Help: "the project's service environment file"},
+			{Long: "record-groups", Help: "record the terminals' process groups for a supervisor (no service manager)"},
+		},
 		Examples: []string{"agentbus -p demo holder --env ~/.config/agentbus/services/demo.env"},
 	},
 	{
@@ -509,6 +513,7 @@ var commands = []cli.Command{
 			"service login",
 			"service restart holder --kill-agents",
 			"service start holder | service gc",
+			"service supervise holder <p> <build key> (no service manager: started detached, never by hand)",
 		},
 		Summary: "the project's user services (systemd --user, launchd)",
 		Flags: []cli.Flag{

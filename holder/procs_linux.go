@@ -138,3 +138,13 @@ func waitExited(pid int) {
 		}
 	}
 }
+
+// procStartOf is pid's start time from /proc; errNoProcess when it is gone
+// or a zombie (Supervised).
+func procStartOf(pid int) (uint64, error) {
+	st, ok := readProcStat(pid)
+	if !ok || st.state == 'Z' {
+		return 0, errNoProcess
+	}
+	return st.start, nil
+}
