@@ -46,9 +46,9 @@ type activityReader interface {
 	Activity(ctx context.Context, id termhost.TermID) (termhost.Activity, error)
 }
 
-// readHostFacts reads the events (newest first) and, with a host, each
-// agent's newest live terminal's draft. A failed events read is the error; a
-// holder that fails only loses the drafts.
+// readHostFacts reads the events (newest first) and, with a host, the draft
+// of each agent's terminal that attach picks (holderTerm). A failed events
+// read is the error; a holder that fails only loses the drafts.
 func readHostFacts(ctx context.Context, evs eventsReader, terms activityReader, project string, now time.Time) (map[string]hostFacts, error) {
 	out := map[string]hostFacts{}
 	if evs != nil {
@@ -92,20 +92,22 @@ func readHostFacts(ctx context.Context, evs eventsReader, terms activityReader, 
 	if err != nil {
 		return out, nil
 	}
-	done := map[string]bool{}
-	for i := len(list) - 1; i >= 0; i-- { // the newest first
-		t := list[i]
-		if t.Project != project || !t.Alive || t.Name == "" || done[t.Name] {
+	names := map[string]bool{}
+	for _, t := range list {
+		names[t.Name] = true
+	}
+	for name := range names {
+		t, ok := holderTerm(list, project, name) // the terminal attach picks
+		if !ok {
 			continue
 		}
-		done[t.Name] = true
 		a, err := terms.Activity(ctx, t.ID)
 		if err != nil || !a.Draft {
 			continue
 		}
-		f := out[t.Name]
+		f := out[name]
 		f.draft, f.draftSince = true, a.DraftSince
-		out[t.Name] = f
+		out[name] = f
 	}
 	return out, nil
 }
