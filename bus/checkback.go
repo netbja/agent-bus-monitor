@@ -88,7 +88,9 @@ func (b *Bus) ClearCheckback(ctx context.Context, agent string) (bool, error) {
 	return n > 0, err
 }
 
-// Checkbacks are every agent's check-back; a corrupt field is skipped.
+// Checkbacks are every agent's check-back. A corrupt field is an error
+// naming it (reviewer-codex): never read as no check-back, so a guard that
+// reads them is unknown, not silent; the agent's next set replaces it.
 func (b *Bus) Checkbacks(ctx context.Context) (map[string]Checkback, error) {
 	h, err := b.r.HGetAll(ctx, CheckbackKey(b.project)).Result()
 	if err != nil {
@@ -97,10 +99,11 @@ func (b *Bus) Checkbacks(ctx context.Context) (map[string]Checkback, error) {
 	out := map[string]Checkback{}
 	for agent, raw := range h {
 		var c Checkback
-		if json.Unmarshal([]byte(raw), &c) == nil && ValidName(agent) {
-			c.Agent = agent
-			out[agent] = c
+		if err := json.Unmarshal([]byte(raw), &c); err != nil || !ValidName(agent) || c.SetID <= 0 || c.DueMs <= 0 {
+			return nil, fmt.Errorf("check-backs: a corrupt field %q (its next checkback replaces it)", agent)
 		}
+		c.Agent = agent
+		out[agent] = c
 	}
 	return out, nil
 }

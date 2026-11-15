@@ -74,3 +74,20 @@ func TestForgetIfClearClearsTheCheckback(t *testing.T) {
 		t.Fatalf("the check-back survived the retire: %+v", all)
 	}
 }
+
+// reviewer-codex on master-idle-b: a corrupt field is an error, never read as
+// no check-back (the guard's read is then unknown); a new set replaces it.
+func TestCheckbacksCorruptIsAnError(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	b.r.HSet(ctx, CheckbackKey(b.project), "master", "{not json")
+	if all, err := b.Checkbacks(ctx); err == nil || !strings.Contains(err.Error(), "master") {
+		t.Fatalf("a corrupt field read as %+v, %v", all, err)
+	}
+	if c, err := b.SetCheckback(ctx, "master", time.Minute, "x"); err != nil || c.Count != 1 {
+		t.Fatalf("a set over a corrupt field: %+v %v", c, err)
+	}
+	if all, err := b.Checkbacks(ctx); err != nil || len(all) != 1 {
+		t.Fatalf("after the set: %+v %v", all, err)
+	}
+}
