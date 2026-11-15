@@ -20,7 +20,7 @@ type headerData struct {
 	pilot      string            // pilot-lease driver, "" = autonomous
 	self       string            // the person busmon writes as (humanLabel); "" = not shown
 	update     string            // a newer release tag ("" = none): the last, lowest-priority item
-	codex      string            // a newer Codex published, its line ("" = none): after update
+	codex      string            // a newer Codex published, its whole line ("" = none): after update
 	note       string            // non-fatal local settings note
 	waiting    string            // owedText: what the Requests view says is owed to the person, "" when nothing
 	background string            // backgroundChip: agents' background work, "" when none (progress-line §4.3)
@@ -179,8 +179,8 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 	if d.update != "" { // a newer release: the first item to go when space is short
 		add(Line{{Text: GlyphUp + " " + Preview(d.update), Role: RoleMuted}}, 101, second)
 	}
-	if v := codexHeader(d.codex); v != "" { // the full line, its command included, is on the About page
-		add(Line{{Text: GlyphUp + " " + v, Role: RoleMuted}}, 102, second)
+	if d.codex != "" { // the whole line, its command included (spec 4): the first item to go
+		add(Line{{Text: GlyphUp + " " + Preview(d.codex), Role: RoleMuted}}, 102, second)
 	}
 	if d.note != "" {
 		add(Line{{Text: Preview(d.note), Role: RoleMuted}}, 2, second)

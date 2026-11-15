@@ -125,8 +125,9 @@ func TestCheckCodex(t *testing.T) {
 	}
 }
 
-// The header carries `↑ codex <new>` after the release item; the About page
-// carries the whole line, its install command as the row's note.
+// The header carries the whole line, its install command included (spec 4,
+// reviewer-codex), when it fits; the About page too, the command as the
+// row's note.
 func TestCodexLineInHeaderAndAbout(t *testing.T) {
 	line := codexNotice("0.170.0", "0.171.0")
 	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
@@ -137,8 +138,8 @@ func TestCodexLineInHeaderAndAbout(t *testing.T) {
 		}
 		text += "\n"
 	}
-	if !strings.Contains(text, GlyphUp+" codex 0.171.0") || strings.Contains(text, "npm install") {
-		t.Fatalf("header %q", text)
+	if !strings.Contains(text, GlyphUp+" "+line) {
+		t.Fatalf("header lacks the whole line with its command: %q", text)
 	}
 	v := withCodexRow(line, aboutVersions{Build: []aboutRow{{Label: "busmon"}}})
 	last := v.Build[len(v.Build)-1]

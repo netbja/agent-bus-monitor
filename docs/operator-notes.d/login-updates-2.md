@@ -5,7 +5,8 @@
   `https://registry.npmjs.org/@openai/codex/latest`, asked at most once a day (cache
   `${XDG_CACHE_HOME:-~/.cache}/agentbus/client-codex.json`, 3 s, silent offline and cached for the
   day), re-judged every hour in the background, never on the UI path. Newer: the header shows
-  `↑ codex <new>` after the release item, and About's THIS BUILD a `codex` row with
-  `npm install -g @openai/codex@latest`. Nothing installs it; after the person does, the client
+  the whole line, `codex <new> available (installed <old>): npm install -g @openai/codex@latest`,
+  after the release item and the first to go when space is short, and About's THIS BUILD a
+  `codex` row with the command as its note. Nothing installs it; after the person does, the client
   fingerprint flow reloads the Codex agents. No line for Grok and agy (no version endpoint) or Claude
   Code (it updates itself).

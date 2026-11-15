@@ -139,17 +139,6 @@ func watchCodex(ctx context.Context, st *shared, on bool, agents func(context.Co
 	}
 }
 
-// codexHeader is the header's short item for the line: `codex <new>`; the
-// command is on the About page.
-func codexHeader(line string) string {
-	v, ok := strings.CutPrefix(line, "codex ")
-	if !ok {
-		return ""
-	}
-	v, _, _ = strings.Cut(v, " ")
-	return "codex " + v
-}
-
 // withCodexRow adds the line to the About page: a line of its text, and a
 // row of THIS BUILD with the install command as its note.
 func withCodexRow(line string, v aboutVersions) aboutVersions {
