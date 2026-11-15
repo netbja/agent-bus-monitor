@@ -734,6 +734,11 @@ line screened for credentials), followed by the verdicts; without it, the commit
   - the PR counted as "not on an approved head" (a newer push, a merge-only head: get a verdict
     on the head you delivered);
   - a draft.
+- **An approved head you have not delivered is yours** (master-idle): `agentbus merge-queue` lists
+  it under "approved, not pushed" (no branch tip on origin, and git finds none of its change in the
+  base, whatever the forge merged it with). Deliver it, or, when nobody ever will (dropped,
+  replaced, redundant), withdraw it once: `agentbus merge-queue drop <sha> "<why>"` (`undrop` puts
+  it back). A drop names that head only: a new approve on another head is new work.
 - Exit 2 means delivered but the plan link was not recorded (say it, record it by hand). A push
   git refuses (the remote branch is ahead) stops it with git's own message.
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -73,5 +74,71 @@ func TestMergeQueueIsReadOnly(t *testing.T) {
 	}
 	if err := identityGuard(pane, "merge-queue", nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// master-idle §3.1: the undelivered heads are printed for master.
+func TestMergeQueueCmdUndelivered(t *testing.T) {
+	rec := mqCmdRecord()
+	rec.Undelivered = []bus.MergeUndelivered{{Subject: "herdr-6c2-2", Head: "fa2d796f00000000000000000000000000000000", Branch: "feat/herdr-6c2-2"}, {Subject: "x", Head: "abcdef1000000000000000000000000000000000"}}
+	var out bytes.Buffer
+	printMergeQueue(rec, false, &out)
+	if !strings.Contains(out.String(), "approved, not pushed (master delivers or drops them): herdr-6c2-2 fa2d796 feat/herdr-6c2-2, x abcdef1") {
+		t.Fatalf("%s", out.String())
+	}
+}
+
+// merge-queue drop / undrop: a short SHA resolved against the approved heads
+// (undrop: the dropped ones), an ambiguous or unknown one refused; only who
+// may deliver drops; the dropped heads are listed with their reasons.
+func TestMergeQueueDrop(t *testing.T) {
+	b, _ := dialMain(t)
+	ctx := context.Background()
+	const a1, a2, other = "fa2d796f00000000000000000000000000000000", "fa2d111100000000000000000000000000000000", "9b7106db00000000000000000000000000000000"
+	for i, h := range []string{a1, a2, other} {
+		if _, err := b.AppendVerdict(ctx, bus.Verdict{Subject: "s" + string(rune('a'+i)), Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: h}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	allow := func(string) error { return nil }
+	run := func(self string, may func(string) error, args ...string) (int, string) {
+		var out, errw bytes.Buffer
+		code := runMergeDrop(ctx, b, self, may, args, &out, &errw)
+		return code, out.String() + errw.String()
+	}
+	if code, msg := run("coder", func(s string) error { return errors.New(s + " may not deliver") }, "drop", "9b7106db", "redundant"); code != 1 || !strings.Contains(msg, "may not deliver") {
+		t.Fatalf("a role without delivers: %d %q", code, msg)
+	}
+	if code, msg := run("master", allow, "drop", "fa2d", "x"); code != 2 || !strings.Contains(msg, "ambiguous") {
+		t.Fatalf("ambiguous: %d %q", code, msg)
+	}
+	if code, msg := run("master", allow, "drop", "deadbeef", "x"); code != 2 || !strings.Contains(msg, "no approved head") {
+		t.Fatalf("unknown: %d %q", code, msg)
+	}
+	if code, msg := run("master", allow, "drop", "9b7106db"); code != 2 || !strings.Contains(msg, "usage") {
+		t.Fatalf("no reason: %d %q", code, msg)
+	}
+	if ds, _ := b.DroppedHeads(ctx); len(ds) != 0 {
+		t.Fatalf("a refused drop wrote %+v", ds)
+	}
+	if code, msg := run("master", allow, "drop", "9b7106db", "redundant after operator-notes-fragments"); code != 0 || !strings.Contains(msg, "dropped 9b7106d") {
+		t.Fatalf("drop: %d %q", code, msg)
+	}
+	if ds, _ := b.DroppedHeads(ctx); ds[other].Reason != "redundant after operator-notes-fragments" || ds[other].By != "master" {
+		t.Fatalf("dropped %+v", ds)
+	}
+	var out bytes.Buffer
+	printDropped(map[string]bus.MergeDrop{other: {Reason: "redundant", By: "master", At: 1793830000000}}, &out)
+	if !strings.Contains(out.String(), "dropped (never to be delivered): 9b7106d redundant (master,") {
+		t.Fatalf("listing %q", out.String())
+	}
+	if code, msg := run("master", allow, "undrop", "fa2d796f"); code != 2 || !strings.Contains(msg, "not dropped") {
+		t.Fatalf("undrop of a head not dropped: %d %q", code, msg)
+	}
+	if code, msg := run("master", allow, "undrop", "9b71"); code != 0 || !strings.Contains(msg, "undropped 9b7106d") {
+		t.Fatalf("undrop: %d %q", code, msg)
+	}
+	if ds, _ := b.DroppedHeads(ctx); len(ds) != 0 {
+		t.Fatalf("after undrop %+v", ds)
 	}
 }

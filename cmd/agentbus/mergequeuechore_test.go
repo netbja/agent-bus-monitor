@@ -42,6 +42,10 @@ func mqChore(t *testing.T, origin string) (*mergeQueueChore, *bus.Bus) {
 		inBase: func(context.Context, string, []string, string, []string) (map[string]bool, error) {
 			return map[string]bool{mqHead: false}, nil
 		},
+		delivered: func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
+			return map[string]bool{}, nil
+		},
+		done: func(context.Context, []bus.Verdict) (map[string]bool, error) { return map[string]bool{}, nil },
 	}
 	return c, b
 }
@@ -84,7 +88,9 @@ func TestMergeQueueChoreGitHub(t *testing.T) {
 }
 
 // GitHub without gh, GitLab and Bitbucket take the git fallback; a local
-// forge reads local branches and fetches nothing.
+// forge reads only local branches and fetches nothing (the local branches
+// are read in every mode since master-idle, to name an undelivered head's
+// branch: what tells local apart is that origin is never read).
 func TestMergeQueueChoreFallbacks(t *testing.T) {
 	ctx := context.Background()
 	for name, c := range map[string]struct {
@@ -101,12 +107,12 @@ func TestMergeQueueChoreFallbacks(t *testing.T) {
 		if c.noGH {
 			ch.hasGH = func([]string) bool { return false }
 		}
-		fetched, local := false, false
+		fetched, remote := false, false
 		ch.fetchBase = func(context.Context, string, []string, string) error { fetched = true; return nil }
-		lt := ch.localTips
-		ch.localTips = func(ctx context.Context, d string, e []string, base string) ([]mergequeue.Tip, string, error) {
-			local = true
-			return lt(ctx, d, e, base)
+		rt := ch.remoteTips
+		ch.remoteTips = func(ctx context.Context, d string, e []string, base string) ([]mergequeue.Tip, string, error) {
+			remote = true
+			return rt(ctx, d, e, base)
 		}
 		ch.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
 			t.Fatalf("%s: gh read", name)
@@ -116,8 +122,8 @@ func TestMergeQueueChoreFallbacks(t *testing.T) {
 			t.Fatal(err)
 		}
 		rec, _ := b.MergeQueue(ctx)
-		if rec.Source != "git" || rec.Reason != "" || len(rec.Items) != 1 || rec.Items[0].Branch != "feat/request-priority" || fetched != c.fetched || local != c.local {
-			t.Fatalf("%s: %+v fetched %v local %v", name, rec, fetched, local)
+		if rec.Source != "git" || rec.Reason != "" || len(rec.Items) != 1 || rec.Items[0].Branch != "feat/request-priority" || fetched != c.fetched || remote == c.local {
+			t.Fatalf("%s: %+v fetched %v origin read %v", name, rec, fetched, remote)
 		}
 	}
 }
@@ -219,5 +225,92 @@ func TestMergeQueueChoreBudgetSpentStillRecords(t *testing.T) {
 	}
 	if rec, _ := b.MergeQueue(ctx); rec.Reason == "" || len(rec.Items) != 1 {
 		t.Fatalf("the spent pass is not recorded: %+v", rec)
+	}
+}
+
+// master-idle §3.1: the undelivered heads, in the forge and none modes, the
+// gh path included: an approved head with no tip on origin and that the git
+// test does not find in the base, its local branch named; dropped, delivered
+// or pushed it is out; local mode lists nothing.
+func TestMergeQueueChoreUndelivered(t *testing.T) {
+	ctx := context.Background()
+	const waiting = "fa2d796f00000000000000000000000000000000"
+	setup := func(origin string) (*mergeQueueChore, *bus.Bus, *bool, *[]string) {
+		c, b := mqChore(t, origin)
+		if _, err := b.AppendVerdict(ctx, bus.Verdict{Subject: "herdr-6c2-2", Author: "coder2", Reviewer: "foureyes", Decision: "approve", Head: waiting}); err != nil {
+			t.Fatal(err)
+		}
+		lt := c.localTips
+		c.localTips = func(ctx context.Context, d string, e []string, base string) ([]mergequeue.Tip, string, error) {
+			tips, tip, err := lt(ctx, d, e, base)
+			return append(tips, mergequeue.Tip{Branch: "feat/herdr-6c2-2", Head: waiting}), tip, err
+		}
+		fetched, judged := false, []string{}
+		c.fetchBase = func(context.Context, string, []string, string) error { fetched = true; return nil }
+		c.delivered = func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
+			judged = append(judged, heads...)
+			return map[string]bool{}, nil
+		}
+		return c, b, &fetched, &judged
+	}
+	for name, origin := range map[string]string{"gh": "git@github.com:o/r.git", "none": "git@git.example.org:o/r.git"} {
+		c, b, fetched, judged := setup(origin)
+		if err := c.pass(ctx, "mq"); err != nil {
+			t.Fatal(err)
+		}
+		rec, _ := b.MergeQueue(ctx)
+		if rec.Reason != "" || len(rec.Undelivered) != 1 || rec.Undelivered[0].Head != waiting || rec.Undelivered[0].Branch != "feat/herdr-6c2-2" ||
+			rec.Undelivered[0].Subject != "herdr-6c2-2" || !*fetched || len(*judged) != 1 || (*judged)[0] != waiting {
+			t.Fatalf("%s: %+v fetched %v judged %v", name, rec, *fetched, *judged)
+		}
+		// Delivered by the git test: out.
+		c.delivered = func(context.Context, string, []string, string, []string) (map[string]bool, error) {
+			return map[string]bool{waiting: true}, nil
+		}
+		if err := c.pass(ctx, "mq"); err != nil {
+			t.Fatal(err)
+		}
+		if rec, _ = b.MergeQueue(ctx); len(rec.Undelivered) != 0 {
+			t.Fatalf("%s: delivered still listed %+v", name, rec.Undelivered)
+		}
+	}
+	// Dropped: out, and never judged.
+	c, b, _, judged := setup("git@github.com:o/r.git")
+	if err := b.DropHead(ctx, waiting, "redundant", "master"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); len(rec.Undelivered) != 0 || len(*judged) != 0 {
+		t.Fatalf("dropped: %+v judged %v", rec.Undelivered, *judged)
+	}
+	// Its plan task done: out.
+	c, b, _, _ = setup("git@github.com:o/r.git")
+	c.done = func(context.Context, []bus.Verdict) (map[string]bool, error) { return map[string]bool{"herdr-6c2-2": true}, nil }
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); len(rec.Undelivered) != 0 {
+		t.Fatalf("done: %+v", rec.Undelivered)
+	}
+	// The git test fails: the pass is unknown, never an empty list.
+	c, b, _, _ = setup("git@github.com:o/r.git")
+	c.delivered = func(context.Context, string, []string, string, []string) (map[string]bool, error) {
+		return nil, errors.New("git show: cannot judge")
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); !strings.Contains(rec.Reason, "cannot judge") || rec.ItemsAt != 0 {
+		t.Fatalf("a failed git test: %+v", rec)
+	}
+	// Local mode: nothing is master's to push.
+	c, b, _, judged = setup("/srv/git/r.git")
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Reason != "" || len(rec.Undelivered) != 0 || len(*judged) != 0 {
+		t.Fatalf("local: %+v judged %v", rec, *judged)
 	}
 }

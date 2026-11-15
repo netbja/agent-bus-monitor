@@ -89,8 +89,8 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo cmd coder \"run the suite\"", "agentbus -p demo cmd -r 1792537337865-0 coder \"and the vet\""},
 	},
 	{
-		Name: "merge-queue", Usage: []string{"merge-queue [--json] [--live]"},
-		Summary: "what waits for the person's merge: open PRs on an approved head (read-only)",
+		Name: "merge-queue", Usage: []string{"merge-queue [--json] [--live]", "merge-queue drop <head> \"<reason>\"", "merge-queue undrop <head>"},
+		Summary: "what waits for the person's merge: open PRs on an approved head, approved heads not pushed; drop withdraws a head nobody will deliver (master, docs, the person)",
 		Flags: []cli.Flag{
 			fJSON,
 			{Long: "live", Arg: "", Help: "derive it now in this checkout (gh, else git) instead of reading the service's cache; writes nothing"},
