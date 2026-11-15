@@ -41,7 +41,7 @@ by the dispatch service every minute. It judges one agent: **the escalation targ
 **Warn** when all of these hold:
 
 1. master is registered and its state is `idle` or `done`, or `waiting` answered since
-   (`WaitAnswered`, as `team-stall` reads it), for at least `dispatch.master_idle_after` (§5),
+   (`WaitAnswered`, as `team-stall` reads it), for at least `dispatch.master_idle_after` (§6),
    counted from the status entry's id or the answer's id (Redis time);
 2. a fresh observation of its pane (`Observation.Fresh`) shows it not busy;
 3. it has no obligation (no pending or unread entry): when it has one, the dispatcher's own wake
@@ -69,7 +69,7 @@ Three sources, each already on the bus or one read away. Nothing else counts.
 
 | Item | Read from | Key (for the episode) |
 |---|---|---|
-| **Approved, not delivered**: a head some subject's deciding approve names (`mergequeue.ApprovedHeads`), within 72 h (`ReviewQueueWindow`), that is no open PR's head, no branch tip on origin, and not in the base; a subject whose plan task is recorded done is left out (`DoneSubjects`, as `review-queue` does) | `{p}:mergequeue`, new field `undelivered` (below) | `head:<sha>` |
+| **Approved, not delivered**: a head some subject's deciding approve names (`mergequeue.ApprovedHeads`), within 72 h (`ReviewQueueWindow`), that is no open, merged or closed PR's head, no branch tip on origin, not in the base, and not dropped (below); a subject whose plan task is recorded done is left out (`DoneSubjects`, as `review-queue` does) | `{p}:mergequeue`, new field `undelivered` (below) | `head:<sha>` |
 | **A request for master**: a board entry addressed to master in state `requested` or `accepted` | `{p}:board` | `req:<task>` |
 | **A check-back due**: master said work is in flight and when to look again, and that time has passed | `{p}:checkback` (§4) | `cb:<set id>` |
 
@@ -80,10 +80,33 @@ approved heads (`ApprovedHeads`, within 72 h) that are no open PR's head and no 
 origin's tips (`mergequeue.RemoteTips`, one `git ls-remote`; the `gh` path adds this read and the
 base fetch it does not do today), then `InBase` on what is left. What remains is written as
 `undelivered: [{subject, head, branch, approved_at}]` in the same fenced write of `{p}:mergequeue`.
+On the `gh` path it also reads the heads of the newest 100 merged or closed PRs (`gh pr list
+--state closed`, one more call; `Items` still come from the open ones only), so a PR merged on the
+forge, squash included, no longer counts.
 `branch` is a local branch whose tip is that head (`mergequeue.LocalTips`), or empty. In the local
 forge mode the field stays empty: delivery there pushes nothing, and the existing `Items` already
 list approved local tips for the person. A failed or stale pass (`ItemsAt` older than 3 passes)
 makes this source `unknown`, and the check names it, never `ok` on it.
+
+**Dropping a head that will never be delivered.** A subject dropped, replaced by another one, or
+squash-merged with its branch deleted leaves an approved head nobody will push (today:
+restore-attach-notes, `9b7106db`, redundant after operator-notes-fragments). Master withdraws it
+once:
+
+```
+agentbus merge-queue drop 9b7106db "redundant after operator-notes-fragments"
+agentbus merge-queue undrop 9b7106db
+```
+
+- It writes one field of `{p}:mergequeue:dropped`: the full head, `{reason, by, at}` (`at` from
+  Redis `TIME`). A short SHA is resolved against the approved heads; an ambiguous or unknown one is
+  refused. Only a delivering role (`delivers = true`: master, docs) or the person may drop, as only
+  they deliver; the check is `deliver`'s own.
+- §3 leaves a dropped head out. The drop names a head, not a subject: a new approve on another
+  head of the same subject is a new item.
+- The merge-queue pass deletes a dropped field whose `at` is older than 72 h, in its fenced write,
+  so the hash stays small. `agentbus merge-queue` lists the dropped heads under the queue, with
+  their reasons.
 
 **Not counted:** asks, open merge-queue items (the person's merge), gates (the reviewers'), plan
 tasks (`team-stall`), requests to other agents (`idle-implementer`).
@@ -118,14 +141,16 @@ can follow and the guard can verify.
 ## 5. The nudge, and how it stays quiet
 
 **One wake to master per episode.** While `idle-master` warns, the stall guard's wake hook
-(`StallWake`, as `IdleImplementerWakes`) sends master one waking directive through
+(`StallWake`, as `IdleImplementerWakes`; `idle-master` joins the check ids the health loop
+hands to that hook, `dispatch/health.go:165`, and `stallWake`'s switch gains its case) sends master one waking directive through
 `FencedCmdOnce`, mark `stall-master`, episode the first 8 bytes of SHA-256 of the sorted item
 keys (§3). The dispatcher then types its fixed wake line in master's pane, and nothing else: the
 text below is a bus message, never typed (the one-pane-writer rule).
 
 ```
 Stall guard: master idle 22m with work in hand: approved, not pushed: herdr-6c2-2 (fa2d796f);
-check-back due: k1/k2 checks. Move it, or say why it waits (an ask, or checkback with a new time).
+check-back due: k1/k2 checks. Move it, or say why it waits: an ask, checkback with a new time,
+or merge-queue drop for a head that will never be pushed.
 ```
 
 **The same facts never wake twice.** One mark field per project, overwritten by each new
@@ -133,8 +158,9 @@ episode, so `{p}:quota` does not grow. A new item, or one gone, is a new set of 
 episode; a master who works and goes idle again with exactly the same items is not woken again by
 this tier.
 
-**Second tier: the person.** On a pass that warns with an episode already woken (the mark holds
-that episode), and the warn has lasted at least `master_idle_after` since that wake, the hook sends
+**Second tier: the person.** On a pass that warns with an episode already woken (the
+`stall-master` mark holds that episode), and at least `master_idle_after` has passed since that
+wake, the hook sends
 **one** notice for the person: `FencedNotifyOnceForPerson`, mark `stall-master-person`, the same
 episode:
 
@@ -142,6 +168,14 @@ episode:
 Stall guard: master was woken 25m ago for: herdr-6c2-2 approved, not pushed. It is idle again and
 nothing moved. Look at master's pane, or tell it in busmon.
 ```
+
+The wake's time is its own entry's stream id (Redis time): `FencedCmdOnce` writes the mark as a
+field of the entry (`stall-master=<episode>`, `onceCmdFields`), and the stall reader already scans
+the cmd stream (`stallCmdScan`), so the newest entry from `dispatch` to master carrying that field
+and episode gives it. No new mark, no writer clock. If that entry is no longer retained, the wake
+is older than the stream's horizon, so the time has passed. A master without turn hooks that stays
+`idle` after the wake keeps the warn's `Since`; the pass one minute after the wake finds the wake 1
+minute old and sends nothing.
 
 So one episode costs at most one wake and one notice, whatever its length.
 
@@ -157,11 +191,13 @@ night is a different fact (a directive unanswered, a coder passed over), with it
 
 | Key | Env | Default | `0` |
 |---|---|---|---|
-| `dispatch.master_idle_after` | `AGENT_BUS_MASTER_IDLE_AFTER` | 20m | `idle-master` off |
+| `dispatch.master_idle_after` | `AGENT_BUS_MASTER_IDLE_AFTER` | 15m | `idle-master` off |
 
 A duration in the registry (`config/keys.go`), `ReadBy: "dispatch"`, the env rule of the other
-stall durations. Its own key, not `stall_after`: the person asked for cruising speed, and master's
-idle with work in hand is the costliest wait of all. busmon's C page lists it.
+stall durations. 15m, the default of `stall_after` and `idle_after`, so every stall guard waits
+the same. Its own key all the same, as `idle_after` is: each measures a different wait (a whole
+team, an implementer passed over, master with work in hand), and the person may want master's
+shorter. busmon's C page lists it.
 
 ## 7. Tests
 
@@ -171,14 +207,20 @@ idle with work in hand is the costliest wait of all. busmon's C page lists it.
   answer; a check-back not yet due is not an item; a stale merge-queue pass is `unknown`; `0` is
   off. The detail caps at three items then `+N`.
 - **The 2026-11-15 replay**: master `waiting` answered at 00:21, `fa2d796f` approved and not on
-  origin, N = 20m: warns at 00:41 and wakes master once; the same input at 00:42 wakes nothing.
+  origin, N = 15m: warns at 00:36 and wakes master once; the same input at 00:37 wakes nothing.
 - **Episodes**: a new item makes a new episode and a new wake; a removed item too; the same items
   in another order are the same episode.
 - **Second tier**: woken, idle again N later with the same episode: one person notice; the next
-  pass sends nothing; cannot-act: notice at once, no wake.
+  pass sends nothing. Woken, still warning one minute later (no turn hooks, `Since` unchanged):
+  nothing. The wake's time comes from its cmd entry; an entry no longer retained counts as old.
+  Cannot-act: notice at once, no wake.
+- **Drop**: a dropped head is left out and its subject's next head is not; drop by a role without
+  `delivers` is refused; an ambiguous short SHA is refused; the pass prunes drops past 72 h; with
+  every item dropped the check reads `ok` and wakes nothing.
 - **`undelivered`**: an approved head with an open PR, a tip on origin, or in the base is left out;
   an approved head on none of these is listed with its local branch; local mode lists nothing; an
-  approve older than 72 h is left out; a done plan subject is left out.
+  approve older than 72 h is left out; a done plan subject is left out; on `gh`, a merged or
+  closed PR's head is left out.
 - **`checkback`**: set, replace, clear, list; the due time is Redis time; `retire --forget`
   removes it; text over 200 runes is refused.
 - **Never typed**: the wake goes through `FencedCmdOnce`, and the existing pane-writer test still
@@ -187,8 +229,9 @@ idle with work in hand is the costliest wait of all. busmon's C page lists it.
 
 ## 8. Questions for the person
 
-1. **The threshold.** Recommended: 20 minutes. Or 30 (master's own proposal), at the cost of
-   ten more minutes per stall; or 10, at the cost of nudging master between two steps of one task.
+1. **The threshold.** Recommended: 15 minutes, as the other stall guards. Or 30 (master's own
+   proposal), at the cost of fifteen more minutes per stall; or 10, at the cost of nudging master
+   between two steps of one task.
 2. **`agentbus checkback`.** Recommended: yes, it is the only way the guard can see background
    work for every client (Codex, Grok, agy, Kimi as master, not only Claude). Or no: the guard then
    sees only approved heads and requests, and background work rests on master's rule alone.
