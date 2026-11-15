@@ -29,7 +29,7 @@ type Command struct {
 	Flags     []Flag
 	Examples  []string
 	NoProject bool // runs with no project and no broker
-	Internal  bool // an entry point for scripts, herdr or units: long flags only
+	Internal  bool // an entry point for scripts, hooks or units: long flags only
 	Text      bool // its trailing words are a message: no global flag is read among them
 }
 
@@ -197,7 +197,7 @@ func Index(w io.Writer, bin string, globals []Flag, cmds []Command) {
 		}
 	}
 	section("commands", false)
-	section("internal (scripts, herdr, units)", true)
+	section("internal (scripts, hooks, units)", true)
 	fmt.Fprintf(w, "\n%s help <command>, or %s <command> --help, shows one command.\n", bin, bin)
 }
 

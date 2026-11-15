@@ -720,7 +720,7 @@ func main() {
 		}
 		p, ok := agentPane(m, rest[0])
 		if !ok {
-			die(fmt.Sprintf("no herdr pane registered for %q", rest[0]))
+			die(fmt.Sprintf("no terminal registered for %q", rest[0]))
 		}
 		fmt.Println(p)
 

@@ -37,7 +37,7 @@ KEYS
   d                    Work: the plan with its done tasks (the drawer; d there folds them)
   U                    tokens: the account windows, every project side by side, this project by agent
   C                    settings: display, attention and your name, changed in config.toml
-  M                    projects: every project of this host, its state, agents, keys, services and herdr workspace; sleep, stop or back one up
+  M                    projects: every project of this host, its state, agents, keys, services and holder; sleep, stop or back one up
   H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
   A                    about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work
   F1 ?                 help

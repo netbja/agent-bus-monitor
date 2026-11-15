@@ -224,14 +224,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "pane", Usage: []string{"pane <agent>"},
-		Summary:  "print an agent's herdr pane",
+		Summary:  "print an agent's registered terminal id",
 		Examples: []string{"agentbus -p demo pane coder"},
 	},
 	{
 		Name: "bind", Usage: []string{"bind <agent> [--pane <pane>] [--pid <pid>]"},
 		Summary: "bind a verified pane identity (lists candidates without --pid)",
 		Flags: []cli.Flag{
-			{Long: "pane", Short: 'P', Arg: "<pane>", Help: "herdr pane id"},
+			{Long: "pane", Short: 'P', Arg: "<pane>", Help: "terminal id (AGENTBUS_TERM_ID)"},
 			{Long: "pid", Short: 'i', Arg: "<pid>", Help: "the client's process id"},
 		},
 		Examples: []string{"agentbus -p demo bind foureyes -P w1-3 -i 41235"},

@@ -369,7 +369,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 		logf("another instance holds the lease; waiting in standby")
 		st.set("starting", "", "")
 		for {
-			if !publish("standby", "another instance holds the lease (a herdr tab, or another machine); taking over when it is free", "") {
+			if !publish("standby", "another instance holds the lease (a foreground run, or another machine); taking over when it is free", "") {
 				logf("project deleted while in standby; exiting")
 				return 0
 			}

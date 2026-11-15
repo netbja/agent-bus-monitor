@@ -617,7 +617,7 @@ func (l *loop) agent(ctx context.Context, agent string, snap *bus.AgentSnapshot,
 
 func (l *loop) inspect(ctx context.Context, snap *bus.AgentSnapshot) Inspection {
 	if snap == nil || snap.Pane == "" {
-		return Inspection{Err: errors.New("no herdr pane registered")}
+		return Inspection{Err: errors.New("no terminal registered")}
 	}
 	return l.rt.Inspect(ctx, snap.Pane)
 }

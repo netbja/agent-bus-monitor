@@ -63,7 +63,7 @@ var testCmds = []Command{
 		Flags:    []Flag{{Long: "since", Short: 's', Arg: "<id>", Help: "cursor"}, {Long: "loop", Help: "headless"}},
 		Examples: []string{"agentbus subscribe -s 0 coder", "agentbus subscribe --drain coder"},
 	},
-	{Name: "plugin", Usage: []string{"plugin projects"}, Summary: "herdr entry points", Internal: true, NoProject: true},
+	{Name: "plugin", Usage: []string{"plugin projects"}, Summary: "hook entry points", Internal: true, NoProject: true},
 }
 
 func TestRender(t *testing.T) {
@@ -115,8 +115,8 @@ commands:
   thread     show one :cmd thread
   subscribe  wait for one addressed command
 
-internal (scripts, herdr, units):
-  plugin     herdr entry points
+internal (scripts, hooks, units):
+  plugin     hook entry points
 
 agentbus help <command>, or agentbus <command> --help, shows one command.
 `

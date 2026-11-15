@@ -63,7 +63,7 @@ func popEnd(ctx context.Context, b *bus.Bus, d swapDeps, token, role string, epi
 			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }})
 		switch {
 		case closed && !f.Closed:
-			return false, "its process is gone but herdr still knows its pane"
+			return false, "its process is gone but the holder still has its terminal"
 		case !closed && f.Closed:
 			return false, "its process and pane went since the end began"
 		}
