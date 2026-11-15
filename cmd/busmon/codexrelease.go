@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +26,23 @@ import (
 // is read, and the request carries nothing of the person's.
 const codexLatestURL = "https://registry.npmjs.org/@openai/codex/latest"
 
+// versionPattern is all a version shown in busmon may be (foureyes): the
+// registry's answer, the cache and an agent's label are drawn in the
+// terminal, so anything else (an escape sequence included) is no version.
+var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+
+// plainVersion is v when it is a version, else "".
+func plainVersion(v string) string {
+	if len(v) > 64 || !versionPattern.MatchString(v) {
+		return ""
+	}
+	return v
+}
+
+// manifestMax bounds the registry's answer (the /latest manifest is a few KB):
+// a longer one is cut, so it never parses.
+const manifestMax = 1 << 20
+
 // clientCache is latestCodex's day: the last check and what it found ("" when
 // it failed).
 type clientCache struct {
@@ -37,7 +56,7 @@ type clientCache struct {
 func latestCodex(ctx context.Context, hc *http.Client, url, cachePath string, now time.Time) string {
 	var c clientCache
 	if b, err := os.ReadFile(cachePath); err == nil && json.Unmarshal(b, &c) == nil && now.Sub(c.CheckedAt) < 24*time.Hour {
-		return c.Version
+		return plainVersion(c.Version)
 	}
 	c = clientCache{CheckedAt: now}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -47,8 +66,9 @@ func latestCodex(ctx context.Context, hc *http.Client, url, cachePath string, no
 			var v struct {
 				Version string `json:"version"`
 			}
-			if resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&v) == nil {
-				c.Version = v.Version
+			body, err := io.ReadAll(io.LimitReader(resp.Body, manifestMax+1))
+			if resp.StatusCode == http.StatusOK && err == nil && json.Unmarshal(body, &v) == nil {
+				c.Version = plainVersion(v.Version)
 			}
 			resp.Body.Close()
 		}
@@ -86,7 +106,7 @@ func codexInstalled(snaps map[string]bus.AgentSnapshot) string {
 			continue
 		}
 		fp, err := clientfp.Decode(s.ClientFP)
-		if err != nil || fp.Label == "" {
+		if err != nil || plainVersion(fp.Label) == "" {
 			continue
 		}
 		if oldest == "" || buildinfo.Newer(release(oldest), release(fp.Label)) {

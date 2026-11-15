@@ -3,8 +3,9 @@
   the installed version is the oldest `client_fp` label among the project's Codex agents (no Codex
   agent, or no label: no request); the published one is `version` from
   `https://registry.npmjs.org/@openai/codex/latest`, asked at most once a day (cache
-  `${XDG_CACHE_HOME:-~/.cache}/agentbus/client-codex.json`, 3 s, silent offline and cached for the
-  day), re-judged every hour in the background, never on the UI path. Newer: the header shows
+  `${XDG_CACHE_HOME:-~/.cache}/agentbus/client-codex.json`, on macOS `~/Library/Caches/agentbus/`,
+  3 s, a 1 MiB answer at most, silent offline and cached for the day; only a plain version
+  `N.N.N[-pre]` is kept or shown, from the registry, the cache or an agent's label), re-judged every hour in the background, never on the UI path. Newer: the header shows
   the whole line, `codex <new> available (installed <old>): npm install -g @openai/codex@latest`,
   after the release item and the first to go when space is short, and About's THIS BUILD a
   `codex` row with the command as its note. Nothing installs it; after the person does, the client

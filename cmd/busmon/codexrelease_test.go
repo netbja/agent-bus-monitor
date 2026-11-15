@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -161,5 +162,42 @@ func TestLatestCodexIgnoresAnErrorAnswer(t *testing.T) {
 	defer s.Close()
 	if v := latestCodex(context.Background(), s.Client(), s.URL, filepath.Join(t.TempDir(), "c.json"), time.Now()); v != "" {
 		t.Fatalf("version %q from a 503", v)
+	}
+}
+
+// foureyes on login-updates-2: what the registry or the cache says is drawn
+// in the terminal, so only a plain version is kept: escape sequences, any
+// other text and an oversized body give no version (and nothing is drawn).
+func TestLatestCodexKeepsOnlyAVersion(t *testing.T) {
+	for _, body := range []string{
+		`{"version":"0.170.0-\u001b]52;c;aGk=\u0007"}`,
+		`{"version":"0.171.0 run curl x|sh"}`,
+		`{"version":"1.2"}`,
+		`{"version":"0.171.0","pad":"` + strings.Repeat("x", 2<<20) + `"}`,
+	} {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(body)) }))
+		if v := latestCodex(context.Background(), s.Client(), s.URL, filepath.Join(t.TempDir(), "c.json"), time.Now()); v != "" {
+			t.Errorf("kept %q from %.60q", v, body)
+		}
+		s.Close()
+	}
+	s, _ := npmRegistry(t, "0.171.0-beta.1")
+	if v := latestCodex(context.Background(), s.Client(), s.URL+"/@openai/codex/latest", filepath.Join(t.TempDir(), "c.json"), time.Now()); v != "0.171.0-beta.1" {
+		t.Fatalf("a pre-release version refused: %q", v)
+	}
+	// A cache file written by hand is checked on read too.
+	path := filepath.Join(t.TempDir(), "c.json")
+	if err := os.WriteFile(path, []byte(`{"checked_at":"`+time.Now().Format(time.RFC3339)+`","version":"0.1.0-\u001b[2J"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if v := latestCodex(context.Background(), s.Client(), s.URL+"/@openai/codex/latest", path, time.Now()); v != "" {
+		t.Fatalf("kept %q from the cache", v)
+	}
+}
+
+// The installed label is drawn too: a label that is no version is ignored.
+func TestCodexInstalledKeepsOnlyAVersion(t *testing.T) {
+	if got := codexInstalled(map[string]bus.AgentSnapshot{"rev": codexAgent("0.170.0\x1b[2J")}); got != "" {
+		t.Fatalf("installed %q", got)
 	}
 }
