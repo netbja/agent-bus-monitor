@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -102,4 +103,115 @@ func relayReply(what, reply string, out, errw io.Writer) int {
 	}
 	fmt.Fprintf(errw, "%s: %s\n", what, reply)
 	return 1
+}
+
+// hostOpFromArgs maps a host command line, run inside an agent's terminal,
+// to its directive and project (envProject unless the command names one);
+// ok false: not a relayed command, run it as it is. A host command with
+// words the closed set cannot carry is refused (ok, err): shortening it
+// would run something else than was asked.
+func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, project string, ok bool, err error) {
+	if len(args) == 0 || slices.Contains(args, "--help") || slices.Contains(args, "-h") {
+		return o, "", false, nil
+	}
+	o, project = bus.HostOp{From: self}, envProject
+	words := args[1:]
+	switch args[0] {
+	case "up":
+		o.Op = bus.HostUp
+		if len(words) > 0 {
+			project, words = words[0], words[1:]
+		}
+	case "pop", "reload", "retire", "swap":
+		o.Op = map[string]string{"pop": bus.HostPop, "reload": bus.HostReload, "retire": bus.HostRetire, "swap": bus.HostSwap}[args[0]]
+		if len(words) > 0 && !strings.HasPrefix(words[0], "-") {
+			o.Agent, words = words[0], words[1:]
+		}
+		if o.Op == bus.HostPop || o.Op == bus.HostSwap {
+			words, o.Profile = extractFlag(words, "--profile")
+		}
+		if o.Op == bus.HostSwap {
+			var back bool
+			words, back = extractBool(words, "--back")
+			if back == (o.Profile != "") {
+				return o, project, true, relayRefusal(args[0], "--profile <profile> or --back")
+			}
+		}
+	case "suspend":
+		o.Op = bus.HostSuspend
+		var p string
+		if words, p = extractFlag(words, "--project"); p != "" {
+			project = p
+		}
+	case "resume":
+		if len(words) > 0 { // a pause's resume message, or --all: the holder is not needed or not reached from here
+			return o, "", false, nil
+		}
+		o.Op = bus.HostResume
+	case "holder":
+		if len(words) == 0 || words[0] != "drain" {
+			return o, "", false, nil
+		}
+		o.Op, words = bus.HostDrain, words[1:]
+		if len(words) > 0 && !strings.HasPrefix(words[0], "-") {
+			project, words = words[0], words[1:]
+		}
+		words, o.IgnoreBackground = extractBool(words, "--ignore-background")
+	default:
+		return o, "", false, nil
+	}
+	if len(words) > 0 {
+		return o, project, true, relayRefusal(args[0], "only "+relayWords[o.Op])
+	}
+	if err := o.Validate(); err != nil {
+		return o, project, true, relayRefusal(args[0], relayWords[o.Op]+" ("+err.Error()+")")
+	}
+	return o, project, true, nil
+}
+
+// relayWords: what each relayed command takes from inside a terminal.
+var relayWords = map[string]string{
+	bus.HostUp: "up <project>", bus.HostPop: "pop <role> [--profile <profile>]", bus.HostReload: "reload <role>",
+	bus.HostRetire: "retire <role>", bus.HostSwap: "swap <role> (--profile <profile> | --back)",
+	bus.HostSuspend: "suspend [--project <p>]", bus.HostResume: "resume", bus.HostDrain: "holder drain <project> [--ignore-background]",
+}
+
+func relayRefusal(cmd, takes string) error {
+	return fmt.Errorf("%s: from inside an agent's terminal it goes through the dispatcher, which takes %s; run anything else from your own shell", cmd, takes)
+}
+
+// relayFromTerminal is main's: inside a terminal the holder started
+// (AGENTBUS_TERM_ID), a host command is sent to the dispatcher instead of
+// the holder, which would refuse it. ok false: not a host command.
+func relayFromTerminal(ctx context.Context, args []string, host, project string, getenv func(string) string, out, errw io.Writer) (int, bool) {
+	if getenv("AGENTBUS_TERM_ID") == "" {
+		return 0, false
+	}
+	self := getenv("AGENT_BUS_AGENT")
+	if self == "" {
+		self = "anonymous"
+	}
+	o, project, ok, err := hostOpFromArgs(args, project, self)
+	switch {
+	case !ok:
+		return 0, false
+	case err != nil:
+		fmt.Fprintln(errw, err)
+		return 2, true
+	case !bus.ValidName(project):
+		fmt.Fprintf(errw, "%s: project required: pass --project <p> or set AGENT_BUS_PROJECT\n", args[0])
+		return 2, true
+	}
+	c, err := bus.Connect(host)
+	if err != nil {
+		fmt.Fprintf(errw, "%s: Redis connection failed: %v\n", args[0], err)
+		return 1, true
+	}
+	defer c.Close()
+	b, err := bus.Open(c, project)
+	if err != nil {
+		fmt.Fprintf(errw, "%s: %v\n", args[0], err)
+		return 1, true
+	}
+	return relayHostOp(ctx, b, o, bus.HostAcceptWindow, out, errw), true
 }

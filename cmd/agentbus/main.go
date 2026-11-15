@@ -73,6 +73,11 @@ func main() {
 		cli.Index(os.Stderr, "agentbus", globalFlags, commands)
 		os.Exit(1)
 	}
+	// Inside an agent's terminal, the host commands go through the
+	// dispatcher (herdr exit §4.2): the holder refuses them from there.
+	if code, ok := relayFromTerminal(context.Background(), args, host, project, os.Getenv, os.Stdout, os.Stderr); ok {
+		os.Exit(code)
+	}
 	// setup is the installer (the Go port of setup.sh): no project, no broker.
 	if len(args) >= 1 && args[0] == "setup" {
 		color := setup.IsTerminal(os.Stdout) && os.Getenv("NO_COLOR") == ""
@@ -288,6 +293,9 @@ func main() {
 		if err != nil {
 			stop()
 			die("dispatch: " + err.Error())
+		}
+		dispatchHostOps = func(b *bus.Bus) dispatch.HostOpsConfig {
+			return dispatch.HostOpsConfig{Run: hostRunner{Project: project, Cmds: realHostCmds(b, project, host)}.Run}
 		}
 		code := runDispatch(sctx, b, rest, rt, os.Stdout, os.Stderr)
 		stop()
