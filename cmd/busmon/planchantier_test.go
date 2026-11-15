@@ -184,3 +184,21 @@ func TestPlanBoardGroupsSelection(t *testing.T) {
 		t.Fatalf("item 2 %+v, side %q", v.items[2], linesText(v.side))
 	}
 }
+
+// §3 (reviewer-codex): Other is last before the finished groups, even when
+// every task in it is done.
+func TestPlanBoardGroupsOtherBeforeFinished(t *testing.T) {
+	p := boardPlan(
+		inGroup(boardRow("w1", plan.Done, "coder"), "work-tab"),
+		inGroup(boardRow("h1", plan.InProgress, "coder"), "herdr-exit"),
+		boardRow("o1", plan.Done, "coder"),
+	)
+	p.file.Groups = []plan.Group{{ID: "work-tab", Title: "Work tab"}, {ID: "herdr-exit", Title: "Leave herdr"}}
+	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
+	_, hi := lineWith(v, "Leave herdr")
+	_, oi := lineWith(v, "Other")
+	_, wi := lineWith(v, "Work tab")
+	if !(hi >= 0 && hi < oi && oi < wi) {
+		t.Fatalf("herdr %d, other %d, work %d:\n%s", hi, oi, wi, v.plain)
+	}
+}

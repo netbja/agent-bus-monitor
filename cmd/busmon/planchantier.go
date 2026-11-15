@@ -24,8 +24,8 @@ type planGroup struct {
 
 // planGroupsOf are the plan's blocks in drawing order: a group with a row
 // waiting for the person first, then one with a task in hand, then the
-// rest, each in the groups list's order; the tasks with no group (Other)
-// last before the finished groups.
+// rest, each in the groups list's order; the tasks with no group (Other,
+// even when all are done) last before the finished groups.
 func planGroupsOf(p planState) []planGroup {
 	byID := map[string]*planGroup{}
 	var listed []*planGroup
@@ -74,16 +74,13 @@ func planGroupsOf(p planState) []planGroup {
 			}
 		}
 	}
-	if len(other.open) > 0 {
+	if len(other.open)+len(other.done) > 0 { // Other last before the finished groups, finished or not
 		out = append(out, *other)
 	}
 	for _, g := range listed {
 		if len(g.open) == 0 {
 			out = append(out, *g)
 		}
-	}
-	if len(other.open) == 0 && len(other.done) > 0 {
-		out = append(out, *other)
 	}
 	return out
 }
