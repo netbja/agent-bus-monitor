@@ -50,7 +50,12 @@ committed, what's pending) and use your client’s verified session reset proced
 **Work in flight never ends a turn silently.** Before ending a turn with work still running (a test
 run, a build, checks on a head), run it as a tracked background task (its exit wakes you), or set
 `agentbus checkback <duration> "<what>"`; clear it (`--clear`) once you have moved it. A job that
-only writes a file wakes nobody.
+only writes a file wakes nobody. The stall guard `idle-master` watches you: idle past
+`dispatch.master_idle_after` (15m) with an approved head not pushed, a request addressed to you or a
+check-back due, the dispatcher wakes you once for those items; idle again as long on the same items,
+the person is told. Move them, or say why they wait: an ask, a check-back with a new time, or
+`agentbus merge-queue drop <head> "<reason>"` for a head that will never be pushed. Setting the same
+check-back more than `dispatch.checkback_max` (3) times tells the person once.
 
 **Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
 reviewers or another agent, and `waiting` only when a person must decide. Where your client has turn

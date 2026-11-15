@@ -39,6 +39,9 @@ type stallReader struct {
 	clear  dispatch.ClearConfig
 	master *string // the dispatcher's escalation target, set once its flags are read
 	now    func() time.Time
+	// redisNow is the broker's clock (idle-master judges Redis times by it,
+	// spec 2026-11-15-master-idle-design.md §5); nil reads bus.ServerTime.
+	redisNow func(context.Context) (time.Time, error)
 
 	mu       sync.Mutex
 	verdicts []bus.Verdict
@@ -55,6 +58,7 @@ type stallReader struct {
 	lastReview *health.ReviewQueueInput
 	lastIdle   *health.IdleImplementerInput
 	lastDrift  *health.PlanDriftInput
+	lastMaster *health.IdleMasterInput
 	// planGit and fetchAge read the repository (plan-drift); nil: the
 	// service's working directory, read-only.
 	planGit  func(ctx context.Context, args ...string) (string, error)
@@ -481,11 +485,14 @@ func (s *stallReader) keep(set func()) {
 }
 
 // stallWake is the health loop's hook after a stored clear-stall,
-// quiet-agent or review-queue record (HealthConfig.StallWake): each wake the judged input
+// quiet-agent, review-queue, idle-implementer, plan-drift or idle-master record (HealthConfig.StallWake): each wake the judged input
 // owes is one waking directive from the dispatcher, once per episode under
 // its {p}:quota mark (chain-reliability: a warning alone woke nobody). A
 // target being swapped is skipped; the next pass sends it.
 func (s *stallReader) stallWake(ctx context.Context, token, check string) error {
+	if check == "idle-master" {
+		return s.idleMasterAct(ctx, token)
+	}
 	var wakes []health.StallWake
 	s.mu.Lock()
 	switch {
@@ -521,6 +528,7 @@ func stallChecks(s *stallReader) []dispatch.HealthCheck {
 		healthOutcomeTask("team-stall", s.teamStall),
 		healthOutcomeTask("review-queue", s.reviewQueue),
 		healthOutcomeTask("idle-implementer", s.idleImplementer),
+		healthOutcomeTask("idle-master", s.idleMaster),
 		healthOutcomeTask("plan-drift", s.planDrift),
 	}
 }

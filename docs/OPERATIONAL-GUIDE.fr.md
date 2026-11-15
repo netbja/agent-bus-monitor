@@ -606,8 +606,15 @@ sa règle ; aucun ne vous demande de surveiller un volet.
   a reçu du travail et n'a rien écrit depuis. `idle-implementer` (`dispatch.idle_after`, 15 minutes)
   avertit quand un implémenteur, un rôle qui a la compétence `implement`, est inactif depuis ce
   délai alors qu'une requête qui lui est adressée attend, non acceptée : il réveille master une fois
-  par implémenteur et par ensemble de requêtes, pour qu'il donne l'élément indépendant suivant. Les
-  volets doivent être observés : là où ils ne le sont pas (macOS), `team-stall` reste `unknown`.
+  par implémenteur et par ensemble de requêtes, pour qu'il donne l'élément indépendant suivant.
+  `idle-master` (`dispatch.master_idle_after`, 15 minutes) avertit quand master est inactif depuis ce
+  délai avec du travail que lui seul peut avancer : une tête approuvée non poussée (le champ
+  `undelivered` de la file de fusion), une requête qui lui est adressée, ou son rappel échu
+  (`agentbus checkback`). Il réveille master une fois par ensemble d'éléments ; si master est de
+  nouveau inactif aussi longtemps sur les mêmes éléments, ou ne peut pas agir, vous recevez un avis.
+  Vous recevez aussi un avis quand master pose le même rappel plus de `dispatch.checkback_max` (3)
+  fois. Les volets doivent être observés : là où ils ne le sont pas (macOS), `team-stall` et
+  `idle-master` restent `unknown`.
 - **Archive de l'historique.** Le service dispatch ajoute chaque minute tous les flux (`cmd`,
   `report`, `status`, `notify`, `verdicts`, `health:log`, `swaps`) à un fichier JSONL par jour UTC
   dans le répertoire d'état du projet, `history/AAAA-MM-JJ.jsonl` (0600 dans 0700) : un fil survit

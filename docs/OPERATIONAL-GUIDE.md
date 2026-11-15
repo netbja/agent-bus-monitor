@@ -594,7 +594,13 @@ to watch a pane.
   since. `idle-implementer` (`dispatch.idle_after`, 15 minutes) warns when an implementer, a role
   with the `implement` skill, has been idle that long while a request addressed to it waits, not
   accepted: it wakes master once per implementer and set of requests, to dispatch the next
-  independent item. Panes must be observed: where they are not (macOS), `team-stall` reads `unknown`.
+  independent item. `idle-master` (`dispatch.master_idle_after`, 15 minutes) warns when master is
+  idle that long with work only it can move: an approved head not pushed (the merge queue's
+  `undelivered`), a request addressed to it, or its check-back due (`agentbus checkback`). It wakes
+  master once per set of items; if master is idle again as long on the same items, or cannot act, you
+  get one notice. You also get one notice when master sets the same check-back more than
+  `dispatch.checkback_max` (3) times. Panes must be observed: where they are not (macOS), `team-stall`
+  and `idle-master` read `unknown`.
 - **History archive.** The dispatch service appends every stream (`cmd`, `report`, `status`,
   `notify`, `verdicts`, `health:log`, `swaps`) each minute to one JSONL file per UTC day in the
   project's state directory, `history/YYYY-MM-DD.jsonl` (0600 in 0700), so a thread outlives the
