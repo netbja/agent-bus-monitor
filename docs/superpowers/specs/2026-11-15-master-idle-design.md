@@ -146,7 +146,7 @@ can follow and the guard can verify.
 **One wake to master per episode.** While `idle-master` warns, the stall guard's wake hook
 (`StallWake`, as `IdleImplementerWakes`; `idle-master` joins the check ids the health loop
 hands to that hook, `dispatch/health.go:165`, and `stallWake`'s switch gains its case) sends master one waking directive through
-`FencedCmdOnce`, mark `stall-master`, episode the first 8 bytes of SHA-256 of the sorted item
+`FencedCmdOnceAt` (below), mark `stall-master`, episode the first 8 bytes of SHA-256 of the sorted item
 keys (§3). The dispatcher then types its fixed wake line in master's pane, and nothing else: the
 text below is a bus message, never typed (the one-pane-writer rule).
 
@@ -156,7 +156,7 @@ check-back due: k1/k2 checks. Move it, or say why it waits: an ask, checkback wi
 or merge-queue drop for a head that will never be pushed.
 ```
 
-**The same facts never wake twice.** One mark field per project, overwritten by each new
+**The same facts never wake twice.** The mark (and its `:at`, below) are one field each per project, overwritten by each new
 episode, so `{p}:quota` does not grow. A new item, or one gone, is a new set of keys and so a new
 episode; a master who works and goes idle again with exactly the same items is not woken again by
 this tier.
@@ -172,16 +172,22 @@ Stall guard: master was woken 25m ago for: herdr-6c2-2 approved, not pushed. It 
 nothing moved. Look at master's pane, or tell it in busmon.
 ```
 
-The wake's time is its own entry's stream id (Redis time): `FencedCmdOnce` writes the entry and
-the mark in one script, and the entry carries `episode=stall-master=<episode>`
-(`onceCmdFields`). The stall reader already scans the cmd stream (`stallCmdScan`), so the newest
-entry from `dispatch` to master with that `episode` field gives it. No new mark, no writer clock.
+The wake's time is kept with its mark, in the same script. A new `bus.FencedCmdOnceAt` is
+`FencedCmdOnce` whose script, when it writes, also sets the field `<mark>:at` of `{p}:quota` to the
+id `XADD` returned (Redis time), and returns that id. The stream entry itself is never the source:
+the cmd stream is capped (~1000 entries) and `busmon --reset` trims it, so an entry gone says
+nothing about its age. `{p}:quota` is neither trimmed nor reset.
 
-- Mark set to this episode, entry found: the wake happened at the entry's id.
-- Mark set, entry not retained: the wake is older than the stream's horizon, so the time has passed.
-- Mark not set to this episode: no wake was sent. A wake that failed (lease lost, a swap in
-  progress: `ErrNotHolder`, `ErrSwapInProgress`) set no mark, since the script writes both or
-  neither; the next pass tries the wake again and the second tier waits for it. A master without turn hooks that stays
+- Mark holds this episode and `stall-master:at` is set: the wake happened at that id.
+- Mark holds this episode but `:at` is missing or unreadable (written by an older release): the
+  age is unknown, so no notice; the detail says `wake time unknown`. The next new episode writes
+  both.
+- Mark does not hold this episode: no wake was sent. A refused wake (`ErrNotHolder`,
+  `ErrSwapInProgress`) writes neither field, since the script writes the entry and both fields or
+  nothing; the next pass tries the wake again and the second tier waits for it.
+
+Both fields are overwritten by each new episode, so `{p}:quota` holds two fields for this guard at
+most. A master without turn hooks that stays
 `idle` after the wake keeps the warn's `Since`; the pass one minute after the wake finds the wake 1
 minute old and sends nothing.
 
@@ -223,7 +229,9 @@ shorter. busmon's C page lists it.
 - **Second tier**: a wake refused (`ErrSwapInProgress`, lease lost) sets no mark: no notice, the
   next pass wakes again. Woken, idle again N later with the same episode: one person notice; the next
   pass sends nothing. Woken, still warning one minute later (no turn hooks, `Since` unchanged):
-  nothing. The wake's time comes from its cmd entry; an entry no longer retained counts as old.
+  nothing. The wake's time comes from `stall-master:at`, written in the wake's script; the cmd
+  entry trimmed or reset changes nothing; `:at` missing with the mark set: no notice, `wake time
+  unknown`. `FencedCmdOnceAt` writes the entry, the mark and `:at` together, or none of them.
   Cannot-act: notice at once, no wake.
 - **Drop**: a dropped head is left out and its subject's next head is not; drop by a role without
   `delivers` is refused; an ambiguous short SHA is refused; the pass prunes drops past 72 h; with
@@ -234,7 +242,7 @@ shorter. busmon's C page lists it.
   closed PR's head is left out.
 - **`checkback`**: set, replace, clear, list; the due time is Redis time; `retire --forget`
   removes it; text over 200 runes is refused.
-- **Never typed**: the wake goes through `FencedCmdOnce`, and the existing pane-writer test still
+- **Never typed**: the wake goes through `FencedCmdOnceAt`, and the existing pane-writer test still
   sees only the wake line.
 - The setting is in the registry (registry test), with its env name.
 
