@@ -286,3 +286,24 @@ func TestRunStopKeepsASuspendResetKeepsOtherPauses(t *testing.T) {
 		t.Fatalf("reset lifted a suspend: %+v", p)
 	}
 }
+
+// run-budget §3: while the run drains, a new task is refused to an agent and
+// allowed to the person; a running or absent run refuses nobody.
+func TestRequestRefusedWhileDraining(t *testing.T) {
+	b, ctx := runWithLease(t)
+	if _, err := b.Request(ctx, "t1", "master", "coder", "", "x", 0); err != nil {
+		t.Fatalf("running: %v", err)
+	}
+	if _, _, err := b.FencedRunDrain(ctx, "tok", RunWhyDuration); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Request(ctx, "t2", "master", "coder", "", "x", 0); !errors.Is(err, ErrRunDraining) {
+		t.Fatalf("an agent's task while draining: %v, want ErrRunDraining", err)
+	}
+	if board, _ := b.Board(ctx); board["t2"].State != "" {
+		t.Fatalf("refused task written: %+v", board["t2"])
+	}
+	if _, err := b.RequestBy(ctx, "t3", "charlie", "coder", "", "x", 0, true); err != nil {
+		t.Fatalf("the person's task while draining: %v", err)
+	}
+}

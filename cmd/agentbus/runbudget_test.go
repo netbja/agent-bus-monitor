@@ -212,3 +212,25 @@ func TestRunStepQuotaDrainDoesNotStop(t *testing.T) {
 		t.Fatalf("a quota drain stopped: %+v", rec)
 	}
 }
+
+// §3: request send from an agent (AGENT_BUS_AGENT set) is refused while the
+// run drains; the person's (unset) goes through.
+func TestRequestSendWhileDraining(t *testing.T) {
+	w := newRunWorld(t)
+	if _, _, err := w.b.FencedRunDrain(w.ctx, "tok", bus.RunWhyDuration); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"AGENT_BUS_AGENT": "master"}
+	old := requestGetenv
+	requestGetenv = func(k string) string { return env[k] }
+	t.Cleanup(func() { requestGetenv = old })
+	var out strings.Builder
+	err := runRequest(w.ctx, w.b, "master", []string{"send", "t1", "coder", "do", "it"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "run is draining") {
+		t.Fatalf("an agent's send: %v", err)
+	}
+	delete(env, "AGENT_BUS_AGENT")
+	if err := runRequest(w.ctx, w.b, "charlie", []string{"send", "t2", "coder", "do", "it"}, &out); err != nil {
+		t.Fatalf("the person's send: %v", err)
+	}
+}
