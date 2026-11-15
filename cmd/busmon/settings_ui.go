@@ -1011,7 +1011,7 @@ var settingHelps = map[string]string{
 	"waiting.bell":                 "rings the terminal's bell on a new decision for you",
 	"recap.auto_after":             "the recap opens by itself after you were away this long",
 	"dispatch.focus_notice":        "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
-	"updates.check":                "asks GitHub once a day whether a newer release exists",
+	"updates.check":                "asks GitHub (a newer release) and npm (a newer Codex than its agents run) once a day",
 	"identity.as":                  "your name on the bus, as a person",
 	"start.team":                   "the roles agentbus start opens for a new project, separated by commas",
 	"notify.on":                    "sends notifications to the targets of notify.toml",

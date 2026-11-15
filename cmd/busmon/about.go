@@ -101,6 +101,7 @@ type aboutSources struct {
 	herdr    func() string // `herdr --version`'s line
 	plugin   func() string // herdr-plugin.toml's version
 	update   func() string // the update check's cached state
+	codex    func() string // a newer Codex published, its line ("" = none)
 }
 
 // openAbout opens the page, reads the versions and lets the fade schedule
@@ -132,8 +133,9 @@ func (m *Model) openAbout() tea.Cmd {
 		}
 		agentbus, herdr := or(src.agentbus, "agentbus ?"), or(src.herdr, "herdr ?")
 		plugin, update := or(src.plugin, "?"), or(src.update, "update unknown")
+		codex := or(src.codex, "")
 		goLine := runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH
-		return aboutVersionsMsg{serial: serial, v: aboutVersions{
+		return aboutVersionsMsg{serial: serial, v: withCodexRow(codex, aboutVersions{
 			Lines: []string{
 				"project " + project,
 				"busmon " + buildinfo.Version,
@@ -160,7 +162,7 @@ func (m *Model) openAbout() tea.Cmd {
 				{Label: "herdr", Value: strings.TrimPrefix(herdr, "herdr ")},
 				{Label: "plugin", Value: plugin},
 			},
-		}}
+		})}
 	}
 	return tea.Batch(read, m.scheduleFade())
 }

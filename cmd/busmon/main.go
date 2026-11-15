@@ -454,6 +454,7 @@ type shared struct {
 	agents         map[string]*agentState
 	pilot          string                        // pilot-lease driver, "" = autonomous
 	update         string                        // a newer release tag found by checkForUpdate, "" = none
+	codexUpdate    string                        // a newer Codex published, its line (watchCodex), "" = none
 	budgets        map[string]bus.BudgetSnapshot // account scope, per provider
 	dispatch       string                        // "", "up" or "down"
 	missions       string                        // "" (no conductor, nothing loaded), "up" or "down", or a service state
@@ -669,14 +670,15 @@ func main() {
 		prior = time.UnixMilli(cache.LastVisit)
 	}
 	if settings.UpdateCheck {
-		go checkForUpdate(ctx, st) // at most once a day; silent offline (updates.check, AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
+		go checkForUpdate(ctx, st)             // at most once a day; silent offline (updates.check, AGENT_BUS_NO_UPDATE_CHECK=1 turns it off)
+		go watchCodex(ctx, st, true, b.Agents) // a newer Codex than its agents run (login-updates 4), same opt-out
 	}
 
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.
 	shell := newShell(shellConfig{ctx: ctx, liveFrom: time.Now(), reader: b, w: b, st: st, project: project, self: self, attachDir: attachmentsDir(),
 		settings: settings, cache: cache, cachePath: cachePath, priorVisit: prior, tour: tour,
-		docker: realSvcRunner, about: realAboutSources(os.Getenv), brokerHost: opts.host, histDir: historyDirOf(project),
+		docker: realSvcRunner, about: withCodexUpdate(realAboutSources(os.Getenv), st), brokerHost: opts.host, histDir: historyDirOf(project),
 		getenv: os.Getenv, flags: flags, retheme: func(name string) (*Theme, error) { // as at the start, with the page's choice
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 		},
