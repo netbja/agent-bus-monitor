@@ -11,7 +11,7 @@ import (
 // terminal's line discipline sends to its foreground group.
 var termSignals = []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT}
 
-// unignoreTermSignals takes back any of termSignals this process was
+// UnignoreTermSignals takes back any of termSignals this process was
 // started with ignored (nohup, a runner or a shell that ignores it). An
 // ignored signal is inherited through exec, so every program the holder
 // starts would ignore it too: Close's SIGHUP would do nothing and each
@@ -19,8 +19,9 @@ var termSignals = []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT}
 // A caught signal is reset to its default by exec, so a handler here gives
 // the programs the default while the holder still ignores it (the channel
 // is never read; a signal it cannot take is dropped). A signal not ignored
-// is left to Go's own handling.
-func unignoreTermSignals() {
+// is left to Go's own handling. `service supervise` calls it too (spec
+// 4.4b, revision 26).
+func UnignoreTermSignals() {
 	for _, s := range termSignals {
 		if signal.Ignored(s) {
 			signal.Notify(make(chan os.Signal, 1), s)

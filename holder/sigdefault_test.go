@@ -35,7 +35,7 @@ func TestHolderHangsUpWhenStartedWithSIGHUPIgnored(t *testing.T) {
 // SIGQUIT is go test's way to a goroutine dump, never dropped in a test).
 func TestUnignoreTermSignals(t *testing.T) {
 	signal.Ignore(syscall.SIGHUP)
-	unignoreTermSignals()
+	UnignoreTermSignals()
 	if signal.Ignored(syscall.SIGHUP) {
 		t.Fatal("SIGHUP still ignored")
 	}

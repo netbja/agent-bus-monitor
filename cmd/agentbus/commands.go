@@ -513,9 +513,9 @@ var commands = []cli.Command{
 			"service login",
 			"service restart holder --kill-agents",
 			"service start holder | service gc",
-			"service supervise holder <p> <build key> (no service manager: started detached, never by hand)",
+			"service supervise holder <p> <build key> | dispatch <p> | missions <p> (no service manager: started detached, never by hand)",
 		},
-		Summary: "the project's user services (systemd --user, launchd)",
+		Summary: "the project's user services (systemd --user, launchd, or detached supervisors without either)",
 		Flags: []cli.Flag{
 			{Long: "all", Short: 'a', Help: "remove: every project's services"},
 			{Long: "env", Arg: "<file>", Help: "service run (units only): the environment file"},
