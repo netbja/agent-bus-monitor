@@ -254,11 +254,13 @@ func kanbanFits(h int, cards []kanbanCard) int {
 // heading is column c's heading: the column holding the cursor (at the
 // selector or in its cards) a pill in the Work tab's colour, so the person
 // always sees which column has the focus; at the selector its ▸ too. At the
-// tab level no column has it.
+// tab level no column has it. Every other heading is the same pill dimmed
+// as the tab of an unfocused panel is (frameFade), readable without the
+// focus (the person, work-title-dark).
 func (k *kanbanView) heading(c int) Line {
 	title := k.cols[c].title
 	if k.level == workAtTabs || c != k.col {
-		return Line{{Text: title, Role: RoleText, Bold: true}}
+		return Line{{Text: " " + title + " ", Role: panelHue[PanelWork], Bold: true, Pill: true, Fade: frameFade, Soft: true}, {Text: " ", Role: RoleText}}
 	}
 	if k.level == workAtCols {
 		title = GlyphSelect + " " + title

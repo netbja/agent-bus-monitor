@@ -18,6 +18,7 @@ type Seg struct {
 	Tab     bool // drawn by tabBar: frameTitle neither pills it nor borrows its spaces
 	Track   bool // drawn on a gauge's track colour (true colour only): the bar's empty part
 	Lift    int  // 1-100: the colour that far towards the text colour (true colour only): a sliding bar's leading cell
+	Soft    bool // a Pill only with true colour (its Fade then shows); otherwise plain bold text (an unfocused kanban heading)
 	QR      bool // a QR code's cells: black on white whatever the theme (notify-guided-setup §5.3)
 }
 
@@ -249,6 +250,7 @@ type cellStyle struct {
 	Lift     int
 	Selected bool
 	QR       bool // black on white whatever the theme
+	Soft     bool // Seg.Soft
 	Border   bool // a frame line: Theme.FrameBorder(Role, Focused)
 	Focused  bool
 }
@@ -273,7 +275,7 @@ func drawLine(s cellSink, x, y, w int, l Line, selected bool) {
 	}
 	pos := x
 	lineClusters(FitLine(l, w), func(text string, width int, seg Seg) bool {
-		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Track: seg.Track, Lift: seg.Lift, Selected: selected, QR: seg.QR}
+		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Track: seg.Track, Lift: seg.Lift, Selected: selected, QR: seg.QR, Soft: seg.Soft}
 		// A wide cluster's continuation cells first, then its head.
 		if width > 0 {
 			whole := pos >= 0 && pos+width <= sw
