@@ -68,6 +68,7 @@ type HostOp struct {
 	Forget           bool   // retire only: --forget, the end of a done pop (foureyes on 10b)
 	Episode          int64  // retire only, with Forget: the declaration the dispatcher judged (ms)
 	Reason           string // retire only: one short line, recorded, never run
+	Resume           bool   // up only: --resume, master's form (reviewer-codex on 10b)
 	From             string // who sent it: self-attested, as every bus entry
 	State            string // UnfinishedHostOps only: HostAccepted or HostRunning
 }
@@ -89,6 +90,8 @@ func (o HostOp) Validate() error {
 		return fmt.Errorf("host: only swap and pop take a profile")
 	case o.Profile != "" && !ValidName(o.Profile):
 		return fmt.Errorf("host: invalid profile %q", o.Profile)
+	case o.Resume && o.Op != HostUp:
+		return fmt.Errorf("host: only up takes --resume")
 	case (o.Forget || o.Episode != 0 || o.Reason != "") && o.Op != HostRetire:
 		return fmt.Errorf("host: only retire takes --forget, --episode and --reason")
 	case o.Forget != (o.Episode > 0) || o.Episode < 0:
@@ -125,6 +128,9 @@ func (o HostOp) describe() string {
 	if o.IgnoreBackground {
 		s += " --ignore-background"
 	}
+	if o.Resume {
+		s += " --resume"
+	}
 	if o.Forget {
 		s += " --forget --episode " + strconv.FormatInt(o.Episode, 10)
 	}
@@ -140,7 +146,10 @@ func (b *Bus) SendHostOp(ctx context.Context, o HostOp) (string, error) {
 	if err := o.Validate(); err != nil {
 		return "", err
 	}
-	ib, forget, episode := "", "", ""
+	ib, forget, episode, resume := "", "", "", ""
+	if o.Resume {
+		resume = "yes"
+	}
 	if o.IgnoreBackground {
 		ib = "yes"
 	}
@@ -149,7 +158,7 @@ func (b *Bus) SendHostOp(ctx context.Context, o HostOp) (string, error) {
 	}
 	return b.r.XAdd(ctx, &redis.XAddArgs{Stream: StreamKey(b.project, "cmd"), MaxLen: streamMaxLen, Approx: true,
 		Values: []interface{}{"from", o.From, "target", HostTarget, "type", CmdHost, "ref", "", "command", o.describe(),
-			"op", o.Op, "agent", o.Agent, "profile", o.Profile, "ignore_background", ib, "forget", forget, "episode", episode, "reason", o.Reason, "text_complete", "yes", "wake", "no"}}).Result()
+			"op", o.Op, "agent", o.Agent, "profile", o.Profile, "ignore_background", ib, "forget", forget, "episode", episode, "reason", o.Reason, "resume", resume, "text_complete", "yes", "wake", "no"}}).Result()
 }
 
 // HostOpsAfter reads the host directives written after id (the dispatcher's
@@ -169,7 +178,7 @@ func (b *Bus) HostOpsAfter(ctx context.Context, id string) ([]HostOp, string, er
 			continue
 		}
 		o := HostOp{ID: e.ID, Op: f["op"], Agent: f["agent"], Profile: f["profile"],
-			IgnoreBackground: f["ignore_background"] == "yes", Forget: f["forget"] == "yes", Reason: f["reason"], From: f["from"]}
+			IgnoreBackground: f["ignore_background"] == "yes", Forget: f["forget"] == "yes", Reason: f["reason"], Resume: f["resume"] == "yes", From: f["from"]}
 		if f["episode"] != "" {
 			o.Episode, _ = strconv.ParseInt(f["episode"], 10, 64)
 		}

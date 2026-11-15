@@ -28,6 +28,7 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000},
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "done here"},
+		{Op: HostUp, From: "master", Resume: true}, // master's up --resume (reviewer-codex on 10b)
 	}
 	for _, o := range ok {
 		if err := o.Validate(); err != nil {
@@ -45,7 +46,8 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true},                                 // --forget needs its episode
 		{Op: HostRetire, Agent: "docs", From: "master", Episode: 17},                                  // an episode only with --forget
 		{Op: HostReload, Agent: "docs", From: "sentinel", Forget: true, Episode: 17},                  // forget is retire's
-		{Op: HostReload, Agent: "docs", From: "sentinel", Reason: "x"},                                // a reason is retire's
+		{Op: HostReload, Agent: "docs", From: "sentinel", Reason: "x"},
+		{Op: HostPop, Agent: "docs", From: "master", Resume: true}, // --resume is up's                                // a reason is retire's
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\nb"},                               // one line
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\x1b[2Jb"},                          // no control character
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: strings.Repeat("x", HostReasonMax+1)}, // capped
@@ -351,17 +353,23 @@ func TestHostOpsPrune(t *testing.T) {
 func TestHostOpRetireForgetRoundTrip(t *testing.T) {
 	b := dialDispatch(t)
 	ctx := context.Background()
-	o := HostOp{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"}
-	if _, err := b.SendHostOp(ctx, o); err != nil {
-		t.Fatal(err)
+	sent := []HostOp{
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
+		{Op: HostUp, From: "master", Resume: true},
+	}
+	for _, o := range sent {
+		if _, err := b.SendHostOp(ctx, o); err != nil {
+			t.Fatal(err)
+		}
 	}
 	ops, _, err := b.HostOpsAfter(ctx, "0-0")
-	if err != nil || len(ops) != 1 {
+	if err != nil || len(ops) != len(sent) {
 		t.Fatalf("read %v, %v", ops, err)
 	}
-	got := ops[0]
-	got.ID = ""
-	if got != o {
-		t.Fatalf("read %+v, want %+v", got, o)
+	for i, got := range ops {
+		got.ID = ""
+		if got != sent[i] {
+			t.Fatalf("read %+v, want %+v", got, sent[i])
+		}
 	}
 }

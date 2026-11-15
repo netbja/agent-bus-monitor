@@ -41,7 +41,7 @@ func TestHostRunnerArgsPerOp(t *testing.T) {
 		op   bus.HostOp
 		want []string
 	}{
-		{bus.HostOp{Op: bus.HostUp, From: "master"}, []string{"demo"}},
+		{bus.HostOp{Op: bus.HostUp, From: "master", Resume: true}, []string{"demo", "--resume"}},
 		{bus.HostOp{Op: bus.HostPop, Agent: "architect", From: "master"}, []string{"architect"}},
 		{bus.HostOp{Op: bus.HostPop, Agent: "architect", Profile: "opus", From: "master"}, []string{"architect", "--profile", "opus"}},
 		{bus.HostOp{Op: bus.HostReload, Agent: "coder", From: "sentinel"}, []string{"coder"}},
@@ -100,6 +100,10 @@ func TestHostRunnerRefusesBeforeRunning(t *testing.T) {
 		{Op: bus.HostDrain, From: "master", IgnoreBackground: true},
 		{Op: bus.HostRelaunch, Agent: "coder", From: "master"},
 		{Op: "format-disk", From: "master"},
+		// up bootstraps and starts a project: relayed, only master's up --resume
+		// (its tool rules' form), never an agent's and never a bare up (reviewer-codex on 10b).
+		{Op: bus.HostUp, From: "coder", Resume: true},
+		{Op: bus.HostUp, From: "master"},
 	} {
 		var calls []call
 		h := hostRunner{Project: "demo", Cmds: fakeHostCmds(&calls, 0, "ok")}

@@ -118,10 +118,14 @@ func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, proje
 	words := args[1:]
 	switch args[0] {
 	case "up":
+		if slices.Contains(words, "--dry-run") { // starts nothing: it reads the holder, which allows that
+			return o, "", false, nil
+		}
 		o.Op = bus.HostUp
-		if len(words) > 0 {
+		if len(words) > 0 && !strings.HasPrefix(words[0], "-") {
 			project, words = words[0], words[1:]
 		}
+		words, o.Resume = extractBool(words, "--resume")
 	case "pop", "reload", "retire", "swap":
 		o.Op = map[string]string{"pop": bus.HostPop, "reload": bus.HostReload, "retire": bus.HostRetire, "swap": bus.HostSwap}[args[0]]
 		if len(words) > 0 && !strings.HasPrefix(words[0], "-") {
@@ -183,7 +187,7 @@ func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, proje
 
 // relayWords: what each relayed command takes from inside a terminal.
 var relayWords = map[string]string{
-	bus.HostUp: "up <project>", bus.HostPop: "pop <role> [--profile <profile>]", bus.HostReload: "reload <role>",
+	bus.HostUp: "up <project> --resume (master's)", bus.HostPop: "pop <role> [--profile <profile>]", bus.HostReload: "reload <role>",
 	bus.HostRetire: "retire <role> [--forget --episode <ms>] [--reason <text>]", bus.HostSwap: "swap <role> (--profile <profile> | --back)",
 	bus.HostSuspend: "suspend [--project <p>]", bus.HostResume: "resume", bus.HostDrain: "holder drain <project>",
 }

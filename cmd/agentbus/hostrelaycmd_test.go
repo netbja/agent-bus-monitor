@@ -16,6 +16,7 @@ func TestHostOpFromArgs(t *testing.T) {
 		want    bus.HostOp
 	}{
 		{[]string{"up", "demo"}, "demo", bus.HostOp{Op: bus.HostUp, From: "coder"}},
+		{[]string{"up", "demo", "--resume"}, "demo", bus.HostOp{Op: bus.HostUp, Resume: true, From: "coder"}},
 		{[]string{"pop", "architect"}, "env", bus.HostOp{Op: bus.HostPop, Agent: "architect", From: "coder"}},
 		{[]string{"pop", "architect", "--profile", "opus"}, "env", bus.HostOp{Op: bus.HostPop, Agent: "architect", Profile: "opus", From: "coder"}},
 		{[]string{"reload", "reviewer"}, "env", bus.HostOp{Op: bus.HostReload, Agent: "reviewer", From: "coder"}},
@@ -42,12 +43,13 @@ func TestHostOpFromArgs(t *testing.T) {
 // Commands the relay does not carry run as they always did; a host command
 // with words the closed set cannot carry is refused, never shortened.
 func TestHostOpFromArgsElse(t *testing.T) {
-	for _, args := range [][]string{{"report", "coder", "x"}, {"resume", "back", "to", "work"}, {"resume", "--all"}, {"holder"}, {"swap", "--help"}} {
+	for _, args := range [][]string{{"report", "coder", "x"}, {"resume", "back", "to", "work"}, {"resume", "--all"}, {"holder"}, {"swap", "--help"},
+		{"up", "demo", "--dry-run"}, {"up", "demo", "--resume", "--dry-run"}} {
 		if _, _, ok, err := hostOpFromArgs(args, "env", "coder"); ok || err != nil {
 			t.Errorf("%q: relayed (%v, %v), want run as it is", args, ok, err)
 		}
 	}
-	for _, args := range [][]string{{"reload", "coder", "--fresh"}, {"retire", "architect", "--now"}, {"retire", "security", "--forget", "--episode", "x1"}, {"retire", "security", "--forget"}, {"swap", "coder"}, {"up", "demo", "--resume"}, {"pop"}, {"holder", "drain", "demo", "--ignore-background"}} {
+	for _, args := range [][]string{{"reload", "coder", "--fresh"}, {"retire", "architect", "--now"}, {"retire", "security", "--forget", "--episode", "x1"}, {"retire", "security", "--forget"}, {"swap", "coder"}, {"up", "demo", "--as", "charlie"}, {"pop"}, {"holder", "drain", "demo", "--ignore-background"}} {
 		_, _, ok, err := hostOpFromArgs(args, "env", "coder")
 		if !ok || err == nil || !strings.Contains(err.Error(), "inside an agent's terminal") {
 			t.Errorf("%q: got ok=%v err=%v, want a refusal", args, ok, err)
