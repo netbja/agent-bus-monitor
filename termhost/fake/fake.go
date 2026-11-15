@@ -59,7 +59,7 @@ func (h *Host) Start(_ context.Context, s termhost.Spec) (termhost.Term, error) 
 	defer h.mu.Unlock()
 	h.next++
 	id := termhost.TermID(fmt.Sprintf("fake-%d", h.next))
-	t := &term{t: termhost.Term{ID: id, Project: s.Project, Name: s.Name, PID: 1000 + h.next, PIDStart: uint64(h.next), Alive: true, Build: "fake"},
+	t := &term{t: termhost.Term{ID: id, Project: s.Project, Name: s.Name, PID: 1000 + h.next, PIDStart: uint64(h.next), Alive: true, Build: "fake", Profile: s.Profile},
 		empty: true, lands: true}
 	h.terms[id] = t
 	h.order = append(h.order, id)

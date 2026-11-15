@@ -135,7 +135,7 @@ func split(id termhost.TermID) (key, term string, err error) {
 
 func (h *Host) term(key string, t TermInfo) termhost.Term {
 	return termhost.Term{ID: termhost.TermID(key + "/" + t.ID), Project: h.project, Name: t.Role, PID: t.PID,
-		PIDStart: t.PIDStart, Alive: t.Alive, Viewers: t.Viewers, Build: t.Build}
+		PIDStart: t.PIDStart, Alive: t.Alive, Viewers: t.Viewers, Build: t.Build, Profile: t.Profile}
 }
 
 // Start runs spec on the current build's holder: the role, its profile and

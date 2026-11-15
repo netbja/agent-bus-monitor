@@ -36,6 +36,9 @@ type Term struct {
 	Alive         bool
 	Viewers       int
 	Build         string // the holder build that owns it
+	// Profile is the client's agentstate profile (claude, codex, …; ""
+	// unknown): what judges its screen and its background work.
+	Profile string
 }
 
 // Screen is a snapshot of a terminal's rendered lines.
