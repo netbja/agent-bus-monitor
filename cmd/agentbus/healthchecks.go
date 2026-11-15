@@ -88,6 +88,13 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 	return []dispatch.HealthCheck{
 		healthOutcomeTask("holder", func(ctx context.Context) (health.Outcome, error) {
 			e, err := holderNow()
+			if err == nil { // holder_restarted: the agents proved in a holder terminal (unread: the base judgement alone)
+				if snaps, aerr := b.Agents(ctx); aerr == nil {
+					if now, terr := b.ServerTime(ctx); terr == nil {
+						e = withHolderAgents(e, snaps, now, provedAlive(hostBootID(), dispatch.ProcStart))
+					}
+				}
+			}
 			return health.EvaluateHolder(e), err
 		}),
 		healthOutcomeTask("holder-draining", func(ctx context.Context) (health.Outcome, error) {

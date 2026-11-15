@@ -227,20 +227,26 @@ func (l holderLaunch) command(s holder.Start) (holder.Command, error) {
 // holderTerms counts the terminals of project's holder of build key, asked
 // over its socket; an error when none answers.
 func holderTerms(project, key string) (int, error) {
+	terms, err := holderTermList(project, key)
+	return len(terms), err
+}
+
+// holderTermList is the terminals of project's holder of build key.
+func holderTermList(project, key string) ([]holder.TermInfo, error) {
 	sock, err := holder.SocketPath(os.Getenv, project, key)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	cl, err := holder.Dial(sock, holder.BuildID())
 	if err != nil {
-		return 0, fmt.Errorf("no holder answers at %s: %w", sock, err)
+		return nil, fmt.Errorf("no holder answers at %s: %w", sock, err)
 	}
 	defer cl.Close()
 	r, err := cl.Call(holder.List{})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return len(r.Terms), nil
+	return r.Terms, nil
 }
 
 // holderReady is up's readiness probe: project's holder of build key

@@ -8,7 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -72,14 +75,14 @@ func TestHolderEvidence(t *testing.T) {
 		sockets: func(project string) (map[string]time.Duration, error) {
 			return map[string]time.Duration{cur: time.Minute, old: 30 * time.Hour}, nil
 		},
-		answer: func(project, key string) (int, bool) {
+		answer: func(project, key string) ([]holder.TermInfo, bool) {
 			switch key {
 			case cur:
-				return 1, true
+				return []holder.TermInfo{{ID: "t1", Alive: true}}, true
 			case old:
-				return 2, true
+				return []holder.TermInfo{{ID: "t1", Alive: true}, {ID: "t2"}}, true
 			}
-			return 0, false
+			return nil, false
 		},
 	}
 	e := holderEvidence(hm, paths, "demo", "v3", probe)
@@ -206,5 +209,42 @@ func TestServiceGCSaysASharedCopyIsKept(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "binary removed") || !strings.Contains(out.String(), "binary kept") {
 		t.Fatalf("out %q", out.String())
+	}
+}
+
+// holder_restarted's agents from the snapshots: the proved process is
+// alive only with the same pid, start time and boot; a reboot since the
+// proof means gone.
+func TestWithHolderAgentsFromSnapshots(t *testing.T) {
+	key := service.BuildKey("v3")
+	now := time.UnixMilli(10_000_000)
+	at := now.Add(-5 * time.Minute).UnixMilli()
+	running := map[int]uint64{7: 70, 8: 80}
+	start := func(pid int) (uint64, error) {
+		if s, ok := running[pid]; ok {
+			return s, nil
+		}
+		if pid == 9 {
+			return 0, errors.New("/proc unreadable")
+		}
+		return 0, dispatch.ErrNoProcess
+	}
+	snaps := map[string]bus.AgentSnapshot{
+		"coder":     {Pane: key + "/t3", State: "idle", PID: 5, PIDStart: 50, IdentTS: at, BootID: "b1"}, // gone
+		"foureyes":  {Pane: key + "/t4", State: "idle", PID: 7, PIDStart: 70, IdentTS: at, BootID: "b1"}, // runs
+		"master":    {Pane: key + "/t5", State: "idle", PID: 8, PIDStart: 81, IdentTS: at, BootID: "b1"}, // pid reused
+		"docs":      {Pane: key + "/t6", State: "idle", PID: 7, PIDStart: 70, IdentTS: at, BootID: "b0"}, // another boot
+		"sentinel":  {Pane: key + "/t7", State: "idle", PID: 7, PIDStart: 70, IdentTS: at},               // boot unknown, runs
+		"reviewer":  {Pane: key + "/t9", State: "idle", PID: 9, PIDStart: 90, IdentTS: at, BootID: "b1"}, // lookup failed: unknown, never lost
+		"pilot":     {Pane: key + "/t10", State: "idle", PID: 8, IdentTS: at, BootID: "b1"},              // no start time recorded: unproved, never lost
+		"architect": {Pane: key + "/t8", State: "done", PID: 6, PIDStart: 60, IdentTS: at, BootID: "b1"}, // gone, but done by itself
+	}
+	e := withHolderAgents(health.HolderEvidence{Known: true}, snaps, now, provedAlive("b1", start))
+	var names []string
+	for _, a := range e.Agents {
+		names = append(names, a.Name)
+	}
+	if got := strings.Join(names, ","); got != "coder,docs,master" {
+		t.Fatalf("weighed %s", got)
 	}
 }
