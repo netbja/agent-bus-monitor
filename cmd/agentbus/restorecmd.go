@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/relaunch"
@@ -21,9 +20,11 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // agentbus restore (spec docs/superpowers/specs/2026-11-01-backup-design.md,
@@ -35,8 +36,8 @@ const restoreUsage = "usage: agentbus restore <archive> [--project <p>]... [--re
 type restoreDeps struct {
 	Getenv    func(string) string
 	Dial      func() (*redis.Client, error)
-	Herdr     func(args ...string) ([]byte, error)
-	Services  func() (service.Manager, string) // the manager, or why there is none
+	Terms     func(project string) ([]termhost.Term, error) // the project's terminals on its holder
+	Services  func() (service.Manager, string)              // the manager, or why there is none
 	ProcStart func(pid int) (uint64, error)
 	Lock      func(project string) (func(), error)
 	Stdin     io.Reader
@@ -48,8 +49,14 @@ func realRestoreDeps(redisHost string) restoreDeps {
 	return restoreDeps{
 		Getenv: os.Getenv,
 		Dial:   func() (*redis.Client, error) { return bus.Connect(redisHost) },
-		Herdr: func(args ...string) ([]byte, error) {
-			return exec.Command(herdrBin(os.Getenv), args...).Output()
+		Terms: func(project string) ([]termhost.Term, error) {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+			if err != nil {
+				return nil, err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return h.List(ctx, project)
 		},
 		Services: func() (service.Manager, string) {
 			return service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
@@ -194,7 +201,7 @@ func (r restoreBroker) Restore(ctx context.Context, p string, keys []bus.DumpedK
 
 // projectLive says why p is live, whatever its keys (spec: an empty keyspace
 // is no proof of a dead project): its dispatch or conductor lease held, a
-// service active, its herdr workspace open, or a registered agent's verified
+// service active, a terminal of its holder alive, or a registered agent's verified
 // process alive. A read that fails is an error: the restore refuses.
 func projectLive(ctx context.Context, c *redis.Client, p string, d restoreDeps, mgr service.Manager) (string, error) {
 	for _, k := range []string{bus.DispatchKey(p), bus.ConductorKey(p)} {
@@ -217,23 +224,13 @@ func projectLive(ctx context.Context, c *redis.Client, p string, d restoreDeps, 
 			}
 		}
 	}
-	raw, err := d.Herdr("workspace", "list")
+	terms, err := d.Terms(p)
 	if err != nil {
-		return "", fmt.Errorf("herdr workspace list: %w (start herdr, or close nothing: the check cannot be skipped)", err)
+		return "", fmt.Errorf("its holder's terminals: %w (the check cannot be skipped)", err)
 	}
-	var ws struct {
-		Result struct {
-			Workspaces []struct {
-				Label string `json:"label"`
-			} `json:"workspaces"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(raw, &ws); err != nil {
-		return "", fmt.Errorf("herdr workspace list: %w", err)
-	}
-	for _, w := range ws.Result.Workspaces {
-		if w.Label == p {
-			return "its herdr workspace is open", nil
+	for _, t := range terms {
+		if t.Alive {
+			return fmt.Sprintf("its holder runs %s's terminal (agentbus down %s)", t.Name, p), nil
 		}
 	}
 	b, err := bus.Open(c, p)

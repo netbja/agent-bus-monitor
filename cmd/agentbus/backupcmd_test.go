@@ -218,7 +218,7 @@ func TestBackupCommandSecrets(t *testing.T) {
 	pw := filepath.Join(w.home, ".config", "agentbus", "redis.env")
 	os.Remove(pw)
 	w.env["AGENTBUS_SERVICE_MANAGER"] = "none"
-	rw := &restoreWorld{backupWorld: w, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{},
+	rw := &restoreWorld{backupWorld: w, archive: list[0].Path, starts: map[int]uint64{},
 		services: func() (service.Manager, string) { return nil, "AGENTBUS_SERVICE_MANAGER=none" }}
 	c, _ := w.d.Dial()
 	bus.DeleteProject(context.Background(), c, p)
