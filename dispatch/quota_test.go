@@ -154,6 +154,16 @@ func TestRunQuotaPauseOutlivesAnExpiredHold(t *testing.T) {
 	b, _ := dialRun(t)
 	cleanupQuota(t, b)
 	registerAs(t, b, "master", "p-master", "anthropic")
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "boot", time.Minute); err != nil || !ok { // a run to drain
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if _, _, err := b.FencedRunPass(ctx, "boot", nil, true, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReleaseDispatch(ctx, "boot"); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now()
 	r := quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(),
 		Windows: []quota.Window{{Name: "5h", UsedPct: 99, ResetsAt: now.Add(1500*time.Millisecond).Unix() + 1}}}
@@ -161,6 +171,9 @@ func TestRunQuotaPauseOutlivesAnExpiredHold(t *testing.T) {
 	f.set(r)
 	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
 	waitFor(t, 3*time.Second, "a quota pause", func() bool { p, _ := b.Pause(context.Background()); return p != nil })
+	if run, _ := b.Run(ctx); run.State != bus.RunDraining {
+		t.Fatalf("master's provider at its limit did not drain the run: %+v", run)
+	}
 	f.set(quota.Unknown("anthropic", "x", "gone"))
 	time.Sleep(3500 * time.Millisecond) // past the reset, well before reset + 2 min
 	if marks, _ := b.QuotaMarks(context.Background()); marks["hold:anthropic"] != "" {
@@ -168,6 +181,10 @@ func TestRunQuotaPauseOutlivesAnExpiredHold(t *testing.T) {
 	}
 	if p, _ := b.Pause(context.Background()); p == nil {
 		t.Fatal("the quota pause was deleted at the reset instead of reset + margin")
+	}
+	// run-budget §4: the hold's release, with no reading, returns the run
+	if run, _ := b.Run(ctx); run.State != bus.RunRunning {
+		t.Fatalf("the run after the release: %+v", run)
 	}
 }
 
@@ -275,7 +292,8 @@ func TestRunQuotaReleaseResumesInterruptedWork(t *testing.T) {
 	}
 	for _, m := range entries(t, r, b, "cmd") {
 		if m.Values["target"] == "foureyes" && m.Values["from"] == "dispatch" {
-			if cmd, _ := m.Values["command"].(string); !strings.Contains(cmd, "plan-v7-review") {
+			// the quota's own warn to an agent with work (run-budget §4) names no task
+			if cmd, _ := m.Values["command"].(string); !strings.HasPrefix(cmd, "Quota ") && !strings.Contains(cmd, "plan-v7-review") {
 				t.Fatalf("foureyes directive %q does not name its task", cmd)
 			}
 		}
@@ -732,4 +750,92 @@ func TestRunQuotaMarksASecondApartSendNothingAgain(t *testing.T) {
 			t.Fatalf("sent again: %q", cmd)
 		}
 	}
+}
+
+// run-budget §4: at quota_warn, each agent on that provider holding work (an
+// accepted task, or working) is warned once per window, besides master; an
+// agent without work, or on another provider, is not. Master's provider
+// drains the run for that quota, announced once; the provider clear again
+// returns the run to running.
+func TestRunQuotaWarnsAgentsWithWorkAndDrainsTheRun(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "coder", "p-coder", "anthropic")
+	registerAs(t, b, "docs", "p-docs", "anthropic")
+	registerAs(t, b, "kimi", "p-kimi", "moonshot")
+	if _, err := b.Request(ctx, "wiki-3", "master", "coder", "", "build it", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AcceptRequest(ctx, "wiki-3", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Status(ctx, "kimi", "working", "", bus.AgentIdent{Pane: "p-kimi", PID: testPID, PIDStart: testStart, Provider: "moonshot"}); err != nil {
+		t.Fatal(err)
+	}
+	// a run to drain (the merge-queue pass starts it; here, by hand)
+	if ok, err := b.AcquireDispatch(ctx, "boot", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if _, _, err := b.FencedRunPass(ctx, "boot", nil, true, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReleaseDispatch(ctx, "boot"); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 88), reading("moonshot", 10))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+
+	count := func(target, prefix string) int {
+		evs, _, _ := b.Recent(ctx, []string{"cmd"}, 200)
+		n := 0
+		for _, e := range evs {
+			if e.From == "dispatch" && e.Target == target && strings.HasPrefix(e.Message, prefix) {
+				n++
+			}
+		}
+		return n
+	}
+	waitFor(t, 3*time.Second, "coder warned and the run draining", func() bool {
+		r, _ := b.Run(ctx)
+		return count("coder", "Quota anthropic 88%") == 1 && r != nil && r.State == bus.RunDraining
+	})
+	time.Sleep(200 * time.Millisecond) // more passes
+	if n := count("coder", "Quota anthropic 88%"); n != 1 {
+		t.Fatalf("coder warned %d times, want 1", n)
+	}
+	if count("docs", "Quota") != 0 || count("kimi", "Quota") != 0 {
+		t.Fatal("an agent without work, or on another provider, was warned")
+	}
+	if n := count("master", "Quota anthropic 88%"); n != 1 {
+		t.Fatalf("master warned %d times, want 1", n)
+	}
+	if n := count("master", "Run draining"); n != 1 {
+		t.Fatalf("%d run-drain directives, want 1", n)
+	}
+	if r, _ := b.Run(ctx); r.Why != bus.RunWhyQuota("anthropic") || r.Drains != 1 {
+		t.Fatalf("run %+v", r)
+	}
+	if !strings.Contains(lastTo(t, b, "coder"), "commit work in progress on your branch") {
+		t.Fatalf("coder's warn: %q", lastTo(t, b, "coder"))
+	}
+	f.set(reading("anthropic", 20), reading("moonshot", 10))
+	waitFor(t, 3*time.Second, "the run running again", func() bool {
+		r, _ := b.Run(ctx)
+		return r != nil && r.State == bus.RunRunning
+	})
+}
+
+func lastTo(t *testing.T, b *bus.Bus, target string) string {
+	t.Helper()
+	evs, _, _ := b.Recent(context.Background(), []string{"cmd"}, 200)
+	last := ""
+	for _, e := range evs {
+		if e.Target == target {
+			last = e.Message
+		}
+	}
+	return last
 }
