@@ -25,6 +25,7 @@ func idleMasterWorld(t *testing.T) *stallWorld {
 func (w *stallWorld) at(now time.Time) {
 	w.t.Helper()
 	w.s.now = func() time.Time { return now }
+	w.s.redisNow = func(context.Context) (time.Time, error) { return now, nil }
 	seen := bus.Observation{State: "idle", At: now.UnixMilli()}
 	if err := w.b.FencedPutObserved(context.Background(), "stall-holder", map[string]bus.Observation{"master": seen, "coder": seen}); err != nil {
 		w.t.Fatal(err)
@@ -151,6 +152,7 @@ func TestIdleMasterCheckback(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	w.at(time.Now().Add(12 * time.Minute)) // after the sets: due 7m ago, whole minutes
 	out := w.run(w.s.idleMaster)
 	if out.Status != health.Warn || out.Detail != "master idle 12m; check-back due 7m ago: k1/k2 checks" {
 		t.Fatalf("due: %+v", out)
@@ -174,5 +176,22 @@ func TestIdleMasterCheckback(t *testing.T) {
 	}
 	if n := w.personNotices(); len(n) != 1 || !strings.Contains(n[0], `master has postponed "K1/K2 checks" 4 times since`) {
 		t.Fatalf("person told %q", n)
+	}
+}
+
+// §5 (reviewer-codex): idle-master judges by the broker's clock, never the
+// dispatcher host's: a host clock two hours ahead does not make master,
+// idle since now in Redis time, idle for two hours.
+func TestIdleMasterUsesRedisTime(t *testing.T) {
+	w := idleMasterWorld(t)
+	w.s.redisNow = nil
+	ahead := time.Now().Add(2 * time.Hour)
+	w.s.now = func() time.Time { return ahead }
+	seen := bus.Observation{State: "idle", At: time.Now().UnixMilli()}
+	if err := w.b.FencedPutObserved(context.Background(), "stall-holder", map[string]bus.Observation{"master": seen}); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.idleMaster); out.Status != health.OK || out.Detail != "master idle 0m" {
+		t.Fatalf("host clock ahead: %+v, want master idle 0m by Redis time", out)
 	}
 }

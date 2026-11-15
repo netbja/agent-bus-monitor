@@ -39,6 +39,9 @@ type stallReader struct {
 	clear  dispatch.ClearConfig
 	master *string // the dispatcher's escalation target, set once its flags are read
 	now    func() time.Time
+	// redisNow is the broker's clock (idle-master judges Redis times by it,
+	// spec 2026-11-15-master-idle-design.md §5); nil reads bus.ServerTime.
+	redisNow func(context.Context) (time.Time, error)
 
 	mu       sync.Mutex
 	verdicts []bus.Verdict

@@ -22,15 +22,25 @@ import (
 const mergeQueueStale = 3 * mergeQueueEvery
 
 func (s *stallReader) idleMaster(ctx context.Context) (health.Outcome, error) {
-	now := s.now()
 	set := readStallSettings(s.getenv)
 	r := config.Machine(s.getenv)
 	master := s.escalateTo()
+	// Every time judged here is Redis time (status and answer ids, the
+	// check-back, the merge queue's pass, the wake's id): so is now
+	// (reviewer-codex), never the dispatcher host's clock.
+	clock := s.redisNow
+	if clock == nil {
+		clock = s.b.ServerTime
+	}
+	now, err := clock(ctx)
 	in := health.IdleMasterInput{Now: now, After: r.Duration("dispatch.master_idle_after"), Master: master, CheckbackMax: r.Int("dispatch.checkback_max")}
 	defer s.keep(func() { s.lastMaster = &in }) // every return: never a stale wake
 	fail := func(phrase string) (health.Outcome, error) {
 		in.ReadErr = phrase
 		return health.EvaluateIdleMaster(in), nil
+	}
+	if err != nil {
+		return fail("broker time unavailable")
 	}
 	// The check-back first: its postponements tell the person on any pass,
 	// the check off included (§4).
