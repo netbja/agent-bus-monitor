@@ -8,5 +8,4 @@
   agent and expiry (`login-expiry:<agent>`, episode the expiry in ms):
   `coder's Claude login expires Thu 15:40 (2 days): run /login in its pane.` The new `login-expiry`
   health check (every 5 minutes) reports the loop's last results, worst first, and reads no file;
-  it never notifies the person. An expired login is only reported for now: its notice, its hold
-  and its release are part 3.
+  it never notifies the person. An expired login holds its agent (part 3, `login-expiry-3a.md`).

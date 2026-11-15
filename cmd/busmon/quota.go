@@ -363,3 +363,31 @@ func freshWindows(b bus.BudgetSnapshot, now time.Time) []bus.BudgetWindow {
 	}
 	return out
 }
+
+// loginHoldOf is agent's login hold in the {p}:quota marks: the expiry (Unix
+// ms) of hold-login:<agent>, or 0 (login-updates r9 §3.6).
+func loginHoldOf(marks map[string]string, agent string) int64 {
+	n, err := strconv.ParseInt(marks[bus.LoginHoldField(agent)], 10, 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+// loginHoldLines are the login-held agents, one line each, by name:
+// "coder: Claude login expired Thu 15:40, held".
+func loginHoldLines(agents map[string]*agentState) []Line {
+	names := make([]string, 0, len(agents))
+	for n, a := range agents {
+		if a != nil && a.loginHeld > 0 {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	out := make([]Line, 0, len(names))
+	for _, n := range names {
+		at := time.UnixMilli(agents[n].loginHeld).Local().Format("Mon 15:04")
+		out = append(out, Line{S(RoleAttention, Preview(n)+": Claude login expired "+at+", held")})
+	}
+	return out
+}

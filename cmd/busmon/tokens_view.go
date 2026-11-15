@@ -151,6 +151,9 @@ func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot
 			b.segs(l...).text("\n")
 		}
 	}
+	for _, l := range loginHoldLines(agents) { // a login hold is an agent's, not an account's (login-updates r9 §3.6)
+		b.text("  ").segs(l...).text("\n")
+	}
 
 	days := tokens.LastDays(now, time.Local, 7)
 	today := days[len(days)-1]
