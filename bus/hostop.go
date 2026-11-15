@@ -352,3 +352,40 @@ func (b *Bus) WithdrawHostOp(ctx context.Context, o HostOp) (bool, error) {
 	n, err := hostWithdraw.Run(ctx, b.r, []string{HostOpsKey(b.project)}, o.ID, string(rec)).Int()
 	return n == 1, err
 }
+
+// HostOpsKeep is how long a finished directive's record is kept (security
+// S10a-4): long past any re-read, the reader's cursor starting two windows
+// back.
+const HostOpsKeep = 24 * time.Hour
+
+// hostPrune: KEYS[1] the lease, KEYS[2] {p}:hostops; ARGV[1] token, ARGV[2]
+// the age ms. It deletes each finished record older than the age, and each
+// unreadable one; an accepted or running record is kept, whatever its age,
+// for the next sweep to report.
+var hostPrune = redis.NewScript(fenceCheck + `
+local t = redis.call('TIME')
+local before = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000) - tonumber(ARGV[2])
+local h = redis.call('HGETALL', KEYS[2])
+local n = 0
+for i = 1, #h, 2 do
+  local ok, rec = pcall(cjson.decode, h[i + 1])
+  local drop = not ok or type(rec) ~= 'table'
+  if not drop and rec['state'] ~= 'accepted' and rec['state'] ~= 'running' then
+    drop = tonumber(rec['at']) == nil or tonumber(rec['at']) < before
+  end
+  if drop then
+    redis.call('HDEL', KEYS[2], h[i])
+    n = n + 1
+  end
+end
+return n`)
+
+// FencedPruneHostOps deletes the finished records older than age (security
+// S10a-4), under the lease; it returns how many went.
+func (b *Bus) FencedPruneHostOps(ctx context.Context, token string, age time.Duration) (int, error) {
+	n, err := hostPrune.Run(ctx, b.r, []string{DispatchKey(b.project), HostOpsKey(b.project)}, token, age.Milliseconds()).Int()
+	if err != nil {
+		return 0, notHolder(err)
+	}
+	return n, nil
+}

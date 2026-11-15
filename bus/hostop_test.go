@@ -3,6 +3,8 @@ package bus
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -297,5 +299,39 @@ func TestHostOpWithdraw(t *testing.T) {
 	}
 	if reply, ok, err := b.HostReply(ctx, o.ID, "master"); err != nil || !ok || !strings.HasPrefix(reply, "accepted") {
 		t.Fatalf("reply %q %v %v", reply, ok, err)
+	}
+}
+
+// Security S10a-4: a finished record older than the age is pruned, under
+// the lease; an unfinished one (accepted, running) is kept whatever its
+// age, as is a recent finished one.
+func TestHostOpsPrune(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, recent := now.Add(-25*time.Hour).UnixMilli(), now.Add(-time.Hour).UnixMilli()
+	rec := func(state string, at int64) string {
+		return fmt.Sprintf(`{"state":%q,"at":%d,"op":"up","agent":"","from":"master"}`, state, at)
+	}
+	key := HostOpsKey(b.project)
+	b.r.HSet(ctx, key, "1-1", rec(HostDone, old), "1-2", rec(HostExpired, old), "1-3", rec(HostWithdrawn, old),
+		"1-4", rec(HostAccepted, old), "1-5", rec(HostRunning, old), "1-6", rec(HostDone, recent), "1-7", "not json")
+	if _, err := b.FencedPruneHostOps(ctx, "other", 24*time.Hour); err == nil {
+		t.Fatal("pruned without the lease")
+	}
+	n, err := b.FencedPruneHostOps(ctx, "tok", 24*time.Hour)
+	if err != nil || n != 4 {
+		t.Fatalf("pruned %d, %v; want 4 (three old finished, one unreadable)", n, err)
+	}
+	left, _ := b.r.HKeys(ctx, key).Result()
+	sort.Strings(left)
+	if strings.Join(left, " ") != "1-4 1-5 1-6" {
+		t.Fatalf("left %v, want the unfinished and the recent", left)
 	}
 }
