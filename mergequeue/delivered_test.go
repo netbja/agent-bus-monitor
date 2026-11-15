@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The git test of master-idle §3.1, on a disposable repository: whatever the
@@ -284,5 +285,39 @@ func TestDeliveredAbsentHead(t *testing.T) {
 	absent := strings.Repeat("ab", 20)
 	if got := r.judge(NewDelivery(), absent); got[absent] {
 		t.Fatal("an absent head reads delivered")
+	}
+}
+
+// reviewer-codex on master-idle-a: only a genuinely missing object is an
+// absent head; a timeout or another git failure is an error (the pass is
+// unknown), never "not delivered".
+func TestDeliveredFailsClosed(t *testing.T) {
+	r := newDRepo(t)
+	h := r.branch("h", [2]string{"3", "h"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got, err := NewDelivery().Delivered(ctx, r.dir, r.env, r.tip("main"), []string{h}); err == nil {
+		t.Fatalf("a cancelled pass judged %v", got)
+	}
+	d := NewDelivery()
+	d.Call = time.Nanosecond
+	if got, err := d.Delivered(context.Background(), r.dir, r.env, r.tip("main"), []string{h}); err == nil {
+		t.Fatalf("a timed-out command judged %v", got)
+	}
+	if got, err := NewDelivery().Delivered(context.Background(), filepath.Join(t.TempDir(), "no-repo"), r.env, r.tip("main"), []string{h}); err == nil {
+		t.Fatalf("no repository judged %v", got)
+	}
+}
+
+// A head with no history in common with the base (an orphan branch) is not
+// delivered, and the pass goes on.
+func TestDeliveredOrphanHead(t *testing.T) {
+	r := newDRepo(t)
+	r.git("switch", "-q", "--orphan", "lonely")
+	r.write("f", "alone\n")
+	h := r.commit("orphan")
+	r.git("switch", "-q", "main")
+	if got := r.judge(NewDelivery(), h); got[h] {
+		t.Fatal("an orphan head reads delivered")
 	}
 }

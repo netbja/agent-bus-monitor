@@ -87,7 +87,14 @@ func (d *Delivery) Delivered(ctx context.Context, dir string, env []string, base
 		if !bus.ValidHead(h) {
 			return nil, errors.New("an invalid commit id")
 		}
-		if _, err := g.run(nil, "cat-file", "-e", h+"^{commit}"); err != nil {
+		// rev-parse --verify --quiet exits 1, silently, only for a name it
+		// cannot resolve: an absent head. A timeout or any other failure is
+		// an error, the pass unknown (reviewer-codex), never "not delivered".
+		here, err := g.exitTrue("rev-parse", "--verify", "--quiet", h+"^{commit}")
+		if err != nil {
+			return nil, err
+		}
+		if !here {
 			out[h] = false // not here: cannot be judged, never delivered
 			continue
 		}
@@ -101,13 +108,14 @@ func (d *Delivery) Delivered(ctx context.Context, dir string, env []string, base
 			continue
 		}
 		fork, err := g.run(nil, "merge-base", baseTip, h)
-		if err != nil {
-			return nil, errors.New("git merge-base: cannot judge")
-		}
-		f := firstLine(fork)
-		if !bus.ValidHead(f) {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
 			out[h] = false // no common history: nothing of the base can be it
 			continue
+		}
+		f := firstLine(fork)
+		if err != nil || !bus.ValidHead(f) {
+			return nil, errors.New("git merge-base: cannot judge")
 		}
 		rest = append(rest, pending{h, f})
 	}
@@ -293,6 +301,21 @@ func (g *gitRun) run(stdin []byte, args ...string) ([]byte, error) {
 		return nil, &runError{name: "git", err: err}
 	}
 	return out.Bytes(), nil
+}
+
+// exitTrue runs a command whose answer is its exit code: 0 true, 1 false,
+// anything else (a timeout included) an error.
+func (g *gitRun) exitTrue(args ...string) (bool, error) {
+	_, err := g.run(nil, args...)
+	if err == nil {
+		return true, nil
+	}
+	var re *runError
+	var ee *exec.ExitError
+	if errors.As(err, &re) && errors.As(re.err, &ee) && ee.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, errors.New("git " + args[0] + ": cannot judge")
 }
 
 // lines runs a listing command and returns its non-empty lines.
