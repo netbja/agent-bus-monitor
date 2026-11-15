@@ -410,3 +410,22 @@ func TestClearStallReadsTheHandoffReport(t *testing.T) {
 		t.Fatalf("judged hand-offs %+v, want coder's report %s at %d", got, rep, h.At)
 	}
 }
+
+// run-budget §3: the same stalled team reads ok while the run drains.
+func TestTeamStallOKWhileTheRunDrains(t *testing.T) {
+	w := newStallWorld(t)
+	w.env["AGENT_BUS_QUIET_AFTER"] = "0" // judged without quiet-agent's record (QuietOff)
+	if out := w.run(w.s.teamStall); out.Status != health.Fail {
+		t.Fatalf("the control is a stall: %+v", out)
+	}
+	ctx := context.Background() // the world holds the lease as stall-holder
+	if _, _, err := w.b.FencedRunPass(ctx, "stall-holder", nil, true, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.b.FencedRunDrain(ctx, "stall-holder", bus.RunWhyDuration); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.run(w.s.teamStall); out.Status != health.OK || out.Detail != "run draining: ready plan tasks wait" {
+		t.Fatalf("draining: %+v", out)
+	}
+}

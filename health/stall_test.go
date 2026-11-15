@@ -42,6 +42,8 @@ func TestTeamStallTable(t *testing.T) {
 		{"stalled, agent work ready", func(*TeamStallInput) {}, Fail, "stalled", "team idle 18m, nothing open; next ready: pages-5 (coder)"},
 		{"person work only", func(in *TeamStallInput) { in.AgentReady = nil }, Warn, "waiting-person", "team idle 18m; waiting for you: Reinstall and tag v0.26"},
 		{"nothing ready", func(in *TeamStallInput) { in.AgentReady, in.PersonReady = nil, nil }, OK, "", "team idle, plan has nothing ready"},
+		// run-budget §3: a ready plan task is no stall while the run drains
+		{"run draining", func(in *TeamStallInput) { in.RunDraining = true }, OK, "", "run draining: ready plan tasks wait"},
 		{"no plan", func(in *TeamStallInput) { in.PlanLoaded = false }, Unknown, "", "no plan loaded: cannot tell whether work remains"},
 		{"a read failed", func(in *TeamStallInput) { in.ReadErr = "agents unavailable" }, Unknown, "", "agents unavailable"},
 		{"off", func(in *TeamStallInput) { in.After = 0 }, Unknown, "", "off (stall_after = 0)"},
