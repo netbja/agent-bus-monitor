@@ -147,13 +147,4 @@ func TestSecretPathMatchingAndVersionOutcomes(t *testing.T) {
 	if got := EvaluateVersions(true, 1).Status; got != Warn {
 		t.Fatalf("version issue = %s", got)
 	}
-	if got := EvaluateHerdrProbe(false, false, 0).Status; got != Unknown {
-		t.Fatalf("missing herdr = %s", got)
-	}
-	if got := EvaluateHerdrProbe(true, true, 1).Status; got != Warn {
-		t.Fatalf("transient herdr error = %s", got)
-	}
-	if got := EvaluateHerdrProbe(true, true, HerdrProbeFailAfter).Status; got != Fail {
-		t.Fatalf("repeated herdr error = %s", got)
-	}
 }

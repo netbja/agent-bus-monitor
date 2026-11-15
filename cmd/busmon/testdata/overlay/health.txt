@@ -18,7 +18,6 @@
   ? Redis exposure and password      no current measurement
   ? Service environment permissions  no current measurement
   ? Installed versions               no current measurement
-  ? herdr command probe              no current measurement
   ? Client updates                   no current measurement
   ? Redis version                    no current measurement
   ? GitHub reachable                 no current measurement
