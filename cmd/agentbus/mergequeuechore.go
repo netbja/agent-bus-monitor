@@ -51,6 +51,10 @@ type mergeQueueChore struct {
 	// kept across passes for its cache) and the plan's done subjects.
 	delivered func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
 	done      func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error)
+	// serverNow is the broker's clock: the approvals' times are Redis TIME,
+	// so the 72 h window is judged on it (reviewer-codex); nil reads
+	// bus.ServerTime.
+	serverNow func(ctx context.Context) (time.Time, error)
 }
 
 // serviceMergeQueue is the dispatch service's chore, in its working directory.
@@ -206,6 +210,14 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	if err != nil {
 		return fail("", "verdicts unavailable")
 	}
+	clock := c.serverNow
+	if clock == nil {
+		clock = c.b.ServerTime
+	}
+	now, err := clock(ctx)
+	if err != nil {
+		return fail("", "broker time unavailable")
+	}
 	in := mergequeue.Input{Verdicts: vs}
 	source := "git"
 	// Origin's tips and the fetched base, in every mode that pushes (the gh
@@ -267,7 +279,7 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	res := mergequeue.Derive(in)
 	var undelivered []bus.MergeUndelivered
 	if f.Kind != forge.Local {
-		u, why := c.undelivered(ctx, env, vs, remote, remoteBase, base)
+		u, why := c.undelivered(ctx, env, vs, remote, remoteBase, base, now)
 		if why != "" {
 			return fail(source, why)
 		}
@@ -276,7 +288,7 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	if judgeBase == "" {
 		judgeBase = remoteBase // the gh path: origin's base
 	}
-	run := c.runDelivered(ctx, env, vs, judgeBase)
+	run := c.runDelivered(ctx, env, vs, judgeBase, now)
 	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting,
 		Undelivered: undelivered}, run
 }
@@ -285,8 +297,8 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 // (master-idle §3.1) finds in the base: a run's deliveries are counted
 // from them, forge or not (run-budget §2). A failed judgement is not known:
 // the run counts nothing this pass, and the queue's record is unaffected.
-func (c *mergeQueueChore) runDelivered(ctx context.Context, env []string, vs []bus.Verdict, baseTip string) runHeads {
-	heads := mergequeue.RecentApprovedHeads(vs, time.Now(), health.ReviewQueueWindow)
+func (c *mergeQueueChore) runDelivered(ctx context.Context, env []string, vs []bus.Verdict, baseTip string, now time.Time) runHeads {
+	heads := mergequeue.RecentApprovedHeads(vs, now, health.ReviewQueueWindow)
 	if len(heads) == 0 {
 		return runHeads{known: true}
 	}
@@ -306,7 +318,7 @@ func (c *mergeQueueChore) runDelivered(ctx context.Context, env []string, vs []b
 // undelivered are the approved heads master has not delivered (master-idle
 // §3.1): no tip on origin, not dropped, not done, and not found in the
 // fetched base by the git test; why is the failed read, or "".
-func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bus.Verdict, remote []mergequeue.Tip, baseTip, base string) ([]bus.MergeUndelivered, string) {
+func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bus.Verdict, remote []mergequeue.Tip, baseTip, base string, now time.Time) ([]bus.MergeUndelivered, string) {
 	cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
 	local, _, err := c.localTips(cctx, c.dir, env, base)
 	cancel()
@@ -325,7 +337,7 @@ func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bu
 	for h := range dropped {
 		isDropped[h] = true
 	}
-	cands := mergequeue.UndeliveredCandidates(mergequeue.UndeliveredInput{Verdicts: vs, Now: time.Now(), Window: health.ReviewQueueWindow,
+	cands := mergequeue.UndeliveredCandidates(mergequeue.UndeliveredInput{Verdicts: vs, Now: now, Window: health.ReviewQueueWindow,
 		Remote: remote, Local: local, Dropped: isDropped, Done: done})
 	if len(cands) == 0 {
 		return []bus.MergeUndelivered{}, ""

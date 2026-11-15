@@ -378,3 +378,46 @@ func TestMergeQueueChoreRun(t *testing.T) {
 		}
 	}
 }
+
+// run-budget §2 (reviewer-codex): the 72 h window is judged on the broker's
+// clock, as the approvals' times are: the broker 73 h on, a fresh approve is
+// out of the window whatever the host's clock says; the broker's time
+// unreadable, the run counts nothing and undelivered is unknown.
+func TestMergeQueueChoreWindowOnBrokerTime(t *testing.T) {
+	c, b := mqChore(t, "git@git.example.org:o/r.git")
+	ctx := context.Background()
+	var judged [][]string
+	c.delivered = func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
+		judged = append(judged, heads)
+		return map[string]bool{}, nil
+	}
+	const waiting = "fa2d796f00000000000000000000000000000000"
+	if _, err := b.AppendVerdict(ctx, bus.Verdict{Subject: "herdr-6c2-2", Author: "coder2", Reviewer: "foureyes", Decision: "approve", Head: waiting}); err != nil {
+		t.Fatal(err)
+	}
+	c.serverNow = func(context.Context) (time.Time, error) { return time.Now().Add(73 * time.Hour), nil }
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := b.MergeQueue(ctx)
+	if len(judged) != 0 || len(rec.Undelivered) != 0 || rec.Reason != "" {
+		t.Fatalf("the broker 73h on: judged %v, undelivered %+v (%q)", judged, rec.Undelivered, rec.Reason)
+	}
+	if run, _ := b.Run(ctx); run == nil || len(run.Counted) != 0 {
+		t.Fatalf("the broker 73h on: run %+v, want started with nothing in the window", run)
+	}
+	c.serverNow = func(context.Context) (time.Time, error) { return time.Time{}, errors.New("broker down") }
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); rec.Reason != "broker time unavailable" {
+		t.Fatalf("no broker time: %+v", rec)
+	}
+	c.serverNow = nil // the broker's own clock: the approve is fresh
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); len(rec.Undelivered) != 1 || len(judged) == 0 {
+		t.Fatalf("the broker's clock: undelivered %+v judged %v", rec.Undelivered, judged)
+	}
+}

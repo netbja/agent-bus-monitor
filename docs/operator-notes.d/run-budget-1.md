@@ -2,7 +2,8 @@
   merge-queue pass, after its own write, through `bus.FencedRunPass` (fenced, Redis `TIME`): `started_at`,
   `paused_ms`, `seen_at`, `deliveries`, `state` (`running`; draining and stopped come with step 2), `since`, `why`,
   `drains`, and one `d:<head>` per head counted. Each pass judges every approved deciding head within 72 h
-  (`mergequeue.RecentApprovedHeads`) with the same git test as master-idle (`Delivery`, its cache shared), in every
+  (`mergequeue.RecentApprovedHeads`; the window on the broker's clock, `bus.ServerTime`, as the approvals' times
+  are, `undelivered`'s too, and an unreadable clock fails the pass) with the same git test as master-idle (`Delivery`, its cache shared), in every
   mode, local included, after `undelivered`. No record: the first pass that judged them writes one with every
   delivered head as its baseline, counting none; a pass that could not judge them starts nothing and counts
   nothing (the queue's record is unaffected). Each later pass adds `now − seen_at` to `paused_ms` when `{p}:pause`
