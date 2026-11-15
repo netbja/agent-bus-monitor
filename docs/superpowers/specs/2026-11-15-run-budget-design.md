@@ -1,6 +1,7 @@
 # A run budget: stop cleanly after a duration, a number of deliveries, or a quota (run-budget)
 
-Status: spec, for review (subject `run-budget-spec`). Not built. From the person's review of
+Status: spec, for review (subject `run-budget-spec`), r3. Not built. It depends on master-idle-spec
+§3.1 (the git test, `-U0` patch-ids, r7 in review). From the person's review of
 master-idle-spec (2026-11-15, thread `1794733043827-0`, its §2 and §4), relayed by master. §8 holds
 the person's open questions.
 
@@ -32,13 +33,19 @@ One record per project, `{p}:run` (a hash), written only by the dispatcher, fenc
 | `state` | `running`, `draining`, `stopped` |
 | `since` | when `state` last changed (Redis `TIME`) |
 | `why` | `duration`, `deliveries`, or `quota:<provider>` |
+| `drains` | how many times this run has entered `draining`: the episode of its once-marks (§3) |
 
-**Start.** The first dispatcher pass that finds no record writes one, `running`. `agentbus run
-reset` (§5) deletes it, and the next pass starts a new run.
+**Start.** The first merge-queue pass that finds no record writes one, `running`, with a
+**baseline**: a `d:<head>` field for every approved head (within 72 h) the git test already finds
+in the base, and `deliveries = 0`. So a new run never counts what was merged before it (foureyes:
+about 15 such heads on this repository today). `agentbus run reset` (§5) deletes the record, and
+the next pass starts a new run with a new baseline.
 
 **Duration.** `elapsed = now − started_at − paused_ms`, all Redis time. Each pass adds `now −
 seen_at` to `paused_ms` when the project is paused (a person's pause, a quota pause or a suspend),
-then sets `seen_at`. The clock stops while the project is paused, to within one pass.
+then sets `seen_at`. The clock stops while the project is paused, to within one pass. Time with
+no dispatcher at all (the service stopped, the host asleep) counts as run time: no pass sees it,
+and the run measures wall time since its start less the pauses it saw.
 
 **Deliveries.** A delivery is an approved head that the git test of master-idle-spec §3.1
 (`mergequeue.Delivered`: in the base, squash, or rebase-merge) finds in the base. The merge-queue
@@ -56,13 +63,17 @@ git test and runs every 5 minutes. Limits are therefore seen within 5 minutes.
 | `run.max_duration` | `AGENT_BUS_RUN_MAX_DURATION` | 0 | no limit |
 | `run.max_deliveries` | `AGENT_BUS_RUN_MAX_DELIVERIES` | 0 | no limit |
 | `run.drain_max` | `AGENT_BUS_RUN_DRAIN_MAX` | 2h | drain until nothing is in flight |
+| `run.screen_hold_max` | `AGENT_BUS_RUN_SCREEN_HOLD_MAX` | 5h | a screen hold ends only by its screen or a reading (§4) |
 
 The registry (`config/keys.go`), `ReadBy: "dispatch"`; busmon's C page lists them. The first
 limit reached wins.
 
 **Drain** (`state = draining`, `why` set). On the pass that reaches a limit:
 
-- master gets one waking directive (`FencedCmdOnce`, mark `run-drain`, episode `started_at`):
+- `drains` grows by one, in the same fenced write that sets `draining`; the episode of this
+  drain's marks is `<started_at>:<drains>`, so a run that drained for a quota, ran again, then
+  reached a limit, announces its second drain too.
+- master gets one waking directive (`FencedCmdOnce`, mark `run-drain`, episode as above):
   `Run budget reached (6 deliveries of 6, 3h10m): dispatch no new task; finish and deliver what is
   in flight; the project pauses when nothing is left.`
 - the person gets one notice (`FencedNotifyOnceForPerson`, mark `run-drain-person`, same episode)
@@ -70,11 +81,19 @@ limit reached wins.
   mark would let the directive's write suppress the notice.
 - `agentbus request send` refuses a new task while the run drains, `run is draining: no new task
   (agentbus run)`. The person may still send one; nobody else may. This is a bus rule
-  (`bus/requests.go`), so every client meets it.
+  (`bus/requests.go`), so every client meets it. The person is recognised as `deliver` recognises
+  them (`cmd/agentbus/deliver.go`): a caller with no `AGENT_BUS_AGENT`, which is busmon's compose
+  window and the person's own shell. Like `deliver`'s role check, this is defence in depth, not a
+  boundary: an agent that unsets the variable passes, as the forge-delivery decision already
+  says (2026-11-02); whether it must be one is the security role's call.
 - `team-stall` reads `ok` (`run draining: ready plan tasks wait`): a ready plan task is not a stall
   during a drain.
 - `idle-master` keeps working: an approved head not delivered still wakes master, or the drain
   would never end.
+
+**A limit reached while draining for a quota** replaces `why` with that limit (no new drain, the
+same episode: master and the person were already told the run drains; the notice of the stop
+gives the reason). So the quota's release never returns a run to `running` past a real limit.
 
 **Stop** (`state = stopped`). When nothing is in flight, or `run.drain_max` after the drain began:
 
@@ -83,7 +102,7 @@ limit reached wins.
 - the dispatcher writes a project pause with kind `run` (`bus.PauseRecord.Kind`, additive), its
   deadline one year ahead, so every existing pause reader stops waking as it does today, and no
   quota release lifts it (`QuotaPauseProvider` is "" for it, as for a person's pause);
-- the person gets one notice (mark `run-stop-person`, episode `started_at`) with the totals and
+- the person gets one notice (mark `run-stop-person`, the drain's episode) with the totals and
   what was still in flight if `drain_max` cut the drain short.
 
 Each once-mark of this spec has its own name: `run-drain`, `run-drain-person`, `run-stop-person`,
@@ -106,16 +125,26 @@ unchanged.
 **A client that gives no warning.** No reading, so the hold is seen only when it happens. One
 source is added: a client profile in `agentstate` may declare a `limit` signature (its "usage
 limit reached" screen), matched on a settled screen like `ready` and `busy`; none declared, never
-seen. A match on an agent's pane is a hold for its provider from that time, recorded as today's
-hold marks are, with the reset unknown (a hold of unknown reset stands until a reading or a served
-call ends it, as `quotaPass` already does).
+seen. Today's `hold:<p>` field stores a reset in Unix seconds and every release path needs a
+reading, so a silent client's hold gets its own field and its own release:
+
+- A match on a held agent's settled pane writes `hold-screen:<p>` in `{p}:quota` (fenced) = the
+  hold's start (Unix s, Redis `TIME`), and, when the signature captures a reset time (an optional
+  `reset` group, `15:40` read in the host's local zone, the next such time), `<start>:<reset>`.
+  The provider counts as held (`l.quota.held[p]`) while the field exists, as for `hold:<p>`.
+- **Release**, the first of: the captured reset plus `resumeMargin` has passed; the agent's pane is
+  seen settled **without** the `limit` signature on 3 observe passes in a row (the observe pass
+  keeps inspecting a held agent's pane; it only skips the wake); `run.screen_hold_max` (default
+  5h, the longest common provider window) since the start; a reading of the provider that
+  releases it as today. The release goes through `release` as today: resume directives, then the
+  field deleted last.
 
 **What a held agent had.** When a hold begins for an agent with work (from either source), the
 dispatcher writes one field of `{p}:held`, fenced: agent → `{provider, since, tasks, branches,
 report}`: its accepted tasks (board), their `branch` field where the board has one, and the id of
 its last report. Master gets one directive per agent and episode (mark `run-held:<agent>`,
 episode the hold's start): `coder is held (anthropic, since
-14:02, reset unknown): accepted wiki-3 (feat/wiki-3). Reassign it, or wait for the reset.` The
+14:02, released when its screen clears, at most 5h): accepted wiki-3 (feat/wiki-3). Reassign it, or wait for the reset.` The
 field is deleted by the release, or by `retire --forget`.
 
 **Master held.** As today: the project pauses until the reset. Added: the person's notice lists
@@ -123,8 +152,8 @@ what is in flight (the same list as §3's stop).
 
 **At the reset.** As today: the release sends each held agent its resume directive and ends
 master's quota pause; a dead agent is relaunched by self-repair with its session resumed. A run in
-`draining` for `quota:<provider>` returns to `running` on that release, since the quota was its
-only reason. A run drained for a duration or deliveries is not resumed by a quota.
+`draining` for `quota:<provider>` (and still that `why`, §3) returns to `running` on that
+release, since the quota was its only reason. A run drained for a duration or deliveries is not resumed by a quota.
 
 ## 5. Commands
 
@@ -133,8 +162,8 @@ agentbus run            # state, elapsed / max, deliveries / max, why, since
 agentbus run reset      # the person only: deletes {p}:run, lifts a kind-run pause
 ```
 
-`run reset` is refused to an agent (`AGENT_BUS_AGENT` set), as `deliver` is refused to a role
-without `delivers`: only the person restarts a run (§8, question 1).
+`run reset` is refused to a caller with `AGENT_BUS_AGENT` set, the same recognition as §3's
+(defence in depth, not a boundary): only the person restarts a run (§8, question 1).
 
 ## 6. Interplay
 
@@ -149,12 +178,16 @@ without `delivers`: only the person restarts a run (§8, question 1).
 ## 7. Tests
 
 - **Duration**: elapsed excludes paused passes; a limit of 3h is reached at 3h of unpaused time;
-  `0` never limits.
+  `0` never limits; a stretch with no dispatcher pass counts as run time.
 - **Deliveries**: a merge, a squash and a rebase-merge each count once; the same head on the next
-  pass does not count again; a pushed head or an open PR does not count; `run reset` restarts at 0.
+  pass does not count again; a pushed head or an open PR does not count. **Baseline**: a new run,
+  or `run reset`, with N approved heads already merged starts at 0, and the next merge counts 1.
 - **Drain**: one master directive and one person notice per run, both emitted (distinct marks: the
   directive written first does not suppress the notice), and neither again on the next pass; `request send` refused to an
   agent, allowed to the person; `team-stall` `ok` with a ready task; `idle-master` still wakes.
+  **A second drain**: a quota drain, its release (`running`), then `max_duration`: `drains` = 2, a
+  second directive and a second notice. **A limit during a quota drain**: `why` becomes the limit,
+  and the quota's release leaves the run `draining`.
 - **Stop**: nothing in flight → kind-run pause; `drain_max` passed with work in flight → pause and
   the notice lists it; a quota release does not lift a kind-run pause; `run reset` lifts it.
 - **Quota, reporting client**: at `quota_warn` each agent on the provider with work gets one
@@ -162,7 +195,10 @@ without `delivers`: only the person restarts a run (§8, question 1).
   `draining` with `quota:<p>`, and its release sets `running`.
 - **Quota, silent client**: a `limit` signature on a settled screen holds the provider; `{p}:held`
   records the agent's accepted tasks and branches; master gets one directive; the release deletes
-  the field; a client without a `limit` signature is never held from its screen.
+  the field; a client without a `limit` signature is never held from its screen. **Screen hold
+  release**: the limit screen, then 3 settled reads without it → released, resume directive sent;
+  a captured `reset` → released at reset + margin; neither → released at `screen_hold_max`; 2
+  settled reads without it then the screen again → still held.
 - **Master held**: the project pauses (as today), and the notice lists the work in flight.
 - Settings in the registry with their env names (registry test).
 
