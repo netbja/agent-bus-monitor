@@ -54,6 +54,7 @@ var keyKinds = map[string]KeyClass{
 	"services": KeyRuntime, "agents": KeyRuntime, "wake:*": KeyRuntime, "handoff": KeyRuntime,
 	"checkback": KeyRuntime, // an agent's own reminder (master-idle §4): what is in flight now
 	"run":       KeyRuntime, // the run budget's count (run-budget §2): a lost one starts a new run with a new baseline
+	"held":      KeyRuntime, // what a held agent had (run-budget §4): beside {p}:quota's hold, which is runtime too
 	"hostops":   KeyRuntime, // the relay's directives by id (herdr exit §4.2): accepted, then their outcome
 	"quota":     KeyRuntime, "pause": KeyRuntime, "fallback": KeyRuntime, "usage": KeyRuntime,
 	"budget": KeyRuntime, "tokens": KeyRuntime, "sessions": KeyRuntime, "doctor": KeyRuntime,

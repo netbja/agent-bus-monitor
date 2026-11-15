@@ -7,7 +7,7 @@ import (
 )
 
 // ForgetAgent removes what the bus holds about one agent: its snapshot,
-// usage and resume record, its check-back, its wake record, armed, gate and receiver keys, and its cmd consumer
+// usage and resume record, its check-back, its held record and login hold, its wake record, armed, gate and receiver keys, and its cmd consumer
 // group. Liveness is passive, so a departed agent otherwise keeps showing its
 // last declared state forever; forgetting is the explicit way to retire it.
 // The streams are history and stay. A dispatcher may recreate an empty group
@@ -22,13 +22,15 @@ func (b *Bus) ForgetAgent(ctx context.Context, agent string) (bool, error) {
 	pipe := b.r.TxPipeline()
 	agents := pipe.HDel(ctx, AgentsKey(p), agent)
 	usage := pipe.HDel(ctx, UsageKey(p), agent)
-	resume := pipe.HDel(ctx, ResumeKey(p), agent)       // only forget clears it (spec 4.7)
-	checkback := pipe.HDel(ctx, CheckbackKey(p), agent) // master-idle §4
+	resume := pipe.HDel(ctx, ResumeKey(p), agent)               // only forget clears it (spec 4.7)
+	checkback := pipe.HDel(ctx, CheckbackKey(p), agent)         // master-idle §4
+	held := pipe.HDel(ctx, HeldKey(p), agent)                   // what it had when held (run-budget §4)
+	login := pipe.HDel(ctx, QuotaKey(p), LoginHoldField(agent)) // its login hold (login-updates r9 §3.6)
 	keys := pipe.Del(ctx, WakeKey(p, agent), ArmedKey(p, agent), GateKey(p, agent), ReceiverKey(p, agent))
 	if _, err := pipe.Exec(ctx); err != nil {
 		return false, err
 	}
-	found := agents.Val()+usage.Val()+resume.Val()+checkback.Val()+keys.Val() > 0
+	found := agents.Val()+usage.Val()+resume.Val()+checkback.Val()+held.Val()+login.Val()+keys.Val() > 0
 	n, err := b.r.XGroupDestroy(ctx, StreamKey(p, "cmd"), agent).Result()
 	if err != nil && !strings.Contains(err.Error(), "no such key") && !strings.Contains(err.Error(), "NOGROUP") {
 		return found, err
