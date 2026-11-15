@@ -78,9 +78,9 @@ type Server struct {
 
 // NewServer checks cfg and becomes a subreaper (Linux). A terminal signal
 // this process was started with ignored is taken back first, so the
-// programs it starts never inherit it (unignoreTermSignals).
+// programs it starts never inherit it (UnignoreTermSignals).
 func NewServer(cfg Config) (*Server, error) {
-	unignoreTermSignals()
+	UnignoreTermSignals()
 	if !bus.ValidName(cfg.Project) {
 		return nil, fmt.Errorf("holder: invalid project %q", cfg.Project)
 	}

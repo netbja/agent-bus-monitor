@@ -50,6 +50,9 @@ import (
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/service"
+	// holder registers the manager where none runs (service.Unmanaged,
+	// herdr exit 6c3): busmon's Detect and Local then see the supervisors.
+	_ "github.com/netbja/agent-bus-monitor/holder"
 	"github.com/redis/go-redis/v9"
 )
 

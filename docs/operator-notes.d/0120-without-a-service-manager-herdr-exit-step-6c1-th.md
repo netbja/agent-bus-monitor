@@ -1,8 +1,8 @@
-- **Without a service manager (herdr exit steps 6c1 and 6c2; `Detect`, `up` and `down` choose it in 6c3, not wired yet).**
+- **Without a service manager (herdr exit steps 6c1, 6c2 and 6c3: detached supervisors).**
   `services.manager` (`auto`, `systemd`, `launchd`, `none`; `MachineOnly`) is the registry key of the
   old `AGENTBUS_SERVICE_MANAGER`: `service.ManagerChoice` reads the environment, then config.toml,
-  and `Detect`, `Local`, `ManagerBin` and `restore` go through it (today `none` still means herdr
-  tabs). `service.Supervisor` is the units' policy for a supervisor process: restart after 2 s on a
+  and `Detect`, `Local`, `ManagerBin` and `restore` go through it (since 6c3 `none` means detached
+  supervisors, below). `service.Supervisor` is the units' policy for a supervisor process: restart after 2 s on a
   non-zero exit, at most 5 starts in 300 s (judged when the next start really happens, after the
   wait: a wait that overran may have freed the window; reviewer-codex), an exit 0 is final, a stop sends the service SIGTERM; `AfterExit` runs after each exit.
   A holder with `Config.Pgids` set rewrites `<rundir>/agentbus/<p>/holder-<key>.pgids`
@@ -34,4 +34,24 @@
   (no start time, nothing judged). `agentbus service supervise` (`supervisecmd.go`) runs
   `service.Supervisor` on `holder --env <file> --record-groups` (the holder then sets `Config.Pgids`)
   and, after each exit, `KillRecordedGroups` with the cutoff taken first and the run directory the
-  holder's env file gives it; it exits 1 when it gave up. Only the holder kind is accepted yet.
+  holder's env file gives it; it exits 1 when it gave up.
+  6c3 wires it: `holder.Supervised` is also a whole `service.Manager` (`Name` `supervisor`), which
+  package `holder` registers as `service.Unmanaged` at init, on Linux only (`service` cannot import
+  `holder`; elsewhere there is no start-time reader yet, so a macOS `none` keeps the old answer, no
+  manager and herdr tabs, as does a binary that does not link `holder`). `Detect` returns it for
+  `services.manager = none`, and for `auto` on a system with neither: a Linux not booted with systemd
+  (`/run/systemd/system` absent) or another system. A systemd that runs but whose user instance does not
+  answer (an ssh session without its bus) stays an error: never a second dispatcher beside the units.
+  `up` then installs dispatch and missions as records, one per project like their units
+  (`<rundir>/agentbus/<p>/<kind>.pid`, same checks and lock, one `arg` line per argument), and `Start`
+  spawns `<exe> --project <p> service supervise <kind> <p>`, which runs the unit's own command
+  (`Spec.Argv`, never `--stderr`) under the same policy, killing no group. Every detached supervisor,
+  the holder's too, starts with a unit's environment (`unitEnv`: PATH, HOME, user, locale, the XDG
+  directories), never the agent or pane variables of the shell that ran `up`. `down`, `service`,
+  `suspend`, `restore` and the health checks reach it through `Detect`; `--tabs` still forces herdr tabs.
+  `service.Detached` (`Limits`) states what does not exist: `services.start_at_login` is refused with it
+  (`LoginStartOf`), and `service status` prints it with each service's supervisor log, which `service
+  logs` shows too. `service supervise` calls `holder.UnignoreTermSignals` first (spec revision 26): under
+  `nohup`, nothing below inherits an ignored SIGHUP (`TestSuperviseUnderNohup`). busmon links `holder`
+  by a blank import in `cmd/busmon/main.go` for this registration alone (its test names the manager
+  without importing `holder`, which would link it into the test binary and prove nothing).

@@ -284,3 +284,65 @@ func TestDetectReadsServicesManagerFromTheFile(t *testing.T) {
 		t.Fatal("ManagerBin ignores the file")
 	}
 }
+
+// fakeUnmanaged is the manager registered for no manager (holder.Supervised
+// in the binaries), set for one test.
+type fakeUnmanaged struct{ Manager }
+
+func (fakeUnmanaged) Name() string { return "supervisor" }
+
+func withUnmanaged(t *testing.T, booted bool) {
+	t.Helper()
+	oldU, oldB := Unmanaged, systemdBooted
+	Unmanaged = func(Paths, func(string) string) Manager { return fakeUnmanaged{} }
+	systemdBooted = func() bool { return booted }
+	t.Cleanup(func() { Unmanaged, systemdBooted = oldU, oldB })
+}
+
+// herdr exit 6c3 (spec 4.4b): services.manager = none, and auto on a system
+// with neither systemd nor launchd, give the registered manager without one;
+// a systemd that runs but whose user instance does not answer (an ssh
+// session without its bus) is still an error, never a second set of
+// services beside the units.
+func TestDetectWithoutAManager(t *testing.T) {
+	none := func(k string) string { return map[string]string{"AGENTBUS_SERVICE_MANAGER": "none"}[k] }
+	auto := func(string) string { return "" }
+	ok := &fakeRun{}
+	down := &fakeRun{fails: map[string]bool{"--user": true}}
+
+	withUnmanaged(t, false)
+	for name, c := range map[string]struct {
+		goos   string
+		run    *fakeRun
+		getenv func(string) string
+	}{
+		"forced none":     {"linux", ok, none},
+		"forced on macOS": {"darwin", ok, none},
+		"no systemd":      {"linux", down, auto},
+		"another system":  {"freebsd", ok, auto},
+	} {
+		if m, why := Detect(c.goos, c.run.run, c.getenv); m == nil || m.Name() != "supervisor" || why != "" {
+			t.Errorf("%s: %v (%s)", name, m, why)
+		}
+		if m, err := Local(c.goos, c.run.run, c.getenv); err != nil || m == nil || m.Name() != "supervisor" {
+			t.Errorf("%s: Local %v, %v", name, m, err)
+		}
+	}
+
+	withUnmanaged(t, true)
+	if m, why := Detect("linux", down.run, auto); m != nil || !strings.Contains(why, "systemd --user") {
+		t.Fatalf("systemd booted, user instance down: %v (%s)", m, why)
+	}
+	if m, err := Local("linux", down.run, auto); m != nil || err == nil {
+		t.Fatalf("Local, systemd booted, user instance down: %v, %v", m, err)
+	}
+	if m, _ := Detect("linux", ok.run, auto); m == nil || m.Name() != "systemd" {
+		t.Fatalf("systemd answering: %v", m)
+	}
+	// A forced systemd that does not answer stays an error.
+	withUnmanaged(t, false)
+	sd := func(k string) string { return map[string]string{"AGENTBUS_SERVICE_MANAGER": "systemd"}[k] }
+	if m, _ := Detect("linux", down.run, sd); m != nil {
+		t.Fatalf("forced systemd, down: %v", m)
+	}
+}

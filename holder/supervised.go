@@ -110,6 +110,11 @@ func (m Supervised) lock(project, key string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+	return lockRecord(path)
+}
+
+// lockRecord is lock's flock on the lock file beside the record at path.
+func lockRecord(path string) (func(), error) {
 	f, err := os.OpenFile(strings.TrimSuffix(path, ".pid")+".lock", os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("holder: the record's lock: %w", err)
@@ -346,8 +351,8 @@ func (m Supervised) HolderUnits(project string) ([]service.HolderUnit, error) {
 
 // spawnDetached starts argv in its own session (setsid: no terminal, no
 // group of the caller's), stdin /dev/null, stdout and stderr appended to log
-// (0600). It is reaped in the background while the caller lives; once the
-// caller exits, init adopts it.
+// (0600), with a unit's environment (unitEnv). It is reaped in the
+// background while the caller lives; once the caller exits, init adopts it.
 func spawnDetached(argv []string, dir, log string) (int, error) {
 	out, err := os.OpenFile(log, os.O_CREATE|os.O_APPEND|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
@@ -361,12 +366,32 @@ func spawnDetached(argv []string, dir, log string) (int, error) {
 	defer null.Close()
 	c := exec.Command(argv[0], argv[1:]...)
 	c.Dir, c.Stdin, c.Stdout, c.Stderr = dir, null, out, out
+	c.Env = unitEnv(os.Environ())
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := c.Start(); err != nil {
 		return 0, err
 	}
 	go func() { _ = c.Wait() }()
 	return c.Process.Pid, nil
+}
+
+// unitEnvKeys are the variables a detached supervisor keeps from the shell
+// that ran up: what a user manager gives a unit (the user, the locale, the
+// XDG directories every path is read from). The rest — an agent's name, a
+// pane, a test's broker — is that shell's, never a service's; the service
+// reads its own from its env file, as under systemd.
+var unitEnvKeys = []string{"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR",
+	"XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"}
+
+// unitEnv is environ cut to unitEnvKeys.
+func unitEnv(environ []string) []string {
+	var out []string
+	for _, kv := range environ {
+		if k, _, ok := strings.Cut(kv, "="); ok && slices.Contains(unitEnvKeys, k) {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
 
 // Each record field, in the file's order.

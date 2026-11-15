@@ -312,8 +312,9 @@ var Keys = []*Key{
 	{Name: "dispatch.person_quiet", Env: "AGENT_BUS_PERSON_QUIET", Kind: Duration, Default: 3 * time.Second, ReadBy: "agentbus holder",
 		env: envBoundedDuration(time.Hour), file: fileBoundedDuration(time.Hour)},
 	// The machine's service manager (herdr exit, spec 4.4b): auto (systemd
-	// when systemctl --user answers, launchd on macOS), systemd, launchd or
-	// none. The variable is the one it has always been.
+	// when systemctl --user answers, launchd on macOS, else none), systemd,
+	// launchd or none: detached supervisors (holder.Supervised, 6c3). The
+	// variable is the one it has always been.
 	{Name: "services.manager", Env: "AGENTBUS_SERVICE_MANAGER", Kind: String, Default: "auto", MachineOnly: true,
 		ReadBy: "agentbus up, service, down, health, restore, suspend; busmon",
 		env: func(raw string) (any, envResult) {

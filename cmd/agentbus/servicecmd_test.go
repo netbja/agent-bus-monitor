@@ -252,3 +252,38 @@ func TestServiceLogsShowsACrashWithoutALog(t *testing.T) {
 		t.Fatalf("logs = %d %q %q", code, out.String(), errw.String())
 	}
 }
+
+// detachedFake is a manager whose services run as detached supervisors
+// (holder.Supervised's shape): it states its limits.
+type detachedFake struct{ *fakeManager }
+
+func (detachedFake) Limits() string { return "LIMITS" }
+
+// herdr exit 6c3 (spec 4.4b): without a manager, service status states what
+// does not exist (no start at login, a logout may end the services) and
+// names the supervisor's log, which service logs shows too; service login
+// with the option on is refused with that reason.
+func TestServiceCmdDetachedSaysItsLimits(t *testing.T) {
+	fm, d := cmdFixture(t)
+	d.Manager = detachedFake{fm}
+	fm.Install(service.Spec{Project: "demo", Kind: service.Dispatch})
+	var out, errw bytes.Buffer
+	runServiceCmd("demo", []string{"status"}, d, &out, &errw)
+	slog := d.Paths.SuperviseLog("demo", service.Dispatch)
+	if !strings.Contains(out.String(), "LIMITS") || !strings.Contains(out.String(), "supervisor log: "+slog) {
+		t.Fatalf("status = %q", out.String())
+	}
+	os.MkdirAll(filepath.Dir(slog), 0o700)
+	os.WriteFile(slog, []byte("supervise: dispatch of project demo (pid 7)\n"), 0o600)
+	out.Reset()
+	if code := runServiceCmd("demo", []string{"logs", "dispatch"}, d, &out, &errw); code != 0 ||
+		!strings.Contains(out.String(), "== dispatch supervisor ("+slog+")\nsupervise: dispatch of project demo (pid 7)\n") {
+		t.Fatalf("logs = %d %q %s", code, out.String(), errw.String())
+	}
+	d.AtLogin = func() bool { return true }
+	out.Reset()
+	errw.Reset()
+	if code := runServiceCmd("demo", []string{"login"}, d, &out, &errw); code != 1 || !strings.Contains(errw.String(), "LIMITS") {
+		t.Fatalf("login = %d %q", code, errw.String())
+	}
+}

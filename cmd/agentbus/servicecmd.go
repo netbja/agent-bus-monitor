@@ -255,6 +255,12 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 				fmt.Fprintf(stdout, "          %s\n", describeRecord(r, time.Now()))
 			}
 			fmt.Fprintf(stdout, "          log: %s\n", d.Paths.LogFile(project, k))
+			if _, ok := m.(service.Detached); ok {
+				fmt.Fprintf(stdout, "          supervisor log: %s\n", d.Paths.SuperviseLog(project, k))
+			}
+		}
+		if dm, ok := m.(service.Detached); ok {
+			fmt.Fprintf(stdout, "%s\n", dm.Limits())
 		}
 	case "start":
 		for _, k := range kinds {
@@ -290,7 +296,16 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			// existed has only the crash file.
 			lines, err := service.TailLog(d.Paths.LogFile(project, k), n)
 			crash, cerr := service.TailLog(d.Paths.CrashFile(project, k), 20)
-			if err != nil && cerr != nil {
+			// Without a manager, the supervisor's own lines (its starts, its
+			// giving up) are in a file of their own: a service that never
+			// started has only those.
+			var sup []string
+			serr := os.ErrNotExist
+			slog := d.Paths.SuperviseLog(project, k)
+			if _, ok := m.(service.Detached); ok {
+				sup, serr = service.TailLog(slog, 20)
+			}
+			if err != nil && cerr != nil && serr != nil {
 				fail(k, err)
 				continue
 			}
@@ -303,6 +318,12 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			if cerr == nil && len(crash) > 0 {
 				fmt.Fprintf(stdout, "== %s crash output (%s)\n", k, d.Paths.CrashFile(project, k))
 				for _, l := range crash {
+					fmt.Fprintln(stdout, l)
+				}
+			}
+			if serr == nil && len(sup) > 0 {
+				fmt.Fprintf(stdout, "== %s supervisor (%s)\n", k, slog)
+				for _, l := range sup {
 					fmt.Fprintln(stdout, l)
 				}
 			}
