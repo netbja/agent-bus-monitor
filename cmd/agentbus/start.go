@@ -64,7 +64,7 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 		},
 		Look:    realUpDeps(stdout, stderr).LookPath,
 		Console: runConsole,
-		Trusted:      trust.Reader(os.Getenv),
+		Trusted: trust.Reader(os.Getenv),
 		Live: func(project string) (map[string]relaunch.Life, error) {
 			client, err := bus.Connect("")
 			if err != nil {
@@ -286,7 +286,6 @@ func runStart(args []string, d startDeps) int {
 	}()
 	return d.Console(p.Project, tty)
 }
-
 
 // setProject takes a name the person gave: valid, and never another folder's
 // project; nothing changes on a refusal (foureyes). An existing project of

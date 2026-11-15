@@ -3,14 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // The dispatcher's own end of a done pop (pop-retire-auto): the world of
@@ -185,29 +187,50 @@ func TestPopEndFailsWhenTheCloseFails(t *testing.T) {
 	}
 }
 
-// reviewer-codex: the service's close goes to herdr with a deadline, so a
-// herdr that hangs never holds the dispatcher's pass.
+// reviewer-codex: the service's close goes to the holder with a deadline,
+// so a holder that hangs never holds the dispatcher's pass (herdr exit §4.2:
+// the pane is the terminal's id).
 func TestServiceClosePaneHasADeadline(t *testing.T) {
-	dir := t.TempDir()
-	hang := filepath.Join(dir, "herdr")
-	if err := os.WriteFile(hang, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+	run, err := os.MkdirTemp("/tmp", "abcp")
+	if err != nil {
 		t.Fatal(err)
 	}
-	env := func(k string) string {
-		return map[string]string{"HERDR_SESSION": "s", "HERDR_BIN_PATH": hang}[k]
+	t.Cleanup(func() { os.RemoveAll(run) })
+	if err := os.Chmod(run, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	closePane, err := serviceClosePane(env, 200*time.Millisecond)
+	env := func(k string) string { return map[string]string{"XDG_RUNTIME_DIR": run}[k] }
+	key := service.BuildKey(holder.BuildID())
+	sock, err := holder.SocketPath(env, "demo", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", sock) // answers nothing: a hung holder
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+		}
+	}()
+	closePane, err := serviceClosePane("demo", env, 200*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	if err := closePane(context.Background(), "p1"); err == nil {
-		t.Fatal("a hung herdr closed the pane")
+	if err := closePane(context.Background(), key+"/t1"); err == nil {
+		t.Fatal("a hung holder closed the terminal")
 	}
 	if d := time.Since(start); d > 5*time.Second {
 		t.Fatalf("the close outlived its deadline: %v", d)
 	}
-	if _, err := serviceClosePane(func(string) string { return "" }, time.Second); err == nil {
-		t.Fatal("a close with no herdr session")
+	if _, err := serviceClosePane("Bad Name", env, time.Second); err == nil {
+		t.Fatal("a close for an invalid project")
 	}
 }

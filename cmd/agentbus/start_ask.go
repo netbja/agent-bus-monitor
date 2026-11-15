@@ -19,13 +19,13 @@ import (
 // digit changes that line, q or the end of input quits having written
 // nothing.
 type asker struct {
-	in     *bufio.Reader
-	out    io.Writer
-	m      *rolecfg.Manifest
-	env    func(string) string
-	look   func(exe string) (string, error) // the agent CLI lookup up uses
-	live   map[string]relaunch.Life         // an existing project's agents; nil unknown
-	short  bool                             // an existing project: the short screen until c or a digit
+	in    *bufio.Reader
+	out   io.Writer
+	m     *rolecfg.Manifest
+	env   func(string) string
+	look  func(exe string) (string, error) // the agent CLI lookup up uses
+	live  map[string]relaunch.Life         // an existing project's agents; nil unknown
+	short bool                             // an existing project: the short screen until c or a digit
 
 	chosenTeam bool // the person changed the team: start.team follows
 }

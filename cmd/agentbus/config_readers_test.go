@@ -189,20 +189,19 @@ func TestServicePopRetire(t *testing.T) {
 func TestWithPopEnd(t *testing.T) {
 	missions := func(context.Context, string) ([]string, error) { return nil, nil }
 	c := servicePopRetire(withConfig(t, "", nil), missions)
-	if withPopEnd(c, nil, nil, func(string) string { return "" }).End != nil {
-		t.Error("an End with no herdr session named")
+	env := func(string) string { return "" }
+	if withPopEnd(c, nil, nil, env).End != nil {
+		t.Error("an End with no project's bus")
 	}
-	env := func(k string) string {
-		if k == "HERDR_SESSION" {
-			return "agent-bus-monitor"
-		}
-		return ""
+	b, err := bus.Open(nil, "agent-bus-monitor")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if withPopEnd(c, nil, nil, env).End == nil {
-		t.Error("no End with a herdr session")
+	if withPopEnd(c, b, nil, env).End == nil { // the pop's terminal closes on the project's holder
+		t.Error("no End for a project")
 	}
 	off := servicePopRetire(withConfig(t, "[dispatch]\npop_retire = false\n", nil), missions)
-	if withPopEnd(off, nil, nil, env).End != nil {
+	if withPopEnd(off, b, nil, env).End != nil {
 		t.Error("an End with pop_retire off")
 	}
 }
