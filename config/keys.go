@@ -266,6 +266,11 @@ var Keys = []*Key{
 		env: envStallDuration, file: fileDuration(true)},
 	{Name: "dispatch.checkback_max", Env: "AGENT_BUS_CHECKBACK_MAX", Kind: Int, Default: 3, ReadBy: "dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 never tells the person")},
+	// Claude Code's login expiry (login-updates spec r9 §3.4): a login that
+	// expires within this warns the person once per agent and expiry; 0 turns
+	// warnings off (an expired login still fails).
+	{Name: "dispatch.login_expiry_warn", Env: "AGENT_BUS_LOGIN_EXPIRY_WARN", Kind: Duration, Default: 72 * time.Hour, ReadBy: "dispatch",
+		env: envNonNegativeDuration, file: fileDuration(true)},
 	// The run budget (spec 2026-11-15-run-budget-design.md §3): a run stops
 	// by itself after this much unpaused time, or this many deliveries; 0
 	// is no limit (the default). Step 1 only shows them (agentbus run); the

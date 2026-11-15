@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/loginexpiry"
 )
 
 // Login expiry (spec docs/superpowers/specs/2026-11-15-login-updates-design.md
@@ -18,9 +20,18 @@ type LoginConfig struct {
 	ClaudeExpired func(now time.Time) (time.Time, bool)
 	Every         time.Duration  // how often the sources are read; 0: a minute
 	Zone          *time.Location // the host's zone, for the day and the time shown; nil: time.Local
+	// Credentials reads one Claude config directory's login expiry ("" the
+	// default directory), loginexpiry.Read (r9 §3); nil: not read.
+	Credentials func(configDir string, now time.Time) (time.Time, loginexpiry.Reason)
+	// Checked: the client has a fixed login expiry (its profile's [login]
+	// source); its agents are read.
+	Checked func(client string) bool
+	// Warn is dispatch.login_expiry_warn, read at each pass (0: no warning);
+	// nil: DefaultLoginExpiryWarn.
+	Warn func() time.Duration
 }
 
-func (c LoginConfig) on() bool { return c.ClaudeExpired != nil }
+func (c LoginConfig) on() bool { return c.ClaudeExpired != nil || c.Credentials != nil }
 
 // loginExpiredMark is the {p}:quota once-mark of a client's expiry notice;
 // its episode is the host's local date: one notice per client per day.
@@ -56,6 +67,14 @@ func (l *loop) loginPass(ctx context.Context) error {
 	now, err := l.b.ServerTime(ctx)
 	if err != nil {
 		return err
+	}
+	if c.Credentials != nil {
+		if err := l.credentialsPass(ctx, now, zone); err != nil {
+			return err
+		}
+	}
+	if c.ClaudeExpired == nil {
+		return nil
 	}
 	at, expired := c.ClaudeExpired(now)
 	if !expired {
