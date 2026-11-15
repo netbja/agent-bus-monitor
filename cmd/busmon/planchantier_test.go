@@ -202,3 +202,29 @@ func TestPlanBoardGroupsOtherBeforeFinished(t *testing.T) {
 		t.Fatalf("herdr %d, other %d, work %d:\n%s", hi, oi, wi, v.plain)
 	}
 }
+
+// §3 (foureyes, B3): only an approved row still in review fills the bar's
+// "nearly done" cells; a row in review without an approval stays muted.
+func TestPlanBoardGroupBarApprovedOnly(t *testing.T) {
+	approved := boardRow("a", plan.InReview, "coder")
+	approved.Verdict = plan.Approved
+	p := boardPlan(
+		inGroup(boardRow("d", plan.Done, "coder"), "g"),
+		inGroup(approved, "g"),
+		inGroup(boardRow("r", plan.InReview, "coder"), "g"),
+		inGroup(boardRow("u", plan.Upcoming, "coder"), "g"),
+	)
+	p.file.Groups = []plan.Group{{ID: "g", Title: "G"}}
+	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
+	_, gi := lineWith(v, "G ")
+	var cells []Role
+	for _, s := range v.lines[gi] {
+		for range strings.Count(s.Text, GlyphThinBar) {
+			cells = append(cells, s.Role)
+		}
+	}
+	_, reviewRole := planLook(plan.InReview)
+	if len(cells) != 20 || cells[4] != RoleDone || cells[5] != reviewRole || cells[9] != reviewRole || cells[10] != RoleMuted {
+		t.Fatalf("bar cells %v", cells)
+	}
+}

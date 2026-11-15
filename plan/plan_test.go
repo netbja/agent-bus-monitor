@@ -89,9 +89,21 @@ func TestParseGroups(t *testing.T) {
 	if len(f.Groups) != 1 || f.Groups[0] != (Group{ID: "herdr-exit", Title: "Leave herdr"}) || f.Tasks[0].Group != "herdr-exit" || f.Tasks[1].Group != "" {
 		t.Fatalf("got %+v", f)
 	}
-	var many []string
-	for i := 0; i < 13; i++ {
-		many = append(many, fmt.Sprintf(`{"id": "g%d", "title": "G"}`, i))
+	// 13 groups, each with its task: refused by the maximum alone
+	// (foureyes, P1); 12 are accepted.
+	manyGroups := func(n int) string {
+		var gs, ts []string
+		for i := 0; i < n; i++ {
+			gs = append(gs, fmt.Sprintf(`{"id": "g%d", "title": "G"}`, i))
+			ts = append(ts, fmt.Sprintf(`{"id": "t%d", "title": "T", "owner": "coder", "group": "g%d"}`, i, i))
+		}
+		return `{"plan": "v0.29", "goal": "g", "groups": [` + strings.Join(gs, ", ") + `], "tasks": [` + strings.Join(ts, ", ") + `]}`
+	}
+	if _, err := Parse([]byte(manyGroups(12))); err != nil {
+		t.Fatalf("12 groups: %v", err)
+	}
+	if _, err := Parse([]byte(manyGroups(13))); err == nil || !strings.Contains(err.Error(), "at most 12 groups") {
+		t.Fatalf("13 groups: %v", err)
 	}
 	for name, data := range map[string]string{
 		"unknown group":  grouped(`{"id": "herdr-exit", "title": "Leave herdr"}`, "self-repair"),
@@ -100,7 +112,6 @@ func TestParseGroups(t *testing.T) {
 		"41-char title":  grouped(`{"id": "herdr-exit", "title": "`+strings.Repeat("x", 41)+`"}`, "herdr-exit"),
 		"empty title":    grouped(`{"id": "herdr-exit", "title": ""}`, "herdr-exit"),
 		"two-line title": grouped(`{"id": "herdr-exit", "title": "a\nb"}`, "herdr-exit"),
-		"13 groups":      grouped(strings.Join(many, ", "), "g0"),
 		"an empty group": grouped(`{"id": "herdr-exit", "title": "A"}, {"id": "self-repair", "title": "B"}`, "herdr-exit"),
 		"group, no list": `{"plan": "v0.29", "goal": "g", "tasks": [{"id": "a", "title": "A", "owner": "coder", "group": "x"}]}`,
 		"unknown field":  `{"plan": "v0.29", "goal": "g", "groups": [{"id": "x", "title": "X", "owner": "coder"}], "tasks": [{"id": "a", "title": "A", "owner": "coder", "group": "x"}]}`,
