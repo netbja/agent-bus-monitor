@@ -152,6 +152,15 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	if promptWaiting(a) {
 		add("prompt", RoleAttention, 1, 0)
 	}
+	if a.host.blocked { // on a holder: the dispatcher saw its client's prompt (spec 4.3a)
+		add("blocked", RoleError, 1, 1)
+	}
+	if a.host.draft { // a line typed in its input, not sent (spec 4.5)
+		add("draft", RoleAttention, 2, 0)
+	}
+	if a.host.skip != "" { // background work made the dispatcher skip an action (spec 4.3b)
+		add("bg work", RoleMuted, 6, 0)
+	}
 	if a.forYou {
 		add("for you", RoleAttention, 2, 0)
 	}
