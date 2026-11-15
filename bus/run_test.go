@@ -148,3 +148,14 @@ func TestRunPausedTime(t *testing.T) {
 		t.Fatalf("elapsed %s: want about 10m, the one gap counted as run time", e)
 	}
 }
+
+// The run's counts are parsed as int without a narrowing conversion
+// (CodeQL): a value out of range, negative or not a number reads 0.
+func TestParseRunCounts(t *testing.T) {
+	for raw, want := range map[string]int{"7": 7, "0": 0, "-5": 0, "99999999999999999999999": 0, "x": 0, "": 0} {
+		r := parseRun(map[string]string{"deliveries": raw, "drains": raw})
+		if r.Deliveries != want || r.Drains != want {
+			t.Errorf("%q: deliveries %d, drains %d, want %d", raw, r.Deliveries, r.Drains, want)
+		}
+	}
+}

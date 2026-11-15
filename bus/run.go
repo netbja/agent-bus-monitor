@@ -60,8 +60,17 @@ func (b *Bus) Run(ctx context.Context) (*RunRecord, error) {
 
 func parseRun(h map[string]string) *RunRecord {
 	n := func(k string) int64 { v, _ := strconv.ParseInt(h[k], 10, 64); return v }
-	r := &RunRecord{StartedAt: n("started_at"), PausedMs: n("paused_ms"), SeenAt: n("seen_at"), Deliveries: int(n("deliveries")),
-		State: h["state"], Since: n("since"), Why: h["why"], Drains: int(n("drains")), Counted: map[string]bool{}}
+	// Counts are parsed as int (no narrowing conversion, CodeQL): out of
+	// range, negative or not a number reads 0.
+	count := func(k string) int {
+		v, err := strconv.Atoi(h[k])
+		if err != nil || v < 0 {
+			return 0
+		}
+		return v
+	}
+	r := &RunRecord{StartedAt: n("started_at"), PausedMs: n("paused_ms"), SeenAt: n("seen_at"), Deliveries: count("deliveries"),
+		State: h["state"], Since: n("since"), Why: h["why"], Drains: count("drains"), Counted: map[string]bool{}}
 	for k := range h {
 		if head, ok := strings.CutPrefix(k, "d:"); ok {
 			r.Counted[head] = true
