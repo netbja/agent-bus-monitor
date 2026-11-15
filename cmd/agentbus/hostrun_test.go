@@ -50,6 +50,8 @@ func TestHostRunnerArgsPerOp(t *testing.T) {
 		{bus.HostOp{Op: bus.HostSuspend, From: "master"}, nil},
 		{bus.HostOp{Op: bus.HostResume, From: "master"}, nil},
 		{bus.HostOp{Op: bus.HostRetire, Agent: "architect", From: "master"}, []string{"architect"}},
+		{bus.HostOp{Op: bus.HostRetire, Agent: "security", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
+			[]string{"security", "--forget", "--episode", "1793647000000", "--reason", "work done"}},
 		{bus.HostOp{Op: bus.HostDrain, From: "master"}, []string{"demo"}},
 	}
 	for _, c := range cases {

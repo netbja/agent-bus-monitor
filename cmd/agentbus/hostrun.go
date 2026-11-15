@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,12 @@ func (h hostRunner) args(o bus.HostOp) []string {
 		a = append(a, "--profile", o.Profile)
 	case o.Op == bus.HostSwap:
 		a = append(a, "--back")
+	}
+	if o.Forget {
+		a = append(a, "--forget", "--episode", strconv.FormatInt(o.Episode, 10))
+	}
+	if o.Reason != "" {
+		a = append(a, "--reason", o.Reason)
 	}
 	return a
 }

@@ -22,6 +22,10 @@ func TestHostOpFromArgs(t *testing.T) {
 		{[]string{"swap", "coder", "--profile", "kimi"}, "env", bus.HostOp{Op: bus.HostSwap, Agent: "coder", Profile: "kimi", From: "coder"}},
 		{[]string{"swap", "coder", "--back"}, "env", bus.HostOp{Op: bus.HostSwap, Agent: "coder", From: "coder"}},
 		{[]string{"retire", "architect"}, "env", bus.HostOp{Op: bus.HostRetire, Agent: "architect", From: "coder"}},
+		// What the dispatcher tells master to run for a done pop (foureyes on 10b).
+		{[]string{"retire", "security", "--forget", "--episode", "1793647000000", "--reason", "work done"}, "env",
+			bus.HostOp{Op: bus.HostRetire, Agent: "security", Forget: true, Episode: 1793647000000, Reason: "work done", From: "coder"}},
+		{[]string{"retire", "security", "--reason", "done"}, "env", bus.HostOp{Op: bus.HostRetire, Agent: "security", Reason: "done", From: "coder"}},
 		{[]string{"suspend"}, "env", bus.HostOp{Op: bus.HostSuspend, From: "coder"}},
 		{[]string{"suspend", "--project", "other"}, "other", bus.HostOp{Op: bus.HostSuspend, From: "coder"}},
 		{[]string{"resume"}, "env", bus.HostOp{Op: bus.HostResume, From: "coder"}},
@@ -43,7 +47,7 @@ func TestHostOpFromArgsElse(t *testing.T) {
 			t.Errorf("%q: relayed (%v, %v), want run as it is", args, ok, err)
 		}
 	}
-	for _, args := range [][]string{{"reload", "coder", "--fresh"}, {"retire", "architect", "--now"}, {"swap", "coder"}, {"up", "demo", "--resume"}, {"pop"}, {"holder", "drain", "demo", "--ignore-background"}} {
+	for _, args := range [][]string{{"reload", "coder", "--fresh"}, {"retire", "architect", "--now"}, {"retire", "security", "--forget", "--episode", "x1"}, {"retire", "security", "--forget"}, {"swap", "coder"}, {"up", "demo", "--resume"}, {"pop"}, {"holder", "drain", "demo", "--ignore-background"}} {
 		_, _, ok, err := hostOpFromArgs(args, "env", "coder")
 		if !ok || err == nil || !strings.Contains(err.Error(), "inside an agent's terminal") {
 			t.Errorf("%q: got ok=%v err=%v, want a refusal", args, ok, err)

@@ -46,7 +46,8 @@ preview), and only the person types into it.
 terminal send the dispatcher a host directive; it runs them with you as the caller, under each
 command's own rules, and the command prints `accepted by the dispatcher` (its outcome follows as a
 reply). Only the words the relay carries pass: `pop <role> [--profile p]`, `swap <role> (--profile p
-| --back)`, the others bare; `--reason`, `--now`, `--fresh` and the like are refused, never dropped.
+| --back)`, `retire <role> [--forget --episode <ms>] [--reason <text>]` (the end of a done pop the
+dispatcher asks you for), the others bare; `--reason`, `--now`, `--fresh` and the like are refused, never dropped.
 With the dispatcher down, the command fails after 5 s and nothing is done: start it
 (`agentbus service start dispatch`) or ask the person to run the command from their shell. The
 person's commands (`suspend`, the resume of a suspended project, `holder drain`) are refused from

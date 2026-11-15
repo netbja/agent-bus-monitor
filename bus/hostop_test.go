@@ -24,6 +24,10 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostPop, Agent: "docs", From: "master"},
 		{Op: HostRetire, Agent: "docs", From: "master", IgnoreBackground: true},
 		{Op: HostSuspend, From: "master"}, {Op: HostResume, From: "master"}, {Op: HostDrain, From: "master"},
+		// retire --forget, what the dispatcher tells master to run (foureyes on 10b)
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000},
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "done here"},
 	}
 	for _, o := range ok {
 		if err := o.Validate(); err != nil {
@@ -38,6 +42,13 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRelaunch, Agent: "coder", Profile: "x", From: "master"}, // a profile outside swap and pop
 		{Op: HostSwap, Agent: "coder", Profile: "a b", From: "master"},
 		{Op: HostRelaunch, Agent: "coder", From: ""},
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true},                                 // --forget needs its episode
+		{Op: HostRetire, Agent: "docs", From: "master", Episode: 17},                                  // an episode only with --forget
+		{Op: HostReload, Agent: "docs", From: "sentinel", Forget: true, Episode: 17},                  // forget is retire's
+		{Op: HostReload, Agent: "docs", From: "sentinel", Reason: "x"},                                // a reason is retire's
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\nb"},                               // one line
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\x1b[2Jb"},                          // no control character
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: strings.Repeat("x", HostReasonMax+1)}, // capped
 	}
 	for _, o := range bad {
 		if err := o.Validate(); err == nil {
@@ -333,5 +344,24 @@ func TestHostOpsPrune(t *testing.T) {
 	sort.Strings(left)
 	if strings.Join(left, " ") != "1-4 1-5 1-6" {
 		t.Fatalf("left %v, want the unfinished and the recent", left)
+	}
+}
+
+// retire --forget's words travel with the directive and come back as written.
+func TestHostOpRetireForgetRoundTrip(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	o := HostOp{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"}
+	if _, err := b.SendHostOp(ctx, o); err != nil {
+		t.Fatal(err)
+	}
+	ops, _, err := b.HostOpsAfter(ctx, "0-0")
+	if err != nil || len(ops) != 1 {
+		t.Fatalf("read %v, %v", ops, err)
+	}
+	got := ops[0]
+	got.ID = ""
+	if got != o {
+		t.Fatalf("read %+v, want %+v", got, o)
 	}
 }

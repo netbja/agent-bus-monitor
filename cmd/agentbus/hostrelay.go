@@ -130,6 +130,19 @@ func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, proje
 		if o.Op == bus.HostPop || o.Op == bus.HostSwap {
 			words, o.Profile = extractFlag(words, "--profile")
 		}
+		if o.Op == bus.HostRetire { // --forget: what the dispatcher tells master to run for a done pop
+			var episode string
+			words, o.Forget = extractBool(words, "--forget")
+			words, episode = extractFlag(words, "--episode")
+			words, o.Reason = extractFlag(words, "--reason")
+			if episode != "" {
+				n, err := strconv.ParseInt(episode, 10, 64)
+				if err != nil || n <= 0 {
+					return o, project, true, relayRefusal(args[0], relayWords[bus.HostRetire]+" (--episode is a positive number)")
+				}
+				o.Episode = n
+			}
+		}
 		if o.Op == bus.HostSwap {
 			var back bool
 			words, back = extractBool(words, "--back")
@@ -171,7 +184,7 @@ func hostOpFromArgs(args []string, envProject, self string) (o bus.HostOp, proje
 // relayWords: what each relayed command takes from inside a terminal.
 var relayWords = map[string]string{
 	bus.HostUp: "up <project>", bus.HostPop: "pop <role> [--profile <profile>]", bus.HostReload: "reload <role>",
-	bus.HostRetire: "retire <role>", bus.HostSwap: "swap <role> (--profile <profile> | --back)",
+	bus.HostRetire: "retire <role> [--forget --episode <ms>] [--reason <text>]", bus.HostSwap: "swap <role> (--profile <profile> | --back)",
 	bus.HostSuspend: "suspend [--project <p>]", bus.HostResume: "resume", bus.HostDrain: "holder drain <project>",
 }
 
