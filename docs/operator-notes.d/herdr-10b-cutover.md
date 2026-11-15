@@ -4,11 +4,11 @@
   (the identity guard, `idea set`, `deliver`'s role check and the launcher's bind read it; `env_refs` may not
   set `AGENTBUS_*`), never `HERDR_PANE_ID`; these person-only checks read the caller's own environment, so
   they stop mistakes, not an agent that unsets the variables: only the holder's in-tree peer check is enforced
-  (security S10b-1). Inside a terminal, `up`, `pop`, `reload`, `swap`, `retire`,
+  (security S10b-1). Inside a terminal, `up` is refused at once (the person's command; the relay's sender is
+  self-attested, so no up is relayed, and the dispatcher refuses a host `up` from anyone: reviewer-codex;
+  `up --dry-run` runs, it starts nothing), and `pop`, `reload`, `swap`, `retire`,
   `suspend`, `resume` (with no words) and `holder drain` go through the dispatcher (`relayFromTerminal`): only
-  the words the closed set carries (`up <project> --resume`, run only for master, the form its rules allow,
-  any other up being the person's from their shell (reviewer-codex); `up --dry-run` is not relayed;
-  `pop --profile`, `swap --profile|--back`, `retire --forget --episode <ms>
+  the words the closed set carries (`pop --profile`, `swap --profile|--back`, `retire --forget --episode <ms>
   --reason <text>`, the end of a done pop the dispatcher asks master for; a reason is one line of at most 120
   characters, never starting with `-` (security S10b-4), recorded, never run), anything else (`--fresh`,
   `--now`, a `--reason` outside retire…) refused with exit 2, never dropped; the service runs the op in-process with the

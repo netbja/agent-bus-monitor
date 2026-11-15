@@ -47,11 +47,11 @@ func (h hostRunner) Run(ctx context.Context, _ string, o bus.HostOp) (string, st
 		return bus.HostRefused, "relaunch: no such command since the herdr exit: reload <role> relaunches an agent"
 	case ownTerminal[o.Op] && o.Agent == o.From:
 		return bus.HostRefused, o.Op + " " + o.Agent + ": an agent cannot " + o.Op + " itself from its own terminal: master or a person runs it"
-	case o.Op == bus.HostUp && (o.From != "master" || !o.Resume):
-		// up bootstraps a project and starts its team, a person's gesture
-		// with no caller check of its own; relayed, only master's up
-		// --resume, the one form its tool rules allow (reviewer-codex).
-		return bus.HostRefused, "up: from an agent's terminal only master's up <project> --resume runs; the person runs any other up from their own shell"
+	case o.Op == bus.HostUp:
+		// up bootstraps a project and starts its team, the person's gesture
+		// with no caller check of its own, and the sender is self-attested:
+		// never run from the relay (reviewer-codex on 10b).
+		return bus.HostRefused, "up: the person's command, run from their own shell; never through the relay"
 	case o.IgnoreBackground: // security S10a-3: the person's only, and the sender is self-attested
 		return bus.HostRefused, o.Op + ": --ignore-background is the person's, from their own shell: the relay never honours it"
 	}
@@ -84,9 +84,6 @@ func (h hostRunner) args(o bus.HostOp) []string {
 		a = append(a, "--profile", o.Profile)
 	case o.Op == bus.HostSwap:
 		a = append(a, "--back")
-	}
-	if o.Resume {
-		a = append(a, "--resume")
 	}
 	if o.Forget {
 		a = append(a, "--forget", "--episode", strconv.FormatInt(o.Episode, 10))

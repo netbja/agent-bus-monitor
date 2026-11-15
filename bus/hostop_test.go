@@ -28,7 +28,6 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000},
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "done here"},
-		{Op: HostUp, From: "master", Resume: true}, // master's up --resume (reviewer-codex on 10b)
 	}
 	for _, o := range ok {
 		if err := o.Validate(); err != nil {
@@ -47,7 +46,6 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRetire, Agent: "docs", From: "master", Episode: 17},                                  // an episode only with --forget
 		{Op: HostReload, Agent: "docs", From: "sentinel", Forget: true, Episode: 17},                  // forget is retire's
 		{Op: HostReload, Agent: "docs", From: "sentinel", Reason: "x"},
-		{Op: HostPop, Agent: "docs", From: "master", Resume: true}, // --resume is up's
 		// a reason is a value, never a flag: "--now" would retire mid-turn (security S10b-4)
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "--now"},
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 17, Reason: "-x"},                                // a reason is retire's
@@ -358,7 +356,6 @@ func TestHostOpRetireForgetRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	sent := []HostOp{
 		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
-		{Op: HostUp, From: "master", Resume: true},
 	}
 	for _, o := range sent {
 		if _, err := b.SendHostOp(ctx, o); err != nil {

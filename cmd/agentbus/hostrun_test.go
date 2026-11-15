@@ -41,7 +41,6 @@ func TestHostRunnerArgsPerOp(t *testing.T) {
 		op   bus.HostOp
 		want []string
 	}{
-		{bus.HostOp{Op: bus.HostUp, From: "master", Resume: true}, []string{"demo", "--resume"}},
 		{bus.HostOp{Op: bus.HostPop, Agent: "architect", From: "master"}, []string{"architect"}},
 		{bus.HostOp{Op: bus.HostPop, Agent: "architect", Profile: "opus", From: "master"}, []string{"architect", "--profile", "opus"}},
 		{bus.HostOp{Op: bus.HostReload, Agent: "coder", From: "sentinel"}, []string{"coder"}},
@@ -100,10 +99,10 @@ func TestHostRunnerRefusesBeforeRunning(t *testing.T) {
 		{Op: bus.HostDrain, From: "master", IgnoreBackground: true},
 		{Op: bus.HostRelaunch, Agent: "coder", From: "master"},
 		{Op: "format-disk", From: "master"},
-		// up bootstraps and starts a project: relayed, only master's up --resume
-		// (its tool rules' form), never an agent's and never a bare up (reviewer-codex on 10b).
-		{Op: bus.HostUp, From: "coder", Resume: true},
+		// up bootstraps and starts a project, the person's gesture: never run
+		// from the relay, whose sender is self-attested (reviewer-codex on 10b).
 		{Op: bus.HostUp, From: "master"},
+		{Op: bus.HostUp, From: "coder"},
 		{Op: bus.HostRetire, Agent: "architect", From: "master", Reason: "--now"}, // security S10b-4
 	} {
 		var calls []call

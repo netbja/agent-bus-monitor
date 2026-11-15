@@ -42,11 +42,10 @@ You never write to a terminal. The person sees one with `agentbus attach <agent>
 preview), and only the person types into it.
 
 ### Host commands from your terminal go through the dispatcher
-`up`, `pop`, `reload`, `swap`, `retire`, `suspend`, `resume` and `holder drain` run from your
+`pop`, `reload`, `swap`, `retire`, `suspend`, `resume` and `holder drain` run from your
 terminal send the dispatcher a host directive; it runs them with you as the caller, under each
 command's own rules, and the command prints `accepted by the dispatcher` (its outcome follows as a
-reply). Only the words the relay carries pass: `up <project> --resume` (yours alone; any other `up` is the
-person's), `pop <role> [--profile p]`, `swap <role> (--profile p
+reply). Only the words the relay carries pass: `pop <role> [--profile p]`, `swap <role> (--profile p
 | --back)`, `retire <role> [--forget --episode <ms>] [--reason <text>]` (the end of a done pop the
 dispatcher asks you for), the others bare; `--reason`, `--now`, `--fresh` and the like are refused, never dropped.
 With the dispatcher down, the command fails after 5 s and nothing is done: start it
@@ -605,7 +604,9 @@ human, and the v0.7 rule applies again from your next wake.
 
 Being armed is not being alive: your terminal can die with the lease still held and the subscribe
 gone. The person's recovery path does not go through the bus — they attach to your terminal
-(`agentbus attach master`), or `agentbus up <project> --resume` starts you again. When the work is genuinely over, end the team deliberately with
+(`agentbus attach master`), or they run `agentbus up <project> --resume` from their own shell. `up` is
+the person's: from your terminal it is refused (only `up --dry-run` runs there); a dead peer comes
+back by the dispatcher's self-repair, or ask the person. When the work is genuinely over, end the team deliberately with
 `agentbus shutdown` rather than letting it decay into an unreachable silence.
 
 Wake a peer because there is work for it, not to check on it. Its silence is not a fault to
