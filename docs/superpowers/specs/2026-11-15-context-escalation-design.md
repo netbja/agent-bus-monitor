@@ -1,6 +1,7 @@
 # The context alert gets teeth (context-escalation)
 
-Status: spec, r5 (r4 reviewer-codex: the compaction notice needs a `compact_boundary` after the
+Status: spec, r6 (r5 reviewer-codex: `used_percentage` is rounded, so every comparison with the
+ceiling keeps half a point of headroom, §4.3). r5 (r4 reviewer-codex: the compaction notice needs a `compact_boundary` after the
 alert, §3.5). r4 (r3 foureyes: the `below-compaction` notice gets a writer, the dispatcher; the
 ceiling is compared in tokens, never a share of one window against a share of another, §4.3).
 Task `context-escalation-r3` (master's directive of 2026-11-15, after the person's
@@ -204,7 +205,8 @@ measures instead (§4.2) and bounds (§4.3).
   automatic compaction of a session of that agent on the same `Window` (kept in `{p}:context` as
   `compact_tokens`; absent until one happened).
 - A fill in tokens is `Pct × Window / 100`: `used_percentage` is a share of `context_window_size`
-  (§4.1), so this conversion is exact.
+  (§4.1), **rounded to a whole point**, so the conversion is exact to within half a point of the
+  window (`0.005 × Window` tokens) either way.
 
 ### 4.3 Bound, compared in tokens
 
@@ -227,10 +229,12 @@ below is in tokens.
   (§4.2), and `compact_at / 100 × compact_window` when the agent published both. With
   `compact_at` alone (no window), the bound is not converted and does not count. None known: no
   ceiling, the steps are judged by the fill alone.
-- **Per agent, at each pass**, a step's threshold in tokens is `t × Window / 100`:
-  - `urgent(a)` is `context_urgent` when its tokens are below the ceiling, else 0 (the deadline
-    still applies);
-  - when the alert's tokens are at or above the ceiling, the agent will compact before any step:
+- **Per agent, at each pass**, a step's threshold in tokens is `t × Window / 100`, and a step
+  **fits** only with the rounding's headroom: `(t + 0.5) × Window / 100 < ceiling`. A reading of
+  `t` can stand for up to `t + 0.5` points; a step that fits is therefore seen before the client
+  can reach its ceiling.
+  - `urgent(a)` is `context_urgent` when it fits, else 0 (the deadline still applies);
+  - when the alert does not fit, the agent may compact before any step:
     **`below-compaction`**. The dispatcher writes it (the check only reads, §5): in `contextAlerts`,
     for each agent with a known fill and a known ceiling, it sets the mark `context-below:<agent>`
     = `<Window>|<ceiling tokens>` and sends one `FencedNotifyOnceForPerson` with that mark and
@@ -311,6 +315,9 @@ Tests (r2's kept, plus):
   (the bound is never compared as 92% of the fill's window); observed at 240k on a 1M `Window`:
   `below-compaction`; a later reading with a ceiling above the alert deletes the mark.
 - the check never writes (`EvaluateContext` is given marks, returns an outcome).
+- **rounding, near the ceiling**: `Window` 200k, observed ceiling 182.6k (91.3%): urgent 91.2%
+  does not fit ((91.2 + 0.5) × 2000 = 183.4k ≥ 182.6k), so `urgent(a)` is 0; urgent 90.5% fits
+  (182.0k < 182.6k); an alert at 91 does not fit: `below-compaction`.
 - the hook: delivers step 1 then step 2 once each per session; a subagent's event, another session,
   a missing variable, a down broker (budget 300 ms) print nothing and exit 0; its output is exactly
   the fixed sentence with numbers and names only (a `{p}:nudge` value carrying any other field is
