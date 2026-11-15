@@ -13,9 +13,11 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // The self-repair watcher's pass (spec
@@ -51,6 +53,24 @@ type selfRepairReads struct {
 	Past      map[string]bus.SelfRepairRecord // each role's attempts, failed proofs, crash loop (step 7)
 	Own       map[string]rolecfg.Profile      // each role's own profile: what a relaunch must prove
 	Fallbacks map[string]bus.FallbackRecord   // roles on a quota fallback profile
+	Manifest  *rolecfg.Manifest               // the local roles.toml: a resume record's allowed profiles
+	Resumes   map[string]bus.ResumeRecord     // {p}:resume
+}
+
+// selfRepairResume is role's resume after §4.7's two conditions (herdr
+// exit): the profile ("" its own) and session to start it on, or why the
+// record is not used ("" also when there is none). Self-repair never starts
+// an agent fresh: no session is a report.
+func selfRepairResume(r selfRepairReads, role string) (profile, session, why string) {
+	rec, ok := r.Resumes[role]
+	if !ok {
+		return "", "", "no resume recorded"
+	}
+	if r.Manifest == nil {
+		return "", "", "no manifest"
+	}
+	profile, session, why = resumeChoice(r.Manifest, role, &rec)
+	return profile, session, why
 }
 
 // selfRepairHerdr is herdr as the pass sees it: the server answers, the
@@ -87,7 +107,8 @@ type selfRepairChore struct {
 	// The acts of on mode (step 7b), each replaced by tests: relaunch runs
 	// the service entry of a relaunch with its fence; agents reads the
 	// snapshots the proof needs; notify rings the desktop (nil: none).
-	relaunch   func(ctx context.Context, role, session string, fence func(string) error) error
+	relaunch   func(ctx context.Context, role, profile, session string, fence func(string) error) error
+	closeOld   func(ctx context.Context, pane string) error // the dead agent's terminal, once the new one is proven
 	agents     func(ctx context.Context) (map[string]bus.AgentSnapshot, error)
 	notify     func(ctx context.Context, title, body string) error
 	proofTries int // reads of the proof, proofEvery apart (60: 60 s)
@@ -165,7 +186,8 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 		if v, ok := r.Marks[bus.ClearMark(role)]; ok {
 			_, a.HandoffClear = bus.ParseClearMark(v)
 		}
-		a.Session, a.Resumable = relaunch.ProvedSession(snap), rolecfg.ResumeVerified(snap.Client)
+		_, a.Session, _ = selfRepairResume(r, role)
+		a.Resumable = a.Session != "" // the record's two conditions held (herdr exit §4.7)
 		a.ProviderFresh, a.ProviderHeld, a.Provider, a.ProviderSince = providerFacts(r, role)
 		if fb, on := r.Fallbacks[role]; on {
 			a.Fallback = fb.Profile
@@ -344,13 +366,20 @@ func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (
 	if c.mode == selfrepair.ModeOn {
 		c.agents = b.Agents
 		c.notify = desktopNotify(exec.LookPath, runQuiet)
-		c.relaunch = func(ctx context.Context, role, session string, fence func(string) error) error {
-			return serviceRelaunch(ctx, b, getenv, c.procStart, role, session, fence)
+		c.relaunch = func(ctx context.Context, role, profile, session string, fence func(string) error) error {
+			return serviceRelaunch(ctx, b, getenv, role, profile, session, fence)
+		}
+		c.closeOld = func(ctx context.Context, pane string) error {
+			h, err := holder.NewHost(b.Project(), holder.BuildID(), getenv)
+			if err != nil {
+				return err
+			}
+			return h.Close(ctx, termhost.TermID(pane))
 		}
 	}
 	c.read = func(ctx context.Context) (selfRepairReads, error) { return readSelfRepair(ctx, b, getenv) }
 	c.herdr = func(snaps map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return serviceRepairHerdr(getenv, b.Project(), snaps, c.procStart)
+		return serviceRepairHost(getenv, b.Project())
 	}
 	return c, dispatch.SelfRepairConfig{Every: dispatch.SelfRepairEvery, Pass: c.pass}
 }
@@ -391,6 +420,10 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	if err != nil {
 		return r, err
 	}
+	r.Manifest = m
+	if r.Resumes, err = b.ResumeRecords(ctx); err != nil {
+		return r, err
+	}
 	if r.Past, err = b.SelfRepairPast(ctx); err != nil {
 		return r, err
 	}
@@ -418,28 +451,42 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	return r, nil
 }
 
-// serviceRepairHerdr reads herdr the way the service entry of a relaunch
-// does (relaunch.ServiceHerdr: the session the services' env file names).
-// Any failure reads as herdr down or the workspace closed: a hold, never an
-// act.
-func serviceRepairHerdr(getenv func(string) string, project string, snaps map[string]bus.AgentSnapshot, procStart func(int) (uint64, error)) selfRepairHerdr {
-	h, err := relaunch.ServiceHerdr(getenv)
+// serviceRepairHost reads the project's holder (herdr exit 10b): it answers
+// (up, and the project open: agentbus down stops it), and a dead agent's
+// role is relaunched unless a live terminal of it still runs, which is
+// waited on, never forced. Any failure reads as the holder down: a hold,
+// never an act.
+func serviceRepairHost(getenv func(string) string, project string) selfRepairHerdr {
+	h, err := holder.NewHost(project, holder.BuildID(), getenv)
 	if err != nil {
 		return selfRepairHerdr{}
 	}
-	ws, err := relaunch.FindWorkspace(h, project, "")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	terms, err := h.List(ctx, project)
 	if err != nil {
 		return selfRepairHerdr{}
 	}
-	if ws == "" {
-		return selfRepairHerdr{Up: true}
-	}
-	panes, err := relaunch.WorkspacePanes(h, ws)
-	if err != nil {
-		return selfRepairHerdr{Up: true}
+	return repairHostFacts(terms, project)
+}
+
+// repairHostFacts judges each dead role by the holder's terminals.
+func repairHostFacts(terms []termhost.Term, project string) selfRepairHerdr {
+	live := map[string]bool{}
+	for _, t := range terms {
+		if t.Alive {
+			live[t.Name] = true
+		}
 	}
 	return selfRepairHerdr{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
-		return relaunch.JudgeTab(h, panes, t, project, snaps, true, procStart, create).V
+		role, ok := relaunch.LaunchRole(t.Command, project)
+		switch {
+		case !ok:
+			return relaunch.VerdictUnknown
+		case live[role]:
+			return relaunch.VerdictRunning
+		}
+		return relaunch.VerdictRelaunch
 	}}
 }
 

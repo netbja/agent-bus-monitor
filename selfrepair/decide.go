@@ -191,9 +191,9 @@ func decideOne(f Facts, a Agent) Decision {
 	}
 	switch { // herdr and the workspace first: the tab is judged only through them (R4)
 	case !f.HerdrUp:
-		return hold(HoldHerdr, "herdr does not answer")
+		return hold(HoldHerdr, "the holder does not answer")
 	case !f.WorkspaceOpen:
-		return hold(HoldWorkspace, "the workspace is not open")
+		return hold(HoldWorkspace, "the project is not open on its holder")
 	}
 	switch a.Tab {
 	case relaunch.VerdictRelaunch, relaunch.VerdictCreate:

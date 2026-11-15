@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/relaunch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // The self-repair watcher's acts, on mode (spec
@@ -86,7 +86,7 @@ func (c *selfRepairChore) act(ctx context.Context, token string, ds []selfrepair
 		ep := strconv.FormatInt(c.wsClosed.UnixMilli(), 10)
 		c.mu.Unlock()
 		_, err := c.sender()(ctx, token, workspaceMark, ep, master,
-			fmt.Sprintf("self-repair: the workspace of %s is not open: nothing is relaunched until it is. Run agentbus up %s --resume (or open it in herdr).",
+			fmt.Sprintf("self-repair: the holder of %s does not answer: nothing is relaunched until it does. Run agentbus up %s.",
 				c.project, c.project))
 		if !errors.Is(err, errNotYet) {
 			keep(err)
@@ -205,13 +205,16 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 		}
 		return nil
 	}
-	session := relaunch.ProvedSession(snap)
-	err := c.relaunch(ctx, role, session, fence)
+	profile, session, _ := selfRepairResume(r, role) // Decide acted only with a session
+	err := c.relaunch(ctx, role, profile, session, fence)
 	// The proof decides, the relaunch's error or not: Role can fail after
 	// the new agent came up (the old pane not closed), and an error before
 	// any split simply finds no proof.
 	proved, ok := c.prove(ctx, role, snap, r)
 	var fin bus.SwapEvent
+	if ok && c.closeOld != nil && snap.Pane != "" && proved.Pane != snap.Pane {
+		_ = c.closeOld(ctx, snap.Pane) // the dead agent's terminal: cleanup, the relaunch stands either way
+	}
 	if ok {
 		resumed := "fresh"
 		if session != "" {
@@ -318,21 +321,23 @@ func newNonce() string {
 	return hex.EncodeToString(b)
 }
 
-// serviceRelaunch is the service entry of a relaunch (spec 4.1): herdr on
-// the session the services' env file names, up's project lock (never next
-// to an up), the template's role tab, its fence read right before the
-// split.
-func serviceRelaunch(ctx context.Context, b *bus.Bus, getenv func(string) string, procStart func(int) (uint64, error),
-	role, session string, fence func(string) error) error {
-	herdr, err := relaunch.ServiceHerdr(getenv)
+// serviceRelaunch starts role on the project's holder (herdr exit §4.7):
+// resume_session only, on the record's profile, the holder rebuilding the
+// command from the template; the fence (the dispatch lease and the role's
+// intent) is checked right before the Start.
+func serviceRelaunch(ctx context.Context, b *bus.Bus, getenv func(string) string, role, profile, session string, fence func(string) error) error {
+	if session == "" {
+		return errors.New("no session to resume: self-repair never starts an agent fresh")
+	}
+	h, err := holder.NewHost(b.Project(), holder.BuildID(), getenv)
 	if err != nil {
 		return err
 	}
-	tpl, err := relaunch.ReadTemplate(getenv, b.Project())
-	if err != nil {
-		return err
+	if fence != nil {
+		if err := fence(role); err != nil {
+			return err
+		}
 	}
-	d := relaunch.Deps{Herdr: herdr, ProcStart: procStart, Home: getenv("HOME"), Fence: fence,
-		Agents: func(string) (map[string]bus.AgentSnapshot, error) { return b.Agents(ctx) }}
-	return relaunch.ServiceRole(d, relaunch.ProjectLock(relaunch.CacheDir(getenv)), b.Project(), role, session, tpl, io.Discard)
+	_, err = h.Start(ctx, termhost.Spec{Project: b.Project(), Name: role, Profile: profile, ResumeSession: session})
+	return err
 }
