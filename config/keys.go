@@ -258,6 +258,14 @@ var Keys = []*Key{
 	// it wakes master (the person's answer, 2026-11-08: 15 minutes); 0 is off.
 	{Name: "dispatch.idle_after", Env: "AGENT_BUS_IDLE_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
 		env: envStallDuration, file: fileDuration(true)},
+	// idle-master (spec 2026-11-15-master-idle-design.md §6, the person's
+	// answers): master idle this long with work in hand is woken once (15
+	// minutes; 0 is off); the same check-back set more than checkback_max
+	// times tells the person once (3; 0 never).
+	{Name: "dispatch.master_idle_after", Env: "AGENT_BUS_MASTER_IDLE_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
+	{Name: "dispatch.checkback_max", Env: "AGENT_BUS_CHECKBACK_MAX", Kind: Int, Default: 3, ReadBy: "dispatch",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 never tells the person")},
 	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
 	// working seen ready this long reads idle for team-stall; 0 turns it off.
 	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",

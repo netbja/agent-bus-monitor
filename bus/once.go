@@ -121,6 +121,62 @@ func (b *Bus) FencedCmdOnceMarks(ctx context.Context, token, mark, episode strin
 	return n == 1, nil
 }
 
+// fencedEntryOnceAt is fencedEntryOnce that also sets ARGV[2]..':at' to the
+// id XADD returned, and returns that id: -1 not the holder, 0 the episode
+// already marked, 2 the recipient being swapped.
+var fencedEntryOnceAt = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
+if redis.call('EXISTS', KEYS[4]) == 1 then return 2 end
+if redis.call('HGET', KEYS[2], ARGV[2]) == ARGV[3] then return 0 end
+local id = redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[4], '*', unpack(ARGV, 5))
+redis.call('HSET', KEYS[2], ARGV[2], ARGV[3], ARGV[2] .. ':at', id)
+return id`)
+
+// FencedCmdOnceAt is FencedCmdOnce that keeps the wake's time with its mark
+// (master-idle §5): when it writes, the field <mark>:at of {p}:quota is set
+// to the entry's id (Redis time), in the same script, and the id is
+// returned; "" when nothing was written. The stream entry itself is never
+// the source of that time: the cmd stream is capped and busmon --reset trims
+// it, {p}:quota is neither.
+func (b *Bus) FencedCmdOnceAt(ctx context.Context, token, mark, episode, from, target, typ, command string, noWake bool) (string, error) {
+	if mark == "" || episode == "" {
+		return "", fmt.Errorf("entry once: mark and episode required")
+	}
+	fields, err := onceCmdFields(mark, episode, from, target, typ, command, noWake)
+	if err != nil {
+		return "", err
+	}
+	args := append([]interface{}{token, mark, episode, streamMaxLen}, fields...)
+	v, err := fencedEntryOnceAt.Run(ctx, b.r,
+		[]string{DispatchKey(b.project), QuotaKey(b.project), StreamKey(b.project, "cmd"), SwapKey(b.project, target)}, args...).Result()
+	if err != nil {
+		return "", err
+	}
+	switch v := v.(type) {
+	case string:
+		return v, nil
+	case int64:
+		switch v {
+		case -1:
+			return "", ErrNotHolder
+		case 2:
+			return "", ErrSwapInProgress
+		}
+		return "", nil
+	}
+	return "", fmt.Errorf("entry once at: unexpected reply %v", v)
+}
+
+// MarkAtSuffix names the {p}:quota field FencedCmdOnceAt keeps beside its
+// mark: a hash field, not a key.
+const MarkAtSuffix = ":at"
+
+// MarkAt reads a <mark>:at field's id as Unix ms; 0 when absent or unreadable.
+func MarkAt(marks map[string]string, mark string) int64 {
+	ms, _ := splitID(marks[mark+MarkAtSuffix])
+	return ms
+}
+
 // FencedNotifyOnceForPerson is FencedNotifyOnce with for=person, as fenced.
 func (b *Bus) FencedNotifyOnceForPerson(ctx context.Context, token, mark, episode, from, message string) (bool, error) {
 	if err := ValidateText(message, CmdMaxRunes); err != nil {

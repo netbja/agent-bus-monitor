@@ -195,3 +195,53 @@ func TestFencedCmdOnceMarks(t *testing.T) {
 		t.Fatalf("no extras = %v, %v", sent, err)
 	}
 }
+
+// master-idle §5: FencedCmdOnceAt writes the entry, its mark and <mark>:at
+// (the entry's id, Redis time) together, or none of them; the same episode
+// writes nothing; a new episode overwrites both fields.
+func TestFencedCmdOnceAt(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if id, err := b.FencedCmdOnceAt(ctx, "bad", "stall-master", "e1", "dispatch", "master", CmdDirective, "wake", false); !errors.Is(err, ErrNotHolder) || id != "" {
+		t.Fatalf("without the lease = %q, %v, want ErrNotHolder", id, err)
+	}
+	if m, _ := b.QuotaMarks(ctx); len(m) != 0 {
+		t.Fatalf("marked without the lease: %v", m)
+	}
+	if err := b.BeginSwap(ctx, "master", SwapIntent{ToProfile: "opus", By: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := b.FencedCmdOnceAt(ctx, "tok", "stall-master", "e1", "dispatch", "master", CmdDirective, "wake", false); !errors.Is(err, ErrSwapInProgress) || id != "" {
+		t.Fatalf("swapping = %q, %v, want ErrSwapInProgress", id, err)
+	}
+	if m, _ := b.QuotaMarks(ctx); len(m) != 0 {
+		t.Fatalf("marked while swapping: %v", m)
+	}
+	if err := b.r.Del(ctx, SwapKey(b.project, "master")).Err(); err != nil {
+		t.Fatal(err)
+	}
+	id, err := b.FencedCmdOnceAt(ctx, "tok", "stall-master", "e1", "dispatch", "master", CmdDirective, "wake", false)
+	if err != nil || id == "" {
+		t.Fatalf("first = %q, %v", id, err)
+	}
+	evs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), "-", "+").Result()
+	if err != nil || len(evs) != 1 || evs[0].ID != id || evs[0].Values["command"] != "wake" || evs[0].Values["episode"] != "stall-master=e1" {
+		t.Fatalf("entries = %v, %v; want one with id %s", evs, err, id)
+	}
+	if m, _ := b.QuotaMarks(ctx); m["stall-master"] != "e1" || m["stall-master:at"] != id {
+		t.Fatalf("marks = %v", m)
+	}
+	if again, err := b.FencedCmdOnceAt(ctx, "tok", "stall-master", "e1", "dispatch", "master", CmdDirective, "wake", false); err != nil || again != "" {
+		t.Fatalf("same episode = %q, %v, want nothing", again, err)
+	}
+	id2, err := b.FencedCmdOnceAt(ctx, "tok", "stall-master", "e2", "dispatch", "master", CmdDirective, "wake", false)
+	if err != nil || id2 == "" || id2 == id {
+		t.Fatalf("new episode = %q, %v", id2, err)
+	}
+	if m, _ := b.QuotaMarks(ctx); m["stall-master"] != "e2" || m["stall-master:at"] != id2 || len(m) != 2 {
+		t.Fatalf("marks = %v, want the two fields of e2", m)
+	}
+}

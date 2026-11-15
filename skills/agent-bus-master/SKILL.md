@@ -314,6 +314,23 @@ and the project stood still until 09:09. The check-back never expires by itself:
 have looked. Unlike `background`, it is not a display but a promise others can read
 (`agentbus checkback` lists it, with how many times the same one was set again).
 
+**The guard that holds you to it: `idle-master`** (a stall check, every minute). When you are idle
+(or `done`, or your `waiting` answered) past `dispatch.master_idle_after` (15m), your pane seen not
+busy, no message waiting for you, the project not paused and your provider not held, and something is
+in your hand, it warns and the dispatcher wakes you once with a directive naming the items:
+
+- an approved head not delivered (the merge queue's `undelivered`: no branch tip on origin, not in
+  the base by git's test, not dropped);
+- a request addressed to you, `requested` or `accepted`;
+- your check-back once due.
+
+The same items never wake you twice. Woken and idle again `master_idle_after` later on the same items,
+the person gets one notice; if you cannot act (your pane blocked), the person is told at once
+instead. Answer the wake by moving the items, or by saying why they wait: an ask to the person, a
+check-back with a new time, or `agentbus merge-queue drop <head> "<reason>"` for a head that will never
+be pushed. Setting the same check-back again more than `dispatch.checkback_max` (3) times tells the
+person once ("master has postponed ... 4 times").
+
 ## Write reports people can read
 
 busmon renders reports as Markdown, and the person reads yours most. Use this shape (busmon's

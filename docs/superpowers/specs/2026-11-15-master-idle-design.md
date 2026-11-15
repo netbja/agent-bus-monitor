@@ -1,6 +1,6 @@
 # A guard for master left idle with work in hand (idle-master)
 
-Status: spec, for review (subject `master-idle-spec`), r8. Not built. Task `master-stall-guard`
+Status: spec, r8; built in three PRs (A: delivered + forge none, B: checkback, C: the idle-master check). Task `master-stall-guard`
 (master's directive of 2026-11-15, at the person's request: "a reliable and durable fix").
 Revisions: r1-r4 the reviewers' rounds; r5 the person's first review (forge-agnostic delivery
 §3.1, postponed check-backs §4); r6 `-U0` patch-ids; r7 the rebase step skips heads with merge
