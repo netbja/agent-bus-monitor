@@ -30,14 +30,22 @@ type hostFacts struct {
 // hostSkipShown is how long a background skip stays on the row.
 const hostSkipShown = 10 * time.Minute
 
-// hostEventsRead is how many of the newest events are read for it.
-const hostEventsRead = 500
+// hostEventsRead is how many of the newest events each read takes; the
+// first read, and a read that finds the previous one's newest entry gone
+// (more than this many appended between two reads), takes the whole stream.
+const (
+	hostEventsRead = 500
+	hostEventsAll  = 10000 // bus eventsMaxLen: the stream's cap
+)
 
 // hostFactsEvery is the watcher's period.
 const hostFactsEvery = 2 * time.Second
 
+// eventsReader is the bus part the facts need: the timeline and the broker's
+// clock (the events' times are the broker's; a skip's age is judged on it).
 type eventsReader interface {
 	RecentEvents(ctx context.Context, n int64) ([]bus.TermEvent, error)
+	ServerTime(ctx context.Context) (time.Time, error)
 }
 
 // activityReader is the part of termhost.Host the draft needs: reads only.
@@ -46,44 +54,95 @@ type activityReader interface {
 	Activity(ctx context.Context, id termhost.TermID) (termhost.Activity, error)
 }
 
-// readHostFacts reads the events (newest first) and, with a host, the draft
-// of each agent's terminal that attach picks (holderTerm). A failed events
-// read is the error; a holder that fails only loses the drafts.
-func readHostFacts(ctx context.Context, evs eventsReader, terms activityReader, project string, now time.Time) (map[string]hostFacts, error) {
+// eventState is one agent's latest blocked/unblocked and skip events as the
+// watcher last saw them: kept until a newer event of the agent replaces it,
+// so an agent stays blocked however many other events follow (the stream is
+// a timeline, read through a window).
+type eventState struct {
+	blocked    bool
+	blockedWhy string
+	blockedAt  time.Time
+	skip       string
+	skipAt     time.Time
+	blockID    string // the event that set it ("" none seen)
+	skipID     string
+}
+
+// hostWatcher is the watcher's memory between reads.
+type hostWatcher struct {
+	agents map[string]eventState
+	newest string // the newest event id of the last read ("" before the first)
+}
+
+// events reads the timeline into w.agents: the newest window, or the whole
+// stream on the first read and after a gap.
+func (w *hostWatcher) events(ctx context.Context, evs eventsReader) error {
+	n := int64(hostEventsRead)
+	if w.newest == "" {
+		n = hostEventsAll
+	}
+	list, err := evs.RecentEvents(ctx, n)
+	if err != nil {
+		return err
+	}
+	if w.newest != "" && int64(len(list)) == n && idAfter(list[len(list)-1].ID, w.newest) {
+		if list, err = evs.RecentEvents(ctx, hostEventsAll); err != nil { // a gap: the window missed entries
+			return err
+		}
+	}
+	if w.agents == nil {
+		w.agents = map[string]eventState{}
+	}
+	for _, e := range list { // newest first: an agent's first entry of a kind is its latest
+		if e.Agent == "" {
+			continue
+		}
+		st := w.agents[e.Agent]
+		switch e.Kind {
+		case bus.EventBlocked, bus.EventUnblocked:
+			if st.blockID != "" && !idAfter(e.ID, st.blockID) {
+				continue
+			}
+			st.blockID = e.ID
+			st.blocked, st.blockedWhy, st.blockedAt = e.Kind == bus.EventBlocked, "", time.Time{}
+			if st.blocked {
+				st.blockedWhy, st.blockedAt = e.Detail, e.At
+			}
+		case bus.EventBackgroundSkip:
+			if st.skipID != "" && !idAfter(e.ID, st.skipID) {
+				continue
+			}
+			st.skipID, st.skip, st.skipAt = e.ID, e.Detail, e.At
+		default:
+			continue
+		}
+		w.agents[e.Agent] = st
+	}
+	if len(list) > 0 && idAfter(list[0].ID, w.newest) {
+		w.newest = list[0].ID
+	}
+	return nil
+}
+
+// read is one pass: the events, the broker's clock, and with a host the
+// draft of each agent's terminal that attach picks (holderTerm). A failed
+// events or clock read is the error (the last facts stay); a holder that
+// fails only loses the drafts.
+func (w *hostWatcher) read(ctx context.Context, evs eventsReader, terms activityReader, project string) (map[string]hostFacts, error) {
+	if err := w.events(ctx, evs); err != nil {
+		return nil, err
+	}
+	now, err := evs.ServerTime(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string]hostFacts{}
-	if evs != nil {
-		list, err := evs.RecentEvents(ctx, hostEventsRead)
-		if err != nil {
-			return nil, err
+	for name, st := range w.agents {
+		f := hostFacts{blocked: st.blocked, blockedWhy: st.blockedWhy, blockedAt: st.blockedAt}
+		if st.skip != "" && now.Sub(st.skipAt) <= hostSkipShown {
+			f.skip, f.skipAt = st.skip, st.skipAt
 		}
-		seenBlock, seenSkip := map[string]bool{}, map[string]bool{}
-		for _, e := range list {
-			if e.Agent == "" {
-				continue
-			}
-			f := out[e.Agent]
-			switch e.Kind {
-			case bus.EventBlocked, bus.EventUnblocked:
-				if seenBlock[e.Agent] {
-					continue
-				}
-				seenBlock[e.Agent] = true
-				if e.Kind == bus.EventBlocked {
-					f.blocked, f.blockedWhy, f.blockedAt = true, e.Detail, e.At
-				}
-			case bus.EventBackgroundSkip:
-				if seenSkip[e.Agent] {
-					continue
-				}
-				seenSkip[e.Agent] = true
-				if now.Sub(e.At) <= hostSkipShown {
-					f.skip, f.skipAt = e.Detail, e.At
-				}
-			default:
-				continue
-			}
-			out[e.Agent] = f
-		}
+		out[name] = f
 	}
 	if terms == nil {
 		return out, nil
@@ -139,9 +198,10 @@ func busmonActivity(project string) activityReader {
 func watchHostFacts(ctx context.Context, st *shared, evs eventsReader, terms activityReader, project string) {
 	t := time.NewTicker(hostFactsEvery)
 	defer t.Stop()
+	var w hostWatcher
 	for {
 		c, cancel := context.WithTimeout(ctx, hostFactsEvery)
-		facts, err := readHostFacts(c, evs, terms, project, time.Now())
+		facts, err := w.read(c, evs, terms, project)
 		cancel()
 		if err == nil {
 			applyHostFacts(st, facts)
