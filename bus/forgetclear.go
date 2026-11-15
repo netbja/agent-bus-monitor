@@ -63,7 +63,7 @@ type ForgetResult struct {
 }
 
 // forgetIfClear: KEYS = swap, cmd, asks, board, gate, agents, usage, wake,
-// armed, receiver; ARGV = own intent, role, pid, pid_start, episode. Changes
+// armed, receiver, dispatch lease, check-backs (master-idle §4); ARGV = own intent, role, pid, pid_start, episode. Changes
 // nothing unless the stored intent is byte-equal to ARGV[1], the stored
 // registration is still that process in that episode, and nothing waits for
 // the role; then deletes its registration and keeps its consumer group.
@@ -127,6 +127,7 @@ end
 if #held > 0 then return held end
 redis.call('HDEL', KEYS[6], role)
 redis.call('HDEL', KEYS[7], role)
+redis.call('HDEL', KEYS[12], role)
 redis.call('DEL', KEYS[8], KEYS[9], KEYS[10])
 return {}`)
 
@@ -157,7 +158,7 @@ func (b *Bus) forgetIfClear(ctx context.Context, token, role, own string, was Re
 	}
 	p := b.project
 	keys := []string{SwapKey(p, role), StreamKey(p, "cmd"), AsksKey(p), BoardKey(p), GateKey(p, role),
-		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role), DispatchKey(p)}
+		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role), DispatchKey(p), CheckbackKey(p)}
 	held, err := forgetIfClear.Run(ctx, b.r, keys, own, role,
 		strconv.Itoa(was.PID), strconv.FormatUint(was.PIDStart, 10), strconv.FormatInt(was.Episode, 10), token).StringSlice()
 	if err != nil {
