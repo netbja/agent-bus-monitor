@@ -10,7 +10,7 @@
   any other up being the person's from their shell (reviewer-codex); `up --dry-run` is not relayed;
   `pop --profile`, `swap --profile|--back`, `retire --forget --episode <ms>
   --reason <text>`, the end of a done pop the dispatcher asks master for; a reason is one line of at most 120
-  characters, recorded, never run), anything else (`--fresh`,
+  characters, never starting with `-` (security S10b-4), recorded, never run), anything else (`--fresh`,
   `--now`, a `--reason` outside retire…) refused with exit 2, never dropped; the service runs the op in-process with the
   sender as the caller (`hostRunner`), so each command keeps its own authorisation: the person's commands
   (suspend, a suspended project's resume, holder drain) see the sender as `AGENT_BUS_AGENT` and refuse it;

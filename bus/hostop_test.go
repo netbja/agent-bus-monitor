@@ -47,7 +47,10 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRetire, Agent: "docs", From: "master", Episode: 17},                                  // an episode only with --forget
 		{Op: HostReload, Agent: "docs", From: "sentinel", Forget: true, Episode: 17},                  // forget is retire's
 		{Op: HostReload, Agent: "docs", From: "sentinel", Reason: "x"},
-		{Op: HostPop, Agent: "docs", From: "master", Resume: true}, // --resume is up's                                // a reason is retire's
+		{Op: HostPop, Agent: "docs", From: "master", Resume: true}, // --resume is up's
+		// a reason is a value, never a flag: "--now" would retire mid-turn (security S10b-4)
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "--now"},
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 17, Reason: "-x"},                                // a reason is retire's
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\nb"},                               // one line
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\x1b[2Jb"},                          // no control character
 		{Op: HostRetire, Agent: "docs", From: "master", Reason: strings.Repeat("x", HostReasonMax+1)}, // capped

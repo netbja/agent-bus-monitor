@@ -104,6 +104,7 @@ func TestHostRunnerRefusesBeforeRunning(t *testing.T) {
 		// (its tool rules' form), never an agent's and never a bare up (reviewer-codex on 10b).
 		{Op: bus.HostUp, From: "coder", Resume: true},
 		{Op: bus.HostUp, From: "master"},
+		{Op: bus.HostRetire, Agent: "architect", From: "master", Reason: "--now"}, // security S10b-4
 	} {
 		var calls []call
 		h := hostRunner{Project: "demo", Cmds: fakeHostCmds(&calls, 0, "ok")}

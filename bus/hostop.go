@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -97,6 +98,9 @@ func (o HostOp) Validate() error {
 	case o.Forget != (o.Episode > 0) || o.Episode < 0:
 		return fmt.Errorf("host: --forget needs --episode <ms>, and --episode needs --forget")
 	case o.Reason != "":
+		if strings.HasPrefix(o.Reason, "-") { // a value, never a flag of retire's (security S10b-4)
+			return fmt.Errorf("host: a reason does not start with '-'")
+		}
 		if utf8.RuneCountInString(o.Reason) > HostReasonMax {
 			return fmt.Errorf("host: a reason is at most %d characters", HostReasonMax)
 		}
