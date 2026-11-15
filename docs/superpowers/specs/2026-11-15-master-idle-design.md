@@ -1,6 +1,7 @@
 # A guard for master left idle with work in hand (idle-master)
 
-Status: spec, for review (subject `master-idle-spec`). Not built. Task `master-stall-guard`
+Status: spec, for review (subject `master-idle-spec`), r5 after the person's review of 2026-11-15
+(forge-agnostic delivery §3.1, postponed check-backs §4). Not built. Task `master-stall-guard`
 (master's directive of 2026-11-15, at the person's request: "a reliable and durable fix").
 §8 holds the questions for the person.
 
@@ -72,24 +73,68 @@ Three sources, each already on the bus or one read away. Nothing else counts.
 
 | Item | Read from | Key (for the episode) |
 |---|---|---|
-| **Approved, not delivered**: a head some subject's deciding approve names (`mergequeue.ApprovedHeads`), within 72 h (`ReviewQueueWindow`), that is no open, merged or closed PR's head, no branch tip on origin, not in the base, and not dropped (below); a subject whose plan task is recorded done is left out (`DoneSubjects`, as `review-queue` does) | `{p}:mergequeue`, new field `undelivered` (below) | `head:<sha>` |
+| **Approved, not delivered**: a head some subject's deciding approve names (`mergequeue.ApprovedHeads`), within 72 h (`ReviewQueueWindow`), that master has not delivered (§3.1) and that is not dropped (below); a subject whose plan task is recorded done is left out (`DoneSubjects`, as `review-queue` does) | `{p}:mergequeue`, new field `undelivered` (below) | `head:<sha>` |
 | **A request for master**: a board entry addressed to master in state `requested` or `accepted` | `{p}:board` | `req:<task>` |
 | **A check-back due**: master said work is in flight and when to look again, and that time has passed | `{p}:checkback` (§4) | `cb:<set id>` |
 
+### 3.1 Delivered: one git test, whatever the forge
+
+The project runs on any forge or on none (the person's review, 2026-11-15). A squash-merge or a
+rebase-merge rewrites commits, so the approved head never becomes an ancestor of the base; a test
+that only asks `InBase` would list a delivered head forever. So the decision is git's alone, the
+same for every forge, and a forge adapter only adds knowledge.
+
+**Three delivery modes**, from `delivery.forge` and origin (`forge.Resolve`):
+
+| Mode | When | Master's part is done when the head is |
+|---|---|---|
+| a forge (`github`, `gitlab`, `bitbucket`) | origin on a known forge, or the setting | in the base (git test below), or a branch tip on origin (pushed, PR opened: the merge is the person's) |
+| `none` (new): a remote, no forge | origin on a host no adapter knows, or `delivery.forge = none` | the same: in the base, or a branch tip on origin |
+| `local`: no remote | no origin, or origin is a path on this machine | never master's: nothing is pushed, `undelivered` stays empty, and the existing `Items` list the approved local tips for the person's merge |
+
+Today `auto` maps an unknown host to `local` with a note; it maps it to `none` instead (§8,
+question 4). `deliver` in `none` mode pushes the branch, as in link mode, without a page to print.
+
+**The git test** (`mergequeue.Delivered`, new, pure over a git runner), for each approved head
+within 72 h, cheapest first; a head matched by any step is delivered:
+
+1. **Merge commit or fast-forward:** `InBase` (`git merge-base --is-ancestor <head> <base tip>`),
+   as today.
+2. **Squash-merge:** the patch-id of the whole branch, `git diff --no-ext-diff --no-textconv
+   <fork>..<head> | git patch-id --stable`, with `<fork>` = `git merge-base <base tip> <head>`,
+   matches the patch-id of one commit of `<fork>..<base tip>` (`git log -p --no-merges
+   --no-ext-diff --no-textconv <fork>..<base tip> | git patch-id --stable`). The range is the
+   commits the base gained since the branch forked: no date and no writer clock bound it.
+3. **Rebase-merge:** `git cherry <base tip> <head>` prints no `+` line: every commit of the head
+   has an equivalent in the base.
+
+`--no-ext-diff --no-textconv` keep any diff driver of the repository's configuration from running:
+the dispatcher never runs the repository's code. `--stable` is right here (not `--verbatim`, which
+the conflict-dispatch spec needs to carry an approval): it detects a delivery, and a forge's
+squash may differ in whitespace only. A squash that also resolved conflicts has another patch-id
+and is not seen: that is what `merge-queue drop` is for.
+
+**The adapter** (`forge.Adapter`, the seam):
+
+```go
+type Adapter interface {
+    OpenPRs(ctx context.Context) ([]PR, error) // Items: open PRs on an approved head
+}
+```
+
+`github` reads it with `gh` (today's `ReadGitHub`); `none`, `gitlab` and `bitbucket` return
+nothing yet and so use origin's tips, as the git fallback does today. A later adapter only adds
+knowledge to `Items`; `undelivered` never depends on one. The `gh pr list --state closed` read
+of r2 is dropped: the git test sees a merged PR, and one fewer forge call is simpler.
+
 **The `undelivered` field.** The merge-queue pass (`cmd/agentbus/mergequeuechore.go`, every
-5 min, lease held) already has the verdicts and either the open PRs (`gh`) or origin's tips, the
-fetched base and `InBase` (the git fallback). In every mode but local it computes, for the
-approved heads (`ApprovedHeads`, within 72 h) that are no open PR's head and no tip in hand:
-origin's tips (`mergequeue.RemoteTips`, one `git ls-remote`; the `gh` path adds this read and the
-base fetch it does not do today), then `InBase` on what is left. What remains is written as
-`undelivered: [{subject, head, branch, approved_at}]` in the same fenced write of `{p}:mergequeue`.
-On the `gh` path it also reads the heads of the newest 100 merged or closed PRs (`gh pr list
---state closed`, one more call; `Items` still come from the open ones only), so a PR merged on the
-forge, squash included, no longer counts.
-`branch` is a local branch whose tip is that head (`mergequeue.LocalTips`), or empty. In the local
-forge mode the field stays empty: delivery there pushes nothing, and the existing `Items` already
-list approved local tips for the person. A failed or stale pass (`ItemsAt` older than 3 passes)
-makes this source `unknown`, and the check names it, never `ok` on it.
+5 min, lease held) fetches the base (`FetchBase`) and reads origin's tips (`RemoteTips`) in the
+forge and `none` modes, the `gh` path included (it does neither today), then writes, in the same
+fenced write of `{p}:mergequeue`, `undelivered: [{subject, head, branch, approved_at}]`: the
+approved heads within 72 h that are no tip on origin, not delivered by the git test, and not
+dropped. `branch` is a local branch whose tip is that head (`mergequeue.LocalTips`), or empty. A
+failed or stale pass (`ItemsAt` older than 3 passes) makes this source `unknown`, and the check
+names it, never `ok` on it.
 
 **Dropping a head that will never be delivered.** A subject dropped, replaced by another one, or
 squash-merged with its branch deleted leaves an approved head nobody will push (today:
@@ -130,6 +175,13 @@ agentbus checkback --clear
   Redis `TIME` plus the duration, `set_id` the time of the write, from the same `TIME`. It is an
   agent's write (no lease, like `status`). A new one replaces the old one; `--clear` deletes it.
   `retire --forget` deletes it too.
+- **Postponed again and again.** A new check-back replaces the old one and is a new episode, so a
+  master that keeps postponing would never reach the second tier. The field also keeps `count`:
+  a check-back whose `what` equals the previous one's (trimmed, case folded) adds one, another
+  `what` or `--clear` starts again at 1. When `count` exceeds `dispatch.checkback_max` (default 3,
+  `0` = never), the stall hook sends the person **one** notice for that `what` (mark
+  `checkback-person`, episode a hash of the agent, the `what` and the first `set_id`), on any pass,
+  whether `idle-master` warns or not: `master has postponed "k1/k2 checks" 4 times since 00:21`.
 - `idle-master` counts it once `due_ms` has passed. It never expires by itself: if master forgets
   to clear it, the next nudge says so (`check-back due 3h ago: k1/k2 checks`), and master clears it.
 - Any agent may set one. Only master's is counted in this spec, since only master has this check.
@@ -206,6 +258,8 @@ night is a different fact (a directive unanswered, a coder passed over), with it
 | Key | Env | Default | `0` |
 |---|---|---|---|
 | `dispatch.master_idle_after` | `AGENT_BUS_MASTER_IDLE_AFTER` | 15m | `idle-master` off |
+| `dispatch.checkback_max` | `AGENT_BUS_CHECKBACK_MAX` | 3 | never tell the person about postponements |
+| `delivery.forge` | (existing) | `auto` | gains the value `none` (§3.1) |
 
 A duration in the registry (`config/keys.go`), `ReadBy: "dispatch"`, the env rule of the other
 stall durations. 15m, the default of `stall_after` and `idle_after`, so every stall guard waits
@@ -236,10 +290,19 @@ shorter. busmon's C page lists it.
 - **Drop**: a dropped head is left out and its subject's next head is not; drop by a role without
   `delivers` is refused; an ambiguous short SHA is refused; the pass prunes drops past 72 h; with
   every item dropped the check reads `ok` and wakes nothing.
-- **`undelivered`**: an approved head with an open PR, a tip on origin, or in the base is left out;
-  an approved head on none of these is listed with its local branch; local mode lists nothing; an
-  approve older than 72 h is left out; a done plan subject is left out; on `gh`, a merged or
-  closed PR's head is left out.
+- **Delivered, `none` adapter, a disposable repository with a bare origin**: a merge commit, a
+  fast-forward, a squash-merge (one commit on the base with the branch's whole diff) and a
+  rebase-merge (each commit replayed) are each delivered; a squash that also resolved a conflict
+  is not (drop covers it); an unrelated commit with the same message is not. A diff driver set in
+  the repository's config never runs (a `textconv` that would fail the test).
+- **`undelivered`**: a head that is a tip on origin, or delivered by the git test, is left out; a
+  head on neither is listed with its local branch; an approve older than 72 h is left out; a done
+  plan subject is left out. The same input gives the same list with the `github` adapter and with
+  `none`: no forge read decides it.
+- **Modes**: `local` (no origin, or a path) lists nothing; `none` (origin on an unknown host) and a
+  forge list the same; `auto` resolves an unknown host to `none`.
+- **Postponed check-backs**: the same `what` three times then a fourth: one person notice; a fifth:
+  nothing; another `what` starts at 1; `--clear` starts at 1; `checkback_max = 0`: never.
 - **`checkback`**: set, replace, clear, list; the due time is Redis time; `retire --forget`
   removes it; text over 200 runes is refused.
 - **Never typed**: the wake goes through `FencedCmdOnceAt`, and the existing pane-writer test still
@@ -256,11 +319,20 @@ shorter. busmon's C page lists it.
    sees only approved heads and requests, and background work rests on master's rule alone.
 3. **The second tier.** Recommended: one notice to you per episode when master was woken and
    nothing moved. Or none: master's wake only.
+4. **A remote on a host no adapter knows.** Recommended: `auto` resolves it to `none` (push to
+   origin, the git test decides delivery), as your review asks. This changes today's `local`
+   fallback, which pushes nothing for such a remote (forge-delivery, 2026-11-02). Or keep `local`
+   for `auto`, and `none` only when `delivery.forge = none` is set.
+5. **Postponements before you are told.** Recommended: 3 check-backs on the same work. Or 2, or 5.
 
 ## 9. Not in scope
 
 - Watching a job's process or a `.done` file: the dispatcher never runs or reads the
   repository's work.
 - Pushing, merging, or dispatching for master: the guard asks; master acts.
+- The `gitlab` and `bitbucket` adapters' own PR reads: the seam is here, each is a later PR that
+  only adds to `Items`.
+- The run budget (duration, deliveries, quota drain): its own spec, `run-budget`, counts its
+  deliveries with this section's git test.
 - Other roles idle with work in hand: `idle-implementer` covers implementers; the reviewers'
   queue is `review-queue`.
