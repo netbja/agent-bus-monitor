@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: draft r4, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: draft r5, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0).
 
 Three small slices: tell the person when an agent's login **has expired** (all four clients), warn
@@ -53,8 +53,10 @@ A new profile list, `[signature] auth = [...]` in `agentstate/clients/<client>.t
   output). **If the fixture shows no error style, or the spoof fixture matches, that client gets no
   `auth` pattern** (no loosened pattern): its only signal stays the stuck agent, as today;
 - **the error is the client's last output**: between the matching line and the input box's top
-  (the rule above the box) there is only blank space, the client's own status lines and nothing
-  the conversation printed after it. A ready box is *not* a veto, unlike `BlockedOn`: after an
+  there is only blank space. The box's top is the profile's own: the rule above the prompt line
+  when `rule_above = true` (Claude), else the prompt line itself (Codex's `›`, as `inputRegion`
+  finds it). Any non-blank line in between counts as later output, the client's own status lines
+  included: no profile names them today, and a missed notice is the safe failure (foureyes on r4). A ready box is *not* a veto, unlike `BlockedOn`: after an
   auth failure the client returns to an empty, ready box under the error, which is the very case to
   catch. An old error followed by any later answer, tool line or message is no longer last and
   never matches (reviewer-codex on r3);
