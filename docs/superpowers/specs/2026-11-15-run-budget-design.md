@@ -65,7 +65,9 @@ limit reached wins.
 - master gets one waking directive (`FencedCmdOnce`, mark `run-drain`, episode `started_at`):
   `Run budget reached (6 deliveries of 6, 3h10m): dispatch no new task; finish and deliver what is
   in flight; the project pauses when nothing is left.`
-- the person gets one notice (`FencedNotifyOnceForPerson`, same mark and episode) with the totals.
+- the person gets one notice (`FencedNotifyOnceForPerson`, mark `run-drain-person`, same episode)
+  with the totals. Its own mark: both calls deduplicate through a `{p}:quota` field, so a shared
+  mark would let the directive's write suppress the notice.
 - `agentbus request send` refuses a new task while the run drains, `run is draining: no new task
   (agentbus run)`. The person may still send one; nobody else may. This is a bus rule
   (`bus/requests.go`), so every client meets it.
@@ -81,8 +83,11 @@ limit reached wins.
 - the dispatcher writes a project pause with kind `run` (`bus.PauseRecord.Kind`, additive), its
   deadline one year ahead, so every existing pause reader stops waking as it does today, and no
   quota release lifts it (`QuotaPauseProvider` is "" for it, as for a person's pause);
-- the person gets one notice with the totals and what was still in flight if `drain_max` cut the
-  drain short.
+- the person gets one notice (mark `run-stop-person`, episode `started_at`) with the totals and
+  what was still in flight if `drain_max` cut the drain short.
+
+Each once-mark of this spec has its own name: `run-drain`, `run-drain-person`, `run-stop-person`,
+`run-held:<agent>` (§4). One field each per project, overwritten by the next run's episode.
 
 ## 4. The quota trigger
 
@@ -108,7 +113,8 @@ call ends it, as `quotaPass` already does).
 **What a held agent had.** When a hold begins for an agent with work (from either source), the
 dispatcher writes one field of `{p}:held`, fenced: agent → `{provider, since, tasks, branches,
 report}`: its accepted tasks (board), their `branch` field where the board has one, and the id of
-its last report. Master gets one directive per agent and episode: `coder is held (anthropic, since
+its last report. Master gets one directive per agent and episode (mark `run-held:<agent>`,
+episode the hold's start): `coder is held (anthropic, since
 14:02, reset unknown): accepted wiki-3 (feat/wiki-3). Reassign it, or wait for the reset.` The
 field is deleted by the release, or by `retire --forget`.
 
@@ -146,7 +152,8 @@ without `delivers`: only the person restarts a run (§8, question 1).
   `0` never limits.
 - **Deliveries**: a merge, a squash and a rebase-merge each count once; the same head on the next
   pass does not count again; a pushed head or an open PR does not count; `run reset` restarts at 0.
-- **Drain**: one master directive and one person notice per run; `request send` refused to an
+- **Drain**: one master directive and one person notice per run, both emitted (distinct marks: the
+  directive written first does not suppress the notice), and neither again on the next pass; `request send` refused to an
   agent, allowed to the person; `team-stall` `ok` with a ready task; `idle-master` still wakes.
 - **Stop**: nothing in flight → kind-run pause; `drain_max` passed with work in flight → pause and
   the notice lists it; a quota release does not lift a kind-run pause; `run reset` lifts it.
