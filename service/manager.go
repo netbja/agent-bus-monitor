@@ -37,6 +37,10 @@ func (s Spec) argv(stderr bool) []string {
 	return append(a, s.Args...)
 }
 
+// Argv is the service command, as a manager without a journal runs it
+// (holder.Supervised: never --stderr, its output already is a file).
+func (s Spec) Argv() []string { return s.argv(false) }
+
 // State is what the manager says of one unit.
 type State struct {
 	Installed bool   // a unit (plist) file exists
@@ -87,26 +91,50 @@ func managerReason(getenv func(string) string, choice string) string {
 	return "services.manager = " + choice + " (config.toml)"
 }
 
+// Unmanaged is the manager where none runs (herdr exit 6c3, spec 4.4b):
+// holder.Supervised, which package holder registers (it imports service, so
+// service cannot name it). Nil — a binary that does not link holder — keeps
+// the answer of before: no manager, and why.
+var Unmanaged func(paths Paths, getenv func(string) string) Manager
+
+// systemdBooted: this Linux runs systemd as init (sd_booted's test).
+var systemdBooted = func() bool {
+	st, err := os.Lstat("/run/systemd/system")
+	return err == nil && st.IsDir()
+}
+
 // Detect finds the manager to use: services.manager (systemd, launchd or
 // none) forces one; auto is systemd --user on Linux when its user instance
-// answers, launchd on macOS. With none, why says what is missing, for the
-// explicit fallback to herdr tabs.
+// answers, launchd on macOS, and otherwise the manager without one
+// (Unmanaged). A systemd that runs as init but whose user instance does not
+// answer is not "no systemd": that stays an error, so no supervisor ever
+// starts beside the units. With no manager at all, why says what is missing,
+// for the explicit fallback to herdr tabs.
 func Detect(goos string, run Runner, getenv func(string) string) (m Manager, why string) {
 	paths, err := PathsFrom(getenv)
 	if err != nil {
 		return nil, err.Error()
 	}
+	forced := true
 	switch choice := ManagerChoice(getenv); choice {
 	case "none":
+		if Unmanaged != nil {
+			return Unmanaged(paths, getenv), ""
+		}
 		return nil, managerReason(getenv, choice)
 	case "systemd":
 		goos = "linux"
 	case "launchd":
 		goos = "darwin"
+	default:
+		forced = false
 	}
 	switch goos {
 	case "linux":
 		if out, err := run("--user", "show-environment"); err != nil {
+			if !forced && Unmanaged != nil && !systemdBooted() {
+				return Unmanaged(paths, getenv), ""
+			}
 			return nil, "systemd --user is not available (" + firstLine(out, err) + ")"
 		}
 		return Systemd{Run: run, Paths: paths}, ""
@@ -116,6 +144,9 @@ func Detect(goos string, run Runner, getenv func(string) string) (m Manager, why
 			return nil, "launchd has no GUI session for this user (" + firstLine(out, err) + ")"
 		}
 		return Launchd{Run: run, Paths: paths, UID: uid}, ""
+	}
+	if Unmanaged != nil {
+		return Unmanaged(paths, getenv), ""
 	}
 	return nil, "no supported service manager on " + goos
 }

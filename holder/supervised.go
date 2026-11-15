@@ -110,6 +110,11 @@ func (m Supervised) lock(project, key string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+	return lockRecord(path)
+}
+
+// lockRecord is lock's flock on the lock file beside the record at path.
+func lockRecord(path string) (func(), error) {
 	f, err := os.OpenFile(strings.TrimSuffix(path, ".pid")+".lock", os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("holder: the record's lock: %w", err)
