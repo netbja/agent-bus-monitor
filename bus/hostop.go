@@ -324,3 +324,31 @@ func (b *Bus) HostReply(ctx context.Context, id, to string) (string, bool, error
 	}
 	return "", false, nil
 }
+
+// hostWithdraw: KEYS[1] {p}:hostops; ARGV[1] the id, ARGV[2] its record
+// (JSON, without its time). It writes the record as withdrawn only when the
+// directive was never handled, and says whether it did.
+var hostWithdraw = redis.NewScript(`
+if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1 then return 0 end
+local t = redis.call('TIME')
+local rec = cjson.decode(ARGV[2])
+rec['state'], rec['at'] = 'withdrawn', tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(rec))
+return 1`)
+
+// HostWithdrawn is a directive its command gave up on before any reply.
+const HostWithdrawn = "withdrawn"
+
+// WithdrawHostOp is the command giving up (reviewer-codex): atomic against
+// the dispatcher's accept, which finds a withdrawn directive handled (seen)
+// and acts on nothing. false: the dispatcher handled it first, and its reply
+// is on {p}:cmd (written in the same script). The command's own write, not
+// fenced: it is not the dispatcher's.
+func (b *Bus) WithdrawHostOp(ctx context.Context, o HostOp) (bool, error) {
+	if !ValidName(o.From) {
+		return false, fmt.Errorf("host: invalid sender %q", o.From)
+	}
+	rec, _ := json.Marshal(hostRecord{Op: o.Op, Agent: o.Agent, From: o.From})
+	n, err := hostWithdraw.Run(ctx, b.r, []string{HostOpsKey(b.project)}, o.ID, string(rec)).Int()
+	return n == 1, err
+}

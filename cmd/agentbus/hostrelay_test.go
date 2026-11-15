@@ -137,3 +137,45 @@ func TestRelayHostOpDeadlineFromTheSend(t *testing.T) {
 		t.Fatalf("%d after %s: %q", code, time.Since(start), errw.String())
 	}
 }
+
+// reviewer-codex on 51c06dd7: once the command has said nothing was done,
+// the dispatcher can no longer act on the directive, however late it reads
+// it (a delayed XADD, a dispatcher that comes back); and a directive the
+// dispatcher accepted just before the give-up is reported accepted.
+func TestRelayHostOpGiveUpIsFinal(t *testing.T) {
+	ctx := context.Background()
+	b, _ := dialMain(t)
+	if ok, err := b.AcquireDispatch(ctx, "relay", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch %v %v", ok, err)
+	}
+	var out, errw bytes.Buffer
+	if code := relayHostOp(ctx, b, bus.HostOp{Op: bus.HostUp, From: "master"}, 100*time.Millisecond, &out, &errw); code != 1 || !strings.Contains(errw.String(), relayFailText) {
+		t.Fatalf("no dispatcher: %d %q", code, errw.String())
+	}
+	ops, _, err := b.HostOpsAfter(ctx, "0-0")
+	if err != nil || len(ops) != 1 {
+		t.Fatalf("ops %v %v", ops, err)
+	}
+	if st, err := b.FencedHostAccept(ctx, "relay", ops[0], time.Hour); err != nil || st != bus.HostSeen {
+		t.Fatalf("a late accept after the give-up = %q, %v", st, err)
+	}
+	// Accepted between the last read and the give-up: reported accepted.
+	real := hostReply
+	defer func() { hostReply = real }()
+	hostReply = func(ctx context.Context, b *bus.Bus, id, to string) (string, bool, error) {
+		ops, _, _ := b.HostOpsAfter(ctx, ops[0].ID)
+		for _, o := range ops {
+			if o.ID == id {
+				if _, err := b.FencedHostAccept(ctx, "relay", o, time.Hour); err != nil {
+					t.Error(err)
+				}
+			}
+		}
+		return "", false, nil // the reads see nothing; only the withdrawal tells
+	}
+	out.Reset()
+	errw.Reset()
+	if code := relayHostOp(ctx, b, bus.HostOp{Op: bus.HostUp, From: "master"}, 100*time.Millisecond, &out, &errw); code != 0 || !strings.Contains(out.String(), "accepted") {
+		t.Fatalf("accepted before the give-up: %d %q %q", code, out.String(), errw.String())
+	}
+}

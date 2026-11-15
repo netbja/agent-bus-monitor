@@ -65,7 +65,23 @@ func relayHostOp(ctx context.Context, b *bus.Bus, o bus.HostOp, window time.Dura
 			if reply, ok, err := hostReply(ctx, b, id, o.From); err == nil && ok { // once more, past the deadline
 				return relayReply(what, reply, out, errw)
 			}
-			fmt.Fprintf(errw, "%s: %s\n", what, relayFailText)
+			// Giving up is atomic against the accept (reviewer-codex): the
+			// directive withdrawn, the dispatcher can never act on it, however
+			// late it reads it; withdrawn too late, its reply is there.
+			o.ID = id
+			withdrawn, err := b.WithdrawHostOp(ctx, o)
+			switch {
+			case err != nil:
+				fmt.Fprintf(errw, "%s: no answer, and the directive could not be withdrawn (%v): it may still run: its outcome comes as a reply (agentbus history -a dispatch)\n", what, err)
+				return 1
+			case withdrawn:
+				fmt.Fprintf(errw, "%s: %s\n", what, relayFailText)
+				return 1
+			}
+			if reply, ok, err := b.HostReply(ctx, id, o.From); err == nil && ok {
+				return relayReply(what, reply, out, errw)
+			}
+			fmt.Fprintf(errw, "%s: the dispatcher handled it, but its reply could not be read\n", what)
 			return 1
 		}
 		select {

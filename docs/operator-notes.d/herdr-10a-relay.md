@@ -16,6 +16,8 @@
   either late. The command side
   (`relayHostOp`) exits 0 on `accepted` and 1 on anything else; its deadline is 5 s after Redis `TIME` at the
   send (never after its own id: a forged entry ahead of the clock pushes later ids forward); with no reply by
-  then and after a last read, it prints the spec's "the dispatcher did not answer within 5 s … Nothing was done"
-  text. Nothing sends a directive and the service gives the relay no `Run` until the cutover (step 10b) wires
+  then, after a last read, it withdraws the directive (`bus.WithdrawHostOp`, an `HSETNX`-like script on
+  `{p}:hostops`, atomic against the accept: a withdrawn directive is `seen` and never acted on, however late the
+  dispatcher reads it; withdrawn too late, the dispatcher's reply is there and is the answer), and only then
+  prints the spec's "the dispatcher did not answer within 5 s … Nothing was done" text. Nothing sends a directive and the service gives the relay no `Run` until the cutover (step 10b) wires
   the in-tree callers and the operations on the holder.

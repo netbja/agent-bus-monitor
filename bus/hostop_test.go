@@ -260,3 +260,42 @@ func TestHostOpFutureIDRefused(t *testing.T) {
 		t.Fatalf("half a second ahead = %q, %v", st, err)
 	}
 }
+
+// reviewer-codex on 51c06dd7: a command that gives up withdraws its
+// directive, atomically against the dispatcher's accept: withdrawn first,
+// the accept finds it handled (seen) and nothing runs; accepted first, the
+// withdrawal fails and the reply is there.
+func TestHostOpWithdraw(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	send := func() HostOp {
+		id, err := b.SendHostOp(ctx, HostOp{Op: HostUp, From: "master"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return HostOp{ID: id, Op: HostUp, From: "master"}
+	}
+	o := send()
+	if ok, err := b.WithdrawHostOp(ctx, o); err != nil || !ok {
+		t.Fatalf("withdraw = %v, %v", ok, err)
+	}
+	if st, err := b.FencedHostAccept(ctx, "tok", o, HostAcceptWindow); err != nil || st != HostSeen {
+		t.Fatalf("accept after the withdrawal = %q, %v", st, err)
+	}
+	if open, _ := b.UnfinishedHostOps(ctx); len(open) != 0 {
+		t.Fatalf("a withdrawn directive is unfinished: %+v", open)
+	}
+	o = send()
+	if st, err := b.FencedHostAccept(ctx, "tok", o, HostAcceptWindow); err != nil || st != HostAccepted {
+		t.Fatalf("accept = %q, %v", st, err)
+	}
+	if ok, err := b.WithdrawHostOp(ctx, o); err != nil || ok {
+		t.Fatalf("withdraw after the accept = %v, %v", ok, err)
+	}
+	if reply, ok, err := b.HostReply(ctx, o.ID, "master"); err != nil || !ok || !strings.HasPrefix(reply, "accepted") {
+		t.Fatalf("reply %q %v %v", reply, ok, err)
+	}
+}
