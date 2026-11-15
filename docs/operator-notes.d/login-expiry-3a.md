@@ -13,7 +13,8 @@
   - **Release:** the next read after /login (within a minute) finds a later expiry still ahead.
     The agent gets `Your Claude login is renewed. Work interrupted by it: …`, then its `{p}:held`
     field and its hold field are deleted, the hold field last. The same expiry, an older one, or an
-    `unknown` read keeps the hold. `retire --forget` deletes both.
+    `unknown` read keeps the hold. An agent swapped to a client with no login expiry is released
+    once the swap is over, with no resume message (the swap resumes it). `retire --forget` deletes both.
   - **Readers:** `bus.HeldReason(marks, agent, provider)` (`quota`, `login` or `""`) is read by:
     the dispatcher's wake skip, its clear and its pop-end judgement; `CannotAct`, whose reason now
     reads `master is held: its Claude login expired`; and team-stall (`t1 (coder, login held)`),

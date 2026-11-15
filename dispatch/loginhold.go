@@ -74,6 +74,40 @@ func (l *loop) loginHolds(ctx context.Context, results []LoginExpiry, now time.T
 			}
 		}
 	}
+	return l.loginHoldsOfOtherClients(ctx)
+}
+
+// loginHoldsOfOtherClients releases a login hold whose agent now runs a
+// client with no login expiry (master swapped it, foureyes on 3a): its
+// credentials are no longer read, so no later expiry would ever release it.
+// No resume: the swap resumes the agent itself; while it runs, the hold
+// waits. An agent with no snapshot keeps its hold (retire --forget clears it).
+func (l *loop) loginHoldsOfOtherClients(ctx context.Context) error {
+	names := make([]string, 0, len(l.loginHeld))
+	for a := range l.loginHeld {
+		names = append(names, a)
+	}
+	sort.Strings(names)
+	for _, a := range names {
+		snap, ok := l.snaps[a]
+		if !ok || l.cfg.Login.Checked != nil && l.cfg.Login.Checked(snap.Client) { // still read: released by its expiry
+			continue
+		}
+		if swapping, err := l.b.Swapping(ctx, a); err != nil || swapping {
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if err := l.b.FencedDelHeld(ctx, l.token, a); err != nil {
+			return err
+		}
+		if err := l.b.FencedQuotaDel(ctx, l.token, bus.LoginHoldField(a)); err != nil {
+			return err
+		}
+		delete(l.loginHeld, a)
+		l.log(map[string]any{"action": "login-release", "agent": a, "reason": "client " + snap.Client + " has no login expiry"})
+	}
 	return nil
 }
 

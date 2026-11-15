@@ -167,13 +167,14 @@ func TestLoginHoldWithoutWorkAndOfMaster(t *testing.T) {
 // A hold left by an earlier dispatcher (or an agent no longer read) still
 // holds its agent: the field, not memory, is the hold.
 func TestLoginHoldReadFromMarks(t *testing.T) {
-	w := newCredWorld(t, map[string]bus.AgentSnapshot{"kimi": {Client: "kimi-cli", Provider: "moonshot"}})
-	if err := w.b.FencedQuotaSet(context.Background(), "holder", bus.LoginHoldField("kimi"), "1794777000000"); err != nil {
+	w := newCredWorld(t, map[string]bus.AgentSnapshot{"coder": claudeSnap("/c")})
+	w.reason["/c"] = "no file" // its read fails: nothing releases it
+	if err := w.b.FencedQuotaSet(context.Background(), "holder", bus.LoginHoldField("coder"), "1794777000000"); err != nil {
 		t.Fatal(err)
 	}
 	w.pass(t)
-	snap := w.l.snaps["kimi"]
-	if !w.l.heldBy("kimi", &snap) {
+	snap := w.l.snaps["coder"]
+	if !w.l.heldBy("coder", &snap) {
 		t.Fatal("a hold field holds nobody")
 	}
 }
@@ -191,7 +192,7 @@ func TestRunLoginHeldAgentIsNotWoken(t *testing.T) {
 	send(t, b, "kimi", "check it")
 	rt := newFakeRT(alwaysReady)
 	cfg := fastConfig()
-	cfg.Login = LoginConfig{Checked: func(string) bool { return false },
+	cfg.Login = LoginConfig{Checked: func(string) bool { return true }, // read, unknown: the hold stands
 		Credentials: func(string, time.Time) (time.Time, loginexpiry.Reason) { return time.Time{}, loginexpiry.NoFile }}
 	start(t, b, rt, cfg)
 	waitFor(t, 3*time.Second, "kimi woken", func() bool {
@@ -207,5 +208,48 @@ func TestRunLoginHeldAgentIsNotWoken(t *testing.T) {
 		if p.Pane == "p-coder" {
 			t.Fatal("a login-held agent was prompted")
 		}
+	}
+}
+
+// A login-held agent swapped to a client with no login expiry (foureyes on
+// 3a): its credentials are no longer read, so nothing would ever release it.
+// Once the swap is over, the hold and its record go, with no resume (the
+// swap resumes it); an agent with no snapshot keeps its hold (forget clears it).
+func TestLoginHoldReleasedWhenTheClientChanges(t *testing.T) {
+	w := newCredWorld(t, map[string]bus.AgentSnapshot{"coder": claudeSnap("/c")})
+	ctx := context.Background()
+	w.r.HSet(ctx, bus.BoardKey(w.b.Project()), "wiki-3", `{"owner":"coder","state":"accepted"}`)
+	w.expiry["/c"] = -time.Hour
+	w.pass(t)
+	if held, _ := w.b.Held(ctx); len(held) != 1 {
+		t.Fatalf("not held: %+v", held)
+	}
+	if err := w.b.FencedQuotaSet(ctx, "holder", bus.LoginHoldField("ghost"), "1"); err != nil {
+		t.Fatal(err)
+	}
+	w.l.snaps = map[string]bus.AgentSnapshot{"coder": {Client: "codex", Provider: "openai"}}
+	// While the swap runs, the hold waits for it.
+	if err := w.r.Set(ctx, bus.SwapKey(w.b.Project(), "coder"), "intent", time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
+	w.pass(t)
+	if w.marks(t)[bus.LoginHoldField("coder")] == "" {
+		t.Fatal("released during the swap")
+	}
+	w.r.Del(ctx, bus.SwapKey(w.b.Project(), "coder"))
+	w.pass(t)
+	m := w.marks(t)
+	if m[bus.LoginHoldField("coder")] != "" || m[bus.LoginHoldField("ghost")] == "" {
+		t.Fatalf("marks %v", m)
+	}
+	if held, _ := w.b.Held(ctx); len(held) != 0 {
+		t.Fatalf("held record kept: %+v", held)
+	}
+	if got := w.dispatchCmds(t, "coder"); len(got) != 0 {
+		t.Fatalf("a resume after a client swap: %q", got)
+	}
+	snap := w.l.snaps["coder"]
+	if w.l.heldBy("coder", &snap) {
+		t.Fatal("still held in the loop")
 	}
 }
