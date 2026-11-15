@@ -44,8 +44,10 @@ by the dispatch service every minute. It judges one agent: **the escalation targ
    (`WaitAnswered`, as `team-stall` reads it), for at least `dispatch.master_idle_after` (§6),
    counted from the status entry's id or the answer's id (Redis time);
 2. a fresh observation of its pane (`Observation.Fresh`) shows it not busy;
-3. it has no obligation (no pending or unread entry): when it has one, the dispatcher's own wake
-   already deals with it, and the check reads `ok`, `master has messages; the dispatcher wakes it`;
+3. it has no obligation in the dispatcher's own sense, `bus.Obligation(...).Wakes()`: entries
+   addressed to it, pending or unread, not `wake=no`, within the dispatcher's horizon. A `wake=no`
+   entry, a stale one past the horizon, or a trimmed gap is not an obligation here either, since
+   nothing would wake master for it. When it has one, the dispatcher's own wake already deals with it, and the check reads `ok`, `master has messages; the dispatcher wakes it`;
 4. the project is not paused, and master's provider is not held;
 5. **something is in master's hand** (§3).
 
@@ -55,7 +57,8 @@ Otherwise:
   `nothing in master's hand`.
 - `unknown` when a read fails, or when master's pane has no fresh observation (the stall guard's
   rule: never judge an unseen pane). The record's detail says which.
-- `off` when the setting is `0`.
+- `unknown` with the detail `off (master_idle_after = 0)` when the setting is `0`, as the other
+  stall checks read off: `health.Status` has no `off`, and the health loop would coerce one.
 
 A `waiting` that is still open (an ask unanswered) is the person's turn and reads `ok`, even with
 work in hand: For you already shows the ask.
@@ -169,11 +172,16 @@ Stall guard: master was woken 25m ago for: herdr-6c2-2 approved, not pushed. It 
 nothing moved. Look at master's pane, or tell it in busmon.
 ```
 
-The wake's time is its own entry's stream id (Redis time): `FencedCmdOnce` writes the mark as a
-field of the entry (`stall-master=<episode>`, `onceCmdFields`), and the stall reader already scans
-the cmd stream (`stallCmdScan`), so the newest entry from `dispatch` to master carrying that field
-and episode gives it. No new mark, no writer clock. If that entry is no longer retained, the wake
-is older than the stream's horizon, so the time has passed. A master without turn hooks that stays
+The wake's time is its own entry's stream id (Redis time): `FencedCmdOnce` writes the entry and
+the mark in one script, and the entry carries `episode=stall-master=<episode>`
+(`onceCmdFields`). The stall reader already scans the cmd stream (`stallCmdScan`), so the newest
+entry from `dispatch` to master with that `episode` field gives it. No new mark, no writer clock.
+
+- Mark set to this episode, entry found: the wake happened at the entry's id.
+- Mark set, entry not retained: the wake is older than the stream's horizon, so the time has passed.
+- Mark not set to this episode: no wake was sent. A wake that failed (lease lost, a swap in
+  progress: `ErrNotHolder`, `ErrSwapInProgress`) set no mark, since the script writes both or
+  neither; the next pass tries the wake again and the second tier waits for it. A master without turn hooks that stays
 `idle` after the wake keeps the warn's `Since`; the pass one minute after the wake finds the wake 1
 minute old and sends nothing.
 
@@ -204,13 +212,16 @@ shorter. busmon's C page lists it.
 - **Evaluation, pure** (`health/idlemaster_test.go`), one case per rule: idle past N with each item
   kind warns; `working`, `blocked`, an open `waiting`, idle under N, a busy pane, an unseen pane
   (`unknown`), an obligation, a pause, a hold: no warn; an answered `waiting` counts from the
-  answer; a check-back not yet due is not an item; a stale merge-queue pass is `unknown`; `0` is
-  off. The detail caps at three items then `+N`.
+  answer; a check-back not yet due is not an item; a stale merge-queue pass is `unknown`; `0` reads
+  `unknown`, `off`. The detail caps at three items then `+N`.
 - **The 2026-11-15 replay**: master `waiting` answered at 00:21, `fa2d796f` approved and not on
   origin, N = 15m: warns at 00:36 and wakes master once; the same input at 00:37 wakes nothing.
+- **Obligation**: a `wake=no` entry, a stale entry past the horizon and a trimmed gap do not keep
+  the check `ok`; a wakeable pending or unread entry does.
 - **Episodes**: a new item makes a new episode and a new wake; a removed item too; the same items
   in another order are the same episode.
-- **Second tier**: woken, idle again N later with the same episode: one person notice; the next
+- **Second tier**: a wake refused (`ErrSwapInProgress`, lease lost) sets no mark: no notice, the
+  next pass wakes again. Woken, idle again N later with the same episode: one person notice; the next
   pass sends nothing. Woken, still warning one minute later (no turn hooks, `Since` unchanged):
   nothing. The wake's time comes from its cmd entry; an entry no longer retained counts as old.
   Cannot-act: notice at once, no wake.
