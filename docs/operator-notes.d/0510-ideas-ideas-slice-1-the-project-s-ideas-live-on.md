@@ -10,7 +10,7 @@
   to `people` (`wake=no`, `human=yes`): Activity shows it, nobody is woken. busmon: Work's IDEAS lists
   the ideas still `to discuss` (a plan task naming an idea's id or title takes its place); F6 lists
   them all by state (tab: one state, enter: the idea, a: add one in the compose window, its first line
-  the title and the rest its text, s: the state picker, y sets it) and flags a state set by someone
+  the title and the rest its text, s: the state picker, ←→ choose, enter sets it) and flags a state set by someone
   other than the configured person. busmon refuses a set or an add when it runs in an agent's
   environment (`AGENT_BUS_AGENT`: it would inherit the person's name; an agent adds with `idea add`
   under its own); a failed add keeps the window's text for the next `a`. An add is idempotent by

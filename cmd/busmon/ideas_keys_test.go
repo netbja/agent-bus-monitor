@@ -70,7 +70,8 @@ func TestIdeasF6Opens(t *testing.T) {
 	}
 }
 
-// s, ↓, y: the state set as the person, the state shown when the picker
+// s, →, enter: the state set as the person (the person, idea-state-keys:
+// the arrows across, enter confirms, no y), the state shown when the picker
 // opened as the expected one; the list read again shows it at once.
 func TestIdeasPickerSets(t *testing.T) {
 	m, w := ideasShell(t, "charlie")
@@ -79,13 +80,13 @@ func TestIdeasPickerSets(t *testing.T) {
 	if p.ideas.pick == nil || p.ideas.pick.id != "i1" || p.ideas.pick.from != bus.IdeaToDiscuss {
 		t.Fatalf("s: %+v", p.ideas.pick)
 	}
-	m = keys(t, m, kDown)
-	m = press1(t, m, 'y')
+	m = keys(t, m, kRight)
+	m = press1(t, m, kEnter)
 	if !slices.Contains(w.sent, "idea set i1 to discuss -> decided charlie") {
 		t.Fatalf("sent %v", w.sent)
 	}
 	if p := m.rd.top(); p.ideas.pick != nil || p.kind != ovIdeas {
-		t.Fatalf("after y: %+v", p)
+		t.Fatalf("after enter: %+v", p)
 	}
 	if m.snap.ideas[0].State != bus.IdeaDecided || !strings.Contains(m.ui.flash, "to discuss → decided") {
 		t.Fatalf("shown %q, flash %q", m.snap.ideas[0].State, m.ui.flash)
@@ -95,7 +96,7 @@ func TestIdeasPickerSets(t *testing.T) {
 	}
 }
 
-// esc closes the picker, not the page; y on the current state writes nothing.
+// esc closes the picker, not the page; enter on the current state writes nothing.
 func TestIdeasPickerCancels(t *testing.T) {
 	m, w := ideasShell(t, "charlie")
 	m = keys(t, m, kF6, 's', kEsc)
@@ -103,7 +104,7 @@ func TestIdeasPickerCancels(t *testing.T) {
 		t.Fatalf("esc: %+v", p)
 	}
 	m = keys(t, m, 's')
-	m = press1(t, m, 'y')
+	m = press1(t, m, kEnter)
 	if len(w.sent) != 0 || !strings.Contains(m.ui.flash, "already") {
 		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
 	}
@@ -112,8 +113,8 @@ func TestIdeasPickerCancels(t *testing.T) {
 // No person named: nothing is written, busmon says how to name yourself.
 func TestIdeasNeedAPerson(t *testing.T) {
 	m, w := ideasShell(t, "")
-	m = keys(t, m, kF6, 's', kDown)
-	m = press1(t, m, 'y')
+	m = keys(t, m, kF6, 's', kRight)
+	m = press1(t, m, kEnter)
 	if len(w.sent) != 0 || !m.ui.flashErr || !strings.Contains(m.ui.flash, "identity set") {
 		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
 	}
@@ -123,8 +124,8 @@ func TestIdeasNeedAPerson(t *testing.T) {
 func TestIdeasRefusalSaid(t *testing.T) {
 	m, w := ideasShell(t, "charlie")
 	w.fail = errors.New("idea refused: the idea is now \"doing\"")
-	m = keys(t, m, kF6, 's', kDown)
-	m = press1(t, m, 'y')
+	m = keys(t, m, kF6, 's', kRight)
+	m = press1(t, m, kEnter)
 	if !m.ui.flashErr || !strings.Contains(m.ui.flash, "doing") {
 		t.Fatalf("flash %q", m.ui.flash)
 	}
@@ -197,8 +198,8 @@ func TestIdeasSetRefusedInAnAgentsEnv(t *testing.T) {
 		}
 		return ""
 	}
-	m = keys(t, m, kF6, 's', kDown)
-	m = press1(t, m, 'y')
+	m = keys(t, m, kF6, 's', kRight)
+	m = press1(t, m, kEnter)
 	if len(w.sent) != 0 || !m.ui.flashErr || !strings.Contains(m.ui.flash, "agent") {
 		t.Fatalf("sent %v flash %q", w.sent, m.ui.flash)
 	}
@@ -208,8 +209,8 @@ func TestIdeasSetRefusedInAnAgentsEnv(t *testing.T) {
 		}
 		return ""
 	}
-	m = keys(t, m, 's', kDown)
-	m = press1(t, m, 'y')
+	m = keys(t, m, 's', kRight)
+	m = press1(t, m, kEnter)
 	if len(w.sent) != 1 {
 		t.Fatalf("the person's busmon in a herdr pane: sent %v flash %q", w.sent, m.ui.flash)
 	}
@@ -218,8 +219,8 @@ func TestIdeasSetRefusedInAnAgentsEnv(t *testing.T) {
 // s on an idea's page too.
 func TestIdeaPageSets(t *testing.T) {
 	m, w := ideasShell(t, "charlie")
-	m = keys(t, m, kF6, kDown, kEnter, 's', kDown)
-	m = press1(t, m, 'y')
+	m = keys(t, m, kF6, kDown, kEnter, 's', kRight)
+	m = press1(t, m, kEnter)
 	if !slices.Contains(w.sent, "idea set i4 to discuss -> decided charlie") {
 		t.Fatalf("sent %v", w.sent)
 	}
@@ -357,5 +358,45 @@ func TestIdeasAddRetrySameRequest(t *testing.T) {
 	m = press1(t, m, tea.Key{Code: 's', Mod: tea.ModCtrl})
 	if len(w.ideaReqs) != 3 || w.ideaReqs[2] == w.ideaReqs[0] {
 		t.Fatalf("request ids %q: a new text is a new request", w.ideaReqs)
+	}
+}
+
+// ← and → move the picker's cursor, wrapping; they never step the tabs
+// while it is open; enter keeps the page and closes only the picker.
+func TestIdeasPickerArrows(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	m = keys(t, m, kF6, 's', kLeft)
+	p := m.rd.top()
+	if p == nil || p.kind != ovIdeas || p.ideas.pick == nil || p.ideas.pick.sel != len(bus.IdeaStates)-1 {
+		t.Fatalf("← from the first state: %+v", p)
+	}
+	m = keys(t, m, kRight, kRight)
+	if p := m.rd.top(); p.ideas.pick.sel != 1 {
+		t.Fatalf("→ → wraps to 1: %d", p.ideas.pick.sel)
+	}
+	m = press1(t, m, kEnter)
+	if !slices.Contains(w.sent, "idea set i1 to discuss -> decided charlie") {
+		t.Fatalf("sent %v", w.sent)
+	}
+	if p := m.rd.top(); p == nil || p.kind != ovIdeas || p.ideas.pick != nil {
+		t.Fatalf("after enter: %+v", p)
+	}
+}
+
+// On an idea's own page (the Work page's Enter on an idea, the person's
+// path): s, ←/→ and enter work the same.
+func TestIdeaPagePickerArrows(t *testing.T) {
+	m, w := ideasShell(t, "charlie")
+	m.push(page{kind: ovIdea, key: "i1"})
+	m = keys(t, m, 's', kRight)
+	if p := m.rd.top(); p == nil || p.kind != ovIdea || p.ideas.pick == nil || p.ideas.pick.sel != 1 {
+		t.Fatalf("s → on the idea's page: %+v", p)
+	}
+	m = press1(t, m, kEnter)
+	if !slices.Contains(w.sent, "idea set i1 to discuss -> decided charlie") {
+		t.Fatalf("sent %v", w.sent)
+	}
+	if p := m.rd.top(); p == nil || p.kind != ovIdea || p.ideas.pick != nil {
+		t.Fatalf("after enter: %+v", p)
 	}
 }

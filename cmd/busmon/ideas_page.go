@@ -11,7 +11,7 @@ import (
 // The Ideas page, F6 (ideas slice 1): the project's ideas from the broker
 // ({p}:ideas, bus/ideas.go) in the one list pattern: a section per state in
 // the order of life, tab narrowing to one state, enter opening an idea, a
-// adding one, s opening the state picker under the selected row (y sets it,
+// adding one, s opening the state picker under the selected row (←→ choose, enter sets it,
 // as the person: the bus refuses an agent's name).
 
 // ideasView is the page's own state.
@@ -168,7 +168,7 @@ func ideaPicker(p ideaPick, width int) []Line {
 		}
 		l = append(l, Seg{Text: " " + label + " ", Role: RoleAccent, Pill: i == p.sel}, S(RoleText, " "))
 	}
-	keys := append(append(Line{}, guide...), S(RoleMuted, GlyphUp+GlyphDownArrow+" choose "+GlyphNone+" y sets it, as you "+GlyphNone+" esc cancels"))
+	keys := append(append(Line{}, guide...), S(RoleMuted, GlyphArrowL+GlyphArrowR+" choose "+GlyphNone+" enter sets it, as you "+GlyphNone+" esc cancels"))
 	return []Line{FitLine(l, width), FitLine(keys, width)}
 }
 
