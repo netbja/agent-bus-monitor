@@ -31,3 +31,13 @@ func TestLoginSource(t *testing.T) {
 		}
 	}
 }
+
+// LoginSourceOf maps an agent's bus client name to its profile's source:
+// claude-code reads Claude's credentials, every other client nothing.
+func TestLoginSourceOf(t *testing.T) {
+	for client, want := range map[string]string{"claude-code": LoginClaudeCredentials, "codex": "", "kimi-cli": "", "grok": "", "agy": "", "": "", "claude": ""} {
+		if got := LoginSourceOf(client); got != want {
+			t.Errorf("%q: %q, want %q", client, got, want)
+		}
+	}
+}

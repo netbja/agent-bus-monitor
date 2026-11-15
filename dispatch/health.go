@@ -37,6 +37,10 @@ type HealthConfig struct {
 	// review-queue record, with the lease token and the check's id: the stall guard's
 	// fenced waking directives (chain-reliability: a warning alone woke nobody).
 	StallWake func(ctx context.Context, token, check string) error
+	// LoginExpiry is the login pass's last results (false before the first):
+	// the login-expiry check reports them and reads no file (login-updates
+	// r9 §3.4). The loop sets it when its LoginConfig reads credentials.
+	LoginExpiry func() ([]LoginExpiry, bool)
 }
 
 func (c HealthConfig) filled() HealthConfig {
@@ -54,6 +58,12 @@ func (c HealthConfig) filled() HealthConfig {
 // each check at a time. Every result is written through the dispatch fence.
 func (l *loop) healthLoop(ctx context.Context) error {
 	cfg := l.cfg.Health.filled()
+	if cfg.LoginExpiry == nil && l.cfg.Login.Credentials != nil {
+		cfg.LoginExpiry = l.loginExpirySnapshot
+	}
+	if cfg.LoginExpiry != nil {
+		cfg.Checks = append(append([]HealthCheck(nil), cfg.Checks...), LoginExpiryCheck(cfg.LoginExpiry, l.cfg.Login.Zone))
+	}
 	next := make(map[string]time.Time, len(cfg.Checks))
 	nextUsage, nextModels, nextRedis := time.Time{}, time.Time{}, time.Time{}
 	lastDaily := time.Time{}

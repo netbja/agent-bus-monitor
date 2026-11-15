@@ -379,9 +379,11 @@ type loop struct {
 	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
 	cleared    map[string]bool              // agents /clear was typed into this pass (clear.go)
 
-	episodes map[string]agentstate.Episode // each agent's blocked episode, on a host (hostevents.go)
-	bgSkips  map[string]string             // the last background skip per agent and action
-	loginAt  time.Time                     // the last login-expiry read (local clock: a throttle)
+	episodes  map[string]agentstate.Episode // each agent's blocked episode, on a host (hostevents.go)
+	bgSkips   map[string]string             // the last background skip per agent and action
+	loginAt   time.Time                     // the last login-expiry read (local clock: a throttle)
+	loginDirs map[string]loginDir           // each Claude config directory's last credentials read (loginexpiry.go)
+	loginRes  loginResults                  // the last credentials pass, read by the login-expiry check
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
