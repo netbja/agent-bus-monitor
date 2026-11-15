@@ -236,6 +236,7 @@ func TestWithHolderAgentsFromSnapshots(t *testing.T) {
 		"docs":      {Pane: key + "/t6", State: "idle", PID: 7, PIDStart: 70, IdentTS: at, BootID: "b0"}, // another boot
 		"sentinel":  {Pane: key + "/t7", State: "idle", PID: 7, PIDStart: 70, IdentTS: at},               // boot unknown, runs
 		"reviewer":  {Pane: key + "/t9", State: "idle", PID: 9, PIDStart: 90, IdentTS: at, BootID: "b1"}, // lookup failed: unknown, never lost
+		"pilot":     {Pane: key + "/t10", State: "idle", PID: 8, IdentTS: at, BootID: "b1"},              // no start time recorded: unproved, never lost
 		"architect": {Pane: key + "/t8", State: "done", PID: 6, PIDStart: 60, IdentTS: at, BootID: "b1"}, // gone, but done by itself
 	}
 	e := withHolderAgents(health.HolderEvidence{Known: true}, snaps, now, provedAlive("b1", start))

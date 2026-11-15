@@ -4,8 +4,8 @@
   lost when all of these hold:
   - the holder of that build answers and started after the agent's proof;
   - the agent's proved process is proved gone on this host: no such process, another start time
-    for its pid, or another boot (a reboot ends it too); a lookup that fails otherwise proves
-    nothing and never makes an agent lost;
+    for its pid, or another boot (a reboot ends it too); a lookup that fails otherwise, or a
+    proof recorded without a start time, proves nothing and never makes an agent lost;
   - it was not declared `done`.
   A holder restart kills every process it held, so a terminal id the new holder reuses never hides
   a lost agent, and a terminal that ended by itself is not called lost. The holder's start is its

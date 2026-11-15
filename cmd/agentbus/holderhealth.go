@@ -171,12 +171,16 @@ func withHolderAgents(e health.HolderEvidence, snaps map[string]bus.AgentSnapsho
 // provedAlive: the snapshot's proved process may still run on this host;
 // false only when it is proved gone: another boot (a reboot since the
 // proof), no such process (dispatch.ErrNoProcess), or another start time
-// for that pid. A lookup that fails otherwise proves nothing, so the agent
-// is never called lost on it (reviewer-codex).
+// for that pid. A lookup that fails otherwise, or a proof without a start
+// time, proves nothing, so the agent is never called lost on it
+// (reviewer-codex).
 func provedAlive(boot string, start func(int) (uint64, error)) func(bus.AgentSnapshot) bool {
 	return func(s bus.AgentSnapshot) bool {
 		if s.PID <= 0 || s.BootID != "" && boot != "" && s.BootID != boot {
 			return false
+		}
+		if s.PIDStart == 0 { // no start time recorded: no process is identified, so none is proved gone
+			return true
 		}
 		got, err := start(s.PID)
 		switch {
