@@ -39,9 +39,10 @@ func loginExpiredAgentMark(agent string) string { return "login-expired:" + agen
 func (l *loop) loginHolds(ctx context.Context, results []LoginExpiry, now time.Time, zone *time.Location) error {
 	marks, err := l.b.QuotaMarks(ctx)
 	if err != nil {
-		return err
+		return err // l.loginHeld keeps the last view, and this pass's fails (holdFailed)
 	}
 	l.loginHeld = bus.LoginHeldAgents(marks)
+	l.holdFailed(results)
 	var work *agentWork
 	for _, r := range results {
 		field := bus.LoginHoldField(r.Agent)
@@ -56,7 +57,6 @@ func (l *loop) loginHolds(ctx context.Context, results []LoginExpiry, now time.T
 			if err := l.loginHold(ctx, r, recorded, work, now, zone); err != nil {
 				return err
 			}
-			l.loginHeld[r.Agent] = true
 		// A renewed login: ok or warn is an expiry still ahead, so later than
 		// the held one, which had passed; unknown and fail keep the hold.
 		case marks[field] != "" && (r.Status == health.OK || r.Status == health.Warn):
@@ -109,6 +109,19 @@ func (l *loop) loginHoldsOfOtherClients(ctx context.Context) error {
 		l.log(map[string]any{"action": "login-release", "agent": a, "reason": "client " + snap.Client + " has no login expiry"})
 	}
 	return nil
+}
+
+// holdFailed holds, in the loop, every agent whose login this pass read as
+// expired, whatever the writes of its hold do next (reviewer-codex on 3a).
+func (l *loop) holdFailed(results []LoginExpiry) {
+	if l.loginHeld == nil {
+		l.loginHeld = map[string]bool{}
+	}
+	for _, r := range results {
+		if r.Status == health.Fail {
+			l.loginHeld[r.Agent] = true
+		}
+	}
 }
 
 // loginHold writes one agent's hold, idempotent per episode (the expiry).

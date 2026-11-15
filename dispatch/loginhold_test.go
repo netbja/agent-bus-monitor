@@ -253,3 +253,25 @@ func TestLoginHoldReleasedWhenTheClientChanges(t *testing.T) {
 		t.Fatal("still held in the loop")
 	}
 }
+
+// Fail closed (reviewer-codex on 3a): an expired login holds its agent in
+// the loop even when the hold's bookkeeping fails (the marks, the board), so
+// it is not woken in the same pass.
+func TestLoginHoldFailsClosedOnWriteErrors(t *testing.T) {
+	for name, breakIt := range map[string]func(w *credWorld){
+		"board unreadable": func(w *credWorld) { w.r.Set(context.Background(), bus.BoardKey(w.b.Project()), "x", 0) },
+		"marks unreadable": func(w *credWorld) { w.r.Set(context.Background(), bus.QuotaKey(w.b.Project()), "x", 0) },
+	} {
+		w := newCredWorld(t, map[string]bus.AgentSnapshot{"coder": claudeSnap("/c")})
+		w.expiry["/c"] = -time.Hour
+		breakIt(w)
+		w.l.loginAt = time.Time{}
+		if err := w.l.loginPass(context.Background()); err == nil {
+			t.Fatalf("%s: no error", name)
+		}
+		snap := w.l.snaps["coder"]
+		if !w.l.heldBy("coder", &snap) {
+			t.Fatalf("%s: an expired login left the agent wakeable", name)
+		}
+	}
+}
