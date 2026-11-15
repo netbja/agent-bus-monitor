@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -190,5 +191,30 @@ func TestConfigErrClassifiesOnlyRefusals(t *testing.T) {
 	}
 	if err := configErr(context.Canceled); errors.Is(err, ErrConfigRefused) {
 		t.Error("a context error read as a refusal")
+	}
+}
+
+// The dispatcher's events are fenced like every dispatcher write (herdr exit
+// step 9): written while its token holds the lease, refused otherwise, and
+// validated as AppendEvent validates.
+func TestFencedAppendEvent(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", time.Minute); err != nil || !ok {
+		t.Fatalf("acquire: %v %v", ok, err)
+	}
+	e := TermEvent{Kind: EventBlocked, Agent: "coder", By: "dispatch", Detail: "blocked: coder (claude)\nx"}
+	if _, err := b.FencedAppendEvent(ctx, "other", e); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("another token: %v", err)
+	}
+	if _, err := b.FencedAppendEvent(ctx, "tok", TermEvent{Kind: "nope"}); err == nil {
+		t.Fatal("an unknown kind was written")
+	}
+	if _, err := b.FencedAppendEvent(ctx, "tok", e); err != nil {
+		t.Fatal(err)
+	}
+	got, err := b.RecentEvents(ctx, 5)
+	if err != nil || len(got) != 1 || got[0].Kind != EventBlocked || got[0].Agent != "coder" || got[0].Detail != "blocked: coder (claude) x" {
+		t.Fatalf("events %+v %v", got, err)
 	}
 }

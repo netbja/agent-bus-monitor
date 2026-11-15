@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -364,6 +365,9 @@ type loop struct {
 	obsFresh   bool                         // not yet judged by promptNotices
 	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
 	cleared    map[string]bool              // agents /clear was typed into this pass (clear.go)
+
+	episodes map[string]agentstate.Episode // each agent's blocked episode, on a host (hostevents.go)
+	bgSkips  map[string]string             // the last background skip per agent and action
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -755,7 +759,11 @@ func (l *loop) prompt(ctx context.Context, s *step, d Decision) error {
 		r.Reason = "prompt error: " + perr.Error()
 		l.logError(s.agent, "prompt", perr)
 	}
-	return l.put(ctx, s, r)
+	if err := l.put(ctx, s, r); err != nil {
+		return err
+	}
+	// After the record (foureyes): a failed notice never leaves it "prompting".
+	return l.promptOutcome(ctx, s.agent, observed, perr)
 }
 
 // escalate is spec §3.4: escalated=pending (fenced) → escalation cmd to the

@@ -106,6 +106,8 @@ func PopDone(f PopFacts) (bool, string) {
 		return no("its pane is on a prompt")
 	case in.Busy || !in.Ready || (in.State != "idle" && in.State != "done"):
 		return no("its pane is not ready")
+	case in.BackgroundSkip() != "": // ending it would lose that work (herdr exit 4.3b)
+		return no("%s", in.BackgroundSkip())
 	}
 	switch {
 	case f.Paused:

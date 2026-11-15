@@ -58,6 +58,24 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		return l
 	}
 
+	// A person at the terminal (a focused viewer attached, spec 4.5) shows in
+	// Activity, so the dispatcher defers the wake rather than having it refused.
+	t.Run("ActivityShowsAPersonActive", func(t *testing.T) {
+		h := newHarness(t)
+		a := start(t, h, "coder")
+		ready(h, a.ID)
+		h.SetPersonActive(a.ID, true)
+		act, err := h.Host().Activity(ctx, a.ID)
+		if err != nil || !act.PersonActive(time.Now(), time.Second) || act.FocusedViewers < 1 {
+			t.Fatalf("a person attached: %+v %v", act, err)
+		}
+		h.SetPersonActive(a.ID, false)
+		act, err = h.Host().Activity(ctx, a.ID)
+		if err != nil || act.PersonActive(time.Now(), time.Second) || act.FocusedViewers != 0 {
+			t.Fatalf("nobody attached: %+v %v", act, err)
+		}
+	})
+
 	t.Run("StartListClose", func(t *testing.T) {
 		h := newHarness(t)
 		a := start(t, h, "coder")

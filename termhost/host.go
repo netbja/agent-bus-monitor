@@ -55,12 +55,15 @@ type Activity struct {
 	Draft         bool      // a viewer typed since the last CR
 	DraftSince    time.Time
 	OutputAt      time.Time // the program's last output
+	// FocusedViewers: non-observer viewers attached and not proven
+	// unfocused (focused from attach until a focus-out, spec 4.5).
+	FocusedViewers int
 }
 
 // PersonActive reports whether a person is at the terminal: a draft stands,
-// or a viewer typed within quiet of now.
+// a viewer typed within quiet of now, or a focused viewer is attached.
 func (a Activity) PersonActive(now time.Time, quiet time.Duration) bool {
-	return a.Draft || (!a.ViewerTypedAt.IsZero() && now.Sub(a.ViewerTypedAt) < quiet)
+	return a.Draft || a.FocusedViewers > 0 || (!a.ViewerTypedAt.IsZero() && now.Sub(a.ViewerTypedAt) < quiet)
 }
 
 // Proc is one process of a terminal's tree (spec 4.3b).

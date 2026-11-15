@@ -11,6 +11,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // Auto-clear (lifecycle spec, part B): after an agent declared its hand-off
@@ -92,6 +93,9 @@ func DecideClear(f ClearFacts) ClearDecision {
 		return no("the pane is blocked on a prompt")
 	case in.Busy || !in.Ready:
 		return no("the pane is not ready")
+	}
+	if why := in.BackgroundSkip(); why != "" { // a /clear would lose it (herdr exit 4.3b)
+		return no(why)
 	}
 	return ClearDecision{Clear: true}
 }
@@ -246,6 +250,9 @@ func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus
 	}
 	f.Inspection = l.rt.Inspect(ctx, snap.Pane)
 	d := DecideClear(f)
+	if why := f.Inspection.BackgroundSkip(); why != "" && d.Reason == why {
+		l.backgroundSkip(ctx, a, "auto-clear", why)
+	}
 	if len(d.WaitGates) > 0 {
 		l.deferClear(a, d.Reason)
 		return l.clearWaits(ctx, a, rec, d.WaitGates)
@@ -266,6 +273,11 @@ func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus
 	}
 	l.cleared[a] = true
 	if err := l.rt.Clear(ctx, snap.Pane); err != nil {
+		if errors.Is(err, termhost.ErrNotLanded) { // pasted, no CR: the person must know
+			if nerr := l.notLanded(ctx, a, "clear"); nerr != nil {
+				return nerr
+			}
+		}
 		return err // typed or not, unknown: the proof settles it, or escalates once
 	}
 	l.cfg.Clear.Decisions.note(a, "cleared")

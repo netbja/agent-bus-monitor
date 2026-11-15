@@ -138,6 +138,9 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 		f.Held = l.heldBy(f.Snap)
 	}
 	done, why := PopDone(f)
+	if bg := f.Pane.BackgroundSkip(); !done && bg != "" && why == bg {
+		l.backgroundSkip(ctx, a, "pop-retire", bg)
+	}
 	if !done {
 		l.logOnce("pop-kept:"+a, map[string]any{"agent": a, "action": "pop-kept", "reason": why})
 		return nil

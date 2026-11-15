@@ -234,7 +234,8 @@ func (h *Host) Activity(ctx context.Context, id termhost.TermID) (termhost.Activ
 		return termhost.Activity{}, errors.New("holder: an activity reply without its activity")
 	}
 	a := r.Activity
-	return termhost.Activity{ViewerTypedAt: msTime(a.ViewerTypedAt), Draft: a.Draft, DraftSince: msTime(a.DraftSince), OutputAt: msTime(a.OutputAt)}, nil
+	return termhost.Activity{ViewerTypedAt: msTime(a.ViewerTypedAt), Draft: a.Draft, DraftSince: msTime(a.DraftSince), OutputAt: msTime(a.OutputAt),
+		FocusedViewers: a.FocusedViewers}, nil
 }
 
 func (h *Host) Processes(ctx context.Context, id termhost.TermID) ([]termhost.Proc, error) {

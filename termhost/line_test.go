@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The wake line typed today, byte for byte (spec 4.2: the same line typed).
@@ -123,5 +124,17 @@ func TestSpecCarriesNoCommand(t *testing.T) {
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("Spec's fields %v, want %v", got, want)
+	}
+}
+
+// A focused viewer attached is a person active, however long ago it typed
+// (spec 4.5: not proven unfocused fails closed).
+func TestPersonActiveWithAFocusedViewer(t *testing.T) {
+	now := time.Now()
+	if !(Activity{FocusedViewers: 1}).PersonActive(now, time.Second) {
+		t.Fatal("a focused viewer is not a person active")
+	}
+	if (Activity{ViewerTypedAt: now.Add(-time.Minute)}).PersonActive(now, time.Second) {
+		t.Fatal("an old key is a person active")
 	}
 }

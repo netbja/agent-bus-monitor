@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -59,6 +60,11 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		}
 		snap := s
 		in := l.rt.Inspect(pctx, snap.Pane)
+		if err := l.blockedObserve(pctx, a, &snap, in); errors.Is(err, bus.ErrNotHolder) {
+			return err
+		} else if err != nil {
+			l.logError(a, "blocked report", err) // the next look sends it: the episode stays open
+		}
 		if in.Err != nil || in.Gone || !identityOK(&snap, in) {
 			if !in.Gone {
 				// A failed look, or a pane whose process is not the agent's at
