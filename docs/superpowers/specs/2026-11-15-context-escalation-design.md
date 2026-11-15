@@ -1,7 +1,8 @@
 # The context alert gets a second step (context-escalation)
 
-Status: spec, r2 (r1: foureyes, "a hand-off stands" is the existing `VoidFor` rule, not a
-session match). Task `context-escalation` (master's directive of 2026-11-15, at the person's
+Status: spec, r2. r1 rejected by both reviewers: "a hand-off stands" is the existing `VoidFor`
+rule, not a session match (§2); the second threshold is applied only above the effective alert
+(§6). Task `context-escalation` (master's directive of 2026-11-15, at the person's
 request, human directive 1794776197529-0): "the context alert has no teeth". Keep it small.
 
 ## 1. What happened on 2026-11-15
@@ -149,8 +150,17 @@ Never a fail: a fail would page sentinel, which can do nothing for a working age
 
 | Name | Env | Kind | Default | Rule |
 |---|---|---|---|---|
-| `dispatch.context_urgent` | `AGENT_BUS_CONTEXT_URGENT` | Float | 90 | 0 = off; otherwise must be above `context_alert` and at most 100, else invalid (the registry's warning, the default used) |
+| `dispatch.context_urgent` | `AGENT_BUS_CONTEXT_URGENT` | Float | 90 | 0 = off; the registry accepts 0 to 100 (outside: its warning, the default used); applied only above the effective alert (below) |
 | `dispatch.context_handoff_deadline` | `AGENT_BUS_CONTEXT_HANDOFF_DEADLINE` | Duration | 20m | 0 = off; at least 1m |
+
+**The effective second threshold** is computed once, where both are read (`bus.ContextUrgent(getenv,
+alert)`, used by the dispatcher's wiring and by nothing else): the configured `context_urgent`
+when it is strictly above the effective `context_alert`, else **0 (off)**, and the dispatch
+service logs once at start `dispatch.context_urgent <u> is not above dispatch.context_alert <a>:
+second threshold off, the deadline still applies` (settings values, never anything else). So
+`context_alert = 95` with the default 90 never escalates in the alert's own pass; the deadline
+alone escalates it. A single publication that jumps over both (79% then 92%) alerts and
+escalates in the same pass, in that order: the agent is already past the second threshold.
 
 Both read by `dispatch` (wired in `cmd/agentbus/quotacmd.go`, `ContextConfig.Urgent` and
 `.Deadline`). `context_alert = 0` turns the whole ladder off, as today. Both off = today's
@@ -170,7 +180,12 @@ Tests:
   you; same agent with a standing hand-off → warn without reason (in hand); with a voided one
   (working since) → escalated again; a mark for an
   older session is not escalated.
-- config: invalid `context_urgent` (≤ alert, > 100), invalid deadline (< 1m).
+- config: `context_urgent` > 100 or < 0 and deadline < 1m invalid (default used);
+  `bus.ContextUrgent`: alert 80 / urgent 90 → 90; alert 95 / urgent 90 (default) → 0; alert 90 /
+  urgent 90 → 0; urgent 0 → 0; alert 0 → the ladder off.
+- dispatch: alert 95, urgent default, fill 96%: the alert only, no escalation in that pass or the
+  next; the escalation at the deadline; fill 79% then 92% in one publication: alert then
+  escalation, once each.
 
 Footprint (one PR):
 - `dispatch/contextalert.go`, `dispatch/context.go` (`Urgent`, `Deadline`), their tests;
