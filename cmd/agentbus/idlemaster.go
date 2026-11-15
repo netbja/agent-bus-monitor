@@ -86,13 +86,14 @@ func (s *stallReader) idleMaster(ctx context.Context) (health.Outcome, error) {
 	if err != nil {
 		return fail("pause unavailable")
 	}
-	in.Paused, in.Held = pause != nil, tr.held[snap.Provider]
+	heldWhy := tr.held.of(master, snap.Provider)
+	in.Paused, in.Held = pause != nil, heldWhy
 	obs, err := s.b.Observed(ctx)
 	if err != nil {
 		return fail("observations unavailable")
 	}
 	ob, seen := obs[master]
-	in.CannotAct = dispatch.CannotAct(master, in.Held, seen && ob.State == "blocked")
+	in.CannotAct = dispatch.CannotAct(master, heldWhy, seen && ob.State == "blocked")
 	marks, err := s.b.QuotaMarks(ctx)
 	if err != nil {
 		return fail("quota marks unavailable")

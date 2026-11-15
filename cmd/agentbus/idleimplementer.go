@@ -39,10 +39,10 @@ func (s *stallReader) idleImplementer(ctx context.Context) (health.Outcome, erro
 	if phrase != "" {
 		return fail(phrase)
 	}
-	in.Agents, in.Held = tr.agents, map[string]bool{}
+	in.Agents, in.Held = tr.agents, map[string]string{}
 	for name, snap := range tr.snaps {
-		if tr.held[snap.Provider] {
-			in.Held[name] = true
+		if why := tr.held.of(name, snap.Provider); why != "" {
+			in.Held[name] = why
 		}
 	}
 	board, err := s.b.Board(ctx)

@@ -114,7 +114,7 @@ func (l *loop) credentialsPass(ctx context.Context, now time.Time, zone *time.Lo
 			l.log(map[string]any{"action": "login-expiry-warn", "agent": r.Agent, "expiry": r.Expiry.UnixMilli()})
 		}
 	}
-	return nil
+	return l.loginHolds(ctx, results, now, zone)
 }
 
 // judgeLogin: unknown with the read's reason; fail once passed; warn within

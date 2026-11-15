@@ -224,7 +224,7 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 // tryClear judges one record and, when the rule passes, reserves, re-inspects
 // and types /clear.
 func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus.AgentSnapshot, asks []bus.Ask, armed map[string]string) error {
-	f := ClearFacts{On: true, Record: rec, Snap: snap, Held: l.heldBy(&snap)}
+	f := ClearFacts{On: true, Record: rec, Snap: snap, Held: l.heldBy(a, &snap)}
 	if void, _ := rec.VoidFor(snap, true); void {
 		return nil // no longer a hand-off: nothing to clear, nothing to say
 	}

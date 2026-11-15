@@ -13,7 +13,7 @@ var iiNow = time.Date(2026, 11, 8, 9, 30, 0, 0, time.UTC)
 
 func iiInput(agents ...StallAgent) IdleImplementerInput {
 	return IdleImplementerInput{Now: iiNow, After: 15 * time.Minute, Implementers: []string{"coder", "coder2"},
-		Agents: agents, Held: map[string]bool{}, Requested: map[string][]string{"coder": {"agy-client-impl"}}}
+		Agents: agents, Held: map[string]string{}, Requested: map[string][]string{"coder": {"agy-client-impl"}}}
 }
 
 func idleFor(name string, d time.Duration) StallAgent {
@@ -44,7 +44,7 @@ func TestIdleImplementerOK(t *testing.T) {
 		"dormant":      {func() IdleImplementerInput { a := idleFor("coder", time.Hour); a.Dormant = true; return iiInput(a) }(), "no implementer registered"},
 		"held": {func() IdleImplementerInput {
 			in := iiInput(idleFor("coder", time.Hour))
-			in.Held["coder"] = true
+			in.Held["coder"] = "quota"
 			return in
 		}(), "coder held by its quota"},
 		"nothing for it": {func() IdleImplementerInput { in := iiInput(idleFor("coder", time.Hour)); in.Requested = nil; return in }(), "nothing requested for coder"},

@@ -29,7 +29,7 @@ type IdleImplementerInput struct {
 	ReadErr      string
 	Agents       []StallAgent
 	Implementers []string            // the roles with the implement skill
-	Held         map[string]bool     // agent -> held by its provider's quota
+	Held         map[string]string   // agent -> why it is held: "quota" (its provider's) or "login" (its own, expired)
 	Requested    map[string][]string // target -> its requests in state requested (read or not, never accepted)
 }
 
@@ -91,7 +91,9 @@ func passedOverOf(in IdleImplementerInput) ([]passedOver, string) {
 			why(fmt.Sprintf("%s idle only %s", a.Name, minutes(idle)))
 		case a.Pane == PaneBusy:
 			why(a.Name + " busy (not declared)")
-		case in.Held[a.Name]:
+		case in.Held[a.Name] == "login":
+			why(a.Name + " held: its login expired")
+		case in.Held[a.Name] != "":
 			why(a.Name + " held by its quota")
 		case len(tasks) == 0:
 			why("nothing requested for " + a.Name)

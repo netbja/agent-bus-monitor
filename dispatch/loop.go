@@ -384,6 +384,7 @@ type loop struct {
 	loginAt   time.Time                     // the last login-expiry read (local clock: a throttle)
 	loginDirs map[string]loginDir           // each Claude config directory's last credentials read (loginexpiry.go)
 	loginRes  loginResults                  // the last credentials pass, read by the login-expiry check
+	loginHeld map[string]bool               // agents with a login hold (hold-login:<agent>), as of the last login pass
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a
@@ -508,8 +509,12 @@ func (l *loop) reconcile(ctx context.Context) error {
 		if s, ok := snaps[a]; ok {
 			snap = &s
 		}
-		if l.heldBy(snap) { // its provider is at its limit: no prompt, no escalation
-			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "quota held: " + snap.Provider})
+		if why := l.heldReason(a, snap); why != "" { // its provider at its limit, or its login expired: no prompt, no escalation
+			reason := "quota held: " + snap.Provider
+			if why == bus.HeldLogin {
+				reason = "login held"
+			}
+			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": reason})
 			continue
 		}
 		if l.cleared[a] { // /clear was typed this pass: nothing else into that pane until the next
@@ -847,18 +852,23 @@ func (l *loop) recipientCannotAct(agent string) string {
 	if agent == t {
 		return "the escalation recipient itself is stuck"
 	}
-	s, ok := l.snaps[t]
+	var snap *bus.AgentSnapshot
+	if s, ok := l.snaps[t]; ok {
+		snap = &s
+	}
 	o, seen := l.obs[t]
-	return CannotAct(t, ok && l.heldBy(&s), seen && o.State == "blocked")
+	return CannotAct(t, l.heldReason(t, snap), seen && o.State == "blocked")
 }
 
 // CannotAct is the escalation target's reason it cannot act, or "": its
 // provider is held, or its own tab was last seen blocked. Pure, so the
 // health loop's stall guard applies the same rule without sharing the
 // reconciliation's state.
-func CannotAct(target string, held, blocked bool) string {
+func CannotAct(target, held string, blocked bool) string {
 	switch {
-	case held:
+	case held == bus.HeldLogin:
+		return target + " is held: its Claude login expired"
+	case held != "":
 		return target + " is held by its provider's limit"
 	case blocked:
 		return target + "'s own tab is blocked"

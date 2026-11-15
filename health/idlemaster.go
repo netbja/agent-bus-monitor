@@ -46,7 +46,7 @@ type IdleMasterInput struct {
 	OpenAsks   int
 	Obligation bool // a wakeable message waits for master: the dispatcher wakes it
 	Paused     bool
-	Held       bool
+	Held       string // why master is held: "quota" (its provider's), "login" (its own, expired) or ""
 	// CannotAct is dispatch.CannotAct's reason, or "".
 	CannotAct string
 	// The items' sources: the merge queue's undelivered heads (QueueUnknown
@@ -157,7 +157,9 @@ func EvaluateIdleMaster(in IdleMasterInput) Outcome {
 		return Outcome{Status: OK, Detail: in.Master + " has messages; the dispatcher wakes it"}
 	case in.Paused:
 		return Outcome{Status: OK, Detail: "project paused"}
-	case in.Held:
+	case in.Held == "login":
+		return Outcome{Status: OK, Detail: in.Master + " held: its login expired"}
+	case in.Held != "":
 		return Outcome{Status: OK, Detail: in.Master + " held by its provider's limit"}
 	}
 	items := in.items()

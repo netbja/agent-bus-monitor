@@ -135,7 +135,7 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 		return nil
 	}
 	if !f.Held {
-		f.Held = l.heldBy(f.Snap)
+		f.Held = l.heldBy(a, f.Snap)
 	}
 	done, why := PopDone(f)
 	if bg := f.Pane.BackgroundSkip(); !done && bg != "" && why == bg {

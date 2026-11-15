@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -85,19 +84,22 @@ func sortStrings(lists ...[]string) {
 	}
 }
 
-// heldProviders are the providers the quota pass holds ({p}:quota hold:<p>).
-func (s *stallReader) heldProviders(ctx context.Context) (map[string]bool, error) {
+// holds are the {p}:quota marks as the stall checks read them: an agent is
+// held by its provider's quota hold or by its own login hold (login-updates
+// r9 §3.6), both excused alike.
+type holds map[string]string
+
+// of is why agent, on provider, is held: bus.HeldQuota, bus.HeldLogin or "".
+func (h holds) of(agent, provider string) string { return bus.HeldReason(h, agent, provider) }
+
+// heldProviders are the holds the dispatcher wrote ({p}:quota hold:<p> and
+// hold-login:<agent>).
+func (s *stallReader) heldProviders(ctx context.Context) (holds, error) {
 	marks, err := s.b.QuotaMarks(ctx)
 	if err != nil {
 		return nil, err
 	}
-	held := map[string]bool{}
-	for k := range marks {
-		if p, ok := strings.CutPrefix(k, "hold:"); ok {
-			held[p] = true
-		}
-	}
-	return held, nil
+	return holds(marks), nil
 }
 
 func dormantAt(snap bus.AgentSnapshot, now time.Time) bool {
@@ -186,7 +188,7 @@ func (s *stallReader) quietAgent(ctx context.Context) (health.Outcome, error) {
 		if err != nil { // a cursor not read is never "not read yet" (foureyes)
 			return fail("delivery cursors unavailable")
 		}
-		a := health.QuietAgent{Name: name, State: snap.State, Held: held[snap.Provider], Dormant: dormantAt(snap, now),
+		a := health.QuietAgent{Name: name, State: snap.State, Held: held.of(name, snap.Provider) != "", Dormant: dormantAt(snap, now),
 			LastDelivered: o.LastDelivered, Pending: o.PendingIDs, LastWrite: lastWrite[name]}
 		if ob, ok := obs[name]; ok && ob.Fresh(now.UnixMilli()) && ob.Busy {
 			a.Pane = health.PaneBusy
@@ -271,8 +273,13 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 				in.AgentReady = append(in.AgentReady, health.ReadyTask{ID: r.Task.ID, Title: r.Task.Title, Owner: "master"})
 			case r.State == plan.Upcoming && r.Task.Owner != plan.Person && len(r.WaitingOn) == 0:
 				t := health.ReadyTask{ID: r.Task.ID, Title: r.Task.Title, Owner: r.Task.Owner}
-				if snap, ok := snaps[r.Task.Owner]; ok && held[snap.Provider] {
-					t.OwnerHeld, t.Hold = true, snap.Provider+" held"
+				if snap, ok := snaps[r.Task.Owner]; ok {
+					switch held.of(r.Task.Owner, snap.Provider) {
+					case bus.HeldQuota:
+						t.OwnerHeld, t.Hold = true, snap.Provider+" held"
+					case bus.HeldLogin:
+						t.OwnerHeld, t.Hold = true, "login held"
+					}
 				}
 				in.AgentReady = append(in.AgentReady, t)
 			}
@@ -284,7 +291,7 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 // teamRead is the team as team-stall and review-queue read it.
 type teamRead struct {
 	snaps        map[string]bus.AgentSnapshot
-	held         map[string]bool
+	held         holds
 	agents       []health.StallAgent
 	team         map[string]bus.AgentSnapshot // the non-dormant agents
 	noIdentities bool
@@ -442,16 +449,10 @@ func (s *stallReader) stallNotify(ctx context.Context, token string, _ health.Re
 	if err != nil {
 		return err
 	}
-	held := map[string]bool{}
-	for k := range marks {
-		if p, ok := strings.CutPrefix(k, "hold:"); ok {
-			held[p] = true
-		}
-	}
 	why := target + " is not registered"
 	if snap, ok := snaps[target]; ok {
 		o, seen := obs[target]
-		why = dispatch.CannotAct(target, held[snap.Provider], seen && o.State == "blocked")
+		why = dispatch.CannotAct(target, holds(marks).of(target, snap.Provider), seen && o.State == "blocked")
 	}
 	var msg string
 	switch since := s.now().Sub(time.UnixMilli(first)); {
