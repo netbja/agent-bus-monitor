@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -223,7 +224,10 @@ func TestWithHolderAgentsFromSnapshots(t *testing.T) {
 		if s, ok := running[pid]; ok {
 			return s, nil
 		}
-		return 0, errors.New("no such process")
+		if pid == 9 {
+			return 0, errors.New("/proc unreadable")
+		}
+		return 0, dispatch.ErrNoProcess
 	}
 	snaps := map[string]bus.AgentSnapshot{
 		"coder":     {Pane: key + "/t3", State: "idle", PID: 5, PIDStart: 50, IdentTS: at, BootID: "b1"}, // gone
@@ -231,6 +235,7 @@ func TestWithHolderAgentsFromSnapshots(t *testing.T) {
 		"master":    {Pane: key + "/t5", State: "idle", PID: 8, PIDStart: 81, IdentTS: at, BootID: "b1"}, // pid reused
 		"docs":      {Pane: key + "/t6", State: "idle", PID: 7, PIDStart: 70, IdentTS: at, BootID: "b0"}, // another boot
 		"sentinel":  {Pane: key + "/t7", State: "idle", PID: 7, PIDStart: 70, IdentTS: at},               // boot unknown, runs
+		"reviewer":  {Pane: key + "/t9", State: "idle", PID: 9, PIDStart: 90, IdentTS: at, BootID: "b1"}, // lookup failed: unknown, never lost
 		"architect": {Pane: key + "/t8", State: "done", PID: 6, PIDStart: 60, IdentTS: at, BootID: "b1"}, // gone, but done by itself
 	}
 	e := withHolderAgents(health.HolderEvidence{Known: true}, snaps, now, provedAlive("b1", start))

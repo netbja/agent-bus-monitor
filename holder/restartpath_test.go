@@ -2,6 +2,7 @@ package holder_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -129,7 +130,7 @@ func TestHolderRestartedAgainstARealHolder(t *testing.T) {
 		var proofs []health.HolderProof
 		for n, s := range snaps {
 			start, err := dispatch.ProcStart(s.PID)
-			alive := s.PID > 0 && err == nil && start == s.PIDStart
+			alive := s.PID > 0 && !errors.Is(err, dispatch.ErrNoProcess) && (err != nil || start == s.PIDStart)
 			proofs = append(proofs, health.HolderProof{Name: n, Pane: s.Pane, State: s.State, PID: s.PID, IdentTS: s.IdentTS, Alive: alive})
 		}
 		now, err := b.ServerTime(ctx)

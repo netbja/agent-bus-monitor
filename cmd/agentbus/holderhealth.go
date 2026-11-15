@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -156,7 +158,8 @@ func holderAnswersAny(getenv func(string) string, key string) bool {
 }
 
 // withHolderAgents is health.WithHolderAgents of the agents' snapshots;
-// alive says whether a snapshot's proved process still runs here.
+// alive says whether a snapshot's proved process may still run here (false:
+// proved gone).
 func withHolderAgents(e health.HolderEvidence, snaps map[string]bus.AgentSnapshot, redisNow time.Time, alive func(bus.AgentSnapshot) bool) health.HolderEvidence {
 	proofs := make([]health.HolderProof, 0, len(snaps))
 	for n, s := range snaps {
@@ -165,15 +168,23 @@ func withHolderAgents(e health.HolderEvidence, snaps map[string]bus.AgentSnapsho
 	return health.WithHolderAgents(e, proofs, redisNow)
 }
 
-// provedAlive: the snapshot's proved process still runs on this host, the
-// same boot (boot) and the same start time (start). Another boot means a
-// reboot since the proof: the process is gone.
+// provedAlive: the snapshot's proved process may still run on this host;
+// false only when it is proved gone: another boot (a reboot since the
+// proof), no such process (dispatch.ErrNoProcess), or another start time
+// for that pid. A lookup that fails otherwise proves nothing, so the agent
+// is never called lost on it (reviewer-codex).
 func provedAlive(boot string, start func(int) (uint64, error)) func(bus.AgentSnapshot) bool {
 	return func(s bus.AgentSnapshot) bool {
 		if s.PID <= 0 || s.BootID != "" && boot != "" && s.BootID != boot {
 			return false
 		}
 		got, err := start(s.PID)
-		return err == nil && got == s.PIDStart
+		switch {
+		case errors.Is(err, dispatch.ErrNoProcess):
+			return false
+		case err != nil:
+			return true // unknown: not lost
+		}
+		return got == s.PIDStart
 	}
 }
