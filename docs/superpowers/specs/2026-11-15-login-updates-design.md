@@ -1,6 +1,6 @@
 # Login expiry and client updates
 
-Status: r7, 2026-11-15. Author: architect. Asked by the person through master (thread
+Status: r8, 2026-11-15. Author: architect. Asked by the person through master (thread
 1794745325922-0; scope agreed on report 1794745470782-0). r7: §3 rewritten on the person's decision
 (thread 1794762002143-0).
 
@@ -117,7 +117,9 @@ pass reads a credential file.
   milliseconds**, 2.5 days ahead that day, which matches the CLI's "expires in 3 days".
   `expiresAt` beside it is the short access token's and is never read.
 - The field comes from no official documentation. If it is missing or not a number, the status is
-  `unknown` with that reason, never a guess.
+  `unknown` with that reason, never a guess. **A value implausible as milliseconds** (before
+  2020-01-01, or more than two years after now) is `unknown: not a time`, never `fail`: should the
+  CLI ever write seconds, no agent is held (foureyes on r7).
 - **macOS**: the credentials are in the Keychain. Read-only:
   `security find-generic-password -s <service> -w`, its output parsed for that one field like
   the file. The service name (`Claude Code-credentials` for the default directory, believed to
@@ -129,9 +131,11 @@ pass reads a credential file.
 
 ### 3.2 Each agent's config directory
 
-- The agent's own `CLAUDE_CONFIG_DIR` is read on every status publish from its environment, like
-  `AGENT_BUS_CLIENT` (`bus.AgentIdent`). It goes into a new snapshot field, `claude_config_dir`,
-  which is set only with a proof, like `client_fp`. Unset means the default, `~/.claude`. Agents
+- The agent's own `CLAUDE_CONFIG_DIR` is read from its environment by both writers of the
+  identity, exactly where `client_fp` is: the status publish (`cmd/agentbus/main.go`) and `bind`
+  (`cmd/agentbus/bind.go`, from the pane's environment), so that a bound agent is not left on
+  `~/.claude`. It goes into a new snapshot field, `claude_config_dir`, which is set only with a
+  proof, like `client_fp`. Unset means the default, `~/.claude`. Agents
   may use different directories.
 - The dispatcher uses the path only when it is absolute and clean, and the file is a regular file
   owned by the dispatcher's own user. Anything else is `unknown`. Agents that share a directory
@@ -145,7 +149,7 @@ pass reads a credential file.
 - One function per platform, returning `(expiry time, reason)`.
   - It reads at most 64 KiB and decodes into a struct holding only `refreshTokenExpiresAt`.
   - The reason is from a closed set: `no file`, `not owned`, `unreadable`, `no field`,
-    `not a number`, `keychain: <exit status>`.
+    `not a number`, `not a time`, `keychain: <exit status>`.
   - It never wraps or prints the decoder's error, the file's bytes or the Keychain's output. Those
     bytes stay in the function's local buffer.
 - **Never logged, copied, stored or put on the bus**: any token, any other field, the file's
@@ -154,8 +158,17 @@ pass reads a credential file.
 
 ### 3.4 The check
 
-- A health check, `login-expiry`, run by the dispatch service in its own loop. Its definition has
-  `Interval: 1h`. There is no new service, no systemd timer and no cron.
+- **The dispatcher reads the field itself**, in its own loop (a new `dispatch/loginexpiry.go`,
+  holding the lease token), because the notices and the hold are fenced writes and a health check's
+  `Run` gets no token and never writes (foureyes on r7). Cadence, per config directory: **once an
+  hour**, and **once a minute for a directory whose agent is held** (3.6), so the release follows the
+  person's /login within a minute. There is no new service, no systemd timer and no cron.
+- `now` is Redis `TIME`, for the status, the hold, the episode and what busmon shows.
+- The results stay in the loop's memory as structured per-agent values (agent, status, expiry,
+  reason). 3.5 and 3.6 act on those values, never on a text.
+- A health check, `login-expiry` (`Interval: 5m`), **reports** them. It reads no file; it gets the
+  loop's last results through a `HealthConfig.LoginExpiry` function, as `StallNotify` passes
+  values the other way.
 - It looks at every agent whose client is Claude Code. Each client's profile declares whether it
   has a fixed login expiry, as `[login] source = "claude-credentials"` in
   `agentstate/clients/claude.toml`. No other profile declares one, so Codex, agy, Kimi and Grok
@@ -205,7 +218,21 @@ Claude agents with another directory still work.
   `{p}:held` field are deleted, and the agent gets the resume directive that `release` sends
   today. `retire --forget` also deletes both.
 - Master expired: master gets no wakes, and the person's fail notice names master. There is no
-  project pause: other agents finish what they hold.
+  project pause: other agents finish what they hold. §2's transcript notice may reach the person
+  first; the two say the same thing.
+- **Every reader that excuses a held agent learns the login hold** (foureyes on r7). Today each one
+  matches only `hold:<provider>`. A new `bus.HeldReason(marks, agent, provider) string` returns
+  `quota` (from `hold:<provider>`), `login` (from `hold-login:<agent>`) or `""`, and each reader uses
+  it:
+
+  | Reader | With a login hold |
+  |---|---|
+  | the dispatcher's wake skip (where `l.quota.held` is read) | no wake |
+  | `cmd/agentbus/stallchecks.go` `heldProviders` (stall checks, `team-stall`, `quiet-agent`, `idle-implementer`, `idle-master`) | excused, as a quota hold |
+  | `stallchecks.go` around `dispatch.CannotAct` | the agent counts as held, so cannot act |
+  | `cmd/agentbus/selfrepairchore.go` (relaunch decision) | **no relaunch**: a new process would hit the same expired login |
+  | `dispatch/popfacts.go` (`f.Held`) | `Held = true`: a held pop is never judged done |
+  | `cmd/busmon/quota.go` | a line `coder: Claude login expired Thu 15:40, held` |
 - If run-budget §4 is not built first, this step builds `{p}:held`'s writer as that spec defines
   it. It is one function, which run-budget then reuses.
 
@@ -261,8 +288,14 @@ Running `claude` or any client to ask its login state; refreshing a token; readi
   - `0` → no warn and no warning notice, while `fail` still holds;
   - two agents sharing a directory → one read;
   - a non-Claude agent → not checked.
-- Unit: the value is read as milliseconds (a seconds value would read as 1970 → `fail`; the test
-  pins the verified unit).
+- Unit: the value is read as milliseconds; a seconds-sized value, a value before 2020 and one more
+  than two years ahead are each `unknown: not a time`, and none holds an agent.
+- Cadence: a held agent's directory is re-read within a minute, and a later future expiry releases
+  it then; an unheld one is read once an hour; `now` comes from the fake broker's `TIME`.
+- Readers, one test each with only `hold-login:<agent>` set: no wake; no stall alarm (team-stall,
+  quiet-agent, idle-implementer, idle-master); `CannotAct`; no self-repair relaunch; a held pop
+  is not retired; busmon's quota page shows the line.
+- The health check reports the loop's results and opens no file (a fake reader counts calls).
 - **No token anywhere**: the fixture's `accessToken` and `refreshToken` hold sentinel strings. After
   ok, warn, fail, release and every `unknown` case, the sentinels appear in none of these: the
   captured log, every stream entry and hash field the fake broker holds, the health detail, the
@@ -291,13 +324,16 @@ Running `claude` or any client to ask its login state; refreshing a token; readi
 
 - `bus/stream.go`: `AgentIdent.ClaudeConfigDir` and the `claude_config_dir` snapshot field, set
   with a proof. Also `bus/ident.go` and `bus/handoff.go`, where `ClientFP` is carried.
-- `cmd/agentbus` status publish: it reads `CLAUDE_CONFIG_DIR` from the environment.
+- `cmd/agentbus/main.go` (status publish) and `cmd/agentbus/bind.go`: they read `CLAUDE_CONFIG_DIR`.
 - `agentstate/profile.go` and `agentstate/clients/claude.toml`: the `[login] source` key.
 - A new reader package, `loginexpiry/`: the file and Keychain readers of 3.3, pure, with their tests.
 - `health/health.go`: the `login-expiry` definition.
-- `cmd/agentbus/healthchecks.go`: the check (3.4).
-- `dispatch/`: the notices (3.5); the hold, the wake skip and the release (3.6); `{p}:held`'s
-  writer if run-budget §4 is not built first.
+- `dispatch/loginexpiry.go`: the reads, their cadence, the notices (3.5), the hold and the release
+  (3.6); `HealthConfig.LoginExpiry`; the wake skip; `{p}:held`'s writer if run-budget §4 is not
+  built first.
+- `cmd/agentbus/healthchecks.go`: the check, reporting the loop's results.
+- `bus/`: `HeldReason`; its readers `cmd/agentbus/stallchecks.go`, `cmd/agentbus/selfrepairchore.go`,
+  `dispatch/popfacts.go`, `cmd/busmon/quota.go`.
 - `config/keys.go`: `dispatch.login_expiry_warn`.
 - `cmd/busmon` settings: the C page row.
 - `docs/operator-notes.d/login-expiry.md`: one bullet.
