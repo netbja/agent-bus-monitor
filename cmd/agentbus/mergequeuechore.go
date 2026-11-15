@@ -81,7 +81,9 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 		github: mergequeue.ReadGitHub, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips,
 		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase,
 		delivered: delivery.Delivered,
-		done:      func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error) { return planDoneSubjects(ctx, b, vs) },
+		done: func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error) {
+			return planDoneSubjects(ctx, b, vs)
+		},
 	}
 }
 

@@ -287,7 +287,9 @@ func TestMergeQueueChoreUndelivered(t *testing.T) {
 	}
 	// Its plan task done: out.
 	c, b, _, _ = setup("git@github.com:o/r.git")
-	c.done = func(context.Context, []bus.Verdict) (map[string]bool, error) { return map[string]bool{"herdr-6c2-2": true}, nil }
+	c.done = func(context.Context, []bus.Verdict) (map[string]bool, error) {
+		return map[string]bool{"herdr-6c2-2": true}, nil
+	}
 	if err := c.pass(ctx, "mq"); err != nil {
 		t.Fatal(err)
 	}
