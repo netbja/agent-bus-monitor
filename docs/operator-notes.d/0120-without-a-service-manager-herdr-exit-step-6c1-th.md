@@ -49,5 +49,6 @@
   `service.Detached` (`Limits`) states what does not exist: `services.start_at_login` is refused with it
   (`LoginStartOf`), and `service status` prints it with each service's supervisor log, which `service
   logs` shows too. `service supervise` calls `holder.UnignoreTermSignals` first (spec revision 26): under
-  `nohup`, nothing below inherits an ignored SIGHUP (`TestSuperviseUnderNohup`). busmon does not link
-  `holder` yet (see the PR).
+  `nohup`, nothing below inherits an ignored SIGHUP (`TestSuperviseUnderNohup`). busmon links `holder`
+  by a blank import in `cmd/busmon/main.go` for this registration alone (its test names the manager
+  without importing `holder`, which would link it into the test binary and prove nothing).
