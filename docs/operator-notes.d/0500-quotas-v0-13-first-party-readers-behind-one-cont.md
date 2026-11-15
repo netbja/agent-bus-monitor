@@ -1,6 +1,13 @@
 - **Quotas (v0.13): first-party readers behind one contract, policy in the dispatcher.**
   Package `quota/`: `Reading` (provider, windows: used %, reset, minutes; observed_at vs
-  collected_at; unknown/unlimited) and readers — Claude via `agentbus statusline` (Claude Code's
+  collected_at; unknown/unlimited) and readers — Claude first via the CLI's `get_usage` control
+  request (claude-usage-probe, `quota/claudeprobe.go`, `quota.claude.probe`, on by default: `claude -p`
+  in stream-json from an empty temp dir, `--setting-sources local --strict-mcp-config`, hooks off, no
+  session kept, the account's `CLAUDE_CONFIG_DIR`, 20 s bound, process group killed after the answer;
+  at most once per 5 min per account, a failure cached too, in `~/.cache/agentbus/quota-claude-usage-<hash>.json`;
+  `five_hour`/`seven_day` → `5h`/`7d`, `weekly_scoped` → `7d-<model>`; Source `cli-usage`; the SDK
+  calls the request experimental, so `rate_limits_available: false`, an unknown answer or a failure
+  falls back, and per window the newer observation wins), then via `agentbus statusline` (Claude Code's
   `statusLine` stdin `rate_limits` merged into `~/.cache/agentbus/quota-claude.json`, plus a
   transcript backstop for a live rejection), Codex via `codex app-server` `account/rateLimits/read`
   (session logs as fallback), declarative file readers (Grok's billing log line is one, built in),
