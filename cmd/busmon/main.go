@@ -683,6 +683,7 @@ func main() {
 			return ResolveTheme(name, "", os.Getenv("COLORFGBG"), noColor, terminalColors())
 		},
 		sleepRunner: realSleepRunner(agentbusBeside()), sleepLog: realSleepLog(os.Getenv), sleepWait: realSleepWait(os.Getenv),
+		terms: busmonTerms(project), agentbusBin: agentbusBeside(),
 		admin: adminSourceFor(client, os.Getenv, self), files: atSourceFor(project, os.Getenv),
 		projectHasKeys: func(ctx context.Context, p string) (bool, error) {
 			keys, err := bus.ProjectKeys(ctx, client, p)

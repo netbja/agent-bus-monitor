@@ -1,0 +1,200 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/termhost"
+)
+
+// The person's console in busmon (herdr exit spec 4.6, step 7b2): an agent's
+// page shows a read-only preview of its terminal on the project's holder,
+// and t puts the person's terminal on it through agentbus attach. busmon
+// itself never types into a terminal: it only reads List and Screen.
+
+// termReader is the part of termhost.Host the preview uses: reads only.
+type termReader interface {
+	List(ctx context.Context, project string) ([]termhost.Term, error)
+	Screen(ctx context.Context, id termhost.TermID, lines int) (termhost.Screen, error)
+}
+
+// busmonTerms is the project's holders, the current build's first; nil (no
+// preview) when the project cannot have one.
+func busmonTerms(project string) termReader {
+	h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+	if err != nil {
+		return nil
+	}
+	return h
+}
+
+// termPreviewRows is how many of the screen's last lines the page shows.
+const termPreviewRows = 30
+
+// termPreviewEvery: while an agent's page is on top, its terminal is read
+// again this often.
+const termPreviewEvery = time.Second
+
+// termView is one read of an agent's terminal: found is false when the agent
+// has no live terminal on a holder (herdr hosts it until the cutover).
+type termView struct {
+	found bool
+	lines []string
+	err   error
+}
+
+// readTermView reads agent's newest live terminal in project; a nil host or
+// no terminal is an empty view, a failed read its error.
+func readTermView(ctx context.Context, h termReader, project, agent string, rows int) termView {
+	if h == nil {
+		return termView{}
+	}
+	terms, err := h.List(ctx, project)
+	if err != nil {
+		return termView{err: err}
+	}
+	for i := len(terms) - 1; i >= 0; i-- { // the newest first
+		t := terms[i]
+		if t.Project != project || t.Name != agent || !t.Alive {
+			continue
+		}
+		sc, err := h.Screen(ctx, t.ID, rows)
+		if err != nil {
+			return termView{err: err}
+		}
+		lines := sc.Lines
+		for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+			lines = lines[:len(lines)-1]
+		}
+		return termView{found: true, lines: lines}
+	}
+	return termView{}
+}
+
+// termPreviewLines is the page's Screen section: nothing when the agent has
+// no terminal on a holder. The text lines only, through Preview: no byte the
+// program printed reaches busmon's own terminal.
+func termPreviewLines(v termView, width int) []Line {
+	var b body
+	switch {
+	case v.err != nil:
+		b.seg(RoleAccent, "Screen").text("\n")
+		b.seg(RoleMuted, "not read: "+Preview(v.err.Error())).text("\n\n")
+	case v.found:
+		b.seg(RoleAccent, "Screen").seg(RoleMuted, " "+GlyphNone+" read-only; t attaches").text("\n")
+		for _, l := range v.lines {
+			b.seg(RoleText, Truncate(Preview(l), max(1, width))).text("\n")
+		}
+		b.text("\n")
+	default:
+		return nil
+	}
+	return b.Lines()
+}
+
+// termViewMsg is a read of the terminal of the agent page with that serial.
+type termViewMsg struct {
+	serial int
+	view   termView
+}
+
+// termTickMsg asks for the next read of the agent page with that serial.
+type termTickMsg struct{ serial int }
+
+func termTick(serial int) tea.Cmd {
+	return tea.Tick(termPreviewEvery, func(time.Time) tea.Msg { return termTickMsg{serial: serial} })
+}
+
+// agentPage is the open agent page with that serial.
+func (m *Model) agentPage(serial int) *page {
+	for i := range m.rd.pages {
+		if p := &m.rd.pages[i]; p.serial == serial && p.kind == ovAgent {
+			return p
+		}
+	}
+	return nil
+}
+
+// termRead reads the page's terminal, unless the page is gone (the chain
+// ends) or under another one (the chain waits without reading).
+func (m *Model) termRead(serial int) tea.Cmd {
+	p := m.agentPage(serial)
+	if p == nil || m.cfg.terms == nil {
+		return nil
+	}
+	if p != m.rd.top() {
+		return termTick(serial)
+	}
+	ctx, h, project, agent := m.cfg.ctx, m.cfg.terms, m.cfg.project, p.key
+	if ctx == nil { // a test's shell
+		ctx = context.Background()
+	}
+	return func() tea.Msg {
+		c, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		return termViewMsg{serial: serial, view: readTermView(c, h, project, agent, termPreviewRows)}
+	}
+}
+
+// gotTermView stores the read on its page and schedules the next one.
+func (m *Model) gotTermView(msg termViewMsg) tea.Cmd {
+	p := m.agentPage(msg.serial)
+	if p == nil {
+		return nil
+	}
+	v := msg.view
+	p.term, p.dirty = &v, true
+	m.refresh()
+	return termTick(msg.serial)
+}
+
+// attachCommand is `agentbus --project <p> attach <agent>`: stdin and stdout
+// left to bubbletea (the person's terminal), stderr captured for a refusal.
+func attachCommand(bin, project, agent string) *exec.Cmd {
+	c := exec.Command(bin, "--project", project, "attach", agent)
+	c.Stderr = &bytes.Buffer{}
+	return c
+}
+
+// attachDoneMsg is the end of an attach: its error and what it wrote on stderr.
+type attachDoneMsg struct {
+	agent, stderr string
+	err           error
+}
+
+// attachCmd hands the terminal to agentbus attach; detach returns to busmon.
+func (m *Model) attachCmd(agent string) tea.Cmd {
+	if agent == "" {
+		return nil
+	}
+	bin := m.cfg.agentbusBin
+	if bin == "" {
+		bin = "agentbus"
+	}
+	c := attachCommand(bin, m.cfg.project, agent)
+	buf := c.Stderr.(*bytes.Buffer)
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return attachDoneMsg{agent: agent, stderr: buf.String(), err: err}
+	})
+}
+
+// attachFlash is the status line after an attach: "" after a clean detach,
+// else agentbus's last line (the refusal names the --prefix choices).
+func attachFlash(agent string, err error, stderr string) string {
+	if err == nil {
+		return ""
+	}
+	why := err.Error()
+	lines := strings.Split(strings.TrimSpace(stderr), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+		why = last
+	}
+	return "attach " + Preview(agent) + ": " + Preview(why)
+}
