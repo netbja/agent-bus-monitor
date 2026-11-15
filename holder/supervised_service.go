@@ -23,13 +23,6 @@ import (
 // running unit is a detached `agentbus service supervise <kind> <project>`.
 var _ service.Manager = Supervised{}
 
-// Supervised is service.Detect's manager where none runs.
-func init() {
-	service.Unmanaged = func(paths service.Paths, getenv func(string) string) service.Manager {
-		return Supervised{Paths: paths, Getenv: getenv}
-	}
-}
-
 // ManagerName is what Supervised calls itself (Manager.Name): the word up,
 // service status and the {p}:services marker show.
 const ManagerName = "supervisor"

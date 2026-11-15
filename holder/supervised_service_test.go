@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -200,5 +201,37 @@ func TestUnmanagedIsSupervised(t *testing.T) {
 	m, ok := service.Unmanaged(service.Paths{Home: "/h"}, getenv).(Supervised)
 	if !ok || m.Paths.Home != "/h" || m.getenv()("XDG_RUNTIME_DIR") != "/run/user/1" {
 		t.Fatalf("unmanaged = %#v", m)
+	}
+}
+
+// A detached supervisor starts with a unit's environment, not the shell's
+// that ran up (herdr exit 6c3): the basics (PATH, HOME, the XDG directories
+// the paths are read from) are kept; an agent's or a pane's variables are not.
+func TestSpawnDetachedKeepsOnlyAUnitsEnvironment(t *testing.T) {
+	t.Setenv("AGENT_BUS_AGENT", "coder")
+	t.Setenv("HERDR_PANE_ID", "w1:p1")
+	t.Setenv("XDG_STATE_HOME", "/st")
+	dir := t.TempDir()
+	out := filepath.Join(dir, "env")
+	pid, err := spawnDetached([]string{"/bin/sh", "-c", "env > " + out + ".tmp && mv " + out + ".tmp " + out}, dir, filepath.Join(dir, "log"))
+	if err != nil || pid <= 0 {
+		t.Fatal(pid, err)
+	}
+	var b []byte
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		if b, err = os.ReadFile(out); err == nil || time.Now().After(deadline) {
+			break
+		}
+	}
+	env := "\n" + string(b)
+	for _, want := range []string{"\nPATH=" + os.Getenv("PATH") + "\n", "\nHOME=" + os.Getenv("HOME") + "\n", "\nXDG_STATE_HOME=/st\n"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("missing %q in %q", want, env)
+		}
+	}
+	for _, leak := range []string{"AGENT_BUS_AGENT=", "HERDR_PANE_ID="} {
+		if strings.Contains(env, "\n"+leak) {
+			t.Errorf("leaked %s", leak)
+		}
 	}
 }

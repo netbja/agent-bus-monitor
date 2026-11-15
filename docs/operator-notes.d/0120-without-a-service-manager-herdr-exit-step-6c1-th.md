@@ -36,15 +36,18 @@
   and, after each exit, `KillRecordedGroups` with the cutoff taken first and the run directory the
   holder's env file gives it; it exits 1 when it gave up.
   6c3 wires it: `holder.Supervised` is also a whole `service.Manager` (`Name` `supervisor`), which
-  package `holder` registers as `service.Unmanaged` at init (`service` cannot import `holder`; a binary
-  that does not link `holder` keeps the old answer, no manager). `Detect` returns it for
+  package `holder` registers as `service.Unmanaged` at init, on Linux only (`service` cannot import
+  `holder`; elsewhere there is no start-time reader yet, so a macOS `none` keeps the old answer, no
+  manager and herdr tabs, as does a binary that does not link `holder`). `Detect` returns it for
   `services.manager = none`, and for `auto` on a system with neither: a Linux not booted with systemd
   (`/run/systemd/system` absent) or another system. A systemd that runs but whose user instance does not
   answer (an ssh session without its bus) stays an error: never a second dispatcher beside the units.
   `up` then installs dispatch and missions as records, one per project like their units
   (`<rundir>/agentbus/<p>/<kind>.pid`, same checks and lock, one `arg` line per argument), and `Start`
   spawns `<exe> --project <p> service supervise <kind> <p>`, which runs the unit's own command
-  (`Spec.Argv`, never `--stderr`) under the same policy, killing no group. `down`, `service`,
+  (`Spec.Argv`, never `--stderr`) under the same policy, killing no group. Every detached supervisor,
+  the holder's too, starts with a unit's environment (`unitEnv`: PATH, HOME, user, locale, the XDG
+  directories), never the agent or pane variables of the shell that ran `up`. `down`, `service`,
   `suspend`, `restore` and the health checks reach it through `Detect`; `--tabs` still forces herdr tabs.
   `service.Detached` (`Limits`) states what does not exist: `services.start_at_login` is refused with it
   (`LoginStartOf`), and `service status` prints it with each service's supervisor log, which `service
