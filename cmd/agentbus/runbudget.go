@@ -75,17 +75,10 @@ func (c *mergeQueueChore) runStepKnown(ctx context.Context, token string, run bu
 	}
 	l := readRunLimits(c.getenv)
 	now := run.SeenAt // the pass's Redis time
-	quotaDrain := strings.HasPrefix(run.Why, "quota:")
-	if run.State == bus.RunRunning || (run.State == bus.RunDraining && quotaDrain) {
+	if run.State == bus.RunRunning || (run.State == bus.RunDraining && strings.HasPrefix(run.Why, "quota:")) {
 		if why := runLimitReached(run, now, l); why != "" {
-			ep, drained, err := c.b.FencedRunDrain(ctx, token, why)
-			if err != nil {
+			if _, _, err := c.b.FencedRunDrain(ctx, token, why); err != nil {
 				return err
-			}
-			if drained {
-				if err := c.announceDrain(ctx, token, ep, run, now, l); err != nil {
-					return err
-				}
 			}
 			if r, err := c.b.Run(ctx); err != nil || r == nil {
 				return nil
@@ -94,7 +87,20 @@ func (c *mergeQueueChore) runStepKnown(ctx context.Context, token string, run bu
 			}
 		}
 	}
-	if run.State != bus.RunDraining || strings.HasPrefix(run.Why, "quota:") || !known {
+	// Every message is told on each pass of its state, by its once-mark: a
+	// transition committed whose message failed is told on a later pass, and
+	// none twice (reviewer-codex). A quota drain is the quota pass's to tell.
+	switch {
+	case run.State == bus.RunStopped:
+		inFlight, _ := c.runInFlight(ctx, undelivered)
+		return c.announceStop(ctx, token, run, now, l, inFlight)
+	case run.State != bus.RunDraining || strings.HasPrefix(run.Why, "quota:"):
+		return nil
+	}
+	if err := c.announceDrain(ctx, token, runEpisode(run), run, now, l); err != nil {
+		return err
+	}
+	if !known {
 		return nil
 	}
 	inFlight, err := c.runInFlight(ctx, undelivered)
@@ -109,11 +115,17 @@ func (c *mergeQueueChore) runStepKnown(ctx context.Context, token string, run bu
 	if err != nil || !stopped {
 		return err
 	}
+	return c.announceStop(ctx, token, run, now, l, inFlight)
+}
+
+// announceStop tells the person the run stopped, once per drain episode,
+// with what is still in flight (a drain cut short by run.drain_max).
+func (c *mergeQueueChore) announceStop(ctx context.Context, token string, run bus.RunRecord, now int64, l runLimits, inFlight []string) error {
 	text := fmt.Sprintf("%s: run stopped (%s; %s): the project is paused; agentbus run reset starts a new run", c.b.Project(), run.Why, runTotals(run, now, l))
 	if len(inFlight) > 0 {
-		text += fmt.Sprintf("; still in flight after run.drain_max (%s): %s", l.drainMax, strings.Join(inFlight, ", "))
+		text += fmt.Sprintf("; still in flight (run.drain_max %s passed): %s", runDuration(l.drainMax), strings.Join(inFlight, ", "))
 	}
-	_, err = c.b.FencedNotifyOnceForPerson(ctx, token, "run-stop-person", runEpisode(run), "dispatch", text)
+	_, err := c.b.FencedNotifyOnceForPerson(ctx, token, "run-stop-person", runEpisode(run), "dispatch", text)
 	return err
 }
 
@@ -167,11 +179,15 @@ func (c *mergeQueueChore) runInFlight(ctx context.Context, undelivered []bus.Mer
 		if s.State == "working" {
 			out = append(out, name+" working")
 		}
-		gates, err := c.b.OpenChallenges(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		if len(gates) > 0 {
+	}
+	// Every gate key: a reviewer offline, with no snapshot, still holds one
+	// (reviewer-codex).
+	gates, err := c.b.AllGates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for name, g := range gates {
+		if len(g) > 0 {
 			out = append(out, "gate on "+name)
 		}
 	}

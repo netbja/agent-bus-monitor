@@ -839,3 +839,42 @@ func lastTo(t *testing.T, b *bus.Bus, target string) string {
 	}
 	return last
 }
+
+// reviewer-codex: a quota drain committed whose announcement was not
+// written is told on a later pass, once.
+func TestRunQuotaDrainAnnouncementRetried(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	if ok, err := b.AcquireDispatch(ctx, "boot", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if _, _, err := b.FencedRunPass(ctx, "boot", nil, true, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := b.FencedRunDrain(ctx, "boot", bus.RunWhyQuota("anthropic")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReleaseDispatch(ctx, "boot"); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 88))
+	start(t, b, newFakeRT(alwaysReady), quotaConfig(f))
+	count := func() int {
+		evs, _, _ := b.Recent(ctx, []string{"cmd"}, 200)
+		n := 0
+		for _, e := range evs {
+			if e.Target == "master" && strings.HasPrefix(e.Message, "Run draining") {
+				n++
+			}
+		}
+		return n
+	}
+	waitFor(t, 3*time.Second, "the drain told", func() bool { return count() == 1 })
+	time.Sleep(200 * time.Millisecond)
+	if n := count(); n != 1 {
+		t.Fatalf("%d drain directives, want 1", n)
+	}
+}

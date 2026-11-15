@@ -234,3 +234,53 @@ func TestRequestSendWhileDraining(t *testing.T) {
 		t.Fatalf("the person's send: %v", err)
 	}
 }
+
+// reviewer-codex: a gate on a reviewer with no status snapshot (offline)
+// is in flight too.
+func TestRunStepGateOnAnOfflineReviewer(t *testing.T) {
+	w := newRunWorld(t)
+	w.env["AGENT_BUS_RUN_MAX_DURATION"] = "1h"
+	w.age(t, "started_at", 2*time.Hour)
+	if err := w.b.OpenChallenge(w.ctx, "security", "g1", "subject x"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := w.pass(t); rec.State != bus.RunDraining {
+		t.Fatalf("an offline reviewer's gate stopped the run: %+v", rec)
+	}
+	if err := w.b.ResolveChallenge(w.ctx, "security", "g1"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := w.pass(t); rec.State != bus.RunStopped {
+		t.Fatalf("nothing in flight: %+v", rec)
+	}
+}
+
+// reviewer-codex: a transition committed whose message was not written
+// (the write failed after it) is told on a later pass, once.
+func TestRunStepRetriesMissingMessages(t *testing.T) {
+	w := newRunWorld(t)
+	if _, err := w.b.Status(w.ctx, "coder", "working", "x", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	// drained, as if the pass that did it failed before its messages
+	if _, _, err := w.b.FencedRunDrain(w.ctx, "tok", bus.RunWhyDeliveries); err != nil {
+		t.Fatal(err)
+	}
+	w.pass(t)
+	w.pass(t)
+	if n := w.count(t, "cmd", "master", "Run budget reached"); n != 1 {
+		t.Fatalf("%d drain directives after the retry, want 1", n)
+	}
+	if n := w.count(t, "notify", "", "run budget reached"); n != 1 {
+		t.Fatalf("%d drain notices after the retry, want 1", n)
+	}
+	// stopped, as if the pass that did it failed before its notice
+	if _, err := w.b.FencedRunStop(w.ctx, "tok", "master"); err != nil {
+		t.Fatal(err)
+	}
+	w.pass(t)
+	w.pass(t)
+	if n := w.count(t, "notify", "", "run stopped"); n != 1 {
+		t.Fatalf("%d stop notices after the retry, want 1", n)
+	}
+}

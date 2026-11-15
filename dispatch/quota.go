@@ -449,10 +449,17 @@ func (l *loop) quotaWarnAgents(ctx context.Context, p string, w quota.Window, sn
 // quotaDrainRun drains the run for master's provider p (run-budget §4),
 // told once per drain to master and to the person, as a limit's drain is.
 func (l *loop) quotaDrainRun(ctx context.Context, p string, w quota.Window) error {
-	ep, drained, err := l.b.FencedRunDrain(ctx, l.token, bus.RunWhyQuota(p))
-	if err != nil || !drained {
+	if _, _, err := l.b.FencedRunDrain(ctx, l.token, bus.RunWhyQuota(p)); err != nil {
 		return err
 	}
+	// Told on each pass while the run drains for this quota, by its
+	// once-marks: an announcement whose write failed is retried, none sent
+	// twice (reviewer-codex).
+	run, err := l.b.Run(ctx)
+	if err != nil || run == nil || run.State != bus.RunDraining || run.Why != bus.RunWhyQuota(p) {
+		return nil
+	}
+	ep := fmt.Sprintf("%d:%d", run.StartedAt, run.Drains)
 	directive := fmt.Sprintf("Run draining for %s's quota (%.0f%%, %s, resets %s): dispatch no new task; finish and deliver what is in flight; the run goes on at the quota's release.",
 		p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
 	if _, err := l.b.FencedCmdOnce(ctx, l.token, "run-drain", ep, dispatchFrom, l.cfg.EscalateTo, bus.CmdDirective, directive, false); err != nil {
@@ -461,6 +468,5 @@ func (l *loop) quotaDrainRun(ctx context.Context, p string, w quota.Window) erro
 	notice := fmt.Sprintf("%s: the run drains for %s's quota (%.0f%%, resets %s): no new task but yours; it goes on at the quota's release (agentbus run)",
 		l.b.Project(), p, w.UsedPct, w.Reset().Local().Format("15:04"))
 	_, err = l.b.FencedNotifyOnceForPerson(ctx, l.token, "run-drain-person", ep, dispatchFrom, notice)
-	l.log(map[string]any{"action": "run-drain", "why": bus.RunWhyQuota(p)})
 	return err
 }
