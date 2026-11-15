@@ -113,6 +113,11 @@ type AgentSnapshot struct {
 	// only with a proof like Model: what the dispatcher compares with the
 	// client installed now (client reload spec).
 	ClientFP string `json:"client_fp,omitempty"`
+	// ClaudeConfigDir is the agent's CLAUDE_CONFIG_DIR as its launched process
+	// had it ("" = the default, ~/.claude), set only with a proof like
+	// ClientFP: where the dispatcher reads its login expiry (login-updates
+	// §3.2). The process's environment is never read for it.
+	ClaudeConfigDir string `json:"claude_config_dir,omitempty"`
 	// Tier is the launched role's tier in roles.toml ("boot" or "pop",
 	// AGENT_BUS_TIER), set only with a proof like Model: what the dispatcher
 	// reads to judge a pop's end (pop-auto-retire §6). Empty = never judged.
@@ -158,6 +163,8 @@ type AgentIdent struct {
 	Tier       string // AGENT_BUS_TIER (pop-auto-retire)
 	Endpoint   string // a local-llm peer's resolved endpoint name
 	EndpointFP string // and its URL's fingerprint
+	// ClaudeConfigDir is CLAUDE_CONFIG_DIR (login-updates §3.2), "" = default.
+	ClaudeConfigDir string
 }
 
 // Verdict is one entry in the {project}:verdicts ledger. Subject keys the review
@@ -394,7 +401,7 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 	// stale cache, so it must not fail a status publish that already landed.
 	ms, _ := splitID(id)
 	snapshot := AgentSnapshot{State: state, Message: message, TS: ms, Pane: who.Pane, Session: who.Session,
-		PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
+		PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, ClaudeConfigDir: who.ClaudeConfigDir, Tier: who.Tier, Endpoint: who.Endpoint, EndpointFP: who.EndpointFP}
 	_ = b.putSnapshot(ctx, agent, snapshot, false) // keeps a bound identity (ident.go)
 	// Best-effort too: give the agent a consumer group at the 24h horizon floor
 	// so commands sent before its first subscribe are not lost to a "$" start.

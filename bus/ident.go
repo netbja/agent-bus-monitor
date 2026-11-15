@@ -36,6 +36,10 @@ func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) Ag
 		if at != 0 && (next.ClientFP != "" || next.PID != out.PID || next.PIDStart != out.PIDStart) {
 			out.ClientFP = next.ClientFP
 		}
+		// And the Claude config directory (login-updates §3.2).
+		if at != 0 && (next.ClaudeConfigDir != "" || next.PID != out.PID || next.PIDStart != out.PIDStart) {
+			out.ClaudeConfigDir = next.ClaudeConfigDir
+		}
 		// And the launched role's tier (pop-auto-retire).
 		if at != 0 && (next.Tier != "" || next.PID != out.PID || next.PIDStart != out.PIDStart) {
 			out.Tier = next.Tier
@@ -162,7 +166,7 @@ func (b *Bus) Bind(ctx context.Context, agent string, who AgentIdent) error {
 		return err
 	}
 	return b.putSnapshot(ctx, agent, AgentSnapshot{Pane: who.Pane, PID: who.PID, PIDStart: who.PIDStart, BootID: who.BootID, Terminal: who.Terminal, IdentTS: now,
-		Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, Tier: who.Tier}, true)
+		Client: who.Client, Provider: who.Provider, Model: who.Model, ClientFP: who.ClientFP, ClaudeConfigDir: who.ClaudeConfigDir, Tier: who.Tier}, true)
 }
 
 // sessionIDPattern is what a session id proved by ProveSession looks like

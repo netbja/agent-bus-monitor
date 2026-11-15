@@ -78,7 +78,8 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 	}
 	if err := d.Bind(ctx, agent, bus.AgentIdent{Pane: pane, PID: pid, PIDStart: start, BootID: d.Boot(), Terminal: terminal,
 		Client: d.Env("AGENT_BUS_CLIENT"), Provider: bus.ProviderFor(d.Env("AGENT_BUS_CLIENT"), d.Env("AGENT_BUS_PROVIDER")),
-		Model: d.Env("AGENT_BUS_MODEL"), ClientFP: d.Env("AGENT_BUS_CLIENT_FP"), Tier: d.Env("AGENT_BUS_TIER")}); err != nil {
+		Model: d.Env("AGENT_BUS_MODEL"), ClientFP: d.Env("AGENT_BUS_CLIENT_FP"), Tier: d.Env("AGENT_BUS_TIER"),
+		ClaudeConfigDir: d.Env("CLAUDE_CONFIG_DIR")}); err != nil {
 		fmt.Fprintf(errw, "bind: %v\n", err)
 		return 1
 	}
