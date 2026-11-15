@@ -71,6 +71,20 @@ func (h *Host) sockets() (map[string]string, []string, error) {
 	return socks, keys, nil
 }
 
+// SocketFiles is every holder socket of the project on disk, answering or
+// not (Describe lists the ones that answer).
+func (h *Host) SocketFiles() ([]string, error) {
+	socks, keys, err := h.sockets()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, socks[k])
+	}
+	return out, nil
+}
+
 // call dials key's holder, sends req under ctx's deadline and returns the reply.
 func (h *Host) call(ctx context.Context, key string, req any) (Reply, error) {
 	if err := ctx.Err(); err != nil {
@@ -135,7 +149,7 @@ func split(id termhost.TermID) (key, term string, err error) {
 
 func (h *Host) term(key string, t TermInfo) termhost.Term {
 	return termhost.Term{ID: termhost.TermID(key + "/" + t.ID), Project: h.project, Name: t.Role, PID: t.PID,
-		PIDStart: t.PIDStart, Alive: t.Alive, Viewers: t.Viewers, Build: t.Build}
+		PIDStart: t.PIDStart, Alive: t.Alive, Viewers: t.Viewers, Build: t.Build, Profile: t.Profile}
 }
 
 // Start runs spec on the current build's holder: the role, its profile and

@@ -180,6 +180,9 @@ func main() {
 	}
 	// holder is what a holder unit runs (herdr exit, spec 4.4): it loads the
 	// project's env file and serves the project's terminals; no broker.
+	if len(args) >= 2 && args[0] == "holder" && args[1] == "drain" { // the person's command, not the server
+		os.Exit(runHolderDrain(project, host, args[2:], os.Getenv, os.Stdout, os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "holder" {
 		os.Exit(mainHolder(project, args[1:], os.Stderr))
 	}

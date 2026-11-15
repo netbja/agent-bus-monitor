@@ -500,13 +500,14 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo attach coder", "agentbus -p demo attach coder --observe"},
 	},
 	{
-		Name: "holder", Usage: []string{"holder [--env <file>] [--record-groups]"},
-		Summary: "serve the project's agent terminals (what a holder unit runs; agentbus up installs it)",
+		Name: "holder", Usage: []string{"holder [--env <file>] [--record-groups]", "holder drain <project> [--ignore-background]"},
+		Summary: "serve the project's agent terminals (what a holder unit runs; agentbus up installs it); drain: relaunch each agent still on an older build onto the current one, one at a time (exit 3: some skipped, run it again; --ignore-background relaunches an agent whose background work is running or unknown, the person only)",
 		Flags: []cli.Flag{
 			{Long: "env", Arg: "<file>", Help: "the project's service environment file"},
 			{Long: "record-groups", Help: "record the terminals' process groups for a supervisor (no service manager)"},
+			{Long: "ignore-background", Help: "holder drain: relaunch an agent whose background work is running or unknown (the person only; Codex, Grok, Kimi and agy always read unknown)"},
 		},
-		Examples: []string{"agentbus -p demo holder --env ~/.config/agentbus/services/demo.env"},
+		Examples: []string{"agentbus -p demo holder --env ~/.config/agentbus/services/demo.env", "agentbus holder drain demo"},
 	},
 	{
 		Name: "down", NoProject: true, Usage: []string{"down <project>"},
