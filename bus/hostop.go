@@ -275,3 +275,19 @@ func (b *Bus) UnfinishedHostOps(ctx context.Context) ([]HostOp, error) {
 	sort.Slice(out, func(i, j int) bool { return idLess(out[i].ID, out[j].ID) })
 	return out, nil
 }
+
+// HostReply is the dispatcher's first reply to directive id, addressed to
+// to: its text, and whether there is one.
+func (b *Bus) HostReply(ctx context.Context, id, to string) (string, bool, error) {
+	evs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), id, "+").Result()
+	if err != nil {
+		return "", false, err
+	}
+	for _, e := range evs {
+		f := toStringMap(e.Values)
+		if f["type"] == CmdReply && f["ref"] == id && f["from"] == HostTarget && f["target"] == to {
+			return f["command"], true, nil
+		}
+	}
+	return "", false, nil
+}
