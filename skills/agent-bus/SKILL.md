@@ -82,13 +82,13 @@ you are **not armed** and your pane is idle, types one fixed line into your pane
 ```
 
 The line carries no message content — only the command to run. It only reaches an agent
-the dispatcher can identify: your last `agentbus status`, run from inside your herdr pane,
-records the pane and your client's process (pid + start time). An agent without that record —
+the dispatcher can identify: your last `agentbus status`, run from inside your terminal on the holder,
+records the terminal and your client's process (pid + start time). An agent without that record —
 or restarted since — is never typed into; it is escalated to master instead. If your commands
-do not run under your pane (Codex runs them through a shared `codex app-server`, whose
-environment may even name another pane), `status` cannot record you: `agent-launch` binds
+do not run under your terminal (Codex runs them through a shared `codex app-server`, whose
+environment may even name another terminal), `status` cannot record you: `agent-launch` binds
 you at start, and otherwise master runs `agentbus bind <you> --pane <pane> --pid <pid>`. A
-later `status` keeps that identity. Do not hand-edit `HERDR_*` variables to work around it. On
+later `status` keeps that identity. Do not hand-edit `AGENTBUS_TERM_ID` to work around it. On
 a line that starts with `[agentbus#`:
 
 1. **Run `agentbus --project <p> subscribe --drain --brief <self>` first.** It prints one line
@@ -482,7 +482,7 @@ what you will never see. What is genuinely out of reach can still be read out of
 One live project has 210 such commands sitting unread today.
 
 With a dispatcher running, you are woken by its wake line: drain first (above). Without
-one, master wakes you by injecting into your herdr pane. Either way, then follow your boot
+one, nothing wakes you: you read your queue at your next boot or drain. Either way, then follow your boot
 sequence: read `agentbus request` and `agentbus board` **first** — that is where work
 assigned during your absence is recorded. The board holds the request's **metadata**, not its
 text: read the body with `agentbus thread <thread>`, using the `thread` field the request
