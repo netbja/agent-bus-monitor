@@ -1,6 +1,7 @@
 # The context alert gets teeth (context-escalation)
 
-Status: spec, r4 (r3 foureyes: the `below-compaction` notice gets a writer, the dispatcher; the
+Status: spec, r5 (r4 reviewer-codex: the compaction notice needs a `compact_boundary` after the
+alert, §3.5). r4 (r3 foureyes: the `below-compaction` notice gets a writer, the dispatcher; the
 ceiling is compared in tokens, never a share of one window against a share of another, §4.3).
 Task `context-escalation-r3` (master's directive of 2026-11-15, after the person's
 review of r2, human directive 1794777873906-0). r2 (d9610408, PR 540) was approved by both
@@ -160,13 +161,16 @@ reads if the hook did not fire). `delivered_at` is what §3.2's master directive
 
 ### 3.5 An episode ended by auto-compaction
 
-When an episode ends (§3.3) **in the same session**, with no hand-off standing, the fill fell
-because the client compacted (a `/clear` or a relaunch changes the session). The dispatcher sends
-the escalation target one `wake=no` notice, mark `context-compacted:<a>` = `<session>|<alert at>`
-(once per episode; not deleted with the others): `context: <agent> was compacted by its client at
-about <last pct>% without a hand-off; it keeps working with a summary of its context. Check its
-current step before sending it more.` When the transcript shows a `compact_boundary` with
-`trigger: auto` after the alert (§4.2), the notice names its `preTokens`.
+A fill falling below the alert in the same session does not prove a compaction: a change of
+`context_window_size` in the same session (a model switch from a 200k to a 1M window) lowers the
+percentage with nothing lost. So the notice needs the **transcript's proof**: when an episode ends
+(§3.3) in the same session, with no hand-off standing, and the transcript reader (§4.2) holds a
+`compact_boundary` with `trigger: auto` in that session **after the alert's time**
+(`context:<a>:at`), the dispatcher sends the escalation target one `wake=no` notice, mark
+`context-compacted:<a>` = `<session>|<alert at>` (once per episode; not deleted with the others):
+`context: <agent> was compacted by its client at <preTokens> tokens without a hand-off; it keeps
+working with a summary of its context. Check its current step before sending it more.` No such
+boundary (a window change, or an episode without `:at`): the episode ends silently, as today.
 
 ## 4. Below the client's own compaction
 
@@ -311,8 +315,11 @@ Tests (r2's kept, plus):
   a missing variable, a down broker (budget 300 ms) print nothing and exit 0; its output is exactly
   the fixed sentence with numbers and names only (a `{p}:nudge` value carrying any other field is
   ignored); it never exits 2.
-- compaction: same session, fill below the alert, no hand-off: one `wake=no` notice, once per
-  episode; a new session (clear, relaunch): none; `compact_boundary` read into `compact_tokens`.
+- compaction: same session, fill below the alert, no hand-off, a `compact_boundary` with
+  `trigger: auto` after the alert: one `wake=no` notice, once per episode; the same drop with no
+  boundary (the `Window` going from 200k to 1M in the session), a boundary before the alert, a
+  `trigger: manual` boundary, or a new session: no notice; `compact_boundary` read into
+  `compact_tokens`.
 - launcher: a Claude Code agent's environment holds `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` and, when
   set, `CLAUDE_CODE_AUTO_COMPACT_WINDOW` from the settings; 0 exports nothing; another client never
   gets them; the agent's status publish carries the two values from its own environment.
