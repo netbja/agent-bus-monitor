@@ -1,6 +1,7 @@
 # After a reboot: ask after an intentional one, restart after an unplanned one (reboot-resume)
 
-Status: spec, r1. Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
+Status: spec, r2 (r1 foureyes: the record names whether an unplanned reboot is being restarted;
+self-repair must be `on` to restart; the dispatcher's suspend record has its fields named). Task `reboot-resume-spec` (master's directive of 2026-11-15, from the person's
 answer 1794777093334-0 to the ask `autoresume10b`). Low priority; it does not block herdr-10b.
 
 ## 1. Why, and what the person asked
@@ -77,16 +78,34 @@ Only then does it write `running` for this boot, so a crash in between judges ag
 write below is fenced and keyed by the boot, so a second judgement of the same boot changes
 nothing.
 
-It records the verdict in `{p}:reboot` (a JSON string, fenced): `{boot, verdict, at}` (`at`
-Redis TIME), for `intentional`, `suspended`, `unplanned` and `stopped` (§3.2). `none` writes
-nothing. The record is deleted (fenced) by the dispatcher once every required agent of the
+It records the verdict in `{p}:reboot` (a JSON string, fenced): `{boot, verdict, why, at}`
+(`at` Redis TIME). `none` writes nothing. The verdicts, a closed set, each with what busmon and
+self-repair do:
+
+| `verdict` | Meaning | busmon (§4) | self-repair (§5) |
+|---|---|---|---|
+| `intentional` | clean shutdown | popup: relaunch | holds |
+| `suspended` | suspended before the shutdown | popup: resume | holds (the suspend already holds it) |
+| `restarting` | unplanned, restarted by itself (§3.1) | no popup; a header line `restarting after an unexpected stop (2 of 3 in 24 h)` | relaunches |
+| `unplanned` | unplanned, **not** restarted; `why` names the first failing condition of §3.1 (`setting off`, `self-repair off`, `self-repair in shadow mode`, `broker persistence unknown`, `broker persistence off`) | popup: relaunch, with `why` | holds |
+| `stopped` | the limit was passed (§3.2) | popup: stopped | holds (the suspend holds it) |
+
+ The record is deleted (fenced) by the dispatcher once every required agent of the
 template is alive, the project has been relaunched, whoever did it.
 
 ### 3.1 Unplanned: restart by itself
 
-When `services.unplanned_restart` is on and the counter allows it (§3.2) and the broker persists
-(the `broker-persistence` check's reading: AOF or RDB on; unknown counts as no, since without
-persistence the counter is lost with the reboot and the limit means nothing), the dispatcher
+When every condition holds, in this order (the first that fails is `why`):
+
+1. `services.unplanned_restart` is on;
+2. self-repair's mode is `on` (`off` relaunches nothing, `shadow` only reports: neither can
+   restart a team, so the verdict says so rather than claiming a restart);
+3. the broker persists (the `broker-persistence` check's reading: AOF or RDB on; unknown counts
+   as no, since without persistence the counter is lost with the reboot and the limit means
+   nothing);
+4. the counter allows it (§3.2; when it does not, the verdict is `stopped`),
+
+the verdict is `restarting` and the dispatcher
 **relaunches the agents through self-repair**, the existing path: a new terminal in the holder per
 dead agent, the role's template, `resume_session` from `{p}:resume`, master first. No new pane
 writer, no `agentbus up` run by a service. Deaths of an older boot are **reboot deaths**: they do
@@ -94,8 +113,8 @@ not count in self-repair's per-agent budgets (R5); the reboot counter counts the
 The escalation target is told (`restarted after an unplanned stop of this machine (2 of 3 in
 24 h)`), and the person gets one notice (`FencedNotifyOnceForPerson`, mark `reboot:<boot>`).
 
-Otherwise (setting off, persistence unknown or off) the verdict is kept as `unplanned` and treated
-as intentional: busmon asks (§4), and self-repair holds (§5).
+Otherwise (1 to 3 fail) the verdict is `unplanned` with its `why`, treated as intentional: busmon
+asks (§4), self-repair holds (§5), and nothing is counted (only a restart counts).
 
 ### 3.2 The counter, and "stopped"
 
@@ -103,11 +122,27 @@ as intentional: busmon asks (§4), and self-repair holds (§5).
 `ZADD NX` (one boot counts once). Before relaunching, the dispatcher counts the members within
 `services.unplanned_window` (24 h). With this boot counted:
 
+Conditions 1 to 3 are checked first, so the set counts only restarts the dispatcher would make.
+
 - count ≤ `services.unplanned_max` (3): relaunch (§3.1);
 - count > 3: **the project is stopped**.
 
-**Stopped** means: the dispatcher writes a suspend record (`{p}:pause`, kind `suspend`, by
-`dispatch`, reason `stopped after 4 unplanned restarts of this machine in 24 h`, fenced). The
+**Stopped** means: the dispatcher writes a suspend record in `{p}:pause`, through a fenced
+variant of `Suspend`'s script (`FencedSuspend`: the lease check, then the same body), with the
+fields `agentbus resume` reads:
+
+| Field | Value |
+|---|---|
+| `kind` | `suspend` |
+| `by` | `dispatch` |
+| `notify` | the escalation target (who gets the resume directive) |
+| `reason` | `stopped after 4 unplanned restarts of this machine in 24 h` |
+| `host`, `boot` | this host, this boot |
+| `services` | `{dispatch: true, missions: <active now>, holder: true}`: the services running when it stopped, so `resume` starts any that has stopped since and stops none |
+| `at`, `until` | set by the script from Redis TIME, as for the person's suspend |
+| `prev` | a timed pause it replaced, as the script does |
+
+An existing suspend is left as it is (the script's own rule): the person's suspend wins. The
 existing suspend rules then apply: nobody is woken, self-repair relaunches nothing, busmon shows
 `suspended since …`. Unlike the person's suspend, the services keep running (they are not stopped
 by the dispatcher), so health, busmon and notifications still work. Verdict in `{p}:reboot`:
@@ -123,11 +158,12 @@ age out of the window by themselves.
 
 At start, for each project of the list on this host:
 
-- `{p}:reboot` with `intentional` or `unplanned` (not restarted): **Relaunch `<p>`?** `This machine
-  restarted at 21:40 (<intentional: "a clean restart" | unplanned: "an unexpected stop">); the agents
-  of <p> are not running.` Enter runs `agentbus up <p> --resume` (as `busmon --pick` runs `up`);
+- `intentional` or `unplanned`: **Relaunch `<p>`?** `This machine restarted at 21:40 (<intentional:
+  "a clean restart" | unplanned: "an unexpected stop, not restarted: <why>">); the agents of <p> are
+  not running.` Enter runs `agentbus up <p> --resume` (as `busmon --pick` runs `up`);
   Esc closes it until busmon's next start. For you keeps an item `relaunch <p>` while the record
   stands.
+- `restarting`: no popup; the header line of §3's table until the record goes.
 - `suspended`: **Resume `<p>`?** `<p> was suspended before the restart.` Enter runs `agentbus
   resume -p <p> --yes`.
 - `stopped`: **`<p>` is stopped.** `4 unplanned restarts in 24 h. Check the repository first (git
@@ -146,8 +182,8 @@ After the herdr cutover, agents come back "through `up` or self-repair with thei
 resume" (herdr exit §4.4a), and the holder service starts with the others at login. After a
 reboot the holder answers empty and every agent is dead, so self-repair would relaunch the team
 after **any** reboot, intentional or not. This spec gates it: a new hold kind `reboot`
-(`selfrepair.HoldReboot`) while `{p}:reboot` stands for this boot with a verdict other than an
-allowed unplanned restart. The hold ends when the record is deleted (every required agent alive,
+(`selfrepair.HoldReboot`) while `{p}:reboot` stands for this boot with any verdict but
+`restarting` (§3's table). The hold ends when the record is deleted (every required agent alive,
 §3). A death of the current boot after that is ordinary self-repair.
 
 ## 6. Settings (`config/keys.go`, group Services, machine-only like `services.start_at_login`)
@@ -170,13 +206,16 @@ Tests:
 - run record: the SIGTERM handler writes `stopped` only over `running` of this boot (never over
   `down` or `suspend`); `up`, `down`, `suspend` write theirs before acting (order checked with fakes);
   the file is 0600 and replaced atomically.
-- dispatch start: `unplanned` with persistence on → self-repair relaunches, reboot deaths not
-  counted in R5; the fourth in the window → suspend record by `dispatch`, services left running,
-  nothing relaunched, notices once; persistence unknown → no relaunch, hold; `intentional` → hold,
-  record written; a second start on the same boot changes nothing; lost lease writes nothing;
+- dispatch start: an unplanned stop with every condition → `restarting`, self-repair relaunches,
+  reboot deaths not counted in R5; each failing condition alone (setting off, self-repair `off`,
+  `shadow`, persistence unknown, off) → `unplanned` with that `why`, no relaunch, hold, nothing
+  counted; the fourth restart in the window → `stopped`, a suspend record with every field of
+  §3.2's table, services left running, nothing relaunched, notices once; an existing suspend of
+  the person's left as it is; `agentbus resume` on the dispatcher's suspend starts no stopped
+  service it should not and lifts it; `intentional` → hold, record written; a second start on the same boot changes nothing; lost lease writes nothing;
   the record deleted once every required agent is alive.
 - `agentbus resume` clears `{p}:unplanned`.
-- busmon: each popup's text and command; no record + services down → local judgement; remote
+- busmon: each verdict's popup or header line, text and command; no record + services down → local judgement; remote
   host → command shown, nothing run.
 
 Footprint (two PRs):
