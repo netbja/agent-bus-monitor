@@ -433,6 +433,15 @@ noms d'onglets et d'agents, sans modèle de projet) :
   la pause et envoie une seule directive de reprise à master. `agentbus --project myapp resume` la
   lève plus tôt ; `pause --status` l'affiche. master le fait lui-même quand sentinel signale que le
   budget de session atteint 90 %.
+- **Le run** (`agentbus --project myapp run`). Le service dispatch compte un run dès son premier
+  passage de la file de fusion : sa durée, sans les intervalles en pause (une pause, une suspension,
+  ou plus de 15 minutes sans passage, comme un hôte en veille), et ses livraisons, les têtes
+  approuvées arrivées dans la base (merge, squash ou rebase-merge, jugées par git, quelle que soit la
+  forge), chacune une fois. Un nouveau run part de 0 : ce qui était fusionné avant lui est sa base.
+  `run.max_duration` et `run.max_deliveries` dans `config.toml` (`0`, par défaut, sans limite) fixent
+  son budget ; `agentbus run` montre le run face à elles et nomme une limite atteinte. L'arrêt propre
+  à une limite vient ensuite : pour l'instant rien n'agit dessus. `agentbus --project myapp run reset`
+  (à vous seul, refusé dans l'environnement d'un agent) démarre un nouveau run.
 - **`@all`** touche les agents listés dans Agents (pas le conducteur, qui ne fait que publier des
   rapports). C'est toujours un message par agent, pour que chacun soit livré à part, mais Activity
   n'affiche qu'une ligne `→ @all (6)`.

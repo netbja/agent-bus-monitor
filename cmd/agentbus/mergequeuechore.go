@@ -51,6 +51,10 @@ type mergeQueueChore struct {
 	// kept across passes for its cache) and the plan's done subjects.
 	delivered func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
 	done      func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error)
+	// serverNow is the broker's clock: the approvals' times are Redis TIME,
+	// so the 72 h window is judged on it (reviewer-codex); nil reads
+	// bus.ServerTime.
+	serverNow func(ctx context.Context) (time.Time, error)
 }
 
 // serviceMergeQueue is the dispatch service's chore, in its working directory.
@@ -147,22 +151,42 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 	}
 	write := min(mergeQueueWrite, budget/2)
 	dctx, cancel := context.WithTimeout(ctx, budget-write)
-	rec := c.derive(dctx)
+	rec, run := c.deriveRun(dctx)
 	cancel()
 	wctx, wcancel := context.WithTimeout(ctx, write)
 	defer wcancel()
-	return c.b.FencedPutMergeQueue(wctx, token, rec)
+	if err := c.b.FencedPutMergeQueue(wctx, token, rec); err != nil {
+		return err
+	}
+	// The run's step (run-budget §2): its clock, and the deliveries judged
+	// this pass; a gap longer than three passes counts as paused.
+	_, _, err := c.b.FencedRunPass(wctx, token, run.heads, run.known, 3*mergeQueueEvery)
+	return err
+}
+
+// runHeads are the approved heads (within 72 h) the git test found in the
+// base this pass; known is false when the pass could not judge them.
+type runHeads struct {
+	heads []string
+	known bool
 }
 
 // derive reads everything one pass needs; a failed read is the reason.
 func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
+	rec, _ := c.deriveRun(ctx)
+	return rec
+}
+
+// deriveRun is derive with the run's delivered heads (run-budget §2): none
+// known when the pass fails.
+func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads) {
 	settings := config.Machine(c.getenv)
 	base := settings.String("delivery.base")
 	env := mergeQueueEnv(c.environ())
 	call := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, mergeQueueCall) }
 	forgeKind := ""
-	fail := func(source, why string) bus.MergeQueueRecord {
-		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}
+	fail := func(source, why string) (bus.MergeQueueRecord, runHeads) {
+		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}, runHeads{}
 	}
 
 	cctx, cancel := call()
@@ -186,12 +210,21 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 	if err != nil {
 		return fail("", "verdicts unavailable")
 	}
+	clock := c.serverNow
+	if clock == nil {
+		clock = c.b.ServerTime
+	}
+	now, err := clock(ctx)
+	if err != nil {
+		return fail("", "broker time unavailable")
+	}
 	in := mergequeue.Input{Verdicts: vs}
 	source := "git"
 	// Origin's tips and the fetched base, in every mode that pushes (the gh
 	// path too, for master-idle's undelivered heads).
 	var remote []mergequeue.Tip
 	remoteBase := ""
+	judgeBase := "" // the base tip the git test judges against (origin's, or the local one)
 	if f.Kind != forge.Local {
 		cctx, cancel = call()
 		remote, remoteBase, err = c.remoteTips(cctx, c.dir, env, base)
@@ -218,6 +251,7 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 		in.PRs = prs
 	default: // the git fallback: GitHub without gh, GitLab and Bitbucket (no reader yet), local
 		tips, baseTip := remote, remoteBase
+		judgeBase = baseTip
 		if f.Kind == forge.Local {
 			cctx, cancel = call()
 			tips, baseTip, err = c.localTips(cctx, c.dir, env, base)
@@ -225,6 +259,7 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 			if err != nil {
 				return fail(source, "branches unreadable: "+err.Error())
 			}
+			judgeBase = baseTip
 		}
 		approved := mergequeue.ApprovedHeads(vs)
 		var heads []string
@@ -244,20 +279,46 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 	res := mergequeue.Derive(in)
 	var undelivered []bus.MergeUndelivered
 	if f.Kind != forge.Local {
-		u, why := c.undelivered(ctx, env, vs, remote, remoteBase, base)
+		u, why := c.undelivered(ctx, env, vs, remote, remoteBase, base, now)
 		if why != "" {
 			return fail(source, why)
 		}
 		undelivered = u
 	}
+	if judgeBase == "" {
+		judgeBase = remoteBase // the gh path: origin's base
+	}
+	run := c.runDelivered(ctx, env, vs, judgeBase, now)
 	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting,
-		Undelivered: undelivered}
+		Undelivered: undelivered}, run
+}
+
+// runDelivered are the approved heads within 72 h that the git test
+// (master-idle §3.1) finds in the base: a run's deliveries are counted
+// from them, forge or not (run-budget §2). A failed judgement is not known:
+// the run counts nothing this pass, and the queue's record is unaffected.
+func (c *mergeQueueChore) runDelivered(ctx context.Context, env []string, vs []bus.Verdict, baseTip string, now time.Time) runHeads {
+	heads := mergequeue.RecentApprovedHeads(vs, now, health.ReviewQueueWindow)
+	if len(heads) == 0 {
+		return runHeads{known: true}
+	}
+	in, err := c.delivered(ctx, c.dir, env, baseTip, heads)
+	if err != nil {
+		return runHeads{}
+	}
+	out := []string{}
+	for _, h := range heads {
+		if in[h] {
+			out = append(out, h)
+		}
+	}
+	return runHeads{heads: out, known: true}
 }
 
 // undelivered are the approved heads master has not delivered (master-idle
 // §3.1): no tip on origin, not dropped, not done, and not found in the
 // fetched base by the git test; why is the failed read, or "".
-func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bus.Verdict, remote []mergequeue.Tip, baseTip, base string) ([]bus.MergeUndelivered, string) {
+func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bus.Verdict, remote []mergequeue.Tip, baseTip, base string, now time.Time) ([]bus.MergeUndelivered, string) {
 	cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
 	local, _, err := c.localTips(cctx, c.dir, env, base)
 	cancel()
@@ -276,7 +337,7 @@ func (c *mergeQueueChore) undelivered(ctx context.Context, env []string, vs []bu
 	for h := range dropped {
 		isDropped[h] = true
 	}
-	cands := mergequeue.UndeliveredCandidates(mergequeue.UndeliveredInput{Verdicts: vs, Now: time.Now(), Window: health.ReviewQueueWindow,
+	cands := mergequeue.UndeliveredCandidates(mergequeue.UndeliveredInput{Verdicts: vs, Now: now, Window: health.ReviewQueueWindow,
 		Remote: remote, Local: local, Dropped: isDropped, Done: done})
 	if len(cands) == 0 {
 		return []bus.MergeUndelivered{}, ""

@@ -266,6 +266,14 @@ var Keys = []*Key{
 		env: envStallDuration, file: fileDuration(true)},
 	{Name: "dispatch.checkback_max", Env: "AGENT_BUS_CHECKBACK_MAX", Kind: Int, Default: 3, ReadBy: "dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 never tells the person")},
+	// The run budget (spec 2026-11-15-run-budget-design.md §3): a run stops
+	// by itself after this much unpaused time, or this many deliveries; 0
+	// is no limit (the default). Step 1 only shows them (agentbus run); the
+	// dispatcher reads them from step 2, the drain.
+	{Name: "run.max_duration", Env: "AGENT_BUS_RUN_MAX_DURATION", Kind: Duration, Default: time.Duration(0), ReadBy: "agentbus run",
+		env: envNonNegativeDuration, file: fileDuration(true)},
+	{Name: "run.max_deliveries", Env: "AGENT_BUS_RUN_MAX_DELIVERIES", Kind: Int, Default: 0, ReadBy: "agentbus run",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 for no limit")},
 	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
 	// working seen ready this long reads idle for team-stall; 0 turns it off.
 	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",
@@ -634,6 +642,13 @@ func isTheme(s string) bool { return s == "auto" || s == "dark" || s == "light" 
 func isSelfRepairMode(s string) bool { return s == "on" || s == "off" || s == "shadow" }
 
 // envPositiveDuration: a Go duration above 0; anything else is skipped.
+func envNonNegativeDuration(raw string) (any, envResult) {
+	if d, err := time.ParseDuration(raw); err == nil && d >= 0 {
+		return d, envUse
+	}
+	return nil, envSkip
+}
+
 func envPositiveDuration(raw string) (any, envResult) {
 	if d, err := time.ParseDuration(raw); err == nil && d > 0 {
 		return d, envUse

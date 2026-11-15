@@ -89,6 +89,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo cmd coder \"run the suite\"", "agentbus -p demo cmd -r 1792537337865-0 coder \"and the vet\""},
 	},
 	{
+		Name: "run", Usage: []string{"run", "run reset"},
+		Summary:  "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run",
+		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
+	},
+	{
 		Name: "checkback", Usage: []string{"checkback <duration> \"<what is in flight>\"", "checkback --clear", "checkback"},
 		Summary: "say when to look again at work in flight off the bus (a test run, a build), so the stall guard sees it; no argument lists them",
 		Flags: []cli.Flag{
