@@ -954,6 +954,8 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		Model:    os.Getenv("AGENT_BUS_MODEL"),
 		ClientFP: os.Getenv("AGENT_BUS_CLIENT_FP"),
 		Tier:     os.Getenv("AGENT_BUS_TIER"),
+		// Where its login expiry is read (login-updates §3.2): kept only with a proof.
+		ClaudeConfigDir: os.Getenv("CLAUDE_CONFIG_DIR"),
 	}
 	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
 		return who

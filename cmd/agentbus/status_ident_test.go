@@ -80,3 +80,13 @@ func TestStatusIdentityFailureLeavesFieldsEmpty(t *testing.T) {
 		t.Fatalf("outside herdr: %+v", who)
 	}
 }
+
+// The status publish carries the agent's CLAUDE_CONFIG_DIR (login-updates
+// §3.2); the bus keeps it only with a proof (TestMergeSnapshotClaudeConfigDir).
+func TestStatusIdentCarriesClaudeConfigDir(t *testing.T) {
+	t.Setenv("HERDR_ENV", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/srv/claude-b")
+	if who := statusIdent(context.Background()); who.ClaudeConfigDir != "/srv/claude-b" {
+		t.Fatalf("%+v", who)
+	}
+}

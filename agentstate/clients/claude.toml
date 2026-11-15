@@ -33,3 +33,8 @@ screen = []
 # (verified offline in the spec; step 3's f12-at-input probe confirms it per version).
 [keys]
 f12 = "free"
+
+# Login expiry (login-updates §3.4): the refresh token's fixed expiry, read from the credentials'
+# one field refreshTokenExpiresAt (loginexpiry). No other client declares one: they refresh themselves.
+[login]
+source = "claude-credentials"

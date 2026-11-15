@@ -101,3 +101,20 @@ func TestBindRecordsTier(t *testing.T) {
 		t.Fatalf("recorded %+v, want tier pop", f.who)
 	}
 }
+
+// bind records the agent's CLAUDE_CONFIG_DIR with the proof, so a bound
+// agent's login expiry is read from its own directory (login-updates §3.2).
+func TestBindRecordsClaudeConfigDir(t *testing.T) {
+	f := &fakeBind{}
+	d := f.deps(codexProcs, map[int]uint64{1930926: 42})
+	d.Env = func(k string) string {
+		return map[string]string{"HERDR_ENV": "1", "HERDR_PANE_ID": "w2:p1", "CLAUDE_CONFIG_DIR": "/srv/claude-b"}[k]
+	}
+	var out, errw bytes.Buffer
+	if code := runBind(context.Background(), d, []string{"codex", "--pid", "1930926"}, &out, &errw); code != 0 {
+		t.Fatalf("code=%d err=%q", code, errw.String())
+	}
+	if f.who == nil || f.who.ClaudeConfigDir != "/srv/claude-b" {
+		t.Fatalf("recorded %+v, want /srv/claude-b", f.who)
+	}
+}

@@ -32,7 +32,18 @@ type Profile struct {
 	// Keys is the attach prefix's status per key, as step 3's probe settled
 	// it (spec 4.6): "free" or "bound"; a key not listed is unknown.
 	Keys map[string]string
+	// LoginSource is where the client's fixed login expiry is read
+	// (login-updates §3.4), "" when it has none (it refreshes itself): only
+	// LoginClaudeCredentials so far.
+	LoginSource string
 }
+
+// LoginClaudeCredentials: Claude Code's credentials, their
+// refreshTokenExpiresAt (loginexpiry).
+const LoginClaudeCredentials = "claude-credentials"
+
+// loginSources are the [login] sources a profile may declare.
+var loginSources = map[string]bool{LoginClaudeCredentials: true}
 
 // KeyStatus is key's status for this client: free, bound or unknown (not
 // probed, or no profile).
@@ -61,7 +72,10 @@ type profileFile struct {
 		Helpers       []string `toml:"helpers"`
 		Screen        []string `toml:"screen"`
 	} `toml:"background"`
-	Keys map[string]string `toml:"keys"`
+	Keys  map[string]string `toml:"keys"`
+	Login struct {
+		Source string `toml:"source"`
+	} `toml:"login"`
 }
 
 // parseProfile reads one profile: every key known, the client named as its
@@ -138,7 +152,10 @@ func parseProfile(name string, data []byte) (Profile, error) {
 			return Profile{}, fmt.Errorf("%s: [keys] %s = %q: want free or bound", name, k, v)
 		}
 	}
-	return Profile{Client: f.Client, Signature: s, Background: bg, Keys: f.Keys}, nil
+	if src := f.Login.Source; src != "" && !loginSources[src] {
+		return Profile{}, fmt.Errorf("%s: [login] source %q is not a known source", name, src)
+	}
+	return Profile{Client: f.Client, Signature: s, Background: bg, Keys: f.Keys, LoginSource: f.Login.Source}, nil
 }
 
 // loadProfiles reads every embedded profile.
