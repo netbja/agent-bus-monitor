@@ -90,7 +90,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "run", Usage: []string{"run", "run reset"},
-		Summary: "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run",
+		Summary:  "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run",
 		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
 	},
 	{
