@@ -71,7 +71,7 @@ type AgentSnapshot struct {
 	// DeclTS is the last declaration's time while a flip holds the state (TS
 	// is then the flip's): readers of what the agent wrote use DeclaredTS.
 	DeclTS  int64  `json:"decl_ts,omitempty"`
-	Pane    string `json:"pane,omitempty"`    // HERDR_PANE_ID when the agent runs inside herdr
+	Pane    string `json:"pane,omitempty"`    // AGENTBUS_TERM_ID when the agent runs in a holder terminal
 	Session string `json:"session,omitempty"` // CLAUDE_CODE_SESSION_ID: locates the agent's transcript
 	// Process identity (§5.2): the agent's foreground pid in its pane and that
 	// pid's start time (field 22 of /proc/<pid>/stat), so a recycled pane or a
@@ -85,7 +85,7 @@ type AgentSnapshot struct {
 	// pid, on a proof only (mergeSnapshot): a proof for the same process from
 	// a caller that cannot read it keeps it; empty when unknown.
 	BootID   string `json:"boot_id,omitempty"`
-	Terminal string `json:"terminal,omitempty"` // herdr terminal id, display only
+	Terminal string `json:"terminal,omitempty"` // the terminal id, display only
 	// IdentTS (ms, Redis time) is when the identity was last proved: by a
 	// verified status (its stream id) or a bind. Only a newer proof replaces it.
 	IdentTS int64 `json:"ident_ts,omitempty"`
@@ -150,12 +150,12 @@ func ProviderFor(client, provider string) string {
 // (rather than more positional params) because this list grows: each new field
 // is one more thing a reader can learn about an agent for free.
 type AgentIdent struct {
-	Pane       string // HERDR_PANE_ID
+	Pane       string // AGENTBUS_TERM_ID
 	Session    string // CLAUDE_CODE_SESSION_ID
-	PID        int    // agent's foreground pid in its herdr pane (0 = unknown)
+	PID        int    // agent's foreground pid in its terminal (0 = unknown)
 	PIDStart   uint64 // that pid's start time, /proc/<pid>/stat field 22
 	BootID     string // the host's boot id (dispatch.BootID), "" when unknown
-	Terminal   string // herdr terminal id, display only
+	Terminal   string // the terminal id, display only
 	Client     string // AGENT_BUS_CLIENT
 	Provider   string // AGENT_BUS_PROVIDER
 	Model      string // AGENT_BUS_MODEL (v0.15.1)
@@ -376,7 +376,7 @@ func (b *Bus) addVoidingHandoff(ctx context.Context, kind, agent string, values 
 }
 
 // Status publishes an agent's state to the {project}:status stream. pane is the
-// agent's HERDR_PANE_ID (empty outside herdr); it is stored in the {project}:agents
+// agent's AGENTBUS_TERM_ID (empty outside a terminal); it is stored in the {project}:agents
 // snapshot only, never in the status stream.
 func (b *Bus) Status(ctx context.Context, agent, state, message string, who AgentIdent) (string, error) {
 	if !ValidName(agent) {

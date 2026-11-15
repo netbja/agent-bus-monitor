@@ -396,7 +396,7 @@ type agentState struct {
 	gates      map[string]string // those challenges, ref → "<challenger>|<summary>" (replaced whole, never mutated)
 	armed      bool              // a live subscribe lease exists (flag "armed")
 	lag        int64             // unconsumed {p}:cmd entries of the agent's group (detail only)
-	pane       string            // HERDR_PANE_ID from the agents hash (detail only)
+	pane       string            // the terminal id from the agents hash (detail only)
 	waiting    int64             // wake-relevant messages (pending + unread): the queue column
 	stale      int               // addressed entries older than the dispatch horizon (flag "stale N")
 	gap        bool              // entries may have been trimmed unread (detail only)

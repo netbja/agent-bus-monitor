@@ -314,7 +314,7 @@ func main() {
 			die("usage: status <agent> <state> [message]")
 		}
 		// Ambient identity, read from the environment rather than asked of the
-		// agent: HERDR_PANE_ID (empty outside herdr) locates its pane, and
+		// agent: AGENTBUS_TERM_ID (empty outside a terminal) locates it, and
 		// CLAUDE_CODE_SESSION_ID (empty for a non-Claude-Code peer) locates its
 		// transcript, which is what `agentbus refresh` reads usage from. The
 		// agent never types either, so neither can drift or be forgotten.

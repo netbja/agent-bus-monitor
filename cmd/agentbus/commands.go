@@ -470,7 +470,7 @@ var commands = []cli.Command{
 	{
 		Name: "up", NoProject: true,
 		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags]"},
-		Summary: "provision a project, start its services, open its herdr workspace",
+		Summary: "provision a project, start its services and its agents on the project's holder",
 		Flags: []cli.Flag{
 			{Long: "as", Short: 'a', Arg: "<name>", Help: "your name in busmon"},
 			{Long: "tabs", Short: 'T', Help: "run dispatch and missions in tabs, not as services"},
@@ -478,7 +478,6 @@ var commands = []cli.Command{
 			{Long: "dry-run", Short: 'n', Help: "print what would happen"},
 			fEsc,
 			{Long: "reload", Arg: "on|propose|off", Help: "the project's reload policy, kept for the services (agentbus reload)"},
-			{Long: "session", Short: 'S', Arg: "<s>", Help: "herdr session (default HERDR_SESSION)"},
 			{Long: "no-dispatch", Help: "bootstrap: no dispatcher"},
 			{Long: "no-missions", Help: "bootstrap: no conductor"},
 			{Long: "index", Help: "bootstrap: index the repository"},

@@ -42,7 +42,7 @@ func newResumeWorld(t *testing.T, agents ...string) *resumeWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.WriteEnvFile(paths.EnvFile(w.b.Project()), map[string]string{"HERDR_SESSION": "demo"}); err != nil {
+	if _, err := service.WriteEnvFile(paths.EnvFile(w.b.Project()), map[string]string{"PATH": "/bin"}); err != nil {
 		t.Fatal(err)
 	}
 	return w

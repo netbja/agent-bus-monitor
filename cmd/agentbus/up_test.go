@@ -172,7 +172,7 @@ func withServices(t *testing.T, deps *upDeps) *upServices {
 	deps.Services = func() (service.Manager, string) { u.probed++; return u.m, "" }
 	deps.Paths = u.paths
 	deps.Exe = func() (string, error) { return u.exe, nil }
-	deps.Environ = []string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "HERDR_SESSION=s", "HERDR_PANE_ID=w1:p1"}
+	deps.Environ = []string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "AGENTBUS_TERM_ID=w1:p1"}
 	deps.Mark = func(project string, inst bus.ServicesInstall) error { u.marks = append(u.marks, inst); return nil }
 	deps.Host = "h1"
 	return u
@@ -201,7 +201,7 @@ func TestUpStartsTheServicesAndOpensNoServiceTab(t *testing.T) {
 		t.Fatalf("missions spec = %+v", ms)
 	}
 	env, err := service.LoadEnvFile(u.paths.EnvFile("demo"))
-	if err != nil || env["REDIS_PASSWORD"] != "s3cret" || env["HERDR_PANE_ID"] != "" {
+	if err != nil || env["REDIS_PASSWORD"] != "s3cret" || env["AGENTBUS_TERM_ID"] != "" {
 		t.Fatalf("env = %v, %v", env, err)
 	}
 	if strings.Join(h.started(), ",") != "master" {
@@ -425,19 +425,19 @@ func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 }
 
 // KeepEnv (a suspended project's resume): the project's env file is kept as
-// it is, its herdr session excepted, so a resume never changes a project's
+// it is, so a resume never changes a project's
 // configuration; what the caller's environment would have changed is named,
 // never its value (master, suspend 3a).
 func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_AUTO_CLEAR=0", "AGENT_BUS_QUOTA_LONG_HOLD=3h"}
+	deps.Environ = []string{"PATH=/bin", "AGENT_BUS_AUTO_CLEAR=0", "AGENT_BUS_QUOTA_LONG_HOLD=3h"}
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up: %d %s", code, errw.String())
 	}
 	deps.KeepEnv = true
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_QUOTA_LONG_HOLD=1h", "AGENT_BUS_TOKENS=0"}
+	deps.Environ = []string{"PATH=/bin", "AGENT_BUS_QUOTA_LONG_HOLD=1h", "AGENT_BUS_TOKENS=0"}
 	out.Reset()
 	if code := runUp([]string{"demo"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up KeepEnv: %d %s", code, errw.String())
@@ -446,7 +446,7 @@ func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env["AGENT_BUS_AUTO_CLEAR"] != "0" || env["AGENT_BUS_QUOTA_LONG_HOLD"] != "3h" || env["HERDR_SESSION"] != "demo" {
+	if env["AGENT_BUS_AUTO_CLEAR"] != "0" || env["AGENT_BUS_QUOTA_LONG_HOLD"] != "3h" {
 		t.Fatalf("env after a KeepEnv up = %v", env)
 	}
 	if _, set := env["AGENT_BUS_TOKENS"]; set {
@@ -472,7 +472,7 @@ func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
 func TestUpKeepEnvRefusesAnUnreadableEnvFile(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_AUTO_CLEAR=0"}
+	deps.Environ = []string{"PATH=/bin", "AGENT_BUS_AUTO_CLEAR=0"}
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up: %d %s", code, errw.String())

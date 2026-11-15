@@ -57,8 +57,8 @@ type upDeps struct {
 	Team    func(project string) (teamHost, error)
 	Resumes func(project string) (map[string]bus.ResumeRecord, error)
 	Notice  func(project, text string) error
-	// KeepEnv keeps the project's env file as it is, its herdr session
-	// excepted: a suspended project's resume never changes its configuration
+	// KeepEnv keeps the project's env file as it is: a suspended project's
+	// resume never changes its configuration
 	// (suspend 3a). What Environ would have changed is named, never its value.
 	KeepEnv bool
 	Mark    func(project string, inst bus.ServicesInstall) error
@@ -123,7 +123,7 @@ type (
 // to open it.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --index --cron --yes]")
 		return 1
 	}
 	if !bus.ValidName(args[0]) { // stranger-test: say why, and what would do

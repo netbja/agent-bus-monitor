@@ -39,14 +39,14 @@ func TestPathsHonourXDGAndIgnoreRelative(t *testing.T) {
 }
 
 func TestCollectEnvKeepsConnectionDropsPaneIdentity(t *testing.T) {
-	env := CollectEnv([]string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "HERDR_SESSION=s", "HERDR_PANE_ID=w1:p1",
-		"HERDR_TAB_ID=t", "AGENT_BUS_PROJECT=x", "AGENT_BUS_AGENT=me", "AGENT_BUS_HUMAN=charlie", "ANTHROPIC_API_KEY=k", "HOME=/h"})
-	for _, k := range []string{"PATH", "REDIS_PASSWORD", "HERDR_SESSION", "AGENT_BUS_HUMAN"} {
+	env := CollectEnv([]string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "HERDR_SESSION=s", "AGENTBUS_TERM_ID=w1:p1",
+		"AGENTBUS_HOST=/run/h.sock", "AGENT_BUS_PROJECT=x", "AGENT_BUS_AGENT=me", "AGENT_BUS_HUMAN=charlie", "ANTHROPIC_API_KEY=k", "HOME=/h"})
+	for _, k := range []string{"PATH", "REDIS_PASSWORD", "AGENT_BUS_HUMAN"} {
 		if _, ok := env[k]; !ok {
 			t.Fatalf("%s dropped: %v", k, env)
 		}
 	}
-	for _, k := range []string{"HERDR_PANE_ID", "HERDR_TAB_ID", "AGENT_BUS_PROJECT", "AGENT_BUS_AGENT", "ANTHROPIC_API_KEY", "HOME"} {
+	for _, k := range []string{"HERDR_SESSION", "AGENTBUS_TERM_ID", "AGENTBUS_HOST", "AGENT_BUS_PROJECT", "AGENT_BUS_AGENT", "ANTHROPIC_API_KEY", "HOME"} {
 		if _, ok := env[k]; ok {
 			t.Fatalf("%s kept: %v", k, env)
 		}

@@ -14,14 +14,13 @@ import (
 )
 
 // envKeys are copied from the shell that runs `agentbus up` into the
-// services' environment file: the broker connection, the herdr session the
-// dispatcher talks to, and what the conductor's test commands need to find
-// their tools. A pane's own identity (HERDR_PANE_ID, HERDR_TAB_ID, …) is
-// never carried: a service is not in a pane.
+// services' environment file: the broker connection and what the
+// conductor's test commands need to find their tools. A terminal's own
+// identity (AGENTBUS_TERM_ID, AGENTBUS_HOST) is never carried: a service is
+// not in a terminal.
 var envKeys = []string{
 	"PATH", "LANG", "LC_ALL", "TZ",
 	"REDIS_URL", "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD",
-	"HERDR_SESSION", "HERDR_SOCKET_PATH", "HERDR_BIN", "HERDR_BIN_PATH",
 	"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
 	"GOPATH", "GOCACHE", "GOMODCACHE", "GOTOOLCHAIN", "GOFLAGS",
 }
