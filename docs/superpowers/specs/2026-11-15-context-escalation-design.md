@@ -1,6 +1,7 @@
 # The context alert gets a second step (context-escalation)
 
-Status: spec, r1. Task `context-escalation` (master's directive of 2026-11-15, at the person's
+Status: spec, r2 (r1: foureyes, "a hand-off stands" is the existing `VoidFor` rule, not a
+session match). Task `context-escalation` (master's directive of 2026-11-15, at the person's
 request, human directive 1794776197529-0): "the context alert has no teeth". Keep it small.
 
 ## 1. What happened on 2026-11-15
@@ -39,6 +40,12 @@ agent's process; a fresh known fill below `dispatch.context_alert` ends it and d
 | 2. **escalation** (new) | the episode has alerted, no hand-off stands for its session, **and** either known fill ≥ `context_urgent` (90) **or** the alert is older than `context_handoff_deadline` (20 min) | one directive to the escalation target **that wakes it**; one notification for the person (`FencedNotifyOnceForPerson`); the desktop notification; the `context` check goes **For you** | master; the person on ntfy/Discord and in busmon |
 | 3. hand-off and clear (today) | the agent declared `agentbus handoff` | the dispatcher's existing `/clear` after a declared hand-off | nobody: it is the normal end |
 
+**A hand-off stands** in this spec exactly as it does for the dispatcher's clear: the agent's
+record in `{p}:handoff` exists and `Handoff.VoidFor(snapshot)` is false (same verified pid and
+start, same proved session, and the agent has not declared `working` since the declaration).
+No second rule: an agent that hands off early and keeps working has a void record, so it can
+still escalate, and the deadline still counts from the alert, not from the voided hand-off.
+
 Step 2 is one act, triggered by whichever comes first. A hand-off declared before it cancels
 it; declared after, it only lifts the check (§4). No step 4: nothing repeats in the same episode.
 If the client compacts by itself, the fill drops below the alert and the episode ends as today.
@@ -65,7 +72,7 @@ In `contextAlerts`, for an agent whose fill is known and at or above `context_al
 ```
 escalate when
   marks[context:<a>] == f.Session                    // this episode alerted
-  and no hand-off record for <a> with Session == f.Session   // bus.Handoffs, read once per pass
+  and no hand-off stands for <a>      // bus.Handoffs (read once per pass) + VoidFor(snaps[a])
   and ( (urgent > 0 and f.Pct >= urgent)
         or (deadline > 0 and MarkAt(marks, context:<a>) > 0
             and now - MarkAt(...) >= deadline) )      // now = the publication's At (Redis TIME)
@@ -95,7 +102,10 @@ in `bus/context.go` (`ContextEscalateMark`), since the health check reads one (�
 ## 4. The check `context` (`health/evaluate.go`, `health/health.go`)
 
 Evidence per agent gains `Escalated bool`: `{p}:quota` holds `context-escalate:<a>` or
-`context-person:<a>` equal to the fill's session, and no hand-off record stands for that session.
+`context-person:<a>` equal to the fill's session, and no hand-off stands for the agent (§2: the
+record and `VoidFor` against `{p}:agents`, which `contextEvidence` reads with `bus.Handoffs`).
+A hand-off that is voided afterwards (the agent works again) puts the agent back For you; its
+marks are still there, and nothing is sent again.
 The check reads the marks the dispatcher wrote; it never judges the thresholds itself, so
 busmon, the check and the dispatcher cannot disagree.
 
@@ -112,7 +122,9 @@ every other warn stays in hand, dealt with by `dispatch`.
 sends a For-you warn as one event keyed `id|since`, the warn's start. For `context` that start is
 the first 80% warn, so a second agent escalating inside the same warn would never ring, and the
 first would ring twice (the event and §3.2 (2)). The relay skips `context`'s For-you event, as it
-skips `merge-queue`'s (`notifyfacts.go:119`): its items are the per-agent, per-episode notices. Remediation text: add "Escalated (no hand-off past the deadline or at
+skips `merge-queue`'s (`notifyfacts.go:119`): its items are the per-agent, per-episode notices.
+
+Remediation text: add "Escalated (no hand-off past the deadline or at
 the second threshold): only the person can reach a working agent; interrupt it and tell it to
 hand off. A hand-off declared lifts it."
 
@@ -149,13 +161,14 @@ behaviour exactly.
 Tests:
 - dispatch: fill 85% then 91% escalates once (directive with wake, person notice, desktop); a
   second publication at 93% sends nothing; deadline: alert at T, fill 85% at T+19m nothing, T+20m
-  escalates; a hand-off declared for the session before T+20m: nothing; a hand-off for an older
-  session does not count; the agent is the escalation target: person notice only; an episode
+  escalates; a standing hand-off before T+20m: nothing; a hand-off declared at T+5m then voided by
+  `working` at T+6m: escalates at T+20m; a hand-off of another session or pid does not count; the agent is the escalation target: person notice only; an episode
   without `:at` escalates only on `context_urgent`; a fill below the alert deletes the five marks;
   unknown or aged fill: nothing; `ErrSwapInProgress` skips; lost lease writes nothing; both
   settings 0 = today's entries exactly.
 - health: `EvaluateContext` with an escalated agent → warn, reason `escalated`, `PlaceOf` For
-  you; same agent with a hand-off for its session → warn without reason (in hand); a mark for an
+  you; same agent with a standing hand-off → warn without reason (in hand); with a voided one
+  (working since) → escalated again; a mark for an
   older session is not escalated.
 - config: invalid `context_urgent` (≤ alert, > 100), invalid deadline (< 1m).
 
@@ -163,7 +176,7 @@ Footprint (one PR):
 - `dispatch/contextalert.go`, `dispatch/context.go` (`Urgent`, `Deadline`), their tests;
 - `bus/context.go`: the mark functions and the two setting readers;
 - `health/evaluate.go`, `health/health.go`, tests;
-- `cmd/agentbus/healthchecks.go`: `contextEvidence` reads the marks and `bus.Handoffs`;
+- `cmd/agentbus/healthchecks.go`: `contextEvidence` reads the marks, `bus.Handoffs` and the agents' snapshots (`VoidFor`);
 - `cmd/agentbus/quotacmd.go`: wiring;
 - `cmd/agentbus/notifyfacts.go`: skip `context`'s For-you event (§4), with a test that an
   escalation rings once, through the notice;
