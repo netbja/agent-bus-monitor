@@ -264,8 +264,8 @@ func TestSelfRepairCrashLoop(t *testing.T) {
 // once per death.
 func TestSelfRepairReports(t *testing.T) {
 	w := newActWorld(t)
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: true, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictMissing }}
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: true, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictMissing }}
 	}
 	read := w.c.read
 	w.c.read = func(ctx context.Context) (selfRepairReads, error) {
@@ -579,8 +579,8 @@ func TestSelfRepairNetworkHoldTold(t *testing.T) {
 func TestSelfRepairWorkspaceClosedTold(t *testing.T) {
 	w := newActWorld(t)
 	open := false
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict {
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict {
 			return relaunch.VerdictBusy // open, the tab is waited on: nothing relaunched in this test
 		}}
 	}
@@ -613,8 +613,8 @@ func TestSelfRepairWorkspaceSpellOutlivesARestart(t *testing.T) {
 		return r, err
 	}
 	open := false
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
 	}
 	w.passes(6)
 	w.c.mu.Lock()
@@ -649,8 +649,8 @@ func TestSelfRepairWorkspaceSpellEndsWithNobodyDead(t *testing.T) {
 		}
 		return r, err
 	}
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: false, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: false, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
 	}
 	w.passes(6)
 	if msgs := w.only("does not answer"); len(msgs) != 1 {

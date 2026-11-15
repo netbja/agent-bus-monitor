@@ -93,9 +93,9 @@ func srChore(running map[int]uint64) (*selfRepairChore, *int) {
 	c := &selfRepairChore{project: "demo", mode: selfrepair.ModeShadow, every: 30 * time.Minute, perDay: 3,
 		master:    func() string { return "master" },
 		procStart: srProcs(running),
-		herdr: func(map[string]bus.AgentSnapshot) selfRepairHerdr {
+		host: func(map[string]bus.AgentSnapshot) selfRepairHost {
 			herdrCalls++
-			return selfRepairHerdr{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
+			return selfRepairHost{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
 				if create {
 					return relaunch.VerdictRelaunch
 				}
@@ -140,7 +140,7 @@ func TestSelfRepairFacts(t *testing.T) {
 	if co.Session != srSession || !co.Resumable || !co.ProviderFresh || co.ProviderHeld || co.Tab != relaunch.VerdictRelaunch {
 		t.Fatalf("coder %+v", co)
 	}
-	if !f.HerdrUp || !f.WorkspaceOpen || f.Mode != selfrepair.ModeShadow || f.Every != 30*time.Minute || f.PerDay != 3 || f.Grace != 60*time.Second {
+	if !f.HolderUp || !f.WorkspaceOpen || f.Mode != selfrepair.ModeShadow || f.Every != 30*time.Minute || f.PerDay != 3 || f.Grace != 60*time.Second {
 		t.Fatalf("facts %+v", f)
 	}
 	if *herdrCalls != 1 {
@@ -301,12 +301,12 @@ func TestSelfRepairFactsSources(t *testing.T) {
 	}
 	// herdr down or the workspace closed: said, and no tab judged.
 	c, _ := srChore(map[int]uint64{101: 99, 103: 99})
-	c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr { return selfRepairHerdr{} }
-	if f := c.facts(srReads(srT0)); f.HerdrUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
+	c.host = func(map[string]bus.AgentSnapshot) selfRepairHost { return selfRepairHost{} }
+	if f := c.facts(srReads(srT0)); f.HolderUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
 		t.Fatalf("herdr down %+v", f)
 	}
-	c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr { return selfRepairHerdr{Up: true} }
-	if f := c.facts(srReads(srT0)); !f.HerdrUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
+	c.host = func(map[string]bus.AgentSnapshot) selfRepairHost { return selfRepairHost{Up: true} }
+	if f := c.facts(srReads(srT0)); !f.HolderUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
 		t.Fatalf("workspace closed %+v", f)
 	}
 }

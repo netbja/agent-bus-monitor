@@ -73,9 +73,9 @@ func selfRepairResume(r selfRepairReads, role string) (profile, session, why str
 	return profile, session, why
 }
 
-// selfRepairHerdr is herdr as the pass sees it: the server answers, the
-// project's workspace is open, and a tab's verdict (create: a required role).
-type selfRepairHerdr struct {
+// selfRepairHost is the holder as the pass sees it: it answers, the
+// project's terminals are there, and a tab's verdict (create: a required role).
+type selfRepairHost struct {
 	Up, Open bool
 	Judge    func(t relaunch.Tab, create bool) relaunch.Verdict
 }
@@ -99,9 +99,9 @@ type selfRepairChore struct {
 	master    func() string // the escalation target: relaunched first (Q6)
 	procStart func(int) (uint64, error)
 	read      func(ctx context.Context) (selfRepairReads, error)
-	// herdr is read once a pass, and only when an agent of the template
-	// reads dead: a project with nobody dead costs herdr nothing.
-	herdr func(snaps map[string]bus.AgentSnapshot) selfRepairHerdr
+	// The holder is read once a pass, and only when an agent of the template
+	// reads dead: a project with nobody dead costs the holder nothing.
+	host  func(snaps map[string]bus.AgentSnapshot) selfRepairHost
 	clock func() time.Time // the check's staleness (local: never persisted)
 
 	// The acts of on mode (step 7b), each replaced by tests: relaunch runs
@@ -123,7 +123,7 @@ type selfRepairChore struct {
 	ran    bool
 	ranAt  time.Time
 	// wsClosed: when this spell of a closed workspace was first seen (R4:
-	// one notice per spell); zero once herdr says it is open.
+	// one notice per spell); zero once the holder says it is open.
 	wsClosed time.Time
 }
 
@@ -207,15 +207,15 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 			delete(c.deaths, role)
 		}
 	}
-	var h selfRepairHerdr
+	var h selfRepairHost
 	read := false
 	for i, a := range f.Agents {
 		if a.Life != relaunch.LifeDead {
 			continue
 		}
-		if !read && c.herdr != nil {
-			h, read = c.herdr(r.Snaps), true
-			f.HerdrUp, f.WorkspaceOpen = h.Up, h.Up && h.Open
+		if !read && c.host != nil {
+			h, read = c.host(r.Snaps), true
+			f.HolderUp, f.WorkspaceOpen = h.Up, h.Up && h.Open
 		}
 		f.Agents[i].Tab = relaunch.VerdictUnknown
 		if f.WorkspaceOpen && h.Judge != nil {
@@ -269,8 +269,8 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 	}
 	c.mu.Lock()
 	f := c.facts(r)
-	// A spell of a closed workspace (R4) ends when herdr is read and says it
-	// is open, or when nobody is dead: no hold stands then, and herdr is
+	// A spell of a closed workspace (R4) ends when the holder is read and says it
+	// is open, or when nobody is dead: no hold stands then, and the holder is
 	// read only for a death (foureyes: after up --resume everyone is alive).
 	// A later closing is a new spell, told again.
 	dead := false
@@ -278,7 +278,7 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 		dead = dead || a.Life == relaunch.LifeDead
 	}
 	clearSpell := false
-	if f.HerdrUp && f.WorkspaceOpen || !dead {
+	if f.HolderUp && f.WorkspaceOpen || !dead {
 		c.wsClosed = time.Time{}
 		clearSpell = r.Marks[workspaceMark] != ""
 	}
@@ -378,7 +378,7 @@ func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (
 		}
 	}
 	c.read = func(ctx context.Context) (selfRepairReads, error) { return readSelfRepair(ctx, b, getenv) }
-	c.herdr = func(snaps map[string]bus.AgentSnapshot) selfRepairHerdr {
+	c.host = func(snaps map[string]bus.AgentSnapshot) selfRepairHost {
 		return serviceRepairHost(getenv, b.Project())
 	}
 	return c, dispatch.SelfRepairConfig{Every: dispatch.SelfRepairEvery, Pass: c.pass}
@@ -456,29 +456,29 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 // role is relaunched unless a live terminal of it still runs, which is
 // waited on, never forced. Any failure reads as the holder down: a hold,
 // never an act.
-func serviceRepairHost(getenv func(string) string, project string) selfRepairHerdr {
+func serviceRepairHost(getenv func(string) string, project string) selfRepairHost {
 	h, err := holder.NewHost(project, holder.BuildID(), getenv)
 	if err != nil {
-		return selfRepairHerdr{}
+		return selfRepairHost{}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	terms, err := h.List(ctx, project)
 	if err != nil {
-		return selfRepairHerdr{}
+		return selfRepairHost{}
 	}
 	return repairHostFacts(terms, project)
 }
 
 // repairHostFacts judges each dead role by the holder's terminals.
-func repairHostFacts(terms []termhost.Term, project string) selfRepairHerdr {
+func repairHostFacts(terms []termhost.Term, project string) selfRepairHost {
 	live := map[string]bool{}
 	for _, t := range terms {
 		if t.Alive {
 			live[t.Name] = true
 		}
 	}
-	return selfRepairHerdr{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
+	return selfRepairHost{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
 		role, ok := relaunch.LaunchRole(t.Command, project)
 		switch {
 		case !ok:
