@@ -471,7 +471,7 @@ func lookPath(name, pathEnv string) (string, error) {
 }
 
 // Launch is Python's launch(): resolve the role, check the client, build the
-// command, bind the pane inside herdr, set the environment and exec the
+// command, bind the terminal the holder started, set the environment and exec the
 // client (or print the plan when AGENT_LAUNCH_DRYRUN=1).
 // env is the launcher's environment (os.Environ() in production); execFn
 // replaces the process (syscall.Exec in production, which keeps the pid).

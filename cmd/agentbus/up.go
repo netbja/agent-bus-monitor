@@ -116,11 +116,9 @@ type (
 	upTemplate = relaunch.Template
 )
 
-// runUp provisions a project (bootstrap, idempotent) and, inside herdr, opens
-// its workspace directly — busmon first and focused, then every tab of the
-// template — or focuses it when it is already open. It replaces "bootstrap new,
-// then Ctrl+B Up and pick the project". Outside herdr it provisions and says how
-// to open it.
+// runUp provisions a project (bootstrap, idempotent), starts its services
+// and its holder, and starts each agent of the template on the holder (herdr
+// exit §4.7); busmon and agentbus attach show them.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --index --cron --yes]")
@@ -1059,8 +1057,8 @@ var (
 
 // lookAgentCLI finds an agent's CLI on up's PATH, else in the usual per-user
 // install directories, else through the person's own login shell (shell):
-// up may run from a pane (the herdr plugin's picker) whose PATH is narrower
-// than the shell an agent's tab runs in, where nvm, volta, asdf, mise or a
+// up may run from a context (busmon's picker, a relayed directive) whose PATH
+// is narrower than the shell an agent's terminal runs in, where nvm, volta, asdf, mise or a
 // CLI's own installer put it on PATH. A miss is errCLIAbsent only when that
 // shell says so; when it cannot answer, errCLIUnknown.
 func lookAgentCLI(getenv func(string) string, look func(string) (string, error), shell func(string) (string, error)) func(string) (string, error) {
@@ -1120,7 +1118,7 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 		cmd.WaitDelay = 500 * time.Millisecond
 		// A session of its own, so no controlling terminal: an interactive
 		// shell's job control (tcsetpgrp) can never take the terminal from a
-		// foreground herdr that start runs meanwhile (foureyes).
+		// foreground program that start runs meanwhile (foureyes).
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
 		if ctx.Err() != nil {

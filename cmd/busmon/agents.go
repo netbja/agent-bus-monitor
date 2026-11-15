@@ -75,7 +75,7 @@ func clientOutdated(a *agentState, now time.Time) bool {
 }
 
 // idleHint (auto-state): the agent reads working, declared or flipped, but a
-// fresh observation has seen its pane ready (herdr's idle or done, not busy)
+// fresh observation has seen its pane ready (the host's idle or done, not busy)
 // for display.idle_hint_after. A hint: it never relabels, rings or counts.
 func idleHint(a *agentState, now time.Time) bool {
 	return a.state == "working" && a.idleHintAfter > 0 && !a.obsBusy && (a.obsState == "idle" || a.obsState == "done") &&

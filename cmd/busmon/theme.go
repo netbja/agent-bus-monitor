@@ -229,7 +229,7 @@ func (t *Theme) Pill(r Role) tcell.Style {
 }
 
 // Tab backgrounds: an inactive tab is a block a shade off the screen's
-// background, as herdr draws its tabs.
+// background, as a terminal draws its tabs.
 var (
 	tabOffDark  = tcell.GetColor("#1F2630")
 	tabOffLight = tcell.GetColor("#E3E6EA")

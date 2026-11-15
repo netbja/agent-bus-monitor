@@ -12,7 +12,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// Inspection is what herdr says about an agent's pane at one instant.
+// Inspection is what the host says about an agent's terminal at one instant.
 type Inspection struct {
 	State   string // idle|working|blocked|done|unknown
 	Client  string
@@ -117,7 +117,7 @@ type Input struct {
 	Retired bool
 }
 
-// workingFactor: an agent herdr reports as working never escalates before
+// workingFactor: an agent the host reports as working never escalates before
 // workingFactor×T — a long turn is not a stall.
 const workingFactor = 4
 

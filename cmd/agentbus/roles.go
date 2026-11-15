@@ -103,7 +103,7 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 			return rolecfg.LaunchProfile(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
 		case len(rest) == 4 && rest[2] == "--resume":
 			return rolecfg.LaunchResume(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
-		case len(rest) == 6 && rest[2] == "--profile" && rest[4] == "--resume": // a swapped role resumed by herdr
+		case len(rest) == 6 && rest[2] == "--profile" && rest[4] == "--resume": // a swapped role resumed on its profile
 			if rest[5] == "" {
 				return errors.New("resume session id is required")
 			}

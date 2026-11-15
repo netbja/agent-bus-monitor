@@ -14,7 +14,7 @@ import (
 
 // The prompt notification (prompt-notify, the person, 2026-10-27 "Bureau"): an
 // agent whose pane shows its client's own prompt (a permission or limit
-// menu, read by the observe pass as herdr state blocked: busmon's `prompt`
+// menu, read by the observe pass as the host's state blocked: busmon's `prompt`
 // flag) earns the person one desktop notification, once per episode, after
 // a grace. Only the person can answer it, in that pane: nothing is typed,
 // no state changes and no bus entry is written; only the episode's mark.

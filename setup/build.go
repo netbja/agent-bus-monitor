@@ -24,7 +24,7 @@ type Installer struct {
 	Getenv func(string) string
 	// Now is the clock for backup names (setup.sh's date +%Y%m%d%H%M%S).
 	Now func() time.Time
-	// Setenv changes setup's own environment (the PATH after installing herdr).
+	// Setenv changes setup's own environment (the PATH after installing Go).
 	Setenv func(k, v string) error
 	// Probe and Sleep are the port check and the wait (PortOpen, time.Sleep
 	// when nil).
@@ -63,7 +63,7 @@ func Ldflags(version, repo, binDir string) string {
 }
 
 // BuildAndInstall is setup.sh's build_and_install_binary: a stamped build,
-// installed atomically into the repository (where the herdr tabs run it) and
+// installed atomically into the repository (where the launch templates run it) and
 // into the bin dir (unless that is the repository).
 func (in *Installer) BuildAndInstall(ctx context.Context, name, pkg string) error {
 	target := filepath.Join(in.Opt.BinDir, name)

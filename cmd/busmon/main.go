@@ -422,7 +422,7 @@ type agentState struct {
 	obsBusy       bool                // the dispatcher saw its pane running a turn ({p}:observed)
 	auto          bool                // its state was flipped by its client's turn hooks, not declared (auto-state)
 	idleHintAfter time.Duration       // display.idle_hint_after: idle? after this long seen ready (0 = off)
-	obsState      string              // herdr's status of the pane at that inspection
+	obsState      string              // the host's status of the terminal at that inspection
 	obsAt         time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
 	clientUpdate  *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
 	host          hostFacts           // its terminal on a holder: blocked, draft, background skip (hostfacts.go)

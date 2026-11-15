@@ -42,7 +42,7 @@ type Broker interface {
 type RestoreDeps struct {
 	Broker Broker
 	// Live says why a project is live ("" = not): a lease held, its services
-	// active, its herdr workspace open, a registered agent's pid alive. An
+	// active, its holder up, a registered agent's pid alive. An
 	// error is not proof of death: the project is refused.
 	Live func(ctx context.Context, project string) (string, error)
 	// Lock takes the project's up lock (no up or start beside the restore).

@@ -9,7 +9,7 @@ import (
 )
 
 // v0.12: dispatch and missions run as user services (systemd --user, launchd),
-// not as herdr tabs. Their state lives in {p}:services so busmon can show it
+// not as terminals. Their state lives in {p}:services so busmon can show it
 // from any machine: one JSON field per service kind, plus the "installed"
 // marker written by `agentbus up`.
 

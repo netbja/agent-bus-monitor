@@ -225,8 +225,8 @@ func main() {
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "anonymous")
-	// The resume of a suspended project is the person's, from their own herdr
-	// pane too: routed before the guard, which it would not pass (foureyes).
+	// The resume of a suspended project is the person's, from any terminal
+	// of theirs: routed before the guard, which it would not pass (foureyes).
 	if ok, code := suspendedResumeFirst(context.Background(), os.Getenv, args,
 		func(ctx context.Context) (*bus.PauseRecord, error) {
 			c, err := bus.Connect(host)

@@ -11,7 +11,7 @@ import (
 // Start at login (self-repair step 9, docs/superpowers/specs/2026-11-09-self-repair-watcher-design.md
 // 4.4): the option services.start_at_login, off by default, starts a
 // project's services when the person logs in, so the self-repair watcher
-// covers a reboot as soon as herdr opens the workspace. No linger: without a
+// covers a reboot as soon as the person logs in. No linger: without a
 // session there is no workspace to relaunch into. One backend per platform;
 // elsewhere the option is refused with the reason.
 

@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Preflight is setup.sh's step 1: platform, git, curl (only for
-// --install-herdr), Go against goWant (go.mod's version), Docker and compose.
+// Preflight is setup.sh's step 1: platform, git, curl,
+// Go against goWant (go.mod's version), Docker and compose.
 // It returns how many required tools are missing, and what it learned of docker; the caller stops a real run
 // after it, while a dry run goes on and lists every gap.
 func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, goos, goarch string) (int, Docker) {

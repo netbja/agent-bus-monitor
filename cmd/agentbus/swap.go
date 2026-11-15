@@ -25,8 +25,8 @@ import (
 // 2026-10-16-quota-resume-and-fallback-design.md §6): replace an agent by the
 // same role on another profile, checking everything that can be checked
 // before anything is closed, and proving the replacement before it reports
-// success. Run inside the project's herdr session, by master after a
-// person's yes, or by the person.
+// success. Run by master after a person's yes (relayed to the dispatcher
+// from master's terminal), or by the person.
 
 // swapDeps are the outside world of a swap; tests replace every one.
 type swapDeps struct {

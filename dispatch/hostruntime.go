@@ -17,7 +17,7 @@ import (
 // step 9, spec docs/superpowers/specs/2026-11-10-herdr-exit-design.md 4.2,
 // 4.3, 4.3b): termhost.Host gives the facts, agentstate judges them. A pane
 // is a termhost.TermID. Nothing in the running system uses it yet: the
-// services' dispatcher keeps herdr's Runtime until the cutover (step 10).
+// services' dispatcher runs on it since the cutover (step 10).
 //
 // What changes from herdr's: the client comes from the agent's launch
 // profile (Client), never from the screen; a screen is settled when the

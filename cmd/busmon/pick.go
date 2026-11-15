@@ -1,6 +1,6 @@
 package main
 
-// busmon --pick: the Projects picker of the herdr plugin (spec
+// busmon --pick: the Projects picker (once the herdr plugin's, spec
 // 2026-10-19-herdr-plugin-design §4). It lists the project templates, says
 // whether the broker holds keys for each, and opens one with `agentbus up`.
 //

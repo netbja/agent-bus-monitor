@@ -18,7 +18,7 @@ import (
 )
 
 // About (A, about-page; the v0.27 plan, item 6): the versions of agentbus,
-// busmon, Redis, herdr, the plugin, the project and the update state (y
+// busmon, Redis, the project and the update state (y
 // copies them), then two agents on a bus line, a packet travelling from
 // master to coder and back; r replays. The versions are read in a command.
 // The packet moves only on the fade schedule (animated, fadeMsg), as every

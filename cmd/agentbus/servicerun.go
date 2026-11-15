@@ -363,7 +363,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			kind == service.Dispatch && code == 0 && anotherDispatcher(ctx, b)) {
 			break
 		}
-		// Another instance (an old herdr tab, another machine) holds the lease:
+		// Another instance (a foreground run, another machine) holds the lease:
 		// wait, then take over when it is free. Not a restart loop: this
 		// process stays and only polls the lease.
 		logf("another instance holds the lease; waiting in standby")

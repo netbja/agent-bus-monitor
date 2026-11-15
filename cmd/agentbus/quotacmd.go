@@ -288,9 +288,8 @@ func servicePopRetire(getenv func(string) string, missions func(context.Context,
 
 // withPopEnd lets the dispatcher end a done pop itself (pop-retire-auto,
 // decision 2026-11-13-dispatcher-ends-done-pop) when it reaches the project's
-// herdr session the way a service does (relaunch.ServiceHerdr: the session
-// the env names); without one, or with pop_retire off, master is told to run
-// retire --forget as before.
+// holder; without one, or with pop_retire off, master is told to run retire
+// --forget as before.
 func withPopEnd(c dispatch.PopRetireConfig, b *bus.Bus, rt dispatch.Runtime, getenv func(string) string) dispatch.PopRetireConfig {
 	if !c.On || b == nil {
 		return c
@@ -308,7 +307,7 @@ func withPopEnd(c dispatch.PopRetireConfig, b *bus.Bus, rt dispatch.Runtime, get
 	return c
 }
 
-// popEndCloseTimeout bounds the dispatcher's herdr pane close.
+// popEndCloseTimeout bounds the dispatcher's terminal close.
 const popEndCloseTimeout = 10 * time.Second
 
 // serviceClosePane closes a terminal of the project's holder (the pane an

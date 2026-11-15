@@ -585,7 +585,7 @@ func readQuietFacts(ctx context.Context, p string, b *bus.Bus, mgr service.Manag
 		if in.Err != nil || !dispatch.IdentityOK(&snap, in) {
 			continue // a pane not running the agent's verified process proves nothing about it
 		}
-		// Only herdr's verified readiness is ready evidence (reviewer-codex):
+		// Only the host's verified readiness is ready evidence (reviewer-codex):
 		// idle or done without Ready reads unknown, which proves nothing.
 		state := in.State
 		if (state == "idle" || state == "done") && !in.Ready {

@@ -55,7 +55,7 @@ func (m *Manifest) ParseTeam(spec string) ([]TeamRole, error) {
 }
 
 // Template returns the project template bootstrap writes.
-// busmon comes first: herdr focuses the first tab. as, when set, is the
+// busmon comes first in the template. as, when set, is the
 // person busmon writes as (busmon --as).
 func Template(m *Manifest, manifestPath, project, cwd, scriptsDir, repo, as string, dispatch, missions bool) string {
 	return TemplateTeam(m, manifestPath, project, cwd, scriptsDir, repo, as, dispatch, missions, nil)

@@ -76,7 +76,7 @@ func (m *Model) ring() bool {
 	return ring && m.cfg.settings.Bell
 }
 
-// bell is the terminal bell, written raw (herdr marks the tab even when it
+// bell is the terminal bell, written raw (a terminal marks the tab even when it
 // is hidden).
 func (m *Model) bell() tea.Cmd {
 	m.sig.bells++

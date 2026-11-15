@@ -137,7 +137,7 @@ func parseResumeArgs(args []string) resumeOptions {
 }
 
 // suspendedResumeFirst runs the resume of a suspended project ahead of the
-// identity guard, which would refuse it in the person's own herdr pane (no
+// identity guard, which would refuse it in a terminal the holder started (no
 // AGENT_BUS_AGENT), while its advice, exporting one, makes resume refuse the
 // caller as an agent (foureyes). Only when the guard would refuse and the
 // pause reads as a suspend: anything else, an unreadable pause included,

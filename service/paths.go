@@ -50,7 +50,7 @@ func PathsFrom(getenv func(string) string) (Paths, error) {
 }
 
 // EnvFile is the project's service environment (0600): the broker
-// connection and herdr session the services use.
+// connection the services use.
 func (p Paths) EnvFile(project string) string {
 	return filepath.Join(p.ConfigHome, "agentbus", "services", project+".env")
 }

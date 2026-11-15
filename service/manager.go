@@ -109,7 +109,7 @@ var systemdBooted = func() bool {
 // (Unmanaged). A systemd that runs as init but whose user instance does not
 // answer is not "no systemd": that stays an error, so no supervisor ever
 // starts beside the units. With no manager at all, why says what is missing,
-// for the explicit fallback to herdr tabs.
+// for the explicit fallback to a supervisor of our own (services.manager = none).
 func Detect(goos string, run Runner, getenv func(string) string) (m Manager, why string) {
 	paths, err := PathsFrom(getenv)
 	if err != nil {

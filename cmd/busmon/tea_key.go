@@ -27,7 +27,7 @@ func keyOfTea(msg tea.KeyPressMsg) Key {
 		// ignores Alt) reads it as it reads Alt+rune, so Ctrl+Alt+? opens the
 		// help on the panels. A Ctrl+Alt letter stays a control key, and a
 		// control code (Enter, Tab, Backspace) is no character (compose-dead-keys:
-		// ~ on a Swiss French keyboard in a herdr pane).
+		// ~ on a Swiss French keyboard in a terminal).
 		if alt && !unicode.IsLetter(k.Code) && unicode.IsPrint(k.Code) {
 			return Key{Code: keyRune, Rune: k.Code, Alt: true}
 		}

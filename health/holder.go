@@ -64,7 +64,7 @@ func WithHolderAgents(e HolderEvidence, proofs []HolderProof, redisNow time.Time
 }
 
 // HolderPane splits an agent's pane into a holder's build key and terminal
-// id; ok is false for a herdr pane or anything else.
+// id; ok is false for anything else.
 func HolderPane(pane string) (key, term string, ok bool) {
 	key, term, found := strings.Cut(pane, "/")
 	if !found || !service.ValidBuildKey(key) || !holderTermID.MatchString(term) {

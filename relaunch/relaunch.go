@@ -41,7 +41,7 @@ func (l Life) String() string {
 // reused is dead; no snapshot, no pid, or an unreadable process is unknown.
 // Gone is PidListedNoMore: dispatch.ProcStart's ErrNoProcess does not wrap
 // fs.ErrNotExist, and reading it as unknown made a tab whose old client
-// herdr still showed read alive, never waited on (reload of 2026-11-09).
+// the host still showed read alive, never waited on (reload of 2026-11-09).
 func SnapLife(s bus.AgentSnapshot, has bool, procStart func(int) (uint64, error)) Life {
 	if !has || s.PID <= 0 || s.PIDStart == 0 || procStart == nil {
 		return LifeUnknown

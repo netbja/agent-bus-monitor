@@ -2,9 +2,6 @@ package setup
 
 import "fmt"
 
-// PluginID is the herdr plugin id this checkout is linked as.
-const PluginID = "netbja.agentbus"
-
 // Options are setup.sh's flags.
 type Options struct {
 	Sub                        string // install, update, uninstall, status, rotate-redis-password

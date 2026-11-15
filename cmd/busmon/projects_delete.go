@@ -598,7 +598,7 @@ func (m Model) drawDeletePanel(g *grid) {
 
 // realQuiet is §5.1's checks, on any host where the broker can tell (the
 // leases, the services' records) and on this machine for the rest: its
-// services, its verified agents' processes, its herdr workspace. The rule
+// services, its verified agents' processes, its holder. The rule
 // agentbus restore uses (projectLive).
 func realQuiet(client *redis.Client, getenv func(string) string) func(ctx context.Context, p string) (string, error) {
 	return func(ctx context.Context, p string) (string, error) {

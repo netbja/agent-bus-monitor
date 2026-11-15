@@ -22,8 +22,8 @@ const ObservedTTL int64 = 120000 // ms
 
 // Observation is one agent's pane as last inspected.
 type Observation struct {
-	Busy  bool   `json:"busy"`            // the client is running a turn (herdr status or busy signature)
-	State string `json:"state,omitempty"` // herdr's agent status: working, idle, blocked, done, unknown
+	Busy  bool   `json:"busy"`            // the client is running a turn (the host's status or busy signature)
+	State string `json:"state,omitempty"` // the host's agent status: working, idle, blocked, done, unknown
 	At    int64  `json:"at"`              // Unix ms, Redis TIME of the inspection
 	// Since (v0.15) is the Redis TIME of the first reading of the current
 	// state by the same process: it identifies an episode (one bell for one

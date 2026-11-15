@@ -29,8 +29,8 @@ func humanAge(d time.Duration) string {
 	}
 }
 
-// agentPane returns the agent's registered herdr pane and whether the agent is
-// known with a non-empty pane.
+// agentPane returns the agent's registered terminal id and whether the agent
+// is known with a non-empty one.
 func agentPane(m map[string]bus.AgentSnapshot, agent string) (string, bool) {
 	s, ok := m[agent]
 	if !ok || s.Pane == "" {

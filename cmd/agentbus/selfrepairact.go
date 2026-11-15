@@ -98,7 +98,7 @@ func (c *selfRepairChore) act(ctx context.Context, token string, ds []selfrepair
 
 // workspaceMark is R4's notice mark in {p}:quota: its value, the spell's
 // episode, outlives a dispatcher restart (reviewer-codex); cleared once
-// herdr says the workspace is open.
+// the holder answers with the project's terminals.
 const workspaceMark = "selfrepair-workspace"
 
 // sinceKey is a last good reading as an episode ("0": none).
