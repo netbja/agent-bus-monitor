@@ -203,3 +203,26 @@ func TestHostOpRunning(t *testing.T) {
 		t.Fatal("a closed operation marked running")
 	}
 }
+
+// §4.2 (foureyes): done does not wake its sender; refused, failed, not run
+// and unknown do: each leaves something to do.
+func TestHostOpOutcomeWakes(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	for i, st := range []string{HostDone, HostRefused, HostFailed, HostNotRun, HostUnknown} {
+		o := HostOp{ID: strconv.Itoa(i+1) + "-0", Op: HostUp, From: "master"}
+		if err := b.FencedHostOutcome(ctx, "tok", o, st, "x"); err != nil {
+			t.Fatal(err)
+		}
+		r := hostReplies(t, b, o.ID)
+		if len(r) != 1 || r[0]["command"] != st+": x" || (r[0]["wake"] == "no") != (st == HostDone) {
+			t.Errorf("%s: %v", st, r)
+		}
+	}
+	if err := b.FencedHostOutcome(ctx, "tok", HostOp{ID: "9-0", Op: HostUp, From: "master"}, HostAccepted, "x"); err == nil {
+		t.Fatal("accepted taken for an outcome")
+	}
+}

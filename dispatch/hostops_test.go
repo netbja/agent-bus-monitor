@@ -196,3 +196,28 @@ func TestHostOpsFailover(t *testing.T) {
 		t.Fatal("the old worker's outcome was written without the lease")
 	}
 }
+
+// §4.2 (foureyes): the reader never waits on the worker: a directive
+// accepted while the queue is full fails at once, said to its sender.
+func TestHostOpsFullQueueFails(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "host-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	l := hostLoop(b, func(context.Context, string, bus.HostOp) (string, string) { t.Fatal("ran"); return "", "" })
+	st := l.newHostOpsState(ctx)
+	st.queue = make(chan bus.HostOp, 1)
+	st.queue <- bus.HostOp{ID: "1-0", Op: bus.HostUp, From: "master"} // the worker is busy
+	if _, err := b.SendHostOp(ctx, bus.HostOp{Op: bus.HostRelaunch, Agent: "coder", From: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	l.hostOpsPass(ctx, st)
+	r := hostReplies(t, b, "master")
+	if len(r) != 2 || !strings.HasPrefix(r[0], "accepted") || r[1] != "failed: the dispatcher's queue is full" {
+		t.Fatalf("replies %q", r)
+	}
+	if len(st.queue) != 1 {
+		t.Fatal("queued past its capacity")
+	}
+}

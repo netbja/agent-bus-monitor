@@ -81,3 +81,33 @@ func TestRelayHostOp(t *testing.T) {
 		t.Fatalf("an op outside the set sent: %d", code)
 	}
 }
+
+// §4.2 (foureyes): a reply first seen by the last read, once the deadline
+// has passed by Redis TIME, is the answer: no failure is declared.
+func TestRelayHostOpLastRead(t *testing.T) {
+	ctx := context.Background()
+	b, _ := dialMain(t)
+	if ok, err := b.AcquireDispatch(ctx, "relay", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch %v %v", ok, err)
+	}
+	real := hostReply
+	defer func() { hostReply = real }()
+	reads := 0
+	hostReply = func(ctx context.Context, b *bus.Bus, id, to string) (string, bool, error) {
+		reads++
+		if reads == 1 { // before the deadline: nothing yet; the dispatcher answers late
+			ops, _, _ := b.HostOpsAfter(ctx, "0-0")
+			if err := b.FencedHostRefuse(ctx, "relay", ops[0], "too late to tell"); err != nil {
+				t.Error(err)
+			}
+			time.Sleep(60 * time.Millisecond)
+			return "", false, nil
+		}
+		return real(ctx, b, id, to)
+	}
+	var out, errw bytes.Buffer
+	code := relayHostOp(ctx, b, bus.HostOp{Op: bus.HostUp, From: "master"}, 50*time.Millisecond, &out, &errw)
+	if code != 1 || reads != 2 || !strings.Contains(errw.String(), "up: refused: too late to tell") || strings.Contains(errw.String(), relayFailText) {
+		t.Fatalf("%d after %d reads: %q", code, reads, errw.String())
+	}
+}

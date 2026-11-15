@@ -24,6 +24,11 @@ const relayFailText = "the dispatcher did not answer within 5 s: from inside an 
 // relayPoll is how often the command reads for its reply.
 const relayPoll = 100 * time.Millisecond
 
+// hostReply reads the dispatcher's reply (a seam for the tests).
+var hostReply = func(ctx context.Context, b *bus.Bus, id, to string) (string, bool, error) {
+	return b.HostReply(ctx, id, to)
+}
+
 // relayHostOp sends o and waits for the dispatcher's reply until window
 // after the directive's id (Redis time). Exit 0 when accepted, 1 otherwise.
 func relayHostOp(ctx context.Context, b *bus.Bus, o bus.HostOp, window time.Duration, out, errw io.Writer) int {
@@ -43,13 +48,13 @@ func relayHostOp(ctx context.Context, b *bus.Bus, o bus.HostOp, window time.Dura
 	}
 	deadline := ms + window.Milliseconds()
 	for {
-		reply, ok, err := b.HostReply(ctx, id, o.From)
+		reply, ok, err := hostReply(ctx, b, id, o.From)
 		if err == nil && ok {
 			return relayReply(what, reply, out, errw)
 		}
 		now, terr := b.ServerTime(ctx)
 		if terr == nil && now.UnixMilli() > deadline {
-			if reply, ok, err := b.HostReply(ctx, id, o.From); err == nil && ok { // once more, past the deadline
+			if reply, ok, err := hostReply(ctx, b, id, o.From); err == nil && ok { // once more, past the deadline
 				return relayReply(what, reply, out, errw)
 			}
 			fmt.Fprintf(errw, "%s: %s\n", what, relayFailText)
