@@ -144,6 +144,9 @@ func LoginExpiryWarnText(agent string, expiry, now time.Time, zone *time.Locatio
 }
 
 func timeLeft(d time.Duration) string {
+	if d < time.Minute { // a warn is always ahead: never "0 minutes"
+		return "less than a minute"
+	}
 	n, unit := int(d/time.Minute), "minute"
 	switch {
 	case d >= 24*time.Hour:

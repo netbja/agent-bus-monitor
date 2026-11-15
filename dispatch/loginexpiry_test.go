@@ -275,6 +275,9 @@ func TestLoginExpiryWarnText(t *testing.T) {
 		{5*time.Hour + 30*time.Minute, "(5 hours)"},
 		{90 * time.Minute, "(1 hour)"},
 		{20 * time.Minute, "(20 minutes)"},
+		{time.Minute, "(1 minute)"},
+		{59 * time.Second, "(less than a minute)"},
+		{time.Millisecond, "(less than a minute)"},
 	} {
 		got := LoginExpiryWarnText("coder", exp, exp.Add(-c.left), time.UTC)
 		if got != "coder's Claude login expires Thu 15:40 "+c.want+": run /login in its pane." {
