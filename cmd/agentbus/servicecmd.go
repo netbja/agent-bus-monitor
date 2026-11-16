@@ -711,33 +711,13 @@ func mainServiceRun(project, host string, args []string) int {
 		},
 		Settings: func() []string { return settingsWarnings(os.Getenv) },
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
-			cfg := dispatchBaseConfig()
-			run := newDispatchRunRecord(paths.StateDir(project), log) // running at its first lease, stopped on a signal (reboot-resume §2.1)
-			cfg.Log, cfg.OnLease = log, run.onLease(onLease)
-			cfg.Quota = serviceQuota(os.Getenv, log)
-			cfg.Login = serviceLoginExpiry(os.Getenv)                        // an expired login told to the person (login-updates)
-			cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
-			cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)
-			cfg.History = serviceHistory(os.Getenv, paths.StateDir(project)) // the streams archived to day files (history)
-			cfg.Backup = serviceBackup(log)                                  // the daily backup when backup.schedule = daily
-			cfg.Observe = dispatch.ObserveEvery
-			cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
-			cfg.Prompt.Skip = promptSkip(b, os.Getenv)                     // never rung twice with a desktop target (notifications)
-			cfg.Notify = serviceNotify(b, os.Getenv)                       // the person's phone and desktop (notifications)
-			cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)               // what waits for the person's merge (merge-queue)
-			cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
-			cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
-			h, err := dispatchRuntime(project, os.Getenv)                  // the dispatcher on the project's holder (herdr exit 10b)
+			cfg, h, err := serviceDispatchConfig(b, project, host, paths, log)
 			if err != nil {
 				fmt.Fprintf(log, "dispatch: %v\n", err)
 				return 1
 			}
-			cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)
-			// The self-repair watcher: shadow passes only (step 6); its check in every mode.
-			repair, repairCfg := serviceSelfRepair(b, os.Getenv, &cfg.EscalateTo)
-			cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
-			cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, h, os.Getenv)
-			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project)) // read at each client-update send (auto-reload)
+			run := newDispatchRunRecord(paths.StateDir(project), log) // running at its first lease, stopped on a signal (reboot-resume §2.1)
+			cfg.OnLease = run.onLease(onLease)
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}
@@ -748,6 +728,40 @@ func mainServiceRun(project, host string, args []string) int {
 		RunMissions: mission.Run,
 	}
 	return serviceRun(ctx, b, kind, rest, deps, w)
+}
+
+// serviceDispatchConfig is the dispatch service's dispatcher: every pass the
+// service runs, and the relay (herdr exit §4.2). The relay was missing here
+// until host-relay-timeout: only the foreground agentbus dispatch set it, so
+// a host command from an agent's terminal was never read by the service.
+func serviceDispatchConfig(b *bus.Bus, project, host string, paths service.Paths, log io.Writer) (dispatch.Config, *dispatch.HostRuntime, error) {
+	cfg := dispatchBaseConfig()
+	cfg.Log = log
+	cfg.HostOps = hostOpsConfig(b, project, host) // host commands from inside an agent's terminal
+	cfg.Quota = serviceQuota(os.Getenv, log)
+	cfg.Login = serviceLoginExpiry(os.Getenv)                        // an expired login told to the person (login-updates)
+	cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
+	cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)
+	cfg.History = serviceHistory(os.Getenv, paths.StateDir(project)) // the streams archived to day files (history)
+	cfg.Backup = serviceBackup(log)                                  // the daily backup when backup.schedule = daily
+	cfg.Observe = dispatch.ObserveEvery
+	cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
+	cfg.Prompt.Skip = promptSkip(b, os.Getenv)                     // never rung twice with a desktop target (notifications)
+	cfg.Notify = serviceNotify(b, os.Getenv)                       // the person's phone and desktop (notifications)
+	cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)               // what waits for the person's merge (merge-queue)
+	cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
+	cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
+	h, err := dispatchRuntime(project, os.Getenv)                  // the dispatcher on the project's holder (herdr exit 10b)
+	if err != nil {
+		return cfg, nil, err
+	}
+	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)
+	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
+	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &cfg.EscalateTo)
+	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
+	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, h, os.Getenv)
+	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project)) // read at each client-update send (auto-reload)
+	return cfg, h, nil
 }
 
 // serviceReloadPolicy reads the project's reload policy as agentbus reload

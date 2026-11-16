@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 )
 
@@ -161,4 +162,11 @@ func realHostCmds(b *bus.Bus, project, host string) map[string]hostCmd {
 			return runHolderDrain(project, host, args, getenvAs(self, os.Getenv), out, errw)
 		},
 	}
+}
+
+// hostOpsConfig is the relay's runner (herdr exit §4.2), the same for the
+// foreground agentbus dispatch and the dispatch service: each accepted op
+// run with the command a shell runs, in this process.
+func hostOpsConfig(b *bus.Bus, project, host string) dispatch.HostOpsConfig {
+	return dispatch.HostOpsConfig{Run: hostRunner{Project: project, Cmds: realHostCmds(b, project, host)}.Run}
 }
