@@ -217,9 +217,34 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 // notification goes through notify-send when it is on PATH, else nowhere.
 func serviceContext(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.ContextConfig {
+	settings := config.Machine(getenv)
 	return dispatch.ContextConfig{Every: time.Minute, Alert: bus.ContextAlert(getenv), MaxAge: bus.ContextMaxAge,
-		Read:   func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) },
-		Notify: desktopNotify(lookPath, run)}
+		Urgent: settings.Float("dispatch.context_urgent"), Deadline: settings.Duration("dispatch.context_handoff_deadline"),
+		Read:      func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) },
+		Compacted: serviceCompacted(getenv, os.UserHomeDir),
+		Notify:    desktopNotify(lookPath, run)}
+}
+
+// serviceCompacted reads a session's last automatic compaction (§3.5) from
+// its transcript under the agent's CLAUDE_CONFIG_DIR, else the service's,
+// else ~/.claude; an unreadable transcript is none (the episode ends
+// silently, as it would without the notice).
+func serviceCompacted(getenv func(string) string, home func() (string, error)) func(string, string, int64) (int64, bool) {
+	return func(configDir, session string, afterMs int64) (int64, bool) {
+		base := configDir
+		if base == "" {
+			base = getenv("CLAUDE_CONFIG_DIR")
+		}
+		if base == "" {
+			h, err := home()
+			if err != nil {
+				return 0, false
+			}
+			base = filepath.Join(h, ".claude")
+		}
+		pre, _, found, err := tokens.AutoCompactAfter(filepath.Join(base, "projects"), session, afterMs)
+		return pre, err == nil && found
+	}
 }
 
 // serviceTokens is the dispatch service's tokens pass: the transcripts of

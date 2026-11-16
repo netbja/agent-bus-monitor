@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
 	"strings"
@@ -61,10 +62,28 @@ func TestContextEvidence(t *testing.T) {
 		"coder":  {Pct: 86, Session: "s1", ObservedAt: at, At: at},
 		"master": {Pct: 95, Session: "s2", ObservedAt: at - bus.ContextMaxAge.Milliseconds() - 1, At: at}, // aged
 	}
-	ev := contextEvidence(fills)
+	ev := contextEvidence(fills, nil, nil, nil)
 	out := health.EvaluateContext(ev, 80)
 	if len(ev) != 2 || out.Status != health.Warn || out.Detail != "at or above 80%: coder 86%" {
 		t.Fatalf("evidence %+v, outcome %+v", ev, out)
+	}
+	// context-escalation §5: the dispatcher's escalation of this session,
+	// no hand-off standing: escalated, with the alert's age; a hand-off
+	// standing lifts it; another session's escalation does not count.
+	marks := map[string]string{bus.ContextMark("coder"): "s1", bus.ContextMark("coder") + bus.MarkAtSuffix: fmt.Sprintf("%d-0", at-27*60000),
+		bus.ContextPersonMark("coder"): "s1"}
+	snaps := map[string]bus.AgentSnapshot{"coder": {PID: 7, PIDStart: 9, IdentSession: "s1"}}
+	out = health.EvaluateContext(contextEvidence(fills, marks, nil, snaps), 80)
+	if out.Reason != "escalated" || !strings.Contains(out.Detail, "coder 86% (no hand-off 27 min)") {
+		t.Fatalf("escalated: %+v", out)
+	}
+	stands := map[string]bus.Handoff{"coder": {Report: "1-1", Session: "s1", PID: 7, PIDStart: 9, At: at}}
+	if out := health.EvaluateContext(contextEvidence(fills, marks, stands, snaps), 80); out.Reason != "" {
+		t.Fatalf("a hand-off stands: %+v", out)
+	}
+	marks[bus.ContextPersonMark("coder")] = "s0"
+	if out := health.EvaluateContext(contextEvidence(fills, marks, nil, snaps), 80); out.Reason != "" {
+		t.Fatalf("another session's escalation: %+v", out)
 	}
 }
 

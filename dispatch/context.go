@@ -22,6 +22,15 @@ type ContextConfig struct {
 	// (context-alert ca2; 0 = off). MaxAge is the oldest reading that acts.
 	Alert  float64
 	MaxAge time.Duration
+	// The escalation (context-escalation §3.2): once per episode, when no
+	// hand-off stands and the fill reaches Urgent (used only above Alert;
+	// 0 = off) or the alert is Deadline old (0 = off).
+	Urgent   float64
+	Deadline time.Duration
+	// Compacted is the session's last automatic compaction after afterMs
+	// (its preTokens), from its transcript under configDir (the agent's
+	// CLAUDE_CONFIG_DIR, "" = the default) (§3.5; nil = no notice).
+	Compacted func(configDir, session string, afterMs int64) (preTokens int64, found bool)
 	// Notify shows a desktop notification (nil = none).
 	Notify func(ctx context.Context, title, body string) error
 }

@@ -311,13 +311,29 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			}
 			return health.EvaluateScreenUnknown(screenEvidence(snaps, observed, now.UnixMilli()), now.UnixMilli()), nil
 		}),
-		healthTask("context", func(ctx context.Context) (health.Status, string, error) {
+		healthOutcomeTask("context", func(ctx context.Context) (health.Outcome, error) {
+			unknown := func(d string, err error) (health.Outcome, error) {
+				return health.Outcome{Status: health.Unknown, Detail: d}, err
+			}
 			fills, err := b.Context(ctx)
 			if err != nil {
-				return health.Unknown, "context fills unavailable", err
+				return unknown("context fills unavailable", err)
 			}
-			out := health.EvaluateContext(contextEvidence(fills), bus.ContextAlert(os.Getenv))
-			return out.Status, out.Detail, nil
+			// The escalation is the dispatcher's (context-escalation §5): the
+			// check reads its marks and the hand-offs, never judges a threshold.
+			marks, err := b.QuotaMarks(ctx)
+			if err != nil {
+				return unknown("context marks unavailable", err)
+			}
+			handoffs, err := b.Handoffs(ctx)
+			if err != nil {
+				return unknown("hand-offs unavailable", err)
+			}
+			snaps, err := b.Agents(ctx)
+			if err != nil {
+				return unknown("agent snapshots unavailable", err)
+			}
+			return health.EvaluateContext(contextEvidence(fills, marks, handoffs, snaps), bus.ContextAlert(os.Getenv)), nil
 		}),
 		healthTask("runaway", func(ctx context.Context) (health.Status, string, error) {
 			now, err := b.ServerTime(ctx)
@@ -908,10 +924,23 @@ func clientUpdates(ev []health.ClientEvidence) map[string]string {
 
 // contextEvidence is the context check's evidence: one entry per published
 // fill, known only when it is not aged.
-func contextEvidence(fills map[string]bus.ContextFill) []health.ContextEvidence {
+func contextEvidence(fills map[string]bus.ContextFill, marks map[string]string, handoffs map[string]bus.Handoff, snaps map[string]bus.AgentSnapshot) []health.ContextEvidence {
 	ev := make([]health.ContextEvidence, 0, len(fills))
 	for a, f := range fills {
-		ev = append(ev, health.ContextEvidence{Agent: a, Pct: f.Pct, Known: f.Known()})
+		e := health.ContextEvidence{Agent: a, Pct: f.Pct, Known: f.Known()}
+		if bus.ContextEscalated(marks, a, f.Session) {
+			stands := false
+			if h, ok := handoffs[a]; ok {
+				snap, known := snaps[a]
+				void, _ := h.VoidFor(snap, known)
+				stands = !void
+			}
+			e.Escalated = !stands
+			if at := bus.MarkAt(marks, bus.ContextMark(a)); at > 0 && f.At > at {
+				e.SinceAlert = time.Duration(f.At-at) * time.Millisecond
+			}
+		}
+		ev = append(ev, e)
 	}
 	return ev
 }

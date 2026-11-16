@@ -43,8 +43,9 @@ func TestNotifyEventsFromFacts(t *testing.T) {
 			"team-stall": {ID: "team-stall", Status: health.Fail, Since: nfMS(-20 * time.Minute), ObservedAt: nfMS(0), Detail: "stall-detail-x"},
 			"disk":       {ID: "disk", Status: health.Fail, Since: nfMS(-time.Hour), ObservedAt: nfMS(0), Detail: "/ 1% free"},
 			"backup":     {ID: "backup", Status: health.Warn, Since: nfMS(-time.Hour), ObservedAt: nfMS(0), Detail: "no archive"},
-			"context":    {ID: "context", Status: health.Warn, Since: nfMS(-time.Hour), ObservedAt: nfMS(0)}, // in hand
-			"github":     {ID: "github", Status: health.OK, Since: nfMS(-time.Hour), ObservedAt: nfMS(0)},
+			// For you, escalated: the dispatcher's notice rings, never the check's item (context-escalation §5)
+			"context": {ID: "context", Status: health.Warn, Reason: "escalated", Since: nfMS(-time.Hour), ObservedAt: nfMS(0)},
+			"github":  {ID: "github", Status: health.OK, Since: nfMS(-time.Hour), ObservedAt: nfMS(0)},
 		},
 		Notices: []bus.RawEntry{
 			{ID: "1793710000000-0", Fields: map[string]string{"from": "dispatch", "message": "escalation nobody can act on", "for": "person"}},

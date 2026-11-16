@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +53,16 @@ func TestServiceContextAlert(t *testing.T) {
 			t.Fatalf("%q: alert %v every %v max age %v", c.env, cfg.Alert, cfg.Every, cfg.MaxAge)
 		}
 	}
+	// context-escalation §7: urgent 90 and the deadline 20m by default; the
+	// registry's env names set them.
 	cfg := serviceContext(func(string) string { return "" }, found, run)
+	if cfg.Urgent != 90 || cfg.Deadline != 20*time.Minute {
+		t.Fatalf("defaults: urgent %v deadline %v", cfg.Urgent, cfg.Deadline)
+	}
+	set := map[string]string{"AGENT_BUS_CONTEXT_URGENT": "95", "AGENT_BUS_CONTEXT_HANDOFF_DEADLINE": "0"}
+	if c := serviceContext(func(k string) string { return set[k] }, found, run); c.Urgent != 95 || c.Deadline != 0 {
+		t.Fatalf("set: urgent %v deadline %v", c.Urgent, c.Deadline)
+	}
 	if err := cfg.Notify(context.Background(), "agentbus p", "coder context 85%"); err != nil || len(ran) != 1 ||
 		strings.Join(ran[0], " ") != "/usr/bin/notify-send -a agentbus agentbus p coder context 85%" {
 		t.Fatalf("ran %q, %v", ran, err)
@@ -111,5 +123,31 @@ func TestServiceClear(t *testing.T) {
 	}
 	if cfg := serviceClear(func(string) string { return "1" }, found, run); cfg.Notify == nil {
 		t.Fatal("no desktop notification for an escalated clear")
+	}
+}
+
+// context-escalation §3.5: the service reads the compaction from the agent's
+// own CLAUDE_CONFIG_DIR, else the service's, else ~/.claude.
+func TestServiceCompacted(t *testing.T) {
+	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
+	write := func(base string, pre int) {
+		dir := filepath.Join(base, "projects", "-p")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		line := fmt.Sprintf(`{"type":"system","subtype":"compact_boundary","timestamp":"2026-11-15T21:50:00Z","compactMetadata":{"trigger":"auto","preTokens":%d}}`+"\n", pre)
+		if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(line), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	agent, home := t.TempDir(), t.TempDir()
+	write(agent, 111)
+	write(filepath.Join(home, ".claude"), 222)
+	c := serviceCompacted(func(string) string { return "" }, func() (string, error) { return home, nil })
+	if pre, ok := c(agent, id, 0); !ok || pre != 111 {
+		t.Fatalf("the agent's dir: %d %v", pre, ok)
+	}
+	if pre, ok := c("", id, 0); !ok || pre != 222 {
+		t.Fatalf("the default: %d %v", pre, ok)
 	}
 }

@@ -808,6 +808,14 @@ heartbeat window. When the plan is done (final sign-off passed, board all
   threshold, have the agent write a hand-off (current step, what's committed, what's pending)
   BEFORE its context is cleared (the dispatcher types `/clear` after a declared hand-off) — never
   clear first and sort it out after.
+- **A context escalation wakes you** (`context: <agent> at 91%, alerted 21 min ago …, no hand-off
+  declared`): the agent was told at the alert (80%) and has not handed off by `context_urgent` (90%)
+  or 20 minutes later; the person is told too. Send that agent no new work, keep its pending items
+  for its next session, never type into its pane, and do not resend the alert: the dispatcher and
+  its hook do. Once it declares its hand-off, the dispatcher clears it.
+- **A compaction notice** (`context: <agent> was compacted by its client … without a hand-off`,
+  `wake=no`): the agent goes on with a summary of its context. Check its current step (its last
+  report, its branch) before sending it more.
 - **Grey ghost text at a peer's prompt is a Claude Code suggestion, not the human typing.**
   Claude Code pre-fills likely next inputs in dim grey, and a screen line in a `blocked` report or
   busmon's preview may show that ghost as ordinary text, so a "line typed but not yet submitted"

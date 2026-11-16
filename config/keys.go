@@ -191,6 +191,35 @@ var Keys = []*Key{
 			return nil, envSkip
 		},
 		file: filePercent},
+	// The context escalation (spec 2026-11-15-context-escalation-design.md
+	// §3.2, §7): an alerted agent with no hand-off standing escalates (master
+	// woken, the person told) at this fill, used only above context_alert
+	// (0 = off), or this long after the alert (0 = off; at least 1m).
+	{Name: "dispatch.context_urgent", Env: "AGENT_BUS_CONTEXT_URGENT", Kind: Float, Default: 90.0, ReadBy: "dispatch",
+		env: func(raw string) (any, envResult) {
+			if n, err := strconv.ParseFloat(raw, 64); err == nil && n >= 0 && n <= 100 {
+				return n, envUse
+			}
+			return nil, envSkip
+		},
+		file: filePercent},
+	{Name: "dispatch.context_handoff_deadline", Env: "AGENT_BUS_CONTEXT_HANDOFF_DEADLINE", Kind: Duration, Default: 20 * time.Minute, ReadBy: "dispatch",
+		env: func(raw string) (any, envResult) {
+			if d, err := time.ParseDuration(raw); err == nil && (d == 0 || d >= time.Minute) {
+				return d, envUse
+			}
+			if raw == "0" {
+				return time.Duration(0), envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			d, why := fileDuration(true)(v)
+			if why == "" && d.(time.Duration) > 0 && d.(time.Duration) < time.Minute {
+				return nil, "want a duration of at least 1m, such as \"20m\", or \"0\""
+			}
+			return d, why
+		}},
 	{Name: "dispatch.prompt_grace", Env: "AGENT_BUS_PROMPT_GRACE", Kind: Duration, Default: 30 * time.Second, ReadBy: "dispatch",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 3600 {
