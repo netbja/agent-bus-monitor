@@ -703,7 +703,7 @@ func main() {
 			out, _ := json.MarshalIndent(m, "", "  ")
 			fmt.Println(string(out))
 		} else {
-			fmt.Print(agentsTable(m, time.Now()))
+			fmt.Print(agentsTable(m, time.Now(), holderLive(ctx, project)))
 		}
 		if len(missing) > 0 {
 			fmt.Fprintln(os.Stderr, "agents: no snapshot for "+strings.Join(missing, ", "))

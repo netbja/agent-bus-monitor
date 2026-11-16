@@ -25,6 +25,10 @@ type hostFacts struct {
 	draftSince time.Time
 	skip       string // "auto-clear skipped — 2 checks running"
 	skipAt     time.Time
+	// live: the project's holder holds a live terminal of the agent;
+	// termsRead: the holder was listed on this read, so a missing terminal
+	// means one (item 22: 'no terminal').
+	live, termsRead bool
 }
 
 // hostSkipShown is how long a background skip stays on the row.
@@ -72,6 +76,8 @@ type eventState struct {
 type hostWatcher struct {
 	agents map[string]eventState
 	newest string // the newest event id of the last read ("" before the first)
+	// termsRead: the last read listed the project's holder (item 22).
+	termsRead bool
 }
 
 // events reads the timeline into w.agents: the newest window, or the whole
@@ -144,6 +150,7 @@ func (w *hostWatcher) read(ctx context.Context, evs eventsReader, terms activity
 		}
 		out[name] = f
 	}
+	w.termsRead = false
 	if terms == nil {
 		return out, nil
 	}
@@ -151,6 +158,10 @@ func (w *hostWatcher) read(ctx context.Context, evs eventsReader, terms activity
 	if err != nil {
 		return out, nil
 	}
+	// An empty list proves nothing unless a holder of the project answered:
+	// with none on this host (another host, the holder down) no terminal is
+	// judged gone (item 22).
+	w.termsRead = holderAnswers(ctx, terms)
 	names := map[string]bool{}
 	for _, t := range list {
 		names[t.Name] = true
@@ -160,11 +171,14 @@ func (w *hostWatcher) read(ctx context.Context, evs eventsReader, terms activity
 		if !ok {
 			continue
 		}
+		f := out[name]
+		f.live = true
+		out[name] = f
 		a, err := terms.Activity(ctx, t.ID)
 		if err != nil || !a.Draft {
 			continue
 		}
-		f := out[name]
+		f = out[name]
 		f.draft, f.draftSince = true, a.DraftSince
 		out[name] = f
 	}
@@ -172,13 +186,16 @@ func (w *hostWatcher) read(ctx context.Context, evs eventsReader, terms activity
 }
 
 // applyHostFacts writes the facts on the agents busmon knows; an agent left
-// out has none.
-func applyHostFacts(st *shared, facts map[string]hostFacts) {
+// out has none. termsRead: the holder was listed on that read, so an agent
+// left out has no live terminal (item 22).
+func applyHostFacts(st *shared, facts map[string]hostFacts, termsRead bool) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	for n, a := range st.agents {
 		if a != nil {
-			a.host = facts[n]
+			f := facts[n]
+			f.termsRead = termsRead
+			a.host = f
 		}
 	}
 }
@@ -204,7 +221,7 @@ func watchHostFacts(ctx context.Context, st *shared, evs eventsReader, terms act
 		facts, err := w.read(c, evs, terms, project)
 		cancel()
 		if err == nil {
-			applyHostFacts(st, facts)
+			applyHostFacts(st, facts, w.termsRead)
 		}
 		select {
 		case <-ctx.Done():
@@ -212,4 +229,20 @@ func watchHostFacts(ctx context.Context, st *shared, evs eventsReader, terms act
 		case <-t.C:
 		}
 	}
+}
+
+// holderDescriber is a holder that says which builds of it answer.
+type holderDescriber interface {
+	Describe(ctx context.Context) (termhost.HostInfo, error)
+}
+
+// holderAnswers: a holder of the project answers on this host. A reader
+// that cannot say is taken at its word (its List did not fail).
+func holderAnswers(ctx context.Context, terms activityReader) bool {
+	d, ok := terms.(holderDescriber)
+	if !ok {
+		return true
+	}
+	info, err := d.Describe(ctx)
+	return err == nil && len(info.Builds) > 0
 }
