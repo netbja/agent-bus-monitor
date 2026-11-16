@@ -888,3 +888,76 @@ func quotaDrainRetried(t *testing.T, unknownReading bool) {
 		t.Fatalf("%d drain directives, want 1", n)
 	}
 }
+
+// Quota settings step 1 (§2.3): every quota message dates its reset in the
+// person's format (display.date_format, read at each message): master's
+// warning, an agent's, and the drain's announcement. A reset three days out
+// read '15:40' before, as if it were today's.
+func TestRunQuotaMessagesDateTheirReset(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	ctx := context.Background()
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "coder", "p-coder", "anthropic")
+	if _, err := b.Request(ctx, "wiki-3", "master", "coder", "", "build it", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.AcceptRequest(ctx, "wiki-3", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "boot", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if _, _, err := b.FencedRunPass(ctx, "boot", nil, true, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReleaseDispatch(ctx, "boot"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	reset := now.Add(72 * time.Hour).Unix()
+	f := &fakeQuota{}
+	f.set(quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(),
+		Windows: []quota.Window{{Name: "seven_day", UsedPct: 88, ResetsAt: reset, Minutes: 7 * 24 * 60}}})
+	cfg := quotaConfig(f)
+	var asked atomic.Int32
+	cfg.Quota.DateFormat = func() string { asked.Add(1); return quota.DateISO }
+	start(t, b, newFakeRT(alwaysReady), cfg)
+	want := "resets " + quota.ResetLabel(time.Unix(reset, 0), now, quota.DateISO)
+	waitFor(t, 3*time.Second, "the three messages", func() bool {
+		return strings.Contains(lastTo(t, b, "coder"), want) && countTo(t, b, "master", "Run draining") == 1
+	})
+	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 200)
+	seen := map[string]bool{}
+	for _, e := range evs {
+		if e.From != "dispatch" || !strings.Contains(e.Message, want) {
+			continue
+		}
+		switch {
+		case e.Target == "master" && strings.HasPrefix(e.Message, "Quota anthropic 88%"):
+			seen["master's warning"] = true
+		case e.Target == "coder":
+			seen["the agent's warning"] = true
+		case e.Target == "master" && strings.HasPrefix(e.Message, "Run draining"):
+			seen["the drain"] = true
+		}
+	}
+	if len(seen) != 3 {
+		t.Fatalf("dated: %v (want %q in each)", seen, want)
+	}
+	if asked.Load() == 0 {
+		t.Fatal("the format was never read")
+	}
+}
+
+func countTo(t *testing.T, b *bus.Bus, target, prefix string) int {
+	t.Helper()
+	evs, _, _ := b.Recent(context.Background(), []string{"cmd"}, 200)
+	n := 0
+	for _, e := range evs {
+		if e.From == "dispatch" && e.Target == target && strings.HasPrefix(e.Message, prefix) {
+			n++
+		}
+	}
+	return n
+}

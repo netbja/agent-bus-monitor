@@ -988,7 +988,10 @@ handles each with a rule you can read, never a guess:
   longer woken until the reset (`held`); when master's own provider is held, the whole project
   pauses (`agentbus pause --until-reset`) and resumes by itself. A long hold makes master ask you
   whether to move a role to one of its `fallback_profiles` (`agentbus swap <role> --profile <p>`,
-  `--back` to return; `agentbus swaps` is the ledger).
+  `--back` to return; `agentbus swaps` is the ledger). A reset is always written with its day
+  (`today 13:59`, `tomorrow 13:59`, `Wed 18 Nov 13:59`), in busmon, `agentbus quota` and the
+  dispatcher's messages; `display.date_format` (busmon's Settings, Display) also offers `iso` and
+  `clock12`.
 - **Health.** The dispatch service measures the project (services, identities, delivery, quotas,
   models, versions, secret-like files tracked in Git…); `agentbus health` and busmon's F5 show it.
   `redis-version` compares the broker with the latest Redis release of its own major, checked

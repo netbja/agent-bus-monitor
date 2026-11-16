@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/plan"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // doneReq is a done tracked request of target that took d, done ago.
@@ -60,8 +61,8 @@ func TestProgressLine(t *testing.T) {
 		want []string
 		not  []string
 	}{
-		{"sure", pace{usual: time.Hour, n: 6}, []string{"started " + start.Local().Format("15:04"), "~50%", "ends ~" + start.Add(time.Hour).Local().Format("15:04")}, []string{"estimate"}},
-		{"thin", pace{usual: time.Hour, n: 3}, []string{"started", "estimate ~" + start.Add(time.Hour).Local().Format("15:04")}, []string{"%", "ends"}},
+		{"sure", pace{usual: time.Hour, n: 6}, []string{"started " + start.Local().Format("15:04"), "~50%", "ends ~" + quota.ResetLabel(start.Add(time.Hour), shellNow, quota.DateRelative)}, []string{"estimate"}},
+		{"thin", pace{usual: time.Hour, n: 3}, []string{"started", "estimate ~" + quota.ResetLabel(start.Add(time.Hour), shellNow, quota.DateRelative)}, []string{"%", "ends"}},
 		{"none", pace{}, []string{"started", "no estimate yet"}, []string{"%", "ends", GlyphThinBar}},
 		{"longer", pace{usual: 20 * time.Minute, n: 6}, []string{"longer than usual (20m)"}, []string{"%", "ends"}},
 	} {
