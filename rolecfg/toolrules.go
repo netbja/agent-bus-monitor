@@ -169,8 +169,8 @@ func parseToolRules(label string, raw interface{}) (ToolRules, error) {
 					return rules, fmt.Errorf("%s.allow: %s would allow every shell command", label, rule)
 				}
 			}
-			if strings.Contains(rule, "agent-spawn") {
-				return rules, fmt.Errorf("%s.%s: agent-spawn rules are derived from the manifest", label, list.name)
+			if strings.Contains(rule, "agent-spawn") || strings.Contains(rule, "agentbus pop") {
+				return rules, fmt.Errorf("%s.%s: pop rules are derived from the manifest", label, list.name)
 			}
 			if other, dup := seen[rule]; dup {
 				return rules, fmt.Errorf("%s: %s in two lists (%s, %s)", label, rule, other, list.name)
@@ -266,11 +266,10 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 			if other == role {
 				continue
 			}
-			rule := "Bash(agent-spawn " + other + " *)"
 			if m.Approval(other) == "person" {
-				derived.Ask = append(derived.Ask, rule)
+				derived.Ask = append(derived.Ask, PopRules(other)...)
 			} else {
-				derived.Allow = append(derived.Allow, rule)
+				derived.Allow = append(derived.Allow, PopRules(other)...)
 			}
 		}
 		for _, other := range m.roleOrder {
@@ -296,7 +295,15 @@ func (m *Manifest) LaunchRules(role string) (ToolRules, error) {
 	return out, nil
 }
 
-// SpawnRules are role's agent-spawn rules (LaunchRules') as the roles they
+// PopRules are the rules for popping role (herdr exit: agentbus pop, the
+// successor of agent-spawn): the bare command and the one with flags; never
+// a prefix, which would also match a role whose name begins with it (coder,
+// coder2) and whose approval may differ.
+func PopRules(role string) []string {
+	return []string{"Bash(agentbus pop " + role + ")", "Bash(agentbus pop " + role + " *)"}
+}
+
+// SpawnRules are role's pop rules (LaunchRules') as the roles they
 // name: allow, and ask (the person approves each pop). Both nil for a role
 // that does not pop, empty (never nil) for one that pops with no other role
 // to pop (reviewer-codex); a role missing from the manifest has no rule at
@@ -316,8 +323,8 @@ func (m *Manifest) SpawnRules(role string) (allow, ask []string, err error) {
 	names := func(rules []string) []string {
 		out := []string{}
 		for _, rule := range rules {
-			if s, ok := strings.CutPrefix(rule, "Bash(agent-spawn "); ok {
-				if name, ok := strings.CutSuffix(s, " *)"); ok {
+			if s, ok := strings.CutPrefix(rule, "Bash(agentbus pop "); ok {
+				if name, ok := strings.CutSuffix(s, ")"); ok && !strings.Contains(name, " ") {
 					out = append(out, name)
 				}
 			}

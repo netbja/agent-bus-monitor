@@ -14,15 +14,14 @@ import (
 )
 
 const (
-	RunawaySilentAfter  = 30 * time.Minute
-	RunawayFastGrowth   = 100_000
-	RunawayGrowthSpan   = 10 * time.Minute
-	PendingWarnAfter    = 10 * time.Minute
-	PendingFailAfter    = time.Hour
-	LagWarnAt           = int64(100)
-	LagFailAt           = int64(1000)
-	QuotaStaleAfter     = 30 * time.Minute
-	HerdrProbeFailAfter = 3
+	RunawaySilentAfter = 30 * time.Minute
+	RunawayFastGrowth  = 100_000
+	RunawayGrowthSpan  = 10 * time.Minute
+	PendingWarnAfter   = 10 * time.Minute
+	PendingFailAfter   = time.Hour
+	LagWarnAt          = int64(100)
+	LagFailAt          = int64(1000)
+	QuotaStaleAfter    = 30 * time.Minute
 )
 
 type Outcome struct {
@@ -275,19 +274,6 @@ func EvaluateVersions(known bool, problems int) Outcome {
 		return Outcome{Status: Warn, Detail: "one or more installed components need review"}
 	}
 	return Outcome{Status: OK, Detail: "installed versions and skill links are current"}
-}
-
-func EvaluateHerdrProbe(available, parseable bool, consecutiveFailures int) Outcome {
-	if !available || !parseable {
-		return Outcome{Status: Unknown, Detail: "herdr probe is unavailable or unparseable"}
-	}
-	if consecutiveFailures >= HerdrProbeFailAfter {
-		return Outcome{Status: Fail, Detail: "herdr command probe repeatedly failed"}
-	}
-	if consecutiveFailures > 0 {
-		return Outcome{Status: Warn, Detail: "herdr command probe failed once; retrying"}
-	}
-	return Outcome{Status: OK, Detail: "herdr command probe succeeded"}
 }
 
 // ClientEvidence is one verified agent's client, as the dispatcher last

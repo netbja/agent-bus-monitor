@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -62,6 +66,9 @@ type HostOp struct {
 	Agent            string // the role it acts on; "" for the project's ops
 	Profile          string // swap and pop only: the profile asked for
 	IgnoreBackground bool   // honoured only from master or the person (§4.3b), at run time
+	Forget           bool   // retire only: --forget, the end of a done pop (foureyes on 10b)
+	Episode          int64  // retire only, with Forget: the declaration the dispatcher judged (ms)
+	Reason           string // retire only: one short line, recorded, never run
 	From             string // who sent it: self-attested, as every bus entry
 	State            string // UnfinishedHostOps only: HostAccepted or HostRunning
 }
@@ -83,9 +90,31 @@ func (o HostOp) Validate() error {
 		return fmt.Errorf("host: only swap and pop take a profile")
 	case o.Profile != "" && !ValidName(o.Profile):
 		return fmt.Errorf("host: invalid profile %q", o.Profile)
+	case (o.Forget || o.Episode != 0 || o.Reason != "") && o.Op != HostRetire:
+		return fmt.Errorf("host: only retire takes --forget, --episode and --reason")
+	case o.Forget != (o.Episode > 0) || o.Episode < 0:
+		return fmt.Errorf("host: --forget needs --episode <ms>, and --episode needs --forget")
+	case o.Reason != "":
+		if strings.HasPrefix(o.Reason, "-") { // a value, never a flag of retire's (security S10b-4)
+			return fmt.Errorf("host: a reason does not start with '-'")
+		}
+		if utf8.RuneCountInString(o.Reason) > HostReasonMax {
+			return fmt.Errorf("host: a reason is at most %d characters", HostReasonMax)
+		}
+		if err := ValidateText(o.Reason, HostReasonMax); err != nil {
+			return fmt.Errorf("host: reason: %v", err)
+		}
+		for _, r := range o.Reason {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("host: a reason is one line of text, no control character")
+			}
+		}
 	}
 	return nil
 }
+
+// HostReasonMax caps a relayed retire's reason: a label for the ledger.
+const HostReasonMax = 120
 
 // describe is the directive's command field: built from validated names
 // only, for a person reading the stream; never parsed.
@@ -100,6 +129,12 @@ func (o HostOp) describe() string {
 	if o.IgnoreBackground {
 		s += " --ignore-background"
 	}
+	if o.Forget {
+		s += " --forget --episode " + strconv.FormatInt(o.Episode, 10)
+	}
+	if o.Reason != "" {
+		s += " --reason " + strconv.Quote(o.Reason)
+	}
 	return s
 }
 
@@ -109,13 +144,16 @@ func (b *Bus) SendHostOp(ctx context.Context, o HostOp) (string, error) {
 	if err := o.Validate(); err != nil {
 		return "", err
 	}
-	ib := ""
+	ib, forget, episode := "", "", ""
 	if o.IgnoreBackground {
 		ib = "yes"
 	}
+	if o.Forget {
+		forget, episode = "yes", strconv.FormatInt(o.Episode, 10)
+	}
 	return b.r.XAdd(ctx, &redis.XAddArgs{Stream: StreamKey(b.project, "cmd"), MaxLen: streamMaxLen, Approx: true,
 		Values: []interface{}{"from", o.From, "target", HostTarget, "type", CmdHost, "ref", "", "command", o.describe(),
-			"op", o.Op, "agent", o.Agent, "profile", o.Profile, "ignore_background", ib, "text_complete", "yes", "wake", "no"}}).Result()
+			"op", o.Op, "agent", o.Agent, "profile", o.Profile, "ignore_background", ib, "forget", forget, "episode", episode, "reason", o.Reason, "text_complete", "yes", "wake", "no"}}).Result()
 }
 
 // HostOpsAfter reads the host directives written after id (the dispatcher's
@@ -134,8 +172,12 @@ func (b *Bus) HostOpsAfter(ctx context.Context, id string) ([]HostOp, string, er
 		if f["type"] != CmdHost || f["target"] != HostTarget {
 			continue
 		}
-		out = append(out, HostOp{ID: e.ID, Op: f["op"], Agent: f["agent"], Profile: f["profile"],
-			IgnoreBackground: f["ignore_background"] == "yes", From: f["from"]})
+		o := HostOp{ID: e.ID, Op: f["op"], Agent: f["agent"], Profile: f["profile"],
+			IgnoreBackground: f["ignore_background"] == "yes", Forget: f["forget"] == "yes", Reason: f["reason"], From: f["from"]}
+		if f["episode"] != "" {
+			o.Episode, _ = strconv.ParseInt(f["episode"], 10, 64)
+		}
+		out = append(out, o)
 	}
 	return out, last, nil
 }
@@ -351,4 +393,41 @@ func (b *Bus) WithdrawHostOp(ctx context.Context, o HostOp) (bool, error) {
 	rec, _ := json.Marshal(hostRecord{Op: o.Op, Agent: o.Agent, From: o.From})
 	n, err := hostWithdraw.Run(ctx, b.r, []string{HostOpsKey(b.project)}, o.ID, string(rec)).Int()
 	return n == 1, err
+}
+
+// HostOpsKeep is how long a finished directive's record is kept (security
+// S10a-4): long past any re-read, the reader's cursor starting two windows
+// back.
+const HostOpsKeep = 24 * time.Hour
+
+// hostPrune: KEYS[1] the lease, KEYS[2] {p}:hostops; ARGV[1] token, ARGV[2]
+// the age ms. It deletes each finished record older than the age, and each
+// unreadable one; an accepted or running record is kept, whatever its age,
+// for the next sweep to report.
+var hostPrune = redis.NewScript(fenceCheck + `
+local t = redis.call('TIME')
+local before = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000) - tonumber(ARGV[2])
+local h = redis.call('HGETALL', KEYS[2])
+local n = 0
+for i = 1, #h, 2 do
+  local ok, rec = pcall(cjson.decode, h[i + 1])
+  local drop = not ok or type(rec) ~= 'table'
+  if not drop and rec['state'] ~= 'accepted' and rec['state'] ~= 'running' then
+    drop = tonumber(rec['at']) == nil or tonumber(rec['at']) < before
+  end
+  if drop then
+    redis.call('HDEL', KEYS[2], h[i])
+    n = n + 1
+  end
+end
+return n`)
+
+// FencedPruneHostOps deletes the finished records older than age (security
+// S10a-4), under the lease; it returns how many went.
+func (b *Bus) FencedPruneHostOps(ctx context.Context, token string, age time.Duration) (int, error) {
+	n, err := hostPrune.Run(ctx, b.r, []string{DispatchKey(b.project), HostOpsKey(b.project)}, token, age.Milliseconds()).Int()
+	if err != nil {
+		return 0, notHolder(err)
+	}
+	return n, nil
 }

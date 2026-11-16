@@ -5,10 +5,10 @@
 # model: Claude Code's aliases (opus, sonnet, haiku) follow the latest model of each family, so a
 # renamed model never breaks a launch. Write an exact id (claude-opus-5-5) only to pin a version;
 # `agentbus roles doctor` shows what each agent really runs.
-# pops = true: the role pops others; its session gets one Claude Code allow rule per role
-# (`Bash(agent-spawn <role> *)`), or an ask rule for a role with approval = "person".
-# approval = "person": that rule is an ask, so Claude Code asks the person in the popping agent's
-# pane before it runs `agent-spawn <role>`. A convenience, not a lock. v0.17.
+# pops = true: the role pops others; its session gets Claude Code allow rules per role
+# (`Bash(agentbus pop <role>)`, with and without flags), or ask rules for a role with approval = "person".
+# approval = "person": those rules are asks, so Claude Code asks the person in the popping agent's
+# terminal before it runs `agentbus pop <role>`. A convenience, not a lock. v0.17.
 # required = true: a boot role the dispatcher's self-repair (once built) brings back when its tab is closed
 # (absent: false, the closed tab is only reported to master). Never on a pop: a pop comes back
 # through master only. Stop a required agent on purpose with agentbus retire or suspend.
@@ -350,7 +350,7 @@ deny = [
 ]
 
 # A second implementer (role-coder2, the person 2026-11-08), popped for parallel work:
-# agent-spawn coder2 <project>. coder's profile, skills and denies; one git worktree per
+# agentbus pop coder2. coder's profile, skills and denies; one git worktree per
 # task from origin/main, never the shared tree, and never a package another task has in
 # flight (roles/coder2.md). Two coders never hold one task: a board claim of a task
 # another owner holds is refused, and only a request's target may accept it (bus/).

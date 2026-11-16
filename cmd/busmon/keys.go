@@ -269,7 +269,7 @@ var (
 		{Keys: "d", Hint: "done", Help: "Work: the plan with its done tasks (the drawer; d there folds them)", Act: ActShowDone, Panels: []PanelID{PanelWork}, match: runeIs('d')},
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
-		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and herdr workspace; sleep, stop or back one up", Act: ActProjects, match: runeIs('M')},
+		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and holder; sleep, stop or back one up", Act: ActProjects, match: runeIs('M')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
 		{Keys: "A", Help: "about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work", Act: ActAbout, match: runeIs('A')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},

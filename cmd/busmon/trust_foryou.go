@@ -10,7 +10,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/trust"
 )
 
-// first-run-trust (b), step 2: an agent herdr restored (no agentbus up ran,
+// first-run-trust (b), step 2: an agent restored without agentbus up (none ran,
 // so no reminder ask) stops on its client's "do you trust this folder?". Its
 // For you prompt row then says which folder and what to choose. busmon reads
 // only the clients' trust flags (package trust), never writes them, and only

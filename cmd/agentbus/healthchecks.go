@@ -32,8 +32,7 @@ import (
 )
 
 const (
-	herdrMinimumVersion = "0.1.0"
-	updateCacheMaxAge   = 24 * time.Hour
+	updateCacheMaxAge = 24 * time.Hour
 )
 
 type usageBaseline struct {
@@ -74,8 +73,6 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 	github := newGitHubCheck()
 	baselines := map[string]usageBaseline{}
 	runawayThresholds, runawayThresholdsOK := runawayThresholdsFromEnv(os.Getenv)
-	var probeMu sync.Mutex
-	probeFailures := 0
 	// The holder's three checks read one evidence (herdr exit 4.4a): units,
 	// sockets and binary copies of this project's builds.
 	holderNow := func() (health.HolderEvidence, error) {
@@ -599,49 +596,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			} else if !skillsMatch(m, os.Environ()) {
 				problems++
 			}
-			version, err := readVersion(ctx, "herdr")
-			if err != nil {
-				known = false
-			} else if !versionAtLeast(version, herdrMinimumVersion) {
-				problems++
-			}
-			plugin, err := exec.CommandContext(ctx, herdrBin(os.Getenv), "plugin", "list", "--json").Output()
-			if err != nil {
-				known = false
-			} else {
-				root, rootErr := repoDir(os.Getenv)
-				problem, readable := pluginProblem(plugin, buildinfo.Version, root)
-				clear(plugin)
-				if rootErr != nil || !readable {
-					known = false
-				} else if problem {
-					problems++
-				}
-			}
 			out := health.EvaluateVersions(known, problems)
-			return out.Status, out.Detail, nil
-		}),
-		healthTask("herdr-probe", func(ctx context.Context) (health.Status, string, error) {
-			pinger, ok := rt.(interface{ Ping(context.Context) error })
-			if !ok {
-				out := health.EvaluateHerdrProbe(false, false, 0)
-				return out.Status, out.Detail, errors.New("runtime has no health probe")
-			}
-			if err := pinger.Ping(ctx); err != nil {
-				if ctx.Err() != nil {
-					return health.Unknown, "herdr probe cancelled", ctx.Err()
-				}
-				probeMu.Lock()
-				probeFailures++
-				count := probeFailures
-				probeMu.Unlock()
-				out := health.EvaluateHerdrProbe(true, true, count)
-				return out.Status, out.Detail, nil
-			}
-			probeMu.Lock()
-			probeFailures = 0
-			probeMu.Unlock()
-			out := health.EvaluateHerdrProbe(true, true, 0)
 			return out.Status, out.Detail, nil
 		}),
 	}
@@ -815,65 +770,7 @@ func versionAtLeast(got, minimum string) bool {
 	return true
 }
 
-// pluginState reads `herdr plugin list --json` and reports whether the plugin
-// with id want is registered and at which version. ok is false when the JSON
-// cannot be read.
-func pluginState(listJSON []byte, want string) (registered bool, version, root string, ok bool) {
-	var list struct {
-		Result struct {
-			Plugins []struct {
-				PluginID   string `json:"plugin_id"`
-				Version    string `json:"version"`
-				PluginRoot string `json:"plugin_root"`
-			} `json:"plugins"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(listJSON, &list); err != nil {
-		return false, "", "", false
-	}
-	for _, p := range list.Result.Plugins {
-		if p.PluginID == want {
-			return true, p.Version, p.PluginRoot, true
-		}
-	}
-	return false, "", "", true
-}
-
 var releaseVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
-
-// pluginProblem judges the registered plugin against the binary's version and
-// the expected checkout. A dev build or an untagged describe does not compare versions; the root is
-// always compared.
-func pluginProblem(listJSON []byte, binaryVersion, wantRoot string) (problem, readable bool) {
-	registered, version, root, ok := pluginState(listJSON, pluginID)
-	if !ok {
-		return false, false
-	}
-	if !registered || !sameDir(root, wantRoot) {
-		return true, true
-	}
-	// setup stamps the full `git describe`: only an exact vX.Y.Z is comparable;
-	// v0.20.0-3-gabc or v0.20.0-dirty (an untagged commit) is treated like dev.
-	if binaryVersion == "dev" || !releaseVersion.MatchString(binaryVersion) {
-		return false, true
-	}
-	return version == "" || strings.TrimPrefix(version, "v") != strings.TrimPrefix(binaryVersion, "v"), true
-}
-
-// sameDir compares two directories after Clean, and after EvalSymlinks when
-// both resolve.
-func sameDir(a, b string) bool {
-	if a == "" || b == "" {
-		return false
-	}
-	a, b = filepath.Clean(a), filepath.Clean(b)
-	if a == b {
-		return true
-	}
-	ra, errA := filepath.EvalSymlinks(a)
-	rb, errB := filepath.EvalSymlinks(b)
-	return errA == nil && errB == nil && ra == rb
-}
 
 func readVersion(ctx context.Context, command string) (string, error) {
 	cmd := exec.CommandContext(ctx, command, "--version")

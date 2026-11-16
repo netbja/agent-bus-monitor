@@ -185,32 +185,18 @@ func runCrashResume(ctx context.Context, p string, d resumeDeps, out, errw io.Wr
 	var relaunched, missing []string
 	if len(dead) > 0 {
 		missing = dead
-		session := ""
-		if paths, err := service.PathsFrom(d.Getenv); err == nil {
-			if env, err := service.LoadEnvFile(paths.EnvFile(p)); err == nil {
-				session = env["HERDR_SESSION"]
-			}
-		}
-		var socket string
-		open := false
-		switch running, err := d.SessionRunning(session); {
-		case session == "":
-			warn("no herdr session is recorded for it")
-		case err != nil || !running:
-			warn("herdr session %s is not running", session)
-		default:
-			if socket, err = d.SessionSocket(session); err != nil {
-				warn("herdr session %s: %v", session, err)
-			} else if open, err = d.WorkspaceOpen(socket, p); err != nil {
-				warn("herdr session %s: %v", session, err)
+		open, err := false, error(nil)
+		if d.ProjectOpen != nil {
+			if open, err = d.ProjectOpen(p); err != nil {
+				warn("its holder: %v", err)
 			}
 		}
 		if !open {
-			// A crash never opens a workspace the person had closed.
-			say("%s not running; its workspace is not open: agentbus up %s --resume relaunches them", strings.Join(dead, ", "), p)
+			// A crash never opens a project the person had brought down.
+			say("%s not running; its holder does not answer: agentbus up %s starts them", strings.Join(dead, ", "), p)
 		} else {
-			if c := d.Up([]string{p, "--resume", "--no-dispatch", "--no-missions"}, session, socket, out); c != 0 {
-				warn("agentbus up %s --resume did not complete (exit %d)", p, c)
+			if c := d.Up([]string{p, "--no-dispatch", "--no-missions"}, out); c != 0 {
+				warn("agentbus up %s did not complete (exit %d)", p, c)
 				code = 1
 			}
 			missing = waitAlive(ctx, b, dead, d)

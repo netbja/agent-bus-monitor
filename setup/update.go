@@ -73,7 +73,7 @@ func (in *Installer) Update(ctx context.Context) int {
 	for _, f := range []struct {
 		on   bool
 		flag string
-	}{{in.Opt.InstallHerdr, "--install-herdr"}, {in.Opt.Force, "--force"}, {!in.Opt.StartDocker, "--no-docker"}, {!in.Opt.InstallSkills, "--no-skills"}, {in.Opt.Yes, "--yes"}} {
+	}{{in.Opt.Force, "--force"}, {!in.Opt.StartDocker, "--no-docker"}, {!in.Opt.InstallSkills, "--no-skills"}, {in.Opt.Yes, "--yes"}} {
 		if f.on {
 			args = append(args, f.flag)
 		}

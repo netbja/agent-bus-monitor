@@ -117,7 +117,7 @@ const deliverDescMax = 1 << 20
 // the repository's): only a role with delivers = true delivers (master and
 // docs, forge-delivery answer 3), checked here before any git call whatever
 // the command's spelling; the tool rules only echo it. The caller is
-// AGENT_BUS_AGENT, which the identity guard requires inside a herdr pane.
+// AGENT_BUS_AGENT, which the identity guard requires inside an agent's terminal.
 // Defence in depth, not a boundary: the bus is no boundary against the local
 // user.
 func deliverRoleCheck(env []string) func(self string) error {
@@ -128,7 +128,7 @@ func deliverRoleCheck(env []string) func(self string) error {
 // deliverRoleCheckFrom fails closed (reviewer-codex): a manifest named by
 // ROLES_TOML or AGENTBUS_REPO that cannot be read or loaded refuses anyone;
 // with none configured, the one found at path is read, and if there is none
-// an agent in a herdr pane is refused while a person outside the panes may.
+// an agent in its terminal (AGENTBUS_TERM_ID) is refused while a person outside the terminals may.
 func deliverRoleCheckFrom(env []string, path string) func(self string) error {
 	return func(self string) error {
 		explicit := false
@@ -148,10 +148,10 @@ func deliverRoleCheckFrom(env []string, path string) func(self string) error {
 			path = ""
 		}
 		if path == "" {
-			if pane, ok := lookupEnv(env, "HERDR_PANE_ID"); ok && pane != "" {
-				return fmt.Errorf("cannot read a roles.toml to check that %s delivers (set ROLES_TOML); an agent's pane never delivers unchecked", self)
+			if pane, ok := lookupEnv(env, "AGENTBUS_TERM_ID"); ok && pane != "" {
+				return fmt.Errorf("cannot read a roles.toml to check that %s delivers (set ROLES_TOML); an agent's terminal never delivers unchecked", self)
 			}
-			return nil // a person outside the agents' panes
+			return nil // a person outside the agents' terminals
 		}
 		m, err := rolecfg.Load(path)
 		if err != nil {

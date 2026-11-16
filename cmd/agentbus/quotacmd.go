@@ -16,8 +16,9 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/quota"
-	"github.com/netbja/agent-bus-monitor/relaunch"
+	"github.com/netbja/agent-bus-monitor/termhost"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
@@ -287,14 +288,13 @@ func servicePopRetire(getenv func(string) string, missions func(context.Context,
 
 // withPopEnd lets the dispatcher end a done pop itself (pop-retire-auto,
 // decision 2026-11-13-dispatcher-ends-done-pop) when it reaches the project's
-// herdr session the way a service does (relaunch.ServiceHerdr: the session
-// the env names); without one, or with pop_retire off, master is told to run
-// retire --forget as before.
+// holder; without one, or with pop_retire off, master is told to run retire
+// --forget as before.
 func withPopEnd(c dispatch.PopRetireConfig, b *bus.Bus, rt dispatch.Runtime, getenv func(string) string) dispatch.PopRetireConfig {
-	if !c.On {
+	if !c.On || b == nil {
 		return c
 	}
-	closePane, err := serviceClosePane(getenv, popEndCloseTimeout)
+	closePane, err := serviceClosePane(b.Project(), getenv, popEndCloseTimeout)
 	if err != nil {
 		return c
 	}
@@ -307,22 +307,23 @@ func withPopEnd(c dispatch.PopRetireConfig, b *bus.Bus, rt dispatch.Runtime, get
 	return c
 }
 
-// popEndCloseTimeout bounds the dispatcher's herdr pane close.
+// popEndCloseTimeout bounds the dispatcher's terminal close.
 const popEndCloseTimeout = 10 * time.Second
 
-// serviceClosePane closes a pane through the herdr session the service's env
-// names, every call bounded by timeout and cancelled with its context
-// (reviewer-codex: a hung herdr never holds the dispatcher's pass).
-func serviceClosePane(getenv func(string) string, timeout time.Duration) (func(context.Context, string) error, error) {
-	herdr, err := relaunch.ServiceHerdrContext(getenv)
+// serviceClosePane closes a terminal of the project's holder (the pane an
+// agent's snapshot names is its terminal's id, herdr exit §4.2), every call
+// bounded by timeout and cancelled with its context (reviewer-codex: a hung
+// host never holds the dispatcher's pass).
+func serviceClosePane(project string, getenv func(string) string, timeout time.Duration) (func(context.Context, string) error, error) {
+	h, err := holder.NewHost(project, holder.BuildID(), getenv)
 	if err != nil {
 		return nil, err
 	}
 	return func(ctx context.Context, pane string) error {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		if out, err := herdr(ctx, "pane", "close", pane); err != nil {
-			return fmt.Errorf("herdr pane close %s: %v: %s", pane, err, strings.TrimSpace(string(out)))
+		if err := h.Close(ctx, termhost.TermID(pane)); err != nil {
+			return fmt.Errorf("closing terminal %s: %w", pane, err)
 		}
 		return nil
 	}, nil

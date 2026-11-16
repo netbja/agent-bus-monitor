@@ -224,7 +224,7 @@ func TestSettingsBackupArchivePage(t *testing.T) {
 	}
 	// A restore refuses a live project whatever --force: the page names
 	// every step that takes one offline, not a suspend alone (reviewer-codex).
-	for _, s := range []string{"even with --force", "agentbus down alpha", "agentbus down beta", "close its herdr workspace",
+	for _, s := range []string{"even with --force", "agentbus down alpha", "agentbus down beta", "its holder stopped",
 		"its agents exit with it", "a suspend is not enough", "agentbus up <project> --resume"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("restore guidance lacks %q:\n%s", s, body)

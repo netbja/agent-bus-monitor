@@ -128,20 +128,13 @@ func TestUpRefusesATabProfileThatDoesNotResolve(t *testing.T) {
 		return err
 	}
 	deps.TabExe, deps.LookPath = nil, nil
-	var started bool
-	deps.Services = nil
 	var out, errw bytes.Buffer
 	code := runUp([]string{"demo", work}, deps, &out, &errw)
 	if code != 1 || !strings.Contains(errw.String(), "tab foureyes: profile other is not foureyes's own nor one of its fallback_profiles") {
 		t.Fatalf("up = %d, %q", code, errw.String())
 	}
-	for _, c := range h.calls {
-		if strings.HasPrefix(c, "workspace create") || strings.HasPrefix(c, "tab create") || strings.HasPrefix(c, "pane run") {
-			started = true
-		}
-	}
-	if started || strings.Contains(errw.String(), "ghost") {
-		t.Fatalf("opened something, or judged the unknown role: %q %q", h.calls, errw.String())
+	if len(h.specs) != 0 || strings.Contains(errw.String(), "ghost") {
+		t.Fatalf("started something, or judged the unknown role: %v %q", h.started(), errw.String())
 	}
 }
 
@@ -168,7 +161,7 @@ func TestUpSkipsAnUnknownRolesTab(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 || strings.Contains(errw.String(), "ghost") {
 		t.Fatalf("up = %d, %q", code, errw.String())
 	}
-	if !strings.Contains(strings.Join(h.calls, "\n"), "workspace create") {
-		t.Fatalf("the team was not opened: %q", h.calls)
+	if startIndex(h, "master") < 0 || startIndex(h, "ghost") >= 0 || !strings.Contains(out.String(), "ghost: not in roles.toml, skipped") {
+		t.Fatalf("started %v: %q", h.started(), out.String())
 	}
 }

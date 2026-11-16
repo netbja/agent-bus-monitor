@@ -129,10 +129,10 @@ func TestRequestNextCLI(t *testing.T) {
 }
 
 // The person's request priority (--as) and request next pass the identity
-// guard in a herdr pane; a priority without --as does not.
+// guard in an agent's terminal; a priority without --as does not.
 func TestRequestPriorityIdentityGuard(t *testing.T) {
 	pane := func(k string) string {
-		if k == "HERDR_PANE_ID" {
+		if k == "AGENTBUS_TERM_ID" {
 			return "p1"
 		}
 		return ""

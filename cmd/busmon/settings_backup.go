@@ -262,10 +262,9 @@ func backupOfflineSteps(b *body, a backupArchiveRow) {
 	}
 	b.text("\n").seg(RoleMuted, " A restore refuses a live project, even with --force. First, for each project:").text("\n")
 	for _, p := range projects {
-		b.seg(RoleAccent, "   agentbus down "+Preview(p)).seg(RoleMuted, "   its services stopped").text("\n")
+		b.seg(RoleAccent, "   agentbus down "+Preview(p)).seg(RoleMuted, "   its services and its holder stopped: its agents exit with it").text("\n")
 	}
-	b.seg(RoleMuted, "   then close its herdr workspace: its agents exit with it").text("\n")
-	b.seg(RoleMuted, " a suspend is not enough: it keeps the agents and the workspace.").text("\n")
+	b.seg(RoleMuted, " a suspend is not enough: it keeps the agents' terminals.").text("\n")
 	b.seg(RoleMuted, " After the restore, agentbus up <project> --resume brings it back.").text("\n")
 }
 

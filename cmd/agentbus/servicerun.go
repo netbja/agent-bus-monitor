@@ -23,9 +23,9 @@ import (
 type serviceRunDeps struct {
 	Paths       service.Paths
 	Host        string
-	Heartbeat   time.Duration // how often the state is published
-	Standby     time.Duration // how often a standby service checks whether the lease is free (default 15s)
-	HerdrPing   func(context.Context) error
+	Heartbeat   time.Duration               // how often the state is published
+	Standby     time.Duration               // how often a standby service checks whether the lease is free (default 15s)
+	HostPing    func(context.Context) error // the project's holder
 	RunDispatch func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int
 	RunMissions func(ctx context.Context, b *bus.Bus, cfg mission.RunConfig) error
 	Now         func() time.Time
@@ -291,8 +291,8 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			defer t.Stop()
 			for {
 				if held, gen := st.leaseGen(); kind == service.Dispatch && held {
-					if err := d.HerdrPing(runCtx); err != nil && runCtx.Err() == nil {
-						st.setIfLeased(gen, "waiting-herdr", "herdr does not answer; no agent is woken until it does", err.Error())
+					if err := d.HostPing(runCtx); err != nil && runCtx.Err() == nil {
+						st.setIfLeased(gen, "waiting-holder", "the holder does not answer; no agent is woken until it does", err.Error())
 					} else {
 						st.setIfLeased(gen, "ready", "holds the dispatch lease", "")
 					}
@@ -363,13 +363,13 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			kind == service.Dispatch && code == 0 && anotherDispatcher(ctx, b)) {
 			break
 		}
-		// Another instance (an old herdr tab, another machine) holds the lease:
+		// Another instance (a foreground run, another machine) holds the lease:
 		// wait, then take over when it is free. Not a restart loop: this
 		// process stays and only polls the lease.
 		logf("another instance holds the lease; waiting in standby")
 		st.set("starting", "", "")
 		for {
-			if !publish("standby", "another instance holds the lease (a herdr tab, or another machine); taking over when it is free", "") {
+			if !publish("standby", "another instance holds the lease (a foreground run, or another machine); taking over when it is free", "") {
 				logf("project deleted while in standby; exiting")
 				return 0
 			}

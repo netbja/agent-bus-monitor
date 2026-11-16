@@ -66,14 +66,11 @@ func trustPlan(tabs []upTab, clientOf func(string) string, trusted func(string) 
 
 // waitTrust tells the person where to answer, polls the trust (reading only
 // the flag) and starts the rest once every gated client is trusted.
-func (d upDeps) waitTrust(tpl upTemplate, dir string, gates, paneOf map[string]string, start func() error) error {
+func (d upDeps) waitTrust(tpl upTemplate, dir string, gates, _ map[string]string, start func() error) error {
 	key, _ := trust.Key(dir)
 	clients := slices.Sorted(maps.Keys(gates))
 	for _, c := range clients {
-		where := gates[c] + "'s pane"
-		if p := paneOf[gates[c]]; p != "" {
-			where += " (" + p + ")"
-		}
+		where := gates[c] + "'s terminal (agentbus attach " + gates[c] + ")"
 		fmt.Fprintf(d.Out, "%s asks whether you trust %s: answer it in %s. The other agents start once it is accepted (agentbus up %s is locked meanwhile).\n",
 			trust.Label(c), key, where, tpl.Name)
 	}

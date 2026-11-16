@@ -3,6 +3,7 @@ package dispatch
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -219,5 +220,38 @@ func TestHostOpsFullQueueFails(t *testing.T) {
 	}
 	if len(st.queue) != 1 {
 		t.Fatal("queued past its capacity")
+	}
+}
+
+// Security S10a-4: the host-ops pass prunes the finished records past
+// bus.HostOpsKeep, at its first pass and then every hostPruneEvery, never
+// on every pass.
+func TestHostOpsPassPrunes(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "host-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	key := bus.HostOpsKey(b.Project())
+	old := func() {
+		at := time.Now().Add(-bus.HostOpsKeep - time.Hour).UnixMilli()
+		r.HSet(ctx, key, "1-1", fmt.Sprintf(`{"state":"done","at":%d,"op":"up","agent":"","from":"master"}`, at))
+	}
+	old()
+	l := hostLoop(b, func(context.Context, string, bus.HostOp) (string, string) { return bus.HostDone, "" })
+	st := l.newHostOpsState(ctx)
+	l.hostOpsPass(ctx, st)
+	if n, _ := r.HLen(ctx, key).Result(); n != 0 {
+		t.Fatalf("%d records left after the first pass, want the old one pruned", n)
+	}
+	old()
+	l.hostOpsPass(ctx, st)
+	if n, _ := r.HLen(ctx, key).Result(); n != 1 {
+		t.Fatal("pruned again on the next pass")
+	}
+	st.pruned = st.pruned.Add(-hostPruneEvery)
+	l.hostOpsPass(ctx, st)
+	if n, _ := r.HLen(ctx, key).Result(); n != 0 {
+		t.Fatal("not pruned once hostPruneEvery had passed")
 	}
 }

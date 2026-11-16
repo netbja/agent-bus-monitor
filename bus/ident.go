@@ -18,7 +18,7 @@ import (
 // It replaces the identity only when it verified one itself and that proof is
 // not older than the stored one (a delayed status must not undo a later bind);
 // an unverified caller's env pane is never trusted over a proved pid (Codex's
-// app-server inherits another session's HERDR_PANE_ID).
+// app-server inherits another session's terminal id).
 func mergeSnapshot(old *AgentSnapshot, next AgentSnapshot, identityOnly bool) AgentSnapshot {
 	var out AgentSnapshot
 	if old != nil {

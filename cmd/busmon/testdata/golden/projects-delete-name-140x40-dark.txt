@@ -13,7 +13,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Projects · 5 · read╭─ Delete project 'old' ───────────────────────────────────────────────────────────────────────╮────────── esc back ─╮
-│ services and herdr: │ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · herdr: —   │                     │
+│ services and holders│ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch ○ here · holder: —  │                     │
 │                     │ This is a DEL, not a reset: streams, consumer groups, agents/usage/budget/verdicts, pilot    │                     │
 │   PROJECT           │ and gate leases all go. The template and the worktrees stay.                                 │  LAST     TEMPLATE  │
 │   agent-bus-monitor │ units reported on: box2 (dispatch, missions)                                                 │  1m ago             │

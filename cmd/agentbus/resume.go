@@ -17,6 +17,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -24,8 +25,8 @@ import (
 
 // agentbus resume on a suspended project (spec docs/superpowers/specs/2026-
 // 11-03-suspend-resume-design.md §5): the services the record marks active
-// start first, then up's own path relaunches the dead agents on their
-// sessions inside the herdr session (never typing into an existing pane),
+// start first, then up's own path starts the dead agents on the project's
+// holder with their recorded sessions (herdr exit §4.7),
 // then, once every agent of the template is alive, the suspend is lifted
 // with one summary to master. A missing agent keeps the suspend unless
 // --partial.
@@ -37,13 +38,11 @@ const resumeProofWait = 90 * time.Second
 const resumeKeep = 5
 
 type resumeDeps struct {
-	Getenv         func(string) string
-	Bus            func(project string) (*bus.Bus, error)
-	Services       func() (service.Manager, string)
-	SessionRunning func(session string) (bool, error)
-	SessionSocket  func(session string) (string, error)
-	// Up runs agentbus up with these arguments inside the herdr session.
-	Up          func(args []string, session, socket string, log io.Writer) int
+	Getenv   func(string) string
+	Bus      func(project string) (*bus.Bus, error)
+	Services func() (service.Manager, string)
+	// Up runs agentbus up with these arguments: the team on the holder.
+	Up          func(args []string, log io.Writer) int
 	BootRoles   func(project string) ([]string, error) // the template's agent tabs
 	ProcStart   func(int) (uint64, error)
 	StateDir    func(project string) string
@@ -53,12 +52,12 @@ type resumeDeps struct {
 	// first read to the last write, so a suspend or another resume never
 	// runs beside it; the nested up does not take it again. Nil: no lock.
 	Lock func(project string) (func(), error)
-	// resume --all (§7): the host's projects, whether a project's workspace
-	// is open in a herdr session, and the confirmation.
-	Projects      func(ctx context.Context) ([]string, error)
-	WorkspaceOpen func(socket, project string) (bool, error)
-	TTY           bool
-	Stdin         io.Reader
+	// resume --all (§7): the host's projects, whether a project is open (its
+	// holder answers), and the confirmation.
+	Projects    func(ctx context.Context) ([]string, error)
+	ProjectOpen func(project string) (bool, error)
+	TTY         bool
+	Stdin       io.Reader
 	// ProofWait and Poll are resumeProofWait and suspendRound; tests shorten them.
 	ProofWait, Poll time.Duration
 }
@@ -74,15 +73,8 @@ func realResumeDeps(host string) resumeDeps {
 			}
 			return bus.Open(r, project)
 		},
-		Services:       func() (service.Manager, string) { return realSuspendDeps(host).Services() },
-		SessionRunning: herdrSessionRunning,
-		SessionSocket:  herdrSessionSocket,
-		Up: func(args []string, session, socket string, log io.Writer) int {
-			// up opens or relaunches inside herdr only: the three a herdr pane
-			// gives a plugin, set for this process, as start does.
-			for k, v := range map[string]string{"HERDR_ENV": "1", "HERDR_SESSION": session, "HERDR_SOCKET_PATH": socket} {
-				_ = os.Setenv(k, v)
-			}
+		Services: func() (service.Manager, string) { return realSuspendDeps(host).Services() },
+		Up: func(args []string, log io.Writer) int {
 			ud := realUpDepsIn(nil, log, log)
 			ud.Lock = nil     // resume holds it
 			ud.KeepEnv = true // a resume never changes the project's configuration
@@ -97,9 +89,14 @@ func realResumeDeps(host string) resumeDeps {
 			return upLock(upCacheDir(os.Getenv))(project, false)
 		},
 		Projects: realSuspendDeps(host).Projects,
-		WorkspaceOpen: func(socket, project string) (bool, error) {
-			id, err := findWorkspace(upDeps{Herdr: herdrIn(socket)}, project)
-			return id != "", err
+		ProjectOpen: func(project string) (bool, error) {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+			if err != nil {
+				return false, err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			return h.Ping(ctx) == nil, nil
 		},
 		TTY:       setup.IsTerminal(os.Stdin),
 		Stdin:     os.Stdin,
@@ -140,7 +137,7 @@ func parseResumeArgs(args []string) resumeOptions {
 }
 
 // suspendedResumeFirst runs the resume of a suspended project ahead of the
-// identity guard, which would refuse it in the person's own herdr pane (no
+// identity guard, which would refuse it in a terminal the holder started (no
 // AGENT_BUS_AGENT), while its advice, exporting one, makes resume refuse the
 // caller as an agent (foureyes). Only when the guard would refuse and the
 // pause reads as a suspend: anything else, an unreadable pause included,
@@ -230,7 +227,7 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 	var svcFailed []string
 	mgr, why := d.Services()
 	if mgr == nil {
-		say("no service manager (%s): dispatch and missions run as herdr tabs, which up relaunches", why)
+		say("no service manager (%s): up says what it needs", why)
 	} else {
 		paths, _ := service.PathsFrom(d.Getenv)
 		for _, k := range service.Kinds {
@@ -260,32 +257,11 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 		}
 	}
 
-	// Agents: up's own path, inside the herdr session.
-	session := ""
-	if paths, err := service.PathsFrom(d.Getenv); err == nil {
-		if env, err := service.LoadEnvFile(paths.EnvFile(p)); err == nil {
-			session = env["HERDR_SESSION"]
-		}
-	}
-	if session == "" && haveSnap {
-		session = snap.Herdr.Session
-	}
-	upRan := false
-	switch running, err := d.SessionRunning(session); {
-	case session == "":
-		fmt.Fprintf(errw, "%s: no herdr session is recorded for it: agentbus up %s --resume relaunches its agents from herdr\n", p, p)
-	case err != nil || !running:
-		fmt.Fprintf(errw, "%s: herdr session %s is not running: start it (herdr --session %s), then run agentbus resume again\n", p, session, session)
-	default:
-		socket, err := d.SessionSocket(session)
-		if err != nil {
-			fmt.Fprintf(errw, "%s: herdr session %s: %v\n", p, session, err)
-			break
-		}
-		upRan = true
-		if code := d.Up([]string{p, "--resume", "--no-dispatch", "--no-missions"}, session, socket, out); code != 0 {
-			fmt.Fprintf(errw, "%s: agentbus up %s --resume did not complete (exit %d)\n", p, p, code)
-		}
+	// Agents: up's own path, the team on the holder.
+	upRan := true
+	if code := d.Up([]string{p, "--no-dispatch", "--no-missions"}, out); code != 0 {
+		fmt.Fprintf(errw, "%s: agentbus up %s did not complete (exit %d): run it, then agentbus resume again\n", p, p, code)
+		upRan = false // nobody comes back: no wait
 	}
 
 	// Proof: every required agent alive, its verified process. Without an up
@@ -415,7 +391,7 @@ func missingPops(ctx context.Context, b *bus.Bus, roles []string, d resumeDeps) 
 // popRecovery names a gone pop with the command that brings it back, resuming
 // only a session the launcher would resume (relaunch.ProvedSession).
 func popRecovery(name, project string, s bus.AgentSnapshot) string {
-	cmd := "agent-spawn " + name + " " + project
+	cmd := "agentbus --project " + project + " pop " + name
 	if session := relaunch.ProvedSession(s); session != "" {
 		cmd += " --resume " + session
 	}

@@ -25,9 +25,11 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/setup"
+	"github.com/netbja/agent-bus-monitor/termhost"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
 
@@ -70,6 +72,11 @@ func main() {
 	if len(args) == 0 {
 		cli.Index(os.Stderr, "agentbus", globalFlags, commands)
 		os.Exit(1)
+	}
+	// Inside an agent's terminal, the host commands go through the
+	// dispatcher (herdr exit §4.2): the holder refuses them from there.
+	if code, ok := relayFromTerminal(context.Background(), args, host, project, os.Getenv, os.Stdout, os.Stderr); ok {
+		os.Exit(code)
 	}
 	// setup is the installer (the Go port of setup.sh): no project, no broker.
 	if len(args) >= 1 && args[0] == "setup" {
@@ -145,11 +152,7 @@ func main() {
 	if len(args) >= 1 && args[0] == "resume" && slices.Contains(args[1:], "--all") {
 		os.Exit(runResumeAll(context.Background(), args[1:], realResumeDeps(host), os.Stdout, os.Stderr))
 	}
-	// plugin holds herdr's entry points (v0.20); it needs no project and no broker.
-	if len(args) >= 1 && args[0] == "plugin" {
-		os.Exit(runPlugin(args[1:], realPluginDeps(), os.Stdout, os.Stderr))
-	}
-	// up provisions a project and opens its herdr workspace: no project flag, no broker of its own.
+	// up provisions a project and starts its team on the holder: no project flag, no broker of its own.
 	if len(args) >= 1 && args[0] == "up" {
 		os.Exit(runUp(args[1:], realUpDeps(os.Stdout, os.Stderr), os.Stdout, os.Stderr))
 	}
@@ -222,8 +225,8 @@ func main() {
 	}
 
 	self := envOr("AGENT_BUS_AGENT", "anonymous")
-	// The resume of a suspended project is the person's, from their own herdr
-	// pane too: routed before the guard, which it would not pass (foureyes).
+	// The resume of a suspended project is the person's, from any terminal
+	// of theirs: routed before the guard, which it would not pass (foureyes).
 	if ok, code := suspendedResumeFirst(context.Background(), os.Getenv, args,
 		func(ctx context.Context) (*bus.PauseRecord, error) {
 			c, err := bus.Connect(host)
@@ -272,8 +275,9 @@ func main() {
 		stop()
 		os.Exit(code)
 	case "bind":
-		h := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}
-		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: h.ForegroundProcs, Start: dispatch.ProcStart, Boot: hostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
+		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: func(ctx context.Context, term string) ([]termhost.Proc, string, error) {
+			return termProcs(ctx, project, term)
+		}, Start: dispatch.ProcStart, Boot: hostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
 		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "reload":
@@ -285,7 +289,15 @@ func main() {
 			List: b.Handoffs, Agents: b.Agents, Now: time.Now}, rest, os.Stdout, os.Stderr))
 	case "dispatch":
 		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-		code := runDispatch(sctx, b, rest, dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}, os.Stdout, os.Stderr)
+		rt, err := dispatchRuntime(project, os.Getenv)
+		if err != nil {
+			stop()
+			die("dispatch: " + err.Error())
+		}
+		dispatchHostOps = func(b *bus.Bus) dispatch.HostOpsConfig {
+			return dispatch.HostOpsConfig{Run: hostRunner{Project: project, Cmds: realHostCmds(b, project, host)}.Run}
+		}
+		code := runDispatch(sctx, b, rest, rt, os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)
 
@@ -302,7 +314,7 @@ func main() {
 			die("usage: status <agent> <state> [message]")
 		}
 		// Ambient identity, read from the environment rather than asked of the
-		// agent: HERDR_PANE_ID (empty outside herdr) locates its pane, and
+		// agent: AGENTBUS_TERM_ID (empty outside a terminal) locates it, and
 		// CLAUDE_CODE_SESSION_ID (empty for a non-Claude-Code peer) locates its
 		// transcript, which is what `agentbus refresh` reads usage from. The
 		// agent never types either, so neither can drift or be forgotten.
@@ -624,7 +636,7 @@ func main() {
 		os.Exit(runIdea(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
 
 	case "swap":
-		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
 
 	case "health":
 		os.Exit(runHealth(ctx, b, self, rest, os.Stdout, os.Stderr))
@@ -635,8 +647,15 @@ func main() {
 		}
 		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
 
+	case "pop":
+		h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+		if err != nil {
+			die("pop: " + err.Error())
+		}
+		os.Exit(runPop(ctx, h, project, rest, os.Stdout, os.Stderr))
+
 	case "retire":
-		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ()), self, rest, os.Stdout, os.Stderr))
+		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
 
 	case "swaps":
 		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
@@ -701,7 +720,7 @@ func main() {
 		}
 		p, ok := agentPane(m, rest[0])
 		if !ok {
-			die(fmt.Sprintf("no herdr pane registered for %q", rest[0]))
+			die(fmt.Sprintf("no terminal registered for %q", rest[0]))
 		}
 		fmt.Println(p)
 
@@ -939,15 +958,15 @@ func main() {
 }
 
 // statusIdent is the identity `status` publishes, all of it ambient. Inside
-// herdr (HERDR_ENV=1 and HERDR_PANE_ID set) it also records the agent's
-// process: the pane's foreground pid that is an ancestor of this process, its
-// /proc start time, and the herdr terminal id — what the dispatcher checks
-// before typing into the pane. Any failure leaves those empty (the agent is
-// then unverified and never prompted); status itself still succeeds.
-// HERDR_BIN overrides the herdr binary.
+// a terminal the holder started (AGENTBUS_TERM_ID, herdr exit §4.2) it
+// records that terminal as the pane and, as the agent's verified process,
+// the host's own child for it: the terminal of this project and agent whose
+// pid is an ancestor of this process, with the start time read now. Any
+// failure leaves the process empty (the agent is then unverified and never
+// prompted); status itself still succeeds.
 func statusIdent(ctx context.Context) bus.AgentIdent {
 	who := bus.AgentIdent{
-		Pane:     os.Getenv("HERDR_PANE_ID"),
+		Pane:     os.Getenv("AGENTBUS_TERM_ID"),
 		Session:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
 		Client:   os.Getenv("AGENT_BUS_CLIENT"),
 		Provider: bus.ProviderFor(os.Getenv("AGENT_BUS_CLIENT"), os.Getenv("AGENT_BUS_PROVIDER")),
@@ -957,26 +976,67 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		// Where its login expiry is read (login-updates §3.2): kept only with a proof.
 		ClaudeConfigDir: os.Getenv("CLAUDE_CONFIG_DIR"),
 	}
-	if os.Getenv("HERDR_ENV") != "1" || who.Pane == "" {
+	project, agent := os.Getenv("AGENT_BUS_PROJECT"), os.Getenv("AGENT_BUS_AGENT")
+	if who.Pane == "" || !bus.ValidName(project) || !bus.ValidName(agent) {
 		return who
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	pids, terminal, err := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}.ForegroundPIDs(ctx, who.Pane)
+	terms, err := identTerms(ctx, project)
 	if err != nil {
 		return who
 	}
-	pid, ok := dispatch.AncestorAmong(pids, os.Getpid())
-	if !ok {
+	for _, t := range terms {
+		// The adapter names a terminal <build key>/<id>; the holder gave
+		// the program its raw id.
+		if t.Name != agent || !strings.HasSuffix(string(t.ID), "/"+who.Pane) || t.PID <= 0 {
+			continue
+		}
+		pid, ok := dispatch.AncestorAmong([]int{t.PID}, os.Getpid())
+		if !ok {
+			return who
+		}
+		start, err := dispatch.ProcStart(pid)
+		if err != nil || start != t.PIDStart {
+			return who
+		}
+		who.Pane, who.Terminal = string(t.ID), string(t.ID)
+		who.PID, who.PIDStart = pid, start
+		who.BootID = hostBootID()
 		return who
 	}
-	start, err := dispatch.ProcStart(pid)
-	if err != nil {
-		return who
-	}
-	who.PID, who.PIDStart, who.Terminal = pid, start, terminal
-	who.BootID = hostBootID()
 	return who
+}
+
+// termProcs are the processes of project's terminal term (its full id, or
+// the raw one a program sees), and that terminal's full id.
+func termProcs(ctx context.Context, project, term string) ([]termhost.Proc, string, error) {
+	h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+	if err != nil {
+		return nil, "", err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	terms, err := h.List(ctx, project)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, t := range terms {
+		if string(t.ID) == term || strings.HasSuffix(string(t.ID), "/"+term) {
+			procs, err := h.Processes(ctx, t.ID)
+			return procs, string(t.ID), err
+		}
+	}
+	return nil, "", fmt.Errorf("no terminal %s on %s's holder", term, project)
+}
+
+// identTerms are project's terminals on its holders (a seam for tests).
+var identTerms = func(ctx context.Context, project string) ([]termhost.Term, error) {
+	h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	return h.List(ctx, project)
 }
 
 // hostBootID is this host's boot id, "" when it cannot be read (no /proc):

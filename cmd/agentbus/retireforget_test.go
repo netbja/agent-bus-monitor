@@ -350,7 +350,7 @@ func TestRetireRefusesAClosedPopNotDone(t *testing.T) {
 		arrange    func(w *swapWorld, rt *popRT)
 	}{
 		{"messages wait", "messages wait for it", func(w *swapWorld, _ *popRT) { w.b.Cmd(ctx, "master", "security", "directive", "", "more") }},
-		{"pane still known", "close that pane first", func(_ *swapWorld, rt *popRT) { rt.gone = false }},
+		{"terminal still known", "close that terminal first", func(_ *swapWorld, rt *popRT) { rt.gone = false }},
 	} {
 		w, d, rt, _ := newPopWorld(t)
 		w.closeByHand(t, rt)

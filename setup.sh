@@ -3,8 +3,7 @@
 # Agent Bus Monitor — setup: the installer's thin front (rollout step 2 of
 # docs/superpowers/specs/2026-10-28-go-installer-design.md: the switch). It
 # checks git and Go, builds agentbus from this checkout, and hands every
-# argument to `agentbus setup`, the installer in Go. The bash installer it
-# replaces stays one release as scripts/setup-legacy.sh, the fallback.
+# argument to `agentbus setup`, the installer in Go.
 #
 set -eu
 

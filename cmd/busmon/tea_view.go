@@ -144,7 +144,7 @@ func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 		}
 		names[longest] = short[tabs[longest]]
 	}
-	// herdr-style blocks: each label " 1 Activity " is a block, padded by a
+	// tab-style blocks: each label " 1 Activity " is a block, padded by a
 	// blank cell on each side in its own colour (busmon-tab-pad, the person),
 	// then one blank column before the next. The active tab is a pill in its panel's colour,
 	// dimmed like the frame when the panel has not the focus; an inactive

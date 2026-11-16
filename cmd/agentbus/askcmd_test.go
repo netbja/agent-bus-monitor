@@ -13,7 +13,7 @@ func TestAskCLIRoundTrip(t *testing.T) {
 	b, r := dialMain(t)
 	ctx := context.Background()
 	t.Cleanup(func() { r.Del(ctx, bus.AsksKey(b.Project())) })
-	t.Setenv("HERDR_ENV", "")
+	t.Setenv("AGENTBUS_TERM_ID", "")
 	in := `{"title":"Opening","id":"forged","questions":[
 	  {"id":"date","header":"Date T","question":"When?","answer":{"choice":"Mon"},
 	   "options":[{"label":"Mon","recommended":true},{"label":"Wed"}]}]}`
@@ -51,7 +51,7 @@ func TestAskCLITask(t *testing.T) {
 	b, r := dialMain(t)
 	ctx := context.Background()
 	t.Cleanup(func() { r.Del(ctx, bus.AsksKey(b.Project())) })
-	t.Setenv("HERDR_ENV", "")
+	t.Setenv("AGENTBUS_TERM_ID", "")
 	in := `{"title":"Merge roles?","questions":[{"id":"go","header":"Merge","question":"Merge?","options":[{"label":"yes"},{"label":"no"}]}]}`
 	var out, errw bytes.Buffer
 	if code := runAsk(ctx, b, []string{"master", "--task", "roles"}, strings.NewReader(in), &out, &errw); code != 0 {

@@ -44,7 +44,7 @@ and the subject. Then:
 - Run tests only in a worktree of your own (`git worktree add .worktrees/review-<task> <sha>`),
   removed when you are done, and only against a disposable broker you started yourself
   (`AGENTBUS_TEST_REDIS_URL`, see `docs/testing-redis.md`). Never point a test at the project's
-  broker, never touch the user's herdr panes.
+  broker, never touch the agents' terminals.
 - Record the verdict on the subject you were given, then answer on the thread:
 
   ```bash

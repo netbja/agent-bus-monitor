@@ -94,6 +94,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
 	},
 	{
+		Name: "pop", Usage: []string{"pop <role> [--profile <profile>] [--resume <session-id>]"},
+		Summary:  "start a role as a new terminal of the project's holder (the master's pop; agent-spawn's successor)",
+		Examples: []string{"agentbus -p demo pop docs", "agentbus -p demo pop reviewer-codex --profile codex-review"},
+	},
+	{
 		Name: "checkback", Usage: []string{"checkback <duration> \"<what is in flight>\"", "checkback --clear", "checkback"},
 		Summary: "say when to look again at work in flight off the bus (a test run, a build), so the stall guard sees it; no argument lists them",
 		Flags: []cli.Flag{
@@ -219,14 +224,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "pane", Usage: []string{"pane <agent>"},
-		Summary:  "print an agent's herdr pane",
+		Summary:  "print an agent's registered terminal id",
 		Examples: []string{"agentbus -p demo pane coder"},
 	},
 	{
 		Name: "bind", Usage: []string{"bind <agent> [--pane <pane>] [--pid <pid>]"},
 		Summary: "bind a verified pane identity (lists candidates without --pid)",
 		Flags: []cli.Flag{
-			{Long: "pane", Short: 'P', Arg: "<pane>", Help: "herdr pane id"},
+			{Long: "pane", Short: 'P', Arg: "<pane>", Help: "terminal id (AGENTBUS_TERM_ID)"},
 			{Long: "pid", Short: 'i', Arg: "<pid>", Help: "the client's process id"},
 		},
 		Examples: []string{"agentbus -p demo bind foureyes -P w1-3 -i 41235"},
@@ -465,7 +470,7 @@ var commands = []cli.Command{
 	{
 		Name: "up", NoProject: true,
 		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags]"},
-		Summary: "provision a project, start its services, open its herdr workspace",
+		Summary: "provision a project, start its services and its agents on the project's holder",
 		Flags: []cli.Flag{
 			{Long: "as", Short: 'a', Arg: "<name>", Help: "your name in busmon"},
 			{Long: "tabs", Short: 'T', Help: "run dispatch and missions in tabs, not as services"},
@@ -473,7 +478,6 @@ var commands = []cli.Command{
 			{Long: "dry-run", Short: 'n', Help: "print what would happen"},
 			fEsc,
 			{Long: "reload", Arg: "on|propose|off", Help: "the project's reload policy, kept for the services (agentbus reload)"},
-			{Long: "session", Short: 'S', Arg: "<s>", Help: "herdr session (default HERDR_SESSION)"},
 			{Long: "no-dispatch", Help: "bootstrap: no dispatcher"},
 			{Long: "no-missions", Help: "bootstrap: no conductor"},
 			{Long: "index", Help: "bootstrap: index the repository"},
@@ -726,12 +730,6 @@ var commands = []cli.Command{
 	},
 
 	// --- internal entry points: long flags only, no expansion
-	{
-		Name: "plugin", NoProject: true, Internal: true,
-		Usage:    []string{"plugin projects|busmon|busmon-pane|workspace-event"},
-		Summary:  "herdr's entry points",
-		Examples: []string{"agentbus plugin projects"},
-	},
 	{
 		Name: "peer", NoProject: true, Internal: true,
 		Usage:   []string{"peer --spec-file <launch.json>", "peer --check <endpoint>"},

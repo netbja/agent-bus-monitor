@@ -12,7 +12,7 @@ import (
 func TestEnvRefsRefuseLoaderAndHookVariables(t *testing.T) {
 	f := newLaunchFixture(t)
 	for _, target := range []string{"LD_LIBRARY_PATH", "LD_AUDIT", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "ENV",
-		"NODE_OPTIONS", "GIT_SSH_COMMAND", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT", "HERDR_PANE_ID", "HERDR_ENV", "PATH",
+		"NODE_OPTIONS", "GIT_SSH_COMMAND", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT", "AGENTBUS_TERM_ID", "AGENTBUS_HOST", "PATH",
 		"GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG", "GIT_DIR", "GIT_TEMPLATE_DIR", "GIT_ASKPASS", "SSH_ASKPASS", "GIT_PROXY_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_EDITOR", "EDITOR", "VISUAL", "PAGER", "GIT_PAGER"} {
 		body := "schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"codex\"\nprovider = \"p\"\nmodel = \"m\"\nenv_refs = { " +
 			target + " = \"SRC\" }\n[roles.coder]\ntier = \"boot\"\nskills = []\n"
@@ -96,7 +96,7 @@ func TestSkillLinkKeepsTheManifestName(t *testing.T) {
 func TestBindPinsThePaneBeforeEnvRefs(t *testing.T) {
 	f := newLaunchFixture(t)
 	m := f.config("codex", "", "", "")
-	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1", "HERDR_ENV=1", "HERDR_PANE_ID=w9:p9", "AGENTBUS_BIN=/x/agentbus")
+	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1", "AGENTBUS_TERM_ID=w9:p9", "AGENTBUS_BIN=/x/agentbus")
 	must(t, err)
 	if first := strings.SplitN(out, "\n", 2)[0]; !strings.Contains(first, " --pane w9:p9") {
 		t.Fatalf("bind line %q does not pin the pane", first)

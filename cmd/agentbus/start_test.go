@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
@@ -11,9 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -321,147 +317,6 @@ func TestStartJudgesTheTemplateAsWritten(t *testing.T) {
 	}
 }
 
-// outsideWorld fakes what start does outside herdr: herdr's launch, the
-// session's socket as herdr session list reports it, and up in that session.
-type outsideWorld struct {
-	launched  []string // sessions herdr was started for
-	socket    string   // "" = the session never listed running
-	inSession [][]string
-	inSock    string
-	upCode    int
-	herdrExit error
-	order     []string
-	tty       io.ReadWriter // what herdr was given
-	release   chan struct{} // up waits until herdr exits
-	said      chan struct{} // then until start has said it still waits (nil: no wait)
-	mu        sync.Mutex    // up runs beside herdr's wait
-
-	// start-tabs: the session's first workspace.
-	running bool     // the session ran before start launched herdr
-	runErr  error    // SessionRunning's error: unknown whether it ran
-	initial string   // what InitialWorkspace finds ("" = none)
-	asked   int      // InitialWorkspace calls
-	ignored []string // the workspace each up was told to ignore
-	closed  []string // CloseInitial calls
-}
-
-func (o *outsideWorld) note(s string) { o.mu.Lock(); defer o.mu.Unlock(); o.order = append(o.order, s) }
-
-func (w *startWorld) outside(o *outsideWorld) startDeps {
-	d := w.deps()
-	d.Up = func(args []string) int { w.ups = append(w.ups, args); o.note("provision"); return 0 }
-	d.HerdrOnPath = func() bool { return true }
-	d.Herdr = func(session string, tty io.ReadWriter) (func() error, error) {
-		o.launched, o.tty = append(o.launched, session), tty
-		o.note("herdr")
-		return func() error {
-			o.note("herdr exit")
-			if o.release != nil {
-				close(o.release) // herdr gone while up still runs
-			}
-			return o.herdrExit
-		}, nil
-	}
-	d.SessionSocket = func(session string) (string, error) {
-		if o.socket == "" {
-			return "", errors.New("herdr session " + session + " did not start")
-		}
-		return o.socket, nil
-	}
-	d.SessionRunning = func(session string) (bool, error) { return o.running, o.runErr }
-	d.InitialWorkspace = func(socket string) (string, error) {
-		o.mu.Lock()
-		o.asked++
-		o.mu.Unlock()
-		return o.initial, nil
-	}
-	d.CloseInitial = func(socket, ws string) (string, error) {
-		o.mu.Lock()
-		o.closed = append(o.closed, ws)
-		o.mu.Unlock()
-		o.note("close " + ws)
-		return "closed herdr's first workspace " + ws, nil
-	}
-	d.UpInSession = func(args []string, session, socket, ignore string, log io.Writer) int {
-		if o.release != nil {
-			<-o.release
-		}
-		if o.said != nil { // up stays open until start has looked (no race on its select)
-			select {
-			case <-o.said:
-			case <-time.After(5 * time.Second):
-			}
-		}
-		o.mu.Lock()
-		o.inSession, o.inSock = append(o.inSession, args), socket
-		o.ignored = append(o.ignored, ignore)
-		o.mu.Unlock()
-		o.note("up in " + session)
-		fmt.Fprintln(log, "opened")
-		return o.upCode
-	}
-	d.LogPath = func(project string) (string, error) { return filepath.Join(w.t.TempDir(), project, "start.log"), nil }
-	return d
-}
-
-// Outside herdr with a terminal (agentbus-start spec, "Outside herdr"):
-// provision as up does, launch herdr --session <project> on the terminal,
-// read the session's socket, run up inside it (its output to start.log),
-// then return herdr's status; without a terminal, only up (its hint).
-func TestStartOutsideHerdr(t *testing.T) {
-	w := newStartWorld(t)
-	o := &outsideWorld{socket: "/xdg/herdr/sessions/shop/herdr.sock"}
-	d := w.outside(o)
-	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
-	if code := runStart([]string{w.folder, "--yes"}, d); code != 0 {
-		t.Fatalf("start = %d: %s", code, w.err.String())
-	}
-	if !strings.Contains(w.out.String(), "starting herdr --session shop now") {
-		t.Fatalf("not said: %q", w.out.String())
-	}
-	if !strings.HasPrefix(strings.Join(o.order, ","), "provision,herdr,") || len(o.launched) != 1 || o.launched[0] != "shop" || o.inSock != o.socket {
-		t.Fatalf("order %q, launched %q, socket %q", o.order, o.launched, o.inSock)
-	}
-	if strings.Join(o.inSession[0], " ") != strings.Join(w.ups[0], " ") {
-		t.Fatalf("up in the session %q, provision %q", o.inSession, w.ups)
-	}
-
-	// The session never listed: herdr keeps the terminal; after it, the
-	// reason and the command to run inside it; exit 1.
-	w = newStartWorld(t)
-	o = &outsideWorld{}
-	d = w.outside(o)
-	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
-	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || !strings.Contains(w.err.String(), "did not start") || !strings.Contains(w.err.String(), "agentbus up shop") || len(o.inSession) != 0 {
-		t.Fatalf("no session = %d %q", code, w.err.String())
-	}
-
-	// up failing inside the session: after herdr exits, the log is named.
-	w = newStartWorld(t)
-	o = &outsideWorld{socket: "/s.sock", upCode: 1}
-	d = w.outside(o)
-	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
-	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || !strings.Contains(w.err.String(), "start.log") {
-		t.Fatalf("up failed in the session = %d %q", code, w.err.String())
-	}
-
-	// No terminal: provision only, nothing launched.
-	w = newStartWorld(t)
-	o = &outsideWorld{socket: "/s.sock"}
-	if code := runStart([]string{w.folder, "--yes"}, w.outside(o)); code != 0 || len(o.launched) != 0 || len(w.ups) != 1 {
-		t.Fatalf("no terminal = %d, launched %q", code, o.launched)
-	}
-
-	// herdr not on PATH: said before anything is written.
-	w = newStartWorld(t)
-	before := w.snapshot()
-	d = w.outside(&outsideWorld{})
-	d.HerdrOnPath = func() bool { return false }
-	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || !strings.Contains(w.err.String(), "https://herdr.dev") || w.snapshot() != before || len(w.ups) != 0 {
-		t.Fatalf("no herdr = %d %q", code, w.err.String())
-	}
-}
-
 // A refused project name is never kept (foureyes); choosing an existing
 // project takes its template's team (reviewer-codex); master missing from a
 // template is added in the assistant, and starting without it is refused
@@ -495,40 +350,6 @@ func TestStartAssistantProjectAndTeam(t *testing.T) {
 	}
 }
 
-// herdr gets the very terminal start opened, never start's own stdio, which
-// may be redirected (reviewer-codex); herdr leaving while up still opens the
-// team is said, with the log (foureyes); a state directory that cannot be
-// told stops start before herdr (foureyes).
-func TestStartOutsideHerdrTerminalAndTiming(t *testing.T) {
-	w := newStartWorld(t)
-	o := &outsideWorld{socket: "/s.sock", release: make(chan struct{}), said: make(chan struct{})}
-	d := w.outside(o)
-	// The fake up returned as soon as herdr's exit released it, and could beat
-	// start's own look at it (its select), so the message was not always said
-	// (a flake under load): up now waits until start has written it.
-	d.Err = &saidWriter{w: d.Err, needle: "still opening the team", said: o.said}
-	tty := &fakeTTY{Reader: strings.NewReader("")}
-	d.TTY = func() io.ReadWriter { return tty }
-	if code := runStart([]string{w.folder, "--yes"}, d); code != 0 {
-		t.Fatalf("start = %d: %s", code, w.err.String())
-	}
-	if o.tty != tty {
-		t.Fatalf("herdr was given %v, not the terminal start opened", o.tty)
-	}
-	if !strings.Contains(w.err.String(), "still opening the team") || !strings.Contains(w.err.String(), "start.log") {
-		t.Fatalf("herdr left before up: %q", w.err.String())
-	}
-
-	w = newStartWorld(t)
-	o = &outsideWorld{socket: "/s.sock"}
-	d = w.outside(o)
-	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
-	d.LogPath = func(string) (string, error) { return "", errors.New("no state directory") }
-	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || len(o.launched) != 0 || !strings.Contains(w.err.String(), "no state directory") {
-		t.Fatalf("no log path = %d, launched %q, %q", code, o.launched, w.err.String())
-	}
-}
-
 // closingTTY counts its closes.
 type closingTTY struct {
 	fakeTTY
@@ -537,88 +358,54 @@ type closingTTY struct {
 
 func (c *closingTTY) Close() error { c.closed++; return nil }
 
-// The terminal is opened once: the assistant's handle is the one herdr gets,
-// closed after it; a run that never reaches herdr closes it too (foureyes).
-func TestStartOpensTheTerminalOnce(t *testing.T) {
+// consoleWorld records what start gave busmon.
+type consoleWorld struct {
+	projects []string
+	ttys     []io.ReadWriter
+	code     int
+}
+
+func (w *startWorld) console(c *consoleWorld) startDeps {
+	d := w.deps()
+	d.Console = func(project string, tty io.ReadWriter) int {
+		c.projects, c.ttys = append(c.projects, project), append(c.ttys, tty)
+		return c.code
+	}
+	return d
+}
+
+// herdr exit §4.6: once up has started the team, start gives the person's
+// terminal to busmon on the project, the very handle the assistant used,
+// opened once and closed once; busmon's status is start's. A failed up
+// opens no busmon; with no terminal start runs up alone.
+func TestStartOpensBusmon(t *testing.T) {
 	w := newStartWorld(t)
-	o := &outsideWorld{socket: "/s.sock"}
-	d := w.outside(o)
+	c := &consoleWorld{code: 3}
+	d := w.console(c)
 	opens, tty := 0, &closingTTY{fakeTTY: fakeTTY{Reader: strings.NewReader("\n")}}
 	d.TTY = func() io.ReadWriter { opens++; return tty }
-	if code := runStart([]string{w.folder}, d); code != 0 {
-		t.Fatalf("start = %d: %s", code, w.err.String())
+	if code := runStart([]string{w.folder}, d); code != 3 {
+		t.Fatalf("start = %d, want busmon's 3: %s", code, w.err.String())
 	}
-	if opens != 1 || o.tty != io.ReadWriter(tty) || tty.closed != 1 {
-		t.Fatalf("opened %d, herdr given the assistant's handle %v, closed %d", opens, o.tty == io.ReadWriter(tty), tty.closed)
+	if len(w.ups) != 1 || len(c.projects) != 1 || c.projects[0] != "shop" || c.ttys[0] != io.ReadWriter(tty) || opens != 1 || tty.closed != 1 {
+		t.Fatalf("ups %q, busmon %q given the assistant's handle %v, opened %d, closed %d", w.ups, c.projects, c.ttys, opens, tty.closed)
+	}
+	if !strings.Contains(w.out.String(), "busmon opens now") {
+		t.Fatalf("not said: %q", w.out.String())
 	}
 
-	// Inside herdr: the assistant's handle is closed once up is run.
 	w = newStartWorld(t)
-	w.env["HERDR_ENV"] = "1"
-	d = w.outside(&outsideWorld{})
-	tty = &closingTTY{fakeTTY: fakeTTY{Reader: strings.NewReader("\n")}}
-	d.TTY = func() io.ReadWriter { return tty }
-	if code := runStart([]string{w.folder}, d); code != 0 || tty.closed != 1 {
-		t.Fatalf("inside herdr = %d, closed %d", code, tty.closed)
-	}
-}
-
-// start-tabs: in a session start created, herdr's first workspace (one bare
-// shell tab, labelled after the folder) is not the project's: up ignores it,
-// so the project's own workspace opens busmon first, and once the team is
-// open start closes it, when still untouched. A session that already ran
-// has no such workspace; a failed up keeps it.
-func TestStartClosesHerdrsFirstWorkspace(t *testing.T) {
-	run := func(o *outsideWorld) *startWorld {
-		t.Helper()
-		w := newStartWorld(t)
-		d := w.outside(o)
-		d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
-		runStart([]string{w.folder, "--yes"}, d)
-		return w
-	}
-	o := &outsideWorld{socket: "/s.sock", initial: "w1"}
-	run(o)
-	if len(o.ignored) != 1 || o.ignored[0] != "w1" || len(o.closed) != 1 || o.closed[0] != "w1" {
-		t.Fatalf("new session: ignored %q, closed %q", o.ignored, o.closed)
-	}
-	if order := strings.Join(o.order, ","); !strings.Contains(order, "up in shop,close w1") && !strings.Contains(order, "up in shop,herdr exit,close w1") {
-		t.Fatalf("closed before the team was open: %s", order)
+	c = &consoleWorld{}
+	d = w.console(c)
+	d.Up = func(args []string) int { w.ups = append(w.ups, args); return 1 }
+	d.TTY = func() io.ReadWriter { return &fakeTTY{Reader: strings.NewReader("")} }
+	if code := runStart([]string{w.folder, "--yes"}, d); code != 1 || len(c.projects) != 0 {
+		t.Fatalf("a failed up = %d, busmon %q", code, c.projects)
 	}
 
-	o = &outsideWorld{socket: "/s.sock", initial: "w1", running: true}
-	run(o)
-	if o.asked != 0 || len(o.ignored) != 1 || o.ignored[0] != "" || len(o.closed) != 0 {
-		t.Fatalf("a running session: asked %d, ignored %q, closed %q", o.asked, o.ignored, o.closed)
+	w = newStartWorld(t)
+	c = &consoleWorld{}
+	if code := runStart([]string{w.folder, "--yes"}, w.console(c)); code != 0 || len(c.projects) != 0 || len(w.ups) != 1 {
+		t.Fatalf("no terminal = %d, busmon %q, ups %q", code, c.projects, w.ups)
 	}
-
-	// Unknown whether the session ran: its first workspace may be the
-	// person's, so it is neither looked for nor closed.
-	o = &outsideWorld{socket: "/s.sock", initial: "w1", runErr: errors.New("herdr session list: timeout")}
-	run(o)
-	if o.asked != 0 || len(o.ignored) != 1 || o.ignored[0] != "" || len(o.closed) != 0 {
-		t.Fatalf("an unread session: asked %d, ignored %q, closed %q", o.asked, o.ignored, o.closed)
-	}
-
-	o = &outsideWorld{socket: "/s.sock", initial: "w1", upCode: 1}
-	run(o)
-	if len(o.closed) != 0 {
-		t.Fatalf("closed after a failed up: %q", o.closed)
-	}
-}
-
-// saidWriter passes writes on and closes said once needle has been written.
-type saidWriter struct {
-	w      io.Writer
-	needle string
-	said   chan struct{}
-	once   sync.Once
-}
-
-func (s *saidWriter) Write(b []byte) (int, error) {
-	n, err := s.w.Write(b)
-	if strings.Contains(string(b), s.needle) {
-		s.once.Do(func() { close(s.said) })
-	}
-	return n, err
 }

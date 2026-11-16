@@ -12,7 +12,7 @@ import (
 func TestClients(t *testing.T) {
 	in, out, _, _ := skillsWorld(t, nil, map[string]string{"claude": "/b/claude"})
 	in.Clients()
-	want := "\n==> 5/5 Scanning installed AI coding agents\n" +
+	want := "\n==> 4/4 Scanning installed AI coding agents\n" +
 		"    ✓ claude: available (/b/claude)\n" +
 		"    • codex: not installed (optional)\n" +
 		"    • kimi: not installed (optional)\n" +
@@ -121,11 +121,10 @@ func TestSummary(t *testing.T) {
 	bar := "================================================================="
 	want := "\n" + bar + "\n Installation complete (v9.9.9) \n" + bar + "\n\n" +
 		"Next steps:\n" +
-		"  1. Start herdr (a named session per project is handy):\n" +
-		"     herdr --session myproject\n\n" +
-		"  2. Inside it, provision and open the Agent Bus team in one command:\n" +
-		"     agentbus up myproject /path/to/your/codebase --as <your-name>\n" +
-		"     (busmon opens first; later, reopen any project with Ctrl+B then Up)\n\n" +
+		"  1. Provision a project and start its team in one command:\n" +
+		"     agentbus up myproject /path/to/your/codebase --as <your-name>\n\n" +
+		"  2. Watch it in busmon, and attach to an agent's terminal:\n" +
+		"     busmon --project myproject · agentbus --project myproject attach <agent>\n\n" +
 		"  Keep it current: ./setup.sh update · check it: ./setup.sh status · remove it: ./setup.sh uninstall\n\n"
 	if out.String() != want {
 		t.Fatalf("got:\n%q\nwant:\n%q", out.String(), want)

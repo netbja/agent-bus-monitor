@@ -16,7 +16,7 @@ import (
 // warning, never a failure (installer-no-client): the bus and busmon work
 // without one, and nothing is installed for the person.
 func (in *Installer) Clients() {
-	in.O.Step("5/5 Scanning installed AI coding agents")
+	in.O.Step("4/4 Scanning installed AI coding agents")
 	found := false
 	for _, c := range rolecfg.Clients {
 		if p, err := in.R.LookPath(c.Exe); err == nil {
@@ -110,14 +110,13 @@ func (o *Output) Summary(opt Options, missing int, rev string) int {
 	if missing > 0 {
 		return 1
 	}
-	cy, b, r := o.c("36"), o.c("1"), o.c("0")
+	cy, r := o.c("36"), o.c("0")
 	fmt.Fprintln(o.out, "Next steps:")
-	fmt.Fprintln(o.out, "  1. Start herdr (a named session per project is handy):")
-	fmt.Fprintln(o.out, "     "+cy+"herdr --session myproject"+r)
-	fmt.Fprintln(o.out, "")
-	fmt.Fprintln(o.out, "  2. Inside it, provision and open the Agent Bus team in one command:")
+	fmt.Fprintln(o.out, "  1. Provision a project and start its team in one command:")
 	fmt.Fprintln(o.out, "     "+cy+"agentbus up myproject /path/to/your/codebase --as <your-name>"+r)
-	fmt.Fprintln(o.out, "     (busmon opens first; later, reopen any project with "+b+"Ctrl+B"+r+" then "+b+"Up"+r+")")
+	fmt.Fprintln(o.out, "")
+	fmt.Fprintln(o.out, "  2. Watch it in busmon, and attach to an agent's terminal:")
+	fmt.Fprintln(o.out, "     "+cy+"busmon --project myproject"+r+" · "+cy+"agentbus --project myproject attach <agent>"+r)
 	fmt.Fprintln(o.out, "")
 	fmt.Fprintln(o.out, "  Keep it current: "+cy+"./setup.sh update"+r+" · check it: "+cy+"./setup.sh status"+r+" · remove it: "+cy+"./setup.sh uninstall"+r)
 	fmt.Fprintln(o.out, "")

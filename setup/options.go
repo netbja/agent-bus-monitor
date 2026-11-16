@@ -2,16 +2,13 @@ package setup
 
 import "fmt"
 
-// PluginID is the herdr plugin id this checkout is linked as.
-const PluginID = "netbja.agentbus"
-
 // Options are setup.sh's flags.
 type Options struct {
-	Sub                         string // install, update, uninstall, status, rotate-redis-password
-	BinDir                      string
-	DryRun, Force, InstallHerdr bool
-	StartDocker, InstallSkills  bool
-	Yes, Purge                  bool
+	Sub                        string // install, update, uninstall, status, rotate-redis-password
+	BinDir                     string
+	DryRun, Force              bool
+	StartDocker, InstallSkills bool
+	Yes, Purge                 bool
 }
 
 // SkillsHome and SkillsRef are where the external skills go, and their pin.
@@ -54,8 +51,6 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 			i++
 		case "--dry-run":
 			opt.DryRun = true
-		case "--install-herdr":
-			opt.InstallHerdr = true
 		case "--force":
 			opt.Force = true
 		case "--no-docker":
@@ -74,7 +69,7 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 			return opt, 1
 		}
 	}
-	if opt.Sub == "rotate-redis-password" && (opt.InstallHerdr || opt.Purge || opt.Force || !opt.StartDocker || !opt.InstallSkills) {
+	if opt.Sub == "rotate-redis-password" && (opt.Purge || opt.Force || !opt.StartDocker || !opt.InstallSkills) {
 		o.Fatal("rotate-redis-password takes only --dry-run and --yes (see --help)")
 		return opt, 1
 	}
@@ -88,8 +83,7 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 	return opt, -1
 }
 
-// RotateHelp is the help's one line the bash fallback has no counterpart for
-// (redis-password): scripts/setup-legacy.sh cannot rotate the password.
+// RotateHelp is the help's line for the broker password's rotation.
 const RotateHelp = "  ./setup.sh rotate-redis-password [--dry-run] [--yes]  replace the broker's password\n"
 
 // Usage is setup.sh's help text.
@@ -105,7 +99,6 @@ Usage:
 Install / update options:
   --bin-dir <dir>   Install directory for binaries (default: $HOME/.local/bin)
   --dry-run         Inspect the environment and show the actions, change nothing
-  --install-herdr   Download herdr (herdr.dev installer) if missing
   --force           No effect since v0.20 (kept so older commands still run)
   --no-docker       Do not start the Redis broker container
   --no-skills       Do not fetch the external skills nor link role skills
@@ -115,10 +108,9 @@ Uninstall options:
   --yes             Accept the cautious default at every step (Redis is stopped, its data kept)
   --purge           Also remove the Redis container and its data without asking
 
-agentbus and busmon are rebuilt on every install, into the repository (where the herdr tabs run
-them) and into the bin dir, stamped with the release (agentbus version, busmon --version).
-The repository is then linked as the herdr plugin ` + PluginID + ` (herdr plugin link), and
-prefix+up (Ctrl+B then Up) bound to its Projects picker.
+agentbus and busmon are rebuilt on every install, into the repository and into the bin dir,
+stamped with the release (agentbus version, busmon --version). agentbus up <project> starts a
+project's services and its agents on the project's holder; busmon is your window on it.
 
 Environment variables:
   BIN_DIR           Binary installation directory

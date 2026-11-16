@@ -29,7 +29,7 @@ func TestServiceFact(t *testing.T) {
 		{"no record: the tab-mode facts", bus.ServiceRecord{}, false, "up", "up"},
 		{"no record, nothing", bus.ServiceRecord{}, false, "", ""},
 		{"ready and fresh", bus.ServiceRecord{State: "ready", At: fresh}, true, "up", "ready"},
-		{"waiting for herdr", bus.ServiceRecord{State: "waiting-herdr", At: fresh}, true, "up", "waiting-herdr"},
+		{"waiting for the holder", bus.ServiceRecord{State: "waiting-holder", At: fresh}, true, "up", "waiting-holder"},
 		{"missions waits for git", bus.ServiceRecord{State: "waiting-git", At: fresh}, true, "", "waiting-git"},
 		{"waiting for git gone stale", bus.ServiceRecord{State: "waiting-git", At: old}, true, "", "down"},
 		{"idle conductor", bus.ServiceRecord{State: "idle", At: fresh}, true, "up", "idle"},
@@ -53,7 +53,7 @@ func TestServiceFact(t *testing.T) {
 
 func TestServiceSegWords(t *testing.T) {
 	for state, want := range map[string]string{
-		"up": "dispatch up", "down": "dispatch down", "ready": "dispatch ready", "waiting-herdr": "dispatch waiting herdr", "waiting-git": "dispatch waiting git",
+		"up": "dispatch up", "down": "dispatch down", "ready": "dispatch ready", "waiting-holder": "dispatch waiting for the holder", "waiting-git": "dispatch waiting git",
 		"failed": "dispatch failed", "gave-up": "dispatch gave up", "stopped": "dispatch stopped", "starting": "dispatch starting",
 	} {
 		if got := lineText(serviceSeg("dispatch", "disp", state, false)); !strings.HasSuffix(got, want) {
@@ -66,7 +66,7 @@ func TestServiceSegWords(t *testing.T) {
 	if r := serviceSeg("dispatch", "disp", "failed", false)[0].Role; r != RoleError {
 		t.Errorf("failed role = %v", r)
 	}
-	if r := serviceSeg("dispatch", "disp", "waiting-herdr", false)[0].Role; r != RoleAttention {
+	if r := serviceSeg("dispatch", "disp", "waiting-holder", false)[0].Role; r != RoleAttention {
 		t.Errorf("waiting role = %v", r)
 	}
 	if r := serviceSeg("missions", "miss", "waiting-git", false)[0].Role; r != RoleAttention {
@@ -107,7 +107,7 @@ func TestServicesCards(t *testing.T) {
 			t.Errorf("unknown Redis lacks %q:\n%s", want, unknown)
 		}
 	}
-	if none := plainOf(servicesCards(svcFacts{}, 0, now, 100)); !strings.Contains(none, "herdr tabs") {
+	if none := plainOf(servicesCards(svcFacts{}, 0, now, 100)); !strings.Contains(none, "agentbus up starts them") {
 		t.Errorf("no services: %q", none)
 	}
 }
@@ -186,22 +186,22 @@ func TestPollShowsServiceStatesAndTheOverlayOpens(t *testing.T) {
 	f := &fakeReader{calls: map[string]int{}, conductor: true,
 		svcInst: &bus.ServicesInstall{Kinds: []string{"dispatch", "missions"}, Manager: "systemd", Host: "h"},
 		svcRecs: map[string]bus.ServiceRecord{
-			"dispatch": {State: "waiting-herdr", At: now, Error: "herdr: no server", Host: "h"},
+			"dispatch": {State: "waiting-holder", At: now, Error: "holder: no server", Host: "h"},
 			"missions": {State: "idle", Detail: "waiting for missions", At: now, Host: "h"},
 		}}
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
 	pollOnce(context.Background(), f, st, 1)
-	if st.dispatch != "waiting-herdr" || st.missions != "idle" {
+	if st.dispatch != "waiting-holder" || st.missions != "idle" {
 		t.Fatalf("dispatch %q missions %q", st.dispatch, st.missions)
 	}
 	m := shellOf(t, st, 160, 45, nil)
 	top := strings.SplitN(m.grid().plain(), "\n", 2)[0]
-	if !strings.Contains(top, "dispatch waiting herdr") || !strings.Contains(top, "missions idle") {
+	if !strings.Contains(top, "dispatch waiting for the holder") || !strings.Contains(top, "missions idle") {
 		t.Fatalf("header = %q", top)
 	}
 	m, cmd := pressCmd(t, m, 's') // the logs are read in a command, then the page opens
 	m = run(t, m, cmd)
-	if screen := m.grid().plain(); !strings.Contains(screen, "Services") || !strings.Contains(screen, "herdr: no server") {
+	if screen := m.grid().plain(); !strings.Contains(screen, "Services") || !strings.Contains(screen, "holder: no server") {
 		t.Fatalf("services page not shown:\n%s", screen)
 	}
 }

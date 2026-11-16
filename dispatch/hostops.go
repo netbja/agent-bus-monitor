@@ -43,8 +43,12 @@ func (c HostOpsConfig) on() bool { return c.Run != nil }
 type hostOpsState struct {
 	cursor string
 	swept  bool
+	pruned time.Time // the last prune of {p}:hostops (security S10a-4)
 	queue  chan bus.HostOp
 }
+
+// hostPruneEvery is how often the finished records are pruned.
+const hostPruneEvery = time.Hour
 
 // newHostOpsState starts the cursor one window before now (Redis time), so
 // a directive written while the dispatcher restarted is still read.
@@ -97,6 +101,13 @@ func (l *loop) hostOpsPass(ctx context.Context, st *hostOpsState) {
 			return
 		}
 		st.swept = true
+	}
+	if time.Since(st.pruned) >= hostPruneEvery {
+		if _, err := l.b.FencedPruneHostOps(ctx, l.token, bus.HostOpsKeep); err != nil {
+			l.logOnce("host-ops", map[string]any{"action": "host-ops-prune-failed", "error": err.Error()})
+		} else {
+			st.pruned = time.Now()
+		}
 	}
 	ops, last, err := l.b.HostOpsAfter(ctx, st.cursor)
 	if err != nil {

@@ -24,7 +24,7 @@ type Installer struct {
 	Getenv func(string) string
 	// Now is the clock for backup names (setup.sh's date +%Y%m%d%H%M%S).
 	Now func() time.Time
-	// Setenv changes setup's own environment (the PATH after installing herdr).
+	// Setenv changes setup's own environment (the PATH after installing Go).
 	Setenv func(k, v string) error
 	// Probe and Sleep are the port check and the wait (PortOpen, time.Sleep
 	// when nil).
@@ -63,7 +63,7 @@ func Ldflags(version, repo, binDir string) string {
 }
 
 // BuildAndInstall is setup.sh's build_and_install_binary: a stamped build,
-// installed atomically into the repository (where the herdr tabs run it) and
+// installed atomically into the repository (where the launch templates run it) and
 // into the bin dir (unless that is the repository).
 func (in *Installer) BuildAndInstall(ctx context.Context, name, pkg string) error {
 	target := filepath.Join(in.Opt.BinDir, name)
@@ -123,11 +123,17 @@ func InstallFile(src, dst string) error {
 	return os.Rename(tmp, dst)
 }
 
-// RoleScriptLinks is setup.sh's install_role_script_links: agent-launch and
-// agent-spawn linked into the bin dir; only links to these exact files are
-// ours, anything else there is left with a warning.
+// RoleScriptLinks is setup.sh's install_role_script_links: agent-launch
+// linked into the bin dir; only a link to this exact file is ours, anything
+// else there is left with a warning. agent-spawn went with herdr (agentbus
+// pop is its successor): a link an older setup made to it is removed.
 func (in *Installer) RoleScriptLinks() {
-	for _, script := range []string{"agent-launch", "agent-spawn"} {
+	if old := filepath.Join(in.Opt.BinDir, "agent-spawn"); OurScriptLink(old, in.Repo) && !in.Opt.DryRun {
+		if os.Remove(old) == nil {
+			defer in.O.OK("agent-spawn: removed " + old + " (gone with herdr: agentbus pop starts a role)")
+		}
+	}
+	for _, script := range []string{"agent-launch"} {
 		target := filepath.Join(in.Opt.BinDir, script)
 		source := filepath.Join(in.Repo, "scripts", script)
 		_, lerr := os.Lstat(target)

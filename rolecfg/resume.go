@@ -84,10 +84,10 @@ func tomlString(s string) string {
 	return b.String()
 }
 
-// ResumeArgv is the command herdr runs to resume a session: the template's
+// ResumeArgv is the command the holder runs to resume a session: the template's
 // own launch (env ROLES_TOML=… agent-launch <role> <project>), with
 // --profile for a role running on another profile than its own, and
-// --resume. `env` is the plain command name herdr requires, and the absolute
+// --resume. `env` is the plain command name the launch requires, and the absolute
 // script needs nothing on PATH.
 func ResumeArgv(launcher, manifest, role, project, profile, sessionID string) ([]string, error) {
 	switch {
@@ -111,7 +111,7 @@ func ResumeArgv(launcher, manifest, role, project, profile, sessionID string) ([
 	return argv, nil
 }
 
-// checkResumeArgv bounds what is handed to herdr: at most 64 arguments and
+// checkResumeArgv bounds what is handed to the holder: at most 64 arguments and
 // 8 KiB, no apostrophe, no control character.
 func checkResumeArgv(argv []string) error {
 	if len(argv) > 64 {

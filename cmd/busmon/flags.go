@@ -22,7 +22,7 @@ var busmonFlags = []cli.Flag{
 	{Long: "theme", Short: 't', Arg: "<theme>", Help: "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)"},
 	{Long: "as", Short: 'a', Arg: "<name>", Help: "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")"},
 	{Long: "version", Short: 'V', Help: "print the version and exit"},
-	{Long: "pick", Short: 'k', Help: "choose a project template and open it with agentbus up (the herdr plugin's Projects picker)"},
+	{Long: "pick", Short: 'k', Help: "choose a project template and open it with agentbus up"},
 }
 
 var busmonHelp = cli.Command{

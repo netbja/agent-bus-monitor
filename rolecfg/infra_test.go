@@ -137,7 +137,7 @@ func TestInfraRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(mr.Ask, "Bash(agent-spawn infra *)") || slices.Contains(mr.Allow, "Bash(agent-spawn infra *)") {
+	if !slices.Contains(mr.Ask, "Bash(agentbus pop infra)") || slices.Contains(mr.Allow, "Bash(agentbus pop infra)") {
 		t.Errorf("master pops infra without the person: allow %v ask %v", mr.Allow, mr.Ask)
 	}
 

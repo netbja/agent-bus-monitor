@@ -30,16 +30,15 @@ func TestReportResumeHandsTheCommandToTheRecorder(t *testing.T) {
 	if got := f.spawnedVerb("record-resume"); len(got) < 7 || got[6] != "alt" {
 		t.Fatalf("a swapped role's recorder argv %q", got)
 	}
-	if f.spawnedVerb("report-resume-send") == nil || f.spawnedVerb("prove-session") == nil {
-		t.Fatalf("herdr's report or the prover dropped: %q", f.spawned)
+	if f.spawnedVerb("prove-session") == nil {
+		t.Fatalf("the prover dropped: %q", f.spawned)
 	}
 
-	// Outside herdr: the record only (the herdr report and its prover stay herdr's).
-	for _, v := range []string{"HERDR_ENV=", "HERDR_PANE_ID=", "HERDR_BIN_PATH="} {
-		f.hook(clearStart, v)
-		if f.spawnedVerb("record-resume") == nil || f.spawnedVerb("report-resume-send") != nil || f.spawnedVerb("prove-session") != nil {
-			t.Errorf("without %s: %q", v, f.spawned)
-		}
+	// Outside a holder terminal: the record only (the prover proves a
+	// terminal's agent).
+	f.hook(clearStart, "AGENTBUS_TERM_ID=")
+	if f.spawnedVerb("record-resume") == nil || f.spawnedVerb("prove-session") != nil {
+		t.Errorf("outside a terminal: %q", f.spawned)
 	}
 	// Nothing to prove with, or no agent: no recorder.
 	for name, c := range map[string]struct {

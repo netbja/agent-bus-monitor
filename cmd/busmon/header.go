@@ -322,7 +322,7 @@ func healthSeg(h health, now time.Time, compact bool) Line {
 }
 
 // dispatchSeg is the dispatcher's state: up/down from its lease, or the
-// service's own state (ready, waiting herdr, failed, …) since v0.12.
+// service's own state (ready, failed, …) since v0.12.
 func dispatchSeg(state string, compact bool) Line {
 	return serviceSeg("dispatch", "disp", state, compact)
 }

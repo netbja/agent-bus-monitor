@@ -145,10 +145,10 @@ func ideaSet(ctx context.Context, b *bus.Bus, args []string, getenv func(string)
 		fmt.Fprintf(errw, "idea set: a state is one of %s\n", strings.Join(bus.IdeaStates, ", "))
 		return 2
 	}
-	// The person's own shell only: an agent's environment or a herdr pane
+	// The person's own shell only: an agent's environment or terminal
 	// is refused. A guard against accidents, not a proof (same uid).
-	if a, pane := getenv("AGENT_BUS_AGENT"), getenv("HERDR_PANE_ID"); a != "" || pane != "" {
-		fmt.Fprintln(errw, "idea set: only the person sets an idea's state, from their own shell or busmon (not from an agent's environment or a herdr pane)")
+	if a, pane := getenv("AGENT_BUS_AGENT"), getenv("AGENTBUS_TERM_ID"); a != "" || pane != "" {
+		fmt.Fprintln(errw, "idea set: only the person sets an idea's state, from their own shell or busmon (not from an agent's environment or terminal)")
 		return 1
 	}
 	by := ideaPerson(as, getenv)

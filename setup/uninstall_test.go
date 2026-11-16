@@ -10,14 +10,14 @@ import (
 )
 
 // uninstallWorld is a machine install set up from in.Repo: binaries, links,
-// role skills, the key binding, the plugin record, setup's skills checkout
-// and a running broker this checkout owns.
+// role skills, setup's skills checkout and a running broker this checkout
+// owns.
 func uninstallWorld(t *testing.T) (*Installer, *bytes.Buffer, *fakeRunner, string) {
 	t.Helper()
-	in, out, f, home := pluginWorld(t, "")
+	in, out, f, home := installWorld(t)
 	bin := in.Opt.BinDir
 	skills := home + "/.local/share/agentbus/skills/mattpocock"
-	for _, d := range []string{bin, in.Repo + "/scripts", in.Repo + "/skills/tdd", skills + "/.git", home + "/.claude/skills", home + "/.config/herdr", home + "/.local/state/agentbus"} {
+	for _, d := range []string{bin, in.Repo + "/scripts", in.Repo + "/skills/tdd", skills + "/.git", home + "/.claude/skills", home + "/.local/state/agentbus"} {
 		_ = os.MkdirAll(d, 0o755)
 	}
 	for _, b := range []string{"agentbus", "busmon"} {
@@ -29,17 +29,12 @@ func uninstallWorld(t *testing.T) (*Installer, *bytes.Buffer, *fakeRunner, strin
 	}
 	_ = os.Symlink(in.Repo+"/skills/tdd", home+"/.claude/skills/tdd")
 	_ = os.WriteFile(skills+"/.git/agentbus-setup", nil, 0o644)
-	_ = os.WriteFile(home+"/.config/herdr/config.toml", []byte("[ui]\n"+KeybindBlock+"\n"), 0o644)
-	_ = os.WriteFile(home+"/.local/state/agentbus/plugin.path", []byte(in.Repo+"\n"), 0o644)
-	f.paths = map[string]string{"herdr": "/b/herdr", "docker": "/b/docker"}
+	f.paths = map[string]string{"docker": "/b/docker"}
 	f.cmds = map[string]fakeCmd{
 		bin + "/agentbus service list":             {out: "demo dispatch running\ndemo missions running\n"},
 		bin + "/agentbus service remove --all":     {},
 		bin + "/agentbus version":                  {out: "agentbus version v1\nagentbus protocol 1\n"},
 		bin + "/busmon --version":                  {out: "busmon version v1\n"},
-		"herdr server reload-config":               {},
-		"herdr plugin list --json":                 {out: listing(row(in.Repo, true))},
-		"herdr plugin unlink netbja.agentbus":      {},
 		"git -C " + skills + " status --porcelain": {},
 		psRedis:                  {out: "running\n"},
 		"docker compose version": {},
@@ -60,7 +55,6 @@ func TestUninstallYes(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, out.String())
 	}
 	skills := home + "/.local/share/agentbus/skills/mattpocock"
-	cfg := home + "/.config/herdr/config.toml"
 	want := "\n==> Agent Bus Monitor — uninstall\n" +
 		"    ✓ removed 2 project services\n" +
 		"    ✓ removed " + bin + "/agentbus\n" +
@@ -68,18 +62,13 @@ func TestUninstallYes(t *testing.T) {
 		"    ✓ removed " + bin + "/agent-launch\n" +
 		"    ✓ removed " + bin + "/agent-spawn\n" +
 		"    ✓ removed 1 role-skill links\n" +
-		"    ✓ removed the key binding: prefix+up is now unbound (backup: " + cfg + ".bak.20261028090000)\n" +
-		"    ✓ herdr plugin netbja.agentbus: unlinked\n" +
 		"    ✓ removed " + skills + "\n" +
 		"    ✓ Redis: stopped (data kept; ./setup.sh install starts it again)\n" +
 		"    • The repository and its built copies (" + in.Repo + "/agentbus, busmon) are left in place.\n"
 	if out.String() != want {
 		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)
 	}
-	if b, _ := os.ReadFile(cfg); string(b) != "[ui]\n" {
-		t.Fatalf("config %q", b)
-	}
-	for _, p := range []string{bin + "/agentbus", bin + "/agent-launch", home + "/.claude/skills/tdd", skills, home + "/.local/state/agentbus/plugin.path"} {
+	for _, p := range []string{bin + "/agentbus", bin + "/agent-launch", home + "/.claude/skills/tdd", skills} {
 		if _, err := os.Lstat(p); err == nil {
 			t.Errorf("%s left", p)
 		}
@@ -181,7 +170,7 @@ func TestUninstallBrokerQuestionWithoutTerminal(t *testing.T) {
 	in.O = NewOutput(&out, &errw, false)
 	f.cmds[in.Opt.BinDir+"/agentbus service list"] = fakeCmd{out: "no agentbus services installed\n"}
 	for _, p := range []string{in.Opt.BinDir + "/agentbus", in.Opt.BinDir + "/busmon", in.Opt.BinDir + "/agent-launch", in.Opt.BinDir + "/agent-spawn",
-		home + "/.claude/skills/tdd", home + "/.config/herdr/config.toml", home + "/.local/state/agentbus/plugin.path", home + "/.local/share/agentbus"} {
+		home + "/.claude/skills/tdd", home + "/.local/share/agentbus"} {
 		_ = os.RemoveAll(p)
 	}
 	if code := in.Uninstall(context.Background(), &Prompter{}); code != 1 {

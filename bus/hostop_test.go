@@ -3,6 +3,8 @@ package bus
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +24,10 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostPop, Agent: "docs", From: "master"},
 		{Op: HostRetire, Agent: "docs", From: "master", IgnoreBackground: true},
 		{Op: HostSuspend, From: "master"}, {Op: HostResume, From: "master"}, {Op: HostDrain, From: "master"},
+		// retire --forget, what the dispatcher tells master to run (foureyes on 10b)
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000},
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "done here"},
 	}
 	for _, o := range ok {
 		if err := o.Validate(); err != nil {
@@ -36,6 +42,16 @@ func TestHostOpValidate(t *testing.T) {
 		{Op: HostRelaunch, Agent: "coder", Profile: "x", From: "master"}, // a profile outside swap and pop
 		{Op: HostSwap, Agent: "coder", Profile: "a b", From: "master"},
 		{Op: HostRelaunch, Agent: "coder", From: ""},
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true},                                 // --forget needs its episode
+		{Op: HostRetire, Agent: "docs", From: "master", Episode: 17},                                  // an episode only with --forget
+		{Op: HostReload, Agent: "docs", From: "sentinel", Forget: true, Episode: 17},                  // forget is retire's
+		{Op: HostReload, Agent: "docs", From: "sentinel", Reason: "x"},
+		// a reason is a value, never a flag: "--now" would retire mid-turn (security S10b-4)
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "--now"},
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 17, Reason: "-x"},                                // a reason is retire's
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\nb"},                               // one line
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: "a\x1b[2Jb"},                          // no control character
+		{Op: HostRetire, Agent: "docs", From: "master", Reason: strings.Repeat("x", HostReasonMax+1)}, // capped
 	}
 	for _, o := range bad {
 		if err := o.Validate(); err == nil {
@@ -297,5 +313,63 @@ func TestHostOpWithdraw(t *testing.T) {
 	}
 	if reply, ok, err := b.HostReply(ctx, o.ID, "master"); err != nil || !ok || !strings.HasPrefix(reply, "accepted") {
 		t.Fatalf("reply %q %v %v", reply, ok, err)
+	}
+}
+
+// Security S10a-4: a finished record older than the age is pruned, under
+// the lease; an unfinished one (accepted, running) is kept whatever its
+// age, as is a recent finished one.
+func TestHostOpsPrune(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, recent := now.Add(-25*time.Hour).UnixMilli(), now.Add(-time.Hour).UnixMilli()
+	rec := func(state string, at int64) string {
+		return fmt.Sprintf(`{"state":%q,"at":%d,"op":"up","agent":"","from":"master"}`, state, at)
+	}
+	key := HostOpsKey(b.project)
+	b.r.HSet(ctx, key, "1-1", rec(HostDone, old), "1-2", rec(HostExpired, old), "1-3", rec(HostWithdrawn, old),
+		"1-4", rec(HostAccepted, old), "1-5", rec(HostRunning, old), "1-6", rec(HostDone, recent), "1-7", "not json")
+	if _, err := b.FencedPruneHostOps(ctx, "other", 24*time.Hour); err == nil {
+		t.Fatal("pruned without the lease")
+	}
+	n, err := b.FencedPruneHostOps(ctx, "tok", 24*time.Hour)
+	if err != nil || n != 4 {
+		t.Fatalf("pruned %d, %v; want 4 (three old finished, one unreadable)", n, err)
+	}
+	left, _ := b.r.HKeys(ctx, key).Result()
+	sort.Strings(left)
+	if strings.Join(left, " ") != "1-4 1-5 1-6" {
+		t.Fatalf("left %v, want the unfinished and the recent", left)
+	}
+}
+
+// retire --forget's words travel with the directive and come back as written.
+func TestHostOpRetireForgetRoundTrip(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	sent := []HostOp{
+		{Op: HostRetire, Agent: "docs", From: "master", Forget: true, Episode: 1793647000000, Reason: "work done"},
+	}
+	for _, o := range sent {
+		if _, err := b.SendHostOp(ctx, o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ops, _, err := b.HostOpsAfter(ctx, "0-0")
+	if err != nil || len(ops) != len(sent) {
+		t.Fatalf("read %v, %v", ops, err)
+	}
+	for i, got := range ops {
+		got.ID = ""
+		if got != sent[i] {
+			t.Fatalf("read %+v, want %+v", got, sent[i])
+		}
 	}
 }

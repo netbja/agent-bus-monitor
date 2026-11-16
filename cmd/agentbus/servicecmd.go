@@ -95,7 +95,7 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 			fmt.Fprintf(stdout, "no service manager (%s): no service installed\n", d.Why)
 			return 0
 		}
-		fmt.Fprintf(stderr, "agentbus service: no service manager (%s); dispatch and missions run as herdr tabs (agentbus up)\n", d.Why)
+		fmt.Fprintf(stderr, "agentbus service: no service manager (%s); set services.manager = none to supervise the services without one\n", d.Why)
 		return 1
 	}
 	m := d.Manager
@@ -390,7 +390,7 @@ func describeRecord(r bus.ServiceRecord, now time.Time) string {
 }
 
 // runDown is `agentbus down <project>`: stop the project's services, delete
-// nothing. The agents and the herdr workspace are left as they are.
+// nothing. The agents the holder ran stop with it.
 func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 	if len(args) != 1 || !bus.ValidName(args[0]) {
 		fmt.Fprintln(stderr, "usage: agentbus down <project>")
@@ -398,7 +398,7 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 	}
 	p := args[0]
 	if d.Manager == nil {
-		fmt.Fprintf(stdout, "no service manager (%s): dispatch and missions run as herdr tabs; close those tabs to stop them\n", d.Why)
+		fmt.Fprintf(stdout, "no service manager (%s): no service to stop\n", d.Why)
 		return 0
 	}
 	kinds, err := projectKinds(d.Manager, p)
@@ -457,9 +457,9 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout)
 	case len(holders) > 0:
 		// A holder is its agents' parent: stopping it stopped them.
-		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted; the agents the holder ran were stopped with it. Agents in the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again; the holder restarts empty.\n", p, p)
+		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted; the agents the holder ran were stopped with it. agentbus up %s starts the services and the team again.\n", p, p)
 	default:
-		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. The agents and the herdr workspace stay open (close them in herdr). agentbus up %s starts the services again.\n", p, p)
+		fmt.Fprintf(stdout, "%s: services stopped, nothing deleted. agentbus up %s starts the services again.\n", p, p)
 	}
 	return code
 }
@@ -697,10 +697,16 @@ func mainServiceRun(project, host string, args []string) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	h := dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")}
 	hostname, _ := os.Hostname()
 	deps := serviceRunDeps{
-		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, HerdrPing: h.Ping, Now: time.Now,
+		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, Now: time.Now,
+		HostPing: func(ctx context.Context) error {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+			if err != nil {
+				return err
+			}
+			return h.Ping(ctx)
+		},
 		Settings: func() []string { return settingsWarnings(os.Getenv) },
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
 			cfg := dispatchBaseConfig()
@@ -718,6 +724,11 @@ func mainServiceRun(project, host string, args []string) int {
 			cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)               // what waits for the person's merge (merge-queue)
 			cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
 			cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
+			h, err := dispatchRuntime(project, os.Getenv)                  // the dispatcher on the project's holder (herdr exit 10b)
+			if err != nil {
+				fmt.Fprintf(log, "dispatch: %v\n", err)
+				return 1
+			}
 			cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)
 			// The self-repair watcher: shadow passes only (step 6); its check in every mode.
 			repair, repairCfg := serviceSelfRepair(b, os.Getenv, &cfg.EscalateTo)

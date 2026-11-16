@@ -9,8 +9,7 @@ import (
 )
 
 // Blocked: herdr exit step 2b, spec 2026-11-10-herdr-exit-design.md 4.3 and
-// 4.3a. Pure judgements, wired to nothing yet: herdr still decides blocked
-// until step 9 puts the dispatcher on them.
+// 4.3a. Pure judgements; the dispatcher's host runtime reads them (step 9).
 
 // BlockedOn reports a permission or question menu of the client's at the
 // bottom of the screen, and what the menu names (the signature's named group

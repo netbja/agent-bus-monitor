@@ -161,7 +161,7 @@ func runProjects(args []string, d projectsDeps, stdout, stderr io.Writer) int {
 		}
 	}
 	for _, p := range down {
-		fmt.Fprintf(stdout, "\n%s has something down: agentbus up %s (inside herdr) restarts it", p, p)
+		fmt.Fprintf(stdout, "\n%s has something down: agentbus up %s restarts it", p, p)
 	}
 	if len(down) > 0 {
 		fmt.Fprintln(stdout)

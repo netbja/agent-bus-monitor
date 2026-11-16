@@ -471,7 +471,7 @@ func lookPath(name, pathEnv string) (string, error) {
 }
 
 // Launch is Python's launch(): resolve the role, check the client, build the
-// command, bind the pane inside herdr, set the environment and exec the
+// command, bind the terminal the holder started, set the environment and exec the
 // client (or print the plan when AGENT_LAUNCH_DRYRUN=1).
 // env is the launcher's environment (os.Environ() in production); execFn
 // replaces the process (syscall.Exec in production, which keeps the pid).
@@ -571,12 +571,13 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 	if el := elevated(p, rules); el != "" { // a swapped ROLES_TOML must not start an unsandboxed client silently
 		fmt.Fprintf(cfg.Stderr, "notice: %s runs %s with elevated %s\n", role, p.Client, el)
 	}
-	// Inside herdr, bind this process's pid before exec hands it (and its
-	// start time) to the client: the dispatcher can then verify the pane even
-	// when the client's own commands do not descend from it.
+	// In a terminal the holder started, bind this process's pid before exec
+	// hands it (and its start time) to the client: the dispatcher can then
+	// verify the terminal even when the client's own commands do not descend
+	// from it.
 	var bind []string
-	pane, _ := e.get("HERDR_PANE_ID")
-	if e.or("HERDR_ENV", "") == "1" && pane != "" {
+	pane, _ := e.get("AGENTBUS_TERM_ID")
+	if pane != "" {
 		bin, ok := e.get("AGENTBUS_BIN")
 		if !ok {
 			if bin, err = os.Executable(); err != nil {
@@ -587,7 +588,7 @@ func LaunchProfileResume(m *Manifest, role, project, profile, resumeID string, e
 		bind = []string{bin, "--project", project, "bind", role, "--pid", strconv.Itoa(os.Getpid()), "--pane", pane}
 	}
 	if requireBind && bind == nil {
-		return errors.New("AGENT_LAUNCH_REQUIRE_BIND=1 but not inside a herdr pane: nothing to bind")
+		return errors.New("AGENT_LAUNCH_REQUIRE_BIND=1 but not inside a terminal the holder started (AGENTBUS_TERM_ID): nothing to bind")
 	}
 	if dry {
 		if bind != nil {

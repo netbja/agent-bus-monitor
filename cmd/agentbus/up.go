@@ -30,12 +30,8 @@ import (
 
 // upDeps is what `agentbus up` touches, injected for tests.
 type upDeps struct {
-	Herdr func(args ...string) ([]byte, error) // the herdr CLI
-	// IgnoreWorkspace is never taken for the project's open workspace: the
-	// first one herdr made for a session agentbus start launched (start-tabs).
-	IgnoreWorkspace string
-	Bootstrap       func(args []string) error // scripts/bootstrap <args>
-	Env             func(string) string
+	Bootstrap func(args []string) error // scripts/bootstrap <args>
+	Env       func(string) string
 
 	// The project services (v0.12). Services finds the manager, or says why
 	// there is none; nil means none.
@@ -55,8 +51,14 @@ type upDeps struct {
 	// keeps that build).
 	HolderBuild   func() string
 	HolderAnswers func(project, key string) bool
-	// KeepEnv keeps the project's env file as it is, its herdr session
-	// excepted: a suspended project's resume never changes its configuration
+	// The team (herdr exit §4.7): Team is the project's terminal host (the
+	// holder), Resumes its {p}:resume records, Notice tells the person why
+	// a record was not used.
+	Team    func(project string) (teamHost, error)
+	Resumes func(project string) (map[string]bus.ResumeRecord, error)
+	Notice  func(project, text string) error
+	// KeepEnv keeps the project's env file as it is: a suspended project's
+	// resume never changes its configuration
 	// (suspend 3a). What Environ would have changed is named, never its value.
 	KeepEnv bool
 	Mark    func(project string, inst bus.ServicesInstall) error
@@ -114,14 +116,12 @@ type (
 	upTemplate = relaunch.Template
 )
 
-// runUp provisions a project (bootstrap, idempotent) and, inside herdr, opens
-// its workspace directly — busmon first and focused, then every tab of the
-// template — or focuses it when it is already open. It replaces "bootstrap new,
-// then Ctrl+B Up and pick the project". Outside herdr it provisions and says how
-// to open it.
+// runUp provisions a project (bootstrap, idempotent), starts its services
+// and its holder, and starts each agent of the template on the holder (herdr
+// exit §4.7); busmon and agentbus attach show them.
 func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --session <s> --index --cron --yes]")
+		fmt.Fprintln(stderr, "usage: agentbus up <project> [<path>] [--as <your-name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags: --no-dispatch --no-missions --index --cron --yes]")
 		return 1
 	}
 	if !bus.ValidName(args[0]) { // stranger-test: say why, and what would do
@@ -137,6 +137,10 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	}
 	project := args[0]
 	args, tabs := extractBool(args, "--tabs")
+	if tabs { // herdr exit §4.4b: no tab mode without herdr
+		fmt.Fprintln(stderr, "agentbus up: --tabs is gone: the services and the agents run under the holder; on a machine with no service manager, services.manager = none supervises them")
+		return 1
+	}
 	args, resume := extractBool(args, "--resume")
 	args, dryRun := extractBool(args, "--dry-run")
 	// The person's name recorded at install is the default --as (v0.21).
@@ -173,23 +177,19 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 	if !slices.Contains(args, "--no-missions") {
 		kinds = append(kinds, service.Missions)
 	}
-	// Service mode unless --tabs or no manager: then the template holds no
-	// dispatch or missions tab, and the services run whatever herdr does.
+	// The services and the holder that runs the agents need a manager
+	// (herdr exit §4.4, §4.4b: services.manager = none supervises them
+	// without one).
 	var m service.Manager
-	why := "--tabs"
-	if !tabs && d.Services != nil {
+	why := "no service manager configured"
+	if d.Services != nil {
 		m, why = d.Services()
-	} else if !tabs {
-		why = "no service manager configured"
 	}
-	if m != nil && herdrSession(args, d.Environ) == "" {
-		fmt.Fprintln(stderr, "agentbus up: cannot tell the herdr session: HERDR_SESSION is unset and HERDR_SOCKET_PATH is not <config>/sessions/<name>/herdr.sock; pass --session <name>")
+	if m == nil {
+		fmt.Fprintf(stderr, "agentbus up: no service manager (%s): the holder that runs the agents needs one; set services.manager = none to supervise them without one\n", why)
 		return 1
 	}
-	bootArgs := args
-	if m != nil {
-		bootArgs = append(slices.Clone(args), "--no-dispatch", "--no-missions")
-	}
+	bootArgs := append(slices.Clone(args), "--no-dispatch", "--no-missions")
 	if err := d.Bootstrap(bootArgs); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: bootstrap failed: %v\n", err)
 		return 1
@@ -222,106 +222,134 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "agentbus up: services.start_at_login is on, but %s; the services start with agentbus up only\n", why)
 		}
 	}
-	if m != nil {
-		if err := startServices(d, m, project, tpl.WorkingDir, herdrSession(args, d.Environ), escalate, reload, kinds, stdout); err != nil {
-			fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
-			if errors.Is(err, errNotInstalled) {
-				return 1
-			}
-			failed = true
+	if err := startServices(d, m, project, tpl.WorkingDir, escalate, reload, kinds, stdout); err != nil {
+		fmt.Fprintf(stderr, "agentbus up: services: %v\n", err)
+		if errors.Is(err, errNotInstalled) {
+			return 1
 		}
-		tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab)
-	} else {
-		if !tabs {
-			fmt.Fprintf(stdout, "no service manager (%s): dispatch and missions run as herdr tabs, and stop when the workspace closes\n", why)
-		}
-		if reload != "" {
-			fmt.Fprintf(stderr, "agentbus up: --reload is recorded for services only; in tab mode export AGENT_BUS_RELOAD in sentinel's environment\n")
-		}
-		if escalate != "" {
-			fmt.Fprintf(stderr, "agentbus up: --escalate-to applies to services only; the tabs escalate to master\n")
-		}
-		// A template written in service mode lacks the tabs: write it again.
-		if missingServiceTab(tpl, kinds) {
-			// Rewrite it in place: without a path bootstrap would take $PWD, so
-			// the project keeps the directory its template already names.
-			newArgs := append([]string{"new"}, args...)
-			if (len(args) < 2 || strings.HasPrefix(args[1], "--")) && tpl.WorkingDir != "" {
-				newArgs = append([]string{"new", project, tpl.WorkingDir}, args[1:]...)
-			}
-			if err := d.Bootstrap(newArgs); err != nil {
-				fmt.Fprintf(stderr, "agentbus up: bootstrap failed: %v\n", err)
-				return 1
-			}
-			tpl = upTemplate{}
-			if _, err := toml.DecodeFile(path, &tpl); err != nil {
-				fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
-				return 1
-			}
-		}
+		failed = true
 	}
-	code := 0
-	if failed {
-		code = 1
-	}
-	if d.Env("HERDR_ENV") != "1" {
-		sess := herdrSession(args, d.Environ)
-		if sess == "" {
-			sess = project // an unreadable socket path names none: the hint falls back to the project
-		}
-		fmt.Fprintf(stdout, "provisioned %s. To open it, start herdr (herdr --session %s), then run: agentbus up %s\n", project, sess, project)
-		return code
-	}
-	if id, err := openWorkspace(d, project); err != nil {
+	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab)
+	if err := upTeam(d, project, tpl, stdout); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
-		return 1
-	} else if id != "" {
-		fmt.Fprintf(stdout, "%s is already open: focused workspace %s; checking its tabs\n", project, id)
-		if err := relaunchUp(d, project, id, tpl, relaunch.Options{Resume: resume, Create: true}, stdout); err != nil {
-			fmt.Fprintf(stderr, "agentbus up: %v\n", err)
-			code = 1
-		}
-		return code
+		failed = true
 	}
-	if len(tpl.Tabs) == 0 {
-		fmt.Fprintf(stderr, "agentbus up: %s has no tabs\n", path)
+	if failed {
 		return 1
 	}
+	return 0
+}
+
+// upTeam starts the team on the project's holder (herdr exit §4.7): the
+// manifest the template's agent tabs name, the resume records, a person
+// notice for each record not used.
+func upTeam(d upDeps, project string, tpl upTemplate, stdout io.Writer) error {
+	return upTeamRun(d, project, tpl, false, stdout)
+}
+
+// upTeamRun is upTeam; dry says what it would start, and waits for no trust.
+func upTeamRun(d upDeps, project string, tpl upTemplate, dry bool, stdout io.Writer) error {
 	if d.Out == nil {
 		d.Out = stdout
 	}
-	if err := layout(d, project, tpl); err != nil {
-		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
-		return 1
+	if d.Team == nil {
+		return errors.New("no terminal host to start the agents on")
 	}
-	fmt.Fprintf(stdout, "opened %s: %d tabs, busmon first (reopen later with Ctrl+B then Up)\n", project, len(tpl.Tabs))
-	return code
+	manifest := ""
+	for _, t := range tpl.Tabs {
+		if mf, role, _ := tabLaunch(t.Command); role != "" && mf != "" {
+			manifest = mf
+			break
+		}
+	}
+	if manifest == "" {
+		fmt.Fprintln(stdout, "no agent tab in the template: no agent to start")
+		return nil
+	}
+	mf, err := rolecfg.Load(manifest)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", manifest, err)
+	}
+	h, err := d.Team(project)
+	if err != nil {
+		return fmt.Errorf("the holder: %w", err)
+	}
+	resumes := map[string]bus.ResumeRecord{}
+	if d.Resumes != nil {
+		if resumes, err = d.Resumes(project); err != nil {
+			return fmt.Errorf("the resume records: %w", err)
+		}
+	}
+	notice := func(text string) {
+		fmt.Fprintln(stdout, text)
+		if dry {
+			return
+		}
+		if d.Notice != nil {
+			if err := d.Notice(project, text); err != nil {
+				fmt.Fprintf(stdout, "(the notice for the person was not sent: %v)\n", err)
+			}
+		}
+	}
+	open := func(idx []int) (map[string]string, error) {
+		tabs := make([]upTab, 0, len(idx))
+		for _, i := range idx {
+			tabs = append(tabs, tpl.Tabs[i])
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), upTeamBudget)
+		defer cancel()
+		var intent func(string) (bus.SwapIntent, bool, error)
+		if d.Intent != nil {
+			intent = func(role string) (bus.SwapIntent, bool, error) { return d.Intent(project, role) }
+		}
+		return openTeam(ctx, h, mf, project, tabs, resumes, intent, notice, dry, stdout)
+	}
+	// Workspace trust (specialist roles, part B): one agent per untrusted
+	// client first, the person answers its dialog in that agent's terminal,
+	// the others once the trust is recorded.
+	dir := os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
+	now, later, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
+		return d.Trusted == nil || d.Trusted(client, dir)
+	})
+	if dry {
+		_, err := open(append(now, later...))
+		key, _ := trust.Key(dir)
+		for _, c := range slices.Sorted(maps.Keys(gates)) {
+			fmt.Fprintf(stdout, "dry run: trust: %s not yet accepted for %s; %s first, the others after\n", trust.Label(c), key, gates[c])
+		}
+		return err
+	}
+	termOf, err := open(now)
+	settle := d.trustReminders(tpl, dir, gates, termOf) // the ask in busmon, also when no agent waits
+	if len(later) == 0 {
+		return err
+	}
+	return errors.Join(err, d.waitTrust(tpl, dir, gates, termOf, func() error {
+		settle() // accepted: the reminder closes itself
+		_, err := open(later)
+		return err
+	}))
 }
 
-// herdrSession is the session the project opens in, as bootstrap resolves
-// it: --session, else the caller's HERDR_SESSION, else the session named by
-// the caller's HERDR_SOCKET_PATH, else the project name. A socket path that
-// names no session gives "": the services must not guess. Bootstrap does not
-// read the socket: it takes --session, HERDR_SESSION, then the project name.
-func herdrSession(args, environ []string) string {
-	for i := 0; i+1 < len(args); i++ {
-		if args[i] == "--session" {
-			return args[i+1]
-		}
+// withProjectBus runs f on project's bus, bounded.
+func withProjectBus[T any](project string, f func(context.Context, *bus.Bus) (T, error)) (T, error) {
+	var zero T
+	c, err := bus.Connect("")
+	if err != nil {
+		return zero, err
 	}
-	for _, kv := range environ {
-		if v, ok := strings.CutPrefix(kv, "HERDR_SESSION="); ok && v != "" {
-			return v
-		}
+	defer c.Close()
+	b, err := bus.Open(c, project)
+	if err != nil {
+		return zero, err
 	}
-	for _, kv := range environ {
-		if v, ok := strings.CutPrefix(kv, "HERDR_SOCKET_PATH="); ok && v != "" {
-			name, _ := sessionFromSocket(v)
-			return name
-		}
-	}
-	return args[0]
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return f(ctx, b)
 }
+
+// upTeamBudget bounds up's holder calls.
+const upTeamBudget = 60 * time.Second
 
 // isServiceTab is a template tab that runs dispatch or missions, which a
 // service runs instead (an older template still has them).
@@ -331,19 +359,8 @@ func isServiceTab(t upTab) bool {
 		strings.HasSuffix(cmd, " dispatch") || strings.Contains(cmd, " missions --repo")
 }
 
-func missingServiceTab(tpl upTemplate, kinds []string) bool {
-	for _, k := range kinds {
-		if !slices.ContainsFunc(tpl.Tabs, func(t upTab) bool { return t.Name == k }) {
-			return true
-		}
-	}
-	return false
-}
-
-// keptEnv is the project's env file to keep, its herdr keys replaced by the
-// caller's (the session's socket may move with a new herdr server). It names
-// on out every other key the caller's environment sets differently, or not at
-// all, never a value. No file: nil, nothing to keep. A file it cannot read is
+// keptEnv is the project's env file to keep. It names on out every key the
+// caller's environment sets differently, or not at all, never a value. No file: nil, nothing to keep. A file it cannot read is
 // an error: a configuration never read is never replaced.
 func keptEnv(path string, caller map[string]string, out io.Writer) (map[string]string, error) {
 	old, err := service.LoadEnvFile(path)
@@ -355,21 +372,13 @@ func keptEnv(path string, caller map[string]string, out io.Writer) (map[string]s
 	}
 	var differ []string
 	for _, k := range slices.Sorted(maps.Keys(caller)) {
-		if strings.HasPrefix(k, "HERDR_") {
-			continue
-		}
 		if v, ok := old[k]; !ok || v != caller[k] {
 			differ = append(differ, k)
 		}
 	}
 	for _, k := range slices.Sorted(maps.Keys(old)) {
-		if _, ok := caller[k]; !ok && !strings.HasPrefix(k, "HERDR_") && k != service.EscalateEnv && k != service.ReloadEnv {
+		if _, ok := caller[k]; !ok && k != service.EscalateEnv && k != service.ReloadEnv {
 			differ = append(differ, k)
-		}
-	}
-	for _, k := range []string{"HERDR_SESSION", "HERDR_SOCKET_PATH"} {
-		if v, ok := caller[k]; ok {
-			old[k] = v
 		}
 	}
 	if len(differ) > 0 {
@@ -386,7 +395,7 @@ var errNotInstalled = errors.New("services not installed")
 // starts each service that is not already running with this configuration.
 // escalate, when set, becomes the project's escalation target; when not, the
 // one an earlier up recorded is kept, so a plain re-run never resets it.
-func startServices(d upDeps, m service.Manager, project, workdir, session, escalate, reload string, kinds []string, stdout io.Writer) error {
+func startServices(d upDeps, m service.Manager, project, workdir, escalate, reload string, kinds []string, stdout io.Writer) error {
 	exe, err := d.Exe()
 	if err != nil {
 		return fmt.Errorf("%w: cannot find this agentbus: %v", errNotInstalled, err)
@@ -411,12 +420,6 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 			env = kept
 		}
 	}
-	if env["HERDR_SESSION"] != session { // another session's socket would reach the wrong server
-		if name, _ := sessionFromSocket(env["HERDR_SOCKET_PATH"]); name != session {
-			delete(env, "HERDR_SOCKET_PATH")
-		}
-	}
-	env["HERDR_SESSION"] = session
 	if escalate != "" {
 		env[service.EscalateEnv] = escalate
 	} else if _, set := env[service.EscalateEnv]; !set {
@@ -534,113 +537,6 @@ func startServices(d upDeps, m service.Manager, project, workdir, session, escal
 		}
 	}
 	return errors.Join(errs...)
-}
-
-// openWorkspace focuses an already open workspace labelled project and returns
-// its id, or "" when there is none.
-func openWorkspace(d upDeps, project string) (string, error) {
-	id, err := findWorkspace(d, project)
-	if err != nil || id == "" {
-		return id, err
-	}
-	if _, err := d.Herdr("workspace", "focus", id); err != nil {
-		return "", fmt.Errorf("herdr workspace focus: %w", err)
-	}
-	return id, nil
-}
-
-// findWorkspace is the id of the open workspace labelled project, or "".
-func findWorkspace(d upDeps, project string) (string, error) {
-	return relaunch.FindWorkspace(d.Herdr, project, d.IgnoreWorkspace)
-}
-
-// layout opens the workspace the way herdr-plus does: the first tab reuses the
-// focused root tab, the others are created behind it, and each tab's command
-// runs once every pane exists.
-func layout(d upDeps, project string, tpl upTemplate) error {
-	dir := os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
-	var created struct {
-		Result struct {
-			Workspace struct {
-				WorkspaceID string `json:"workspace_id"`
-			} `json:"workspace"`
-			Tab struct {
-				TabID string `json:"tab_id"`
-			} `json:"tab"`
-			RootPane struct {
-				PaneID string `json:"pane_id"`
-			} `json:"root_pane"`
-		} `json:"result"`
-	}
-	out, err := d.Herdr("workspace", "create", "--cwd", dir, "--label", project, "--focus")
-	if err != nil {
-		return fmt.Errorf("herdr workspace create: %w", err)
-	}
-	if err := json.Unmarshal(out, &created); err != nil || created.Result.Workspace.WorkspaceID == "" {
-		return fmt.Errorf("herdr workspace create: unexpected reply %s", strings.TrimSpace(string(out)))
-	}
-	ws, panes := created.Result.Workspace.WorkspaceID, []string{created.Result.RootPane.PaneID}
-	if err := fill(d, ws, created.Result.Tab.TabID, panes, tpl); errors.Is(err, errTrustPending) {
-		return err // the started agents stay; up again starts the others
-	} else if err != nil {
-		// A half-made workspace would be focused by the next "agentbus up" as if it were open.
-		if _, cerr := d.Herdr("workspace", "close", ws); cerr != nil {
-			return fmt.Errorf("%w (and closing the half-made workspace %s failed: %v; close it by hand)", err, ws, cerr)
-		}
-		return fmt.Errorf("%w (closed the half-made workspace %s; run agentbus up again)", err, ws)
-	}
-	return nil
-}
-
-// fill names the root tab, creates the others and runs each tab's command.
-func fill(d upDeps, ws, rootTab string, panes []string, tpl upTemplate) error {
-	if _, err := d.Herdr("tab", "rename", rootTab, tpl.Tabs[0].Name); err != nil {
-		return fmt.Errorf("herdr tab rename: %w", err)
-	}
-	for _, t := range tpl.Tabs[1:] {
-		out, err := d.Herdr("tab", "create", "--workspace", ws, "--label", t.Name, "--no-focus")
-		if err != nil {
-			return fmt.Errorf("herdr tab create %s: %w", t.Name, err)
-		}
-		var tab struct {
-			Result struct {
-				RootPane struct {
-					PaneID string `json:"pane_id"`
-				} `json:"root_pane"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal(out, &tab); err != nil || tab.Result.RootPane.PaneID == "" {
-			return fmt.Errorf("herdr tab create %s: unexpected reply %s", t.Name, strings.TrimSpace(string(out)))
-		}
-		panes = append(panes, tab.Result.RootPane.PaneID)
-	}
-	run := func(idx []int) error {
-		for _, i := range idx {
-			if _, err := d.Herdr("pane", "run", panes[i], tpl.Tabs[i].Command); err != nil {
-				return fmt.Errorf("herdr pane run (%s): %w", tpl.Tabs[i].Name, err)
-			}
-		}
-		return nil
-	}
-	dir := os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
-	now, later, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
-		return d.Trusted == nil || d.Trusted(client, dir)
-	})
-	if err := run(now); err != nil {
-		return err
-	}
-	paneOf := map[string]string{} // A10: the gate names the pane to answer in
-	for i, t := range tpl.Tabs {
-		paneOf[t.Name] = panes[i]
-	}
-	settle := d.trustReminders(tpl, dir, gates, paneOf) // the ask in busmon, also when no agent waits
-	if len(later) == 0 {
-		return nil
-	}
-	return d.waitTrust(tpl, dir, gates, paneOf, func() error {
-		settle() // accepted: the reminder closes itself
-		return run(later)
-	})
 }
 
 // holderContext records the holder's launch context in env (service.Holder*
@@ -774,20 +670,15 @@ func repoDir(env func(string) string) (string, error) {
 	return "", errors.New("cannot find the agent-bus-monitor checkout (scripts/bootstrap): set AGENTBUS_REPO or reinstall with ./setup.sh install")
 }
 
-// realUpDeps runs the real herdr and the repository's bootstrap.
+// realUpDeps runs the repository's bootstrap and the real holder.
 func realUpDeps(stdout, stderr io.Writer) upDeps { return realUpDepsIn(os.Stdin, stdout, stderr) }
 
-// realUpDepsIn is realUpDeps with bootstrap's stdin given: start's run inside
-// herdr gives none, herdr owning the terminal (foureyes).
+// realUpDepsIn is realUpDeps with bootstrap's stdin given (none when the
+// caller owns no terminal to lend it).
 func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 	paths, _ := service.PathsFrom(os.Getenv)
 	host, _ := os.Hostname()
 	return upDeps{
-		Herdr: func(args ...string) ([]byte, error) {
-			cmd := exec.Command(herdrBin(os.Getenv), args...)
-			cmd.Stderr = stderr
-			return cmd.Output()
-		},
 		Bootstrap: func(args []string) error {
 			repo, err := repoDir(os.Getenv)
 			if err != nil {
@@ -814,6 +705,16 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		Environ:       os.Environ(),
 		HolderBuild:   holder.BuildID,
 		HolderAnswers: func(project, key string) bool { return holderReady(os.Getenv, project, key, holderProbeTimeout) },
+		Team:          func(project string) (teamHost, error) { return holder.NewHost(project, holder.BuildID(), os.Getenv) },
+		Resumes: func(project string) (map[string]bus.ResumeRecord, error) {
+			return withProjectBus(project, func(ctx context.Context, b *bus.Bus) (map[string]bus.ResumeRecord, error) {
+				return b.ResumeRecords(ctx)
+			})
+		},
+		Notice: func(project, text string) error {
+			_, err := withProjectBus(project, func(ctx context.Context, b *bus.Bus) (string, error) { return b.PersonNotice(ctx, "agentbus", text) })
+			return err
+		},
 		Mark: func(project string, inst bus.ServicesInstall) error {
 			c, err := bus.Connect("")
 			if err != nil {
@@ -860,43 +761,6 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 	}
 }
 
-// relaunchUp reads the agents' snapshots (without them, the panes decide) and
-// relaunches what is gone in the open workspace ws.
-func relaunchUp(d upDeps, project, ws string, tpl upTemplate, o relaunch.Options, stdout io.Writer) error {
-	var snaps map[string]bus.AgentSnapshot
-	ok := false
-	if d.Agents != nil {
-		s, err := d.Agents(project)
-		if err != nil {
-			fmt.Fprintf(stdout, "agents unreadable (%v): the panes decide\n", err)
-		} else {
-			snaps, ok = s, true
-		}
-	}
-	o.Dir = os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
-	if d.Intent != nil {
-		o.Held = func(role string) (string, bool) {
-			in, held, err := d.Intent(project, role)
-			if err != nil { // as for the agents: said, and the panes decide
-				fmt.Fprintf(stdout, "%s: intent unreadable (%v): not checked\n", role, err)
-				return "", false
-			}
-			return in.Kind, held
-		}
-	}
-	// busmon's old shell needs herdr only, not the agents (start-busmon-pane).
-	o.CloseBusmon = true
-	if ok {
-		// A relaunched agent is proven by its own bind before its old pane closes.
-		sleep := d.Sleep
-		if sleep == nil {
-			sleep = time.Sleep
-		}
-		o.Prove = &relaunch.Proof{Agents: func() (map[string]bus.AgentSnapshot, error) { return d.Agents(project) }, Sleep: sleep, Tries: 60}
-	}
-	return relaunch.Open(d.Herdr, snaps, ok, d.ProcStart, project, ws, tpl, o, stdout)
-}
-
 // upDryRun prints what up would do to an open workspace, and changes nothing:
 // no bootstrap, no service, no typing.
 func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) int {
@@ -906,30 +770,9 @@ func upDryRun(d upDeps, project string, resume bool, stdout, stderr io.Writer) i
 		fmt.Fprintf(stderr, "agentbus up: reading %s: %v\n", path, err)
 		return 1
 	}
-	if d.Env("HERDR_ENV") != "1" {
-		fmt.Fprintf(stdout, "dry run: outside herdr, up would provision %s and say how to open it\n", project)
-		return 0
-	}
-	id, err := findWorkspace(d, project)
-	if err != nil {
-		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
-		return 1
-	}
-	if id == "" {
-		fmt.Fprintf(stdout, "dry run: %s is not open; up would open it with %d tabs\n", project, len(tpl.Tabs))
-		dir := os.ExpandEnv(strings.Replace(tpl.WorkingDir, "~", d.Env("HOME"), 1))
-		_, _, gates := trustPlan(tpl.Tabs, d.TabClient, func(client string) bool {
-			return d.Trusted == nil || d.Trusted(client, dir)
-		})
-		key, _ := trust.Key(dir)
-		for _, c := range slices.Sorted(maps.Keys(gates)) {
-			fmt.Fprintf(stdout, "dry run: trust: %s not yet accepted for %s; %s first, the others after\n", trust.Label(c), key, gates[c])
-		}
-		return 0
-	}
-	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab) // services mode; --tabs mode reruns them too
-	fmt.Fprintf(stdout, "dry run: %s is open (workspace %s); services are not checked\n", project, id)
-	if err := relaunchUp(d, project, id, tpl, relaunch.Options{Resume: resume, DryRun: true, Create: true}, stdout); err != nil {
+	fmt.Fprintf(stdout, "dry run: services are not checked; the agents on %s's holder:\n", project)
+	tpl.Tabs = slices.DeleteFunc(tpl.Tabs, isServiceTab)
+	if err := upTeamRun(d, project, tpl, true, stdout); err != nil {
 		fmt.Fprintf(stderr, "agentbus up: %v\n", err)
 		return 1
 	}
@@ -1214,8 +1057,8 @@ var (
 
 // lookAgentCLI finds an agent's CLI on up's PATH, else in the usual per-user
 // install directories, else through the person's own login shell (shell):
-// up may run from a pane (the herdr plugin's picker) whose PATH is narrower
-// than the shell an agent's tab runs in, where nvm, volta, asdf, mise or a
+// up may run from a context (busmon's picker, a relayed directive) whose PATH
+// is narrower than the shell an agent's terminal runs in, where nvm, volta, asdf, mise or a
 // CLI's own installer put it on PATH. A miss is errCLIAbsent only when that
 // shell says so; when it cannot answer, errCLIUnknown.
 func lookAgentCLI(getenv func(string) string, look func(string) (string, error), shell func(string) (string, error)) func(string) (string, error) {
@@ -1275,7 +1118,7 @@ func shellProbe(getenv func(string) string, timeout time.Duration) func(string) 
 		cmd.WaitDelay = 500 * time.Millisecond
 		// A session of its own, so no controlling terminal: an interactive
 		// shell's job control (tcsetpgrp) can never take the terminal from a
-		// foreground herdr that start runs meanwhile (foureyes).
+		// foreground program that start runs meanwhile (foureyes).
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		out, _ := cmd.Output() // the shell's own exit status is not the answer: the marker is
 		if ctx.Err() != nil {

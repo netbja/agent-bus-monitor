@@ -100,9 +100,8 @@ index_preflight() {
   echo "index: requested (sentinel runs index_repository on boot)"
 }
 install_cron() {
-  local session="${HERDR_SESSION:-default}"
   local tag="# agent-bus daily-review: $project"
-  local line="0 7 * * * AGENT_BUS_PROJECT=$project HERDR_SESSION=$session $SCRIPT_DIR/daily-review-trigger.sh >/dev/null 2>&1"
+  local line="0 7 * * * AGENT_BUS_PROJECT=$project $SCRIPT_DIR/daily-review-trigger.sh >/dev/null 2>&1"
   local current; current="$(crontab -l 2>/dev/null || true)"
   # -x: whole-line match, so project "demo" is not seen as "installed" merely because
   # "# agent-bus daily-review: demo2" already exists (substring collision).

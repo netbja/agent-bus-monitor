@@ -38,7 +38,7 @@ func TestFencedHealthPutTransitionsAndWakesOncePerEpisode(t *testing.T) {
 	put := func(status health.Status) {
 		t.Helper()
 		err := b.FencedHealthPut(ctx, "holder", "master", health.Record{
-			ID: "herdr-probe", Status: status, Detail: "probe response checked", Fingerprint: "probe-v1",
+			ID: "holder", Status: status, Detail: "probe response checked", Fingerprint: "probe-v1",
 		})
 		if err != nil {
 			t.Fatalf("FencedHealthPut(%s): %v", status, err)
@@ -50,7 +50,7 @@ func TestFencedHealthPutTransitionsAndWakesOncePerEpisode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Health: %v", err)
 	}
-	if rec := got["herdr-probe"]; rec.Status != health.Fail || rec.Since == 0 || rec.ObservedAt < rec.Since {
+	if rec := got["holder"]; rec.Status != health.Fail || rec.Since == 0 || rec.ObservedAt < rec.Since {
 		t.Fatalf("stored record = %+v", rec)
 	}
 	transitions, _, err := b.HealthTransitions(ctx, "", 10)
@@ -178,7 +178,7 @@ func TestFencedHealthPutUnknownDoesNotOpenANewFailEpisode(t *testing.T) {
 	installHealthProject(t, b, "holder")
 	for _, st := range []health.Status{health.Fail, health.Unknown, health.Fail} {
 		if err := b.FencedHealthPut(ctx, "holder", "master", health.Record{
-			ID: "herdr-probe", Status: st, Detail: "probe", Fingerprint: "probe-v1"}); err != nil {
+			ID: "holder", Status: st, Detail: "probe", Fingerprint: "probe-v1"}); err != nil {
 			t.Fatalf("FencedHealthPut(%s): %v", st, err)
 		}
 	}

@@ -43,7 +43,7 @@ const termPreviewRows = 30
 const termPreviewEvery = time.Second
 
 // termView is one read of an agent's terminal: found is false when the agent
-// has no live terminal on a holder (herdr hosts it until the cutover).
+// has no live terminal on its holder.
 type termView struct {
 	found bool
 	lines []string

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,33 +12,25 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/termhost"
+	"github.com/netbja/agent-bus-monitor/termhost/fake"
 )
 
-// fakeHerdr records the calls and answers like herdr's CLI.
-type fakeHerdr struct {
-	calls      []string
-	workspaces string // JSON list of {"label","workspace_id"} entries
-	fail       string // a call prefix that fails
+// fixtureManifest is upFixture's roles.toml: beside its templates.
+func fixtureManifest(templates string) string {
+	return filepath.Join(filepath.Dir(templates), "roles.toml")
 }
 
-func (f *fakeHerdr) run(args ...string) ([]byte, error) {
-	f.calls = append(f.calls, strings.Join(args, " "))
-	if f.fail != "" && strings.HasPrefix(strings.Join(args, " "), f.fail) {
-		return nil, errors.New("herdr failed")
-	}
-	switch strings.Join(args[:2], " ") {
-	case "workspace list":
-		return []byte(`{"result":{"workspaces":[` + f.workspaces + `]}}`), nil
-	case "workspace create":
-		return []byte(`{"result":{"workspace":{"workspace_id":"w9"},"tab":{"tab_id":"w9:t1"},"root_pane":{"pane_id":"w9:p1"}}}`), nil
-	case "tab create":
-		n := len(f.calls)
-		return []byte(`{"result":{"tab":{"tab_id":"w9:t` + string(rune('0'+n)) + `"},"root_pane":{"pane_id":"w9:p` + string(rune('0'+n)) + `"}}}`), nil
-	}
-	return []byte(`{"result":{}}`), nil
+// agentTab is a template tab launching role in demo, as bootstrap writes it.
+func agentTab(templates, role string) string {
+	return "env ROLES_TOML=" + fixtureManifest(templates) + " /r/scripts/agent-launch " + role + " demo"
 }
 
-func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
+// upFixture: a project "demo" whose bootstrap writes a template (busmon,
+// master, and the service tabs unless --no-dispatch / --no-missions), a
+// roles.toml it names, a fake service manager and the fake terminal host
+// the team starts on (herdr exit §4.7).
+func upFixture(t *testing.T) (string, string, *recHost, *[]string, upDeps) {
 	t.Helper()
 	dir := t.TempDir()
 	templates := filepath.Join(dir, "projects")
@@ -45,11 +38,17 @@ func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
 	if err := os.MkdirAll(work, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	h := &fakeHerdr{}
+	manifest := fixtureManifest(templates)
+	if err := os.WriteFile(manifest, []byte("schema_version = 2\n[defaults]\nprofile = \"claude\"\n"+
+		"[profiles.claude]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\noptions = { permission = \"manual\" }\n"+
+		"[roles.master]\ntier = \"boot\"\nskills = []\n[roles.coder]\ntier = \"boot\"\nskills = []\n"+
+		"[roles.foureyes]\ntier = \"boot\"\nskills = []\n[roles.sentinel]\ntier = \"boot\"\nskills = []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	team := &recHost{Host: fake.New()}
 	var boot []string
-	env := map[string]string{"HERDR_ENV": "1", "AGENTBUS_PROJECTS_DIR": templates}
+	env := map[string]string{"AGENTBUS_PROJECTS_DIR": templates}
 	deps := upDeps{
-		Herdr: h.run,
 		Bootstrap: func(args []string) error {
 			boot = append(boot, strings.Join(args, " "))
 			if err := os.MkdirAll(templates, 0o755); err != nil {
@@ -62,7 +61,7 @@ func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
 				return nil
 			}
 			has := func(f string) bool { return slices.Contains(args, f) }
-			body := "name = \"demo\"\nworking_dir = \"" + work + "\"\n\n[[tabs]]\nname = \"busmon\"\ncommand = \"/r/busmon --project demo\"\n\n[[tabs]]\nname = \"master\"\ncommand = \"env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch master demo\"\n"
+			body := "name = \"demo\"\nworking_dir = \"" + work + "\"\n\n[[tabs]]\nname = \"busmon\"\ncommand = \"/r/busmon --project demo\"\n\n[[tabs]]\nname = \"master\"\ncommand = \"env ROLES_TOML=" + manifest + " /r/scripts/agent-launch master demo\"\n"
 			if !has("--no-dispatch") {
 				body += "\n[[tabs]]\nname = \"dispatch\"\ncommand = \"/r/agentbus --project demo dispatch\"\n"
 			}
@@ -71,69 +70,58 @@ func upFixture(t *testing.T) (string, string, *fakeHerdr, *[]string, upDeps) {
 			}
 			return os.WriteFile(path, []byte(body), 0o644)
 		},
-		Env: func(k string) string { return env[k] },
+		Env:  func(k string) string { return env[k] },
+		Team: func(string) (teamHost, error) { return team, nil },
 	}
-	return work, templates, h, &boot, deps
+	withServices(t, &deps)
+	return work, templates, team, &boot, deps
 }
 
-func TestUpProvisionsAndOpensBusmonFirst(t *testing.T) {
+func TestUpProvisionsAndStartsTheTeam(t *testing.T) {
 	work, _, h, boot, deps := upFixture(t)
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work, "--as", "charlie"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if len(*boot) != 1 || (*boot)[0] != "demo "+work+" --as charlie" {
+	if len(*boot) != 1 || (*boot)[0] != "demo "+work+" --as charlie --no-dispatch --no-missions" {
 		t.Fatalf("bootstrap calls = %q", *boot)
 	}
-	want := []string{
-		"workspace list",
-		"workspace create --cwd " + work + " --label demo --focus",
-		"tab rename w9:t1 busmon",
-		"tab create --workspace w9 --label master --no-focus",
-		"tab create --workspace w9 --label dispatch --no-focus",
-		"pane run w9:p1 /r/busmon --project demo",
+	if strings.Join(h.started(), ",") != "master" {
+		t.Fatalf("started %v, want the agents only (busmon is the person's window)", h.started())
 	}
-	got := strings.Join(h.calls, "\n")
-	for _, w := range want {
-		if !strings.Contains(got, w) {
-			t.Fatalf("missing herdr call %q in:\n%s", w, got)
-		}
-	}
-	if !strings.Contains(out.String(), "opened demo") {
+	if !strings.Contains(out.String(), "master: started") || !strings.Contains(out.String(), "busmon: run it in your own terminal: busmon --project demo") {
 		t.Fatalf("out = %q", out.String())
 	}
 }
 
-func TestUpFocusesAnOpenWorkspace(t *testing.T) {
+// A second up starts nothing that runs.
+func TestUpStartsNothingRunning(t *testing.T) {
 	work, _, h, _, deps := upFixture(t)
-	h.workspaces = `{"label":"demo","workspace_id":"w4"}`
 	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
+	for i := 0; i < 2; i++ {
+		if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+			t.Fatalf("up = %d: %s", code, errw.String())
+		}
 	}
-	got := strings.Join(h.calls, "\n")
-	if !strings.Contains(got, "workspace focus w4") || strings.Contains(got, "workspace create") {
-		t.Fatalf("a re-run must focus, not open a second workspace:\n%s", got)
+	if strings.Join(h.started(), ",") != "master" || !strings.Contains(out.String(), "master: running") {
+		t.Fatalf("started %v: %q", h.started(), out.String())
 	}
 }
 
-func TestUpOutsideHerdrProvisionsAndExplains(t *testing.T) {
-	work, templates, h, boot, deps := upFixture(t)
-	deps.Env = func(k string) string { // outside herdr: no HERDR_ENV
-		if k == "AGENTBUS_PROJECTS_DIR" {
-			return templates
-		}
-		return ""
-	}
+// herdr exit §4.4b: no tab mode, and no team without a service manager.
+func TestUpRefusesTabsAndNoManager(t *testing.T) {
+	work, _, h, _, deps := upFixture(t)
 	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d", code)
+	if code := runUp([]string{"demo", work, "--tabs"}, deps, &out, &errw); code != 1 || !strings.Contains(errw.String(), "--tabs is gone") {
+		t.Fatalf("--tabs: %d %q", code, errw.String())
 	}
-	if len(*boot) != 1 || len(h.calls) != 0 {
-		t.Fatalf("outside herdr: bootstrap %q, herdr %q", *boot, h.calls)
+	deps.Services = func() (service.Manager, string) { return nil, "systemd --user is not available" }
+	errw.Reset()
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || !strings.Contains(errw.String(), "services.manager = none") {
+		t.Fatalf("no manager: %d %q", code, errw.String())
 	}
-	if !strings.Contains(out.String(), "start herdr") {
-		t.Fatalf("no instructions: %q", out.String())
+	if len(h.specs) != 0 {
+		t.Fatalf("started %v", h.started())
 	}
 }
 
@@ -149,23 +137,22 @@ func TestUpRefusesBadInput(t *testing.T) {
 	}
 }
 
-// A layout that fails halfway must not leave a labelled workspace behind: the
-// next "agentbus up" would focus it and report success with no command running.
-func TestUpClosesAWorkspaceItCouldNotFinish(t *testing.T) {
-	for _, fail := range []string{"tab create --workspace w9 --label dispatch", "pane run w9:p1", "tab rename"} {
-		work, _, h, _, deps := upFixture(t)
-		h.fail = fail
-		var out, errw bytes.Buffer
-		if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
-			t.Fatalf("%s: up succeeded", fail)
-		}
-		if got := strings.Join(h.calls, "\n"); !strings.Contains(got, "workspace close w9") {
-			t.Fatalf("%s: the half-made workspace was not closed:\n%s", fail, got)
-		}
-		if !strings.Contains(errw.String(), "closed") {
-			t.Fatalf("%s: stderr = %q", fail, errw.String())
-		}
+// A start the holder refuses fails up, and says which.
+func TestUpSaysAStartTheHolderRefused(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	deps.Team = func(string) (teamHost, error) { return refusingHost{}, nil }
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 || !strings.Contains(out.String(), "master: not started: no holder") {
+		t.Fatalf("up = %d: %q %q", code, out.String(), errw.String())
 	}
+}
+
+// refusingHost lists nothing and refuses every start.
+type refusingHost struct{}
+
+func (refusingHost) List(context.Context, string) ([]termhost.Term, error) { return nil, nil }
+func (refusingHost) Start(context.Context, termhost.Spec) (termhost.Term, error) {
+	return termhost.Term{}, errors.New("no holder")
 }
 
 // servicesFixture: upFixture plus a fake service manager, a marker recorder
@@ -185,7 +172,7 @@ func withServices(t *testing.T, deps *upDeps) *upServices {
 	deps.Services = func() (service.Manager, string) { u.probed++; return u.m, "" }
 	deps.Paths = u.paths
 	deps.Exe = func() (string, error) { return u.exe, nil }
-	deps.Environ = []string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "HERDR_SESSION=s", "HERDR_PANE_ID=w1:p1"}
+	deps.Environ = []string{"PATH=/bin", "REDIS_PASSWORD=s3cret", "AGENTBUS_TERM_ID=w1:p1"}
 	deps.Mark = func(project string, inst bus.ServicesInstall) error { u.marks = append(u.marks, inst); return nil }
 	deps.Host = "h1"
 	return u
@@ -214,12 +201,11 @@ func TestUpStartsTheServicesAndOpensNoServiceTab(t *testing.T) {
 		t.Fatalf("missions spec = %+v", ms)
 	}
 	env, err := service.LoadEnvFile(u.paths.EnvFile("demo"))
-	if err != nil || env["REDIS_PASSWORD"] != "s3cret" || env["HERDR_SESSION"] != "s" || env["HERDR_PANE_ID"] != "" {
+	if err != nil || env["REDIS_PASSWORD"] != "s3cret" || env["AGENTBUS_TERM_ID"] != "" {
 		t.Fatalf("env = %v, %v", env, err)
 	}
-	got := strings.Join(h.calls, "\n")
-	if strings.Contains(got, "--label dispatch") || strings.Contains(got, "--label missions") || strings.Contains(got, " dispatch\n") {
-		t.Fatalf("a service tab was opened:\n%s", got)
+	if strings.Join(h.started(), ",") != "master" {
+		t.Fatalf("started %v: a service is no terminal", h.started())
 	}
 	if !strings.Contains(out.String(), "dispatch: started") || !strings.Contains(out.String(), "service logs") {
 		t.Fatalf("out = %q", out.String())
@@ -236,8 +222,8 @@ func TestUpFiltersServiceTabsOfAnOlderTemplate(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if got := strings.Join(h.calls, "\n"); strings.Contains(got, "dispatch") || strings.Contains(got, "missions") {
-		t.Fatalf("an older template's service tabs were opened:\n%s", got)
+	if len(h.specs) != 0 {
+		t.Fatalf("an older template's service tabs were started: %v", h.started())
 	}
 }
 
@@ -314,87 +300,6 @@ func TestUpReloadsAChangedUnitThatIsNotRunning(t *testing.T) {
 	}
 	if stop < 0 || start < stop {
 		t.Fatalf("a changed stopped unit was not reloaded before its start: %v", u.m.calls)
-	}
-}
-
-// The herdr session the project opens in reaches the services: --session,
-// else the caller's, else the project name, as bootstrap resolves it. A
-// socket of another session is not carried over.
-func TestUpGivesTheServicesTheProjectsHerdrSession(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	u := withServices(t, &deps)
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=mine", "HERDR_SOCKET_PATH=/run/herdr/mine.sock"}
-	var out, errw bytes.Buffer
-	runUp([]string{"demo", work, "--session", "team"}, deps, &out, &errw)
-	env, _ := service.LoadEnvFile(u.paths.EnvFile("demo"))
-	if env["HERDR_SESSION"] != "team" || env["HERDR_SOCKET_PATH"] != "" {
-		t.Fatalf("--session: env = %v", env)
-	}
-	runUp([]string{"demo", work}, deps, &out, &errw)
-	env, _ = service.LoadEnvFile(u.paths.EnvFile("demo"))
-	if env["HERDR_SESSION"] != "mine" || env["HERDR_SOCKET_PATH"] != "/run/herdr/mine.sock" {
-		t.Fatalf("caller's session: env = %v", env)
-	}
-	deps.Environ = []string{"PATH=/bin"}
-	runUp([]string{"demo", work}, deps, &out, &errw)
-	env, _ = service.LoadEnvFile(u.paths.EnvFile("demo"))
-	if env["HERDR_SESSION"] != "demo" {
-		t.Fatalf("outside herdr: env = %v", env)
-	}
-}
-
-// The tab fallback rewrites the template but keeps the project's directory,
-// even when up runs elsewhere without a path.
-func TestUpTabsFallbackKeepsTheProjectDirectory(t *testing.T) {
-	work, _, _, boot, deps := upFixture(t)
-	withServices(t, &deps)
-	var out, errw bytes.Buffer
-	runUp([]string{"demo", work}, deps, &out, &errw)
-	*boot = nil
-	runUp([]string{"demo", "--tabs"}, deps, &out, &errw)
-	if len(*boot) != 2 || (*boot)[1] != "new demo "+work {
-		t.Fatalf("bootstrap calls = %q, want the rewrite to keep %s", *boot, work)
-	}
-}
-
-func TestUpFallsBackToTabsExplicitly(t *testing.T) {
-	work, _, h, boot, deps := upFixture(t)
-	u := withServices(t, &deps)
-	deps.Services = func() (service.Manager, string) {
-		return nil, "systemd --user is not available (Failed to connect to bus)"
-	}
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	if !strings.Contains(out.String(), "systemd --user is not available") || !strings.Contains(out.String(), "herdr tabs") {
-		t.Fatalf("the fallback is silent: %q", out.String())
-	}
-	if strings.Contains((*boot)[0], "--no-dispatch") || len(u.marks) != 0 || len(u.m.calls) != 0 {
-		t.Fatalf("services touched in tab mode: boot %q marks %v calls %v", *boot, u.marks, u.m.calls)
-	}
-	if got := strings.Join(h.calls, "\n"); !strings.Contains(got, "--label dispatch") || !strings.Contains(got, "--label missions") {
-		t.Fatalf("no service tabs in tab mode:\n%s", got)
-	}
-}
-
-func TestUpTabsFlagForcesTabsAndRewritesAServiceTemplate(t *testing.T) {
-	work, _, h, boot, deps := upFixture(t)
-	u := withServices(t, &deps)
-	var out, errw bytes.Buffer
-	runUp([]string{"demo", work}, deps, &out, &errw) // services: the template has no service tab
-	h.calls, *boot, u.probed = nil, nil, 0
-	if code := runUp([]string{"demo", work, "--tabs"}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up --tabs = %d: %s", code, errw.String())
-	}
-	if u.probed != 0 {
-		t.Fatal("--tabs still probed the service manager")
-	}
-	if len(*boot) != 2 || !strings.HasPrefix((*boot)[1], "new demo") || strings.Contains(strings.Join(*boot, " "), "--tabs") {
-		t.Fatalf("bootstrap calls = %q (want a rewrite with \"new\", never --tabs)", *boot)
-	}
-	if got := strings.Join(h.calls, "\n"); !strings.Contains(got, "--label dispatch") {
-		t.Fatalf("no dispatch tab:\n%s", got)
 	}
 }
 
@@ -482,7 +387,7 @@ func TestUpNamesTheExpectedTemplatePath(t *testing.T) {
 	work, templates, _, _, deps := upFixture(t)
 	deps.Bootstrap = func([]string) error { return nil } // writes no template
 	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work, "--tabs"}, deps, &out, &errw); code != 1 {
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
 	if want := filepath.Join(templates, "demo.toml"); !strings.Contains(errw.String(), want) {
@@ -490,97 +395,7 @@ func TestUpNamesTheExpectedTemplatePath(t *testing.T) {
 	}
 }
 
-func TestHerdrSessionFallsBackToTheSocket(t *testing.T) {
-	sock := "HERDR_SOCKET_PATH=/h/.config/herdr/sessions/agent-bus/herdr.sock"
-	cases := []struct {
-		args, environ []string
-		want          string
-	}{
-		{[]string{"demo"}, []string{sock}, "agent-bus"},
-		{[]string{"demo", "--session", "team"}, []string{sock}, "team"},
-		{[]string{"demo"}, []string{"HERDR_SESSION=mine", sock}, "mine"},
-		{[]string{"demo"}, []string{"PATH=/bin"}, "demo"},
-		{[]string{"demo"}, []string{"HERDR_SOCKET_PATH=/h/.config/herdr/herdr.sock"}, "default"},
-		{[]string{"demo"}, []string{"HERDR_SOCKET_PATH=/tmp/odd.sock"}, ""},
-	}
-	for _, c := range cases {
-		if got := herdrSession(c.args, c.environ); got != c.want {
-			t.Errorf("herdrSession(%v, %v) = %q, want %q", c.args, c.environ, got, c.want)
-		}
-	}
-}
-
-func TestUpRefusesServicesOnAnUnreadableSocket(t *testing.T) {
-	work, _, _, boot, deps := upFixture(t)
-	u := withServices(t, &deps)
-	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=/tmp/odd.sock"}
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
-	}
-	for _, w := range []string{"HERDR_SOCKET_PATH", "--session"} {
-		if !strings.Contains(errw.String(), w) {
-			t.Fatalf("stderr %q does not name %s", errw.String(), w)
-		}
-	}
-	if _, err := os.Stat(u.paths.EnvFile("demo")); err == nil {
-		t.Fatal("an env file was written")
-	}
-	if len(*boot) != 0 {
-		t.Fatalf("a refused up must not bootstrap: %q", *boot)
-	}
-}
-
-func TestUpOutsideHerdrHintNamesASession(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	deps.Env = func(k string) string {
-		if k == "AGENTBUS_PROJECTS_DIR" {
-			return filepath.Join(filepath.Dir(work), "projects")
-		}
-		return ""
-	}
-	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=/tmp/odd.sock"}
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work, "--tabs"}, deps, &out, &errw); code != 0 {
-		t.Fatalf("exit %d: %s", code, errw.String())
-	}
-	if !strings.Contains(out.String(), "herdr --session demo)") {
-		t.Fatalf("the hint must name a session: %q", out.String())
-	}
-}
-
-func TestHerdrBinOrder(t *testing.T) {
-	cases := []struct {
-		env  map[string]string
-		want string
-	}{
-		{map[string]string{"HERDR_BIN_PATH": "/p/herdr", "HERDR_BIN": "/b/herdr"}, "/p/herdr"},
-		{map[string]string{"HERDR_BIN": "/b/herdr"}, "/b/herdr"},
-		{map[string]string{}, "herdr"},
-	}
-	for _, c := range cases {
-		if got := herdrBin(func(k string) string { return c.env[k] }); got != c.want {
-			t.Errorf("herdrBin(%v) = %q, want %q", c.env, got, c.want)
-		}
-	}
-}
-
-func TestUpKeepsTheSocketThatNamedTheSession(t *testing.T) {
-	work, _, _, _, deps := upFixture(t)
-	u := withServices(t, &deps)
-	sock := "/x/sessions/agent-bus/herdr.sock"
-	deps.Environ = []string{"PATH=/bin", "HERDR_SOCKET_PATH=" + sock}
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("exit %d: %s", code, errw.String())
-	}
-	env, _ := service.LoadEnvFile(u.paths.EnvFile("demo"))
-	if env["HERDR_SESSION"] != "agent-bus" || env["HERDR_SOCKET_PATH"] != sock {
-		t.Fatalf("env = %v", env)
-	}
-}
-
-// Whichever agentbus runs up (the plugin's ./agentbus, the repo's), the units
+// Whichever agentbus runs up (the repo's, a worktree's), the units
 // run the one setup.sh installed, so a machine's services name one binary.
 func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
@@ -609,38 +424,20 @@ func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 	}
 }
 
-// start-tabs: the first workspace herdr made for a session start launched
-// (labelled after the folder, often the project) is not the project's: up
-// ignores it and opens the project's own, busmon first.
-func TestUpIgnoresTheSessionsFirstWorkspace(t *testing.T) {
-	work, _, h, _, deps := upFixture(t)
-	h.workspaces = `{"label":"demo","workspace_id":"w1"}`
-	deps.IgnoreWorkspace = "w1"
-	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
-		t.Fatalf("up = %d: %s", code, errw.String())
-	}
-	got := strings.Join(h.calls, "\n")
-	if strings.Contains(got, "workspace focus w1") || !strings.Contains(got, "workspace create --cwd "+work+" --label demo --focus") ||
-		!strings.Contains(got, "tab rename w9:t1 busmon") {
-		t.Fatalf("the session's first workspace was taken for the project's:\n%s", got)
-	}
-}
-
 // KeepEnv (a suspended project's resume): the project's env file is kept as
-// it is, its herdr session excepted, so a resume never changes a project's
+// it is, so a resume never changes a project's
 // configuration; what the caller's environment would have changed is named,
 // never its value (master, suspend 3a).
 func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_AUTO_CLEAR=0", "AGENT_BUS_QUOTA_LONG_HOLD=3h"}
+	deps.Environ = []string{"PATH=/bin", "AGENT_BUS_AUTO_CLEAR=0", "AGENT_BUS_QUOTA_LONG_HOLD=3h"}
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up: %d %s", code, errw.String())
 	}
 	deps.KeepEnv = true
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_QUOTA_LONG_HOLD=1h", "AGENT_BUS_TOKENS=0"}
+	deps.Environ = []string{"PATH=/bin", "AGENT_BUS_QUOTA_LONG_HOLD=1h", "AGENT_BUS_TOKENS=0"}
 	out.Reset()
 	if code := runUp([]string{"demo"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up KeepEnv: %d %s", code, errw.String())
@@ -649,7 +446,7 @@ func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env["AGENT_BUS_AUTO_CLEAR"] != "0" || env["AGENT_BUS_QUOTA_LONG_HOLD"] != "3h" || env["HERDR_SESSION"] != "demo" {
+	if env["AGENT_BUS_AUTO_CLEAR"] != "0" || env["AGENT_BUS_QUOTA_LONG_HOLD"] != "3h" {
 		t.Fatalf("env after a KeepEnv up = %v", env)
 	}
 	if _, set := env["AGENT_BUS_TOKENS"]; set {
@@ -675,7 +472,7 @@ func TestUpKeepEnvKeepsTheProjectsSettings(t *testing.T) {
 func TestUpKeepEnvRefusesAnUnreadableEnvFile(t *testing.T) {
 	work, _, _, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	deps.Environ = []string{"PATH=/bin", "HERDR_SESSION=demo", "AGENT_BUS_AUTO_CLEAR=0"}
+	deps.Environ = []string{"PATH=/bin", "AGENT_BUS_AUTO_CLEAR=0"}
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up: %d %s", code, errw.String())

@@ -15,6 +15,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 var srT0 = time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
@@ -59,8 +60,32 @@ func srReads(now time.Time) selfRepairReads {
 		Pops:     map[string]bool{},
 		Own: map[string]rolecfg.Profile{"master": {Client: "claude-code", Provider: "anthropic"},
 			"coder": {Client: "claude-code", Provider: "anthropic"}, "foureyes": {Client: "claude-code", Provider: "anthropic"}},
+		Manifest: srManifest,
+		Resumes:  map[string]bus.ResumeRecord{"master": {Session: srSession}, "coder": {Session: srSession}, "foureyes": {Session: srSession}},
 	}
 }
+
+// srManifest: the three roles on one Claude Code profile (herdr exit §4.7:
+// a resume record is checked against the local manifest).
+var srManifest = func() *rolecfg.Manifest {
+	dir, err := os.MkdirTemp("", "srm")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "roles.toml")
+	body := "schema_version = 2\n[defaults]\nprofile = \"claude\"\n" +
+		"[profiles.claude]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\noptions = { permission = \"manual\" }\n" +
+		"[roles.master]\ntier = \"boot\"\nskills = []\n[roles.coder]\ntier = \"boot\"\nskills = []\n[roles.foureyes]\ntier = \"boot\"\nskills = []\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		panic(err)
+	}
+	m, err := rolecfg.Load(path)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}()
 
 // srChore: coder's process (102) is gone, the others run.
 func srChore(running map[int]uint64) (*selfRepairChore, *int) {
@@ -68,9 +93,9 @@ func srChore(running map[int]uint64) (*selfRepairChore, *int) {
 	c := &selfRepairChore{project: "demo", mode: selfrepair.ModeShadow, every: 30 * time.Minute, perDay: 3,
 		master:    func() string { return "master" },
 		procStart: srProcs(running),
-		herdr: func(map[string]bus.AgentSnapshot) selfRepairHerdr {
+		host: func(map[string]bus.AgentSnapshot) selfRepairHost {
 			herdrCalls++
-			return selfRepairHerdr{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
+			return selfRepairHost{Up: true, Open: true, Judge: func(t relaunch.Tab, create bool) relaunch.Verdict {
 				if create {
 					return relaunch.VerdictRelaunch
 				}
@@ -115,7 +140,7 @@ func TestSelfRepairFacts(t *testing.T) {
 	if co.Session != srSession || !co.Resumable || !co.ProviderFresh || co.ProviderHeld || co.Tab != relaunch.VerdictRelaunch {
 		t.Fatalf("coder %+v", co)
 	}
-	if !f.HerdrUp || !f.WorkspaceOpen || f.Mode != selfrepair.ModeShadow || f.Every != 30*time.Minute || f.PerDay != 3 || f.Grace != 60*time.Second {
+	if !f.HolderUp || !f.WorkspaceOpen || f.Mode != selfrepair.ModeShadow || f.Every != 30*time.Minute || f.PerDay != 3 || f.Grace != 60*time.Second {
 		t.Fatalf("facts %+v", f)
 	}
 	if *herdrCalls != 1 {
@@ -210,6 +235,7 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			s.Client, s.Provider = "local-llm", ""
 			r.Snaps["coder"] = s
 			r.Own["coder"] = rolecfg.Profile{Client: "local-llm"}
+			delete(r.Resumes, "coder") // a local model records no resume
 			r.Health["llm-endpoint"] = health.Record{Status: health.OK, ObservedAt: srT0.Add(-time.Minute).UnixMilli()}
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool {
 			return a.ProviderFresh && !a.Resumable && a.Session == ""
@@ -230,11 +256,18 @@ func TestSelfRepairFactsSources(t *testing.T) {
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Pop && a.Retired }},
 		{"a pop told done", func(r *selfRepairReads) { r.Pops["coder"] = true; r.Marks[bus.PopDoneMark("coder")] = "7" },
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Pop && a.Retired }},
-		{"no proved session", func(r *selfRepairReads) {
-			s := r.Snaps["coder"]
-			s.IdentSession = ""
-			r.Snaps["coder"] = s
-		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Session == "" && a.Resumable }},
+		// herdr exit §4.7: the session is the resume record's, after its two
+		// conditions; none, or one that fails them, is no session: reported,
+		// never a fresh start.
+		{"no resume recorded", func(r *selfRepairReads) { delete(r.Resumes, "coder") },
+			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Session == "" && !a.Resumable }},
+		{"a record on a profile outside the role's", func(r *selfRepairReads) {
+			r.Resumes["coder"] = bus.ResumeRecord{Session: srSession, Profile: "codex-review"}
+		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Session == "" && !a.Resumable }},
+		{"an injected session", func(r *selfRepairReads) { r.Resumes["coder"] = bus.ResumeRecord{Session: srSession + ";rm"} },
+			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Session == "" && !a.Resumable }},
+		{"a valid record", func(*selfRepairReads) {},
+			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Session == srSession && a.Resumable }},
 		{"its budget's past (step 7)", func(r *selfRepairReads) {
 			r.Past = map[string]bus.SelfRepairRecord{"coder": {Attempts: []time.Time{srT0.Add(-3 * time.Hour), srT0.Add(-time.Hour)},
 				CrashLoop: true, Failed: map[string]bool{"7:7": true}}}
@@ -268,12 +301,12 @@ func TestSelfRepairFactsSources(t *testing.T) {
 	}
 	// herdr down or the workspace closed: said, and no tab judged.
 	c, _ := srChore(map[int]uint64{101: 99, 103: 99})
-	c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr { return selfRepairHerdr{} }
-	if f := c.facts(srReads(srT0)); f.HerdrUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
+	c.host = func(map[string]bus.AgentSnapshot) selfRepairHost { return selfRepairHost{} }
+	if f := c.facts(srReads(srT0)); f.HolderUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
 		t.Fatalf("herdr down %+v", f)
 	}
-	c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr { return selfRepairHerdr{Up: true} }
-	if f := c.facts(srReads(srT0)); !f.HerdrUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
+	c.host = func(map[string]bus.AgentSnapshot) selfRepairHost { return selfRepairHost{Up: true} }
+	if f := c.facts(srReads(srT0)); !f.HolderUp || f.WorkspaceOpen || srAgent(t, f, "coder").Tab != relaunch.VerdictUnknown {
 		t.Fatalf("workspace closed %+v", f)
 	}
 }
@@ -453,5 +486,28 @@ func TestReadSelfRepairRedis(t *testing.T) {
 	}
 	if _, ok := r.Snaps["coder"]; !ok || r.Now.IsZero() {
 		t.Fatalf("snaps %v now %v", r.Snaps, r.Now)
+	}
+}
+
+// herdr exit 10b: a dead agent's role is relaunched unless a live terminal
+// of it still runs on the holder (waited on, never forced); a tab that
+// launches no role of the project is unknown.
+func TestRepairHostFacts(t *testing.T) {
+	h := repairHostFacts([]termhost.Term{{Name: "master", Alive: true}, {Name: "coder", Alive: false}}, "demo")
+	if !h.Up || !h.Open {
+		t.Fatalf("%+v", h)
+	}
+	for tab, want := range map[relaunch.Tab]relaunch.Verdict{
+		{Name: "master", Command: "agent-launch master demo"}: relaunch.VerdictRunning,
+		{Name: "coder", Command: "agent-launch coder demo"}:   relaunch.VerdictRelaunch,
+		{Name: "notes", Command: "vim notes.md"}:              relaunch.VerdictUnknown,
+	} {
+		if got := h.Judge(tab, true); got != want {
+			t.Errorf("%s: %s, want %s", tab.Name, got, want)
+		}
+	}
+	if err := serviceRelaunch(context.Background(), nil, func(string) string { return "" }, "coder", "", "", nil); err == nil ||
+		!strings.Contains(err.Error(), "never starts an agent fresh") {
+		t.Fatalf("a relaunch without a session: %v", err)
 	}
 }

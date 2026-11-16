@@ -60,13 +60,10 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, rolecfg.ProjectsDir(func(k string) string { v, _ := lookupEnv(env, k); return v }))
 		return nil
 	}
-	switch action { // Claude's SessionStart hook and its sender: silent, never failing
+	switch action { // Claude's SessionStart hook and its helpers: silent, never failing
 	case "report-resume":
 		reportResume(rest, env, os.Stdin, stdout, stderr, spawnDetached,
 			hookFacts{Ancestors: func() []dispatch.ProcID { return dispatch.Ancestors(os.Getpid()) }, Now: time.Now})
-		return nil
-	case "report-resume-send":
-		reportResumeSend(rest, defaultSenderDeps())
 		return nil
 	case "prove-session":
 		proveSessionSend(rest, openProver, dispatch.ProcStart)
@@ -106,7 +103,7 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 			return rolecfg.LaunchProfile(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
 		case len(rest) == 4 && rest[2] == "--resume":
 			return rolecfg.LaunchResume(m, rest[0], rest[1], rest[3], env, stdout, stderr, syscall.Exec)
-		case len(rest) == 6 && rest[2] == "--profile" && rest[4] == "--resume": // a swapped role resumed by herdr
+		case len(rest) == 6 && rest[2] == "--profile" && rest[4] == "--resume": // a swapped role resumed on its profile
 			if rest[5] == "" {
 				return errors.New("resume session id is required")
 			}

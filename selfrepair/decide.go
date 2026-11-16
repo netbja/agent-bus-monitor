@@ -88,7 +88,7 @@ type Facts struct {
 	Now               time.Time // Redis TIME
 	Mode              Mode
 	Paused, Suspended bool
-	HerdrUp           bool // the herdr server answers
+	HolderUp          bool // the project's holder answers
 	WorkspaceOpen     bool // the project's workspace is open
 	InFlight          bool // a relaunch of the project is not proven yet
 	LastRelaunch      time.Time
@@ -106,7 +106,7 @@ const (
 	KindUnknown  Kind = "unknown"  // the process cannot be judged: never acts
 	KindWait     Kind = "wait"     // not yet: the grace, the tab, the budget's spacing, another relaunch
 	KindSkip     Kind = "skip"     // a declared departure or another relauncher: not the watcher's
-	KindHold     Kind = "hold"     // the conditions to relaunch are not there (herdr, workspace, network)
+	KindHold     Kind = "hold"     // the conditions to relaunch are not there (holder, workspace, network)
 	KindReport   Kind = "report"   // told to master, never acted on
 	KindBudget   Kind = "budget"   // a crash loop: escalated, nothing more until reset
 	KindFailed   Kind = "failed"   // this death's relaunch failed its proof: escalated, no retry
@@ -130,7 +130,7 @@ type Decision struct {
 
 // A hold's kinds.
 const (
-	HoldHerdr     = "herdr"
+	HoldHolder    = "holder"
 	HoldWorkspace = "workspace"
 	HoldQuota     = "quota"
 	HoldNetwork   = "network"
@@ -189,11 +189,11 @@ func decideOne(f Facts, a Agent) Decision {
 		}
 		return r
 	}
-	switch { // herdr and the workspace first: the tab is judged only through them (R4)
-	case !f.HerdrUp:
-		return hold(HoldHerdr, "herdr does not answer")
+	switch { // the holder and the workspace first: the tab is judged only through them (R4)
+	case !f.HolderUp:
+		return hold(HoldHolder, "the holder does not answer")
 	case !f.WorkspaceOpen:
-		return hold(HoldWorkspace, "the workspace is not open")
+		return hold(HoldWorkspace, "the project is not open on its holder")
 	}
 	switch a.Tab {
 	case relaunch.VerdictRelaunch, relaunch.VerdictCreate:

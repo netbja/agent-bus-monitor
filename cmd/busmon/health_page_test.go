@@ -125,8 +125,8 @@ func TestHealthPageAllExpandAndCopy(t *testing.T) {
 	if body[items[1].line-1].text() == body[items[0].line].text() {
 		t.Error("the expansion is not under its row")
 	}
-	// herdr-probe names a command for its fail; warning, it is in hand, and y copies nothing.
-	recs["herdr-probe"] = guardian.Record{ID: "herdr-probe", Status: guardian.Warn, ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
+	// A warning in hand (the holder's): y copies nothing.
+	recs["holder"] = guardian.Record{ID: "holder", Status: guardian.Warn, ObservedAt: now.UnixMilli(), Since: now.UnixMilli()}
 	for sel := 2; sel <= 3; sel++ {
 		if _, _, _, plain := healthPage(recs, notes, now, "demo", healthView{sel: sel}, 136); plain != "" {
 			t.Errorf("y on in-hand row %d copies %q", sel, plain)

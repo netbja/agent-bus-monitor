@@ -15,16 +15,17 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // restoreWorld is a backupWorld whose project was archived then deleted.
 type restoreWorld struct {
 	*backupWorld
-	archive    string
-	workspaces string // herdr's workspace list
-	starts     map[int]uint64
-	answer     string
-	services   func() (service.Manager, string)
+	archive  string
+	terms    []termhost.Term // the holder's terminals
+	starts   map[int]uint64
+	answer   string
+	services func() (service.Manager, string)
 }
 
 func newRestoreCmdWorld(t *testing.T) *restoreWorld {
@@ -40,7 +41,7 @@ func newRestoreCmdWorld(t *testing.T) *restoreWorld {
 	}
 	// This host runs no service manager, and says so explicitly.
 	bw.env["AGENTBUS_SERVICE_MANAGER"] = "none"
-	return &restoreWorld{backupWorld: bw, archive: list[0].Path, workspaces: `{"result":{"workspaces":[]}}`, starts: map[int]uint64{},
+	return &restoreWorld{backupWorld: bw, archive: list[0].Path, starts: map[int]uint64{},
 		services: func() (service.Manager, string) { return nil, "AGENTBUS_SERVICE_MANAGER=none" }}
 }
 
@@ -48,7 +49,7 @@ func (w *restoreWorld) deps() restoreDeps {
 	return restoreDeps{
 		Getenv: w.d.Getenv,
 		Dial:   w.d.Dial,
-		Herdr:  func(...string) ([]byte, error) { return []byte(w.workspaces), nil },
+		Terms:  func(string) ([]termhost.Term, error) { return w.terms, nil },
 		ProcStart: func(pid int) (uint64, error) {
 			if s, ok := w.starts[pid]; ok {
 				return s, nil
@@ -115,8 +116,8 @@ func TestRestoreCommandRefusesALiveProject(t *testing.T) {
 			c, _ := w.d.Dial()
 			c.Set(ctx, bus.DispatchKey(w.b.Project()), "tok", 0)
 		},
-		"an open workspace": func(w *restoreWorld, _ func() error) {
-			w.workspaces = `{"result":{"workspaces":[{"label":"` + w.b.Project() + `","workspace_id":"w1"}]}}`
+		"a terminal on its holder": func(w *restoreWorld, _ func() error) {
+			w.terms = []termhost.Term{{ID: "t1", Project: w.b.Project(), Name: "coder", Alive: true}}
 		},
 	} {
 		w := newRestoreCmdWorld(t)
@@ -162,14 +163,14 @@ func TestRestoreCommandRefusesALiveProject(t *testing.T) {
 		!strings.Contains(oout.String(), "cannot tell") {
 		t.Fatalf("an unreadable pid: %d\n%s", code, oout.String())
 	}
-	// herdr unreadable: cannot tell, refused (fail closed).
+	// the holder unreadable: cannot tell, refused (fail closed).
 	w := newRestoreCmdWorld(t)
 	d := w.deps()
-	d.Herdr = func(...string) ([]byte, error) { return nil, errors.New("connection refused") }
+	d.Terms = func(string) ([]termhost.Term, error) { return nil, errors.New("connection refused") }
 	var out bytes.Buffer
 	if code := runRestore(ctx, []string{w.archive, "--project", w.b.Project()}, "", d, &out, &out); code != 1 ||
 		!strings.Contains(out.String(), "cannot tell") {
-		t.Fatalf("herdr down: %d\n%s", code, out.String())
+		t.Fatalf("holder unreadable: %d\n%s", code, out.String())
 	}
 }
 

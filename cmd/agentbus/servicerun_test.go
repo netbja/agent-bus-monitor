@@ -26,7 +26,7 @@ func runFixture(t *testing.T) (*bus.Bus, serviceRunDeps) {
 		Paths:     service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"},
 		Host:      "h1",
 		Heartbeat: 20 * time.Millisecond,
-		HerdrPing: func(context.Context) error { return nil },
+		HostPing:  func(context.Context) error { return nil },
 		Now:       time.Now,
 	}
 	return b, d
@@ -122,10 +122,10 @@ func TestServiceRunExitsWithoutTheMarker(t *testing.T) {
 func TestServiceRunDispatchReadyWaitingHerdrStopped(t *testing.T) {
 	b, d := runFixture(t)
 	mark(t, b)
-	var herdrDown atomic.Bool
-	d.HerdrPing = func(context.Context) error {
-		if herdrDown.Load() {
-			return errors.New("herdr: no server")
+	var holderDown atomic.Bool
+	d.HostPing = func(context.Context) error {
+		if holderDown.Load() {
+			return errors.New("holder: no server")
 		}
 		return nil
 	}
@@ -142,8 +142,8 @@ func TestServiceRunDispatchReadyWaitingHerdrStopped(t *testing.T) {
 	if r.Host != "h1" || r.PID == 0 || !strings.HasSuffix(r.Log, "dispatch.log") {
 		t.Fatalf("record = %+v", r)
 	}
-	herdrDown.Store(true)
-	if r := waitState(t, b, service.Dispatch, "waiting-herdr"); !strings.Contains(r.Error, "no server") {
+	holderDown.Store(true)
+	if r := waitState(t, b, service.Dispatch, "waiting-holder"); !strings.Contains(r.Error, "no server") {
 		t.Fatalf("record = %+v", r)
 	}
 	cancel()
@@ -417,14 +417,14 @@ func TestServiceRunWaitsInStandbyThenTakesOver(t *testing.T) {
 	}
 }
 
-// A herdr probe in flight when the lease is lost must not put "ready" back:
+// A holder probe in flight when the lease is lost must not put "ready" back:
 // its answer is for a lease generation that no longer holds.
 func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
 	b, d := runFixture(t)
 	mark(t, b)
 	var blocking atomic.Bool
 	entered, release := make(chan struct{}, 1), make(chan struct{})
-	d.HerdrPing = func(context.Context) error {
+	d.HostPing = func(context.Context) error {
 		if blocking.Load() {
 			select {
 			case entered <- struct{}{}:
@@ -450,7 +450,7 @@ func TestServiceRunAProbeInFlightCannotRestoreReady(t *testing.T) {
 	close(lose) // the lease is lost meanwhile
 	<-lost      // and the loss is recorded before the probe answers
 	blocking.Store(false)
-	close(release) // the probe answers "herdr is fine"
+	close(release) // the probe answers "the holder is fine"
 	time.Sleep(100 * time.Millisecond)
 	for i := 0; i < 5; i++ {
 		if r := record(t, b, service.Dispatch); r.State == "ready" {

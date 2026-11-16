@@ -32,7 +32,7 @@ type PopFacts struct {
 	HandoffReport     string     // its report id, named to master for a closed pop
 	Pane              Inspection // a live inspection of its pane
 	Paused, Held      bool
-	// Closed: its verified process is gone and herdr no longer knows its
+	// Closed: its verified process is gone and the holder no longer has its
 	// pane or sees an agent in it (pop-closed-by-hand: closed by hand,
 	// plain retire or herdr). Nothing can declare, clear or be inspected
 	// any more, so conditions 8's hand-off, 9's state and 10 are not read

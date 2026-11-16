@@ -45,7 +45,6 @@ func TestPlacesOfTheNamedChecks(t *testing.T) {
 		"context":            {Warn: PlaceInHand},
 		"client-updates":     {Warn: PlaceInHand},
 		"runaway":            {Warn: PlaceInHand},
-		"herdr-probe":        {Warn: PlaceInHand, Fail: PlaceForYou},
 	} {
 		d, ok := ByID(id)
 		if !ok {

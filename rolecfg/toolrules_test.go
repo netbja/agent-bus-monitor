@@ -163,7 +163,8 @@ func TestToolRulesRejections(t *testing.T) {
 		{"unknown key", "[roles.master.tool_rules]\nextra = [\"Read\"]", "unknown"},
 		{"bare Bash", "[roles.master.tool_rules]\nallow = [\"Bash\"]", "tool_rules.allow: Bash would allow every shell command"},
 		{"star Bash", "[roles.master.tool_rules]\nallow = [\"Bash( * )\"]", "tool_rules.allow: Bash( * ) would allow every shell command"},
-		{"agent-spawn", "[roles.master.tool_rules]\nallow = [\"Bash(agent-spawn coder *)\"]", "tool_rules.allow: agent-spawn rules are derived from the manifest"},
+		{"agent-spawn", "[roles.master.tool_rules]\nallow = [\"Bash(agent-spawn coder *)\"]", "tool_rules.allow: pop rules are derived from the manifest"},
+		{"agentbus pop", "[roles.master.tool_rules]\nallow = [\"Bash(agentbus pop coder *)\"]", "tool_rules.allow: pop rules are derived from the manifest"},
 		{"too long", "[roles.master.tool_rules]\nallow = [\"" + long + "\"]", "invalid rule"},
 		{"control char", "[roles.master.tool_rules]\nallow = [\"Read\\n\"]", "invalid rule"},
 		{"bad name", "[roles.master.tool_rules]\nallow = [\"9bad\"]", "invalid rule"},
@@ -195,9 +196,9 @@ func TestLaunchRulesDerivesSpawnRules(t *testing.T) {
 	want := ToolRules{
 		// The spawn rules, then a pop's end for every pop, person-approved
 		// included (pop-auto-retire §6), then the role's own.
-		Allow: []string{"Bash(agent-spawn coder *)", "Bash(agent-spawn architect *)",
+		Allow: []string{"Bash(agentbus pop coder)", "Bash(agentbus pop coder *)", "Bash(agentbus pop architect)", "Bash(agentbus pop architect *)",
 			"Bash(agentbus retire deploy --forget --episode * --reason *)", "Bash(agentbus retire architect --forget --episode * --reason *)", "Read"},
-		Ask: []string{"Bash(agent-spawn deploy *)"},
+		Ask: []string{"Bash(agentbus pop deploy)", "Bash(agentbus pop deploy *)"},
 	}
 	if !reflect.DeepEqual(r, want) {
 		t.Fatalf("LaunchRules(master) = %+v, want %+v", r, want)
@@ -258,12 +259,12 @@ func TestShippedManifestRules(t *testing.T) {
 		switch {
 		case role == "master":
 		case p.Approval == "person":
-			asked = append(asked, "Bash(agent-spawn "+role+" *)")
+			asked = append(asked, PopRules(role)...)
 		default:
 			others++
 		}
 	}
-	if want := []string{"Bash(agent-spawn deploy *)", "Bash(agent-spawn infra *)"}; !reflect.DeepEqual(asked, want) || !reflect.DeepEqual(r.Ask, want) {
+	if want := append(PopRules("deploy"), PopRules("infra")...); !reflect.DeepEqual(asked, want) || !reflect.DeepEqual(r.Ask, want) {
 		t.Fatalf("master ask = %v, person-approved roles %v, want %v", r.Ask, asked, want)
 	}
 	// Then a pop's end for every pop role, person-approved included
@@ -277,9 +278,10 @@ func TestShippedManifestRules(t *testing.T) {
 	if len(retire) == 0 || !slices.Contains(retire, "Bash(agentbus retire deploy --forget --episode * --reason *)") {
 		t.Fatalf("retire rules %v lack the person-approved pops", retire)
 	}
-	if len(r.Allow) != others+len(retire)+len(masterUpRules) || !reflect.DeepEqual(r.Allow[others:others+len(retire)], retire) ||
-		!reflect.DeepEqual(r.Allow[others+len(retire):], masterUpRules) {
-		t.Fatalf("master allow = %v, want one per role but master and the person-approved ones (%d), then %v, then %v", r.Allow, others, retire, masterUpRules)
+	pops := 2 * others // PopRules: the bare command and the one with flags
+	if len(r.Allow) != pops+len(retire)+len(masterUpRules) || !reflect.DeepEqual(r.Allow[pops:pops+len(retire)], retire) ||
+		!reflect.DeepEqual(r.Allow[pops+len(retire):], masterUpRules) {
+		t.Fatalf("master allow = %v, want two per role but master and the person-approved ones (%d), then %v, then %v", r.Allow, pops, retire, masterUpRules)
 	}
 	for _, rule := range r.Allow {
 		role, isRetire := strings.CutPrefix(rule, "Bash(agentbus retire ")
@@ -552,7 +554,7 @@ func TestBusmonDestructiveDenies(t *testing.T) {
 	}
 }
 
-// SpawnRules are LaunchRules' agent-spawn rules as role names: allow, and ask
+// SpawnRules are LaunchRules' pop rules as role names: allow, and ask
 // (the person approves); none for a role that does not pop (roles doctor,
 // roles-doctor-pop-rules).
 func TestSpawnRules(t *testing.T) {

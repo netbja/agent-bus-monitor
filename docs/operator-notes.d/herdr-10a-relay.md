@@ -1,4 +1,4 @@
-- **The relay of host commands (herdr exit §4.2, step 10a; off until the cutover).** After the cutover the holder
+- **The relay of host commands (herdr exit §4.2, step 10a; wired in 10b).** After the cutover the holder
   refuses `Start`, `Close` and `Submit` from inside an agent's terminal, so a host command run there sends the
   dispatcher a host directive on `{p}:cmd` (`type host`, target `dispatch`, `wake=no`): a closed set of names,
   `{op, agent, profile, ignore_background, from}`, ops `up pop relaunch reload swap suspend resume retire drain`
@@ -19,5 +19,6 @@
   then, after a last read, it withdraws the directive (`bus.WithdrawHostOp`, an `HSETNX`-like script on
   `{p}:hostops`, atomic against the accept: a withdrawn directive is `seen` and never acted on, however late the
   dispatcher reads it; withdrawn too late, the dispatcher's reply is there and is the answer), and only then
-  prints the spec's "the dispatcher did not answer within 5 s … Nothing was done" text. Nothing sends a directive and the service gives the relay no `Run` until the cutover (step 10b) wires
-  the in-tree callers and the operations on the holder.
+  prints the spec's "the dispatcher did not answer within 5 s … Nothing was done" text. Since 10b, main sends
+  the directive for each of those commands run with `AGENTBUS_TERM_ID` set, and the dispatch service's `Run`
+  (`cmd/agentbus/hostrun.go`) runs it with the very command a shell runs, the sender as the caller.

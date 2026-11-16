@@ -3,7 +3,7 @@ id: 2026-10-19-herdr-plugin
 project: agent-bus-monitor
 scope: project
 kind: decision
-status: active
+status: superseded
 created: 2026-10-19
 last_verified: 2026-10-30
 author: claude
@@ -11,6 +11,10 @@ confidence: verified
 ---
 
 ## Finding/decision
+
+**Superseded on 2026-11-15 by the [herdr exit](2026-11-15-herdr-exit.md):** the plugin, its
+manifest and `agentbus plugin` are deleted. The templates directory, no migration code and a picker
+that never provisions still hold.
 
 Since v0.20, agent-bus is itself a herdr plugin, `netbja.agentbus`, and herdr-plus is no longer
 installed or needed. Each part of the decision with its reason:
@@ -65,7 +69,7 @@ letting the picker create a project.
   registers it and runs no build.
 - PR #90 (merged): the groundwork, session from `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, templates
   directory. The plugin itself is the PR of branch `feat/v020-herdr-plugin`.
-- Committed: the [manifest](../../../herdr-plugin.toml), the [picker model](../../../projlist/projlist.go),
+- Committed: the manifest (`herdr-plugin.toml`, deleted by the herdr exit), the [picker model](../../../projlist/projlist.go),
   [setup's tests with fake herdr](../../../tests/installer_test.sh), and the earlier
   [project services decision](2026-10-14-project-services.md) this builds on.
 

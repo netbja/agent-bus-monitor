@@ -459,7 +459,7 @@ func (m *Model) switchTab(n int) {
 }
 
 // stepTab moves the focus to the lower panel's next or previous tab, wrapping
-// as herdr's own next and previous tab do (busmon-keys).
+// as a terminal's own next and previous tab do (busmon-keys).
 func (m *Model) stepTab(next bool) {
 	focus := m.ui.focus
 	if focus == PanelRequests { // Work's sub-view

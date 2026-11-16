@@ -18,7 +18,7 @@ func dead(name string) Agent {
 }
 
 func facts(agents ...Agent) Facts {
-	return Facts{Now: t0, Mode: ModeShadow, HerdrUp: true, WorkspaceOpen: true,
+	return Facts{Now: t0, Mode: ModeShadow, HolderUp: true, WorkspaceOpen: true,
 		Grace: 60 * time.Second, Every: 30 * time.Minute, PerDay: 3, Agents: agents}
 }
 
@@ -59,8 +59,8 @@ func TestDecideOneAgent(t *testing.T) {
 		{"tab runs something else", func(_ *Facts, a *Agent) { a.Tab = relaunch.VerdictRunning }, KindWait, "tab"},
 		{"an optional tab missing", func(_ *Facts, a *Agent) { a.Tab = relaunch.VerdictMissing }, KindReport, "tab missing"},
 		{"a required tab missing (R2)", func(_ *Facts, a *Agent) { a.Tab, a.Required = relaunch.VerdictCreate, true }, KindCreate, "tab missing"},
-		{"herdr down", func(f *Facts, _ *Agent) { f.HerdrUp = false }, KindHold, "herdr"},
-		{"workspace closed", func(f *Facts, _ *Agent) { f.WorkspaceOpen = false }, KindHold, "workspace"},
+		{"holder down", func(f *Facts, _ *Agent) { f.HolderUp = false }, KindHold, "holder does not answer"},
+		{"project closed", func(f *Facts, _ *Agent) { f.WorkspaceOpen = false }, KindHold, "not open on its holder"},
 		{"provider not fresh", func(_ *Facts, a *Agent) { a.ProviderFresh = false }, KindHold, "provider"},
 		{"provider held", func(_ *Facts, a *Agent) { a.ProviderHeld = true }, KindHold, "quota"},
 		{"on a quota fallback", func(_ *Facts, a *Agent) { a.Fallback = "kimi" }, KindReport, "fallback profile kimi"},
@@ -197,7 +197,7 @@ func TestDecideHoldKinds(t *testing.T) {
 	}{
 		{"network", func(_ *Facts, a *Agent) { a.ProviderFresh, a.Provider, a.ProviderSince = false, "anthropic", since }, HoldNetwork, "anthropic"},
 		{"workspace", func(f *Facts, _ *Agent) { f.WorkspaceOpen = false }, HoldWorkspace, ""},
-		{"herdr", func(f *Facts, _ *Agent) { f.HerdrUp = false }, HoldHerdr, ""},
+		{"holder", func(f *Facts, _ *Agent) { f.HolderUp = false }, HoldHolder, ""},
 		{"quota", func(_ *Facts, a *Agent) { a.ProviderHeld = true }, HoldQuota, ""},
 	} {
 		a := dead("coder")
@@ -212,7 +212,7 @@ func TestDecideHoldKinds(t *testing.T) {
 			t.Errorf("network: since %v", d.Since)
 		}
 	}
-	if d := one(t, Facts{Now: t0, Mode: ModeOn, HerdrUp: true, WorkspaceOpen: true, Grace: time.Minute, Agents: []Agent{dead("coder")}}); d.Hold != "" {
+	if d := one(t, Facts{Now: t0, Mode: ModeOn, HolderUp: true, WorkspaceOpen: true, Grace: time.Minute, Agents: []Agent{dead("coder")}}); d.Hold != "" {
 		t.Errorf("no hold, a hold kind: %+v", d)
 	}
 }

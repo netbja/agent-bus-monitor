@@ -29,8 +29,8 @@ func humanAge(d time.Duration) string {
 	}
 }
 
-// agentPane returns the agent's registered herdr pane and whether the agent is
-// known with a non-empty pane.
+// agentPane returns the agent's registered terminal id and whether the agent
+// is known with a non-empty one.
 func agentPane(m map[string]bus.AgentSnapshot, agent string) (string, bool) {
 	s, ok := m[agent]
 	if !ok || s.Pane == "" {
@@ -158,7 +158,7 @@ func runAgentsForget(ctx context.Context, d forgetDeps, args []string, out, errw
 // --since (Unix ms): a declared state from a bound process. It reads once a
 // second until --timeout (default 30s) and returns 0 once it has one, 1 if
 // none came (its client may be waiting on a dialog in its pane), 2 on usage.
-// Read-only: agent-spawn uses it to say which pane to look at.
+// Read-only: a launcher uses it to say which terminal to look at.
 func runAgentsWait(ctx context.Context, read func(context.Context) (map[string]bus.AgentSnapshot, error),
 	sleep func(time.Duration), args []string, out, errw io.Writer) int {
 	args, sinceS := extractFlag(args, "--since")

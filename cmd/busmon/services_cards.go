@@ -191,7 +191,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 		out = append(out, Line{S(RoleMuted, fmt.Sprintf("%s %s services on %s, set up %s ago %s", rule, Preview(f.inst.Manager), Preview(f.inst.Host),
 			humanAge(now.Sub(time.UnixMilli(f.inst.At))), rule))}, nil)
 	} else if len(f.recs) == 0 {
-		out = append(out, Line{S(RoleMuted, rule+" no project services recorded: dispatch and missions run as herdr tabs, or not at all "+rule)}, nil)
+		out = append(out, Line{S(RoleMuted, rule+" no project services recorded: agentbus up starts them "+rule)}, nil)
 	}
 	var cards [][]Line
 	for i, k := range svcCardKinds {
@@ -245,7 +245,7 @@ func serviceCard(f svcFacts, kind string, selected bool, now time.Time) []Line {
 		return []Line{{S(RoleAccent, kind)}, {S(RoleMuted, "no state published")}, {S(RoleMuted, "(not started since agentbus up)")}}
 	}
 	state := serviceFact(r, true, "", now)
-	role := map[string]Role{"failed": RoleError, "gave-up": RoleError, "waiting-herdr": RoleAttention, "waiting-git": RoleAttention, "starting": RoleAttention, "down": RoleMuted, "stopped": RoleMuted}[state]
+	role := map[string]Role{"failed": RoleError, "gave-up": RoleError, "waiting-holder": RoleAttention, "waiting-git": RoleAttention, "starting": RoleAttention, "down": RoleMuted, "stopped": RoleMuted}[state]
 	glyph := GlyphWorking
 	if role == RoleText {
 		role = RoleOK

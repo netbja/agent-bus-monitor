@@ -28,7 +28,7 @@ const (
 )
 
 // workKanbanOn says whether the Work tab draws the Kanban: the setting, and
-// for auto busmon's own width (the herdr pane's, not the terminal's).
+// for auto busmon's own width (its pane's, not the whole terminal's).
 func workKanbanOn(layout string, width int) bool {
 	switch layout {
 	case "kanban":

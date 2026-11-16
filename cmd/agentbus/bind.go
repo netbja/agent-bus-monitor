@@ -8,13 +8,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // bindDeps is what `agentbus bind` touches, injected for tests.
 type bindDeps struct {
 	Bind  func(ctx context.Context, agent string, who bus.AgentIdent) error
-	Procs func(ctx context.Context, pane string) ([]dispatch.Proc, string, error)
+	Procs func(ctx context.Context, term string) ([]termhost.Proc, string, error) // the terminal's processes, and its full id
 	Start func(pid int) (uint64, error)
 	Boot  func() string // this host's boot id, "" when unknown (dispatch.BootID)
 	Env   func(string) string
@@ -32,8 +32,8 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 		return 1
 	}
 	agent := args[0]
-	if pane == "" && d.Env("HERDR_ENV") == "1" {
-		pane = d.Env("HERDR_PANE_ID")
+	if pane == "" { // inside a terminal the holder started (herdr exit §4.2)
+		pane = d.Env("AGENTBUS_TERM_ID")
 	}
 	if pane == "" {
 		fmt.Fprintln(errw, "bind: no pane (pass --pane)")
@@ -44,16 +44,13 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 		fmt.Fprintf(errw, "bind: pane %s: %v\n", pane, err)
 		return 1
 	}
+	pane = terminal // the terminal's full id is what the dispatcher addresses
 	if pidArg == "" {
 		fmt.Fprintf(errw, "bind: pick the client's pid in pane %s and pass --pid:\n", pane)
 		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(tw, "PID\tPPID\tCOMMAND")
 		for _, p := range procs {
-			cmd := p.Cmdline
-			if cmd == "" {
-				cmd = p.Name
-			}
-			fmt.Fprintf(tw, "%d\t%d\t%s\n", p.PID, p.PPID, cmd)
+			fmt.Fprintf(tw, "%d\t%d\t%s\n", p.PID, p.PPID, p.Command)
 		}
 		tw.Flush()
 		return 2
@@ -68,7 +65,7 @@ func runBind(ctx context.Context, d bindDeps, args []string, out, errw io.Writer
 		found = found || p.PID == pid
 	}
 	if !found {
-		fmt.Fprintf(errw, "bind: pid %d is not in the foreground of pane %s\n", pid, pane)
+		fmt.Fprintf(errw, "bind: pid %d is not a process of terminal %s\n", pid, pane)
 		return 1
 	}
 	start, err := d.Start(pid)

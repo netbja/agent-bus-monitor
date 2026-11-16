@@ -18,10 +18,10 @@ import (
 )
 
 // resumeWorld is a suspended project: the suspend world after a suspend,
-// with fakes for herdr and up.
+// with fakes for the holder and up.
 type resumeWorld struct {
 	*suspendWorld
-	running bool       // the herdr session runs
+	upCode  int        // what up returns (1: the holder unreachable)
 	upArgs  [][]string // every up call
 	onUp    func()     // what up brings back
 	boot    []string   // the template's agents
@@ -33,16 +33,16 @@ type resumeWorld struct {
 
 func newResumeWorld(t *testing.T, agents ...string) *resumeWorld {
 	t.Helper()
-	w := &resumeWorld{suspendWorld: newSuspendWorld(t), running: true, boot: agents}
+	w := &resumeWorld{suspendWorld: newSuspendWorld(t), boot: agents}
 	for _, a := range agents {
 		w.agent(a, "idle")
 	}
-	// The project's services env file records its herdr session, as up writes it.
+	// The project's services env file, as up writes it.
 	paths, err := service.PathsFrom(func(k string) string { return w.env[k] })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.WriteEnvFile(paths.EnvFile(w.b.Project()), map[string]string{"HERDR_SESSION": "demo"}); err != nil {
+	if _, err := service.WriteEnvFile(paths.EnvFile(w.b.Project()), map[string]string{"PATH": "/bin"}); err != nil {
 		t.Fatal(err)
 	}
 	return w
@@ -71,17 +71,15 @@ func (w *resumeWorld) kill(name string, tier ...string) {
 
 func (w *resumeWorld) resumeDeps() resumeDeps {
 	return resumeDeps{
-		Getenv:         func(k string) string { return w.env[k] },
-		Bus:            func(string) (*bus.Bus, error) { return w.b, nil },
-		Services:       func() (service.Manager, string) { return w.mgr, "" },
-		SessionRunning: func(string) (bool, error) { return w.running, nil },
-		SessionSocket:  func(string) (string, error) { return "/run/herdr.sock", nil },
-		Up: func(args []string, _, _ string, _ io.Writer) int {
+		Getenv:   func(k string) string { return w.env[k] },
+		Bus:      func(string) (*bus.Bus, error) { return w.b, nil },
+		Services: func() (service.Manager, string) { return w.mgr, "" },
+		Up: func(args []string, _ io.Writer) int {
 			w.upArgs = append(w.upArgs, args)
 			if w.onUp != nil {
 				w.onUp()
 			}
-			return 0
+			return w.upCode
 		},
 		BootRoles:   func(string) ([]string, error) { return w.boot, w.bootErr },
 		Lock:        w.lock,
@@ -115,7 +113,7 @@ func TestResumeBringsTheProjectBack(t *testing.T) {
 	if !w.mgr.active[w.b.Project()+"/dispatch"] || w.mgr.active[w.b.Project()+"/missions"] {
 		t.Fatalf("services after resume: %v", w.mgr.active)
 	}
-	want := []string{w.b.Project(), "--resume", "--no-dispatch", "--no-missions"}
+	want := []string{w.b.Project(), "--no-dispatch", "--no-missions"}
 	if len(w.upArgs) != 1 || strings.Join(w.upArgs[0], " ") != strings.Join(want, " ") {
 		t.Fatalf("up calls = %q, want %q", w.upArgs, want)
 	}
@@ -159,15 +157,16 @@ func TestResumeKeepsTheSuspendWhileAnAgentIsMissing(t *testing.T) {
 	}
 }
 
-// herdr not running: services only, the pause kept, the way out said.
-func TestResumeWithoutHerdr(t *testing.T) {
+// up fails (the holder unreachable): services only, the pause kept, the way
+// out said.
+func TestResumeWhenUpFails(t *testing.T) {
 	w := newResumeWorld(t, "master")
 	w.suspendNow()
 	w.kill("master")
-	w.running = false
+	w.upCode = 1
 	code, _, errw := w.resume()
-	if code != 1 || len(w.upArgs) != 0 || !strings.Contains(errw, "herdr --session") {
-		t.Fatalf("resume without herdr = %d, up %v, %q", code, w.upArgs, errw)
+	if code != 1 || len(w.upArgs) != 1 || !strings.Contains(errw, "did not complete") || !strings.Contains(errw, "then agentbus resume again") {
+		t.Fatalf("resume when up fails = %d, up %v, %q", code, w.upArgs, errw)
 	}
 	if p := w.pause(); p == nil || !p.Suspended() {
 		t.Fatalf("pause = %+v", p)
@@ -226,7 +225,7 @@ func TestResumeNamesPopsAndRefusesAnAgent(t *testing.T) {
 	}
 	delete(w.env, "AGENT_BUS_AGENT")
 	code, out, errw := w.resume()
-	if code != 0 || !strings.Contains(out, "agent-spawn ui-kimi "+w.b.Project()) {
+	if code != 0 || !strings.Contains(out, "agentbus --project "+w.b.Project()+" pop ui-kimi") {
 		t.Fatalf("resume = %d\n%s\n%s", code, out, errw)
 	}
 }
@@ -389,13 +388,12 @@ func TestResumeHoldsTheProjectLock(t *testing.T) {
 	}
 }
 
-// herdr not running: nobody can come back, so resume does not wait
-// (foureyes).
-func TestResumeWithoutHerdrDoesNotWait(t *testing.T) {
+// up failed: nobody can come back, so resume does not wait (foureyes).
+func TestResumeWhenUpFailsDoesNotWait(t *testing.T) {
 	w := newResumeWorld(t, "master")
 	w.suspendNow()
 	w.kill("master")
-	w.running = false
+	w.upCode = 1
 	w.proof = 5 * time.Second
 	start := time.Now()
 	if code, _, _ := w.resume(); code != 1 {
@@ -414,12 +412,12 @@ func TestResumeArgs(t *testing.T) {
 	}
 }
 
-// From a herdr pane with no AGENT_BUS_AGENT (the person's own pane after a
+// From a terminal with no AGENT_BUS_AGENT (the person's own pane after a
 // reboot), the resume of a suspended project runs: the identity guard would
 // refuse it, and its advice (export AGENT_BUS_AGENT) would then make resume
 // refuse the caller as an agent (foureyes). A timed pause keeps the guard.
-func TestSuspendedResumeRunsFromAHerdrPane(t *testing.T) {
-	env := map[string]string{"HERDR_PANE_ID": "p-x"}
+func TestSuspendedResumeRunsFromATerminal(t *testing.T) {
+	env := map[string]string{"AGENTBUS_TERM_ID": "p-x"}
 	getenv := func(k string) string { return env[k] }
 	full := 0
 	run := func(context.Context, []string) int { full++; return 0 }

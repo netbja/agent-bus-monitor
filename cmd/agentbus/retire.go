@@ -26,7 +26,7 @@ import (
 //
 // pop-closed-by-hand: a plain retire of a pop ends with the same forget
 // (a boot role never), and --forget accepts a pop already closed by hand
-// (its verified process gone, herdr knowing its pane no more): nothing is
+// (its verified process gone, its holder knowing its terminal no more): nothing is
 // closed, and ForgetIfClear still checks pid, start, episode and what waits.
 
 const retireUsage = "usage: agentbus retire <role> [--reason <text>] [--now] | retire <role> --forget --episode <ms> [--reason <text>]"
@@ -84,8 +84,8 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 		}
 		closed = true
 	}
-	if pane := d.Env("HERDR_PANE_ID"); pane != "" && pane == snap.Pane {
-		return fail("an agent cannot retire itself: run it from master's pane or a terminal")
+	if term := d.Env("AGENTBUS_TERM_ID"); term != "" && (term == snap.Pane || strings.HasSuffix(snap.Pane, "/"+term)) {
+		return fail("an agent cannot retire itself: run it from master's terminal or your own")
 	}
 	if code := openWork(ctx, b, role, fail); code != 0 {
 		return code
@@ -98,7 +98,7 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }})
 		switch {
 		case closed && !f.Closed:
-			return false, "its process is gone but herdr still knows its pane: close that pane first"
+			return false, "its process is gone but its holder still runs its terminal: close that terminal first"
 		case !closed && f.Closed:
 			return false, "its process and pane went since retire began"
 		}

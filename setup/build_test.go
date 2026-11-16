@@ -106,31 +106,39 @@ func TestBuildDryRun(t *testing.T) {
 	}
 }
 
-// The launcher links: ours reported, a foreign file left with a warning,
-// a missing one linked (a dry run only says so).
+// The launcher link: ours reported, a foreign file left with a warning, a
+// missing one linked (a dry run only says so). agent-spawn went with herdr
+// (its successor is agentbus pop): a link an older setup made to it is
+// removed, anything else of that name is left.
 func TestRoleScriptLinks(t *testing.T) {
 	in, out, _, repo, bin := buildWorld(t, "abc", nil)
 	if err := os.Symlink(filepath.Join(repo, "scripts", "agent-launch"), filepath.Join(bin, "agent-launch")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(filepath.Join(repo, "scripts", "agent-spawn"), filepath.Join(bin, "agent-spawn")); err != nil {
+		t.Fatal(err)
+	}
 	in.RoleScriptLinks()
-	if got, _ := os.Readlink(filepath.Join(bin, "agent-spawn")); got != filepath.Join(repo, "scripts", "agent-spawn") {
-		t.Fatalf("agent-spawn link %q", got)
+	if _, err := os.Lstat(filepath.Join(bin, "agent-spawn")); !os.IsNotExist(err) {
+		t.Fatalf("an older setup's agent-spawn link is still there: %v", err)
 	}
 	want := "    ✓ agent-launch: linked to " + repo + "/scripts/agent-launch\n" +
-		"    ✓ agent-spawn: linked to " + repo + "/scripts/agent-spawn\n"
+		"    ✓ agent-spawn: removed " + bin + "/agent-spawn (gone with herdr: agentbus pop starts a role)\n"
 	if out.String() != want {
 		t.Fatalf("%q", out.String())
 	}
 	out.Reset()
 	in2, out2, _, _, bin2 := buildWorld(t, "abc", nil)
 	_ = os.WriteFile(filepath.Join(bin2, "agent-launch"), []byte("mine"), 0o755)
+	_ = os.WriteFile(filepath.Join(bin2, "agent-spawn"), []byte("mine"), 0o755)
 	in2.Opt.DryRun = true
 	in2.RoleScriptLinks()
-	want2 := "    ! " + bin2 + "/agent-launch exists and is not this repository's agent-launch link; left as it is\n" +
-		"    • [dry-run] would link " + bin2 + "/agent-spawn -> " + in2.Repo + "/scripts/agent-spawn\n"
+	want2 := "    ! " + bin2 + "/agent-launch exists and is not this repository's agent-launch link; left as it is\n"
 	if out2.String() != want2 {
 		t.Fatalf("%q", out2.String())
+	}
+	if b, _ := os.ReadFile(filepath.Join(bin2, "agent-spawn")); string(b) != "mine" {
+		t.Fatal("a foreign agent-spawn was touched")
 	}
 }
 

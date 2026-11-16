@@ -21,7 +21,7 @@ type SelfRepairConfig struct {
 
 func (c SelfRepairConfig) on() bool { return c.Pass != nil }
 
-// selfRepairLoop runs beside the reconciliation: a slow herdr never delays
+// selfRepairLoop runs beside the reconciliation: a slow holder never delays
 // a wake.
 func (l *loop) selfRepairLoop(ctx context.Context) {
 	every := l.cfg.SelfRepair.Every

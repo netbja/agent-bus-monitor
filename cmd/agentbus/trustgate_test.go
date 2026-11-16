@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ import (
 // gateFixture: a template with busmon, two Claude agents, a Codex agent and
 // the dispatch tab; claude's trust is recorded after `after` polls (never when
 // negative), codex is trusted.
-func gateFixture(t *testing.T, after int) (string, *fakeHerdr, upDeps, *int) {
+func gateFixture(t *testing.T, after int) (string, *recHost, upDeps, *int) {
 	t.Helper()
 	work, templates, h, _, deps := upFixture(t)
 	if err := os.MkdirAll(templates, 0o755); err != nil {
@@ -21,9 +20,9 @@ func gateFixture(t *testing.T, after int) (string, *fakeHerdr, upDeps, *int) {
 	}
 	body := "name = \"demo\"\nworking_dir = \"" + work + "\"\n" +
 		"[[tabs]]\nname = \"busmon\"\ncommand = \"/r/busmon --project demo\"\n" +
-		"[[tabs]]\nname = \"master\"\ncommand = \"agent-launch master demo\"\n" +
-		"[[tabs]]\nname = \"coder\"\ncommand = \"agent-launch coder demo\"\n" +
-		"[[tabs]]\nname = \"foureyes\"\ncommand = \"agent-launch foureyes demo\"\n" +
+		"[[tabs]]\nname = \"master\"\ncommand = \"" + agentTab(templates, "master") + "\"\n" +
+		"[[tabs]]\nname = \"coder\"\ncommand = \"" + agentTab(templates, "coder") + "\"\n" +
+		"[[tabs]]\nname = \"foureyes\"\ncommand = \"" + agentTab(templates, "foureyes") + "\"\n" +
 		"[[tabs]]\nname = \"dispatch\"\ncommand = \"/r/agentbus --project demo dispatch\"\n"
 	if err := os.WriteFile(filepath.Join(templates, "demo.toml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -50,33 +49,24 @@ func gateFixture(t *testing.T, after int) (string, *fakeHerdr, upDeps, *int) {
 	return work, h, deps, &polls
 }
 
-func runIndex(calls []string, tab string) int {
-	for i, c := range calls {
-		if strings.HasPrefix(c, "pane run ") && strings.Contains(c, tab) {
-			return i
-		}
-	}
-	return -1
-}
-
 func TestUpGatesAgentsOnTrust(t *testing.T) {
 	work, h, deps, polls := gateFixture(t, 2)
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	coder := runIndex(h.calls, "agent-launch coder")
-	for _, first := range []string{"/r/busmon", "agent-launch master", "agent-launch foureyes", "dispatch"} {
-		if i := runIndex(h.calls, first); i < 0 || i > coder {
-			t.Fatalf("%s ran at %d, coder at %d:\n%s", first, i, coder, strings.Join(h.calls, "\n"))
+	coder := startIndex(h, "coder")
+	for _, first := range []string{"master", "foureyes"} {
+		if i := startIndex(h, first); i < 0 || i > coder {
+			t.Fatalf("%s started at %d, coder at %d: %v", first, i, coder, h.started())
 		}
 	}
 	if coder < 0 || *polls < 2 {
 		t.Fatalf("coder at %d after %d polls", coder, *polls)
 	}
 	msg := out.String()
-	// A10: the message names the pane, not only the tab.
-	if !regexp.MustCompile(`answer it in master's pane \([^)\s]+\)`).MatchString(msg) || !strings.Contains(msg, "agentbus up demo is locked") {
+	// A10: the message says where to answer: the agent's own terminal.
+	if !strings.Contains(msg, "answer it in master's terminal (agentbus attach master)") || !strings.Contains(msg, "agentbus up demo is locked") {
 		t.Fatalf("out = %q", msg)
 	}
 }
@@ -87,13 +77,11 @@ func TestUpTrustTimeoutStartsNothingMore(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
 		t.Fatal("up succeeded without trust")
 	}
-	if runIndex(h.calls, "agent-launch coder") >= 0 {
+	if startIndex(h, "coder") >= 0 {
 		t.Fatal("coder started without trust")
 	}
-	for _, c := range h.calls {
-		if strings.HasPrefix(c, "workspace close") {
-			t.Fatal("the workspace was closed: its started agent would be lost")
-		}
+	if startIndex(h, "master") < 0 {
+		t.Fatal("master, the gate's agent, was not started")
 	}
 	if !strings.Contains(errw.String(), "agentbus up demo") {
 		t.Fatalf("no way forward: %q", errw.String())
@@ -106,7 +94,7 @@ func TestUpWithoutAGateStartsEverything(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if *polls != 0 || runIndex(h.calls, "agent-launch coder") < 0 || strings.Contains(out.String(), "trust") {
+	if *polls != 0 || startIndex(h, "coder") < 0 || strings.Contains(out.String(), "trust") {
 		t.Fatalf("polls %d out %q", *polls, out.String())
 	}
 }
@@ -149,9 +137,9 @@ func TestUpOpensNoTrustGateForAnAbsentCLI(t *testing.T) {
 	if *polls != 0 || strings.Contains(out.String(), "asks whether you trust") {
 		t.Fatalf("a trust gate waited for an absent CLI (%d polls): %q", *polls, out.String())
 	}
-	for _, tab := range []string{"agent-launch master", "agent-launch coder", "agent-launch foureyes"} {
-		if runIndex(h.calls, tab) < 0 {
-			t.Fatalf("%s not started:\n%s", tab, strings.Join(h.calls, "\n"))
+	for _, role := range []string{"master", "coder", "foureyes"} {
+		if startIndex(h, role) < 0 {
+			t.Fatalf("%s not started: %v", role, h.started())
 		}
 	}
 	if !strings.Contains(out.String(), "warning: master needs claude, not found") {

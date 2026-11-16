@@ -155,3 +155,8 @@ func TestMessageCommandsAreText(t *testing.T) {
 		}
 	}
 }
+
+// runOut runs a command and returns its combined output.
+func runOut(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}

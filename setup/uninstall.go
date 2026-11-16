@@ -95,8 +95,6 @@ func (in *Installer) Uninstall(ctx context.Context, p *Prompter) int {
 				o.OK("removed " + strconv.Itoa(len(links)) + " role-skill links")
 			}
 		},
-		func() { in.removeKeyBinding(ctx, ask) },
-		func() { in.unlinkPlugin(ctx, ask) },
 		func() { in.removeSkills(ctx, ask) },
 		func() { in.stopBroker(ctx, ask, p) },
 	} {
@@ -106,65 +104,6 @@ func (in *Installer) Uninstall(ctx context.Context, p *Prompter) int {
 	}
 	o.Info("The repository and its built copies (" + in.Repo + "/agentbus, busmon) are left in place.")
 	return 0
-}
-
-func (in *Installer) removeKeyBinding(ctx context.Context, ask func(string, bool) bool) {
-	cfg := in.HerdrConfig()
-	content, err := os.ReadFile(cfg)
-	if err != nil || !strings.Contains(string(content), keybindMark) || !ask("remove the herdr key binding (prefix+up -> agent-bus projects)?", true) {
-		return
-	}
-	// Drop the block install wrote, line for line, and the blank line before it.
-	swapped, ok := KeybindSwap(KeybindBlock, "", string(content))
-	if !ok {
-		in.O.Warn("the key binding block in " + cfg + " was edited: left as it is (remove it by hand)")
-		return
-	}
-	backup, err := in.backup(cfg)
-	if err == nil {
-		err = writeAtomic(cfg, []byte(swapped))
-	}
-	if err != nil {
-		in.O.Warn("could not rewrite " + cfg + ": " + err.Error())
-		return
-	}
-	in.O.OK("removed the key binding: prefix+up is now unbound (backup: " + backup + ")")
-	if _, err := in.R.LookPath("herdr"); err == nil {
-		_, _ = in.herdr(ctx, "server", "reload-config")
-	}
-}
-
-// unlinkPlugin unlinks the registration only when herdr still has it from
-// the checkout setup recorded.
-func (in *Installer) unlinkPlugin(ctx context.Context, ask func(string, bool) bool) {
-	recorded := in.recordedPlugin()
-	if recorded == "" {
-		return
-	}
-	var rows []PluginRow
-	ok := false
-	if _, err := in.R.LookPath("herdr"); err == nil {
-		list, err := in.herdr(ctx, "plugin", "list", "--json")
-		rows, ok = PluginRows(list)
-		ok = ok && err == nil
-	}
-	r, _ := Ours(rows)
-	switch {
-	case !ok:
-		in.O.Warn("herdr plugin list --json could not be read: " + PluginID + " left as it is")
-	case r.Root == "":
-		_ = os.Remove(in.PluginRecord())
-	case !sameDir(r.Root, recorded):
-		in.O.Info(PluginID + " is linked from " + r.Root + ", which setup did not link: kept")
-	case ask("unlink the herdr plugin "+PluginID+" ("+r.Root+")?", true):
-		if out, err := in.herdr(ctx, "plugin", "unlink", PluginID); err == nil {
-			_ = os.Remove(in.PluginRecord())
-			in.O.OK("herdr plugin " + PluginID + ": unlinked")
-		} else {
-			showTail(in.O.err, out)
-			in.O.Warn("herdr plugin unlink " + PluginID + " failed: left as it is")
-		}
-	}
 }
 
 func (in *Installer) removeSkills(ctx context.Context, ask func(string, bool) bool) {

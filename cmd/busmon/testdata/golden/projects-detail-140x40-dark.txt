@@ -21,7 +21,7 @@
 │ leases      none held                                                                                                                    │
 │ pause       paused by charlie (10m ago)                                                                                                  │
 │ services    — (this machine, vdr)                                                                                                        │
-│ herdr       —                                                                                                                            │
+│ holder      — (this machine)                                                                                                             │
 │ template    —                                                                                                                            │
 │                                                                                                                                          │
 │                                                                                                                                          │

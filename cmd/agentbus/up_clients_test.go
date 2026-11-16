@@ -36,7 +36,7 @@ func withClients(t *testing.T, deps upDeps, templates string, have ...string) up
 			return err
 		}
 		defer f.Close()
-		_, err = f.WriteString("\n[[tabs]]\nname = \"coder\"\ncommand = \"env ROLES_TOML=/r/roles.toml /r/scripts/agent-launch coder demo\"\n")
+		_, err = f.WriteString("\n[[tabs]]\nname = \"coder\"\ncommand = \"" + agentTab(templates, "coder") + "\"\n")
 		return err
 	}
 	deps.TabExe = func(cmd string) string {
@@ -62,16 +62,13 @@ func withClients(t *testing.T, deps upDeps, templates string, have ...string) up
 func TestUpWithNoAgentCLIRefusesBeforeOpeningAnything(t *testing.T) {
 	work, templates, h, _, deps := upFixture(t)
 	deps = withClients(t, deps, templates)
-	deps.Services = nil
 	var out, errw bytes.Buffer
 	code := runUp([]string{"demo", work}, deps, &out, &errw)
 	if code != 1 {
 		t.Fatalf("up = %d, want 1: %s %s", code, out.String(), errw.String())
 	}
-	for _, c := range h.calls {
-		if strings.HasPrefix(c, "workspace create") || strings.HasPrefix(c, "tab create") || strings.HasPrefix(c, "pane run") {
-			t.Fatalf("up opened something with no agent CLI: %q", h.calls)
-		}
+	if len(h.specs) != 0 {
+		t.Fatalf("up started something with no agent CLI: %v", h.started())
 	}
 	msg := errw.String()
 	for _, w := range []string{
@@ -94,9 +91,8 @@ func TestUpStartsEveryTabAndNamesTheMissingCLI(t *testing.T) {
 	}
 	// master's call: a lookup alone never drops a tab; the missing one is
 	// named, and every tab starts as before (its pane says if it fails).
-	got := strings.Join(h.calls, "\n")
-	if !strings.Contains(got, "--label coder") || !strings.Contains(got, "--label master") {
-		t.Fatalf("want every tab opened:\n%s", got)
+	if startIndex(h, "coder") < 0 || startIndex(h, "master") < 0 {
+		t.Fatalf("want every agent started: %v", h.started())
 	}
 	if !strings.Contains(out.String(), "warning: master needs claude, not found (Claude Code (claude): https://code.claude.com/docs/en/setup)") {
 		t.Fatalf("the missing one is not named: %q", out.String())
@@ -110,9 +106,8 @@ func TestUpWithEveryCLIOpensEveryTab(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	got := strings.Join(h.calls, "\n")
-	if !strings.Contains(got, "--label coder") || !strings.Contains(got, "--label master") || strings.Contains(out.String(), "not started") {
-		t.Fatalf("%s\n%s", got, out.String())
+	if startIndex(h, "coder") < 0 || startIndex(h, "master") < 0 || strings.Contains(out.String(), "not started") {
+		t.Fatalf("%v\n%s", h.started(), out.String())
 	}
 }
 
@@ -239,8 +234,8 @@ func TestUpKeepsATabItCannotJudge(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if got := strings.Join(h.calls, "\n"); !strings.Contains(got, "--label coder") {
-		t.Fatalf("the unjudged tab was dropped:\n%s", got)
+	if startIndex(h, "coder") < 0 {
+		t.Fatalf("the unjudged agent was dropped: %v", h.started())
 	}
 	if !strings.Contains(out.String(), "could not tell whether codex is installed") {
 		t.Fatalf("no reason given: %q", out.String())
@@ -315,9 +310,8 @@ func TestUpStartsEveryTabWhenTheShellTimesOut(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d, want 0 (fail open): %s", code, errw.String())
 	}
-	got := strings.Join(h.calls, "\n")
-	if !strings.Contains(got, "--label master") || !strings.Contains(got, "--label coder") {
-		t.Fatalf("a tab was not opened:\n%s", got)
+	if startIndex(h, "master") < 0 || startIndex(h, "coder") < 0 {
+		t.Fatalf("an agent was not started: %v", h.started())
 	}
 	if !strings.Contains(out.String(), "could not tell whether claude is installed") || !strings.Contains(out.String(), "did not answer within") {
 		t.Fatalf("the timeout is not said: %q", out.String())

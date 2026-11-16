@@ -11,13 +11,12 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
-	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // The suspend's snapshot (spec §6): what the host remembers about a suspended
 // project, for resume and for the person. Identifiers, states and counts
 // only: no message, report, ask or gate text, no status message, no
-// environment value but the herdr session. It is never written into Redis.
+// environment value. It is never written into Redis.
 
 const suspendSnapshotFile = "suspend.json"
 
@@ -28,16 +27,11 @@ type suspendSnapshot struct {
 	Host          string                 `json:"host"`
 	By            string                 `json:"by"`
 	Reason        string                 `json:"reason,omitempty"`
-	Herdr         snapHerdr              `json:"herdr"`
 	Services      map[string]snapService `json:"services"`
 	PauseReplaced *snapPause             `json:"pause_replaced,omitempty"`
 	Agents        map[string]snapAgent   `json:"agents"`
 	Open          snapOpen               `json:"open"`
 	Unknown       []string               `json:"unknown,omitempty"`
-}
-
-type snapHerdr struct {
-	Session string `json:"session,omitempty"`
 }
 
 type snapService struct {
@@ -116,13 +110,6 @@ func readSnapshotFacts(ctx context.Context, p string, b *bus.Bus, rec *bus.Pause
 	}
 	if rec.Prev != nil {
 		s.PauseReplaced = &snapPause{Reason: health.Redact(rec.Prev.Reason), By: rec.Prev.By, Until: rec.Prev.Until}
-	}
-	if paths, err := service.PathsFrom(d.Getenv); err == nil {
-		if env, err := service.LoadEnvFile(paths.EnvFile(p)); err == nil {
-			s.Herdr.Session = env["HERDR_SESSION"]
-		} else if !os.IsNotExist(err) {
-			unknown("herdr session", err)
-		}
 	}
 	why := map[string]string{}
 	for _, a := range busy {

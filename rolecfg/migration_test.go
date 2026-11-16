@@ -49,7 +49,7 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 	want := r1
 	want.Allow = nil
 	for _, rule := range r1.Allow { // the spawn rules; the retire rules follow them all
-		if strings.HasPrefix(rule, "Bash(agent-spawn ") {
+		if strings.HasPrefix(rule, "Bash(agentbus pop ") {
 			want.Allow = append(want.Allow, rule)
 		}
 	}
@@ -60,9 +60,9 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 			t.Fatal(err)
 		}
 		if p.Approval == "person" {
-			want.Ask = append(want.Ask, "Bash(agent-spawn "+role+" *)")
+			want.Ask = append(want.Ask, PopRules(role)...)
 		} else {
-			want.Allow = append(want.Allow, "Bash(agent-spawn "+role+" *)")
+			want.Allow = append(want.Allow, PopRules(role)...)
 		}
 	}
 	for _, role := range v2.roleOrder { // a pop's end for every pop (pop-auto-retire §6)

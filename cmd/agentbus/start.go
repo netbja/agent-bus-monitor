@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/relaunch"
@@ -13,7 +12,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -21,7 +19,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
-	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
 	"github.com/netbja/agent-bus-monitor/trust"
 )
@@ -33,26 +30,16 @@ type startDeps struct {
 	Manifest func() (*rolecfg.Manifest, error)
 	Up       func(args []string) int // up's own code path
 	Live     func(project string) (map[string]relaunch.Life, error)
-	// Busmon judges an open project's busmon tab with up's own rule, reading
-	// herdr only; nil, an error or "" leave busmon out of the screen.
-	Busmon   func(project string) (relaunch.Verdict, error)
 	Repo     func() (string, error) // the checkout bootstrap writes templates from
 	TTY      func() io.ReadWriter   // the person's terminal; nil when there is none
 	Look     func(exe string) (string, error)
 	Out, Err io.Writer
 
-	// Outside herdr (spec "Outside herdr"): start launches the session itself.
-	HerdrOnPath   func() bool                                                            // nil: not checked
-	Herdr         func(session string, tty io.ReadWriter) (wait func() error, err error) // herdr --session on that terminal
-	SessionSocket func(session string) (string, error)                                   // herdr session list --json, until running
-	UpInSession   func(args []string, session, socket, ignoreWorkspace string, log io.Writer) int
-	// start-tabs: herdr's first workspace of a session start created (one bare
-	// shell tab) is not the project's. nil SessionRunning: never touched.
-	SessionRunning   func(session string) (bool, error)
-	InitialWorkspace func(socket string) (string, error)
-	CloseInitial     func(socket, ws string) (string, error)
-	Trusted          func(client, dir string) bool // nil: no trust line
-	LogPath          func(project string) (string, error)
+	Trusted func(client, dir string) bool // nil: no trust line
+	// Console gives the person's terminal to busmon on the project once the
+	// team runs (herdr exit §4.6: busmon and attach are the console); its
+	// exit status is start's.
+	Console func(project string, tty io.ReadWriter) int
 }
 
 // realStartDeps runs up's own code path, reads the manifest as the role
@@ -75,58 +62,9 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			}
 			return nil
 		},
-		Look: realUpDeps(stdout, stderr).LookPath,
-		HerdrOnPath: func() bool {
-			_, err := exec.LookPath(herdrBin(os.Getenv))
-			return err == nil
-		},
-		Herdr: func(session string, tty io.ReadWriter) (func() error, error) {
-			f, ok := tty.(*os.File)
-			if !ok {
-				return nil, errors.New("no terminal to give herdr")
-			}
-			cmd := exec.Command(herdrBin(os.Getenv), "--session", session)
-			cmd.Stdin, cmd.Stdout, cmd.Stderr = f, f, f // the person's terminal, for herdr's whole run
-			if err := cmd.Start(); err != nil {
-				return nil, err
-			}
-			return cmd.Wait, nil
-		},
-		SessionSocket: herdrSessionSocket,
-		UpInSession: func(args []string, session, socket, ignoreWorkspace string, log io.Writer) int {
-			// up opens a workspace only inside herdr: the three a herdr pane
-			// gives a plugin, set for this process and the herdr calls it makes.
-			for k, v := range map[string]string{"HERDR_ENV": "1", "HERDR_SESSION": session, "HERDR_SOCKET_PATH": socket} {
-				_ = os.Setenv(k, v)
-			}
-			deps := realUpDepsIn(nil, log, log) // no terminal for bootstrap: herdr owns it
-			deps.IgnoreWorkspace = ignoreWorkspace
-			return runUp(args, deps, log, log)
-		},
-		SessionRunning: herdrSessionRunning,
-		InitialWorkspace: func(socket string) (string, error) {
-			deadline := time.Now().Add(3 * time.Second) // herdr makes it as it starts
-			for {
-				ws, err := initialWorkspace(herdrIn(socket))
-				if ws != "" || time.Now().After(deadline) {
-					return ws, err
-				}
-				time.Sleep(250 * time.Millisecond)
-			}
-		},
-		CloseInitial: func(socket, ws string) (string, error) { return closeInitialWorkspace(herdrIn(socket), ws) },
-		Trusted:      trust.Reader(os.Getenv),
-		LogPath: func(project string) (string, error) {
-			paths, err := service.PathsFrom(os.Getenv)
-			if err != nil {
-				return "", err
-			}
-			dir := paths.StateDir(project)
-			if !filepath.IsAbs(dir) {
-				return "", fmt.Errorf("the state directory %q is not absolute", dir)
-			}
-			return filepath.Join(dir, "start.log"), nil
-		},
+		Look:    realUpDeps(stdout, stderr).LookPath,
+		Console: runConsole,
+		Trusted: trust.Reader(os.Getenv),
 		Live: func(project string) (map[string]relaunch.Life, error) {
 			client, err := bus.Connect("")
 			if err != nil {
@@ -147,192 +85,34 @@ func realStartDeps(stdout, stderr io.Writer) startDeps {
 			}
 			return out, nil
 		},
-		Busmon: func(project string) (relaunch.Verdict, error) {
-			if os.Getenv("HERDR_ENV") != "1" {
-				return "", nil // outside herdr the workspace cannot be read
-			}
-			path := templatePath(realUpDeps(stdout, stderr), project)
-			var tpl upTemplate
-			if _, err := toml.DecodeFile(path, &tpl); err != nil {
-				return "", err
-			}
-			herdr := func(args ...string) ([]byte, error) { return exec.Command(herdrBin(os.Getenv), args...).Output() }
-			return busmonVerdict(herdr, tpl, project)
-		},
 		Out: stdout, Err: stderr,
 	}
 }
 
-// busmonVerdict is what up would do to the project's busmon tab, judged by
-// up's own rule (relaunch.JudgeTab) from herdr's read-only answers: "" when the
-// project's workspace is not open or its template has no busmon tab.
-func busmonVerdict(herdr func(args ...string) ([]byte, error), tpl upTemplate, project string) (relaunch.Verdict, error) {
-	i := slices.IndexFunc(tpl.Tabs, func(t upTab) bool { return relaunch.IsBusmonTab(t, project) })
-	if i < 0 {
-		return "", nil
+// runConsole runs busmon on project in the person's terminal, for the
+// whole of its run.
+func runConsole(project string, tty io.ReadWriter) int {
+	f, ok := tty.(*os.File)
+	if !ok {
+		return 1
 	}
-	ws, err := findWorkspace(upDeps{Herdr: herdr}, project)
-	if err != nil || ws == "" {
-		return "", err
-	}
-	panes, err := relaunch.WorkspacePanes(herdr, ws)
+	bin, err := exec.LookPath("busmon")
 	if err != nil {
-		return "", err
+		fmt.Fprintf(f, "agentbus start: busmon is not on PATH: run it yourself: busmon --project %s\n", project)
+		return 1
 	}
-	return relaunch.JudgeTab(herdr, panes, tpl.Tabs[i], project, nil, false, nil, true).V, nil
-}
-
-// herdrSessionSocket asks herdr where a session lives (herdr session list
-// --json: name, running, socket_path), every 250 ms until it is listed
-// running, for 15 s at most. agentbus never computes herdr's config
-// directory: herdrSession only parses a path it is given.
-func herdrSessionSocket(session string) (string, error) {
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		out, err := exec.Command(herdrBin(os.Getenv), "session", "list", "--json").Output()
-		if err == nil {
-			var list struct {
-				Sessions []struct {
-					Name       string `json:"name"`
-					Running    bool   `json:"running"`
-					SocketPath string `json:"socket_path"`
-				} `json:"sessions"`
-			}
-			if json.Unmarshal(out, &list) == nil {
-				for _, s := range list.Sessions {
-					if s.Name == session && s.Running && s.SocketPath != "" {
-						return s.SocketPath, nil
-					}
-				}
-			}
+	cmd := exec.Command(bin, "--project", project)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = f, f, f
+	if err := cmd.Run(); err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return ee.ExitCode()
 		}
-		if time.Now().After(deadline) {
-			return "", fmt.Errorf("herdr session %s did not start within 15s", session)
-		}
-		time.Sleep(250 * time.Millisecond)
+		return 1
 	}
+	return 0
 }
 
-// herdrSessionRunning reads once whether herdr lists the session running.
-func herdrSessionRunning(session string) (bool, error) {
-	out, err := exec.Command(herdrBin(os.Getenv), "session", "list", "--json").Output()
-	if err != nil {
-		return false, err
-	}
-	var list struct {
-		Sessions []struct {
-			Name    string `json:"name"`
-			Running bool   `json:"running"`
-		} `json:"sessions"`
-	}
-	if err := json.Unmarshal(out, &list); err != nil {
-		return false, err
-	}
-	for _, s := range list.Sessions {
-		if s.Name == session {
-			return s.Running, nil
-		}
-	}
-	return false, nil
-}
-
-// herdrIn runs herdr against one session's socket.
-func herdrIn(socket string) func(args ...string) ([]byte, error) {
-	return func(args ...string) ([]byte, error) {
-		cmd := exec.Command(herdrBin(os.Getenv), args...)
-		cmd.Env = append(os.Environ(), "HERDR_SOCKET_PATH="+socket)
-		return cmd.Output()
-	}
-}
-
-type herdrWorkspace struct {
-	Label       string `json:"label"`
-	WorkspaceID string `json:"workspace_id"`
-	TabCount    int    `json:"tab_count"`
-	PaneCount   int    `json:"pane_count"`
-}
-
-func herdrWorkspaces(herdr func(args ...string) ([]byte, error)) ([]herdrWorkspace, error) {
-	out, err := herdr("workspace", "list")
-	if err != nil {
-		return nil, fmt.Errorf("herdr workspace list: %w", err)
-	}
-	var v struct {
-		Result struct {
-			Workspaces []herdrWorkspace `json:"workspaces"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(out, &v); err != nil {
-		return nil, fmt.Errorf("herdr workspace list: %w", err)
-	}
-	return v.Result.Workspaces, nil
-}
-
-// initialWorkspace is the first workspace herdr made for a new session: the
-// session's only workspace, with one tab and one pane; else "".
-func initialWorkspace(herdr func(args ...string) ([]byte, error)) (string, error) {
-	ws, err := herdrWorkspaces(herdr)
-	if err != nil || len(ws) != 1 || ws[0].TabCount != 1 || ws[0].PaneCount != 1 {
-		return "", err
-	}
-	return ws[0].WorkspaceID, nil
-}
-
-// closeInitialWorkspace closes herdr's first workspace ws only while it is
-// still untouched, read again right before: one tab, one pane, a plain shell
-// in it (relaunch.PaneShell, argv only). It never types into the pane; anything else
-// keeps it and the note says why.
-func closeInitialWorkspace(herdr func(args ...string) ([]byte, error), ws string) (string, error) {
-	all, err := herdrWorkspaces(herdr)
-	if err != nil {
-		return "", err
-	}
-	var w *herdrWorkspace
-	for i := range all {
-		if all[i].WorkspaceID == ws {
-			w = &all[i]
-		}
-	}
-	switch {
-	case w == nil:
-		return fmt.Sprintf("herdr's first workspace %s is gone already", ws), nil
-	case w.TabCount != 1 || w.PaneCount != 1:
-		return fmt.Sprintf("kept herdr's first workspace %s: it has %d tabs and %d panes now", ws, w.TabCount, w.PaneCount), nil
-	}
-	out, err := herdr("pane", "list")
-	if err != nil {
-		return "", fmt.Errorf("herdr pane list: %w", err)
-	}
-	var panes struct {
-		Result struct {
-			Panes []struct {
-				PaneID      string `json:"pane_id"`
-				WorkspaceID string `json:"workspace_id"`
-			} `json:"panes"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(out, &panes); err != nil {
-		return "", fmt.Errorf("herdr pane list: %w", err)
-	}
-	pane := ""
-	for _, p := range panes.Result.Panes {
-		if p.WorkspaceID == ws {
-			pane = p.PaneID
-		}
-	}
-	if pane == "" {
-		return fmt.Sprintf("kept herdr's first workspace %s: its pane is not listed", ws), nil
-	}
-	if plain, err := relaunch.PaneShell(herdr, pane); err != nil || !plain {
-		return fmt.Sprintf("kept herdr's first workspace %s: something runs in it, or it could not be read", ws), nil
-	}
-	if _, err := herdr("workspace", "close", ws); err != nil {
-		return "", fmt.Errorf("herdr workspace close %s: %w", ws, err)
-	}
-	return fmt.Sprintf("closed herdr's first workspace %s (a bare shell): busmon's tab is the first", ws), nil
-}
-
-// startUsage is start's line in the help table.
 const startUsage = "usage: agentbus start [<path>] [--yes] [--dry-run] [--name <project>] [--as <name>] [--roles <role[:profile],...>]"
 
 // runStart is agentbus start (agentbus-start spec): deduce, show, let the
@@ -389,7 +169,7 @@ func runStart(args []string, d startDeps) int {
 		fmt.Fprintln(d.Out, n)
 	}
 	// The person's terminal is opened once: the assistant's handle is the
-	// one herdr gets, and whoever ends with it closes it (foureyes).
+	// one busmon gets, and whoever ends with it closes it (foureyes).
 	var tty io.ReadWriter
 	handed := false
 	defer func() {
@@ -412,9 +192,6 @@ func runStart(args []string, d startDeps) int {
 		}
 		if p.Existing {
 			a.live, _ = d.Live(p.Project) // unknown leaves the running line out
-			if d.Busmon != nil {
-				a.busmon, _ = d.Busmon(p.Project) // unknown leaves busmon out
-			}
 			// An open project, unchanged by a flag: the short screen
 			// (start-busmon-pane).
 			a.short = name == "" && as == "" && roles == ""
@@ -461,23 +238,6 @@ func runStart(args []string, d startDeps) int {
 		return 0
 	}
 
-	outside := d.Env("HERDR_ENV") != "1"
-	if outside && d.HerdrOnPath != nil && !d.HerdrOnPath() {
-		return fail("herdr is not on PATH: the team runs in it. Install it from https://herdr.dev (or ./setup.sh install --install-herdr), then run agentbus start again")
-	}
-	// Outside herdr with a terminal, start runs herdr on it: where up's
-	// output will go is settled before anything is written (foureyes).
-	logPath := ""
-	runHerdr := outside && d.TTY != nil && d.Herdr != nil
-	if runHerdr && tty == nil {
-		tty = d.TTY()
-	}
-	if runHerdr && tty != nil {
-		if logPath, err = d.LogPath(p.Project); err != nil {
-			return fail("where to log the team's opening: %v", err)
-		}
-	}
-
 	// start's own writes: the name when none is recorded, the default team
 	// when the person chose one.
 	cfg := config.Path(d.Env)
@@ -505,120 +265,26 @@ func runStart(args []string, d startDeps) int {
 	case !p.Existing && !complete:
 		upArgs = append(upArgs, "--roles", teamSpec(p.Team))
 	}
-	if !runHerdr || tty == nil { // inside herdr up opens the team; without a terminal it provisions and says how to open it
-		return d.Up(upArgs)
-	}
-	if code := d.Up(upArgs); code != 0 { // provisioned as up does outside herdr
+	if code := d.Up(upArgs); code != 0 {
 		return code
 	}
-	fmt.Fprintf(d.Out, "starting herdr --session %s now: the team opens inside it\n", p.Project)
-	handed = true // startInHerdr closes it once herdr exits
-	return startInHerdr(d, m, p, upArgs, tty, logPath)
-}
-
-// startInHerdr hands the terminal to herdr --session <project> and opens the
-// team inside it through the session's socket (spec, "Outside herdr"). What
-// up would say goes to start.log while herdr draws, so the lines a person
-// needs are said before: the missing clients and the dialogs to answer.
-func startInHerdr(d startDeps, m *rolecfg.Manifest, p startPlan, upArgs []string, tty io.ReadWriter, logPath string) int {
-	a := &asker{m: m, look: d.Look}
-	if a.look == nil {
-		a.look = func(exe string) (string, error) { return exe, nil }
+	if d.Console == nil {
+		return 0
 	}
-	for _, l := range a.clientLines(p.Team) {
-		if strings.Contains(l, "✗") {
-			fmt.Fprintln(d.Out, l)
-		}
+	if tty == nil && d.TTY != nil {
+		tty = d.TTY()
 	}
-	if d.Trusted != nil {
-		seen := map[string]bool{}
-		for _, r := range p.Team {
-			prof, err := m.ResolveWith(r.Role, a.profileOf(r))
-			if err != nil || seen[prof.Client] || d.Trusted(prof.Client, p.Folder) {
-				continue
-			}
-			seen[prof.Client] = true
-			fmt.Fprintf(d.Out, "%s does not trust %s yet: answer its dialog in the %s tab\n", trust.Label(prof.Client), p.Folder, r.Role)
-		}
+	if tty == nil { // no terminal: up said how to open busmon
+		return 0
 	}
-	closeTTY := func() {
+	fmt.Fprintf(d.Out, "the team runs on the holder; busmon opens now (attach to an agent with agentbus attach <agent>)\n")
+	handed = true
+	defer func() {
 		if c, ok := tty.(io.Closer); ok {
 			c.Close()
 		}
-	}
-	// A session that already ran has no first workspace of ours to set aside;
-	// unknown counts as running, so nothing is ever closed on a guess.
-	fresh := false
-	if d.SessionRunning != nil {
-		running, err := d.SessionRunning(p.Project)
-		fresh = err == nil && !running
-	}
-	wait, err := d.Herdr(p.Project, tty) // the terminal start opened, never its own stdio (reviewer-codex)
-	if err != nil {
-		closeTTY()
-		fmt.Fprintf(d.Err, "agentbus start: starting herdr --session %s: %v\n", p.Project, err)
-		return 1
-	}
-	// up opens the team beside herdr's run: herdr holds the terminal until
-	// it exits, and up may wait on a trust dialog meanwhile.
-	type opened struct {
-		code    int
-		sockErr error
-	}
-	done := make(chan opened, 1)
-	go func() {
-		socket, err := d.SessionSocket(p.Project)
-		if err != nil {
-			done <- opened{1, err}
-			return
-		}
-		code := 1
-		if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
-			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-				initial := ""
-				if fresh && d.InitialWorkspace != nil {
-					initial, _ = d.InitialWorkspace(socket)
-				}
-				code = d.UpInSession(upArgs, p.Project, socket, initial, f)
-				// Once the team is open, herdr's first workspace (a bare shell
-				// tab) goes, if it is still untouched; never typed into.
-				if code == 0 && initial != "" && d.CloseInitial != nil {
-					note, err := d.CloseInitial(socket, initial)
-					if err != nil {
-						note = fmt.Sprintf("kept herdr's first workspace %s: %v", initial, err)
-					}
-					fmt.Fprintln(f, note)
-				}
-				f.Close()
-			}
-		}
-		done <- opened{code, nil}
 	}()
-	herdrErr := wait()
-	closeTTY()
-	var r opened
-	select {
-	case r = <-done:
-	default: // herdr left first (foureyes): say why start still waits
-		fmt.Fprintf(d.Err, "agentbus start: herdr has exited; still opening the team: see %s\n", logPath)
-		r = <-done
-	}
-	code, sockErr := r.code, r.sockErr
-	switch {
-	case sockErr != nil:
-		fmt.Fprintf(d.Err, "agentbus start: %v; inside it, run: agentbus up %s\n", sockErr, p.Project)
-		return 1
-	case code != 0:
-		fmt.Fprintf(d.Err, "agentbus start: opening the team inside herdr failed: see %s\n", logPath)
-		return 1
-	case herdrErr != nil:
-		var exit *exec.ExitError
-		if errors.As(herdrErr, &exit) {
-			return exit.ExitCode()
-		}
-		return 1
-	}
-	return 0
+	return d.Console(p.Project, tty)
 }
 
 // setProject takes a name the person gave: valid, and never another folder's

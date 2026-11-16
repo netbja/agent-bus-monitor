@@ -24,10 +24,17 @@ const dispatchUsage = "usage: dispatch [--horizon D] [--escalate-after D] [--esc
 // dispatchBaseConfig is the starting config; tests shrink its lease timings.
 var dispatchBaseConfig = dispatch.DefaultConfig
 
+// dispatchHostOps is the relay's runner (herdr exit §4.2): main sets it for
+// the service, so tests that run the loop never run a host command.
+var dispatchHostOps func(b *bus.Bus) dispatch.HostOpsConfig
+
 func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Runtime, stdout, stderr io.Writer) int {
 	cfg := dispatchBaseConfig()
 	cfg.Log = stderr
 	cfg.Observe = dispatch.ObserveEvery
+	if dispatchHostOps != nil && b != nil {
+		cfg.HostOps = dispatchHostOps(b)
+	}
 	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, rt, os.Getenv)
 	if paths, err := service.PathsFrom(os.Getenv); err == nil {
 		cfg.Health = realHealthConfig(b, rt, paths, cfg.Clear, &cfg.EscalateTo)

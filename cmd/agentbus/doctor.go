@@ -42,7 +42,7 @@ type doctorRow struct {
 	// enforce, in its launch's words (agy-client §4.2, §4.4); never a verdict.
 	Risk string `json:"risk,omitempty"`
 	// Pops is, for a role that pops, the roles its session may spawn without
-	// a prompt (allow) and with the person's yes (ask): the agent-spawn rules
+	// a prompt (allow) and with the person's yes (ask): the pop rules
 	// it launches with (rolecfg.SpawnRules). A role in neither is not covered.
 	Pops *doctorPops `json:"pops,omitempty"`
 	// usedAt is when the transcript last showed Used (Unix ms; 0 = none):

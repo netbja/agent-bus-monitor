@@ -64,7 +64,7 @@ func newActWorld(t *testing.T) *actWorld {
 		}
 		return out, nil
 	}
-	c.relaunch = func(_ context.Context, role, session string, fence func(string) error) error {
+	c.relaunch = func(_ context.Context, role, profile, session string, fence func(string) error) error {
 		w.mu.Lock()
 		w.relaunch = append(w.relaunch, role+" "+session)
 		w.mu.Unlock()
@@ -264,8 +264,8 @@ func TestSelfRepairCrashLoop(t *testing.T) {
 // once per death.
 func TestSelfRepairReports(t *testing.T) {
 	w := newActWorld(t)
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: true, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictMissing }}
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: true, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictMissing }}
 	}
 	read := w.c.read
 	w.c.read = func(ctx context.Context) (selfRepairReads, error) {
@@ -579,21 +579,21 @@ func TestSelfRepairNetworkHoldTold(t *testing.T) {
 func TestSelfRepairWorkspaceClosedTold(t *testing.T) {
 	w := newActWorld(t)
 	open := false
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict {
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict {
 			return relaunch.VerdictBusy // open, the tab is waited on: nothing relaunched in this test
 		}}
 	}
 	w.passes(6)
-	msgs := w.only("workspace")
-	if len(w.relaunch) != 0 || len(msgs) != 1 || !strings.Contains(msgs[0], "agentbus up demo --resume") {
+	msgs := w.only("does not answer")
+	if len(w.relaunch) != 0 || len(msgs) != 1 || !strings.Contains(msgs[0], "Run agentbus up demo.") {
 		t.Fatalf("relaunched %q, master %q", w.relaunch, w.toMaster())
 	}
 	open = true
 	w.passes(1)
 	open = false
 	w.passes(2)
-	if msgs := w.only("workspace"); len(msgs) != 2 {
+	if msgs := w.only("does not answer"); len(msgs) != 2 {
 		t.Fatalf("closed again, not told: %q", msgs)
 	}
 }
@@ -613,15 +613,15 @@ func TestSelfRepairWorkspaceSpellOutlivesARestart(t *testing.T) {
 		return r, err
 	}
 	open := false
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: open, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
 	}
 	w.passes(6)
 	w.c.mu.Lock()
 	w.c.wsClosed = time.Time{} // a restart: the chore's memory is gone
 	w.c.mu.Unlock()
 	w.passes(3)
-	if msgs := w.only("workspace"); len(msgs) != 1 {
+	if msgs := w.only("does not answer"); len(msgs) != 1 {
 		t.Fatalf("one closure, a restart in it: told %d times: %q", len(msgs), msgs)
 	}
 	open = true
@@ -631,7 +631,7 @@ func TestSelfRepairWorkspaceSpellOutlivesARestart(t *testing.T) {
 	}
 	open = false
 	w.passes(2)
-	if msgs := w.only("workspace"); len(msgs) != 2 {
+	if msgs := w.only("does not answer"); len(msgs) != 2 {
 		t.Fatalf("a new closure not told: %q", msgs)
 	}
 }
@@ -649,11 +649,11 @@ func TestSelfRepairWorkspaceSpellEndsWithNobodyDead(t *testing.T) {
 		}
 		return r, err
 	}
-	w.c.herdr = func(map[string]bus.AgentSnapshot) selfRepairHerdr {
-		return selfRepairHerdr{Up: true, Open: false, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
+	w.c.host = func(map[string]bus.AgentSnapshot) selfRepairHost {
+		return selfRepairHost{Up: true, Open: false, Judge: func(relaunch.Tab, bool) relaunch.Verdict { return relaunch.VerdictBusy }}
 	}
 	w.passes(6)
-	if msgs := w.only("workspace"); len(msgs) != 1 {
+	if msgs := w.only("does not answer"); len(msgs) != 1 {
 		t.Fatalf("first closure: %q", msgs)
 	}
 	alive := w.c.procStart
@@ -664,7 +664,7 @@ func TestSelfRepairWorkspaceSpellEndsWithNobodyDead(t *testing.T) {
 	}
 	w.c.procStart = alive // closed again, coder dead again
 	w.passes(6)
-	if msgs := w.only("workspace"); len(msgs) != 2 {
+	if msgs := w.only("does not answer"); len(msgs) != 2 {
 		t.Fatalf("the next closure not told: %q", msgs)
 	}
 }

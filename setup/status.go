@@ -12,12 +12,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// herdrPlusState is where setup before v0.20 recorded the herdr-plus it
-// installed; only read, to say it is no longer needed.
-func (in *Installer) herdrPlusState() string {
-	return filepath.Join(in.state(), "agentbus", "herdr-plus.ref")
-}
-
 // OurSkillLinks is setup.sh's our_skill_links: the role-skill symlinks
 // install made (into this checkout's skills, the external skills folder or
 // the historical ~/Tools checkout) in SKILLS_DEST, ~/.claude/skills and
@@ -29,7 +23,7 @@ func (in *Installer) OurSkillLinks() []string {
 		dirs = append(dirs, d)
 	}
 	dirs = append(dirs, filepath.Join(home, ".claude", "skills"), filepath.Join(home, ".agents", "skills"))
-	prefixes := []string{in.Repo + "/skills/", SkillsHome(in.Getenv) + "/", home + "/Tools/herdr-plugins/skills/"}
+	prefixes := []string{in.Repo + "/skills/", SkillsHome(in.Getenv) + "/"}
 	var links []string
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
@@ -122,7 +116,7 @@ func (in *Installer) Status(ctx context.Context) int {
 		}
 		in.shadowed(name, filepath.Join(in.Opt.BinDir, name))
 	}
-	for _, script := range []string{"agent-launch", "agent-spawn"} {
+	for _, script := range []string{"agent-launch"} {
 		p := filepath.Join(in.Opt.BinDir, script)
 		_, lerr := os.Lstat(p)
 		switch {
@@ -144,19 +138,6 @@ func (in *Installer) Status(ctx context.Context) int {
 		o.Info("external skills: not installed (" + home + ")")
 	}
 	o.Info("role skill links: " + strconv.Itoa(len(in.OurSkillLinks())))
-	in.pluginStatus(ctx)
-	if _, err := os.Stat(in.herdrPlusState()); err == nil {
-		o.Info("herdr-plus: installed by an older setup, no longer needed: herdr plugin uninstall cloudmanic.herdr-plus")
-	}
-	cfg, _ := os.ReadFile(in.HerdrConfig())
-	switch {
-	case strings.Contains(string(cfg), keybindMark):
-		o.OK("herdr key binding: prefix+up -> " + PluginID + ".projects")
-	case strings.Contains(string(cfg), oldKeybindMark):
-		o.Info("herdr key binding: still herdr-plus's (./setup.sh install moves it to " + PluginID + ")")
-	default:
-		o.Info("herdr key binding: not added")
-	}
 	if lines := in.serviceLines(ctx); len(lines) > 0 {
 		for _, l := range lines {
 			o.Info("project service: " + l)
@@ -232,41 +213,5 @@ func (in *Installer) passwordLine() {
 func (in *Installer) shadowed(name, want string) {
 	if found, err := in.R.LookPath(name); err == nil && found != "" && found != want {
 		in.O.Warn(name + " on PATH is " + found + " (shadows " + want + ")")
-	}
-}
-
-func (in *Installer) pluginStatus(ctx context.Context) {
-	o := in.O
-	if _, err := in.R.LookPath("herdr"); err != nil {
-		o.Info("herdr: not on PATH")
-		return
-	}
-	list, err := in.herdr(ctx, "plugin", "list", "--json")
-	rows, ok := PluginRows(list)
-	if err != nil || !ok {
-		o.Warn("herdr plugin list --json could not be read: the " + PluginID + " registration is unknown")
-		return
-	}
-	r, found := Ours(rows)
-	if !found {
-		o.Info(PluginID + ": not linked into herdr (./setup.sh install)")
-		return
-	}
-	switch {
-	case !sameDir(r.Root, in.Repo):
-		o.Warn(PluginID + ": linked from " + r.Root + ", not from this checkout")
-	case !r.Enabled:
-		o.Warn(PluginID + ": linked from " + r.Root + " but disabled in herdr")
-	default:
-		o.OK(PluginID + ": linked from " + r.Root + " (version " + r.Version + ")")
-	}
-	out, _ := in.herdr(ctx, "plugin", "action", "list")
-	switch pluginActionState(string(out)) {
-	case "ok":
-		o.OK(PluginID + ": Projects picker available (Ctrl+B then Up)")
-	case "noserver":
-		o.Info(PluginID + ": Projects picker not checked (no herdr server running here)")
-	default:
-		o.Warn(PluginID + ": registered but its projects action is missing (check: herdr plugin action list)")
 	}
 }

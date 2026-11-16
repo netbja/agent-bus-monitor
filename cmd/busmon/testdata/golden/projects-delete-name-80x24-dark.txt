@@ -4,7 +4,7 @@
 │  ● answer master    review lot 1? (2 questions)                            4m│
 │╭─ Delete project 'old' ─────────────────────────────────────────────────────╮│
 ││ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch   ││
-││ ○ here · herdr: —                                                          ││
+││ ○ here · holder: —                                                         ││
 ╰│ This is a DEL, not a reset: streams, consumer groups,                      │╯
 ╭│ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │╮
 ││ and the worktrees stay.                                                    │▲

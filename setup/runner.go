@@ -16,7 +16,7 @@ type Cmd struct {
 }
 
 // Runner is the one way setup reaches the outside world (spec: Safety,
-// layer 1): every docker, herdr, git, go, systemctl, launchctl and curl call,
+// layer 1): every docker, git, go, systemctl, launchctl and curl call,
 // and the client CLIs of the model refresh. The real one lives in
 // cmd/agentbus; tests pass one that fails on any command they did not expect.
 type Runner interface {

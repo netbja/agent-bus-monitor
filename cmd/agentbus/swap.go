@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,16 +15,18 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // `agentbus swap <role> --profile <profile> [--now] [--force]` (spec
 // 2026-10-16-quota-resume-and-fallback-design.md §6): replace an agent by the
 // same role on another profile, checking everything that can be checked
 // before anything is closed, and proving the replacement before it reports
-// success. Run inside the project's herdr session, by master after a
-// person's yes, or by the person.
+// success. Run by master after a person's yes (relayed to the dispatcher
+// from master's terminal), or by the person.
 
 // swapDeps are the outside world of a swap; tests replace every one.
 type swapDeps struct {
@@ -46,8 +47,8 @@ type swapDeps struct {
 	PopRetireAfter time.Duration
 }
 
-func realSwapDeps(env []string) swapDeps {
-	return swapDeps{
+func realSwapDeps(env []string, project string) swapDeps {
+	d := swapDeps{
 		Env: os.Getenv,
 		Manifest: func() (*rolecfg.Manifest, error) {
 			path, err := manifestPath(env)
@@ -58,32 +59,32 @@ func realSwapDeps(env []string) swapDeps {
 		},
 		LookPath:       exec.LookPath,
 		ProcStart:      dispatch.ProcStart,
-		Runtime:        dispatch.Herdr{Bin: os.Getenv("HERDR_BIN")},
 		PopRetireAfter: config.Machine(os.Getenv).Duration("dispatch.pop_retire_after"),
+		// The project's holder (herdr exit §4.2): the old terminal closed,
+		// the role started anew on the profile chosen (its own or one of its
+		// fallback_profiles: the holder starts no other).
 		ClosePane: func(ctx context.Context, pane string) error {
-			out, err := exec.CommandContext(ctx, "herdr", "pane", "close", pane).CombinedOutput()
-			if err != nil {
-				return fmt.Errorf("herdr pane close %s: %v: %s", pane, err, strings.TrimSpace(string(out)))
-			}
-			return nil
-		},
-		Spawn: func(ctx context.Context, role, project, profile string) error {
-			repo, err := repoDir(os.Getenv)
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
 			if err != nil {
 				return err
 			}
-			c := exec.CommandContext(ctx, filepath.Join(repo, "scripts", "agent-spawn"), role, project, "--profile", profile)
-			// swap proves the new agent itself: agent-spawn need not wait for it (A10).
-			c.Env = append(os.Environ(), "AGENT_LAUNCH_REQUIRE_BIND=1", "AGENT_SPAWN_WAIT=0")
-			out, err := c.CombinedOutput()
+			return h.Close(ctx, termhost.TermID(pane))
+		},
+		Spawn: func(ctx context.Context, role, project, profile string) error {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
 			if err != nil {
-				return fmt.Errorf("agent-spawn: %v: %s", err, strings.TrimSpace(string(out)))
+				return err
 			}
-			return nil
+			_, err = h.Start(ctx, termhost.Spec{Project: project, Name: role, Profile: profile})
+			return err
 		},
 		Now: time.Now, Sleep: time.Sleep,
 		PIDGone: 15 * time.Second, Proof: 60 * time.Second, Recent: 2 * time.Minute,
 	}
+	if rt, err := dispatchRuntime(project, os.Getenv); err == nil {
+		d.Runtime = rt
+	}
+	return d
 }
 
 const swapUsage = "usage: agentbus swap <role> (--profile <profile> | --back) [--reason <text>] [--now] [--force]"
@@ -176,11 +177,11 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		return fail("no verified pane recorded for %s (agentbus agents): nothing to replace", role)
 	}
 	if start, err := d.ProcStart(snap.PID); err != nil || start != snap.PIDStart {
-		return fail("its recorded process (pid %d) is not running any more: start it with agent-spawn %s %s --profile %s",
-			snap.PID, role, b.Project(), profile)
+		return fail("its recorded process (pid %d) is not running any more: start it with agentbus --project %s pop %s --profile %s",
+			snap.PID, b.Project(), role, profile)
 	}
-	if pane := d.Env("HERDR_PANE_ID"); pane != "" && pane == snap.Pane {
-		return fail("an agent cannot swap itself: run it from master's pane or a terminal")
+	if term := d.Env("AGENTBUS_TERM_ID"); term != "" && (term == snap.Pane || strings.HasSuffix(snap.Pane, "/"+term)) {
+		return fail("an agent cannot swap itself: run it from master's terminal or your own")
 	}
 
 	// Back to its own profile (§11.3): only when something differs — it runs
@@ -253,9 +254,9 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		}
 	}
 	defer end()
-	recovery := fmt.Sprintf("recover with: agent-spawn %s %s (its own profile, %s)", role, b.Project(), own.Profile)
+	recovery := fmt.Sprintf("recover with: agentbus --project %s pop %s (its own profile, %s)", b.Project(), role, own.Profile)
 	if own.Profile != manifestOwn.Profile { // the project's own profile, not roles.toml's
-		recovery = fmt.Sprintf("recover with: agent-spawn %s %s --profile %s (its own profile)", role, b.Project(), own.Profile)
+		recovery = fmt.Sprintf("recover with: agentbus --project %s pop %s --profile %s (its own profile)", b.Project(), role, own.Profile)
 	}
 	// With the intent written, no request or challenge opens on it any more
 	// (refuseWhileSwapping): look again for what opened since the first scan.

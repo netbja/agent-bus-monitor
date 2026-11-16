@@ -114,7 +114,7 @@ func ReadPopFacts(ctx context.Context, b *bus.Bus, rt Runtime, role string, o Po
 		f.Unknown = append(f.Unknown, "pane")
 	} else {
 		f.Pane = rt.Inspect(ctx, f.Snap.Pane)
-		// Closed: herdr knows no pane or agent there, and the process is gone.
+		// Closed: the holder has no terminal or agent there, and the process is gone.
 		f.Closed = f.Pane.Gone && ProcGone(f.Snap, o.ProcStart)
 	}
 	return f

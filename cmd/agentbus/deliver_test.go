@@ -557,7 +557,7 @@ func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
 	dir := t.TempDir()
 	// An explicit manifest that cannot be read refuses, for anyone (reviewer-codex).
 	missing := filepath.Join(dir, "none.toml")
-	for _, env := range [][]string{{"ROLES_TOML=" + missing}, {"ROLES_TOML=" + missing, "HERDR_PANE_ID=p1"},
+	for _, env := range [][]string{{"ROLES_TOML=" + missing}, {"ROLES_TOML=" + missing, "AGENTBUS_TERM_ID=p1"},
 		{"AGENTBUS_REPO=" + dir}} {
 		if err := deliverRoleCheck(env)("coder"); err == nil || !strings.Contains(err.Error(), "cannot read") {
 			t.Errorf("%v: %v", env, err)
@@ -579,7 +579,7 @@ func TestDeliverRoleCheckReadsTheManifest(t *testing.T) {
 	none := func(env []string) func(string) error {
 		return deliverRoleCheckFrom(env, filepath.Join(bin, "roles.toml"))
 	}
-	if err := none([]string{"HERDR_PANE_ID=p1"})("coder"); err == nil {
+	if err := none([]string{"AGENTBUS_TERM_ID=p1"})("coder"); err == nil {
 		t.Error("an agent delivered with no manifest")
 	}
 	if err := none(nil)("charlie"); err != nil {

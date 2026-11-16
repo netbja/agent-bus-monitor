@@ -23,7 +23,7 @@ const (
 )
 
 // runMissions is `agentbus missions`: the conductor process, in the
-// foreground (a herdr tab, like dispatch).
+// foreground (as its service runs it, like dispatch).
 func runMissions(ctx context.Context, b *bus.Bus, args []string, cwd string, stdout, stderr io.Writer) int {
 	args, status := extractBool(args, "--status")
 	args, repo := extractFlag(args, "--repo")
