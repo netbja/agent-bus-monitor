@@ -32,8 +32,9 @@ package main
 // working during each turn, then idle.
 //
 // What it cannot cover: a real Claude Code (its screen is a fake drawn from
-// the claude signature and a captured screen, its hooks are called in
-// process, not by the client), the real launcher (the holder's launch is the
+// the claude signature and a captured screen; its hooks are the real turn
+// hook run as its children, but fired by the fake, not by Claude Code's own
+// hook events), the real launcher (the holder's launch is the
 // test's, not TemplateLaunch running agent-launch), systemd or launchd (the
 // services manager is a fake), docker and the production broker (never
 // touched). The self-repair's grace (60 s, three reads) is passed on a
