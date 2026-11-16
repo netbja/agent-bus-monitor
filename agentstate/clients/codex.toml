@@ -14,8 +14,13 @@ ready = ['(?m)^(?:\x1b\[[0-9;]*m)*›(?:\x1b\[[0-9;]*m| )*\x1b\[2m']
 busy = []
 modal = ['enter/esc latest']
 dialog = ['(?s)Hooks need review.*Trust all and continue']
-# Blocked: no permission menu captured yet (step 3); the hooks review above is a Dialog.
-blocked = []
+# Blocked: a question menu, a line ending in "?" right above the `› 1.` selector (blank lines
+# are not counted) and a second option `2.` below it, its question as "what" (the input line starts
+# with `›` too: a typed "1. …" under a question is no menu, foureyes). Captured live 2026-11-16: the rate-limit menu
+# "Approaching rate limits / Switch to <model> for lower credit usage? / › 1. Switch to …"
+# (screens/codex-rate-limit.txt), which held reviewer-codex 15 minutes while the dispatcher read
+# "unknown". The hooks review above is a Dialog (no question mark).
+blocked = ['(?m)^[ \t]*(?P<what>[^\n]*\S\?)[ \t]*\n[ \t]*› 1\. [^\n]*\n[ \t]*2\. ']
 
 # Background work: the process tree is never authoritative (tools run under a shared local
 # app-server daemon); the subagent hooks and the "Background terminals" list are to verify (step 3).
@@ -23,3 +28,9 @@ blocked = []
 authoritative = []
 helpers = []
 screen = []
+
+# The attach prefix (herdr exit spec 4.6, 4.9): F12 free by the f12-at-input probe, codex-cli 0.169.0
+# (agentbus term record codex f12-at-input, 2026-11-16, testdata/raw/codex/f12-at-input.jsonl):
+# between the two presses (legacy, kitty) Codex only redraws the same frame; the input keeps abc.
+[keys]
+f12 = "free"

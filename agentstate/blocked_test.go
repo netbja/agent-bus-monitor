@@ -17,6 +17,9 @@ func TestBlockedSignatures(t *testing.T) {
 		{"agy", "agy153-approval", "touch ap1"},
 		{"agy", "agy-approval", "sleep 8"},
 		{"claude", "claude-modal", "Pick red or blue?"},
+		// Codex's rate-limit menu (2026-11-16, reviewer-codex sat on it 15 min
+		// while the dispatcher said only "agent unknown"), captured live.
+		{"codex", "codex-rate-limit", "Switch to gpt-6-luna for lower credit usage?"},
 	} {
 		blocked, what := sigs[c.client].BlockedOn(readScreen(t, c.screen+".txt"))
 		if !blocked || what != c.what {
@@ -29,7 +32,7 @@ func TestBlockedSignatures(t *testing.T) {
 	}
 	for _, e := range entries {
 		name := strings.TrimSuffix(e.Name(), ".txt")
-		if name == "agy153-approval" || name == "agy-approval" || name == "claude-modal" || name == "README.md" {
+		if name == "agy153-approval" || name == "agy-approval" || name == "claude-modal" || name == "codex-rate-limit" || name == "README.md" {
 			continue
 		}
 		client := strings.SplitN(name, "-", 2)[0]
@@ -54,7 +57,7 @@ func TestBlockedSignatures(t *testing.T) {
 	if b, _ := sigs["agy"].BlockedOn(readScreen(t, "agy153-approval.txt") + strings.Repeat("later output\n", 20)); b {
 		t.Error("a menu 20 lines above the bottom read as blocked")
 	}
-	for _, c := range []string{"codex", "kimi", "grok"} {
+	for _, c := range []string{"kimi", "grok"} {
 		if len(sigs[c].Blocked) != 0 {
 			t.Errorf("%s has a Blocked signature no fixture pins", c)
 		}
@@ -161,5 +164,25 @@ func TestBlockedEpisodeAfterANewPid(t *testing.T) {
 	e, ev = e.Step(Observation{PID: 8, At: t0.Add(61 * time.Second), Hook: true, HookSince: t0.Add(time.Minute)})
 	if ev == nil || ev.Kind != Blocked || ev.Line() != "blocked: coder (claude) since 09:01:00" {
 		t.Fatalf("new episode: %+v", ev)
+	}
+}
+
+// The rate-limit menu is never an idle prompt: its `› 1.` selector is not
+// Codex's ready input box, so a wake is never typed into the menu.
+func TestCodexRateLimitMenuIsNotReady(t *testing.T) {
+	sig := Signatures()["codex"]
+	if ready, _ := sig.Match(readScreen(t, "codex-rate-limit.txt")); ready {
+		t.Error("the rate-limit menu reads ready")
+	}
+	// A reply ending in a question with "1. …" typed in the input is not a
+	// menu: Codex's input line starts with › too (foureyes). A menu has a
+	// second option.
+	typed := "• Should I also update the README?\n\n› 1. fix the tests\n\n  gpt-6 default · ~/x\n"
+	if b, _ := sig.BlockedOn(typed); b {
+		t.Error("a question above a typed '1. …' input read as blocked")
+	}
+	// Answered, the menu is gone and the ready box is back: not blocked.
+	if b, _ := sig.BlockedOn(readScreen(t, "codex-rate-limit.txt") + strings.Repeat("later output\n", 20)); b {
+		t.Error("a menu 20 lines above the bottom read as blocked")
 	}
 }

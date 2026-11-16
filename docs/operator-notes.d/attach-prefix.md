@@ -6,5 +6,5 @@
   effect. F12 stays the default: on the person's machine it was the outer herdr, not the desktop, that took F12.
   `attach.prefix` is set in busmon's Settings (Display), with attach's own rule for a prefix from the setting:
   refused unless every client the project's roles run on (own and fallback profiles) records it `free`, naming
-  each other client and its free keys. Today only F12 is recorded free, for Claude Code and Grok: with a Codex,
-  Kimi or agy role, attach to it still needs `--prefix`.
+  each other client and its free keys. Today only F12 is recorded free, for Claude Code, Grok and Codex (codex-cli 0.169.0, its
+  `f12-at-input` probe, 2026-11-16): with a Kimi or agy role, attach to it still needs `--prefix`.
