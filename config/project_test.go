@@ -34,10 +34,10 @@ func TestProjectValue(t *testing.T) {
 		want          any
 		source        string
 	}{
-		{"dispatch.quota_warn", "demo", 80.0, "config.toml [project.demo]"}, // the project's table first
+		{"dispatch.quota_warn", "demo", 80.0, "config.toml [project.demo]"},  // the project's table first
 		{"dispatch.quota_drain", "demo", 90.0, "config.toml [project.demo]"}, // over the env file's 88 (Q4b)
-		{"dispatch.quota_hold", "demo", 96.0, "env file"},                     // then the env file
-		{"dispatch.quota_warn", "nope", 70.0, "config.toml"},                  // then the machine key
+		{"dispatch.quota_hold", "demo", 96.0, "env file"},                    // then the env file
+		{"dispatch.quota_warn", "nope", 70.0, "config.toml"},                 // then the machine key
 		{"dispatch.quota_max_age", "demo", Lookup1("dispatch.quota_max_age").Default, "default"},
 	} {
 		got := ProjectValue(f, env, c.project, c.name)

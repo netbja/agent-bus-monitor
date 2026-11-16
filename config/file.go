@@ -53,16 +53,16 @@ func (w Warning) String() string {
 // File is a loaded settings file: the registry values it sets, valid ones
 // only, and its warnings.
 type File struct {
-	Label     string
-	Path      string
-	Exists    bool
-	Warnings  []Warning
-	values    map[string]fileValue
-	refused   map[string]fileValue // a FailClosed key's line its rule refuses (value nil)
+	Label    string
+	Path     string
+	Exists   bool
+	Warnings []Warning
+	values   map[string]fileValue
+	refused  map[string]fileValue // a FailClosed key's line its rule refuses (value nil)
 	// projects are the [project.<name>] tables: name -> key -> value, only
 	// for the Project keys (quota settings §2.2).
-	projects map[string]map[string]fileValue
-	endpoints []Endpoint           // config.toml's [llm.<name>] tables (llm.go)
+	projects  map[string]map[string]fileValue
+	endpoints []Endpoint // config.toml's [llm.<name>] tables (llm.go)
 }
 
 type fileValue struct {

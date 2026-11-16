@@ -21,12 +21,12 @@ import (
 
 // QuotaConfig enables the policy; a nil Read disables it.
 type QuotaConfig struct {
-	Read    func(ctx context.Context) []quota.Reading
-	Every   time.Duration // collection interval (default 60 s)
-	WarnPct  float64 // default 85
-	DrainPct float64 // start nothing new above (quota settings §2.1); default WarnPct
-	HoldPct  float64 // default 95
-	MaxAge  time.Duration // a reading older than this is unknown for policy (default 30 min)
+	Read     func(ctx context.Context) []quota.Reading
+	Every    time.Duration // collection interval (default 60 s)
+	WarnPct  float64       // default 85
+	DrainPct float64       // start nothing new above (quota settings §2.1); default WarnPct
+	HoldPct  float64       // default 95
+	MaxAge   time.Duration // a reading older than this is unknown for policy (default 30 min)
 	// LongHold (v0.15 §5): a hold whose reset is further away than this asks
 	// for a decision, once per episode (default 2 h; negative disables).
 	LongHold time.Duration
