@@ -21,6 +21,7 @@
     quiet-agent, idle-implementer and idle-master (`held: its login expired`).
   - **busmon:** shows `coder: Claude login expired Thu 15:40, held` under the Accounts cards and in
     the agent's detail.
-  - **Not yet (part 3b, after herdr-10b):** self-repair's relaunch decision and `popfacts`'
-    `Held`. Until then, self-repair may relaunch a login-held agent, and the CLI's pop facts may
-    judge its pop done. This is harmless but wasteful, since the new client is not logged in either.
+  - **Self-repair and pop facts (part 3b):** self-repair holds a login-held agent (hold kind
+    `login`, "its Claude login expired: /login in its pane releases it") and never relaunches it, since
+    a new process would hit the same expired login. `ReadPopFacts` gives `LoginHeld`, so a login-held
+    pop is never judged done ("its login expired (held)").

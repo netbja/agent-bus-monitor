@@ -134,8 +134,11 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	if f.Snap == nil {
 		return nil
 	}
-	if !f.Held {
-		f.Held = l.heldBy(a, f.Snap)
+	switch l.heldReason(a, f.Snap) { // this pass's view, beside the marks ReadPopFacts read
+	case bus.HeldQuota:
+		f.Held = true
+	case bus.HeldLogin:
+		f.LoginHeld = true
 	}
 	done, why := PopDone(f)
 	if bg := f.Pane.BackgroundSkip(); !done && bg != "" && why == bg {

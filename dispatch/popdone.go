@@ -32,6 +32,7 @@ type PopFacts struct {
 	HandoffReport     string     // its report id, named to master for a closed pop
 	Pane              Inspection // a live inspection of its pane
 	Paused, Held      bool
+	LoginHeld         bool // its own login expired: hold-login:<role> (login-updates r9 §3.6)
 	// Closed: its verified process is gone and the holder no longer has its
 	// pane or sees an agent in it (pop-closed-by-hand: closed by hand,
 	// plain retire or herdr). Nothing can declare, clear or be inspected
@@ -114,6 +115,8 @@ func PopDone(f PopFacts) (bool, string) {
 		return no("the project is paused")
 	case f.Held:
 		return no("its provider is held")
+	case f.LoginHeld:
+		return no("its login expired (held)")
 	}
 	return true, ""
 }

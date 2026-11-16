@@ -196,6 +196,17 @@ func TestSelfRepairFactsSources(t *testing.T) {
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.ProviderHeld }},
 		{"another provider held", func(r *selfRepairReads) { r.Marks["hold:openai"] = "1799999999" },
 			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return !a.ProviderHeld }},
+		{"its login held", func(r *selfRepairReads) { r.Marks[bus.LoginHoldField("coder")] = "1794777000000" },
+			func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.LoginHeld && !a.ProviderHeld }},
+		{"another agent's login held", func(r *selfRepairReads) { r.Marks[bus.LoginHoldField("foureyes")] = "1794777000000" },
+			func(f selfrepair.Facts, a selfrepair.Agent) bool {
+				for _, o := range f.Agents {
+					if o.Name == "foureyes" && !o.LoginHeld {
+						return false
+					}
+				}
+				return !a.LoginHeld
+			}},
 		{"on a quota fallback", func(r *selfRepairReads) {
 			r.Fallbacks = map[string]bus.FallbackRecord{"coder": {OwnProfile: "opus", OwnProvider: "anthropic", Profile: "kimi", Provider: "moonshot"}}
 		}, func(_ selfrepair.Facts, a selfrepair.Agent) bool { return a.Fallback == "kimi" }},

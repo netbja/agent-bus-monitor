@@ -64,6 +64,9 @@ type Agent struct {
 	// model: its endpoint answers); ProviderHeld: the coordinator holds it.
 	ProviderFresh bool
 	ProviderHeld  bool
+	// LoginHeld: its own login expired (hold-login:<agent>, login-updates r9
+	// §3.6): a new process would hit the same expired login.
+	LoginHeld bool
 	// Provider names it (its own profile's), and ProviderSince is its last
 	// good reading (zero: none): a network hold tells master since when.
 	Provider      string
@@ -134,6 +137,7 @@ const (
 	HoldWorkspace = "workspace"
 	HoldQuota     = "quota"
 	HoldNetwork   = "network"
+	HoldLogin     = "login"
 )
 
 func short(d time.Duration) string {
@@ -205,6 +209,8 @@ func decideOne(f Facts, a Agent) Decision {
 	switch {
 	case a.ProviderHeld:
 		return hold(HoldQuota, "its provider's quota is held")
+	case a.LoginHeld:
+		return hold(HoldLogin, "its Claude login expired: /login in its pane releases it")
 	case !a.ProviderFresh:
 		return hold(HoldNetwork, "its provider unreachable (no fresh quota read in 5 min)")
 	}
