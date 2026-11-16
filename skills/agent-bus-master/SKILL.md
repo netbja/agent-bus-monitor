@@ -660,7 +660,7 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    PR never leaves the implementer idle, nor does a pending review:** while N is in review or waits for
    its merge, dispatch the next *independent* board item at once, one that touches no package of
    the work in review; the implementer takes it and tells you which. "No stacked PRs" means one
-   PR per step from `origin/main`, never "wait for the merge".
+   PR per step from `origin/<base>` (the project's delivery base), never "wait for the merge".
 3. **`agentbus reports --json` entries carry the full text in `.Full`** — no separate lookup needed,
    the plain-text tail view is the one that truncates.
 4. **If you poll `agentbus reports --json` yourself (e.g. from a background watcher), track the last
@@ -727,6 +727,9 @@ agentbus deliver <branch> --task <plan-task>     # subject and title from the pl
 agentbus deliver <branch> --subject <s> [--base <b>] [--title <t>] [--body-file <f>] [--dry-run]
 ```
 
+The base is `--base`, else the project template's `[delivery] base`, else the machine's
+`delivery.base` (`main` by default); `agentbus config --project <p>` shows which applies.
+
 The request's description is your `--body-file` (what, why, how it was validated, limits; each
 line screened for credentials), followed by the verdicts; without it, the commits' subjects.
 
@@ -761,6 +764,35 @@ line screened for credentials), followed by the verdicts; without it, the commit
   it back). A drop names that head only: a new approve on another head is new work.
 - Exit 2 means delivered but the plan link was not recorded (say it, record it by hand). A push
   git refuses (the remote branch is ahead) stops it with git's own message.
+
+## Promotion: `dev` → `main`
+
+Where a project delivers to `dev` (decision
+[dev branch flow](../../docs/memory/decisions/2026-11-16-dev-branch-flow.md), spec
+`docs/superpowers/specs/2026-11-16-dev-branch-flow-design.md` §5), `main` takes nothing but
+promotions: fast-forwards of `main` to a `dev` head that passed the check. You run them; the
+person decides each one. Until `agentbus promote` exists (the spec's step 4), by hand:
+
+1. **The check, on a clean worktree at the `dev` head `S`** (`git worktree add <tmp> S`, never the
+   team's checkout), with a disposable Redis started for it:
+   `go build ./... && go vet ./... && GOOS=darwin go build ./...`;
+   `AGENTBUS_TEST_REDIS_URL=<disposable> go test ./... -count=1`;
+   `AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<disposable> go test ./cmd/agentbus -run '^TestReleaseEndToEnd$' -count=1 -v`,
+   whose output must hold `--- PASS: TestReleaseEndToEnd` (a SKIP or no line fails it);
+   `go run ./cmd/agentbus mem check`.
+2. **A failure is yours, never the person's:** nothing is pushed and no ask is opened. Fix `dev`
+   (a task to an implementer, a PR into `dev`), then check the new head.
+3. **Passed: propose it in For you** with `agentbus ask`: the sha `S`, the PRs it carries
+   (`git log --first-parent --oneline origin/main..S`), the check's lines, and the tag you propose
+   (a tag is on the person's word only).
+4. **On their yes, push `S` and nothing newer:** `git push origin S:refs/heads/main` (git refuses
+   it unless it is a fast-forward), then the tag if they named one, and report the sha, the PRs and
+   the PASS line to them (`agentbus report master --to <person>`).
+
+Hotfixes go the same way by default: a fix into `dev`, then a promotion. `main` is protected and
+stays the repository's default branch, so a pull request from outside the team targets `main`:
+retarget it to `dev` (`gh pr edit <n> --base dev`) before any review. A retargeted PR keeps its
+approvals: deliver's proof binds the head, never the base.
 
 ## Record the decisions you make, or they die in the pane
 

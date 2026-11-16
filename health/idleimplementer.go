@@ -127,7 +127,7 @@ func IdleImplementerWakes(in IdleImplementerInput, master string) []StallWake {
 	for _, o := range over {
 		sum := sha256.Sum256([]byte(o.name + "\n" + strings.Join(o.tasks, "\n")))
 		out = append(out, StallWake{Mark: "stall-implementer:" + o.name, Episode: hex.EncodeToString(sum[:8]), Target: master,
-			Text: fmt.Sprintf("Stall guard: %s idle %s while requested for it: %s. Dispatch the next independent item (no stacked PRs: one PR per step from origin/main), or tell %s why it waits.",
+			Text: fmt.Sprintf("Stall guard: %s idle %s while requested for it: %s. Dispatch the next independent item (no stacked PRs: one PR per step from origin/<base>), or tell %s why it waits.",
 				o.name, minutes(o.idle), taskList(o.tasks), o.name)})
 	}
 	return out

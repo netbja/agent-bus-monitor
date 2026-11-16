@@ -13,6 +13,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [PRs merge into the project's base (dev here); main takes only master's promotions, on the person's yes (active)](decisions/2026-11-16-dev-branch-flow.md)
 - [herdr is gone: the holder hosts every agent's terminal (active)](decisions/2026-11-15-herdr-exit.md)
 - [A finished pop is ended by the dispatcher itself, master told without waking (active)](decisions/2026-11-13-dispatcher-ends-done-pop.md)
 - [The dispatcher's self-repair may relaunch a dead agent in a new pane; services may start at login (option); R1-R4 built (steps 7b, 8), macOS identity (step 10) (active)](decisions/2026-11-09-self-repair-pane-writer.md)

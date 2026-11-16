@@ -64,7 +64,7 @@ func TestCoder2Role(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, w := range []string{"own git worktree per task", "origin/main", "Never push", "One task at a time",
+	for _, w := range []string{"own git worktree per task", "origin/<base>", "Never push", "One task at a time",
 		"Do not touch a package another\n  task has in flight", "agentbus board", "Two coders never take the same task"} {
 		if !strings.Contains(string(md), w) {
 			t.Errorf("roles/coder2.md lacks %q", w)
@@ -84,9 +84,16 @@ func TestNeverIdleOnAnUnmergedPR(t *testing.T) {
 			t.Fatal(err)
 		}
 		text := strings.Join(strings.Fields(string(b)), " ")
-		for _, want := range []string{"unmerged PR never leaves", "independent", "never", "origin/main"} {
+		// dev branch flow (2026-11-16): one PR per step from the project's
+		// delivery base, never main by name (these files serve every project).
+		for _, want := range []string{"unmerged PR never leaves", "independent", "never", "origin/<base>"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("%s lacks %q", f, want)
+			}
+		}
+		for _, bad := range []string{"from `origin/main`", "from origin/main", "--is-ancestor <its head> origin/main"} {
+			if strings.Contains(text, bad) {
+				t.Errorf("%s still names main as the base: %q", f, bad)
 			}
 		}
 		// foureyes: no surface may call work in review "in flight" or "in hand".

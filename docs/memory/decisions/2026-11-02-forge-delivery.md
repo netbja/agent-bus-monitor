@@ -56,7 +56,9 @@ mode, pushes nothing and leaves the merge to the person.
 
 Every project on a machine with this release. The forge comes from one machine-wide setting,
 `delivery.forge` (`auto` reads `origin`), never a per-project value; `delivery.base` is the target
-branch.
+branch. Amended 2026-11-16 for the base only ([dev branch flow](2026-11-16-dev-branch-flow.md)): a
+project template's `[delivery] base` is above `delivery.base`, and promoting `dev` to `main` is
+master's, on the person's yes.
 
 ## Evidence
 
