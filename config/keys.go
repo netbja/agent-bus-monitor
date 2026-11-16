@@ -444,7 +444,7 @@ var Keys = []*Key{
 	// one setting for the machine, never read from a project's env file. A
 	// project's template may name its own base ([delivery] base, rolecfg.
 	// DeliveryBase, dev-branch-flow §4.1), above delivery.base.
-	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver", MachineOnly: true,
+	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver, dispatch", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if isForge(raw) {
 				return raw, envUse
@@ -457,7 +457,7 @@ var Keys = []*Key{
 			}
 			return nil, "want auto, github, gitlab, bitbucket, none or local"
 		}},
-	{Name: "delivery.base", Env: "AGENT_BUS_DELIVERY_BASE", Kind: String, Default: "main", ReadBy: "agentbus deliver, agentbus missions", MachineOnly: true,
+	{Name: "delivery.base", Env: "AGENT_BUS_DELIVERY_BASE", Kind: String, Default: "main", ReadBy: "agentbus deliver, agentbus missions, dispatch", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if ValidBranchName(raw) {
 				return raw, envUse

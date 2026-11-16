@@ -39,7 +39,7 @@ func DeliveryBase(env func(string) string, project string) (base string, ok bool
 	if b == "" {
 		return "", false, nil
 	}
-	if !config.ValidBranchName(b) || b == "HEAD" {
+	if !config.ValidBranchName(b) { // HEAD included
 		return "", false, fmt.Errorf("%s: [delivery] base %q is not a valid branch name", path, b)
 	}
 	return b, true, nil
