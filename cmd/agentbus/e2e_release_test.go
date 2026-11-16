@@ -22,6 +22,15 @@ package main
 //     wiring: serviceSelfRepair) relaunches it on the holder, resuming its
 //     recorded session, proved by the new process's bind.
 //
+// The gate's command (it fails, never skips, without a broker):
+//
+//	AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<isolated disposable broker> \
+//	  go test ./cmd/agentbus -run '^TestReleaseEndToEnd$' -count=1 -v
+//
+// The turn hooks run as the fake client's children, as Claude Code runs
+// them, so the bus proves them by their ancestors; the test sees coder
+// working during each turn, then idle.
+//
 // What it cannot cover: a real Claude Code (its screen is a fake drawn from
 // the claude signature and a captured screen, its hooks are called in
 // process, not by the client), the real launcher (the holder's launch is the
@@ -37,6 +46,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -59,8 +69,18 @@ import (
 
 // The test binary doubles as the fake client the holder runs.
 func TestMain(m *testing.M) {
-	if os.Getenv("AGENTBUS_E2E_FAKE") == "claude" {
+	switch os.Getenv("AGENTBUS_E2E_FAKE") {
+	case "claude":
 		e2eFakeClaude()
+		return
+	case "turnhook": // a hook the client runs as its child, as Claude Code does
+		turnHook([]string{os.Getenv("AGENTBUS_E2E_HOOK")}, os.Environ(), os.Stdin, io.Discard, func(ctx context.Context, project, agent, state string) error {
+			err := realTurnFlip(ctx, project, agent, state)
+			if err != nil {
+				e2eLog("turn %s: %v", state, err)
+			}
+			return err
+		}, func(string, string, string) {})
 		return
 	}
 	os.Exit(m.Run())
@@ -126,9 +146,17 @@ func e2eFakeClaude() {
 	if err := b.RecordResume(ctx, agent, chain, "", session); err != nil {
 		e2eLog("record resume: %v", err)
 	}
+	// The turn hooks run as the client's children, as Claude Code runs them:
+	// the bus proves the caller by its ancestors.
+	exe, _ := os.Executable()
 	hook := func(which, event, prompt string) {
 		in, _ := json.Marshal(map[string]string{"hook_event_name": event, "session_id": session, "prompt": prompt})
-		turnHook([]string{which}, os.Environ(), bytes.NewReader(in), io.Discard, realTurnFlip, func(string, string, string) {})
+		c := exec.Command(exe, "-test.run=^$")
+		c.Env = append(os.Environ(), "AGENTBUS_E2E_FAKE=turnhook", "AGENTBUS_E2E_HOOK="+which)
+		c.Stdin = bytes.NewReader(in)
+		if err := c.Run(); err != nil {
+			e2eLog("hook %s: %v", which, err)
+		}
 	}
 	hook("end", "SessionStart", "")
 	// Its boot steps (the boot line's turn): presence published as
@@ -280,7 +308,14 @@ func until(d time.Duration, cond func() bool) bool {
 	return cond()
 }
 
+// e2eGate is set by the release gate (dev -> main): the test must run, so a
+// missing broker fails it instead of skipping it (a skip reads ok).
+const e2eGate = "AGENTBUS_RELEASE_GATE"
+
 func TestReleaseEndToEnd(t *testing.T) {
+	if os.Getenv(e2eGate) == "1" && os.Getenv("AGENTBUS_TEST_REDIS_URL") == "" {
+		t.Fatal("release gate: AGENTBUS_TEST_REDIS_URL must name an isolated disposable broker; the release test does not skip under the gate")
+	}
 	testredis.Configure(t)
 	ctx := context.Background()
 
@@ -461,6 +496,14 @@ func TestReleaseEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := "drained " + "1"
+		// The turn hook's start: working while the turn runs (the fake's turn
+		// lasts 300 ms), so the idle after it is the Stop hook's, not the boot's.
+		if !until(20*time.Second, func() bool {
+			snaps, _ := b.Agents(ctx)
+			return snaps["coder"].State == "working"
+		}) {
+			t.Fatalf("wake %d: coder never read working: the turn hooks did not run", i+1)
+		}
 		var sc string
 		if !until(20*time.Second, func() bool {
 			sc, _ = w.screen(t, "coder")
