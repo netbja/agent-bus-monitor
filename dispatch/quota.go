@@ -30,6 +30,18 @@ type QuotaConfig struct {
 	// for a decision, once per episode (default 2 h; negative disables).
 	LongHold time.Duration
 	Now      func() time.Time
+	// DateFormat is display.date_format, read at each message (quota
+	// settings §2.3); nil: the relative default.
+	DateFormat func() string
+}
+
+// resetLabel is a window's reset in the person's format, at now.
+func (q QuotaConfig) resetLabel(w quota.Window, now time.Time) string {
+	format := ""
+	if q.DateFormat != nil {
+		format = q.DateFormat()
+	}
+	return quota.ResetLabel(w.Reset(), now, format)
 }
 
 func (q QuotaConfig) filled() QuotaConfig {
@@ -154,7 +166,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				continue // the same window, its reset read a few seconds off: warned already
 			}
 			msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish what is in flight, start nothing new.",
-				p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
+				p, w.UsedPct, w.Name, q.resetLabel(w, now))
 			if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, bus.CmdDirective, msg); err != nil {
 				return err
 			}
@@ -438,6 +450,7 @@ func (l *loop) agentsWithWork(ctx context.Context, snaps map[string]bus.AgentSna
 // master, once per window (run-budget §4): the warn's mark extended with the
 // agent.
 func (l *loop) quotaWarnAgents(ctx context.Context, p string, w quota.Window, snaps map[string]bus.AgentSnapshot, work map[string]bool, marks map[string]string) error {
+	q := l.cfg.Quota.filled()
 	names := make([]string, 0, len(snaps))
 	for name := range snaps {
 		names = append(names, name)
@@ -452,7 +465,7 @@ func (l *loop) quotaWarnAgents(ctx context.Context, p string, w quota.Window, sn
 			continue
 		}
 		msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish your step, commit work in progress on your branch, report what is left, then status done. Start nothing new.",
-			p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
+			p, w.UsedPct, w.Name, q.resetLabel(w, q.Now()))
 		if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, name, bus.CmdDirective, msg); err != nil {
 			return err
 		}
@@ -470,7 +483,8 @@ func (l *loop) quotaDrainRun(ctx context.Context, p string, w quota.Window) erro
 	if _, _, err := l.b.FencedRunDrain(ctx, l.token, bus.RunWhyQuota(p)); err != nil {
 		return err
 	}
-	return l.quotaDrainTell(ctx, fmt.Sprintf("%.0f%%, %s, resets %s", w.UsedPct, w.Name, w.Reset().Local().Format("15:04")))
+	q := l.cfg.Quota.filled()
+	return l.quotaDrainTell(ctx, fmt.Sprintf("%.0f%%, %s, resets %s", w.UsedPct, w.Name, q.resetLabel(w, q.Now())))
 }
 
 // quotaDrainTell tells master and the person that the run drains for a

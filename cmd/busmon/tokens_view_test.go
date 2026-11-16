@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // tokFixtureState is today's shape: this project busy and partial, one
@@ -379,16 +380,16 @@ func TestTokensPageAccountCards(t *testing.T) {
 	}
 	for _, width := range []int{70, 80, 120, 190} {
 		lines := tokensPage(iconsOff, tokFixtureState(now), budgets, nil, nil, "agent-bus-monitor", now, width, false, barView{}, true)
-		page := linesText(lines)
+		page := strings.Join(strings.Fields(linesText(lines)), " ") // a wrapped sentence reads as one
 		for _, l := range lines {
 			if l.Width() > width {
 				t.Fatalf("%d: a line is %d cells: %q", width, l.Width(), l.text())
 			}
 		}
 		for _, s := range []string{"CLAUDE", "7d " + GlyphNone + " 86%", "CODEX", // the header's names (foureyes)
-			GlyphNone + " resets " + now.Add(2*time.Hour).Local().Format("15:04"),
+			GlyphNone + " resets " + quota.ResetLabel(now.Add(2*time.Hour), now, quota.DateRelative),
 			"On track: you should reach the reset with room to spare.",
-			"At this pace the limit comes around " + now.Add(60*time.Minute).Local().Format("15:04") + ", before the " + now.Add(4*time.Hour).Local().Format("15:04") + " reset."} {
+			"At this pace the limit comes around " + quota.ResetLabel(now.Add(60*time.Minute), now, quota.DateRelative) + ", before its reset, " + quota.ResetLabel(now.Add(4*time.Hour), now, quota.DateRelative) + "."} {
 			if !strings.Contains(page, s) {
 				t.Errorf("%d: the page lacks %q:\n%s", width, s, page)
 			}
@@ -420,7 +421,7 @@ func TestPaceSentenceAtTheLimit(t *testing.T) {
 	now := shellNow
 	reset := now.Add(40 * time.Minute)
 	ws := []bus.BudgetWindow{{Name: "5h", UsedPct: 100, ResetsAt: reset.Unix(), ObservedAt: now.UnixMilli()}}
-	if got, want := paceSentence(bus.BudgetSnapshot{Windows: ws}, now), "Limit reached: it resets at "+reset.Local().Format("15:04")+"."; got != want {
+	if got, want := paceSentence(bus.BudgetSnapshot{Windows: ws}, now), "Limit reached: it resets "+quota.ResetLabel(reset, now, quota.DateRelative)+"."; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

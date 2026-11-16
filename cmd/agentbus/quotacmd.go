@@ -44,6 +44,7 @@ func runQuota(args []string, out, errw io.Writer) int {
 		return 0
 	}
 	now := time.Now()
+	format := config.Machine(os.Getenv).String("display.date_format")
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "PROVIDER\tWINDOW\tUSED\tRESETS\tOBSERVED\tSOURCE")
 	for _, r := range rs {
@@ -60,16 +61,22 @@ func runQuota(args []string, out, errw io.Writer) int {
 			continue
 		}
 		for _, w := range r.Windows {
-			resets := "past"
-			if d := w.Reset().Sub(now); d > 0 {
-				resets = "in " + roundDur(d)
-			}
-			fmt.Fprintf(tw, "%s\t%s\t%.0f%%\t%s\t%s ago\t%s\n", r.Provider, w.Name, w.UsedPct, resets,
+			fmt.Fprintf(tw, "%s\t%s\t%.0f%%\t%s\t%s ago\t%s\n", r.Provider, w.Name, w.UsedPct, quotaResets(w, now, format),
 				roundDur(now.Sub(time.UnixMilli(r.ObservedAt))), r.Source)
 		}
 	}
 	tw.Flush()
 	return 0
+}
+
+// quotaResets is a window's RESETS cell: how long, and the reset dated in
+// format (display.date_format, quota settings §2.3); "past" once passed.
+func quotaResets(w quota.Window, now time.Time, format string) string {
+	d := w.Reset().Sub(now)
+	if d <= 0 {
+		return "past"
+	}
+	return "in " + roundDur(d) + " (" + quota.ResetLabel(w.Reset(), now, format) + ")"
 }
 
 // runStatusline is Claude Code's statusLine: it records the rate-limit
@@ -208,6 +215,9 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 	if q.LongHold = settings.Duration("dispatch.quota_long_hold"); q.LongHold == 0 {
 		q.LongHold = -1 // 0 = off
 	}
+	// display.date_format, from config.toml at each message: a change in
+	// busmon's Settings applies with no restart (quota settings §2.3).
+	q.DateFormat = func() string { return config.Machine(getenv).String("display.date_format") }
 	return q
 }
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // A row padded after a bar keeps the bar's colour but never its track: the
@@ -93,7 +94,7 @@ func TestTokensAccountsCards(t *testing.T) {
 // A hold is never dropped for room: the card's head says it.
 func TestTokensAccountsKeepAHold(t *testing.T) {
 	holds := map[string]int64{"openai": shellNow.Add(40 * time.Minute).Unix()}
-	want := "held until " + shellNow.Add(40*time.Minute).Local().Format("15:04")
+	want := "held until " + quota.ResetLabel(shellNow.Add(40*time.Minute), shellNow, quota.DateRelative)
 	for _, width := range []int{190, 120, 80, 66} {
 		card := cardOf(tokAccounts(width, holds), "openai")
 		if len(card) == 0 || !strings.Contains(card[0], want) {

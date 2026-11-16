@@ -352,7 +352,10 @@ func TestTokensPageBarsSlide(t *testing.T) {
 	at := shellNow.Add(time.Second)
 	m = pollAgain(t, m, calm(80), at)
 	start := row(m)
-	m = step(t, m, fadeMsg(at.Add(300*time.Millisecond)))
+	// Mid-slide at 150 ms of barSlideFor's 500: the card's dated reset label
+	// (quota settings §2.3) leaves the bar 40 cells at this width, so a later
+	// frame already rounds to the end value.
+	m = step(t, m, fadeMsg(at.Add(150*time.Millisecond)))
 	mid := row(m)
 	m = step(t, m, fadeMsg(at.Add(600*time.Millisecond)))
 	end := row(m)

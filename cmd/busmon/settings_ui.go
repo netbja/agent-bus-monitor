@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // The settings page's interaction (spec docs/superpowers/specs/2026-11-01-busmon-config-page-mockups.md,
@@ -72,7 +73,8 @@ var themeChoices = []string{"auto", "dark", "light"}
 // settingChoices are the keys chosen with ←→ among their values, in the
 // page's order (busmon-icons: display.icons joins the theme).
 var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont},
-	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}, "display.work_layout": {"auto", "list", "kanban"}}
+	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}, "display.work_layout": {"auto", "list", "kanban"},
+	"display.date_format": quota.DateFormats}
 
 // settingsMsg is the rows read again, after an open or a write.
 type settingsMsg struct {
@@ -211,6 +213,9 @@ func (m *Model) applySettings(key string) string {
 		cur.NoFollow = ns.NoFollow
 		m.lists.activity.SetFollow(!cur.NoFollow)
 		m.syncPause()
+		return "applied and saved"
+	case "display.date_format": // quota settings §2.3: the next frame dates every reset with it
+		cur.DateFormat, dateFormat = ns.DateFormat, ns.DateFormat
 		return "applied and saved"
 	case "display.work_layout": // requests-plan-redesign: the next frame draws it
 		cur.WorkLayout = ns.WorkLayout
@@ -1005,6 +1010,7 @@ var settingHelps = map[string]string{
 	"compose.at_path":              "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
 	"display.follow":               "Activity scrolls with new lines (a wheel up or a selection above the newest lines pauses it); off, it never scrolls by itself and end or G jumps to the newest line once",
 	"attach.prefix":                "agentbus attach's way out: prefix then d detaches, prefix twice sends it to the agent; f1-f12 or ctrl+<letter>; refused unless verified free for every client the project's roles run on",
+	"display.date_format":          dateFormatHelp(),
 	"display.work_layout":          "the Work tab (3): auto is the list below 130 columns of busmon's pane and the Kanban from 130; list or kanban keeps one",
 	"display.idle_hint_after":      "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after":      "the screensaver: a calm screen after this long without input; 0 = off",
@@ -1228,4 +1234,16 @@ func formatStep(d, unit time.Duration) string {
 		return strconv.FormatInt(int64(d/time.Microsecond), 10) + "us"
 	}
 	return d.String()
+}
+
+// dateFormatHelp shows each format on one fixed time, so the person sees
+// what they pick (quota settings §2.3).
+func dateFormatHelp() string {
+	now := time.Date(2026, 11, 16, 14, 30, 0, 0, time.UTC)
+	at := time.Date(2026, 11, 17, 13, 59, 0, 0, time.UTC)
+	var parts []string
+	for _, f := range quota.DateFormats {
+		parts = append(parts, f+": "+quota.ResetLabel(at, now, f))
+	}
+	return "how resets and other times to come are written, here and in the dispatcher's messages: " + strings.Join(parts, " "+GlyphNone+" ")
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/quota"
 )
 
 // The U page's Accounts zone as cards (usage-cards, the person's choice from
@@ -57,8 +58,10 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 		row = append(row, S(budgetRole(w.UsedPct), fmt.Sprintf(" %4.0f%%", w.UsedPct)), S(RoleMuted, " "+tails[i]))
 		out = append(out, FitLine(row, width))
 	}
-	if s := paceSentence(b, now); s != "" {
-		out = append(out, FitLine(append(append(Line{}, indent...), S(RoleMuted, s)), width))
+	if s := paceSentence(b, now); s != "" { // wrapped, never cut: its dated times (quota settings §2.3) can outgrow a line
+		for _, l := range wrapIndented(s, width, strings.Repeat(" ", indent.Width())) {
+			out = append(out, FitLine(l, width))
+		}
 	}
 	return out
 }
@@ -105,14 +108,14 @@ func windowTail(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) string 
 	return ""
 }
 
-// resetClock is a time ahead as the person reads a clock: HH:MM within a
-// day, else the weekday and HH:MM.
-func resetClock(t, now time.Time) string {
-	if t.Sub(now) < 24*time.Hour {
-		return t.Local().Format("15:04")
-	}
-	return t.Local().Format("Mon 15:04")
-}
+// dateFormat is display.date_format (quota settings §2.3), set from the
+// settings at start and on each save: every reset and estimate busmon
+// writes takes it.
+var dateFormat = quota.DateRelative
+
+// resetClock is a time to come, as the person reads it: with its day
+// whenever it is not today (quota.ResetLabel, the dispatcher's own rule).
+func resetClock(t, now time.Time) string { return quota.ResetLabel(t, now, dateFormat) }
 
 // paceSentence says whether the card's windows reach their resets at the
 // pace they are spent: a spent window first, then the earliest window
@@ -156,9 +159,9 @@ func paceSentence(b bus.BudgetSnapshot, now time.Time) string {
 	}
 	switch {
 	case !spentUntil.IsZero():
-		return "Limit reached: it resets at " + resetClock(spentUntil, now) + "."
+		return "Limit reached: it resets " + resetClock(spentUntil, now) + "."
 	case !limitAt.IsZero():
-		return "At this pace the limit comes around " + resetClock(limitAt, now) + ", before the " + resetClock(resetAt, now) + " reset."
+		return "At this pace the limit comes around " + resetClock(limitAt, now) + ", before its reset, " + resetClock(resetAt, now) + "."
 	case judged:
 		return "On track: you should reach the reset with room to spare."
 	case aged != "":

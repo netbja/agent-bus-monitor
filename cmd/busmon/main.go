@@ -517,6 +517,7 @@ func main() {
 		LimitSet: set["limit"], Limit: opts.limit, Theme: ifSet(set["theme"], opts.theme), As: ifSet(set["as"], opts.as),
 	}
 	settings := loadBusmonSettings(os.Getenv, flags)
+	dateFormat = settings.DateFormat // every reset busmon writes (quota settings §2.3)
 	// --pick chooses the project, so like --list it must run before the
 	// project-required exit, and before --reset and --delete: a picker never
 	// purges or deletes, whatever else is on the line. It needs only the
