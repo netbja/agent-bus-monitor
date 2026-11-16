@@ -42,6 +42,9 @@ func TestTemplateLaunch(t *testing.T) {
 		{Start{Role: "coder", Profile: "alt"}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --profile alt"},
 		{Start{Role: "coder", ResumeSession: sess}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --resume " + sess},
 		{Start{Role: "coder", Profile: "alt", ResumeSession: sess}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --profile alt --resume " + sess},
+		// resume-record-profile: a resume recorded on a forced profile of the
+		// role's own client (holder drain, up) resumes on its own profile.
+		{Start{Role: "coder", Profile: "spare", ResumeSession: sess}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --resume " + sess},
 	} {
 		cmd, err := l.Command(c.start)
 		if err != nil || strings.Join(cmd.Argv, " ") != c.want || cmd.Dir != l.Dir {
@@ -58,6 +61,8 @@ func TestTemplateLaunch(t *testing.T) {
 		"a role not in the manifest":                     {Role: "master"},
 		"a profile not the role's":                       {Role: "coder", Profile: "spare"},
 		"a profile not in the manifest":                  {Role: "coder", Profile: "ghost"},
+		"a resume on another client's profile":           {Role: "coder", Profile: "grok", ResumeSession: "0f1e2d3c-aaaa-bbbb-cccc-000000000001"},
+		"a resume on a profile not in the manifest":      {Role: "coder", Profile: "ghost", ResumeSession: "0f1e2d3c-aaaa-bbbb-cccc-000000000001"},
 		"an invalid frame":                               {Role: "Coder"},
 		"a resume of a client without a verified resume": {Role: "scout", ResumeSession: "0f1e2d3c-aaaa-bbbb-cccc-000000000001"},
 	} {
