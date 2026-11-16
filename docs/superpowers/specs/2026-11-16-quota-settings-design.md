@@ -1,8 +1,8 @@
 # Quota thresholds as busmon settings: design (P1-10)
 
-Status: draft for the person's answers (§8). No code yet.
+Status: r3, the person's answers (§8, 2026-11-16) folded into the design. No code before master's go.
 Asked by: the person's reliability plan (directive 1794830959056-0, item 10), through master.
-Base: origin/dev `e6d9cfcc`.
+Base: origin/dev `e6d9cfcc` (r1, r2); r3 on origin/dev `510244c9`.
 
 The person's three requests:
 
@@ -98,28 +98,27 @@ master's provider, the project pauses until the reset plus 2 minutes (`FencedQuo
 
 ## 2. Design
 
-The parts marked **(Qn)** depend on an answer in §8. The design gives the option this spec
-recommends, never as decided.
+Every choice below is the person's answer (§8); none is left open.
 
 ### 2.1 Three thresholds, one per act (request a)
 
 - **New key `dispatch.quota_drain`:** "start nothing new above", a percent, read by dispatch.
-  - Default: equal to `dispatch.quota_warn`, so a person who sets nothing keeps today's behaviour.
-    **(Q1: its default.)**
-  - It alone triggers act 2 (the run drains) and act 1 (agents with work are told to finish their
-    step). **(Q2: does act 1 go with the drain or with the warning?)**
-- **`dispatch.quota_warn`** keeps act 3: master's one warning per window, before the drain.
+  - Default: the warning's, 85, so a person who sets nothing keeps today's behaviour (Q1).
+  - It alone triggers act 2 (the run drains).
+- **`dispatch.quota_warn`** keeps act 3, master's one warning per window, and act 1: agents with
+  work are told to finish their step at the warning, before the drain (Q2).
 - **`dispatch.quota_hold`** is unchanged.
 - **Release:** `warnClear` becomes `drainClear`. A drained run returns to running when every usable
   window is under `quota_drain`, not under `quota_warn`.
 - **Validation:**
   - In the registry, each key is a percent in (0, 100]. A file value outside that is refused, as
     today.
-  - Across keys, `warn ≤ drain ≤ hold` must hold. This is checked by the busmon page before it
-    writes (as `settingRefusal` does for `attach.prefix`) and by the dispatcher at start. A set
-    that breaks the order is refused on the page, naming the two keys. If the dispatcher finds a
-    broken order in an env file, it logs it and uses the defaults for the offending keys.
-    **(Q3: is the order a rule, or may drain sit above hold?)**
+  - Across keys, `warn ≤ drain ≤ hold` is a rule (Q3). The busmon page checks it before it writes
+    (as `settingRefusal` does for `attach.prefix`) and refuses a set that breaks it, naming the two
+    keys.
+  - The dispatcher checks it at each read (§2.2). A broken order found on disk (a hand edit) uses
+    the registry defaults for all three, logged once per episode, never the last good set: the
+    file the person sees is what is judged (foureyes on r2).
 
 ### 2.2 Per project, and applied without a restart by hand (request a)
 
@@ -136,60 +135,37 @@ recommends, never as decided.
   `config.Machine(os.Getenv)`, keeps the start-time value: a change would never apply, and a value
   removed from the file would stay.
 
-**Where a project's value lives (Q4).** Two options, with their real costs:
+**Where a project's value lives: a `[project.<p>]` table in `config.toml` (Q4).**
 
-- **A. The project's service env file.**
-  - `up` gets a list of quota keys it carries over from the old file, as it does for escalate and
-    reload. A value busmon wrote survives `up`.
-  - Precedence when the person's shell, at `up` time, carries `AGENT_BUS_QUOTA_WARN` and busmon
-    wrote another value: the shell's value is what `up` writes today. **(Q4b: which wins, the
-    shell's at `up` or the one set in busmon?)** This spec suggests busmon's: it is the value on
-    screen.
-  - Cost: a carry-over list to keep in step with the keys, a precedence rule at `up`, and a busmon
-    write into a file `up` owns.
-- **B. A `[project.<p>]` table in `config.toml`.**
-  - A new resolver layer. For these keys, `config.toml`'s project table comes above its machine
-    keys. `up` never touches `config.toml`, so nothing is carried over.
-  - The shell's environment at `up` still reaches the env file and the dispatcher. For these keys
-    the dispatcher reads files only (below), so the env file's value would be ignored unless the
-    rule says otherwise. **(Q4b applies the same way: should an `AGENT_BUS_QUOTA_*` in the shell at
-    `up` still win?)**
-  - Cost: a new layer in `config` (Resolver with a project), and a project's values that outlive
-    its deletion unless `projects delete` removes its table.
+- A new resolver layer for these keys: the project's table, above the machine keys of
+  `config.toml`. `up` never rewrites `config.toml`, so nothing is carried over.
+- **Precedence (Q4b):** the value set in busmon (the project's table) wins over a shell variable. In
+  order: the project's table, then an `AGENT_BUS_QUOTA_*` the project's env file carries (the
+  person's shell at `up`), then the machine keys of `config.toml`, then the registry default.
+- `projects delete` removes the project's table with the project (a step of its own in §4).
 
-Recommendation: B, now that A's carry-over is written down. It is one file the person can read,
-and no other command rewrites it. A stays a fair choice: it has no new resolver layer.
-
-**Applying a change.**
+**Applying a change: re-read each minute (Q5).**
 
 - **What the dispatcher reads, for these four keys only** (`dispatch.quota_warn`, `_drain`,
-  `_hold`, `_max_age`):
-  - Option A: the project's env file and `config.toml`, read from disk.
-  - Option B: `config.toml`'s project table, then its machine keys.
-  - **The process environment is not consulted** for these keys. The file read at each refresh
-    replaces it, so a key removed from the file is gone (busmon's `D`), and the start-time copy
-    never wins.
+  `_hold`, `_max_age`): `config.toml` (the project's table, its machine keys) and the project's env
+  file, read from disk, in the order above.
+  - **The process environment is not consulted** for these keys: it is a start-time copy (above),
+    so the start-time value would win and a value removed would stay.
   - Every other key keeps today's resolution.
-- **When:** the quota policy runs at every reconcile, but readings are collected every `q.Every`
-  (60 s, `quotaPass`). The thresholds are re-read **with the readings**, at the same refresh, so
-  two small files are read once a minute, not at every tick. A change applies within a minute with
-  no restart, like the self-repair and reload settings, which are already "read at each call".
+- **When:** the thresholds are re-read **with the readings**, every `q.Every` (60 s, `quotaPass`),
+  not at every reconcile tick. A change applies within a minute with no restart.
 - **A file that cannot be read** (missing, unparsable): the last thresholds read stay in force and
-  the dispatcher logs it once per episode. A dispatcher that has never read one uses the
-  registry's defaults.
-- **(Q5):** or should busmon restart the project's dispatch service after a save instead? That is
-  simpler in the dispatcher (none of the above), but a restart takes the lease away for a few
-  seconds, and with A the restart alone still loses the value at the next `up`.
+  the dispatcher logs it once per episode. A dispatcher that has never read one uses the registry's
+  defaults. A broken order is §2.1's rule, not this one.
 
-**busmon page.** A "Quota" group on the Settings page, for the current project:
+**busmon page.** A "Quota" group on the Settings page, for the **current project only** (Q6): no row
+edits a machine-wide default.
 
-- **Rows:** "Warn master at", "Start nothing new above", "Hold agents at", each a percent.
-- **Source:** each row shows where its value comes from (`project`, `machine`, `default`).
-  `D` removes the project's own value.
-- **The project's own values:**
-  - When a project's value is set, the machine's value is shown beside it.
-  - Editing writes the project's value. A separate row edits the machine's default.
-    **(Q6: does the page edit the machine default too, or only the project's value?)**
+- **Rows:** "Warn master at", "Start nothing new above", "Hold agents at", each a percent, written
+  to the project's table.
+- **Source:** each row shows where its value comes from (`this project`, `env at up`, `machine`,
+  `default`). `D` removes the project's own value, and the next source shows.
+- **Date format** (§2.3) is a row of the Display group, a machine-wide display preference.
 
 ### 2.3 The drain shown (request b)
 
@@ -200,8 +176,15 @@ and no other command rewrites it. A stays a fair choice: it has no new resolver 
   - tomorrow: `tomorrow 13:59`;
   - further: `Wed 18 Nov 13:59`.
 
-  It applies to quota.go:157, :455 and :473, and to `resetClock`. **(Q7: the exact format;
-  English day names.)**
+  It applies to quota.go:157, :455 and :473, and to `resetClock`. That is the default (Q7).
+- **The format is adjustable in Settings (Q7).** A new registry key `display.date_format` (Display
+  group, a choice with ←→ as `display.theme` is), read by busmon and the dispatcher at each use:
+  - `relative` (default): `today 13:59`, `tomorrow 13:59`, `Wed 18 Nov 13:59`;
+  - `iso`: `2026-11-18 13:59`;
+  - `clock12`: `today 1:59 PM`, `tomorrow 1:59 PM`, `Wed 18 Nov 1:59 PM`.
+
+  English day and month names in every format. The page shows a sample of each choice, built from a
+  fixed time, so the person sees what they pick.
 - **busmon shows the run:**
   - **Header:** when the run is `draining` or `stopped`, a line under the project header, e.g.
     `Run draining · anthropic seven_day 88% ≥ 85% (start nothing new) · resets tomorrow 13:59 ·
@@ -232,16 +215,28 @@ as `run reset` is.
   (act 2), and a run already drained for a quota returns to running.
 - **Unchanged:**
   - master's warning (act 3) and the agents' notice (act 1) are still sent;
-  - the hold at `quota_hold` still holds, **(Q8: or does the override pass the hold too?)**;
+  - the hold at `quota_hold` still holds: the override passes only the drain (Q8);
   - the run budget's own limits (duration, deliveries) are not overridden.
 - **When it ends:** the next pass applies the thresholds again. The person gets one notice when it
   starts and one when it ends (marks `run-override` / `run-override-end`, episode =
   `override_until`).
 - **Limits:**
-  - `--until` must be in the future and at most the tightest window's reset. Past the reset there
-    is no drain to override. **(Q9: any upper bound, e.g. 24 h?)**
+  - `--until` must be in the future, and at most 24 hours ahead or the tightest window's reset,
+    whichever comes first (Q9). A later time is refused, naming the bound that applies.
   - `--until` takes `HH:MM` (today, or tomorrow if passed), `tomorrow HH:MM`, or a duration (`2h`).
 - **`agentbus run override --clear`** ends it early.
+
+### 2.5 Other providers
+
+- **Readings are less reliable outside Claude.** Codex and Grok report their quota from other
+  sources (§1 of the quota-awareness spec): Grok's last reading can be hours old. The existing rule
+  stands: a reading older than `dispatch.quota_max_age` is unknown for the policy, so it never
+  warns, drains, holds or releases. busmon's run line (§2.3) shows the reading's age when it is
+  not fresh, so a drain or its absence is never read as certain.
+- **A running turn is not interrupted.** The drain only stops new work from being dispatched; an
+  agent in a turn finishes it. That holds for every provider.
+- **One set of thresholds** for every provider of the project, for now (Q10). Per-provider values
+  stay out of scope (§7).
 
 ## 3. What does not change
 
@@ -253,9 +248,11 @@ as `run reset` is.
 ## 4. Steps (one PR each, each gated by foureyes)
 
 1. **Dates:** `quota.ResetLabel`, used in the three dispatcher messages, `resetClock` and
-   `agentbus quota`. No setting changes. This is request (b)'s field bug alone.
-2. **`dispatch.quota_drain`:** split from `quota_warn` (§2.1), the order validation, and the
-   dispatcher reading the keys at each pass (§2.2, after Q4/Q5).
+   `agentbus quota`, with `display.date_format` and its Display row (§2.3). This is request (b)'s
+   field bug.
+2. **`dispatch.quota_drain`:** split from `quota_warn` (§2.1), the order rule, the `[project.<p>]`
+   layer, and the dispatcher re-reading the keys from files each minute (§2.2).
+   `projects delete` removes the project's table in the same step.
 3. **`run reset`:** the warning, then `run override` and its record, the dispatcher honouring it,
    and the notices (§2.4).
 4. **busmon:** the run line (§2.3) and the Quota settings group with the override action
@@ -267,15 +264,19 @@ as `run reset` is.
   - `ResetLabel` today, tomorrow, in 3 days, across midnight and across a DST change (a fixed
     zone). This is the field case: tomorrow's 13:59 seen at 14:30 reads `tomorrow 13:59`.
   - The dispatcher's three messages carry the date. busmon's card shows it.
+  - `display.date_format`: each of `relative`, `iso`, `clock12` on the same times; an invalid value
+    is refused by the registry; the Display row shows a sample per choice; a change applies at the
+    next message and the next redraw, with no restart.
 - **Thresholds (step 2):**
-  - **Between warn and drain:** at 86% with warn 80, drain 90, master is warned, the run is not
-    drained and no agent is told to stop.
+  - **Between warn and drain:** at 86% with warn 80, drain 90, master is warned and agents with
+    work are told to finish their step (Q2), but the run is not drained.
   - **At drain:** at 91% it drains.
   - **Release:** the drained run returns to running under 90%, not under 80%.
   - **Default:** with `quota_drain` unset, it behaves as today (one threshold), so the existing
     quota tests pass unchanged.
-- **Order:** the page refuses warn 90 / drain 80 and writes nothing. A dispatcher started with a
-  broken order logs it and uses the defaults.
+- **Order:** the page refuses warn 90 / drain 80 and writes nothing. A dispatcher that reads a
+  broken order (at start or at a refresh) uses the defaults for all three and logs it once per
+  episode, never the last good set.
 - **Applied live:**
   - The project's value changed on disk between two refreshes is applied on the second, with no
     restart.
@@ -288,22 +289,27 @@ as `run reset` is.
   - The thresholds are read at the readings' refresh, not at every reconcile tick (a counted
     reader).
 - **Survives `up`:** busmon sets drain 90 for the project, `agentbus up <p>` runs, and drain is
-  still 90. With A, this tests the carry-over list. With B, it tests that `up` writes no
-  `config.toml`.
-- **Precedence at `up` (after Q4b):** a shell carrying `AGENT_BUS_QUOTA_DRAIN=70` at `up`, against
-  busmon's 90, gives the answer the person chose.
+  still 90: `up` writes no `config.toml`.
+- **Precedence (Q4b):** a shell carrying `AGENT_BUS_QUOTA_DRAIN=70` at `up`, against busmon's 90:
+  the dispatcher reads 90. With no project value, it reads 70 (the env file), then the machine
+  key, then the default.
+- **Project deleted:** `projects delete` removes `[project.<p>]` from `config.toml`, and leaves every
+  other line as it was.
 - **`run reset` (step 3):** above the drain threshold it prints the warning and the override
   command; under it, today's line. Either way the run is reset.
 - **Override:**
   - While active, a pass at 88% does not drain, and a quota-drained run returns to running.
   - At `override_until` the next pass drains again, and the person is told once at each end.
-  - `--until` in the past or past the reset is refused. An agent environment is refused.
+  - `--until` in the past, more than 24 hours ahead, or past the reset is refused, naming the bound
+    (Q9). An agent environment is refused.
+  - The hold at `quota_hold` still holds while an override is active (Q8).
   - `--clear` ends it.
 - **busmon (step 4):**
   - The run line appears for draining and stopped runs and is absent for running ones. Goldens
     cover light and dark.
-  - The Quota group writes the project's value (A: its env file; B: its `config.toml` table), shows
+  - The Quota group writes the current project's table only (no row writes a machine key), shows
     the source of each value, and `D` removes the project's value.
+  - The run line shows a reading's age when it is not fresh (§2.5).
 - Every dispatcher write stays fenced: a lost lease writes nothing.
 
 ## 6. Interplay
@@ -312,8 +318,7 @@ as `run reset` is.
   threshold. That is `coord` as today.
 - **Pause and suspend:** a paused or suspended project is not drained or released by the override.
   The override writes only `{p}:run`.
-- **Several projects:** each project's dispatcher reads its own values (A: its env file; B: its
-  table). A machine value changed in busmon applies to every project that sets none, each at its
+- **Several projects:** each project's dispatcher reads its own table. A machine value changed in busmon applies to every project that sets none, each at its
   next refresh.
 
 ## 7. Not in scope
@@ -322,31 +327,19 @@ as `run reset` is.
   can ask for per-provider values later.
 - Changing how readings are collected (`quota.claude.probe`, readers).
 
-## 8. Questions for the person
+## 8. The person's answers (2026-11-16, through master's ask)
 
-1. **Drain default:** what is the default of "start nothing new above" (`quota_drain`)? Equal to
-   the warning (85, today's behaviour), or another value (e.g. warn 80, drain 90)?
-2. **Which threshold tells agents to finish:** when agents with work are told "finish your step,
-   start nothing new", should that happen at the warning threshold or at the drain threshold?
-   Today it fires at the warning threshold. If the drain defaults to the warning (Q1), both answers
-   keep today's behaviour until you set them apart.
-3. **Order:** must the order always be warning ≤ drain ≤ hold, refused otherwise? Or may drain sit
-   above hold?
-4. **Where a project's values live** (§2.2 gives the costs):
-   - A. the project's service env file. `agentbus up` rewrites that file, so it would need a list
-     of quota keys to carry over;
-   - B. a `[project.<name>]` table in `config.toml`, which nothing else rewrites (recommended).
-
-   4b. **Shell or busmon:** when your shell carries an `AGENT_BUS_QUOTA_*` variable as you run
-   `agentbus up`, and busmon holds another value for the project, which one wins? The suggestion
-   is busmon's, the one on screen.
-5. **How a change applies:** should the dispatcher re-read the thresholds from the files once a
-   minute, with the quota readings, so a change applies with no restart (recommended)? Or should
-   busmon restart the project's dispatch service after a save?
-6. **Machine default on the page:** should the Settings page also edit the machine-wide default
-   (every project without its own value), or only the current project's values?
-7. **Date format:** is `today 13:59` / `tomorrow 13:59` / `Wed 18 Nov 13:59` right?
-8. **Override and the hold:** should the override pass only the drain (recommended: the hold at
-   `quota_hold` still holds), or the hold too?
-9. **Override length:** is there an upper bound beyond "at most until the window's reset", e.g.
-   24 hours?
+1. **Drain default:** the warning's, 85 (today's behaviour).
+2. **"Finish your step" to agents with work:** at the warning threshold.
+3. **Order:** `warning ≤ drain ≤ hold` is enforced.
+4. **Where a project's values live:** a `[project.<name>]` table in `config.toml`.
+   - 4b. busmon's value wins over a shell variable.
+5. **Applying a change:** the dispatcher re-reads the thresholds each minute; no restart.
+6. **Settings page:** it edits only the current project's values; no machine-wide default.
+7. **Date format:** `today 13:59` / `tomorrow 13:59` / `Wed 18 Nov 13:59`, and the format is
+   adjustable in Settings (user friendly).
+8. **Override:** it passes only the drain; the hold still holds.
+9. **Override length:** at most 24 hours or the window's reset, whichever comes first.
+10. **Other providers:** Codex and Grok readings are less reliable (Grok's can be hours old), a running
+    turn is not interrupted by the drain, and the thresholds stay one set for every provider for now
+    (§2.5).
