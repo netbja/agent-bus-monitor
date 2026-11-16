@@ -481,6 +481,7 @@ func startServices(d upDeps, m service.Manager, project, workdir, escalate, relo
 			}
 		}
 	}
+	recordUp(d.Paths.StateDir(project), stdout) // before the services start: the person started it (reboot-resume §2.1)
 	// The holder before the services: it makes no broker connection, and the
 	// dispatcher's first health pass must find it answering, or holder fails
 	// for agents that were never lost (foureyes).

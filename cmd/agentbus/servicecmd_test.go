@@ -25,6 +25,7 @@ type fakeManager struct {
 	stopErr   func(p, k string) error // nil = every stop succeeds
 	failList  bool                    // List fails after the first removal
 	removed   int
+	onCall    func(call string) // nil = nothing; told each start and stop as it happens
 }
 
 func newFakeManager() *fakeManager {
@@ -41,6 +42,9 @@ func (f *fakeManager) Install(s service.Spec) (bool, error) {
 }
 func (f *fakeManager) Start(p, k string) error {
 	f.calls = append(f.calls, "start "+p+" "+k)
+	if f.onCall != nil {
+		f.onCall("start " + p + " " + k)
+	}
 	if f.failStart {
 		return errors.New("start refused")
 	}
@@ -49,6 +53,9 @@ func (f *fakeManager) Start(p, k string) error {
 }
 func (f *fakeManager) Stop(p, k string) error {
 	f.calls = append(f.calls, "stop "+p+" "+k)
+	if f.onCall != nil {
+		f.onCall("stop " + p + " " + k)
+	}
 	if f.stopErr != nil {
 		if err := f.stopErr(p, k); err != nil {
 			return err

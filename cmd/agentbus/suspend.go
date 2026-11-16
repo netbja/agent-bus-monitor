@@ -21,6 +21,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -361,6 +362,7 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 	if err != nil {
 		return fail("reading the suspend back: %v", err)
 	}
+	recordStopping(d.StateDir(p), lifecycle.CauseSuspend, errw) // with its pause record, before the services stop (reboot-resume §2.1)
 	if mgr != nil && rec.Services[service.Dispatch] {
 		if st, err := mgr.State(p, service.Dispatch); err == nil && st.Active {
 			if err := mgr.Stop(p, service.Dispatch); err != nil {
@@ -629,6 +631,9 @@ func suspendCancel(ctx context.Context, p string, b *bus.Bus, raw string, rec *b
 				failed = append(failed, k+" ("+err.Error()+")")
 			}
 		}
+	}
+	if len(failed) == 0 {
+		recordRunning(d.StateDir(p), errw) // the suspend is cancelled: the project runs on (reboot-resume §2.1)
 	}
 	if len(failed) > 0 {
 		line := fmt.Sprintf("could not start %s again: %s stays suspended; agentbus resume brings it back", strings.Join(failed, ", "), p)
