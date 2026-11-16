@@ -102,21 +102,29 @@ func (r Reply) encode() []byte {
 
 // BuildID is this binary's build id, as hello and welcome carry it: the
 // buildinfo version, then the VCS revision when the build recorded one
-// ("+dirty" for a modified tree).
+// ("+dirty" for a modified tree: setup's stamped buildinfo.Tree, which
+// ignores untracked files, else Go's vcs.modified).
 func BuildID() string {
-	id := buildinfo.Version
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
-		return id
+		return buildinfo.Version
 	}
+	return buildID(buildinfo.Version, buildinfo.Tree, bi.Settings)
+}
+
+func buildID(version, tree string, settings []debug.BuildSetting) string {
+	id := version
 	rev, dirty := "", false
-	for _, s := range bi.Settings {
+	for _, s := range settings {
 		switch s.Key {
 		case "vcs.revision":
 			rev = s.Value
 		case "vcs.modified":
 			dirty = s.Value == "true"
 		}
+	}
+	if tree != "" { // setup's stamp, git's tracked view: untracked files never count
+		dirty = tree == "dirty"
 	}
 	if len(rev) > 12 {
 		rev = rev[:12]

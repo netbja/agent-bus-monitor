@@ -35,6 +35,8 @@ type Installer struct {
 	// replaces this process with it: argv without argv[0], the environment.
 	Script string
 	Exec   func(path string, args, env []string) error
+
+	saidDirty bool // the dirty tree is said once per install
 }
 
 // RepoRev is setup.sh's REPO_REV: git describe --tags --always --dirty.
@@ -55,9 +57,23 @@ func BuildVersion(rev string) string {
 	return "dev"
 }
 
-// Ldflags are setup.sh's three -X flags, written as it writes them.
-func Ldflags(version, repo, binDir string) string {
+// Tree is the checkout's state in rev (RepoRev: git describe --dirty, which
+// counts tracked files only): "dirty" or "clean", "" when the revision is
+// unknown (build-id-untracked: an untracked file never makes a build dirty).
+func Tree(rev string) string {
+	switch {
+	case rev == "" || rev == "unknown revision":
+		return ""
+	case strings.HasSuffix(rev, "-dirty"):
+		return "dirty"
+	}
+	return "clean"
+}
+
+// Ldflags are setup.sh's -X flags, written as it writes them, and the tree.
+func Ldflags(version, tree, repo, binDir string) string {
 	return "-X github.com/netbja/agent-bus-monitor/buildinfo.Version=" + version +
+		" -X github.com/netbja/agent-bus-monitor/buildinfo.Tree=" + tree +
 		" -X 'github.com/netbja/agent-bus-monitor/buildinfo.Repo=" + repo + "'" +
 		" -X 'github.com/netbja/agent-bus-monitor/buildinfo.Bin=" + binDir + "/agentbus'"
 }
@@ -71,9 +87,13 @@ func (in *Installer) BuildAndInstall(ctx context.Context, name, pkg string) erro
 		in.O.Info(fmt.Sprintf("[dry-run] would compile %s -> %s (and %s/%s)", pkg, target, in.Repo, name))
 		return nil
 	}
+	if Tree(in.Rev) == "dirty" && !in.saidDirty {
+		in.saidDirty = true
+		in.O.Warn("building from modified tracked files (git status): the build id carries +dirty")
+	}
 	in.O.Info(fmt.Sprintf("Compiling %s (%s)...", name, in.Rev))
 	built := filepath.Join(in.Tmp, name)
-	ld := Ldflags(BuildVersion(in.Rev), in.Repo, in.Opt.BinDir)
+	ld := Ldflags(BuildVersion(in.Rev), Tree(in.Rev), in.Repo, in.Opt.BinDir)
 	out, err := in.R.Run(ctx, Cmd{Name: "go", Args: []string{"build", "-ldflags", ld, "-o", built, pkg}, Dir: in.Repo})
 	if err != nil {
 		showTail(in.O.err, out)

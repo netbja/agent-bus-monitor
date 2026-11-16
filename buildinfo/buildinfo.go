@@ -11,6 +11,11 @@ import (
 // Version is the release tag (v0.11.0, or v0.11.0-3-gabc123 between tags), or "dev".
 var Version = "dev"
 
+// Tree is the checkout's state setup stamps, in git's tracked view
+// ("clean" or "dirty"; "" for a plain go build): untracked files never
+// count (build-id-untracked), where Go's vcs.modified counts them.
+var Tree = ""
+
 // Repo is the checkout setup.sh built from (agentbus up finds scripts/bootstrap there).
 var Repo = ""
 
