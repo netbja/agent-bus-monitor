@@ -71,6 +71,9 @@ func runCmd(ctx context.Context, b *bus.Bus, self string, args []string, out io.
 	if len(args) < 2 {
 		return fmt.Errorf("usage: cmd [--ref T] [--no-wake] <target> <command>")
 	}
+	if err := refuseAnonymousTarget(args[0]); err != nil {
+		return fmt.Errorf("cmd: %w", err)
+	}
 	send := b.Cmd
 	if noWake {
 		send = b.CmdNoWake

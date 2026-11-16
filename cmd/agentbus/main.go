@@ -2,7 +2,8 @@
 //
 // The project is required (--project or AGENT_BUS_PROJECT); every stream is
 // namespaced {project}:{kind}. Self identity (for `from`/pilot driver) is
-// AGENT_BUS_AGENT (default "anonymous"). Trailing words are joined into one message.
+// AGENT_BUS_AGENT, else the person's identity (identity.as); with neither, a
+// write is refused (senderIdentity, identityGuard). Trailing words are joined into one message.
 //
 // Every command's usage, flags (long and short) and examples are in one
 // table, commands.go: `agentbus help`, `agentbus help <cmd>` or
@@ -224,7 +225,7 @@ func main() {
 		die("project required: pass --project <p> or set AGENT_BUS_PROJECT")
 	}
 
-	self := envOr("AGENT_BUS_AGENT", "anonymous")
+	self, _ := senderIdentity(os.Getenv) // the agent, else the person's identity (P2-11)
 	// The resume of a suspended project is the person's, from any terminal
 	// of theirs: routed before the guard, which it would not pass (foureyes).
 	if ok, code := suspendedResumeFirst(context.Background(), os.Getenv, args,
@@ -427,6 +428,9 @@ func main() {
 		rest, ref := extractFlag(rest, "--ref")
 		if ref == "" || len(rest) < 2 {
 			die("usage: reply --ref R <target> <message>")
+		}
+		if err := refuseAnonymousTarget(rest[0]); err != nil {
+			die("reply: " + err.Error())
 		}
 		if _, err := b.Cmd(ctx, self, rest[0], bus.CmdReply, ref, strings.Join(rest[1:], " ")); err != nil {
 			die(err.Error())

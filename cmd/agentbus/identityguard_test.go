@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // A8(a): inside a herdr pane with no AGENT_BUS_AGENT, a command that writes
@@ -41,8 +43,9 @@ func TestIdentityGuard(t *testing.T) {
 			t.Errorf("read-only %v refused: %v", r, err)
 		}
 	}
-	// Outside a pane, or with an identity, nothing is refused.
-	for _, m := range []map[string]string{{}, {"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "coder"}} {
+	// Outside a pane with the person's identity, or with an agent's, nothing is
+	// refused (outside a pane with no identity at all: P2-11, identitysender_test).
+	for _, m := range []map[string]string{{config.EnvName("identity.as"): "charlie", "XDG_CONFIG_HOME": t.TempDir()}, {"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "coder"}} {
 		if err := identityGuard(env(m), "status", []string{"idle", "x"}); err != nil {
 			t.Errorf("env %v: %v", m, err)
 		}
