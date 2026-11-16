@@ -476,7 +476,7 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 		key, _ := config.Lookup(s.edit)
 		v, why := parseSetting(key, s.text)
 		if why == "" {
-			why = settingRefusal(s.edit, v)
+			why = settingRefusal(m.settingsGetenv(), s.edit, v)
 		}
 		if why != "" {
 			s.err = why
@@ -1004,7 +1004,7 @@ var settingHelps = map[string]string{
 	"display.limit":                "Activity lines replayed when busmon starts; 0 or below: all history",
 	"compose.at_path":              "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
 	"display.follow":               "Activity scrolls with new lines (a wheel up or a selection above the newest lines pauses it); off, it never scrolls by itself and end or G jumps to the newest line once",
-	"attach.prefix":                "agentbus attach's way out: prefix then d detaches, prefix twice sends it to the agent; f1-f12 or ctrl+<letter>; refused for a client that binds it",
+	"attach.prefix":                "agentbus attach's way out: prefix then d detaches, prefix twice sends it to the agent; f1-f12 or ctrl+<letter>; refused unless verified free for every client the project's roles run on",
 	"display.work_layout":          "the Work tab (3): auto is the list below 130 columns of busmon's pane and the Kanban from 130; list or kanban keeps one",
 	"display.idle_hint_after":      "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after":      "the screensaver: a calm screen after this long without input; 0 = off",

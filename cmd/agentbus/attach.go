@@ -130,6 +130,18 @@ type attachSession struct {
 // agent's screen.
 const attachBanner = 2 * time.Second
 
+// startsWithPrefix says whether a chunk of the person's keys begins with a
+// press of the prefix, judged on a copy of the scanner (nothing is fed).
+func startsWithPrefix(scan *keyScanner, b []byte) bool {
+	probe := *scan
+	probe.buf = append([]byte(nil), scan.buf...)
+	evs := probe.Feed(b)
+	if len(evs) == 0 {
+		evs = probe.Flush() // a prefix that is a lone escape sequence
+	}
+	return len(evs) > 0 && (evs[0].Kind == keyPending || evs[0].Kind == keyDetach)
+}
+
 // keyLabel is a prefix as the person reads it: F12, Ctrl-].
 func keyLabel(k string) string { return config.AttachKeyLabel(k) }
 
@@ -145,7 +157,8 @@ func bannerText(agent, prefix string, observe bool) string {
 	if observe {
 		more = "" // an observer sends nothing
 	}
-	return "\x1b[2J\x1b[H\r\n  " + what + "\r\n\r\n  To leave: press " + k + " then d.\r\n" + more + "\r\n  (any key continues)\r\n"
+	return "\x1b[2J\x1b[H\r\n  " + what + "\r\n\r\n  To leave: press " + k + " then d.\r\n" + more +
+		"\r\n  Any other key shows " + agent + "'s screen; that key is not sent.\r\n"
 }
 
 // attachRestore leaves the outer terminal as a shell expects it, whatever
@@ -206,7 +219,10 @@ func runAttach(s attachSession) error {
 		}
 	}()
 	// The banner: the way out on screen before the agent's (P1-8). A key
-	// ends it and is kept for the agent; a closed input ends the attach.
+	// ends it and is dropped: the person has not seen the agent's screen, and
+	// an Enter would answer a dialog they never read (foureyes). Only a chunk
+	// that starts with the prefix goes on to the scanner, so <prefix> d works
+	// during the banner. A closed input ends the attach.
 	var first []byte
 	if s.Banner > 0 {
 		write([]byte(bannerText(s.Term.Role, s.Prefix, s.Observe)))
@@ -216,7 +232,9 @@ func runAttach(s attachSession) error {
 			if !ok {
 				return nil
 			}
-			first = b
+			if startsWithPrefix(scan, b) {
+				first = b
+			}
 		}
 		write([]byte("\x1b[2J\x1b[H"))
 	}

@@ -52,10 +52,12 @@ func waitFor(t *testing.T, out *attachBuf, s string) {
 	}
 }
 
-// P1-8: the person could not leave an attach (F12 was their desktop's, and
-// nothing on screen named the way out). The detach key is shown on screen
-// as the attach starts, before the agent's screen, and stays in the outer
-// terminal's title; a key ends the banner at once and still reaches the agent.
+// P1-8: the person could not leave an attach (F12 was their outer
+// terminal's, and nothing on screen named the way out). The detach key is
+// shown on screen as the attach starts, before the agent's screen, and stays
+// in the outer terminal's title. The key that ends the banner is never sent
+// (foureyes): the person has not seen the agent's screen yet, and an Enter
+// there would answer a dialog they never read.
 func TestAttachShowsTheDetachKey(t *testing.T) {
 	_, sock, term := attachWorld(t)
 	in, typed := io.Pipe()
@@ -66,7 +68,10 @@ func TestAttachShowsTheDetachKey(t *testing.T) {
 			Size: func() (int, int) { return 100, 30 }, Banner: time.Minute})
 	}()
 	waitFor(t, out, "To leave: press Ctrl-] then d.")
-	io.WriteString(typed, "hello\r") // ends the banner long before its minute
+	waitFor(t, out, "not sent")
+	io.WriteString(typed, "y\r") // ends the banner long before its minute, and is dropped
+	time.Sleep(300 * time.Millisecond)
+	io.WriteString(typed, "hello\r")
 	waitFor(t, out, "hello")
 	got := out.String()
 	if i := strings.Index(got, "To leave: press Ctrl-] then d."); i < 0 || i > strings.Index(got, "hello") {
@@ -74,6 +79,9 @@ func TestAttachShowsTheDetachKey(t *testing.T) {
 	}
 	if !strings.Contains(got, "\x1b]2;agentbus attach coder: Ctrl-] then d detaches\x07") {
 		t.Fatalf("the title does not name the way out: %q", got)
+	}
+	if after := got[strings.Index(got, "not sent"):]; strings.Contains(after, "y\r") || strings.Contains(after, "\ny") {
+		t.Fatalf("the key that ended the banner reached the agent: %q", after)
 	}
 	io.WriteString(typed, "\x1dd")
 	select {
@@ -83,6 +91,29 @@ func TestAttachShowsTheDetachKey(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Ctrl-] d did not detach")
+	}
+}
+
+// The prefix still works during the banner: Ctrl-] d there detaches at once,
+// before the agent's screen, and sends nothing.
+func TestAttachDetachesDuringTheBanner(t *testing.T) {
+	_, sock, term := attachWorld(t)
+	in, typed := io.Pipe()
+	out := &attachBuf{}
+	done := make(chan error, 1)
+	go func() {
+		done <- runAttach(attachSession{Socket: sock, Term: term, Prefix: "ctrl+]", In: in, Out: out,
+			Size: func() (int, int) { return 100, 30 }, Banner: time.Minute})
+	}()
+	waitFor(t, out, "To leave: press Ctrl-] then d.")
+	io.WriteString(typed, "\x1dd")
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Ctrl-] d during the banner did not detach")
 	}
 }
 
@@ -125,5 +156,28 @@ func TestAttachEscapeNeverReachesTheAgent(t *testing.T) {
 	}
 	if strings.Contains(screen, "^]") || strings.Contains(screen, "\x1d") || strings.Contains(screen, "hello\r\nd") {
 		t.Fatalf("the escape reached the agent: %q", screen)
+	}
+}
+
+// Which banner-ending chunk goes on to the scanner: only one that starts
+// with the prefix, in its legacy or kitty encoding; any other key, Enter
+// included, is dropped.
+func TestStartsWithPrefix(t *testing.T) {
+	for prefix, cases := range map[string]map[string]bool{
+		"f12":    {"\x1b[24~": true, "\x1b[24~d": true, "\x1b[24;1u": false, "\x1b[24;1~": true, "\r": false, "y\r": false, "\x1b": false, "d\x1b[24~": false},
+		"ctrl+]": {"\x1d": true, "\x1dd": true, "\x1b[93;5u": true, "\r": false, "\x03": false},
+	} {
+		scan, err := newKeyScanner(prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for chunk, want := range cases {
+			if got := startsWithPrefix(scan, []byte(chunk)); got != want {
+				t.Errorf("%s %q: %v, want %v", prefix, chunk, got, want)
+			}
+		}
+		if scan.pending || len(scan.buf) != 0 {
+			t.Errorf("%s: the scanner was fed", prefix)
+		}
 	}
 }

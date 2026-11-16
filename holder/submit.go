@@ -27,6 +27,10 @@ const (
 // clientProfiles maps rolecfg's client names to agentstate's profiles.
 var clientProfiles = map[string]string{"claude-code": "claude", "codex": "codex", "kimi-cli": "kimi", "grok": "grok", "agy": "agy"}
 
+// ClientProfile is the agentstate profile a terminal of rolecfg's client
+// runs under ("" none): what attach's prefix gate reads for it.
+func ClientProfile(client string) string { return clientProfiles[client] }
+
 // settled is the screen once no output came for settleQuiet, as the
 // signatures read it (ANSI lines), with its modes; ok false when the program
 // kept writing past limit (an unsettled screen proves nothing).
