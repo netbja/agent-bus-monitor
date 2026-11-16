@@ -924,40 +924,29 @@ func TestRunQuotaMessagesDateTheirReset(t *testing.T) {
 	cfg.Quota.DateFormat = func() string { asked.Add(1); return quota.DateISO }
 	start(t, b, newFakeRT(alwaysReady), cfg)
 	want := "resets " + quota.ResetLabel(time.Unix(reset, 0), now, quota.DateISO)
-	waitFor(t, 3*time.Second, "the three messages", func() bool {
-		return strings.Contains(lastTo(t, b, "coder"), want) && countTo(t, b, "master", "Run draining") == 1
-	})
-	evs, _, _ := b.Recent(ctx, []string{"cmd"}, 200)
-	seen := map[string]bool{}
-	for _, e := range evs {
-		if e.From != "dispatch" || !strings.Contains(e.Message, want) {
-			continue
+	// One snapshot per poll, all three checked in it: the pass writes the
+	// agent's warning, then the drain, then master's warning (reviewer-codex).
+	dated := func() map[string]bool {
+		evs, _, _ := b.Recent(ctx, []string{"cmd"}, 200)
+		seen := map[string]bool{}
+		for _, e := range evs {
+			if e.From != "dispatch" || !strings.Contains(e.Message, want) {
+				continue
+			}
+			switch {
+			case e.Target == "master" && strings.HasPrefix(e.Message, "Quota anthropic 88%"):
+				seen["master's warning"] = true
+			case e.Target == "coder":
+				seen["the agent's warning"] = true
+			case e.Target == "master" && strings.HasPrefix(e.Message, "Run draining"):
+				seen["the drain"] = true
+			}
 		}
-		switch {
-		case e.Target == "master" && strings.HasPrefix(e.Message, "Quota anthropic 88%"):
-			seen["master's warning"] = true
-		case e.Target == "coder":
-			seen["the agent's warning"] = true
-		case e.Target == "master" && strings.HasPrefix(e.Message, "Run draining"):
-			seen["the drain"] = true
-		}
+		return seen
 	}
-	if len(seen) != 3 {
-		t.Fatalf("dated: %v (want %q in each)", seen, want)
-	}
+	waitFor(t, 3*time.Second, "the three messages dated", func() bool { return len(dated()) == 3 })
 	if asked.Load() == 0 {
 		t.Fatal("the format was never read")
 	}
 }
 
-func countTo(t *testing.T, b *bus.Bus, target, prefix string) int {
-	t.Helper()
-	evs, _, _ := b.Recent(context.Background(), []string{"cmd"}, 200)
-	n := 0
-	for _, e := range evs {
-		if e.From == "dispatch" && e.Target == target && strings.HasPrefix(e.Message, prefix) {
-			n++
-		}
-	}
-	return n
-}
