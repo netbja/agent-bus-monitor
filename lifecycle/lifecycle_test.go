@@ -180,6 +180,10 @@ func TestReadMalformed(t *testing.T) {
 	if _, err := ReadCounter(dir); !errors.Is(err, ErrMalformed) {
 		t.Fatalf("counter: %v", err)
 	}
+	os.WriteFile(filepath.Join(dir, CounterFile), []byte("null"), 0o600) // never an empty count: that resets the budget
+	if _, err := ReadCounter(dir); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("null counter: %v", err)
+	}
 	empty := t.TempDir()
 	if _, err := ReadCounter(empty); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing counter: %v", err)
@@ -224,5 +228,22 @@ func TestCounterFile(t *testing.T) {
 	}
 	if left, _ := filepath.Glob(filepath.Join(dir, ".*tmp*")); len(left) != 0 {
 		t.Fatalf("temp files left: %v", left)
+	}
+}
+
+// Every write that creates run.json creates the counter first: a first down
+// or suspend never leaves run.json without its counter.
+func TestStoppingBootstraps(t *testing.T) {
+	for _, cause := range []string{CauseDown, CauseSuspend} {
+		dir := t.TempDir()
+		if err := Stopping(dir, "B", cause, t0); err != nil {
+			t.Fatal(err)
+		}
+		if es, err := ReadCounter(dir); err != nil || len(es) != 0 {
+			t.Fatalf("%s: counter %+v %v", cause, es, err)
+		}
+	}
+	if err := Stopping(t.TempDir(), "B", "reboot", t0); err == nil {
+		t.Fatal("an unknown cause written")
 	}
 }

@@ -91,11 +91,6 @@ func ReadRun(dir string) (Record, error) {
 // run.json present means the counter was created. A counter lost since is
 // never recreated here: only the person's up or resume does (§3.2).
 func Started(dir, boot string, now time.Time) error {
-	if _, err := os.Stat(filepath.Join(dir, RunFile)); errors.Is(err, os.ErrNotExist) {
-		if err := ensureCounter(dir); err != nil {
-			return err
-		}
-	}
 	return writeRun(dir, Record{Boot: boot, State: Running, At: stamp(now)})
 }
 
@@ -198,7 +193,17 @@ func ensureCounter(dir string) error {
 	return WriteCounter(dir, nil)
 }
 
+// writeRun replaces run.json. The write that creates it creates the counter
+// first, as [], whoever writes it (§3.2's bootstrap): run.json present means
+// the counter was created.
 func writeRun(dir string, r Record) error {
+	if _, err := os.Lstat(filepath.Join(dir, RunFile)); errors.Is(err, os.ErrNotExist) {
+		if err := ensureCounter(dir); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
 	b, err := json.Marshal(r)
 	if err != nil {
 		return err

@@ -20,6 +20,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
@@ -421,7 +422,8 @@ func runDown(args []string, d serviceCmdDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "no service installed for %s: nothing to stop\n", p)
 		return 0
 	}
-	var stopped, notStopped []string // build ids
+	recordStopping(d.Paths.StateDir(p), lifecycle.CauseDown, stderr) // before the stop: the person stopped it (reboot-resume §2.1)
+	var stopped, notStopped []string                                 // build ids
 	for _, u := range holders {
 		if err := hm.StopHolder(p, u.Key); err != nil {
 			fmt.Fprintf(stderr, "error: holder (build %s): %v\n", u.Raw, err)
@@ -710,7 +712,8 @@ func mainServiceRun(project, host string, args []string) int {
 		Settings: func() []string { return settingsWarnings(os.Getenv) },
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
 			cfg := dispatchBaseConfig()
-			cfg.Log, cfg.OnLease = log, onLease
+			run := newDispatchRunRecord(paths.StateDir(project), log) // running at its first lease, stopped on a signal (reboot-resume §2.1)
+			cfg.Log, cfg.OnLease = log, run.onLease(onLease)
 			cfg.Quota = serviceQuota(os.Getenv, log)
 			cfg.Login = serviceLoginExpiry(os.Getenv)                        // an expired login told to the person (login-updates)
 			cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
@@ -738,7 +741,9 @@ func mainServiceRun(project, host string, args []string) int {
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}
-			return superviseDispatch(ctx, b, h, cfg, log)
+			code := superviseDispatch(ctx, b, h, cfg, log)
+			run.exited(ctx.Err() != nil) // the context ends on SIGTERM or SIGINT only
+			return code
 		},
 		RunMissions: mission.Run,
 	}
