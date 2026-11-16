@@ -160,7 +160,6 @@ change ([EN](docs/OPERATIONAL-GUIDE.md#6-starting-work-a-small-task-a-large-chan
 | `mission/` | The missions conductor behind `agentbus missions`                          |
 | `service/` | The project services: systemd `--user` units, launchd plists                |
 | `setup.sh`, `setup/` | The installer, in bash and its Go port (`agentbus setup`)         |
-| `herdr-plugin.toml` | The herdr plugin `netbja.agentbus`: Projects picker, busmon action, workspace hook |
 
 ## Run the broker
 

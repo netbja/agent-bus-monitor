@@ -14,8 +14,9 @@
   back on at once. In kitty mode the repeat or release of the key that ended a pending
   prefix is dropped too (foureyes). **Gated per
   client**: the client profiles' `[keys]` table records `free`/`bound` per key as step 3 settled
-  it (claude and grok: `f12` free, verified offline; every other is unknown until the
-  `term record <client> f12-at-input` probe is run and recorded); bound is refused naming the
+  it (claude and grok: `f12` free, verified offline; codex: `f12` free by its
+  `term record codex f12-at-input` probe, 2026-11-16; kimi and agy unknown until that probe is run
+  and recorded for them); bound is refused naming the
   free keys, unknown is refused unless `--prefix` names the key (then a warning in the title),
   `--observe` is never gated and never types. Pending prefix and hold notices go to the outer
   terminal's title, never over the program's screen; detach restores the outer terminal
