@@ -52,6 +52,8 @@ func TestSenderIdentity(t *testing.T) {
 		{map[string]string{}, "anonymous", false},
 		{map[string]string{"AGENT_BUS_AGENT": "anonymous", human: "charlie"}, "charlie", true}, // anonymous is nobody: the person
 		{map[string]string{"AGENT_BUS_AGENT": "anonymous"}, "anonymous", false},
+		{map[string]string{human: "anonymous"}, "anonymous", false},                                // the person named anonymous is nobody too (reviewer-codex)
+		{map[string]string{"config.toml": "[identity]\nas = \"anonymous\"\n"}, "anonymous", false}, // recorded so: nobody
 		{map[string]string{human: "Not Valid"}, "anonymous", false},
 	} {
 		name, person := senderIdentity(senderEnv(t, c.env))
@@ -75,6 +77,11 @@ func TestIdentityGuardRefusesAnonymousOutsideATerminal(t *testing.T) {
 	// (foureyes: it sent 'from anonymous' through the guard).
 	if err := identityGuard(senderEnv(t, map[string]string{"AGENT_BUS_AGENT": "anonymous"}), "cmd", []string{"sentinel", "x"}); err == nil {
 		t.Fatal("AGENT_BUS_AGENT=anonymous allowed")
+	}
+	for _, m := range []map[string]string{{config.EnvName("identity.as"): "anonymous"}, {"config.toml": "[identity]\nas = \"anonymous\"\n"}} {
+		if err := identityGuard(senderEnv(t, m), "cmd", []string{"master", "hello"}); err == nil {
+			t.Fatalf("%v: a person named anonymous allowed", m)
+		}
 	}
 	// An identity set but invalid is said as such, not as none.
 	if err := identityGuard(senderEnv(t, map[string]string{config.EnvName("identity.as"): "Not Valid"}), "cmd", []string{"master", "x"}); err == nil ||
