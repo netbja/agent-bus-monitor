@@ -233,7 +233,7 @@ func holderTerms(project, key string) (int, error) {
 
 // holderTermList is the terminals of project's holder of build key.
 func holderTermList(project, key string) ([]holder.TermInfo, error) {
-	sock, err := holder.SocketPath(os.Getenv, project, key)
+	sock, err := holder.SocketFor(os.Getenv, project, key)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func holderTermList(project, key string) ([]holder.TermInfo, error) {
 // queued by the kernel) or accepts and stays silent is not ready
 // (reviewer-codex).
 func holderReady(getenv func(string) string, project, key string, timeout time.Duration) bool {
-	sock, err := holder.SocketPath(getenv, project, key)
+	sock, err := holder.SocketFor(getenv, project, key)
 	if err != nil {
 		return false
 	}

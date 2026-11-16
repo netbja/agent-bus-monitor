@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -45,18 +44,12 @@ func (h *Host) sockets() (map[string]string, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	names, err := filepath.Glob(filepath.Join(dir, "holder-*.sock"))
+	socks, err := ProjectSockets(dir) // both names: an older build's holder keeps its legacy one (P0-2 B)
 	if err != nil {
 		return nil, nil, err
 	}
-	socks := map[string]string{}
-	var keys []string
-	for _, n := range names {
-		key := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(n), "holder-"), ".sock")
-		if !service.ValidBuildKey(key) {
-			continue
-		}
-		socks[key] = n
+	keys := make([]string, 0, len(socks))
+	for key := range socks {
 		keys = append(keys, key)
 	}
 	slices.SortFunc(keys, func(a, b string) int {
@@ -90,7 +83,7 @@ func (h *Host) call(ctx context.Context, key string, req any) (Reply, error) {
 	if err := ctx.Err(); err != nil {
 		return Reply{}, err
 	}
-	sock, err := SocketPath(h.getenv, h.project, key)
+	sock, err := SocketFor(h.getenv, h.project, key)
 	if err != nil {
 		return Reply{}, err
 	}

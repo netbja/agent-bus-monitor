@@ -22,7 +22,7 @@ type holderProbe struct {
 	answer  func(project, key string) (terms []holder.TermInfo, ok bool)
 }
 
-// realHolderProbe lists <rundir>/agentbus/<project>/holder-<key>.sock (the
+// realHolderProbe lists the project's holder sockets (holder.ProjectSockets: h-<id>.sock, or an older build's holder-<key>.sock; the
 // directory checked, holder.ProjectDir) and asks each over its socket.
 func realHolderProbe(getenv func(string) string) holderProbe {
 	return holderProbe{
@@ -31,17 +31,13 @@ func realHolderProbe(getenv func(string) string) holderProbe {
 			if err != nil {
 				return nil, err
 			}
-			ents, err := os.ReadDir(dir)
+			socks, err := holder.ProjectSockets(dir) // both names (P0-2 B)
 			if err != nil {
 				return nil, err
 			}
 			out := map[string]time.Duration{}
-			for _, d := range ents {
-				key, ok := strings.CutPrefix(d.Name(), "holder-")
-				if key, ok = strings.CutSuffix(key, ".sock"); !ok || !service.ValidBuildKey(key) {
-					continue
-				}
-				if info, err := d.Info(); err == nil {
+			for key, sock := range socks {
+				if info, err := os.Lstat(sock); err == nil {
 					out[key] = time.Since(info.ModTime())
 				}
 			}
@@ -136,7 +132,7 @@ func holderEvidence(m service.Manager, paths service.Paths, project, currentRaw 
 }
 
 // holderAnswersAny: a holder of build key answers for some project of this
-// host (<rundir>/agentbus/*/holder-<key>.sock): its binary copy is in use.
+// host (its socket, either name: holder.SocketFor): its binary copy is in use.
 func holderAnswersAny(getenv func(string) string, key string) bool {
 	root, err := holder.RunAgentbusDir(getenv)
 	if err != nil {

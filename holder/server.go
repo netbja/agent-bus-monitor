@@ -7,7 +7,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/screen"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // Config is a holder's: one project (spec 4.4, Q4), its build, its socket
@@ -136,6 +139,13 @@ func (s *Server) Listen() error {
 		return fmt.Errorf("holder: %s already answers: another holder of this build runs", s.cfg.Socket)
 	}
 	_ = os.Remove(s.cfg.Socket)
+	// Beside a bounded name, the key file names this build (P0-2 B), written
+	// before the socket so a reader that finds the socket finds its key.
+	if kf := s.keyFile(); kf != "" {
+		if err := WriteKeyFile(kf, service.BuildKey(s.cfg.Build)); err != nil {
+			return fmt.Errorf("holder: its key file: %w", err)
+		}
+	}
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: s.cfg.Socket, Net: "unix"})
 	if err != nil {
 		return err
@@ -230,6 +240,20 @@ func (s *Server) Shutdown() {
 		t.close(s.cfg.Grace)
 	}
 	_ = os.Remove(s.cfg.Socket)
+	if kf := s.keyFile(); kf != "" {
+		_ = os.Remove(kf)
+	}
+}
+
+// keyFile is the key file beside the socket, "" for a socket not named
+// h-<id>.sock (a legacy name holds its key itself).
+func (s *Server) keyFile() string {
+	dir, name := filepath.Split(s.cfg.Socket)
+	id, ok := strings.CutPrefix(name, "h-")
+	if id, ok = strings.CutSuffix(id, ".sock"); !ok || id == "" {
+		return ""
+	}
+	return filepath.Join(dir, "h-"+id+".key")
 }
 
 // serveConn is one client: same uid only (S6), then hello and welcome,

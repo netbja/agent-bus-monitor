@@ -274,6 +274,13 @@ func TestAdminLocalReaders(t *testing.T) {
 	if err := os.WriteFile(sock, nil, 0o600); err != nil { // a socket file nothing answers on
 		t.Fatal(err)
 	}
+	kf, err := holder.KeyFilePath(env, "demo", service.BuildKey(holder.BuildID())) // written beside it by its holder (P0-2 B)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.WriteKeyFile(kf, service.BuildKey(holder.BuildID())); err != nil {
+		t.Fatal(err)
+	}
 	if got, err := readAdminHolders(context.Background(), env); err != nil || !got["demo"].unread {
 		t.Fatalf("a holder that does not answer: %v %v", got, err)
 	}
