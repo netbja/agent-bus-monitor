@@ -70,11 +70,17 @@ func (l TemplateLaunch) Command(s Start) (Command, error) {
 		if err != nil {
 			return Command{}, fmt.Errorf("holder: %w", err)
 		}
-		return Command{Argv: argv, Dir: l.Dir, Client: p.Client}, nil
+		return Command{Argv: argv, Env: roleEnv(s.Role), Dir: l.Dir, Client: p.Client}, nil
 	}
 	argv := []string{"env", "ROLES_TOML=" + l.Manifest, l.Launcher, s.Role, l.Project}
 	if profile != "" {
 		argv = append(argv, "--profile", profile)
 	}
-	return Command{Argv: argv, Dir: l.Dir, Client: p.Client}, nil
+	return Command{Argv: argv, Env: roleEnv(s.Role), Dir: l.Dir, Client: p.Client}, nil
 }
+
+// roleEnv names the role a terminal is for (P1-7): agent-launch starts only
+// its environment's AGENT_BUS_AGENT, and the holder's own environment may hold
+// another agent's (an up run from master's terminal). Added after the holder's
+// and the env file's, it wins over both.
+func roleEnv(role string) []string { return []string{"AGENT_BUS_AGENT=" + role} }

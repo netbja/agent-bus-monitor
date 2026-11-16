@@ -336,7 +336,7 @@ func TestReloadFailuresAreLoggedWithTheirRecovery(t *testing.T) {
 	}{
 		"SIGTERM ignored": {func(w *reloadWorld) { w.ignore = true }, "term 4242", "stop", "did not exit"},
 		"relaunch failed": {func(w *reloadWorld) { w.relaunch = errors.New("split refused") }, "term 4242;relaunch coder " + coderSession, "relaunch",
-			"agent-launch coder"},
+			"recover with agentbus --project "},
 		"no proof": {func(w *reloadWorld) { w.noProof = true }, "term 4242;relaunch coder " + coderSession, "proof", "agentbus agents"},
 		"still the old client": {func(w *reloadWorld) {
 			w.launched = clientfp.Fingerprint{Path: "/bin/claude", Target: clientfp.FileFP{Path: "/opt/claude/2.0", Ino: 1}}.Encode()
@@ -561,7 +561,7 @@ func TestReloadProvesTheTemplatesProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.relaunch = errors.New("relaunch failed")
-	if code, out := w.run(d, "sentinel", "coder"); code == 0 || !strings.Contains(out, "agent-launch coder "+w.b.Project()+" --profile review") {
+	if code, out := w.run(d, "sentinel", "coder"); code == 0 || !strings.Contains(out, "recover with agentbus --project "+w.b.Project()+" pop coder --profile review") || strings.Contains(out, "agent-launch") {
 		t.Fatalf("recovery: %d %s", code, out)
 	}
 }

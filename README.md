@@ -925,12 +925,15 @@ services yet. Switching to the workspace (or `agentbus up <p>` in it) brings eve
 - **`agentbus projects`** lists every known project with its broker state, services and agents,
   even with Redis down, and names the `agentbus up` to run.
 
-To resume one Claude Code conversation by hand, use the role launcher so its permission rules and
-Agent Bus identity stay attached:
+To resume one Claude Code conversation by hand, start it as a new terminal of the project's holder,
+through the role launcher, so its permission rules and Agent Bus identity stay attached:
 
 ```bash
-agent-launch coder myproject --resume <session-id>
+agentbus --project myproject pop coder --resume <session-id>
 ```
+
+The launcher refuses a session recorded for another role (it resumes only as that role), and, typed
+in an agent's terminal, any role but that agent's.
 
 Never run `claude --resume` by hand. Session resume through the launcher is Claude Code only:
 Codex, Kimi, Grok and Antigravity are refused until their session id source is verified

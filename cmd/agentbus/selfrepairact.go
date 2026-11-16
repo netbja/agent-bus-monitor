@@ -227,12 +227,8 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 		if err != nil {
 			why = "failed: " + err.Error() + "; no proof"
 		}
-		recovery := "agent-launch " + role + " " + c.project
-		if session != "" {
-			recovery += " --resume " + session
-		}
 		fin = bus.SwapEvent{Role: role, Event: bus.SwapFailed, By: "dispatch", OldPID: snap.PID, OldPane: snap.Pane, Episode: ep, Error: why,
-			Reason: "recover with " + recovery + " in a new pane of its tab, or agentbus up " + c.project + " --resume"}
+			Reason: recoveryHint(c.project, role, profile, session)}
 	}
 	msg := owedMsg{Mark: "selfrepair-done:" + role, Episode: ep,
 		Text: fmt.Sprintf("self-repair: %s relaunched (pid %d -> %d, pane %s -> %s, %s).", role, snap.PID, fin.NewPID, snap.Pane, fin.NewPane, fin.Reason)}

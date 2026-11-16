@@ -334,9 +334,11 @@ Votre projet est dans `~/code/myapp`. Le plus court est `cd ~/code/myapp && agen
      un volet existant. Une fois le nouvel agent prouvé, l'ancien volet est fermé s'il n'est plus
      qu'un shell. `--dry-run` affiche le plan, `--resume` reprend les sessions Claude Code
      enregistrées des agents.
-   - **Une conversation à la main :** `agent-launch coder myapp --resume <id-de-session>`. Ne lancez
-     jamais `claude --resume` à la main : l'agent perdrait ses règles de rôle et son identité sur
-     le bus.
+   - **Une conversation à la main :** `agentbus --project myapp pop coder --resume <id-de-session>`,
+     un nouveau terminal du holder du projet. Ne lancez jamais `claude --resume` à la main : l'agent
+     perdrait ses règles de rôle et son identité sur le bus. `agent-launch` tapé dans le terminal
+     d'un agent ne lance que le rôle de cet agent, et une session enregistrée pour un autre rôle ne
+     reprend que sous ce rôle.
    - `agentbus projects` liste tous les projets connus avec l'état du broker, les services et les
      agents, et indique le `agentbus up` à lancer.
 

@@ -21,7 +21,8 @@ var errRoleMissing = errors.New("role missing")
 
 // runRoles is the role manifest CLI the scripts call (agent-launch,
 // link-role-skills.sh, lib/roles.sh, bootstrap): the Go port of
-// scripts/lib/role_config.py. It needs no project and no broker. Exit codes
+// scripts/lib/role_config.py. It needs no project and no broker, but for a
+// launch with --resume, which reads the resume records (launchGuard). Exit codes
 // are the Python ones: 0, 1 on error (agent roles: ... on stderr), 3 for a
 // role that exists/field do not find.
 func runRoles(args, env []string, stdout, stderr io.Writer) int {
@@ -96,6 +97,15 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 	}
 	switch action {
 	case "launch":
+		if len(rest) >= 2 {
+			session := ""
+			if n := len(rest); n >= 4 && rest[n-2] == "--resume" {
+				session = rest[n-1]
+			}
+			if err := launchGuard(env, rest[0], rest[1], session, launchResumes); err != nil {
+				return err
+			}
+		}
 		switch {
 		case len(rest) == 2:
 			return rolecfg.Launch(m, rest[0], rest[1], env, stdout, stderr, syscall.Exec)

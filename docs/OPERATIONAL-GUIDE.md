@@ -320,8 +320,10 @@ Assume your target project is at `~/code/myapp`. The short way is `cd ~/code/mya
      comes back in a new pane beside its old one; nothing is ever typed into an existing pane.
      Once the new agent is proven, the old pane is closed if it is still a plain shell.
      `--dry-run` prints the plan, `--resume` resumes the Claude Code agents' recorded sessions.
-   - **One conversation by hand:** `agent-launch coder myapp --resume <session-id>`. Never run
-     `claude --resume` by hand: the agent would lose its role rules and its bus identity.
+   - **One conversation by hand:** `agentbus --project myapp pop coder --resume <session-id>`, a new
+     terminal of the project's holder. Never run `claude --resume` by hand: the agent would lose its
+     role rules and its bus identity. `agent-launch` typed in an agent's terminal launches only that
+     agent's role, and a session recorded for another role resumes only as that role.
    - `agentbus projects` lists every known project with its broker state, services and agents,
      and names the `agentbus up` to run.
 
@@ -555,7 +557,7 @@ to watch a pane.
   default, or `off`), its budgets (one relaunch per agent every 30 minutes, three a day),
   **Start services at login** (off, stored only for now) and **Development mode** (`dev = true`
   or `AGENT_BUS_DEV=1`). With `on`, the dispatch service relaunches a dead agent (its process gone
-  for a minute, three reads) in a new pane of its tab, resuming its session, master first, one at a
+  for a minute, three reads) in a new terminal of the holder, resuming its session, master first, one at a
   time, and recreates a required role's missing tab; master gets one line per relaunch. A relaunch
   with no proof within a minute, or a fourth death in a day, is escalated to master and rings your
   desktop, and nothing more is tried for it: `agentbus self-repair reset <agent> --as <you>` clears
