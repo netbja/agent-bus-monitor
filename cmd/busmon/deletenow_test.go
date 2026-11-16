@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -119,5 +121,37 @@ func TestDeleteErr(t *testing.T) {
 	}
 	if deleteErr("demo", 3, nil, nil) != nil {
 		t.Error("no error became one")
+	}
+}
+
+// Quota settings step 2 (§2.2, foureyes on r2): a project deleted takes its
+// [project.<p>] table of config.toml with it; a sibling's stays.
+func TestDeleteProjectNowRemovesItsConfigTable(t *testing.T) {
+	testredis.Configure(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	project := "dt" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b, _ := bus.Open(c, project)
+	b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}})
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[project." + project + ".dispatch]\nquota_warn = 80\n\n[project.sibling.dispatch]\nquota_warn = 70\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := deleteProjectNow(ctx, c, project, func(string) ([]string, error) { return nil, nil }); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if strings.Contains(string(got), project) || !strings.Contains(string(got), "[project.sibling.dispatch]") {
+		t.Fatalf("config.toml after the delete:\n%s", got)
 	}
 }

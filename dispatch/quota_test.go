@@ -915,15 +915,20 @@ func TestRunQuotaMessagesDateTheirReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	reset := now.Add(72 * time.Hour).Unix()
+	// Noon tomorrow: a relative label would say 'tomorrow 12:00', which is
+	// what a stored message must never carry.
+	y, m, d := now.AddDate(0, 0, 1).Date()
+	reset := time.Date(y, m, d, 12, 0, 0, 0, time.Local).Unix()
 	f := &fakeQuota{}
 	f.set(quota.Reading{Provider: "anthropic", ObservedAt: now.UnixMilli(),
 		Windows: []quota.Window{{Name: "seven_day", UsedPct: 88, ResetsAt: reset, Minutes: 7 * 24 * 60}}})
 	cfg := quotaConfig(f)
 	var asked atomic.Int32
-	cfg.Quota.DateFormat = func() string { asked.Add(1); return quota.DateISO }
+	cfg.Quota.DateFormat = func() string { asked.Add(1); return quota.DateRelative }
 	start(t, b, newFakeRT(alwaysReady), cfg)
-	want := "resets " + quota.ResetLabel(time.Unix(reset, 0), now, quota.DateISO)
+	// A stored message carries the absolute date, never today or tomorrow
+	// (master's decision, 2026-11-16): read after midnight, it stays true.
+	want := "resets " + quota.ResetStamp(time.Unix(reset, 0), now, quota.DateRelative)
 	// One snapshot per poll, all three checked in it: the pass writes the
 	// agent's warning, then the drain, then master's warning (reviewer-codex).
 	dated := func() map[string]bool {

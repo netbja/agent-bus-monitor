@@ -385,3 +385,69 @@ func writeAtomic(path, text string) error {
 	}
 	return nil
 }
+
+// RemoveProject removes project's [project.<project>] tables from the
+// config.toml at path (projects delete, quota settings step 2): each section
+// whose header is project.<project> or under it, to the next header; every
+// other byte kept. A dotted key elsewhere naming it is removed too. An
+// absent file or table is no edit; the edit must read back with only those
+// leaves gone.
+func RemoveProject(path, project string) error {
+	if !validName(project) {
+		return fmt.Errorf("invalid project name %q", project)
+	}
+	text, old, err := readForEdit(path)
+	if err != nil {
+		return err
+	}
+	prefix := "project." + project + "."
+	has := false
+	for k := range old {
+		if strings.HasPrefix(k, prefix) {
+			has = true
+		}
+	}
+	if !has {
+		return nil
+	}
+	lines := strings.SplitAfter(text, "\n")
+	var kept []string
+	table, drop := "", false
+	for _, line := range lines {
+		s := strings.TrimSpace(line)
+		if strings.HasPrefix(s, "[") && !strings.HasPrefix(s, "[[") {
+			if end := strings.Index(s, "]"); end > 0 {
+				table = strings.TrimSpace(s[1:end])
+				drop = table == "project."+project || strings.HasPrefix(table, prefix)
+			}
+		}
+		if drop {
+			continue
+		}
+		if eq := strings.Index(s, "="); eq > 0 && !strings.HasPrefix(s, "#") && !strings.HasPrefix(s, "[") {
+			key := strings.Trim(strings.TrimSpace(s[:eq]), `"'`)
+			if table != "" {
+				key = table + "." + key
+			}
+			if strings.HasPrefix(key, prefix) {
+				continue
+			}
+		}
+		kept = append(kept, line)
+	}
+	edited := strings.Join(kept, "")
+	got, err := leavesOf(edited)
+	if err != nil {
+		return errNotReadBack
+	}
+	expect := cloneLeaves(old)
+	for k := range expect {
+		if strings.HasPrefix(k, prefix) {
+			delete(expect, k)
+		}
+	}
+	if !reflect.DeepEqual(expect, got) {
+		return errNotReadBack
+	}
+	return writeAtomic(path, edited)
+}

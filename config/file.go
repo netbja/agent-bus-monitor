@@ -59,6 +59,9 @@ type File struct {
 	Warnings  []Warning
 	values    map[string]fileValue
 	refused   map[string]fileValue // a FailClosed key's line its rule refuses (value nil)
+	// projects are the [project.<name>] tables: name -> key -> value, only
+	// for the Project keys (quota settings §2.2).
+	projects map[string]map[string]fileValue
 	endpoints []Endpoint           // config.toml's [llm.<name>] tables (llm.go)
 }
 
@@ -130,6 +133,10 @@ func load(path, label string, legacy bool) *File {
 	for _, name := range names {
 		if !legacy && strings.HasPrefix(name, "llm.") {
 			continue // an endpoint, read above
+		}
+		if rest, ok := strings.CutPrefix(name, "project."); ok && !legacy {
+			f.loadProject(rest, leaves[name], lines[name])
+			continue
 		}
 		k, known := Lookup(name)
 		if known && legacy && !k.Legacy {
@@ -203,4 +210,62 @@ func keyLines(text string) map[string]int {
 		}
 	}
 	return out
+}
+
+// loadProject reads one leaf of a [project.<name>] table, rest being
+// "<name>.<key>": only a valid project name and a Project key; anything
+// else is a warning, as an unknown key is.
+func (f *File) loadProject(rest string, v any, line int) {
+	project, key, ok := strings.Cut(rest, ".")
+	k, known := Lookup(key)
+	switch {
+	case !ok || !validName(project):
+		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: "project." + rest, Msg: "not a project's table ([project.<name>], a lowercase name)"})
+		return
+	case !known || !k.Project:
+		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: "project." + rest, Msg: "has no per-project value (only the quota thresholds do)"})
+		return
+	}
+	val, why := k.file(v)
+	if why != "" {
+		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: "project." + rest, Msg: why + "; ignored"})
+		return
+	}
+	if f.projects == nil {
+		f.projects = map[string]map[string]fileValue{}
+	}
+	if f.projects[project] == nil {
+		f.projects[project] = map[string]fileValue{}
+	}
+	f.projects[project][key] = fileValue{value: val, line: line}
+}
+
+// ProjectValue resolves a Project key for project (quota settings §2.2, the
+// person's Q4b): config.toml's [project.<project>] table, then the project's
+// service env file (envFile, as service.LoadEnvFile reads it: the shell's
+// variables at up), then config.toml's machine key, then the default. The
+// process environment is never read: a service's is a start-time copy, so
+// a value changed or removed on disk would never apply. A value a key's rule
+// refuses is skipped, never used.
+func ProjectValue(f *File, envFile map[string]string, project, name string) Resolved {
+	k, ok := Lookup(name)
+	if !ok || !k.Project {
+		panic("config: " + name + " has no per-project value")
+	}
+	if f != nil {
+		if v, ok := f.projects[project][name]; ok {
+			return Resolved{Key: k, Value: v.value, Source: f.Label + " [project." + project + "]", Line: v.line}
+		}
+	}
+	if raw := envFile[k.Env]; raw != "" && k.Env != "" {
+		if v, res := k.env(raw); res == envUse {
+			return Resolved{Key: k, Value: v, Source: "env file"}
+		}
+	}
+	if f != nil {
+		if v, ok := f.values[name]; ok {
+			return Resolved{Key: k, Value: v.value, Source: f.Label, Line: v.line}
+		}
+	}
+	return Resolved{Key: k, Value: k.Default, Source: "default"}
 }

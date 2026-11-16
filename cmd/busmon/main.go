@@ -46,6 +46,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/projfiles"
@@ -227,6 +228,13 @@ func deleteProjectNow(ctx context.Context, client *redis.Client, project string,
 	}
 	// The last check and the DEL in one script; then the keys that came back.
 	n, left, err := bus.DeleteProjectIfQuiet(ctx, client, project)
+	if err == nil {
+		// Its [project.<p>] table of config.toml goes with it (quota settings
+		// §2.2): a project deleted keeps no thresholds behind.
+		if terr := config.RemoveProject(config.Path(os.Getenv), project); terr != nil {
+			return n, kinds, left, fmt.Errorf("%s deleted, but its [project.%s] table in config.toml was not removed: %v", project, project, terr)
+		}
+	}
 	return n, kinds, left, deleteErr(project, n, kinds, err)
 }
 
