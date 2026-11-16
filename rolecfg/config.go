@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -296,6 +297,37 @@ func (m *Manifest) Fallbacks(role string) []string {
 	info, _ := asTable(m.Roles[role])
 	names, _ := stringNames(info["fallback_profiles"])
 	return names
+}
+
+// ResumeProfile is the profile a resume recorded on profile runs on
+// (resume-record-profile): "" (the role's own) for "" or its own, the
+// profile itself for one of its fallback_profiles, and "" with onOwn for
+// another profile this manifest defines for the role on the role's own
+// client, which a swap --force may have put it on: the session resumes, on
+// its own profile, never on the recorded one (a record is a broker key). Any
+// other profile is an error: another client's session is not this client's.
+func (m *Manifest) ResumeProfile(role, profile string) (run string, onOwn bool, err error) {
+	own, err := m.Resolve(role)
+	if err != nil {
+		return "", false, err
+	}
+	if profile == "" || profile == own.Profile {
+		return "", false, nil
+	}
+	outside := fmt.Errorf("profile %s is neither %s's own nor one of its fallback_profiles", profile, role)
+	if !namePattern.MatchString(profile) {
+		return "", false, outside
+	}
+	if slices.Contains(m.Fallbacks(role), profile) {
+		if _, err := m.ResolveWith(role, profile); err != nil {
+			return "", false, err
+		}
+		return profile, false, nil
+	}
+	if ran, err := m.ResolveWith(role, profile); err != nil || ran.Client != own.Client {
+		return "", false, outside
+	}
+	return "", true, nil
 }
 
 // checkFallbacks (v0.15 §4): each fallback is a defined profile that resolves

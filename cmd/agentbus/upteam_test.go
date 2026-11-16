@@ -148,6 +148,7 @@ func TestOpenTeamRecordConditions(t *testing.T) {
 		// profile, never the recorded one (the record is a broker key).
 		{"our own forced swap, same client", "master", bus.ResumeRecord{Session: "4fa9d0ff-21", Profile: "claude-opus"}, "4fa9d0ff-21", "", "master: its recorded profile claude-opus is neither master's own nor one of its fallback_profiles: session 4fa9d0ff-21 resumes on its own profile claude"},
 		{"a profile roles.toml lacks", "master", bus.ResumeRecord{Session: "4fa9d0ff-21", Profile: "gone"}, "", "", "master: its resume record is not used"},
+		{"a forced swap with a bad session", "master", bus.ResumeRecord{Session: "4fa9d0ff-21;rm", Profile: "claude-opus"}, "", "", "master: its resume record is not used (its session id is not valid)"},
 	} {
 		h := &recHost{Host: fake.New()}
 		_, notices := openFixture(t, h, map[string]bus.ResumeRecord{c.role: c.rec})
@@ -157,6 +158,9 @@ func TestOpenTeamRecordConditions(t *testing.T) {
 		}
 		if got := strings.Join(notices, "\n"); c.notice == "" && got != "" || c.notice != "" && !strings.Contains(got, c.notice) {
 			t.Errorf("%s: notices %q", c.name, got)
+		}
+		if got := strings.Join(notices, "\n"); c.session == "" && strings.Contains(got, "resumes on") {
+			t.Errorf("%s: a record not used is said to resume: %q", c.name, got)
 		}
 	}
 }

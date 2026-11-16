@@ -47,22 +47,19 @@ func resumeChoice(m *rolecfg.Manifest, role string, rec *bus.ResumeRecord) (prof
 	if err != nil {
 		return "", "", err.Error(), ""
 	}
+	run, onOwn, err := m.ResumeProfile(role, rec.Profile)
+	if err != nil {
+		return "", "", err.Error(), ""
+	}
 	p := own
-	if rec.Profile != "" && rec.Profile != own.Profile {
-		outside := fmt.Sprintf("profile %s is neither %s's own nor one of its fallback_profiles", rec.Profile, role)
-		if !bus.ValidName(rec.Profile) {
-			return "", "", outside, ""
+	if run != "" {
+		if p, err = m.ResolveWith(role, run); err != nil {
+			return "", "", err.Error(), ""
 		}
-		if slices.Contains(m.Fallbacks(role), rec.Profile) {
-			if p, err = m.ResolveWith(role, rec.Profile); err != nil {
-				return "", "", err.Error(), ""
-			}
-			profile = rec.Profile
-		} else if ran, err := m.ResolveWith(role, rec.Profile); err != nil || ran.Client != own.Client {
-			return "", "", outside, ""
-		} else if bus.ValidSessionID(rec.Session) {
-			note = fmt.Sprintf("its recorded %s: session %s resumes on its own profile %s", outside, rec.Session, own.Profile)
-		}
+		profile = run
+	}
+	if onOwn { // an invalid session returns below, with no note
+		note = fmt.Sprintf("its recorded profile %s is neither %s's own nor one of its fallback_profiles: session %s resumes on its own profile %s", rec.Profile, role, rec.Session, own.Profile)
 	}
 	switch {
 	case !bus.ValidSessionID(rec.Session):

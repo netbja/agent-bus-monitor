@@ -53,14 +53,23 @@ func (l TemplateLaunch) Command(s Start) (Command, error) {
 		return Command{}, fmt.Errorf("holder: role %s: %w", s.Role, err)
 	}
 	p, profile := own, ""
-	if s.Profile != "" && s.Profile != own.Profile {
+	if s.ResumeSession != "" {
+		// A resume runs where rolecfg.ResumeProfile says: a forced swap's
+		// profile of the role's own client resumes on its own profile
+		// (resume-record-profile: holder drain, up).
+		if profile, _, err = m.ResumeProfile(s.Role, s.Profile); err != nil {
+			return Command{}, fmt.Errorf("holder: %w", err)
+		}
+	} else if s.Profile != "" && s.Profile != own.Profile {
 		if !slices.Contains(m.Fallbacks(s.Role), s.Profile) {
 			return Command{}, fmt.Errorf("holder: profile %s is neither %s's own nor one of its fallback_profiles", s.Profile, s.Role)
 		}
-		if p, err = m.ResolveWith(s.Role, s.Profile); err != nil {
-			return Command{}, fmt.Errorf("holder: profile %s: %w", s.Profile, err)
-		}
 		profile = s.Profile
+	}
+	if profile != "" {
+		if p, err = m.ResolveWith(s.Role, profile); err != nil {
+			return Command{}, fmt.Errorf("holder: profile %s: %w", profile, err)
+		}
 	}
 	if s.ResumeSession != "" {
 		if !rolecfg.ResumeVerified(p.Client) {
