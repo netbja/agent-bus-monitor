@@ -324,40 +324,9 @@ func main() {
 		}
 
 	case "report":
-		rest, auto := extractBool(rest, "--auto")
-		var to []string
-		for {
-			var t string
-			if rest, t = extractFlag(rest, "--to"); t == "" {
-				break
-			}
-			to = append(to, t)
-		}
-		if len(rest) < 2 {
-			die("usage: report <agent> [--auto] [--to <agent>]... <message>")
-		}
-		for _, t := range to {
-			if !bus.ValidName(t) {
-				die(fmt.Sprintf("report: --to %q: invalid agent name", t))
-			}
-		}
-		kind := bus.ReportNote
-		if auto {
-			kind = bus.ReportAuto
-		}
-		msg := strings.Join(rest[1:], " ")
-		if note := reportShapeNote(msg); note != "" {
-			fmt.Fprintln(os.Stderr, note)
-		}
-		id, err := b.Report(ctx, rest[0], kind, msg)
+		id, err := sendReport(ctx, b, rest, os.Stderr)
 		if err != nil {
 			die(err.Error())
-		}
-		// A report wakes nobody; --to also tells the agents waiting for it.
-		for _, t := range to {
-			if _, err := b.Cmd(ctx, rest[0], t, bus.CmdDirective, id, reportNotice(id, msg)); err != nil {
-				die(fmt.Sprintf("report %s published, but telling %s failed: %v", id, t, err))
-			}
 		}
 		fmt.Println(id) // the entry id, as cmd prints: what `handoff --report` takes
 
