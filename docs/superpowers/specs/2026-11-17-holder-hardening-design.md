@@ -1,6 +1,8 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r1, for review (subject `holder-hardening-spec`). Not built. Base: origin/dev
+Status: spec, r2, for review (subject `holder-hardening-spec`). r2: reviewer-codex (the reboot
+judgement must wait for the holder to answer: H1b, and reboot-resume §3 amended), foureyes's notes
+(an older build's agents after a reboot, H3's notice mark, Q7's cost). Not built. Base: origin/dev
 `079ed636`. Author: coder, task `holder-hardening-spec`, from master's directive of 2026-11-17
 relaying the person's request for holder robustness. One PR (this spec); the build is §8's steps.
 The person's decisions are §7.
@@ -92,8 +94,38 @@ build drains and is never started again (`service/holder.go:14-20`). The enable 
 `up` on a new build enables the new key and disables the old one (a running old holder keeps
 running; disable starts and stops nothing). `service gc` already removes a disabled old unit.
 
-No start order is needed: the dispatcher holds self-repair until the holder answers, and the
-holder needs no broker to start.
+**After an upgrade not yet drained**, the enable has moved to the new build: a reboot then starts
+only the new, empty holder. The old build's agents are not lost: they are dead, and self-repair (or
+reboot-resume's restart) relaunches them into the new holder, resumed. Nobody should expect the old
+holder back after a reboot; `service gc` removes it.
+
+**H1b. The reboot judgement waits for the holder (amends reboot-resume §3).** Self-repair already
+holds while the holder does not answer, but reboot-resume's judgement is **one-shot**: it runs once
+before the dispatcher's first pass, and its condition 2b ("the holder answers") would record
+`unplanned`, `holder not answering`, whenever the dispatch service wins the race at boot or login.
+`HoldReboot` would then keep the team stopped after the holder came up. Unit ordering does not fix
+it: `After=` with `Type=simple` orders the starts, not the socket's readiness, and launchd has no
+order at all. So, on every platform:
+
+1. **A readiness phase, before the verdict.** When `run.json` reads another boot (a verdict other
+   than `none` is possible), the dispatch service, holding the lease, polls the current build's
+   holder (the same probe as health `holder`: its socket answers a `Describe`) every 2 s for at
+   most **2 minutes** (`holderReadyWait`, a constant).
+2. **Nothing is decided during it.** `run.json` is not rewritten (a dispatcher that restarts during
+   the phase judges again from the start), `{p}:reboot` is not written, the counter is neither read
+   nor incremented, and self-repair holds every agent: a new hold reason `reboot pending` for this
+   boot, before any relaunch.
+3. **The holder answers within the wait:** the judgement runs as reboot-resume §3 specifies, 2b
+   holding.
+4. **It does not:** the verdict is `unplanned`, `why` `holder not answering` (after the 2-minute wait), final for this
+   boot: no relaunch, nothing counted, the person told (§3.3's notice), busmon's popup offers the
+   relaunch, exactly as for any other `unplanned`.
+
+Tests (with reboot-resume A, deterministic, fake clock and fake holder probe): dispatch starts first,
+the holder answers after 30 s → `restarting` exactly once, the counter incremented once, nothing
+relaunched before the verdict; the holder never answers → `unplanned`, `holder not answering`
+after 2 minutes, no relaunch, the counter untouched; a dispatcher restart during the phase → judged once,
+counted once; a same-boot start (`none`) → no phase, no wait.
 
 **H2. Reboot-resume's remaining steps, in this order:** A (with H1 in place, so condition 2b can
 hold), then C (boot), then B (the popup). Until A, a reboot after H1 brings the holder and the
@@ -107,8 +139,10 @@ before (§7, Q2).
 agents it held. Health `holder`:
 
 - `Person: [Fail]`, `Command: agentbus --project <p> service start holder`: in For you;
-- a desktop notice once per episode (the notifications path, as `prompt-notify` does for a blocked
-  pane), naming the project and the command;
+- a desktop notice once per episode, naming the project and the command, sent through
+  `FencedNotifyOnceForPerson` with the mark `holder-down:<episode>` (the episode being the health
+  check's first failing reading, Redis TIME): a dispatcher restart in the same episode does not
+  notify twice (as `prompt-notify`'s once-per-episode marks);
 - the warn `holder_restarted` stays in hand (self-repair is bringing the agents back), but its text
   says how many are waiting and the time the queue takes (§2.1's pace).
 
@@ -204,13 +238,15 @@ what step 1 builds, not this sequence: H6 composes with it.
    (H7), or does a skipped agent wait for your next `update`?
 7. **The recovery pace after a crash:** 2 minutes between relaunches (`ProjectPause`) gives about
    15 minutes for 8 agents. Keep it (it protects quotas and the machine), or shorten it after a
-   holder crash only, when every agent died at once?
+   holder crash only, when every agent died at once? The cost of shorter: eight resumed sessions
+   start within a minute or two, mostly on one provider's quota, each reloading its whole
+   conversation.
 
 ## 8. Build order (each its own PR, into dev)
 
 1. H3 (health `holder` to the person, the notice) and the endurance test of §5: they change no
    behaviour of the services, and the test pins today's recovery first.
-2. Reboot-resume A, with H1 (§7 Q1, Q2).
+2. Reboot-resume A, with H1 and H1b (§7 Q1, Q2).
 3. H4 and H5 as the person answers Q3 and Q4.
 4. H6 (and H7 if Q6 says so).
 5. Reboot-resume C, then B.

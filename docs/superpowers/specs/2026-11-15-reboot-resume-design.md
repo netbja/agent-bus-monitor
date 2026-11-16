@@ -143,6 +143,10 @@ When every condition holds, in this order (the first that fails is `why`):
    session`; and with a holder that does not answer, `why` `holder not answering`. So an
    unattended restart is promised only after the herdr-10 cutover; before it, an unplanned reboot
    gets the popup, as an intentional one;
+   *Amended 2026-11-17 ([holder hardening](2026-11-17-holder-hardening-design.md), H1 and H1b):
+   the holder is not enabled with the other services today, so H1 must ship with step A; and 2b is
+   judged only after a bounded readiness phase (the holder polled for at most 2 minutes, nothing
+   written, counted or relaunched meanwhile), its timeout giving `holder not answering` (after the 2-minute wait).*
 3. **the repository is intact** (the person's point 2), a read-only check of the project's
    repository: no `index.lock` in its git directory or in any of its worktrees' (`git worktree
    list --porcelain`, then a stat of each `index.lock`), and `git fsck --no-dangling --no-progress`
