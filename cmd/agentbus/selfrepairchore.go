@@ -69,7 +69,7 @@ func selfRepairResume(r selfRepairReads, role string) (profile, session, why str
 	if r.Manifest == nil {
 		return "", "", "no manifest"
 	}
-	profile, session, why = resumeChoice(r.Manifest, role, &rec)
+	profile, session, why, _ = resumeChoice(r.Manifest, role, &rec)
 	return profile, session, why
 }
 
