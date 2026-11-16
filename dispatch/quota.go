@@ -320,9 +320,21 @@ func servedPast(r quota.Reading, w quota.Window) bool {
 	return w.UsedPct >= 100 && r.AvailableAt > w.Observed(r).UnixMilli()
 }
 
-// heldBy reports whether agent's provider is held this pass.
-func (l *loop) heldBy(snap *bus.AgentSnapshot) bool {
-	return snap != nil && snap.Provider != "" && l.quota.held[snap.Provider]
+// heldBy reports whether agent is held: its provider this pass, or its own
+// login (hold-login:<agent>, login-updates r9 §3.6).
+func (l *loop) heldBy(agent string, snap *bus.AgentSnapshot) bool {
+	return l.heldReason(agent, snap) != ""
+}
+
+// heldReason is bus.HeldReason's answer from this pass's view: quota, login or "".
+func (l *loop) heldReason(agent string, snap *bus.AgentSnapshot) string {
+	if snap != nil && snap.Provider != "" && l.quota.held[snap.Provider] {
+		return bus.HeldQuota
+	}
+	if l.loginHeld[agent] {
+		return bus.HeldLogin
+	}
+	return ""
 }
 
 // budgetOf is a reading as {p}:budget carries it; the legacy percent fields

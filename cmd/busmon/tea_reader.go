@@ -467,6 +467,9 @@ func (m *Model) buildPage() bool {
 			b.join(termPreviewLines(*p.term, width))
 		}
 		b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
+		for _, l := range loginHoldLines(map[string]*agentState{p.key: a}) { // its own login hold (login-updates r9 §3.6)
+			b.segs(l...).text("\n")
+		}
 		p.title, p.body, p.plain = title, b.Lines(), agentDetailPlain(a)
 		p.plainWhat, p.threadWhat, p.threadPlain = "status", "report", ""
 		if rep, _, ok := lastReport(p.key, m.feed.feed); ok { // the report the page shows, whole (the person)

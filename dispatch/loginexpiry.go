@@ -101,6 +101,7 @@ func (l *loop) credentialsPass(ctx context.Context, now time.Time, zone *time.Lo
 	l.loginRes.mu.Lock()
 	l.loginRes.read, l.loginRes.all = true, results
 	l.loginRes.mu.Unlock()
+	l.holdFailed(results) // before anything that can fail: an expired login is never woken (fail closed)
 	for _, r := range results {
 		if r.Status != health.Warn {
 			continue
@@ -114,7 +115,7 @@ func (l *loop) credentialsPass(ctx context.Context, now time.Time, zone *time.Lo
 			l.log(map[string]any{"action": "login-expiry-warn", "agent": r.Agent, "expiry": r.Expiry.UnixMilli()})
 		}
 	}
-	return nil
+	return l.loginHolds(ctx, results, now, zone)
 }
 
 // judgeLogin: unknown with the read's reason; fail once passed; warn within
