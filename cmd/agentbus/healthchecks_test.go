@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,31 @@ func TestContextEvidence(t *testing.T) {
 	out := health.EvaluateContext(ev, 80)
 	if len(ev) != 2 || out.Status != health.Warn || out.Detail != "at or above 80%: coder 86%" {
 		t.Fatalf("evidence %+v, outcome %+v", ev, out)
+	}
+}
+
+// vt-osc-title: screen-unknown's evidence: the declared state, the
+// dispatcher's observation (fresh or aged), and whether the agent's client
+// has a ready signature to read a screen with.
+func TestScreenEvidence(t *testing.T) {
+	now := int64(10_000_000_000)
+	snaps := map[string]bus.AgentSnapshot{
+		"coder": {State: "idle", Client: "claude-code"},
+		"kimi":  {State: "idle", Client: "kimi-cli"},
+		"x":     {State: "idle", Client: "nonesuch"},
+	}
+	obs := map[string]bus.Observation{
+		"coder": {State: "unknown", Since: now - 14*60_000, At: now - 1000},
+		"kimi":  {State: "unknown", Since: now - 30*60_000, At: now - 1000},
+		"x":     {State: "unknown", Since: now - 30*60_000, At: now - 1000},
+	}
+	ev := screenEvidence(snaps, obs, now)
+	out := health.EvaluateScreenUnknown(ev, now)
+	if out.Status != health.Warn || !strings.Contains(out.Detail, "coder 14 min") || strings.Contains(out.Detail, "x ") {
+		t.Fatalf("%+v %+v", ev, out)
+	}
+	obs["coder"] = bus.Observation{State: "unknown", Since: now - 14*60_000, At: now - bus.ObservedTTL - 1}
+	if out := health.EvaluateScreenUnknown(screenEvidence(snaps, obs, now), now); strings.Contains(out.Detail, "coder") {
+		t.Fatalf("an aged observation: %+v", out)
 	}
 }

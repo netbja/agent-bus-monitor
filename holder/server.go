@@ -407,7 +407,12 @@ func (s *Server) start(f Start) Reply {
 	id := "t" + strconv.Itoa(s.next)
 	c := exec.Command(cmd.Argv[0], cmd.Argv[1:]...)
 	c.Dir = cmd.Dir
-	c.Env = append(append(os.Environ(), cmd.Env...), "AGENTBUS_TERM_ID="+id, "AGENTBUS_HOST="+s.cfg.Socket)
+	// The terminal is x/vt, an xterm with 256 colours and truecolor: the
+	// program is told so whatever the holder inherited (a service runs with
+	// TERM=dumb, and Claude Code then drew its dim text unstyled, which its
+	// ready signature read as typed: vt-osc-title). A role's own env wins.
+	c.Env = append(append(append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor"), cmd.Env...),
+		"AGENTBUS_TERM_ID="+id, "AGENTBUS_HOST="+s.cfg.Socket)
 	// The registry's lock is held from the fork until the pid is tracked,
 	// so the reaper never takes the new program for an orphan.
 	trackMu.Lock()

@@ -14,3 +14,7 @@ func LoginSourceOf(client string) string {
 	}
 	return profiles[name].LoginSource
 }
+
+// BusClientProfile is the profile of an agent's bus client name
+// (AGENT_BUS_CLIENT), "" for a client without one.
+func BusClientProfile(client string) string { return busClientProfiles[client] }

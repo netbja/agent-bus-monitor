@@ -272,3 +272,25 @@ func TestEmptyInputAndInputHolds(t *testing.T) {
 		t.Errorf("a dialog under an empty box: ready %v, reads empty %v", ready, sigs["codex"].EmptyInput(withDialog))
 	}
 }
+
+// vt-osc-title (2026-11-16): a prompt suggestion is dim text on the empty
+// input, as the placeholder is, and reads ready; drawn unstyled (Claude Code
+// under TERM=dumb, which a service passed to the holder's terminals) the
+// same text is typed text and does not. Hence the holder tells every
+// terminal TERM=xterm-256color (holder/server.go).
+func TestClaudeSuggestionReadsReady(t *testing.T) {
+	sig := Signatures()["claude"]
+	empty := readScreen(t, "claude-empty.txt")
+	placeholder := "\x1b[2mTry \"how do I log an error?\"\x1b[0m"
+	if !strings.Contains(empty, placeholder) {
+		t.Fatal("the capture's placeholder moved")
+	}
+	suggested := strings.Replace(empty, placeholder, "\x1b[2mrun the tests and fix what fails\x1b[0m", 1)
+	if ready, _ := sig.Match(suggested); !ready {
+		t.Fatal("a dim suggestion does not read ready")
+	}
+	unstyled := strings.Replace(empty, placeholder, "run the tests and fix what fails", 1)
+	if ready, _ := sig.Match(unstyled); ready {
+		t.Fatal("unstyled text read ready: it is what a person typed")
+	}
+}

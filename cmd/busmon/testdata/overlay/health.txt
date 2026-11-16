@@ -41,4 +41,5 @@
   ? Holder leftovers                 no current measurement
   ? Idle master                      no current measurement
   ? Login expiry                     no current measurement
+  ? Unreadable screen                no current measurement
   ── fine · 1  (a shows them) ──

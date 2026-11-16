@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
@@ -291,6 +292,24 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			clientUpdateRefresh(ctx, ev)
 			out := health.EvaluateClientUpdates(ev)
 			return out.Status, out.Detail, nil
+		}),
+		healthOutcomeTask("screen-unknown", func(ctx context.Context) (health.Outcome, error) {
+			unknown := func(d string, err error) (health.Outcome, error) {
+				return health.Outcome{Status: health.Unknown, Detail: d}, err
+			}
+			now, err := b.ServerTime(ctx)
+			if err != nil {
+				return unknown("server time unavailable", err)
+			}
+			snaps, err := b.Agents(ctx)
+			if err != nil {
+				return unknown("agent snapshots unavailable", err)
+			}
+			observed, err := b.Observed(ctx)
+			if err != nil {
+				return unknown("pane observations unavailable", err)
+			}
+			return health.EvaluateScreenUnknown(screenEvidence(snaps, observed, now.UnixMilli()), now.UnixMilli()), nil
 		}),
 		healthTask("context", func(ctx context.Context) (health.Status, string, error) {
 			fills, err := b.Context(ctx)
@@ -932,4 +951,23 @@ func persistenceOutcome(appendOnly, save string, err error) (health.Status, stri
 	}
 	out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{Known: true, AppendOnly: appendOnly, Save: save})
 	return out.Status, out.Detail, nil
+}
+
+// screenEvidence is screen-unknown's evidence (vt-osc-title): each agent's
+// declared state and the dispatcher's last observation of its screen; an
+// agent counts only when its client has a ready signature to read a screen
+// with (agentstate), so a client that always reads unknown is never named.
+func screenEvidence(snaps map[string]bus.AgentSnapshot, observed map[string]bus.Observation, nowMs int64) []health.ScreenEvidence {
+	sigs := agentstate.Signatures()
+	var ev []health.ScreenEvidence
+	for a, s := range snaps {
+		o, ok := observed[a]
+		if !ok {
+			continue
+		}
+		sig, has := sigs[agentstate.BusClientProfile(s.Client)]
+		ev = append(ev, health.ScreenEvidence{Agent: a, Declared: s.State, Observed: o.State, Since: o.Since,
+			Fresh: o.Fresh(nowMs), Judged: has && len(sig.Ready) > 0})
+	}
+	return ev
 }
