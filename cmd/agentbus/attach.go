@@ -120,6 +120,32 @@ type attachSession struct {
 	Out     io.Writer
 	Size    func() (cols, rows int)
 	Resized <-chan os.Signal // SIGWINCH (nil: none)
+	// Banner is how long the way out is shown on screen before the agent's
+	// screen (P1-8); a key ends it at once. 0: no banner (the title still
+	// names it).
+	Banner time.Duration
+}
+
+// attachBanner is how long agentbus attach shows the way out before the
+// agent's screen.
+const attachBanner = 2 * time.Second
+
+// keyLabel is a prefix as the person reads it: F12, Ctrl-].
+func keyLabel(k string) string { return config.AttachKeyLabel(k) }
+
+// bannerText is the screen an attach starts on: which agent, and the way
+// out, on a cleared screen, before the agent's screen replaces it.
+func bannerText(agent, prefix string, observe bool) string {
+	k := keyLabel(prefix)
+	what := "Attached to " + agent + "."
+	if observe {
+		what = "Observing " + agent + " (read-only)."
+	}
+	more := "  " + k + " twice sends " + k + " to " + agent + ". Ctrl-C goes to " + agent + ", it does not leave.\r\n"
+	if observe {
+		more = "" // an observer sends nothing
+	}
+	return "\x1b[2J\x1b[H\r\n  " + what + "\r\n\r\n  To leave: press " + k + " then d.\r\n" + more + "\r\n  (any key continues)\r\n"
 }
 
 // attachRestore leaves the outer terminal as a shell expects it, whatever
@@ -144,10 +170,6 @@ func runAttach(s attachSession) error {
 		return err
 	}
 	defer cl.Close()
-	cols, rows := s.Size()
-	if _, err := cl.Call(holder.Attach{Term: s.Term.ID, Observe: s.Observe, Cols: cols, Rows: rows}); err != nil {
-		return err
-	}
 	var outMu sync.Mutex
 	write := func(b []byte) {
 		outMu.Lock()
@@ -155,13 +177,52 @@ func runAttach(s attachSession) error {
 		_, _ = s.Out.Write(b)
 	}
 	title := func(t string) { write([]byte("\x1b]2;" + t + "\x07")) }
+	// The title always names the way out (P1-8); a notice replaces it while
+	// it lasts, then it comes back.
+	way := "agentbus attach " + s.Term.Role + ": " + keyLabel(s.Prefix) + " then d detaches"
+	if s.Warn != "" {
+		way += "; " + s.Warn
+	}
+	idle := func() { title(way) }
 	defer write([]byte(attachRestore))
 	// Focus reports from the outer terminal (attachRestore turns them off):
 	// the holder's person-active judgement needs to know when the person
 	// looks away (reviewer-codex).
 	write([]byte("\x1b[?1004h"))
-	if s.Warn != "" {
-		title("agentbus attach: " + s.Warn)
+	idle()
+
+	chunks := make(chan []byte)
+	go func() { // the person's keys
+		buf := make([]byte, 4096)
+		for {
+			n, err := s.In.Read(buf)
+			if n > 0 {
+				chunks <- append([]byte(nil), buf[:n]...)
+			}
+			if err != nil {
+				close(chunks)
+				return
+			}
+		}
+	}()
+	// The banner: the way out on screen before the agent's (P1-8). A key
+	// ends it and is kept for the agent; a closed input ends the attach.
+	var first []byte
+	if s.Banner > 0 {
+		write([]byte(bannerText(s.Term.Role, s.Prefix, s.Observe)))
+		select {
+		case <-time.After(s.Banner):
+		case b, ok := <-chunks:
+			if !ok {
+				return nil
+			}
+			first = b
+		}
+		write([]byte("\x1b[2J\x1b[H"))
+	}
+	cols, rows := s.Size()
+	if _, err := cl.Call(holder.Attach{Term: s.Term.ID, Observe: s.Observe, Cols: cols, Rows: rows}); err != nil {
+		return err
 	}
 
 	var heldMu sync.Mutex
@@ -187,26 +248,11 @@ func runAttach(s attachSession) error {
 					scan.held = n.Active
 					heldMu.Unlock()
 					if n.Active {
-						title(fmt.Sprintf("agentbus attach: a %s may be left in the input; %d keys held: %s r sends them, %s x drops them", n.Kind, n.Held, s.Prefix, s.Prefix))
+						title(fmt.Sprintf("agentbus attach: a %s may be left in the input; %d keys held: %s r sends them, %s x drops them", n.Kind, n.Held, keyLabel(s.Prefix), keyLabel(s.Prefix)))
 					} else {
-						title("")
+						idle()
 					}
 				}
-			}
-		}
-	}()
-
-	chunks := make(chan []byte)
-	go func() { // the person's keys
-		buf := make([]byte, 4096)
-		for {
-			n, err := s.In.Read(buf)
-			if n > 0 {
-				chunks <- append([]byte(nil), buf[:n]...)
-			}
-			if err != nil {
-				close(chunks)
-				return
 			}
 		}
 	}()
@@ -221,9 +267,9 @@ func runAttach(s attachSession) error {
 					err = cl.SendData(e.Data)
 				}
 			case keyPending:
-				title("agentbus attach: " + s.Prefix + " … (d detach, " + s.Prefix + " sends it)")
+				title("agentbus attach: " + keyLabel(s.Prefix) + " … (d detach, " + keyLabel(s.Prefix) + " sends it)")
 			case keyDone:
-				title("")
+				idle()
 			case keyDetach:
 				_ = cl.SendControl(holder.Detach{})
 				return true, nil
@@ -232,7 +278,7 @@ func runAttach(s attachSession) error {
 			case keyDiscard:
 				err = cl.SendControl(holder.Discard{})
 			case keyBell:
-				title("")
+				idle()
 				write([]byte("\a"))
 			case keyFocusIn, keyFocusOut:
 				err = cl.SendControl(holder.Focus{In: e.Kind == keyFocusIn})
@@ -246,6 +292,24 @@ func runAttach(s attachSession) error {
 
 	flush := time.NewTimer(time.Hour)
 	flush.Stop()
+	feed := func(b []byte) (bool, error) {
+		heldMu.Lock()
+		evs := scan.Feed(b)
+		pending := len(scan.buf) > 0
+		heldMu.Unlock()
+		if done, err := apply(evs); done {
+			return true, err
+		}
+		if pending {
+			flush.Reset(escFlush)
+		}
+		return false, nil
+	}
+	if first != nil { // the key that ended the banner
+		if done, err := feed(first); done {
+			return err
+		}
+	}
 	for {
 		select {
 		case err := <-ended:
@@ -259,15 +323,8 @@ func runAttach(s attachSession) error {
 			if !ok {
 				return nil // the person's terminal closed
 			}
-			heldMu.Lock()
-			evs := scan.Feed(b)
-			pending := len(scan.buf) > 0
-			heldMu.Unlock()
-			if done, err := apply(evs); done {
+			if done, err := feed(b); done {
 				return err
-			}
-			if pending {
-				flush.Reset(escFlush)
 			}
 		case <-flush.C:
 			heldMu.Lock()
@@ -348,7 +405,7 @@ func runAttachCmd(project string, args []string, stdout, stderr io.Writer) int {
 	signal.Notify(winch, syscall.SIGWINCH)
 	defer signal.Stop(winch)
 	err = runAttach(attachSession{Socket: sock, Term: t, Prefix: prefix, Observe: observe, Warn: warn,
-		In: os.Stdin, Out: os.Stdout, Size: size, Resized: winch})
+		In: os.Stdin, Out: os.Stdout, Size: size, Resized: winch, Banner: attachBanner})
 	term.Restore(fd, old)
 	var re *holder.RemoteError
 	switch {

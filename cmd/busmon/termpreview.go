@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -48,6 +49,21 @@ type termView struct {
 	found bool
 	lines []string
 	err   error
+	// prefix is the attach prefix (attach.prefix), named beside "t attaches"
+	// with its detach (P1-8); "" names none.
+	prefix string
+}
+
+// attachPrefix is the attach.prefix agentbus attach will use; "" when the
+// setting is invalid (attach refuses it).
+func attachPrefix(getenv func(string) string) string {
+	r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
+	got := r.Get("attach.prefix")
+	if got.Invalid {
+		return ""
+	}
+	s, _ := got.Value.(string)
+	return s
 }
 
 // readTermView reads agent's terminal in project (holderTerm: the one attach
@@ -85,7 +101,11 @@ func termPreviewLines(v termView, width int) []Line {
 		b.seg(RoleAccent, "Screen").text("\n")
 		b.seg(RoleMuted, "not read: "+Preview(v.err.Error())).text("\n\n")
 	case v.found:
-		b.seg(RoleAccent, "Screen").seg(RoleMuted, " "+GlyphNone+" read-only; t attaches").text("\n")
+		how := " " + GlyphNone + " read-only; t attaches"
+		if v.prefix != "" {
+			how += ", then " + config.AttachKeyLabel(v.prefix) + " d detaches"
+		}
+		b.seg(RoleAccent, "Screen").seg(RoleMuted, how).text("\n")
 		for _, l := range v.lines {
 			b.seg(RoleText, Truncate(Preview(l), max(1, width))).text("\n")
 		}
@@ -136,7 +156,9 @@ func (m *Model) termRead(serial int) tea.Cmd {
 	return func() tea.Msg {
 		c, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
-		return termViewMsg{serial: serial, view: readTermView(c, h, project, agent, termPreviewRows)}
+		v := readTermView(c, h, project, agent, termPreviewRows)
+		v.prefix = attachPrefix(os.Getenv)
+		return termViewMsg{serial: serial, view: v}
 	}
 }
 

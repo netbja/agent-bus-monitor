@@ -475,6 +475,9 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 	case k.Code == keyEnter:
 		key, _ := config.Lookup(s.edit)
 		v, why := parseSetting(key, s.text)
+		if why == "" {
+			why = settingRefusal(s.edit, v)
+		}
 		if why != "" {
 			s.err = why
 			return nil
