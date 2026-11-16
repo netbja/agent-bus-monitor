@@ -4,4 +4,5 @@
   and master's answer went to nobody (an `anonymous: no snapshot` escalation followed). `report --to`, `reply` and
   `cmd` refuse `anonymous` as an addressee. Inside an agent's terminal with `AGENT_BUS_AGENT` unset, a write is still
   refused, an inherited `AGENT_BUS_HUMAN` included. A CLI entry sent as the person is not marked `human`: busmon alone
-  writes those. The cron `daily-review-trigger.sh` sends as the recorded name.
+  writes those. `AGENT_BUS_AGENT=anonymous` is the same nobody as unset. The cron `daily-review-trigger.sh` no longer
+  exports it: it sends as the recorded name, or is refused (cron mails the refusal) on a machine with none.

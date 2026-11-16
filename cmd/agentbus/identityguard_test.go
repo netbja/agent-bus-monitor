@@ -50,9 +50,10 @@ func TestIdentityGuard(t *testing.T) {
 			t.Errorf("env %v: %v", m, err)
 		}
 	}
-	// AGENT_BUS_AGENT=anonymous said on purpose is an identity, not the default.
-	if err := identityGuard(env(map[string]string{"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err != nil {
-		t.Errorf("explicit anonymous refused: %v", err)
+	// AGENT_BUS_AGENT=anonymous is the same nobody as unset (P2-11, foureyes):
+	// refused in a terminal as unset is.
+	if err := identityGuard(env(map[string]string{"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err == nil {
+		t.Error("an explicit anonymous allowed in a terminal")
 	}
 }
 

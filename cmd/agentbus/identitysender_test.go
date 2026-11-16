@@ -50,6 +50,8 @@ func TestSenderIdentity(t *testing.T) {
 		{map[string]string{"config.toml": "[identity]\nas = \"dana\"\n"}, "dana", true}, // recorded once (agentbus identity set)
 		{map[string]string{human: "charlie", "config.toml": "[identity]\nas = \"dana\"\n"}, "charlie", true},
 		{map[string]string{}, "anonymous", false},
+		{map[string]string{"AGENT_BUS_AGENT": "anonymous", human: "charlie"}, "charlie", true}, // anonymous is nobody: the person
+		{map[string]string{"AGENT_BUS_AGENT": "anonymous"}, "anonymous", false},
 		{map[string]string{human: "Not Valid"}, "anonymous", false},
 	} {
 		name, person := senderIdentity(senderEnv(t, c.env))
@@ -68,6 +70,16 @@ func TestIdentityGuardRefusesAnonymousOutsideATerminal(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("message %q lacks %q", err, want)
 		}
+	}
+	// The cron trigger's old default: AGENT_BUS_AGENT=anonymous is no identity
+	// (foureyes: it sent 'from anonymous' through the guard).
+	if err := identityGuard(senderEnv(t, map[string]string{"AGENT_BUS_AGENT": "anonymous"}), "cmd", []string{"sentinel", "x"}); err == nil {
+		t.Fatal("AGENT_BUS_AGENT=anonymous allowed")
+	}
+	// An identity set but invalid is said as such, not as none.
+	if err := identityGuard(senderEnv(t, map[string]string{config.EnvName("identity.as"): "Not Valid"}), "cmd", []string{"master", "x"}); err == nil ||
+		!strings.Contains(err.Error(), "identity.as is set but invalid") {
+		t.Fatalf("an invalid identity: %v", err)
 	}
 	if err := identityGuard(senderEnv(t, map[string]string{}), "reports", nil); err != nil {
 		t.Fatalf("a read refused: %v", err)

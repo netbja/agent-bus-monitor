@@ -9,7 +9,9 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"   # cron's env is minimal; agentbus lives here.
 
 : "${AGENT_BUS_PROJECT:?set AGENT_BUS_PROJECT (the crontab line does this)}"
-export AGENT_BUS_AGENT="${AGENT_BUS_AGENT:-anonymous}"
+# No AGENT_BUS_AGENT default: the directive is sent as the person's recorded identity
+# (agentbus identity set <name>, or AGENT_BUS_HUMAN on the crontab line), never as
+# "anonymous"; with none, agentbus refuses and cron mails the refusal (P2-11).
 
 read -r -d '' MSG <<'EOF' || true
 [cron review] Follow your agent-bus-sentinel skill for one wake.
