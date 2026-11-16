@@ -141,6 +141,13 @@ func TestOpenTeamRecordConditions(t *testing.T) {
 		{"a profile outside the set", "reviewer-codex", bus.ResumeRecord{Session: "5f2b1c3d-aa", Profile: "claude-opus"}, "", "", "claude-opus is neither"},
 		{"a fallback resumes on it", "coder", bus.ResumeRecord{Session: "5f2b1c3d-aa", Profile: "claude-alt"}, "5f2b1c3d-aa", "claude-alt", ""},
 		{"a client without a verified resume", "reviewer-codex", bus.ResumeRecord{Session: "5f2b1c3d-aa"}, "", "", "has no verified resume"},
+		// resume-record-profile (2026-11-16): master swapped with --force to a
+		// profile outside its set (claude-sonnet-edits in the field); its own
+		// SessionStart hook recorded it, and up refused the record, so master
+		// lost its context. Same client: the session resumes, on master's own
+		// profile, never the recorded one (the record is a broker key).
+		{"our own forced swap, same client", "master", bus.ResumeRecord{Session: "4fa9d0ff-21", Profile: "claude-opus"}, "4fa9d0ff-21", "", "master: its recorded profile claude-opus is neither master's own nor one of its fallback_profiles: session 4fa9d0ff-21 resumes on its own profile claude"},
+		{"a profile roles.toml lacks", "master", bus.ResumeRecord{Session: "4fa9d0ff-21", Profile: "gone"}, "", "", "master: its resume record is not used"},
 	} {
 		h := &recHost{Host: fake.New()}
 		_, notices := openFixture(t, h, map[string]bus.ResumeRecord{c.role: c.rec})

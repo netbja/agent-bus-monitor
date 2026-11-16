@@ -32,31 +32,45 @@ type teamHost interface {
 // its fallback_profiles in the local manifest, never a broker key; its
 // session must be a valid id of a client whose resume is verified. invalid
 // says why the record is not used ("" when it is, or there is none).
-func resumeChoice(m *rolecfg.Manifest, role string, rec *bus.ResumeRecord) (profile, session, invalid string) {
+//
+// A profile outside that set (a swap --force, which records the profile it
+// ran on: resume-record-profile) still resumes its session when the local
+// manifest defines it for the role on the role's own client: on the role's
+// own profile, never the recorded one, so a broker writer still chooses no
+// profile; note says so. A profile of another client is refused: its
+// session is not this client's.
+func resumeChoice(m *rolecfg.Manifest, role string, rec *bus.ResumeRecord) (profile, session, invalid, note string) {
 	if rec == nil {
-		return "", "", ""
+		return "", "", "", ""
 	}
 	own, err := m.Resolve(role)
 	if err != nil {
-		return "", "", err.Error()
+		return "", "", err.Error(), ""
 	}
 	p := own
 	if rec.Profile != "" && rec.Profile != own.Profile {
-		if !bus.ValidName(rec.Profile) || !slices.Contains(m.Fallbacks(role), rec.Profile) {
-			return "", "", fmt.Sprintf("profile %s is neither %s's own nor one of its fallback_profiles", rec.Profile, role)
+		outside := fmt.Sprintf("profile %s is neither %s's own nor one of its fallback_profiles", rec.Profile, role)
+		if !bus.ValidName(rec.Profile) {
+			return "", "", outside, ""
 		}
-		if p, err = m.ResolveWith(role, rec.Profile); err != nil {
-			return "", "", err.Error()
+		if slices.Contains(m.Fallbacks(role), rec.Profile) {
+			if p, err = m.ResolveWith(role, rec.Profile); err != nil {
+				return "", "", err.Error(), ""
+			}
+			profile = rec.Profile
+		} else if ran, err := m.ResolveWith(role, rec.Profile); err != nil || ran.Client != own.Client {
+			return "", "", outside, ""
+		} else if bus.ValidSessionID(rec.Session) {
+			note = fmt.Sprintf("its recorded %s: session %s resumes on its own profile %s", outside, rec.Session, own.Profile)
 		}
-		profile = rec.Profile
 	}
 	switch {
 	case !bus.ValidSessionID(rec.Session):
-		return "", "", "its session id is not valid"
+		return "", "", "its session id is not valid", ""
 	case !rolecfg.ResumeVerified(p.Client):
-		return "", "", fmt.Sprintf("client %s has no verified resume", p.Client)
+		return "", "", fmt.Sprintf("client %s has no verified resume", p.Client), ""
 	}
-	return profile, rec.Session, ""
+	return profile, rec.Session, "", note
 }
 
 // openTeam starts every agent tab of tabs whose role has no live terminal:
@@ -118,7 +132,10 @@ func openTeam(ctx context.Context, h teamHost, m *rolecfg.Manifest, project stri
 		if r, ok := resumes[role]; ok {
 			rec = &r
 		}
-		profile, session, invalid := resumeChoice(m, role, rec)
+		profile, session, invalid, note := resumeChoice(m, role, rec)
+		if note != "" {
+			notice(role + ": " + note)
+		}
 		if invalid != "" {
 			notice(fmt.Sprintf("%s: its resume record is not used (%s); it starts fresh", role, invalid))
 			profile = ""
