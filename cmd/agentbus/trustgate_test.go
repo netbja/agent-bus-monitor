@@ -45,46 +45,64 @@ func gateFixture(t *testing.T, after int) (string, *recHost, upDeps, *int) {
 		return client == "codex" || after >= 0 && polls >= after
 	}
 	deps.Sleep = func(time.Duration) { polls++ }
-	deps.TrustTimeout, deps.TrustPoll = 10*time.Second, 2*time.Second
 	return work, h, deps, &polls
 }
 
+// P1-9 (demo field test): up waited, holding the person's terminal, while
+// master sat on Claude Code's trust dialog. up starts the gate agent (and the
+// agents of trusted clients), says where to answer and how to go on, and
+// returns at once without polling; a second up, once the trust is recorded,
+// starts the others.
 func TestUpGatesAgentsOnTrust(t *testing.T) {
 	work, h, deps, polls := gateFixture(t, 2)
 	var out, errw bytes.Buffer
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	coder := startIndex(h, "coder")
+	if *polls != 0 {
+		t.Fatalf("up waited: %d polls", *polls)
+	}
 	for _, first := range []string{"master", "foureyes"} {
-		if i := startIndex(h, first); i < 0 || i > coder {
-			t.Fatalf("%s started at %d, coder at %d: %v", first, i, coder, h.started())
+		if startIndex(h, first) < 0 {
+			t.Fatalf("%s not started: %v", first, h.started())
 		}
 	}
-	if coder < 0 || *polls < 2 {
-		t.Fatalf("coder at %d after %d polls", coder, *polls)
+	if startIndex(h, "coder") >= 0 {
+		t.Fatal("coder started before the trust")
 	}
 	msg := out.String()
-	// A10: the message says where to answer: the agent's own terminal.
-	if !strings.Contains(msg, "answer it in master's terminal (agentbus attach master)") || !strings.Contains(msg, "agentbus up demo is locked") {
-		t.Fatalf("out = %q", msg)
+	// A10: the message says where to answer (the agent's own terminal, or
+	// busmon), and how to go on.
+	for _, want := range []string{"answer it in master's terminal (agentbus attach master) or in busmon's For you",
+		"then run agentbus up demo to start the others (coder)"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("out lacks %q: %q", want, msg)
+		}
+	}
+	*polls = 2 // the person answered: the trust is recorded
+	before := len(h.started())
+	out.Reset()
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("second up = %d: %s", code, errw.String())
+	}
+	if startIndex(h, "coder") < before || strings.Contains(out.String(), "trust") {
+		t.Fatalf("the second up: started %v, out %q", h.started(), out.String())
 	}
 }
 
-func TestUpTrustTimeoutStartsNothingMore(t *testing.T) {
-	work, h, deps, _ := gateFixture(t, -1)
+// Never answered: up has still returned, the gate's agent started, the rest
+// not, and the way on said.
+func TestUpReturnsWithoutTheTrust(t *testing.T) {
+	work, h, deps, polls := gateFixture(t, -1)
 	var out, errw bytes.Buffer
-	if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
-		t.Fatal("up succeeded without trust")
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if startIndex(h, "coder") >= 0 {
-		t.Fatal("coder started without trust")
+	if *polls != 0 || startIndex(h, "coder") >= 0 || startIndex(h, "master") < 0 {
+		t.Fatalf("polls %d, started %v", *polls, h.started())
 	}
-	if startIndex(h, "master") < 0 {
-		t.Fatal("master, the gate's agent, was not started")
-	}
-	if !strings.Contains(errw.String(), "agentbus up demo") {
-		t.Fatalf("no way forward: %q", errw.String())
+	if !strings.Contains(out.String(), "agentbus up demo") {
+		t.Fatalf("no way forward: %q", out.String())
 	}
 }
 

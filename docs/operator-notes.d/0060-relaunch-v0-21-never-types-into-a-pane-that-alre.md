@@ -52,9 +52,10 @@
   project-required exit. `missions` without a Git repository publishes `waiting-git` and waits.
   **Trust gate** (`trust.go`, specialist roles spec part B): when `up` opens a workspace whose
   folder a client (Claude Code, Codex) does not trust yet, it starts the first agent of that client
-  alone, says to answer the client's own dialog in its pane, polls the trust (2 s, 10 min) and only
-  then starts that client's other agents; a timeout starts nothing more and keeps the workspace
-  (`errTrustPending`); its message names the pane to answer in (A10). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
+  alone, says to answer the client's own dialog in its terminal (or busmon's For you) and to run `agentbus up`
+  again, and returns at once (P1-9, 2026-11-16: it used to poll for 10 min, holding the person's terminal); the
+  next `up`, once the trust is recorded, starts that client's other agents and closes the busmon reminder. Its
+  message names the terminal to answer in (A10). The readers (`claudeTrusted`, `codexTrusted`) read only the trust flag, keyed
   as Claude Code documents (`trustKey`: git root, a worktree's main checkout, else the folder) and
   return a bool, never file content (`~/.claude.json` can hold an API key). agentbus never writes
   those files. Nil `upDeps.Trusted` = no gate. **Agent CLIs** (installer-no-client): `rolecfg.Clients`

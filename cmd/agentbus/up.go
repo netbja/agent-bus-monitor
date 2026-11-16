@@ -86,11 +86,9 @@ type upDeps struct {
 	Trusted   func(client, dir string) bool
 	// TrustAsks is the project's asks on the broker, for the trust reminder
 	// in busmon (first-run-trust (b)); nil: no reminder, the line only.
-	TrustAsks    func(project string) (trustAskBus, error)
-	Sleep        func(time.Duration)
-	TrustPoll    time.Duration
-	TrustTimeout time.Duration
-	Out          io.Writer // the gate's messages (runUp's stdout)
+	TrustAsks func(project string) (trustAskBus, error)
+	Sleep     func(time.Duration)
+	Out       io.Writer // the gate's messages (runUp's stdout)
 
 	// The agents' CLIs (installer-no-client): TabExe is the program a tab's
 	// agent runs ("" for none), LookPath finds it on up's PATH. Nil: no check.
@@ -328,15 +326,15 @@ func upTeamRun(d upDeps, project string, tpl upTemplate, dry bool, stdout io.Wri
 		return err
 	}
 	termOf, err := open(now)
-	settle := d.trustReminders(tpl, dir, gates, termOf) // the ask in busmon, also when no agent waits
-	if len(later) == 0 {
-		return err
+	d.trustReminders(tpl, dir, gates, termOf) // the ask in busmon, also when no agent waits; a trusted one closes
+	if len(later) > 0 {
+		names := make([]string, 0, len(later))
+		for _, i := range later {
+			names = append(names, tpl.Tabs[i].Name)
+		}
+		d.trustNext(tpl, dir, gates, names)
 	}
-	return errors.Join(err, d.waitTrust(tpl, dir, gates, termOf, func() error {
-		settle() // accepted: the reminder closes itself
-		_, err := open(later)
-		return err
-	}))
+	return err
 }
 
 // withProjectBus runs f on project's bus, bounded.
