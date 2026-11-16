@@ -40,6 +40,10 @@ type ServiceRecord struct {
 	Host   string `json:"host,omitempty"`
 	Error  string `json:"error,omitempty"`
 	Log    string `json:"log,omitempty"`
+	// Build is the build the service runs (holder.BuildID), so an install
+	// can tell which services still run the previous one (P2-13); "" for a
+	// service started before builds were recorded.
+	Build string `json:"build,omitempty"`
 }
 
 // stampedHSet writes ARGV[2] (a JSON object) into field ARGV[1] with "at" set
