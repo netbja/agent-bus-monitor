@@ -373,7 +373,7 @@ func EvaluateContext(ev []ContextEvidence, threshold float64) Outcome {
 		}
 		since := ""
 		if e.SinceAlert > 0 {
-			since = fmt.Sprintf(" %d min", int(e.SinceAlert.Minutes()))
+			since = fmt.Sprintf(" %d min", int64(e.SinceAlert/time.Minute))
 		}
 		escalated = append(escalated, fmt.Sprintf("%s %.0f%% (no hand-off%s)", e.Agent, e.Pct, since))
 	}
