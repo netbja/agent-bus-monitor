@@ -76,10 +76,10 @@ func withAsks(deps upDeps, f *fakeAsks) upDeps {
 // An untrusted gated client gets a reminder in For you, from agentbus (never
 // from an agent: its ask slot stays free): the folder, where to answer, the
 // choice by its label and what trusting loads; it closes itself once the
-// trust is accepted during up's wait. A trusted client gets none. Nothing is
-// written to a client's file.
+// trust is accepted, by the next up (P1-9: up no longer waits). A trusted
+// client gets none. Nothing is written to a client's file.
 func TestUpOpensATrustAskAndClosesIt(t *testing.T) {
-	work, _, deps, _ := gateFixture(t, 2)
+	work, _, deps, polls := gateFixture(t, 2)
 	f := &fakeAsks{}
 	deps = withAsks(deps, f)
 	var out, errw bytes.Buffer
@@ -93,8 +93,16 @@ func TestUpOpensATrustAskAndClosesIt(t *testing.T) {
 	q := d.Questions[0]
 	if d.From != "agentbus" || q.ID != "trust-claude-code" || q.Header != "Folder trust" || bus.ValidateAskDef(d) != nil ||
 		!strings.Contains(q.Question, `choose "Yes, I trust this folder"`) || !strings.Contains(q.Question, "master's pane") ||
-		!strings.Contains(q.Context, work) || !strings.Contains(q.Context, "hooks") {
+		!strings.Contains(q.Context, work) || !strings.Contains(q.Context, "hooks") ||
+		!strings.Contains(q.Context, "then run agentbus up demo") || !strings.Contains(q.Options[0].Description, "agentbus up demo") {
 		t.Fatalf("ask %+v (valid: %v)", d, bus.ValidateAskDef(d))
+	}
+	if len(f.withdrawn) != 0 {
+		t.Fatalf("closed before the trust: %q", f.withdrawn)
+	}
+	*polls = 2 // the person answered
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("second up = %d: %s", code, errw.String())
 	}
 	if len(f.withdrawn) != 1 || !strings.HasPrefix(f.withdrawn[0], "agentbus|ask-agentbus-1|trust-claude-code|") || !strings.Contains(f.withdrawn[0], "trusted") {
 		t.Fatalf("withdrawn %q", f.withdrawn)
@@ -136,6 +144,10 @@ func TestUpTrustAskTwoClientsOneAsk(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
+	*polls = 2 // both answered
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("second up = %d: %s", code, errw.String())
+	}
 	if len(f.defs) != 2 || len(f.defs[1].Questions) != 2 || f.defs[1].Questions[0].ID != "trust-claude-code" || f.defs[1].Questions[1].ID != "trust-codex" {
 		t.Fatalf("defs %+v", f.defs)
 	}
@@ -149,8 +161,8 @@ func TestUpTrustAskTwoClientsOneAsk(t *testing.T) {
 	}
 }
 
-// Not accepted in time: the reminder stays open for the person.
-func TestUpTrustAskStaysOpenOnTimeout(t *testing.T) {
+// Not accepted: the reminder stays open for the person after up returns.
+func TestUpTrustAskStaysOpenUntilTrusted(t *testing.T) {
 	work, _, deps, _ := gateFixture(t, -1)
 	f := &fakeAsks{}
 	deps = withAsks(deps, f)

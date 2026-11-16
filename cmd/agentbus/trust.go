@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -22,10 +21,6 @@ import (
 // only ever reads the clients' files, and only the trust flag: the readers
 // return a bool, never content (package trust), so nothing of these files
 // (which may hold account data or an API key) can reach a log or an error.
-
-// errTrustPending: the person did not accept the trust in time; the agents
-// already started stay, and agentbus up starts the others once it is.
-var errTrustPending = errors.New("trust not accepted")
 
 // trustPlan splits the template's tabs: those started at once (every tab
 // but an agent of a client not yet trusted, and the first agent of each such
@@ -64,36 +59,15 @@ func trustPlan(tabs []upTab, clientOf func(string) string, trusted func(string) 
 	return now, later, gates
 }
 
-// waitTrust tells the person where to answer, polls the trust (reading only
-// the flag) and starts the rest once every gated client is trusted.
-func (d upDeps) waitTrust(tpl upTemplate, dir string, gates, _ map[string]string, start func() error) error {
+// trustNext tells the person where to answer and how to go on, and returns
+// (P1-9): up never waits on a dialog only the person can answer, holding
+// their terminal. The agents of an untrusted client start with the next up,
+// once the trust is recorded; that up also closes the busmon reminder.
+func (d upDeps) trustNext(tpl upTemplate, dir string, gates map[string]string, later []string) {
 	key, _ := trust.Key(dir)
-	clients := slices.Sorted(maps.Keys(gates))
-	for _, c := range clients {
-		where := gates[c] + "'s terminal (agentbus attach " + gates[c] + ")"
-		fmt.Fprintf(d.Out, "%s asks whether you trust %s: answer it in %s. The other agents start once it is accepted (agentbus up %s is locked meanwhile).\n",
-			trust.Label(c), key, where, tpl.Name)
-	}
-	poll, timeout := d.TrustPoll, d.TrustTimeout
-	if poll <= 0 {
-		poll = 2 * time.Second
-	}
-	if timeout <= 0 {
-		timeout = 10 * time.Minute
-	}
-	for waited := time.Duration(0); ; waited += poll {
-		all := true
-		for _, c := range clients {
-			all = all && d.Trusted(c, dir)
-		}
-		if all {
-			return start()
-		}
-		if waited >= timeout {
-			return fmt.Errorf("%w for %s within %s: the other agents are not started; once you have answered, run agentbus up %s",
-				errTrustPending, key, timeout, tpl.Name)
-		}
-		d.Sleep(poll)
+	for _, c := range slices.Sorted(maps.Keys(gates)) {
+		fmt.Fprintf(d.Out, "%s asks whether you trust %s: answer it in %s's terminal (agentbus attach %s) or in busmon's For you, then run agentbus up %s to start the others (%s).\n",
+			trust.Label(c), key, gates[c], gates[c], tpl.Name, strings.Join(later, ", "))
 	}
 }
 
@@ -120,7 +94,7 @@ func trustAskQID(client string) string { return "trust-" + client }
 // dialog), the choice by its label (the keys only as a hint: they change
 // between client versions) and what trusting loads. Asked from agentbus
 // (trustAskFrom). Nothing is written to a client's file.
-func trustAskDef(client, key, where string) bus.AskDef {
+func trustAskDef(client, key, where, project string) bus.AskDef {
 	label := trust.Label(client)
 	hint := ""
 	if client == "claude-code" {
@@ -136,8 +110,8 @@ func trustAskDef(client, key, where string) bus.AskDef {
 		Question: label + ` asks whether you trust this folder: in ` + where + `, choose "` + trust.Choice + `".`,
 		Context: trustAskFolder(key) + "Trusting lets " + label + " read, edit and run files there, and load the repository's own " +
 			"settings, hooks and MCP servers: for a repository you did not write, look at it first." + hint +
-			" This ask closes itself once the trust is recorded.",
-		Options: []bus.AskOption{{Label: "Done in the pane", Description: "it also closes by itself once the trust is recorded"}},
+			" Once you have chosen it, then run agentbus up " + project + " to start the other agents; that closes this ask.",
+		Options: []bus.AskOption{{Label: "Done in the pane", Description: "then run agentbus up " + project + ": it starts the others and closes this ask"}},
 	}}}
 }
 
@@ -243,7 +217,7 @@ func (d upDeps) trustReminders(tpl upTemplate, dir string, gates, paneOf map[str
 		if p := paneOf[agent]; p != "" {
 			where += " (" + p + ")"
 		}
-		def, replaces := trustAskDef(client, key, where), ""
+		def, replaces := trustAskDef(client, key, where, tpl.Name), ""
 		if mine != nil { // agentbus's open ask keeps its questions: this one joins them
 			if len(mine.Questions) >= bus.AskMaxQuestions || slices.ContainsFunc(mine.Questions, func(q bus.AskQuestionState) bool { return q.ID == trustAskQID(client) && q.Answer == nil }) {
 				note(fmt.Errorf("agentbus's open ask has no room for %s's reminder", trust.Label(client)))
