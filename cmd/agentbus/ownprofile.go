@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -42,15 +41,16 @@ func tabLaunch(command string) (manifest, role, profile string) {
 
 // launchProfile resolves the profile a tab names for role: none is the
 // role's own in roles.toml; another must be that one or one of its
-// fallback_profiles (spec "A role's own profile in a project"), so a template
-// never runs a role on a profile roles.toml no longer allows.
+// fallback_profiles or alt_profiles (spec "A role's own profile in a
+// project"; fable-profile-architect), so a template never runs a role on a
+// profile roles.toml no longer allows.
 func launchProfile(m *rolecfg.Manifest, role, profile string) (rolecfg.Profile, error) {
 	own, err := m.Resolve(role)
 	if err != nil || profile == "" || profile == own.Profile {
 		return own, err
 	}
-	if !slices.Contains(m.Fallbacks(role), profile) {
-		return rolecfg.Profile{}, fmt.Errorf("profile %s is not %s's own nor one of its fallback_profiles in roles.toml", profile, role)
+	if !m.MayRunOn(role, profile) {
+		return rolecfg.Profile{}, fmt.Errorf("profile %s is not %s's own nor one of its fallback_profiles or alt_profiles in roles.toml", profile, role)
 	}
 	return m.ResolveWith(role, profile)
 }

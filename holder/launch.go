@@ -61,8 +61,8 @@ func (l TemplateLaunch) Command(s Start) (Command, error) {
 			return Command{}, fmt.Errorf("holder: %w", err)
 		}
 	} else if s.Profile != "" && s.Profile != own.Profile {
-		if !slices.Contains(m.Fallbacks(s.Role), s.Profile) {
-			return Command{}, fmt.Errorf("holder: profile %s is neither %s's own nor one of its fallback_profiles", s.Profile, s.Role)
+		if !m.MayRunOn(s.Role, s.Profile) {
+			return Command{}, fmt.Errorf("holder: profile %s is neither %s's own nor one of its fallback_profiles or alt_profiles", s.Profile, s.Role)
 		}
 		profile = s.Profile
 	}

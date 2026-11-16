@@ -52,8 +52,8 @@ func settingRefusal(getenv func(string) string, key string, v any) string {
 }
 
 // projectClients are the client profiles (agentstate's names, a client with
-// none by its rolecfg name) the project's roles run on, own and fallback
-// profiles, sorted; why says the roles cannot be read.
+// none by its rolecfg name) the project's roles run on, own, fallback and
+// alt profiles, sorted; why says the roles cannot be read.
 func projectClients(getenv func(string) string) ([]string, string) {
 	const unreadable = "roles.toml cannot be read: which clients attach serves is unknown"
 	path, err := rolecfg.ManifestPath(getenv)
@@ -79,7 +79,7 @@ func projectClients(getenv func(string) string) ([]string, string) {
 	}
 	for _, role := range m.RoleNames() {
 		add(m.Resolve(role))
-		for _, fb := range m.Fallbacks(role) {
+		for _, fb := range append(m.Fallbacks(role), m.Alternates(role)...) { // every profile a launch may name (MayRunOn)
 			add(m.ResolveWith(role, fb))
 		}
 	}
