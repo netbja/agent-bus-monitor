@@ -949,4 +949,3 @@ func TestRunQuotaMessagesDateTheirReset(t *testing.T) {
 		t.Fatal("the format was never read")
 	}
 }
-
