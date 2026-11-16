@@ -47,6 +47,12 @@ func TestTemplateLaunch(t *testing.T) {
 		if err != nil || strings.Join(cmd.Argv, " ") != c.want || cmd.Dir != l.Dir {
 			t.Errorf("%+v: %q in %q %v, want %q", c.start, cmd.Argv, cmd.Dir, err, c.want)
 		}
+		// The terminal is the role's own (P1-7): agent-launch refuses a role
+		// that is not its environment's AGENT_BUS_AGENT, so one the holder
+		// inherited (an up run from master's terminal) must not reach it.
+		if strings.Join(cmd.Env, " ") != "AGENT_BUS_AGENT="+c.start.Role {
+			t.Errorf("%+v: env %q", c.start, cmd.Env)
+		}
 	}
 	for name, s := range map[string]Start{
 		"a role not in the manifest":                     {Role: "master"},
