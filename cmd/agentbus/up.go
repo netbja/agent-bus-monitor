@@ -84,6 +84,10 @@ type upDeps struct {
 	// client's trust of the project folder. Nil Trusted: no gate.
 	TabClient func(command string) string
 	Trusted   func(client, dir string) bool
+	// GitRepo says whether dir is a Git repository: the missions service
+	// needs one, and up starts the project without it otherwise (P1-16).
+	// Nil: not checked.
+	GitRepo func(dir string) bool
 	// TrustAsks is the project's asks on the broker, for the trust reminder
 	// in busmon (first-run-trust (b)); nil: no reminder, the line only.
 	TrustAsks func(project string) (trustAskBus, error)
@@ -220,6 +224,23 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 				return ""
 			}
 			return clientOf(cmd)
+		}
+	}
+	// P1-16, the person's answer: a project works without Git (no forge, no
+	// repository). Only the missions service needs one: up starts the
+	// project without it and says once how to enable it, instead of a
+	// missions service waiting out of sight for git init. One left running
+	// by an earlier up can only be waiting: it is stopped.
+	if slices.Contains(kinds, service.Missions) && d.GitRepo != nil && !d.GitRepo(tpl.WorkingDir) {
+		kinds = slices.DeleteFunc(kinds, func(k string) bool { return k == service.Missions })
+		fmt.Fprintf(stdout, "missions: not started: no Git repository in %s (the conductor needs one). To enable it: git init %s, then agentbus up %s\n",
+			tpl.WorkingDir, tpl.WorkingDir, project)
+		if st, err := m.State(project, service.Missions); err == nil && st.Active {
+			if err := m.Stop(project, service.Missions); err != nil {
+				fmt.Fprintf(stderr, "agentbus up: missions: stop the service waiting for a Git repository: %v (agentbus --project %s service stop missions)\n", err, project)
+			} else {
+				fmt.Fprintln(stdout, "missions: stopped the service that waited for a Git repository")
+			}
 		}
 	}
 	failed := false
@@ -756,6 +777,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
 		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath, shellProbe(os.Getenv, 3*time.Second)),
 		Trusted:   trust.Reader(os.Getenv),
+		GitRepo:   isGitRepo,
 		TrustAsks: func(project string) (trustAskBus, error) {
 			c, err := bus.Connect("")
 			if err != nil {
