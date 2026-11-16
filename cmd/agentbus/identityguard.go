@@ -19,7 +19,9 @@ func senderIdentity(getenv func(string) string) (name string, person bool) {
 		return a, false
 	}
 	g := config.Machine(getenv).Get("identity.as")
-	if s, ok := g.Value.(string); ok && !g.Invalid && bus.ValidName(s) {
+	// "anonymous" is nobody here too, set as the person's name or not
+	// (reviewer-codex on 76625f41).
+	if s, ok := g.Value.(string); ok && !g.Invalid && bus.ValidName(s) && s != "anonymous" {
 		return s, true
 	}
 	return "anonymous", false
