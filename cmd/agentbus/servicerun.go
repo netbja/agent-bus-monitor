@@ -30,6 +30,7 @@ type serviceRunDeps struct {
 	RunMissions func(ctx context.Context, b *bus.Bus, cfg mission.RunConfig) error
 	Now         func() time.Time
 	Settings    func() []string // the settings files' warnings, logged once at start (nil = none)
+	Build       string          // the build this process runs, recorded with its state (P2-13)
 }
 
 // lastError keeps the last line that reports an error, so a failed service
@@ -156,7 +157,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	}
 	budget := service.Budget{Path: d.Paths.BudgetFile(p, kind)}
 	rec := func(state, detail, errText string) bus.ServiceRecord {
-		return bus.ServiceRecord{State: state, Detail: detail, Error: errText, PID: os.Getpid(), Host: d.Host, Log: d.Paths.LogFile(p, kind)}
+		return bus.ServiceRecord{State: state, Detail: detail, Error: errText, PID: os.Getpid(), Host: d.Host, Log: d.Paths.LogFile(p, kind), Build: d.Build}
 	}
 	// publish writes the state; false means the project is gone.
 	publish := func(state, detail, errText string) bool {

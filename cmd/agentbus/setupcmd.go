@@ -116,7 +116,6 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 		}
 	}
 	in.RoleScriptLinks()
-	in.ServicesHint(ctx)
 	in.CheckPath(getenv("PATH"))
 	in.ExternalSkills(ctx)
 	in.RoleSkills(ctx)
@@ -128,7 +127,9 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 		defer t.Close()
 		tty = t
 	}
-	in.Identity(ctx, &setup.Prompter{Yes: opt.Yes, TTY: tty})
+	prompt := &setup.Prompter{Yes: opt.Yes, TTY: tty} // one reader for the terminal: answers typed ahead stay for their questions
+	in.Identity(ctx, prompt)
+	in.RestartStale(ctx, prompt) // after the broker step: service stale reads it (P2-13)
 	in.Models(ctx)
 	return o.Summary(opt, missing, in.Rev)
 }

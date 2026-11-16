@@ -528,6 +528,7 @@ var commands = []cli.Command{
 			"service status|start|stop|restart|remove [dispatch|missions]",
 			"service logs [dispatch|missions] [-n 50]",
 			"service list | service remove --all",
+			"service stale (this host's running services on another build than this agentbus: setup asks to restart them)",
 			"service login",
 			"service restart holder --kill-agents",
 			"service start holder | service gc",

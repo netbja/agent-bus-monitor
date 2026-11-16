@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -133,5 +134,61 @@ func (in *Installer) ServicesHint(ctx context.Context) {
 		p, k := f[0], f[1]
 		rest := strings.Join(f[2:], " ")
 		in.O.Info("  " + p + " " + k + " (" + rest + "): agentbus --project " + p + " service restart " + k)
+	}
+}
+
+// RestartStale (P2-13): the project services still running an older build
+// than the one just installed, asked of the installed agentbus (service
+// stale), each with its restart; then one question, restarted only on the
+// person's yes. --yes takes the cautious default (no) and no terminal asks
+// nothing: an install never restarts a service unattended. Only dispatch and
+// missions: a holder and its agents are never touched. A stale list that
+// cannot be read falls back to naming every running service (ServicesHint).
+func (in *Installer) RestartStale(ctx context.Context, p *Prompter) {
+	if in.Opt.DryRun {
+		return
+	}
+	ab := filepath.Join(in.Opt.BinDir, "agentbus")
+	if !isExec(ab) {
+		return
+	}
+	out, err := in.R.Run(ctx, Cmd{Name: ab, Args: []string{"service", "stale"}, Stdout: true})
+	if err != nil {
+		in.ServicesHint(ctx)
+		return
+	}
+	var stale [][2]string
+	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Fields(l)
+		if len(f) != 3 { // service stale never names a holder (they are not units)
+			continue
+		}
+		stale = append(stale, [2]string{f[0], f[1]})
+		build := f[2]
+		if build == "-" {
+			build = "no build recorded"
+		}
+		if len(stale) == 1 {
+			in.O.Info("project services still running an older agentbus build (restart them to run this one; their holders and agents are not touched):")
+		}
+		in.O.Info("  " + f[0] + " " + f[1] + " (" + build + "): agentbus --project " + f[0] + " service restart " + f[1])
+	}
+	if len(stale) == 0 {
+		in.O.Info("every project service runs this build")
+		return
+	}
+	if p == nil || p.Yes || p.TTY == nil { // never unattended: the commands above are the way
+		return
+	}
+	ok, err := Ask(in.O, p, fmt.Sprintf("Restart these %d services now?", len(stale)), false)
+	if err != nil || !ok {
+		return
+	}
+	for _, s := range stale {
+		if _, err := in.R.Run(ctx, Cmd{Name: ab, Args: []string{"--project", s[0], "service", "restart", s[1]}}); err != nil {
+			in.O.Warn(s[0] + " " + s[1] + ": restart failed: " + err.Error())
+			continue
+		}
+		in.O.Info("  restarted " + s[0] + " " + s[1])
 	}
 }

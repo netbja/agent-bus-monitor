@@ -26,7 +26,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login | service restart holder --kill-agents | service start holder | service gc"
+const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service stale | service remove --all | service login | service restart holder --kill-agents | service start holder | service gc"
 
 // serviceCmdDeps: the manager (nil when none is usable, Why says why), the
 // user's directories and, for state reads, the project's bus.
@@ -101,6 +101,8 @@ func runServiceCmd(project string, args []string, d serviceCmdDeps, stdout, stde
 	}
 	m := d.Manager
 	switch sub {
+	case "stale": // setup's question after an install (P2-13)
+		return serviceStale(d, stdout, stderr)
 	case "list":
 		units, err := m.List()
 		if err != nil {
@@ -701,7 +703,7 @@ func mainServiceRun(project, host string, args []string) int {
 	defer stop()
 	hostname, _ := os.Hostname()
 	deps := serviceRunDeps{
-		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, Now: time.Now,
+		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, Now: time.Now, Build: holder.BuildID(),
 		HostPing: func(ctx context.Context) error {
 			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
 			if err != nil {
