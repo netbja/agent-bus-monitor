@@ -334,6 +334,11 @@ type ContextEvidence struct {
 	Agent string
 	Pct   float64
 	Known bool
+	// Escalated (context-escalation §5): the dispatcher escalated this
+	// fill's episode and no hand-off stands; SinceAlert is the alert's age
+	// (0 = unknown, an episode alerted by an older build).
+	Escalated  bool
+	SinceAlert time.Duration
 }
 
 // EvaluateContext: warn when a known fill is at or above threshold (the
@@ -361,6 +366,20 @@ func EvaluateContext(ev []ContextEvidence, threshold float64) Outcome {
 		return Outcome{Status: OK, Detail: fmt.Sprintf("%d agent(s) below %.0f%%", known, threshold)}
 	}
 	sort.Slice(high, func(i, j int) bool { return high[i].Agent < high[j].Agent })
+	var escalated []string
+	for _, e := range high {
+		if !e.Escalated {
+			continue
+		}
+		since := ""
+		if e.SinceAlert > 0 {
+			since = fmt.Sprintf(" %d min", int(e.SinceAlert.Minutes()))
+		}
+		escalated = append(escalated, fmt.Sprintf("%s %.0f%% (no hand-off%s)", e.Agent, e.Pct, since))
+	}
+	if len(escalated) > 0 { // For you (§5): the dispatcher's notices ring, this is the item
+		return Outcome{Status: Warn, Reason: "escalated", Detail: truncateDetail("escalated: " + strings.Join(escalated, ", "))}
+	}
 	parts := make([]string, 0, len(high))
 	for _, e := range high {
 		parts = append(parts, fmt.Sprintf("%s %.0f%%", e.Agent, e.Pct))

@@ -117,6 +117,7 @@ merge:
 			add("stall", since, time.UnixMilli(rec.Since), "team stall: every agent idle, work ready (busmon F5)", rec.Detail)
 		case id == "team-stall":
 		case id == "merge-queue": // its items are events of their own (merge:<pr>|<head>)
+		case id == "context": // the dispatcher's per-agent notices are its only rings (context-escalation §5)
 		case st == health.Fail:
 			add("fail", id+"|"+since, time.UnixMilli(rec.Since), title+" fails (busmon F5)", rec.Detail)
 		case st == health.Warn && def.PlaceOf(rec, st) == health.PlaceForYou:

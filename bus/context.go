@@ -113,3 +113,24 @@ func (b *Bus) Context(ctx context.Context) (map[string]ContextFill, error) {
 	}
 	return out, nil
 }
+
+// The {p}:quota fields of an agent's context episode (context-alert,
+// context-escalation §3); each holds the episode's session. ContextMark is
+// the alert (with <mark>:at, its time), ContextNoticeMark master's wake=no
+// notice, ContextEscalateMark master's waking directive at the escalation,
+// ContextPersonMark the person's notice.
+func ContextMark(agent string) string         { return "context:" + agent }
+func ContextNoticeMark(agent string) string   { return "context-notice:" + agent }
+func ContextEscalateMark(agent string) string { return "context-escalate:" + agent }
+func ContextPersonMark(agent string) string   { return "context-person:" + agent }
+
+// ContextEpisodeMarks are the fields an episode's end deletes (§3.3).
+func ContextEpisodeMarks(agent string) []string {
+	return []string{ContextMark(agent), ContextMark(agent) + MarkAtSuffix, ContextNoticeMark(agent),
+		ContextEscalateMark(agent), ContextPersonMark(agent)}
+}
+
+// ContextEscalated: agent's escalation was sent in session's episode.
+func ContextEscalated(marks map[string]string, agent, session string) bool {
+	return session != "" && marks[ContextPersonMark(agent)] == session
+}

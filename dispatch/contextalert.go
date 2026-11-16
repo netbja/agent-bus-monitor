@@ -19,21 +19,14 @@ import (
 // the last publication; a paused project is not judged (reconcile stops
 // before), and an unknown or aged fill never acts, nor ends an episode.
 
-// contextMark and contextNoticeMark are the {p}:quota fields of an agent's
-// episode; their value is the session. The escalation's marks
-// (context-escalation §3.2) are contextEscalateMark (master's waking
-// directive) and contextPersonMark (the person's notice).
-func contextMark(agent string) string         { return "context:" + agent }
-func contextNoticeMark(agent string) string   { return "context-notice:" + agent }
-func contextEscalateMark(agent string) string { return "context-escalate:" + agent }
-func contextPersonMark(agent string) string   { return "context-person:" + agent }
-
-// contextEpisodeMarks are the fields an episode's end deletes (§3.3), the
-// alert's time (<mark>:at) among them.
-func contextEpisodeMarks(agent string) []string {
-	return []string{contextMark(agent), contextMark(agent) + bus.MarkAtSuffix, contextNoticeMark(agent),
-		contextEscalateMark(agent), contextPersonMark(agent)}
-}
+// The episode's marks are bus.ContextMark and its kin (bus/context.go).
+var (
+	contextMark         = bus.ContextMark
+	contextNoticeMark   = bus.ContextNoticeMark
+	contextEscalateMark = bus.ContextEscalateMark
+	contextPersonMark   = bus.ContextPersonMark
+	contextEpisodeMarks = bus.ContextEpisodeMarks
+)
 
 // contextAlerts judges the last publication once; a lost lease is ErrNotHolder.
 func (l *loop) contextAlerts(ctx context.Context) error {
