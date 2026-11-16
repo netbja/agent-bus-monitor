@@ -1,6 +1,8 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r2, for review (subject `holder-hardening-spec`). r2: reviewer-codex (the reboot
+Status: spec, r3, for review (subject `holder-hardening-spec`). r3: reviewer-codex (the wait only at
+condition 2b of an otherwise eligible unplanned restart; intentional, suspended and the earlier
+conditions keep their verdict at once), foureyes (the notice names the wait). r2: reviewer-codex (the reboot
 judgement must wait for the holder to answer: H1b, and reboot-resume §3 amended), foureyes's notes
 (an older build's agents after a reboot, H3's notice mark, Q7's cost). Not built. Base: origin/dev
 `079ed636`. Author: coder, task `holder-hardening-spec`, from master's directive of 2026-11-17
@@ -99,33 +101,46 @@ only the new, empty holder. The old build's agents are not lost: they are dead, 
 reboot-resume's restart) relaunches them into the new holder, resumed. Nobody should expect the old
 holder back after a reboot; `service gc` removes it.
 
-**H1b. The reboot judgement waits for the holder (amends reboot-resume §3).** Self-repair already
-holds while the holder does not answer, but reboot-resume's judgement is **one-shot**: it runs once
-before the dispatcher's first pass, and its condition 2b ("the holder answers") would record
-`unplanned`, `holder not answering`, whenever the dispatch service wins the race at boot or login.
-`HoldReboot` would then keep the team stopped after the holder came up. Unit ordering does not fix
-it: `After=` with `Type=simple` orders the starts, not the socket's readiness, and launchd has no
-order at all. So, on every platform:
+**H1b. Condition 2b waits for the holder (amends reboot-resume §3.1).** Self-repair already holds
+while the holder does not answer, but reboot-resume's judgement is **one-shot**: it runs once before
+the dispatcher's first pass, and its condition 2b ("the holder answers") would record `unplanned`,
+`holder not answering`, whenever the dispatch service wins the race at boot or login. `HoldReboot`
+would then keep the team stopped after the holder came up. Unit ordering does not fix it: `After=`
+with `Type=simple` orders the starts, not the socket's readiness, and launchd has no order at all.
+So, on every platform, **only where an automatic restart is otherwise possible**:
 
-1. **A readiness phase, before the verdict.** When `run.json` reads another boot (a verdict other
-   than `none` is possible), the dispatch service, holding the lease, polls the current build's
-   holder (the same probe as health `holder`: its socket answers a `Describe`) every 2 s for at
-   most **2 minutes** (`holderReadyWait`, a constant).
-2. **Nothing is decided during it.** `run.json` is not rewritten (a dispatcher that restarts during
-   the phase judges again from the start), `{p}:reboot` is not written, the counter is neither read
-   nor incremented, and self-repair holds every agent: a new hold reason `reboot pending` for this
-   boot, before any relaunch.
-3. **The holder answers within the wait:** the judgement runs as reboot-resume §3 specifies, 2b
-   holding.
-4. **It does not:** the verdict is `unplanned`, `why` `holder not answering` (after the 2-minute wait), final for this
-   boot: no relaunch, nothing counted, the person told (§3.3's notice), busmon's popup offers the
-   relaunch, exactly as for any other `unplanned`.
+1. **Classification first, unchanged.** `lifecycle.Judge` classifies as reboot-resume §2.2 says,
+   without waiting: `none`, `intentional` and `suspended` keep their verdict, whatever the holder
+   does (an intentional or suspended project is never turned into `unplanned` by a slow holder).
+2. **Then conditions 1 and 2, unchanged**, also without waiting: `setting off`, `self-repair off`,
+   `self-repair in shadow mode` are recorded with their own `why`.
+3. **Only at 2b, for an `unplanned` classification whose 1 and 2 held: a readiness phase.** The
+   dispatch service, holding the lease, polls the current build's holder (health `holder`'s probe:
+   its socket answers a `Describe`) every 2 s for at most **2 minutes** (`holderReadyWait`, a
+   constant). Nothing is decided during it: `run.json` is not rewritten (a dispatcher that restarts
+   meanwhile judges again from the start), `{p}:reboot` is not written, the counter is neither read
+   nor incremented, and self-repair holds every agent (hold reason `reboot pending`, this boot).
+4. **The holder answers within the wait:** the judgement goes on from condition 3 (the repository
+   check) as reboot-resume §3.1 specifies.
+5. **It does not:** the verdict is `unplanned`, `why` `holder not answering` (the closed set
+   unchanged), final for this boot: no relaunch, nothing counted. §3.3's notice says it, naming the
+   wait (`… not restarted: its holder did not answer within 2 minutes of the dispatcher's start`),
+   so the person knows a slow start (a disk check at boot) cost the automatic restart; busmon's
+   popup offers the relaunch, as for any other `unplanned`. A holder answering after the wait does
+   not reopen the verdict: the person relaunches.
 
-Tests (with reboot-resume A, deterministic, fake clock and fake holder probe): dispatch starts first,
-the holder answers after 30 s → `restarting` exactly once, the counter incremented once, nothing
-relaunched before the verdict; the holder never answers → `unplanned`, `holder not answering`
-after 2 minutes, no relaunch, the counter untouched; a dispatcher restart during the phase → judged once,
-counted once; a same-boot start (`none`) → no phase, no wait.
+Tests (with reboot-resume A, deterministic, fake clock and fake holder probe):
+
+- eligible `unplanned`, the dispatcher first, the holder answering after 30 s → `restarting` exactly
+  once, the counter incremented once, nothing relaunched before the verdict;
+- eligible `unplanned`, the holder never answering → `unplanned`, `holder not answering` after 2
+  minutes, no relaunch, the counter untouched, the notice naming the wait;
+- a dispatcher restart during the phase → judged once, counted once;
+- `intentional`, and `suspended`, with no holder answering → their own verdict at once, no wait, no
+  `holder not answering`, the popup's relaunch or resume as reboot-resume §4;
+- `unplanned` with `services.unplanned_restart` off, and with self-repair off → `setting off` or
+  `self-repair off` at once, no wait;
+- the same boot (`none`) → no phase, no wait.
 
 **H2. Reboot-resume's remaining steps, in this order:** A (with H1 in place, so condition 2b can
 hold), then C (boot), then B (the popup). Until A, a reboot after H1 brings the holder and the
