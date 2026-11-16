@@ -294,9 +294,7 @@ func main() {
 			stop()
 			die("dispatch: " + err.Error())
 		}
-		dispatchHostOps = func(b *bus.Bus) dispatch.HostOpsConfig {
-			return dispatch.HostOpsConfig{Run: hostRunner{Project: project, Cmds: realHostCmds(b, project, host)}.Run}
-		}
+		dispatchHostOps = func(b *bus.Bus) dispatch.HostOpsConfig { return hostOpsConfig(b, project, host) }
 		code := runDispatch(sctx, b, rest, rt, os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)
