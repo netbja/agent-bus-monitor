@@ -85,7 +85,8 @@ type upDeps struct {
 	TabClient func(command string) string
 	Trusted   func(client, dir string) bool
 	// GitRepo says whether dir is a Git repository: the missions service
-	// needs one (P1-16). Nil: not checked.
+	// needs one, and up starts the project without it otherwise (P1-16).
+	// Nil: not checked.
 	GitRepo func(dir string) bool
 	// TrustAsks is the project's asks on the broker, for the trust reminder
 	// in busmon (first-run-trust (b)); nil: no reminder, the line only.
@@ -227,13 +228,22 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 			return clientOf(cmd)
 		}
 	}
-	// P1-16: the missions service waits, out of sight, for a Git repository
-	// in the project's folder. up refuses that folder up front instead and
-	// says how to go on; it never runs git init in the person's folder.
+	// P1-16, the person's answer: a project works without Git (no forge, no
+	// repository). Only the missions service needs one: up starts the
+	// project without it and says once how to enable it, instead of a
+	// missions service waiting out of sight for git init. One left running
+	// by an earlier up can only be waiting: it is stopped.
 	if slices.Contains(kinds, service.Missions) && d.GitRepo != nil && !d.GitRepo(tpl.WorkingDir) {
-		fmt.Fprintf(stderr, "agentbus up: no Git repository in %s, which the missions service needs: run git init %s, or agentbus up %s --no-missions; nothing started\n",
+		kinds = slices.DeleteFunc(kinds, func(k string) bool { return k == service.Missions })
+		fmt.Fprintf(stdout, "missions: not started: no Git repository in %s (the conductor needs one). To enable it: git init %s, then agentbus up %s\n",
 			tpl.WorkingDir, tpl.WorkingDir, project)
-		return 1
+		if st, err := m.State(project, service.Missions); err == nil && st.Active {
+			if err := m.Stop(project, service.Missions); err != nil {
+				fmt.Fprintf(stderr, "agentbus up: missions: stop the service waiting for a Git repository: %v (agentbus --project %s service stop missions)\n", err, project)
+			} else {
+				fmt.Fprintln(stdout, "missions: stopped the service that waited for a Git repository")
+			}
+		}
 	}
 	failed := false
 	if d.AtLogin != nil && d.AtLogin() {
