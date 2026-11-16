@@ -84,6 +84,9 @@ type upDeps struct {
 	// client's trust of the project folder. Nil Trusted: no gate.
 	TabClient func(command string) string
 	Trusted   func(client, dir string) bool
+	// GitRepo says whether dir is a Git repository: the missions service
+	// needs one (P1-16). Nil: not checked.
+	GitRepo func(dir string) bool
 	// TrustAsks is the project's asks on the broker, for the trust reminder
 	// in busmon (first-run-trust (b)); nil: no reminder, the line only.
 	TrustAsks    func(project string) (trustAskBus, error)
@@ -223,6 +226,14 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 			}
 			return clientOf(cmd)
 		}
+	}
+	// P1-16: the missions service waits, out of sight, for a Git repository
+	// in the project's folder. up refuses that folder up front instead and
+	// says how to go on; it never runs git init in the person's folder.
+	if slices.Contains(kinds, service.Missions) && d.GitRepo != nil && !d.GitRepo(tpl.WorkingDir) {
+		fmt.Fprintf(stderr, "agentbus up: no Git repository in %s, which the missions service needs: run git init %s, or agentbus up %s --no-missions; nothing started\n",
+			tpl.WorkingDir, tpl.WorkingDir, project)
+		return 1
 	}
 	failed := false
 	if d.AtLogin != nil && d.AtLogin() {
@@ -758,6 +769,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		TabExe:    func(cmd string) string { return tabExecutable(cmd, os.Getenv) },
 		LookPath:  lookAgentCLI(os.Getenv, exec.LookPath, shellProbe(os.Getenv, 3*time.Second)),
 		Trusted:   trust.Reader(os.Getenv),
+		GitRepo:   isGitRepo,
 		TrustAsks: func(project string) (trustAskBus, error) {
 			c, err := bus.Connect("")
 			if err != nil {
