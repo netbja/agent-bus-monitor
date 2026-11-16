@@ -183,6 +183,24 @@ func TestHostPathReportsBlockedToMaster(t *testing.T) {
 	}
 }
 
+// Codex's rate-limit menu (2026-11-16, captured live) is a blocked menu too:
+// master hears "blocked: coder (codex) since … screen: …" naming its question,
+// not a bare "agent unknown" after the escalation threshold.
+func TestHostPathReportsCodexRateLimitMenu(t *testing.T) {
+	w := newHostWorld(t)
+	w.rt.Client = func(string) string { return "codex" }
+	w.show("codex-rate-limit.txt")
+	cfg := fastConfig()
+	cfg.Observe = 30 * time.Millisecond
+	start(t, w.b, w.rt, cfg)
+	waitFor(t, 3*time.Second, "the blocked report", func() bool { return len(w.cmdsTo("master")) == 1 })
+	enter := w.cmdsTo("master")[0]
+	if !strings.HasPrefix(enter.Message, "blocked: coder (codex) since ") ||
+		!strings.Contains(enter.Message, `screen: "Switch to gpt-6-luna for lower credit usage?"`) || enter.NoWake {
+		t.Fatalf("enter %+v", enter)
+	}
+}
+
 // The escalation target blocked itself: only the person can answer, so both
 // reports are notices for the person, never a cmd to itself.
 func TestHostPathBlockedTargetTellsThePerson(t *testing.T) {
