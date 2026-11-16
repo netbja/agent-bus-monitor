@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/netbja/agent-bus-monitor/config"
+
 	"context"
 	"errors"
 	"os/exec"
@@ -178,5 +180,22 @@ func TestAgentPageUnderAnotherWaits(t *testing.T) {
 	}
 	if msg, ok := cmd().(termTickMsg); !ok || msg.serial != serial {
 		t.Fatalf("a covered page was read: %T", cmd())
+	}
+}
+
+// P1-8: busmon's t is agentbus attach, so the preview names its way out
+// beside "t attaches": the attach prefix in effect, as the person reads it.
+func TestTermPreviewNamesTheDetachKey(t *testing.T) {
+	got := plainOf(termPreviewLines(termView{found: true, prefix: "ctrl+]", lines: []string{"ok"}}, 80))
+	if !strings.Contains(got, "t attaches, then Ctrl-] d detaches") {
+		t.Fatalf("the detach key is not named: %q", got)
+	}
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	dir := t.TempDir()
+	if got := attachPrefix(env(map[string]string{"XDG_CONFIG_HOME": dir, config.EnvName("attach.prefix"): "f7"})); got != "f7" {
+		t.Fatalf("the setting: %q", got)
+	}
+	if got := attachPrefix(env(map[string]string{"XDG_CONFIG_HOME": dir, config.EnvName("attach.prefix"): "ctrl+c"})); got != "" {
+		t.Fatalf("an invalid setting is named: %q", got)
 	}
 }

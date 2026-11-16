@@ -1,6 +1,9 @@
 package config
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // The attach prefix's key names (herdr exit spec 4.6): f1-f12, ctrl+<letter>,
 // ctrl+\ and ctrl+]. One rule for the setting attach.prefix, the client
@@ -17,3 +20,11 @@ func AttachKeyName(k string) bool { return attachKeyRE.MatchString(k) }
 
 // AttachPrefixAllowed: k is a key name and not a reserved one.
 func AttachPrefixAllowed(k string) bool { return AttachKeyName(k) && !attachKeyReserved[k] }
+
+// AttachKeyLabel is a key name as the person reads it on screen: F12, Ctrl-].
+func AttachKeyLabel(k string) string {
+	if rest, ok := strings.CutPrefix(k, "ctrl+"); ok {
+		return "Ctrl-" + strings.ToUpper(rest)
+	}
+	return strings.ToUpper(k)
+}
