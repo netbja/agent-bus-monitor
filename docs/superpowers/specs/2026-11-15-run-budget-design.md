@@ -1,6 +1,6 @@
 # A run budget: stop cleanly after a duration, a number of deliveries, or a quota (run-budget)
 
-Status: spec, r6; step 1 built (§2 the run counted, §5 agentbus run and run reset). It depends on master-idle-spec
+Status: spec, r6; step 1 built (§2 the run counted, §5 agentbus run and run reset); step 2 built (§3 the drain and the stop, §4 the quota trigger for a client that reports its quota; `{p}:held` and the screen hold not yet). It depends on master-idle-spec
 §3.1 (the git test, `-U0` patch-ids; master-idle r8). From the person's review of
 master-idle-spec (2026-11-15, thread `1794733043827-0`, its §2 and §4), relayed by master; r6 folds
 in the person's second review and answers (thread `1794734231604-0`). §8 records the answers.

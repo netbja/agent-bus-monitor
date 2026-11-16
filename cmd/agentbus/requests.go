@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -51,7 +52,10 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		if len(args) < 3 {
 			return fmt.Errorf("usage: request send <task> <target> [--ref T] [--ttl 5m] <body>")
 		}
-		id, err := b.Request(ctx, args[0], self, args[1], ref, strings.Join(args[2:], " "), ttl)
+		// The person (no AGENT_BUS_AGENT, as deliver recognises them) may
+		// send a task while the run drains; an agent may not (run-budget §3).
+		person := requestGetenv("AGENT_BUS_AGENT") == ""
+		id, err := b.RequestBy(ctx, args[0], self, args[1], ref, strings.Join(args[2:], " "), ttl, person)
 		if err != nil {
 			return err
 		}
@@ -113,3 +117,7 @@ func validBranch(s string) bool {
 	}
 	return true
 }
+
+// requestGetenv reads the caller's environment for request send (a seam for
+// the tests).
+var requestGetenv = os.Getenv

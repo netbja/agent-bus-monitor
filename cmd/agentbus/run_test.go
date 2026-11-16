@@ -78,3 +78,37 @@ func TestRunCmd(t *testing.T) {
 		t.Fatalf("a bad argument: %d", code)
 	}
 }
+
+// run-budget step 2: a draining run says when the drain ends; a stopped one
+// that the project is paused; reset says it lifts that pause.
+func TestRunCmdDrainAndStop(t *testing.T) {
+	b, _ := dialMain(t)
+	ctx := context.Background()
+	env := map[string]string{"HOME": t.TempDir(), "XDG_CONFIG_HOME": t.TempDir(), "AGENT_BUS_RUN_DRAIN_MAX": "2h"}
+	run := func(args ...string) string {
+		var out, errw bytes.Buffer
+		runRun(ctx, b, args, func(k string) string { return env[k] }, &out, &errw)
+		return out.String() + errw.String()
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch %v %v", ok, err)
+	}
+	if _, _, err := b.FencedRunPass(ctx, "tok", nil, true, 15*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := b.FencedRunDrain(ctx, "tok", bus.RunWhyDeliveries); err != nil {
+		t.Fatal(err)
+	}
+	if msg := run(); !strings.Contains(msg, "drain       until nothing is in flight, at most 2h (run.drain_max)") {
+		t.Fatalf("draining: %q", msg)
+	}
+	if _, err := b.FencedRunStop(ctx, "tok", "master"); err != nil {
+		t.Fatal(err)
+	}
+	if msg := run(); !strings.Contains(msg, "the project is paused; agentbus run reset starts a new run") {
+		t.Fatalf("stopped: %q", msg)
+	}
+	if msg := run("reset"); !strings.Contains(msg, "the run's pause lifted") {
+		t.Fatalf("reset: %q", msg)
+	}
+}

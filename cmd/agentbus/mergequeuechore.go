@@ -159,9 +159,13 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 		return err
 	}
 	// The run's step (run-budget §2): its clock, and the deliveries judged
-	// this pass; a gap longer than three passes counts as paused.
-	_, _, err := c.b.FencedRunPass(wctx, token, run.heads, run.known, 3*mergeQueueEvery)
-	return err
+	// this pass; a gap longer than three passes counts as paused. Then its
+	// limits (§3): the drain, and the stop once nothing is in flight.
+	runRec, _, err := c.b.FencedRunPass(wctx, token, run.heads, run.known, 3*mergeQueueEvery)
+	if err != nil {
+		return err
+	}
+	return c.runStepKnown(wctx, token, runRec, rec.Undelivered, rec.Reason == "")
 }
 
 // runHeads are the approved heads (within 72 h) the git test found in the

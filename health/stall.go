@@ -113,6 +113,7 @@ type TeamStallInput struct {
 	PlanLoaded   bool
 	AgentReady   []ReadyTask
 	PersonReady  []string // titles of the person's tasks Waiting
+	RunDraining  bool     // the run drains (run-budget §3): ready plan tasks wait, no stall
 }
 
 // EvaluateTeamStall: every agent idle for After, nothing open and work ready
@@ -149,6 +150,9 @@ func EvaluateTeamStall(in TeamStallInput) Outcome {
 		if t.OwnerHeld {
 			held = append(held, fmt.Sprintf("%s (%s, %s)", t.ID, t.Owner, t.Hold))
 			continue
+		}
+		if in.RunDraining {
+			return ok("run draining: ready plan tasks wait")
 		}
 		return Outcome{Status: Fail, Reason: "stalled", Detail: truncateDetail(
 			fmt.Sprintf("%s, nothing open; next ready: %s (%s)", idleText(idleFor, in.Agents), t.ID, t.Owner))}

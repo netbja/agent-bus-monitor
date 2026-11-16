@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -31,7 +32,7 @@ func runRun(ctx context.Context, b *bus.Bus, args []string, getenv func(string) 
 			fmt.Fprintln(errw, "run reset:", err)
 			return 2
 		}
-		fmt.Fprintln(out, "run reset: the next merge-queue pass starts a new run (its baseline: the heads already delivered)")
+		fmt.Fprintln(out, "run reset: the run's pause lifted, if it had stopped; the next merge-queue pass starts a new run (its baseline: the heads already delivered)")
 		return 0
 	}
 	fmt.Fprintln(errw, "usage: run | run reset")
@@ -80,6 +81,18 @@ func printRun(ctx context.Context, b *bus.Bus, getenv func(string) string, out, 
 	}
 	for _, why := range reached {
 		fmt.Fprintf(out, "limit reached: %s\n", why)
+	}
+	switch rec.State {
+	case bus.RunDraining:
+		if dm := r.Duration("run.drain_max"); dm > 0 && !strings.HasPrefix(rec.Why, "quota:") {
+			fmt.Fprintf(out, "drain       until nothing is in flight, at most %s (run.drain_max)\n", runDuration(dm))
+		} else if strings.HasPrefix(rec.Why, "quota:") {
+			fmt.Fprintln(out, "drain       until the quota's release")
+		} else {
+			fmt.Fprintln(out, "drain       until nothing is in flight")
+		}
+	case bus.RunStopped:
+		fmt.Fprintln(out, "the project is paused; agentbus run reset starts a new run")
 	}
 	return 0
 }

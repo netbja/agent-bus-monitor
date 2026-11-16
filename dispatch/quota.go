@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -127,12 +129,24 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		return err
 	}
 	l.quota.held = map[string]bool{}
+	var work map[string]bool // agents holding work, read once when a window warns (run-budget §4)
 	for p := range used {
 		r := l.quota.readings[p]
 		usable := r.Usable(now, q.MaxAge)
 		for _, w := range usable {
 			if w.UsedPct < q.WarnPct {
 				continue
+			}
+			if work == nil {
+				work = l.agentsWithWork(ctx, snaps)
+			}
+			if err := l.quotaWarnAgents(ctx, p, w, snaps, work, marks); err != nil {
+				return err
+			}
+			if p == coord {
+				if err := l.quotaDrainRun(ctx, p, w); err != nil {
+					return err
+				}
 			}
 			field := "warn:" + p + ":" + w.Name
 			reset := strconv.FormatInt(w.ResetsAt, 10)
@@ -208,6 +222,12 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.quota.held[p] = true
 			}
 		}
+		if !l.quota.held[p] && warnClear(usable, q.WarnPct) {
+			// the provider clear again: a run drained for its quota runs (§4)
+			if _, err := l.b.FencedRunQuotaRelease(ctx, l.token, p); err != nil {
+				return err
+			}
+		}
 		resetOf[p] = recorded
 		// A hold that expired at its reset leaves the quota pause to
 		// FencedResume, which ends it at reset + resumeMargin.
@@ -219,6 +239,11 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.logOnce("quota-pause:"+p, map[string]any{"action": "quota-pause", "provider": p, "until": time.UnixMilli(until).Format(time.RFC3339)})
 			}
 		}
+	}
+	// A quota drain's announcement, from the run's state alone: a failed
+	// write is retried even when no reading warns any more (reviewer-codex).
+	if err := l.quotaDrainTell(ctx, ""); err != nil {
+		return err
 	}
 	return l.coordinatorMoved(ctx, paused, coord, resetOf)
 }
@@ -280,6 +305,11 @@ func (l *loop) release(ctx context.Context, p string, recorded int64, snaps map[
 		return nil
 	}
 	if err := l.b.FencedQuotaDel(ctx, l.token, "hold:"+p); err != nil {
+		return err
+	}
+	// A run drained for this quota runs again (run-budget §4), whatever
+	// ended the hold: a reading, a call served, the reset passed.
+	if _, err := l.b.FencedRunQuotaRelease(ctx, l.token, p); err != nil {
 		return err
 	}
 	entry := map[string]any{"action": "quota-release", "provider": p}
@@ -366,4 +396,106 @@ func (l *loop) logOnce(key string, v map[string]any) {
 	if !same {
 		l.log(v)
 	}
+}
+
+// warnClear: a usable reading with every window under the warn threshold.
+func warnClear(usable []quota.Window, warnPct float64) bool {
+	if len(usable) == 0 {
+		return false
+	}
+	for _, w := range usable {
+		if w.UsedPct >= warnPct {
+			return false
+		}
+	}
+	return true
+}
+
+// agentsWithWork are the agents holding work (run-budget §4): an accepted
+// task on the board, or declared working. A board that cannot be read leaves
+// only the working ones.
+func (l *loop) agentsWithWork(ctx context.Context, snaps map[string]bus.AgentSnapshot) map[string]bool {
+	out := map[string]bool{}
+	for name, s := range snaps {
+		if s.State == "working" {
+			out[name] = true
+		}
+	}
+	board, err := l.b.Board(ctx)
+	if err != nil {
+		l.logError("", "quota-warn board", err)
+		return out
+	}
+	for _, e := range board {
+		if e.State == "accepted" && bus.ValidName(e.Owner) { // an accepted task; a plan claim is not work held
+			out[e.Owner] = true
+		}
+	}
+	return out
+}
+
+// quotaWarnAgents warns each agent on provider p holding work, besides
+// master, once per window (run-budget §4): the warn's mark extended with the
+// agent.
+func (l *loop) quotaWarnAgents(ctx context.Context, p string, w quota.Window, snaps map[string]bus.AgentSnapshot, work map[string]bool, marks map[string]string) error {
+	names := make([]string, 0, len(snaps))
+	for name := range snaps {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if snaps[name].Provider != p || name == l.cfg.EscalateTo || !work[name] {
+			continue
+		}
+		field := "warn:" + p + ":" + w.Name + ":" + name
+		if marked, _ := strconv.ParseInt(marks[field], 10, 64); quota.SameReset(marked, w.ResetsAt) {
+			continue
+		}
+		msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish your step, commit work in progress on your branch, report what is left, then status done. Start nothing new.",
+			p, w.UsedPct, w.Name, w.Reset().Local().Format("15:04"))
+		if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, name, bus.CmdDirective, msg); err != nil {
+			return err
+		}
+		if err := l.b.FencedQuotaSet(ctx, l.token, field, strconv.FormatInt(w.ResetsAt, 10)); err != nil {
+			return err
+		}
+		l.log(map[string]any{"action": "quota-warn-agent", "provider": p, "window": w.Name, "agent": name})
+	}
+	return nil
+}
+
+// quotaDrainRun drains the run for master's provider p (run-budget §4),
+// told once per drain to master and to the person, as a limit's drain is.
+func (l *loop) quotaDrainRun(ctx context.Context, p string, w quota.Window) error {
+	if _, _, err := l.b.FencedRunDrain(ctx, l.token, bus.RunWhyQuota(p)); err != nil {
+		return err
+	}
+	return l.quotaDrainTell(ctx, fmt.Sprintf("%.0f%%, %s, resets %s", w.UsedPct, w.Name, w.Reset().Local().Format("15:04")))
+}
+
+// quotaDrainTell tells master and the person that the run drains for a
+// quota, on each pass while it does, by the drain's once-marks: an
+// announcement whose write failed is retried from the run's own state,
+// whatever the provider reads now (reviewer-codex), and none is sent twice.
+// detail is the reading's, "" when the pass has none.
+func (l *loop) quotaDrainTell(ctx context.Context, detail string) error {
+	run, err := l.b.Run(ctx)
+	if err != nil || run == nil || run.State != bus.RunDraining {
+		return nil
+	}
+	p, ok := strings.CutPrefix(run.Why, "quota:")
+	if !ok {
+		return nil
+	}
+	if detail != "" {
+		detail = " (" + detail + ")"
+	}
+	ep := fmt.Sprintf("%d:%d", run.StartedAt, run.Drains)
+	directive := fmt.Sprintf("Run draining for %s's quota%s: dispatch no new task; finish and deliver what is in flight; the run goes on at the quota's release.", p, detail)
+	if _, err := l.b.FencedCmdOnce(ctx, l.token, "run-drain", ep, dispatchFrom, l.cfg.EscalateTo, bus.CmdDirective, directive, false); err != nil {
+		return err
+	}
+	notice := fmt.Sprintf("%s: the run drains for %s's quota%s: no new task but yours; it goes on at the quota's release (agentbus run)", l.b.Project(), p, detail)
+	_, err = l.b.FencedNotifyOnceForPerson(ctx, l.token, "run-drain-person", ep, dispatchFrom, notice)
+	return err
 }

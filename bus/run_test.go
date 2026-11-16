@@ -159,3 +159,151 @@ func TestParseRunCounts(t *testing.T) {
 		}
 	}
 }
+
+func runWithLease(t *testing.T) (*Bus, context.Context) {
+	t.Helper()
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	runPass(t, b, true)
+	return b, ctx
+}
+
+// run-budget §3: a limit drains the run once, with the episode of its marks
+// <started_at>:<drains>; a second limit while draining changes nothing; only
+// the lease holder writes.
+func TestRunDrain(t *testing.T) {
+	b, ctx := runWithLease(t)
+	if _, _, err := b.FencedRunDrain(ctx, "bad", RunWhyDuration); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("without the lease: %v", err)
+	}
+	ep, drained, err := b.FencedRunDrain(ctx, "tok", RunWhyDuration)
+	rec, _ := b.Run(ctx)
+	if err != nil || !drained || rec.State != RunDraining || rec.Why != RunWhyDuration || rec.Drains != 1 ||
+		ep != fmt.Sprintf("%d:1", rec.StartedAt) || rec.Since == 0 {
+		t.Fatalf("drain = %q %v %v, record %+v", ep, drained, err, rec)
+	}
+	if _, drained, err := b.FencedRunDrain(ctx, "tok", RunWhyDeliveries); err != nil || drained {
+		t.Fatalf("a second limit while draining: %v %v", drained, err)
+	}
+	if rec, _ := b.Run(ctx); rec.Why != RunWhyDuration || rec.Drains != 1 {
+		t.Fatalf("record changed: %+v", rec)
+	}
+}
+
+// §3, §4: a quota drain returns to running on its release; a limit reached
+// during it replaces why (no new drain), and the release then leaves the run
+// draining; a second drain after a release is a new episode.
+func TestRunQuotaDrainAndRelease(t *testing.T) {
+	b, ctx := runWithLease(t)
+	q := RunWhyQuota("anthropic")
+	if _, drained, err := b.FencedRunDrain(ctx, "tok", q); err != nil || !drained {
+		t.Fatalf("quota drain: %v %v", drained, err)
+	}
+	if back, err := b.FencedRunQuotaRelease(ctx, "tok", "openai"); err != nil || back {
+		t.Fatalf("another provider's release: %v %v", back, err)
+	}
+	if back, err := b.FencedRunQuotaRelease(ctx, "tok", "anthropic"); err != nil || !back {
+		t.Fatalf("release: %v %v", back, err)
+	}
+	if rec, _ := b.Run(ctx); rec.State != RunRunning || rec.Why != "" {
+		t.Fatalf("after the release: %+v", rec)
+	}
+	ep, drained, err := b.FencedRunDrain(ctx, "tok", q)
+	rec, _ := b.Run(ctx)
+	if err != nil || !drained || rec.Drains != 2 || ep != fmt.Sprintf("%d:2", rec.StartedAt) {
+		t.Fatalf("second drain %q %v %v %+v", ep, drained, err, rec)
+	}
+	if _, drained, err := b.FencedRunDrain(ctx, "tok", RunWhyDeliveries); err != nil || drained {
+		t.Fatalf("a limit during a quota drain is no new drain: %v %v", drained, err)
+	}
+	if rec, _ := b.Run(ctx); rec.Why != RunWhyDeliveries || rec.Drains != 2 || rec.State != RunDraining {
+		t.Fatalf("why not replaced: %+v", rec)
+	}
+	if back, err := b.FencedRunQuotaRelease(ctx, "tok", "anthropic"); err != nil || back {
+		t.Fatalf("the quota release ran past a real limit: %v %v", back, err)
+	}
+}
+
+// §3: the stop writes a kind-run pause a year ahead (a person's or a quota
+// pause replaced, never a suspend), which no quota release lifts and run
+// reset does.
+func TestRunStopAndReset(t *testing.T) {
+	b, ctx := runWithLease(t)
+	if stopped, err := b.FencedRunStop(ctx, "tok", "master"); err != nil || stopped {
+		t.Fatalf("a running run stopped: %v %v", stopped, err)
+	}
+	if _, _, err := b.FencedRunDrain(ctx, "tok", RunWhyDeliveries); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.FencedQuotaPause(ctx, "tok", "anthropic", "master", time.Now().Add(time.Hour).UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if stopped, err := b.FencedRunStop(ctx, "tok", "master"); err != nil || !stopped {
+		t.Fatalf("stop: %v %v", stopped, err)
+	}
+	p, err := b.Pause(ctx)
+	if err != nil || p == nil || p.Kind != PauseKindRun || p.UntilTime().Before(time.Now().Add(300*24*time.Hour)) || QuotaPauseProvider(p) != "" {
+		t.Fatalf("pause %+v %v", p, err)
+	}
+	if rec, _ := b.Run(ctx); rec.State != RunStopped {
+		t.Fatalf("record %+v", rec)
+	}
+	if ok, err := b.FencedQuotaUnpause(ctx, "tok", "anthropic", "dispatch"); err != nil || ok {
+		t.Fatalf("a quota release lifted the run's pause: %v %v", ok, err)
+	}
+	if err := b.ResetRun(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := b.Pause(ctx); p != nil {
+		t.Fatalf("reset left the run's pause: %+v", p)
+	}
+	if rec, _ := b.Run(ctx); rec != nil {
+		t.Fatalf("reset left the run: %+v", rec)
+	}
+}
+
+// A suspend is never replaced by the stop; reset never lifts a pause other
+// than the run's.
+func TestRunStopKeepsASuspendResetKeepsOtherPauses(t *testing.T) {
+	b, ctx := runWithLease(t)
+	if _, _, err := b.FencedRunDrain(ctx, "tok", RunWhyDuration); err != nil {
+		t.Fatal(err)
+	}
+	b.r.Set(ctx, PauseKey(b.project), `{"until":1,"by":"charlie","notify":"master","kind":"suspend"}`, 0)
+	if stopped, err := b.FencedRunStop(ctx, "tok", "master"); err != nil || !stopped {
+		t.Fatalf("stop: %v %v", stopped, err)
+	}
+	if p, _ := b.Pause(ctx); p == nil || p.Kind != PauseKindSuspend {
+		t.Fatalf("suspend replaced: %+v", p)
+	}
+	if err := b.ResetRun(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := b.Pause(ctx); p == nil || p.Kind != PauseKindSuspend {
+		t.Fatalf("reset lifted a suspend: %+v", p)
+	}
+}
+
+// run-budget §3: while the run drains, a new task is refused to an agent and
+// allowed to the person; a running or absent run refuses nobody.
+func TestRequestRefusedWhileDraining(t *testing.T) {
+	b, ctx := runWithLease(t)
+	if _, err := b.Request(ctx, "t1", "master", "coder", "", "x", 0); err != nil {
+		t.Fatalf("running: %v", err)
+	}
+	if _, _, err := b.FencedRunDrain(ctx, "tok", RunWhyDuration); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Request(ctx, "t2", "master", "coder", "", "x", 0); !errors.Is(err, ErrRunDraining) {
+		t.Fatalf("an agent's task while draining: %v, want ErrRunDraining", err)
+	}
+	if board, _ := b.Board(ctx); board["t2"].State != "" {
+		t.Fatalf("refused task written: %+v", board["t2"])
+	}
+	if _, err := b.RequestBy(ctx, "t3", "charlie", "coder", "", "x", 0, true); err != nil {
+		t.Fatalf("the person's task while draining: %v", err)
+	}
+}

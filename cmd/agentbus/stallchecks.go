@@ -285,6 +285,11 @@ func (s *stallReader) teamStall(ctx context.Context) (health.Outcome, error) {
 			}
 		}
 	}
+	run, err := s.b.Run(ctx) // run-budget §3: no stall while the run drains
+	if err != nil {
+		return fail("run unavailable")
+	}
+	in.RunDraining = run != nil && run.State == bus.RunDraining
 	return health.EvaluateTeamStall(in), nil
 }
 
