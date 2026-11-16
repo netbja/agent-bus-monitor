@@ -95,6 +95,9 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 		if !bus.ValidName(t) {
 			return "", fmt.Errorf("report: --to %q: invalid agent name", t)
 		}
+		if err := refuseAnonymousTarget(t); err != nil { // nothing is addressed to anonymous (P2-11)
+			return "", fmt.Errorf("report: --to: %w", err)
+		}
 	}
 	kind := bus.ReportNote
 	if auto {

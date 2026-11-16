@@ -115,8 +115,11 @@ What to expect the first time:
   rather than printing nothing; agents appear as they start.
 - **Who you are on the bus.** In busmon you write as a person: `--as <your-name>` (or
   `AGENT_BUS_HUMAN`, or `agentbus identity set <your-name>`). From a shell, `agentbus` writes as
-  `AGENT_BUS_AGENT`, and as `anonymous` when it is unset; inside a herdr pane with it unset, a
-  command that writes is refused with the fix, so an agent never posts under the wrong name.
+  `AGENT_BUS_AGENT`, else as you (`AGENT_BUS_HUMAN`, or the name `agentbus identity set` recorded).
+  With neither, a command that writes is refused with the fix rather than sent from `anonymous`,
+  whose answer would reach nobody; nothing is addressed to `anonymous` either. Inside an agent's
+  terminal with `AGENT_BUS_AGENT` unset, a write is refused, so an agent never posts under the
+  wrong name (your name included).
 
 - `./setup.sh update` keeps the machine current; busmon shows `↑ vX.Y.Z` in its header when a
   newer release exists.

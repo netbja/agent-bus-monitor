@@ -68,7 +68,7 @@ State values are a closed set: **`working` · `idle` · `blocked` · `done`**.
 
 ```bash
 export AGENT_BUS_PROJECT=<project> # REQUIRED namespace (every stream is {project}:{kind})
-export AGENT_BUS_AGENT=claude1     # who YOU are (used as `from` and pilot identity); default "anonymous"
+export AGENT_BUS_AGENT=claude1     # who YOU are (used as `from` and pilot identity); unset: the person's AGENT_BUS_HUMAN, else a write is refused
 ```
 
 With those exported you can drop `--project` from every command below. The

@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // A8(a): inside a herdr pane with no AGENT_BUS_AGENT, a command that writes
@@ -41,15 +43,17 @@ func TestIdentityGuard(t *testing.T) {
 			t.Errorf("read-only %v refused: %v", r, err)
 		}
 	}
-	// Outside a pane, or with an identity, nothing is refused.
-	for _, m := range []map[string]string{{}, {"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "coder"}} {
+	// Outside a pane with the person's identity, or with an agent's, nothing is
+	// refused (outside a pane with no identity at all: P2-11, identitysender_test).
+	for _, m := range []map[string]string{{config.EnvName("identity.as"): "charlie", "XDG_CONFIG_HOME": t.TempDir()}, {"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "coder"}} {
 		if err := identityGuard(env(m), "status", []string{"idle", "x"}); err != nil {
 			t.Errorf("env %v: %v", m, err)
 		}
 	}
-	// AGENT_BUS_AGENT=anonymous said on purpose is an identity, not the default.
-	if err := identityGuard(env(map[string]string{"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err != nil {
-		t.Errorf("explicit anonymous refused: %v", err)
+	// AGENT_BUS_AGENT=anonymous is the same nobody as unset (P2-11, foureyes):
+	// refused in a terminal as unset is.
+	if err := identityGuard(env(map[string]string{"AGENTBUS_TERM_ID": "w2:pA", "AGENT_BUS_AGENT": "anonymous"}), "notify", []string{"x"}); err == nil {
+		t.Error("an explicit anonymous allowed in a terminal")
 	}
 }
 
