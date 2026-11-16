@@ -3,6 +3,7 @@ package holder
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -147,8 +148,8 @@ func TestCheckLevelOwner(t *testing.T) {
 	}
 }
 
-// The socket path: <dir>/holder-<key>.sock, refused past 104 bytes (macOS's
-// sun_path) and for an invalid build key.
+// The socket path: <dir>/holder-<key>.sock, refused past this OS's sun_path
+// and for an invalid build key.
 func TestSocketPath(t *testing.T) {
 	xdg := t.TempDir()
 	os.Chmod(xdg, 0o700)
@@ -158,10 +159,92 @@ func TestSocketPath(t *testing.T) {
 	}
 	deep := filepath.Join(xdg, strings.Repeat("d", 80))
 	os.Mkdir(deep, 0o700)
-	if _, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": deep}), "demo", "v1.0123456789"); err == nil || !strings.Contains(err.Error(), "104") {
+	if _, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": deep}), "demo", "v1.0123456789"); err == nil || !strings.Contains(err.Error(), "a unix socket path takes") {
 		t.Fatalf("a long path: %v", err)
 	}
 	if _, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": xdg}), "demo", "../x"); err == nil {
+		t.Fatal("an invalid build key accepted")
+	}
+}
+
+// fieldKey is the build key of the field failure (P0-2, 2026-11-16): a dirty
+// build's key, its socket path 105 bytes long.
+const fieldKey = "v0.28.0.877.g1691ae95.1691ae950206.dirty.c7ab19e304"
+
+// xdgFor is a 0700 run directory whose socket path for project and key is
+// exactly n bytes long.
+func xdgFor(t *testing.T, project, key string, n int) string {
+	t.Helper()
+	base, err := os.MkdirTemp("/tmp", "h") // short: t.TempDir() is too long to build a 105-byte path in
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(base) })
+	tail := len("/agentbus/" + project + "/holder-" + key + ".sock")
+	pad := n - tail - len(base) - 1
+	if pad < 1 {
+		t.Skipf("the temp dir %s is too long for a %d-byte path", base, n)
+	}
+	x := filepath.Join(base, strings.Repeat("x", pad))
+	if err := os.Mkdir(x, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return x
+}
+
+// The field failure: a 105-byte socket path was refused on Linux by macOS's
+// limit, so the holder never listened and the dispatcher waited for it. Each
+// OS has its own sun_path: Linux 108, macOS 104, the NUL included.
+func TestSocketPathFieldFailure(t *testing.T) {
+	if got := maxSocketPathFor("linux"); got != 107 {
+		t.Fatalf("linux %d", got)
+	}
+	if got := maxSocketPathFor("darwin"); got != 103 {
+		t.Fatalf("darwin %d", got)
+	}
+	if got := maxSocketPathFor("freebsd"); got != 103 {
+		t.Fatalf("another OS: the smallest, %d", got)
+	}
+	if runtime.GOOS != "linux" {
+		t.Skip("the field failure is Linux's")
+	}
+	x := xdgFor(t, "abm", fieldKey, 105)
+	env := envOf(map[string]string{"XDG_RUNTIME_DIR": x})
+	p, err := SocketPath(env, "abm", fieldKey)
+	if err != nil || len(p) != 105 {
+		t.Fatalf("the field's 105-byte path: %d %v", len(p), err)
+	}
+	if err := SocketPathFits(env, "abm", fieldKey); err != nil {
+		t.Fatalf("fits: %v", err)
+	}
+	edge := xdgFor(t, "abm", fieldKey, 107) // the longest Linux takes
+	if p, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": edge}), "abm", fieldKey); err != nil || len(p) != 107 {
+		t.Fatalf("a 107-byte path: %d %v", len(p), err)
+	}
+	long := xdgFor(t, "abm", fieldKey, 108)
+	if _, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": long}), "abm", fieldKey); err == nil || !strings.Contains(err.Error(), "108") {
+		t.Fatalf("a 108-byte path on Linux: %v", err)
+	}
+}
+
+// SocketPathFits judges the length without creating any directory: agentbus
+// up asks it before it starts anything.
+func TestSocketPathFitsCreatesNothing(t *testing.T) {
+	x := filepath.Join(t.TempDir(), "run")
+	if err := SocketPathFits(envOf(map[string]string{"XDG_RUNTIME_DIR": x}), "demo", "v1.0123456789"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(x); !os.IsNotExist(err) {
+		t.Fatalf("a directory was created: %v", err)
+	}
+	deep := filepath.Join(x, strings.Repeat("d", 120))
+	if err := SocketPathFits(envOf(map[string]string{"XDG_RUNTIME_DIR": deep}), "demo", "v1.0123456789"); err == nil || !strings.Contains(err.Error(), "XDG_RUNTIME_DIR") {
+		t.Fatalf("too long: %v", err)
+	}
+	if err := SocketPathFits(envOf(map[string]string{"XDG_RUNTIME_DIR": x}), "Bad", "v1.0123456789"); err == nil {
+		t.Fatal("an invalid project accepted")
+	}
+	if err := SocketPathFits(envOf(map[string]string{"XDG_RUNTIME_DIR": x}), "demo", "../x"); err == nil {
 		t.Fatal("an invalid build key accepted")
 	}
 }

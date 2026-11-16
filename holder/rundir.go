@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"syscall"
 
@@ -19,9 +20,16 @@ import (
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
-// maxSocketPath is the longest socket path every platform takes: macOS's
-// sun_path holds 104 bytes, its NUL included.
-const maxSocketPath = 103
+// maxSocketPathFor is the longest unix socket path goos takes: its
+// sun_path less the NUL (Linux 108, macOS 104). Another OS gets the
+// smallest of the two. The field failure (P0-2): macOS's limit applied on
+// Linux refused a 105-byte path, so the holder never listened.
+func maxSocketPathFor(goos string) int {
+	if goos == "linux" {
+		return 107
+	}
+	return 103
+}
 
 type runRoot struct {
 	path     string
@@ -118,7 +126,7 @@ func checkLevel(path string, st fs.FileInfo, uid int) error {
 
 // SocketPath is the holder socket of project's build key:
 // <rundir>/agentbus/<project>/holder-<key>.sock, its directories checked
-// (ProjectDir). A path longer than a unix socket takes is refused.
+// (ProjectDir). A path longer than this OS's unix socket takes is refused.
 func SocketPath(getenv func(string) string, project, key string) (string, error) {
 	if !service.ValidBuildKey(key) {
 		return "", fmt.Errorf("holder: invalid build key %q", key)
@@ -128,8 +136,29 @@ func SocketPath(getenv func(string) string, project, key string) (string, error)
 		return "", err
 	}
 	p := filepath.Join(dir, "holder-"+key+".sock")
-	if len(p) > maxSocketPath {
-		return "", fmt.Errorf("holder socket path %s is %d bytes; a unix socket path must fit in 104 bytes (macOS): set a shorter XDG_RUNTIME_DIR or TMPDIR", p, len(p))
+	if err := socketFits(p); err != nil {
+		return "", err
 	}
 	return p, nil
+}
+
+// SocketPathFits says whether project's socket for key fits this OS's unix
+// socket path, creating nothing: agentbus up asks it before it starts
+// anything, so a holder that could never listen is refused up front.
+func SocketPathFits(getenv func(string) string, project, key string) error {
+	if !bus.ValidName(project) {
+		return fmt.Errorf("holder: invalid project %q", project)
+	}
+	if !service.ValidBuildKey(key) {
+		return fmt.Errorf("holder: invalid build key %q", key)
+	}
+	return socketFits(filepath.Join(runDir(getenv).path, "agentbus", project, "holder-"+key+".sock"))
+}
+
+func socketFits(p string) error {
+	if limit := maxSocketPathFor(runtime.GOOS); len(p) > limit {
+		return fmt.Errorf("holder socket path %s is %d bytes; a unix socket path takes %d here (%s): set a shorter XDG_RUNTIME_DIR or TMPDIR",
+			p, len(p), limit+1, runtime.GOOS)
+	}
+	return nil
 }

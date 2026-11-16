@@ -170,6 +170,14 @@ func runUp(args []string, d upDeps, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "agentbus up: --reload: want on, propose or off, not %q\n", reload)
 		return 1
 	}
+	// P0-2: a socket path this OS cannot take leaves a holder that never
+	// listens and a dispatcher waiting for it: refused before anything starts.
+	if d.HolderBuild != nil {
+		if err := holder.SocketPathFits(d.Env, project, service.BuildKey(d.HolderBuild())); err != nil {
+			fmt.Fprintf(stderr, "agentbus up: %v; nothing started\n", err)
+			return 1
+		}
+	}
 	kinds := []string{}
 	if !slices.Contains(args, "--no-dispatch") {
 		kinds = append(kinds, service.Dispatch)
