@@ -12,8 +12,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -75,7 +77,7 @@ func Judge(prev *Record, err error, boot string) Verdict {
 // ReadRun reads run.json: os.ErrNotExist when missing, ErrMalformed when
 // unreadable as a record.
 func ReadRun(dir string) (Record, error) {
-	b, err := os.ReadFile(filepath.Join(dir, RunFile))
+	b, err := readRegular(filepath.Join(dir, RunFile))
 	if err != nil {
 		return Record{}, err
 	}
@@ -137,7 +139,7 @@ type Entry struct {
 // ReadCounter reads unplanned.json: os.ErrNotExist when missing (never read
 // as empty: that would reset the budget), ErrMalformed when unreadable.
 func ReadCounter(dir string) ([]Entry, error) {
-	b, err := os.ReadFile(filepath.Join(dir, CounterFile))
+	b, err := readRegular(filepath.Join(dir, CounterFile))
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +147,39 @@ func ReadCounter(dir string) ([]Entry, error) {
 	if json.Unmarshal(b, &es) != nil || es == nil {
 		return nil, fmt.Errorf("%s: %w", CounterFile, ErrMalformed)
 	}
+	for _, e := range es { // an entry the dispatcher did not write would drop out of the window: a reset
+		if e.Boot == "" || e.At <= 0 {
+			return nil, fmt.Errorf("%s: an entry without its boot or time: %w", CounterFile, ErrMalformed)
+		}
+	}
 	return es, nil
+}
+
+// maxFile is the most read of either file (one restart entry is ~30 bytes).
+const maxFile = 1 << 20
+
+// readRegular reads path only when it is a regular file (never through a
+// symlink, never blocking on a FIFO): os.ErrNotExist when missing,
+// ErrMalformed for anything else, never its content.
+func readRegular(path string) ([]byte, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	// O_NONBLOCK keeps a FIFO from blocking. Then: a symlink's target is not
+	// the file Lstat saw (SameFile), and a FIFO or device is not regular,
+	// even one whose writer would feed it what a counter looks like.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if got, err := f.Stat(); err != nil || !got.Mode().IsRegular() || !os.SameFile(fi, got) {
+		return nil, fmt.Errorf("%s: not a regular file: %w", filepath.Base(path), ErrMalformed)
+	}
+	// At most maxFile+1 bytes: a larger file is cut, and a cut JSON value
+	// never decodes, so it reads as malformed.
+	return io.ReadAll(io.LimitReader(f, maxFile+1))
 }
 
 // WriteCounter replaces unplanned.json, fsync'd before it returns.

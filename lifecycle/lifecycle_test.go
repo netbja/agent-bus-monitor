@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -245,5 +247,55 @@ func TestStoppingBootstraps(t *testing.T) {
 	}
 	if err := Stopping(t.TempDir(), "B", "reboot", t0); err == nil {
 		t.Fatal("an unknown cause written")
+	}
+}
+
+// The counter fails closed (reviewer-codex on RR-1): an entry without its boot
+// or its time, a symlink and a FIFO are errors, never an empty count; the
+// run record refuses a non-regular path too.
+func TestReadRefusesWhatWasNotWritten(t *testing.T) {
+	for name, body := range map[string]string{
+		"empty entry":       `[{}]`,
+		"no boot":           `[{"at":5}]`,
+		"no time":           `[{"boot":"A"}]`,
+		"negative time":     `[{"boot":"A","at":-1}]`,
+		"one good, one bad": `[{"boot":"A","at":5},{"boot":"","at":6}]`,
+	} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, CounterFile), []byte(body), 0o600)
+		if es, err := ReadCounter(dir); !errors.Is(err, ErrMalformed) {
+			t.Errorf("%s: %+v %v", name, es, err)
+		}
+	}
+	big := t.TempDir()
+	many := `[{"boot":"A","at":1}` + strings.Repeat(`,{"boot":"A","at":1}`, maxFile/20) + `]` // valid, and over 1 MiB
+	os.WriteFile(filepath.Join(big, CounterFile), []byte(many), 0o600)
+	if _, err := ReadCounter(big); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("a counter over 1 MiB: %v", err)
+	}
+	dir := t.TempDir()
+	real := filepath.Join(t.TempDir(), "elsewhere.json")
+	os.WriteFile(real, []byte(`[{"boot":"A","at":5}]`), 0o600)
+	os.Symlink(real, filepath.Join(dir, CounterFile))
+	os.Symlink(real, filepath.Join(dir, RunFile))
+	if _, err := ReadCounter(dir); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("a symlinked counter: %v", err)
+	}
+	if _, err := ReadRun(dir); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("a symlinked run record: %v", err)
+	}
+	fifo := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(fifo, CounterFile), 0o600); err != nil {
+		t.Skip("no fifo here")
+	}
+	done := make(chan error, 1)
+	go func() { _, err := ReadCounter(fifo); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil || errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("a FIFO counter: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("reading a FIFO counter blocked")
 	}
 }
