@@ -14,15 +14,8 @@ import (
 // What the dispatcher adds on a terminal host (herdr exit step 9, spec
 // 2026-11-10-herdr-exit-design.md 4.2, 4.3a, 4.3b, 6.5): master told when an
 // agent is blocked, the person when a line may be left in an input, and the
-// terminal-lifecycle events. Only HostRuntime's facts lead here: herdr's
-// Runtime carries no blocked look and returns none of termhost's errors, so
-// the running dispatcher behaves as before.
-
-// onHost: the loop runs on a terminal host, not herdr.
-func (l *loop) onHost() bool {
-	_, ok := l.rt.(*HostRuntime)
-	return ok
-}
+// terminal-lifecycle events. Since the herdr exit (10b) the host is the only
+// Runtime the dispatcher runs on, so these apply to every wake.
 
 // event records one fact in {p}:events, fenced; a failure is logged, never
 // stops the pass (the events are a timeline, not a source of truth).
@@ -98,9 +91,6 @@ func (l *loop) blockedLook(ctx context.Context, agent, client string, o agentsta
 // with nothing typed, or not seen in the input (the person is told, as the
 // line may be left there).
 func (l *loop) promptOutcome(ctx context.Context, agent string, observed bool, err error) error {
-	if !l.onHost() {
-		return nil
-	}
 	switch {
 	case err == nil && observed:
 		l.event(ctx, bus.EventWakeTyped, agent, "")
@@ -150,7 +140,7 @@ func (l *loop) backgroundSkip(ctx context.Context, agent, action, why string) {
 // blockedObserve feeds the observation pass's look at agent to its blocked
 // episode: a host's look of the agent's own process, or its terminal gone
 // (which ends an open episode). A failed look, another process in the
-// terminal, or herdr's Runtime (no look) are no new fact.
+// terminal, or no look at all (a runtime that judges none) are no new fact.
 func (l *loop) blockedObserve(ctx context.Context, agent string, snap *bus.AgentSnapshot, in Inspection) error {
 	var o agentstate.Observation
 	switch {

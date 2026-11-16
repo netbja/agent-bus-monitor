@@ -222,19 +222,27 @@ func TestHostPathGoneTerminalEndsTheEpisode(t *testing.T) {
 	})
 }
 
-// herdr's Runtime (the running dispatcher until the cutover) writes no
-// {p}:events: a wake typed through it changes nothing of before.
-func TestHerdrPathWritesNoEvents(t *testing.T) {
+// Since the herdr exit the host is the only Runtime (herdr-10 follow-up 2):
+// a typed wake records its event whatever runtime typed it, with no branch
+// on the runtime's type left in the loop.
+func TestEveryRuntimeRecordsATypedWake(t *testing.T) {
 	b, _ := dialRun(t)
 	register(t, b, "coder", "p-coder")
 	send(t, b, "coder", "build it")
 	rt := newFakeRT(alwaysReady)
 	start(t, b, rt, fastConfig())
-	waitFor(t, 3*time.Second, "a prompt", func() bool { return len(rt.Prompts()) == 1 })
-	time.Sleep(100 * time.Millisecond)
-	if evs, err := b.RecentEvents(context.Background(), 10); err != nil || len(evs) != 0 {
-		t.Fatalf("events on herdr's path: %+v %v", evs, err)
-	}
+	waitFor(t, 3*time.Second, "a prompt and its event", func() bool {
+		evs, err := b.RecentEvents(context.Background(), 10)
+		if err != nil || len(rt.Prompts()) != 1 {
+			return false
+		}
+		for _, e := range evs {
+			if e.Kind == bus.EventWakeTyped && e.Agent == "coder" {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 // reviewer-codex on herdr-9: a viewer attached and not proven unfocused is a

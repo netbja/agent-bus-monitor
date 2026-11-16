@@ -29,8 +29,8 @@ type Inspection struct {
 	Gone       bool
 	Err        error
 
-	// A terminal host's facts (herdr exit step 9, HostRuntime); herdr's
-	// Runtime judges neither, so both stay nil there and skip nothing.
+	// The terminal host's facts (herdr exit step 9, HostRuntime); nil when
+	// not judged (a failed read, a test's runtime) and then they skip nothing.
 	// Blocked is this look for the blocked episode (spec 4.3a); Background
 	// the background-work judgement (4.3b), whose Blocks() makes /clear and
 	// pop-retire skip the agent.
