@@ -441,8 +441,10 @@ var Keys = []*Key{
 		env: envZeroOne, file: fileBool},
 	// Forge delivery (spec 2026-11-01-forge-delivery-design.md): the forge
 	// agentbus deliver uses (auto reads origin) and the branch it targets;
-	// one setting for the machine, never a project's.
-	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver, agentbus missions", MachineOnly: true,
+	// one setting for the machine, never read from a project's env file. A
+	// project's template may name its own base ([delivery] base, rolecfg.
+	// DeliveryBase, dev-branch-flow §4.1), above delivery.base.
+	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if isForge(raw) {
 				return raw, envUse

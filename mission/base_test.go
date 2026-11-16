@@ -49,8 +49,13 @@ func TestLoadTakesTheConductorsBase(t *testing.T) {
 	if got := strings.TrimSpace(run(t, h.repo, "git", "rev-parse", "change/other")); got != devHead {
 		t.Errorf("change/other at %s, want dev's head %s", got, devHead)
 	}
-	// A later pass keeps the recorded base even if the project's moves.
+	// A later pass keeps the recorded base even if the project's moves:
+	// the change is parsed with its record's base, never the conductor's.
 	h.c.Base = "main"
+	ch, err := h.c.loadChange(h.ctx, "other")
+	if err != nil || ch == nil || ch.file.Base != "dev" {
+		t.Fatalf("loadChange: file base %v (err %v), want dev", ch, err)
+	}
 	h.pass()
 	if rec, _, _ := h.c.Store.Change(h.ctx, "other"); rec.Base != "dev" {
 		t.Errorf("after a pass the record says %q, want dev", rec.Base)
