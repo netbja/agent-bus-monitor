@@ -180,11 +180,14 @@ pops = true
 # forge-delivery: master delivers; agentbus deliver refuses every role without delivers = true.
 delivers = true
 skills = ["agent-bus-master", "wayfinder", "to-tickets"]
-# The person, 2026-10-27: master relaunches this project's dead agents without a prompt.
-# Exact commands only: no other project, no other flag, no wildcard.
+# The person, 2026-10-27: master relaunched this project's dead agents without a prompt.
+# Since the herdr exit (10b), up is the person's command: the relay refuses it in an
+# agent's terminal, and a dead agent comes back by the dispatcher's self-repair. Master
+# keeps the dry run, which starts nothing. Exact commands only: no other project, no
+# other flag, no wildcard.
 [roles.master.tool_rules]
 # Lifecycle part C: master reloads sentinel, and only sentinel.
-allow = ["Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
+allow = ["Bash(agentbus up agent-bus-monitor --resume --dry-run)",
   "Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)",
   # forge-delivery: master delivers (push included) once the 4-eyes proof names the head.
   "Bash(agentbus deliver *)"]

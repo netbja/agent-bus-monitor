@@ -10,7 +10,9 @@
   busmon's tab, when it held one plain-shell pane, has that pane closed with no proof once the new
   pane runs busmon, if it is re-read a plain shell: `isBusmonTab`, `closeIfShell`, `CloseBusmon`,
   start-busmon-pane;
-  master may run `agentbus up agent-bus-monitor --resume` without a prompt, `roles.toml`). A tab's command counts as gone only when
+  master may run `agentbus up agent-bus-monitor --resume --dry-run` without a prompt, `roles.toml`;
+  since the herdr exit the relaunch itself is the person's: the relay refuses `up` inside an agent's
+  terminal). A tab's command counts as gone only when
   no live snapshot says otherwise (`snapLife`: pid + `pid_start`, Linux only), herdr sees no agent in
   any of its panes, and **every** pane of the tab is a plain interactive shell (`idleShell`, argv
   only: a classification, never a licence to type); anything running in any pane (maybe the agent

@@ -232,10 +232,12 @@ var configDeny = []string{"Edit(~/.config/agentbus/config.toml)",
 	"Bash(busmon *-delete*)", "Bash(busmon *-d *)", "Bash(busmon *-d=*)", "Bash(busmon -d *)",
 	"Bash(busmon *-reset*)", "Bash(busmon *-r)", "Bash(busmon *-r *)", "Bash(busmon *-r=*)", "Bash(busmon -r*)"}
 
-// masterUpRules are master's own rules in the shipped manifest (Charlie,
-// 2026-10-27): the exact relaunch of this project, and (lifecycle part C) the
-// exact reload of sentinel, nothing broader.
-var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume)", "Bash(agentbus up agent-bus-monitor --resume --dry-run)",
+// masterUpRules are master's own rules in the shipped manifest: the dry run
+// of this project's relaunch (the relaunch itself is the person's since the
+// herdr exit: the relay refuses up in an agent's terminal, and a dead agent
+// comes back by self-repair), and (lifecycle part C) the exact reload of
+// sentinel, nothing broader.
+var masterUpRules = []string{"Bash(agentbus up agent-bus-monitor --resume --dry-run)",
 	"Bash(agentbus reload sentinel)", "Bash(agentbus reload sentinel --dry-run)", "Bash(agentbus deliver *)"}
 
 func TestShippedManifestRules(t *testing.T) {
