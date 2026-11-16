@@ -1,6 +1,7 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r4, for review (subject `holder-hardening-spec`). r4: master (the person asked how
+Status: spec, r5, for review (subject `holder-hardening-spec`). r5: reviewer-codex and foureyes (G1's
+safety contract, §7.1). r4: master (the person asked how
 our holder compares with herdr-core: §7, Q8). r3: reviewer-codex (the wait only at
 condition 2b of an otherwise eligible unplanned restart; intentional, suspended and the earlier
 conditions keep their verdict at once), foureyes (the notice names the wait). r2: reviewer-codex (the reboot
@@ -276,12 +277,68 @@ What that means for agents today:
 
 | Option | What it changes | Cost (coder, with reviews) |
 |---|---|---|
-| **G1. Contain the parser** | a `recover()` around each terminal's `scr.Write` and `Snapshot`: a panic resets that terminal's emulator (rebuilt from its 1 MiB tail, or blank), records the bytes that triggered it in the holder's log, warns; the program and every other agent keep running. A hang is bounded by moving `Write` out of the lock path: the read loop appends to the tail and hands the bytes to a per-terminal emulator goroutine through a bounded queue; a queue full for N seconds marks that screen `stuck` (the dispatcher reads it unknown, never ready) and the program keeps being read. `List`/`info` stop taking the emulator's lock. Health `holder` probes `List` too, so a stuck holder reads fail | **1-2 PRs, ~400 lines with tests; 1-2 days.** Kills neither failure mode at the root: a stuck goroutine stays stuck until the holder restarts |
+| **G1. Contain the parser** | each terminal's emulator in its own goroutine behind a bounded queue, so the read loop never waits on it; a panic recovered (its lock released) and a hang abandoned, each latching that terminal's screen `invalid` or `stuck` (read unknown: never woken, never submitted to) until a proven full redraw; `List` reports each terminal's screen state, and health `holder` consumes it. The program and every other agent keep running. The contract is §7.1 | **2-3 PRs, ~800 lines with tests, 3-4 days** with §7.1's safety contract. Kills neither failure mode at the root: a stuck goroutine is abandoned, not stopped, until the holder restarts |
 | **G2. Split like herdr-core** | a minimal PTY owner (spawn, pump, resize, signal, reap, the tail, the query answers it must keep giving while no core runs) as the service unit; the current holder becomes a restartable core, its child, connected over a socket, rebuilding screens from the tails at start. A core crash, hang (killed by the owner) or upgrade keeps every program running; `holder drain` is needed only when the owner itself changes | **5-7 PRs, ~2,500-3,500 lines with tests; 2-3 weeks**, plus a live check per platform. New risks: a second protocol and process, the query answers (DSR/DA) during a core restart, the owner's own upgrade still needs a drain |
 | **G3. Keep as is** | the alarm and the endurance test of §4-§5 only | none beyond §4-§5 |
 
 G1 then G2 is possible: G1's per-terminal emulator goroutine and tail are what G2's core would
 rebuild from, so G1 is not wasted work.
+
+### 7.1 G1's safety contract (if the person chooses it)
+
+**A screen the holder cannot vouch for reads unknown, never ready.** The dispatcher types into a
+terminal only when its screen reads ready (agentstate's signature); a screen parsed from a partial
+stream could show an empty input box the program no longer draws. So:
+
+1. **Ordered bytes and a generation.** The read loop never waits on the parser: it appends to the
+   tail and, under a short lock that never runs the emulator, counts every byte read (`readSeq`)
+   and enqueues the chunk with its offset. The emulator goroutine records the offset it has parsed
+   to (`parsedSeq`). A terminal's screen carries a **generation**, raised on every reset.
+2. **Queue pressure never blocks a read.** The queue is bounded (a fixed byte budget). When a chunk
+   does not fit, the read loop drops it and **every chunk after it until the queue has drained**,
+   and marks a **gap** at that offset: reads continue, the program never blocks on the parser.
+3. **Any gap, panic or reset invalidates the screen at once, and the state is latched.** The
+   terminal's screen state becomes `invalid` (a gap, a recovered panic) or `stuck` (the emulator has
+   not advanced `parsedSeq` for 10 s while bytes wait); `Screen` and `Activity` then answer that
+   state instead of a snapshot, and stay so until a **complete resynchronisation**.
+4. **Resynchronisation is proven, never assumed.** A new emulator (new generation) is valid only
+   when it has parsed an unbroken stream that ends at the current `readSeq` and starts at a point
+   that fixes the whole screen: a full-screen clear or the alternate screen's switch, which every
+   supported client emits on its next full redraw (Claude Code, Codex and the rest redraw their
+   input box on any resize), or a **resize the holder itself sends** (SIGWINCH with the same size
+   toggled by one row and back, which makes the client redraw everything). A blank emulator, or a
+   replay of the 1 MiB tail from an arbitrary point, is not proof by itself: replayed bytes count
+   only from such a full-redraw point found in the tail.
+5. **A panic is recovered with its lock released.** The `Write` and `Snapshot` calls run in a small
+   function with `defer t.mu.Unlock()` (foureyes: `readLoop` locks by hand, so a `recover()` there
+   without it would turn the crash into a deadlock), the offending chunk's offset and length are
+   logged (never its bytes: terminal output may hold secrets), and the screen goes `invalid` as in 3.
+6. **Bounded retries.** A stuck emulator goroutine cannot be killed in Go: it is abandoned (its
+   generation is dead, its output ignored), a new one starts for the resynchronisation, at most
+   **3 per terminal per hour**; past that the terminal stays `stuck` until the holder restarts, and
+   health says so.
+7. **Explicit in the API and health, not inferred from timing.** `info`/`List` no longer take the
+   emulator's lock, so a hung parser no longer stalls them, and they **report** it: `TermInfo` gains
+   `Screen` (`ok`, `invalid`, `stuck`) and its generation. The dispatcher reads `invalid`/`stuck` as
+   unknown (never ready: no wake, no `/clear`, no submit); health `holder` warns on any `invalid`
+   terminal and fails on a `stuck` one, naming it, to the person (H3) with its own notice mark.
+8. **`go test -race` on `holder/` and `screen/`** in G1's PR (foureyes): `x/vt` already has a known
+   race (`Emulator.Close` against `Read`, reported 2026-11-16); the PR says whether its new emulator
+   goroutine is in that path.
+
+Fault-injection tests (a fake emulator with injected pauses and panics):
+
+- the queue overflows while the parser pauses, then the parser resumes: `invalid` from the gap's
+  first byte, never `ok` from the surviving chunks, `ok` only after a proven full redraw;
+- a panic, then a failed replay (the tail has no full-redraw point): `invalid` latched, a
+  holder-sent resize redraw restores `ok`;
+- one terminal's parser hung: every other terminal's `Screen`, `Activity`, attach and `List` answer
+  within their deadlines, and the hung one reports `stuck`;
+- across every case: **zero** wakes, `/clear` or `Submit` typed into a terminal whose screen is not
+  `ok` (the dispatcher's recorder counts them);
+- retries: a fourth stuck parser within the hour leaves the terminal `stuck` and health failing.
+
+G1's cost estimate grows with this contract: **2-3 PRs, ~800 lines with tests, 3-4 days.**
 
 ## 8. Questions for the person
 
@@ -308,7 +365,7 @@ rebuild from, so G1 is not wasted work.
    conversation.
 8. **The parser inside the holder (§7).** Today a bug in the screen emulator kills every agent (a
    panic) or freezes one agent and blinds the dispatcher while the holder alarm stays green (a
-   hang). Contain it inside the holder first (G1, 1-2 days), split the PTY owner from the parser as
+   hang). Contain it inside the holder first (G1, 3-4 days with §7.1's contract), split the PTY owner from the parser as
    herdr-core does (G2, 2-3 weeks, and updates then keep the agents running), G1 then G2, or keep it
    as is (G3)?
 
