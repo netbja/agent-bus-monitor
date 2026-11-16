@@ -60,6 +60,11 @@ configured test broker fails the suite. See [Redis test setup](docs/testing-redi
 
 Short forms; the full text, with the reasons, is in the two documents below.
 
+- **PRs go to `dev`; `main` takes only promotions.** Branch from `origin/dev`, deliver into `dev`
+  (the project template's `[delivery] base = "dev"`; until the person sets it there,
+  `agentbus deliver --base dev`), and call a PR merged when its head is an
+  ancestor of `origin/dev`. Only master moves `main`: a fast-forward to a `dev` head that passed the
+  release check, on the person's yes (decision 2026-11-16, dev branch flow).
 - **The project is required.** Pass `--project <p>` or set `AGENT_BUS_PROJECT`; names match
   `^[a-z][a-z0-9_-]{0,31}$` (`ValidName`). Commands that answer "which project?" (`busmon --list`,
   `--pick`, `agentbus plugin`, `mem`, `start`, `backup`, `suspend`…) sit above the project-required

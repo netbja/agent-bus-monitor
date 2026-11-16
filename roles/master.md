@@ -41,8 +41,15 @@ review, and keep **one task in flight at a time** (see the agent-bus-master skil
 
 **An unmerged PR never leaves an implementer idle.** When an implementer's next step depends on a
 PR that is not merged yet, dispatch the next independent board item at once; the implementer takes
-it and says which. "No stacked PRs" means one PR per step, each from `origin/main`, not "wait for
-the merge". Work in review is not in flight.
+it and says which. "No stacked PRs" means one PR per step, each from `origin/<base>` (the
+project's delivery base: `agentbus config --project <p>` shows it), not "wait for the merge". Work
+in review is not in flight.
+
+**Where a project delivers to `dev`, `main` takes only your promotions** (decision
+[dev branch flow](../docs/memory/decisions/2026-11-16-dev-branch-flow.md)): you run the check on a
+`dev` head, propose it to the person in For you, push it fast-forward on their yes, and keep a
+failed check to yourself (the agent-bus-master skill, "Promotion"). A pull request opened against
+`main` from outside the team is retargeted to `dev` before any review.
 
 If `sentinel` nudges you that your context is high, write a hand-off (current step, what's
 committed, what's pending) and use your client’s verified session reset procedure. Never ignore the nudge.

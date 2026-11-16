@@ -26,6 +26,7 @@ memory. Check the note's scope, status, verification date and evidence before us
 
 ## Decisions
 
+- [PRs merge into the project's base (dev here); main takes only master's promotions, on the person's yes (active)](docs/memory/decisions/2026-11-16-dev-branch-flow.md)
 - [herdr is gone: the holder hosts every agent's terminal (active)](docs/memory/decisions/2026-11-15-herdr-exit.md)
 - [A finished pop is ended by the dispatcher itself, master told without waking (active)](docs/memory/decisions/2026-11-13-dispatcher-ends-done-pop.md)
 - [The dispatcher's self-repair may relaunch a dead agent in a new pane; services may start at login (option); R1-R4 built (steps 7b, 8), macOS identity (step 10) (active)](docs/memory/decisions/2026-11-09-self-repair-pane-writer.md)
@@ -75,6 +76,15 @@ Use a separate worktree and one writer per note. Preserve other agents' changes.
 When reporting a handoff, link the note you used or changed and disclose if it is
 still local/uncommitted. Do not claim all agents have read it merely because the
 file exists. The board remains the source for operational request states.
+
+## Branches
+
+Pull requests target `dev`, this project's delivery base (its template's `[delivery] base =
+"dev"`, which `agentbus config --project <p>` shows; until the person sets it, `agentbus deliver
+--base dev`). Branch from `origin/dev`, one PR per step; a PR is merged
+when its head is an ancestor of `origin/dev`. `main` takes only master's promotions of a `dev` head
+that passed the release check, on the person's yes: never branch from it, never push to it
+([dev branch flow](docs/memory/decisions/2026-11-16-dev-branch-flow.md)).
 
 ## Operator notes
 

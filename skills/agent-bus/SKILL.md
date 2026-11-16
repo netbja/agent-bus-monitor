@@ -306,8 +306,11 @@ agentbus request next                       # which one to take next (exit 64: n
 
 - **An unmerged PR never leaves you idle.** When your next step depends on a PR that is not merged
   yet, take the next independent request (`agentbus request next`), accept it and tell master
-  which one you took. One PR per step, each from `origin/main` ("no stacked PRs") never means
-  "wait".
+  which one you took. One PR per step, each from `origin/<base>` ("no stacked PRs") never means
+  "wait". `<base>` is the project's delivery base (`agentbus config --project <p>` shows it:
+  the template's `[delivery] base`, else `delivery.base`, `main` by default); merged means
+  `git merge-base --is-ancestor <head> origin/<base>`. Where it is `dev`, `main` takes only
+  master's promotions: never branch from it.
 
 - Only the **target** agent can accept, block or complete its own request.
 - `block` does not require a prior `accept` — you may refuse work you never took, with a

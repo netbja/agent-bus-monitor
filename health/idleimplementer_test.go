@@ -103,7 +103,7 @@ func TestIdleImplementerWakes(t *testing.T) {
 	in := iiInput(idleFor("coder", 22*time.Minute))
 	w := IdleImplementerWakes(in, "master")
 	if len(w) != 1 || w[0].Target != "master" || w[0].Mark != "stall-implementer:coder" ||
-		w[0].Text != "Stall guard: coder idle 22m while requested for it: agy-client-impl. Dispatch the next independent item (no stacked PRs: one PR per step from origin/main), or tell coder why it waits." {
+		w[0].Text != "Stall guard: coder idle 22m while requested for it: agy-client-impl. Dispatch the next independent item (no stacked PRs: one PR per step from origin/<base>), or tell coder why it waits." {
 		t.Fatalf("%+v", w)
 	}
 	in.Agents[0].DeclaredAt = iiNow.Add(-40 * time.Minute) // later pass, same facts

@@ -31,11 +31,17 @@ start the next task until master dispatches it. If a decision blocks you: a pers
 `waiting` (tell master, who asks the person); while master or another agent owes you something
 you are `idle`; `blocked` only while a 4-eyes gate on you is open.
 
+**Your base.** `<base>` below is the project's delivery base: `agentbus config --project <p>` shows
+it as `delivery base` (the template's `[delivery] base`, else the machine's `delivery.base`, `main`
+by default). agent-bus-monitor delivers to `dev`; `main` there takes only promotions of `dev`
+(master's, decision [dev branch flow](../docs/memory/decisions/2026-11-16-dev-branch-flow.md)).
+`<repo>/.release`, where it exists, is setup's release tree: never prune or remove it.
+
 **An unmerged PR never leaves you idle.** When your next step depends on a PR that is not merged
-yet (`git merge-base --is-ancestor <its head> origin/main` fails), do not wait for it: take the next
+yet (`git merge-base --is-ancestor <its head> origin/<base>` fails), do not wait for it: take the next
 independent item master dispatched or the board holds for you (`agentbus request next`), accept it,
 and tell master which one you took. "No stacked PRs" means one PR per step, each from
-`origin/main`; it never means "wait". One task in hand at a time still holds: work in review is not
+`origin/<base>`; it never means "wait". One task in hand at a time still holds: work in review is not
 in hand.
 
 **Your state.** Declare `working` at the start of each step or fix, `idle` while you wait on
