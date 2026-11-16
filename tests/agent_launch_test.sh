@@ -6,7 +6,7 @@ L="$REPO/scripts/agent-launch"
 
 out="$(AGENT_LAUNCH_DRYRUN=1 "$L" master demo)"
 assert_contains "$out" "--model sonnet"           "master model flag"
-assert_contains "$out" "--permission-mode acceptEdits"     "master permission flag"
+assert_contains "$out" "--permission-mode auto"           "master permission flag (claude-sonnet-auto)"
 assert_contains "$out" "--name demo:master"                "master session name"
 assert_contains "$out" "roles/master.md"                   "master prompt file"
 
