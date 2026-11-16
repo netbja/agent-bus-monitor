@@ -27,7 +27,7 @@ func TestServiceRecordsItsBuild(t *testing.T) {
 	}
 }
 
-// P2-13 (seen 2026-11-16: ai-tradex-solana, hyperliquid and demo kept the old
+// P2-13 (seen 2026-11-16: three other projects kept the old
 // binary): service stale lists this host's running dispatch and missions
 // services whose recorded build is not this agentbus's, a record from before
 // builds were recorded included; never a holder, never a stopped unit,

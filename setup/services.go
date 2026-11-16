@@ -160,7 +160,7 @@ func (in *Installer) RestartStale(ctx context.Context, p *Prompter) {
 	var stale [][2]string
 	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Fields(l)
-		if len(f) != 3 || isHolderLine(l) {
+		if len(f) != 3 { // service stale never names a holder (they are not units)
 			continue
 		}
 		stale = append(stale, [2]string{f[0], f[1]})

@@ -3,6 +3,7 @@ package setup
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -119,6 +120,21 @@ func TestRestartStaleServices(t *testing.T) {
 	f.cmds[ab+" service stale"] = fakeCmd{out: ""}
 	in.RestartStale(ctx, &Prompter{TTY: fakeTTY{strings.NewReader(""), &bytes.Buffer{}}})
 	if !strings.Contains(out.String(), "every project service runs this build") {
+		t.Fatalf("%q", out.String())
+	}
+}
+
+// service stale that cannot run (the broker down at install) falls back to
+// naming every running service with its restart, and asks nothing.
+func TestRestartStaleFallsBackToTheServiceList(t *testing.T) {
+	in, out, f, _ := installWorld(t)
+	ab := in.Opt.BinDir + "/agentbus"
+	_ = os.MkdirAll(in.Opt.BinDir, 0o755)
+	_ = os.WriteFile(ab, []byte("#!/bin/sh\n"), 0o755)
+	f.cmds[ab+" service stale"] = fakeCmd{err: errors.New("broker unreachable")}
+	f.cmds[ab+" service list"] = fakeCmd{out: "demo dispatch running since 2h\n"}
+	in.RestartStale(context.Background(), &Prompter{TTY: fakeTTY{strings.NewReader("y\n"), &bytes.Buffer{}}})
+	if !strings.Contains(out.String(), "demo dispatch (running since 2h): agentbus --project demo service restart dispatch") {
 		t.Fatalf("%q", out.String())
 	}
 }

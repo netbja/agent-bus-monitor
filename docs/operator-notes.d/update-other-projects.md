@@ -4,6 +4,6 @@
   `agentbus service stale` which of this host's running services recorded another build (a record from before
   builds were recorded, or of another process, counts as older), lists each with its
   `agentbus --project <p> service restart <kind>`, and asks once `Restart these N services now? [y/N]`. `--yes`
-  and no terminal restart nothing. Holders and agents are never touched. Seen 2026-11-16: ai-tradex-solana,
-  hyperliquid and demo kept the old binary after an install. The services started before this build list as
+  and no terminal restart nothing. Holders and agents are never touched. Seen 2026-11-16: three other projects
+  kept the old binary after an install. The services started before this build list as
   `no build recorded` until restarted once.

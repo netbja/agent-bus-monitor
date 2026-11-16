@@ -39,6 +39,11 @@ func staleServices(units []service.Unit, state func(project, kind string) servic
 		switch {
 		case ok && r.Host != "" && r.Host != host:
 			continue
+		// The unit's main PID is the service run process itself (the units
+		// exec the binary directly): a record of another PID was written by a
+		// process that is gone, so its build says nothing about this one. A
+		// wrapper started by the manager would make every service read
+		// unknown, and offered for restart at each install (foureyes).
 		case !ok || (st.PID > 0 && r.PID != st.PID):
 			out = append(out, staleService{u.Project, u.Kind, ""})
 		case r.Build != build:
