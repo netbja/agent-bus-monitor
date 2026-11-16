@@ -26,6 +26,7 @@ type vtScreen struct {
 	mu      sync.Mutex
 	e       *vt.Emulator
 	modes   modeTracker
+	strs    stringFilter // the string sequences x/vt would print (strfilter.go)
 	ring    []string // scrollback, oldest at head
 	head    int
 	keep    int
@@ -63,18 +64,18 @@ func (s *vtScreen) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.modes.feed(p)
-	n := 0
+	whole := len(p)
+	p = s.strs.filter(p) // before x/vt, across writes: vt-osc-title
 	for len(p) > 0 { // x/vt's Clear keeps the backing array of every line one write scrolled: a bounded write bounds it
 		chunk := p[:min(len(p), writeChunk)]
-		m, err := s.e.Write(chunk)
-		n += m
+		_, err := s.e.Write(chunk)
 		s.takeScrollback()
 		if err != nil {
-			return n, err
+			return 0, err
 		}
 		p = p[len(chunk):]
 	}
-	return n, nil
+	return whole, nil // every byte given was taken: shown, held, or dropped by the filter
 }
 
 // writeChunk bounds what one x/vt write may scroll off: its scrollback keeps
