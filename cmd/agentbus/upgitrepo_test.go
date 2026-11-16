@@ -19,7 +19,7 @@ func TestUpStartsWithoutMissionsOnAFolderWithoutGit(t *testing.T) {
 	work, _, h, _, deps := upFixture(t)
 	u := withServices(t, &deps)
 	u.m.specs["demo/"+service.Missions] = service.Spec{Project: "demo", Kind: service.Missions} // an earlier up's unit,
-	u.m.active["demo/"+service.Missions] = true                                                   // waiting for git init
+	u.m.active["demo/"+service.Missions] = true                                                 // waiting for git init
 	var asked []string
 	deps.GitRepo = func(dir string) bool { asked = append(asked, dir); return false }
 	var out, errw bytes.Buffer
