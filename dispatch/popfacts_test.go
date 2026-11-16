@@ -53,3 +53,29 @@ func TestReadPopFacts(t *testing.T) {
 		t.Fatalf("a failed read: done=%v why=%q", done, why)
 	}
 }
+
+// A login hold of its own holds a pop (login-updates r9 §3.6): never judged
+// done while its login has expired; another agent's hold does not count.
+func TestReadPopFactsLoginHeld(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "scout", "idle", "review sent", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Bind(ctx, "scout", bus.AgentIdent{Pane: "w1:p3", PID: 42, PIDStart: 4200, Tier: "pop", Provider: "openai"}); err != nil {
+		t.Fatal(err)
+	}
+	rt := newFakeRT(func(string, int) Inspection {
+		return Inspection{State: "idle", Ready: true, PIDs: []int{42}, Starts: map[int]uint64{42: 4200}}
+	})
+	opt := PopReadOptions{Now: time.Now().Add(time.Hour), RetireAfter: 15 * time.Minute,
+		Missions: func(context.Context, string) ([]string, error) { return nil, nil }}
+	r.HSet(ctx, bus.QuotaKey(b.Project()), bus.LoginHoldField("security"), "1794777000000")
+	if f := ReadPopFacts(ctx, b, rt, "scout", opt); f.LoginHeld || f.Held {
+		t.Fatalf("another agent's login hold: %+v", f)
+	}
+	r.HSet(ctx, bus.QuotaKey(b.Project()), bus.LoginHoldField("scout"), "1794777000000")
+	if done, why := PopDone(ReadPopFacts(ctx, b, rt, "scout", opt)); done || why != "its login expired (held)" {
+		t.Fatalf("its login held: done=%v why=%q", done, why)
+	}
+}

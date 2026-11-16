@@ -101,6 +101,8 @@ func TestPopRetirePassSendsNothing(t *testing.T) {
 		"focused": func(w *popWorld) {
 			w.rt.script = func(string, int) Inspection { in := readyIn(); in.Focused = true; return in }
 		},
+		// The loop holds its login before any mark is written (holdFailed): this pass's view counts.
+		"its login held in the loop": func(w *popWorld) { w.l.loginHeld = map[string]bool{"security": true} },
 		"master held": func(w *popWorld) {
 			w.b.Status(ctx, "master", "idle", "", bus.AgentIdent{Provider: "anthropic"})
 			w.l.quota.held = map[string]bool{"anthropic": true}

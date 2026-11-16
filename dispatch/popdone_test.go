@@ -66,6 +66,7 @@ func TestPopDone(t *testing.T) {
 		{"not ready", "not ready", func(f *PopFacts) { f.Pane.Ready = false }},
 		{"paused", "the project is paused", func(f *PopFacts) { f.Paused = true }},
 		{"held", "its provider is held", func(f *PopFacts) { f.Held = true }},
+		{"login held", "its login expired (held)", func(f *PopFacts) { f.LoginHeld = true }}, // login-updates r9 §3.6
 	} {
 		f := donePop()
 		c.edit(&f)
@@ -117,6 +118,7 @@ func TestPopDoneJudgesAClosedPop(t *testing.T) {
 		{"other episode", "another episode", func(f *PopFacts) { f.Episode = 1 }},
 		{"paused", "the project is paused", func(f *PopFacts) { f.Paused = true }},
 		{"held", "its provider is held", func(f *PopFacts) { f.Held = true }},
+		{"login held", "its login expired (held)", func(f *PopFacts) { f.LoginHeld = true }}, // login-updates r9 §3.6
 	} {
 		f := closedPop()
 		c.edit(&f)

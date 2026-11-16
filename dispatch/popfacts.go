@@ -107,8 +107,12 @@ func ReadPopFacts(ctx context.Context, b *bus.Bus, rt Runtime, role string, o Po
 		f.Paused = p != nil
 	}
 	if marks, err := b.QuotaMarks(ctx); !unknown("quota", err) {
-		_, f.Held = marks["hold:"+f.Snap.Provider]
-		f.Held = f.Held && f.Snap.Provider != ""
+		switch bus.HeldReason(marks, role, f.Snap.Provider) {
+		case bus.HeldQuota:
+			f.Held = true
+		case bus.HeldLogin:
+			f.LoginHeld = true
+		}
 	}
 	if f.Snap.Pane == "" {
 		f.Unknown = append(f.Unknown, "pane")

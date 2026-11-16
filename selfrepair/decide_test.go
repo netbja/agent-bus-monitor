@@ -199,6 +199,7 @@ func TestDecideHoldKinds(t *testing.T) {
 		{"workspace", func(f *Facts, _ *Agent) { f.WorkspaceOpen = false }, HoldWorkspace, ""},
 		{"holder", func(f *Facts, _ *Agent) { f.HolderUp = false }, HoldHolder, ""},
 		{"quota", func(_ *Facts, a *Agent) { a.ProviderHeld = true }, HoldQuota, ""},
+		{"login", func(_ *Facts, a *Agent) { a.LoginHeld = true }, HoldLogin, ""}, // login-updates r9 §3.6: a new process would hit the same expired login
 	} {
 		a := dead("coder")
 		f := facts()

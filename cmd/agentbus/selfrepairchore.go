@@ -189,6 +189,7 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 		_, a.Session, _ = selfRepairResume(r, role)
 		a.Resumable = a.Session != "" // the record's two conditions held (herdr exit §4.7)
 		a.ProviderFresh, a.ProviderHeld, a.Provider, a.ProviderSince = providerFacts(r, role)
+		a.LoginHeld = bus.HeldReason(r.Marks, role, "") == bus.HeldLogin // login-updates r9 §3.6
 		if fb, on := r.Fallbacks[role]; on {
 			a.Fallback = fb.Profile
 			if a.Fallback == "" {
