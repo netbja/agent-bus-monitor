@@ -280,3 +280,25 @@ func TestContextCompactedNoticeRetriedAfterAWriteFailure(t *testing.T) {
 		t.Fatal("the episode did not end once the notice was sent")
 	}
 }
+
+// foureyes: an episode alerted by an older build (no :at) escalates only at
+// context_urgent, never by the deadline; and its end sends no compaction
+// notice (the notice needs the alert's time).
+func TestContextEpisodeWithoutAlertTime(t *testing.T) {
+	w := newEscalateWorld(t, 90, 20*time.Minute)
+	w.l.cfg.Context.Compacted = func(_, _ string, _ int64) (int64, bool) { return 412345, true }
+	w.pass(85)
+	w.r.HDel(w.ctx, bus.QuotaKey(w.b.Project()), "context:coder"+bus.MarkAtSuffix)
+	w.pass(88) // however old the alert, no deadline without its time
+	if w.count("master", "no hand-off declared", true) != 0 {
+		t.Fatal("escalated by the deadline without the alert's time")
+	}
+	w.pass(91)
+	if n := w.count("master", "context: coder at 91%, alerted earlier at 80%", true); n != 1 {
+		t.Fatalf("%d urgent escalations, want 1", n)
+	}
+	w.pass(30)
+	if n := w.count("master", "was compacted by its client", false); n != 0 {
+		t.Fatalf("a compaction notice without the alert's time: %d", n)
+	}
+}
