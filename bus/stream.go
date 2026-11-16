@@ -288,6 +288,7 @@ type Event struct {
 	Recovered    bool   // possible duplicate from pending recovery
 	Attempt      int64  // Redis delivery attempt count
 	Full         string // report: full retained text (empty unless it differs from the preview)
+	To           string // report: its addressees (report --to), comma-separated, field "to" (additive); "" for none
 	NoWake       bool   // cmd: field wake=no — delivered, but never worth waking the target
 	Human        bool   // cmd/notify: field human=yes — written by a person (busmon), not an agent
 	For          string // notify: field for — ForPerson marks a dispatcher notice meant for the person (additive)
@@ -310,6 +311,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
 	case "report":
 		e.Agent, e.RKind, e.Message, e.Full = fields["agent"], fields["kind"], fields["message"], fields["full"]
+		e.To = addressees(fields["to"])
 	case "notify":
 		e.From, e.Message = fields["from"], fields["message"]
 	case "cmd":
@@ -417,6 +419,10 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 // restore fidelity without flooding the flat viewers. Oversize/invalid UTF-8
 // is rejected before publishing; new retained text is exact, not sanitized.
 func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
+	return b.report(ctx, agent, kind, message, "")
+}
+
+func (b *Bus) report(ctx context.Context, agent, kind, message, to string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
 	}
@@ -428,7 +434,23 @@ func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, 
 	if message != preview {
 		values["full"] = message
 	}
+	if to != "" {
+		values["to"] = to
+	}
 	return b.addVoidingHandoff(ctx, "report", agent, values)
+}
+
+// ReportTo is Report naming its addressees (report --to) on the entry
+// itself, field "to", comma-separated: what a reader shows as the report's
+// recipients (busmon-reply-target). Each must be a valid name; none writes
+// no field, as Report.
+func (b *Bus) ReportTo(ctx context.Context, agent, kind, message string, to []string) (string, error) {
+	for _, t := range to {
+		if !ValidName(t) {
+			return "", fmt.Errorf("invalid addressee %q", t)
+		}
+	}
+	return b.report(ctx, agent, kind, message, strings.Join(to, ","))
 }
 
 // Notify broadcasts a message on the {project}:notify stream. from is advisory
@@ -1140,4 +1162,17 @@ func (b *Bus) HumanNotify(ctx context.Context, from, message string) (string, er
 		return "", fmt.Errorf("invalid sender %q", from)
 	}
 	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message, "human": "yes"})
+}
+
+// addressees is a report's "to" field with every part that is no valid name
+// dropped: a reader shows it, so a hand-written field never carries a
+// control sequence there.
+func addressees(raw string) string {
+	var out []string
+	for _, t := range strings.Split(raw, ",") {
+		if ValidName(t) {
+			out = append(out, t)
+		}
+	}
+	return strings.Join(out, ",")
 }

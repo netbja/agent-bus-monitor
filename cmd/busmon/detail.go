@@ -124,11 +124,15 @@ func detailFrom(e bus.Event) string {
 	return "(unknown)"
 }
 
-// detailTo is the addressee. Only cmd entries have one; the other three streams
-// are broadcasts, and saying so is more useful than an empty field.
+// detailTo is the addressee: a cmd entry's target, a report's addressees
+// (report --to, busmon-reply-target); anything else is a broadcast, and
+// saying so is more useful than an empty field.
 func detailTo(e bus.Event) string {
 	if e.Target != "" {
 		return e.Target
+	}
+	if e.Kind == "report" && e.To != "" {
+		return strings.ReplaceAll(e.To, ",", ", ")
 	}
 	return "(broadcast — every reader of this project)"
 }

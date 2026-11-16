@@ -76,12 +76,25 @@ func (m *Model) replyFromPage(p *page) {
 		return
 	}
 	m.closeReader()
+	held := ""
 	if d := m.ui.msgCompose; d.to != "" || d.body != "" {
-		m.openMessageCompose("", "")
-		m.ui.flash, m.ui.flashErr = "your unsent draft is open: the reply was not put in", false
-		return
+		other := strings.TrimPrefix(strings.TrimSpace(d.to), "@")
+		if other == "" || other == to {
+			// No recipient, or the sender's: the reply under way.
+			m.openMessageCompose("", "")
+			m.ui.flash, m.ui.flashErr = "your unsent draft is open: the reply was not put in", false
+			return
+		}
+		// Another agent's draft never takes the reply's place
+		// (busmon-reply-target): it is held, first, and opens again once the
+		// reply is sent.
+		m.ui.heldDrafts = append([]composeDraft{d}, m.ui.heldDrafts...)
+		m.ui.msgCompose, held = composeDraft{}, other
 	}
 	m.openMessageCompose("", to)
+	if held != "" {
+		m.ui.flash, m.ui.flashErr = "your draft to "+held+" is kept: it opens again once this reply is sent", false
+	}
 	if c := m.ui.compose; c != nil {
 		c.area.set(replyPrefill(m.replySource(p.ev)))
 		c.onTo = false

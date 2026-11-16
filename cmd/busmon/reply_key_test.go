@@ -107,13 +107,15 @@ func TestReplyKeyNotOffered(t *testing.T) {
 	}
 }
 
-// A draft is never overwritten: i opens it as it was and says so.
+// A draft is never overwritten: i on a message from another agent opens
+// the reply, the draft held (TestReplyHoldsADraftToAnotherAgent); an empty
+// recipient is no other agent's, and the draft opens as it was.
 func TestReplyKeyKeepsTheDraft(t *testing.T) {
 	m := fixtureShell(t, 140, 40)
-	m.ui.msgCompose = composeDraft{to: "@foureyes", body: "my own words"}
+	m.ui.msgCompose = composeDraft{body: "my own words"}
 	m.pushMessage(bus.Event{Kind: "cmd", Type: "directive", From: "master", Target: "coder", ID: "9-0", Message: "rebase"}, shellNow)
 	m = keys(t, m, 'i')
-	if c := m.ui.compose; c == nil || c.area.value() != "my own words" || c.recipient() != "foureyes" {
+	if c := m.ui.compose; c == nil || c.area.value() != "my own words" {
 		t.Fatalf("the draft was replaced: %+v", c)
 	}
 	if !strings.Contains(m.ui.flash, "your unsent draft is open") {

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -70,4 +73,45 @@ func reportNotice(id, msg string) string {
 		first = string(r[:300]) + "…"
 	}
 	return "Report " + id + " for you (full text: agentbus reports " + id + "): " + first
+}
+
+// sendReport is `agentbus report <agent> [--auto] [--to <name>]... <message>`:
+// the report, its addressees named on it (busmon-reply-target), then one
+// notice per addressee, since a report wakes nobody. It returns the entry id.
+func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer) (string, error) {
+	rest, auto := extractBool(rest, "--auto")
+	var to []string
+	for {
+		var t string
+		if rest, t = extractFlag(rest, "--to"); t == "" {
+			break
+		}
+		to = append(to, t)
+	}
+	if len(rest) < 2 {
+		return "", errors.New("usage: report <agent> [--auto] [--to <agent>]... <message>")
+	}
+	for _, t := range to {
+		if !bus.ValidName(t) {
+			return "", fmt.Errorf("report: --to %q: invalid agent name", t)
+		}
+	}
+	kind := bus.ReportNote
+	if auto {
+		kind = bus.ReportAuto
+	}
+	msg := strings.Join(rest[1:], " ")
+	if note := reportShapeNote(msg); note != "" {
+		fmt.Fprintln(stderr, note)
+	}
+	id, err := b.ReportTo(ctx, rest[0], kind, msg, to)
+	if err != nil {
+		return "", err
+	}
+	for _, t := range to {
+		if _, err := b.Cmd(ctx, rest[0], t, bus.CmdDirective, id, reportNotice(id, msg)); err != nil {
+			return "", fmt.Errorf("report %s published, but telling %s failed: %v", id, t, err)
+		}
+	}
+	return id, nil
 }
