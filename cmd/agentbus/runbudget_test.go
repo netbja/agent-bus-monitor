@@ -284,3 +284,41 @@ func TestRunStepRetriesMissingMessages(t *testing.T) {
 		t.Fatalf("%d stop notices after the retry, want 1", n)
 	}
 }
+
+// foureyes: a pass that could not read the queue stops nothing (what is in
+// flight is not known), however empty everything else is.
+func TestRunStepUnknownQueueStopsNothing(t *testing.T) {
+	w := newRunWorld(t)
+	w.env["AGENT_BUS_RUN_MAX_DURATION"] = "1h"
+	w.age(t, "started_at", 2*time.Hour)
+	rec, _, err := w.b.FencedRunPass(w.ctx, "tok", nil, false, 3*mergeQueueEvery)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.c.runStepKnown(w.ctx, "tok", rec, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if now, _ := w.b.Run(w.ctx); now.State != bus.RunDraining {
+		t.Fatalf("unknown queue: %+v, want draining (not stopped)", now)
+	}
+	if rec := w.pass(t); rec.State != bus.RunStopped {
+		t.Fatalf("the queue known and empty: %+v", rec)
+	}
+}
+
+// foureyes: §3's in flight is a board entry requested or accepted; a plan
+// claim (board state working) does not hold the drain.
+func TestRunStepBoardClaimIsNotInFlight(t *testing.T) {
+	w := newRunWorld(t)
+	w.env["AGENT_BUS_RUN_MAX_DURATION"] = "1h"
+	w.age(t, "started_at", 2*time.Hour)
+	if err := w.b.BoardClaim(w.ctx, "plan-3", "coder", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.b.BoardState(w.ctx, "plan-3", "working"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := w.pass(t); rec.State != bus.RunStopped {
+		t.Fatalf("a board claim held the drain: %+v", rec)
+	}
+}

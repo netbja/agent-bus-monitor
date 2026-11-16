@@ -159,8 +159,9 @@ func (c *mergeQueueChore) runInFlight(ctx context.Context, undelivered []bus.Mer
 		return nil, err
 	}
 	for task, e := range board {
-		switch e.State {
-		case "requested", "accepted", "working":
+		// §3: requested or accepted only; a plan claim (working) is not
+		// in flight, or a stale one would hold every drain (foureyes)
+		if e.State == "requested" || e.State == "accepted" {
 			out = append(out, fmt.Sprintf("task %s (%s, %s)", task, e.State, e.Owner))
 		}
 	}

@@ -415,7 +415,7 @@ func (l *loop) agentsWithWork(ctx context.Context, snaps map[string]bus.AgentSna
 		return out
 	}
 	for _, e := range board {
-		if (e.State == "accepted" || e.State == "working") && bus.ValidName(e.Owner) {
+		if e.State == "accepted" && bus.ValidName(e.Owner) { // an accepted task; a plan claim is not work held
 			out[e.Owner] = true
 		}
 	}
