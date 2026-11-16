@@ -136,9 +136,6 @@ var Keys = []*Key{
 			}
 			return nil, "want absolute or relative"
 		}},
-	// requests-plan-redesign (the person, Q1): the Work tab is the list (layout
-	// A) below 130 columns of busmon's pane and the Kanban (layout B) from 130;
-	// list or kanban keeps one at every width.
 	// quota settings spec §2.3: how a reset (and any time to come) is written,
 	// by busmon and by the dispatcher's messages. No environment variable: a
 	// service reads config.toml as it is at each message, never a start-time
@@ -150,6 +147,9 @@ var Keys = []*Key{
 			}
 			return nil, "want relative (today 13:59), iso (2026-11-18 13:59) or clock12 (today 1:59 PM)"
 		}},
+	// requests-plan-redesign (the person, Q1): the Work tab is the list (layout
+	// A) below 130 columns of busmon's pane and the Kanban (layout B) from 130;
+	// list or kanban keeps one at every width.
 	{Name: "display.work_layout", Kind: String, Default: "auto", ReadBy: "busmon",
 		file: func(v any) (any, string) {
 			if s, ok := v.(string); ok && (s == "auto" || s == "list" || s == "kanban") {
