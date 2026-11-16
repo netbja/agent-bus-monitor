@@ -22,7 +22,7 @@ func buildWorld(t *testing.T, rev string, buildErr error) (*Installer, *bytes.Bu
 	}
 	tmp := t.TempDir()
 	version := BuildVersion(rev)
-	ld := Ldflags(version, repo, bin)
+	ld := Ldflags(version, Tree(rev), repo, bin)
 	write := func(c Cmd) {
 		for i, a := range c.Args {
 			if a == "-o" {
@@ -47,8 +47,8 @@ func TestBuildVersionAndLdflags(t *testing.T) {
 		BuildVersion("abc123") != "dev" || BuildVersion("unknown revision") != "dev" {
 		t.Fatal("BuildVersion")
 	}
-	want := "-X github.com/netbja/agent-bus-monitor/buildinfo.Version=v1 -X 'github.com/netbja/agent-bus-monitor/buildinfo.Repo=/r' -X 'github.com/netbja/agent-bus-monitor/buildinfo.Bin=/b/agentbus'"
-	if got := Ldflags("v1", "/r", "/b"); got != want {
+	want := "-X github.com/netbja/agent-bus-monitor/buildinfo.Version=v1 -X github.com/netbja/agent-bus-monitor/buildinfo.Tree=clean -X 'github.com/netbja/agent-bus-monitor/buildinfo.Repo=/r' -X 'github.com/netbja/agent-bus-monitor/buildinfo.Bin=/b/agentbus'"
+	if got := Ldflags("v1", "clean", "/r", "/b"); got != want {
 		t.Fatalf("Ldflags\n got %s\nwant %s", got, want)
 	}
 }
@@ -85,6 +85,7 @@ func TestBuildAndInstallBoth(t *testing.T) {
 // A failed build: the log's last 15 lines, indented, then the fatal line.
 func TestBuildFailureShowsTheTail(t *testing.T) {
 	in, _, errw, _, _ := buildWorld(t, "abc", errors.New("exit 1"))
+	in.Rev = "abc"
 	if err := in.BuildAndInstall(context.Background(), "agentbus", "./cmd/agentbus"); err == nil {
 		t.Fatal("a failed build succeeded")
 	}
