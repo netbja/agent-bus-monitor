@@ -1,13 +1,14 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r3, for review (subject `holder-hardening-spec`). r3: reviewer-codex (the wait only at
+Status: spec, r4, for review (subject `holder-hardening-spec`). r4: master (the person asked how
+our holder compares with herdr-core: §7, Q8). r3: reviewer-codex (the wait only at
 condition 2b of an otherwise eligible unplanned restart; intentional, suspended and the earlier
 conditions keep their verdict at once), foureyes (the notice names the wait). r2: reviewer-codex (the reboot
 judgement must wait for the holder to answer: H1b, and reboot-resume §3 amended), foureyes's notes
 (an older build's agents after a reboot, H3's notice mark, Q7's cost). Not built. Base: origin/dev
 `079ed636`. Author: coder, task `holder-hardening-spec`, from master's directive of 2026-11-17
-relaying the person's request for holder robustness. One PR (this spec); the build is §8's steps.
-The person's decisions are §7.
+relaying the person's request for holder robustness. One PR (this spec); the build is §9's steps.
+The person's decisions are §8.
 
 ## 1. Why
 
@@ -146,7 +147,7 @@ Tests (with reboot-resume A, deterministic, fake clock and fake holder probe):
 hold), then C (boot), then B (the popup). Until A, a reboot after H1 brings the holder and the
 dispatcher back at login and **self-repair relaunches the whole team, intentional reboot or not**:
 reboot-resume §5 says so and gates it with `HoldReboot`. So H1 ships **with or after** A, never
-before (§7, Q2).
+before (§8, Q2).
 
 ## 4. An alarm when the holder stops answering
 
@@ -164,12 +165,12 @@ agents it held. Health `holder`:
 **H4. The dispatcher may start the current build's holder unit**, once per episode, when health
 `holder` fails and the unit is not `active` (never a restart, never another build's, never
 `up`): the act sentinel's remediation describes, done by the one process still running. A new
-automated act on a service, so the person's (§7, Q3). Without H4, H3 tells the person, who runs
+automated act on a service, so the person's (§8, Q3). Without H4, H3 tells the person, who runs
 the command.
 
 **H5. A hung holder** (alive, its socket not answering) is not restarted by systemd. Options:
 `WatchdogSec=` with the holder notifying systemd from its accept loop (systemd then kills and
-restarts it, killing its agents), or health `holder` alone telling the person (H3). §7, Q4.
+restarts it, killing its agents), or health `holder` alone telling the person (H3). §8, Q4.
 
 **Out of scope:** a dead dispatch service. Its unit restarts it within its budget (`services`
 health, `service/budget.go`); when the budget is spent, busmon's header shows dispatch down. A
@@ -203,7 +204,7 @@ Proposed as `TestHolderRestartEndToEnd`, beside `TestReleaseEndToEnd`, under the
 Those need a **live check** on the person's machine (a scripted ask: kill the holder with
 `systemctl --user kill -s KILL <unit>`, watch the team come back, time it) or a **soak run** in a
 disposable VM or a systemd container (podman `--systemd=always`, linger, a test project with fake
-clients, the holder killed every N minutes for hours, wakes counted). §7, Q5.
+clients, the holder killed every N minutes for hours, wakes counted). §8, Q5.
 
 ## 6. Upgrading: can it be one command?
 
@@ -226,14 +227,63 @@ person's command (no agent runs it, as for drain) and moves only idle agents.
 
 **H7, optional: the dispatcher finishes the drain.** An agent skipped because it was busy is moved
 by the dispatcher the next time it is idle, with drain's own checks. A new automated act (it closes
-a terminal and starts one, as self-repair and a done pop's end already do), so the person's (§7,
+a terminal and starts one, as self-repair and a done pop's end already do), so the person's (§8,
 Q6). Without H7, the skipped agents wait for the next `update` or `holder drain`, and health
 `holder-draining` keeps telling master.
 
 The dev branch flow's step 5 (setup builds the newest tag on `main` in `<repo>/.release`) changes
 what step 1 builds, not this sequence: H6 composes with it.
 
-## 7. Questions for the person
+## 7. Gap with herdr-core
+
+The person asked whether our holder works like herdr-core (`hc`, `/data/AI-Docs/herdr-core`), whose
+holder survives what ours does not.
+
+**herdr-core.** Its holder (`crates/herdr-core/src/holder.rs`, 465 lines) "owns every PTY, is every
+program's parent, always reads output. Spawn, pump, resize, signal, reap. **No parsing, no
+policy.**" It keeps a **1 MiB tail per terminal** (`TAIL_BYTES`) so that a separate process, the
+core, which parses screens and serves the API, can crash or be restarted and rebuild every screen
+from the tails; the holder restarts a crashed core itself. So `hc update` and `hc server restart`
+**keep running terminals** ("Updates restart the core while holders keep the terminals running",
+`docs/security.md`), and kept terminals survive a core loss.
+
+**Ours.** One process does both: the holder owns the PTYs **and** runs the screen emulator
+(`screen`, on `charmbracelet/x/vt`) in each terminal's read loop, under that terminal's lock
+(`holder/term.go:58-77`: `t.scr.Write(buf)` for every read, then the 1 MiB `tail`, then the
+viewers). It also serves the API, the viewers (attach), the submit protocol, the holds and the
+emulator's answers to the program's queries (DSR, DA, the cursor position: `answer`). There is no
+`recover()` anywhere in `holder/` or `screen/`.
+
+What that means for agents today:
+
+- **A parser panic kills every agent of the project.** A panic in `scr.Write` happens in a
+  terminal's read goroutine; Go ends the process on an unrecovered panic in any goroutine, so the
+  holder exits, the unit restarts it empty (§2.1), and every agent dies with it, not only the one
+  whose output triggered it. The output that caused it is not kept: the tail dies with the process.
+- **A parser hang freezes that agent and blinds the dispatcher, while the alarm stays green.** A
+  `Write` that never returns keeps that terminal's lock: its output is no longer read, so the
+  program blocks once the PTY's buffer is full (the agent freezes mid-turn). Every call that takes
+  the lock waits: `Screen`, `Activity`, attach, and **`List`**, which takes every terminal's lock in
+  turn (`terminal.info`, `holder/term.go:144`), so the dispatcher's look at *any* agent of the
+  project, and self-repair's, hang on their deadlines. `Describe` takes only the server's lock
+  (`holder/server.go:330-334`), so health `holder`'s probe still answers: it reads **OK**. Nothing
+  restarts the process (systemd sees it alive; §4's H5 watchdog would see it alive too, if it beat
+  from the accept loop).
+- **An upgrade cannot keep the terminals.** A new build is a new holder; agents move to it only by
+  being relaunched (`holder drain`), which `hc` avoids by restarting only the core.
+
+**Three ways forward, with their cost** (§8, Q8):
+
+| Option | What it changes | Cost (coder, with reviews) |
+|---|---|---|
+| **G1. Contain the parser** | a `recover()` around each terminal's `scr.Write` and `Snapshot`: a panic resets that terminal's emulator (rebuilt from its 1 MiB tail, or blank), records the bytes that triggered it in the holder's log, warns; the program and every other agent keep running. A hang is bounded by moving `Write` out of the lock path: the read loop appends to the tail and hands the bytes to a per-terminal emulator goroutine through a bounded queue; a queue full for N seconds marks that screen `stuck` (the dispatcher reads it unknown, never ready) and the program keeps being read. `List`/`info` stop taking the emulator's lock. Health `holder` probes `List` too, so a stuck holder reads fail | **1-2 PRs, ~400 lines with tests; 1-2 days.** Kills neither failure mode at the root: a stuck goroutine stays stuck until the holder restarts |
+| **G2. Split like herdr-core** | a minimal PTY owner (spawn, pump, resize, signal, reap, the tail, the query answers it must keep giving while no core runs) as the service unit; the current holder becomes a restartable core, its child, connected over a socket, rebuilding screens from the tails at start. A core crash, hang (killed by the owner) or upgrade keeps every program running; `holder drain` is needed only when the owner itself changes | **5-7 PRs, ~2,500-3,500 lines with tests; 2-3 weeks**, plus a live check per platform. New risks: a second protocol and process, the query answers (DSR/DA) during a core restart, the owner's own upgrade still needs a drain |
+| **G3. Keep as is** | the alarm and the endurance test of §4-§5 only | none beyond §4-§5 |
+
+G1 then G2 is possible: G1's per-terminal emulator goroutine and tail are what G2's core would
+rebuild from, so G1 is not wasted work.
+
+## 8. Questions for the person
 
 1. **Enable the holder with the others (H1)?** When "start at login" is on, the holder starts at
    login too, so the team's terminals are there when the dispatcher is. Without it, "start at
@@ -256,12 +306,17 @@ what step 1 builds, not this sequence: H6 composes with it.
    holder crash only, when every agent died at once? The cost of shorter: eight resumed sessions
    start within a minute or two, mostly on one provider's quota, each reloading its whole
    conversation.
+8. **The parser inside the holder (§7).** Today a bug in the screen emulator kills every agent (a
+   panic) or freezes one agent and blinds the dispatcher while the holder alarm stays green (a
+   hang). Contain it inside the holder first (G1, 1-2 days), split the PTY owner from the parser as
+   herdr-core does (G2, 2-3 weeks, and updates then keep the agents running), G1 then G2, or keep it
+   as is (G3)?
 
-## 8. Build order (each its own PR, into dev)
+## 9. Build order (each its own PR, into dev)
 
-1. H3 (health `holder` to the person, the notice) and the endurance test of §5: they change no
+1. H3 (health `holder` to the person, the notice), the endurance test of §5, and G1 if Q8 says so: they change no
    behaviour of the services, and the test pins today's recovery first.
-2. Reboot-resume A, with H1 and H1b (§7 Q1, Q2).
+2. Reboot-resume A, with H1 and H1b (§8 Q1, Q2).
 3. H4 and H5 as the person answers Q3 and Q4.
 4. H6 (and H7 if Q6 says so).
 5. Reboot-resume C, then B.
