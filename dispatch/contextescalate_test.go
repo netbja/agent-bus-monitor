@@ -249,3 +249,34 @@ func TestContextCompactedNotice(t *testing.T) {
 		t.Fatalf("a hand-off stood: %d notices, want 1", n)
 	}
 }
+
+// reviewer-codex: a compaction notice whose write fails keeps the episode,
+// so a later pass sends it once.
+func TestContextCompactedNoticeRetriedAfterAWriteFailure(t *testing.T) {
+	w := newEscalateWorld(t, 90, 20*time.Minute)
+	w.l.cfg.Context.Compacted = func(_, session string, afterMs int64) (int64, bool) { return 412345, afterMs > 0 }
+	w.pass(85)
+	cmd := bus.StreamKey(w.b.Project(), "cmd")
+	saved, err := w.r.Dump(w.ctx, cmd).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.r.Del(w.ctx, cmd)
+	w.r.Set(w.ctx, cmd, "not a stream", 0) // the notice's XADD fails (WRONGTYPE)
+	w.pass(30)
+	if marks, _ := w.b.QuotaMarks(w.ctx); marks["context:coder"] == "" || marks["context:coder"+bus.MarkAtSuffix] == "" {
+		t.Fatalf("a failed notice ended the episode: %v", marks)
+	}
+	w.r.Del(w.ctx, cmd)
+	if err := w.r.Restore(w.ctx, cmd, 0, saved).Err(); err != nil {
+		t.Fatal(err)
+	}
+	w.pass(30)
+	w.pass(30)
+	if n := w.count("master", "was compacted by its client", false); n != 1 {
+		t.Fatalf("%d compaction notices after the retry, want 1", n)
+	}
+	if marks, _ := w.b.QuotaMarks(w.ctx); marks["context:coder"] != "" {
+		t.Fatal("the episode did not end once the notice was sent")
+	}
+}

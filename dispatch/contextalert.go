@@ -67,7 +67,10 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 				if errors.Is(err, bus.ErrNotHolder) {
 					return err
 				}
+				// The episode stays: a later pass retries the notice
+				// (reviewer-codex); it ends once sent or proved needless.
 				l.logError(a, "context compacted", err)
+				continue
 			}
 			var ended []string
 			for _, k := range contextEpisodeMarks(a) {
