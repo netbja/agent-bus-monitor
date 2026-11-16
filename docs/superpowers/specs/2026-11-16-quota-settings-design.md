@@ -62,7 +62,7 @@ So today "warn" and "start nothing new" are **one threshold**.
 
 **The drain ends** (`FencedRunQuotaRelease`) when the provider is not held and every usable window
 is under `WarnPct` (`warnClear`, quota.go:224 and :402), or at the hold's release (`release`,
-quota.go:300-305).
+quota.go:312).
 
 **`quota_hold`** (quota.go:166-238) holds the provider. Its agents are not woken. If it is
 master's provider, the project pauses until the reset plus 2 minutes (`FencedQuotaPause`).
@@ -123,26 +123,63 @@ recommends, never as decided.
 
 ### 2.2 Per project, and applied without a restart by hand (request a)
 
-**Where a project's value lives (Q4).** Two options:
+**Two facts constrain where a project's value can live.**
 
-- **A. The project's service env file.** It already exists, is already per project, and already
-  sits above `config.toml`. busmon writes `AGENT_BUS_QUOTA_DRAIN=…` there (`service.WriteEnvFile`).
-  The machine-wide value stays in `config.toml`.
-- **B. A `[project.<p>]` table in `config.toml`.** One file for the person, readable and diffable.
-  This is a new resolver layer (env > project table > machine).
+- **`up` rewrites the project's env file whole.** It builds the file from its own `AGENT_BUS_*`
+  environment (`service.CollectEnv`, `envPrefixes`) and replaces the file with `WriteEnvFile`. It
+  carries over only `AGENT_BUS_ESCALATE_TO` and the reload mode, each with its own code
+  (`cmd/agentbus/up.go:431-448`). Any other key written there by someone else is gone after the
+  next `up`. That is why `auto_clear` set in the env file needs `AGENT_BUS_AUTO_CLEAR=1 agentbus up`.
+- **The dispatcher's process environment is a start-time copy.** The unit loads the env file into
+  the dispatcher's environment when it starts, and `config.Machine` reads the environment before
+  `config.toml`. So a dispatcher that re-reads the files at each pass, but still asks
+  `config.Machine(os.Getenv)`, keeps the start-time value: a change would never apply, and a value
+  removed from the file would stay.
 
-Recommendation: A. It is the mechanism `up --reload` and `auto_clear` already use, and a project
-deleted takes its file with it.
+**Where a project's value lives (Q4).** Two options, with their real costs:
 
-**Applying a change:**
+- **A. The project's service env file.**
+  - `up` gets a list of quota keys it carries over from the old file, as it does for escalate and
+    reload. A value busmon wrote survives `up`.
+  - Precedence when the person's shell, at `up` time, carries `AGENT_BUS_QUOTA_WARN` and busmon
+    wrote another value: the shell's value is what `up` writes today. **(Q4b: which wins, the
+    shell's at `up` or the one set in busmon?)** This spec suggests busmon's: it is the value on
+    screen.
+  - Cost: a carry-over list to keep in step with the keys, a precedence rule at `up`, and a busmon
+    write into a file `up` owns.
+- **B. A `[project.<p>]` table in `config.toml`.**
+  - A new resolver layer. For these keys, `config.toml`'s project table comes above its machine
+    keys. `up` never touches `config.toml`, so nothing is carried over.
+  - The shell's environment at `up` still reaches the env file and the dispatcher. For these keys
+    the dispatcher reads files only (below), so the env file's value would be ignored unless the
+    rule says otherwise. **(Q4b applies the same way: should an `AGENT_BUS_QUOTA_*` in the shell at
+    `up` still win?)**
+  - Cost: a new layer in `config` (Resolver with a project), and a project's values that outlive
+    its deletion unless `projects delete` removes its table.
 
-- The dispatcher reads the four quota keys **at each quota pass** (every 60 s), not once at start:
-  the machine file plus the project's env file, read from disk (`service.LoadEnvFile`). The process
-  environment is set once by the unit, so it is not re-read.
-- So a change from busmon applies within a minute with no restart. This follows the self-repair
-  and reload settings, which are already "read at each call".
-- **(Q5):** or should busmon restart the project's dispatch service after a save? That is simpler
-  in the dispatcher, but a restart takes the lease away for a few seconds.
+Recommendation: B, now that A's carry-over is written down. It is one file the person can read,
+and no other command rewrites it. A stays a fair choice: it has no new resolver layer.
+
+**Applying a change.**
+
+- **What the dispatcher reads, for these four keys only** (`dispatch.quota_warn`, `_drain`,
+  `_hold`, `_max_age`):
+  - Option A: the project's env file and `config.toml`, read from disk.
+  - Option B: `config.toml`'s project table, then its machine keys.
+  - **The process environment is not consulted** for these keys. The file read at each refresh
+    replaces it, so a key removed from the file is gone (busmon's `D`), and the start-time copy
+    never wins.
+  - Every other key keeps today's resolution.
+- **When:** the quota policy runs at every reconcile, but readings are collected every `q.Every`
+  (60 s, `quotaPass`). The thresholds are re-read **with the readings**, at the same refresh, so
+  two small files are read once a minute, not at every tick. A change applies within a minute with
+  no restart, like the self-repair and reload settings, which are already "read at each call".
+- **A file that cannot be read** (missing, unparsable): the last thresholds read stay in force and
+  the dispatcher logs it once per episode. A dispatcher that has never read one uses the
+  registry's defaults.
+- **(Q5):** or should busmon restart the project's dispatch service after a save instead? That is
+  simpler in the dispatcher (none of the above), but a restart takes the lease away for a few
+  seconds, and with A the restart alone still loses the value at the next `up`.
 
 **busmon page.** A "Quota" group on the Settings page, for the current project:
 
@@ -239,9 +276,22 @@ as `run reset` is.
     quota tests pass unchanged.
 - **Order:** the page refuses warn 90 / drain 80 and writes nothing. A dispatcher started with a
   broken order logs it and uses the defaults.
-- **Applied live:** the project's env file changed between two passes is applied on the second,
-  with no restart. The machine value applies when the project sets none. The env file wins over
+- **Applied live:**
+  - The project's value changed on disk between two refreshes is applied on the second, with no
+    restart.
+  - The machine value applies when the project sets none.
+  - A value removed from the file is gone at the next refresh, even though the dispatcher's
+    process environment still holds it from its start (the field case foureyes raised).
+  - The process environment's start-time `AGENT_BUS_QUOTA_DRAIN` never wins over a newer file
+    value.
+  - An unreadable file keeps the last values and logs once.
+  - The thresholds are read at the readings' refresh, not at every reconcile tick (a counted
+    reader).
+- **Survives `up`:** busmon sets drain 90 for the project, `agentbus up <p>` runs, and drain is
+  still 90. With A, this tests the carry-over list. With B, it tests that `up` writes no
   `config.toml`.
+- **Precedence at `up` (after Q4b):** a shell carrying `AGENT_BUS_QUOTA_DRAIN=70` at `up`, against
+  busmon's 90, gives the answer the person chose.
 - **`run reset` (step 3):** above the drain threshold it prints the warning and the override
   command; under it, today's line. Either way the run is reset.
 - **Override:**
@@ -252,8 +302,8 @@ as `run reset` is.
 - **busmon (step 4):**
   - The run line appears for draining and stopped runs and is absent for running ones. Goldens
     cover light and dark.
-  - The Quota group writes the project's env file, shows the source of each value, and `D`
-    removes the project's value.
+  - The Quota group writes the project's value (A: its env file; B: its `config.toml` table), shows
+    the source of each value, and `D` removes the project's value.
 - Every dispatcher write stays fenced: a lost lease writes nothing.
 
 ## 6. Interplay
@@ -262,8 +312,9 @@ as `run reset` is.
   threshold. That is `coord` as today.
 - **Pause and suspend:** a paused or suspended project is not drained or released by the override.
   The override writes only `{p}:run`.
-- **Several projects:** with option A, each project's dispatcher reads its own env file. A machine
-  value changed in busmon applies to every project that sets none, each at its next pass.
+- **Several projects:** each project's dispatcher reads its own values (A: its env file; B: its
+  table). A machine value changed in busmon applies to every project that sets none, each at its
+  next refresh.
 
 ## 7. Not in scope
 
@@ -277,14 +328,21 @@ as `run reset` is.
    the warning (85, today's behaviour), or another value (e.g. warn 80, drain 90)?
 2. **Which threshold tells agents to finish:** when agents with work are told "finish your step,
    start nothing new", should that happen at the warning threshold or at the drain threshold?
+   Today it fires at the warning threshold. If the drain defaults to the warning (Q1), both answers
+   keep today's behaviour until you set them apart.
 3. **Order:** must the order always be warning ≤ drain ≤ hold, refused otherwise? Or may drain sit
    above hold?
-4. **Where a project's values live:**
-   - A. the project's service env file, as `up --reload` does (recommended);
-   - B. a `[project.<name>]` table in `config.toml`.
-5. **How a change applies:** should the dispatcher read the thresholds at each pass, within a
-   minute with no restart (recommended)? Or should busmon restart the project's dispatch service
-   after a save?
+4. **Where a project's values live** (§2.2 gives the costs):
+   - A. the project's service env file. `agentbus up` rewrites that file, so it would need a list
+     of quota keys to carry over;
+   - B. a `[project.<name>]` table in `config.toml`, which nothing else rewrites (recommended).
+
+   4b. **Shell or busmon:** when your shell carries an `AGENT_BUS_QUOTA_*` variable as you run
+   `agentbus up`, and busmon holds another value for the project, which one wins? The suggestion
+   is busmon's, the one on screen.
+5. **How a change applies:** should the dispatcher re-read the thresholds from the files once a
+   minute, with the quota readings, so a change applies with no restart (recommended)? Or should
+   busmon restart the project's dispatch service after a save?
 6. **Machine default on the page:** should the Settings page also edit the machine-wide default
    (every project without its own value), or only the current project's values?
 7. **Date format:** is `today 13:59` / `tomorrow 13:59` / `Wed 18 Nov 13:59` right?
