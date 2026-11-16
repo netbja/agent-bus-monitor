@@ -226,18 +226,6 @@ as `run reset` is.
   - `--until` takes `HH:MM` (today, or tomorrow if passed), `tomorrow HH:MM`, or a duration (`2h`).
 - **`agentbus run override --clear`** ends it early.
 
-### 2.5 Other providers
-
-- **Readings are less reliable outside Claude.** Codex and Grok report their quota from other
-  sources (§1 of the quota-awareness spec): Grok's last reading can be hours old. The existing rule
-  stands: a reading older than `dispatch.quota_max_age` is unknown for the policy, so it never
-  warns, drains, holds or releases. busmon's run line (§2.3) shows the reading's age when it is
-  not fresh, so a drain or its absence is never read as certain.
-- **A running turn is not interrupted.** The drain only stops new work from being dispatched; an
-  agent in a turn finishes it. That holds for every provider.
-- **One set of thresholds** for every provider of the project, for now (Q10). Per-provider values
-  stay out of scope (§7).
-
 ## 3. What does not change
 
 - The hold at `quota_hold`, the project pause for master's provider, the long-hold question, the
@@ -309,7 +297,6 @@ as `run reset` is.
     cover light and dark.
   - The Quota group writes the current project's table only (no row writes a machine key), shows
     the source of each value, and `D` removes the project's value.
-  - The run line shows a reading's age when it is not fresh (§2.5).
 - Every dispatcher write stays fenced: a lost lease writes nothing.
 
 ## 6. Interplay
@@ -324,6 +311,9 @@ as `run reset` is.
 
 ## 7. Not in scope
 
+- **Later (the person's next feature):** quota reliability per provider (Codex and Grok readings, which
+  can be hours old, and how a drain meets a running turn), with its own spec. This spec keeps one set
+  of thresholds for the project.
 - Per-agent or per-provider thresholds. One set per project, applied to every provider; the person
   can ask for per-provider values later.
 - Changing how readings are collected (`quota.claude.probe`, readers).
@@ -341,6 +331,4 @@ as `run reset` is.
    adjustable in Settings (user friendly).
 8. **Override:** it passes only the drain; the hold still holds.
 9. **Override length:** at most 24 hours or the window's reset, whichever comes first.
-10. **Other providers:** Codex and Grok readings are less reliable (Grok's can be hours old), a running
-    turn is not interrupted by the drain, and the thresholds stay one set for every provider for now
-    (§2.5).
+10. **Other providers:** a separate, next feature (§7, Later), not this spec.
