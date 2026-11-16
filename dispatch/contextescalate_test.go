@@ -210,3 +210,42 @@ func TestContextEscalationOfTheTarget(t *testing.T) {
 		t.Fatalf("%d person notices, want 1", n)
 	}
 }
+
+// context-escalation §3.5: an episode ended in the same session by an
+// automatic compaction after the alert, no hand-off standing: one wake=no
+// notice to master; no boundary (a window change), a hand-off standing, or
+// a new session: none.
+func TestContextCompactedNotice(t *testing.T) {
+	w := newEscalateWorld(t, 90, 20*time.Minute)
+	var compacted bool
+	var asked []int64
+	w.l.cfg.Context.Compacted = func(_, session string, afterMs int64) (int64, bool) {
+		asked = append(asked, afterMs)
+		return 412345, compacted && session == "s1" && afterMs > 0
+	}
+	notices := func() int { return w.count("master", "was compacted by its client at 412345 tokens", false) }
+
+	w.pass(85)
+	w.pass(40) // no boundary: a window change, silent
+	if notices() != 0 || len(asked) != 1 || asked[0] == 0 {
+		t.Fatalf("no boundary: %d notices, asked %v", notices(), asked)
+	}
+	compacted = true
+	w.pass(85)
+	w.pass(30)
+	w.pass(20) // the episode is over: nothing asked again
+	if n := notices(); n != 1 {
+		t.Fatalf("%d compaction notices, want 1", n)
+	}
+	if marks, _ := w.b.QuotaMarks(w.ctx); marks["context-compacted:coder"] == "" {
+		t.Fatal("the notice's mark is not kept")
+	}
+	// a hand-off standing: the episode ends as planned, no notice
+	w.pass(85)
+	h, _ := json.Marshal(bus.Handoff{Report: "1-1", Session: "s1", PID: testPID, PIDStart: testStart, At: time.Now().UnixMilli() + 60000})
+	w.r.HSet(w.ctx, bus.HandoffKey(w.b.Project()), "coder", string(h))
+	w.pass(30)
+	if n := notices(); n != 1 {
+		t.Fatalf("a hand-off stood: %d notices, want 1", n)
+	}
+}

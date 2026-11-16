@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -120,5 +123,31 @@ func TestServiceClear(t *testing.T) {
 	}
 	if cfg := serviceClear(func(string) string { return "1" }, found, run); cfg.Notify == nil {
 		t.Fatal("no desktop notification for an escalated clear")
+	}
+}
+
+// context-escalation §3.5: the service reads the compaction from the agent's
+// own CLAUDE_CONFIG_DIR, else the service's, else ~/.claude.
+func TestServiceCompacted(t *testing.T) {
+	id := "93ff25bd-34d8-4077-bf6c-65e6cb135bbf"
+	write := func(base string, pre int) {
+		dir := filepath.Join(base, "projects", "-p")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		line := fmt.Sprintf(`{"type":"system","subtype":"compact_boundary","timestamp":"2026-11-15T21:50:00Z","compactMetadata":{"trigger":"auto","preTokens":%d}}`+"\n", pre)
+		if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(line), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	agent, home := t.TempDir(), t.TempDir()
+	write(agent, 111)
+	write(filepath.Join(home, ".claude"), 222)
+	c := serviceCompacted(func(string) string { return "" }, func() (string, error) { return home, nil })
+	if pre, ok := c(agent, id, 0); !ok || pre != 111 {
+		t.Fatalf("the agent's dir: %d %v", pre, ok)
+	}
+	if pre, ok := c("", id, 0); !ok || pre != 222 {
+		t.Fatalf("the default: %d %v", pre, ok)
 	}
 }

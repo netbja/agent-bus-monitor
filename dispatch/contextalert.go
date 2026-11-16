@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -61,6 +62,12 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 		if f.Pct < c.Alert {
 			if err := loadMarks(); err != nil {
 				return err
+			}
+			if err := l.compactedNotice(ctx, a, f, marks, esc); err != nil {
+				if errors.Is(err, bus.ErrNotHolder) {
+					return err
+				}
+				l.logError(a, "context compacted", err)
 			}
 			var ended []string
 			for _, k := range contextEpisodeMarks(a) {
@@ -222,4 +229,32 @@ func (e *escalation) judge(ctx context.Context, a string, f bus.ContextFill, mar
 		}
 	}
 	return nil
+}
+
+// compactedNotice (§3.5): an episode ending in the session it alerted, with
+// no hand-off standing, whose transcript holds an automatic compaction after
+// the alert, tells the escalation target once (wake=no): the agent lost its
+// context without a hand-off. A fill lower in the same session with no such
+// boundary (a window change) ends the episode silently, as does an episode
+// with no alert time (an older build).
+func (l *loop) compactedNotice(ctx context.Context, a string, f bus.ContextFill, marks map[string]string, esc *escalation) error {
+	c, to := l.cfg.Context, l.cfg.EscalateTo
+	alertAt := bus.MarkAt(marks, contextMark(a))
+	if c.Compacted == nil || marks[contextMark(a)] != f.Session || alertAt == 0 || !bus.ValidName(to) {
+		return nil
+	}
+	if stands, err := esc.standing(ctx, a); err != nil || stands {
+		return err
+	}
+	pre, found := c.Compacted(esc.snaps[a].ClaudeConfigDir, f.Session, alertAt)
+	if !found {
+		return nil
+	}
+	note := fmt.Sprintf("context: %s was compacted by its client at %d tokens without a hand-off; it keeps working with a summary of its context. Check its current step before sending it more.", a, pre)
+	episode := f.Session + "|" + strconv.FormatInt(alertAt, 10)
+	_, err := l.b.FencedCmdOnce(ctx, l.token, bus.ContextCompactedMark(a), episode, dispatchFrom, to, bus.CmdDirective, note, true)
+	if errors.Is(err, bus.ErrSwapInProgress) {
+		return nil
+	}
+	return err
 }

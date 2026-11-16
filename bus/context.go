@@ -124,6 +124,10 @@ func ContextNoticeMark(agent string) string   { return "context-notice:" + agent
 func ContextEscalateMark(agent string) string { return "context-escalate:" + agent }
 func ContextPersonMark(agent string) string   { return "context-person:" + agent }
 
+// ContextCompactedMark is the compaction notice's mark (§3.5), its episode
+// <session>|<alert at>: not an episode mark, never deleted with them.
+func ContextCompactedMark(agent string) string { return "context-compacted:" + agent }
+
 // ContextEpisodeMarks are the fields an episode's end deletes (§3.3).
 func ContextEpisodeMarks(agent string) []string {
 	return []string{ContextMark(agent), ContextMark(agent) + MarkAtSuffix, ContextNoticeMark(agent),
