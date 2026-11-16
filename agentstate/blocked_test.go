@@ -174,6 +174,13 @@ func TestCodexRateLimitMenuIsNotReady(t *testing.T) {
 	if ready, _ := sig.Match(readScreen(t, "codex-rate-limit.txt")); ready {
 		t.Error("the rate-limit menu reads ready")
 	}
+	// A reply ending in a question with "1. …" typed in the input is not a
+	// menu: Codex's input line starts with › too (foureyes). A menu has a
+	// second option.
+	typed := "• Should I also update the README?\n\n› 1. fix the tests\n\n  gpt-6 default · ~/x\n"
+	if b, _ := sig.BlockedOn(typed); b {
+		t.Error("a question above a typed '1. …' input read as blocked")
+	}
 	// Answered, the menu is gone and the ready box is back: not blocked.
 	if b, _ := sig.BlockedOn(readScreen(t, "codex-rate-limit.txt") + strings.Repeat("later output\n", 20)); b {
 		t.Error("a menu 20 lines above the bottom read as blocked")
