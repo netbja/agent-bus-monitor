@@ -448,7 +448,7 @@ var commands = []cli.Command{
 		Flags: []cli.Flag{
 			{Long: "task", Short: 't', Arg: "<plan-task>", Help: "the plan task: its review subject and title, and plan link once delivered"},
 			{Long: "subject", Short: 's', Arg: "<s>", Help: "the review subject (default the task's, else the branch)"},
-			{Long: "base", Short: 'b', Arg: "<b>", Help: "the branch delivered to (default delivery.base)"},
+			{Long: "base", Short: 'b', Arg: "<b>", Help: "the branch delivered to (default: the project template's [delivery] base, else delivery.base)"},
 			{Long: "title", Short: 'T', Arg: "<t>", Help: "the request's title (default the task's, else the first commit's subject)"},
 			{Long: "body-file", Short: 'F', Arg: "<path>", Help: "the request's description (default the commits' subjects); the 4-eyes record follows it"},
 			{Long: "dry-run", Short: 'n', Help: "check everything and print what would be delivered; push nothing"},

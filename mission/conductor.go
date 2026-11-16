@@ -22,10 +22,14 @@ type Conductor struct {
 	Git         Git
 	ProjectRoot string // StateHome/<p>; a change's files live in ProjectRoot/<c>
 	EscalateTo  string // default "master"
-	Self        string // the conductor's bus identity, "conductor"
-	TestLimit   time.Duration
-	Now         func(ctx context.Context) (int64, error) // Unix ms; nil = Redis TIME
-	Log         func(format string, args ...any)         // optional
+	// Base is the base of a change whose missions.json names none: the
+	// project's delivery base, read once at start; "" = main. A loaded
+	// change keeps the base its record holds.
+	Base      string
+	Self      string // the conductor's bus identity, "conductor"
+	TestLimit time.Duration
+	Now       func(ctx context.Context) (int64, error) // Unix ms; nil = Redis TIME
+	Log       func(format string, args ...any)         // optional
 }
 
 func (c *Conductor) logf(format string, args ...any) {
@@ -72,7 +76,7 @@ func (c *Conductor) loadChange(ctx context.Context, name string) (*change, error
 	if FileHash(data) != rec.FileHash {
 		return nil, fmt.Errorf("missions.json at %s does not match the loaded hash", rec.Commit)
 	}
-	f, err := Parse(data)
+	f, err := ParseBase(data, rec.Base)
 	if err != nil {
 		return nil, err
 	}

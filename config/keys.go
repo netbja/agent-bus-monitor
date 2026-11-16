@@ -442,7 +442,7 @@ var Keys = []*Key{
 	// Forge delivery (spec 2026-11-01-forge-delivery-design.md): the forge
 	// agentbus deliver uses (auto reads origin) and the branch it targets;
 	// one setting for the machine, never a project's.
-	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver", MachineOnly: true,
+	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver, agentbus missions", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if isForge(raw) {
 				return raw, envUse
@@ -455,7 +455,7 @@ var Keys = []*Key{
 			}
 			return nil, "want auto, github, gitlab, bitbucket, none or local"
 		}},
-	{Name: "delivery.base", Env: "AGENT_BUS_DELIVERY_BASE", Kind: String, Default: "main", ReadBy: "agentbus deliver", MachineOnly: true,
+	{Name: "delivery.base", Env: "AGENT_BUS_DELIVERY_BASE", Kind: String, Default: "main", ReadBy: "agentbus deliver, agentbus missions", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if ValidBranchName(raw) {
 				return raw, envUse

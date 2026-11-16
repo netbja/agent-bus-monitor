@@ -51,6 +51,11 @@ type configProject struct {
 	EscalateToSource string `json:"escalate_to_source"`
 	Reload           string `json:"reload"`
 	ReloadSource     string `json:"reload_source"`
+	// DeliveryBase is the branch the project delivers to (dev-branch-flow
+	// §4.1): its template's [delivery] base, else the machine's; "unknown"
+	// when the template names a base that is not one (a warning says why).
+	DeliveryBase       string `json:"delivery_base"`
+	DeliveryBaseSource string `json:"delivery_base_source"`
 }
 
 // configLLM is one of config.toml's [llm.<name>] endpoints: host and port
@@ -138,6 +143,14 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		proj.Reload, proj.ReloadSource = config.Format(r.Value), r.Source
 	}
 	doc := configDoc{Project: proj}
+	if proj != nil {
+		b, src, err := projectDeliveryBase(getenv, project)
+		if err != nil {
+			b, src = "unknown", "template"
+			doc.Warnings = append(doc.Warnings, fmt.Sprintf("project %s: %v: agentbus deliver refuses without --base", project, err))
+		}
+		proj.DeliveryBase, proj.DeliveryBaseSource = b, src
+	}
 	legacyUsed := 0
 	for _, k := range config.Keys {
 		r := shell.Get(k.Name)
@@ -360,8 +373,8 @@ func printConfigDoc(out io.Writer, doc configDoc) {
 	}
 	fmt.Fprintln(out, "flags over the env: "+strings.Join(flags, " · "))
 	if p := doc.Project; p != nil {
-		fmt.Fprintf(out, "project %s: escalate_to %s (%s), reload %s (%s); * = the services see another value than this shell\n",
-			p.Name, p.EscalateTo, p.EscalateToSource, p.Reload, p.ReloadSource)
+		fmt.Fprintf(out, "project %s: escalate_to %s (%s), reload %s (%s), delivery base %s (%s); * = the services see another value than this shell\n",
+			p.Name, p.EscalateTo, p.EscalateToSource, p.Reload, p.ReloadSource, p.DeliveryBase, p.DeliveryBaseSource)
 	}
 	if len(doc.Warnings) == 0 {
 		fmt.Fprintln(out, "warnings: none")

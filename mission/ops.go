@@ -90,7 +90,7 @@ func (c *Conductor) readMissions(ctx context.Context, ref string) (p, commit str
 	if data, err = c.Git.Show(ctx, commit, p); err != nil {
 		return "", "", nil, File{}, fmt.Errorf("%s not found at %s", p, short(commit))
 	}
-	if f, err = Parse(data); err != nil {
+	if f, err = ParseBase(data, c.Base); err != nil {
 		return "", "", nil, File{}, err
 	}
 	tree, err := c.Git.Tree(ctx, commit)
