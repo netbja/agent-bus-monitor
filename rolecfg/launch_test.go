@@ -160,7 +160,7 @@ func TestLaunchCommandLines(t *testing.T) {
 		t.Fatal(err, e)
 	}
 	want := []string{"claude", "--model", "test-model", "--fallback-model", "fb-model", "--permission-mode", "bypassPermissions", "--settings", hookSettings(f), "--effort", "xhigh", "--name", "demo:coder", "--append-system-prompt"}
-	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, " ") != strings.Join(want, " ") {
+	if got := f.execed[1 : len(f.execed)-2]; f.execed[len(f.execed)-1] != BootLine || strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("claude argv = %q", got)
 	}
 	m = f.config("codex", `reasoning = "xhigh"`+"\nreasoning_levels = [\"xhigh\"]", "", "[profiles.main.options]\nsandbox = \"workspace-write\"\napproval = \"never\"")
@@ -198,7 +198,7 @@ func TestLaunchWithoutSharedToolRulesCarriesOnlyTheHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"claude", "--model", "test-model", "--permission-mode", "bypassPermissions", "--settings", hookSettings(f), "--name", "demo:coder", "--append-system-prompt"}
-	if strings.Join(f.execed[1:len(f.execed)-1], "\x00") != strings.Join(want, "\x00") {
+	if strings.Join(f.execed[1:len(f.execed)-2], "\x00") != strings.Join(want, "\x00") || f.execed[len(f.execed)-1] != BootLine {
 		t.Fatalf("launch argv changed without [tool_rules]: got %q want %q", f.execed, want)
 	}
 }
@@ -330,7 +330,7 @@ func TestLaunchDryRun(t *testing.T) {
 	cm := f.config("claude-code", "", "", "")
 	out, _, err = f.launch(cm, "coder", "AGENT_LAUNCH_DRYRUN=1")
 	must(t, err)
-	if !strings.Contains(out, "--name demo:coder --append-system-prompt-file "+ShellJoin([]string{filepath.Join(f.root, "coder.md")})+"\n") {
+	if !strings.Contains(out, "--name demo:coder --append-system-prompt-file "+ShellJoin([]string{filepath.Join(f.root, "coder.md"), BootLine})+"\n") {
 		t.Fatalf("claude dry run = %q", out)
 	}
 }
@@ -626,7 +626,7 @@ func TestLaunchSettingsFlag(t *testing.T) {
 	}
 	settings := strings.TrimSuffix(popsSettings, "}") + ", " + strings.TrimPrefix(hookSettings(f), "{")
 	want := []string{"claude", "--model", "test-model", "--permission-mode", "acceptEdits", "--settings", settings, "--name", "demo:coder", "--append-system-prompt"}
-	if got := f.execed[1 : len(f.execed)-1]; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+	if got := f.execed[1 : len(f.execed)-2]; f.execed[len(f.execed)-1] != BootLine || strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("claude argv = %q", got)
 	}
 	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")

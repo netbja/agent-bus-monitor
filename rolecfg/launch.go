@@ -282,6 +282,13 @@ func jsonString(s string) string {
 	return q
 }
 
+// BootLine is a Claude Code agent's first user turn, given on its command
+// line (fresh-agent-boot): its role is a system prompt, and without a first
+// turn it sits at an empty prompt, never booted, read "agent unknown" by the
+// dispatcher. One fixed line, never typed into a terminal: the dispatcher's
+// own lines stay the wake line and /clear.
+const BootLine = "Run the On boot steps of your role now."
+
 // build is Python's build(): the client command line. dry replaces the
 // prompt and the generated files with placeholders and writes nothing.
 func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID string, dry bool, env []string) ([]string, error) {
@@ -307,10 +314,11 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 			cmd = append(cmd, "--effort", p.Reasoning)
 		}
 		cmd = append(cmd, "--name", project+":"+p.Role)
+		// The role is the system prompt; BootLine is the first turn, fresh or resumed.
 		if dry {
-			return append(cmd, "--append-system-prompt-file", promptPath), nil
+			return append(cmd, "--append-system-prompt-file", promptPath, BootLine), nil
 		}
-		return append(cmd, "--append-system-prompt", prompt), nil
+		return append(cmd, "--append-system-prompt", prompt, BootLine), nil
 	case "codex":
 		sandbox, approval := opts["sandbox"], opts["approval"]
 		if sandbox == "" {
