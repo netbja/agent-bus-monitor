@@ -26,7 +26,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service remove --all | service login | service restart holder --kill-agents | service start holder | service gc"
+const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service stale | service remove --all | service login | service restart holder --kill-agents | service start holder | service gc"
 
 // serviceCmdDeps: the manager (nil when none is usable, Why says why), the
 // user's directories and, for state reads, the project's bus.
