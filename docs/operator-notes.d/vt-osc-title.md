@@ -4,6 +4,10 @@
   its ready signature failed, and the dispatcher deferred `agent unknown` until someone attached. `screen`'s
   `stringFilter` (strfilter.go), before x/vt and stateful across chunks and writes, drops every OSC 0/1/2 title
   and every string sequence whose payload holds such a byte (OSC 9 and 777 notifications with a glyph, an APC or
-  DCS); everything else passes byte for byte. The health check `screen-unknown` (For you, `agentbus attach
+  DCS); everything else passes byte for byte. The holder tells every terminal it starts `TERM=xterm-256color` and
+  `COLORTERM=truecolor` (what x/vt emulates), after its own environment and before the role's (a role's `TERM`
+  wins): a service runs with `TERM=dumb`, and Claude Code under it drew its dim placeholder and prompt suggestions
+  unstyled, which the ready signature reads as typed text. Agents started before the fix keep `TERM=dumb` until
+  they are started again. The health check `screen-unknown` (For you, `agentbus attach
   <agent>`) names each agent declared idle whose screen the dispatcher has read `unknown` for 10 minutes
   (`health.ScreenUnknownAfter`), among the clients with a ready signature only: such an agent cannot be woken.

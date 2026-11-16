@@ -123,6 +123,10 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 			return sh(`sleep 31 & sleep 32 & wait`), nil
 		case "hupper": // ignores SIGHUP: only the grace's SIGKILL ends it
 			return sh(`trap '' HUP; printf 'ready\n'; exec sleep 30`), nil
+		case "termer": // vt-osc-title: the terminal type the program is told
+			return sh(`printf 'term=%s color=%s\n' "$TERM" "$COLORTERM"; exec sleep 30`), nil
+		case "termer-own": // a role's own TERM wins
+			return Command{Argv: []string{"/bin/sh", "-c", `printf 'term=%s\n' "$TERM"; exec sleep 30`}, Env: []string{"TERM=screen"}}, nil
 		case "talker":
 			return sh(`printf 'ready\n'; exec cat`), nil
 		case "osc":
@@ -633,4 +637,20 @@ func TestHolderEndsTheGroupWhatTheScanMissed(t *testing.T) {
 		_ = syscall.Kill(child, syscall.SIGKILL)
 		t.Fatal("a group member the scan missed outlived its terminal")
 	}
+}
+
+// vt-osc-title (2026-11-16): the holder's terminals are x/vt, an xterm with
+// 256 colours and truecolor. The services run with TERM=dumb (systemd), and
+// Claude Code under it drew its dim placeholder and prompt suggestions
+// unstyled: its ready signature read them as typed text. Every terminal is
+// told what it is, whatever the holder inherited; a role's own TERM wins.
+func TestHolderTerminalIsAnXterm(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("COLORTERM", "")
+	_, sock := newTestHolder(t)
+	cl := dial(t, sock)
+	a := startRole(t, cl, "termer")
+	waitScreen(t, cl, a.ID, "term=xterm-256color color=truecolor")
+	b := startRole(t, cl, "termer-own")
+	waitScreen(t, cl, b.ID, "term=screen")
 }
