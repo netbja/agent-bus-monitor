@@ -41,14 +41,18 @@ const deliverBodyMax = 60000
 const glabDescMax = 100000
 
 type deliverDeps struct {
-	Run      setup.Runner
-	Dir      string                   // the repository deliver runs in
-	TempDir  string                   // where the body file is written ("" = the system's)
-	Setting  func(name string) string // delivery.forge, delivery.base
-	Verdicts func(ctx context.Context, subject string) ([]bus.Verdict, error)
-	Plan     func(ctx context.Context) (plan.File, bool, error)
-	LinkPR   func(ctx context.Context, task string, n int) error
-	LinkRef  func(ctx context.Context, task, ref string) error
+	Run     setup.Runner
+	Dir     string                   // the repository deliver runs in
+	TempDir string                   // where the body file is written ("" = the system's)
+	Setting func(name string) string // delivery.forge, delivery.base
+	// ProjectBase is the base the project's template names ([delivery] base,
+	// dev-branch-flow §4.1), above the machine's delivery.base; ok false
+	// when it names none. nil = none.
+	ProjectBase func() (base string, ok bool, err error)
+	Verdicts    func(ctx context.Context, subject string) ([]bus.Verdict, error)
+	Plan        func(ctx context.Context) (plan.File, bool, error)
+	LinkPR      func(ctx context.Context, task string, n int) error
+	LinkRef     func(ctx context.Context, task, ref string) error
 	// Report tells master what was delivered; nil when master itself runs it.
 	Report func(ctx context.Context, msg string) error
 	// MayDeliver refuses a caller whose role may not deliver; nil = no check.
@@ -80,7 +84,10 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 	settings := config.Machine(os.Getenv)
 	d := deliverDeps{
 		Run: gitEnvRunner{}, Dir: dir,
-		Setting:  settings.String,
+		Setting: settings.String,
+		ProjectBase: func() (string, bool, error) {
+			return rolecfg.DeliveryBase(os.Getenv, b.Project())
+		},
 		Verdicts: b.Verdicts,
 		Plan: func(ctx context.Context) (plan.File, bool, error) {
 			rec, ok, err := b.Plan(ctx)
@@ -189,6 +196,15 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	}
 	if !config.ValidBranchName(o.branch) {
 		return fail(1, "%q is not a valid branch name", o.branch)
+	}
+	if o.base == "" && d.ProjectBase != nil {
+		b, ok, err := d.ProjectBase()
+		if err != nil {
+			return fail(1, "%v (or pass --base)", err)
+		}
+		if ok {
+			o.base = b
+		}
 	}
 	if o.base == "" {
 		o.base = d.Setting("delivery.base")

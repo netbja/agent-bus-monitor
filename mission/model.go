@@ -40,7 +40,11 @@ type Mission struct {
 
 // Parse reads missions.json strictly (unknown fields are refused) and fills
 // the defaults: base main, branch change/<change>, max_attempts 3.
-func Parse(data []byte) (File, error) {
+func Parse(data []byte) (File, error) { return ParseBase(data, "") }
+
+// ParseBase is Parse with base's default given: the project's delivery base
+// (dev-branch-flow §4.2), main when it is "".
+func ParseBase(data []byte, base string) (File, error) {
 	var f File
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -49,6 +53,9 @@ func Parse(data []byte) (File, error) {
 	}
 	if _, err := dec.Token(); err != io.EOF {
 		return File{}, fmt.Errorf("missions.json: data after the top-level object")
+	}
+	if f.Base == "" {
+		f.Base = base
 	}
 	if f.Base == "" {
 		f.Base = "main"

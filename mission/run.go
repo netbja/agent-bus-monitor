@@ -18,6 +18,7 @@ import (
 // RunConfig configures the conductor process.
 type RunConfig struct {
 	Repo, StateHome, EscalateTo   string
+	Base                          string // a change's default base: the project's delivery base; "" = main
 	Tick, Lease, Renew, TestLimit time.Duration
 	Log                           func(format string, args ...any) // optional
 }
@@ -128,7 +129,7 @@ func Run(ctx context.Context, b *bus.Bus, cfg RunConfig) (err error) {
 	}()
 
 	c := &Conductor{Bus: b, Store: Store{B: b, Token: token}, Git: Git{Repo: cfg.Repo}, ProjectRoot: projectRoot,
-		EscalateTo: cfg.EscalateTo, Self: "conductor", TestLimit: cfg.TestLimit, Log: cfg.Log}
+		EscalateTo: cfg.EscalateTo, Base: cfg.Base, Self: "conductor", TestLimit: cfg.TestLimit, Log: cfg.Log}
 	if err := c.Startup(runCtx); err != nil {
 		logf("startup: %v", err)
 	}

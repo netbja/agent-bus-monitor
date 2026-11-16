@@ -160,3 +160,23 @@ func TestChangeHeaderShowsCompletion(t *testing.T) {
 		t.Fatalf("header = %q", got)
 	}
 }
+
+// The conductor starts with the project's delivery base as a change's
+// default (dev-branch-flow §4.2); a template naming a broken base stops it
+// before it takes the lease, with the template named.
+func TestMissionsReadsTheProjectsBase(t *testing.T) {
+	b := dialDispatchMain(t)
+	dir := t.TempDir()
+	t.Setenv("AGENTBUS_PROJECTS_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, b.Project()+".toml"), []byte("[delivery]\nbase = \"a..b\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := runMissions(context.Background(), b, []string{"--repo", t.TempDir()}, ".", &out, &errb); code != 1 ||
+		!strings.Contains(errb.String(), b.Project()+".toml") || !strings.Contains(errb.String(), "not a valid branch name") {
+		t.Fatalf("exit %d, stderr %q", code, errb.String())
+	}
+	if alive, _ := b.ConductorAlive(context.Background()); alive {
+		t.Fatal("the conductor took the lease on a broken base")
+	}
+}

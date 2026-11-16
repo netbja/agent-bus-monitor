@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -61,6 +62,13 @@ func runMissions(ctx context.Context, b *bus.Bus, args []string, cwd string, std
 		repo = r
 	}
 	cfg.Repo = repo
+	base, src, err := projectDeliveryBase(os.Getenv, b.Project())
+	if err != nil {
+		fmt.Fprintln(stderr, "error: "+err.Error())
+		return 1
+	}
+	cfg.Base = base
+	cfg.Log("a change without a base starts from %s (%s)", base, src)
 	switch err := mission.Run(ctx, b, cfg); {
 	case errors.Is(err, mission.ErrAlreadyRunning):
 		fmt.Fprintln(stdout, "conductor already running")
