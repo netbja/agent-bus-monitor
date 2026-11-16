@@ -217,7 +217,9 @@ func serviceQuota(getenv func(string) string, log io.Writer) dispatch.QuotaConfi
 // notification goes through notify-send when it is on PATH, else nowhere.
 func serviceContext(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.ContextConfig {
+	settings := config.Machine(getenv)
 	return dispatch.ContextConfig{Every: time.Minute, Alert: bus.ContextAlert(getenv), MaxAge: bus.ContextMaxAge,
+		Urgent: settings.Float("dispatch.context_urgent"), Deadline: settings.Duration("dispatch.context_handoff_deadline"),
 		Read:   func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) },
 		Notify: desktopNotify(lookPath, run)}
 }

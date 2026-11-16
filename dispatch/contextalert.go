@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -19,9 +20,20 @@ import (
 // before), and an unknown or aged fill never acts, nor ends an episode.
 
 // contextMark and contextNoticeMark are the {p}:quota fields of an agent's
-// episode; their value is the session.
-func contextMark(agent string) string       { return "context:" + agent }
-func contextNoticeMark(agent string) string { return "context-notice:" + agent }
+// episode; their value is the session. The escalation's marks
+// (context-escalation §3.2) are contextEscalateMark (master's waking
+// directive) and contextPersonMark (the person's notice).
+func contextMark(agent string) string         { return "context:" + agent }
+func contextNoticeMark(agent string) string   { return "context-notice:" + agent }
+func contextEscalateMark(agent string) string { return "context-escalate:" + agent }
+func contextPersonMark(agent string) string   { return "context-person:" + agent }
+
+// contextEpisodeMarks are the fields an episode's end deletes (§3.3), the
+// alert's time (<mark>:at) among them.
+func contextEpisodeMarks(agent string) []string {
+	return []string{contextMark(agent), contextMark(agent) + bus.MarkAtSuffix, contextNoticeMark(agent),
+		contextEscalateMark(agent), contextPersonMark(agent)}
+}
 
 // contextAlerts judges the last publication once; a lost lease is ErrNotHolder.
 func (l *loop) contextAlerts(ctx context.Context) error {
@@ -39,21 +51,26 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 	}
 	sort.Strings(names)
 	var marks map[string]string
+	loadMarks := func() error {
+		if marks != nil {
+			return nil
+		}
+		m, err := l.b.QuotaMarks(ctx)
+		marks = m
+		return err
+	}
+	esc := l.newEscalation(c)
 	for _, a := range names {
 		f := l.ctxFills[a]
 		if f.Session == "" || (c.MaxAge > 0 && f.At-f.ObservedAt > c.MaxAge.Milliseconds()) {
 			continue // unknown or aged: it neither alerts nor ends an episode
 		}
 		if f.Pct < c.Alert {
-			if marks == nil {
-				m, err := l.b.QuotaMarks(ctx)
-				if err != nil {
-					return err
-				}
-				marks = m
+			if err := loadMarks(); err != nil {
+				return err
 			}
 			var ended []string
-			for _, k := range []string{contextMark(a), contextNoticeMark(a)} {
+			for _, k := range contextEpisodeMarks(a) {
 				if _, ok := marks[k]; ok {
 					ended = append(ended, k)
 				}
@@ -70,6 +87,17 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 				return err
 			}
 			l.logError(a, "context alert", err)
+			continue
+		}
+		marks = nil // the alert may have written its marks: read them again
+		if err := loadMarks(); err != nil {
+			return err
+		}
+		if err := esc.judge(ctx, a, f, marks); err != nil {
+			if errors.Is(err, bus.ErrNotHolder) {
+				return err
+			}
+			l.logError(a, "context escalation", err)
 		}
 	}
 	return nil
@@ -80,14 +108,15 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 func (l *loop) alertContext(ctx context.Context, a string, f bus.ContextFill) error {
 	to := l.cfg.EscalateTo
 	directive := fmt.Sprintf("context %.0f%%: at your next stopping point commit WIP, publish your hand-off with agentbus report %s --to %s, then declare it: agentbus handoff %s --report <its id>", f.Pct, a, to, a)
-	sent, err := l.b.FencedCmdOnce(ctx, l.token, contextMark(a), f.Session, dispatchFrom, a, bus.CmdDirective, directive, false)
+	// The alert keeps its time (§3.1): the deadline counts from it.
+	id, err := l.b.FencedCmdOnceAt(ctx, l.token, contextMark(a), f.Session, dispatchFrom, a, bus.CmdDirective, directive, false)
 	if errors.Is(err, bus.ErrSwapInProgress) {
 		return nil // the agent is being replaced: its successor starts a new session
 	}
 	if err != nil {
 		return err
 	}
-	if sent {
+	if id != "" {
 		l.log(map[string]any{"agent": a, "action": "context-alert", "pct": f.Pct})
 		if n := l.cfg.Context.Notify; n != nil {
 			if err := n(ctx, "agentbus "+l.b.Project(), fmt.Sprintf("%s context %.0f%%: told to hand off", a, f.Pct)); err != nil {
@@ -104,4 +133,100 @@ func (l *loop) alertContext(ctx context.Context, a string, f bus.ContextFill) er
 		return nil
 	}
 	return err
+}
+
+// escalation is one pass's step 2 (context-escalation §3.2): its settings,
+// and the hand-offs and snapshots read once, when first needed.
+type escalation struct {
+	l        *loop
+	urgent   float64
+	deadline time.Duration
+	read     bool
+	handoffs map[string]bus.Handoff
+	snaps    map[string]bus.AgentSnapshot
+}
+
+// newEscalation applies the start rule: urgent is used only above the alert.
+func (l *loop) newEscalation(c ContextConfig) *escalation {
+	urgent := c.Urgent
+	if urgent > 0 && urgent <= c.Alert {
+		l.logOnce("context-urgent", map[string]any{"action": "context-urgent-off", "urgent": urgent, "alert": c.Alert,
+			"reason": "dispatch.context_urgent is not above dispatch.context_alert"})
+		urgent = 0
+	}
+	return &escalation{l: l, urgent: urgent, deadline: c.Deadline}
+}
+
+// standing reports whether agent a's hand-off stands (VoidFor false).
+func (e *escalation) standing(ctx context.Context, a string) (bool, error) {
+	if !e.read {
+		h, err := e.l.b.Handoffs(ctx)
+		if err != nil {
+			return false, err
+		}
+		s, err := e.l.b.Agents(ctx)
+		if err != nil {
+			return false, err
+		}
+		e.handoffs, e.snaps, e.read = h, s, true
+	}
+	h, ok := e.handoffs[a]
+	if !ok {
+		return false, nil
+	}
+	snap, known := e.snaps[a]
+	void, _ := h.VoidFor(snap, known)
+	return !void, nil
+}
+
+// judge escalates agent a once in this episode when it is due: alerted, no
+// hand-off standing, and the fill at urgent or the alert past the deadline;
+// now is the publication's Redis time.
+func (e *escalation) judge(ctx context.Context, a string, f bus.ContextFill, marks map[string]string) error {
+	if marks[contextMark(a)] != f.Session || (marks[contextEscalateMark(a)] == f.Session && marks[contextPersonMark(a)] == f.Session) {
+		return nil // not alerted in this episode, or escalated already
+	}
+	alertAt := bus.MarkAt(marks, contextMark(a))
+	byFill := e.urgent > 0 && f.Pct >= e.urgent
+	byTime := e.deadline > 0 && alertAt > 0 && f.At-alertAt >= e.deadline.Milliseconds()
+	if !byFill && !byTime {
+		return nil
+	}
+	if stands, err := e.standing(ctx, a); err != nil || stands {
+		return err
+	}
+	l, c := e.l, e.l.cfg.Context
+	since := "earlier"
+	minutes := ""
+	if alertAt > 0 {
+		n := (f.At - alertAt) / 60000
+		since = fmt.Sprintf("%d min ago", n)
+		minutes = fmt.Sprintf(" after %d min", n)
+	}
+	to := l.cfg.EscalateTo
+	if a != to && bus.ValidName(to) {
+		directive := fmt.Sprintf("context: %s at %.0f%%, alerted %s at %.0f%%, no hand-off declared. Its client has no mid-turn channel yet: the person is told. Send it no new work; do not type into its pane. Once it declares its hand-off the dispatcher clears it.",
+			a, f.Pct, since, c.Alert)
+		_, err := l.b.FencedCmdOnce(ctx, l.token, contextEscalateMark(a), f.Session, dispatchFrom, to, bus.CmdDirective, directive, false)
+		if errors.Is(err, bus.ErrSwapInProgress) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	notice := fmt.Sprintf("%s context %.0f%%, no hand-off%s: if you are at the desk, interrupt it (Esc) and tell it to hand off now.", a, f.Pct, minutes)
+	sent, err := l.b.FencedNotifyOnceForPerson(ctx, l.token, contextPersonMark(a), f.Session, dispatchFrom, notice)
+	if err != nil {
+		return err
+	}
+	if sent {
+		l.log(map[string]any{"agent": a, "action": "context-escalate", "pct": f.Pct, "by_fill": byFill, "by_time": byTime})
+		if n := c.Notify; n != nil {
+			if err := n(ctx, "agentbus "+l.b.Project(), fmt.Sprintf("%s context %.0f%%: no hand-off yet", a, f.Pct)); err != nil {
+				l.logError(a, "desktop notify", err)
+			}
+		}
+	}
+	return nil
 }

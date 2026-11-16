@@ -22,6 +22,11 @@ type ContextConfig struct {
 	// (context-alert ca2; 0 = off). MaxAge is the oldest reading that acts.
 	Alert  float64
 	MaxAge time.Duration
+	// The escalation (context-escalation §3.2): once per episode, when no
+	// hand-off stands and the fill reaches Urgent (used only above Alert;
+	// 0 = off) or the alert is Deadline old (0 = off).
+	Urgent   float64
+	Deadline time.Duration
 	// Notify shows a desktop notification (nil = none).
 	Notify func(ctx context.Context, title, body string) error
 }

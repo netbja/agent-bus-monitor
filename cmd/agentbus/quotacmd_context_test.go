@@ -50,7 +50,16 @@ func TestServiceContextAlert(t *testing.T) {
 			t.Fatalf("%q: alert %v every %v max age %v", c.env, cfg.Alert, cfg.Every, cfg.MaxAge)
 		}
 	}
+	// context-escalation §7: urgent 90 and the deadline 20m by default; the
+	// registry's env names set them.
 	cfg := serviceContext(func(string) string { return "" }, found, run)
+	if cfg.Urgent != 90 || cfg.Deadline != 20*time.Minute {
+		t.Fatalf("defaults: urgent %v deadline %v", cfg.Urgent, cfg.Deadline)
+	}
+	set := map[string]string{"AGENT_BUS_CONTEXT_URGENT": "95", "AGENT_BUS_CONTEXT_HANDOFF_DEADLINE": "0"}
+	if c := serviceContext(func(k string) string { return set[k] }, found, run); c.Urgent != 95 || c.Deadline != 0 {
+		t.Fatalf("set: urgent %v deadline %v", c.Urgent, c.Deadline)
+	}
 	if err := cfg.Notify(context.Background(), "agentbus p", "coder context 85%"); err != nil || len(ran) != 1 ||
 		strings.Join(ran[0], " ") != "/usr/bin/notify-send -a agentbus agentbus p coder context 85%" {
 		t.Fatalf("ran %q, %v", ran, err)
