@@ -163,7 +163,7 @@ func TestHostFactsOnTheRowAndPage(t *testing.T) {
 // when they are gone.
 func TestApplyHostFacts(t *testing.T) {
 	st := &shared{agents: map[string]*agentState{"coder": {host: hostFacts{draft: true}}, "master": {}}}
-	applyHostFacts(st, map[string]hostFacts{"master": {blocked: true}, "ghost": {blocked: true}})
+	applyHostFacts(st, map[string]hostFacts{"master": {blocked: true}, "ghost": {blocked: true}}, false)
 	if st.agents["coder"].host.draft || !st.agents["master"].host.blocked || st.agents["ghost"] != nil {
 		t.Fatalf("coder %+v master %+v", st.agents["coder"].host, st.agents["master"].host)
 	}

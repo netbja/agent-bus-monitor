@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 const (
@@ -60,7 +63,22 @@ func selectAgents(m map[string]bus.AgentSnapshot, names []string) (map[string]bu
 	return out, missing
 }
 
-func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
+// liveTerminals are the agents of project with a live terminal on the holder
+// list (item 22).
+func liveTerminals(list []termhost.Term, project string) map[string]bool {
+	out := map[string]bool{}
+	for _, t := range list {
+		if t.Project == project && t.Alive {
+			out[t.Name] = true
+		}
+	}
+	return out
+}
+
+// agentsTable prints the agents; live is the holder's agents with a live
+// terminal (nil: the holder was not read), so an agent whose terminal is
+// gone shows 'no terminal' (bus.ShownState), never its last state.
+func agentsTable(m map[string]bus.AgentSnapshot, now time.Time, live map[string]bool) string {
 	if len(m) == 0 { // stranger-test: say so rather than print nothing
 		return "no agent has declared a status yet (each appears with its first agentbus status)\n"
 	}
@@ -91,7 +109,8 @@ func agentsTable(m map[string]bus.AgentSnapshot, now time.Time) string {
 		if s.Pane != "" {
 			pane = "  ⧉" + s.Pane
 		}
-		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s%s\n", n, s.State, when, marker, pane, msg)
+		state := bus.ShownState(s.State, s.Pane, live != nil, live[n])
+		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s%s\n", n, state, when, marker, pane, msg)
 	}
 	return sb.String()
 }
@@ -193,4 +212,35 @@ func runAgentsWait(ctx context.Context, read func(context.Context) (map[string]b
 	}
 	fmt.Fprintf(errw, "agents wait: no status from %s within %s\n", agent, timeout)
 	return 1
+}
+
+// holderLive reads the project's holder for liveTerminals; nil when it
+// cannot be read (another host, or down): the declared states show.
+func holderLive(ctx context.Context, project string) map[string]bool {
+	h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+	if err != nil {
+		return nil
+	}
+	c, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return liveFrom(c, h, project)
+}
+
+// termLister is the part of a holder liveFrom reads.
+type termLister interface {
+	List(ctx context.Context, project string) ([]termhost.Term, error)
+	Describe(ctx context.Context) (termhost.HostInfo, error)
+}
+
+// liveFrom is liveTerminals of h's list; nil unless a holder of the project
+// answers (an empty list from no holder proves nothing) and the list is read.
+func liveFrom(ctx context.Context, h termLister, project string) map[string]bool {
+	if info, err := h.Describe(ctx); err != nil || len(info.Builds) == 0 {
+		return nil
+	}
+	list, err := h.List(ctx, project)
+	if err != nil {
+		return nil
+	}
+	return liveTerminals(list, project)
 }

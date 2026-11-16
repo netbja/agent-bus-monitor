@@ -16,7 +16,7 @@ func TestAgentsTable(t *testing.T) {
 		"claude1": {State: "working", Message: "plan 10", TS: now.Add(-12 * time.Second).UnixMilli(), Pane: "w1:p1"},
 		"helper":  {State: "done", TS: now.Add(-11 * time.Minute).UnixMilli()},
 	}
-	out := agentsTable(m, now)
+	out := agentsTable(m, now, nil)
 	if !strings.Contains(out, "claude1") || !strings.Contains(out, "working") || !strings.Contains(out, "plan 10") {
 		t.Fatalf("missing claude1 row: %q", out)
 	}
@@ -67,7 +67,7 @@ func TestHumanAge(t *testing.T) {
 }
 
 func TestAgentsTableShowsNeverForAnAgentWithoutAStatus(t *testing.T) {
-	out := agentsTable(map[string]bus.AgentSnapshot{"coder": {Pane: "w2:p3"}}, time.Now())
+	out := agentsTable(map[string]bus.AgentSnapshot{"coder": {Pane: "w2:p3"}}, time.Now(), nil)
 	if !strings.Contains(out, "never") || strings.Contains(out, "h ago") || strings.Contains(out, "stale") {
 		t.Fatalf("table = %q", out)
 	}
@@ -111,11 +111,11 @@ func TestAgentsForgetRefusesLiveAgentsUnlessForced(t *testing.T) {
 
 // stranger-test: a project no agent has joined yet says so, instead of printing nothing.
 func TestAgentsTableSaysWhenNoAgentYet(t *testing.T) {
-	out := agentsTable(map[string]bus.AgentSnapshot{}, time.Now())
+	out := agentsTable(map[string]bus.AgentSnapshot{}, time.Now(), nil)
 	if !strings.Contains(out, "no agent has declared a status yet") || !strings.HasSuffix(out, "\n") {
 		t.Fatalf("empty table: %q", out)
 	}
-	if strings.Contains(agentsTable(map[string]bus.AgentSnapshot{"coder": {State: "idle"}}, time.Now()), "no agent") {
+	if strings.Contains(agentsTable(map[string]bus.AgentSnapshot{"coder": {State: "idle"}}, time.Now(), nil), "no agent") {
 		t.Fatal("the empty note shows with an agent present")
 	}
 }

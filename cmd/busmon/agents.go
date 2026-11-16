@@ -235,6 +235,11 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 // provider at its limit (quota) or the project pause (paused). The declared
 // state stays in the detail; blocked, waiting and done are never covered.
 func stateLook(a *agentState) (glyph, word string, role Role, group int) {
+	// Item 22: a terminal gone from the holder is said before anything the
+	// agent last declared: it can neither work nor be woken.
+	if bus.ShownState(a.state, a.pane, a.host.termsRead, a.host.live) == bus.StateNoTerminal {
+		return GlyphDown, bus.StateNoTerminal, RoleError, 1
+	}
 	state := a.state
 	if answered(a) && !promptWaiting(a) {
 		return GlyphIdle, "answered", RoleMuted, 4
