@@ -318,8 +318,9 @@ as `run reset` is.
   threshold. That is `coord` as today.
 - **Pause and suspend:** a paused or suspended project is not drained or released by the override.
   The override writes only `{p}:run`.
-- **Several projects:** each project's dispatcher reads its own table. A machine value changed in busmon applies to every project that sets none, each at its
-  next refresh.
+- **Several projects:** each project's dispatcher reads its own table. A machine key of
+  `config.toml` (edited by hand: busmon edits only the current project, Q6) applies to every project
+  that sets none, each at its next refresh.
 
 ## 7. Not in scope
 
