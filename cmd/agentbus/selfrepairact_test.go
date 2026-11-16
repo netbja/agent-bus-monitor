@@ -179,7 +179,8 @@ func TestSelfRepairFailedProof(t *testing.T) {
 		t.Fatalf("ledger %q", got)
 	}
 	msgs := w.toMaster()
-	if len(msgs) != 1 || !strings.Contains(msgs[0], "self-repair: coder relaunch failed its proof") || !strings.Contains(msgs[0], "agent-launch coder demo --resume "+srSession) {
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "self-repair: coder relaunch failed its proof") || !strings.Contains(msgs[0], "recover with agentbus --project demo pop coder --resume "+srSession+", or agentbus up demo --resume") ||
+		strings.Contains(msgs[0], "agent-launch") || strings.Contains(msgs[0], "of its tab") { // the holder's command, never the herdr-era launch in a new pane (P1-7)
 		t.Fatalf("master told %q", msgs)
 	}
 	if len(w.desktop) != 1 || !strings.Contains(w.desktop[0], "coder") {

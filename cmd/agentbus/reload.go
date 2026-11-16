@@ -336,20 +336,12 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 	}
 
 	// Relaunch and proof.
-	recovery := fmt.Sprintf("agent-launch %s %s", role, b.Project())
-	if own.Profile != manifestOwn.Profile {
-		recovery += " --profile " + own.Profile
-	}
-	if session != "" {
-		recovery += " --resume " + session
-	}
 	profile := ""
 	if own.Profile != manifestOwn.Profile {
 		profile = own.Profile
 	}
 	if err := d.Relaunch(ctx, role, profile, session); err != nil {
-		return failed("relaunch", "the old client is gone and the relaunch failed: %v; recover with %s in pane %s, or agentbus up %s --resume",
-			err, recovery, snap.Pane, b.Project())
+		return failed("relaunch", "the old client is gone and the relaunch failed: %v; %s", err, recoveryHint(b.Project(), role, profile, session))
 	}
 	var proved bus.AgentSnapshot
 	for deadline := d.Now().Add(d.Proof); ; d.Sleep(500 * time.Millisecond) {
