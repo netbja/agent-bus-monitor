@@ -30,8 +30,8 @@ func TestResetLabel(t *testing.T) {
 		{at(17, 13, 59), DateClock12, "tomorrow 1:59 PM"},
 		{at(16, 9, 5), DateClock12, "today 9:05 AM"},
 		{at(18, 13, 59), DateClock12, "Wed 18 Nov 1:59 PM"},
-		{at(17, 13, 59), "", "tomorrow 13:59"},          // unset: the default
-		{at(17, 13, 59), "bogus", "tomorrow 13:59"},     // unknown: the default
+		{at(17, 13, 59), "", "tomorrow 13:59"},                 // unset: the default
+		{at(17, 13, 59), "bogus", "tomorrow 13:59"},            // unknown: the default
 		{at(17, 13, 59).UTC(), DateRelative, "tomorrow 13:59"}, // shown in now's zone
 	} {
 		if got := ResetLabel(c.t, now, c.format); got != c.want {
