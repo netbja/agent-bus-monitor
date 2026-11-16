@@ -409,7 +409,7 @@ func readAdminServices(m service.Manager) (map[string]map[string]bool, error) {
 }
 
 // readAdminHolders is every project with a holder run directory on this
-// machine (spec decision Q4: <rundir>/agentbus/<project>/holder-*.sock,
+// machine (spec decision Q4: <rundir>/agentbus/<project>/h-<id>.sock or the legacy holder-<key>.sock,
 // the project validated before use) and its live terminals; a holder that
 // does not answer is unread, never none.
 func readAdminHolders(ctx context.Context, getenv func(string) string) (map[string]adminTerms, error) {
@@ -429,7 +429,7 @@ func readAdminHolders(ctx context.Context, getenv func(string) string) (map[stri
 		if !e.IsDir() || !bus.ValidName(p) {
 			continue
 		}
-		socks, _ := filepath.Glob(filepath.Join(dir, p, "holder-*.sock"))
+		socks, _ := holder.ProjectSockets(filepath.Join(dir, p)) // both names (P0-2 B)
 		if len(socks) == 0 {
 			continue
 		}

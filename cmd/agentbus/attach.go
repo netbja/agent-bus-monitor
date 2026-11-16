@@ -70,18 +70,16 @@ func findAgentTerm(getenv func(string) string, project, agent string) (string, h
 	if err != nil {
 		return "", holder.TermInfo{}, err
 	}
-	ents, err := os.ReadDir(dir)
+	byKey, err := holder.ProjectSockets(dir) // both names (P0-2 B)
 	if err != nil {
 		return "", holder.TermInfo{}, err
 	}
-	current := "holder-" + service.BuildKey(holder.BuildID()) + ".sock"
-	var socks []string
-	for _, d := range ents {
-		if n := d.Name(); strings.HasPrefix(n, "holder-") && strings.HasSuffix(n, ".sock") {
-			socks = append(socks, n)
-		}
+	current := service.BuildKey(holder.BuildID())
+	keys := make([]string, 0, len(byKey))
+	for k := range byKey {
+		keys = append(keys, k)
 	}
-	slices.SortStableFunc(socks, func(a, b string) int { // the current build first
+	slices.SortStableFunc(keys, func(a, b string) int { // the current build first
 		switch {
 		case a == current && b != current:
 			return -1
@@ -90,8 +88,8 @@ func findAgentTerm(getenv func(string) string, project, agent string) (string, h
 		}
 		return strings.Compare(a, b)
 	})
-	for _, name := range socks {
-		sock := dir + "/" + name
+	for _, key := range keys {
+		sock := byKey[key]
 		cl, err := holder.Dial(sock, holder.BuildID())
 		if err != nil {
 			continue

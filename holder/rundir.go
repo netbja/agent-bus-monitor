@@ -7,6 +7,8 @@
 package holder
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -135,7 +138,7 @@ func SocketPath(getenv func(string) string, project, key string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	p := filepath.Join(dir, "holder-"+key+".sock")
+	p := filepath.Join(dir, socketName(key))
 	if err := socketFits(p); err != nil {
 		return "", err
 	}
@@ -152,7 +155,7 @@ func SocketPathFits(getenv func(string) string, project, key string) error {
 	if !service.ValidBuildKey(key) {
 		return fmt.Errorf("holder: invalid build key %q", key)
 	}
-	return socketFits(filepath.Join(runDir(getenv).path, "agentbus", project, "holder-"+key+".sock"))
+	return socketFits(filepath.Join(runDir(getenv).path, "agentbus", project, socketName(key)))
 }
 
 func socketFits(p string) error {
@@ -161,4 +164,121 @@ func socketFits(p string) error {
 			p, len(p), limit+1, runtime.GOOS)
 	}
 	return nil
+}
+
+// The socket's name is bounded whatever the build key (P0-2 B): h-<id>.sock,
+// id the first 16 hex digits of the key's sha256, with h-<id>.key beside it,
+// written by its holder, naming the key in full. Before this, the name was
+// holder-<key>.sock: a holder of an older build still listens there after an
+// upgrade, so every reader takes both (ProjectSockets, SocketFor).
+
+func socketID(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:8])
+}
+
+func socketName(key string) string { return "h-" + socketID(key) + ".sock" }
+
+func legacySocketName(key string) string { return "holder-" + key + ".sock" }
+
+// KeyFilePath is the key file beside key's socket, its directories checked.
+func KeyFilePath(getenv func(string) string, project, key string) (string, error) {
+	sock, err := SocketPath(getenv, project, key)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(sock, ".sock") + ".key", nil
+}
+
+// SocketFor is key's socket to dial: the new name when a socket is there,
+// else the legacy name when one is, else the new name (where a holder of
+// this build listens).
+func SocketFor(getenv func(string) string, project, key string) (string, error) {
+	p, err := SocketPath(getenv, project, key)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Lstat(p); err == nil {
+		return p, nil
+	}
+	legacy := filepath.Join(filepath.Dir(p), legacySocketName(key))
+	if _, err := os.Lstat(legacy); err == nil {
+		return legacy, nil
+	}
+	return p, nil
+}
+
+// ProjectSockets is every holder socket in a project's run directory, by
+// build key: holder-<key>.sock, and h-<id>.sock whose h-<id>.key (a regular
+// file) names a valid key of that id. A missing directory has none.
+func ProjectSockets(dir string) (map[string]string, error) {
+	ents, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return map[string]string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, e := range ents {
+		name := e.Name()
+		if key, ok := strings.CutPrefix(name, "holder-"); ok {
+			if key, ok = strings.CutSuffix(key, ".sock"); ok && service.ValidBuildKey(key) {
+				if _, taken := out[key]; !taken { // the new name wins
+					out[key] = filepath.Join(dir, name)
+				}
+			}
+			continue
+		}
+		id, ok := strings.CutPrefix(name, "h-")
+		if id, ok = strings.CutSuffix(id, ".sock"); !ok {
+			continue
+		}
+		key, ok := readKeyFile(filepath.Join(dir, "h-"+id+".key"))
+		if !ok || socketID(key) != id {
+			continue
+		}
+		out[key] = filepath.Join(dir, name)
+	}
+	return out, nil
+}
+
+// readKeyFile reads a key file: a regular file (Lstat: no symlink), small,
+// holding one valid build key.
+func readKeyFile(path string) (string, bool) {
+	st, err := os.Lstat(path)
+	if err != nil || !st.Mode().IsRegular() || st.Size() > 256 {
+		return "", false
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	key := strings.TrimSpace(string(b))
+	return key, service.ValidBuildKey(key)
+}
+
+// WriteKeyFile writes key's key file, 0600, replacing one there (a temp file
+// renamed into place).
+func WriteKeyFile(path, key string) error {
+	if !service.ValidBuildKey(key) {
+		return fmt.Errorf("holder: invalid build key %q", key)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".key.tmp*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.WriteString(key + "\n"); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

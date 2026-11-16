@@ -154,7 +154,7 @@ func TestSocketPath(t *testing.T) {
 	xdg := t.TempDir()
 	os.Chmod(xdg, 0o700)
 	p, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": xdg}), "demo", "v1.0123456789")
-	if err != nil || p != filepath.Join(xdg, "agentbus", "demo", "holder-v1.0123456789.sock") {
+	if err != nil || p != filepath.Join(xdg, "agentbus", "demo", "h-"+socketID("v1.0123456789")+".sock") {
 		t.Fatalf("%q %v", p, err)
 	}
 	deep := filepath.Join(xdg, strings.Repeat("d", 80))
@@ -168,7 +168,9 @@ func TestSocketPath(t *testing.T) {
 }
 
 // fieldKey is the build key of the field failure (P0-2, 2026-11-16): a dirty
-// build's key, its socket path 105 bytes long.
+// build's key, its socket path 105 bytes long under the legacy name
+// holder-<key>.sock. xdgFor pads for the current name, h-<id>.sock, so the
+// limits below are judged on the path a holder of this build listens on.
 const fieldKey = "v0.28.0.877.g1691ae95.1691ae950206.dirty.c7ab19e304"
 
 // xdgFor is a 0700 run directory whose socket path for project and key is
@@ -180,7 +182,7 @@ func xdgFor(t *testing.T, project, key string, n int) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(base) })
-	tail := len("/agentbus/" + project + "/holder-" + key + ".sock")
+	tail := len("/agentbus/" + project + "/" + socketName(key))
 	pad := n - tail - len(base) - 1
 	if pad < 1 {
 		t.Skipf("the temp dir %s is too long for a %d-byte path", base, n)
@@ -246,5 +248,108 @@ func TestSocketPathFitsCreatesNothing(t *testing.T) {
 	}
 	if err := SocketPathFits(envOf(map[string]string{"XDG_RUNTIME_DIR": x}), "demo", "../x"); err == nil {
 		t.Fatal("an invalid build key accepted")
+	}
+}
+
+// The socket's name is bounded whatever the build key (P0-2 B): h-<16 hex
+// of the key's sha256>.sock, 23 bytes, so a long dirty key and a 32-byte
+// project fit under /run/user/<uid>.
+func TestSocketNameIsBounded(t *testing.T) {
+	long := "v0.28.0.877.g1691ae95.1691ae950206.dirty.c7ab19e304"
+	if got := socketID(long); len(got) != 16 || got == socketID("v1.0123456789") {
+		t.Fatalf("id %q", got)
+	}
+	if socketID(long) != socketID(long) {
+		t.Fatal("not deterministic")
+	}
+	xdg, err := os.MkdirTemp("/tmp", "h") // short: t.TempDir() is too long here
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(xdg) })
+	os.Chmod(xdg, 0o700)
+	project := strings.Repeat("p", 32)
+	p, err := SocketPath(envOf(map[string]string{"XDG_RUNTIME_DIR": xdg}), project, long)
+	if err != nil || filepath.Base(p) != "h-"+socketID(long)+".sock" || len(filepath.Base(p)) != 23 {
+		t.Fatalf("%q %v", p, err)
+	}
+	// /run/user/1000 (14 bytes) + /agentbus/ + 32 + / + 23 = 80: far under either OS's limit.
+	if n := len("/run/user/1000/agentbus/" + project + "/" + filepath.Base(p)); n > 103 {
+		t.Fatalf("%d bytes", n)
+	}
+}
+
+// ProjectSockets reads both formats (P0-2 B): the legacy holder-<key>.sock,
+// whose name holds its key (an older build still running after an
+// upgrade), and h-<id>.sock beside the h-<id>.key its holder wrote. A new
+// socket whose key file is missing, names another id's key, holds an
+// invalid key, or is not a regular file is left out.
+func TestProjectSockets(t *testing.T) {
+	dir := t.TempDir()
+	touch := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	touch("holder-v1.0123456789.sock", "")
+	touch("h-"+socketID("v2.0123456789")+".sock", "")
+	touch("h-"+socketID("v2.0123456789")+".key", "v2.0123456789\n")
+	touch("h-"+socketID("v3.0123456789")+".sock", "") // no key file
+	touch("h-"+socketID("v4.0123456789")+".sock", "")
+	touch("h-"+socketID("v4.0123456789")+".key", "v5.0123456789") // another id's key
+	touch("h-"+socketID("v6.0123456789")+".sock", "")
+	touch("h-"+socketID("v6.0123456789")+".key", "../x") // not a key
+	touch("h-"+socketID("v7.0123456789")+".sock", "")
+	elsewhere := filepath.Join(t.TempDir(), "k")
+	os.WriteFile(elsewhere, []byte("v7.0123456789"), 0o600)                          // its own key, through a symlink
+	os.Symlink(elsewhere, filepath.Join(dir, "h-"+socketID("v7.0123456789")+".key")) // not a regular file
+	touch("h-"+socketID("Bad Key")+".sock", "")
+	touch("h-"+socketID("Bad Key")+".key", "Bad Key") // its id, but not a build key
+	touch("h-"+socketID("v8.0123456789")+".sock", "")
+	touch("h-"+socketID("v8.0123456789")+".key", "v8.0123456789")
+	touch("holder-v8.0123456789.sock", "") // both names for one key: the new one wins
+	touch("holder-bad key.sock", "")
+	touch("notes.txt", "")
+	got, err := ProjectSockets(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"v1.0123456789": filepath.Join(dir, "holder-v1.0123456789.sock"),
+		"v2.0123456789": filepath.Join(dir, "h-"+socketID("v2.0123456789")+".sock"),
+		"v8.0123456789": filepath.Join(dir, "h-"+socketID("v8.0123456789")+".sock"),
+	}
+	if len(got) != len(want) || got["v1.0123456789"] != want["v1.0123456789"] || got["v2.0123456789"] != want["v2.0123456789"] ||
+		got["v8.0123456789"] != want["v8.0123456789"] {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	if empty, err := ProjectSockets(filepath.Join(dir, "none")); err != nil || len(empty) != 0 {
+		t.Fatalf("a missing dir: %v %v", empty, err)
+	}
+}
+
+// SocketFor resolves a key's socket: the new name when it is there, else
+// the legacy one when that is there, else the new one (where a holder of
+// this build will listen).
+func TestSocketFor(t *testing.T) {
+	xdg := filepath.Join(t.TempDir(), "r")
+	os.Mkdir(xdg, 0o700)
+	env := envOf(map[string]string{"XDG_RUNTIME_DIR": xdg})
+	dir, err := ProjectDir(env, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := filepath.Join(dir, "h-"+socketID("v1.0123456789")+".sock")
+	if p, err := SocketFor(env, "demo", "v1.0123456789"); err != nil || p != fresh {
+		t.Fatalf("nothing there: %q %v", p, err)
+	}
+	legacy := filepath.Join(dir, "holder-v1.0123456789.sock")
+	os.WriteFile(legacy, nil, 0o600)
+	if p, _ := SocketFor(env, "demo", "v1.0123456789"); p != legacy {
+		t.Fatalf("legacy only: %q", p)
+	}
+	os.WriteFile(fresh, nil, 0o600)
+	if p, _ := SocketFor(env, "demo", "v1.0123456789"); p != fresh {
+		t.Fatalf("both: %q", p)
 	}
 }
