@@ -26,11 +26,11 @@ func TestReportToNamesItsAddressees(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	id, err := sendReport(ctx, b, []string{"master", "--to", "bernard", "--to", "coder", "Review ready"}, io.Discard)
+	id, err := sendReport(ctx, b, []string{"master", "--to", "charlie", "--to", "coder", "Review ready"}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e, err := b.ReportByID(ctx, id); err != nil || e.To != "bernard,coder" {
+	if e, err := b.ReportByID(ctx, id); err != nil || e.To != "charlie,coder" {
 		t.Fatalf("the report reads %+v, %v", e, err)
 	}
 	evs, err := b.Thread(ctx, id) // the notices carry the report's id as ref

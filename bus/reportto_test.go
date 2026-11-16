@@ -10,15 +10,15 @@ import (
 // as a broadcast. The report entry records its addressees, field "to":
 // additive, an older entry has none.
 func TestReportRecordsItsAddressees(t *testing.T) {
-	e := ParseEntry("p:report", "1-0", map[string]string{"agent": "master", "kind": "note", "message": "m", "to": "bernard,coder"})
-	if e.To != "bernard,coder" {
+	e := ParseEntry("p:report", "1-0", map[string]string{"agent": "master", "kind": "note", "message": "m", "to": "charlie,coder"})
+	if e.To != "charlie,coder" {
 		t.Fatalf("To = %q", e.To)
 	}
 	if e := ParseEntry("p:report", "1-0", map[string]string{"agent": "master", "message": "m"}); e.To != "" {
 		t.Fatalf("an entry without addressees: To = %q", e.To)
 	}
 	// A name that is no agent name is dropped, never shown.
-	if e := ParseEntry("p:report", "1-0", map[string]string{"agent": "master", "message": "m", "to": "bernard,Bad Name,,\x1b[2J"}); e.To != "bernard" {
+	if e := ParseEntry("p:report", "1-0", map[string]string{"agent": "master", "message": "m", "to": "charlie,Bad Name,,\x1b[2J"}); e.To != "charlie" {
 		t.Fatalf("To = %q", e.To)
 	}
 }
@@ -26,12 +26,12 @@ func TestReportRecordsItsAddressees(t *testing.T) {
 func TestReportToWritesTheAddressees(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	id, err := b.ReportTo(ctx, "master", ReportNote, "for you", []string{"bernard"})
+	id, err := b.ReportTo(ctx, "master", ReportNote, "for you", []string{"charlie"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	e, err := b.ReportByID(ctx, id)
-	if err != nil || e.To != "bernard" {
+	if err != nil || e.To != "charlie" {
 		t.Fatalf("read back %+v, %v", e, err)
 	}
 	if _, err := b.ReportTo(ctx, "master", ReportNote, "x", []string{"Bad Name"}); err == nil {
