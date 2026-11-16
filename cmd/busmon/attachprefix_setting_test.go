@@ -61,8 +61,13 @@ func TestSettingsAttachPrefixGate(t *testing.T) {
 	}
 	// A fallback profile on a client with no verified key: attach would
 	// refuse a swapped agent, so the setting is refused.
-	withCodex := manifest(t, "claude-code", "codex")
-	if file, e := edit(t, withCodex, "f12"); strings.Contains(file, "prefix") || !strings.Contains(e, "codex (no key verified free)") {
+	withAgy := manifest(t, "claude-code", "agy")
+	if file, e := edit(t, withAgy, "f12"); strings.Contains(file, "prefix") || !strings.Contains(e, "agy (no key verified free)") {
+		t.Fatalf("f12 with an agy fallback: %q, err %q", file, e)
+	}
+	// Codex records f12 free (its f12-at-input probe, 2026-11-16): a codex
+	// fallback lets it through.
+	if file, e := edit(t, manifest(t, "claude-code", "codex"), "f12"); !strings.Contains(file, `prefix = "f12"`) {
 		t.Fatalf("f12 with a codex fallback: %q, err %q", file, e)
 	}
 	// Roles that cannot be read, or that rolecfg.Load refuses (a Claude Code
