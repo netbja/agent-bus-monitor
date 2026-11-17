@@ -243,3 +243,23 @@ func TestSuperviseUnderNohup(t *testing.T) {
 		t.Fatalf("the service ended %q, want signal hangup", got)
 	}
 }
+
+// The holder numbers its terminals on across its processes (holder
+// hardening): its record is in the project's state directory, which a
+// reboot keeps, one per build.
+func TestHolderConfigTermsFile(t *testing.T) {
+	w := newHolderWorld(t)
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin", service.HolderRepoEnv: w.repo, "XDG_RUNTIME_DIR": w.run})
+	cfg, getenv, err := holderConfig("demo", []string{"--env", w.envFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, err := service.PathsFrom(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := holderTermsFile(paths, "demo", cfg.Build); cfg.TermsFile != want || !strings.HasPrefix(want, paths.StateDir("demo")) ||
+		!strings.Contains(want, service.BuildKey(cfg.Build)) {
+		t.Fatalf("terms file %q, want %q under %s", cfg.TermsFile, want, paths.StateDir("demo"))
+	}
+}

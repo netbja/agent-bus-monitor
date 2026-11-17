@@ -37,9 +37,11 @@ Only these repairs are allowed, and only when the check identifies the matching 
   starts that build's unit and never restarts a running one. Then escalate to master with the
   agents that were lost (every agent the holder held died with it). Never `agentbus up`, never
   `service restart holder` (it needs `--kill-agents`, the person's word), never relaunch an agent.
-  When `holder` warns instead (`holder_restarted`: a holder came back after a crash, and the
-  agents named in it died with its old process), there is nothing to start: escalate to master
-  with that list, once per episode, and do nothing else.
+  You died with that holder, so this fail is the person's (in For you, the desktop rung once per
+  episode, holder hardening H3), not yours: you meet it only if you still run (a holder of another
+  build kept you) or after it is back. When `holder` warns instead (`holder_restarted`: a holder
+  came back after a crash, and the agents named in it died with its old process), there is nothing
+  to start: master follows that warn, and self-repair brings the agents back.
 
 After a repair, wait for the next measured result. Never restart repeatedly, run project commands,
 change Redis credentials, edit roles or configuration, change project code, or close/type into a

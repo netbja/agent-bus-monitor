@@ -126,9 +126,14 @@ func holderConfig(project string, args []string) (holder.Config, func(string) st
 			return holder.Config{}, nil, err
 		}
 	}
+	paths, err := service.PathsFrom(getenv)
+	if err != nil {
+		return holder.Config{}, nil, err
+	}
 	r := config.Resolver{Getenv: getenv, Files: []*config.File{config.Load(config.Path(getenv), "config.toml")}}
 	return holder.Config{
 		Pgids:       pgids,
+		TermsFile:   holderTermsFile(paths, project, build),
 		Project:     project,
 		Build:       build,
 		Socket:      sock,
@@ -267,4 +272,11 @@ func holderReady(getenv func(string) string, project, key string, timeout time.D
 	}
 	cl.Close()
 	return true
+}
+
+// holderTermsFile is where build's holder records the last terminal number
+// it gave (holder.Config.TermsFile): the project's state directory, which a
+// crash and a reboot keep, one file per build.
+func holderTermsFile(paths service.Paths, project, build string) string {
+	return filepath.Join(paths.StateDir(project), service.Holder+"."+service.BuildKey(build)+".terms")
 }

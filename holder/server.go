@@ -39,6 +39,11 @@ type Config struct {
 	// Pgids is the record of the terminals' process groups (PgidsPath), for
 	// a supervisor without a cgroup (spec 4.4b); "" keeps none.
 	Pgids string
+	// TermsFile records the last terminal number given, so a holder that
+	// restarts (a crash, an upgrade's restart, a reboot) numbers on and a
+	// pane id ("<key>/t<n>") never names two terminals: self-repair proves
+	// a relaunched agent by its new pane. "" numbers from t1 in each process.
+	TermsFile string
 
 	// ancestors is dispatch.Ancestors; procStart dispatch.ProcStart (tests
 	// replace them).
@@ -127,7 +132,7 @@ func NewServer(cfg Config) (*Server, error) {
 	if err := becomeSubreaper(); err != nil {
 		return nil, fmt.Errorf("holder: subreaper: %w", err)
 	}
-	return &Server{cfg: cfg, self: dispatch.ProcID{PID: os.Getpid(), Start: start},
+	return &Server{cfg: cfg, self: dispatch.ProcID{PID: os.Getpid(), Start: start}, next: readTermsFile(cfg.TermsFile),
 		terms: map[string]*terminal{}, stop: make(chan struct{}), conns: map[*net.UnixConn]bool{}}, nil
 }
 
@@ -429,6 +434,7 @@ func (s *Server) start(f Start) Reply {
 	}
 	s.next++
 	id := "t" + strconv.Itoa(s.next)
+	writeTermsFile(s.cfg.TermsFile, s.next)
 	c := exec.Command(cmd.Argv[0], cmd.Argv[1:]...)
 	c.Dir = cmd.Dir
 	// The terminal is x/vt, an xterm with 256 colours and truecolor: the
@@ -490,4 +496,37 @@ func splitLines(s string) []string {
 		}
 	}
 	return append(out, s[start:])
+}
+
+// readTermsFile is the last terminal number a previous holder gave (Config.
+// TermsFile); 0 when there is none or it cannot be read.
+func readTermsFile(path string) int {
+	if path == "" {
+		return 0
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// writeTermsFile records n, replacing the file whole (best effort: a holder
+// that cannot write it still numbers on within its own process).
+func writeTermsFile(path string, n int) {
+	if path == "" {
+		return
+	}
+	if os.MkdirAll(filepath.Dir(path), 0o700) != nil {
+		return
+	}
+	tmp := path + ".tmp"
+	if os.WriteFile(tmp, []byte(strconv.Itoa(n)+"\n"), 0o600) != nil {
+		return
+	}
+	_ = os.Rename(tmp, path)
 }
