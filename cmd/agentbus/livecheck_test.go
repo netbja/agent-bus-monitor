@@ -95,7 +95,7 @@ func (f *liveFake) advance() {
 			s = o
 		}
 		f.seq++
-		f.agents[r] = liveAgent{PID: 1000 + f.seq, Session: s}
+		f.agents[r] = liveAgent{PID: 1000 + f.seq, Session: s, At: time.Now()}
 		f.swaps[r] = append(f.swaps[r], bus.SwapEvent{ID: f.id(), Role: r, Event: bus.SwapRelaunched})
 		f.order = append(f.order, r)
 		if len(f.pending) == 0 {
@@ -133,7 +133,7 @@ func (f *liveFake) Crash(_ context.Context, p dispatch.ProcID) error {
 		f.next = dispatch.ProcID{PID: p.PID + 1, Start: p.Start + 1}
 	}
 	for r, a := range f.agents {
-		f.agents[r] = liveAgent{PID: 0, Session: a.Session}
+		f.agents[r] = liveAgent{PID: 0, Session: a.Session, At: a.At}
 	}
 	f.pending["master"], f.pending["coder"] = 0, 2
 	f.status, f.detail = health.Warn, "holder build x restarted 3s ago: 2 agent(s) lost: coder, master"
@@ -284,6 +284,28 @@ func (s *liveSwapped) Crash(ctx context.Context, p dispatch.ProcID) error {
 		}
 	}()
 	return nil
+}
+
+// A relaunch whose record predates the crash did not resume: the record is
+// the old process's.
+func TestLiveCheckWaitsForTheNewRecord(t *testing.T) {
+	f := &liveStaleRecord{liveFake: newLiveFake()}
+	var out bytes.Buffer
+	if code := runLiveCheck(context.Background(), f, liveTestOpts(), &out); code != 1 || !strings.Contains(out.String(), "FAIL relaunch master: not within 2s (its new process has not recorded its session yet)") {
+		t.Fatalf("exit %d:\n%s", code, out.String())
+	}
+}
+
+// liveStaleRecord relaunches with the old record's time.
+type liveStaleRecord struct{ *liveFake }
+
+func (s *liveStaleRecord) Agents(ctx context.Context) (map[string]liveAgent, error) {
+	as, err := s.liveFake.Agents(ctx)
+	for r, a := range as {
+		a.At = time.Time{}
+		as[r] = a
+	}
+	return as, err
 }
 
 // Without its holder's process the check refuses to crash anything.

@@ -27,11 +27,14 @@ import (
 	"github.com/netbja/agent-bus-monitor/selfrepair"
 )
 
-// liveAgent is one role as the bus says it: its proved process (0: none)
-// and its recorded resume session.
+// liveAgent is one role as the bus says it: its proved process (0: none),
+// its recorded resume session and when that record was written (a new
+// process's SessionStart rewrites it: a relaunch resumed its session when
+// the record is newer than the crash and names the same session).
 type liveAgent struct {
 	PID     int
 	Session string
+	At      time.Time
 }
 
 // liveWorld is the disposable project the check acts on and reads
@@ -140,9 +143,9 @@ func liveWait(ctx context.Context, o liveOpts, d time.Duration, step string, con
 		}
 		if !time.Now().Before(deadline) {
 			if last != "" {
-				return liveFailf("%s: not within %s (%s)", step, d, last)
+				return liveFailf("%s: not within %s (%s)", step, d.Round(time.Second), last)
 			}
-			return liveFailf("%s: not within %s", step, d)
+			return liveFailf("%s: not within %s", step, d.Round(time.Second))
 		}
 		select {
 		case <-ctx.Done():
@@ -275,6 +278,8 @@ func liveRound(ctx context.Context, w liveWorld, o liveOpts, roles []string, out
 			switch {
 			case a.PID == 0 || a.PID == before[r].PID:
 				return false, "its new process not proved yet", nil
+			case a.At.Before(t0):
+				return false, "its new process has not recorded its session yet", nil
 			case a.Session != before[r].Session:
 				return false, "", liveFailf("on session %s, not its recorded %s", a.Session, before[r].Session)
 			}
