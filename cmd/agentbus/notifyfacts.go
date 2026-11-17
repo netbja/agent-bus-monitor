@@ -26,6 +26,10 @@ type notifyPlanTask struct{ ID, Title, Subject string } // Subject: its review s
 // (stallchecks.go): that notice is the stall itself, never an event.
 const stallNoticePrefix = "Stall guard: "
 
+// holderNoticePrefix opens the person's notice of a holder that does not
+// answer (holdernotice.go): the holder's fail event covers it.
+const holderNoticePrefix = "Holder down: "
+
 type notifyFacts struct {
 	Asks        []bus.Ask
 	Agents      map[string]bus.AgentSnapshot
@@ -128,7 +132,7 @@ merge:
 		if e.Fields["for"] != "person" {
 			continue
 		}
-		if e.Fields["from"] == "dispatch" && strings.HasPrefix(e.Fields["message"], stallNoticePrefix) {
+		if e.Fields["from"] == "dispatch" && (strings.HasPrefix(e.Fields["message"], stallNoticePrefix) || strings.HasPrefix(e.Fields["message"], holderNoticePrefix)) {
 			// The stall guard writes it only during a team-stall fail, which
 			// the stall event covers: never an event of its own, so no second
 			// line, and no late buzz once the stall is over (foureyes).

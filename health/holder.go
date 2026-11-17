@@ -83,6 +83,9 @@ type HolderEvidence struct {
 	// when AgentsKnown is false.
 	AgentsKnown bool
 	Agents      []HolderAgent
+	// RelaunchPace is self-repair's wait between two relaunches of the
+	// project (selfrepair.ProjectPause), for the warn's queue; 0: not said.
+	RelaunchPace time.Duration
 }
 
 func (e HolderEvidence) current() (HolderBuild, bool) {
@@ -141,7 +144,14 @@ func holderRestarted(e HolderEvidence) string {
 		}
 		if len(lost) > 0 {
 			sort.Strings(lost)
-			parts = append(parts, fmt.Sprintf("holder build %s restarted %s ago: %d agent(s) lost: %s", b.Raw, b.Since.Round(time.Second), len(lost), strings.Join(lost, ", ")))
+			part := fmt.Sprintf("holder build %s restarted %s ago: %d agent(s) lost: %s", b.Raw, b.Since.Round(time.Second), len(lost), strings.Join(lost, ", "))
+			if e.RelaunchPace > 0 { // H3: the queue self-repair works through
+				part += fmt.Sprintf("; %d waiting for self-repair, one relaunch every %s, master first", len(lost), e.RelaunchPace)
+				if len(lost) > 1 {
+					part += fmt.Sprintf(", the last in about %s", time.Duration(len(lost)-1)*e.RelaunchPace)
+				}
+			}
+			parts = append(parts, part)
 		}
 	}
 	if len(parts) == 0 {

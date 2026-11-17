@@ -33,6 +33,10 @@ type HealthConfig struct {
 	// lease token: the stall guard's fenced notices for the person (a check's
 	// Run gets no token and never writes).
 	StallNotify func(ctx context.Context, token string, rec health.Record) error
+	// HolderNotify runs right after each stored holder record, with the
+	// lease token: the person's notice of a holder that does not answer,
+	// once per episode (holder hardening H3).
+	HolderNotify func(ctx context.Context, token string, rec health.Record) error
 	// StallWake runs right after each stored clear-stall, quiet-agent or
 	// review-queue record, with the lease token and the check's id: the stall guard's
 	// fenced waking directives (chain-reliability: a warning alone woke nobody).
@@ -160,16 +164,17 @@ func (l *loop) healthLoop(ctx context.Context) error {
 				l.logError("", "health "+check.Definition.ID, err)
 			} else {
 				next[check.Definition.ID] = time.Now().Add(check.Definition.Interval)
-				if cfg.StallNotify != nil && check.Definition.ID == "team-stall" {
+				notice := map[string]func(context.Context, string, health.Record) error{"team-stall": cfg.StallNotify, "holder": cfg.HolderNotify}[check.Definition.ID]
+				if notice != nil {
 					hctx, hcancel := context.WithTimeout(passCtx, 2*time.Second)
-					err := cfg.StallNotify(hctx, l.token, rec)
+					err := notice(hctx, l.token, rec)
 					hcancel()
 					if errors.Is(err, bus.ErrNotHolder) {
 						cancel()
 						return ErrLeaseLost
 					}
 					if err != nil {
-						l.logError("", "health team-stall notice", err)
+						l.logError("", "health "+check.Definition.ID+" notice", err)
 					}
 				}
 				if id := check.Definition.ID; cfg.StallWake != nil && (id == "clear-stall" || id == "quiet-agent" || id == "review-queue" || id == "idle-implementer" || id == "idle-master" || id == "plan-drift") {

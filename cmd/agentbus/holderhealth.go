@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/selfrepair"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -187,4 +189,14 @@ func provedAlive(boot string, start func(int) (uint64, error)) func(bus.AgentSna
 		}
 		return got == s.PIDStart
 	}
+}
+
+// holderRelaunchPace is self-repair's pace for holder_restarted's queue
+// (H3): selfrepair.ProjectPause while self-repair relaunches (on), else 0,
+// so the warn claims no queue that nothing works through.
+func holderRelaunchPace(getenv func(string) string) time.Duration {
+	if config.SelfRepairMode(config.Machine(getenv)) != string(selfrepair.ModeOn) {
+		return 0
+	}
+	return selfrepair.ProjectPause
 }

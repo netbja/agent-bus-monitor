@@ -4,8 +4,7 @@
   socket's mtime) and its binary copy; a copy that another project's unit records is that project's,
   never this one's leftover; a manager that cannot say makes it unknown. Three checks read it
   (`health/holder.go`): `holder` fails when the current build's unit is installed and no holder
-  answers (sentinel's one action: `agentbus service start holder`, once per episode, then escalate
-  the agents lost); `holder-draining` warns while an older build still holds terminals (master's,
+  answers (the person's since holder hardening H3: `agentbus service start holder`, in For you); `holder-draining` warns while an older build still holds terminals (master's,
   never a fail); `holder-leftovers` warns when an older build that neither runs nor answers keeps
   its unit or copy (the person's: `agentbus --project <p> service gc`). `service start holder`
   starts the current build's installed unit only (`StartHolder` never restarts); `service gc` runs

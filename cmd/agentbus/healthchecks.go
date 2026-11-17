@@ -20,8 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/agentstate"
+	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
@@ -48,7 +48,7 @@ func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths, clea
 	stall := newStallReader(b, os.Getenv, clear, escalateTo)
 	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
 	checks = append(checks, healthOutcomeTask("model-catalogue", realCatalogueReader().run)) // model-detection §3.5
-	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify, StallWake: stall.stallWake,
+	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify, HolderNotify: holderNotice(b), StallWake: stall.stallWake,
 		UsageRefresh: usageRefresh(b), ModelsRefresh: modelsRefresh(), RedisRefresh: redisRefresh(b)}
 }
 
@@ -90,6 +90,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 				if snaps, aerr := b.Agents(ctx); aerr == nil {
 					if now, terr := b.ServerTime(ctx); terr == nil {
 						e = withHolderAgents(e, snaps, now, provedAlive(hostBootID(), dispatch.ProcStart))
+						e.RelaunchPace = holderRelaunchPace(os.Getenv)
 					}
 				}
 			}

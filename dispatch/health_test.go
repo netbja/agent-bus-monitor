@@ -239,3 +239,46 @@ func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
 		t.Fatalf("StallWake calls %v", called)
 	}
 }
+
+// H3 (holder hardening §4): after each stored holder record the loop hands
+// the lease token to HolderNotify (the person's notice); another check never
+// calls it.
+func TestHealthLoopCallsHolderNotifyAfterTheHolderCheck(t *testing.T) {
+	b, _ := dialRun(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "holder-notify", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if err := b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}, Manager: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	hold, _ := health.ByID("holder")
+	other, _ := health.ByID("services")
+	hold.Interval, other.Interval = time.Hour, time.Hour
+	var mu sync.Mutex
+	var calls []string
+	l := &loop{b: b, token: "holder-notify", cfg: Config{EscalateTo: "master", Log: io.Discard,
+		Health: HealthConfig{Tick: time.Millisecond, PassBudget: time.Second,
+			Checks: []HealthCheck{
+				{Definition: other, Run: func(context.Context) (health.Outcome, error) {
+					return health.Outcome{Status: health.Fail, Detail: "x"}, nil
+				}},
+				{Definition: hold, Run: func(context.Context) (health.Outcome, error) {
+					return health.Outcome{Status: health.Fail, Detail: "no holder answers"}, nil
+				}},
+			},
+			HolderNotify: func(_ context.Context, token string, rec health.Record) error {
+				mu.Lock()
+				defer mu.Unlock()
+				calls = append(calls, token+"|"+rec.ID+"|"+string(rec.Status))
+				return nil
+			}}}}
+	runCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	_ = l.healthLoop(runCtx)
+	cancel()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 1 || calls[0] != "holder-notify|holder|fail" {
+		t.Fatalf("hook calls %v", calls)
+	}
+}
