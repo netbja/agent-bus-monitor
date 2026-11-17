@@ -111,7 +111,7 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
     says it. The events stay on the timeline.
   - Nothing is written to `{p}:agents`: it is busmon's reading of `{p}:observed`, as today.
 - **The text busmon shows** (as built, step 3a): the For you line says `blocked: waiting for an
-  answer in its terminal`; `enter` opens the agent's page, whose Screen section is headed with
+  answer in its terminal` (a folder-trust prompt adds what it asks after the words); `enter` opens the agent's page, whose Screen section is headed with
   the same words and shows the screen's last lines. One line in For you has no room for six.
 - **The lines are read live from the holder by busmon, and kept in memory only.**
   - As built, they come from the agent page's existing screen read (`readTermView`, the terminal

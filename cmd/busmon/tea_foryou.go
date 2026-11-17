@@ -48,7 +48,7 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 			}
 			text := blockedWords
 			if a.trustFolder != "" {
-				text = trustPromptText(a.client, a.trustFolder)
+				text = blockedWords + ": " + trustPromptText(a.client, a.trustFolder) // the words first, then what it asks
 			}
 			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("prompt:%s:%d", name, since.UnixMilli()),
 				Agent: name, Text: text, At: since})

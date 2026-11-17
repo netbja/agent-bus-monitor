@@ -121,7 +121,8 @@ func TestTrustLineThroughThePoll(t *testing.T) {
 		t.Fatalf("trust read for %q: only master shows a prompt", asked)
 	}
 	row := promptRow(t, takeSnapshot(st, time.Now()), "master")
-	if !strings.Contains(row, "Claude Code asks whether you trust /w/repo") || !strings.Contains(row, `choose "Yes, I trust this folder"`) {
+	// reviewer-codex on step 3a: the blocked words first, then what it asks.
+	if !strings.HasPrefix(row, blockedWords+": ") || !strings.Contains(row, "Claude Code asks whether you trust /w/repo") || !strings.Contains(row, `choose "Yes, I trust this folder"`) {
 		t.Fatalf("master's prompt row: %q", row)
 	}
 
