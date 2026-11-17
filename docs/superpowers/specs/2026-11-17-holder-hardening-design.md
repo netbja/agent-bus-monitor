@@ -1,6 +1,7 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r6, for review (subject `holder-hardening-spec`). r6: reviewer-codex (no in-place
+Status: spec, r6.1, for review (subject `holder-hardening-spec`). r6.1: foureyes (a client blocked
+on an unanswered cursor report is the person's to replace, said in health). r6: reviewer-codex (no in-place
 resynchronisation: an invalid terminal is replaced; every snapshot caught up atomically), foureyes
 (query answers while the emulator is not trusted). r5: reviewer-codex and foureyes (G1's
 safety contract, §7.1). r4: master (the person asked how
@@ -330,7 +331,10 @@ stream could show an empty input box the program no longer draws. So:
    today. While it is not, a small scanner in the read loop answers the static queries itself
    (primary and secondary device attributes, DSR 5 "status": fixed strings, the emulator's own),
    and **never** a cursor-position report from a guessed cursor (a wrong position corrupts the
-   client's layout); the terminal is due for replacement (4).
+   client's layout); the terminal is due for replacement (4). A client that waits for that
+   report mid-turn stops there: its turn never ends, its turn state never reads idle, and the
+   replacement falls to the person (4). Health's `invalid` and `stuck` texts say so: `a client may
+   be waiting for a cursor report: replace it by hand (agentbus reload <agent>)`.
 7. **A panic is recovered with its lock released.** The `Write` and `Snapshot` calls run in a small
    function with `defer` unlocking the emulator's lock (foureyes: `readLoop` locks by hand today,
    so a `recover()` without it would turn the crash into a deadlock), the offending chunk's offset
