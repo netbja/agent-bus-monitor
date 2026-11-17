@@ -93,6 +93,18 @@ func TestQuotaThresholdsMissingConfigKeepsTheLast(t *testing.T) {
 	if th, err := read(); err != nil || th.Warn != 85 {
 		t.Fatalf("no config.toml at start: %+v %v", th, err)
 	}
+	// Still none at the next read: no error, the env file still read
+	// (foureyes on 07f75a85).
+	envFile := filepath.Join(dir, "demo.env")
+	if err := os.WriteFile(envFile, []byte(config.EnvName("dispatch.quota_warn")+"=\"75\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if th, err := read(); err != nil || th.Warn != 75 {
+		t.Fatalf("no config.toml, read again: %+v %v", th, err)
+	}
+	if err := os.Remove(envFile); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(cfg, []byte("[project.demo.dispatch]\nquota_warn = 80\nquota_drain = 90\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

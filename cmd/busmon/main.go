@@ -212,16 +212,16 @@ func cameBack(project string, n int64, left []string) string {
 		n, plural(int(n), "key"), project, len(left), plural(len(left), "key"), strings.Join(shown, ", "), project)
 }
 
+// deleteQuiet is the delete script and its re-scan (a test's seam for keys
+// that come back).
+var deleteQuiet = bus.DeleteProjectIfQuiet
+
 // deleteProjectNow is --delete's core with no terminal I/O (projects-admin
 // §5.3), the one path busmon --delete and the Projects page share: the
 // project's services on this machine first (stopped, they write nothing more,
 // and no unit is left to start a project that no longer exists), then every
 // {p}:* key in the script that refuses a live project (bus.DeleteProjectIfQuiet),
 // then the keys written meanwhile. A removal that fails deletes nothing.
-// deleteQuiet is the delete script and its re-scan (a test's seam for keys
-// that come back).
-var deleteQuiet = bus.DeleteProjectIfQuiet
-
 func deleteProjectNow(ctx context.Context, client *redis.Client, project string, removeServices func(string) ([]string, error)) (int64, []string, []string, error) {
 	if !bus.ValidName(project) { // before any removal: the services' env file is a path built from the name (reviewer-codex)
 		return 0, nil, nil, fmt.Errorf("invalid project name %q", project)

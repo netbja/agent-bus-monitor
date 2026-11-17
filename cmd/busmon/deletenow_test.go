@@ -184,3 +184,29 @@ func TestDeleteProjectNowKeepsTheTableWhenKeysCameBack(t *testing.T) {
 		t.Fatalf("the table went with keys that came back:\n%s", got)
 	}
 }
+
+// foureyes on 07f75a85: a delete the script refused (a live project, an
+// error) deletes nothing, the project's table included.
+func TestDeleteProjectNowKeepsTheTableWhenRefused(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[project.demo.dispatch]\nquota_warn = 80\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	orig := deleteQuiet
+	t.Cleanup(func() { deleteQuiet = orig })
+	deleteQuiet = func(context.Context, *redis.Client, string) (int64, []string, error) {
+		return 0, nil, &bus.DeleteRefusal{What: "dispatch"}
+	}
+	if _, _, _, err := deleteProjectNow(context.Background(), nil, "demo", func(string) ([]string, error) { return nil, nil }); err == nil {
+		t.Fatal("a refused delete reported none")
+	}
+	if got, _ := os.ReadFile(cfg); string(got) != text {
+		t.Fatalf("a refused delete removed the table:\n%s", got)
+	}
+}
