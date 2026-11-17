@@ -218,6 +218,10 @@ func cameBack(project string, n int64, left []string) string {
 // and no unit is left to start a project that no longer exists), then every
 // {p}:* key in the script that refuses a live project (bus.DeleteProjectIfQuiet),
 // then the keys written meanwhile. A removal that fails deletes nothing.
+// deleteQuiet is the delete script and its re-scan (a test's seam for keys
+// that come back).
+var deleteQuiet = bus.DeleteProjectIfQuiet
+
 func deleteProjectNow(ctx context.Context, client *redis.Client, project string, removeServices func(string) ([]string, error)) (int64, []string, []string, error) {
 	if !bus.ValidName(project) { // before any removal: the services' env file is a path built from the name (reviewer-codex)
 		return 0, nil, nil, fmt.Errorf("invalid project name %q", project)
@@ -227,10 +231,11 @@ func deleteProjectNow(ctx context.Context, client *redis.Client, project string,
 		return 0, nil, nil, err
 	}
 	// The last check and the DEL in one script; then the keys that came back.
-	n, left, err := bus.DeleteProjectIfQuiet(ctx, client, project)
-	if err == nil {
+	n, left, err := deleteQuiet(ctx, client, project)
+	if err == nil && len(left) == 0 {
 		// Its [project.<p>] table of config.toml goes with it (quota settings
-		// §2.2): a project deleted keeps no thresholds behind.
+		// §2.2): a project deleted keeps no thresholds behind. Keys that came
+		// back are no clean delete: the table stays (reviewer-codex).
 		if terr := config.RemoveProject(config.Path(os.Getenv), project); terr != nil {
 			return n, kinds, left, fmt.Errorf("%s deleted, but its [project.%s] table in config.toml was not removed: %v", project, project, terr)
 		}
