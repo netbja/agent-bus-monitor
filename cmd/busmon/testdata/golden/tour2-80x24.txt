@@ -9,7 +9,7 @@
 ╭─ A│ agent is woken and reads it. @all reaches every agent; tab completes │ …─╮
 │▶ ♙│ a name.                                                              │le ▲
 │  ♙│                                                                      │   ┃
-│  ♙│   i     the line: @coder please rebase                               │   ▼
+│  ▲│   i     the line: @coder please rebase                               │   ▼
 ╰───│   I ^O  the compose window, several lines; Ctrl+S sends              │───╯
 ╭─  │                                                                      │e ─╮
 │   │ Text without @name is a broadcast nobody reads: busmon asks for a    │   ▲

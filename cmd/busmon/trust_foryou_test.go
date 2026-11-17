@@ -121,7 +121,8 @@ func TestTrustLineThroughThePoll(t *testing.T) {
 		t.Fatalf("trust read for %q: only master shows a prompt", asked)
 	}
 	row := promptRow(t, takeSnapshot(st, time.Now()), "master")
-	if !strings.Contains(row, "Claude Code asks whether you trust /w/repo") || !strings.Contains(row, `choose "Yes, I trust this folder"`) {
+	// reviewer-codex on step 3a: the blocked words first, then what it asks.
+	if !strings.HasPrefix(row, blockedWords+": ") || !strings.Contains(row, "Claude Code asks whether you trust /w/repo") || !strings.Contains(row, `choose "Yes, I trust this folder"`) {
 		t.Fatalf("master's prompt row: %q", row)
 	}
 
@@ -135,7 +136,7 @@ func TestTrustLineThroughThePoll(t *testing.T) {
 	f.observed = map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now, PID: 4242}}
 	st.trustOf = nil
 	pollOnce(context.Background(), f, st, 1)
-	if row := promptRow(t, takeSnapshot(st, time.Now()), "master"); row != "pane prompt" {
+	if row := promptRow(t, takeSnapshot(st, time.Now()), "master"); row != "blocked: waiting for an answer in its terminal" {
 		t.Fatalf("no reader: row %q", row)
 	}
 }

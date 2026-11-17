@@ -94,12 +94,13 @@ func modelDrift(a *agentState) bool {
 		a.model.PID != 0 && a.model.PID == a.pid
 }
 
-// promptWaiting (v0.15 §13): the agent's own client is asking something in
-// its tab (a limit menu, a permission prompt), seen by the dispatcher as a
-// blocked pane, while the agent itself declares neither blocked nor waiting
-// and has no open ask. Only a person can answer it, in that tab: it reads as
-// waiting, beside the declared state, never instead of it.
-func promptWaiting(a *agentState) bool {
+// promptBlocked (v0.15 §13, agent-screen-blocked §3): the agent's own client
+// is asking something in its terminal (a limit menu, a permission prompt),
+// seen by the dispatcher as a blocked terminal ({p}:observed), while the
+// agent itself declares neither blocked nor waiting and has no open ask. Only
+// a person can answer it, there: the state column reads blocked, as a
+// person's decision; the declared state is never rewritten.
+func promptBlocked(a *agentState) bool {
 	return a.obsPrompt && obsFresh(a, a.clock()) && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
 }
 
@@ -122,7 +123,7 @@ func (a *agentState) clock() time.Time {
 
 // waitsForPerson: a declared wait, an open ask or a prompt in its tab.
 func waitsForPerson(a *agentState) bool {
-	return a.openAsk > 0 || a.state == "waiting" && !answered(a) || promptWaiting(a)
+	return a.openAsk > 0 || a.state == "waiting" && !answered(a) || promptBlocked(a)
 }
 
 // popDoneAt is when agent's current episode was declared, if the
@@ -148,12 +149,6 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 	}
 	if _, word, _, _ := stateLook(a); a.held && word != "quota" { // the state column already says quota
 		add("held", RoleAttention, 2, 2)
-	}
-	if promptWaiting(a) {
-		add("prompt", RoleAttention, 1, 0)
-	}
-	if a.host.blocked { // on a holder: the dispatcher saw its client's prompt (spec 4.3a)
-		add("blocked", RoleError, 1, 1)
 	}
 	if a.host.draft { // a line typed in its input, not sent (spec 4.5)
 		add("draft", RoleAttention, 2, 0)
@@ -241,10 +236,13 @@ func stateLook(a *agentState) (glyph, word string, role Role, group int) {
 		return GlyphDown, bus.StateNoTerminal, RoleError, 1
 	}
 	state := a.state
-	if answered(a) && !promptWaiting(a) {
+	if promptBlocked(a) { // its client's question, in its terminal: the person's to answer
+		return GlyphBlocked, "blocked", RoleAttention, 0
+	}
+	if answered(a) {
 		return GlyphIdle, "answered", RoleMuted, 4
 	}
-	if a.openAsk > 0 || promptWaiting(a) { // its open questions, or its client's, make it waiting
+	if a.openAsk > 0 { // its own open questions make it waiting
 		state = "waiting"
 	}
 	if state == "working" || state == "idle" || state == "" {
@@ -577,7 +575,7 @@ func waitingQuestions(m map[string]*agentState) int {
 		switch {
 		case a.openAsk > 0:
 			n += a.openAsk
-		case a.state == "waiting" && !answered(a), promptWaiting(a):
+		case a.state == "waiting" && !answered(a), promptBlocked(a):
 			n++
 		}
 	}

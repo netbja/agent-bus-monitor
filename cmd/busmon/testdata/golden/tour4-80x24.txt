@@ -9,7 +9,7 @@
 ╭─ A│   R      where was I? the recap since your last visit                │ …─╮
 │▶ ♙│   p P    the plan, in a drawer (d shows what is done)                │le ▲
 │  ♙│   f      filter Activity                                             │   ┃
-│  ♙│   + -    Requests: a tracked request's priority; agents take high    │   ▼
+│  ▲│   + -    Requests: a tracked request's priority; agents take high    │   ▼
 ╰───│          first                                                       │───╯
 ╭─  │   F1 ?   help, every key                                             │e ─╮
 │   │   F2 F3  requests, services                                          │   ▲

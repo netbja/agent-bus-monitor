@@ -9,7 +9,7 @@
 ╭─ A│                                                                      │ …─╮
 │▶ ♙│   For you     what needs you: questions, waits, merges               │le ▲
 │  ♙│   Agents      each agent, its state and how fresh it is              │   ┃
-│  ♙│   1 Activity  everything said on the bus, live                       │   ▼
+│  ▲│   1 Activity  everything said on the bus, live                       │   ▼
 ╰───│   2 Board     who owns which task                                    │───╯
 ╭─  │   3 Work      who owes what: you, the team, what comes next, ideas   │e ─╮
 │   │                                                                      │   ▲

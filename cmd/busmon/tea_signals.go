@@ -55,7 +55,7 @@ func (m *Model) ring() bool {
 		seen[n] = true
 		a := m.snap.agents[n]
 		key := "status:" + a.stateAt.String()
-		if promptWaiting(a) { // one ring per blocked episode of its tab
+		if promptBlocked(a) { // one ring per blocked episode of its tab
 			key = "prompt:" + a.obsSince.String()
 		}
 		switch {

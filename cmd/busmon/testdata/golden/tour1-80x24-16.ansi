@@ -9,7 +9,7 @@
 [38;5;8m╭─[m [38;5;6mA[m[38;5;6m│[m                                                                      [38;5;6m│[m[38;5;7m …[m[38;5;8m─╮[m
 [38;5;8m│[m[7;38;5;6m▶ [m[7;38;5;3m♙[m[38;5;6m│[m   [38;5;3mFor you[m     what needs you: questions, waits, merges               [38;5;6m│[m[7mle [m[38;5;8m▲[m
 [38;5;8m│[m  [38;5;3m♙[m[38;5;6m│[m   [38;5;6mAgents[m      each agent, its state and how fresh it is              [38;5;6m│[m   [38;5;8m┃[m
-[38;5;8m│[m  [38;5;3m♙[m[38;5;6m│[m   [38;5;2m1 Activity[m  everything said on the bus, live                       [38;5;6m│[m   [38;5;8m▼[m
+[38;5;8m│[m  [38;5;3m▲[m[38;5;6m│[m   [38;5;2m1 Activity[m  everything said on the bus, live                       [38;5;6m│[m   [38;5;8m▼[m
 [38;5;8m╰───[m[38;5;6m│[m   [38;5;5m2 Board[m     who owns which task                                    [38;5;6m│[m[38;5;8m───╯[m
 [38;5;8m╭─[m [1;7;38;5;2m [m[38;5;6m│[m   [38;5;12m3 Work[m      who owes what: you, the team, what comes next, ideas   [38;5;6m│[m[38;5;7me[m [38;5;8m─╮[m
 [38;5;8m│[m  [38;5;8m [m[38;5;6m│[m                                                                      [38;5;6m│[m[38;5;8m   [m[38;5;8m▲[m

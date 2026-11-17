@@ -129,7 +129,9 @@ func TestHostFactsReadFailure(t *testing.T) {
 	}
 }
 
-// The row says blocked, draft and the skip; the page says what each is.
+// The row says draft and the skip; blocked is the state column's, from the
+// observation (agent-screen-blocked §3), not a second flag from the events.
+// The page says what each is.
 func TestHostFactsOnTheRowAndPage(t *testing.T) {
 	a := &agentState{state: "working", stateAt: hostNow, host: hostFacts{blocked: true, blockedWhy: "Allow Bash?", blockedAt: hostNow.Add(-time.Minute),
 		draft: true, draftSince: hostNow.Add(-3 * time.Minute), skip: "auto-clear skipped — 2 checks running", skipAt: hostNow.Add(-time.Minute)}}
@@ -137,10 +139,13 @@ func TestHostFactsOnTheRowAndPage(t *testing.T) {
 	for _, f := range agentFlags(a, false) {
 		words = append(words, f.Word)
 	}
-	for _, w := range []string{"blocked", "draft", "bg work"} {
+	for _, w := range []string{"draft", "bg work"} {
 		if !strings.Contains(strings.Join(words, ","), w) {
 			t.Fatalf("flags %v lack %q", words, w)
 		}
+	}
+	if strings.Contains(strings.Join(words, ","), "blocked") {
+		t.Fatalf("flags %v repeat blocked", words)
 	}
 	_, body := agentDetail("coder", a, false, nil, nil, hostNow)
 	for _, want := range []string{"Blocked on", "Allow Bash?", "Draft", "unsent", "Background", "auto-clear skipped"} {
@@ -154,9 +159,7 @@ func TestHostFactsOnTheRowAndPage(t *testing.T) {
 			t.Fatalf("an agent without host facts flags %q", f.Word)
 		}
 	}
-	if g := agentGroup(a, false); g != 1 {
-		t.Fatalf("a blocked agent sorts in group %d, want 1", g)
-	}
+
 }
 
 // The watcher writes the facts on the agents busmon knows, and clears them

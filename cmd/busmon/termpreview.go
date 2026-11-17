@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/config"
+	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -39,6 +40,14 @@ func busmonTerms(project string) termReader {
 // termPreviewRows is how many of the screen's last lines the page shows.
 const termPreviewRows = 30
 
+// blockedWords is what busmon says of an agent whose client asks something
+// in its terminal (agent-screen-blocked §3).
+const blockedWords = "blocked: waiting for an answer in its terminal"
+
+// blockedLines is how many of a blocked screen's last non-blank lines the
+// page shows (the person's answer to Q4).
+const blockedLines = 6
+
 // termPreviewEvery: while an agent's page is on top, its terminal is read
 // again this often.
 const termPreviewEvery = time.Second
@@ -52,6 +61,20 @@ type termView struct {
 	// prefix is the attach prefix (attach.prefix), named beside "t attaches"
 	// with its detach (P1-8); "" names none.
 	prefix string
+	// blocked: the agent's client asks something (promptBlocked); set when
+	// the page is drawn, from the snapshot, not by the read.
+	blocked bool
+}
+
+// lastNonBlank is the last n lines of ls that are not blank, in order.
+func lastNonBlank(ls []string, n int) []string {
+	var out []string
+	for i := len(ls) - 1; i >= 0 && len(out) < n; i-- {
+		if strings.TrimSpace(ls[i]) != "" {
+			out = append([]string{ls[i]}, out...)
+		}
+	}
+	return out
 }
 
 // attachPrefix is the attach.prefix agentbus attach will use; "" when the
@@ -100,6 +123,12 @@ func termPreviewLines(v termView, width int) []Line {
 	case v.err != nil:
 		b.seg(RoleAccent, "Screen").text("\n")
 		b.seg(RoleMuted, "not read: "+Preview(v.err.Error())).text("\n\n")
+	case v.found && v.blocked:
+		b.seg(RoleAccent, "Screen").seg(RoleAttention, " "+GlyphNone+" "+blockedWords).seg(RoleMuted, " "+GlyphNone+" t attaches").text("\n")
+		for _, l := range lastNonBlank(v.lines, blockedLines) {
+			b.seg(RoleText, Truncate(Preview(guardian.Redact(l)), max(1, width))).text("\n")
+		}
+		b.text("\n")
 	case v.found:
 		how := " " + GlyphNone + " read-only; t attaches"
 		if v.prefix != "" {

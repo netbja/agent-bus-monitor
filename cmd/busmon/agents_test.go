@@ -262,16 +262,19 @@ func TestBusyFlagIsObservedNotDeclared(t *testing.T) {
 	}
 }
 
-// v0.15 §13: a tab whose client asks something reads waiting, flagged
-// prompt, counted and sorted like a person's decision; the declared state
-// stays, and a declared blocked or waiting is not covered.
-func TestPromptInTheTabReadsWaiting(t *testing.T) {
+// v0.15 §13, agent-screen-blocked §3: a tab whose client asks something
+// reads blocked (one source, the observation; one word), counted and sorted
+// like a person's decision; the declared state stays, and a declared blocked
+// or waiting is not covered. No second flag says it.
+func TestPromptInTheTabReadsBlocked(t *testing.T) {
 	a := &agentState{state: "working", held: true, paused: true, registered: true, obsPrompt: true, obsAt: time.Now()}
-	if _, w, _, g := stateLook(a); w != "waiting" || g != 0 {
-		t.Fatalf("stateLook = %q group %d, want waiting group 0 (it beats quota and paused)", w, g)
+	if g, w, r, grp := stateLook(a); w != "blocked" || grp != 0 || g != GlyphBlocked || r != RoleAttention {
+		t.Fatalf("stateLook = %q %q %v group %d, want blocked, attention, group 0 (it beats quota and paused)", g, w, r, grp)
 	}
-	if fs := agentFlags(a, false); len(fs) == 0 || fs[0].Word != "prompt" {
-		t.Fatalf("flags = %+v, want prompt first", fs)
+	for _, f := range agentFlags(a, false) {
+		if f.Word == "prompt" || f.Word == "blocked" {
+			t.Fatalf("flags %+v repeat what the state column says", agentFlags(a, false))
+		}
 	}
 	if a.state != "working" {
 		t.Fatal("the declared state was rewritten")
@@ -282,12 +285,15 @@ func TestPromptInTheTabReadsWaiting(t *testing.T) {
 	if got := asksFor(map[string]*agentState{"master": a}); len(got) != 1 {
 		t.Fatalf("asksFor = %v, want master (the bell)", got)
 	}
+	if _, w, _, _ := stateLook(&agentState{state: "idle", obsPrompt: true, openAsk: 1, obsAt: time.Now()}); w != "waiting" {
+		t.Errorf("an open ask with a prompt reads %q, want waiting (its own question)", w)
+	}
 	for _, st := range []string{"blocked", "waiting"} {
-		if promptWaiting(&agentState{state: st, obsPrompt: true, obsAt: time.Now()}) {
+		if promptBlocked(&agentState{state: st, obsPrompt: true, obsAt: time.Now()}) {
 			t.Errorf("declared %s is covered by prompt", st)
 		}
 	}
-	if promptWaiting(&agentState{state: "idle", obsPrompt: true, openAsk: 1, obsAt: time.Now()}) {
+	if promptBlocked(&agentState{state: "idle", obsPrompt: true, openAsk: 1, obsAt: time.Now()}) {
 		t.Error("an open ask is covered by prompt")
 	}
 }
@@ -295,7 +301,7 @@ func TestPromptInTheTabReadsWaiting(t *testing.T) {
 // A prompt read before the reads started failing ends with its reading's age.
 func TestPromptAgesOutWithoutNewReads(t *testing.T) {
 	old := &agentState{state: "idle", obsPrompt: true, obsAt: time.Now().Add(-3 * time.Minute)}
-	if promptWaiting(old) {
+	if promptBlocked(old) {
 		t.Fatal("a 3-minute-old blocked reading still reads waiting")
 	}
 }

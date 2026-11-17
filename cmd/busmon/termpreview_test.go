@@ -91,6 +91,27 @@ func TestTermPreviewLinesAreSanitised(t *testing.T) {
 	}
 }
 
+// agent-screen-blocked §3: blocked, the Screen section says so and keeps
+// the screen's last 6 non-blank lines, a line with a credential shape
+// replaced whole; the text is read live and held in memory only.
+func TestTermPreviewWhenBlocked(t *testing.T) {
+	lines := []string{"old 1", "old 2", "old 3", "Allow this command?", "export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789", "", "❯ 1. Yes", "  2. No", "  3. No, and tell Claude", "Esc to cancel", "", ""}
+	got := plainOf(termPreviewLines(termView{found: true, lines: lines, blocked: true}, 80))
+	for _, want := range []string{"blocked: waiting for an answer in its terminal", "❯ 1. Yes", "Esc to cancel", "Allow this command?"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("lacks %q:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"old 1", "old 2", "old 3", "ghp_abcdef"} {
+		if strings.Contains(got, not) {
+			t.Fatalf("shows %q:\n%s", not, got)
+		}
+	}
+	if plain := plainOf(termPreviewLines(termView{found: true, lines: lines}, 80)); !strings.Contains(plain, "old 1") || strings.Contains(plain, "waiting for an answer") {
+		t.Fatalf("not blocked: the whole screen, no blocked words:\n%s", plain)
+	}
+}
+
 // t runs agentbus attach for the agent, on the project, through the
 // person's terminal; nothing else is in the argv.
 func TestAttachCommandArgv(t *testing.T) {
@@ -150,6 +171,35 @@ func TestAgentPageShowsItsTerminal(t *testing.T) {
 	m.pop()
 	if m.termRead(msg.serial) != nil {
 		t.Fatal("a closed page is still read")
+	}
+}
+
+// The page of an agent whose client asks something (the fixture's sentinel,
+// an observed prompt) says blocked over its live screen's last lines.
+func TestBlockedAgentPageShowsTheWordsAndItsScreen(t *testing.T) {
+	m := fixtureShell(t, 140, 40)
+	if !promptBlocked(m.snap.agents["sentinel"]) {
+		t.Fatal("the fixture's sentinel is not blocked on a prompt")
+	}
+	h := fake.New()
+	tm := startTerm(t, h, m.cfg.project, "sentinel")
+	h.SetScreen(tm.ID, "Allow this command?\n❯ 1. Yes")
+	m.cfg.terms = h
+	msg, ok := m.pushAgent("sentinel")().(termViewMsg)
+	if !ok || !msg.view.found {
+		t.Fatalf("read %+v", msg)
+	}
+	next, _ := m.Update(msg)
+	m = next.(Model)
+	screen := m.grid().plain()
+	headed := false
+	for _, l := range strings.Split(screen, "\n") {
+		if strings.Contains(l, "Screen") && strings.Contains(l, blockedWords) {
+			headed = true
+		}
+	}
+	if !headed || !strings.Contains(screen, "Allow this command?") {
+		t.Fatalf("the blocked page's Screen section is not headed blocked:\n%s", screen)
 	}
 }
 

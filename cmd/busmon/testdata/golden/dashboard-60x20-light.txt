@@ -4,7 +4,7 @@
 ╭─ For you ───────────────────────────────────── 4 decide ─╮
 │  ● answer master    review lot 1? (2 questions)        4m│
 │  ♙ answer foureyes  need a decision on the width rule  6m│
-│  ♙ answer sentinel  pane prompt                        1m│
+│  ♙ answer sentinel  blocked: waiting for an answer in… 1m│
 │  ◆ review coder     by charlie  look at b1               │
 │                                                          │
 │                                                          │
