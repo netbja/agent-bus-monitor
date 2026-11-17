@@ -142,6 +142,13 @@ func TestLiveProjectReadsTheBus(t *testing.T) {
 	if done, err := p.Drained(ctx, "coder", id); err != nil || done {
 		t.Fatalf("drained before any read: %v %v", done, err)
 	}
+	// Read but not acknowledged (a client that died mid-turn): not drained (foureyes).
+	if _, err := p.r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "coder", Consumer: "h", Streams: []string{bus.StreamKey(p.project, "cmd"), ">"}, Count: 10}).Result(); err != nil {
+		t.Fatal(err)
+	}
+	if done, err := p.Drained(ctx, "coder", id); err != nil || done {
+		t.Fatalf("drained while still pending: %v %v", done, err)
+	}
 	if code := runDrain(ctx, b, "coder", "h", io.Discard, false); code != 0 {
 		t.Fatalf("drain %d", code)
 	}
