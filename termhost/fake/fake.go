@@ -224,13 +224,13 @@ func (h *Host) SetPersonActive(id termhost.TermID, v bool) {
 	h.set(id, func(t *term) { t.personActive = v })
 }
 
-// SetScreen replaces the terminal's screen lines.
 // SetScreenErr makes Screen answer err (nil: the screen again), as a holder
 // that does not vouch for a screen (termhost.ErrScreenUntrusted).
 func (h *Host) SetScreenErr(id termhost.TermID, err error) {
 	h.set(id, func(t *term) { t.screenErr = err })
 }
 
+// SetScreen replaces the terminal's screen lines.
 func (h *Host) SetScreen(id termhost.TermID, lines ...string) {
 	h.set(id, func(t *term) { t.screen = slices.Clone(lines) })
 }

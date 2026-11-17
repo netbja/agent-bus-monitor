@@ -82,6 +82,9 @@ func (t *terminal) paint(v *viewer) {
 			v.repaint, v.painting, v.pend = false, true, nil
 			v.filter = outputFilter{osc52: v.filter.osc52}
 			t.mu.Unlock()
+			if t.afterPaintRegister != nil {
+				t.afterPaintRegister()
+			}
 			var b []byte
 			err := t.run(func(s screen.Screen) { b = s.Render() })
 			<-t.emu
@@ -138,7 +141,7 @@ func (t *terminal) paintNotice(v *viewer, st string) {
 
 // noticePaint is the first paint of a screen the holder no longer vouches for.
 func noticePaint(st string) []byte {
-	return []byte("\x1b[H\x1b[2J[agentbus: this terminal's screen is " + st + "; the live output follows. Replace it: agentbus reload <agent>]\r\n")
+	return []byte("\x1b[H\x1b[2J[agentbus: this terminal's screen is " + st + "; the live output follows. Replace it with agentbus reload <agent> once the agent is idle]\r\n")
 }
 
 func (t *terminal) removeViewer(v *viewer) {

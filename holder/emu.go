@@ -68,6 +68,23 @@ type emuState struct {
 	// afterViewCheck runs between view's caught-up check and its read
 	// (tests: output arriving in that window).
 	afterViewCheck func()
+	// afterPaintRegister runs once paint registered its viewer, before the
+	// render (tests: output arriving while it renders).
+	afterPaintRegister func()
+
+	// The static answers the read loop found in output the emulator has
+	// not answered yet (foureyes): pending while the screen is trusted,
+	// each with the offset its query ends at; owed (written once, by
+	// payOwed) when the screen is latched before the emulator answered.
+	pending  []pendingAnswer
+	owed     []byte
+	lastSeen int64 // parsedSeq when the previous answer pass began
+}
+
+// pendingAnswer is a static answer and the read offset its query ends at.
+type pendingAnswer struct {
+	b   []byte
+	end int64
 }
 
 func newEmuState(after time.Duration) emuState {
@@ -84,6 +101,13 @@ func (t *terminal) latch(state, why string) {
 	}
 	t.latched, t.gen = state, t.gen+1
 	t.queue, t.queued = nil, 0
+	// The queries the emulator never answered (a hang before this latch, a
+	// gap that dropped them): answered now, once, by the static answers
+	// (§7.1 item 6; foureyes: the client would wait forever).
+	for _, p := range t.pending {
+		t.owed = append(t.owed, p.b...)
+	}
+	t.pending = nil
 	// The offset only: terminal output may hold secrets (§7.1 item 7).
 	fmt.Fprintf(os.Stderr, "holder: terminal %s (%s): screen %s at byte %d: %s\n", t.id, t.role, state, t.parsedSeq, why)
 }
@@ -112,6 +136,11 @@ func (t *terminal) took(chunk []byte) {
 // queueResize orders a resize after the output already read. Called with
 // t.mu held.
 func (t *terminal) queueResize(cols, rows int) {
+	select {
+	case <-t.outDone: // the emulator goroutine has ended: nothing would take it (foureyes)
+		return
+	default:
+	}
 	if t.latched != "" {
 		return
 	}
@@ -351,4 +380,48 @@ func queryPrefix(b []byte) bool {
 		}
 	}
 	return false
+}
+
+// owe records the static answers found in the chunk just read (its query
+// ending at readSeq): owed at once on a latched screen, else pending until
+// the emulator has answered it. Called with t.mu held, after took.
+func (t *terminal) owe(answers []byte) {
+	if len(answers) == 0 {
+		return
+	}
+	if t.latched != "" {
+		t.owed = append(t.owed, answers...)
+		return
+	}
+	t.pending = append(t.pending, pendingAnswer{b: answers, end: t.readSeq})
+}
+
+// answered drops the pending answers the emulator has given: those whose
+// query was parsed before the previous answer pass began (the emulator
+// produces its replies asynchronously, so one pass may come before them;
+// the next one has them). Called with t.mu held, parsed being parsedSeq
+// when this pass began.
+func (t *terminal) answered(parsed int64) {
+	n := 0
+	for _, p := range t.pending {
+		if p.end > t.lastSeen {
+			t.pending[n] = p
+			n++
+		}
+	}
+	t.pending, t.lastSeen = t.pending[:n], parsed
+}
+
+// payOwed writes the owed static answers to the program, once, under the
+// input lock.
+func (t *terminal) payOwed() {
+	t.mu.Lock()
+	b := t.owed
+	t.owed = nil
+	t.mu.Unlock()
+	if len(b) > 0 {
+		t.inMu.Lock()
+		_, _ = t.pty.Write(b)
+		t.inMu.Unlock()
+	}
 }

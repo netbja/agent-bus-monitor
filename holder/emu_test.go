@@ -2,6 +2,7 @@ package holder
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/screen"
+	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // faultScreen is the real emulator with injected faults (holder hardening
@@ -237,7 +239,7 @@ func TestEmuStuckIsContained(t *testing.T) {
 		"hanger": `stty raw -echo; printf 'ready\n'; sleep 0.4; printf 'HANG'; sleep 1; ` +
 			`printf '\033[c'; dd bs=1 count=` + strconv.Itoa(len(answerDA1)) + ` 2>/dev/null > ` + dir + `/da; ` +
 			`printf '\033[5n'; dd bs=1 count=` + strconv.Itoa(len(answerDSR)) + ` 2>/dev/null > ` + dir + `/dsr; ` +
-			`printf '\033[6n'; timeout 1 dd bs=1 count=1 2>/dev/null > ` + dir + `/cpr; ` +
+			`printf '\033[6n'; timeout --foreground 1 dd bs=1 count=1 2>/dev/null > ` + dir + `/cpr; ` +
 			`echo end > ` + dir + `/end; exec sleep 30`,
 	}, func(c *Config) { c.stuckAfter = 300 * time.Millisecond })
 	cl := dial(t, fh.sock)
@@ -343,5 +345,134 @@ func TestViewDiscardsAReadOvertakenByOutput(t *testing.T) {
 	t.Cleanup(func() { term.mu.Lock(); term.latched = ScreenInvalid; term.mu.Unlock(); term.kickEmu() })
 	if st := term.view(time.Second, func(screen.Screen) { reads++ }); st != ScreenOK || reads != 2 {
 		t.Fatalf("caught up: %s after %d read(s)", st, reads)
+	}
+}
+
+// queryProbe is a program that asks a DA right after mark, reads exactly
+// its answer into dir/da, then waits 0.5 s for any second answer
+// (dir/extra), and ends (dir/end).
+func queryProbe(dir, before string) string {
+	return `stty raw -echo; printf 'ready\n'; sleep 0.4; ` + before +
+		`printf '\033[c'; dd bs=1 count=` + strconv.Itoa(len(answerDA1)) + ` 2>/dev/null > ` + dir + `/da; ` +
+		`timeout --foreground 0.5 dd bs=1 count=1 2>/dev/null > ` + dir + `/extra; echo end > ` + dir + `/end; exec sleep 30`
+}
+
+// answeredOnce: the probe ended with the DA answered exactly once.
+func answeredOnce(t *testing.T, dir string) {
+	t.Helper()
+	if !until(10*time.Second, func() bool { _, err := os.Stat(filepath.Join(dir, "end")); return err == nil }) {
+		t.Fatal("the program froze waiting for its DA")
+	}
+	read := func(n string) string { b, _ := os.ReadFile(filepath.Join(dir, n)); return string(b) }
+	if read("da") != answerDA1 || read("extra") != "" {
+		t.Fatalf("da %q, then %q", read("da"), read("extra"))
+	}
+}
+
+// foureyes: a DA sent after the emulator hung, before the stuck latch, is
+// answered once the latch comes (its static answer was pending), once.
+func TestEmuQueryInTheHangWindowIsAnswered(t *testing.T) {
+	dir := t.TempDir()
+	fh := newFaultHolder(t, map[string]string{"prober": queryProbe(dir, `printf 'HANG'; sleep 0.05; `)},
+		func(c *Config) { c.stuckAfter = 300 * time.Millisecond })
+	cl := dial(t, fh.sock)
+	a := startRole(t, cl, "prober")
+	waitScreen(t, cl, a.ID, "ready")
+	fh.screen(a.ID).set(func(f *faultScreen) { f.hangOn = "HANG" })
+	answeredOnce(t, dir)
+	if st, _ := stateOf(t, cl, a.ID); st != ScreenStuck {
+		t.Fatalf("state %s", st)
+	}
+}
+
+// foureyes: a DA queued for a paused emulator, then dropped with the queue
+// by a gap's latch, is answered at the latch, once.
+func TestEmuQueryInAGapIsAnswered(t *testing.T) {
+	dir := t.TempDir()
+	fh := newFaultHolder(t, map[string]string{"prober": queryProbe(dir, `printf '\033[c'; head -c 6000000 /dev/zero | tr '\0' x; `)}, nil)
+	// The probe asks twice: the first DA before the flood (dropped by the
+	// gap), read by its dd after the flood; the second is answered at once.
+	cl := dial(t, fh.sock)
+	a := startRole(t, cl, "prober")
+	waitScreen(t, cl, a.ID, "ready")
+	gate := make(chan struct{})
+	t.Cleanup(func() { close(gate) })
+	fh.screen(a.ID).set(func(f *faultScreen) { f.gate = gate })
+	if !until(10*time.Second, func() bool { _, err := os.Stat(filepath.Join(dir, "end")); return err == nil }) {
+		t.Fatal("the program froze waiting for its DA")
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "da"))
+	extra, _ := os.ReadFile(filepath.Join(dir, "extra"))
+	// Two queries, two answers: the dd reads the first, the second waits in
+	// the input (extra reads its first byte).
+	if string(b) != answerDA1 || string(extra) != answerDA1[:1] {
+		t.Fatalf("da %q, then %q", b, extra)
+	}
+	if st, _ := stateOf(t, cl, a.ID); st != ScreenInvalid {
+		t.Fatalf("state %s", st)
+	}
+}
+
+// foureyes: a trusted emulator answers a DA itself; the scanner adds no
+// second answer.
+func TestEmuHealthyAnswersOnce(t *testing.T) {
+	dir := t.TempDir()
+	fh := newFaultHolder(t, map[string]string{"prober": queryProbe(dir, "")}, nil)
+	cl := dial(t, fh.sock)
+	a := startRole(t, cl, "prober")
+	answeredOnce(t, dir)
+	if st, _ := stateOf(t, cl, a.ID); st != ScreenOK {
+		t.Fatalf("state %s", st)
+	}
+}
+
+// foureyes: output read while a viewer's paint renders reaches it after
+// the paint, never before.
+func TestPaintKeepsOutputBehindIt(t *testing.T) {
+	v := &viewer{out: make(chan []byte, 8), repaint: true}
+	term := &terminal{viewers: map[*viewer]bool{v: true}, scr: screen.New(20, 5, 10), emuState: newEmuState(0)}
+	term.afterPaintRegister = func() {
+		term.mu.Lock()
+		term.fanOut([]byte("after"))
+		term.mu.Unlock()
+	}
+	term.paint(v)
+	if len(v.out) != 2 {
+		t.Fatalf("%d chunks", len(v.out))
+	}
+	if first, second := string(<-v.out), string(<-v.out); !strings.Contains(first, "\x1b[") || second != "after" {
+		t.Fatalf("order %q, %q", first, second)
+	}
+}
+
+// foureyes: a viewer's resize reaches the emulator, in order with the
+// output.
+func TestResizeReachesTheEmulator(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Close(); w.Close() })
+	term := &terminal{pty: w, scr: screen.New(20, 5, 10), cols: 20, rows: 5, emuState: newEmuState(0)}
+	go term.emuLoop()
+	t.Cleanup(func() { term.mu.Lock(); term.latched = ScreenInvalid; term.mu.Unlock(); term.kickEmu() })
+	term.mu.Lock()
+	term.resize(40, 5)
+	term.took([]byte(strings.Repeat("x", 25)))
+	term.mu.Unlock()
+	var snap screen.Snapshot
+	if st := term.view(time.Second, func(s screen.Screen) { snap = s.Snapshot(0) }); st != ScreenOK {
+		t.Fatalf("state %s", st)
+	}
+	if snap.Cols != 40 || !strings.Contains(snap.Plain(), strings.Repeat("x", 25)) {
+		t.Fatalf("cols %d:\n%s", snap.Cols, snap.Plain())
+	}
+}
+
+// foureyes: the holder's code screen reaches the dispatcher as
+// termhost.ErrScreenUntrusted.
+func TestMapErrScreen(t *testing.T) {
+	if err := mapErr(&RemoteError{Code: CodeScreen, Msg: "terminal t1's screen is stuck"}); !errors.Is(err, termhost.ErrScreenUntrusted) {
+		t.Fatalf("%v", err)
 	}
 }

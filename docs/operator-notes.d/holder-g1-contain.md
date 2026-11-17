@@ -12,9 +12,14 @@
     `ScreenReq` refuses anything but ok with code `screen` (`termhost.ErrScreenUntrusted`). The
     dispatcher then reads an inspection error and waits: no wake, `/clear` or submit.
   - Nothing restores `ok` in place: the terminal is replaced (reload).
-  - While the screen is latched, the read loop answers DA1, DA2 and DSR 5 with x/vt's own strings,
-    never a cursor position.
-  - An untrusted screen's viewer is painted a notice, then the live output.
+  - The read loop finds DA1, DA2 and DSR 5 queries in every chunk:
+    - while the screen is trusted, each static answer stays pending until the emulator has parsed
+      past it and an answer pass collected its replies;
+    - a latch writes the pending ones once (a query in the hang window before the stuck latch, or
+      dropped by a gap: foureyes);
+    - once latched, it answers at once, with x/vt's own strings, never a cursor position.
+  - An untrusted screen's viewer is painted a notice (replace it with `agentbus reload` once the agent
+    is idle), then the live output.
   - Part 2 brings health `holder` on invalid/stuck and `agentbus reload --replace-broken`.
   - `go test -race ./holder` passes. `./screen` fails on x/vt's known `Emulator.Close`/`Read` race,
     on dev too; the holder never calls `Close`, so the emulator goroutine is not in that path.
