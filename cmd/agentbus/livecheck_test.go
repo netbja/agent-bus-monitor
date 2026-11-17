@@ -299,13 +299,21 @@ func TestLiveCheckWaitsForTheNewRecord(t *testing.T) {
 	}
 }
 
-// liveStaleRecord relaunches with the old record's time.
-type liveStaleRecord struct{ *liveFake }
+// liveStaleRecord keeps each record's pre-crash time, though that time is
+// after the crash on this host's clock (a broker whose clock is ahead:
+// reviewer-codex): only the record's own clock compares.
+type liveStaleRecord struct {
+	*liveFake
+	at time.Time
+}
 
 func (s *liveStaleRecord) Agents(ctx context.Context) (map[string]liveAgent, error) {
 	as, err := s.liveFake.Agents(ctx)
+	if s.at.IsZero() {
+		s.at = time.Now().Add(time.Hour)
+	}
 	for r, a := range as {
-		a.At = time.Time{}
+		a.At = s.at
 		as[r] = a
 	}
 	return as, err

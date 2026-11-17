@@ -225,8 +225,9 @@ wrapper for the person:
 - **On what:** a disposable project of its own (`lc` + 6 hex), never the person's team: master
   and coder, `agentbus up --no-missions --roles master,coder`, self-repair on, in a working
   folder of the check's (`$XDG_STATE_HOME/agentbus/.livecheck/work`, kept, so a real client's
-  trust of it is given once). At the end (also on a failure or Ctrl-C) its services and holder,
-  broker keys, template and state are removed; `--keep` leaves it running.
+  trust of it is given once). At the end (also on a failure or Ctrl-C) its services and holder
+  are removed, then, only once they are gone, its broker keys, template and state (a unit left
+  installed keeps what it runs on, and the check says how to finish); `--keep` leaves it running.
 - **The crash:** SIGKILL of the holder's own process, which its `Describe` now names (pid and
   start time; the kill is refused when the pid no longer has that start time). The manager sees a
   crash and restarts it (`Restart=on-failure`, `KeepAlive`, the supervisor's policy).
@@ -234,8 +235,9 @@ wrapper for the person:
   ready; health `holder` ok; each agent woken (a directive, drained); the crash; a new holder
   process answers; health `holder` warns that it restarted; each agent relaunched by
   self-repair, master first, one per `ProjectPause` (2 minutes, the person's answer to Q7),
-  resumed on its recorded session (a new proved process, the resume record rewritten after
-  the crash with the same session, and with fake clients the screen saying so), no `failed`
+  resumed on its recorded session (a new proved process, the resume record rewritten with the
+  same session, newer than the one before the crash on the broker's own clock, and with fake
+  clients the screen saying so), no `failed`
   in its swap ledger; each woken again; health `holder` ok again.
 - **`--clients=fake`** (the default): `agentbus fake-client` is `claude` on the project's PATH,
   so the launcher, its preflight and bind, the hooks of `--settings`, the holder, the dispatcher

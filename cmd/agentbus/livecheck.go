@@ -32,9 +32,10 @@ import (
 )
 
 // liveAgent is one role as the bus says it: its proved process (0: none),
-// its recorded resume session and when that record was written (a new
-// process's SessionStart rewrites it: a relaunch resumed its session when
-// the record is newer than the crash and names the same session).
+// its recorded resume session and when that record was written, on the
+// broker's clock (a new process's SessionStart rewrites it: a relaunch
+// resumed its session when the record is newer than the one before the
+// crash and names the same session).
 type liveAgent struct {
 	PID     int
 	Session string
@@ -282,7 +283,7 @@ func liveRound(ctx context.Context, w liveWorld, o liveOpts, roles []string, out
 			switch {
 			case a.PID == 0 || a.PID == before[r].PID:
 				return false, "its new process not proved yet", nil
-			case a.At.Before(t0):
+			case !a.At.After(before[r].At): // both on the record's clock (the broker's), never this host's
 				return false, "its new process has not recorded its session yet", nil
 			case a.Session != before[r].Session:
 				return false, "", liveFailf("on session %s, not its recorded %s", a.Session, before[r].Session)

@@ -171,6 +171,42 @@ func TestLiveProjectReadsTheBus(t *testing.T) {
 	}
 }
 
+// A service remove that fails leaves everything else: the units it left
+// still need the project's keys, template and state (reviewer-codex); Down
+// says how to finish.
+func TestLiveProjectDownKeepsTheProjectWhenItsServicesStay(t *testing.T) {
+	p, _, _ := liveTestProject(t, "fake")
+	ctx := context.Background()
+	if err := p.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+	tpl := filepath.Join(rolecfg.ProjectsDir(p.getenv), p.project+".toml")
+	os.MkdirAll(filepath.Dir(tpl), 0o700)
+	os.WriteFile(tpl, []byte("x"), 0o600)
+	if _, err := p.b.Cmd(ctx, "master", "coder", bus.CmdDirective, "", "x"); err != nil {
+		t.Fatal(err)
+	}
+	p.run = func(context.Context, []string, []string, io.Writer) error { return errors.New("exit status 1") }
+	err := p.Down(ctx)
+	if err == nil || !strings.Contains(err.Error(), "agentbus --project "+p.project+" service remove") {
+		t.Fatalf("%v", err)
+	}
+	for _, f := range []string{tpl, p.dir} {
+		if _, err := os.Stat(f); err != nil {
+			t.Fatalf("%s removed: %v", f, err)
+		}
+	}
+	r, _ := bus.Connect("")
+	defer r.Close()
+	if keys, _ := r.Keys(ctx, p.project+":*").Result(); len(keys) == 0 {
+		t.Fatal("broker keys removed")
+	}
+	p.run = func(context.Context, []string, []string, io.Writer) error { return nil }
+	if err := p.Down(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Down removes what up made and what the check wrote; the working folder
 // stays.
 func TestLiveProjectDown(t *testing.T) {

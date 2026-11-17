@@ -183,8 +183,9 @@ func (p *liveProject) open() error {
 }
 
 // Down removes the project: its services and holder (which ends its
-// agents), its broker keys, its template, its state and the check's files;
-// the working folder stays (a real client's trust of it is kept).
+// agents), then, only once they are gone, its broker keys, its template,
+// its state and the check's files; the working folder stays (a real
+// client's trust of it is kept).
 func (p *liveProject) Down(ctx context.Context) error {
 	var errs []error
 	log, err := os.OpenFile(filepath.Join(p.dir, "down.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -196,8 +197,12 @@ func (p *liveProject) Down(ctx context.Context) error {
 		out = log
 		defer log.Close()
 	}
+	// Its services first: while a unit stays installed (a holder that would
+	// not stop), its keys, template and state are what it runs on, so
+	// nothing else is removed (reviewer-codex).
 	if err := p.run(ctx, []string{p.exe, "--project", p.project, "service", "remove"}, p.environ, out); err != nil {
-		errs = append(errs, fmt.Errorf("service remove: %v", err))
+		return fmt.Errorf("its services were not all removed (%v; %s): the project is left whole; finish with agentbus --project %s service remove, then busmon --delete %s",
+			err, filepath.Join(p.dir, "down.log"), p.project, p.project)
 	}
 	if p.r == nil {
 		if r, err := p.connect(); err == nil {
