@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 func newHolderNoticeBus(t *testing.T) *bus.Bus {
@@ -134,5 +139,34 @@ func TestHolderDownNoticeIsNoSecondNotifierLine(t *testing.T) {
 	evs := notifyEvents(f, nil, now)
 	if len(evs) != 1 || evs[0].Kind != "fail" {
 		t.Fatalf("events %+v", evs)
+	}
+}
+
+// foureyes: the dispatch service's own health config carries the notice,
+// so dropping it from realHealthConfig fails here, not silently in
+// production: its hook, given a stored holder fail, rings the person.
+func TestRealHealthConfigRingsTheHolderDown(t *testing.T) {
+	b := newHolderNoticeBus(t)
+	home := t.TempDir()
+	for k, v := range map[string]string{"HOME": home, "XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"XDG_STATE_HOME": filepath.Join(home, ".state"), "XDG_DATA_HOME": filepath.Join(home, ".data"),
+		config.EnvName("services.manager"): "none"} {
+		t.Setenv(k, v)
+	}
+	paths, err := service.PathsFrom(os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	master := "master"
+	cfg := realHealthConfig(b, nil, paths, dispatch.ClearConfig{}, &master)
+	if cfg.HolderNotify == nil {
+		t.Fatal("the dispatch service's health config has no holder notice")
+	}
+	fail := putHolder(t, b, health.Fail, "the holder service of build v1 is installed and no holder answers")
+	if err := cfg.HolderNotify(context.Background(), "hn-holder", fail); err != nil {
+		t.Fatal(err)
+	}
+	if got := personNoticesOf(t, b); len(got) != 1 || !strings.HasPrefix(got[0], holderNoticePrefix) {
+		t.Fatalf("notices %q", got)
 	}
 }
