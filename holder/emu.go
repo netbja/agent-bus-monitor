@@ -65,6 +65,9 @@ type emuState struct {
 	gen        int    // raised when the screen's state is latched
 	stuckAfter time.Duration
 	scan       queryScan // the read loop's own (read loop only)
+	// afterViewCheck runs between view's caught-up check and its read
+	// (tests: output arriving in that window).
+	afterViewCheck func()
 }
 
 func newEmuState(after time.Duration) emuState {
@@ -236,9 +239,11 @@ func (t *terminal) screenState() string {
 }
 
 // view calls read on the emulator only when the screen is caught up: the
-// emulator's lock held, and at that instant everything read has been
-// parsed (§7.1 item 5). It waits up to wait for that; the state it returns
-// is ScreenOK when read ran, else why not (lagging, invalid, stuck).
+// emulator's lock held, everything read parsed before the read, and nothing
+// more read by the time it ends (§7.1 item 5; else the read is discarded and
+// tried again). It waits up to wait for that; the state it returns is
+// ScreenOK only for a read that held, else why not (lagging, invalid, stuck):
+// the caller then never uses what read saw.
 func (t *terminal) view(wait time.Duration, read func(screen.Screen)) string {
 	deadline := time.Now().Add(wait)
 	for {
@@ -258,18 +263,31 @@ func (t *terminal) view(wait time.Duration, read func(screen.Screen)) string {
 			return st
 		}
 		t.mu.Lock()
-		st := t.screenState()
+		st, seq := t.screenState(), t.readSeq
 		t.mu.Unlock()
 		if st == ScreenOK {
-			err := t.run(read)
-			if err != nil {
-				t.mu.Lock()
-				t.latch(ScreenInvalid, err.Error())
-				t.mu.Unlock()
-				st = ScreenInvalid
+			if t.afterViewCheck != nil {
+				t.afterViewCheck()
 			}
+			err := t.run(read)
+			t.mu.Lock()
+			if err != nil {
+				t.latch(ScreenInvalid, err.Error())
+			}
+			// The read loop runs on while the emulator is read: output it
+			// took meanwhile is not in this snapshot, so it is discarded
+			// and the read tried again (reviewer-codex).
+			st = t.screenState()
+			if st == ScreenOK && t.readSeq != seq {
+				st = ScreenLagging
+			}
+			t.mu.Unlock()
 			<-t.emu
-			return st
+			if st != ScreenLagging || !time.Now().Before(deadline) {
+				return st
+			}
+			time.Sleep(5 * time.Millisecond)
+			continue
 		}
 		<-t.emu
 		if st != ScreenLagging || !time.Now().Before(deadline) {

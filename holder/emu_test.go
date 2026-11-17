@@ -321,3 +321,27 @@ func until(d time.Duration, cond func() bool) bool {
 	}
 	return cond()
 }
+
+// reviewer-codex: output the read loop takes while view reads the emulator
+// is not in that snapshot, so view never calls it ok: it discards the read
+// and tries again, and with the emulator still behind answers lagging.
+func TestViewDiscardsAReadOvertakenByOutput(t *testing.T) {
+	term := &terminal{scr: screen.New(20, 5, 10), emuState: newEmuState(0)}
+	reads := 0
+	term.afterViewCheck = func() {
+		if reads == 0 {
+			term.mu.Lock()
+			term.took([]byte("> ready")) // the read loop, between the check and the read
+			term.mu.Unlock()
+		}
+	}
+	st := term.view(50*time.Millisecond, func(screen.Screen) { reads++ })
+	if st != ScreenLagging || reads != 1 {
+		t.Fatalf("state %s after %d read(s): an overtaken read was called ok", st, reads)
+	}
+	go term.emuLoop() // the emulator catches up: the next read holds
+	t.Cleanup(func() { term.mu.Lock(); term.latched = ScreenInvalid; term.mu.Unlock(); term.kickEmu() })
+	if st := term.view(time.Second, func(screen.Screen) { reads++ }); st != ScreenOK || reads != 2 {
+		t.Fatalf("caught up: %s after %d read(s)", st, reads)
+	}
+}
