@@ -182,6 +182,15 @@ func main() {
 		}
 		os.Exit(runAttachCmd(project, args[1:], os.Stdout, os.Stderr))
 	}
+	// screen reads an agent's screen from the project's holders, read-only
+	// (agent-screen-blocked §2); no broker.
+	if len(args) >= 1 && args[0] == "screen" {
+		if !bus.ValidName(project) {
+			fmt.Fprintln(os.Stderr, "error: project required: agentbus --project <p> screen <agent>")
+			os.Exit(2)
+		}
+		os.Exit(runScreenCmd(project, os.Getenv, args[1:], os.Stdout, os.Stderr))
+	}
 	// holder is what a holder unit runs (herdr exit, spec 4.4): it loads the
 	// project's env file and serves the project's terminals; no broker.
 	if len(args) >= 2 && args[0] == "holder" && args[1] == "drain" { // the person's command, not the server
