@@ -65,6 +65,10 @@ func serviceLogin(d serviceCmdDeps, stdout, stderr io.Writer) int {
 				continue
 			}
 			fmt.Fprintf(stdout, "%s: starts at login\n", p)
+			if err := holderAtLogin(d.Manager, p, d.HolderBuild, true, stdout); err != nil {
+				fmt.Fprintf(stderr, "%s: holder: %v\n", p, err)
+				code = 1
+			}
 		case was:
 			if err := ls.Disable(p); err != nil {
 				fmt.Fprintf(stderr, "%s: %v\n", p, err)
@@ -72,9 +76,48 @@ func serviceLogin(d serviceCmdDeps, stdout, stderr io.Writer) int {
 				continue
 			}
 			fmt.Fprintf(stdout, "%s: no longer starts at login\n", p)
+			if err := holderAtLogin(d.Manager, p, d.HolderBuild, false, stdout); err != nil {
+				fmt.Fprintf(stderr, "%s: holder: %v\n", p, err)
+				code = 1
+			}
 		default:
 			fmt.Fprintf(stdout, "%s: does not start at login\n", p)
 		}
 	}
 	return code
+}
+
+// holderAtLogin is H1 (holder hardening §3): on, the current build's holder
+// unit of project is enabled with the other services and every other build
+// disabled (an older build drains, never started again); off, every holder
+// of the project is disabled. Nothing is started or stopped. A manager
+// without holders, or without a login backend for them, does nothing; on,
+// with this build's holder not installed for the project, it is said.
+func holderAtLogin(m service.Manager, project string, build func() string, on bool, stdout io.Writer) error {
+	hl, ok := m.(service.HolderLoginStart)
+	hm, isHM := m.(service.HolderManager)
+	if !ok || !isHM {
+		return nil
+	}
+	if !on {
+		return hl.DisableHolders(project)
+	}
+	if build == nil {
+		return nil
+	}
+	raw := build()
+	key := service.BuildKey(raw)
+	units, err := hm.HolderUnits(project)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(units, func(u service.HolderUnit) bool { return u.Key == key }) {
+		fmt.Fprintf(stdout, "%s: no holder of this build (%s) installed: agentbus up %s installs it, then it starts at login too\n", project, raw, project)
+		return nil
+	}
+	if err := hl.EnableHolder(project, key); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "holder: starts at login (build %s; an older build is not started again)\n", raw)
+	return nil
 }

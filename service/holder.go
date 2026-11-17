@@ -580,7 +580,7 @@ func (m Launchd) RemoveHolder(project, key string) error {
 	if err := os.Remove(m.holderPath(project, key)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return nil
+	return m.removeHolderAgent(project, key) // its login copy goes with it (H1)
 }
 
 func (m Launchd) HolderUnits(project string) ([]HolderUnit, error) {
