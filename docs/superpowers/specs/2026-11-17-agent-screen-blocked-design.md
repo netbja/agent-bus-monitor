@@ -164,8 +164,9 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
   - `old build, hosts no agent`: a holder of a build other than the dispatcher's, with no live
     terminal. No command stops one holder today:
     `down` stops them all, and `service gc` removes only holders that no longer run. Step 4 adds
-    `agentbus -p <p> service stop holder <build>`, refused while that holder has a live terminal
-    and for the current build. It differs from `service restart holder --kill-agents`, which kills
+    `agentbus -p <p> service stop holder <build>`, refused while that holder has a live terminal,
+    while its unit runs without its socket answering (it may hold agents), and for the current
+    build. It differs from `service restart holder --kill-agents`, which kills
     the current build's agents: `stop holder <build>` never kills an agent, it refuses. The
     flag's detail names it, then `service gc`. See Q5.
   - `current build missing`: no holder of the dispatcher's build. This is §1's state, shown on

@@ -802,8 +802,8 @@ func serviceRunDepsFor(project, host, hostname string, paths service.Paths) serv
 // the person's Q5): one older build's holder, named by its build id or key,
 // stopped through the manager so service gc can remove it. Never the current
 // build's (agentbus down stops the project), never one that holds a live
-// terminal (agentbus holder drain moves them) or answers without its list;
-// one that no longer answers holds nothing and may be stopped.
+// terminal (agentbus holder drain moves them) or answers without its list,
+// never one whose unit runs without answering (it may hold agents).
 func stopHolderCmd(d serviceCmdDeps, project string, args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "usage: agentbus --project <p> service stop holder <build>")
@@ -839,6 +839,22 @@ func stopHolderCmd(d serviceCmdDeps, project string, args []string, stdout, stde
 		return 1
 	}
 	live, answered, err := d.HolderLive(project, u.Key)
+	if !answered {
+		// It may run with its socket hung, its terminals still alive
+		// (reviewer-codex): only a unit the manager says is not running is
+		// known to hold nothing.
+		active, aerr := hm.HolderActive(project, u.Key)
+		switch {
+		case aerr != nil:
+			fmt.Fprintf(stderr, "holder (build %s) does not answer and its unit's state cannot be read (%v): not stopped\n", u.Raw, aerr)
+			return 1
+		case active:
+			fmt.Fprintf(stderr, "holder (build %s) runs but does not answer: its terminals cannot be listed, it may hold agents; not stopped\n", u.Raw)
+			return 1
+		}
+		fmt.Fprintf(stdout, "holder (build %s) is not running: nothing to stop; agentbus --project %s service gc removes it\n", u.Raw, project)
+		return 0
+	}
 	switch {
 	case answered && err != nil:
 		fmt.Fprintf(stderr, "holder (build %s) answers but its terminals could not be listed (%v): not stopped\n", u.Raw, err)

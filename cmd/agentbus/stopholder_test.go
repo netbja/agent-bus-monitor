@@ -45,9 +45,17 @@ func TestServiceStopHolder(t *testing.T) {
 	if code, _, _ := stop(d, service.BuildKey(old)); code != 0 || !hm.saw("stop-holder demo "+service.BuildKey(old)) {
 		t.Fatalf("by its key: code %d calls %v", code, hm.calls)
 	}
+	// reviewer-codex: a holder whose unit runs but whose socket does not
+	// answer may still hold agents: refused, never stopped.
 	d, hm = newDeps(live{n: 0, answered: false})
-	if code, _, _ := stop(d, old); code != 0 || !hm.saw("stop-holder demo "+service.BuildKey(old)) {
-		t.Fatalf("a holder that no longer answers: code %d calls %v", code, hm.calls)
+	if code, _, errw := stop(d, old); code == 0 || !strings.Contains(errw, "runs but does not answer") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
+		t.Fatalf("an active holder that does not answer: code %d err %q calls %v", code, errw, hm.calls)
+	}
+	// Its unit not running: nothing to stop, gc removes it.
+	d, hm = newDeps(live{n: 0, answered: false})
+	hm.active[service.BuildKey(old)] = false
+	if code, out, _ := stop(d, old); code != 0 || !strings.Contains(out, "not running") || !strings.Contains(out, "service gc") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
+		t.Fatalf("an inactive holder: code %d out %q calls %v", code, out, hm.calls)
 	}
 	for name, c := range map[string]struct {
 		l    live

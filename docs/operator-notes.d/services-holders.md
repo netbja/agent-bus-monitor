@@ -7,6 +7,7 @@
     `old build, hosts no agent` with the commands:
     `agentbus --project <p> service stop holder <build>`, then `service gc`.
   - The stop refuses the current build's holder and a holder with a live terminal (`holder
-    drain` moves them first), and one that answers but cannot be listed. It never kills an agent;
+    drain` moves them first), one that answers but cannot be listed, and one whose unit runs but
+    whose socket does not answer (it may hold agents). It never kills an agent;
     `service restart holder --kill-agents` does.
   - When no holder of the dispatcher's build answers, the page says so and names `agentbus up`.
