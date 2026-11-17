@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+
+	"github.com/netbja/agent-bus-monitor/screen"
 )
 
 // viewerQueue bounds a viewer's pending output chunks; a viewer that falls
@@ -24,24 +26,119 @@ type viewer struct {
 	repaint    bool        // fell behind: its next write is a first paint
 	filter     outputFilter
 	in         inputScan // its input read as a stream (t.mu held)
+	// painting: its first paint is being rendered (paint): output read
+	// meanwhile waits in pend, behind the paint.
+	painting bool
+	pend     [][]byte
 }
 
 // addViewer registers v and queues its first paint, rendered from the
 // emulator: what an empty outer terminal needs to show the screen.
 func (t *terminal) addViewer(v *viewer) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.viewers == nil {
 		t.viewers = map[*viewer]bool{}
 	}
 	t.viewers[v] = true
-	v.out <- t.scr.Render()
+	v.repaint = true // nothing reaches it before its first paint
 	if t.holding && !v.observe {
 		t.noticeTo(v)
 	}
 	if !v.observe && v.cols > 0 {
 		t.activeViewer(v)
 	}
+	t.mu.Unlock()
+	t.paint(v)
+}
+
+// paint gives v its first paint, rendered from the emulator only when the
+// screen is caught up (holder hardening G1): the emulator's lock held, so
+// the render is the screen at exactly the bytes read when v starts taking
+// chunks again; the output read while it renders waits in v.pend, behind
+// it. A screen that is not caught up within lagWait leaves v to repaint on
+// its next write (lagging), or paints a notice instead of the screen
+// (invalid, stuck: the live output follows). v is registered, marked
+// repaint (fanOut skips it).
+func (t *terminal) paint(v *viewer) {
+	deadline := time.Now().Add(lagWait)
+	for {
+		if !t.lockEmu(time.Until(deadline)) {
+			t.mu.Lock()
+			st := t.screenState()
+			if st == ScreenOK || st == ScreenLagging { // busy: v repaints on its next write
+				t.mu.Unlock()
+				return
+			}
+			t.paintNotice(v, st)
+			t.mu.Unlock()
+			return
+		}
+		t.mu.Lock()
+		st := t.screenState()
+		if st == ScreenOK {
+			for len(v.out) > 0 { // its stale chunks: the paint replaces them
+				<-v.out
+			}
+			v.repaint, v.painting, v.pend = false, true, nil
+			v.filter = outputFilter{osc52: v.filter.osc52}
+			t.mu.Unlock()
+			var b []byte
+			err := t.run(func(s screen.Screen) { b = s.Render() })
+			<-t.emu
+			t.mu.Lock()
+			if err != nil {
+				t.latch(ScreenInvalid, err.Error())
+				b = noticePaint(ScreenInvalid)
+			}
+			v.painting = false
+			select {
+			case v.out <- b:
+			default:
+				v.repaint = true
+			}
+			for _, c := range v.pend {
+				select {
+				case v.out <- c:
+				default:
+					v.repaint = true
+				}
+			}
+			v.pend = nil
+			t.mu.Unlock()
+			return
+		}
+		<-t.emu
+		if st != ScreenLagging {
+			t.paintNotice(v, st)
+			t.mu.Unlock()
+			return
+		}
+		t.mu.Unlock()
+		if !time.Now().Before(deadline) {
+			return // still behind: v repaints on its next write
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// paintNotice paints v a notice instead of an untrusted screen, the live
+// output following it. Called with t.mu held.
+func (t *terminal) paintNotice(v *viewer, st string) {
+	for len(v.out) > 0 {
+		<-v.out
+	}
+	v.repaint = false
+	v.filter = outputFilter{osc52: v.filter.osc52}
+	select {
+	case v.out <- noticePaint(st):
+	default:
+		v.repaint = true
+	}
+}
+
+// noticePaint is the first paint of a screen the holder no longer vouches for.
+func noticePaint(st string) []byte {
+	return []byte("\x1b[H\x1b[2J[agentbus: this terminal's screen is " + st + "; the live output follows. Replace it: agentbus reload <agent>]\r\n")
 }
 
 func (t *terminal) removeViewer(v *viewer) {
@@ -68,6 +165,14 @@ func (t *terminal) fanOut(chunk []byte) {
 		if len(b) == 0 {
 			continue
 		}
+		if v.painting { // behind its first paint (paint)
+			if len(v.pend) >= viewerQueue {
+				v.repaint = true
+			} else {
+				v.pend = append(v.pend, b)
+			}
+			continue
+		}
 		select {
 		case v.out <- b:
 		default:
@@ -81,30 +186,36 @@ func (t *terminal) fanOut(chunk []byte) {
 // when it fell behind, else its next chunk. ok is false once the terminal
 // ended and v's queue is empty, or the viewer left (stop).
 func (t *terminal) nextFor(v *viewer, done, stop <-chan struct{}) (byte, []byte, bool) {
-	t.mu.Lock()
-	if v.repaint {
-		for len(v.out) > 0 {
-			<-v.out
-		}
-		v.repaint, v.filter = false, outputFilter{osc52: v.filter.osc52}
-		b := t.scr.Render()
+	for {
+		t.mu.Lock()
+		repaint := v.repaint
 		t.mu.Unlock()
-		return FrameData, b, true
-	}
-	t.mu.Unlock()
-	select {
-	case b := <-v.ctl:
-		return FrameControl, b, true
-	case b := <-v.out:
-		return FrameData, b, true
-	case <-stop:
-		return 0, nil, false
-	case <-done:
+		var retry <-chan time.Time
+		if repaint {
+			t.paint(v) // its paint, or a notice, is its next chunk
+			t.mu.Lock()
+			repaint = v.repaint
+			t.mu.Unlock()
+			if repaint { // the emulator still behind: try again shortly
+				retry = time.After(lagWait) // collected unstopped (Go 1.23)
+			}
+		}
 		select {
+		case b := <-v.ctl:
+			return FrameControl, b, true
 		case b := <-v.out:
 			return FrameData, b, true
-		default:
+		case <-stop:
 			return 0, nil, false
+		case <-retry:
+			continue
+		case <-done:
+			select {
+			case b := <-v.out:
+				return FrameData, b, true
+			default:
+				return 0, nil, false
+			}
 		}
 	}
 }
@@ -122,7 +233,7 @@ func (t *terminal) activeViewer(v *viewer) {
 func (t *terminal) resize(cols, rows int) {
 	t.cols, t.rows = cols, rows
 	_ = pty.Setsize(t.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
-	t.scr.Resize(cols, rows)
+	t.queueResize(cols, rows) // in order with the output, by the emulator goroutine
 }
 
 // input writes a viewer's bytes to the program under the input lock (the
@@ -308,7 +419,7 @@ func (t *terminal) activity() *ActivityInfo {
 	for v := range t.viewers { // a lone ESC older than escWait was the Escape key
 		t.settle(v, now, false)
 	}
-	a := &ActivityInfo{Draft: t.draft, Viewers: len(t.viewers)}
+	a := &ActivityInfo{Draft: t.draft, Viewers: len(t.viewers), Screen: t.screenState()}
 	ms := func(at time.Time) int64 {
 		if at.IsZero() {
 			return 0

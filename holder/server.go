@@ -60,6 +60,10 @@ type Config struct {
 	// afterAttachReply runs right after an Attach is answered, before its
 	// stream starts (tests: the viewer must be registered by then).
 	afterAttachReply func()
+	// newScreen replaces the emulator (tests: injected pauses and panics);
+	// stuckAfter the stuck threshold (0: stuckAfter).
+	newScreen  func(cols, rows, scrollback int) screen.Screen
+	stuckAfter time.Duration
 }
 
 // Defaults.
@@ -370,7 +374,11 @@ func (s *Server) handle(v any, inTree bool) Reply {
 		if !ok {
 			return errReply(CodeUnknown, "no terminal %s", f.Term)
 		}
-		return Reply{Screen: t.screenInfo(f.Lines)}
+		info, st := t.screenInfo(f.Lines)
+		if st != ScreenOK {
+			return errReply(CodeScreen, "terminal %s's screen is %s: read it unknown", f.Term, st)
+		}
+		return Reply{Screen: info}
 	case ActivityReq:
 		t, ok := s.term(f.Term)
 		if !ok {
@@ -455,12 +463,14 @@ func (s *Server) start(f Start) Reply {
 	trackedSet[c.Process.Pid] = true
 	trackMu.Unlock()
 	t := &terminal{id: id, role: f.Role, profile: clientProfiles[cmd.Client], pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others, escWait: s.cfg.escWait,
-		scr: screen.New(cols, rows, s.cfg.Scrollback), done: make(chan struct{}), outDone: make(chan struct{}), holdState: holdState{holdMax: s.cfg.holdMax}}
+		scr: s.newScreen(cols, rows), done: make(chan struct{}), outDone: make(chan struct{}), holdState: holdState{holdMax: s.cfg.holdMax},
+		emuState: newEmuState(s.cfg.stuckAfter)}
 	t.start, _ = s.cfg.procStart(t.pid)
 	s.terms[id] = t
 	s.order = append(s.order, id)
 	s.mu.Unlock()
 	go t.readLoop()
+	go t.emuLoop()
 	go t.replyLoop()
 	sig, sigOK := agentstate.Signatures()[t.profile]
 	go t.leftBehindLoop(sig, sigOK)
@@ -472,18 +482,21 @@ func (s *Server) start(f Start) Reply {
 }
 
 // screenInfo is the screen, with up to lines of scrollback above it.
-func (t *terminal) screenInfo(lines int) *ScreenInfo {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	snap := t.scr.Snapshot(lines)
-	m := t.scr.Modes()
+// It is given only for a caught-up screen the holder vouches for (holder
+// hardening G1); else the state says why not.
+func (t *terminal) screenInfo(lines int) (*ScreenInfo, string) {
+	var snap screen.Snapshot
+	var m screen.Modes
+	if st := t.view(lagWait, func(s screen.Screen) { snap, m = s.Snapshot(lines), s.Modes() }); st != ScreenOK {
+		return nil, st
+	}
 	plain := snap.Plain()
 	var out []string
 	if plain != "" {
 		out = splitLines(plain)
 	}
 	return &ScreenInfo{Lines: out, Styled: snap.ANSI(), CursorRow: snap.CursorY, CursorCol: snap.CursorX,
-		BracketedPaste: m.BracketedPaste, AltScreen: m.AltScreen}
+		BracketedPaste: m.BracketedPaste, AltScreen: m.AltScreen}, ScreenOK
 }
 
 func splitLines(s string) []string {
@@ -529,4 +542,11 @@ func writeTermsFile(path string, n int) {
 		return
 	}
 	_ = os.Rename(tmp, path)
+}
+
+func (s *Server) newScreen(cols, rows int) screen.Screen {
+	if s.cfg.newScreen != nil {
+		return s.cfg.newScreen(cols, rows, s.cfg.Scrollback)
+	}
+	return screen.New(cols, rows, s.cfg.Scrollback)
 }

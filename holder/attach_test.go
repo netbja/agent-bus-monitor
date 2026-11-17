@@ -253,7 +253,7 @@ func TestInputScan(t *testing.T) {
 // stale chunks dropped, one first paint instead.
 func TestSlowViewerIsRepainted(t *testing.T) {
 	v := &viewer{out: make(chan []byte, 2)}
-	term := &terminal{viewers: map[*viewer]bool{v: true}, scr: screen.New(20, 5, 10)}
+	term := &terminal{viewers: map[*viewer]bool{v: true}, scr: screen.New(20, 5, 10), emuState: newEmuState(0)}
 	term.fanOut([]byte("one"))
 	term.fanOut([]byte("two"))
 	term.fanOut([]byte("three")) // the queue holds two: a repaint

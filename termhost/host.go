@@ -95,6 +95,9 @@ var (
 	ErrNotReady     = errors.New("termhost: the program is not ready or its input is not empty")
 	ErrNotLanded    = errors.New("termhost: the line was not seen in the input; nothing more sent")
 	ErrLeftBehind   = errors.New("termhost: a line may be left in the input; no submit until it reads empty")
+	// ErrScreenUntrusted: the host does not vouch for the terminal's screen
+	// (lagging, invalid, stuck: holder hardening G1); read it unknown.
+	ErrScreenUntrusted = errors.New("termhost: the terminal's screen is not vouched for")
 )
 
 // Host owns terminals. Its rules (spec 4.2) are part of the interface:

@@ -32,6 +32,7 @@ const (
 	CodeLater    = "later"     // not served yet (submit and attach: herdr exit step 5c)
 	CodeFailed   = "failed"    // the operation failed
 	CodeDraining = "draining"  // an older build: no new terminal
+	CodeScreen   = "screen"    // the screen is not vouched for (lagging, invalid, stuck): termhost.ErrScreenUntrusted
 )
 
 // TermInfo is one terminal.
@@ -47,6 +48,13 @@ type TermInfo struct {
 	// Profile is the client's agentstate profile (claude, codex, …; "" none):
 	// agentbus attach gates its prefix on it (spec 4.6).
 	Profile string `json:"profile,omitempty"`
+	// Screen is whether the holder vouches for its screen (holder hardening
+	// G1): ok, lagging (the emulator behind, for now), invalid or stuck
+	// (latched until the terminal is replaced). Anything but ok reads
+	// unknown: never woken, never submitted to. ScreenGen is raised when
+	// the state is latched.
+	Screen    string `json:"screen,omitempty"`
+	ScreenGen int    `json:"screen_gen,omitempty"`
 }
 
 // ScreenInfo is a terminal's screen.
@@ -64,12 +72,13 @@ type ScreenInfo struct {
 // draft and since when, the viewers, and how many of them may be at it
 // (non-observers not proven unfocused).
 type ActivityInfo struct {
-	OutputAt       int64 `json:"output_at"`
-	ViewerTypedAt  int64 `json:"viewer_typed_at,omitempty"`
-	Draft          bool  `json:"draft,omitempty"`
-	DraftSince     int64 `json:"draft_since,omitempty"`
-	Viewers        int   `json:"viewers,omitempty"`
-	FocusedViewers int   `json:"focused_viewers,omitempty"`
+	OutputAt       int64  `json:"output_at"`
+	ViewerTypedAt  int64  `json:"viewer_typed_at,omitempty"`
+	Draft          bool   `json:"draft,omitempty"`
+	DraftSince     int64  `json:"draft_since,omitempty"`
+	Viewers        int    `json:"viewers,omitempty"`
+	FocusedViewers int    `json:"focused_viewers,omitempty"`
+	Screen         string `json:"screen,omitempty"` // as TermInfo.Screen (holder hardening G1)
 }
 
 // ProcInfo is one process of a terminal's tree (spec 4.3b).

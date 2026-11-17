@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/agentstate"
+	"github.com/netbja/agent-bus-monitor/screen"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
@@ -39,13 +40,17 @@ func (t *terminal) settled(limit time.Duration) (screenText string, bracketed, o
 	for {
 		t.mu.Lock()
 		quiet := time.Since(t.outAt) >= settleQuiet
+		t.mu.Unlock()
 		if quiet || time.Now().After(deadline) {
-			snap := t.scr.Snapshot(0)
-			m := t.scr.Modes()
-			t.mu.Unlock()
+			// Only a caught-up screen the holder vouches for (holder
+			// hardening G1): any other proves nothing.
+			var snap screen.Snapshot
+			var m screen.Modes
+			if t.view(lagWait, func(s screen.Screen) { snap, m = s.Snapshot(0), s.Modes() }) != ScreenOK {
+				return "", false, false
+			}
 			return snap.ANSI(), m.BracketedPaste, quiet
 		}
-		t.mu.Unlock()
 		time.Sleep(10 * time.Millisecond)
 	}
 }

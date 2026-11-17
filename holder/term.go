@@ -53,6 +53,8 @@ type terminal struct {
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
+
+	emuState // the emulator's containment (emu.go)
 }
 
 // readLoop reads the program's output until the PTY ends.
@@ -63,15 +65,23 @@ func (t *terminal) readLoop() {
 		n, err := t.pty.Read(buf)
 		if n > 0 {
 			t.mu.Lock()
-			_, _ = t.scr.Write(buf[:n])
+			t.took(buf[:n]) // never waits on the emulator (emu.go)
 			t.tail = append(t.tail, buf[:n]...)
 			if len(t.tail) > tailMax {
 				t.tail = append([]byte(nil), t.tail[len(t.tail)-tailMax:]...)
 			}
 			t.outAt = time.Now()
 			t.fanOut(buf[:n])
+			static := t.scan.answers(buf[:n])
+			if t.latched == "" {
+				static = nil // a trusted emulator answers, as before
+			}
 			t.mu.Unlock()
-			t.answer()
+			if len(static) > 0 {
+				t.inMu.Lock()
+				_, _ = t.pty.Write(static)
+				t.inMu.Unlock()
+			}
 		}
 		if err != nil {
 			return
@@ -90,8 +100,20 @@ const replyEvery = 10 * time.Millisecond
 // or not.
 func (t *terminal) answer() {
 	t.mu.Lock()
-	replies := t.scr.Replies()
+	latched := t.latched != ""
 	t.mu.Unlock()
+	if latched || !t.lockEmu(0) { // untrusted: the read loop's scanner answers; busy: the next tick
+		return
+	}
+	var replies []byte
+	err := t.run(func(s screen.Screen) { replies = s.Replies() })
+	<-t.emu
+	if err != nil {
+		t.mu.Lock()
+		t.latch(ScreenInvalid, err.Error())
+		t.mu.Unlock()
+		return
+	}
 	if len(replies) > 0 {
 		t.inMu.Lock() // never inside a viewer's bytes or a submit
 		_, _ = t.pty.Write(replies)
@@ -107,7 +129,10 @@ func (t *terminal) replyLoop() {
 		select {
 		case <-t.outDone:
 			return
-		case <-tick.C:
+		case now := <-tick.C:
+			t.mu.Lock()
+			t.watch(now)
+			t.mu.Unlock()
 			t.answer()
 		}
 	}
@@ -144,7 +169,8 @@ func (t *terminal) waitLoop() {
 func (t *terminal) info(build string) TermInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build, Profile: t.profile}
+	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build, Profile: t.profile,
+		Screen: t.screenState(), ScreenGen: t.gen}
 }
 
 // signal sends sig to pid (negative: a process group), through the
