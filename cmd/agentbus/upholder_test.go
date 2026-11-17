@@ -17,10 +17,11 @@ import (
 // fakeHolderManager is a fakeManager that also holds holder units.
 type fakeHolderManager struct {
 	*fakeManager
-	holders map[string]service.HolderSpec // by key
-	units    []service.HolderUnit
-	active   map[string]bool
-	failStop map[string]bool // StopHolder fails for these keys
+	holders   map[string]service.HolderSpec // by key
+	units     []service.HolderUnit
+	active    map[string]bool
+	failStop  map[string]bool // StopHolder fails for these keys
+	activeErr error           // HolderActive fails with it
 }
 
 func (f *fakeHolderManager) InstallHolder(s service.HolderSpec) (bool, error) {
@@ -40,7 +41,9 @@ func (f *fakeHolderManager) StartHolder(project, key string) error {
 	f.active[key] = true
 	return nil
 }
-func (f *fakeHolderManager) HolderActive(project, key string) (bool, error) { return f.active[key], nil }
+func (f *fakeHolderManager) HolderActive(project, key string) (bool, error) {
+	return f.active[key], f.activeErr
+}
 func (f *fakeHolderManager) RemoveHolder(project, key string) error {
 	f.calls = append(f.calls, "remove-holder "+project+" "+key)
 	for i, u := range f.units {

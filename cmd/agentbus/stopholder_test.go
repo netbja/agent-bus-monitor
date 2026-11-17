@@ -51,6 +51,19 @@ func TestServiceStopHolder(t *testing.T) {
 	if code, _, errw := stop(d, old); code == 0 || !strings.Contains(errw, "runs but does not answer") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
 		t.Fatalf("an active holder that does not answer: code %d err %q calls %v", code, errw, hm.calls)
 	}
+	// foureyes: a unit state that cannot be read is refused, never read as
+	// "not running".
+	d, hm = newDeps(live{n: 0, answered: false})
+	hm.activeErr = errors.New("systemctl: bus unreachable")
+	if code, out, errw := stop(d, old); code != 1 || !strings.Contains(errw, "cannot be read") || strings.Contains(out, "not running") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
+		t.Fatalf("unreadable state: code %d out %q err %q calls %v", code, out, errw, hm.calls)
+	}
+	// The refusal of a running holder that does not answer names what the
+	// person can still do.
+	d, _ = newDeps(live{n: 0, answered: false})
+	if _, _, errw := stop(d, old); !strings.Contains(errw, "agentbus down demo") {
+		t.Fatalf("refusal names no way out: %q", errw)
+	}
 	// Its unit not running: nothing to stop, gc removes it.
 	d, hm = newDeps(live{n: 0, answered: false})
 	hm.active[service.BuildKey(old)] = false

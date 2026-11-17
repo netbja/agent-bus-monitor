@@ -849,7 +849,7 @@ func stopHolderCmd(d serviceCmdDeps, project string, args []string, stdout, stde
 			fmt.Fprintf(stderr, "holder (build %s) does not answer and its unit's state cannot be read (%v): not stopped\n", u.Raw, aerr)
 			return 1
 		case active:
-			fmt.Fprintf(stderr, "holder (build %s) runs but does not answer: its terminals cannot be listed, it may hold agents; not stopped\n", u.Raw)
+			fmt.Fprintf(stderr, "holder (build %s) runs but does not answer: its terminals cannot be listed, it may hold agents; not stopped (agentbus down %s stops every holder of the project, its agents with them)\n", u.Raw, project)
 			return 1
 		}
 		fmt.Fprintf(stdout, "holder (build %s) is not running: nothing to stop; agentbus --project %s service gc removes it\n", u.Raw, project)
