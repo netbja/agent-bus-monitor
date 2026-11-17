@@ -4,6 +4,7 @@
   agent of that name, the person's own shell and `ask --withdraw` still pass). `agentbus ask
   <person>` run in master's terminal once wrote the person into `{p}:agents` with master's terminal.
   busmon then listed them under Agents, and the dispatcher woke and escalated them. An entry that
-  borrows another agent's terminal is no agent: the dispatcher skips a human sender with such an
-  entry, and busmon drops the person's. A leftover entry is removed with `agentbus agents forget
+  borrows another agent's terminal is no agent: the dispatcher skips a human identity with such an
+  entry (a human sender still in the capped cmd stream, or the person's `identity.as`, which it
+  reads at start), and busmon drops the person's. A leftover entry is removed with `agentbus agents forget
   <person> --force` (`--force`: its status is recent), or busmon's d.

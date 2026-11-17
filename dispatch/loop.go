@@ -35,7 +35,10 @@ type Config struct {
 	Horizon, Retry, EscalateAfter, Tick, Lease, Renew, MinPTTL time.Duration
 	MaxTries                                                   int
 	EscalateTo                                                 string
-	Log                                                        io.Writer // one JSON line per decision
+	// Person is the person's recorded name (identity.as): a human identity
+	// whatever the capped cmd stream still holds (human-not-an-agent).
+	Person string
+	Log    io.Writer // one JSON line per decision
 	// OnLease, when set, is told when this dispatcher takes the lease (true)
 	// and when Run gives it up (false): agentbus service run reports "ready".
 	OnLease func(held bool)
@@ -499,6 +502,9 @@ func (l *loop) reconcile(ctx context.Context) error {
 	humanIdentity := make(map[string]bool, len(humanSenders))
 	for _, name := range humanSenders {
 		humanIdentity[name] = true
+	}
+	if bus.ValidName(l.cfg.Person) { // known without the stream, which is capped (reviewer-codex)
+		humanIdentity[l.cfg.Person] = true
 	}
 	names := map[string]bool{}
 	for a := range snaps {
