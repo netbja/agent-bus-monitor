@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -40,7 +41,7 @@ func screenWorld() *fakeScreens {
 			{ID: "k888/t6", Project: "demo", Name: "sentinel", Alive: true, Build: "v888"},
 			{ID: "k888/t2", Project: "demo", Name: "old", Alive: false, Build: "v888"},
 		},
-		screen: map[termhost.TermID]termhost.Screen{"k888/t1": {Lines: []string{"Do you want to proceed?", "\x1b[31m❯ 1. Yes\x07", " 2. No", "", ""}}},
+		screen: map[termhost.TermID]termhost.Screen{"k888/t1": {Lines: []string{"Do you want to proceed?", "\x1b[31m❯ 1. Yes\x1b[0m\x07", " 2. No\x1b]0;a title\x07", "", ""}}},
 		err:    map[termhost.TermID]error{},
 	}
 }
@@ -63,6 +64,9 @@ func inTerm(id string) func(string) string {
 
 func TestScreenCommand(t *testing.T) {
 	ctx := context.Background()
+	at := time.Date(2026, 11, 17, 23, 5, 9, 0, time.FixedZone("CET", 3600))
+	screenNow = func() time.Time { return at }
+	t.Cleanup(func() { screenNow = time.Now })
 	t.Run("master reads an agent's screen", func(t *testing.T) {
 		f := screenWorld()
 		var out, errw bytes.Buffer
@@ -70,12 +74,12 @@ func TestScreenCommand(t *testing.T) {
 			t.Fatalf("code %d: %s", code, errw.String())
 		}
 		got := out.String()
-		for _, w := range []string{"coder on k888/t1 (build v888)", "Do you want to proceed?", "❯ 1. Yes", " 2. No"} {
+		for _, w := range []string{"coder on k888/t1 (build v888), read 2026-11-17 23:05:09", "Do you want to proceed?", "\n❯ 1. Yes\n", "\n 2. No\n"} {
 			if !strings.Contains(got, w) {
 				t.Errorf("lacks %q:\n%s", w, got)
 			}
 		}
-		if strings.ContainsAny(got, "\x1b\x07") || strings.HasSuffix(got, "\n\n") {
+		if strings.ContainsAny(got, "\x1b\x07") || strings.Contains(got, "[31m") || strings.Contains(got, "[0m") || strings.Contains(got, "a title") || strings.HasSuffix(got, "\n\n") {
 			t.Errorf("control bytes or trailing blank lines reach the reader's terminal: %q", got)
 		}
 		if strings.Join(f.asked, ",") != "list,screen k888/t1 40" {
@@ -172,9 +176,13 @@ func TestScreenCommand(t *testing.T) {
 		}
 		var v struct {
 			Agent, Term, Build string
+			Rows               int
 			Lines              []string
+			Trusted            bool
+			ReadAt             string `json:"read_at"`
 		}
-		if err := json.Unmarshal(out.Bytes(), &v); err != nil || v.Agent != "coder" || v.Term != "k888/t1" || v.Build != "v888" || len(v.Lines) != 3 || strings.Contains(v.Lines[1], "\x1b") {
+		if err := json.Unmarshal(out.Bytes(), &v); err != nil || v.Agent != "coder" || v.Term != "k888/t1" || v.Build != "v888" || v.Rows != 3 || len(v.Lines) != 3 ||
+			!v.Trusted || v.ReadAt != "2026-11-17T23:05:09+01:00" || strings.Contains(v.Lines[1], "\x1b") {
 			t.Fatalf("json %+v %v: %s", v, err, out.String())
 		}
 	})

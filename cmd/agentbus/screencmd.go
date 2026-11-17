@@ -23,6 +23,9 @@ type screenReader interface {
 	Screen(ctx context.Context, id termhost.TermID, lines int) (termhost.Screen, error)
 }
 
+// screenNow is the read time screen prints (tests fix it).
+var screenNow = time.Now
+
 const (
 	screenLinesDefault = 40
 	screenLinesMax     = 200
@@ -118,25 +121,31 @@ func runScreen(ctx context.Context, keyOf func(socket string) string, h screenRe
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
+	at := screenNow()
 	if asJSON {
 		b, _ := json.Marshal(struct {
-			Agent string   `json:"agent"`
-			Term  string   `json:"term"`
-			Build string   `json:"build"`
-			Lines []string `json:"lines"`
-		}{agent, string(t.ID), t.Build, lines})
+			Agent   string   `json:"agent"`
+			Term    string   `json:"term"`
+			Build   string   `json:"build"`
+			Rows    int      `json:"rows"`
+			Lines   []string `json:"lines"`
+			Trusted bool     `json:"trusted"` // an untrusted screen exits 1 with no lines
+			ReadAt  string   `json:"read_at"`
+		}{agent, string(t.ID), t.Build, len(lines), lines, true, at.Format(time.RFC3339)})
 		fmt.Fprintln(out, string(b))
 		return 0
 	}
-	fmt.Fprintf(out, "%s on %s (build %s)\n", agent, t.ID, t.Build)
+	fmt.Fprintf(out, "%s on %s (build %s), read %s\n", agent, t.ID, t.Build, at.Format("2006-01-02 15:04:05"))
 	for _, l := range lines {
 		fmt.Fprintln(out, l)
 	}
 	return 0
 }
 
-// liveTermOf is agent's live terminal: the first holder (the current build
-// first, as List orders them) that has one, its newest.
+// liveTermOf is agent's live terminal: on the first holder that has one, in
+// List's order (the CLI's own build first, then the others by build key, an
+// arbitrary order among older builds during a drain), the last one listed.
+// An agent has one live terminal, so the choice only matters mid-relaunch.
 func liveTermOf(terms []termhost.Term, project, agent string) (termhost.Term, bool) {
 	var found termhost.Term
 	ok := false
@@ -151,24 +160,50 @@ func liveTermOf(terms []termhost.Term, project, agent string) (termhost.Term, bo
 	return found, ok
 }
 
-// plainLine drops escape sequences and control characters, so nothing the
-// agent's program printed acts on the reader's terminal.
+// plainLine drops escape sequences (CSI, and OSC up to its BEL or ST) and
+// control characters, so nothing the agent's program printed acts on the
+// reader's terminal.
 func plainLine(s string) string {
 	var b strings.Builder
-	esc := false
+	const (
+		text = iota
+		esc  // after ESC
+		csi  // ESC [ … final byte
+		osc  // ESC ] … BEL or ESC \
+	)
+	state := text
 	for _, r := range s {
-		switch {
+		switch state {
 		case esc:
-			if r >= '@' && r <= '~' && r != '[' {
-				esc = false
+			switch r {
+			case '[':
+				state = csi
+			case ']':
+				state = osc
+			default:
+				state = text // a two-byte sequence: its byte dropped
 			}
-		case r == 0x1b:
-			esc = true
-		case r == '\t':
-			b.WriteRune(' ')
-		case unicode.IsControl(r):
+		case csi:
+			if r >= '@' && r <= '~' {
+				state = text
+			}
+		case osc:
+			switch r {
+			case 0x07:
+				state = text
+			case 0x1b:
+				state = esc // ESC \ ends it; the backslash is dropped as a two-byte sequence
+			}
 		default:
-			b.WriteRune(r)
+			switch {
+			case r == 0x1b:
+				state = esc
+			case r == '\t':
+				b.WriteRune(' ')
+			case unicode.IsControl(r):
+			default:
+				b.WriteRune(r)
+			}
 		}
 	}
 	return b.String()
