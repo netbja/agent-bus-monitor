@@ -500,6 +500,14 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus start", "agentbus start ~/src/shop --yes", "agentbus start --roles master,coder,foureyes:review"},
 	},
 	{
+		Name: "screen", Usage: []string{"screen <agent> [--lines N] [--json]"},
+		Summary: "print an agent's last screen text from the project's holder, read-only (master, sentinel, or the person outside the agents' terminals)",
+		Flags: []cli.Flag{fJSON,
+			{Long: "lines", Arg: "<n>", Help: "how many lines (default 40, at most 200)"},
+		},
+		Examples: []string{"agentbus -p demo screen coder", "agentbus -p demo screen coder --lines 10 --json"},
+	},
+	{
 		Name: "attach", Usage: []string{"attach <agent> [--observe] [--prefix <key>]"},
 		Summary: "put this terminal on an agent's terminal in the project's holder; <prefix> d detaches, <prefix> <prefix> sends one (attach.prefix, default f12)",
 		Flags: []cli.Flag{
