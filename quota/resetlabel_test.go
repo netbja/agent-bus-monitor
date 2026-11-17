@@ -47,3 +47,26 @@ func TestResetLabel(t *testing.T) {
 		t.Errorf("two days across DST: %q", got)
 	}
 }
+
+// A stored message (a directive, a notice) is read later, after midnight
+// too: it carries the absolute date and time, never today or tomorrow
+// (master's decision on foureyes' note, 2026-11-16). Live views use
+// ResetLabel.
+func TestResetStamp(t *testing.T) {
+	paris, err := time.LoadLocation("Europe/Paris")
+	if err != nil {
+		t.Skip("no zone data:", err)
+	}
+	now := time.Date(2026, 11, 16, 23, 0, 0, 0, paris)
+	tomorrow := time.Date(2026, 11, 17, 13, 59, 0, 0, paris)
+	for format, want := range map[string]string{
+		DateRelative: "Tue 17 Nov 13:59", "": "Tue 17 Nov 13:59", DateISO: "2026-11-17 13:59", DateClock12: "Tue 17 Nov 1:59 PM",
+	} {
+		if got := ResetStamp(tomorrow, now, format); got != want {
+			t.Errorf("%q: %q, want %q", format, got, want)
+		}
+	}
+	if got := ResetStamp(time.Date(2027, 1, 2, 9, 0, 0, 0, paris), now, DateRelative); got != "Sat 2 Jan 2027 09:00" {
+		t.Errorf("another year: %q", got)
+	}
+}

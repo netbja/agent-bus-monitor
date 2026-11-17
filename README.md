@@ -986,7 +986,9 @@ handles each with a rule you can read, never a guess:
   master may reload only sentinel; a person may reload anyone with `--as <name>`. `agentbus up
   <p> --reload propose` makes every reload wait for you, `--reload off` leaves them to you.
 - **Quotas.** The dispatch service reads every provider's usage windows each minute, from local
-  files only (`agentbus quota`). At 85 % master is warned; at 95 % that provider's agents are no
+  files only (`agentbus quota`). At 85 % master is warned and the run drains (start nothing new;
+  `dispatch.quota_drain` sets that apart, per project in `config.toml`'s `[project.<name>.dispatch]`
+  if you want); at 95 % that provider's agents are no
   longer woken until the reset (`held`); when master's own provider is held, the whole project
   pauses (`agentbus pause --until-reset`) and resumes by itself. A long hold makes master ask you
   whether to move a role to one of its `fallback_profiles` (`agentbus swap <role> --profile <p>`,

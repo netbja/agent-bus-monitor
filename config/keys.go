@@ -70,6 +70,10 @@ type Key struct {
 	// MachineOnly keys are the machine's alone: a project's services env file
 	// is never read for them (forge-delivery answer 1).
 	MachineOnly bool
+	// Project keys also have a value per project, in config.toml's
+	// [project.<name>] table (quota settings §2.2), read through
+	// ProjectValue: the quota thresholds.
+	Project bool
 	// PersonOnly keys are the person's alone (backup.after_*): read from
 	// config.toml only, never written by agentbus (Set and Unset refuse
 	// them: edit config.toml yourself). They have no env variable and are
@@ -251,9 +255,16 @@ var Keys = []*Key{
 	{Name: "dispatch.quota", Env: "AGENT_BUS_QUOTA", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  func(raw string) (any, envResult) { return raw != "off", envUse }, // off turns it off
 		file: fileBool},
-	{Name: "dispatch.quota_warn", Env: "AGENT_BUS_QUOTA_WARN", Kind: Float, Default: 85.0, ReadBy: "dispatch", env: envPositiveFloat, file: filePositivePercent},
-	{Name: "dispatch.quota_hold", Env: "AGENT_BUS_QUOTA_HOLD", Kind: Float, Default: 95.0, ReadBy: "dispatch", env: envPositiveFloat, file: filePositivePercent},
-	{Name: "dispatch.quota_max_age", Env: "AGENT_BUS_QUOTA_MAX_AGE", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch",
+	// The quota thresholds (quota settings spec §2.1): master warned and agents
+	// with work told to finish their step at quota_warn; the run drained,
+	// nothing new started, at quota_drain (unset: quota_warn's value, today's
+	// behaviour); the provider held at quota_hold. warn <= drain <= hold, or
+	// the dispatcher uses the defaults for all three. Per project too
+	// ([project.<name>] in config.toml, ProjectValue), read each minute.
+	{Name: "dispatch.quota_warn", Env: "AGENT_BUS_QUOTA_WARN", Kind: Float, Default: 85.0, ReadBy: "dispatch", Project: true, env: envPositiveFloat, file: filePositivePercent},
+	{Name: "dispatch.quota_drain", Env: "AGENT_BUS_QUOTA_DRAIN", Kind: Float, Default: 85.0, ReadBy: "dispatch", Project: true, env: envPositiveFloat, file: filePositivePercent},
+	{Name: "dispatch.quota_hold", Env: "AGENT_BUS_QUOTA_HOLD", Kind: Float, Default: 95.0, ReadBy: "dispatch", Project: true, env: envPositiveFloat, file: filePositivePercent},
+	{Name: "dispatch.quota_max_age", Env: "AGENT_BUS_QUOTA_MAX_AGE", Kind: Duration, Default: 30 * time.Minute, ReadBy: "dispatch", Project: true,
 		env: func(raw string) (any, envResult) {
 			if d, err := time.ParseDuration(raw); err == nil && d > 0 { // <= 0 was always the default
 				return d, envUse

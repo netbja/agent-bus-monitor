@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/quota"
+	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/termhost"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
@@ -398,4 +401,41 @@ func quotaListed(cfg map[string]quota.ProviderConfig, file *config.File, explici
 		}
 	}
 	return out
+}
+
+// quotaThresholds reads project's quota thresholds from the files, for the
+// dispatcher's refresh (quota settings §2.2): config.toml's [project.<p>]
+// table, then the project's service env file (the shell at up), then the
+// machine keys, then the defaults (config.ProjectValue). The process
+// environment is never read: it is the service's start-time copy. A drain no
+// file sets follows the warning (today's behaviour). A config.toml or env
+// file that cannot be read is an error, and the dispatcher keeps the last
+// values; a missing env file is none.
+func quotaThresholds(getenv func(string) string, project, envFile string) func() (dispatch.QuotaThresholds, error) {
+	seen := false // config.toml existed at a previous read
+	return func() (dispatch.QuotaThresholds, error) {
+		f := config.Load(config.Path(getenv), "config.toml")
+		if !f.Exists && seen { // removed since: keep the last (spec §2.2)
+			return dispatch.QuotaThresholds{}, errors.New("config.toml: missing since the last read")
+		}
+		seen = seen || f.Exists
+		for _, w := range f.Warnings {
+			if w.Key == "" { // the whole file: it cannot be read or does not parse
+				return dispatch.QuotaThresholds{}, fmt.Errorf("config.toml: %s", w.Msg)
+			}
+		}
+		ef, err := service.LoadEnvFile(envFile)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return dispatch.QuotaThresholds{}, err
+		}
+		get := func(name string) config.Resolved { return config.ProjectValue(f, ef, project, name) }
+		th := dispatch.QuotaThresholds{Warn: get("dispatch.quota_warn").Value.(float64), Hold: get("dispatch.quota_hold").Value.(float64),
+			MaxAge: get("dispatch.quota_max_age").Value.(time.Duration)}
+		if d := get("dispatch.quota_drain"); d.Source == "default" {
+			th.Drain = th.Warn
+		} else {
+			th.Drain = d.Value.(float64)
+		}
+		return th, nil
+	}
 }

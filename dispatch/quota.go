@@ -21,11 +21,12 @@ import (
 
 // QuotaConfig enables the policy; a nil Read disables it.
 type QuotaConfig struct {
-	Read    func(ctx context.Context) []quota.Reading
-	Every   time.Duration // collection interval (default 60 s)
-	WarnPct float64       // default 85
-	HoldPct float64       // default 95
-	MaxAge  time.Duration // a reading older than this is unknown for policy (default 30 min)
+	Read     func(ctx context.Context) []quota.Reading
+	Every    time.Duration // collection interval (default 60 s)
+	WarnPct  float64       // default 85
+	DrainPct float64       // start nothing new above (quota settings §2.1); default WarnPct
+	HoldPct  float64       // default 95
+	MaxAge   time.Duration // a reading older than this is unknown for policy (default 30 min)
 	// LongHold (v0.15 §5): a hold whose reset is further away than this asks
 	// for a decision, once per episode (default 2 h; negative disables).
 	LongHold time.Duration
@@ -33,15 +34,36 @@ type QuotaConfig struct {
 	// DateFormat is display.date_format, read at each message (quota
 	// settings §2.3); nil: the relative default.
 	DateFormat func() string
+	// Thresholds reads the thresholds from the project's files (quota
+	// settings §2.2), with the readings, every Every; nil: the fields above,
+	// fixed. An error keeps the last values; a broken order (warn <= drain
+	// <= hold) uses the defaults for all three.
+	Thresholds func() (QuotaThresholds, error)
 }
 
-// resetLabel is a window's reset in the person's format, at now.
-func (q QuotaConfig) resetLabel(w quota.Window, now time.Time) string {
+// QuotaThresholds are the project's quota thresholds, as read.
+type QuotaThresholds struct {
+	Warn, Drain, Hold float64
+	MaxAge            time.Duration
+}
+
+// The thresholds a broken order falls back to (the registry's defaults).
+const (
+	defaultWarnPct  = 85
+	defaultDrainPct = 85
+	defaultHoldPct  = 95
+	defaultMaxAge   = 30 * time.Minute
+)
+
+// resetStamp is a window's reset in a stored message: the absolute date and
+// time in the person's format, never today or tomorrow (master's decision,
+// 2026-11-16: a directive is read later, maybe after midnight).
+func (q QuotaConfig) resetStamp(w quota.Window, now time.Time) string {
 	format := ""
 	if q.DateFormat != nil {
 		format = q.DateFormat()
 	}
-	return quota.ResetLabel(w.Reset(), now, format)
+	return quota.ResetStamp(w.Reset(), now, format)
 }
 
 func (q QuotaConfig) filled() QuotaConfig {
@@ -49,13 +71,16 @@ func (q QuotaConfig) filled() QuotaConfig {
 		q.Every = time.Minute
 	}
 	if q.WarnPct <= 0 {
-		q.WarnPct = 85
+		q.WarnPct = defaultWarnPct
+	}
+	if q.DrainPct <= 0 {
+		q.DrainPct = q.WarnPct // unset: today's behaviour, one threshold
 	}
 	if q.HoldPct <= 0 {
 		q.HoldPct = 95
 	}
 	if q.MaxAge <= 0 {
-		q.MaxAge = 30 * time.Minute
+		q.MaxAge = defaultMaxAge
 	}
 	if q.LongHold == 0 {
 		q.LongHold = 2 * time.Hour
@@ -74,6 +99,50 @@ type quotaState struct {
 	readings map[string]quota.Reading
 	at       time.Time
 	held     map[string]bool // provider → held this pass
+	th       QuotaThresholds // in force, refreshed with the readings
+	thSet    bool
+}
+
+// refreshThresholds reads the thresholds with the readings (quota settings
+// §2.2): an error keeps the last values (logged once), a broken order uses
+// the defaults for all three (logged once per episode, never the last good
+// set: the file the person sees is what is judged).
+func (l *loop) refreshThresholds(q QuotaConfig) {
+	if !l.quota.thSet {
+		l.quota.thSet = true
+		if q.Thresholds == nil {
+			l.quota.th = QuotaThresholds{Warn: q.WarnPct, Drain: q.DrainPct, Hold: q.HoldPct, MaxAge: q.MaxAge}
+		} else { // the files decide: a first read that fails keeps the registry defaults (reviewer-codex)
+			l.quota.th = QuotaThresholds{Warn: defaultWarnPct, Drain: defaultDrainPct, Hold: defaultHoldPct, MaxAge: defaultMaxAge}
+		}
+	}
+	if q.Thresholds == nil {
+		return
+	}
+	th, err := q.Thresholds()
+	if err != nil {
+		l.logOnce("quota-thresholds", map[string]any{"action": "quota-thresholds-unread", "error": err.Error(), "kept": fmt.Sprint(l.quota.th)})
+		return
+	}
+	l.forget("quota-thresholds")
+	if th.MaxAge <= 0 {
+		th.MaxAge = defaultMaxAge
+	}
+	if !(th.Warn > 0 && th.Warn <= th.Drain && th.Drain <= th.Hold) {
+		l.logOnce("quota-order", map[string]any{"action": "quota-order", "warn": th.Warn, "drain": th.Drain, "hold": th.Hold,
+			"reason": "want warn <= drain <= hold: the defaults are used for all three"})
+		th.Warn, th.Drain, th.Hold = defaultWarnPct, defaultDrainPct, defaultHoldPct
+	} else {
+		l.forget("quota-order") // a later broken order is a new episode, logged again
+	}
+	l.quota.th = th
+}
+
+// forget drops a logOnce key, so its next entry is logged.
+func (l *loop) forget(key string) {
+	l.logMu.Lock()
+	delete(l.last, key)
+	l.logMu.Unlock()
 }
 
 // quotaPass collects (when due), publishes, warns, holds and pauses. It runs
@@ -91,7 +160,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			l.quota.readings[r.Provider] = r
 		}
 		l.quota.at = now
+		l.refreshThresholds(q)
 	}
+	th := l.quota.th
 	used := map[string]bool{}
 	for _, s := range snaps {
 		if s.Provider != "" {
@@ -144,9 +215,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 	var work map[string]bool // agents holding work, read once when a window warns (run-budget §4)
 	for p := range used {
 		r := l.quota.readings[p]
-		usable := r.Usable(now, q.MaxAge)
+		usable := r.Usable(now, th.MaxAge)
 		for _, w := range usable {
-			if w.UsedPct < q.WarnPct {
+			if w.UsedPct < th.Warn {
 				continue
 			}
 			if work == nil {
@@ -155,7 +226,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			if err := l.quotaWarnAgents(ctx, p, w, snaps, work, marks); err != nil {
 				return err
 			}
-			if p == coord {
+			if p == coord && w.UsedPct >= th.Drain { // start nothing new above (§2.1)
 				if err := l.quotaDrainRun(ctx, p, w); err != nil {
 					return err
 				}
@@ -166,7 +237,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				continue // the same window, its reset read a few seconds off: warned already
 			}
 			msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish what is in flight, start nothing new.",
-				p, w.UsedPct, w.Name, q.resetLabel(w, now))
+				p, w.UsedPct, w.Name, q.resetStamp(w, now))
 			if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, bus.CmdDirective, msg); err != nil {
 				return err
 			}
@@ -183,9 +254,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		// reading of it does not end the hold because another window is low:
 		// within a window, use only grows until its reset.
 		heldWin, heldKnown := windowAt(r, recorded)
-		heldOpen := heldKnown && !windowClear(usable, heldWin.Name, q.HoldPct)
+		heldOpen := heldKnown && !windowClear(usable, heldWin.Name, th.Hold)
 		switch {
-		case ok && tight.UsedPct >= q.HoldPct:
+		case ok && tight.UsedPct >= th.Hold:
 			if quota.SameReset(recorded, tight.ResetsAt) {
 				tight.ResetsAt = recorded // the same window: its episode keeps the stored reset
 			} else {
@@ -215,7 +286,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				}
 			}
 			recorded = 0
-		case recorded != 0 && r.ServedSince(now, q.MaxAge) && (!heldKnown || servedPast(r, heldWin)):
+		case recorded != 0 && r.ServedSince(now, th.MaxAge) && (!heldKnown || servedPast(r, heldWin)):
 			// No window to read, but the provider served a call after the
 			// limit hit (a quota reset granted early): the hold is over. An
 			// aged reading of the held window counts only at the limit itself
@@ -234,7 +305,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.quota.held[p] = true
 			}
 		}
-		if !l.quota.held[p] && warnClear(usable, q.WarnPct) {
+		if !l.quota.held[p] && warnClear(usable, th.Drain) { // a drained run runs again under the drain (§2.1)
 			// the provider clear again: a run drained for its quota runs (§4)
 			if _, err := l.b.FencedRunQuotaRelease(ctx, l.token, p); err != nil {
 				return err
@@ -465,7 +536,7 @@ func (l *loop) quotaWarnAgents(ctx context.Context, p string, w quota.Window, sn
 			continue
 		}
 		msg := fmt.Sprintf("Quota %s %.0f%% (%s, resets %s): finish your step, commit work in progress on your branch, report what is left, then status done. Start nothing new.",
-			p, w.UsedPct, w.Name, q.resetLabel(w, q.Now()))
+			p, w.UsedPct, w.Name, q.resetStamp(w, q.Now()))
 		if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, name, bus.CmdDirective, msg); err != nil {
 			return err
 		}
@@ -484,7 +555,7 @@ func (l *loop) quotaDrainRun(ctx context.Context, p string, w quota.Window) erro
 		return err
 	}
 	q := l.cfg.Quota.filled()
-	return l.quotaDrainTell(ctx, fmt.Sprintf("%.0f%%, %s, resets %s", w.UsedPct, w.Name, q.resetLabel(w, q.Now())))
+	return l.quotaDrainTell(ctx, fmt.Sprintf("%.0f%%, %s, resets %s", w.UsedPct, w.Name, q.resetStamp(w, q.Now())))
 }
 
 // quotaDrainTell tells master and the person that the run drains for a

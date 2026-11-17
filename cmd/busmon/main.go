@@ -46,6 +46,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/projfiles"
@@ -211,6 +212,10 @@ func cameBack(project string, n int64, left []string) string {
 		n, plural(int(n), "key"), project, len(left), plural(len(left), "key"), strings.Join(shown, ", "), project)
 }
 
+// deleteQuiet is the delete script and its re-scan (a test's seam for keys
+// that come back).
+var deleteQuiet = bus.DeleteProjectIfQuiet
+
 // deleteProjectNow is --delete's core with no terminal I/O (projects-admin
 // §5.3), the one path busmon --delete and the Projects page share: the
 // project's services on this machine first (stopped, they write nothing more,
@@ -226,7 +231,15 @@ func deleteProjectNow(ctx context.Context, client *redis.Client, project string,
 		return 0, nil, nil, err
 	}
 	// The last check and the DEL in one script; then the keys that came back.
-	n, left, err := bus.DeleteProjectIfQuiet(ctx, client, project)
+	n, left, err := deleteQuiet(ctx, client, project)
+	if err == nil && len(left) == 0 {
+		// Its [project.<p>] table of config.toml goes with it (quota settings
+		// §2.2): a project deleted keeps no thresholds behind. Keys that came
+		// back are no clean delete: the table stays (reviewer-codex).
+		if terr := config.RemoveProject(config.Path(os.Getenv), project); terr != nil {
+			return n, kinds, left, fmt.Errorf("%s deleted, but its [project.%s] table in config.toml was not removed: %v", project, project, terr)
+		}
+	}
 	return n, kinds, left, deleteErr(project, n, kinds, err)
 }
 

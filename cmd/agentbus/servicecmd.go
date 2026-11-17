@@ -741,6 +741,9 @@ func serviceDispatchConfig(b *bus.Bus, project, host string, paths service.Paths
 	cfg.Log = log
 	cfg.HostOps = hostOpsConfig(b, project, host) // host commands from inside an agent's terminal
 	cfg.Quota = serviceQuota(os.Getenv, log)
+	if cfg.Quota.Read != nil { // the thresholds re-read from the files each minute (quota settings §2.2)
+		cfg.Quota.Thresholds = quotaThresholds(os.Getenv, project, paths.EnvFile(project))
+	}
 	cfg.Login = serviceLoginExpiry(os.Getenv)                        // an expired login told to the person (login-updates)
 	cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
 	cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)

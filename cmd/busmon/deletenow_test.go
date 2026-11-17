@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/redis/go-redis/v9"
 )
 
 // projects-admin §5.3: deleteProjectNow is --delete's core with no terminal
@@ -119,5 +122,91 @@ func TestDeleteErr(t *testing.T) {
 	}
 	if deleteErr("demo", 3, nil, nil) != nil {
 		t.Error("no error became one")
+	}
+}
+
+// Quota settings step 2 (§2.2, foureyes on r2): a project deleted takes its
+// [project.<p>] table of config.toml with it; a sibling's stays.
+func TestDeleteProjectNowRemovesItsConfigTable(t *testing.T) {
+	testredis.Configure(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	project := "dt" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b, _ := bus.Open(c, project)
+	b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}})
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[project." + project + ".dispatch]\nquota_warn = 80\n\n[project.sibling.dispatch]\nquota_warn = 70\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := deleteProjectNow(ctx, c, project, func(string) ([]string, error) { return nil, nil }); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if strings.Contains(string(got), project) || !strings.Contains(string(got), "[project.sibling.dispatch]") {
+		t.Fatalf("config.toml after the delete:\n%s", got)
+	}
+}
+
+// reviewer-codex on 358ef19c: keys that came back after the delete script
+// (a writer racing it) are no clean delete: the project's [project.<p>]
+// table stays.
+func TestDeleteProjectNowKeepsTheTableWhenKeysCameBack(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[project.demo.dispatch]\nquota_warn = 80\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	orig := deleteQuiet
+	t.Cleanup(func() { deleteQuiet = orig })
+	deleteQuiet = func(context.Context, *redis.Client, string) (int64, []string, error) {
+		return 5, []string{"demo:status"}, nil
+	}
+	n, _, left, err := deleteProjectNow(context.Background(), nil, "demo", func(string) ([]string, error) { return nil, nil })
+	if err != nil || n != 5 || len(left) != 1 {
+		t.Fatalf("delete: %d %v %v", n, left, err)
+	}
+	if got, _ := os.ReadFile(cfg); string(got) != text {
+		t.Fatalf("the table went with keys that came back:\n%s", got)
+	}
+}
+
+// foureyes on 07f75a85: a delete the script refused (a live project, an
+// error) deletes nothing, the project's table included.
+func TestDeleteProjectNowKeepsTheTableWhenRefused(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[project.demo.dispatch]\nquota_warn = 80\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	orig := deleteQuiet
+	t.Cleanup(func() { deleteQuiet = orig })
+	deleteQuiet = func(context.Context, *redis.Client, string) (int64, []string, error) {
+		return 0, nil, &bus.DeleteRefusal{What: "dispatch"}
+	}
+	if _, _, _, err := deleteProjectNow(context.Background(), nil, "demo", func(string) ([]string, error) { return nil, nil }); err == nil {
+		t.Fatal("a refused delete reported none")
+	}
+	if got, _ := os.ReadFile(cfg); string(got) != text {
+		t.Fatalf("a refused delete removed the table:\n%s", got)
 	}
 }

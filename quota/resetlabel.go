@@ -50,3 +50,22 @@ func calendarDays(from, t time.Time) int {
 	}
 	return int(math.Round(day(t).Sub(day(from)).Hours() / 24))
 }
+
+// ResetStamp is a reset written into a stored message (a directive, a
+// notice), read later and maybe after midnight: always the absolute date and
+// time in format's style, never today or tomorrow (master's decision,
+// 2026-11-16). Live views use ResetLabel.
+func ResetStamp(t, now time.Time, format string) string {
+	t = t.In(now.Location())
+	if format == DateISO {
+		return t.Format("2006-01-02 15:04")
+	}
+	clock := "15:04"
+	if format == DateClock12 {
+		clock = "3:04 PM"
+	}
+	if t.Year() != now.Year() {
+		return t.Format("Mon 2 Jan 2006 " + clock)
+	}
+	return t.Format("Mon 2 Jan " + clock)
+}
