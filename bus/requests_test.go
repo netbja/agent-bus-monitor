@@ -371,6 +371,14 @@ func TestRequestWithALostBodyCanBeClosed(t *testing.T) {
 			t.Fatalf("%s: %+v %+v", task, e, e.Request)
 		}
 	}
+	// The closing reply goes to the other side: the sender's close tells the
+	// target, the target's tells the sender (foureyes).
+	for task, want := range map[string]string{"lost-a": "master", "lost-b": "dev"} {
+		msgs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), board[task].Request.ResponseID, board[task].Request.ResponseID).Result()
+		if err != nil || len(msgs) != 1 || msgs[0].Values["target"] != want {
+			t.Fatalf("%s's closing reply: %v %v, want target %s", task, msgs, err, want)
+		}
+	}
 }
 
 // An expired request, never accepted, is closable the same way.

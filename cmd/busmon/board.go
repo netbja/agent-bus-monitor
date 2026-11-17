@@ -68,9 +68,13 @@ func boardItems(m map[string]bus.BoardEntry, now time.Time, width int) []ListIte
 	taskW := boardTaskW(m, width)
 	for _, t := range tasks {
 		e := m[t]
+		state, role, why := e.State, boardStateRole(e.State), ""
+		if e.Request != nil && e.Request.ClosedUnaccepted != "" { // done, but nothing delivered (request-lost-body)
+			state, role, why = "closed", RoleAttention, "  "+e.Request.ClosedUnaccepted+", nothing delivered"
+		}
 		l := Line{col(Preview(t), taskW, RoleText), col(Preview(e.Owner), boardOwnerW, RoleMuted),
-			col(Preview(e.State), boardStateW, boardStateRole(e.State)),
-			{Text: humanAge(now.Sub(time.Unix(e.Updated, 0))), Role: RoleMuted}}
+			col(Preview(state), boardStateW, role),
+			{Text: humanAge(now.Sub(time.Unix(e.Updated, 0))), Role: RoleMuted}, {Text: Preview(why), Role: RoleAttention}}
 		out = append(out, ListItem{Key: t, Line: FitLine(l, width), Selectable: true})
 	}
 	return out

@@ -195,3 +195,19 @@ func TestBoardTaskColumnFitsContent(t *testing.T) {
 		t.Fatalf("empty board task column %d", got)
 	}
 }
+
+// request-lost-body (foureyes): a request closed unaccepted (its body lost
+// to retention, or expired) reads "closed … body missing", never plain done:
+// nothing was delivered.
+func TestBoardShowsAClosedUnacceptedRequest(t *testing.T) {
+	m := map[string]bus.BoardEntry{"lost": {Owner: "coder", State: "done", Updated: boardNow.Unix(),
+		Request: &bus.RequestInfo{ID: "1-0", Target: "coder", RespondedAt: boardNow.UnixMilli(), ResponseID: "2-0", ClosedUnaccepted: "body missing"}}}
+	its := boardItems(m, boardNow, 100)
+	if len(its) != 1 || !strings.Contains(its[0].Line.text(), "closed") || !strings.Contains(its[0].Line.text(), "body missing, nothing delivered") || strings.Contains(its[0].Line.text(), "done") {
+		t.Fatalf("row: %q", its[0].Line.text())
+	}
+	reqs := boardRequests(m)
+	if text, _ := nextAction(reqs[0], boardNow); !strings.Contains(text, "closed unaccepted: body missing") || !strings.Contains(text, "nothing delivered") {
+		t.Fatalf("next action: %q", text)
+	}
+}
