@@ -1,11 +1,11 @@
 # busmon views: one question per view (Work, Board, Plan)
 
-Status: r1, spec and mock-ups only, no code. Base: origin/dev `35a0b7f2`. Author: coder2, from the
+Status: r2, spec and mock-ups only, no code; r2 holds the person's answers of 2026-11-17 (§8). Base: origin/dev `35a0b7f2`. Author: coder2, from the
 person's direction relayed by master on 2026-11-17 (task `views-redesign-spec`). It supersedes the
 `ideas-triage-and-plan-spec` request given to coder. It builds on the requests-plan redesign, whose
 §9 (decided 2026-11-10) is built: the Work tab, the Kanban and the Projects counts
 ([2026-11-09-requests-plan-redesign-mockups.md](2026-11-09-requests-plan-redesign-mockups.md)).
-The mock-ups go to the person first; the questions in §8 come before any code.
+The person answered §8's questions on 2026-11-17; the spec and the mock-ups follow the answers.
 
 ## 1. Problem
 
@@ -41,13 +41,17 @@ One list, one line per task, Board's format: **task, owner, state, age**, newest
 
 - **Done is hidden by default**: `d` shows the done tasks (as the plan's DONE). The frame's label says
   `12 open · 31 done (d)`.
-- **An alert column only when something is wrong**, never a column of blanks:
-  - `never delivered`: a tracked request still not delivered to its target (no `output_written`)
-    after the delivery threshold;
-  - `body lost`: the request's body is no longer in the stream (`availability: missing`);
-  - `no reply 3h`: delivered or accepted, no response past `board.no_reply_after`, a new setting
-    (default 2 h; 0 = off; Display group in `C`).
+- **An alert column only when something is wrong**, never a column of blanks (the person's Q1):
+  - `no acceptance 40m`: a tracked request not accepted past `board.no_accept_after` (a new
+    setting, default 30 minutes; 0 = off). A request never delivered is not accepted either: its
+    diagnostics (Enter) say which;
+  - `no reply 3h`: accepted, no response past `board.no_reply_after` (a new setting, default
+    2 hours; 0 = off);
+  - `body lost`: the request's body is no longer in the stream (`availability: missing`), shown
+    at once.
   
+  Both settings are in Shift+C's Display group and apply at once.
+
   Rows with an alert come first, oldest alert first, then the others by age. The column exists
   only while at least one row has an alert.
 - **Enter opens the row's diagnostics**, today's Requests detail for that thread: the delivery
@@ -59,9 +63,14 @@ One list, one line per task, Board's format: **task, owner, state, age**, newest
   - `cancel`, `reassign`: master's (a directive to master, prefilled in Compose for the person to
     send);
   - missions flag their own stuck requests (the conductor).
-  - **If master is dead** (no fresh status, no terminal): busmon offers the same act through the
-    dispatcher, after a confirmation line, and writes one Activity entry saying what was done
-    and by whom. This is the only path where busmon asks the dispatcher to act.
+  - **If master is dead** (no fresh status, no terminal; the person's Q2):
+    1. busmon first proposes to wait: the dispatcher's self-repair relaunches master first
+       (decision 2026-11-09), and the row says `master is down; self-repair relaunches it`;
+    2. the person may still act now: busmon asks the dispatcher to resend or cancel, after a
+       confirmation line. This is the only path where busmon asks the dispatcher to act;
+    3. every such act is traced: an Activity entry (what, which request, by the person through
+       busmon) and a directive to master on the bus saying what was done without it. Master's
+       role reads these at its restart, before its own work.
 - **No `for you` count in its title**: a request the person owes is in Work (YOU), and its Board
   row has no special mark.
 
@@ -100,18 +109,22 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 
 `4` opens the Plan tab (no longer an alias to Work's NEXT); `p` and `P` still open it as today.
 
-- **A roadmap, not a copy of For you:** sections **NOW**, **NEXT**, **APPROVED** and **LATER**, then
+- **A roadmap, not a copy of For you:** sections **NOW**, **APPROVED**, **NEXT** and **LATER**, then
   DONE folded to a count (`d`).
   - NOW: in progress and in review.
-  - APPROVED: both reviewers approved, waiting for delivery or the merge (out of NOW, its own
-    section).
+  - APPROVED: both reviewers approved, waiting for delivery or the merge: its own section between
+    NOW and NEXT, folded away when empty (the person's Q3).
   - NEXT: not started, unblocked, by priority then file order.
   - LATER: blocked by another task (`waits on <id>`), then the low-priority tasks.
 - **No `person · waiting for you` column.** A task the person owns shows `♙` before its owner; what
   the person must do now is Work's, not repeated here.
 - **Dependencies** show as `after <id>` on the task's line (the first one, `+N` for more); the side
   panel (wide tier) lists all of them and the tasks that wait on this one.
-- **Priority**: one glyph set, used in Plan and the Kanban: `▲` high, nothing for normal, `▼` low.
+- **Priority**: one glyph set, used in Plan and the Kanban: `▲` high, nothing for normal, `▼` low
+  (the person's Q4). Their colour is the accent, never the header's yellow warning `▲`, so a high
+  task never reads as an alarm; the no-colour palette keeps the glyph. A future ASCII setting
+  (the braille-graphs idea, `docs/memory/open-questions/2026-11-17-braille-graphs.md`) covers
+  them too: `^` and `v`.
   `+` and `-` on a plan task raise or lower it (the person's, as `request priority`). NOW and NEXT
   sort by priority, then file order.
   - Plan tasks gain an optional `priority` field (`high`, `normal`, `low`; absent = normal) in the
@@ -134,7 +147,7 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 │   holder-g1-part2            coder     queued                                                                            ││                                  │
 │   decide-compose-undo        ♙ person  decide                                                                            ││                                  │
 │ LATER                                                                                                                    ││                                  │
-│   quota-step-4               coder     blocked    after quota-step-3                                                     ││                                  │
+│ ▲ quota-step-4               coder     blocked    after quota-step-3                                                     ││                                  │
 │ ▼ master-conversation        coder     low        after decide-master-conversation                                       ││                                  │
 │ ▼ agent-led-setup            coder     low                                                                               ││                                  │
 │ DONE 28 (d)                                                                                                              ││                                  │
@@ -154,21 +167,37 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 │ ▲ quota-step-3             coder     queued    after quota-settings-step2    │
 │   holder-g1-part2          coder     queued                                  │
 │   decide-compose-undo      ♙ person  decide                                  │
-│ LATER 3 (l) · DONE 28 (d)                                                    │
+│ LATER 3 · 1 ▲ (enter) · DONE 28 (enter)                                      │
 ╰─ + - priority · enter task ──────────────────────────────────────────────────╯
 ```
 
-At 80 columns LATER folds to a count, as DONE; `l` unfolds it.
+At 80 columns LATER folds to a count that Enter opens, as DONE does, and the count keeps a
+high-priority task visible: `LATER 3 · 1 ▲` (the person's Q5).
 
 ## 5. IDEAS: triage from the card
 
 The ideas are notes in `docs/memory/open-questions/` (ideas-as-notes, `docs/memory/IDEAS.md`). On an
 idea's card (Work's IDEAS row or the Kanban's Ideas card):
 
+Enter opens a small triage panel; `y`, `l` and `n` act only inside it, so a task is created by two
+key presses, never one (the person's Q6). Everywhere else `y` keeps copying.
+
 - `y` **yes**: master adds a plan task for it and queues it; the note becomes `resolved`, linking the
   task.
 - `l` **later**: nothing moves; the note stays `proposed`, and the card shows `later` with the date.
 - `n` **no**: the note becomes `superseded` with the person's "no" and the date, and leaves IDEAS.
+- Esc closes the panel, nothing sent.
+
+```
+╭─ Idea · language-setting ──────────────────────────╮
+│ A language setting for busmon and the CLI          │
+│ docs/memory/open-questions/2026-11-17-language-…   │
+│                                                    │
+│   y  yes: a plan task, queued by master            │
+│   l  later: the note stays                         │
+│   n  no: the note is closed                        │
+╰─ esc close ────────────────────────────────────────╯
+```
 
 busmon never edits the repository: each key sends master a directive (`idea <id>: yes|later|no`),
 and master (or docs) writes the note in a PR. The card shows `sent` until the note changes.
@@ -193,19 +222,22 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
 1. IDEAS reads the notes (`memory.OpenQuestions` wired into the Work model, beside the broker's
    ideas), and the stale comment in `work_model.go` corrected.
 2. The two fixes of §6.
-3. Board and Requests merged (§3), the `board.no_reply_after` setting.
+3. Board and Requests merged (§3), the `board.no_accept_after` and `board.no_reply_after` settings,
+   the master-dead path and its trace.
 4. Plan as tab 4, the roadmap sections, `priority` in the plan file and the glyphs (§4).
 5. IDEAS triage keys (§5).
 
-## 8. Questions for the person
+## 8. The person's answers (2026-11-17)
 
-1. **Board alerts**: are the three alerts right (never delivered, body lost, no reply), and is
-   2 hours the right default for "no reply"?
-2. **Master dead**: may busmon ask the dispatcher to resend or cancel after a confirmation, when
-   master has no fresh status? Or should busmon only say so?
-3. **Plan sections**: NOW, APPROVED, NEXT, LATER, DONE: is APPROVED its own section as drawn, or a
-   mark inside NOW?
-4. **Priority glyphs**: `▲` high, `▼` low, nothing for normal: or `+`/`-` as text?
-5. **80 columns**: LATER folded to a count on the Plan, as drawn, or listed?
-6. **IDEAS keys**: `y` yes, `l` later, `n` no: `y` copies the note's path today on Work; move the copy
-   to `c`?
+1. **Board alerts:** two settings in Shift+C, "no acceptance" (30 minutes) and "no reply" (2 hours),
+   both adjustable (§3).
+2. **Master dead:** yes, busmon may ask the dispatcher to resend or cancel after a confirmation,
+   traced; it first proposes waiting for master's self-repair; master reads the trace at its
+   restart, and any cancel done without it is told to it on the bus (§3).
+3. **APPROVED:** its own section between NOW and NEXT, folded when empty (§4).
+4. **Priority:** `▲`/`▼`, nothing for normal, in a colour distinct from the header's yellow
+   warning; an ASCII setting may cover them (§4).
+5. **80 columns:** LATER folds to a count that Enter opens, keeping a high-priority task visible,
+   `LATER 3 · 1 ▲` (§4).
+6. **IDEAS:** `y` stays copy everywhere; Enter on an idea opens a triage panel where `y`, `l`, `n`
+   act (§5).
