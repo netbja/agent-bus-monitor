@@ -95,14 +95,26 @@ func (t *terminal) answer() {
 	t.mu.Lock()
 	latched := t.latched != ""
 	t.mu.Unlock()
-	if latched || !t.lockEmu(0) { // untrusted: the read loop's scanner answers; busy: the next tick
+	if latched || !t.ansMu.TryLock() { // untrusted: the scanner's answers; a pass running: it answers
+		return
+	}
+	defer t.ansMu.Unlock() // one pass at a time: answering is that pass's
+	if !t.lockEmu(0) {     // busy: the next tick
 		return
 	}
 	// The pass is in flight from here: a latch meanwhile leaves the pending
 	// answers to it, so an answer it collects is never also owed
 	// (reviewer-codex: one answer per query).
+	if t.afterAnswerLock != nil {
+		t.afterAnswerLock()
+	}
 	t.mu.Lock()
-	t.answering, t.answeringAt = true, time.Now()
+	if t.latched != "" { // latched since the check above: its pending answers are owed, the emulator's are not ours to write
+		t.mu.Unlock()
+		<-t.emu
+		return
+	}
+	t.answering, t.answeringAt = true, time.Now() // atomic with that recheck (reviewer-codex)
 	t.mu.Unlock()
 	var replies []byte
 	err := t.run(func(s screen.Screen) { replies = s.Replies() })
@@ -116,8 +128,9 @@ func (t *terminal) answer() {
 		return
 	}
 	t.answering = false
-	if err != nil { // the latch pays what is still pending (reviewer-codex: latch first)
+	if err != nil { // latch, and owe what is still pending even if latched already (reviewer-codex)
 		t.latch(ScreenInvalid, err.Error())
+		t.owePending()
 		t.mu.Unlock()
 		return
 	}

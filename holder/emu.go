@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
@@ -78,11 +79,15 @@ type emuState struct {
 	// payOwed) when the screen is latched before the emulator answered.
 	pending     []pendingAnswer
 	owed        []byte
-	answering   bool      // an answer pass is collecting the emulator's replies
-	answeringAt time.Time // since when
+	ansMu       sync.Mutex // one answer pass at a time (the reply loop's and the emulator goroutine's)
+	answering   bool       // an answer pass is collecting the emulator's replies
+	answeringAt time.Time  // since when
 	// afterReplies runs between an answer pass's Replies and its short
 	// lock (tests: a latch in that window).
 	afterReplies func()
+	// afterAnswerLock runs once an answer pass took the emulator's lock,
+	// before it marks itself in flight (tests: a latch in that window).
+	afterAnswerLock func()
 }
 
 // pendingAnswer is one query's static answer.

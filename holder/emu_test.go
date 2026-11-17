@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,7 +30,8 @@ type faultScreen struct {
 	snapPanic bool
 	// replies, when set, answers each Replies call in turn (nil: panic);
 	// past its end, the emulator's own.
-	replies [][]byte
+	replies       [][]byte
+	beforeReplies func() // runs in a scripted Replies call, before its answer
 }
 
 func (f *faultScreen) Replies() []byte {
@@ -41,6 +43,12 @@ func (f *faultScreen) Replies() []byte {
 	r := f.replies[0]
 	f.replies = f.replies[1:]
 	f.mu.Unlock()
+	f.mu.Lock()
+	before := f.beforeReplies
+	f.mu.Unlock()
+	if before != nil {
+		before()
+	}
 	if r == nil {
 		panic("injected replies panic")
 	}
@@ -589,5 +597,87 @@ func TestWatchAbandonsAHungAnswerPass(t *testing.T) {
 	term.watch(time.Now())
 	if string(term.owed) != answerDA1 || term.answering {
 		t.Fatalf("owed %q, answering %v", term.owed, term.answering)
+	}
+}
+
+// pipeTerm is a hand-built terminal on f whose writes to the program are
+// read back from the pipe once it is closed.
+func pipeTerm(t *testing.T, f *faultScreen) (*terminal, func() string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Close(); w.Close() })
+	term := &terminal{pty: w, scr: f, emuState: newEmuState(0)}
+	return term, func() string { w.Close(); b, _ := io.ReadAll(r); return string(b) }
+}
+
+// reviewer-codex (1): a latch between an answer pass's first check and its
+// mark pays the static DA; the pass then rechecks under the short lock and
+// writes nothing of the emulator's: one answer.
+func TestLatchBeforeTheAnswerPassMarksAnswersOnce(t *testing.T) {
+	term, written := pipeTerm(t, &faultScreen{Screen: screen.New(20, 5, 10), replies: [][]byte{[]byte(answerDA1)}})
+	term.owe(term.scan.find([]byte("\x1b[c")))
+	term.afterAnswerLock = func() {
+		term.mu.Lock()
+		term.latch(ScreenInvalid, "a gap")
+		term.mu.Unlock()
+		term.payOwed()
+	}
+	term.answer()
+	term.payOwed()
+	if got := written(); got != answerDA1 {
+		t.Fatalf("written %q, want one DA", got)
+	}
+}
+
+// reviewer-codex (2): a latch during a pass (left the pending answers to
+// it), then Replies panics: the pending DA is owed and written once.
+func TestLatchThenRepliesPanicPaysOnce(t *testing.T) {
+	f := &faultScreen{Screen: screen.New(20, 5, 10), replies: [][]byte{nil}}
+	term, written := pipeTerm(t, f)
+	term.owe(term.scan.find([]byte("\x1b[c")))
+	f.beforeReplies = func() {
+		term.mu.Lock()
+		term.latch(ScreenStuck, "a stuck latch")
+		term.mu.Unlock()
+	}
+	term.answer()
+	term.payOwed()
+	if got := written(); got != answerDA1 {
+		t.Fatalf("written %q, want one DA", got)
+	}
+}
+
+// Answer passes never overlap: while one runs (here, paused after its
+// Replies, the emulator's lock released), another returns at once, so
+// answering is one pass's.
+func TestAnswerPassesNeverOverlap(t *testing.T) {
+	f := &faultScreen{Screen: screen.New(20, 5, 10), replies: [][]byte{[]byte(answerDA1), []byte(answerDA1)}}
+	term, written := pipeTerm(t, f)
+	term.owe(term.scan.find([]byte("\x1b[c")))
+	inside, release := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	term.afterReplies = func() { // the first pass, its emulator lock released
+		if first.CompareAndSwap(false, true) {
+			close(inside)
+			<-release
+		}
+	}
+	done := make(chan struct{})
+	go func() { term.answer(); close(done) }()
+	<-inside
+	term.answer() // a second pass while the first runs: returns, collects nothing
+	close(release)
+	<-done
+	if got := written(); got != answerDA1 {
+		t.Fatalf("written %q, want the one DA of the first pass", got)
+	}
+	f.mu.Lock()
+	left := len(f.replies)
+	f.mu.Unlock()
+	if left != 1 {
+		t.Fatalf("Replies called %d times", 2-left)
 	}
 }

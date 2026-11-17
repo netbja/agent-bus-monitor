@@ -16,7 +16,9 @@
     - while the screen is trusted, each static answer stays pending until its reply is observed in
       what the emulator gave (in order; a Replies panic latches first; a latch during an answer pass leaves the
       pending answers to that pass, which retires what it saw and owes the rest, so no query is
-      answered twice; a pass hung on a latched screen is abandoned by the watch, reviewer-codex);
+      answered twice; a pass hung on a latched screen is abandoned by the watch; one pass at a time (`ansMu`),
+      which rechecks the latch and marks itself under `t.mu` after taking the emulator's lock, and
+      owes what is pending on a `Replies` panic even if already latched, reviewer-codex);
     - a latch writes the pending ones once (a query in the hang window before the stuck latch, or
       dropped by a gap: foureyes);
     - once latched, it answers at once, with x/vt's own strings, never a cursor position.
