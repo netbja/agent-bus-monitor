@@ -414,6 +414,16 @@ var Keys = []*Key{
 	// person logs in: agentbus up and agentbus service login apply it through
 	// service.LoginStart (step 9: systemd, launchd; refused elsewhere).
 	{Name: "services.start_at_login", Kind: Bool, Default: false, ReadBy: "agentbus up, agentbus service login", MachineOnly: true, file: fileBool},
+	// After an unplanned stop of the machine (reboot-resume §3.1, §6.3): the
+	// dispatch service restarts the team by itself, at most unplanned_max
+	// times in unplanned_window; one more stops the project. Machine-only:
+	// they judge this host's reboots.
+	{Name: "services.unplanned_restart", Env: "AGENT_BUS_UNPLANNED_RESTART", Kind: Bool, Default: true, ReadBy: "dispatch",
+		MachineOnly: true, env: envZeroOne, file: fileBool},
+	{Name: "services.unplanned_max", Env: "AGENT_BUS_UNPLANNED_MAX", Kind: Int, Default: 3, ReadBy: "dispatch",
+		MachineOnly: true, env: envIntRange(1, 10), file: fileInt(func(n int) bool { return n >= 1 && n <= 10 }, "want a whole number from 1 to 10")},
+	{Name: "services.unplanned_window", Env: "AGENT_BUS_UNPLANNED_WINDOW", Kind: Duration, Default: 24 * time.Hour, ReadBy: "dispatch",
+		MachineOnly: true, env: envDurationRange(time.Hour, 7*24*time.Hour), file: fileDurationRange(time.Hour, 7*24*time.Hour)},
 	// The history archive (spec 2026-11-01-history-design.md): days of day
 	// files kept (0 = no archive) and the directory's cap in MiB.
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",
@@ -920,4 +930,36 @@ func (k *Key) Valid(v any) bool {
 	}
 	_, why := k.file(v)
 	return why == ""
+}
+
+// envIntRange is a whole number from lo to hi.
+func envIntRange(lo, hi int) func(string) (any, envResult) {
+	return func(raw string) (any, envResult) {
+		if n, err := strconv.Atoi(raw); err == nil && n >= lo && n <= hi {
+			return n, envUse
+		}
+		return nil, envSkip
+	}
+}
+
+// envDurationRange is a duration from lo to hi.
+func envDurationRange(lo, hi time.Duration) func(string) (any, envResult) {
+	return func(raw string) (any, envResult) {
+		if d, err := time.ParseDuration(raw); err == nil && d >= lo && d <= hi {
+			return d, envUse
+		}
+		return nil, envSkip
+	}
+}
+
+// fileDurationRange is envDurationRange's rule for the file.
+func fileDurationRange(lo, hi time.Duration) func(any) (any, string) {
+	return func(v any) (any, string) {
+		if s, ok := v.(string); ok {
+			if d, err := time.ParseDuration(s); err == nil && d >= lo && d <= hi {
+				return d, ""
+			}
+		}
+		return nil, "want a duration from " + lo.String() + " to " + hi.String() + ", such as \"24h\""
+	}
 }

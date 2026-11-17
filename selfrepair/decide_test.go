@@ -217,3 +217,20 @@ func TestDecideHoldKinds(t *testing.T) {
 		t.Errorf("no hold, a hold kind: %+v", d)
 	}
 }
+
+// reboot-resume §5: while this boot's reboot record stands with any verdict
+// but restarting, every dead agent is held (kind reboot), its reason said;
+// nothing else changes the hold.
+func TestDecideHoldsAfterAReboot(t *testing.T) {
+	f := facts(dead("coder"))
+	f.Mode = ModeOn
+	f.Reboot = "after an intentional reboot: the person relaunches"
+	d := one(t, f)
+	if d.Kind != KindHold || d.Hold != HoldReboot || !strings.Contains(d.Reason, "intentional reboot") || d.Act {
+		t.Fatalf("%+v", d)
+	}
+	f.Reboot = ""
+	if d := one(t, f); d.Kind != KindRelaunch || !d.Act {
+		t.Fatalf("no record: %+v", d)
+	}
+}

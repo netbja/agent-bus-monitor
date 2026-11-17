@@ -92,13 +92,17 @@ type Facts struct {
 	Mode              Mode
 	Paused, Suspended bool
 	HolderUp          bool // the project's holder answers
-	WorkspaceOpen     bool // the project's workspace is open
-	InFlight          bool // a relaunch of the project is not proven yet
-	LastRelaunch      time.Time
-	Grace             time.Duration // dead this long before acting (60 s)
-	Every             time.Duration // dispatch.self_repair_every
-	PerDay            int           // dispatch.self_repair_per_day
-	Agents            []Agent
+	// Reboot is why a reboot holds every relaunch (reboot-resume §5: this
+	// boot's record with any verdict but restarting, or the judgement still
+	// pending); "" none.
+	Reboot        string
+	WorkspaceOpen bool // the project's workspace is open
+	InFlight      bool // a relaunch of the project is not proven yet
+	LastRelaunch  time.Time
+	Grace         time.Duration // dead this long before acting (60 s)
+	Every         time.Duration // dispatch.self_repair_every
+	PerDay        int           // dispatch.self_repair_per_day
+	Agents        []Agent
 }
 
 // Kind is what a decision does.
@@ -138,6 +142,7 @@ const (
 	HoldQuota     = "quota"
 	HoldNetwork   = "network"
 	HoldLogin     = "login"
+	HoldReboot    = "reboot" // reboot-resume §5: the person relaunches after this reboot
 )
 
 func short(d time.Duration) string {
@@ -193,7 +198,9 @@ func decideOne(f Facts, a Agent) Decision {
 		}
 		return r
 	}
-	switch { // the holder and the workspace first: the tab is judged only through them (R4)
+	switch { // a reboot, the holder and the workspace first: the tab is judged only through them (R4)
+	case f.Reboot != "":
+		return hold(HoldReboot, "%s", f.Reboot)
 	case !f.HolderUp:
 		return hold(HoldHolder, "the holder does not answer")
 	case !f.WorkspaceOpen:

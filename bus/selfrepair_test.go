@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -469,5 +470,41 @@ func TestSelfRepairOwedRedis(t *testing.T) {
 	}
 	if again, _ := b.SelfRepairOwed(ctx); len(again) != 1 || again[0].Value != "second" {
 		t.Fatalf("after one ack %+v", again)
+	}
+}
+
+// reboot-resume §3.1: a relaunch after an unplanned reboot (a reboot death)
+// is recorded apart: it spaces the project's relaunches (the pause) but is
+// never one of the role's own (its per-day budget, R5).
+func TestRebootRelaunchIsNotTheRolesAttemptRedis(t *testing.T) {
+	b := dialDispatch(t)
+	ctx := context.Background()
+	if _, err := b.Status(ctx, "coder", "idle", "", AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := b.AcquireDispatch(ctx, "tok", 15*time.Second); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := b.BeginRebootRelaunch(ctx, "tok", "coder", "n1", SwapEvent{By: "dispatch", Episode: "1:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.FinishSelfRepair(ctx, "tok", "n1", SwapEvent{Role: "coder", Event: SwapRelaunched, By: "dispatch", Episode: "1:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.BeginSelfRepair(ctx, "tok", "coder", "n2", SwapEvent{By: "dispatch", Episode: "2:2"}); err != nil {
+		t.Fatal(err)
+	}
+	past, err := b.SelfRepairPast(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := past["coder"]
+	if len(c.Attempts) != 1 || len(c.RebootAttempts) != 1 || !c.RebootAttempts[0].Before(c.Attempts[0].Add(time.Second)) {
+		t.Fatalf("attempts %v, reboot attempts %v", c.Attempts, c.RebootAttempts)
+	}
+	// The window drops a reboot attempt like any other.
+	raw, _ := b.r.HGet(ctx, SelfRepairKey(b.project), "attempts:coder").Result()
+	if !strings.HasPrefix(raw, "r") || strings.Count(raw, ",") != 1 {
+		t.Fatalf("field %q", raw)
 	}
 }

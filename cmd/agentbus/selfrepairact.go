@@ -189,7 +189,12 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 	role, snap := d.Agent, r.Snaps[d.Agent]
 	nonce := newNonce()
 	begin := bus.SwapEvent{By: "dispatch", Reason: string(d.Kind) + ": " + d.Reason, OldPID: snap.PID, OldPane: snap.Pane, Episode: ep}
-	if err := c.b.BeginSelfRepair(ctx, token, role, nonce, begin); err != nil {
+	beginFn := c.b.BeginSelfRepair
+	if rebootDeath(r, role) { // reboot-resume §3.1: the reboot counter counts it, never R5
+		beginFn = c.b.BeginRebootRelaunch
+		begin.Reason = "reboot " + begin.Reason
+	}
+	if err := beginFn(ctx, token, role, nonce, begin); err != nil {
 		if errors.Is(err, bus.ErrSwapInProgress) {
 			return nil // another relauncher holds the role: never next to it
 		}
