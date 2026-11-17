@@ -1267,3 +1267,21 @@ func ensureOwnHolder(d upDeps, m service.Manager, project, workdir string, stdou
 	fmt.Fprintf(stdout, "holder: no holder of this build (%s) answers; installing and starting it (the agents on older builds are not touched)\n", raw)
 	return startHolder(d, m, project, workdir, stdout)
 }
+
+// serviceEnsureHolder is the dispatch service's EnsureHolder: up's deps (the
+// service manager, the binary, the build) and the unit's working directory,
+// which is the project's repository as up gave it.
+func serviceEnsureHolder(project string, deps func(log io.Writer) upDeps) func(context.Context, io.Writer) error {
+	return func(_ context.Context, log io.Writer) error {
+		ud := deps(log)
+		m, why := ud.Services()
+		if m == nil {
+			return fmt.Errorf("no service manager (%s)", why)
+		}
+		workdir, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		return ensureOwnHolder(ud, m, project, workdir, log)
+	}
+}

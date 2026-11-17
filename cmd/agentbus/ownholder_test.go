@@ -91,7 +91,7 @@ func TestServiceRunEnsuresItsHolderOnceWithTheLease(t *testing.T) {
 	var granted sync.Once
 	open := func() { granted.Do(func() { close(grant) }) }
 	runUntilCleanup(t, b, service.Dispatch, nil, d)
-	t.Cleanup(open) // after a failure too: the run's stop needs RunDispatch past the grant
+	t.Cleanup(open)                    // after a failure too: the run's stop needs RunDispatch past the grant
 	time.Sleep(100 * time.Millisecond) // several heartbeats without the lease
 	if n := calls.Load(); n != 0 {
 		t.Fatalf("ensured %d times without the lease", n)
@@ -101,5 +101,36 @@ func TestServiceRunEnsuresItsHolderOnceWithTheLease(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // several heartbeats with it
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("ensured %d times, want once", n)
+	}
+}
+
+// The service's closure: up's manager and the unit's working directory reach
+// ensureOwnHolder; no manager is an error, not a panic.
+func TestServiceEnsureHolderWiring(t *testing.T) {
+	_, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	exe := filepath.Join(t.TempDir(), "agentbus")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deps.Exe = func() (string, error) { return exe, nil }
+	hm := &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{}}
+	deps.Services = func() (service.Manager, string) { return hm, "" }
+	deps.HolderBuild = func() string { return "v0.29.0" }
+	deps.HolderAnswers = func(project, k string) bool { return hm.active[k] }
+	deps.Sleep = func(time.Duration) {}
+	work := t.TempDir()
+	t.Chdir(work)
+	var out bytes.Buffer
+	if err := serviceEnsureHolder("demo", func(io.Writer) upDeps { return deps })(context.Background(), &out); err != nil {
+		t.Fatal(err)
+	}
+	key := service.BuildKey("v0.29.0")
+	if s, ok := hm.holders[key]; !ok || s.WorkDir != work || s.Project != "demo" {
+		t.Fatalf("holder spec %+v (installed %v)", s, ok)
+	}
+	deps.Services = func() (service.Manager, string) { return nil, "no systemd" }
+	if err := serviceEnsureHolder("demo", func(io.Writer) upDeps { return deps })(context.Background(), &out); err == nil || !strings.Contains(err.Error(), "no systemd") {
+		t.Fatalf("no manager: %v", err)
 	}
 }
