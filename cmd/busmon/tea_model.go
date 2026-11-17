@@ -36,6 +36,9 @@ type fadeMsg time.Time
 
 // shellConfig is what the shell is started with.
 type shellConfig struct {
+	// holders reads the project's holders on this host for the Services page
+	// (agent-screen-blocked §4); nil reads none.
+	holders       func(context.Context) ([]holderRow, error)
 	ctx           context.Context
 	reader        busReader
 	w             busWriter // sends, answers, thread reads, removals, resume
@@ -121,26 +124,26 @@ type uiState struct {
 	ideaAdding     bool                    // an add is on its way: another waits for its result
 	ideaReq        string                  // the request id of the text last sent (ideaReqText): a retry of it reuses the id
 	ideaReqText    string
-	askDraft       string                  // a directive held once: its recipient has an open ask
-	broadcastDraft string                  // a broadcast warned about once: the next send sends it
-	askChoose      *askChoice              // several recipients hold questions: the next digit picks one
-	sending        bool                    // a send is in flight
-	pauseAck       string                  // the send the person chose to make despite the pause
-	pausePopup     *pauseDialog            // the pause popup, when open
-	confirm        *pendingRemoval         // a d waiting for its y
-	palSel         int                     // the palette's chosen row (a leading / in the line)
-	palMoved       bool                    // ↑↓ moved it since the last edit: Enter runs that row
-	palHidden      bool                    // Esc hid the list; the next edit shows it again
-	sleepAsk       *sleepAsk               // a Z waiting for its y
-	sleepRun       *sleepRun               // agentbus suspend or resume running
-	sleepSeq       int                     // the last run's id
-	reminder       *reminderDialog         // the reminder, when open
-	summary        bool                    // the recap's summary confirmation is open
-	summarySent    bool                    // the summary request is in flight: its success closes the recap
-	tour           *tourState              // the first-launch tour, when open (tour.go)
-	pastedImages   map[string]string       // an image pasted in compose: its hash -> the file saved (never saved twice)
-	atRecent       []string                // the @ popup's picks this session, most recent first (compose-at-file §4.2)
-	del            *deletePanel            // the Projects page's delete confirmation (projects_delete.go)
+	askDraft       string            // a directive held once: its recipient has an open ask
+	broadcastDraft string            // a broadcast warned about once: the next send sends it
+	askChoose      *askChoice        // several recipients hold questions: the next digit picks one
+	sending        bool              // a send is in flight
+	pauseAck       string            // the send the person chose to make despite the pause
+	pausePopup     *pauseDialog      // the pause popup, when open
+	confirm        *pendingRemoval   // a d waiting for its y
+	palSel         int               // the palette's chosen row (a leading / in the line)
+	palMoved       bool              // ↑↓ moved it since the last edit: Enter runs that row
+	palHidden      bool              // Esc hid the list; the next edit shows it again
+	sleepAsk       *sleepAsk         // a Z waiting for its y
+	sleepRun       *sleepRun         // agentbus suspend or resume running
+	sleepSeq       int               // the last run's id
+	reminder       *reminderDialog   // the reminder, when open
+	summary        bool              // the recap's summary confirmation is open
+	summarySent    bool              // the summary request is in flight: its success closes the recap
+	tour           *tourState        // the first-launch tour, when open (tour.go)
+	pastedImages   map[string]string // an image pasted in compose: its hash -> the file saved (never saved twice)
+	atRecent       []string          // the @ popup's picks this session, most recent first (compose-at-file §4.2)
+	del            *deletePanel      // the Projects page's delete confirmation (projects_delete.go)
 	// The idle view (idleview.go): shown after display.idle_view_after with
 	// no input; lastInput is the last input's poll time (the first poll's
 	// until then), idleSince when the view was entered.

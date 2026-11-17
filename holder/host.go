@@ -343,6 +343,7 @@ func (h *Host) Process(ctx context.Context) (dispatch.ProcID, error) {
 type HolderState struct {
 	Build  string
 	Socket string
+	PID    int // the holder process, as it says itself (0: an older build)
 	Live   int
 	Listed bool
 }
@@ -364,7 +365,7 @@ func (h *Host) Holders(ctx context.Context) ([]HolderState, error) {
 			}
 			continue
 		}
-		st := HolderState{Build: r.Info.Build, Socket: socks[key]}
+		st := HolderState{Build: r.Info.Build, Socket: socks[key], PID: r.Info.PID}
 		if l, err := h.call(ctx, key, List{}); err == nil {
 			st.Listed = true
 			for _, t := range l.Terms {

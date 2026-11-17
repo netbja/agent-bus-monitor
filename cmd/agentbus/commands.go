@@ -539,7 +539,7 @@ var commands = []cli.Command{
 			"service stale (this host's running services on another build than this agentbus: setup asks to restart them)",
 			"service login",
 			"service restart holder --kill-agents",
-			"service start holder | service gc",
+			"service start holder | service stop holder <build> | service gc",
 			"service supervise holder <p> <build key> | dispatch <p> | missions <p> (no service manager: started detached, never by hand)",
 		},
 		Summary: "the project's user services (systemd --user, launchd, or detached supervisors without either)",

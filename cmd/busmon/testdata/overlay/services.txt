@@ -22,4 +22,7 @@
 │ memory ? · ? keys (every project)                                                                │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
+—— holders ——
+● v0.29.0  running · up 2h · hosts 3 agents
+
 enter or l: the selected service's log, enter on Redis: its page  ·  agentbus down <p> stops them; …
