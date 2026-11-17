@@ -170,7 +170,7 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 │ NOW                                                                                                                      ││ owner   coder                    │
 │ ● agent-screen-blocked       coder     working    after holder-g1                                                        ││ state   queued 3h                │
 │ ◐ ask-refuses-person         coder2    review     foureyes 12m · reviewer-codex 12m                                      ││ after   quota-settings-step2 ✓   │
-│ APPROVED                                                                                                                 ││ waits   quota-step-4 on it       │
+│ APPROVED                                                                                                                 ││ unblocks quota-step-4            │
 │ ✓ human-not-an-agent-test    coder2    approved   deliver                                                                ││ prio    ↑ high (+ -)             │
 │ NEXT                                                                                                                     ││ request quota-step-3 queued      │
 │ ↑ quota-step-3               coder     queued     after quota-settings-step2                                             ││                                  │
@@ -238,10 +238,12 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
 ## 6. Fixes
 
 - **"Nothing expected from you." while decisions wait.** The For you panel shows the person's plan
-  tasks as one pointer, not as rows (§9, Q5), so with only plan decisions waiting its body is
-  empty and reads "Nothing expected from you." while the label says `10 decide`. Fix: with no
-  row and decisions waiting, the panel reads `10 decisions in the plan (3 Work)`, attention role;
-  "Nothing expected" only when the strip counts nothing.
+  tasks as one pointer, not as rows (requests-plan §9, Q5). With no row, `forYouEmptyRows` writes
+  "Nothing expected from you." whenever nothing is owed (`owed == 0`), then the plan pointer
+  (`planPointer`, the person's first waiting, blocked or upcoming task) under it, while the label
+  says `10 decide`. Fix: when the strip counts decisions, that first line reads
+  `10 decisions in the plan (3 Work)`, attention role, and the pointer stays under it;
+  "Nothing expected from you." only when the strip counts nothing.
 - **Kanban For you cards repeat `decide · you`.** Every card's first line is
   `<glyph> decide · you · 2h`: "you" is true of the whole column, and the glyph already says the
   verb. Fix: the first line is the glyph and the title; the second is the age and the place
