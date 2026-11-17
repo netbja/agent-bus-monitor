@@ -752,6 +752,50 @@ func TestDeliverNeedsBothReviewers(t *testing.T) {
 	if code, _, errw := w.run("master", "coder/x", "--single-approval", "just in case"); code != 0 || len(w.traces) != 0 || strings.Contains(w.r.body, "one approval") {
 		t.Fatalf("both approved with the flag: exit %d, traces %q: %q", code, w.traces, errw)
 	}
+	// reviewer-codex: each reviewer's LATEST decision counts. foureyes
+	// approved, then rejected; reviewer-codex approved after: the roll-up is
+	// APPROVED, but only one reviewer approves now.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "reject", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvH},
+	}
+	if code, _, errw := w.run("master", "coder/x"); code != 3 || w.r.did("git push") {
+		t.Fatalf("a superseded approval counted: exit %d: %q", code, errw)
+	}
+	// An approval of an older head, then of the delivered one: each
+	// reviewer's latest names the head, both count.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = append([]bus.Verdict{{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvOld}}, w.verdicts...)
+	if code, _, errw := w.run("master", "coder/x"); code != 0 {
+		t.Fatalf("an older head's approval before: exit %d: %q", code, errw)
+	}
+	// An approval of the head, then the same reviewer on a newer head: its
+	// latest no longer names this head.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = append(w.verdicts, bus.Verdict{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvOld})
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("a reviewer whose latest names another head counted: exit %d", code)
+	}
+	// A self-approval beside one reviewer's is still one approval.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "coder", Decision: "approve", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+	}
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("a self-approval counted: exit %d", code)
+	}
+	// The second reviewer's only approval names another head.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvOld},
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+	}
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("an approval of another head counted: exit %d", code)
+	}
 	// An empty reason is no reason.
 	w = newDeliverWorld(t, "git@github.com:o/r.git")
 	one(w)

@@ -338,7 +338,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// Both reviewers approve the head (merge-popup-setting, the person's
 	// answer 3): otherwise the person could merge code one reviewer never
 	// read, and the merge queue, which For you lists, would not show it.
-	if reviewers := distinctReviewers(approvals); len(reviewers) < 2 && o.single == "" {
+	if reviewers := currentApprovers(vs, h); len(reviewers) < 2 && o.single == "" {
 		return fail(3, "%s@%s has %d independent approval(s) (%s); both reviewers must approve the head: nothing delivered. "+
 			"In an emergency: --single-approval <reason>, written in the request and traced on the bus", subject, h, len(reviewers), strings.Join(reviewers, ", "))
 	}
@@ -363,7 +363,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	}
 	title = deliverTitle(title, o.branch)
 	body := deliverBody(title, commits, approvals, h, desc)
-	if o.single != "" && len(distinctReviewers(approvals)) < 2 {
+	if o.single != "" && len(currentApprovers(vs, h)) < 2 {
 		body += "\n**delivered with one approval: " + safeLine(o.single) + "** (agentbus deliver --single-approval)\n"
 	} else {
 		o.single = "" // both approved: no emergency to trace
@@ -472,12 +472,26 @@ func placeOf(f forge.Forge) string {
 	return f.Host + "/" + f.Owner + "/" + f.Repo
 }
 
-// distinctReviewers are the reviewers of approvals, each once, in order.
-func distinctReviewers(approvals []bus.Verdict) []string {
+// currentApprovers are the reviewers whose latest decision on the subject
+// is an independent approve of h, in the order of their first verdict
+// (reviewer-codex): an approval a reviewer later rejected or replaced with
+// another head's no longer counts. vs is oldest first.
+func currentApprovers(vs []bus.Verdict, h string) []string {
+	var order []string
+	latest := map[string]bus.Verdict{}
+	for _, v := range vs {
+		if v.Reviewer == v.Author {
+			continue
+		}
+		if _, seen := latest[v.Reviewer]; !seen {
+			order = append(order, v.Reviewer)
+		}
+		latest[v.Reviewer] = v
+	}
 	var out []string
-	for _, v := range approvals {
-		if !slices.Contains(out, v.Reviewer) {
-			out = append(out, v.Reviewer)
+	for _, r := range order {
+		if v := latest[r]; v.Decision == "approve" && v.Head == h {
+			out = append(out, r)
 		}
 	}
 	return out
