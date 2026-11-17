@@ -283,6 +283,11 @@ func TestHolderStartScreenClose(t *testing.T) {
 	if p, err := h.Process(context.Background()); err != nil || p.PID != os.Getpid() || p.Start == 0 {
 		t.Fatalf("Process %+v %v", p, err)
 	}
+	// Each holder with its own list (holder-behind): this one, listed, with
+	// its one live terminal.
+	if hs, err := h.Holders(context.Background()); err != nil || len(hs) != 1 || hs[0].Build != "test" || !hs[0].Listed || hs[0].Live != 1 || hs[0].Socket != sock {
+		t.Fatalf("Holders %+v %v", hs, err)
+	}
 	if _, err := cl.Call(Ping{}); err != nil {
 		t.Fatal(err)
 	}

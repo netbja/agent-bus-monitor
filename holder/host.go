@@ -337,6 +337,49 @@ func (h *Host) Process(ctx context.Context) (dispatch.ProcID, error) {
 	return dispatch.ProcID{PID: r.Info.PID, Start: r.Info.Start}, nil
 }
 
+// HolderState is one holder of the project that answered Describe: its
+// build and socket, and its live terminals when its List answered too
+// (Listed). A List that failed leaves Listed false: never "no terminal".
+type HolderState struct {
+	Build  string
+	Socket string
+	Live   int
+	Listed bool
+}
+
+// Holders is every holder of the project that answers, each with its own
+// List: unlike List, a holder whose List fails is said, not skipped
+// (reviewer-codex, holder-behind).
+func (h *Host) Holders(ctx context.Context) ([]HolderState, error) {
+	socks, keys, err := h.sockets()
+	if err != nil {
+		return nil, err
+	}
+	var out []HolderState
+	for _, key := range keys {
+		r, err := h.call(ctx, key, Describe{})
+		if err != nil || r.Info == nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			continue
+		}
+		st := HolderState{Build: r.Info.Build, Socket: socks[key]}
+		if l, err := h.call(ctx, key, List{}); err == nil {
+			st.Listed = true
+			for _, t := range l.Terms {
+				if t.Alive {
+					st.Live++
+				}
+			}
+		} else if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		out = append(out, st)
+	}
+	return out, nil
+}
+
 // Describe is every holder of the project that answers: its build, socket
 // and terminals; a build other than the current one is draining.
 func (h *Host) Describe(ctx context.Context) (termhost.HostInfo, error) {

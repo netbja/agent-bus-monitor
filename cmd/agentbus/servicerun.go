@@ -336,7 +336,10 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			for {
 				if held, gen := st.leaseGen(); kind == service.Dispatch && held {
 					ensure()
-					if err := d.HostPing(runCtx); err != nil && runCtx.Err() == nil {
+					var behind *holderBehindError
+					if err := d.HostPing(runCtx); err != nil && runCtx.Err() == nil && errors.As(err, &behind) {
+						st.setIfLeased(gen, "holder-behind", behind.detail(p), err.Error())
+					} else if err != nil && runCtx.Err() == nil {
 						st.setIfLeased(gen, "waiting-holder", "the holder does not answer; no agent is woken until it does", err.Error())
 					} else {
 						st.setIfLeased(gen, "ready", "holds the dispatch lease", "")

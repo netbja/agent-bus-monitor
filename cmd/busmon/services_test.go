@@ -30,6 +30,8 @@ func TestServiceFact(t *testing.T) {
 		{"no record, nothing", bus.ServiceRecord{}, false, "", ""},
 		{"ready and fresh", bus.ServiceRecord{State: "ready", At: fresh}, true, "up", "ready"},
 		{"waiting for the holder", bus.ServiceRecord{State: "waiting-holder", At: fresh}, true, "up", "waiting-holder"},
+		{"its build's holder missing, another answers", bus.ServiceRecord{State: "holder-behind", At: fresh}, true, "up", "holder-behind"},
+		{"holder-behind gone stale", bus.ServiceRecord{State: "holder-behind", At: old}, true, "", "down"},
 		{"missions waits for git", bus.ServiceRecord{State: "waiting-git", At: fresh}, true, "", "waiting-git"},
 		{"waiting for git gone stale", bus.ServiceRecord{State: "waiting-git", At: old}, true, "", "down"},
 		{"idle conductor", bus.ServiceRecord{State: "idle", At: fresh}, true, "up", "idle"},
@@ -53,7 +55,7 @@ func TestServiceFact(t *testing.T) {
 
 func TestServiceSegWords(t *testing.T) {
 	for state, want := range map[string]string{
-		"up": "dispatch up", "down": "dispatch down", "ready": "dispatch ready", "waiting-holder": "dispatch waiting for the holder", "waiting-git": "dispatch waiting git",
+		"up": "dispatch up", "down": "dispatch down", "ready": "dispatch ready", "waiting-holder": "dispatch waiting for the holder", "holder-behind": "dispatch no holder of its build", "waiting-git": "dispatch waiting git",
 		"failed": "dispatch failed", "gave-up": "dispatch gave up", "stopped": "dispatch stopped", "starting": "dispatch starting",
 	} {
 		if got := lineText(serviceSeg("dispatch", "disp", state, false)); !strings.HasSuffix(got, want) {
@@ -68,6 +70,9 @@ func TestServiceSegWords(t *testing.T) {
 	}
 	if r := serviceSeg("dispatch", "disp", "waiting-holder", false)[0].Role; r != RoleAttention {
 		t.Errorf("waiting role = %v", r)
+	}
+	if r := serviceSeg("dispatch", "disp", "holder-behind", false)[0].Role; r != RoleAttention {
+		t.Errorf("holder-behind role = %v", r)
 	}
 	if r := serviceSeg("missions", "miss", "waiting-git", false)[0].Role; r != RoleAttention {
 		t.Errorf("waiting git role = %v", r)
@@ -486,5 +491,22 @@ func TestServiceLogHeaderWrapsAtItsWidth(t *testing.T) {
 	}
 	if !strings.HasPrefix(lines[0].text(), "Log:  ") || !strings.HasPrefix(lines[1].text(), "      ") {
 		t.Errorf("the path does not wrap under its value:\n%s", plainOf(lines))
+	}
+}
+
+// A dispatcher whose own build has no holder, while another build's holder
+// answers, reads as attention on its card, not as a healthy running state.
+func TestServiceCardHolderBehindIsAttention(t *testing.T) {
+	now := time.Now()
+	recs := map[string]bus.ServiceRecord{"dispatch": {State: "holder-behind", Detail: "no holder of this build (b2) runs", At: now.UnixMilli(), PID: 7, Host: "here"}}
+	lines := serviceCard(svcFacts{recs: recs, host: "here"}, "dispatch", false, now)
+	var role Role = -1
+	for _, sp := range lines[0] {
+		if strings.Contains(sp.Text, "holder-behind") {
+			role = sp.Role
+		}
+	}
+	if role != RoleAttention {
+		t.Fatalf("holder-behind role = %v, want attention; card %q", role, plainOf(lines))
 	}
 }
