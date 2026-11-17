@@ -1,6 +1,6 @@
 # busmon views: one question per view (Work, Board, Plan)
 
-Status: r2, spec and mock-ups only, no code; r2 holds the person's answers of 2026-11-17 (§8). Base: origin/dev `35a0b7f2`. Author: coder2, from the
+Status: r3, spec and mock-ups only, no code; r2 holds the person's answers of 2026-11-17 (§8); r3 names the master-dead mechanism (§3.1) and puts the priority glyphs back to the person (§9, foureyes). Base: origin/dev `35a0b7f2`. Author: coder2, from the
 person's direction relayed by master on 2026-11-17 (task `views-redesign-spec`). It supersedes the
 `ideas-triage-and-plan-spec` request given to coder. It builds on the requests-plan redesign, whose
 §9 (decided 2026-11-10) is built: the Work tab, the Kanban and the Projects counts
@@ -57,8 +57,8 @@ One list, one line per task, Board's format: **task, owner, state, age**, newest
 - **Enter opens the row's diagnostics**, today's Requests detail for that thread: the delivery
   cursor, the pending list, the request's facts, the thread's entries. The between-agents line of
   Work opens this Board, filtered to the rows between agents, in place of today's sub-view.
-- **busmon never writes the bus here.** The row's actions are words in the footer, each naming who
-  acts:
+- **busmon never changes a request itself.** The row's actions are words in the footer, each
+  naming who acts:
   - `resend`: the dispatcher's (it already re-wakes; a stuck delivery is its alarm);
   - `cancel`, `reassign`: master's (a directive to master, prefilled in Compose for the person to
     send);
@@ -67,12 +67,39 @@ One list, one line per task, Board's format: **task, owner, state, age**, newest
     1. busmon first proposes to wait: the dispatcher's self-repair relaunches master first
        (decision 2026-11-09), and the row says `master is down; self-repair relaunches it`;
     2. the person may still act now: busmon asks the dispatcher to resend or cancel, after a
-       confirmation line. This is the only path where busmon asks the dispatcher to act;
+       confirmation line, by the mechanism of §3.1. This is the only path where busmon asks the
+       dispatcher to act;
     3. every such act is traced: an Activity entry (what, which request, by the person through
        busmon) and a directive to master on the bus saying what was done without it. Master's
        role reads these at its restart, before its own work.
 - **No `for you` count in its title**: a request the person owes is in Work (YOU), and its Board
   row has no special mark.
+
+### 3.1 The person's act through the dispatcher (master down)
+
+A protocol change (`bus/`) and a trust boundary: built only after the security role's review
+(step 3b, §7). Nothing here exists today: the dispatcher takes no request from anyone, and a
+tracked request cannot be cancelled.
+
+- **How busmon asks:** one cmd entry, a new type `act`, target `dispatch`, written by busmon with
+  `human: yes` and the person as sender (`bus.PersonAct(ctx, person, verb, task)`, verb `resend` or
+  `cancel`). It is on the cmd stream, so Activity shows it as it shows any person's entry.
+- **Who may ask:** a `human: yes` entry. The CLI never writes one (identityguard.go: only busmon
+  does), but any process with access to the broker could; that is true of every person's
+  directive today, and it is the boundary the security review judges. The act is narrow so
+  that a forged one does little: the dispatcher acts only while master is down by its own facts,
+  resend only re-wakes, and cancel is undone by master's next request.
+- **What the dispatcher does**, in its reconcile, fenced as every write:
+  - master up (a fresh status and a live terminal, its own facts, not busmon's): no act; a notice
+    to the person, `master is up: ask master`;
+  - `resend`: the request's target is woken again, the existing re-wake (its wake record cleared);
+  - `cancel`: a new board state `cancelled`, with the response `cancelled by <person> through
+    busmon while master was down (act <id>)`; `request` and busmon show it like `done`, and master
+    may send the request again;
+  - each act, done or refused, is followed by a directive to master naming the act, its entry and
+    what changed, which master reads at its restart (master's role, a line to add).
+- **Idempotent:** an act already applied (its entry id recorded on the request) is not applied
+  twice after a restart of the dispatcher.
 
 ### Mock-up: Board at 160 columns (one alert)
 
@@ -115,23 +142,26 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
   - APPROVED: both reviewers approved, waiting for delivery or the merge: its own section between
     NOW and NEXT, folded away when empty (the person's Q3).
   - NEXT: not started, unblocked, by priority then file order.
-  - LATER: blocked by another task (`waits on <id>`), then the low-priority tasks.
+  - LATER: blocked by another task (`waits on <id>`), then the low-priority tasks, blocked or not:
+    an unblocked low-priority task is in LATER, never in NEXT.
 - **No `person · waiting for you` column.** A task the person owns shows `♙` before its owner; what
   the person must do now is Work's, not repeated here.
 - **Dependencies** show as `after <id>` on the task's line (the first one, `+N` for more); the side
   panel (wide tier) lists all of them and the tasks that wait on this one.
-- **Priority**: one glyph set, used in Plan and the Kanban: `▲` high, nothing for normal, `▼` low
-  (the person's Q4). Their colour is the accent, never the header's yellow warning `▲`, so a high
-  task never reads as an alarm; the no-colour palette keeps the glyph. A future ASCII setting
-  (the braille-graphs idea, `docs/memory/open-questions/2026-11-17-braille-graphs.md`) covers
-  them too: `^` and `v`.
+- **Priority**: one glyph set, used in Plan and the Kanban, nothing for normal. The person chose
+  `▲` high and `▼` low (Q4), but both already mean something in busmon: `▲` is blocked
+  (`GlyphBlocked`, the agents' state column, waiting-holder, holder-behind) and `▼` is down
+  (`GlyphDown`). Request priority already has its own marks, `↑` and `↓` (`priorityMark`, on the
+  Kanban's cards). This spec recommends `↑`/`↓` everywhere, no collision and no move, and draws the
+  mock-ups with them; the choice goes back to the person (§9). Their colour is never the header's
+  yellow warning; a future ASCII setting (the braille-graphs idea,
+  `docs/memory/open-questions/2026-11-17-braille-graphs.md`) covers them too: `^` and `v`.
   `+` and `-` on a plan task raise or lower it (the person's, as `request priority`). NOW and NEXT
   sort by priority, then file order.
   - Plan tasks gain an optional `priority` field (`high`, `normal`, `low`; absent = normal) in the
     plan file; the three `LOW:` titles become `priority: low` and lose the prefix.
-  - **The dispatcher hands out the highest unblocked task first**: master's `request next` already
-    orders tracked requests by priority; a plan task's priority is copied to the request master
-    sends for it.
+  - **Master hands out the highest unblocked task first**: `request next` already orders tracked
+    requests by priority; a plan task's priority is copied to the request master sends for it.
 
 ### Mock-up: Plan at 160 columns
 
@@ -141,15 +171,15 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 │ ● agent-screen-blocked       coder     working    after holder-g1                                                        ││ state   queued 3h                │
 │ ◐ ask-refuses-person         coder2    review     foureyes 12m · reviewer-codex 12m                                      ││ after   quota-settings-step2 ✓   │
 │ APPROVED                                                                                                                 ││ waits   quota-step-4 on it       │
-│ ✓ human-not-an-agent-test    coder2    approved   deliver                                                                ││ prio    ▲ high (+ -)             │
+│ ✓ human-not-an-agent-test    coder2    approved   deliver                                                                ││ prio    ↑ high (+ -)             │
 │ NEXT                                                                                                                     ││ request quota-step-3 queued      │
-│ ▲ quota-step-3               coder     queued     after quota-settings-step2                                             ││                                  │
+│ ↑ quota-step-3               coder     queued     after quota-settings-step2                                             ││                                  │
 │   holder-g1-part2            coder     queued                                                                            ││                                  │
 │   decide-compose-undo        ♙ person  decide                                                                            ││                                  │
 │ LATER                                                                                                                    ││                                  │
-│ ▲ quota-step-4               coder     blocked    after quota-step-3                                                     ││                                  │
-│ ▼ master-conversation        coder     low        after decide-master-conversation                                       ││                                  │
-│ ▼ agent-led-setup            coder     low                                                                               ││                                  │
+│ ↑ quota-step-4               coder     blocked    after quota-step-3                                                     ││                                  │
+│ ↓ master-conversation        coder     low        after decide-master-conversation                                       ││                                  │
+│ ↓ agent-led-setup            coder     low                                                                               ││                                  │
 │ DONE 28 (d)                                                                                                              ││                                  │
 ╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────╯╰─  ───────────────────────────────╯
 ```
@@ -164,15 +194,15 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 │ APPROVED                                                                     │
 │ ✓ human-not-an-agent-test  coder2    deliver                                 │
 │ NEXT                                                                         │
-│ ▲ quota-step-3             coder     queued    after quota-settings-step2    │
+│ ↑ quota-step-3             coder     queued    after quota-settings-step2    │
 │   holder-g1-part2          coder     queued                                  │
 │   decide-compose-undo      ♙ person  decide                                  │
-│ LATER 3 · 1 ▲ (enter) · DONE 28 (enter)                                      │
+│ LATER 3 · 1 ↑ (enter) · DONE 28 (enter)                                      │
 ╰─ + - priority · enter task ──────────────────────────────────────────────────╯
 ```
 
 At 80 columns LATER folds to a count that Enter opens, as DONE does, and the count keeps a
-high-priority task visible: `LATER 3 · 1 ▲` (the person's Q5).
+high-priority task visible: `LATER 3 · 1 ↑` (the person's Q5).
 
 ## 5. IDEAS: triage from the card
 
@@ -222,8 +252,9 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
 1. IDEAS reads the notes (`memory.OpenQuestions` wired into the Work model, beside the broker's
    ideas), and the stale comment in `work_model.go` corrected.
 2. The two fixes of §6.
-3. Board and Requests merged (§3), the `board.no_accept_after` and `board.no_reply_after` settings,
-   the master-dead path and its trace.
+3. Board and Requests merged (§3), the `board.no_accept_after` and `board.no_reply_after` settings.
+   3b. The person's act through the dispatcher (§3.1): `bus.PersonAct`, the `cancelled` state, the
+   dispatcher's fenced act, master's role line; after the security role's review.
 4. Plan as tab 4, the roadmap sections, `priority` in the plan file and the glyphs (§4).
 5. IDEAS triage keys (§5).
 
@@ -241,3 +272,13 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
    `LATER 3 · 1 ▲` (§4).
 6. **IDEAS:** `y` stays copy everywhere; Enter on an idea opens a triage panel where `y`, `l`, `n`
    act (§5).
+
+## 9. Back to the person (r3)
+
+7. **Priority glyphs:** `▲` and `▼` already mean blocked and down in busmon, and requests already
+   use `↑`/`↓` for priority. Keep `↑`/`↓` everywhere (recommended, drawn in the mock-ups), or keep
+   `▲`/`▼` for priority and give blocked and down other glyphs?
+8. **Cancel while master is down** (§3.1) is a new board state and a new dispatcher act, built
+   after a security review. Keep it, or resend only (the dispatcher already re-wakes) and leave
+   cancel to master?
+
