@@ -520,7 +520,9 @@ func (l *loop) reconcile(ctx context.Context) error {
 
 	var first error
 	for _, a := range sorted {
-		if _, agent := snaps[a]; humanIdentity[a] && !agent { // a registered agent stays an agent
+		// A registered agent stays an agent, unless its entry borrows another
+		// agent's terminal: the person's name written from master's pane.
+		if _, agent := snaps[a]; humanIdentity[a] && (!agent || bus.BorrowedTerminal(a, snaps)) {
 			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "target is a human identity"})
 			continue
 		}

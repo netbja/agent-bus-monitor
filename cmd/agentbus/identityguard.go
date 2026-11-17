@@ -128,3 +128,38 @@ func readOnlyCommand(cmd string, rest []string) bool {
 	}
 	return false
 }
+
+// personGuard refuses (human-not-an-agent) ask and status naming the person
+// from another agent's terminal. Both write the named agent's entry in
+// {p}:agents with the caller's terminal: "agentbus ask <person>" in master's
+// pane made the person an agent (busmon listed it, the dispatcher woke and
+// escalated it). The name is the asking or declaring agent itself; the
+// person is the one the questions go to, and answers in busmon. An agent of
+// the person's name, and the person's own shell, are not refused; neither is
+// withdrawing an ask, so a stray one can still be closed.
+func personGuard(getenv func(string) string, cmd string, rest []string) error {
+	if cmd != "ask" && cmd != "status" {
+		return nil
+	}
+	self := agentIdentity(getenv)
+	person := settingsIdentity(getenv)
+	if self == "" || person == "" || self == person {
+		return nil
+	}
+	args := rest
+	if cmd == "ask" {
+		var withdraw string
+		for _, f := range []string{"--file", "--replace", "--question", "--note", "--task"} {
+			args, _ = extractFlag(args, f)
+		}
+		if args, withdraw = extractFlag(args, "--withdraw"); withdraw != "" {
+			return nil
+		}
+	}
+	if len(args) == 0 || args[0] != person {
+		return nil
+	}
+	return fmt.Errorf("refusing %s %s from %s's terminal: %q is the person (identity.as), not an agent, and this would list them as one. "+
+		"%s names the agent itself: agentbus ask %s puts your questions to the person, who answers in busmon",
+		cmd, person, self, person, cmd, self)
+}

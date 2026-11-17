@@ -259,6 +259,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
 		os.Exit(2)
 	}
+	if err := personGuard(os.Getenv, args[0], args[1:]); err != nil { // the person is no agent (human-not-an-agent)
+		fmt.Fprintln(os.Stderr, "agentbus: "+err.Error())
+		os.Exit(2)
+	}
 	if args[0] != "service" { // a service logs its own at start
 		printSettingsWarnings(os.Getenv, os.Stderr)
 	}
