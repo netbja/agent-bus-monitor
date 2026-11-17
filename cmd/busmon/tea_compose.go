@@ -42,8 +42,8 @@ type textArea struct {
 	undo, redo []areaState
 	run        string
 
-	// A multi-line paste is shown as a placeholder, "[Pasted text #n +k
-	// lines]": spans are where the placeholders are in text, in order, each
+	// A multi-line paste is shown as a placeholder, "[Pasted #n: first
+	// words…, k lines]" (pasteLabel): spans are where the placeholders are in text, in order, each
 	// with its paste; value gives the paste back in its place. A span is a
 	// position, never a match of the words, so the same words typed are text
 	// (reviewer-codex). Every change of text goes through splice, which moves
@@ -199,8 +199,8 @@ func (t *textArea) outOfPlaceholder(pos int) int {
 }
 
 // insertPaste is a paste: one with a line break goes in as a placeholder
-// (the person: Claude Code's "[Pasted text #1 +9 lines]"), any other as
-// typed text. It reports the runes the limit dropped.
+// (pasteLabel: "[Pasted #1: first words…, 10 lines]"), any other as typed
+// text. It reports the runes the limit dropped.
 func (t *textArea) insertPaste(s string) (dropped int) {
 	s = agreeWidths(DetailText(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\t", "    ")))
 	if !strings.Contains(s, "\n") {
@@ -216,7 +216,7 @@ func (t *textArea) insertPaste(s string) (dropped int) {
 		return dropped + t.insert(s)
 	}
 	t.pastes++
-	ph := fmt.Sprintf("[Pasted text #%d +%d lines]", t.pastes, strings.Count(s, "\n"))
+	ph := pasteLabel(t.pastes, s)
 	n := len([]rune(ph))
 	t.splice(t.cur, t.cur, []rune(ph))
 	i := 0
@@ -226,6 +226,36 @@ func (t *textArea) insertPaste(s string) (dropped int) {
 	t.spans = slices.Insert(t.spans, i, pasteSpan{t.cur, t.cur + n, s})
 	t.cur += n
 	return dropped
+}
+
+// pasteExcerpt is how many runes of a paste's first words its label shows.
+const pasteExcerpt = 24
+
+// pasteLabel is paste n's placeholder (busmon-paste-label): its first line
+// that is not blank, cut at a word near pasteExcerpt runes, so pastes can be
+// told apart, and its line count (a final line break ends a line, it opens
+// none).
+func pasteLabel(n int, s string) string {
+	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+	count := fmt.Sprintf("%d %s", len(lines), plural(len(lines), "line"))
+	for _, l := range lines {
+		rs := []rune(strings.TrimSpace(l))
+		if len(rs) == 0 {
+			continue
+		}
+		words := string(rs)
+		if len(rs) > pasteExcerpt {
+			cut := rs[:pasteExcerpt]
+			if rs[pasteExcerpt] != ' ' {
+				if i := strings.LastIndex(string(cut), " "); i > 0 {
+					cut = []rune(string(cut)[:i])
+				}
+			}
+			words = strings.TrimRight(string(cut), " ") + "…"
+		}
+		return fmt.Sprintf("[Pasted #%d: %s, %s]", n, words, count)
+	}
+	return fmt.Sprintf("[Pasted #%d: %s]", n, count)
 }
 
 func (t *textArea) changed() { t.rev++ }
