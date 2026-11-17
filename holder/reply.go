@@ -88,6 +88,10 @@ type Info struct {
 	Proto   int    `json:"proto"`
 	Terms   int    `json:"terms"`
 	Socket  string `json:"socket"`
+	// The holder's own process, so a live check can crash it as a crash
+	// does (SIGKILL; holder hardening §5); the start time guards a reused pid.
+	PID   int    `json:"pid,omitempty"`
+	Start uint64 `json:"start,omitempty"`
 }
 
 func errReply(code string, format string, a ...any) Reply {

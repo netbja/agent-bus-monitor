@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -319,6 +320,19 @@ func (h *Host) WaitScreen(ctx context.Context, id termhost.TermID, match string,
 func (h *Host) Ping(ctx context.Context) error {
 	_, err := h.call(ctx, h.key(), Ping{})
 	return err
+}
+
+// Process is the current build's holder process (its pid and start time),
+// as it says itself.
+func (h *Host) Process(ctx context.Context) (dispatch.ProcID, error) {
+	r, err := h.call(ctx, h.key(), Describe{})
+	if err != nil {
+		return dispatch.ProcID{}, err
+	}
+	if r.Info == nil || r.Info.PID <= 0 || r.Info.Start == 0 {
+		return dispatch.ProcID{}, errors.New("holder: its describe names no process (an older build)")
+	}
+	return dispatch.ProcID{PID: r.Info.PID, Start: r.Info.Start}, nil
 }
 
 // Describe is every holder of the project that answers: its build, socket
