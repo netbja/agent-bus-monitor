@@ -55,6 +55,48 @@ type selfRepairReads struct {
 	Fallbacks map[string]bus.FallbackRecord   // roles on a quota fallback profile
 	Manifest  *rolecfg.Manifest               // the local roles.toml: a resume record's allowed profiles
 	Resumes   map[string]bus.ResumeRecord     // {p}:resume
+	// After a reboot (reboot-resume §5): this host's boot and {p}:reboot
+	// (nil: none).
+	Boot   string
+	Reboot *bus.RebootRecord
+}
+
+// thisBoot is the reads' reboot record when it is this boot's.
+func (r selfRepairReads) thisBoot() (bus.RebootRecord, bool) {
+	if r.Reboot == nil || r.Boot == "" || r.Reboot.Boot != r.Boot {
+		return bus.RebootRecord{}, false
+	}
+	return *r.Reboot, true
+}
+
+// rebootHold is why this boot's reboot record holds every relaunch ("" when
+// it does not: none, another boot's, or restarting).
+func rebootHold(r selfRepairReads) string {
+	rec, ok := r.thisBoot()
+	if !ok {
+		return ""
+	}
+	switch rec.Verdict {
+	case bus.RebootRestarting:
+		return ""
+	case bus.RebootIntentional:
+		return "after a clean restart of this machine: the person relaunches (agentbus up --resume)"
+	case bus.RebootSuspended:
+		return "suspended before this machine restarted: the person resumes (agentbus resume)"
+	case bus.RebootUnplanned:
+		return "after an unexpected stop of this machine, not restarted (" + rec.Why + "): the person relaunches (agentbus up --resume)"
+	case bus.RebootStopped:
+		return "stopped after this machine restarted (" + rec.Why + "): the person resumes (agentbus resume)"
+	}
+	return "after a restart of this machine (" + rec.Verdict + "): the person relaunches"
+}
+
+// rebootDeath: role's death is a reboot death, relaunched by this boot's
+// restarting verdict: its proof predates the judgement (reboot-resume §3.1;
+// R5 never counts it).
+func rebootDeath(r selfRepairReads, role string) bool {
+	rec, ok := r.thisBoot()
+	return ok && rec.Verdict == bus.RebootRestarting && r.Snaps[role].IdentTS < rec.At
 }
 
 // selfRepairResume is role's resume after §4.7's two conditions (herdr
@@ -139,12 +181,13 @@ func (c *selfRepairChore) facts(r selfRepairReads) selfrepair.Facts {
 		f.Paused = !f.Suspended
 	}
 	for _, p := range r.Past { // any role's: the project's pause after a relaunch (4.5)
-		for _, at := range p.Attempts {
+		for _, at := range append(append([]time.Time(nil), p.Attempts...), p.RebootAttempts...) {
 			if at.After(f.LastRelaunch) {
 				f.LastRelaunch = at
 			}
 		}
 	}
+	f.Reboot = rebootHold(r)
 	for _, in := range r.Intents {
 		if in.Kind == bus.SwapKindSelfRepair {
 			f.InFlight = true // R1 never runs next to another self-repair
@@ -297,6 +340,9 @@ func (c *selfRepairChore) pass(ctx context.Context, token string) error {
 	var first error
 	if c.mode == selfrepair.ModeOn {
 		first = c.act(ctx, token, ds, r, deaths, f.Now)
+		if err := c.endReboot(ctx, token, r, f); err != nil && first == nil {
+			first = err
+		}
 	}
 	if c.mode == selfrepair.ModeShadow {
 		for _, d := range ds {
@@ -428,6 +474,12 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	if r.Past, err = b.SelfRepairPast(ctx); err != nil {
 		return r, err
 	}
+	r.Boot = runBootID()
+	if rec, ok, err := b.Reboot(ctx); err != nil {
+		return r, err
+	} else if ok {
+		r.Reboot = &rec
+	}
 	if r.Fallbacks, err = b.Fallbacks(ctx); err != nil {
 		return r, err
 	}
@@ -494,4 +546,21 @@ func repairHostFacts(terms []termhost.Term, project string) selfRepairHost {
 // selfRepairCheck is the health check self-repair, in every mode.
 func selfRepairCheck(c *selfRepairChore) dispatch.HealthCheck {
 	return healthOutcomeTask("self-repair", c.check)
+}
+
+// endReboot deletes {p}:reboot, fenced (reboot-resume §3): another boot's
+// at once, this boot's once every required agent of the template is alive,
+// whoever relaunched them.
+func (c *selfRepairChore) endReboot(ctx context.Context, token string, r selfRepairReads, f selfrepair.Facts) error {
+	if r.Reboot == nil || r.Boot == "" {
+		return nil
+	}
+	if r.Reboot.Boot == r.Boot {
+		for _, a := range f.Agents {
+			if a.Required && a.Life != relaunch.LifeAlive {
+				return nil
+			}
+		}
+	}
+	return c.b.FencedDelReboot(ctx, token, r.Reboot.Boot)
 }

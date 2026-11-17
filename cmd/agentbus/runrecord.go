@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/lifecycle"
@@ -55,33 +54,17 @@ func recordRunning(dir string, warn io.Writer) {
 	}
 }
 
-// dispatchRunRecord is the dispatch service's: running once it first holds
-// the lease, stopped (signal) when a signal ends it.
+// dispatchRunRecord is the dispatch service's: stopped (signal) when a
+// signal ends it. Running is written by its reboot judge (reboot.go), once
+// the start is judged.
 type dispatchRunRecord struct {
 	dir  string
 	boot string
 	log  io.Writer
-	once sync.Once
 }
 
 func newDispatchRunRecord(dir string, log io.Writer) *dispatchRunRecord {
 	return &dispatchRunRecord{dir: dir, boot: runBootID(), log: log}
-}
-
-// onLease wraps the service's lease callback: the first lease writes running.
-func (r *dispatchRunRecord) onLease(next func(bool)) func(bool) {
-	return func(held bool) {
-		if held && r.boot != "" {
-			r.once.Do(func() {
-				if err := lifecycle.Started(r.dir, r.boot, time.Now()); err != nil {
-					fmt.Fprintf(r.log, "dispatch: run record: %v\n", err)
-				}
-			})
-		}
-		if next != nil {
-			next(held)
-		}
-	}
 }
 
 // exited is called when the service returns: signalled, it writes stopped

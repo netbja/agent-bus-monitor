@@ -28,33 +28,12 @@ func runRecordOf(t *testing.T, dir string) lifecycle.Record {
 	return r
 }
 
-// The dispatch service: running at its first lease only (a later lease
-// writes nothing), the service's own callback still called; stopped
-// (signal) when a signal ends it, nothing when it ends otherwise.
+// The dispatch service: stopped (signal) when a signal ends it, nothing
+// when it ends otherwise (running is its reboot judge's: reboot_test.go).
 func TestDispatchRunRecord(t *testing.T) {
 	withBoot(t, "B")
 	dir := t.TempDir()
-	var calls []bool
 	r := newDispatchRunRecord(dir, io.Discard)
-	lease := r.onLease(func(h bool) { calls = append(calls, h) })
-	lease(false)
-	if _, err := lifecycle.ReadRun(dir); !os.IsNotExist(err) {
-		t.Fatalf("written without the lease: %v", err)
-	}
-	lease(true)
-	if got := runRecordOf(t, dir); got.State != lifecycle.Running || got.Boot != "B" {
-		t.Fatalf("%+v", got)
-	}
-	if err := lifecycle.Stopping(dir, "B", lifecycle.CauseDown, t0RR); err != nil {
-		t.Fatal(err)
-	}
-	lease(true) // the lease again: once only
-	if got := runRecordOf(t, dir); got.Cause != lifecycle.CauseDown {
-		t.Fatalf("a second lease rewrote it: %+v", got)
-	}
-	if len(calls) != 3 || calls[0] || !calls[1] || !calls[2] {
-		t.Fatalf("the service's callback: %v", calls)
-	}
 	if err := lifecycle.Started(dir, "B", t0RR); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +49,6 @@ func TestDispatchRunRecord(t *testing.T) {
 	withBoot(t, "")
 	other := t.TempDir()
 	u := newDispatchRunRecord(other, io.Discard)
-	u.onLease(nil)(true)
 	u.exited(true)
 	recordUp(other, io.Discard)
 	recordStopping(other, lifecycle.CauseDown, io.Discard)

@@ -5,7 +5,7 @@ scope: project
 kind: decision
 status: active
 created: 2026-11-15
-last_verified: 2026-11-15
+last_verified: 2026-11-17
 author: coder
 confidence: verified
 ---
@@ -21,6 +21,14 @@ stand unchanged: nothing types into an existing terminal; an old terminal closes
 replacement is proven; the dispatcher is the one automated writer. An in-tree process asks the
 dispatcher for a host operation through the relay (§4.2), never drives the holder itself.
 
+**The holder starts with the other services** (amended 2026-11-17, [holder
+hardening](../../superpowers/specs/2026-11-17-holder-hardening-design.md) H1, the person's answer to Q1):
+when `services.start_at_login` is on, `agentbus up` and `agentbus service login` enable the current
+build's holder unit with dispatch and missions (systemd: its `[Install]` section and `enable`;
+launchd: its LaunchAgents copy), and disable every other build's: an older build drains and is never
+started again. It ships with reboot-resume A (Q2), so a reboot never brings the team back without
+the judgement that holds self-repair after an intentional one.
+
 What stays from the [plugin decision](2026-10-19-herdr-plugin.md): templates in
 `~/.config/agentbus/projects`, no migration code, and a picker that never provisions.
 
@@ -35,6 +43,8 @@ call, `HERDR_*` read or herdr exec is refused: a test forbids it.
   §4.2, merged as step 10a (PR #539).
 - The cutover PR (branch `feat/herdr-10b-cutover`); it merges only after the person tags the last
   herdr release and passes the live check its description lists.
+- H1: `service/holderlogin.go` (`HolderLoginStart`), `holderAtLogin` in `cmd/agentbus/servicelogin.go`,
+  branch `feat/holder-step2`.
 
 ## Limits / what would invalidate it
 

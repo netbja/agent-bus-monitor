@@ -718,8 +718,8 @@ func mainServiceRun(project, host string, args []string) int {
 				fmt.Fprintf(log, "dispatch: %v\n", err)
 				return 1
 			}
-			run := newDispatchRunRecord(paths.StateDir(project), log) // running at its first lease, stopped on a signal (reboot-resume §2.1)
-			cfg.OnLease = run.onLease(onLease)
+			run := newDispatchRunRecord(paths.StateDir(project), log) // stopped on a signal (reboot-resume §2.1); running is the judge's, after its verdict
+			cfg.OnLease = onLease
 			if escalateTo != "" {
 				cfg.EscalateTo = escalateTo
 			}
@@ -762,7 +762,9 @@ func serviceDispatchConfig(b *bus.Bus, project, host string, paths service.Paths
 	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &cfg.EscalateTo)
 	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
 	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, h, os.Getenv)
-	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project)) // read at each client-update send (auto-reload)
+	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))       // read at each client-update send (auto-reload)
+	workdir, _ := os.Getwd()                                                        // the unit's WorkingDirectory: the project's repository
+	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, workdir, log).run // judged once, before any loop (reboot-resume §3)
 	return cfg, h, nil
 }
 

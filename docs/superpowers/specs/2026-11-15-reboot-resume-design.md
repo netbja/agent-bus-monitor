@@ -296,6 +296,10 @@ machine-only), applied by `agentbus service boot` (enable or disable, as `agentb
 applies `start_at_login`; `agentbus up` applies both), one backend per platform behind the same
 interface as `LoginStart`:
 
+*Amended 2026-11-17 ([holder hardening](2026-11-17-holder-hardening-design.md) H1): the units it
+enables include the current build's holder unit (`service.HolderLoginStart`), as `start_at_login`
+already does since step A; never an older build's.*
+
 | Platform | Mechanism | Needs root |
 |---|---|---|
 | Linux with systemd | `loginctl enable-linger <user>`, and the units enabled as for `start_at_login` (the user manager then starts at boot) | no, where polkit allows a user to linger itself; otherwise the command says so and prints the line to run |

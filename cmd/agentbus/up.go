@@ -564,6 +564,9 @@ func startServices(d upDeps, m service.Manager, project, workdir, escalate, relo
 			fmt.Fprintf(stdout, "services: start at login (services.start_at_login; no linger: only once you log in)\n")
 		}
 	}
+	if err := holderAtLogin(m, project, d.HolderBuild, atLogin && ls != nil, stdout); err != nil {
+		errs = append(errs, fmt.Errorf("holder at login: %v", err))
+	}
 	return errors.Join(errs...)
 }
 

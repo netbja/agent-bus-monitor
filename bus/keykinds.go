@@ -62,6 +62,7 @@ var keyKinds = map[string]KeyClass{
 	"armed:*": KeyRuntime, "swap:*": KeyRuntime, "observed": KeyRuntime, "context": KeyRuntime,
 	"health:daily": KeyRuntime, "notified": KeyRuntime, "mergequeue": KeyRuntime, "missionops": KeyRuntime, "missionops:results": KeyRuntime,
 	"seen": KeyRuntime, "background:*": KeyRuntime,
+	"reboot": KeyRuntime, // the dispatcher's verdict on this boot (reboot-resume §3): judged again after a restore
 }
 
 // ClassOf classifies key as project's: its class and the kind that matched

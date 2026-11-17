@@ -49,21 +49,22 @@ const (
 // "attempts:<role>" of the self-repair hash; attempts older than ARGV[7] ms
 // dropped, at most ARGV[6] kept). KEYS: dispatch lease, intent, ledger,
 // agents, self-repair hash. ARGV: token, role, intent, ttl ms, maxlen, hard
-// max, window ms, ledger fields...
+// max, window ms, the attempt's prefix ("" the role's own, "r" a reboot
+// relaunch: reboot-resume §3.1), ledger fields...
 var beginSelfRepair = redis.NewScript(`
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 if redis.call('HEXISTS', KEYS[4], ARGV[2]) == 0 then return -2 end
 if redis.call('SET', KEYS[2], ARGV[3], 'NX', 'PX', ARGV[4]) == false then return 0 end
-redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[5], '*', unpack(ARGV, 8))
+redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[5], '*', unpack(ARGV, 9))
 local t = redis.call('TIME')
 local nowms = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local now = string.format('%d', nowms)
+local now = ARGV[8] .. string.format('%d', nowms)
 local f = 'attempts:' .. ARGV[2]
 local keep = {}
 local old = redis.call('HGET', KEYS[5], f)
 if old then
   for v in string.gmatch(old, '[^,]+') do
-    local n = tonumber(v)
+    local n = tonumber((string.gsub(v, '^r', '')))
     if n and nowms - n < tonumber(ARGV[7]) then table.insert(keep, v) end
   end
 end
@@ -91,6 +92,17 @@ return 1`)
 // ErrNoSnapshot for a role with no snapshot, ErrSwapInProgress when any
 // intent holds the role; nothing is written then.
 func (b *Bus) BeginSelfRepair(ctx context.Context, token, role, nonce string, ev SwapEvent) error {
+	return b.beginSelfRepair(ctx, token, role, nonce, "", ev)
+}
+
+// BeginRebootRelaunch is BeginSelfRepair for a reboot death (reboot-resume
+// §3.1): its attempt spaces the project's relaunches but is never counted in
+// the role's own budget (R5); the reboot counter counts it instead.
+func (b *Bus) BeginRebootRelaunch(ctx context.Context, token, role, nonce string, ev SwapEvent) error {
+	return b.beginSelfRepair(ctx, token, role, nonce, "r", ev)
+}
+
+func (b *Bus) beginSelfRepair(ctx context.Context, token, role, nonce, prefix string, ev SwapEvent) error {
 	if !ValidName(role) {
 		return fmt.Errorf("invalid role %q", role)
 	}
@@ -105,7 +117,7 @@ func (b *Bus) BeginSelfRepair(ctx context.Context, token, role, nonce string, ev
 	if err := ev.valid(); err != nil {
 		return err
 	}
-	args := append([]interface{}{token, role, string(v), SwapTTL.Milliseconds(), streamMaxLen, attemptsHardMax, selfRepairDayMs}, ev.fields()...)
+	args := append([]interface{}{token, role, string(v), SwapTTL.Milliseconds(), streamMaxLen, attemptsHardMax, selfRepairDayMs, prefix}, ev.fields()...)
 	n, err := beginSelfRepair.Run(ctx, b.r,
 		[]string{DispatchKey(b.project), SwapKey(b.project, role), SwapsKey(b.project), AgentsKey(b.project), SelfRepairKey(b.project)}, args...).Int()
 	if err != nil {
@@ -319,10 +331,11 @@ func (b *Bus) FinishSelfRepairOwing(ctx context.Context, token, nonce string, ev
 // death episodes whose relaunch failed its proof (no retry for those), and a
 // crash loop the dispatcher marked.
 type SelfRepairRecord struct {
-	Attempts    []time.Time
-	Failed      map[string]bool
-	CrashLoop   bool
-	CrashLoopAt int64 // the mark's Redis TIME (ms): the crash loop's episode
+	Attempts       []time.Time
+	RebootAttempts []time.Time // relaunches after an unplanned reboot: the project's pause only
+	Failed         map[string]bool
+	CrashLoop      bool
+	CrashLoopAt    int64 // the mark's Redis TIME (ms): the crash loop's episode
 }
 
 // SelfRepairPast reads every role's SelfRepairRecord from {p}:selfrepair. A
@@ -348,11 +361,17 @@ func (b *Bus) SelfRepairPast(ctx context.Context) (map[string]SelfRepairRecord, 
 			r.CrashLoopAt, _ = strconv.ParseInt(v, 10, 64)
 		case "attempts":
 			for _, ms := range strings.Split(v, ",") {
-				if n, err := strconv.ParseInt(ms, 10, 64); err == nil && n > 0 {
-					r.Attempts = append(r.Attempts, time.UnixMilli(n))
+				reboot := strings.HasPrefix(ms, "r")
+				if n, err := strconv.ParseInt(strings.TrimPrefix(ms, "r"), 10, 64); err == nil && n > 0 {
+					if reboot {
+						r.RebootAttempts = append(r.RebootAttempts, time.UnixMilli(n))
+					} else {
+						r.Attempts = append(r.Attempts, time.UnixMilli(n))
+					}
 				}
 			}
 			sort.Slice(r.Attempts, func(i, j int) bool { return r.Attempts[i].Before(r.Attempts[j]) })
+			sort.Slice(r.RebootAttempts, func(i, j int) bool { return r.RebootAttempts[i].Before(r.RebootAttempts[j]) })
 		case "failed":
 			for _, ep := range strings.Split(v, ",") {
 				if ep != "" {

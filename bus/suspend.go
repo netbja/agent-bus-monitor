@@ -48,7 +48,11 @@ type SuspendSpec struct {
 // suspendScript writes the suspend in one step: an existing suspend is left
 // and returned (0); a timed pause becomes its prev; at and until come from
 // Redis TIME (1).
-var suspendScript = redis.NewScript(`
+var suspendScript = redis.NewScript(suspendBody)
+
+// suspendBody is the suspend's script (FencedSuspend runs it behind the
+// lease check).
+const suspendBody = `
 local v = redis.call('GET', KEYS[1])
 local prev = nil
 if v then
@@ -66,7 +70,7 @@ r['until'] = now + tonumber(ARGV[2])
 if prev then r['prev'] = prev end
 local out = cjson.encode(r)
 redis.call('SET', KEYS[1], out)
-return {1, out}`)
+return {1, out}`
 
 // Suspend puts the project to sleep. It returns the stored record and its raw
 // text (what Unsuspend and SuspendCancel compare against), and whether a

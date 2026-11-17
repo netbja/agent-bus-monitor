@@ -161,7 +161,11 @@ func (m Systemd) mayStartAtLogin(project, kind string) bool {
 // setInstall adds or removes the [Install] section of an installed unit and
 // reloads the manager when the file changed.
 func (m Systemd) setInstall(project, kind string, on bool) error {
-	p := m.path(project, kind)
+	return m.setInstallAt(m.path(project, kind), on)
+}
+
+// setInstallAt is setInstall for the unit file at p.
+func (m Systemd) setInstallAt(p string, on bool) error {
 	b, err := os.ReadFile(p)
 	if err != nil {
 		return err
