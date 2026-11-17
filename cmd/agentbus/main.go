@@ -608,7 +608,7 @@ func main() {
 		os.Exit(1) // gated → non-zero so a script/agent can block on it
 
 	case "ask":
-		os.Exit(runAsk(ctx, b, rest, os.Stdin, os.Stdout, os.Stderr))
+		os.Exit(runAsk(ctx, b, rest, os.Stdin, os.Getenv, os.Stdout, os.Stderr))
 
 	case "asks":
 		os.Exit(runAsks(ctx, b, rest, os.Stdout, os.Stderr))
