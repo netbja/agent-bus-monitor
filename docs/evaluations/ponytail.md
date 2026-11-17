@@ -491,4 +491,4 @@ this document.
 | "Write less" drops a check at a trust boundary | rules | Ponytail's own "never cut" list; its benchmark shows no loss of hidden checks (97% vs 96%); our 4-eyes and security reviews stay |
 | Adherence fades in long sessions; history-only on Codex and agy | rules | measured in the protocol (adherence after N turns and after compaction) |
 | Overlap with the global `karpathy-skills` plugin (similar rules), or the two rule sets pulling apart | both | the add arm measures what Ponytail adds to it, the swap arm whether it does better in its place; `karpathy-guidelines` calls are counted |
-| The measured effect is noise at our volume | both | at least 20 tasks per arm, paired by size; no decision on fewer |
+| The measured effect is noise at our volume | both | the bench pairs each task across arms: 12 tasks × 2 runs, sign test plus bootstrap interval; fewer than 12 usable tasks after the pilot: no decision. Phase 2 looks for regressions only, not for the size of the effect |
