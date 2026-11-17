@@ -1,6 +1,8 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r6.2, for review (subject `holder-hardening-spec`). r6.2: foureyes (`reload` refuses a
+Status: spec, r6.3, for review (subject `holder-hardening-spec`). r6.3: the person's answers to Q5
+and Q7; §5 gains the live check as built and when to come back to the soak run (task
+`holder-endurance-test`). r6.2: foureyes (`reload` refuses a
 busy agent: a person-only `--replace-broken` mode for a terminal the holder marks invalid or stuck).
 r6.1: foureyes (a client blocked
 on an unanswered cursor report is the person's to replace, said in health). r6: reviewer-codex (no in-place
@@ -212,6 +214,43 @@ Those need a **live check** on the person's machine (a scripted ask: kill the ho
 disposable VM or a systemd container (podman `--systemd=always`, linger, a test project with fake
 clients, the holder killed every N minutes for hours, wakes counted). §8, Q5.
 
+**The live check, as built** (the person's answer to Q5, 2026-11-17: a scripted live check,
+run on the person's machine before each release). `agentbus check holder-restart
+[--clients fake|real] [--rounds <n>] [--keep]`, and `scripts/holder-live-check.sh`, a POSIX sh
+wrapper for the person:
+
+- **Where it runs:** this host's service manager as `agentbus up` finds it: systemd, launchd, or
+  the detached supervisors (`services.manager = none`). One Go command, so macOS and a Linux
+  without systemd run the same code; no GNU or BSD tool is called.
+- **On what:** a disposable project of its own (`lc` + 6 hex), never the person's team: master
+  and coder, `agentbus up --no-missions --roles master,coder`, self-repair on, in a working
+  folder of the check's (`$XDG_STATE_HOME/agentbus/.livecheck/work`, kept, so a real client's
+  trust of it is given once). At the end (also on a failure or Ctrl-C) its services and holder
+  are removed, then, only once they are gone, its broker keys, template and state (a unit left
+  installed keeps what it runs on, and the check says how to finish); `--keep` leaves it running.
+- **The crash:** SIGKILL of the holder's own process, which its `Describe` now names (pid and
+  start time; the kill is refused when the pid no longer has that start time). The manager sees a
+  crash and restarts it (`Restart=on-failure`, `KeepAlive`, the supervisor's policy).
+- **What it times**, each step with a deadline, failing on the first that is not met: the team
+  ready; health `holder` ok; each agent woken (a directive, drained); the crash; a new holder
+  process answers; health `holder` warns that it restarted; each agent relaunched by
+  self-repair, master first, one per `ProjectPause` (2 minutes, the person's answer to Q7),
+  resumed on its recorded session (a new proved process, the resume record rewritten with the
+  same session, newer than the one before the crash on the broker's own clock, and with fake
+  clients the screen saying so), no `failed`
+  in its swap ledger; each woken again; health `holder` ok again.
+- **`--clients=fake`** (the default): `agentbus fake-client` is `claude` on the project's PATH,
+  so the launcher, its preflight and bind, the hooks of `--settings`, the holder, the dispatcher
+  and the drain are the production ones; it costs no quota. It is the base of the soak run.
+  **`--clients=real`**: Claude Code itself, a few turns of quota per round.
+- **What it still cannot prove:** a reboot (reboot-resume's own check), slow leaks over hours,
+  and launchd or the supervisors on a machine the check never ran on.
+
+**When to come back to the soak run** (the person's request with Q5): build it, on the fake
+clients above, when one of these happens first: the first release without herdr has run a
+week on the person's machine; a tenure bug is reported (a leak, a slowdown, a crash or a hang
+after hours of running); or the live check fails twice in a row with no cause found.
+
 ## 6. Upgrading: can it be one command?
 
 Today, per project:
@@ -409,6 +448,9 @@ G1's cost estimate grows with this contract: **2-3 PRs, ~900 lines with tests, 4
 5. **The endurance test:** the in-process test (§5) under the release gate is proposed. Do you also
    want a scripted live check on your machine before each release, or a soak run in a VM or
    container (longer to build)?
+   **Answer (2026-11-17): a scripted live check**, on macOS and on a Linux without systemd too,
+   with fake clients besides the real ones (the base of a later soak run), and a criterion in this
+   spec for coming back to the soak run: §5, as built.
 6. **One command to update (H6)?** And should the dispatcher move a busy agent later by itself
    (H7), or does a skipped agent wait for your next `update`?
 7. **The recovery pace after a crash:** 2 minutes between relaunches (`ProjectPause`) gives about
@@ -416,6 +458,7 @@ G1's cost estimate grows with this contract: **2-3 PRs, ~900 lines with tests, 4
    holder crash only, when every agent died at once? The cost of shorter: eight resumed sessions
    start within a minute or two, mostly on one provider's quota, each reloading its whole
    conversation.
+   **Answer (2026-11-17): keep 2 minutes.** Nothing changes; the live check (§5) times it.
 8. **The parser inside the holder (§7).** Today a bug in the screen emulator kills every agent (a
    panic) or freezes one agent and blinds the dispatcher while the holder alarm stays green (a
    hang). Contain it inside the holder first (G1, 4-5 days with §7.1's contract), split the PTY owner from the parser as

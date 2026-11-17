@@ -122,6 +122,8 @@ var foreignFlags = []string{
 	"--roles",                        // roles template's team, the argv bootstrap builds (agentbus-start)
 	"--count", "--reverse", "--push", // git rev-list, git log and git remote get-url (deliver)
 	"--first-parent", "--git-common-dir", "--path-format", // git rev-list and git rev-parse, plan-drift's read
+	"--resume", "--fallback-model", "--permission-mode", "--effort", // Claude Code's, the fake client reads them
+	"--append-system-prompt", "--append-system-prompt-file",
 	"--body-file", "--output", "--source-branch", "--target-branch", "--description", // gh and glab (deliver)
 	"--no-dangling", "--no-progress", // git fsck, the repository check of an automatic restart (reboot-resume §3.1)
 }

@@ -74,6 +74,8 @@ func TestMain(m *testing.M) {
 	case "claude":
 		e2eFakeClaude()
 		return
+	case "fakeclient": // agentbus fake-client, its argv in AGENTBUS_FAKE_ARGS (fakeclient_test.go)
+		os.Exit(runFakeClient(strings.Split(os.Getenv("AGENTBUS_FAKE_ARGS"), "\x1f"), os.Stdin, os.Stdout, os.Stderr))
 	case "turnhook": // a hook the client runs as its child, as Claude Code does
 		turnHook([]string{os.Getenv("AGENTBUS_E2E_HOOK")}, os.Environ(), os.Stdin, io.Discard, func(ctx context.Context, project, agent, state string) error {
 			err := realTurnFlip(ctx, project, agent, state)
@@ -116,7 +118,6 @@ func e2eFakeClaude() {
 		return
 	}
 	defer term.Restore(0, old)
-	os.Stdout.WriteString("\x1b[?2004h")
 
 	ctx := context.Background()
 	client, err := bus.Connect("")
@@ -170,91 +171,24 @@ func e2eFakeClaude() {
 	if w, _, err := term.GetSize(1); err == nil && w > 20 {
 		cols = w
 	}
-	rule := "\x1b[38;2;136;136;136m" + strings.Repeat("─", cols-2) + "\x1b[0m"
-	var history []string
+	ui := newFakeClaudeUI(project, agent, cols, os.Stdout)
 	if s := os.Getenv("AGENTBUS_E2E_RESUMED"); s != "" {
-		history = append(history, "resumed "+s)
+		ui.history = append(ui.history, "resumed "+s)
 	}
-	// draw is the screen; titled writes Claude's turn-end title where it was
-	// in the field, right after `❯` (vt-osc-title).
-	draw := func(input string, busy, titled bool) {
-		var w strings.Builder
-		// Redrawn in place, as Claude's renderer does: a full-screen erase
-		// (ED 2) would push the turn's spinner line into the scrollback the
-		// dispatcher reads, and the agent would read busy for good.
-		w.WriteString("\x1b[H\x1b[J\x1b[1mClaude Code\x1b[0m (e2e fake)\r\n\r\n")
-		for _, h := range history {
-			w.WriteString("● " + h + "\r\n")
+	ui.draw("", false, true)
+	ui.loop(os.Stdin, func(line string) {
+		e2eLog("submitted %q", line)
+		hook("start", "UserPromptSubmit", line)
+	}, func(line string) {
+		time.Sleep(300 * time.Millisecond)
+		if strings.Contains(line, "subscribe --drain "+agent) {
+			var out bytes.Buffer
+			host, _ := os.Hostname()
+			runDrain(ctx, b, agent, host, &out, false)
+			ui.history = append(ui.history, "drained "+strconv.Itoa(strings.Count(out.String(), "\"event\":\"cmd\"")))
 		}
-		if busy {
-			w.WriteString("✶ Kneading… (1s)\r\n")
-		}
-		w.WriteString(rule + "\r\n❯\u00a0")
-		if titled {
-			w.WriteString("\x1b]0;✳ " + project + ":" + agent + "\x07")
-		}
-		if input == "" {
-			w.WriteString("\x1b[2mTry \"fix the tests\"\x1b[0m\r\n")
-		} else {
-			w.WriteString(input + "\r\n")
-		}
-		w.WriteString(rule + "\r\n  \x1b[38;5;30mModel: fake\x1b[0m")
-		os.Stdout.WriteString(w.String())
-	}
-	draw("", false, true)
-
-	var input []byte
-	pasting := false
-	var seq []byte // an escape sequence being read
-	buf := make([]byte, 4096)
-	for {
-		n, err := os.Stdin.Read(buf)
-		if err != nil || n == 0 {
-			return
-		}
-		for _, c := range buf[:n] {
-			if len(seq) > 0 || c == 0x1b {
-				seq = append(seq, c)
-				switch s := string(seq); {
-				case s == "\x1b[200~":
-					pasting, seq = true, nil
-				case s == "\x1b[201~":
-					pasting, seq = false, nil
-					draw(string(input), false, false)
-				case len(seq) > 6 || len(seq) > 1 && !strings.HasPrefix("\x1b[200~", s) && !strings.HasPrefix("\x1b[201~", s):
-					seq = nil // not ours: dropped
-				}
-				continue
-			}
-			if c == '\r' && !pasting {
-				line := string(input)
-				input = input[:0]
-				if line == "" {
-					continue
-				}
-				e2eLog("submitted %q", line)
-				history = append(history, "SUBMITTED "+line)
-				hook("start", "UserPromptSubmit", line)
-				draw("", true, false)
-				time.Sleep(300 * time.Millisecond)
-				if strings.Contains(line, "subscribe --drain "+agent) {
-					var out bytes.Buffer
-					host, _ := os.Hostname()
-					runDrain(ctx, b, agent, host, &out, false)
-					history = append(history, "drained "+strconv.Itoa(strings.Count(out.String(), "\"event\":\"cmd\"")))
-				}
-				hook("end", "Stop", "")
-				draw("", false, true)
-				continue
-			}
-			if c >= 0x20 || pasting {
-				input = append(input, c)
-				if !pasting {
-					draw(string(input), false, false)
-				}
-			}
-		}
-	}
+		hook("end", "Stop", "")
+	})
 }
 
 // e2eBuf is a buffer the dispatcher writes from its goroutine.

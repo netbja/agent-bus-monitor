@@ -742,6 +742,23 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus peer --check local"},
 	},
 	{
+		Name: "check", NoProject: true,
+		Usage:   []string{"check holder-restart [--clients fake|real] [--rounds <n>] [--keep]"},
+		Summary: "the holder's live check, before a release: on a disposable project of its own (master and coder), kill the holder, time its restart, self-repair's relaunches on their sessions, the wakes and health; removes the project at the end",
+		Flags: []cli.Flag{
+			{Long: "clients", Arg: "fake|real", Help: "fake (default): agentbus fake-client as claude, no quota; real: Claude Code (a few turns of quota; trust its folder once)"},
+			{Long: "rounds", Arg: "<n>", Help: "crashes in a row (default 1)"},
+			{Long: "keep", Help: "leave the test project running at the end (it says how to remove it)"},
+		},
+		Examples: []string{"agentbus check holder-restart", "agentbus check holder-restart --clients real --rounds 2"},
+	},
+	{
+		Name: "fake-client", NoProject: true, Internal: true,
+		Usage:    []string{"fake-client claude [Claude Code's options] [prompt]"},
+		Summary:  "a fake Claude Code, the live check's claude (the launcher's argv, its --settings hooks, the wake's drain)",
+		Examples: []string{"agentbus fake-client claude --help"},
+	},
+	{
 		Name: "statusline", NoProject: true, Internal: true,
 		Usage:   []string{"statusline [--then <command>]", "statusline --print-install [--then <command>]"},
 		Summary: "Claude Code's statusLine: records rate limits from stdin",

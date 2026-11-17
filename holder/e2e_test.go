@@ -267,6 +267,22 @@ func TestHolderStartScreenClose(t *testing.T) {
 	if r, err := cl.Call(Describe{}); err != nil || r.Info.Project != "demo" || r.Info.Terms != 1 || r.Info.Socket != sock {
 		t.Fatalf("describe %+v %v", r.Info, err)
 	}
+	// Its own process, for the live check's crash (holder hardening §5).
+	if r, _ := cl.Call(Describe{}); r.Info.PID != os.Getpid() || r.Info.Start == 0 {
+		t.Fatalf("describe names process %d (start %d), not %d", r.Info.PID, r.Info.Start, os.Getpid())
+	} else if st, err := dispatch.ProcStart(os.Getpid()); err != nil || st != r.Info.Start {
+		t.Fatalf("start %d, proc says %d %v", r.Info.Start, st, err)
+	}
+	run := filepath.Dir(filepath.Dir(filepath.Dir(sock))) // <run>/agentbus/demo/<socket>
+	h, _ := NewHost("demo", "test", func(k string) string {
+		if k == "XDG_RUNTIME_DIR" {
+			return run
+		}
+		return ""
+	})
+	if p, err := h.Process(context.Background()); err != nil || p.PID != os.Getpid() || p.Start == 0 {
+		t.Fatalf("Process %+v %v", p, err)
+	}
 	if _, err := cl.Call(Ping{}); err != nil {
 		t.Fatal(err)
 	}

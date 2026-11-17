@@ -190,6 +190,15 @@ func main() {
 	if len(args) >= 1 && args[0] == "holder" {
 		os.Exit(mainHolder(project, args[1:], os.Stderr))
 	}
+	// fake-client is a fake Claude Code for the holder's live check (a test
+	// project's `claude`); it reads its project and agent from the launch.
+	if len(args) >= 1 && args[0] == "fake-client" {
+		os.Exit(runFakeClient(args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
+	// check holder-restart is the holder's live check (holder hardening §5): it names its own project.
+	if len(args) >= 1 && args[0] == "check" {
+		os.Exit(runCheck(args[1:], os.Getenv, os.Environ(), os.Stdout, os.Stderr))
+	}
 	if len(args) >= 1 && args[0] == "down" {
 		os.Exit(runDown(args[1:], realServiceCmdDeps(host), os.Stdout, os.Stderr))
 	}
