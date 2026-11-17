@@ -778,6 +778,17 @@ func TestDeliverNeedsBothReviewers(t *testing.T) {
 	if code, _, _ := w.run("master", "coder/x"); code != 3 {
 		t.Fatalf("a reviewer whose latest names another head counted: exit %d", code)
 	}
+	// reviewer-codex on ed6f0a59: a reviewer's later decision supersedes its
+	// approve even when that verdict names the reviewer as its author.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+		{Subject: "coder/x", Author: "foureyes", Reviewer: "foureyes", Decision: "reject", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvH},
+	}
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("an approve outlived its reviewer's self-authored reject: exit %d", code)
+	}
 	// A self-approval beside one reviewer's is still one approval.
 	w = newDeliverWorld(t, "git@github.com:o/r.git")
 	w.verdicts = []bus.Verdict{

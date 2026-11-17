@@ -479,10 +479,7 @@ func placeOf(f forge.Forge) string {
 func currentApprovers(vs []bus.Verdict, h string) []string {
 	var order []string
 	latest := map[string]bus.Verdict{}
-	for _, v := range vs {
-		if v.Reviewer == v.Author {
-			continue
-		}
+	for _, v := range vs { // every verdict is its reviewer's latest so far, self-authored too (reviewer-codex)
 		if _, seen := latest[v.Reviewer]; !seen {
 			order = append(order, v.Reviewer)
 		}
@@ -490,7 +487,7 @@ func currentApprovers(vs []bus.Verdict, h string) []string {
 	}
 	var out []string
 	for _, r := range order {
-		if v := latest[r]; v.Decision == "approve" && v.Head == h {
+		if v := latest[r]; v.Decision == "approve" && v.Reviewer != v.Author && v.Head == h {
 			out = append(out, r)
 		}
 	}
