@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -440,5 +441,31 @@ func TestSuspendedResumeRunsFromATerminal(t *testing.T) {
 	}
 	if ok, _ := suspendedResumeFirst(context.Background(), getenv, []string{"pause", "--for", "1h"}, suspended, run); ok {
 		t.Fatal("another command was routed")
+	}
+}
+
+// reboot-resume §3.4: the person's resume empties the unplanned-restart
+// counter (the stop it lifts may be the limit's); a resume that keeps the
+// suspend leaves it.
+func TestResumeResetsTheUnplannedCounter(t *testing.T) {
+	w := newResumeWorld(t, "master", "coder")
+	entries := []lifecycle.Entry{{Boot: "Ba", At: 1}, {Boot: "Bb", At: 2}}
+	if err := lifecycle.WriteCounter(w.state, entries); err != nil {
+		t.Fatal(err)
+	}
+	w.suspendNow()
+	w.kill("coder")
+	if code, _, _ := w.resume(); code != 1 {
+		t.Fatal("resumed with coder missing")
+	}
+	if es, err := lifecycle.ReadCounter(w.state); err != nil || len(es) != 2 {
+		t.Fatalf("a kept suspend reset the counter: %+v %v", es, err)
+	}
+	w.onUp = func() { w.agent("coder", "idle") }
+	if code, out, errw := w.resume(); code != 0 {
+		t.Fatalf("resume = %d\n%s\n%s", code, out, errw)
+	}
+	if es, err := lifecycle.ReadCounter(w.state); err != nil || len(es) != 0 {
+		t.Fatalf("counter after the resume %+v %v", es, err)
 	}
 }

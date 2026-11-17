@@ -18,6 +18,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -281,6 +282,11 @@ func runSuspendedResume(ctx context.Context, p string, o resumeOptions, d resume
 	restored, _, err := b.Unsuspend(ctx, raw, by, summary)
 	if err != nil {
 		return keep("lifting the suspend: %v", err)
+	}
+	// The person's resume resets the unplanned-restart counter (reboot-resume
+	// §3.4), as the person alone resets a run budget.
+	if err := lifecycle.ResetCounter(d.StateDir(p)); err != nil {
+		fmt.Fprintf(errw, "%s: the unplanned-restart counter was not emptied: %v\n", p, err)
 	}
 	if restored {
 		say("resumed; the previous pause (%s, until %s) is back", rec.Prev.Reason, time.UnixMilli(rec.Prev.Until).Format("15:04"))

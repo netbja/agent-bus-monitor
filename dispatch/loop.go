@@ -39,6 +39,12 @@ type Config struct {
 	// OnLease, when set, is told when this dispatcher takes the lease (true)
 	// and when Run gives it up (false): agentbus service run reports "ready".
 	OnLease func(held bool)
+	// Reboot judges the start once the lease is held, before any other loop
+	// (reboot-resume §3, holder hardening H1b): nothing is woken, checked or
+	// relaunched until it returns, the lease renewed meanwhile. An error
+	// ends Run (bus.ErrNotHolder as ErrLeaseLost): the next start judges
+	// again.
+	Reboot func(ctx context.Context, token string) error
 	// Quota, when its Read is set, collects provider readings and holds the
 	// agents of a provider near its limit (v0.13).
 	Quota QuotaConfig
@@ -209,7 +215,7 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 		}
 	}()
 
-	wg.Add(2)
+	wg.Add(1)
 	go func() { // lease renewal; losing it stops the loop
 		defer wg.Done()
 		t := time.NewTicker(cfg.Renew)
@@ -235,6 +241,18 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 			}
 		}
 	}()
+	if cfg.Reboot != nil {
+		if err := cfg.Reboot(inner, token); err != nil {
+			if lost.Load() || errors.Is(err, bus.ErrNotHolder) {
+				return ErrLeaseLost
+			}
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("dispatch: the reboot judgement: %w", err)
+		}
+	}
+
 	if len(cfg.Health.Checks) > 0 || cfg.Health.DailyWake {
 		wg.Add(1)
 		go func() {
@@ -295,6 +313,7 @@ func Run(ctx context.Context, b *bus.Bus, rt Runtime, cfg Config) error {
 	}
 
 	signal := make(chan struct{}, 1)
+	wg.Add(1)
 	go func() { // XREAD BLOCK on {p}:cmd from "$": a latency signal only
 		defer wg.Done()
 		for inner.Err() == nil {
