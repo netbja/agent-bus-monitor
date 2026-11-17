@@ -266,3 +266,21 @@ func (b *Bus) gapPossible(ctx context.Context, stream, lastDelivered string) boo
 	}
 	return idLess(lastDelivered, info.FirstEntry.ID)
 }
+
+// BorrowedTerminal reports a snapshot written from another agent's terminal:
+// name's entry names a terminal that another entry in snaps names too. A
+// person's name given to a command run in an agent's terminal (agentbus ask
+// <person> in master's) leaves such an entry; it is no agent of its own
+// (human-not-an-agent).
+func BorrowedTerminal(name string, snaps map[string]AgentSnapshot) bool {
+	s, ok := snaps[name]
+	if !ok || s.Pane == "" {
+		return false
+	}
+	for other, o := range snaps {
+		if other != name && o.Pane == s.Pane {
+			return true
+		}
+	}
+	return false
+}

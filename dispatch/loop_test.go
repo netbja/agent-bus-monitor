@@ -482,6 +482,85 @@ func TestRunDoesNotEscalateToHumanSender(t *testing.T) {
 	}
 }
 
+// human-not-an-agent: a status written under the person's name from another
+// agent's terminal (agentbus ask <person> run in master's pane) gives the
+// person an entry in {p}:agents. That entry borrows master's terminal: it is
+// no agent, so the person is still never woken, retried or escalated.
+func TestRunDoesNotWakeAPersonWithABorrowedEntry(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "master", "p-master")
+	if _, err := b.HumanCmd(ctx, "charlie", "master", "please check this"); err != nil {
+		t.Fatal(err)
+	}
+	register(t, b, "charlie", "p-master") // written from master's terminal
+	send(t, b, "charlie", "a report for the person")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	start(t, b, rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if got := escalations(t, r, b, "charlie"); len(got) != 0 {
+		t.Fatalf("the person got escalated: %+v", got)
+	}
+	for _, p := range rt.Prompts() {
+		if strings.Contains(p.Text, "for charlie") {
+			t.Fatalf("a wake typed for the person: %+v", p)
+		}
+	}
+	if _, ok := wakeOf(t, b, "charlie"); ok {
+		t.Fatal("the person got an agent wake record")
+	}
+}
+
+// reviewer-codex on 6cd737c6: the human senders come from the capped cmd
+// stream; once the person's own entries are trimmed, the person's recorded
+// name (Config.Person, identity.as) still marks them, so a borrowed entry is
+// still no agent and the person is still never woken.
+func TestRunDoesNotWakeTheConfiguredPersonWithABorrowedEntry(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "master", "p-master")
+	register(t, b, "charlie", "p-master") // no human=yes entry left in the stream
+	send(t, b, "charlie", "a report for the person")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	cfg.Person = "charlie"
+	start(t, b, rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if got := escalations(t, r, b, "charlie"); len(got) != 0 {
+		t.Fatalf("the person got escalated: %+v", got)
+	}
+	for _, p := range rt.Prompts() {
+		if strings.Contains(p.Text, "for charlie") {
+			t.Fatalf("a wake typed for the person: %+v", p)
+		}
+	}
+	if _, ok := wakeOf(t, b, "charlie"); ok {
+		t.Fatal("the person got an agent wake record")
+	}
+}
+
+// The person's recorded name with no entry at all is no wake target either,
+// whatever the stream still holds.
+func TestRunDoesNotWakeTheConfiguredPerson(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "master", "p-master")
+	send(t, b, "charlie", "a report for the person")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	cfg.Person = "charlie"
+	start(t, b, rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if got := escalations(t, r, b, "charlie"); len(got) != 0 {
+		t.Fatalf("the person got escalated: %+v", got)
+	}
+	if got := notifies(t, r, b, "charlie"); len(got) != 0 {
+		t.Fatalf("the person got a dispatcher notify: %+v", got)
+	}
+}
+
 // Controller ruling 2: after progress the escalation that follows refreshes the
 // progress marks, so the next tick is quiet instead of re-escalating forever.
 func TestRunProgressThenEscalateOnceMore(t *testing.T) {

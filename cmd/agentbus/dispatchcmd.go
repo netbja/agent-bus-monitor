@@ -22,7 +22,13 @@ const dispatchUsage = "usage: dispatch [--horizon D] [--escalate-after D] [--esc
 // loses its lease re-acquires while the project exists, and exits 0 once the
 // project is deleted (superviseDispatch). Bad flags exit 2.
 // dispatchBaseConfig is the starting config; tests shrink its lease timings.
-var dispatchBaseConfig = dispatch.DefaultConfig
+// The person's recorded name (identity.as) is a human identity to the loop
+// whatever the capped cmd stream holds (human-not-an-agent, reviewer-codex).
+var dispatchBaseConfig = func() dispatch.Config {
+	cfg := dispatch.DefaultConfig()
+	cfg.Person = settingsIdentity(os.Getenv)
+	return cfg
+}
 
 // dispatchHostOps is the relay's runner (herdr exit §4.2): main sets it for
 // the service, so tests that run the loop never run a host command.
