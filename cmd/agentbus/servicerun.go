@@ -35,6 +35,7 @@ type serviceRunDeps struct {
 	// answers (the person's yes to agent-screen-blocked Q1). The dispatch
 	// service calls it once, after it first holds the lease; nil: never.
 	EnsureHolder func(ctx context.Context, log io.Writer) error
+	EnsureRetry  time.Duration // a failed EnsureHolder is tried again after this, while the lease is held (default 5 min)
 }
 
 // lastError keeps the last line that reports an error, so a failed service
@@ -283,21 +284,42 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	publish("starting", "", "")
 	logf("starting %s for %s (pid %d)", kind, p, os.Getpid())
 
-	// ensureHolder runs once per process, the first time this dispatcher
-	// holds the lease (a standby on another host installs nothing), beside the
-	// heartbeat: a holder's start waits for its socket.
-	var ensureHolder sync.Once
+	// ensure runs EnsureHolder the first time this dispatcher holds the
+	// lease (a standby on another host installs nothing), beside the
+	// heartbeat: a holder's start waits for its socket. A success is final for
+	// the process; a failure (a transient manager error) is tried again after
+	// EnsureRetry, at a heartbeat with the lease held.
+	var ensureMu sync.Mutex
+	ensureBusy, ensureDone := false, false
+	var ensureNext time.Time
+	retry := d.EnsureRetry
+	if retry <= 0 {
+		retry = 5 * time.Minute
+	}
 	ensure := func() {
-		if kind != service.Dispatch || d.EnsureHolder == nil {
+		if d.EnsureHolder == nil {
 			return
 		}
-		ensureHolder.Do(func() {
-			go func() {
-				if err := d.EnsureHolder(ctx, logw); err != nil && ctx.Err() == nil {
-					logf("holder of this build: %v", err)
-				}
-			}()
-		})
+		ensureMu.Lock()
+		defer ensureMu.Unlock()
+		if ensureBusy || ensureDone || time.Now().Before(ensureNext) {
+			return
+		}
+		ensureBusy = true
+		go func() {
+			err := d.EnsureHolder(ctx, logw)
+			if err != nil && ctx.Err() == nil {
+				logf("holder of this build: %v (tried again in %v)", err, retry)
+			}
+			ensureMu.Lock()
+			defer ensureMu.Unlock()
+			ensureBusy = false
+			if err == nil {
+				ensureDone = true
+			} else {
+				ensureNext = time.Now().Add(retry)
+			}
+		}()
 	}
 
 	// attempt runs the loop once, with the heartbeat beside it.

@@ -1271,9 +1271,19 @@ func ensureOwnHolder(d upDeps, m service.Manager, project, workdir string, stdou
 // serviceEnsureHolder is the dispatch service's EnsureHolder: up's deps (the
 // service manager, the binary, the build) and the unit's working directory,
 // which is the project's repository as up gave it.
+//
+// The binary is identified when the service starts (foureyes): startHolder
+// copies the installed agentbus under this process's build, so a file
+// replaced since (an update between the start and the first lease) would be
+// installed under the wrong build. It is refused instead.
 func serviceEnsureHolder(project string, deps func(log io.Writer) upDeps) func(context.Context, io.Writer) error {
+	started := exeIdentity(deps(io.Discard))
 	return func(_ context.Context, log io.Writer) error {
 		ud := deps(log)
+		if now := exeIdentity(ud); started == nil || now == nil || !os.SameFile(started, now) ||
+			!started.ModTime().Equal(now.ModTime()) || started.Size() != now.Size() {
+			return errors.New("this agentbus binary was replaced since the dispatcher started: no holder installed from it; restart the dispatcher (agentbus up or agentbus service restart dispatch)")
+		}
 		m, why := ud.Services()
 		if m == nil {
 			return fmt.Errorf("no service manager (%s)", why)
@@ -1284,4 +1294,20 @@ func serviceEnsureHolder(project string, deps func(log io.Writer) upDeps) func(c
 		}
 		return ensureOwnHolder(ud, m, project, workdir, log)
 	}
+}
+
+// exeIdentity is the file d.Exe names, nil when it cannot be read.
+func exeIdentity(d upDeps) os.FileInfo {
+	if d.Exe == nil {
+		return nil
+	}
+	exe, err := d.Exe()
+	if err != nil {
+		return nil
+	}
+	fi, err := os.Stat(exe)
+	if err != nil {
+		return nil
+	}
+	return fi
 }

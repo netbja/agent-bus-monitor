@@ -702,34 +702,7 @@ func mainServiceRun(project, host string, args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	hostname, _ := os.Hostname()
-	deps := serviceRunDeps{
-		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, Now: time.Now, Build: holder.BuildID(),
-		HostPing: func(ctx context.Context) error {
-			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
-			if err != nil {
-				return err
-			}
-			return h.Ping(ctx)
-		},
-		Settings:     func() []string { return settingsWarnings(os.Getenv) },
-		EnsureHolder: serviceEnsureHolder(project, func(log io.Writer) upDeps { return realUpDepsIn(nil, log, log) }),
-		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
-			cfg, h, err := serviceDispatchConfig(b, project, host, paths, log)
-			if err != nil {
-				fmt.Fprintf(log, "dispatch: %v\n", err)
-				return 1
-			}
-			run := newDispatchRunRecord(paths.StateDir(project), log) // stopped on a signal (reboot-resume §2.1); running is the judge's, after its verdict
-			cfg.OnLease = onLease
-			if escalateTo != "" {
-				cfg.EscalateTo = escalateTo
-			}
-			code := superviseDispatch(ctx, b, h, cfg, log)
-			run.exited(ctx.Err() != nil) // the context ends on SIGTERM or SIGINT only
-			return code
-		},
-		RunMissions: mission.Run,
-	}
+	deps := serviceRunDepsFor(project, host, hostname, paths)
 	return serviceRun(ctx, b, kind, rest, deps, w)
 }
 
@@ -781,5 +754,39 @@ func serviceReloadPolicy(getenv func(string) string, envFile string) func() stri
 		ef, _ := service.LoadEnvFile(envFile)
 		mode, _ := service.ReloadPolicy(getenv, ef)
 		return mode
+	}
+}
+
+// serviceRunDepsFor is what `agentbus service run` gives serviceRun: the
+// holder probe, the start of this build's holder, the dispatcher and the
+// conductor (named so a test sees each hook is there).
+func serviceRunDepsFor(project, host, hostname string, paths service.Paths) serviceRunDeps {
+	return serviceRunDeps{
+		Paths: paths, Host: hostname, Heartbeat: 5 * time.Second, Standby: 15 * time.Second, EnsureRetry: 5 * time.Minute, Now: time.Now, Build: holder.BuildID(),
+		HostPing: func(ctx context.Context) error {
+			h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)
+			if err != nil {
+				return err
+			}
+			return h.Ping(ctx)
+		},
+		Settings:     func() []string { return settingsWarnings(os.Getenv) },
+		EnsureHolder: serviceEnsureHolder(project, func(log io.Writer) upDeps { return realUpDepsIn(nil, log, log) }),
+		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
+			cfg, h, err := serviceDispatchConfig(b, project, host, paths, log)
+			if err != nil {
+				fmt.Fprintf(log, "dispatch: %v\n", err)
+				return 1
+			}
+			run := newDispatchRunRecord(paths.StateDir(project), log) // stopped on a signal (reboot-resume §2.1); running is the judge's, after its verdict
+			cfg.OnLease = onLease
+			if escalateTo != "" {
+				cfg.EscalateTo = escalateTo
+			}
+			code := superviseDispatch(ctx, b, h, cfg, log)
+			run.exited(ctx.Err() != nil) // the context ends on SIGTERM or SIGINT only
+			return code
+		},
+		RunMissions: mission.Run,
 	}
 }

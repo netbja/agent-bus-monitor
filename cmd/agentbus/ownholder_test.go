@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -132,5 +133,96 @@ func TestServiceEnsureHolderWiring(t *testing.T) {
 	deps.Services = func() (service.Manager, string) { return nil, "no systemd" }
 	if err := serviceEnsureHolder("demo", func(io.Writer) upDeps { return deps })(context.Background(), &out); err == nil || !strings.Contains(err.Error(), "no systemd") {
 		t.Fatalf("no manager: %v", err)
+	}
+}
+
+// foureyes: the binary the service would copy must be the one it runs. An
+// update that replaced the installed agentbus between the service's start
+// and its first lease would otherwise copy the new binary under the old
+// build's key: refused, with the restart named.
+func TestServiceEnsureHolderRefusesAReplacedBinary(t *testing.T) {
+	for _, how := range []string{"renamed over", "rewritten in place"} {
+		t.Run(how, func(t *testing.T) {
+			_, _, _, _, deps := upFixture(t)
+			u := withServices(t, &deps)
+			dir := t.TempDir()
+			exe := filepath.Join(dir, "agentbus")
+			if err := os.WriteFile(exe, []byte("#!/bin/sh\n# v0.29.0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			deps.Exe = func() (string, error) { return exe, nil }
+			hm := &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{}}
+			deps.Services = func() (service.Manager, string) { return hm, "" }
+			deps.HolderBuild = func() string { return "v0.29.0" }
+			deps.HolderAnswers = func(string, string) bool { return false }
+			deps.Sleep = func(time.Duration) {}
+			ensure := serviceEnsureHolder("demo", func(io.Writer) upDeps { return deps }) // the service's start
+			if how == "renamed over" {
+				next := filepath.Join(dir, "agentbus.new")
+				if err := os.WriteFile(next, []byte("#!/bin/sh\n# v0.30.0, a longer one\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Rename(next, exe); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				later := time.Now().Add(time.Hour)
+				if err := os.WriteFile(exe, []byte("#!/bin/sh\n# v0.30.0, a longer one\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				_ = os.Chtimes(exe, later, later)
+			}
+			var out bytes.Buffer
+			err := ensure(context.Background(), &out)
+			if err == nil || !strings.Contains(err.Error(), "replaced since the dispatcher started") {
+				t.Fatalf("err = %v", err)
+			}
+			if len(hm.calls) != 0 {
+				t.Fatalf("installed from a replaced binary: %v", hm.calls)
+			}
+		})
+	}
+}
+
+// foureyes: the service's deps carry the probe and the ensure, so neither
+// can be unhooked from mainServiceRun silently.
+func TestServiceRunDepsForTheDispatchService(t *testing.T) {
+	d := serviceRunDepsFor("demo", "", "h1", service.Paths{Home: t.TempDir()})
+	if d.EnsureHolder == nil || d.HostPing == nil || d.RunDispatch == nil || d.RunMissions == nil {
+		t.Fatalf("deps lack a hook: ensure %v, ping %v, dispatch %v, missions %v", d.EnsureHolder != nil, d.HostPing != nil, d.RunDispatch != nil, d.RunMissions != nil)
+	}
+	if d.Heartbeat <= 0 || d.EnsureRetry <= 0 {
+		t.Fatalf("heartbeat %v, retry %v", d.Heartbeat, d.EnsureRetry)
+	}
+}
+
+// foureyes's note: a failed ensure (a transient systemctl error) is tried
+// again after EnsureRetry while the lease is held; a success is final.
+func TestServiceRunRetriesAFailedEnsure(t *testing.T) {
+	b, d := runFixture(t)
+	mark(t, b)
+	var calls atomic.Int32
+	d.EnsureRetry = 60 * time.Millisecond
+	d.EnsureHolder = func(context.Context, io.Writer) error {
+		if calls.Add(1) == 1 {
+			return errors.New("systemctl: transient")
+		}
+		return nil
+	}
+	d.RunDispatch = func(ctx context.Context, _ *bus.Bus, _ string, onLease func(bool), _ io.Writer) int {
+		onLease(true)
+		<-ctx.Done()
+		onLease(false)
+		return 0
+	}
+	runUntilCleanup(t, b, service.Dispatch, nil, d)
+	waitState(t, b, service.Dispatch, "ready")
+	time.Sleep(30 * time.Millisecond)
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("retried before EnsureRetry: %d calls", n)
+	}
+	time.Sleep(250 * time.Millisecond)
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("calls %d, want 2 (one retry, then success is final)", n)
 	}
 }
