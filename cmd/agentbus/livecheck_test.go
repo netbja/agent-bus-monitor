@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -326,5 +329,55 @@ func TestLiveCheckKeep(t *testing.T) {
 	var out bytes.Buffer
 	if code := runLiveCheck(context.Background(), f, o, &out); code != 0 || f.down != 0 || !strings.Contains(out.String(), "kept: lc0a1b2c") {
 		t.Fatalf("exit %d down %d:\n%s", code, f.down, out.String())
+	}
+}
+
+func TestCheckArgs(t *testing.T) {
+	for _, c := range []struct {
+		args    []string
+		clients string
+		rounds  int
+		keep    bool
+		err     string
+	}{
+		{[]string{"holder-restart"}, "fake", 1, false, ""},
+		{[]string{"holder-restart", "--clients", "real", "--rounds", "3", "--keep"}, "real", 3, true, ""},
+		{[]string{"holder-restart", "--clients=real", "--rounds=2"}, "real", 2, false, ""},
+		{[]string{}, "", 0, false, "usage"},
+		{[]string{"holder"}, "", 0, false, "usage"},
+		{[]string{"holder-restart", "--clients", "codex"}, "", 0, false, "--clients: fake or real"},
+		{[]string{"holder-restart", "--rounds", "0"}, "", 0, false, "--rounds: a number from 1 to 20"},
+		{[]string{"holder-restart", "--rounds"}, "", 0, false, "--rounds needs a value"},
+		{[]string{"holder-restart", "--project", "x"}, "", 0, false, "unknown argument --project"},
+	} {
+		clients, rounds, keep, err := parseCheckArgs(c.args)
+		if c.err != "" {
+			if err == nil || !strings.Contains(err.Error(), c.err) {
+				t.Errorf("%q: %v, want %q", c.args, err, c.err)
+			}
+			continue
+		}
+		if err != nil || clients != c.clients || rounds != c.rounds || keep != c.keep {
+			t.Errorf("%q: %q %d %v %v", c.args, clients, rounds, keep, err)
+		}
+	}
+}
+
+// The person's wrapper runs this command, its options passed on, under a
+// plain sh.
+func TestHolderLiveCheckScript(t *testing.T) {
+	dir := t.TempDir()
+	rec := filepath.Join(dir, "rec")
+	bin := filepath.Join(dir, "agentbus")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nprintf '%s|' \"$@\" > "+rec+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command("/bin/sh", "../../scripts/holder-live-check.sh", "--clients", "real", "--rounds", "2")
+	c.Env = append(os.Environ(), "AGENTBUS_BIN="+bin)
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if b, _ := os.ReadFile(rec); string(b) != "check|holder-restart|--clients|real|--rounds|2|" {
+		t.Fatalf("ran %q", b)
 	}
 }

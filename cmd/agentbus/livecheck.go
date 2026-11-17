@@ -18,7 +18,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -337,4 +341,72 @@ func liveWake(ctx context.Context, w liveWorld, o liveOpts, role string, out io.
 	}
 	fmt.Fprintf(out, "ok   %-46s %s\n", "wake "+role, time.Since(t).Round(100*time.Millisecond))
 	return nil
+}
+
+// checkUsage is check's usage line.
+const checkUsage = "usage: agentbus check holder-restart [--clients fake|real] [--rounds <n>] [--keep]"
+
+// parseCheckArgs reads check's arguments.
+func parseCheckArgs(args []string) (clients string, rounds int, keep bool, err error) {
+	if len(args) == 0 || args[0] != "holder-restart" {
+		return "", 0, false, errors.New(checkUsage)
+	}
+	clients, rounds = "fake", 1
+	for i := 1; i < len(args); i++ {
+		a := args[i]
+		name, val, inline := strings.Cut(a, "=")
+		switch name {
+		case "--keep":
+			if inline {
+				return "", 0, false, fmt.Errorf("--keep takes no value")
+			}
+			keep = true
+			continue
+		case "--clients", "--rounds":
+		default:
+			return "", 0, false, fmt.Errorf("unknown argument %s; %s", a, checkUsage)
+		}
+		if !inline {
+			if i+1 >= len(args) {
+				return "", 0, false, fmt.Errorf("%s needs a value", name)
+			}
+			i++
+			val = args[i]
+		}
+		switch name {
+		case "--clients":
+			if val != "fake" && val != "real" {
+				return "", 0, false, fmt.Errorf("--clients: fake or real, not %q", val)
+			}
+			clients = val
+		case "--rounds":
+			n, err := strconv.Atoi(val)
+			if err != nil || n < 1 || n > 20 {
+				return "", 0, false, fmt.Errorf("--rounds: a number from 1 to 20, not %q", val)
+			}
+			rounds = n
+		}
+	}
+	return clients, rounds, keep, nil
+}
+
+// runCheck is `agentbus check holder-restart`. Ctrl-C stops the check and
+// still removes the project.
+func runCheck(args []string, getenv func(string) string, environ []string, stdout, stderr io.Writer) int {
+	clients, rounds, keep, err := parseCheckArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "agentbus check: "+err.Error())
+		return 2
+	}
+	p, err := newLiveProject(clients, getenv, environ)
+	if err != nil {
+		fmt.Fprintln(stderr, "agentbus check: "+err.Error())
+		return 1
+	}
+	o := liveOpts{Project: p.project, Clients: clients, Rounds: rounds, Keep: keep, Poll: 2 * time.Second, Deadlines: liveDefaults(clients == "real")}
+	fmt.Fprintf(stdout, "holder live check: test project %s (master, coder), clients %s, %d round(s); about %d minutes a round (self-repair relaunches one agent every %s). Ctrl-C stops it and removes the project.\n",
+		p.project, clients, rounds, int((o.Deadlines.Relaunch/2+o.Deadlines.Pace)/time.Minute)+1, selfrepair.ProjectPause)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runLiveCheck(ctx, p, o, stdout)
 }
