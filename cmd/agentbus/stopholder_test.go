@@ -76,3 +76,16 @@ func TestServiceStopHolder(t *testing.T) {
 		}
 	}
 }
+
+// foureyes: the real deps carry the live-terminal count, so service stop
+// holder is not refused everywhere by a missing hook.
+func TestRealServiceCmdDepsCountLiveTerminals(t *testing.T) {
+	d := realServiceCmdDeps("h1")
+	if d.HolderLive == nil || d.HolderTerms == nil || d.HolderBuild == nil {
+		t.Fatalf("deps lack a holder hook: live %v, terms %v, build %v", d.HolderLive != nil, d.HolderTerms != nil, d.HolderBuild != nil)
+	}
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	if n, answered, err := d.HolderLive("demo", "nokey"); n != 0 || answered || err != nil {
+		t.Fatalf("no holder: %d %v %v", n, answered, err)
+	}
+}
