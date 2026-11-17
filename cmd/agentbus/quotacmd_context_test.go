@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
 
@@ -101,6 +102,19 @@ func TestServicePrompt(t *testing.T) {
 	}
 	if cfg := servicePrompt(func(string) string { return "" }, missing, run); cfg.Notify != nil {
 		t.Fatal("a missing notify-send must be skipped")
+	}
+	// The stuck screen's ring (agent-screen-blocked §3): 3 minutes by
+	// default, the setting's seconds, 0 off.
+	for env, want := range map[string]time.Duration{"": 3 * time.Minute, "0": 0, "600": 10 * time.Minute} {
+		cfg := servicePrompt(func(k string) string {
+			if k == config.EnvName("dispatch.stuck_after") {
+				return env
+			}
+			return ""
+		}, found, run)
+		if cfg.StuckAfter != want {
+			t.Fatalf("%q: stuck after %v, want %v", env, cfg.StuckAfter, want)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/agentstate"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/termhost"
 	"github.com/netbja/agent-bus-monitor/termhost/fake"
 )
@@ -279,5 +281,25 @@ func TestHostRuntimeUntrustedScreenIsUnknown(t *testing.T) {
 	in := f.inspect()
 	if !errors.Is(in.Err, termhost.ErrScreenUntrusted) || in.Ready || in.Gone || in.State != "unknown" {
 		t.Fatalf("an untrusted screen: %+v", in)
+	}
+}
+
+// agent-screen-blocked §3: a settled screen the client's signature does not
+// read (neither ready, nor busy, nor a prompt) inspects as unknown with a
+// screen hash, the stuck screen's measure; the hash is an opaque digest, so
+// no word of the screen reaches the observation (never written to Redis).
+func TestHostRuntimeUnrecognisedScreenIsUnknownWithAHash(t *testing.T) {
+	f := newHostFixture(t)
+	f.h.SetScreen(f.term.ID, "zq-secret-word-7731 something no signature reads", "", "another plain line")
+	f.quiet(time.Second)
+	in := f.inspect()
+	if in.State != "unknown" || in.Ready || in.Busy || in.ScreenHash == "" {
+		t.Fatalf("unrecognised screen: state %q ready %v busy %v hash %q", in.State, in.Ready, in.Busy, in.ScreenHash)
+	}
+	o := bus.Observation{State: in.State, PID: f.term.PID, ScreenHash: in.ScreenHash}
+	carryScreen(&o, bus.Observation{}, false)
+	b, _ := json.Marshal(o)
+	if strings.Contains(string(b), "zq-secret-word") || strings.Contains(string(b), "another plain line") {
+		t.Fatalf("screen text in the observation: %s", b)
 	}
 }

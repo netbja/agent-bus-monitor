@@ -27,7 +27,7 @@ var groups = map[string]Group{
 	"waiting.popup_after": GroupAttention, "waiting.snooze": GroupAttention, "waiting.bell": GroupAttention,
 	"recap.auto_after": GroupAttention, "updates.check": GroupAttention, "dispatch.focus_notice": GroupAttention,
 	"identity.as": GroupIdentity, "start.team": GroupIdentity,
-	"dispatch.context_alert": GroupServices, "dispatch.context_urgent": GroupServices, "dispatch.context_handoff_deadline": GroupServices, "dispatch.prompt_grace": GroupServices, "dispatch.quota": GroupServices,
+	"dispatch.context_alert": GroupServices, "dispatch.context_urgent": GroupServices, "dispatch.context_handoff_deadline": GroupServices, "dispatch.prompt_grace": GroupServices, "dispatch.stuck_after": GroupServices, "dispatch.quota": GroupServices,
 	"dispatch.quota_warn": GroupServices, "dispatch.quota_drain": GroupServices, "dispatch.quota_hold": GroupServices, "dispatch.quota_max_age": GroupServices,
 	"dispatch.quota_long_hold": GroupServices, "quota.claude.probe": GroupServices, "dispatch.tokens": GroupServices, "dispatch.auto_clear": GroupServices,
 	"dispatch.pop_retire": GroupServices, "dispatch.pop_retire_after": GroupServices, "dispatch.stall_after": GroupServices, "dispatch.clear_stall_after": GroupServices, "dispatch.quiet_after": GroupServices, "dispatch.idle_after": GroupServices, "dispatch.master_idle_after": GroupServices, "dispatch.checkback_max": GroupServices, "dispatch.login_expiry_warn": GroupServices, "run.max_duration": GroupServices, "run.max_deliveries": GroupServices, "run.drain_max": GroupServices,

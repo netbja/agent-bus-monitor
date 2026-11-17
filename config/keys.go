@@ -248,6 +248,22 @@ var Keys = []*Key{
 			}
 			return nil, "want whole seconds from 0 to 3600"
 		}},
+	// agent-screen-blocked §3 (the person's Q3): an unrecognised screen
+	// unchanged this long reads stuck in busmon and rings the desktop once per
+	// episode (0 = off).
+	{Name: "dispatch.stuck_after", Env: "AGENT_BUS_STUCK_AFTER", Kind: Duration, Default: 3 * time.Minute, ReadBy: "dispatch",
+		env: func(raw string) (any, envResult) {
+			if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 86400 {
+				return time.Duration(n) * time.Second, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if n, ok := v.(int64); ok && n >= 0 && n <= 86400 {
+				return time.Duration(n) * time.Second, ""
+			}
+			return nil, "want whole seconds from 0 to 86400"
+		}},
 	// focus-notice: a wake waiting this long on the pane that has the focus
 	// earns the person one desktop notice (0 = off).
 	{Name: "dispatch.focus_notice", Env: "AGENT_BUS_FOCUS_NOTICE", Kind: Duration, Default: 30 * time.Second, ReadBy: "dispatch",
