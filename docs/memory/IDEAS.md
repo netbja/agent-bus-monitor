@@ -1,9 +1,15 @@
 # Ideas waiting for the person
 
-One note per idea, in [open-questions](open-questions/) (status proposed). busmon's Work page lists
-them under IDEAS; the person decides each one. An idea is written as a note, never as a plan task
-owned by the person (those flood For you). A decided idea becomes a task, and its note is marked
-resolved or superseded.
+One note per idea, in [open-questions](open-questions/) (status proposed): the repository's record
+of each idea, its context and a recommendation, for the person to decide. An idea is written as a
+note, never as a plan task owned by the person (those flood For you). A decided idea becomes a task,
+and its note is marked resolved or superseded.
+
+busmon does not list these notes today. Its Work page's IDEAS section shows the broker's ideas
+(`agentbus idea list`, `{p}:ideas`, read by `cmd/busmon/work_ideas.go`). The requests-plan redesign
+(§9) planned IDEAS to list the open-question notes, and `memory.OpenQuestions` can read them, but
+nothing calls it. Until that is wired, an idea the person should see in busmon is also added with
+`agentbus idea add`, its note's path in the text.
 
 From 2026-11-17:
 
