@@ -251,7 +251,7 @@ var Keys = []*Key{
 	// agent-screen-blocked §3 (the person's Q3): an unrecognised screen
 	// unchanged this long reads stuck in busmon and rings the desktop once per
 	// episode (0 = off).
-	{Name: "dispatch.stuck_after", Env: "AGENT_BUS_STUCK_AFTER", Kind: Duration, Default: 3 * time.Minute, ReadBy: "dispatch",
+	{Name: "dispatch.stuck_after", Env: "AGENT_BUS_STUCK_AFTER", Kind: Duration, Default: 3 * time.Minute, ReadBy: "dispatch, busmon",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 86400 {
 				return time.Duration(n) * time.Second, envUse

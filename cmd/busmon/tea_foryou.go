@@ -41,6 +41,9 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		case a.state == "waiting" && !answered(a) && a.openAsk == 0:
 			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("wait:%s:%d", name, a.stateAt.UnixMilli()),
 				Agent: name, Text: a.message, At: a.stateAt})
+		case screenStuck(a):
+			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("stuck:%s:%d", name, a.obsScreenSince.UnixMilli()),
+				Agent: name, Text: stuckWords(a), At: a.obsScreenSince})
 		case promptBlocked(a):
 			since := a.obsSince
 			if since.IsZero() {

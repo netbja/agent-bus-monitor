@@ -140,6 +140,10 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
   - **What busmon shows:** the state column reads `stuck` (attention, group 0). The text is
     `stuck: its screen is not recognised and has not changed for <d>`, then the lines, read as
     above.
+    As built (step 3b-2): busmon reads `dispatch.stuck_after` itself and judges the observation of
+    the agent's current process (`screen_since`, the broker's times); a stuck agent waits for the
+    person (the header's count, For you with its words) and its page heads the live screen with
+    them, as a blocked one.
   - **Its ring:** once per episode, under its own mark `stuck:<agent>` in `{p}:quota`, through
     prompt-notify's runner, with its own words: `<project>: <agent>'s screen has not changed for
     <d> and is not a prompt agentbus knows (<term>)`. It never says "waits on a prompt". Whether

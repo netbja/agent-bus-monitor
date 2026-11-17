@@ -465,7 +465,7 @@ func (m *Model) buildPage() bool {
 		until, isHeld := held(s.holds, a.provider, now)
 		if p.term != nil {
 			v := *p.term
-			v.blocked = promptBlocked(a) // its client asks: the last lines, and the words (agent-screen-blocked §3)
+			v.heading = attentionWords(a) // blocked or stuck: the last lines, and the words (agent-screen-blocked §3)
 			b.join(termPreviewLines(v, width))
 		}
 		b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
