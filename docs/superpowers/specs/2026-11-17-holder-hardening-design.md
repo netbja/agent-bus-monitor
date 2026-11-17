@@ -1,6 +1,8 @@
 # Holder hardening: what a holder death, restart or reboot does today, and what to change
 
-Status: spec, r6.1, for review (subject `holder-hardening-spec`). r6.1: foureyes (a client blocked
+Status: spec, r6.2, for review (subject `holder-hardening-spec`). r6.2: foureyes (`reload` refuses a
+busy agent: a person-only `--replace-broken` mode for a terminal the holder marks invalid or stuck).
+r6.1: foureyes (a client blocked
 on an unanswered cursor report is the person's to replace, said in health). r6: reviewer-codex (no in-place
 resynchronisation: an invalid terminal is replaced; every snapshot caught up atomically), foureyes
 (query answers while the emulator is not trusted). r5: reviewer-codex and foureyes (G1's
@@ -313,7 +315,17 @@ stream could show an empty input box the program no longer draws. So:
    with a completion barrier, so **none restores `ok` in place**. The terminal is replaced through
    the reload protocol (`agentbus reload <agent>`: the old terminal closed once the agent is idle,
    a new one started on its resume session), judged idle from the agent's own turn state (its turn
-   hooks, `TurnState`), never from the invalid screen; when that is unknown, the person decides.
+   hooks, `TurnState`), never from the invalid screen. **When it is not idle, or that is unknown**
+   (a client stuck mid-turn, item 6), only the person replaces it, with a new reload mode:
+   `agentbus reload <agent> --replace-broken --as <person>`. It is the person's (refused from an
+   agent's shell, as `holder drain` is, and `--as` required), and accepted **only** while the holder
+   reports that terminal's screen `invalid` or `stuck` (re-read just before acting); it skips the
+   idle, turn and wake checks (each reads the untrusted screen) and keeps every other reload check
+   (open reviews and missions, `reloadOpenWork`); it says first that the turn in flight is lost,
+   closes the old terminal (its program hung up), starts the new one on the agent's resume session,
+   and records it in the ledger like any reload. Tests: refused on an `ok` screen, from an agent's
+   shell, without `--as`, and on a terminal whose screen turned `ok` between the read and the act;
+   accepted on a busy `stuck` terminal, the new terminal `ok` on the same session.
    The holder may send a resize to ask for a redraw (it helps a person attached), and it never
    certifies anything. A per-client protocol could later restore `ok` in place, once specified and
    tested for that client.
@@ -333,8 +345,9 @@ stream could show an empty input box the program no longer draws. So:
    and **never** a cursor-position report from a guessed cursor (a wrong position corrupts the
    client's layout); the terminal is due for replacement (4). A client that waits for that
    report mid-turn stops there: its turn never ends, its turn state never reads idle, and the
-   replacement falls to the person (4). Health's `invalid` and `stuck` texts say so: `a client may
-   be waiting for a cursor report: replace it by hand (agentbus reload <agent>)`.
+   replacement falls to the person (4). Health's `invalid` and `stuck` texts say so, with the
+   command that works on a busy agent: `a client may be waiting for a cursor report: replace it by
+   hand (agentbus reload <agent> --replace-broken --as <you>; the turn in flight is lost)`.
 7. **A panic is recovered with its lock released.** The `Write` and `Snapshot` calls run in a small
    function with `defer` unlocking the emulator's lock (foureyes: `readLoop` locks by hand today,
    so a `recover()` without it would turn the crash into a deadlock), the offending chunk's offset
