@@ -52,6 +52,7 @@ const (
 	defaultWarnPct  = 85
 	defaultDrainPct = 85
 	defaultHoldPct  = 95
+	defaultMaxAge   = 30 * time.Minute
 )
 
 // resetStamp is a window's reset in a stored message: the absolute date and
@@ -79,7 +80,7 @@ func (q QuotaConfig) filled() QuotaConfig {
 		q.HoldPct = 95
 	}
 	if q.MaxAge <= 0 {
-		q.MaxAge = 30 * time.Minute
+		q.MaxAge = defaultMaxAge
 	}
 	if q.LongHold == 0 {
 		q.LongHold = 2 * time.Hour
@@ -108,8 +109,12 @@ type quotaState struct {
 // set: the file the person sees is what is judged).
 func (l *loop) refreshThresholds(q QuotaConfig) {
 	if !l.quota.thSet {
-		l.quota.th = QuotaThresholds{Warn: q.WarnPct, Drain: q.DrainPct, Hold: q.HoldPct, MaxAge: q.MaxAge}
 		l.quota.thSet = true
+		if q.Thresholds == nil {
+			l.quota.th = QuotaThresholds{Warn: q.WarnPct, Drain: q.DrainPct, Hold: q.HoldPct, MaxAge: q.MaxAge}
+		} else { // the files decide: a first read that fails keeps the registry defaults (reviewer-codex)
+			l.quota.th = QuotaThresholds{Warn: defaultWarnPct, Drain: defaultDrainPct, Hold: defaultHoldPct, MaxAge: defaultMaxAge}
+		}
 	}
 	if q.Thresholds == nil {
 		return
@@ -121,7 +126,7 @@ func (l *loop) refreshThresholds(q QuotaConfig) {
 	}
 	l.forget("quota-thresholds")
 	if th.MaxAge <= 0 {
-		th.MaxAge = q.MaxAge
+		th.MaxAge = defaultMaxAge
 	}
 	if !(th.Warn > 0 && th.Warn <= th.Drain && th.Drain <= th.Hold) {
 		l.logOnce("quota-order", map[string]any{"action": "quota-order", "warn": th.Warn, "drain": th.Drain, "hold": th.Hold,

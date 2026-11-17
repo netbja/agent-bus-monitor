@@ -129,6 +129,46 @@ func TestRunQuotaUnreadableThresholdsKeepTheLast(t *testing.T) {
 	}
 }
 
+// reviewer-codex on 0cc1cc2f: with Thresholds wired, a first read that fails
+// uses the registry defaults, never the static fields the service filled from
+// its start-time process environment.
+func TestRunQuotaFirstReadFailureUsesTheDefaults(t *testing.T) {
+	f := &fakeThresholds{}
+	f.set(QuotaThresholds{}, errors.New("config.toml does not parse"))
+	b, q, cfg := drainWorld(t, f)
+	cfg.Quota.WarnPct, cfg.Quota.DrainPct, cfg.Quota.HoldPct = 50, 50, 60 // the process env's
+	q.set(reading("anthropic", 70))
+	start(t, b, newFakeRT(alwaysReady), cfg)
+	waitFor(t, 3*time.Second, "a read", func() bool { return f.reads.Load() > 0 })
+	time.Sleep(300 * time.Millisecond)
+	if n, s := countTo(t, b, "master", "Quota anthropic"), runState(b); n != 0 || s != bus.RunRunning {
+		t.Fatalf("at 70%% under the defaults: %d quota messages, run %q", n, s)
+	}
+	q.set(reading("anthropic", 86))
+	waitFor(t, 3*time.Second, "warned and drained at the default 85", func() bool {
+		return countTo(t, b, "master", "Quota anthropic 86%") == 1 && runState(b) == bus.RunDraining
+	})
+}
+
+// foureyes on 0cc1cc2f: a good order between two broken ones ends the
+// episode; the second broken order is logged again.
+func TestRunQuotaBrokenOrderAgainIsLoggedAgain(t *testing.T) {
+	f := &fakeThresholds{}
+	broken := QuotaThresholds{Warn: 90, Drain: 80, Hold: 95, MaxAge: 30 * time.Minute}
+	f.set(broken, nil)
+	b, q, cfg := drainWorld(t, f)
+	q.set(reading("anthropic", 10))
+	cfg.Quota.Every = 100 * time.Millisecond
+	logs := func() int { return strings.Count(cfg.Log.(*syncBuf).String(), `"action":"quota-order"`) }
+	start(t, b, newFakeRT(alwaysReady), cfg)
+	waitFor(t, 3*time.Second, "the first episode logged", func() bool { return logs() == 1 })
+	n := f.reads.Load()
+	f.set(QuotaThresholds{Warn: 80, Drain: 90, Hold: 95, MaxAge: 30 * time.Minute}, nil)
+	waitFor(t, 3*time.Second, "a good read", func() bool { return f.reads.Load() > n+1 })
+	f.set(broken, nil)
+	waitFor(t, 3*time.Second, "the second episode logged", func() bool { return logs() == 2 })
+}
+
 // The thresholds are read with the readings, every q.Every, not at every
 // reconcile tick (§2.2).
 func TestRunQuotaThresholdsReadWithTheReadings(t *testing.T) {

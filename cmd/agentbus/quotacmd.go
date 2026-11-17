@@ -412,8 +412,13 @@ func quotaListed(cfg map[string]quota.ProviderConfig, file *config.File, explici
 // file that cannot be read is an error, and the dispatcher keeps the last
 // values; a missing env file is none.
 func quotaThresholds(getenv func(string) string, project, envFile string) func() (dispatch.QuotaThresholds, error) {
+	seen := false // config.toml existed at a previous read
 	return func() (dispatch.QuotaThresholds, error) {
 		f := config.Load(config.Path(getenv), "config.toml")
+		if !f.Exists && seen { // removed since: keep the last (spec §2.2)
+			return dispatch.QuotaThresholds{}, errors.New("config.toml: missing since the last read")
+		}
+		seen = seen || f.Exists
 		for _, w := range f.Warnings {
 			if w.Key == "" { // the whole file: it cannot be read or does not parse
 				return dispatch.QuotaThresholds{}, fmt.Errorf("config.toml: %s", w.Msg)

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/redis/go-redis/v9"
 )
 
 // Quota settings step 2 (§2.2): the dispatch service reads its project's
@@ -67,5 +71,72 @@ func TestQuotaThresholdsFromTheFiles(t *testing.T) {
 	write(cfg, "")
 	if _, err = quotaThresholds(getenv, "demo", filepath.Join(dir, "none.env"))(); err != nil {
 		t.Fatalf("no env file: %v", err)
+	}
+}
+
+// reviewer-codex on 0cc1cc2f (spec §2.2): a config.toml that disappears after
+// a good read keeps the last thresholds (an error, so the dispatcher keeps
+// them); one that never existed reads the defaults.
+func TestQuotaThresholdsMissingConfigKeepsTheLast(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(k string) string {
+		if k == "XDG_CONFIG_HOME" || k == "HOME" {
+			return dir
+		}
+		return ""
+	}
+	read := quotaThresholds(getenv, "demo", filepath.Join(dir, "demo.env"))
+	if th, err := read(); err != nil || th.Warn != 85 {
+		t.Fatalf("no config.toml at start: %+v %v", th, err)
+	}
+	if err := os.WriteFile(cfg, []byte("[project.demo.dispatch]\nquota_warn = 80\nquota_drain = 90\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if th, err := read(); err != nil || th.Warn != 80 || th.Drain != 90 {
+		t.Fatalf("a good read: %+v %v", th, err)
+	}
+	if err := os.Remove(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if th, err := read(); err == nil {
+		t.Fatalf("config.toml removed read as %+v, not an error", th)
+	}
+}
+
+// foureyes on 0cc1cc2f: the dispatch service wires the file reader, so its
+// project's [project.<p>] table governs the drain.
+func TestServiceDispatcherReadsTheProjectThresholds(t *testing.T) {
+	root := t.TempDir()
+	for k, v := range map[string]string{"HOME": root, "XDG_CONFIG_HOME": root + "/cfg", "XDG_STATE_HOME": root + "/state",
+		"XDG_DATA_HOME": root + "/data", "XDG_RUNTIME_DIR": root + "/run"} {
+		t.Setenv(k, v)
+	}
+	cfgFile := filepath.Join(root, "cfg", "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfgFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[dispatch]\nquota = true\n\n[project.demo.dispatch]\nquota_warn = 70\nquota_drain = 80\n"
+	if err := os.WriteFile(cfgFile, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The config is built, never run: the client is never dialled.
+	b, err := bus.Open(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
+	cfg, _, err := serviceDispatchConfig(b, "demo", "", paths, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Quota.Read == nil || cfg.Quota.Thresholds == nil {
+		t.Fatalf("quota on, thresholds reader wired: read %v, thresholds %v", cfg.Quota.Read != nil, cfg.Quota.Thresholds != nil)
+	}
+	if th, err := cfg.Quota.Thresholds(); err != nil || th.Warn != 70 || th.Drain != 80 {
+		t.Fatalf("the project's table: %+v %v", th, err)
 	}
 }
