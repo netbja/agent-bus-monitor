@@ -1,6 +1,6 @@
 # busmon views: one question per view (Work, Board, Plan)
 
-Status: r3, spec and mock-ups only, no code; r2 holds the person's answers of 2026-11-17 (§8); r3 names the master-dead mechanism (§3.1) and puts the priority glyphs back to the person (§9, foureyes). Base: origin/dev `35a0b7f2`. Author: coder2, from the
+Status: r4, spec and mock-ups only, no code. Every question is answered (§8, §9, the person on 2026-11-17 and 2026-11-18): the spec is final. Base: origin/dev `35a0b7f2`. Author: coder2, from the
 person's direction relayed by master on 2026-11-17 (task `views-redesign-spec`). It supersedes the
 `ideas-triage-and-plan-spec` request given to coder. It builds on the requests-plan redesign, whose
 §9 (decided 2026-11-10) is built: the Work tab, the Kanban and the Projects counts
@@ -63,43 +63,13 @@ One list, one line per task, Board's format: **task, owner, state, age**, newest
   - `cancel`, `reassign`: master's (a directive to master, prefilled in Compose for the person to
     send);
   - missions flag their own stuck requests (the conductor).
-  - **If master is dead** (no fresh status, no terminal; the person's Q2):
-    1. busmon first proposes to wait: the dispatcher's self-repair relaunches master first
-       (decision 2026-11-09), and the row says `master is down; self-repair relaunches it`;
-    2. the person may still act now: busmon asks the dispatcher to resend or cancel, after a
-       confirmation line, by the mechanism of §3.1. This is the only path where busmon asks the
-       dispatcher to act;
-    3. every such act is traced: an Activity entry (what, which request, by the person through
-       busmon) and a directive to master on the bus saying what was done without it. Master's
-       role reads these at its restart, before its own work.
+  - **If master is dead** (no fresh status, no terminal; the person's Q2 and Q8): the row says
+    `master is down; self-repair relaunches it`. A resend needs nothing from busmon: the
+    dispatcher already wakes the target again on its own. A cancel or a reassign waits for master,
+    whom the dispatcher's self-repair relaunches first (decision 2026-11-09). busmon asks the
+    dispatcher for nothing, and no request changes while master is down.
 - **No `for you` count in its title**: a request the person owes is in Work (YOU), and its Board
   row has no special mark.
-
-### 3.1 The person's act through the dispatcher (master down)
-
-A protocol change (`bus/`) and a trust boundary: built only after the security role's review
-(step 3b, §7). Nothing here exists today: the dispatcher takes no request from anyone, and a
-tracked request cannot be cancelled.
-
-- **How busmon asks:** one cmd entry, a new type `act`, target `dispatch`, written by busmon with
-  `human: yes` and the person as sender (`bus.PersonAct(ctx, person, verb, task)`, verb `resend` or
-  `cancel`). It is on the cmd stream, so Activity shows it as it shows any person's entry.
-- **Who may ask:** a `human: yes` entry. The CLI never writes one (identityguard.go: only busmon
-  does), but any process with access to the broker could; that is true of every person's
-  directive today, and it is the boundary the security review judges. The act is narrow so
-  that a forged one does little: the dispatcher acts only while master is down by its own facts,
-  resend only re-wakes, and cancel is undone by master's next request.
-- **What the dispatcher does**, in its reconcile, fenced as every write:
-  - master up (a fresh status and a live terminal, its own facts, not busmon's): no act; a notice
-    to the person, `master is up: ask master`;
-  - `resend`: the request's target is woken again, the existing re-wake (its wake record cleared);
-  - `cancel`: a new board state `cancelled`, with the response `cancelled by <person> through
-    busmon while master was down (act <id>)`; `request` and busmon show it like `done`, and master
-    may send the request again;
-  - each act, done or refused, is followed by a directive to master naming the act, its entry and
-    what changed, which master reads at its restart (master's role, a line to add).
-- **Idempotent:** an act already applied (its entry id recorded on the request) is not applied
-  twice after a restart of the dispatcher.
 
 ### Mock-up: Board at 160 columns (one alert)
 
@@ -148,12 +118,9 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
   the person must do now is Work's, not repeated here.
 - **Dependencies** show as `after <id>` on the task's line (the first one, `+N` for more); the side
   panel (wide tier) lists all of them and the tasks that wait on this one.
-- **Priority**: one glyph set, used in Plan and the Kanban, nothing for normal. The person chose
-  `▲` high and `▼` low (Q4), but both already mean something in busmon: `▲` is blocked
-  (`GlyphBlocked`, the agents' state column, waiting-holder, holder-behind) and `▼` is down
-  (`GlyphDown`). Request priority already has its own marks, `↑` and `↓` (`priorityMark`, on the
-  Kanban's cards). This spec recommends `↑`/`↓` everywhere, no collision and no move, and draws the
-  mock-ups with them; the choice goes back to the person (§9). Their colour is never the header's
+- **Priority**: `↑` high, `↓` low, nothing for normal, the marks requests already carry
+  (`priorityMark`), in Plan, the Kanban and the requests alike (the person's Q7). `▲` and `▼` keep
+  meaning blocked (`GlyphBlocked`) and down (`GlyphDown`). Their colour is never the header's
   yellow warning; a future ASCII setting (the braille-graphs idea,
   `docs/memory/open-questions/2026-11-17-braille-graphs.md`) covers them too: `^` and `v`.
   `+` and `-` on a plan task raise or lower it (the person's, as `request priority`). NOW and NEXT
@@ -255,8 +222,6 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
    ideas), and the stale comment in `work_model.go` corrected.
 2. The two fixes of §6.
 3. Board and Requests merged (§3), the `board.no_accept_after` and `board.no_reply_after` settings.
-   3b. The person's act through the dispatcher (§3.1): `bus.PersonAct`, the `cancelled` state, the
-   dispatcher's fenced act, master's role line; after the security role's review.
 4. Plan as tab 4, the roadmap sections, `priority` in the plan file and the glyphs (§4).
 5. IDEAS triage keys (§5).
 
@@ -264,23 +229,19 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
 
 1. **Board alerts:** two settings in Shift+C, "no acceptance" (30 minutes) and "no reply" (2 hours),
    both adjustable (§3).
-2. **Master dead:** yes, busmon may ask the dispatcher to resend or cancel after a confirmation,
-   traced; it first proposes waiting for master's self-repair; master reads the trace at its
-   restart, and any cancel done without it is told to it on the bus (§3).
+2. **Master dead:** busmon first proposes waiting for master's self-repair (§3); Q8 below narrowed
+   the rest to resend only.
 3. **APPROVED:** its own section between NOW and NEXT, folded when empty (§4).
-4. **Priority:** `▲`/`▼`, nothing for normal, in a colour distinct from the header's yellow
-   warning; an ASCII setting may cover them (§4).
+4. **Priority:** a glyph per level, nothing for normal, in a colour distinct from the header's
+   yellow warning; an ASCII setting may cover them (§4). Q7 below chose the glyphs.
 5. **80 columns:** LATER folds to a count that Enter opens, keeping a high-priority task visible,
-   `LATER 3 · 1 ▲` (§4).
+   `LATER 3 · 1 ↑` (§4).
 6. **IDEAS:** `y` stays copy everywhere; Enter on an idea opens a triage panel where `y`, `l`, `n`
    act (§5).
 
-## 9. Back to the person (r3)
+## 9. The person's re-decisions (2026-11-18)
 
-7. **Priority glyphs:** `▲` and `▼` already mean blocked and down in busmon, and requests already
-   use `↑`/`↓` for priority. Keep `↑`/`↓` everywhere (recommended, drawn in the mock-ups), or keep
-   `▲`/`▼` for priority and give blocked and down other glyphs?
-8. **Cancel while master is down** (§3.1) is a new board state and a new dispatcher act, built
-   after a security review. Keep it, or resend only (the dispatcher already re-wakes) and leave
-   cancel to master?
-
+7. **Priority glyphs:** `↑`/`↓` everywhere, the requests' marks; `▲`/`▼` stay blocked and down
+   (the earlier `▲`/`▼` choice did not know they were taken).
+8. **Master down:** resend only, which the dispatcher already does. No cancel while master is down:
+   cancel stays master's; no new board state, no new dispatcher act, no security review (§3).
