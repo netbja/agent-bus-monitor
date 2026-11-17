@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -199,4 +200,22 @@ func holderRelaunchPace(getenv func(string) string) time.Duration {
 		return 0
 	}
 	return selfrepair.ProjectPause
+}
+
+// holderCheck is health holder's run: the evidence, the agents proved in a
+// holder terminal for holder_restarted (unread: the base judgement alone),
+// and self-repair's pace for its queue.
+func holderCheck(b *bus.Bus, evidence func() (health.HolderEvidence, error), getenv func(string) string) func(context.Context) (health.Outcome, error) {
+	return func(ctx context.Context) (health.Outcome, error) {
+		e, err := evidence()
+		if err == nil {
+			if snaps, aerr := b.Agents(ctx); aerr == nil {
+				if now, terr := b.ServerTime(ctx); terr == nil {
+					e = withHolderAgents(e, snaps, now, provedAlive(hostBootID(), dispatch.ProcStart))
+					e.RelaunchPace = holderRelaunchPace(getenv)
+				}
+			}
+		}
+		return health.EvaluateHolder(e), err
+	}
 }

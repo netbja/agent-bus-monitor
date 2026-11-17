@@ -273,6 +273,54 @@ type e2eWorld struct {
 	h       *holder.Host
 	log     string
 	session map[string]string // each role's first session
+
+	raw, sock string
+	launch    func(holder.Start) (holder.Command, error)
+	hm        *fakeHolderManager
+	mu        sync.Mutex
+	srv       *holder.Server // the holder's current process
+	scancel   context.CancelFunc
+	resumed   []string // the roles started on a recorded session, in order
+
+	killed atomic.Bool // the self-repair's grace runs on a shifted clock once set
+	dlog   e2eBuf      // the dispatcher's log
+}
+
+// serve starts a holder server on the world's socket, as the unit starts
+// the holder process.
+func (w *e2eWorld) serve(t *testing.T) {
+	t.Helper()
+	paths, err := service.PathsFrom(os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := holder.NewServer(holder.Config{Project: w.project, Build: w.raw, Socket: w.sock, Launch: w.launch,
+		TermsFile: holderTermsFile(paths, w.project, w.raw), // as holderConfig sets it
+		Grace:     time.Second, SubmitWait: 2 * time.Second, PersonQuiet: 100 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.Listen(); err != nil {
+		t.Fatalf("the holder does not listen on %s (%d bytes): %v", w.sock, len(w.sock), err)
+	}
+	sctx, scancel := context.WithCancel(context.Background())
+	go srv.Serve(sctx)
+	w.mu.Lock()
+	w.srv, w.scancel = srv, scancel
+	w.mu.Unlock()
+}
+
+// stop ends the holder's current process: its terminals closed, its socket
+// gone.
+func (w *e2eWorld) stop() {
+	w.mu.Lock()
+	srv, scancel := w.srv, w.scancel
+	w.srv, w.scancel = nil, nil
+	w.mu.Unlock()
+	if srv != nil {
+		scancel()
+		srv.Shutdown()
+	}
 }
 
 func (w *e2eWorld) fakeLog() string {
@@ -314,6 +362,52 @@ func until(d time.Duration, cond func() bool) bool {
 const e2eGate = "AGENTBUS_RELEASE_GATE"
 
 func TestReleaseEndToEnd(t *testing.T) {
+	w := e2eUp(t)
+	ctx := context.Background()
+	b := w.b
+
+	// 3. The dispatcher, as the service runs it, with its self-repair.
+	w.startDispatch(t)
+
+	// 2-3. Two wakes in a row: each typed, submitted, its turn ended with
+	// Claude's title, the message drained.
+	for _, text := range []string{"first task", "second task"} {
+		w.wake(t, "coder", text)
+	}
+
+	// 4. coder dies; the self-repair resumes it on the holder.
+	_, old := w.screen(t, "coder")
+	before, _ := b.Agents(ctx)
+	if err := b.SetBudget(ctx, "anthropic", bus.BudgetSnapshot{Provider: "anthropic", ObservedAt: time.Now().UnixMilli()}); err != nil {
+		t.Fatal(err)
+	}
+	w.killed.Store(true)
+	if err := syscall.Kill(old.PID, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	var sc string
+	var now termhost.Term
+	if !until(30*time.Second, func() bool {
+		sc, now = w.screen(t, "coder")
+		return now.ID != "" && now.ID != old.ID && strings.Contains(sc, "resumed "+w.session["coder"])
+	}) {
+		evs, _ := b.SwapLog(ctx, "coder", 20)
+		t.Fatalf("coder was not relaunched on its session %s (swap ledger %+v):\n%s", w.session["coder"], evs, sc)
+	}
+	if !until(10*time.Second, func() bool {
+		snaps, _ := b.Agents(ctx)
+		s := snaps["coder"]
+		return s.PID == now.PID && s.PID != before["coder"].PID
+	}) {
+		t.Fatalf("the relaunched coder never proved its process")
+	}
+}
+
+// e2eUp is the release test's step 1 (see the file's head): the project, the
+// machine, this build's holder serving, up run with the services stubbed,
+// and master and coder bound on the holder.
+func e2eUp(t *testing.T) *e2eWorld {
+	t.Helper()
 	if os.Getenv(e2eGate) == "1" && os.Getenv("AGENTBUS_TEST_REDIS_URL") == "" {
 		t.Fatal("release gate: AGENTBUS_TEST_REDIS_URL must name an isolated disposable broker; the release test does not skip under the gate")
 	}
@@ -379,11 +473,13 @@ func TestReleaseEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &e2eWorld{b: b, project: project, log: filepath.Join(root, "fake.log"), session: map[string]string{}}
-	var mu sync.Mutex
-	launch := func(s holder.Start) (holder.Command, error) {
-		mu.Lock()
-		defer mu.Unlock()
+	w := &e2eWorld{b: b, project: project, log: filepath.Join(root, "fake.log"), session: map[string]string{}, raw: raw, sock: sock}
+	w.launch = func(s holder.Start) (holder.Command, error) {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		if s.ResumeSession != "" {
+			w.resumed = append(w.resumed, s.Role)
+		}
 		if _, ok := w.session[s.Role]; !ok {
 			w.session[s.Role] = fmt.Sprintf("e2e%08x-%s", time.Now().UnixNano()&0xffffffff, s.Role)
 		}
@@ -392,25 +488,16 @@ func TestReleaseEndToEnd(t *testing.T) {
 			"AGENTBUS_E2E_SESSION=" + w.session[s.Role], "AGENTBUS_E2E_RESUMED=" + s.ResumeSession,
 			"AGENT_BUS_AGENT=" + s.Role, "AGENT_BUS_PROJECT=" + project, "AGENT_BUS_CLIENT=claude-code", "AGENT_BUS_PROVIDER=anthropic"}}, nil
 	}
-	srv, err := holder.NewServer(holder.Config{Project: project, Build: raw, Socket: sock, Launch: launch,
-		Grace: time.Second, SubmitWait: 2 * time.Second, PersonQuiet: 100 * time.Millisecond})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := srv.Listen(); err != nil {
-		t.Fatalf("the holder does not listen on %s (%d bytes): %v", sock, len(sock), err)
-	}
-	sctx, scancel := context.WithCancel(context.Background())
-	go srv.Serve(sctx)
-	t.Cleanup(func() { scancel(); srv.Shutdown() })
+	w.serve(t)
+	t.Cleanup(w.stop)
 	if w.h, err = holder.NewHost(project, raw, os.Getenv); err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if t.Failed() {
 			t.Logf("fake clients' log:\n%s", w.fakeLog())
 		}
-	}()
+	})
 
 	// 1. up: the services stubbed, the holder step with the real probe, the
 	// team on the holder.
@@ -433,8 +520,8 @@ func TestReleaseEndToEnd(t *testing.T) {
 	if err := os.WriteFile(u.exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hm := &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{}}
-	deps.Services = func() (service.Manager, string) { return hm, "" }
+	w.hm = &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{}}
+	deps.Services = func() (service.Manager, string) { return w.hm, "" }
 	var out, errw bytes.Buffer
 	if code := runUp([]string{project, work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d\n%s\n%s", code, out.String(), errw.String())
@@ -452,7 +539,15 @@ func TestReleaseEndToEnd(t *testing.T) {
 		}
 	}
 
-	// 3. The dispatcher, as the service runs it, with its self-repair.
+	return w
+}
+
+// startDispatch runs the dispatcher as the service runs it (dispatchRuntime,
+// serviceSelfRepair on, its production wiring), on fast ticks; once
+// w.killed is set, each self-repair read is 25 s later than the last.
+func (w *e2eWorld) startDispatch(t *testing.T) {
+	t.Helper()
+	b, project := w.b, w.project
 	rt, err := dispatchRuntime(project, os.Getenv)
 	if err != nil {
 		t.Fatal(err)
@@ -461,12 +556,16 @@ func TestReleaseEndToEnd(t *testing.T) {
 	if chore.mode != "on" || chore.relaunch == nil {
 		t.Fatalf("self-repair is %q, not on", chore.mode)
 	}
-	var killed atomic.Bool
 	var shifts atomic.Int64
 	read := chore.read
+	var last string
 	chore.read = func(ctx context.Context) (selfRepairReads, error) {
+		if out, _ := chore.check(ctx); out.Detail != last { // the previous pass's verdict, when it changes
+			last = out.Detail
+			fmt.Fprintf(&w.dlog, "self-repair %s: %s\n", out.Status, out.Detail)
+		}
 		r, err := read(ctx)
-		if killed.Load() { // the grace on a shifted clock: each read 25 s later
+		if w.killed.Load() { // the grace on a shifted clock: each read 25 s later
 			r.Now = r.Now.Add(time.Duration(shifts.Add(1)) * 25 * time.Second)
 		}
 		return r, err
@@ -477,77 +576,60 @@ func TestReleaseEndToEnd(t *testing.T) {
 	// (rule 5: the record keeps its At, controller ruling 1): 2 s here.
 	cfg.Retry, cfg.EscalateAfter = 2*time.Second, time.Hour
 	cfg.Tick, cfg.Lease, cfg.Renew, cfg.MinPTTL = 50*time.Millisecond, 2*time.Second, 100*time.Millisecond, 300*time.Millisecond
-	var dlog e2eBuf
-	cfg.Log = &dlog
-	defer func() {
+	cfg.Log = &w.dlog
+	t.Cleanup(func() {
 		if t.Failed() {
-			t.Logf("dispatcher log:\n%s", dlog.String())
+			t.Logf("dispatcher log:\n%s", w.dlog.String())
 		}
-	}()
+	})
 	cfg.SelfRepair = src
 	dctx, dcancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- dispatch.Run(dctx, b, rt, cfg) }()
 	t.Cleanup(func() { dcancel(); <-done })
 
-	// 2-3. Two wakes in a row: each typed, submitted, its turn ended with
-	// Claude's title, the message drained.
-	for i, text := range []string{"first task", "second task"} {
-		if _, err := b.Cmd(ctx, "master", "coder", bus.CmdDirective, "", text); err != nil {
-			t.Fatal(err)
-		}
-		want := "drained " + "1"
-		// The turn hook's start: working while the turn runs (the fake's turn
-		// lasts 300 ms), so the idle after it is the Stop hook's, not the boot's.
-		if !until(20*time.Second, func() bool {
-			snaps, _ := b.Agents(ctx)
-			return snaps["coder"].State == "working"
-		}) {
-			t.Fatalf("wake %d: coder never read working: the turn hooks did not run", i+1)
-		}
-		var sc string
-		if !until(20*time.Second, func() bool {
-			sc, _ = w.screen(t, "coder")
-			return strings.Count(sc, "SUBMITTED [agentbus#") == i+1 && strings.Count(sc, want) == i+1
-		}) {
-			t.Fatalf("wake %d never landed (a title on the input line reads the agent unknown):\n%s", i+1, sc)
-		}
-		if strings.Contains(sc, project+":coder") {
-			t.Fatalf("wake %d: Claude's title is on the screen:\n%s", i+1, sc)
-		}
-		if !until(5*time.Second, func() bool {
-			snaps, _ := b.Agents(ctx)
-			return snaps["coder"].State == "idle"
-		}) {
-			snaps, _ := b.Agents(ctx)
-			t.Fatalf("wake %d: coder's turn never ended: state %q (%+v)", i+1, snaps["coder"].State, snaps["coder"])
-		}
-	}
+}
 
-	// 4. coder dies; the self-repair resumes it on the holder.
-	_, old := w.screen(t, "coder")
-	before, _ := b.Agents(ctx)
-	if err := b.SetBudget(ctx, "anthropic", bus.BudgetSnapshot{Provider: "anthropic", ObservedAt: time.Now().UnixMilli()}); err != nil {
+// wake sends role a directive and follows it: the turn hooks read working,
+// the wake typed and submitted, a drain after it (the directive no longer
+// pending), the turn ended idle. Counted from the screen as it was before
+// the directive, so another message to role (self-repair tells master)
+// does not upset the count.
+func (w *e2eWorld) wake(t *testing.T, role, text string) {
+	t.Helper()
+	ctx := context.Background()
+	b, project := w.b, w.project
+	sc, _ := w.screen(t, role)
+	subs, drains := strings.Count(sc, "SUBMITTED [agentbus#"), strings.Count(sc, "drained ")
+	from := "master"
+	if role == "master" {
+		from = "coder"
+	}
+	id, err := b.Cmd(ctx, from, role, bus.CmdDirective, "", text)
+	if err != nil {
 		t.Fatal(err)
 	}
-	killed.Store(true)
-	if err := syscall.Kill(old.PID, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
-	}
-	var sc string
-	var now termhost.Term
-	if !until(30*time.Second, func() bool {
-		sc, now = w.screen(t, "coder")
-		return now.ID != "" && now.ID != old.ID && strings.Contains(sc, "resumed "+w.session["coder"])
-	}) {
-		evs, _ := b.SwapLog(ctx, "coder", 20)
-		t.Fatalf("coder was not relaunched on its session %s (swap ledger %+v):\n%s", w.session["coder"], evs, sc)
-	}
-	if !until(10*time.Second, func() bool {
+	if !until(20*time.Second, func() bool {
 		snaps, _ := b.Agents(ctx)
-		s := snaps["coder"]
-		return s.PID == now.PID && s.PID != before["coder"].PID
+		return snaps[role].State == "working"
 	}) {
-		t.Fatalf("the relaunched coder never proved its process")
+		t.Fatalf("wake %q: %s never read working: the turn hooks did not run", text, role)
+	}
+	if !until(20*time.Second, func() bool {
+		sc, _ = w.screen(t, role)
+		pending, err := b.PendingFor(ctx, role, id)
+		return strings.Count(sc, "SUBMITTED [agentbus#") > subs && strings.Count(sc, "drained ") > drains && err == nil && !pending
+	}) {
+		t.Fatalf("wake %q of %s never landed (a title on the input line reads the agent unknown):\n%s", text, role, sc)
+	}
+	if strings.Contains(sc, project+":"+role) {
+		t.Fatalf("wake %q: Claude's title is on %s's screen:\n%s", text, role, sc)
+	}
+	if !until(5*time.Second, func() bool {
+		snaps, _ := b.Agents(ctx)
+		return snaps[role].State == "idle"
+	}) {
+		snaps, _ := b.Agents(ctx)
+		t.Fatalf("wake %q: %s's turn never ended: state %q (%+v)", text, role, snaps[role].State, snaps[role])
 	}
 }
