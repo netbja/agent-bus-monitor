@@ -302,7 +302,7 @@ func serviceTokens(getenv func(string) string, home func() (string, error)) disp
 func servicePrompt(getenv func(string) string, lookPath func(string) (string, error),
 	run func(ctx context.Context, bin string, args ...string) error) dispatch.PromptConfig {
 	return dispatch.PromptConfig{Grace: dispatch.PromptGrace(getenv), Notify: desktopNotify(lookPath, run),
-		FocusGrace: dispatch.FocusNotice(getenv)}
+		FocusGrace: dispatch.FocusNotice(getenv), StuckAfter: dispatch.StuckAfter(getenv)}
 }
 
 // serviceClear is the dispatch service's auto-clear (lifecycle part B): on by

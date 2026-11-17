@@ -97,12 +97,8 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 				}
 			}
 		}
-		if o.ScreenHash != "" {
-			o.ScreenRepeats = 1
-			if p, ok := prev[a]; ok && p.PID == o.PID && p.ScreenHash == o.ScreenHash {
-				o.ScreenRepeats = min(p.ScreenRepeats+1, 10000)
-			}
-		}
+		p, ok := prev[a]
+		carryScreen(&o, p, ok)
 		obs[a] = o
 	}
 	l.obs = obs
@@ -119,3 +115,22 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 
 // Observation is bus.Observation, named here for the loop.
 type Observation = bus.Observation
+
+// carryScreen sets o's ScreenRepeats and ScreenSince from the previous
+// reading prev (has: there was one): the same pid and hash carry them on (the
+// health runaway warning counts passes; a stuck screen, agent-screen-blocked
+// §3, measures time, since a pass can be skipped); a new hash or pid starts
+// them at this reading; no hash (a screen not settled) has neither.
+func carryScreen(o *Observation, prev Observation, has bool) {
+	if o.ScreenHash == "" {
+		o.ScreenRepeats, o.ScreenSince = 0, 0
+		return
+	}
+	o.ScreenRepeats, o.ScreenSince = 1, o.At
+	if has && prev.PID == o.PID && prev.ScreenHash == o.ScreenHash {
+		o.ScreenRepeats = min(prev.ScreenRepeats+1, 10000)
+		if prev.ScreenSince != 0 {
+			o.ScreenSince = prev.ScreenSince
+		}
+	}
+}

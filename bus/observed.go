@@ -34,6 +34,10 @@ type Observation struct {
 	// is never written to Redis; repeats support the health runaway warning.
 	ScreenHash    string `json:"screen_hash,omitempty"`
 	ScreenRepeats int    `json:"screen_repeats,omitempty"`
+	// ScreenSince (additive, agent-screen-blocked §3) is the Redis TIME of
+	// the first reading of ScreenHash by PID: how long the screen has stood
+	// unchanged (a stuck screen); 0 with no hash.
+	ScreenSince int64 `json:"screen_since,omitempty"`
 	// Update (client reload spec, additive): the client installed now is not
 	// the one this process runs. ClientJudged: the dispatcher could tell
 	// (a launch fingerprint or the Claude Code layout), whatever the answer.

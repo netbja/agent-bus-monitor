@@ -35,7 +35,21 @@ type PromptConfig struct {
 	// FocusGrace is how long a wake waits on a focused pane before the
 	// person gets a desktop notice (focus-notice; 0 = off).
 	FocusGrace time.Duration
+	// StuckAfter is dispatch.stuck_after (agent-screen-blocked §3): a
+	// settled screen the client's signature does not recognise, unchanged
+	// this long, rings once per episode with its own words (0 = off).
+	StuckAfter time.Duration
 }
+
+// StuckAfter is dispatch.stuck_after: AGENT_BUS_STUCK_AFTER (whole seconds,
+// 0 = off), else config.toml, else 3 minutes (the person's Q3).
+func StuckAfter(getenv func(string) string) time.Duration {
+	return config.Machine(getenv).Duration("dispatch.stuck_after")
+}
+
+// stuckMark is agent's {p}:quota field for a stuck screen's episode,
+// pid:ScreenSince.
+func stuckMark(agent string) string { return "stuck:" + agent }
 
 // PromptGraceDefault: two observe passes past the first reading. A prompt is
 // first seen up to ObserveEvery after it appears, so it rings 30-45 s after
@@ -61,8 +75,8 @@ func (l *loop) promptNotices(ctx context.Context, snaps map[string]bus.AgentSnap
 		return nil
 	}
 	l.obsFresh = false
-	grace := l.cfg.Prompt.Grace
-	if grace <= 0 {
+	grace, stuck := l.cfg.Prompt.Grace, l.cfg.Prompt.StuckAfter
+	if grace <= 0 && stuck <= 0 {
 		return nil
 	}
 	marks, err := l.b.QuotaMarks(ctx)
@@ -73,7 +87,11 @@ func (l *loop) promptNotices(ctx context.Context, snaps map[string]bus.AgentSnap
 	// its episode too: its mark would otherwise stay forever.
 	var gone []string
 	for k := range marks {
-		if a, ok := strings.CutPrefix(k, "prompt:"); ok {
+		a, ok := strings.CutPrefix(k, "prompt:")
+		if !ok {
+			a, ok = strings.CutPrefix(k, "stuck:")
+		}
+		if ok {
 			if _, seen := l.obs[a]; !seen {
 				gone = append(gone, k)
 			}
@@ -90,6 +108,14 @@ func (l *loop) promptNotices(ctx context.Context, snaps map[string]bus.AgentSnap
 		names = append(names, a)
 	}
 	sort.Strings(names)
+	if stuck > 0 {
+		if err := l.stuckNotices(ctx, snaps, marks, names, stuck); err != nil {
+			return err
+		}
+	}
+	if grace <= 0 {
+		return nil
+	}
 	var asking map[string]bool
 	for _, a := range names {
 		o, s := l.obs[a], snaps[a]
@@ -150,4 +176,79 @@ func (l *loop) promptNotices(ctx context.Context, snaps map[string]bus.AgentSnap
 		}
 	}
 	return nil
+}
+
+// stuckNotices rings once per episode for a stuck screen (agent-screen-blocked
+// §3, the person's Q6): the observation reads the state unknown (settled, its
+// client's signature reads neither ready, nor busy, nor a prompt), for the
+// agent's own process, with the same screen hash for stuck_after. Its words
+// never say prompt. A recognised state, another process or no hash ends the
+// episode; a new hash is a new one. prompt-notify's suppressions hold.
+func (l *loop) stuckNotices(ctx context.Context, snaps map[string]bus.AgentSnapshot, marks map[string]string, names []string, after time.Duration) error {
+	var asking map[string]bool
+	for _, a := range names {
+		o, s := l.obs[a], snaps[a]
+		mark := stuckMark(a)
+		if o.State != "unknown" || o.ScreenHash == "" || o.ScreenSince == 0 || o.PID == 0 || o.PID != s.PID {
+			if _, ok := marks[mark]; ok {
+				if err := l.b.FencedQuotaDel(ctx, l.token, mark); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		episode := fmt.Sprintf("%d:%d", o.PID, o.ScreenSince)
+		stood := time.Duration(o.At-o.ScreenSince) * time.Millisecond
+		if marks[mark] == episode || stood < after || s.State == "blocked" || s.State == "waiting" {
+			continue
+		}
+		if asking == nil {
+			asks, err := l.b.Asks(ctx)
+			if err != nil {
+				return err
+			}
+			asking = map[string]bool{}
+			for _, k := range asks {
+				if k.Open() > 0 {
+					asking[k.From] = true
+				}
+			}
+		}
+		if asking[a] {
+			continue
+		}
+		if swapping, err := l.b.Swapping(ctx, a); err != nil || swapping {
+			if err != nil {
+				l.logError(a, "stuck notify", err)
+			}
+			continue
+		}
+		if err := l.b.FencedQuotaSet(ctx, l.token, mark, episode); err != nil {
+			if errors.Is(err, bus.ErrNotHolder) {
+				return err
+			}
+			l.logError(a, "stuck notify", err)
+			continue
+		}
+		l.log(map[string]any{"agent": a, "action": "stuck-notify", "pane": s.Pane, "since": o.ScreenSince})
+		n := l.cfg.Prompt.Notify
+		if n == nil {
+			l.log(map[string]any{"agent": a, "action": "stuck-notify", "note": "no notify-send on PATH: nothing shown"})
+			continue
+		}
+		body := fmt.Sprintf("%s: %s's screen has not changed for %s and is not a prompt agentbus knows (%s)", l.b.Project(), a, stuckFor(stood), s.Pane)
+		if err := n(ctx, "agentbus "+l.b.Project(), body); err != nil {
+			l.logError(a, "desktop notify", err)
+		}
+	}
+	return nil
+}
+
+// stuckFor is how long a screen stood, in whole minutes ("3m"), or seconds
+// under a minute.
+func stuckFor(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	}
+	return fmt.Sprintf("%dm", int(d/time.Minute))
 }
