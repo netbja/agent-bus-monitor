@@ -1251,3 +1251,63 @@ func bootstrapCommand(repo string, args []string) *exec.Cmd {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// ensureOwnHolder is the dispatch service's start of its own build's holder
+// (agent-screen-blocked Q1, the person's yes): when that holder does not
+// answer, it is installed and started as up does (startHolder), beside the
+// older builds' holders, whose agents are never touched.
+func ensureOwnHolder(d upDeps, m service.Manager, project, workdir string, stdout io.Writer) error {
+	if d.HolderBuild == nil {
+		return nil
+	}
+	raw := d.HolderBuild()
+	if d.HolderAnswers != nil && d.HolderAnswers(project, service.BuildKey(raw)) {
+		return nil
+	}
+	fmt.Fprintf(stdout, "holder: no holder of this build (%s) answers; installing and starting it (the agents on older builds are not touched)\n", raw)
+	return startHolder(d, m, project, workdir, stdout)
+}
+
+// serviceEnsureHolder is the dispatch service's EnsureHolder: up's deps (the
+// service manager, the binary, the build) and the unit's working directory,
+// which is the project's repository as up gave it.
+//
+// The binary is identified when the service starts (foureyes): startHolder
+// copies the installed agentbus under this process's build, so a file
+// replaced since (an update between the start and the first lease) would be
+// installed under the wrong build. It is refused instead.
+func serviceEnsureHolder(project string, deps func(log io.Writer) upDeps) func(context.Context, io.Writer) error {
+	started := exeIdentity(deps(io.Discard))
+	return func(_ context.Context, log io.Writer) error {
+		ud := deps(log)
+		if now := exeIdentity(ud); started == nil || now == nil || !os.SameFile(started, now) ||
+			!started.ModTime().Equal(now.ModTime()) || started.Size() != now.Size() {
+			return errors.New("this agentbus binary was replaced since the dispatcher started: no holder installed from it; restart the dispatcher (agentbus up or agentbus service restart dispatch)")
+		}
+		m, why := ud.Services()
+		if m == nil {
+			return fmt.Errorf("no service manager (%s)", why)
+		}
+		workdir, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		return ensureOwnHolder(ud, m, project, workdir, log)
+	}
+}
+
+// exeIdentity is the file d.Exe names, nil when it cannot be read.
+func exeIdentity(d upDeps) os.FileInfo {
+	if d.Exe == nil {
+		return nil
+	}
+	exe, err := d.Exe()
+	if err != nil {
+		return nil
+	}
+	fi, err := os.Stat(exe)
+	if err != nil {
+		return nil
+	}
+	return fi
+}
