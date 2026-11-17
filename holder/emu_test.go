@@ -545,3 +545,49 @@ func stateOf2(t *terminal) (string, int) {
 	defer t.mu.Unlock()
 	return t.screenState(), t.gen
 }
+
+// reviewer-codex: a latch between an answer pass's Replies and its short
+// lock (a gap in the read loop) never pays a static answer the pass
+// collected from the emulator: one answer per query, the emulator's.
+func TestLatchDuringAnAnswerPassAnswersOnce(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Close(); w.Close() })
+	f := &faultScreen{Screen: screen.New(20, 5, 10), replies: [][]byte{[]byte(answerDA1)}}
+	term := &terminal{pty: w, scr: f, emuState: newEmuState(0)}
+	term.mu.Lock()
+	term.owe(term.scan.find([]byte("\x1b[c\x1b[5n"))) // a DA the emulator answers, a DSR it has not yet
+	term.mu.Unlock()
+	term.afterReplies = func() {
+		term.mu.Lock()
+		term.latch(ScreenInvalid, "a gap") // the read loop, in the window
+		term.mu.Unlock()
+		term.payOwed()
+	}
+	term.answer()
+	term.payOwed()
+	w.Close()
+	got, _ := io.ReadAll(r)
+	if string(got) != answerDA1+answerDSR {
+		t.Fatalf("written %q, want the emulator's DA and the owed DSR, once each", got)
+	}
+}
+
+// A pass that hangs collecting replies on a latched screen is abandoned
+// by the watch: its pending answers are owed, and it writes nothing if it
+// returns.
+func TestWatchAbandonsAHungAnswerPass(t *testing.T) {
+	term := &terminal{emuState: newEmuState(time.Second)}
+	term.owe([][]byte{[]byte(answerDA1)})
+	term.answering, term.answeringAt = true, time.Now().Add(-2*time.Second)
+	term.latch(ScreenStuck, "test")
+	if len(term.owed) != 0 {
+		t.Fatal("the latch owed answers the pass still holds")
+	}
+	term.watch(time.Now())
+	if string(term.owed) != answerDA1 || term.answering {
+		t.Fatalf("owed %q, answering %v", term.owed, term.answering)
+	}
+}

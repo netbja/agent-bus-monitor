@@ -76,8 +76,13 @@ type emuState struct {
 	// not answered yet (foureyes): pending while the screen is trusted
 	// until its reply is observed (answered), owed (written once, by
 	// payOwed) when the screen is latched before the emulator answered.
-	pending []pendingAnswer
-	owed    []byte
+	pending     []pendingAnswer
+	owed        []byte
+	answering   bool      // an answer pass is collecting the emulator's replies
+	answeringAt time.Time // since when
+	// afterReplies runs between an answer pass's Replies and its short
+	// lock (tests: a latch in that window).
+	afterReplies func()
 }
 
 // pendingAnswer is one query's static answer.
@@ -100,10 +105,9 @@ func (t *terminal) latch(state, why string) {
 	// The queries the emulator never answered (a hang before this latch, a
 	// gap that dropped them): answered now, once, by the static answers
 	// (§7.1 item 6; foureyes: the client would wait forever).
-	for _, p := range t.pending {
-		t.owed = append(t.owed, p.b...)
+	if !t.answering { // an answer pass in flight hands them over itself (answer)
+		t.owePending()
 	}
-	t.pending = nil
 	// The offset only: terminal output may hold secrets (§7.1 item 7).
 	fmt.Fprintf(os.Stderr, "holder: terminal %s (%s): screen %s at byte %d: %s\n", t.id, t.role, state, t.parsedSeq, why)
 }
@@ -245,6 +249,12 @@ func (t *terminal) lockEmu(d time.Duration) bool {
 // watch latches a stuck emulator: bytes wait and it has not advanced for
 // stuckAfter. Called with t.mu held (the reply loop's tick).
 func (t *terminal) watch(now time.Time) {
+	// A pass that hangs collecting replies on a latched screen is abandoned:
+	// its pending answers are owed (it writes nothing if it ever returns).
+	if t.latched != "" && t.answering && now.Sub(t.answeringAt) >= t.stuckAfter {
+		t.answering = false
+		t.owePending()
+	}
 	waiting := len(t.queue) > 0 || t.inFlight
 	if t.latched == "" && waiting && !t.progressAt.IsZero() && now.Sub(t.progressAt) >= t.stuckAfter {
 		t.latch(ScreenStuck, fmt.Sprintf("no progress for %s with %d bytes waiting", t.stuckAfter, t.readSeq-t.parsedSeq))
@@ -411,6 +421,14 @@ func (t *terminal) answered(replies []byte) {
 		n++
 	}
 	t.pending = t.pending[:n]
+}
+
+// owePending moves every pending answer to owed. Called with t.mu held.
+func (t *terminal) owePending() {
+	for _, p := range t.pending {
+		t.owed = append(t.owed, p.b...)
+	}
+	t.pending = nil
 }
 
 // payOwed writes the owed static answers to the program, once, under the

@@ -98,16 +98,33 @@ func (t *terminal) answer() {
 	if latched || !t.lockEmu(0) { // untrusted: the read loop's scanner answers; busy: the next tick
 		return
 	}
+	// The pass is in flight from here: a latch meanwhile leaves the pending
+	// answers to it, so an answer it collects is never also owed
+	// (reviewer-codex: one answer per query).
+	t.mu.Lock()
+	t.answering, t.answeringAt = true, time.Now()
+	t.mu.Unlock()
 	var replies []byte
 	err := t.run(func(s screen.Screen) { replies = s.Replies() })
 	<-t.emu
+	if t.afterReplies != nil {
+		t.afterReplies()
+	}
 	t.mu.Lock()
+	if !t.answering { // abandoned by watch (it hung on a latched screen): its answers were owed
+		t.mu.Unlock()
+		return
+	}
+	t.answering = false
 	if err != nil { // the latch pays what is still pending (reviewer-codex: latch first)
 		t.latch(ScreenInvalid, err.Error())
 		t.mu.Unlock()
 		return
 	}
 	t.answered(replies)
+	if t.latched != "" { // latched during the pass: what it did not see is owed now
+		t.owePending()
+	}
 	t.mu.Unlock()
 	if len(replies) > 0 {
 		t.inMu.Lock() // never inside a viewer's bytes or a submit
