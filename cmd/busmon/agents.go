@@ -617,12 +617,7 @@ func screenStuck(a *agentState) bool {
 
 // stuckWords is what busmon says of a stuck agent: never "prompt".
 func stuckWords(a *agentState) string {
-	d := a.obsAt.Sub(a.obsScreenSince)
-	stood := fmt.Sprintf("%dm", int(d/time.Minute))
-	if d < time.Minute {
-		stood = fmt.Sprintf("%ds", int(d/time.Second))
-	}
-	return "stuck: its screen is not recognised and has not changed for " + stood
+	return "stuck: its screen is not recognised and has not changed for " + humanAge(a.obsAt.Sub(a.obsScreenSince))
 }
 
 // attentionWords heads the agent's page when the person must look at its

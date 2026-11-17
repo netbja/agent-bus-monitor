@@ -30,6 +30,9 @@ func TestStuckReadsAfterStuckAfter(t *testing.T) {
 	if got := stuckWords(a); got != "stuck: its screen is not recognised and has not changed for 4m" {
 		t.Fatalf("words %q", got)
 	}
+	if got := stuckWords(stuckAgent(2*time.Hour + 5*time.Minute)); got != "stuck: its screen is not recognised and has not changed for "+humanAge(2*time.Hour+5*time.Minute) {
+		t.Fatalf("words after hours %q (busmon's own age format)", got)
+	}
 	if !waitsForPerson(a) {
 		t.Fatal("a stuck agent is not the person's to look at")
 	}
@@ -43,6 +46,11 @@ func TestStuckReadsAfterStuckAfter(t *testing.T) {
 		"recognised":       func() *agentState { x := stuckAgent(time.Hour); x.obsState = "idle"; return x }(),
 		"no hash":          func() *agentState { x := stuckAgent(time.Hour); x.obsScreenSince = time.Time{}; return x }(),
 		"old reading":      func() *agentState { x := stuckAgent(time.Hour); x.obsAt = x.obsAt.Add(-time.Hour); return x }(),
+		"stale reading": func() *agentState { // the dispatcher gone: its last reading ages out
+			x := stuckAgent(time.Hour)
+			x.judgedAt = x.obsAt.Add(10 * time.Minute)
+			return x
+		}(),
 	} {
 		if screenStuck(b) {
 			t.Errorf("%s: reads stuck", name)
@@ -95,7 +103,7 @@ func TestStuckThroughThePollAndSettings(t *testing.T) {
 	if settings.StuckAfter != 3*time.Minute {
 		t.Fatalf("settings stuck after %v", settings.StuckAfter)
 	}
-	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}, stuckAfter: settings.StuckAfter}
+	st := newShared("charlie", settings) // as main builds it (foureyes: the wiring)
 	pollOnce(context.Background(), f, st, 1)
 	pollOnce(context.Background(), f, st, 1)
 	s := takeSnapshot(st, time.Now())
