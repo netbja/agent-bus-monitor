@@ -29,4 +29,12 @@ func TestPollDropsThePersonsBorrowedEntry(t *testing.T) {
 	if _, ok := st.agents["charlie"]; !ok {
 		t.Fatal("an agent with its own terminal dropped")
 	}
+	// No terminal on either side (the person's own shell, a service that
+	// reports): no terminal is shared, nothing is borrowed (foureyes).
+	f.snaps["charlie"] = bus.AgentSnapshot{State: "working", TS: 103}
+	f.snaps["sentinel"] = bus.AgentSnapshot{State: "idle", TS: 103}
+	pollOnce(context.Background(), f, st, 3)
+	if _, ok := st.agents["charlie"]; !ok {
+		t.Fatal("two entries without a terminal read as one borrowing the other")
+	}
 }
