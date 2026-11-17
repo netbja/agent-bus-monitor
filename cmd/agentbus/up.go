@@ -1251,3 +1251,19 @@ func bootstrapCommand(repo string, args []string) *exec.Cmd {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// ensureOwnHolder is the dispatch service's start of its own build's holder
+// (agent-screen-blocked Q1, the person's yes): when that holder does not
+// answer, it is installed and started as up does (startHolder), beside the
+// older builds' holders, whose agents are never touched.
+func ensureOwnHolder(d upDeps, m service.Manager, project, workdir string, stdout io.Writer) error {
+	if d.HolderBuild == nil {
+		return nil
+	}
+	raw := d.HolderBuild()
+	if d.HolderAnswers != nil && d.HolderAnswers(project, service.BuildKey(raw)) {
+		return nil
+	}
+	fmt.Fprintf(stdout, "holder: no holder of this build (%s) answers; installing and starting it (the agents on older builds are not touched)\n", raw)
+	return startHolder(d, m, project, workdir, stdout)
+}

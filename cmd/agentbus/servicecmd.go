@@ -712,6 +712,18 @@ func mainServiceRun(project, host string, args []string) int {
 			return h.Ping(ctx)
 		},
 		Settings: func() []string { return settingsWarnings(os.Getenv) },
+		EnsureHolder: func(_ context.Context, log io.Writer) error {
+			ud := realUpDepsIn(nil, log, log)
+			m, why := ud.Services()
+			if m == nil {
+				return fmt.Errorf("no service manager (%s)", why)
+			}
+			workdir, err := os.Getwd() // the unit's WorkingDirectory: the project's repository, as up gave it
+			if err != nil {
+				return err
+			}
+			return ensureOwnHolder(ud, m, project, workdir, log)
+		},
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
 			cfg, h, err := serviceDispatchConfig(b, project, host, paths, log)
 			if err != nil {

@@ -41,8 +41,14 @@ holder services run (builds 886 and 888).
   - no holder answers: `waiting-holder`, as today, with the socket named.
 - busmon shows `holder-behind` as attention and running, like `waiting-holder`: it joins
   `serviceRunning` (`cmd/busmon/services.go`) and the role map (`services_cards.go`).
-- Whether the dispatcher may install and start its build's holder itself is the person's
-  question Q1. Without a yes, it only says it.
+- **The person answered Q1 yes** (task `screen-blocked-q1`, 2026-11-17).
+  - The dispatch service, the first time it holds the lease, checks once whether its own build's
+    holder answers. If it does not, the service installs and starts it as `up` does
+    (`startHolder`: the binary copy, the unit, the start, the wait for its socket, the gc of
+    older builds that no longer run).
+  - It never stops, restarts or touches an older build's holder or its agents.
+  - A standby on another host holds no lease and installs nothing.
+  - A failure is logged in `dispatch.log`. The state then says `holder-behind` (step 1).
 
 ## 2. `agentbus screen <agent>` (step 2)
 
@@ -201,6 +207,7 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
   - Recommended: **yes**. Otherwise every update leaves pop, relaunch and reload broken until
     someone runs `up`.
   - No: §1's message only.
+  - **Answer: yes** (the person, 2026-11-17).
 - **Q2.** May the person, in a shell outside any terminal, run `agentbus screen`? Recommended:
   yes. The person can already attach to the terminal.
 - **Q3.** Stuck after how long unchanged and unrecognised? Recommended: 3 minutes, a setting.

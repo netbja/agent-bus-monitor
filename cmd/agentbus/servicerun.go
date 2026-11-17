@@ -31,6 +31,10 @@ type serviceRunDeps struct {
 	Now         func() time.Time
 	Settings    func() []string // the settings files' warnings, logged once at start (nil = none)
 	Build       string          // the build this process runs, recorded with its state (P2-13)
+	// EnsureHolder installs and starts the holder of this build when none
+	// answers (the person's yes to agent-screen-blocked Q1). The dispatch
+	// service calls it once, after it first holds the lease; nil: never.
+	EnsureHolder func(ctx context.Context, log io.Writer) error
 }
 
 // lastError keeps the last line that reports an error, so a failed service
@@ -279,6 +283,23 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 	publish("starting", "", "")
 	logf("starting %s for %s (pid %d)", kind, p, os.Getpid())
 
+	// ensureHolder runs once per process, the first time this dispatcher
+	// holds the lease (a standby on another host installs nothing), beside the
+	// heartbeat: a holder's start waits for its socket.
+	var ensureHolder sync.Once
+	ensure := func() {
+		if kind != service.Dispatch || d.EnsureHolder == nil {
+			return
+		}
+		ensureHolder.Do(func() {
+			go func() {
+				if err := d.EnsureHolder(ctx, logw); err != nil && ctx.Err() == nil {
+					logf("holder of this build: %v", err)
+				}
+			}()
+		})
+	}
+
 	// attempt runs the loop once, with the heartbeat beside it.
 	attempt := func() (code int, runErr error, gone bool) {
 		runCtx, cancel := context.WithCancel(ctx)
@@ -292,6 +313,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			defer t.Stop()
 			for {
 				if held, gen := st.leaseGen(); kind == service.Dispatch && held {
+					ensure()
 					if err := d.HostPing(runCtx); err != nil && runCtx.Err() == nil {
 						st.setIfLeased(gen, "waiting-holder", "the holder does not answer; no agent is woken until it does", err.Error())
 					} else {
