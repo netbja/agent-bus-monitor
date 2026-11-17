@@ -12,24 +12,24 @@ var kShiftEnd = tea.Key{Code: tea.KeyEnd, Mod: tea.ModShift}
 
 const tenLines = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10"
 
-// The person: a multi-line paste shows as "[Pasted text #1 +9 lines]" in the
+// The person: a multi-line paste shows as "[Pasted #1: l1, 10 lines]" in the
 // text, as Claude Code's input does; the whole text is kept and sent.
 func TestComposeMultiLinePasteIsAPlaceholder(t *testing.T) {
 	m := composeWith(t, "see ")
 	m = step(t, m, tea.PasteMsg{Content: tenLines})
 	a := &m.ui.compose.area
-	if got := string(a.text); got != "see [Pasted text #1 +9 lines]" {
+	if got := string(a.text); got != "see [Pasted #1: l1, 10 lines]" {
 		t.Fatalf("shown %q", got)
 	}
 	if got := a.value(); got != "see "+tenLines {
 		t.Fatalf("value %q", got)
 	}
-	if !strings.Contains(m.grid().plain(), "[Pasted text #1 +9 lines]") {
+	if !strings.Contains(m.grid().plain(), "[Pasted #1: l1, 10 lines]") {
 		t.Fatalf("not on screen:\n%s", m.grid().plain())
 	}
 	// A one-line paste stays as it is.
 	m = step(t, m, tea.PasteMsg{Content: " and more"})
-	if got := string(a.text); got != "see [Pasted text #1 +9 lines] and more" {
+	if got := string(a.text); got != "see [Pasted #1: l1, 10 lines] and more" {
 		t.Fatalf("one-line paste: %q", got)
 	}
 }
@@ -78,7 +78,7 @@ func TestComposePlaceholderNumbering(t *testing.T) {
 	m := composeWith(t, "")
 	m = step(t, m, tea.PasteMsg{Content: "a\nb"})
 	m = step(t, m, tea.PasteMsg{Content: "c\nd\ne"})
-	if got := string(m.ui.compose.area.text); got != "[Pasted text #1 +1 lines][Pasted text #2 +2 lines]" {
+	if got := string(m.ui.compose.area.text); got != "[Pasted #1: a, 2 lines][Pasted #2: c, 3 lines]" {
 		t.Fatalf("shown %q", got)
 	}
 	if got := m.ui.compose.area.value(); got != "a\nbc\nd\ne" {
@@ -86,7 +86,7 @@ func TestComposePlaceholderNumbering(t *testing.T) {
 	}
 	m.ui.compose.area.set("")
 	m = step(t, m, tea.PasteMsg{Content: "f\ng"})
-	if got := string(m.ui.compose.area.text); got != "[Pasted text #1 +1 lines]" {
+	if got := string(m.ui.compose.area.text); got != "[Pasted #1: f, 2 lines]" {
 		t.Fatalf("a new text starts at 1: %q", got)
 	}
 }
