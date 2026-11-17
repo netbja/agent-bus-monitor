@@ -206,7 +206,8 @@ that gate and the subject's older ones, never the gate of a newer delta you have
 that is no longer needed: `agentbus gate close <agent> <ref> --note "<why>"` (never a verdict).
 **A verdict on a branch names the commit you read**: `agentbus verdict --subject <s> --head <sha>
 --ref <R> <author> approve "<why>"`, with the full SHA (`git rev-parse HEAD` in your checkout).
-`agentbus deliver` pushes a branch only when the newest independent approve names its exact head;
+`agentbus deliver` pushes a branch only when the newest independent approve names its exact head
+and both reviewers approved that head;
 a verdict without `--head` still counts for the roll-up, never for a delivery. A new commit means
 a new verdict on its SHA. Only master and docs deliver (`delivers = true`); you never push.
 

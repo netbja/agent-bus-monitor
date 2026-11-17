@@ -104,7 +104,8 @@ Every change is reviewed by someone other than its author.
   does not count.
 - A delivery is bound to the reviewed commit: `agentbus deliver` pushes only when the newest
   independent approve names the exact head (`agentbus verdict --head <sha>`) with no reject after
-  it. Only master and the docs agent deliver
+  it, and two reviewers approved that head (`--single-approval <reason>` in an emergency, traced).
+  Only master and the docs agent deliver
   ([decision](docs/memory/decisions/2026-11-02-forge-delivery.md)).
 - Never close a stale gate with a verdict of your own (it counts as an approve): use
   `agentbus gate close`.

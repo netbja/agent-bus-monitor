@@ -155,3 +155,34 @@ func TestMergeQueueDropped(t *testing.T) {
 		t.Fatalf("after the pass: %+v", ds)
 	}
 }
+
+// merge-popup-setting (the person's choice A): a delivery marks the queue
+// due with the broker's time, the dispatcher reads the mark; a later mark
+// differs. The key is runtime and never makes a project look alive.
+func TestMergeQueueDueMark(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if v, err := b.MergeQueueDue(ctx); err != nil || v != 0 {
+		t.Fatalf("no mark: %d %v", v, err)
+	}
+	if err := b.MarkMergeQueueDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	first, err := b.MergeQueueDue(ctx)
+	if err != nil || first <= 0 {
+		t.Fatalf("mark: %d %v", first, err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	if err := b.MarkMergeQueueDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if second, _ := b.MergeQueueDue(ctx); second == first {
+		t.Fatalf("a second mark did not change: %d", second)
+	}
+	if alive, err := b.HasKeysBesidesDispatch(ctx); err != nil || alive {
+		t.Fatalf("the mark made the project look alive: %v %v", alive, err)
+	}
+	if c, _ := ClassOf(b.project, MergeQueueDueKey(b.project)); c != KeyRuntime {
+		t.Fatalf("class %v", c)
+	}
+}

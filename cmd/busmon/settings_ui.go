@@ -1015,7 +1015,7 @@ var settingHelps = map[string]string{
 	"display.idle_hint_after":      "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after":      "the screensaver: a calm screen after this long without input; 0 = off",
 	"waiting.fade":                 "fades a waiting agent in and out and slides the gauges (true colour only)",
-	"waiting.popup_after":          "the reminder opens once a decision has waited this long",
+	"waiting.popup_after":          "the reminder opens once a decision has waited this long; 0 turns it off",
 	"waiting.snooze":               "how long a dismissed reminder stays away",
 	"waiting.bell":                 "rings the terminal's bell on a new decision for you",
 	"recap.auto_after":             "the recap opens by itself after you were away this long",

@@ -742,7 +742,9 @@ line screened for credentials), followed by the verdicts; without it, the commit
 
 - **The 4-eyes check is deliver's own.** It resolves the branch head `H` once and goes on only
   when the subject's roll-up is APPROVED **and** its newest independent approve names `H`
-  (`verdict --head`). Otherwise it exits 3: no current APPROVED verdict names `H` (the roll-up is
+  (`verdict --head`) **and** two reviewers approved `H` (both reviewers, the person's rule of
+  2026-11-17; `--single-approval <reason>` only in an emergency, written in the request and traced
+  on the bus). Otherwise it exits 3: no current APPROVED verdict names `H` (the roll-up is
   PENDING or REJECTED, or the approval names another commit or none). Its message names the
   subject, the state, the head approved (or none) and `H`. Answer a rejection first, then get an
   approval with `--head` on the final SHA; never work around it.

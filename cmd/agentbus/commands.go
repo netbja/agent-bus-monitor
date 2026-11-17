@@ -452,6 +452,7 @@ var commands = []cli.Command{
 			{Long: "title", Short: 'T', Arg: "<t>", Help: "the request's title (default the task's, else the first commit's subject)"},
 			{Long: "body-file", Short: 'F', Arg: "<path>", Help: "the request's description (default the commits' subjects); the 4-eyes record follows it"},
 			{Long: "dry-run", Short: 'n', Help: "check everything and print what would be delivered; push nothing"},
+			{Long: "single-approval", Arg: "<reason>", Help: "an emergency: deliver with one reviewer's approval, the reason written in the request and traced on the bus (both reviewers are required otherwise)"},
 		},
 		Examples: []string{"agentbus -p demo deliver coder/roles -t roles", "agentbus -p demo deliver pr/v0.26 -b main -n"},
 	},

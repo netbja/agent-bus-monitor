@@ -60,7 +60,7 @@ var keyKinds = map[string]KeyClass{
 	"budget": KeyRuntime, "tokens": KeyRuntime, "sessions": KeyRuntime, "doctor": KeyRuntime,
 	"pilot": KeyRuntime, "dispatch": KeyRuntime, "conductor": KeyRuntime, "receiver:*": KeyRuntime,
 	"armed:*": KeyRuntime, "swap:*": KeyRuntime, "observed": KeyRuntime, "context": KeyRuntime,
-	"health:daily": KeyRuntime, "notified": KeyRuntime, "mergequeue": KeyRuntime, "missionops": KeyRuntime, "missionops:results": KeyRuntime,
+	"health:daily": KeyRuntime, "notified": KeyRuntime, "mergequeue": KeyRuntime, "mergequeue:due": KeyRuntime, "missionops": KeyRuntime, "missionops:results": KeyRuntime,
 	"seen": KeyRuntime, "background:*": KeyRuntime,
 	"reboot": KeyRuntime, // the dispatcher's verdict on this boot (reboot-resume §3): judged again after a restore
 }

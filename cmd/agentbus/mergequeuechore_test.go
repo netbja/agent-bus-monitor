@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -471,5 +473,48 @@ func TestMergeQueueChoreRunGap(t *testing.T) {
 	}
 	if rec, _ := b.Run(ctx); rec.PausedMs < (20 * time.Minute).Milliseconds() {
 		t.Fatalf("20m without a pass: paused %dms, want the gap", rec.PausedMs)
+	}
+}
+
+// merge-popup-setting: the queue's base is the project's, as deliver's
+// (dev-branch-flow §4.1): the template's [delivery] base, else the machine's
+// delivery.base. The chore read only the machine's, so it said main while
+// every PR went to dev.
+func TestMergeQueueChoreUsesTheProjectBase(t *testing.T) {
+	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
+	ctx := context.Background()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, b.Project()+".toml"), []byte("[delivery]\nbase = \"dev\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.getenv = func(k string) string {
+		if k == "AGENTBUS_PROJECTS_DIR" {
+			return dir
+		}
+		return ""
+	}
+	var asked []string
+	c.remoteTips = func(_ context.Context, _ string, _ []string, base string) ([]mergequeue.Tip, string, error) {
+		asked = append(asked, base)
+		return []mergequeue.Tip{{Branch: "feat/request-priority", Head: mqHead}}, "1111111111111111111111111111111111111111", nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Base != "dev" || len(asked) == 0 || asked[0] != "dev" {
+		t.Fatalf("base %q, tips asked for %v", rec.Base, asked)
+	}
+}
+
+// merge-popup-setting: the dispatch service's chore reads the delivery's
+// mark, so a delivered PR is passed for at once.
+func TestServiceMergeQueueReadsTheDueMark(t *testing.T) {
+	b, _ := dialMain(t)
+	cfg := serviceMergeQueue(b, func(string) string { return "" })
+	if cfg.Pass == nil {
+		t.Skip("no chore in this directory")
+	}
+	if cfg.Due == nil {
+		t.Fatal("the service's merge queue never reads the delivery's mark")
 	}
 }
