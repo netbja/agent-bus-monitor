@@ -819,3 +819,35 @@ func TestDeliverMarksTheMergeQueueDue(t *testing.T) {
 		t.Errorf("a delivery with both approvals traced %q", w.traces)
 	}
 }
+
+// foureyes on ed6f0a59: the real deps wire both hooks. A delivery marks the
+// merge queue due on the broker, and an emergency's trace is a report on the
+// bus, where the person reads it.
+func TestRealDeliverDepsMarkAndTrace(t *testing.T) {
+	b, _ := dialMain(t)
+	ctx := context.Background()
+	d := realDeliverDeps(b, "master", t.TempDir())
+	if d.MarkDue == nil || d.Trace == nil {
+		t.Fatalf("hooks: MarkDue %v, Trace %v", d.MarkDue != nil, d.Trace != nil)
+	}
+	if err := d.MarkDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := b.MergeQueueDue(ctx); err != nil || v <= 0 {
+		t.Fatalf("no mark on the broker: %d %v", v, err)
+	}
+	if err := d.Trace(ctx, "coder/x@abc delivered with one approval: production down"); err != nil {
+		t.Fatal(err)
+	}
+	evs, err := b.Reports(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range evs {
+		found = found || e.Agent == "master" && strings.Contains(e.Message, "delivered with one approval: production down")
+	}
+	if !found {
+		t.Fatalf("the trace is not on the bus: %+v", evs)
+	}
+}
