@@ -198,7 +198,7 @@ agentbus plan note roles rebased on main                 # a one-line note on th
 agentbus plan ignore 458                                 # a merge that belongs to no task (notes, a release): no plan-drift warning
 agentbus plan show [--json]                              # tasks by DERIVED state; exit 1 when a read failed ('?' tasks)
 agentbus ask master --task roles -F q.json               # an ask about a plan task names it by field (never by its words)
-# ask's <agent> is YOU, the asker: a person or an unknown name is refused. The person answers in busmon; agentbus answer is refused from an agent
+# ask's <agent> is YOU (AGENT_BUS_AGENT), the asker; any other name is refused. The person answers in busmon; agentbus answer is refused from an agent
 # States are derived, never typed: board request done = delivered = IN REVIEW (not done);
 # approved, its PR linked, unrecorded = WAITING FOR YOU ("merge PR N"; with no PR it stays in review);
 # a person task whose ask is answered, nothing open = ANSWERED, MASTER TO RECORD; done needs `plan done`

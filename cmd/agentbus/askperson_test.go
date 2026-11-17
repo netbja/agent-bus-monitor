@@ -61,7 +61,9 @@ func TestAskRefusesAPersonOrAnUnknownName(t *testing.T) {
 		{"anonymous", "master", false}, // nobody
 		{"ghost", "master", false},     // no known agent
 		{"master", "master", true},     // the caller itself
-		{"coder", "master", true},      // a registered agent
+		{"coder", "master", false},     // another agent, registered or not: the asker is the caller
+		{"coder", "", false},           // the person's shell, with no agent identity
+		{"coder", "coder", true},       // the registered agent itself
 		{"dana", "dana", false},        // a caller named like a human sender, no agent entry
 	} {
 		var out, errw bytes.Buffer
@@ -71,6 +73,13 @@ func TestAskRefusesAPersonOrAnUnknownName(t *testing.T) {
 		}
 		if !c.ok && !strings.Contains(errw.String(), "ask <your agent name>; the person is the one who answers") {
 			t.Errorf("ask %s: unclear refusal %q", c.name, errw.String())
+		}
+	}
+	// The person's shell says why it cannot ask.
+	{
+		var out, errw bytes.Buffer
+		if code := runAsk(ctx, b, []string{"coder"}, strings.NewReader(in), env(""), &out, &errw); code == 0 || !strings.Contains(errw.String(), "a person never asks") {
+			t.Errorf("ask coder from the person's shell: exit %d, %q", code, errw.String())
 		}
 	}
 	// The person's stray entry (today's bug: an earlier ask <person> made

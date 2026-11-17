@@ -107,17 +107,15 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, get
 // askerCheck refuses an asker that is no agent (ask-refuses-person): ask
 // <agent> names the ASKING agent, and "agentbus ask <person>" once stored an
 // ask from the person and declared them waiting, an agent to busmon and the
-// dispatcher. Refused: anonymous, the person's recorded name (identity.as)
+// dispatcher. Refused: the person's recorded name (identity.as)
 // unless the caller is an agent of that name, a human sender (busmon's
-// human=yes entries) that no agent entry holds, and any name that is neither
-// the caller (AGENT_BUS_AGENT) nor a registered agent. Withdrawing is not
-// checked, so a stray ask can still be closed.
+// human=yes entries) that no agent entry holds, and any name other than the
+// caller's own (AGENT_BUS_AGENT; none in the person's shell, and never
+// anonymous, which agentIdentity reads as none). Withdrawing is not checked,
+// so a stray ask can still be closed.
 func askerCheck(ctx context.Context, b *bus.Bus, getenv func(string) string, name string) error {
 	const fix = "ask <your agent name>; the person is the one who answers"
 	self := agentIdentity(getenv)
-	if name == "anonymous" {
-		return fmt.Errorf("%q is nobody: %s", name, fix)
-	}
 	if person := settingsIdentity(getenv); name == person && self != name {
 		return fmt.Errorf("%q is the person (identity.as), not an agent: %s (in busmon)", name, fix)
 	}
@@ -133,8 +131,13 @@ func askerCheck(ctx context.Context, b *bus.Bus, getenv func(string) string, nam
 	if !registered && slices.Contains(humans, name) {
 		return fmt.Errorf("%q wrote from busmon as a person, and is no agent: %s (in busmon)", name, fix)
 	}
-	if name != self && !registered {
-		return fmt.Errorf("%q is no known agent (none registered by that name, and you are %q): %s", name, self, fix)
+	if name != self {
+		// The asker is the caller (reviewer-codex): a registered name is not
+		// enough, or the person's shell or another agent could ask as it.
+		if self == "" {
+			return fmt.Errorf("asking as %q needs that agent's own identity (AGENT_BUS_AGENT=%s, in its terminal); a person never asks: %s", name, name, fix)
+		}
+		return fmt.Errorf("you are %q, not %q: an agent asks only as itself: %s", self, name, fix)
 	}
 	return nil
 }
