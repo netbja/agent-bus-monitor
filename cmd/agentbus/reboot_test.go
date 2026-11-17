@@ -445,3 +445,35 @@ func TestServiceDispatchConfigJudgesTheReboot(t *testing.T) {
 		t.Fatalf("services %v", svc)
 	}
 }
+
+// reviewer-codex: a stop after the verdict was recorded, before its notice
+// and master's directive: the next start finds this boot's record, tells
+// them (once), and judges and counts nothing again.
+func TestJudgeTellsAfterAStopBeforeTelling(t *testing.T) {
+	w := newJudgeWorld(t)
+	w.before(lifecycle.Running, "")
+	if err := lifecycle.WriteCounter(w.dir, []lifecycle.Entry{{Boot: "B1", At: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	rec := bus.RebootRecord{Boot: "B1", Verdict: bus.RebootRestarting, N: 1, Max: 3, Window: (24 * time.Hour).Milliseconds()}
+	if err := w.b.FencedPutReboot(context.Background(), "tok", rec); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := w.run(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := w.notices(); len(got) != 1 || !strings.Contains(got[0], "1 of 3 in 24 h") {
+		t.Fatalf("notices %q", got)
+	}
+	if got := w.toMaster(); len(got) != 1 {
+		t.Fatalf("master told %q", got)
+	}
+	if es := w.counter(); len(es) != 1 || w.polls != 0 || w.repoRuns != 0 {
+		t.Fatalf("judged again: counter %+v, polls %d, repo %d", es, w.polls, w.repoRuns)
+	}
+	if r := w.runRecord(); r.Boot != "B1" || r.State != lifecycle.Running {
+		t.Fatalf("run record %+v", r)
+	}
+}

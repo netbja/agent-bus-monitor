@@ -61,10 +61,15 @@ func (j *rebootJudge) run(ctx context.Context, token string) error {
 		return nil // unknown boot: nothing can be judged, nothing is written (§2.3)
 	}
 	// A judgement of this boot is already recorded (a stop after it, before
-	// running was written): it stands, nothing is judged or counted again.
+	// running was written): it stands, nothing is judged or counted again;
+	// its notice and directive, once per boot, are given again in case the
+	// stop came before them (reviewer-codex).
 	if rec, ok, err := j.b.Reboot(ctx); err != nil {
 		return err
 	} else if ok && rec.Boot == j.boot {
+		if err := j.tell(ctx, token, rec); err != nil {
+			return err
+		}
 		return j.started()
 	}
 	prev, err := lifecycle.ReadRun(j.dir)
