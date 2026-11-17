@@ -1,7 +1,8 @@
 # Agent screen, blocked agents, holders in Services
 
 Status: spec, r3, for review (subject `agent-screen-blocked-spec`). r3: foureyes (§3 states
-what busmon shows today, a prompt reads `waiting`; screen text stays out of Redis, so the lines
+what busmon shows today, a prompt reads `waiting`; one source and one word for a prompt;
+`holder-behind` in busmon's maps; uptime not from `Describe`; `stop holder` vs `restart holder`; screen text stays out of Redis, so the lines
 are read live by busmon and held in memory; r2's `{p}:screens` is withdrawn). r2: reviewer-codex (the
 screen lines as a snapshot kept current, not carried by the events; stuck apart from blocked,
 with its own events, episode and ring). Not built. Base: origin/dev
@@ -38,7 +39,8 @@ holder services run (builds 886 and 888).
     `no holder of this build (v0.29.0) runs: agents on build 888 are still woken; a pop, a
     relaunch or a reload fails until agentbus up agent-bus-monitor starts it`;
   - no holder answers: `waiting-holder`, as today, with the socket named.
-- busmon shows `holder-behind` as attention, like `waiting-holder`.
+- busmon shows `holder-behind` as attention and running, like `waiting-holder`: it joins
+  `serviceRunning` (`cmd/busmon/services.go`) and the role map (`services_cards.go`).
 - Whether the dispatcher may install and start its build's holder itself is the person's
   question Q1. Without a yes, it only says it.
 
@@ -73,21 +75,34 @@ holder services run (builds 886 and 888).
 - busmon reads it. A fresh observed prompt (`promptWaiting`: not declared `blocked` or
   `waiting`, no open ask) already turns the state column to `waiting`, in group 0, as a
   person's decision. The desktop rings once per episode (prompt-notify).
-- The holder's `blocked`/`unblocked` events add the `blocked` flag on the row (herdr exit 4.3a).
+- The holder's `blocked`/`unblocked` events add the `blocked` flag on the row (herdr exit 4.3a):
+  a second source and a second word for the same fact.
 - What the person does not get: the words "blocked: waiting for an answer in its terminal", and
   what the screen says. `waiting` reads as the agent's own question (an ask), and the person
   has to attach to the terminal to see the prompt.
 
-**The rule kept: screen text is never written to Redis.** `bus/observed.go` says it; its reason
+**What the person saw is not known.** The directive says "unknown/stuck on a client prompt",
+which covers two cases: a prompt the signature recognises, shown today as `waiting`, which reads
+as the agent's own question; and a screen it does not recognise, shown today as the agent's last
+declaration. This spec handles both: the word for the first, the new `stuck` for the second. Q7
+asks master which one it was, for the regression test.
+
+**The rule kept: screen text is never written to Redis.** `bus/observed.go` and
+`dispatch/decide.go` say it; its reason
 is that a screen can hold anything the client printed (secrets, file contents). Only an opaque
 digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Redis; r2's
 `{p}:screens` snapshot is withdrawn.
 
 **What changes:**
 
-- **The state column reads `blocked`** for an observed prompt, instead of `waiting`.
+- **One source and one word for a prompt:** the observation (`{p}:observed`, state `blocked`),
+  read as `blocked`.
+  - `promptWaiting` becomes `promptBlocked`: same test (a fresh observed prompt, not declared
+    `blocked` or `waiting`, no open ask); `stateLook` maps it to `blocked` instead of `waiting`.
   - It keeps group 0 and the attention role: the person must act. The glyph is `GlyphBlocked`.
   - A declared `waiting`, or an open ask, still reads `waiting`: the agent's own question.
+  - The row's `blocked` flag from the holder's events is dropped from the row: the state column
+    says it. The events stay on the timeline.
   - Nothing is written to `{p}:agents`: it is busmon's reading of `{p}:observed`, as today.
 - **The text busmon shows**, in the agent's detail (`enter` on the row) and in the For you line:
   `blocked: waiting for an answer in its terminal`, then the screen's last lines.
@@ -134,14 +149,18 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
   - state (active, inactive, failed, `not answering` when the unit runs but its socket does not
     answer);
   - build;
-  - uptime (the unit's `ActiveEnterTimestamp`, or the holder's start time from `Describe`);
+  - uptime: the unit's `ActiveEnterTimestamp` (launchd and the detached supervisor: the
+    process's start from `ps`). `Describe`'s `Start` is clock ticks since boot, an identity
+    check, not a wall time: it is not used;
   - agents hosted (live terminals).
 - **Flags:**
   - `old build, hosts no agent`: a holder of a build other than the dispatcher's, with no live
     terminal. No command stops one holder today:
     `down` stops them all, and `service gc` removes only holders that no longer run. Step 4 adds
     `agentbus -p <p> service stop holder <build>`, refused while that holder has a live terminal
-    and for the current build. The flag's detail names it, then `service gc`. See Q5.
+    and for the current build. It differs from `service restart holder --kill-agents`, which kills
+    the current build's agents: `stop holder <build>` never kills an agent, it refuses. The
+    flag's detail names it, then `service gc`. See Q5.
   - `current build missing`: no holder of the dispatcher's build. This is §1's state, shown on
     the holder block too.
 - busmon only reads: it never stops a holder.
@@ -158,8 +177,8 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
      lines;
    - a fake host records the requests, and only List/Screen/Describe appear.
 3. **Step 3:**
-   - an observed prompt reads `blocked`, not `waiting`; a declared `waiting` or an open ask
-     still reads `waiting`;
+   - an observed prompt reads `blocked` from `{p}:observed`, not `waiting`; a declared
+     `waiting` or an open ask still reads `waiting`; the row has no second `blocked` flag;
    - stuck reads after `stuck_after`, not before; a new hash or pid ends it; a prompt turns it to
      `blocked`; its ring never says prompt;
    - busmon reads `Screen` only for blocked or stuck agents; the lines are capped and redacted
@@ -194,6 +213,10 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
 - **Q6.** Should a stuck screen ring the desktop, with its own words (§3), or only show in
   busmon? Recommended: ring once per episode. A screen nobody recognises for 3 minutes is
   usually something only the person can answer.
+
+- **Q7** (for master). What did the person see: a recognised client prompt, which busmon showed
+  as `waiting`, or a screen agentbus does not recognise? Step 3's regression test reproduces
+  that case.
 
 ## 7. Steps
 
