@@ -47,12 +47,26 @@ func screenWorld() *fakeScreens {
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
+// testKeyOf is the build key of a holder socket in screenWorld.
+func testKeyOf(socket string) string {
+	if socket == "/run/x/h-888.sock" {
+		return "k888"
+	}
+	return ""
+}
+
+// What the holder really sets in an agent's terminal: its own terminal id
+// and its socket (holder/server.go), not the qualified "<key>/<id>".
+func inTerm(id string) func(string) string {
+	return envOf(map[string]string{"AGENTBUS_TERM_ID": id, "AGENTBUS_HOST": "/run/x/h-888.sock"})
+}
+
 func TestScreenCommand(t *testing.T) {
 	ctx := context.Background()
 	t.Run("master reads an agent's screen", func(t *testing.T) {
 		f := screenWorld()
 		var out, errw bytes.Buffer
-		if code := runScreen(ctx, f, "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "k888/t4"}), []string{"coder"}, &out, &errw); code != 0 {
+		if code := runScreen(ctx, testKeyOf, f, "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "k888/t4"}), []string{"coder"}, &out, &errw); code != 0 {
 			t.Fatalf("code %d: %s", code, errw.String())
 		}
 		got := out.String()
@@ -68,22 +82,42 @@ func TestScreenCommand(t *testing.T) {
 			t.Errorf("asked %v", f.asked)
 		}
 	})
+	t.Run("master in its real terminal (holder-local id and socket)", func(t *testing.T) {
+		var out, errw bytes.Buffer
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", inTerm("t4"), []string{"coder"}, &out, &errw); code != 0 {
+			t.Fatalf("code %d: %s", code, errw.String())
+		}
+		errw.Reset()
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", inTerm("t1"), []string{"master"}, &out, &errw); code != 1 || !strings.Contains(errw.String(), "you are coder") {
+			t.Fatalf("coder in its real terminal: code %d err %q", code, errw.String())
+		}
+	})
+	t.Run("an agent's shell without its terminal id is still that agent", func(t *testing.T) {
+		var out, errw bytes.Buffer
+		code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(map[string]string{"AGENT_BUS_AGENT": "coder"}), []string{"master"}, &out, &errw)
+		if code != 1 || !strings.Contains(errw.String(), "you are coder") {
+			t.Fatalf("code %d err %q", code, errw.String())
+		}
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(map[string]string{"AGENT_BUS_AGENT": "master"}), []string{"coder"}, &out, &errw); code != 0 {
+			t.Fatalf("master by name: code %d", code)
+		}
+	})
 	t.Run("sentinel may", func(t *testing.T) {
 		var out, errw bytes.Buffer
-		if code := runScreen(ctx, screenWorld(), "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "k888/t6"}), []string{"coder"}, &out, &errw); code != 0 {
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "k888/t6"}), []string{"coder"}, &out, &errw); code != 0 {
 			t.Fatalf("code %d: %s", code, errw.String())
 		}
 	})
 	t.Run("the person outside any terminal may (Q2)", func(t *testing.T) {
 		var out, errw bytes.Buffer
-		if code := runScreen(ctx, screenWorld(), "demo", envOf(nil), []string{"coder", "--lines", "3"}, &out, &errw); code != 0 {
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(nil), []string{"coder", "--lines", "3"}, &out, &errw); code != 0 {
 			t.Fatalf("code %d: %s", code, errw.String())
 		}
 	})
 	t.Run("another agent is refused", func(t *testing.T) {
 		f := screenWorld()
 		var out, errw bytes.Buffer
-		code := runScreen(ctx, f, "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "k888/t1"}), []string{"master"}, &out, &errw)
+		code := runScreen(ctx, testKeyOf, f, "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "k888/t1"}), []string{"master"}, &out, &errw)
 		if code != 1 || !strings.Contains(errw.String(), "screen is master's and sentinel's; you are coder") || out.Len() != 0 {
 			t.Fatalf("code %d out %q err %q", code, out.String(), errw.String())
 		}
@@ -95,14 +129,14 @@ func TestScreenCommand(t *testing.T) {
 	})
 	t.Run("a terminal not of this project is refused", func(t *testing.T) {
 		var out, errw bytes.Buffer
-		code := runScreen(ctx, screenWorld(), "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "kzzz/t9"}), []string{"coder"}, &out, &errw)
+		code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(map[string]string{"AGENTBUS_TERM_ID": "kzzz/t9"}), []string{"coder"}, &out, &errw)
 		if code != 1 || !strings.Contains(errw.String(), "kzzz/t9 is not a live terminal of demo") {
 			t.Fatalf("code %d err %q", code, errw.String())
 		}
 	})
 	t.Run("no live terminal", func(t *testing.T) {
 		var out, errw bytes.Buffer
-		code := runScreen(ctx, screenWorld(), "demo", envOf(nil), []string{"old"}, &out, &errw)
+		code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(nil), []string{"old"}, &out, &errw)
 		if code != 1 || !strings.Contains(errw.String(), "no live terminal of old") {
 			t.Fatalf("code %d err %q", code, errw.String())
 		}
@@ -111,7 +145,7 @@ func TestScreenCommand(t *testing.T) {
 		f := screenWorld()
 		f.err["k888/t1"] = fmt.Errorf("%w (resynchronising)", termhost.ErrScreenUntrusted)
 		var out, errw bytes.Buffer
-		code := runScreen(ctx, f, "demo", envOf(nil), []string{"coder"}, &out, &errw)
+		code := runScreen(ctx, testKeyOf, f, "demo", envOf(nil), []string{"coder"}, &out, &errw)
 		if code != 1 || !strings.Contains(errw.String(), "screen not trusted") || strings.Contains(out.String(), "proceed") {
 			t.Fatalf("code %d out %q err %q", code, out.String(), errw.String())
 		}
@@ -119,21 +153,21 @@ func TestScreenCommand(t *testing.T) {
 	t.Run("lines bounded", func(t *testing.T) {
 		f := screenWorld()
 		var out, errw bytes.Buffer
-		if code := runScreen(ctx, f, "demo", envOf(nil), []string{"coder", "--lines", "500"}, &out, &errw); code != 0 || f.asked[1] != "screen k888/t1 200" {
+		if code := runScreen(ctx, testKeyOf, f, "demo", envOf(nil), []string{"coder", "--lines", "500"}, &out, &errw); code != 0 || f.asked[1] != "screen k888/t1 200" {
 			t.Fatalf("code %d asked %v err %q", code, f.asked, errw.String())
 		}
 		for _, bad := range []string{"0", "x", "-3"} {
-			if code := runScreen(ctx, screenWorld(), "demo", envOf(nil), []string{"coder", "--lines", bad}, &out, &errw); code != 2 {
+			if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(nil), []string{"coder", "--lines", bad}, &out, &errw); code != 2 {
 				t.Errorf("--lines %s: code %d", bad, code)
 			}
 		}
-		if code := runScreen(ctx, screenWorld(), "demo", envOf(nil), nil, &out, &errw); code != 2 {
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(nil), nil, &out, &errw); code != 2 {
 			t.Errorf("no agent: code %d", code)
 		}
 	})
 	t.Run("json", func(t *testing.T) {
 		var out, errw bytes.Buffer
-		if code := runScreen(ctx, screenWorld(), "demo", envOf(nil), []string{"coder", "--json"}, &out, &errw); code != 0 {
+		if code := runScreen(ctx, testKeyOf, screenWorld(), "demo", envOf(nil), []string{"coder", "--json"}, &out, &errw); code != 0 {
 			t.Fatalf("code %d %s", code, errw.String())
 		}
 		var v struct {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -33,7 +34,11 @@ var screenReaders = map[string]bool{"master": true, "sentinel": true}
 
 // runScreen is `agentbus screen <agent> [--lines N] [--json]`: the agent's
 // live terminal's last screen text, plain.
-func runScreen(ctx context.Context, h screenReader, project string, getenv func(string) string, args []string, out, errw io.Writer) int {
+//
+// keyOf is the build key of a holder socket ("" unknown): inside an agent's
+// terminal the holder sets its own terminal id (AGENTBUS_TERM_ID, "t1") and
+// its socket (AGENTBUS_HOST), so the caller's terminal is "<key>/t1".
+func runScreen(ctx context.Context, keyOf func(socket string) string, h screenReader, project string, getenv func(string) string, args []string, out, errw io.Writer) int {
 	usage := func() int {
 		fmt.Fprintln(errw, "usage: agentbus --project <p> screen <agent> [--lines N] [--json]")
 		return 2
@@ -63,11 +68,20 @@ func runScreen(ctx context.Context, h screenReader, project string, getenv func(
 		fmt.Fprintf(errw, "agentbus screen: the holders of %s cannot be listed: %v\n", project, err)
 		return 1
 	}
-	// The caller: inside an agent's terminal, that terminal's role.
+	// The caller: inside an agent's terminal, that terminal's role; an
+	// agent's shell without it, the agent it names (AGENT_BUS_AGENT).
 	if self := getenv("AGENTBUS_TERM_ID"); self != "" {
+		id := self
+		if !strings.Contains(id, "/") {
+			key := ""
+			if keyOf != nil {
+				key = keyOf(getenv("AGENTBUS_HOST"))
+			}
+			id = key + "/" + self
+		}
 		caller := ""
 		for _, t := range terms {
-			if string(t.ID) == self && t.Alive && t.Project == project {
+			if string(t.ID) == id && t.Alive && t.Project == project {
 				caller = t.Name
 			}
 		}
@@ -79,6 +93,9 @@ func runScreen(ctx context.Context, h screenReader, project string, getenv func(
 			fmt.Fprintf(errw, "agentbus screen: screen is master's and sentinel's; you are %s\n", caller)
 			return 1
 		}
+	} else if name := getenv("AGENT_BUS_AGENT"); name != "" && !screenReaders[name] {
+		fmt.Fprintf(errw, "agentbus screen: screen is master's and sentinel's; you are %s\n", name)
+		return 1
 	}
 	t, ok := liveTermOf(terms, project, agent)
 	if !ok {
@@ -165,7 +182,23 @@ func runScreenCmd(project string, getenv func(string) string, args []string, out
 		fmt.Fprintf(errw, "agentbus screen: %v\n", err)
 		return 1
 	}
+	keyOf := func(socket string) string {
+		dir, err := holder.ProjectDir(getenv, project)
+		if err != nil || socket == "" {
+			return ""
+		}
+		socks, err := holder.ProjectSockets(dir) // both names (P0-2 B)
+		if err != nil {
+			return ""
+		}
+		for key, p := range socks {
+			if filepath.Clean(p) == filepath.Clean(socket) {
+				return key
+			}
+		}
+		return ""
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return runScreen(ctx, h, project, getenv, args, out, errw)
+	return runScreen(ctx, keyOf, h, project, getenv, args, out, errw)
 }
