@@ -123,6 +123,7 @@ var foreignFlags = []string{
 	"--count", "--reverse", "--push", // git rev-list, git log and git remote get-url (deliver)
 	"--first-parent", "--git-common-dir", "--path-format", // git rev-list and git rev-parse, plan-drift's read
 	"--body-file", "--output", "--source-branch", "--target-branch", "--description", // gh and glab (deliver)
+	"--no-dangling", "--no-progress", // git fsck, the repository check of an automatic restart (reboot-resume §3.1)
 }
 
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of
