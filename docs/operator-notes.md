@@ -231,8 +231,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   socket's mtime) and its binary copy; a copy that another project's unit records is that project's,
   never this one's leftover; a manager that cannot say makes it unknown. Three checks read it
   (`health/holder.go`): `holder` fails when the current build's unit is installed and no holder
-  answers (sentinel's one action: `agentbus service start holder`, once per episode, then escalate
-  the agents lost); `holder-draining` warns while an older build still holds terminals (master's,
+  answers (the person's since holder hardening H3: `agentbus service start holder`, in For you); `holder-draining` warns while an older build still holds terminals (master's,
   never a fail); `holder-leftovers` warns when an older build that neither runs nor answers keeps
   its unit or copy (the person's: `agentbus --project <p> service gc`). `service start holder`
   starts the current build's installed unit only (`StartHolder` never restarts); `service gc` runs
@@ -1610,6 +1609,25 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   holds no live terminal of it; its own state comes back with its terminal. It is a reader's projection
   (`bus.ShownState`): the snapshot is never rewritten. With no holder answering (another host, the holder down)
   nothing is judged and the declared state shows. `agentbus agents --json` prints the stored snapshots as before.
+- **`agentbus -p <p> screen <agent>` prints an agent's last screen text, read-only.** It reads
+  through the project's holders (any build) and never types. Options: `--lines N` (default 40,
+  at most 200) and `--json`. From inside an agent's terminal (`AGENTBUS_TERM_ID`), only master's
+  and sentinel's terminals may run it. The person in a shell outside the terminals may too (the
+  person's answer to Q2). Escape sequences and control characters are dropped, so nothing the
+  program printed acts on the reader's terminal. An untrusted screen (the holder's emulator
+  resynchronising) prints no lines. The caller is the terminal the holder named
+  (`AGENTBUS_TERM_ID` on the socket `AGENTBUS_HOST`), or else `AGENT_BUS_AGENT`: it is a team
+  rule, not a security boundary (agent-screen-blocked §2).
+- **An ask comes from an agent, an answer from the person.** `agentbus ask <agent>` names the asking
+  agent, which must be the caller itself (`AGENT_BUS_AGENT`): another agent's name, registered or
+  not, is refused, and so is any name from the person's shell. Also refused: the person's recorded
+  name (`identity.as`, unless the caller is an agent of that name) and a name that wrote from
+  busmon as a person and holds no agent entry. Nothing is stored, and the refusal says
+  `ask <your agent name>; the person is the one who answers`.
+  `--withdraw` is not checked, so a stray ask can still be closed. `agentbus answer` is refused
+  from an agent (`AGENT_BUS_AGENT`, or inside an agent's terminal), `--as` included: answers are
+  typed in busmon or the person's own shell. The dispatcher also skips an entry under the person's
+  recorded name that has no terminal (written from the person's own shell).
 - **An attach names its way out on screen (attach-prefix, 2026-11-16).** `agentbus attach` (and busmon's `t`,
   which runs it) starts on a banner, `To leave: press F12 then d`, for 2 s or until a key. That key is not sent
   (the person has not seen the agent's screen: an Enter would answer a dialog unread), unless it is the prefix,
@@ -1681,6 +1699,23 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `agentbus promote` exists. CLAUDE.md and AGENTS.md state it for this project; decision note
   `docs/memory/decisions/2026-11-16-dev-branch-flow.md`. Plan-drift still reads `origin/main` until
   the next step.
+- **The dispatch service starts its own build's holder when none answers.** After an update
+  restarts dispatch on a new build, the first time the service holds the lease it installs and
+  starts that build's holder, as `agentbus up` does. The older holders keep their agents until
+  `agentbus holder drain` moves them; it never stops or restarts a holder.
+  - A failure is a line in `dispatch.log`, tried again every 5 minutes while the lease is held.
+  - If the installed agentbus was replaced since the service started, it refuses ("replaced
+    since the dispatcher started"): restart the dispatcher. `agentbus up <project>` does the same
+    by hand (agent-screen-blocked Q1).
+- **A role may be popped on another profile by name: alt_profiles (fable-profile-architect).** A
+  role's `alt_profiles` in `roles.toml` list profiles `agentbus pop <role> --profile <p>` and a
+  template tab's `--profile` may name, on the same provider too; unlike `fallback_profiles` they
+  are never a quota escape (`swap` and the quota ask ignore them). A session started on one resumes
+  on it (holder drain, `up`), never silently on the role's own. The shipped manifest adds
+  `claude-fable` (Claude Code's `fable` alias, the models table's frontier) as architect's
+  alternate: `agentbus pop architect --profile claude-fable`; plain `pop architect` stays on Opus.
+  Fable counts against Anthropic's separate `7d-fable` window (`agentbus quota`), and a full window
+  holds every Claude agent of the project today (the hold reads the provider's tightest window).
 - **A Claude Code agent boots by itself (fresh-agent-boot).** Its launch passes one fixed first
   turn on the command line, after the role's system prompt: "Run the On boot steps of your role
   now." (`rolecfg.BootLine`), fresh or resumed (`--resume`), so an agent started by `up`, a pop, a
@@ -1843,6 +1878,60 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   there: unless that wiring lands first, auto-clear and pop-retire pause for every Claude agent at
   the cutover); and writes `{p}:events` (`wake`, `wake-refused`, `wake-not-landed`, `blocked`,
   `unblocked`, `background-skip`) through `bus.FencedAppendEvent`, fenced by the dispatch lease.
+- **`dispatch holder-behind`: no holder of the dispatcher's build runs, an older one does.**
+  After an update restarts the dispatch service on a new build, the agents on an older build's
+  holder are still read and woken. But a `pop`, a relaunch or a `reload` starts on the
+  dispatcher's own build and fails. The state's detail names the builds that answer and which
+  of them host an agent ("answers but hosts no agent" otherwise). `agentbus up <project>`
+  installs and starts the missing holder beside the old one, without touching the agents.
+  `waiting-holder` now means that no holder of the project answers (agent-screen-blocked §1).
+- **The holder contains its screen emulator (holder hardening G1, part 1; spec §7.1).** Each terminal's
+  x/vt emulator runs in its own goroutine (`holder/emu.go`, `emuLoop`) behind a 4 MiB queue. The read loop
+  never waits on it: tail, viewers and `readSeq` move on. Its lock is `t.emu`; `t.mu` never runs it.
+  - A full queue (a gap) or a recovered panic (`run`, with its lock released) latches the screen
+    `invalid`.
+  - No progress for 10 s with bytes waiting latches it `stuck`. That goroutine is abandoned, and no
+    second one starts.
+  - A read while the emulator is behind, past 200 ms, is `lagging` (not latched).
+  - Screen, settle (submit) and a viewer's paint use the emulator only when caught up (`view`,
+    `paint`, `parsedSeq == readSeq` under its lock).
+  - `TermInfo.Screen` / `ActivityInfo.Screen` say the state, `ScreenGen` is raised on a latch, and
+    `ScreenReq` refuses anything but ok with code `screen` (`termhost.ErrScreenUntrusted`). The
+    dispatcher then reads an inspection error and waits: no wake, `/clear` or submit.
+  - Nothing restores `ok` in place: the terminal is replaced (reload).
+  - The read loop finds DA1, DA2 and DSR 5 queries in every chunk:
+    - while the screen is trusted, each static answer stays pending until its reply is observed in
+      what the emulator gave (in order; a Replies panic latches first; a latch during an answer pass leaves the
+      pending answers to that pass, which retires what it saw and owes the rest, so no query is
+      answered twice; a pass hung on a latched screen is abandoned by the watch; one pass at a time (`ansMu`),
+      which rechecks the latch and marks itself under `t.mu` after taking the emulator's lock, and
+      owes what is pending on a `Replies` panic even if already latched, reviewer-codex);
+    - a latch writes the pending ones once (a query in the hang window before the stuck latch, or
+      dropped by a gap: foureyes);
+    - once latched, it answers at once, with x/vt's own strings, never a cursor position.
+  - An untrusted screen's viewer is painted a notice (replace it with `agentbus reload` once the agent
+    is idle), then the live output.
+  - Part 2 brings health `holder` on invalid/stuck and `agentbus reload --replace-broken`.
+  - `go test -race ./holder` passes. `./screen` fails on x/vt's known `Emulator.Close`/`Read` race,
+    on dev too; the holder never calls `Close`, so the emulator goroutine is not in that path.
+- **A dead holder is the person's (holder hardening H3).** Health `holder`'s fail goes to For you with
+  `agentbus --project <p> service start holder`, and the desktop is rung once per episode through
+  `FencedNotifyOnceForPerson`, mark `holder-down` holding the fail's since (Redis time; an unknown
+  pass keeps it, ok or warn deletes it), so a restarted dispatcher does not ring twice; the
+  notifier's fail line covers it (prefix `Holder down: `, never a second line). Its handler is
+  master, not sentinel, who died with the holder. The warn `holder_restarted` stays in hand and,
+  while `dispatch.self_repair` is on, says how many agents wait and when the last comes back at
+  self-repair's pace (`selfrepair.ProjectPause`, one relaunch per pause, master first).
+- **Before a release, run the holder's live check: `agentbus check holder-restart`** (or
+  `scripts/holder-live-check.sh`). It brings up a disposable project of its own (`lc` + 6 hex:
+  master and coder, never your team), kills its holder with SIGKILL, and times the restart, the
+  relaunches (master first, one every 2 minutes, each on its session), the wakes and health
+  `holder`; then it removes the project, also on a failure or Ctrl-C (`--keep` leaves it). About
+  six minutes a round. `--clients fake` (the default) runs `agentbus fake-client` as `claude`, no
+  quota; `--clients real` runs Claude Code, once its folder
+  (`$XDG_STATE_HOME/agentbus/.livecheck/work`) is trusted: `cd` there, run `claude`, accept, quit.
+  On a real machine its relaunches pass only with the holder's terminal numbering kept across a
+  restart (step 1a). The soak run waits for its criterion (holder hardening spec §5).
 - **Holder socket name, bounded (P0-2 B, `holder/rundir.go`).** A holder now listens at
   `<rundir>/agentbus/<project>/h-<id>.sock`, where `id` is the first 16 hex digits of its build
   key's sha256: 23 bytes whatever the key, so a dirty build's long key and a 32-byte project fit
@@ -1859,6 +1948,16 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   it starts anything (`holder.SocketPathFits`, which creates nothing). A path too long for this OS
   refuses up with the path and the fix (a shorter `XDG_RUNTIME_DIR` or `TMPDIR`): `nothing
   started`. A socket name of bounded length, whatever the build key, is the next step.
+- **A restarted holder numbers its terminals on (holder hardening, found by the endurance test).** Each holder
+  process numbered its terminals from `t1`, so after a crash, a restart or a reboot the relaunched master
+  got `<key>/t1` again, the dead master's pane: self-repair's proof ("a new process in a new pane",
+  `replaced`) refused it for 60 s and every relaunch after a holder crash was escalated as failed. The
+  holder now records its last number in `holder.Config.TermsFile`, `<state>/<project>/holder.<key>.terms`
+  (`holderTermsFile`, set by `holderConfig`), and numbers on from it; an unreadable record numbers from
+  `t1`, a failed write is ignored (the process still numbers on). One small file per build is left
+  behind by `service gc`. `TestHolderRestartEndToEnd` (release gate) pins the recovery: crash, the
+  same socket served again, `holder_restarted` naming both agents, both resumed master first and
+  proved, woken again, `ok`; then a holder that never returns fails in For you.
 - **Host commands from an agent's terminal reach the dispatch service (host-relay-timeout, 2026-11-16).** Since herdr
   exit 10b, `pop`, `reload`, `retire`, `swap`, `suspend`, `resume` and `holder drain` run inside an agent's terminal
   are relayed to the dispatcher, but only the foreground `agentbus dispatch` turned the relay on: the dispatch
@@ -1866,6 +1965,19 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   within 5 s ... Nothing was done` (seen with `reload sentinel` and `pop coder2` from master, on both the old and the
   new build). The service's dispatcher now runs the same relay (`serviceDispatchConfig`, `hostOpsConfig`). It takes
   effect when the dispatch service restarts on the new build.
+- **The person is never an agent.** `agentbus ask <agent>` and `agentbus status <agent>` name the
+  agent that asks or declares, never the person the questions go to. From another agent's terminal,
+  the person's recorded name (`identity.as`) is refused for both, before any broker call (an
+  agent of that name, the person's own shell and `ask --withdraw` still pass). `agentbus ask
+  <person>` run in master's terminal once wrote the person into `{p}:agents` with master's terminal.
+  busmon then listed them under Agents, and the dispatcher woke and escalated them. An entry that
+  borrows another agent's terminal is no agent: the dispatcher skips a human identity with such an
+  entry (a human sender still in the capped cmd stream, or the person's `identity.as`, which it
+  reads at start), and busmon drops the person's. A leftover entry is removed with `agentbus agents forget
+  <person> --force` (`--force`: its status is recent), or busmon's d.
+- **A person named `anonymous` is nobody too (identity-anonymous-human, 2026-11-17).** With `AGENT_BUS_AGENT` unset,
+  `AGENT_BUS_HUMAN=anonymous` or `[identity] as = "anonymous"` in config.toml no longer passes as the person's
+  identity: a write from the shell is refused with the fix, as with no identity at all (reviewer-codex on #571).
 - **Login expiry, part 1: the reader and the identity (login-updates r9 §3.1-3.3, `loginexpiry/`).**
   No behaviour changes yet (part 2 runs the check). `loginexpiry.ReadFile` reads one field,
   `claudeAiOauth.refreshTokenExpiresAt` (Unix ms), from `<config dir>/.credentials.json`:
@@ -2012,6 +2124,17 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   (Settings, Display: `relative` default, `iso`, `clock12`, a sample of each shown) has no environment variable:
   the dispatch service reads config.toml at each message, so a change applies with no restart. The pace sentence
   under a card wraps instead of being cut.
+- **Three quota thresholds, per project, read each minute (quota settings step 2, 2026-11-17).** `dispatch.quota_warn`
+  (85) warns master and tells agents with work to finish their step; the new `dispatch.quota_drain` ("start nothing
+  new above"; unset, it follows the warning: today's behaviour) drains the run, which runs again once every window is
+  under it; `dispatch.quota_hold` (95) holds the provider. `warn <= drain <= hold` is a rule: a broken order uses the
+  defaults for all three (logged once per episode). A project's own values live in `config.toml`:
+  `[project.<name>.dispatch]` with `quota_warn`, `quota_drain`, `quota_hold`, `quota_max_age`, read before the
+  project's env file (`AGENT_BUS_QUOTA_*` from the shell at `up`), then the machine keys, then the defaults. The
+  dispatch service re-reads them from the files with the readings, every minute, with no restart, and never from its
+  own start-time environment; an unreadable `config.toml` keeps the last values. `busmon --delete` (Projects page too)
+  removes the project's table. Quota directives and the drain notice, stored and read later, carry the absolute date
+  (`resets Tue 17 Nov 13:59`), never "today" or "tomorrow".
 - **Reboot-resume, part 1: the run record (reboot-resume spec §2, `lifecycle/`).** Nothing is
   judged yet, so behaviour is unchanged. Each project's state directory now holds two local
   files, written 0600 and replaced atomically (a temp file, fsync, rename, then fsync of the
@@ -2027,6 +2150,35 @@ change adds its own fragment there, never an edit here; the newest notes are in 
     `run.json`. The dispatch service never recreates a lost one; `agentbus up` does.
   The boot id is `dispatch.BootID` (Linux `boot_id`, macOS `kern.bootsessionuuid`). Where it is
   unknown (the BSDs), nothing is written. A failed write is said and never stops the command.
+- **After a reboot, the dispatch service judges once (reboot-resume A, with holder hardening H1 and H1b).**
+  - **The judgement:** once it holds the lease, before any other loop (`dispatch.Config.Reboot`,
+    `cmd/agentbus/reboot.go`), the dispatch service reads `run.json` (`lifecycle.Judge`) and records
+    the verdict in `{p}:reboot` (fenced, at from Redis TIME). Only then does it write `running`, so a
+    stop in between judges again. The verdicts are `intentional`, `suspended`, `restarting`,
+    `unplanned` (with `why`) and `stopped` (with `why`).
+  - **An unplanned stop** restarts the team only when, in order:
+    - `services.unplanned_restart` is on (default on);
+    - self-repair is `on`;
+    - the holder answers within 2 minutes of the dispatcher's start (H1b: polled every 2 s;
+      nothing written, counted or relaunched meanwhile; never for `intentional` or `suspended`);
+    - the repository is intact (`repoIntegrity`: no `index.lock` in the git directory or a
+      worktree's, `git fsck` exits 0 within 5 min, run with `core.fsmonitor=false` and
+      `core.hooksPath=/dev/null`; a directory with no `.git` passes);
+    - the count, kept in `unplanned.json` and written before anything is relaunched, stays within
+      `services.unplanned_max` (3) in `services.unplanned_window` (24 h).
+  - **A failed check or the limit:** the project is stopped by a fenced suspend (`by` dispatch;
+    the services keep running). A lost or garbled counter reads `unplanned` (`counter missing`,
+    `counter not written`), never empty.
+  - **Who is told:** the person, once per boot (mark `reboot`); for a restart, master too.
+  - **Self-repair** holds every agent (`HoldReboot`) while this boot's record stands with any verdict
+    but `restarting`. It relaunches a reboot death as `BeginRebootRelaunch` (an `r`-prefixed attempt:
+    the project's pause, never the role's own budget), and deletes the record once every required
+    agent is alive (another boot's at once).
+  - **Resume:** `agentbus resume` empties the counter.
+  - **H1:** with `services.start_at_login` on, `up` and `service login` enable the current build's
+    holder with the other services and disable every other build's (`service.HolderLoginStart`).
+  - **Not in A:** busmon's popup (B), `services.start_at_boot` (C), and the retirement of
+    `suspend.auto_resume` (with B, which replaces it).
 - **A failed relaunch names the holder's command; a launch starts only its own role (recovery-hints, 2026-11-16).**
   A self-repair or reload that fails now says `recover with agentbus --project <p> pop <role> [--profile <p>]
   [--resume <session>], or agentbus up <p> --resume`, never the herdr-era `agent-launch <role> <project>` in a new
