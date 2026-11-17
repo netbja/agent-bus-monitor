@@ -65,6 +65,15 @@ func TestSettingsAttachPrefixGate(t *testing.T) {
 	if file, e := edit(t, withAgy, "f12"); strings.Contains(file, "prefix") || !strings.Contains(e, "agy (no key verified free)") {
 		t.Fatalf("f12 with an agy fallback: %q, err %q", file, e)
 	}
+	// An alt profile is a client the role may run on too (pop --profile,
+	// fable-profile-architect): one on agy refuses the setting as a fallback does.
+	altAgy := manifest(t, "claude-code", "agy")
+	if b, err := os.ReadFile(altAgy); err == nil {
+		os.WriteFile(altAgy, []byte(strings.Replace(string(b), "fallback_profiles", "alt_profiles", 1)), 0o644)
+	}
+	if file, e := edit(t, altAgy, "f12"); strings.Contains(file, "prefix") || !strings.Contains(e, "agy (no key verified free)") {
+		t.Fatalf("f12 with an agy alternate: %q, err %q", file, e)
+	}
 	// Codex records f12 free (its f12-at-input probe, 2026-11-16): a codex
 	// fallback lets it through.
 	if file, e := edit(t, manifest(t, "claude-code", "codex"), "f12"); !strings.Contains(file, `prefix = "f12"`) {

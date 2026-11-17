@@ -171,6 +171,9 @@ func Load(path string) (*Manifest, error) {
 		if _, exists := info["fallback_profiles"]; exists && version != 2 {
 			return nil, fmt.Errorf("role %s: fallback_profiles needs schema_version 2", role)
 		}
+		if _, exists := info["alt_profiles"]; exists && version != 2 {
+			return nil, fmt.Errorf("role %s: alt_profiles needs schema_version 2", role)
+		}
 		if _, _, localRules, err := roleRules(role, info); err != nil {
 			return nil, err
 		} else if err := checkDelivers(role, info, localRules); err != nil {
@@ -239,6 +242,9 @@ func Load(path string) (*Manifest, error) {
 			if err := m.checkFallbacks(role); err != nil {
 				return nil, err
 			}
+			if err := m.checkAlternates(role); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return m, nil
@@ -299,9 +305,80 @@ func (m *Manifest) Fallbacks(role string) []string {
 	return names
 }
 
+// MaxAlternates bounds alt_profiles, as MaxFallbacks bounds fallbacks.
+const MaxAlternates = 3
+
+// Alternates is the role's alt_profiles, in order (schema 2): other profiles
+// the role may run on when someone asks for one (pop --profile, a template's
+// --profile), the same provider allowed. Never a quota fallback: swap and
+// the quota ask read Fallbacks alone (fable-profile-architect).
+func (m *Manifest) Alternates(role string) []string {
+	info, _ := asTable(m.Roles[role])
+	names, _ := stringNames(info["alt_profiles"])
+	return names
+}
+
+// MayRunOn: profile is "" (the role's own), the role's own, one of its
+// fallback_profiles or one of its alt_profiles: the profiles a launch may
+// name for role.
+func (m *Manifest) MayRunOn(role, profile string) bool {
+	if profile == "" {
+		return true
+	}
+	if own, err := m.Resolve(role); err == nil && profile == own.Profile {
+		return true
+	}
+	return slices.Contains(m.Fallbacks(role), profile) || slices.Contains(m.Alternates(role), profile)
+}
+
+// checkAlternates: each alternate is a defined profile that resolves for the
+// role, not the role's own, not also a fallback, at most MaxAlternates, no
+// repeats. The same provider is allowed: an alternate is chosen, it never
+// escapes a quota hold.
+func (m *Manifest) checkAlternates(role string) error {
+	info, _ := asTable(m.Roles[role])
+	raw, exists := info["alt_profiles"]
+	if !exists {
+		return nil
+	}
+	names, ok := stringNames(raw)
+	if !ok {
+		return fmt.Errorf("role %s: alt_profiles must be an array of profile names", role)
+	}
+	if len(names) > MaxAlternates {
+		return fmt.Errorf("role %s: at most %d alt_profiles", role, MaxAlternates)
+	}
+	own, err := m.Resolve(role)
+	if err != nil {
+		return err
+	}
+	fallbacks := m.Fallbacks(role)
+	seen := map[string]bool{}
+	for _, name := range names {
+		if seen[name] {
+			return fmt.Errorf("role %s: alt profile %s listed twice", role, name)
+		}
+		seen[name] = true
+		if name == own.Profile {
+			return fmt.Errorf("role %s: alt profile %s is the role's own profile", role, name)
+		}
+		if _, ok := m.Profiles[name]; !ok {
+			return fmt.Errorf("role %s: unknown alt profile %s", role, name)
+		}
+		if slices.Contains(fallbacks, name) {
+			return fmt.Errorf("role %s: profile %s is both an alt and a fallback profile", role, name)
+		}
+		if _, err := m.resolve(role, name); err != nil {
+			return fmt.Errorf("role %s: alt profile %s: %w", role, name, err)
+		}
+	}
+	return nil
+}
+
 // ResumeProfile is the profile a resume recorded on profile runs on
 // (resume-record-profile): "" (the role's own) for "" or its own, the
-// profile itself for one of its fallback_profiles, and "" with onOwn for
+// profile itself for one of its fallback_profiles or alt_profiles (a pop on
+// Fable resumes on Fable, fable-profile-architect), and "" with onOwn for
 // another profile this manifest defines for the role on the role's own
 // client, which a swap --force may have put it on: the session resumes, on
 // its own profile, never on the recorded one (a record is a broker key). Any
@@ -318,7 +395,7 @@ func (m *Manifest) ResumeProfile(role, profile string) (run string, onOwn bool, 
 	if !namePattern.MatchString(profile) {
 		return "", false, outside
 	}
-	if slices.Contains(m.Fallbacks(role), profile) {
+	if slices.Contains(m.Fallbacks(role), profile) || slices.Contains(m.Alternates(role), profile) {
 		if _, err := m.ResolveWith(role, profile); err != nil {
 			return "", false, err
 		}
@@ -398,7 +475,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 		profile["options"] = options
 	} else {
-		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "pops", "approval", "delivers", "tool_rules", "required"), "role "+role+" (move execution fields into a profile)"); err != nil {
+		if err := checkKeys(info, set("profile", "tier", "skills", "fallback_profiles", "alt_profiles", "pops", "approval", "delivers", "tool_rules", "required"), "role "+role+" (move execution fields into a profile)"); err != nil {
 			return Profile{}, err
 		}
 		profileNameValue, ok := info["profile"]

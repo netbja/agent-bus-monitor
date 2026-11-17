@@ -19,7 +19,7 @@ type checkRow struct {
 	Model     string   `json:"model,omitempty"`
 	Tier      string   `json:"tier,omitempty"`
 	Resolved  string   `json:"resolved,omitempty"` // the id a tier stands for now
-	UsedBy    []string `json:"used_by"`            // "coder", "fallback of coder"; empty = unused
+	UsedBy    []string `json:"used_by"`            // "coder", "fallback of coder", "alt of architect"; empty = unused
 	Verdict   string   `json:"verdict"`            // ok, gone, newer, newer?, not listed (partial), untiered, unknown
 	Why       string   `json:"why,omitempty"`
 	Candidate string   `json:"candidate,omitempty"`
@@ -48,6 +48,9 @@ func modelsCheckReport(tbl *models.Table, cfg models.Config, m *rolecfg.Manifest
 		}
 		for _, fb := range m.Fallbacks(role) {
 			usedBy[fb] = append(usedBy[fb], "fallback of "+role)
+		}
+		for _, alt := range m.Alternates(role) {
+			usedBy[alt] = append(usedBy[alt], "alt of "+role)
 		}
 	}
 	var rows []checkRow

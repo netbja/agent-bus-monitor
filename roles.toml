@@ -37,6 +37,17 @@ model = "opus"
 permission = "bypassPermissions"
 fallback = "claude-opus-5"
 
+# Fable, Anthropic's frontier model above Opus, by Claude Code's alias (the models table lists `fable`
+# as frontier; the alias follows the latest Fable, never an id from memory). For complex work only:
+# its use counts against the separate 7d-fable window (agentbus quota). A role reaches it through
+# alt_profiles (pop <role> --profile claude-fable), never as a quota fallback (same provider).
+[profiles.claude-fable]
+client = "claude-code"
+provider = "anthropic"
+model = "fable"
+[profiles.claude-fable.options]
+permission = "bypassPermissions"
+
 [profiles.claude-opus-manual]
 client = "claude-code"
 provider = "anthropic"
@@ -232,6 +243,9 @@ deny = ["Bash(agentbus deliver *)"]
 [roles.architect]
 profile = "claude-opus-fallback"
 tier = "pop"
+# alt_profiles: profiles master may pop it on by name (agentbus pop architect --profile
+# claude-fable) for a task complex enough to pay Fable's price; the default stays Opus.
+alt_profiles = ["claude-fable"]
 skills = ["agent-bus", "codebase-design", "domain-modeling", "to-spec"]
 [roles.architect.tool_rules]
 deny = ["Bash(agentbus deliver *)"]

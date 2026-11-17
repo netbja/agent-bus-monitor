@@ -63,6 +63,13 @@ which).
   touching several modules or services; a disagreement between coder and foureyes that survived
   one round; a cross-cutting risk (security, data loss, deployment, money). Not for a routine
   change: that stays with coder.
+- **Fable, for the hardest of those** (`agentbus pop architect --profile claude-fable`): a role's
+  `alt_profiles` (`roles.toml`) are the other profiles you may pop it on by name. Use Fable only when
+  Opus is not enough: a design a first architect pass could not settle, or a decision the person
+  asked Fable for. Check `agentbus quota` first: it counts against Anthropic's separate `7d-fable`
+  window, and today a full window holds every Claude agent of the team, not only the Fable one. The
+  pop resumes on Fable if relaunched (holder drain, up); a plain `agentbus pop architect` stays on
+  Opus. Say in your report which profile you popped it on.
 - You run on a lighter model than architect. On a heavy decision, have architect instruct it
   (options, risks, recommendation) and put the decision to the person with an ask, rather than
   deciding alone.

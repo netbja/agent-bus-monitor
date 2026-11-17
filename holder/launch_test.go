@@ -11,8 +11,9 @@ const testManifest = "schema_version = 2\n[defaults]\nprofile = \"main\"\n" +
 	"[profiles.main]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"opus\"\noptions = { permission = \"manual\" }\n" +
 	"[profiles.alt]\nclient = \"claude-code\"\nprovider = \"other\"\nmodel = \"m2\"\noptions = { permission = \"manual\" }\n" +
 	"[profiles.spare]\nclient = \"claude-code\"\nprovider = \"third\"\nmodel = \"m3\"\noptions = { permission = \"manual\" }\n" +
+	"[profiles.fable]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"fable\"\noptions = { permission = \"manual\" }\n" +
 	"[profiles.grok]\nclient = \"grok\"\nprovider = \"xai\"\nmodel = \"grok-4.6\"\n" +
-	"[roles.coder]\ntier = \"boot\"\nfallback_profiles = [\"alt\"]\n" +
+	"[roles.coder]\ntier = \"boot\"\nfallback_profiles = [\"alt\"]\nalt_profiles = [\"fable\"]\n" +
 	"[roles.scout]\ntier = \"pop\"\nprofile = \"grok\"\n"
 
 func testLauncher(t *testing.T) TemplateLaunch {
@@ -45,6 +46,10 @@ func TestTemplateLaunch(t *testing.T) {
 		// resume-record-profile: a resume recorded on a forced profile of the
 		// role's own client (holder drain, up) resumes on its own profile.
 		{Start{Role: "coder", Profile: "spare", ResumeSession: sess}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --resume " + sess},
+		// fable-profile-architect: an alternate (same provider) is popped on
+		// by name, and its session resumes on it, never on the role's own.
+		{Start{Role: "coder", Profile: "fable"}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --profile fable"},
+		{Start{Role: "coder", Profile: "fable", ResumeSession: sess}, "env ROLES_TOML=" + l.Manifest + " /r/scripts/agent-launch coder demo --profile fable --resume " + sess},
 	} {
 		cmd, err := l.Command(c.start)
 		if err != nil || strings.Join(cmd.Argv, " ") != c.want || cmd.Dir != l.Dir {
