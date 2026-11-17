@@ -1611,7 +1611,8 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   nothing is judged and the declared state shows. `agentbus agents --json` prints the stored snapshots as before.
 - **`agentbus -p <p> screen <agent>` prints an agent's last screen text, read-only.** It reads
   through the project's holders (any build) and never types. Options: `--lines N` (default 40,
-  at most 200) and `--json`. From inside an agent's terminal (`AGENTBUS_TERM_ID`), only master's
+  at most 200) and `--json` (`agent, term, build, rows, lines, trusted, read_at`); the header
+  names the terminal, its build and the read time. From inside an agent's terminal (`AGENTBUS_TERM_ID`), only master's
   and sentinel's terminals may run it. The person in a shell outside the terminals may too (the
   person's answer to Q2). Escape sequences and control characters are dropped, so nothing the
   program printed acts on the reader's terminal. An untrusted screen (the holder's emulator
@@ -1644,6 +1645,14 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   stamps `buildinfo.Tree` from `git describe --dirty` (tracked files only) and the build id follows
   it; setup says once per install when it builds from modified tracked files. A plain `go build`
   carries no stamp and keeps Go's own view.
+- **busmon reads `blocked` for an agent whose client asks something in its terminal.** That is
+  a permission or limit menu the dispatcher observed (`{p}:observed`), until a person answers it
+  there. It used to read `waiting`, which now means only the agent's own question (a declared
+  wait or an open ask). The state column, the For you line and the agent's page say "blocked:
+  waiting for an answer in its terminal". The page's Screen section then shows the screen's last
+  6 non-blank lines, read live from the holder while the page is open; a line that looks like a
+  credential is hidden. The row no longer carries the `prompt` flag or the holder-event
+  `blocked` flag: the state column says it (agent-screen-blocked §3, step 3a).
 - **A report names its addressees, and a reply goes to its sender (busmon-reply-target).**
   `agentbus report --to <name>` now records the addressees on the report entry itself (field `to`,
   additive; older reports have none), so busmon's page shows the addressee (the person, or an agent), not "broadcast". In
@@ -2228,6 +2237,16 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   project), and the run goes on when that provider is clear (every window under the warn threshold, no hold) or
   its hold is released; a limit reached meanwhile replaces `why`, and the run then stays draining. Not in step 2:
   `{p}:held`, the held directives and the silent client's screen hold (`run.screen_hold_max`).
+- **A stuck screen rings the desktop once per episode** (`dispatch.stuck_after`,
+  `AGENT_BUS_STUCK_AFTER` in whole seconds; default 3 minutes, `0` off). A screen counts as
+  stuck when it is settled, its client's signature reads it as neither ready, nor busy, nor a
+  prompt, and it has not changed for that long in the same process. The ring says
+  `<project>: <agent>'s screen has not changed for <d> and is not a prompt agentbus knows
+  (<terminal>)`, never "waits on a prompt". It follows prompt-notify's suppressions (a declared
+  blocked or waiting, an open ask, a swap, the pause), under its own mark `stuck:<agent>`. A
+  client update that changes the idle screen can make several agents of that client stuck at
+  once, one ring each. The observation gains `screen_since`, the time of the first reading of
+  the current screen; no screen text is written (agent-screen-blocked §3).
 - **A project folder without Git starts without missions (up-git-repo, 2026-11-16).** A project needs no forge and no
   repository (the person's answer). Only the missions service (the conductor) needs Git, and it used to wait for
   one out of sight (`no Git repository in <dir>: run git init there`, seen only in its state). `agentbus up` (and
