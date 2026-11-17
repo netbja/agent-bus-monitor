@@ -30,6 +30,9 @@ type RequestInfo struct {
 	Commit            string `json:"commit,omitempty"`       // request done --commit (missions)
 	Branch            string `json:"branch,omitempty"`       // request done --branch
 	Availability      string `json:"availability,omitempty"` // derived, never persisted
+	// ClosedUnaccepted says why a request was closed without an accept:
+	// "body missing" (cmd retention removed it) or "expired" (request-lost-body).
+	ClosedUnaccepted string `json:"closed_unaccepted,omitempty"`
 	// Priority (request-priority, additive): "high" or "low", absent = normal;
 	// set only by a person through SetRequestPriority, kept by every board
 	// script's cjson round trip.
@@ -170,7 +173,11 @@ const requestTransitionSrc = `
 local raw=redis.call('HGET',KEYS[1],ARGV[1]);if not raw then return redis.error_reply('unknown request') end
 local e=cjson.decode(raw);local r=e.request
 if not r then return redis.error_reply('board task is not a tracked request') end
-if r.target~=ARGV[2] then return redis.error_reply('only the target agent may accept/block/complete this request') end
+local bysender=false
+if r.target~=ARGV[2] then
+ if ARGV[3]~='done' or r.from~=ARGV[2] or r.accepted_at then return redis.error_reply('only the target agent may accept/block/complete this request') end
+ bysender=true
+end
 if e.state=='done' then
  if ARGV[3]=='done' then return r.response_id end
  return redis.error_reply('request already completed')
@@ -179,8 +186,8 @@ local t=redis.call('TIME');local now=t[1]*1000+math.floor(t[2]/1000)
 local result=''
 if ARGV[3]=='accept' then
  if not r.accepted_at then
-  if r.expires_at and r.expires_at>0 and r.expires_at<=now then return redis.error_reply('request expired; cannot accept') end
-  if #redis.call('XRANGE',KEYS[2],r.id,r.id)==0 then return redis.error_reply('request body missing; cannot accept') end
+  if r.expires_at and r.expires_at>0 and r.expires_at<=now then return redis.error_reply('request expired; cannot accept (its target or sender closes it: agentbus request done <task> <why>)') end
+  if #redis.call('XRANGE',KEYS[2],r.id,r.id)==0 then return redis.error_reply('request body missing; cannot accept (its target or sender closes it: agentbus request done <task> <why>)') end
   r.accepted_at=now
  end
  e.state='accepted';r.blocked_reason=nil
@@ -190,9 +197,16 @@ elseif ARGV[3]=='block' then
  end
  e.state='blocked';r.blocked_reason=ARGV[4]
 else
- if not r.accepted_at then return redis.error_reply('request must be explicitly accepted before completion') end
- if e.state=='blocked' then return redis.error_reply('blocked request: accept to resume before completion') end
- result=redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',r.from,'type','reply','ref',r.thread,'command',ARGV[4],'text_complete','yes')
+ if not r.accepted_at then
+  local why=''
+  if #redis.call('XRANGE',KEYS[2],r.id,r.id)==0 then why='body missing'
+  elseif r.expires_at and r.expires_at>0 and r.expires_at<=now then why='expired' end
+  if why=='' then return redis.error_reply('request must be explicitly accepted before completion') end
+  r.closed_unaccepted=why
+ elseif e.state=='blocked' then return redis.error_reply('blocked request: accept to resume before completion') end
+ local to=r.from
+ if bysender then to=r.target end
+ result=redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',to,'type','reply','ref',r.thread,'command',ARGV[4],'text_complete','yes')
  r.response_id=result;r.responded_at=now;e.state='done'
  if ARGV[6]~='' then r.commit=ARGV[6] end
  if ARGV[7]~='' then r.branch=ARGV[7] end
