@@ -1,6 +1,8 @@
 # Agent screen, blocked agents, holders in Services
 
-Status: spec, r1, for review (subject `agent-screen-blocked-spec`). Not built. Base: origin/dev
+Status: spec, r2, for review (subject `agent-screen-blocked-spec`). r2: reviewer-codex (the
+screen lines as a snapshot kept current, not carried by the events; stuck apart from blocked,
+with its own events, episode and ring). Not built. Base: origin/dev
 `15e50f7e`. Author: coder, task `agent-screen-blocked`, from master's directive of 2026-11-17
 relaying what the person approved. The person's decisions are §6; the build is §7's steps, one
 PR each from origin/dev.
@@ -75,19 +77,43 @@ holder services run (builds 886 and 888).
   current terminal is `blocked`. busmon derives this; the agent's declared status in
   `{p}:agents` is not overwritten (the putSnapshot rule: an observation never replaces the
   agent's word). Its declared state stays in the detail.
-- **Stuck counts too.** A settled screen that the client's signature reads as neither ready, nor
-  busy, nor a prompt (`Inspect` leaves it `unknown`), unchanged (same `ScreenHash`) for
-  `dispatch.stuck_after` (default 3 min, Q3), gets a `blocked` event with
-  `why=unrecognised screen`. A change of the hash or a recognised state ends the episode
-  (`unblocked`). It shares prompt-notify's episode, grace and once-per-episode ring.
-- **The text busmon shows** in the agent's detail (`enter` on the row) and in the For you line:
-  `blocked: waiting for an answer in its terminal`, then the screen's last lines.
-  - The lines: the last 6 non-blank lines (Q4). They come with the event: the dispatcher already
-    holds the screen it judged.
-  - They are capped at 6 × 200 runes and scrubbed with the same secret redaction as reports.
-  - busmon reads the holder for nothing new.
-- **Suppressions stay prompt-notify's:** the agent declared `blocked` or `waiting`, an open ask,
-  the project paused, the agent swapping.
+- **Stuck is its own state, not a prompt** (r2, reviewer-codex).
+  - **What counts:** a settled screen that the client's signature reads as neither ready, nor
+    busy, nor a prompt (`Inspect` leaves it `unknown`), unchanged (same `ScreenHash`) for
+    `dispatch.stuck_after` (default 3 min, Q3).
+  - **Its own events:** `stuck` and `unstuck` (new event kinds in `bus/events.go`).
+  - **Its own episode:** the same pid-and-since rule as prompt-notify, under its own mark
+    `stuck:<agent>` in `{p}:quota`. A change of the hash, a recognised state or a prompt ends
+    it. A prompt that appears opens a `blocked` episode instead.
+  - **What busmon shows:** the state column reads `stuck`, and the text is `stuck: its screen is
+    not recognised and has not changed for <d>`.
+  - **Its ring:** once per episode, through the same runner, with its own words: `<project>:
+    <agent>'s screen has not changed for <d> and is not a prompt agentbus knows (<term>)`. It
+    never says "waits on a prompt". Whether it rings at all is Q6.
+- **The text busmon shows for `blocked`**, in the agent's detail (`enter` on the row) and in the
+  For you line: `blocked: waiting for an answer in its terminal`, then the screen's last lines.
+- **The lines are a snapshot the dispatcher keeps current** (r2, reviewer-codex: the
+  blocked/unblocked events are written only when an episode opens or closes, so lines carried by
+  them would go stale).
+  - **Where:** the hash `{p}:screens`, one field per agent. Its value is JSON: `{term, pid,
+    episode, kind (blocked|stuck), at (Redis TIME), lines[]}`.
+  - **When it is written:** a fenced write at each observe pass (15 s) of an open episode, and
+    only when the `ScreenHash` changed since the last write. It costs no holder read: the
+    dispatcher already holds the screen it judged.
+  - **What the lines are:** the last 6 non-blank lines (Q4), each cut to 200 runes, through the
+    same secret redaction as reports before the write.
+  - **When it is removed:** by a fenced write when the episode ends
+    (`unblocked`/`unstuck`); when the agent leaves the observation; and when a different term or
+    pid is observed. A dispatcher that dies mid-episode leaves its last snapshot, so busmon also
+    bounds it: it shows a snapshot only while busmon's own episode for that agent (term, pid,
+    episode) is open and `at` is under 2 minutes old (8 passes). Otherwise it shows `screen not
+    read since <at>`. The next dispatcher with the lease overwrites or removes it.
+  - **Retention:** at most one snapshot per observed agent; nothing archived. `agents forget`
+    removes the agent's field (step 3 adds it there); `projects delete` removes the key with the
+    project's other `{p}:` keys.
+  - busmon reads `{p}:screens` with the agents and never reads the holder for it.
+- **Suppressions stay prompt-notify's**, for both `blocked` and `stuck`: the agent declared
+  `blocked` or `waiting`, an open ask, the project paused, the agent swapping.
 
 ## 4. Holders in busmon's Services (step 4)
 
@@ -124,6 +150,11 @@ holder services run (builds 886 and 888).
 3. **Step 3:**
    - the state column reads `blocked` from the events, and the declaration is kept;
    - a stuck screen emits after `stuck_after`, not before; a changed hash ends the episode;
+   - stuck emits `stuck`, never `blocked`, and its ring never says prompt; a prompt that appears
+     ends it and opens `blocked`;
+   - the snapshot is rewritten when the hash changes, not when it does not; it is removed at the
+     episode's end and on a new pid; busmon hides one older than 2 minutes or from another
+     episode;
    - the lines are capped and redacted;
    - the suppressions hold.
 4. **Step 4:**
@@ -149,11 +180,15 @@ holder services run (builds 886 and 888).
   stop it by itself after a while? Recommended: flag it and name the command. Stopping a holder
   is the person's call.
 
+- **Q6.** Should a stuck screen ring the desktop, with its own words (§3), or only show in
+  busmon? Recommended: ring once per episode. A screen nobody recognises for 3 minutes is
+  usually something only the person can answer.
+
 ## 7. Steps
 
 One PR each, from origin/dev, base dev, in this order:
 
 1. The holder state (§1). With Q1's answer, the start of the missing holder.
 2. `agentbus screen` (§2).
-3. Blocked in the state column, stuck, lines (§3).
+3. Blocked and stuck in the state column, the screen snapshot (§3).
 4. Holders in Services (§4).
