@@ -41,12 +41,12 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		case a.state == "waiting" && !answered(a) && a.openAsk == 0:
 			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("wait:%s:%d", name, a.stateAt.UnixMilli()),
 				Agent: name, Text: a.message, At: a.stateAt})
-		case promptWaiting(a):
+		case promptBlocked(a):
 			since := a.obsSince
 			if since.IsZero() {
 				since = a.obsAt
 			}
-			text := "pane prompt"
+			text := blockedWords
 			if a.trustFolder != "" {
 				text = trustPromptText(a.client, a.trustFolder)
 			}

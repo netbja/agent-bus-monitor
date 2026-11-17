@@ -9,7 +9,7 @@
 ╭─ A│ you with ●, and the agent reads waiting.                             │ …─╮
 │▶ ♙│                                                                      │le ▲
 │  ♙│   ! F4  open its questions                                           │   ┃
-│  ♙│   1-9   pick an answer                                               │   ▼
+│  ▲│   1-9   pick an answer                                               │   ▼
 ╰───│   o     Other: write your own answer in the compose window           │───╯
 ╭─  │                                                                      │e ─╮
 │   │ Your answer wakes the agent; nothing else is needed.                 │   ▲

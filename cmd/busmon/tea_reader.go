@@ -464,7 +464,9 @@ func (m *Model) buildPage() bool {
 		snap, has := s.budgets[a.provider]
 		until, isHeld := held(s.holds, a.provider, now)
 		if p.term != nil {
-			b.join(termPreviewLines(*p.term, width))
+			v := *p.term
+			v.blocked = promptBlocked(a) // its client asks: the last lines, and the words (agent-screen-blocked §3)
+			b.join(termPreviewLines(v, width))
 		}
 		b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
 		for _, l := range loginHoldLines(map[string]*agentState{p.key: a}) { // its own login hold (login-updates r9 §3.6)

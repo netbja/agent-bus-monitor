@@ -9,7 +9,7 @@
 ╭─ A[1m│[m                                                                      [1m│[m …─╮
 │[7m▶ [m[7m♙[m[1m│[m   For you     what needs you: questions, waits, merges               [1m│[m[7mle [m▲
 │  ♙[1m│[m   Agents      each agent, its state and how fresh it is              [1m│[m   ┃
-│  ♙[1m│[m   1 Activity  everything said on the bus, live                       [1m│[m   ▼
+│  ▲[1m│[m   1 Activity  everything said on the bus, live                       [1m│[m   ▼
 ╰───[1m│[m   2 Board     who owns which task                                    [1m│[m───╯
 ╭─ [1;7m [m[1m│[m   3 Work      who owes what: you, the team, what comes next, ideas   [1m│[me ─╮
 │   [1m│[m                                                                      [1m│[m   ▲

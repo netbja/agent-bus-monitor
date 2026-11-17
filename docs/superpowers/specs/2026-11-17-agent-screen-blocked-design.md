@@ -110,21 +110,22 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
   - The row's `blocked` flag from the holder's events is dropped from the row: the state column
     says it. The events stay on the timeline.
   - Nothing is written to `{p}:agents`: it is busmon's reading of `{p}:observed`, as today.
-- **The text busmon shows**, in the agent's detail (`enter` on the row) and in the For you line:
-  `blocked: waiting for an answer in its terminal`, then the screen's last lines.
+- **The text busmon shows** (as built, step 3a): the For you line says `blocked: waiting for an
+  answer in its terminal`; `enter` opens the agent's page, whose Screen section is headed with
+  the same words and shows the screen's last lines. One line in For you has no room for six.
 - **The lines are read live from the holder by busmon, and kept in memory only.**
-  - busmon already reads the holder (`List`, `Activity`, for drafts and `no terminal`). It adds
-    `Screen` for the agents that read `blocked` or `stuck`: no other agent.
-  - Read every `hostFactsEvery` (2 s) while busmon shows that agent, so the lines follow the
-    screen. Its cost is one screen read per blocked agent, bounded by the agents shown.
-  - It keeps the last 6 non-blank lines (Q4), each cut to 200 runes, after `health.Redact`, per line
-    (a line with a credential shape is replaced whole). They are held in the agent's in-memory row and dropped when the state
-    ends or the terminal changes. They are never logged, never written to Redis, and never sent
+  - As built, they come from the agent page's existing screen read (`readTermView`, the terminal
+    preview): every tick while that page is open and on top, the same read `t attaches` uses.
+    No other agent's screen is read, and no read happens while the page is closed.
+  - It keeps the last 6 non-blank lines (Q4), each through `health.Redact` (a line with a
+    credential shape is replaced whole) and cut to the page's width. They are held on the page
+    and dropped with it. They are never logged, never written to Redis, and never sent
     in a notification: the desktop ring keeps its fixed words.
-  - **When busmon cannot read the holder**, the text says so instead of lines:
-    - busmon on another host than the holder (an SSH tunnel to the broker only): `screen on
-      <host>: agentbus -p <p> screen <agent> there`;
-    - an untrusted screen (G1): `screen not trusted (<reason>)`.
+  - **When busmon cannot read the holder:** a failed read (an untrusted screen, G1, among
+    them) shows `not read: <the error>`, the preview's existing text, instead of lines. busmon on
+    another host than the holder finds no holder there, so the page has no Screen section; the
+    page's blocked words still say it. `agentbus -p <p> screen <agent>` on the holder's machine
+    reads it there.
   - This answers reviewer-codex's r1 point (lines would go stale) without a stored snapshot.
 - **Stuck is its own state, not a prompt** (r2, reviewer-codex).
   - **What counts:** an observation in state `unknown` (settled, the client's signature reads
@@ -231,5 +232,6 @@ One PR each, from origin/dev, base dev, in this order:
 
 1. The holder state (§1). With Q1's answer, the start of the missing holder.
 2. `agentbus screen` (§2).
-3. Blocked and stuck in the state column, the screen snapshot (§3).
+3. Blocked and stuck (§3), in two PRs: 3a, blocked in the state column with the screen's last
+   lines on the agent's page; 3b, stuck (`ScreenSince`, `dispatch.stuck_after`, its ring).
 4. Holders in Services (§4).

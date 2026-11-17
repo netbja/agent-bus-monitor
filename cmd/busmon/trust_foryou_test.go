@@ -135,7 +135,7 @@ func TestTrustLineThroughThePoll(t *testing.T) {
 	f.observed = map[string]bus.Observation{"master": {State: "blocked", At: now, Since: now, PID: 4242}}
 	st.trustOf = nil
 	pollOnce(context.Background(), f, st, 1)
-	if row := promptRow(t, takeSnapshot(st, time.Now()), "master"); row != "pane prompt" {
+	if row := promptRow(t, takeSnapshot(st, time.Now()), "master"); row != "blocked: waiting for an answer in its terminal" {
 		t.Fatalf("no reader: row %q", row)
 	}
 }

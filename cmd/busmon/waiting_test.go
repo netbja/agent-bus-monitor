@@ -162,8 +162,8 @@ func TestAnsweredNeverCoversANewerDeclaration(t *testing.T) {
 func TestPromptBeatsAnswered(t *testing.T) {
 	now := time.Now()
 	a := &agentState{state: "working", stateAt: now.Add(-time.Minute), obsPrompt: true, obsAt: now}
-	if _, w, _, _ := stateLook(a); w != "waiting" || !waitsForPerson(a) {
-		t.Fatalf("stateLook = %q, want waiting for a pane prompt", w)
+	if _, w, _, _ := stateLook(a); w != "blocked" || !waitsForPerson(a) {
+		t.Fatalf("stateLook = %q, want blocked for a pane prompt", w)
 	}
 }
 

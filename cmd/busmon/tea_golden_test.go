@@ -208,7 +208,7 @@ func TestShellGoldensCarryEverySurvivingFlag(t *testing.T) {
 	got := fixtureShell(t, 140, 60).grid().plain()
 	for _, w := range []string{
 		// agent row flags and state looks
-		"busy", "prompt", "update", "model" + GlyphNotEqual, "swapping", "fallback kimi-alt", "held", "quota",
+		"busy", "update", "model" + GlyphNotEqual, "swapping", "fallback kimi-alt", "held", "quota",
 		"gate 1", "for you", "deferred", "escalating", "escalated", "paused", "pilot", "armed", "stale 2",
 		"1 dormant (a shows)",
 		// header items
