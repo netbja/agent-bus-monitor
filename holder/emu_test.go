@@ -3,6 +3,7 @@ package holder
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,6 +27,24 @@ type faultScreen struct {
 	hangOn    string
 	panicOn   string
 	snapPanic bool
+	// replies, when set, answers each Replies call in turn (nil: panic);
+	// past its end, the emulator's own.
+	replies [][]byte
+}
+
+func (f *faultScreen) Replies() []byte {
+	f.mu.Lock()
+	if len(f.replies) == 0 {
+		f.mu.Unlock()
+		return f.Screen.Replies()
+	}
+	r := f.replies[0]
+	f.replies = f.replies[1:]
+	f.mu.Unlock()
+	if r == nil {
+		panic("injected replies panic")
+	}
+	return r
 }
 
 func (f *faultScreen) Write(p []byte) (int, error) {
@@ -475,4 +494,54 @@ func TestMapErrScreen(t *testing.T) {
 	if err := mapErr(&RemoteError{Code: CodeScreen, Msg: "terminal t1's screen is stuck"}); !errors.Is(err, termhost.ErrScreenUntrusted) {
 		t.Fatalf("%v", err)
 	}
+}
+
+// reviewer-codex: a DA parsed, an answer pass that sees no reply yet, then
+// a Replies panic: the latch pays the pending DA, once. A pending answer is
+// retired only by its reply observed, never by its parse.
+func TestRepliesPanicPaysThePendingDA(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Close(); w.Close() })
+	f := &faultScreen{Screen: screen.New(20, 5, 10), replies: [][]byte{{}, nil}}
+	term := &terminal{pty: w, scr: f, emuState: newEmuState(0)}
+	term.mu.Lock()
+	term.owe(term.scan.find([]byte("\x1b[c")))
+	term.readSeq, term.parsedSeq = 3, 3 // the emulator parsed it
+	term.mu.Unlock()
+	term.answer() // no reply yet: still pending
+	term.answer() // Replies panics: the latch owes it
+	term.payOwed()
+	term.payOwed()
+	w.Close()
+	got, _ := io.ReadAll(r)
+	if string(got) != answerDA1 {
+		t.Fatalf("written %q, want the DA answer once", got)
+	}
+	if st, _ := stateOf2(term); st != ScreenInvalid {
+		t.Fatalf("state %s", st)
+	}
+}
+
+// A reply observed retires its pending answer, in order, whatever lies
+// between (a cursor report), so a later latch pays nothing twice.
+func TestAnsweredRetiresByObservation(t *testing.T) {
+	term := &terminal{emuState: newEmuState(0)}
+	term.owe([][]byte{[]byte(answerDA1), []byte(answerDSR), []byte(answerDA1)})
+	term.answered([]byte(answerDA1 + "\x1b[3;1R" + answerDSR))
+	if len(term.pending) != 1 || string(term.pending[0].b) != answerDA1 {
+		t.Fatalf("pending %q", term.pending)
+	}
+	term.latch(ScreenStuck, "test")
+	if string(term.owed) != answerDA1 {
+		t.Fatalf("owed %q", term.owed)
+	}
+}
+
+func stateOf2(t *terminal) (string, int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.screenState(), t.gen
 }

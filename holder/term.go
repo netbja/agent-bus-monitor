@@ -72,7 +72,7 @@ func (t *terminal) readLoop() {
 			}
 			t.outAt = time.Now()
 			t.fanOut(buf[:n])
-			t.owe(t.scan.answers(buf[:n])) // the emulator's to give while trusted, owed once not (emu.go)
+			t.owe(t.scan.find(buf[:n])) // the emulator's to give while trusted, owed once not (emu.go)
 			t.mu.Unlock()
 			t.payOwed()
 		}
@@ -98,21 +98,17 @@ func (t *terminal) answer() {
 	if latched || !t.lockEmu(0) { // untrusted: the read loop's scanner answers; busy: the next tick
 		return
 	}
-	t.mu.Lock()
-	parsed := t.parsedSeq
-	t.mu.Unlock()
 	var replies []byte
 	err := t.run(func(s screen.Screen) { replies = s.Replies() })
 	<-t.emu
 	t.mu.Lock()
-	t.answered(parsed)
-	t.mu.Unlock()
-	if err != nil {
-		t.mu.Lock()
+	if err != nil { // the latch pays what is still pending (reviewer-codex: latch first)
 		t.latch(ScreenInvalid, err.Error())
 		t.mu.Unlock()
 		return
 	}
+	t.answered(replies)
+	t.mu.Unlock()
 	if len(replies) > 0 {
 		t.inMu.Lock() // never inside a viewer's bytes or a submit
 		_, _ = t.pty.Write(replies)

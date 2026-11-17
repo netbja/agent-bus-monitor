@@ -73,19 +73,15 @@ type emuState struct {
 	afterPaintRegister func()
 
 	// The static answers the read loop found in output the emulator has
-	// not answered yet (foureyes): pending while the screen is trusted,
-	// each with the offset its query ends at; owed (written once, by
+	// not answered yet (foureyes): pending while the screen is trusted
+	// until its reply is observed (answered), owed (written once, by
 	// payOwed) when the screen is latched before the emulator answered.
-	pending  []pendingAnswer
-	owed     []byte
-	lastSeen int64 // parsedSeq when the previous answer pass began
+	pending []pendingAnswer
+	owed    []byte
 }
 
-// pendingAnswer is a static answer and the read offset its query ends at.
-type pendingAnswer struct {
-	b   []byte
-	end int64
-}
+// pendingAnswer is one query's static answer.
+type pendingAnswer struct{ b []byte }
 
 func newEmuState(after time.Duration) emuState {
 	if after <= 0 {
@@ -343,9 +339,12 @@ type queryScan struct{ carry []byte }
 const queryMax = len("\x1b[>0c") - 1
 
 // answers is what the queries in chunk ask for, in order.
-func (q *queryScan) answers(chunk []byte) []byte {
+func (q *queryScan) answers(chunk []byte) []byte { return bytes.Join(q.find(chunk), nil) }
+
+// find is each query's answer in chunk, in order.
+func (q *queryScan) find(chunk []byte) [][]byte {
 	buf := append(q.carry, chunk...)
-	var out []byte
+	var out [][]byte
 	for i := 0; i < len(buf); i++ {
 		if buf[i] != 0x1b {
 			continue
@@ -353,11 +352,11 @@ func (q *queryScan) answers(chunk []byte) []byte {
 		rest := buf[i:]
 		switch {
 		case bytes.HasPrefix(rest, []byte("\x1b[c")), bytes.HasPrefix(rest, []byte("\x1b[0c")):
-			out = append(out, answerDA1...)
+			out = append(out, []byte(answerDA1))
 		case bytes.HasPrefix(rest, []byte("\x1b[>c")), bytes.HasPrefix(rest, []byte("\x1b[>0c")):
-			out = append(out, answerDA2...)
+			out = append(out, []byte(answerDA2))
 		case bytes.HasPrefix(rest, []byte("\x1b[5n")):
-			out = append(out, answerDSR...)
+			out = append(out, []byte(answerDSR))
 		}
 	}
 	// The carry: a tail that begins a query still arriving (a strict
@@ -382,34 +381,36 @@ func queryPrefix(b []byte) bool {
 	return false
 }
 
-// owe records the static answers found in the chunk just read (its query
-// ending at readSeq): owed at once on a latched screen, else pending until
-// the emulator has answered it. Called with t.mu held, after took.
-func (t *terminal) owe(answers []byte) {
-	if len(answers) == 0 {
-		return
-	}
-	if t.latched != "" {
-		t.owed = append(t.owed, answers...)
-		return
-	}
-	t.pending = append(t.pending, pendingAnswer{b: answers, end: t.readSeq})
-}
-
-// answered drops the pending answers the emulator has given: those whose
-// query was parsed before the previous answer pass began (the emulator
-// produces its replies asynchronously, so one pass may come before them;
-// the next one has them). Called with t.mu held, parsed being parsedSeq
-// when this pass began.
-func (t *terminal) answered(parsed int64) {
-	n := 0
-	for _, p := range t.pending {
-		if p.end > t.lastSeen {
-			t.pending[n] = p
-			n++
+// owe records the static answers found in the chunk just read, one per
+// query: owed at once on a latched screen, else pending until the emulator's
+// reply is observed. Called with t.mu held, after took.
+func (t *terminal) owe(answers [][]byte) {
+	for _, a := range answers {
+		if t.latched != "" {
+			t.owed = append(t.owed, a...)
+		} else {
+			t.pending = append(t.pending, pendingAnswer{b: a})
 		}
 	}
-	t.pending, t.lastSeen = t.pending[:n], parsed
+}
+
+// answered retires the pending answers the emulator has given, as
+// observed in replies (reviewer-codex: never on its parse alone): each
+// pending answer, oldest first, retired by the next occurrence of its bytes
+// in replies. The emulator answers in order, so an answer not seen yet stays
+// pending, for a later pass or a latch. Called with t.mu held.
+func (t *terminal) answered(replies []byte) {
+	rest := replies
+	n := 0
+	for _, p := range t.pending {
+		if i := bytes.Index(rest, p.b); i >= 0 {
+			rest = rest[i+len(p.b):]
+			continue
+		}
+		t.pending[n] = p
+		n++
+	}
+	t.pending = t.pending[:n]
 }
 
 // payOwed writes the owed static answers to the program, once, under the

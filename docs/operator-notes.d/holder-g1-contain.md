@@ -13,8 +13,8 @@
     dispatcher then reads an inspection error and waits: no wake, `/clear` or submit.
   - Nothing restores `ok` in place: the terminal is replaced (reload).
   - The read loop finds DA1, DA2 and DSR 5 queries in every chunk:
-    - while the screen is trusted, each static answer stays pending until the emulator has parsed
-      past it and an answer pass collected its replies;
+    - while the screen is trusted, each static answer stays pending until its reply is observed in
+      what the emulator gave (in order; a Replies panic latches first, reviewer-codex);
     - a latch writes the pending ones once (a query in the hang window before the stuck latch, or
       dropped by a gap: foureyes);
     - once latched, it answers at once, with x/vt's own strings, never a cursor position.
