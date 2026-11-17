@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -24,7 +25,7 @@ type askFile struct {
 }
 
 // runAsk stores an agent's questions for a person and declares it waiting.
-func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out, errw io.Writer) int {
+func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, getenv func(string) string, out, errw io.Writer) int {
 	args, file := extractFlag(args, "--file")
 	args, replaces := extractFlag(args, "--replace")
 	args, withdraw := extractFlag(args, "--withdraw")
@@ -59,6 +60,10 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 		}
 		fmt.Fprintf(out, "withdrawn %s\n", withdraw)
 		return 0
+	}
+	if err := askerCheck(ctx, b, getenv, agent); err != nil {
+		fmt.Fprintf(errw, "ask: %v\n", err)
+		return 2
 	}
 	var src io.Reader = stdin
 	if file != "" {
@@ -97,6 +102,44 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, out
 		}
 	}
 	return 0
+}
+
+// askerCheck refuses an asker that is no agent (ask-refuses-person): ask
+// <agent> names the ASKING agent, and "agentbus ask <person>" once stored an
+// ask from the person and declared them waiting, an agent to busmon and the
+// dispatcher. Refused: the person's recorded name (identity.as)
+// unless the caller is an agent of that name, a human sender (busmon's
+// human=yes entries) that no agent entry holds, and any name other than the
+// caller's own (AGENT_BUS_AGENT; none in the person's shell, and never
+// anonymous, which agentIdentity reads as none). Withdrawing is not checked,
+// so a stray ask can still be closed.
+func askerCheck(ctx context.Context, b *bus.Bus, getenv func(string) string, name string) error {
+	const fix = "ask <your agent name>; the person is the one who answers"
+	self := agentIdentity(getenv)
+	if person := settingsIdentity(getenv); name == person && self != name {
+		return fmt.Errorf("%q is the person (identity.as), not an agent: %s (in busmon)", name, fix)
+	}
+	snaps, err := b.Agents(ctx)
+	if err != nil {
+		return err
+	}
+	_, registered := snaps[name]
+	_, humans, err := b.CmdTargetsAndHumanSenders(ctx)
+	if err != nil {
+		return err
+	}
+	if !registered && slices.Contains(humans, name) {
+		return fmt.Errorf("%q wrote from busmon as a person, and is no agent: %s (in busmon)", name, fix)
+	}
+	if name != self {
+		// The asker is the caller (reviewer-codex): a registered name is not
+		// enough, or the person's shell or another agent could ask as it.
+		if self == "" {
+			return fmt.Errorf("asking as %q needs that agent's own identity (AGENT_BUS_AGENT=%s, in its terminal); a person never asks: %s", name, name, fix)
+		}
+		return fmt.Errorf("you are %q, not %q: an agent asks only as itself: %s", self, name, fix)
+	}
+	return nil
 }
 
 // runAsks lists the asks and what each question got.
@@ -148,6 +191,12 @@ func runAnswer(ctx context.Context, b *bus.Bus, args []string, getenv func(strin
 	args, isText := extractBool(args, "--text")
 	if len(args) < 2 || (choice == "") == (!isText) {
 		fmt.Fprintln(errw, "usage: answer <ask-id> <question> (--choice <label> | --text <words...>) [--as <person>]")
+		return 2
+	}
+	// An answer is the person's (ask-refuses-person): never an agent's, with
+	// or without --as, so no agent answers in the person's name.
+	if a := agentIdentity(getenv); a != "" || getenv("AGENTBUS_TERM_ID") != "" {
+		fmt.Fprintf(errw, "answer: refused from an agent (%s): answers are the person's, in busmon or the person's own shell\n", strings.TrimSpace(a+" "+getenv("AGENTBUS_TERM_ID")))
 		return 2
 	}
 	by := as

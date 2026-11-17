@@ -18,7 +18,7 @@ func TestAskCLIRoundTrip(t *testing.T) {
 	  {"id":"date","header":"Date T","question":"When?","answer":{"choice":"Mon"},
 	   "options":[{"label":"Mon","recommended":true},{"label":"Wed"}]}]}`
 	var out, errw bytes.Buffer
-	if code := runAsk(ctx, b, []string{"master"}, strings.NewReader(in), &out, &errw); code != 0 {
+	if code := runAsk(ctx, b, []string{"master"}, strings.NewReader(in), asMaster, &out, &errw); code != 0 {
 		t.Fatalf("ask: %d %s", code, errw.String())
 	}
 	id := strings.Fields(out.String())[0]
@@ -42,7 +42,7 @@ func TestAskCLIRoundTrip(t *testing.T) {
 	if !strings.Contains(out.String(), "answered") || !strings.Contains(out.String(), "Mon (charlie)") {
 		t.Fatalf("asks:\n%s", out.String())
 	}
-	if code := runAsk(ctx, b, []string{"master"}, strings.NewReader(`{"title":"x","questions":[]}`), &out, &errw); code == 0 {
+	if code := runAsk(ctx, b, []string{"master"}, strings.NewReader(`{"title":"x","questions":[]}`), asMaster, &out, &errw); code == 0 {
 		t.Fatal("an ask with no question was accepted")
 	}
 }
@@ -54,14 +54,14 @@ func TestAskCLITask(t *testing.T) {
 	t.Setenv("AGENTBUS_TERM_ID", "")
 	in := `{"title":"Merge roles?","questions":[{"id":"go","header":"Merge","question":"Merge?","options":[{"label":"yes"},{"label":"no"}]}]}`
 	var out, errw bytes.Buffer
-	if code := runAsk(ctx, b, []string{"master", "--task", "roles"}, strings.NewReader(in), &out, &errw); code != 0 {
+	if code := runAsk(ctx, b, []string{"master", "--task", "roles"}, strings.NewReader(in), asMaster, &out, &errw); code != 0 {
 		t.Fatalf("ask: %d %s", code, errw.String())
 	}
 	asks, _ := b.Asks(ctx)
 	if len(asks) != 1 || asks[0].Task != "roles" {
 		t.Fatalf("task not stored: %+v", asks)
 	}
-	if code := runAsk(ctx, b, []string{"master", "--task", "Bad Task", "--replace", asks[0].ID}, strings.NewReader(in), &out, &errw); code == 0 {
+	if code := runAsk(ctx, b, []string{"master", "--task", "Bad Task", "--replace", asks[0].ID}, strings.NewReader(in), asMaster, &out, &errw); code == 0 {
 		t.Fatal("an invalid task was accepted")
 	}
 }
@@ -78,8 +78,16 @@ func TestAskRefusesTheSystemSender(t *testing.T) {
 	} {
 		var out, errw bytes.Buffer
 		in := `{"title":"t","questions":[{"id":"trust-claude-code","header":"Folder trust","question":"q?","options":[{"label":"a"}]}]}`
-		if code := runAsk(context.Background(), nil, args, strings.NewReader(in), &out, &errw); code == 0 || !strings.Contains(errw.String(), "reserved") {
+		if code := runAsk(context.Background(), nil, args, strings.NewReader(in), asMaster, &out, &errw); code == 0 || !strings.Contains(errw.String(), "reserved") {
 			t.Errorf("%v: exit %d, %q", args, code, errw.String())
 		}
 	}
+}
+
+// asMaster is master's environment: the caller asks as itself.
+func asMaster(k string) string {
+	if k == "AGENT_BUS_AGENT" {
+		return "master"
+	}
+	return ""
 }

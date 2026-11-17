@@ -541,6 +541,30 @@ func TestRunDoesNotWakeTheConfiguredPersonWithABorrowedEntry(t *testing.T) {
 	}
 }
 
+// foureyes on 8a3f3f7c: the person's own shell has no terminal, so an entry
+// under the person's recorded name with no terminal (agentbus status <person>
+// typed there) is the person's, not an agent's: never woken or escalated.
+func TestRunDoesNotWakeTheConfiguredPersonWithNoTerminal(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "master", "p-master")
+	if _, err := b.Status(context.Background(), "charlie", "working", "from the person's shell", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	send(t, b, "charlie", "a report for the person")
+	rt := newFakeRT(alwaysReady)
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	cfg.Person = "charlie"
+	start(t, b, rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if got := escalations(t, r, b, "charlie"); len(got) != 0 {
+		t.Fatalf("the person got escalated: %+v", got)
+	}
+	if _, ok := wakeOf(t, b, "charlie"); ok {
+		t.Fatal("the person got an agent wake record")
+	}
+}
+
 // The person's recorded name with no entry at all is no wake target either,
 // whatever the stream still holds.
 func TestRunDoesNotWakeTheConfiguredPerson(t *testing.T) {
