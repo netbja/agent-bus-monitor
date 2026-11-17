@@ -13,6 +13,7 @@
  ────────────────────────────────────────────────────────────────────
  Reminder after · waiting.popup_after · from the default · read by
  busmon
- the reminder opens once a decision has waited this long
+ the reminder opens once a decision has waited this long; 0 turns it
+ off
  Reset Attention? 2 keys set in config.toml (snooze, bell) will be
  removed (y)
