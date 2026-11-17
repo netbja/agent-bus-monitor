@@ -126,6 +126,8 @@ func mapErr(err error) error {
 		to = termhost.ErrNotLanded
 	case CodeLeftBehind:
 		to = termhost.ErrLeftBehind
+	case CodeScreen:
+		to = termhost.ErrScreenUntrusted
 	default:
 		return err
 	}

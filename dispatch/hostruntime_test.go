@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -266,5 +267,17 @@ func TestHostRuntimeForgetsAGoneTerminal(t *testing.T) {
 	defer f.rt.mu.Unlock()
 	if n := len(f.rt.samples); n != 0 {
 		t.Fatalf("%d terminals' samples kept", n)
+	}
+}
+
+// Holder hardening G1: a screen the holder does not vouch for (lagging,
+// invalid, stuck) is an inspection error: never ready, never gone, and
+// the dispatcher waits (rule 7), so nothing is typed into it.
+func TestHostRuntimeUntrustedScreenIsUnknown(t *testing.T) {
+	f := newHostFixture(t)
+	f.h.SetScreenErr(f.term.ID, fmt.Errorf("%w (terminal t1's screen is stuck)", termhost.ErrScreenUntrusted))
+	in := f.inspect()
+	if !errors.Is(in.Err, termhost.ErrScreenUntrusted) || in.Ready || in.Gone || in.State != "unknown" {
+		t.Fatalf("an untrusted screen: %+v", in)
 	}
 }

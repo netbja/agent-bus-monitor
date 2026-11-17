@@ -53,6 +53,8 @@ type terminal struct {
 
 	done    chan struct{} // closed once the program was waited for
 	outDone chan struct{} // closed once its output ended
+
+	emuState // the emulator's containment (emu.go)
 }
 
 // readLoop reads the program's output until the PTY ends.
@@ -63,15 +65,16 @@ func (t *terminal) readLoop() {
 		n, err := t.pty.Read(buf)
 		if n > 0 {
 			t.mu.Lock()
-			_, _ = t.scr.Write(buf[:n])
+			t.took(buf[:n]) // never waits on the emulator (emu.go)
 			t.tail = append(t.tail, buf[:n]...)
 			if len(t.tail) > tailMax {
 				t.tail = append([]byte(nil), t.tail[len(t.tail)-tailMax:]...)
 			}
 			t.outAt = time.Now()
 			t.fanOut(buf[:n])
+			t.owe(t.scan.find(buf[:n])) // the emulator's to give while trusted, owed once not (emu.go)
 			t.mu.Unlock()
-			t.answer()
+			t.payOwed()
 		}
 		if err != nil {
 			return
@@ -90,7 +93,51 @@ const replyEvery = 10 * time.Millisecond
 // or not.
 func (t *terminal) answer() {
 	t.mu.Lock()
-	replies := t.scr.Replies()
+	latched := t.latched != ""
+	t.mu.Unlock()
+	if latched || !t.ansMu.TryLock() { // untrusted: the scanner's answers; a pass running: it answers
+		return
+	}
+	defer t.ansMu.Unlock() // one pass at a time: answering is that pass's
+	if !t.lockEmu(0) {     // busy: the next tick
+		return
+	}
+	// The pass is in flight from here: a latch meanwhile leaves the pending
+	// answers to it, so an answer it collects is never also owed
+	// (reviewer-codex: one answer per query).
+	if t.afterAnswerLock != nil {
+		t.afterAnswerLock()
+	}
+	t.mu.Lock()
+	if t.latched != "" { // latched since the check above: its pending answers are owed, the emulator's are not ours to write
+		t.mu.Unlock()
+		<-t.emu
+		return
+	}
+	t.answering, t.answeringAt = true, time.Now() // atomic with that recheck (reviewer-codex)
+	t.mu.Unlock()
+	var replies []byte
+	err := t.run(func(s screen.Screen) { replies = s.Replies() })
+	<-t.emu
+	if t.afterReplies != nil {
+		t.afterReplies()
+	}
+	t.mu.Lock()
+	if !t.answering { // abandoned by watch (it hung on a latched screen): its answers were owed
+		t.mu.Unlock()
+		return
+	}
+	t.answering = false
+	if err != nil { // latch, and owe what is still pending even if latched already (reviewer-codex)
+		t.latch(ScreenInvalid, err.Error())
+		t.owePending()
+		t.mu.Unlock()
+		return
+	}
+	t.answered(replies)
+	if t.latched != "" { // latched during the pass: what it did not see is owed now
+		t.owePending()
+	}
 	t.mu.Unlock()
 	if len(replies) > 0 {
 		t.inMu.Lock() // never inside a viewer's bytes or a submit
@@ -107,7 +154,11 @@ func (t *terminal) replyLoop() {
 		select {
 		case <-t.outDone:
 			return
-		case <-tick.C:
+		case now := <-tick.C:
+			t.mu.Lock()
+			t.watch(now)
+			t.mu.Unlock()
+			t.payOwed()
 			t.answer()
 		}
 	}
@@ -144,7 +195,8 @@ func (t *terminal) waitLoop() {
 func (t *terminal) info(build string) TermInfo {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build, Profile: t.profile}
+	return TermInfo{ID: t.id, Role: t.role, PID: t.pid, PIDStart: t.start, Alive: t.alive, Exit: t.exit, Viewers: len(t.viewers), Build: build, Profile: t.profile,
+		Screen: t.screenState(), ScreenGen: t.gen}
 }
 
 // signal sends sig to pid (negative: a process group), through the

@@ -25,6 +25,7 @@ type term struct {
 	submitted           []string
 	activity            termhost.Activity
 	procs               []termhost.Proc
+	screenErr           error // SetScreenErr: what Screen answers instead
 }
 
 // Host is the fake. The zero value is not usable: New makes one.
@@ -98,6 +99,9 @@ func (h *Host) Screen(_ context.Context, id termhost.TermID, lines int) (termhos
 	t, err := h.get(id)
 	if err != nil {
 		return termhost.Screen{}, err
+	}
+	if t.screenErr != nil {
+		return termhost.Screen{}, t.screenErr
 	}
 	l := t.screen
 	if lines > 0 && len(l) > lines {
@@ -218,6 +222,12 @@ func (h *Host) SetLands(id termhost.TermID, v bool) { h.set(id, func(t *term) { 
 // SetPersonActive scripts a viewer typing or a draft.
 func (h *Host) SetPersonActive(id termhost.TermID, v bool) {
 	h.set(id, func(t *term) { t.personActive = v })
+}
+
+// SetScreenErr makes Screen answer err (nil: the screen again), as a holder
+// that does not vouch for a screen (termhost.ErrScreenUntrusted).
+func (h *Host) SetScreenErr(id termhost.TermID, err error) {
+	h.set(id, func(t *term) { t.screenErr = err })
 }
 
 // SetScreen replaces the terminal's screen lines.
