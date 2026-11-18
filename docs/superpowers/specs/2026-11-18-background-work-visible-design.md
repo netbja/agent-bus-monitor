@@ -1,12 +1,26 @@
 # An agent's background work, visible in busmon
 
-Status: spec, r1, for review (subject `background-work-visible-spec`). Not built. Base: origin/dev
+Status: spec, r2, for review (subject `background-work-visible-spec`). r2: foureyes (it starts from
+the declared record busmon already shows; one background mark per agent; the observed facts get
+their own per-agent key; SubagentStop refreshes the parent's tasks). Not built. Base: origin/dev
 `5ec6e134`. Author: coder, task `background-work-visible-spec`, from master's directive of
 2026-11-18 relaying the person's item 24: today an agent reads `idle` in busmon while it runs a long
 background job or sub-agents. The person's decisions are §6. The build is §7's steps, one PR each
 from origin/dev.
 
 ## 1. What exists today
+
+- **A declared source, shown already** (progress-line §4).
+  - **How it is set:** `agentbus background <agent> <text> [--for d] | --clear` writes
+    `{p}:background:<agent>`, a hash of `text` (60 characters at most), `since` (Redis TIME) and
+    `by`.
+  - **Expiry:** 30 minutes by default, 24 hours at most.
+  - **What busmon shows:** the text on the agent's row (`… 2 checks running 4m`) and a header
+    chip (`… master: 2 checks running +1`).
+  - **Its limit:** it is what the agent remembers to say, not what runs.
+- **The person's item 24** (`docs/memory/open-questions/2026-11-17-agent-background-work.md`)
+  starts from that count. It proposes folding into idea i2, "sub-agent child rows in busmon"
+  (Q6).
 
 - **A judgement, not a display.** `agentstate.Background` (herdr exit 4.3b) judges whether an
   agent has background work, from three sources a client profile may declare authoritative.
@@ -22,8 +36,8 @@ from origin/dev.
   installs only `SessionStart`, `UserPromptSubmit` and `Stop` (`rolecfg/launch.go`
   `settingsJSON`). So the `hooks` source never says anything. Sub-agents are only filtered out
   of the turn flips (`turnhook.go`: Claude's `agent_id`, Grok's `subagentType`).
-- **Nothing reaches busmon** but the skip events. An agent with a 40-minute build in the
-  background reads `idle`.
+- **Nothing observed reaches busmon** but the skip events. An agent with a 40-minute build in
+  the background reads `idle`, unless it declared the build itself.
 
 ## 2. Where the facts come from, per client
 
@@ -37,6 +51,8 @@ client fact.
   (`shell`, `subagent`, `monitor`, `workflow`, `teammate`, `cloud session`, `MCP task`) and
   `status`. Shell tasks also carry `command`, all of them a `description`. The array is present
   when Claude's task registry is reachable, and empty when nothing is in flight.
+- **`SubagentStop` carries the same two arrays, scoped to the parent session**: a sub-agent's
+  stop is a fresher reading of the parent's tasks, recorded for the parent.
 - **They also carry `session_crons`**: the wakeups scheduled with `CronCreate`,
   `ScheduleWakeup` or `/loop`, each with its `id`, `schedule` and `recurring`, plus a `prompt`.
 - **`SubagentStart` and `SubagentStop`** carry `agent_id` and `agent_type`. They fire for
@@ -70,24 +86,34 @@ client fact.
 
 ## 3. What busmon shows
 
-- **On the agent's row, a flag** `bg 2 · 14m`: the count of background tasks and the age of the
-  oldest. It shows beside the state; the state column is unchanged, and an agent with only
-  background work still reads `idle` (Q1).
+**One background mark per agent**, in the row's existing slot (`… <what> <age>`), never two:
+
+- **The agent declared its work** (`agentbus background`): its text and age, as today. The
+  agent's words say best what runs.
+- **It declared nothing, but work is observed:** `… 2 bg tasks 14m` (the count and the oldest's
+  age).
   - From Claude's hooks: the tasks of `background_tasks` (shell, subagent, monitor and the
     others), counted together.
-  - From the process source only: `bg ≥1 · 14m?`, a lower bound, marked as such.
-  - Scheduled wakeups (`session_crons`) are not counted as running work. They are shown on the
-    page only (Q2).
-- **On the agent's page, a Background section**, one line per task: its type, its status and
-  how long it has run (`shell · running · 14m`, `subagent Explore · running · 3m`).
-  - For a shell task, the program's name only (`make`, `go`), read live from the holder's
-    process list while the page is open, like the screen preview (Q3).
-  - The source, so the person knows how much to trust it: `from Claude Code's hooks at its
-    last turn end (4m ago)`, or `from the process tree`.
-  - The scheduled wakeups, with their schedule.
-- **Ages.** Neither source gives a start time for a task, so its age is counted from when
-  agentbus first saw it: its first Stop, or the process's own start time from the process
-  tree. Saying so on the page keeps it honest.
+  - From the process source only: `… bg ≥1? 14m`, a lower bound, marked as such (Q5).
+  - Scheduled wakeups (`session_crons`) are not counted as running work: a small `⏰` after the
+    mark, the list on the page only (Q2).
+- **The header chip** keeps the declared texts, and counts an agent with observed work alone as
+  `bg`.
+- **The state column is unchanged:** an agent with only background work still reads `idle` (Q1).
+
+**On the agent's page, a Background section:**
+
+- the declared text, if any, with its age and who set it;
+- one line per observed task: its type, its status and how long it has run (`shell · running ·
+  14m`, `subagent Explore · running · 3m`);
+- for a shell task, the program's name only (`make`, `go`), read live from the holder's process
+  list while the page is open, like the screen preview (Q3);
+- the source, so the person knows how much to trust it: `from Claude Code's hooks at its last
+  turn end (4m ago)`, or `from the process tree`;
+- the scheduled wakeups, with their schedule.
+
+**Ages.** Neither source gives a task's start, so its age is counted from when agentbus first saw
+it: its first Stop, or the process's own start from the process tree. The page says so.
 
 ## 4. What is stored, and what never is
 
@@ -97,13 +123,25 @@ client fact.
 - a process's arguments;
 - screen text (the rule `bus/observed.go` states).
 
-**What is stored**, per agent, in a new hash `{p}:background` (field: agent; value: JSON),
-written by the agent's own hook through `agentbus` as the turn flips are:
+**What is stored**, per agent, in a new hash `{p}:bgtasks:<agent>`, written by the agent's own
+hook through `agentbus` as the turn flips are.
+- It is apart from the declared record `{p}:background:<agent>`: two writers (the agent's words,
+  its client's facts) with two lifetimes, so neither replaces nor clears the other.
+- `agentbus background --clear` clears the declared text only; the observed tasks end with the
+  client's next report.
+- The key class `bgtasks:*` is added to `keykinds` as runtime, beside `background:*`, and `busmon
+  --delete` and `projects delete` remove it with the project.
+
+Its value:
 - `{source: "hooks", at: <Redis TIME of the Stop>, pid: <the agent's process>, tasks: [{id_hash,
   type, status, first_seen}], crons: [{id_hash, schedule, recurring}]}`.
 - `id_hash` is a digest of the task id, which keeps `first_seen` across turn ends without storing
   ids.
-- `type` and `status` are Claude's fixed labels, capped at 32 characters, never free text.
+- `type` and `status` are Claude's labels, capped at 32 characters: an unknown `type` (Claude
+  falls back to its raw discriminant) is stored as `other`, a status outside the known ones as
+  `other`.
+- A sub-agent's `agent_type` is stored when it matches `[A-Za-z0-9_-]{1,32}` (a built-in or a
+  user-defined agent's name), else as `subagent` only: it can be any name the person wrote.
 - `schedule` is a cron expression, accepted only if it matches the five-field shape.
 - The entry expires one hour after its last write, and is dropped when the agent's process
   changes (a relaunch) or at `SessionStart`.
@@ -119,12 +157,14 @@ oldest one's start, Redis-clock). No names, no arguments.
      their types and first-seen times, and no command or description (a test greps every key
      written for the payload's words);
    - a second Stop keeps first-seen by id hash; an empty list clears the entry;
-   - a payload from a sub-agent (`agent_id`) does not overwrite the parent's entry;
+   - a `SubagentStop` refreshes the parent's entry, keyed to the parent;
+   - an unknown `type` is stored as `other`; an `agent_type` outside the pattern as `subagent`;
    - `SessionStart` and a new pid drop it.
 2. **Process source (step 2):** a terminal with a busy `make` child and an idle MCP helper
    counts 1 and its start; the observation carries no name.
 3. **busmon (step 3):**
-   - the row flag from each source;
+   - one mark per agent: the declared text wins over the observed count, and the page shows both;
+   - the observed count from each source;
    - the `?` mark for the process-only clients;
    - crons on the page only;
    - the page's live process names, read only while the page is open;
@@ -149,13 +189,21 @@ oldest one's start, Redis-clock). No names, no arguments.
   nothing until a client's own source is proved? Recommended: show it with its `?`. A process
   that burns CPU under the agent is a fact worth seeing.
 
+- **Q6.** Item 24's note proposes folding this into idea i2 (sub-agent child rows under the
+  agent). Should the observed tasks become child rows under the agent's row, or stay one mark
+  on the row plus the page's list? Recommended: one mark plus the page for now. Child rows can
+  come later on the same data, without a new source.
+- **Q7.** Should the dispatcher's skip (no `/clear`, relaunch or drain while work runs) also
+  honour the agent's declared text? Recommended: yes. Expiry bounds it (30 minutes by default),
+  and a declaration is the agent saying its work must not be cut.
+
 ## 7. Steps
 
 One PR each, from origin/dev, base dev:
 
 1. Claude's hooks: install `Stop`'s list reading (the existing `Stop` hook reads
    `background_tasks` and `session_crons`) and `SubagentStart`/`SubagentStop`; write
-   `{p}:background` as §4 says; wire `HostRuntime.Hooks` from it, so the dispatcher's skip also
-   uses the hooks it was meant to.
+   `{p}:bgtasks:<agent>` as §4 says; wire `HostRuntime.Hooks` from it, so the dispatcher's skip
+   also uses the hooks it was meant to (and the declared record, with Q7's yes).
 2. The process source in the observation (`bg_procs`, `bg_oldest`).
-3. busmon: the row flag, the page's section, the live process names (§3).
+3. busmon: one mark per agent, the page's section, the live process names (§3).
