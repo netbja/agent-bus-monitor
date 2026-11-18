@@ -25,7 +25,7 @@ func writeFile(t *testing.T, name, body string) string {
 func TestRegistryRows(t *testing.T) {
 	want := []string{
 		"waiting.popup_after", "waiting.snooze", "waiting.bell", "waiting.fade", "recap.auto_after",
-		"display.theme", "display.icons", "compose.at_path", "display.date_format", "display.work_layout", "display.follow", "display.limit", "display.idle_hint_after", "display.idle_view_after", "identity.as", "updates.check",
+		"display.theme", "display.icons", "display.graphs", "compose.at_path", "display.date_format", "display.work_layout", "display.follow", "display.limit", "display.idle_hint_after", "display.idle_view_after", "identity.as", "updates.check",
 		"dispatch.context_alert", "dispatch.context_urgent", "dispatch.context_handoff_deadline", "dispatch.prompt_grace", "dispatch.stuck_after", "dispatch.focus_notice", "dispatch.quota", "dispatch.quota_warn", "dispatch.quota_drain",
 		"dispatch.quota_hold", "dispatch.quota_max_age", "dispatch.quota_long_hold", "quota.claude.probe", "dispatch.tokens",
 		"dispatch.auto_clear", "dispatch.stall_after", "dispatch.clear_stall_after", "dispatch.quiet_after", "dispatch.idle_after", "dispatch.master_idle_after", "dispatch.checkback_max", "dispatch.login_expiry_warn", "run.max_duration", "run.max_deliveries", "run.drain_max", "dispatch.turn_stale_after", "dispatch.pop_retire", "dispatch.pop_retire_after", "dev", "dispatch.self_repair", "dispatch.self_repair_every", "dispatch.self_repair_per_day", "holder.scrollback", "dispatch.submit_wait", "dispatch.person_quiet", "services.manager", "attach.prefix", "services.start_at_login", "services.unplanned_restart", "services.unplanned_max", "services.unplanned_window", "history.keep_days", "history.max_mb", "start.team", "sentinel.reload", "suspend.wait", "suspend.auto_resume", "delivery.forge", "delivery.base", "backup.schedule", "backup.dir", "backup.keep", "backup.warn_after", "backup.age_recipient", "backup.after_command", "backup.after_env", "backup.after_timeout", "notify.on", "notify.targets", "notify.events", "notify.detail", "notify.delay", "notify.max_per_hour", "notify.quiet", "notify.quiet_exempt", "bus.report_max", "bus.report_full_max", "bus.verdict_max", "projects.delete_files", "projects.delete_backups",
@@ -82,6 +82,8 @@ func TestEnvRulesUnchanged(t *testing.T) {
 		{"display.icons", "nerd", "nerd", "use"},
 		{"display.icons", "agent-font", "agent-font", "use"},
 		{"display.icons", "emoji", nil, "skip"}, // busmon-icons: a wrong value never breaks the screen
+		{"display.graphs", "braille", "braille", "use"},
+		{"display.graphs", "dots", nil, "skip"}, // braille-sparklines §2: an unknown value is auto
 		{"display.limit", " -1 ", -1, "use"},
 		{"display.limit", "0", 0, "use"},
 		{"display.limit", "abc", nil, "skip"},
@@ -369,5 +371,22 @@ func TestWorkLayoutKey(t *testing.T) {
 	}
 	if got, why := k.file("board"); got != nil || why == "" {
 		t.Errorf("board accepted: %v %q", got, why)
+	}
+}
+
+// braille-sparklines §2: the sparklines' style, auto by default, env
+// AGENT_BUS_BUSMON_GRAPHS; an unknown value is the registry's warning.
+func TestGraphsKey(t *testing.T) {
+	k, ok := Lookup("display.graphs")
+	if !ok || k.Default != "auto" || k.Kind != String || k.Env != "AGENT_BUS_BUSMON_GRAPHS" || k.Group() != GroupDisplay {
+		t.Fatalf("%+v %v", k, ok)
+	}
+	for _, v := range []string{"auto", "block", "braille", "ascii"} {
+		if got, why := k.file(v); got != v || why != "" {
+			t.Errorf("%s: %v %q", v, got, why)
+		}
+	}
+	if got, why := k.file("dots"); got != nil || why != "want auto, block, braille or ascii" {
+		t.Errorf("dots accepted: %v %q", got, why)
 	}
 }
