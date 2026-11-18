@@ -6,6 +6,53 @@ release exists.
 
 ## Unreleased
 
+## v0.30.0 — a sturdier holder, quota drain per project, agents' screens, and the person never an agent
+
+- The holder survives crashes, restarts and reboots: a dead holder is For you with its start
+  command; a restarted one numbers its terminals on; after a reboot the dispatch service restarts
+  the team only under `services.unplanned_*`, else suspends it; each screen emulator is contained
+  (`invalid`/`stuck`, then `agentbus reload`); `agentbus check holder-restart` times a live restart.
+- `agentbus screen <agent>` prints an agent's last screen, read-only, escape sequences dropped.
+  busmon reads `blocked` for an agent whose client asks in its terminal and shows its last lines; a
+  stuck screen rings once per episode (`dispatch.stuck_after`). The dispatch service starts its own
+  build's holder; `holder-behind` names the older builds still hosting agents.
+- Quota thresholds per project: `dispatch.quota_warn`, the new `dispatch.quota_drain` and
+  `dispatch.quota_hold`, in `config.toml` `[project.<name>.dispatch]`, re-read every minute.
+- The person is never an agent: `ask` asks only as the calling agent, `ask` and `status` refuse the
+  person's name from another agent's terminal, `answer` is refused from any agent, `anonymous` is
+  nobody. A leftover entry goes with `agentbus agents forget <person> --force`.
+- busmon's paste label names its first words; `agentbus pop <role> --profile <p>` pops a role's
+  `alt_profiles`; eleven ideas waiting for the person are notes listed in `docs/memory/IDEAS.md`.
+  The first release through the dev branch flow.
+- Not in it: busmon's question panel on Enter, the merge shown within seconds and deliver needing
+  both reviewers, the views redesign's code (spec only), closing a request nobody can accept,
+  holder G1 part 2.
+
+[Notes](docs/releases/v0.30.0.md)
+
+## v0.29.0 — the herdr exit: the holder hosts every terminal; self-repair, run budget and the Work tab
+
+No release notes were written for this release; this entry is drawn from the titles of the PRs
+merged since v0.28.0 (#332 to #579).
+
+- The herdr exit: a holder per build hosts every agent's terminal (`agentbus attach`,
+  `attach.prefix`, `agentbus holder drain`); the dispatcher reads its screens; busmon switches
+  projects; host commands from an agent's terminal go through the dispatch service's relay.
+- Self-repair: the dispatcher relaunches a dead agent in a new terminal and closes a finished pop
+  without waking master; an expired login holds its agent; health `plan-drift`, a sentinel digest
+  of long-lived warns, the context alarm ladder and compaction notice.
+- A run budget: `agentbus run` drains the run at its limit or at the quota warning and stops when
+  nothing is in flight; no new task to an agent while it drains; quota reset dates and times.
+- busmon: a Work tab (Requests and Plan, Kanban from 130 columns), the Plan grouped by effort, Ideas
+  (`agentbus idea`, F6), a slash palette, a first-run trust ask, multi-line paste as a marker.
+- busmon: For you as an inbox that can empty, an idle view, a projects page (delete, reset), a
+  progress line, `@` file picking in the compose window. Clients and roles: agy (Gemini), one Kimi
+  family, model detection with a catalogue health check, `coder2` a second implementer, master in
+  auto permission mode; sentinel reloads an agent on a client update.
+- Master idle: delivery detection without a forge and `agentbus checkback`. Operator notes are
+  fragments (`docs/operator-notes.d/`), assembled by `agentbus mem notes`. The dev branch flow:
+  PRs go to `dev`, `main` takes promotions; nothing is sent from `anonymous`.
+
 ## v0.28.0 — stabilisation: the merge queue, one row per report, request priority, and the docs
 
 - The merge queue: PRs on a head both reviewers approved are derived from the ledger and the forge
