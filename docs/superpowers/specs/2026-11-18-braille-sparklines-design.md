@@ -43,7 +43,7 @@ choices are §6; the build is §7.
 ## 3. The styles, side by side
 
 Sample week, two projects, same scale as busmon (each day against the zone's largest day). The
-agent-bus-monitor values, oldest first: 0, 1.2M, 3.4M, 0.4M, 5.1M, 2.2M, 4.0M. The polymarket
+agent-bus-monitor values, oldest first: 0, 1.2M, 3.4M, 0.4M, 5.1M, 2.2M, 4.0M. The myproject
 values: 0.3M, 0, 0, 0.9M, 0.6M, 0.1M, 1.4M. Width 90 or more. The glyphs below were produced by
 the encoder §4 describes, not drawn by hand.
 
