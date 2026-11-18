@@ -12,10 +12,11 @@ release exists.
   command; a restarted one numbers its terminals on; after a reboot the dispatch service restarts
   the team only under `services.unplanned_*`, else suspends it; each screen emulator is contained
   (`invalid`/`stuck`, then `agentbus reload`); `agentbus check holder-restart` times a live restart.
-- `agentbus screen <agent>` prints an agent's last screen, read-only, CSI and OSC sequences dropped.
-  busmon reads `blocked` for an agent whose client asks in its terminal and shows its last lines; a
-  stuck screen rings once per episode (`dispatch.stuck_after`). The dispatch service starts its own
-  build's holder; `holder-behind` names the older builds still hosting agents.
+- `agentbus screen <agent>` prints an agent's last screen, read-only, CSI and OSC escape sequences
+  dropped whole, control characters dropped. busmon reads `blocked` for an agent whose client asks
+  in its terminal and shows its last lines; a stuck screen rings once per episode
+  (`dispatch.stuck_after`). The dispatch service starts its own build's holder; `holder-behind`
+  names the older builds still hosting agents.
 - Quota thresholds per project: `dispatch.quota_warn`, the new `dispatch.quota_drain` and
   `dispatch.quota_hold`, in `config.toml` `[project.<name>.dispatch]`, re-read every minute.
 - The person is never an agent: `ask` asks only as the calling agent, `ask` and `status` refuse the
@@ -43,8 +44,9 @@ merged since v0.28.0 (#332 to #579).
   of long-lived warns, the context alarm ladder and compaction notice.
 - A run budget: `agentbus run` drains the run at its limit or at the quota warning and stops when
   nothing is in flight; no new task to an agent while it drains; quota reset dates and times.
-- busmon: a Work tab (Requests and Plan, Kanban from 130 columns), the Plan grouped by effort, Ideas
-  (`agentbus idea`, F6), a slash palette, a first-run trust ask, multi-line paste as a marker.
+- busmon: a Work tab (Requests and Plan, Kanban from 130 columns), the Plan grouped by workstream
+  (`groups` in the plan, each with a done/total bar), Ideas (`agentbus idea`, F6), a slash palette,
+  a first-run trust ask, multi-line paste as a marker.
 - busmon: For you as an inbox that can empty, an idle view, a projects page (delete, reset), a
   progress line, `@` file picking in the compose window. Clients and roles: agy (Gemini), one Kimi
   family, model detection with a catalogue health check, `coder2` a second implementer, master in
