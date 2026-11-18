@@ -443,7 +443,7 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   of a header gauge (the fill keeps its level roles: `RoleGauge`'s deep green (usage-green: `#39C69E` dark, `#0B7D60` light, ANSI green), amber from 80 %, red from 95 %, usage-cards; the thin track is the fill faded; when a gauge's two windows do not fit, every provider keeps only its busiest, `quotaSegOf`), the model lines of an agent's page, and the U page's
   account windows and per-agent provider column. Sparklines (braille-sparklines, spec
   `docs/superpowers/specs/2026-11-18-braille-sparklines-design.md`): `display.graphs` = `auto` | `block` | `braille` |
-  `ascii`, resolved once by `graphsStyle` (`graphs.go`; `auto` reads the locale through `localeFor`), drawn by
+  `ascii`, resolved once by `graphsStyle` (`graphs.go`; `auto` reads the locale through `config.Locale`), drawn by
   `sparkLine` on the U page's 7-day column only; the gauges keep their blocks. Icons (busmon-icons, spec
   `docs/superpowers/specs/2026-11-02-busmon-icons-design.md`): `display.icons` = `off` (default, today's screen byte for
   byte, `TestIconsOffIsToday`) | `nerd` (a lettered box per provider) | `agent-font` (the maker's logo, by client then

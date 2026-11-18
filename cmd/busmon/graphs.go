@@ -1,6 +1,10 @@
 package main
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/netbja/agent-bus-monitor/config"
+)
 
 // The sparklines' styles (braille-sparklines, spec
 // docs/superpowers/specs/2026-11-18-braille-sparklines-design.md): the
@@ -30,18 +34,6 @@ var (
 	brailleRight = [4]rune{0x80, 0x20, 0x10, 0x08}
 )
 
-// localeFor is the locale a category reads: the first non-empty of LC_ALL,
-// category's own variable (LC_CTYPE, LC_MESSAGES) and LANG. The language
-// setting reads LC_MESSAGES through it, so the precedence cannot drift.
-func localeFor(getenv func(string) string, category string) string {
-	for _, k := range []string{"LC_ALL", category, "LANG"} {
-		if v := getenv(k); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // graphsStyle resolves display.graphs: an explicit block, braille or ascii
 // wins; auto (and an unknown or empty value) is ascii when the locale is not
 // UTF-8, else block. auto never gives braille (§2).
@@ -50,7 +42,7 @@ func graphsStyle(setting string, getenv func(string) string) string {
 	case graphsBlock, graphsBraille, graphsASCII:
 		return setting
 	}
-	l := strings.ToLower(localeFor(getenv, "LC_CTYPE"))
+	l := strings.ToLower(config.Locale(getenv, "LC_CTYPE"))
 	if !strings.Contains(l, "utf-8") && !strings.Contains(l, "utf8") {
 		return graphsASCII
 	}

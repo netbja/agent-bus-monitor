@@ -1,7 +1,8 @@
 # Braille sparklines: a graph style setting, with mock-ups
 
 Status: r3, built (subject `braille-sparklines`). r3: the person's answers (Q1 one line, Q2 filled) and
-their addition, that any non-zero value lights at least the bottom dot (§4). Before: spec, r2, for review (subject
+their addition, that any non-zero value lights at least the bottom dot (§4); the locale helper is
+`config.Locale`, importable (§4). Before: spec, r2, for review (subject
 `braille-sparklines-spec`). r2: reviewer-codex (the tests pin
 every pair of the locale's precedence), foureyes (the live change
 needs its `applySettings` case; one locale helper shared with the language setting). Not built. Base: origin/dev
@@ -136,8 +137,9 @@ What the mock-ups show:
   - Level `k` (1 to 4 per row of cells) sets the bottom `k` dots, or only the `k`-th when dotted.
   - A day with no tokens has no dot. The empty cell is `U+2800`, the blank braille glyph, so the
     column keeps its width in every font.
-- **One locale helper, shared:** `auto` reads the locale through `localeFor(getenv, category)`,
-  which returns the first non-empty of `LC_ALL`, the category's variable, and `LANG`. Here the
+- **One locale helper, shared:** `auto` reads the locale through `config.Locale(getenv, category)`
+  (as built, in `config/locale.go`: an importable package, so busmon, agentbus's `--help` and the
+  language setting's `i18n` package can all call it; reviewer-codex), which returns the first non-empty of `LC_ALL`, the category's variable, and `LANG`. Here the
   category is `LC_CTYPE`; the language setting (approved spec, not built) reads `LC_MESSAGES`
   through the same helper. Whichever of the two builds lands first adds it, the second reuses it,
   so the precedence cannot drift between them. No locale reading exists in busmon today.
@@ -203,7 +205,7 @@ One PR, from origin/dev, base dev, after the person's answers:
 - the encoder and `auto`'s resolution in a new `cmd/busmon/graphs.go`;
 - `tokens_view.go` calling `sparkLines`;
 - the settings screen entry and its `display.graphs` case in `applySettings`;
-- `localeFor`, unless the language setting's build has added it already;
+- `config.Locale`, unless the language setting's build has added it already;
 - the harness pin and the goldens;
 - an operator-notes fragment.
 

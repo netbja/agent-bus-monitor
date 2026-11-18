@@ -144,27 +144,6 @@ func TestGraphsStyle(t *testing.T) {
 	}
 }
 
-// localeFor: the first non-empty of LC_ALL, the category's variable, LANG
-// (shared with the language setting, which reads LC_MESSAGES).
-func TestLocaleFor(t *testing.T) {
-	for _, c := range []struct {
-		env  []string
-		cat  string
-		want string
-	}{
-		{nil, "LC_CTYPE", ""},
-		{[]string{"LANG", "a"}, "LC_CTYPE", "a"},
-		{[]string{"LANG", "a", "LC_CTYPE", "b"}, "LC_CTYPE", "b"},
-		{[]string{"LANG", "a", "LC_CTYPE", "b", "LC_ALL", "c"}, "LC_CTYPE", "c"},
-		{[]string{"LANG", "a", "LC_CTYPE", "b"}, "LC_MESSAGES", "a"},
-		{[]string{"LANG", "a", "LC_MESSAGES", "m"}, "LC_MESSAGES", "m"},
-	} {
-		if got := localeFor(envOf(c.env...), c.cat); got != c.want {
-			t.Errorf("localeFor(%v, %s) = %q, want %q", c.env, c.cat, got, c.want)
-		}
-	}
-}
-
 // §5: the Tokens page in braille and in ascii, at 80 and 140 columns.
 func TestTokensGraphsGoldens(t *testing.T) {
 	pinLocal(t)
