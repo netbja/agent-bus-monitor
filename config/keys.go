@@ -130,6 +130,21 @@ var Keys = []*Key{
 			}
 			return nil, "want off, nerd or agent-font"
 		}},
+	// braille-sparklines §2: the sparklines' glyphs (not the gauges); auto is
+	// ascii off a UTF-8 locale, else block; braille only when chosen.
+	{Name: "display.graphs", Env: "AGENT_BUS_BUSMON_GRAPHS", Kind: String, Default: "auto", ReadBy: "busmon",
+		env: func(raw string) (any, envResult) {
+			if isGraphs(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && isGraphs(s) {
+				return s, ""
+			}
+			return nil, "want auto, block, braille or ascii"
+		}},
 	// compose-at-file §5 (the person, Q1): the path busmon's @ inserts in the
 	// compose window, absolute (the default) or relative to the project's
 	// root. A home path (@~/) is always absolute.
@@ -766,6 +781,9 @@ func fileBoundedDuration(max time.Duration) func(any) (any, string) {
 }
 
 func isIcons(s string) bool { return s == "off" || s == "nerd" || s == "agent-font" }
+func isGraphs(s string) bool {
+	return s == "auto" || s == "block" || s == "braille" || s == "ascii"
+}
 
 // envZeroOne takes 1 (on) and 0 (off) only; anything else is skipped.
 func envZeroOne(raw string) (any, envResult) {
