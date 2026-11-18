@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -126,6 +127,33 @@ func (b *Bus) DroppedHeads(ctx context.Context) (map[string]MergeDrop, error) {
 // derivation (a hash), replaced by every pass; runtime, not in projectKinds,
 // ignored by HasKeysBesidesDispatch.
 func MergeQueueKey(project string) string { return project + ":mergequeue" }
+
+// MergeQueueDueKey is {p}:mergequeue:due, a delivery's mark: the broker's time
+// in milliseconds when agentbus deliver last delivered (merge-popup-setting,
+// the person's choice A). The dispatcher only reads it: a mark it has not
+// passed for runs a pass at once, so a PR is a row in For you within seconds.
+func MergeQueueDueKey(project string) string { return project + ":mergequeue:due" }
+
+// mergeQueueDueTTL: a mark older than this has long been passed for.
+const mergeQueueDueTTL = time.Hour
+
+// MarkMergeQueueDue marks the merge queue due, with the broker's time.
+func (b *Bus) MarkMergeQueueDue(ctx context.Context) error {
+	now, err := b.r.Time(ctx).Result()
+	if err != nil {
+		return err
+	}
+	return b.r.Set(ctx, MergeQueueDueKey(b.project), now.UnixMilli(), mergeQueueDueTTL).Err()
+}
+
+// MergeQueueDue is the last delivery's mark, 0 when there is none.
+func (b *Bus) MergeQueueDue(ctx context.Context) (int64, error) {
+	v, err := b.r.Get(ctx, MergeQueueDueKey(b.project)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return 0, nil
+	}
+	return v, err
+}
 
 // MergeQueueTTL bounds the cache: a dispatcher gone, it expires, and an
 // expired key reads unknown.

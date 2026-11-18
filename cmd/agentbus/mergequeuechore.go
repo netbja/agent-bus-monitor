@@ -63,7 +63,7 @@ func serviceMergeQueue(b *bus.Bus, getenv func(string) string) dispatch.MergeQue
 	if c == nil {
 		return dispatch.MergeQueueConfig{}
 	}
-	return dispatch.MergeQueueConfig{Every: mergeQueueEvery, Pass: c.pass}
+	return dispatch.MergeQueueConfig{Every: mergeQueueEvery, Pass: c.pass, Due: b.MergeQueueDue} // a delivery's mark runs a pass at once (merge-popup-setting)
 }
 
 // serviceMergeQueueChore is the chore with the real readers, in the current
@@ -185,12 +185,17 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 // known when the pass fails.
 func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads) {
 	settings := config.Machine(c.getenv)
-	base := settings.String("delivery.base")
+	// The project's base, as deliver's (merge-popup-setting): the template's
+	// [delivery] base, else the machine's delivery.base.
+	base, _, berr := projectDeliveryBase(c.getenv, c.b.Project())
 	env := mergeQueueEnv(c.environ())
 	call := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, mergeQueueCall) }
 	forgeKind := ""
 	fail := func(source, why string) (bus.MergeQueueRecord, runHeads) {
 		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}, runHeads{}
+	}
+	if berr != nil { // a template that does not decode: no base anybody chose
+		return fail("", "the project's base: "+berr.Error())
 	}
 
 	cctx, cancel := call()

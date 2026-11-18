@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ import (
 // command goes through deliverDeps.Run; nothing leaves the machine before the
 // 4-eyes proof bound to the head holds.
 
-const deliverUsage = "usage: deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run]"
+const deliverUsage = "usage: deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run] [--single-approval <reason>]"
 
 // deliverBodyMax keeps the body under GitHub's 65 536 characters.
 const deliverBodyMax = 60000
@@ -57,6 +58,13 @@ type deliverDeps struct {
 	Report func(ctx context.Context, msg string) error
 	// MayDeliver refuses a caller whose role may not deliver; nil = no check.
 	MayDeliver func(self string) error
+	// MarkDue marks the merge queue due after a delivery, so the dispatcher
+	// passes at once and the PR is a row in For you within seconds
+	// (merge-popup-setting, the person's choice A). nil = none.
+	MarkDue func(ctx context.Context) error
+	// Trace writes a delivery with one approval (--single-approval) to the
+	// bus, where the person reads it. nil = none.
+	Trace func(ctx context.Context, msg string) error
 }
 
 // gitEnvRunner is the real runner for deliver: execRunner without an
@@ -99,6 +107,11 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 		},
 		LinkPR: b.PlanLink, LinkRef: b.PlanLinkRef,
 		MayDeliver: deliverRoleCheck(os.Environ()),
+		MarkDue:    b.MarkMergeQueueDue,
+		Trace: func(ctx context.Context, msg string) error {
+			_, err := b.Report(ctx, self, bus.ReportNote, msg)
+			return err
+		},
 	}
 	if self != "master" {
 		d.Report = func(ctx context.Context, msg string) error {
@@ -115,6 +128,7 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 type deliverOpts struct {
 	branch, task, subject, base, title, bodyFile string
 	dry                                          bool
+	single                                       string // --single-approval: the emergency's reason
 }
 
 // deliverDescMax bounds a --body-file read; the body is capped after.
@@ -185,7 +199,10 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	args, o.title = extractFlag(args, "--title")
 	args, o.bodyFile = extractFlag(args, "--body-file")
 	args, o.dry = extractBool(args, "--dry-run")
-	if len(args) != 1 {
+	singleGiven := slices.Contains(args, "--single-approval")
+	args, o.single = extractFlag(args, "--single-approval")
+	o.single = strings.TrimSpace(o.single)
+	if len(args) != 1 || singleGiven && o.single == "" {
 		fmt.Fprintln(errw, deliverUsage)
 		return 1
 	}
@@ -318,6 +335,13 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		return fail(3, "%s is %s with %s; the branch head is %s: nothing delivered", subject, state, found, h)
 	}
 	approvals := approvalsOn(vs, h)
+	// Both reviewers approve the head (merge-popup-setting, the person's
+	// answer 3): otherwise the person could merge code one reviewer never
+	// read, and the merge queue, which For you lists, would not show it.
+	if reviewers := currentApprovers(vs, h); len(reviewers) < 2 && o.single == "" {
+		return fail(3, "%s@%s has %d independent approval(s) (%s); both reviewers must approve the head: nothing delivered. "+
+			"In an emergency: --single-approval <reason>, written in the request and traced on the bus", subject, h, len(reviewers), strings.Join(reviewers, ", "))
+	}
 
 	// The commits and the body, every line through SafeText.
 	log, err := git("log", "--reverse", "--format=%H%x09%s", baseRef+".."+h)
@@ -339,6 +363,11 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	}
 	title = deliverTitle(title, o.branch)
 	body := deliverBody(title, commits, approvals, h, desc)
+	if o.single != "" && len(currentApprovers(vs, h)) < 2 {
+		body += "\n**delivered with one approval: " + safeLine(o.single) + "** (agentbus deliver --single-approval)\n"
+	} else {
+		o.single = "" // both approved: no emergency to trace
+	}
 
 	link := func(prN int) int {
 		if o.task == "" {
@@ -356,12 +385,23 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		}
 		return 0
 	}
+	// tell runs once per delivery, never on a dry run or a refusal: it
+	// reports to master, marks the merge queue due and traces an emergency.
 	tell := func(msg string) {
-		if d.Report == nil {
-			return
+		if d.Report != nil {
+			if err := d.Report(ctx, msg); err != nil {
+				fmt.Fprintf(errw, "deliver: telling master failed: %v\n", err)
+			}
 		}
-		if err := d.Report(ctx, msg); err != nil {
-			fmt.Fprintf(errw, "deliver: telling master failed: %v\n", err)
+		if d.MarkDue != nil {
+			if err := d.MarkDue(ctx); err != nil {
+				fmt.Fprintf(errw, "deliver: marking the merge queue due failed (it passes within 5 minutes): %v\n", err)
+			}
+		}
+		if o.single != "" && d.Trace != nil {
+			if err := d.Trace(ctx, fmt.Sprintf("%s@%s delivered with one approval: %s (%s)", subject, h, o.single, msg)); err != nil {
+				fmt.Fprintf(errw, "deliver: tracing the single approval failed: %v\n", err)
+			}
 		}
 	}
 
@@ -430,6 +470,28 @@ func placeOf(f forge.Forge) string {
 		return "a local path"
 	}
 	return f.Host + "/" + f.Owner + "/" + f.Repo
+}
+
+// currentApprovers are the reviewers whose latest decision on the subject
+// is an independent approve of h, in the order of their first verdict
+// (reviewer-codex): an approval a reviewer later rejected or replaced with
+// another head's no longer counts. vs is oldest first.
+func currentApprovers(vs []bus.Verdict, h string) []string {
+	var order []string
+	latest := map[string]bus.Verdict{}
+	for _, v := range vs { // every verdict is its reviewer's latest so far, self-authored too (reviewer-codex)
+		if _, seen := latest[v.Reviewer]; !seen {
+			order = append(order, v.Reviewer)
+		}
+		latest[v.Reviewer] = v
+	}
+	var out []string
+	for _, r := range order {
+		if v := latest[r]; v.Decision == "approve" && v.Reviewer != v.Author && v.Head == h {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // approvalsOn is every independent approve naming h, oldest first.

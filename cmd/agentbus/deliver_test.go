@@ -95,18 +95,22 @@ type deliverWorld struct {
 	linkErr  error
 	reports  []string
 	subject  string
+	marked   int      // MarkDue calls (merge-popup-setting)
+	traces   []string // Trace messages: a delivery with one approval
 }
 
 var errExit1 = errors.New("exit status 1")
 
 // newDeliverWorld: branch coder/x at dlvH, two commits ahead of origin's main,
-// origin on GitHub, approved on dlvH by foureyes, gh present and logged in.
+// origin on GitHub, approved on dlvH by both reviewers, gh present and logged in.
 func newDeliverWorld(t *testing.T, origin string) *deliverWorld {
 	w := &deliverWorld{
 		settings: map[string]string{"delivery.forge": "auto", "delivery.base": "main"},
 		linkedPR: map[string]int{}, linkRef: map[string]string{},
-		verdicts: []bus.Verdict{{ID: "1-0", Subject: "coder/x", Author: "coder", Reviewer: "foureyes",
-			Decision: "approve", Message: "looks right\nmore", Ref: "dml1", Head: dlvH, TS: 1793600000000}},
+		verdicts: []bus.Verdict{{ID: "1-0", Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex",
+			Decision: "approve", Message: "no finding", Ref: "dml0", Head: dlvH, TS: 1793599000000},
+			{ID: "2-0", Subject: "coder/x", Author: "coder", Reviewer: "foureyes",
+				Decision: "approve", Message: "looks right\nmore", Ref: "dml1", Head: dlvH, TS: 1793600000000}},
 	}
 	w.r = &deliverRunner{t: t, paths: map[string]string{"gh": "/bin/gh", "glab": "/bin/glab"}, outs: map[string][]dlvOut{},
 		cmds: map[string]dlvOut{
@@ -140,6 +144,8 @@ func newDeliverWorld(t *testing.T, origin string) *deliverWorld {
 		},
 		LinkPR:  func(_ context.Context, task string, n int) error { w.linkedPR[task] = n; return w.linkErr },
 		LinkRef: func(_ context.Context, task, ref string) error { w.linkRef[task] = ref; return w.linkErr },
+		MarkDue: func(context.Context) error { w.marked++; return nil },
+		Trace:   func(_ context.Context, msg string) error { w.traces = append(w.traces, msg); return nil },
 	}
 	return w
 }
@@ -704,5 +710,155 @@ func TestDeliverNonePushesWithoutAPage(t *testing.T) {
 	}
 	if w.linkRef["t1"] != "coder/x@"+dlvH {
 		t.Errorf("link %v", w.linkRef)
+	}
+}
+
+// merge-popup-setting (the person's answer 3): deliver refuses a head that
+// both reviewers did not approve, so nothing reaches the person's merge
+// without the 4-eyes For you shows; --single-approval <reason> is the
+// emergency way out, written in the request and traced on the bus.
+func TestDeliverNeedsBothReviewers(t *testing.T) {
+	one := func(w *deliverWorld) { w.verdicts = w.verdicts[1:] } // foureyes only
+	w := newDeliverWorld(t, "git@github.com:o/r.git")
+	one(w)
+	code, _, errw := w.run("master", "coder/x")
+	if code != 3 || w.r.did("git push") || w.r.did("gh ") || !strings.Contains(errw, "both reviewers") || !strings.Contains(errw, "--single-approval") {
+		t.Fatalf("one approval: exit %d, ran %v: %q", code, w.r.ran, errw)
+	}
+	// The same reviewer twice is still one.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts[0].Reviewer = "foureyes"
+	if code, _, errw := w.run("master", "coder/x"); code != 3 || w.r.did("git push") {
+		t.Fatalf("one reviewer twice: exit %d: %q", code, errw)
+	}
+	if w.marked != 0 {
+		t.Errorf("a refused delivery marked the queue due")
+	}
+	// The emergency way out: delivered, the reason in the body and traced.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	one(w)
+	code, _, errw = w.run("master", "coder/x", "--single-approval", "production down, foureyes read it")
+	if code != 0 {
+		t.Fatalf("--single-approval: exit %d: %q", code, errw)
+	}
+	if !strings.Contains(w.r.body, "delivered with one approval: production down, foureyes read it") {
+		t.Errorf("body lacks the reason:\n%s", w.r.body)
+	}
+	if len(w.traces) != 1 || !strings.Contains(w.traces[0], "one approval") || !strings.Contains(w.traces[0], "production down") {
+		t.Errorf("traces %q", w.traces)
+	}
+	// Both approved: the flag is moot, nothing traced, no line in the body.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	if code, _, errw := w.run("master", "coder/x", "--single-approval", "just in case"); code != 0 || len(w.traces) != 0 || strings.Contains(w.r.body, "one approval") {
+		t.Fatalf("both approved with the flag: exit %d, traces %q: %q", code, w.traces, errw)
+	}
+	// reviewer-codex: each reviewer's LATEST decision counts. foureyes
+	// approved, then rejected; reviewer-codex approved after: the roll-up is
+	// APPROVED, but only one reviewer approves now.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "reject", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvH},
+	}
+	if code, _, errw := w.run("master", "coder/x"); code != 3 || w.r.did("git push") {
+		t.Fatalf("a superseded approval counted: exit %d: %q", code, errw)
+	}
+	// An approval of an older head, then of the delivered one: each
+	// reviewer's latest names the head, both count.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = append([]bus.Verdict{{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvOld}}, w.verdicts...)
+	if code, _, errw := w.run("master", "coder/x"); code != 0 {
+		t.Fatalf("an older head's approval before: exit %d: %q", code, errw)
+	}
+	// An approval of the head, then the same reviewer on a newer head: its
+	// latest no longer names this head.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = append(w.verdicts, bus.Verdict{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvOld})
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("a reviewer whose latest names another head counted: exit %d", code)
+	}
+	// reviewer-codex on ed6f0a59: a reviewer's later decision supersedes its
+	// approve even when that verdict names the reviewer as its author.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+		{Subject: "coder/x", Author: "foureyes", Reviewer: "foureyes", Decision: "reject", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvH},
+	}
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("an approve outlived its reviewer's self-authored reject: exit %d", code)
+	}
+	// A self-approval beside one reviewer's is still one approval.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "coder", Decision: "approve", Head: dlvH},
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+	}
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("a self-approval counted: exit %d", code)
+	}
+	// The second reviewer's only approval names another head.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.verdicts = []bus.Verdict{
+		{Subject: "coder/x", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve", Head: dlvOld},
+		{Subject: "coder/x", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: dlvH},
+	}
+	if code, _, _ := w.run("master", "coder/x"); code != 3 {
+		t.Fatalf("an approval of another head counted: exit %d", code)
+	}
+	// An empty reason is no reason.
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	one(w)
+	if code, _, _ := w.run("master", "coder/x", "--single-approval", " "); code == 0 {
+		t.Fatal("a blank reason delivered")
+	}
+}
+
+// merge-popup-setting (the person's choice A): a delivery marks the merge
+// queue due, so the PR is a row in For you within seconds; a dry run or a
+// refusal marks nothing.
+func TestDeliverMarksTheMergeQueueDue(t *testing.T) {
+	w := newDeliverWorld(t, "git@github.com:o/r.git")
+	if code, _, errw := w.run("master", "coder/x", "--dry-run"); code != 0 || w.marked != 0 {
+		t.Fatalf("dry run: exit %d, marked %d: %q", code, w.marked, errw)
+	}
+	if code, _, errw := w.run("master", "coder/x"); code != 0 || w.marked != 1 {
+		t.Fatalf("delivery: exit %d, marked %d: %q", code, w.marked, errw)
+	}
+	if len(w.traces) != 0 {
+		t.Errorf("a delivery with both approvals traced %q", w.traces)
+	}
+}
+
+// foureyes on ed6f0a59: the real deps wire both hooks. A delivery marks the
+// merge queue due on the broker, and an emergency's trace is a report on the
+// bus, where the person reads it.
+func TestRealDeliverDepsMarkAndTrace(t *testing.T) {
+	b, _ := dialMain(t)
+	ctx := context.Background()
+	d := realDeliverDeps(b, "master", t.TempDir())
+	if d.MarkDue == nil || d.Trace == nil {
+		t.Fatalf("hooks: MarkDue %v, Trace %v", d.MarkDue != nil, d.Trace != nil)
+	}
+	if err := d.MarkDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := b.MergeQueueDue(ctx); err != nil || v <= 0 {
+		t.Fatalf("no mark on the broker: %d %v", v, err)
+	}
+	if err := d.Trace(ctx, "coder/x@abc delivered with one approval: production down"); err != nil {
+		t.Fatal(err)
+	}
+	evs, err := b.Reports(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range evs {
+		found = found || e.Agent == "master" && strings.Contains(e.Message, "delivered with one approval: production down")
+	}
+	if !found {
+		t.Fatalf("the trace is not on the bus: %+v", evs)
 	}
 }
