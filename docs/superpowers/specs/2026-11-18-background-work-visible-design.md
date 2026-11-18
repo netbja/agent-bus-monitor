@@ -1,6 +1,9 @@
 # An agent's background work, visible in busmon
 
-Status: spec, r2, for review (subject `background-work-visible-spec`). r2: foureyes (it starts from
+Status: spec, r3, for review (subject `background-work-visible-spec`). r3: reviewer-codex
+(`agent_type` stored for a sub-agent task; Stop and SubagentStop timing told apart, `at` is the
+event's Redis time), foureyes's step-1 notes (the parent's pid; the status set from a recorded
+payload). r2: foureyes (it starts from
 the declared record busmon already shows; one background mark per agent; the observed facts get
 their own per-agent key; SubagentStop refreshes the parent's tasks). Not built. Base: origin/dev
 `5ec6e134`. Author: coder, task `background-work-visible-spec`, from master's directive of
@@ -57,9 +60,15 @@ client fact.
   `ScheduleWakeup` or `/loop`, each with its `id`, `schedule` and `recurring`, plus a `prompt`.
 - **`SubagentStart` and `SubagentStop`** carry `agent_id` and `agent_type`. They fire for
   sub-agents Claude starts, and also for its own internal agents (an empty `agent_type`).
-- **Turn ends only.** The lists come at turn ends, which is exactly when the agent reads `idle`.
-  A task that ends later is not reported until the next turn ends. The process source (below)
-  says when its shell is gone.
+- **When the lists come** (r3, reviewer-codex):
+  - **A parent `Stop`:** at each of the agent's turn ends, the parent's full snapshot. This is
+    exactly when the agent starts to read `idle`.
+  - **A `SubagentStop`:** whenever a sub-agent finishes, during the parent's turn or after it.
+    It is a refresh of the same parent-scoped snapshot.
+  - **Staleness:** the record's `at` is the Redis time of the last of these events. A task that
+    ends with no event after it stays listed until the next Stop or SubagentStop, or the
+    record's hour. The process source (below) says when a shell is gone, and the page shows how
+    old the snapshot is.
 
 ### Every client on a holder: the process tree, a corroborating source
 
@@ -108,8 +117,8 @@ client fact.
   14m`, `subagent Explore · running · 3m`);
 - for a shell task, the program's name only (`make`, `go`), read live from the holder's process
   list while the page is open, like the screen preview (Q3);
-- the source, so the person knows how much to trust it: `from Claude Code's hooks at its last
-  turn end (4m ago)`, or `from the process tree`;
+- the source, so the person knows how much to trust it: `from Claude Code's hooks, last report 4m ago`
+  (a turn end or a sub-agent's stop), or `from the process tree`;
 - the scheduled wakeups, with their schedule.
 
 **Ages.** Neither source gives a task's start, so its age is counted from when agentbus first saw
@@ -133,13 +142,20 @@ hook through `agentbus` as the turn flips are.
   --delete` and `projects delete` remove it with the project.
 
 Its value:
-- `{source: "hooks", at: <Redis TIME of the Stop>, pid: <the agent's process>, tasks: [{id_hash,
-  type, status, first_seen}], crons: [{id_hash, schedule, recurring}]}`.
+- `{source: "hooks", event: "Stop"|"SubagentStop", at: <Redis TIME of that event's write>, pid:
+  <the agent's proved process>, tasks: [{id_hash, type, agent_type?, status, first_seen}], crons:
+  [{id_hash, schedule, recurring}]}`.
+- `agent_type` is present for a `subagent` task only, sanitised as below (r3, reviewer-codex:
+  the page's `subagent Explore` needs it).
+- `pid` is always the parent agent's proved process (foureyes). A SubagentStop's hook runs in
+  the parent's process, so its own pid is never written. Otherwise the drop on a new pid would
+  fire at every sub-agent stop.
 - `id_hash` is a digest of the task id, which keeps `first_seen` across turn ends without storing
   ids.
 - `type` and `status` are Claude's labels, capped at 32 characters: an unknown `type` (Claude
   falls back to its raw discriminant) is stored as `other`, a status outside the known ones as
-  `other`.
+  `other`. The known statuses are fixed from step 1's recorded payload (the reference lists none;
+  at least `running`), and named here then.
 - A sub-agent's `agent_type` is stored when it matches `[A-Za-z0-9_-]{1,32}` (a built-in or a
   user-defined agent's name), else as `subagent` only: it can be any name the person wrote.
 - `schedule` is a cron expression, accepted only if it matches the five-field shape.
@@ -157,7 +173,9 @@ oldest one's start, Redis-clock). No names, no arguments.
      their types and first-seen times, and no command or description (a test greps every key
      written for the payload's words);
    - a second Stop keeps first-seen by id hash; an empty list clears the entry;
-   - a `SubagentStop` refreshes the parent's entry, keyed to the parent;
+   - a `SubagentStop` refreshes the parent's entry, keyed to the parent, its `at` the event's time,
+     its `pid` the parent's (no drop at a sub-agent's stop);
+   - a sub-agent task keeps its sanitised `agent_type`;
    - an unknown `type` is stored as `other`; an `agent_type` outside the pattern as `subagent`;
    - `SessionStart` and a new pid drop it.
 2. **Process source (step 2):** a terminal with a busy `make` child and an idle MCP helper
