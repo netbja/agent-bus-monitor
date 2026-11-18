@@ -11,7 +11,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/vt v0.1.0
 	github.com/creack/pty v1.1.24
-	github.com/gdamore/tcell/v2 v2.13.9
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/ironpark/gostty v0.0.0-20261108124048-de82fbcca291
 	github.com/klauspost/compress v1.20.3
@@ -31,12 +30,10 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/ebitengine/purego v0.11.2 // indirect
-	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
 )

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/gdamore/tcell/v2"
 )
 
 // The shell's View paints onto a grid of cells (drawLine, drawFrame), then turns each row into styled spans
@@ -137,15 +136,14 @@ func (p *painter) paint(l Line) string {
 	return sb.String()
 }
 
-// lipStyle is a cell's style for the shell: the same resolution as
-// tcellStyle, through the same palette: the theme keeps its colours as tcell
-// values, the one use of tcell left.
+// lipStyle is a cell's style for the shell: termStyle's resolution, through
+// the theme's palette.
 func (t *Theme) lipStyle(c cellStyle) lipgloss.Style {
-	return lipFrom(t.tcellStyle(c))
+	return lipFrom(t.termStyle(c))
 }
 
-// lipFrom carries a tcell style's colours and attributes over to lipgloss.
-func lipFrom(ts tcell.Style) lipgloss.Style {
+// lipFrom carries a theme style's colours and attributes over to lipgloss.
+func lipFrom(ts Style) lipgloss.Style {
 	fg, bg, attr := ts.Decompose()
 	s := lipgloss.NewStyle()
 	if c := lipColor(fg); c != nil {
@@ -154,23 +152,23 @@ func lipFrom(ts tcell.Style) lipgloss.Style {
 	if c := lipColor(bg); c != nil {
 		s = s.Background(c)
 	}
-	if attr&tcell.AttrBold != 0 {
+	if attr&attrBold != 0 {
 		s = s.Bold(true)
 	}
-	if attr&tcell.AttrReverse != 0 {
+	if attr&attrReverse != 0 {
 		s = s.Reverse(true)
 	}
 	return s
 }
 
-// lipColor is a tcell colour for lipgloss: true colour as itself, a palette
-// colour as its ANSI index, the default as none.
-func lipColor(c tcell.Color) color.Color {
-	switch {
-	case c == tcell.ColorDefault || !c.Valid():
-		return nil
-	case c.IsRGB():
-		return lipgloss.Color(fmt.Sprintf("#%06x", c.Hex()))
+// lipColor is a theme colour for lipgloss: true colour as itself, an ANSI
+// colour as its index, the terminal's own as none.
+func lipColor(c Color) color.Color {
+	if i, ok := c.index(); ok {
+		return lipgloss.ANSIColor(uint8(i))
 	}
-	return lipgloss.ANSIColor(uint8(c - tcell.ColorValid))
+	if c.kind == colorKindRGB {
+		return lipgloss.Color(fmt.Sprintf("#%06x", c.v))
+	}
+	return nil
 }

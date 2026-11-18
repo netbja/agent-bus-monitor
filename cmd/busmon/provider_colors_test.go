@@ -3,8 +3,6 @@ package main
 import (
 	"testing"
 
-	"github.com/gdamore/tcell/v2"
-
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
@@ -53,11 +51,11 @@ func TestEveryQuotaProviderHasItsColour(t *testing.T) {
 			t.Errorf("%s uses %q, a colour busmon gives a role of its own", h.provider, c)
 		}
 	}
-	if th.colors[RoleProvOpenAI] != tcell.ColorDefault {
+	if th.colors[RoleProvOpenAI] != colorDefault {
 		t.Errorf("openai on 16 colours = %q, want the terminal's own foreground", th.tags[RoleProvOpenAI])
 	}
 	withPalette(t, "light", false, 256)
-	if th.colors[RoleProvOpenAI] != tcell.ColorDefault {
+	if th.colors[RoleProvOpenAI] != colorDefault {
 		t.Errorf("openai on light 16 colours = %q: unreadable on white", th.tags[RoleProvOpenAI])
 	}
 	withPalette(t, "dark", false, 1<<24)

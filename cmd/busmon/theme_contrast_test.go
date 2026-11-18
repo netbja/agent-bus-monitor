@@ -4,12 +4,10 @@ import (
 	"math"
 	"strings"
 	"testing"
-
-	"github.com/gdamore/tcell/v2"
 )
 
 // luminance is a colour's relative luminance (WCAG 2).
-func luminance(c tcell.Color) float64 {
+func luminance(c Color) float64 {
 	r, g, b := c.RGB()
 	lin := func(v int32) float64 {
 		x := float64(v) / 255
@@ -22,7 +20,7 @@ func luminance(c tcell.Color) float64 {
 }
 
 // contrast is the WCAG contrast ratio of two colours, 1 to 21.
-func contrast(a, b tcell.Color) float64 {
+func contrast(a, b Color) float64 {
 	la, lb := luminance(a), luminance(b)
 	return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 }
@@ -48,7 +46,7 @@ func TestLightThemePaintsItsBackground(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	white := tcell.GetColor("#ffffff")
+	white := getColor("#ffffff")
 	for r := RoleText; r < roleCount; r++ {
 		if _, bg, _ := lt.Style(r).Decompose(); bg != white {
 			t.Errorf("light Style(%d) background %v, want the painted %v", r, bg, white)
@@ -78,7 +76,7 @@ func TestOnlyLightPaintsTheBackground(t *testing.T) {
 			t.Fatal(err)
 		}
 		for r := RoleText; r < roleCount; r++ {
-			if _, bg, _ := th.Style(r).Decompose(); bg != tcell.ColorDefault {
+			if _, bg, _ := th.Style(r).Decompose(); bg != colorDefault {
 				t.Errorf("%s colors=%d noColor=%v: Style(%d) background %v, want the terminal's", c.name, c.colors, c.noColor, r, bg)
 			}
 		}
@@ -94,7 +92,7 @@ func TestThemeContrast(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		bg := tcell.GetColor(c.bg)
+		bg := getColor(c.bg)
 		for r := RoleText; r < roleCount; r++ {
 			fg, _, _ := th.Style(r).Decompose()
 			if got := contrast(fg, bg); got < minContrast(r) {

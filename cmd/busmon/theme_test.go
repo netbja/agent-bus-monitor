@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -98,19 +97,19 @@ func TestStyleRoles(t *testing.T) {
 	light, _ := ResolveTheme("light", "", "", false, 1<<24)
 	none, _ := ResolveTheme("dark", "", "", true, 1<<24)
 	fg, bg, _ := dark.Style(RoleOK).Decompose()
-	if fg != tcell.GetColor("#7EE2A8") || bg != tcell.ColorDefault {
+	if fg != getColor("#7EE2A8") || bg != colorDefault {
 		t.Fatal(fg, bg)
 	}
 	fg, _, _ = light.Style(RoleError).Decompose()
-	if fg != tcell.GetColor("#CF222E") {
+	if fg != getColor("#CF222E") {
 		t.Fatal(fg)
 	}
 	fg, bg, _ = none.Style(RoleError).Decompose()
-	if fg != tcell.ColorDefault || bg != tcell.ColorDefault {
+	if fg != colorDefault || bg != colorDefault {
 		t.Fatal(fg, bg)
 	}
 	for thm, want := range map[*Theme]string{dark: "#22324A", light: "#DDF4FF"} {
-		if _, bg, _ := thm.Selected(RoleText).Decompose(); bg != tcell.GetColor(want) {
+		if _, bg, _ := thm.Selected(RoleText).Decompose(); bg != getColor(want) {
 			t.Fatal("selection background", bg, want)
 		}
 	}
@@ -119,13 +118,13 @@ func TestStyleRoles(t *testing.T) {
 			thm, _ := ResolveTheme("dark", "", "", n, colors)
 			_, bg, attrs := thm.Selected(RoleText).Decompose()
 			if n || colors == 16 {
-				if attrs&tcell.AttrReverse == 0 || bg != tcell.ColorDefault {
+				if attrs&attrReverse == 0 || bg != colorDefault {
 					t.Fatal("missing reverse", bg, attrs)
 				}
 			}
 			if n {
 				_, _, attrs = thm.Border(true).Decompose()
-				if attrs&tcell.AttrBold == 0 {
+				if attrs&attrBold == 0 {
 					t.Fatal("focused border not bold")
 				}
 			}

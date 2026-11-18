@@ -238,7 +238,7 @@ func FitLine(l Line, w int) Line {
 // cellStyle is how one cell is drawn, independent of the terminal library
 // (busmon Charm spec, step b): a role and its modifiers, or a frame line in a
 // panel's hue. The painter resolves it from the theme (Theme.lipStyle, through
-// tcellStyle's colours).
+// termStyle's colours).
 type cellStyle struct {
 	Role     Role
 	Bold     bool
