@@ -1,6 +1,7 @@
 # A language setting: French or English for what the person reads
 
-Status: spec, r1, for review (subject `language-setting-spec`). Not built. Base: origin/dev
+Status: spec, r2, for review (subject `language-setting-spec`). r2: foureyes (the default is `en`;
+the text busmon composes for the bus stays English, and the rule test covers busmon's writers). Not built. Base: origin/dev
 `5ec6e134`.
 Author: coder, task `language-setting-spec`, from master's directive of 2026-11-18 relaying the
 person's idea 17 (`docs/memory/open-questions/2026-11-17-language-setting.md`). The person's
@@ -31,6 +32,13 @@ decisions are §7; the build is §8's steps, one PR each from origin/dev.
 **Never follows it, English always:**
 - **Everything on the bus:** reports, directives, asks, verdicts, status messages, notices that
   agents read. One language serves every model, and an agent never has to guess.
+- **The text busmon composes for the bus**, which reaches an agent:
+  - the compose window's prefills (`@master ` plus `planStartText`, `re: <first line>`);
+  - its answers to asks (any words busmon adds to the agent's choice labels);
+  - idea states;
+  - the views redesign's triage directive (`idea <id>: yes|later|no`).
+
+  These are written in English, never through `T`, even while busmon shows French around them.
 - **What agents write:** their reports and messages are shown as written, in whatever language
   they used.
 - **The CLI, by default (Q2):** agents and scripts read `agentbus` output and errors and match
@@ -57,7 +65,8 @@ already words them.
 
 ## 4. The setting
 
-- `display.language` in the registry (`config/keys.go`), `auto | en | fr`, default `auto`.
+- `display.language` in the registry (`config/keys.go`), `en | fr | auto`, **default `en`**
+  (§1: the default does not change; Q3 may choose `auto`).
   - Env `AGENT_BUS_LANGUAGE` (through `config.EnvName`).
   - Shown in busmon's settings screen (Shift+C), in the Display group.
   - Read by busmon (and agentbus's `--help`, with Q2's yes).
@@ -75,8 +84,15 @@ already words them.
   are where truncation and wrapping are seen.
 - **The catalogue test** (§3): every `T` literal translated or marked; no French entry left
   without its English key in the code.
-- **The rule test:** nothing that writes to the bus or to an agent's terminal calls `T`. A test
-  scans `bus/`, `dispatch/` and the CLI's bus writers for it.
+- **The rule test:** nothing that writes to the bus or to an agent's terminal calls `T`. It
+  scans `bus/`, `dispatch/` and the CLI's bus writers. It also covers busmon's own write paths:
+  - the compose prefills;
+  - every busmon call into a bus writer (`Send`, `Answer`, idea states, the busWriter
+    interface's methods);
+  - the strings handed to them, followed back to their literals.
+
+  A `T` on any of these paths fails the test. A second test renders busmon in French, sends a
+  prefill and an answer, and checks that the entries written are the English ones.
 
 ## 6. Cost and files
 
