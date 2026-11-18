@@ -29,12 +29,18 @@ type redisInfoReader interface {
 
 // svcFacts is everything the Services page shows.
 type svcFacts struct {
-	inst  *bus.ServicesInstall
-	recs  map[string]bus.ServiceRecord
-	host  string
-	logs  map[string]int64     // service -> its current log's size (absent: unknown)
-	since map[string]time.Time // service -> its process's start (this host only)
-	redis redisFacts
+	inst    *bus.ServicesInstall
+	recs    map[string]bus.ServiceRecord
+	host    string
+	project string
+	// holders: the project's holders on this host (agent-screen-blocked §4);
+	// holdersRead says they were read, holdersErr why not.
+	holders     []holderRow
+	holdersRead bool
+	holdersErr  string
+	logs        map[string]int64     // service -> its current log's size (absent: unknown)
+	since       map[string]time.Time // service -> its process's start (this host only)
+	redis       redisFacts
 }
 
 type redisFacts struct {
@@ -80,8 +86,24 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 }
 
 // gatherServices reads the facts; it runs in a command, never in View.
-func gatherServices(ctx context.Context, r busReader, project string, inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, run svcRunner) svcFacts {
-	f := svcFacts{inst: inst, recs: recs, host: host, logs: map[string]int64{}, since: map[string]time.Time{}}
+func gatherServices(ctx context.Context, r busReader, project string, inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, run svcRunner,
+	holders func(context.Context) ([]holderRow, error)) svcFacts {
+	f := svcFacts{project: project, inst: inst, recs: recs, host: host, logs: map[string]int64{}, since: map[string]time.Time{}}
+	switch d, ok := recs["dispatch"]; {
+	case holders == nil:
+		f.holdersErr = "no holder reader"
+	case ok && d.Host != "" && d.Host != host:
+		f.holdersErr = "they run on " + d.Host + ", with its dispatcher" // a holder's socket is on its own machine
+	default:
+		hc, hcancel := context.WithTimeout(ctx, 2*time.Second)
+		rows, err := holders(hc)
+		hcancel()
+		if err != nil {
+			f.holdersErr = err.Error()
+		} else {
+			f.holders, f.holdersRead = rows, true
+		}
+	}
 	for k, rec := range recs {
 		if rec.Host != host {
 			continue // its log and process are on another machine
@@ -135,7 +157,13 @@ func serviceStart(project, kind string, rec bus.ServiceRecord, proc string) (tim
 	if err != nil || !isServiceArgv(strings.Split(strings.TrimRight(string(cmd), "\x00"), "\x00"), project, kind) {
 		return time.Time{}, false
 	}
-	stat, err := os.ReadFile(fmt.Sprintf("%s/%d/stat", proc, rec.PID))
+	return procStartTime(proc, rec.PID)
+}
+
+// procStartTime is pid's start: /proc/<pid>/stat's field 22 (clock ticks
+// since boot) plus /proc/stat's btime; unknown off Linux or for a gone pid.
+func procStartTime(proc string, pid int) (time.Time, bool) {
+	stat, err := os.ReadFile(fmt.Sprintf("%s/%d/stat", proc, pid))
 	if err != nil {
 		return time.Time{}, false
 	}
@@ -230,6 +258,7 @@ func servicesCards(f svcFacts, sel int, now time.Time, width int) []Line {
 			out = append(out, l)
 		}
 	}
+	out = append(out, holdersSection(f, now, width)...)
 	out = append(out, nil, Line{S(RoleMuted, "enter or l: the selected service's log, enter on Redis: its page  "+GlyphNone+"  agentbus down <p> stops them; agentbus --project <p> service status|logs|restart")})
 	for i := range out {
 		out[i] = FitLine(out[i], width)

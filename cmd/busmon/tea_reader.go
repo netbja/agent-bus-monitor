@@ -321,7 +321,7 @@ func (m *Model) gotThread(msg threadMsg) {
 // a new one), the records fresh from the bus; the last poll's stand in when
 // that read fails.
 func (m *Model) servicesCmd(serial int) tea.Cmd {
-	inst, recs, r, ctx, project, docker := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project, m.cfg.docker
+	inst, recs, r, ctx, project, docker, holders := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project, m.cfg.docker, m.cfg.holders
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -334,7 +334,7 @@ func (m *Model) servicesCmd(serial int) tea.Cmd {
 			cancel()
 		}
 		host, _ := os.Hostname()
-		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker), serial: serial}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker, holders), serial: serial}
 	}
 }
 

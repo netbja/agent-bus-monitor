@@ -156,20 +156,26 @@ digest (`ScreenHash`) goes to the broker. This spec writes no screen text to Red
   - state (active, inactive, failed, `not answering` when the unit runs but its socket does not
     answer);
   - build;
-  - uptime: the unit's `ActiveEnterTimestamp` (launchd and the detached supervisor: the
-    process's start from `ps`). `Describe`'s `Start` is clock ticks since boot, an identity
-    check, not a wall time: it is not used;
+  - uptime (as built): the holder process's start, read from `/proc/<pid>/stat` for the pid
+    its `Describe` names, as the dispatch and missions cards read theirs. `Describe`'s `Start`
+    (clock ticks since boot) is not used as a time. Unknown, so not shown, off Linux and for a
+    holder of a build from before `Describe` named its pid;
   - agents hosted (live terminals).
 - **Flags:**
   - `old build, hosts no agent`: a holder of a build other than the dispatcher's, with no live
     terminal. No command stops one holder today:
     `down` stops them all, and `service gc` removes only holders that no longer run. Step 4 adds
-    `agentbus -p <p> service stop holder <build>`, refused while that holder has a live terminal
-    and for the current build. It differs from `service restart holder --kill-agents`, which kills
+    `agentbus -p <p> service stop holder <build>`, refused while that holder has a live terminal,
+    while its unit runs without its socket answering (it may hold agents), and for the current
+    build. It differs from `service restart holder --kill-agents`, which kills
     the current build's agents: `stop holder <build>` never kills an agent, it refuses. The
     flag's detail names it, then `service gc`. See Q5.
   - `current build missing`: no holder of the dispatcher's build. This is §1's state, shown on
     the holder block too.
+- **As built (step 4):** the holders are a section under the cards, one line each with its
+  flag below it, not selectable cards. They are read on busmon's own host only: a holder's
+  socket and unit are on the dispatcher's machine, so with the dispatcher elsewhere the section
+  says where they run.
 - busmon only reads: it never stops a holder.
 
 ## 5. Tests first, per step

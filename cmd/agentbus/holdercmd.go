@@ -254,6 +254,31 @@ func holderTermList(project, key string) ([]holder.TermInfo, error) {
 	return r.Terms, nil
 }
 
+// holderLiveTerms is the live terminals of project's holder of build key, for
+// service stop holder: answered false when no holder answers there.
+func holderLiveTerms(project, key string) (int, bool, error) {
+	sock, err := holder.SocketFor(os.Getenv, project, key)
+	if err != nil {
+		return 0, false, nil
+	}
+	cl, err := holder.Dial(sock, holder.BuildID())
+	if err != nil {
+		return 0, false, nil
+	}
+	defer cl.Close()
+	r, err := cl.Call(holder.List{})
+	if err != nil {
+		return 0, true, err
+	}
+	n := 0
+	for _, t := range r.Terms {
+		if t.Alive {
+			n++
+		}
+	}
+	return n, true, nil
+}
+
 // holderReady is up's readiness probe: project's holder of build key
 // completes its handshake within timeout. The welcome comes from the
 // holder's accept loop, so a socket that only listens (its connections
