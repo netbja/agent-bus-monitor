@@ -12,7 +12,7 @@ release exists.
   command; a restarted one numbers its terminals on; after a reboot the dispatch service restarts
   the team only under `services.unplanned_*`, else suspends it; each screen emulator is contained
   (`invalid`/`stuck`, then `agentbus reload`); `agentbus check holder-restart` times a live restart.
-- `agentbus screen <agent>` prints an agent's last screen, read-only, escape sequences dropped.
+- `agentbus screen <agent>` prints an agent's last screen, read-only, CSI and OSC sequences dropped.
   busmon reads `blocked` for an agent whose client asks in its terminal and shows its last lines; a
   stuck screen rings once per episode (`dispatch.stuck_after`). The dispatch service starts its own
   build's holder; `holder-behind` names the older builds still hosting agents.
