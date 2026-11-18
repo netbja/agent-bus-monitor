@@ -52,7 +52,7 @@ the encoder §4 describes, not drawn by hand.
 ```
 Projects                   in      out  7 days
   agent-bus-monitor        4.0M     360k   ▂▆▁█▄▇  ████████     16.3M
-  polymarket               1.4M     125k  ▁  ▂▁▁▃  ██░░░░░░      3.3M
+  myproject                1.4M     125k  ▁  ▂▁▁▃  ██░░░░░░      3.3M
 ```
 
 **ascii** (8 levels, `_.-:=+*#`, one cell per day):
@@ -60,7 +60,7 @@ Projects                   in      out  7 days
 ```
 Projects                   in      out  7 days
   agent-bus-monitor        4.0M     360k   .+_#:*  ████████     16.3M
-  polymarket               1.4M     125k  _  .__-  ██░░░░░░      3.3M
+  myproject                1.4M     125k  _  .__-  ██░░░░░░      3.3M
 ```
 
 **braille, 1 line, filled** (4 levels, two days per cell, 4 cells, padded to the column's 7):
@@ -68,7 +68,7 @@ Projects                   in      out  7 days
 ```
 Projects                   in      out  7 days
   agent-bus-monitor        4.0M     360k  ⢀⣆⣧⡇     ████████     16.3M
-  polymarket               1.4M     125k  ⡀⢀⣀⡄     ██░░░░░░      3.3M
+  myproject                1.4M     125k  ⡀⢀⣀⡄     ██░░░░░░      3.3M
 ```
 
 **braille, 1 line, dots** (4 levels, only the top dot of each day):
@@ -76,7 +76,7 @@ Projects                   in      out  7 days
 ```
 Projects                   in      out  7 days
   agent-bus-monitor        4.0M     360k  ⢀⢂⠡⠁     ████████     16.3M
-  polymarket               1.4M     125k  ⡀⢀⣀⠄     ██░░░░░░      3.3M
+  myproject                1.4M     125k  ⡀⢀⣀⠄     ██░░░░░░      3.3M
 ```
 
 **braille, 2 lines, filled** (8 levels, two days per cell, each project two rows high):
@@ -86,7 +86,7 @@ Projects                   in      out  7 days
                                           ⠀⡄⡇⡆
   agent-bus-monitor        4.0M     360k  ⢠⣇⣿⡇     ████████     16.3M
                                           ⠀⠀⠀⠀
-  polymarket               1.4M     125k  ⡀⢠⣀⡆     ██░░░░░░      3.3M
+  myproject                1.4M     125k  ⡀⢠⣀⡆     ██░░░░░░      3.3M
 ```
 
 **braille, 2 lines, dots** (8 levels, top dot only):
@@ -96,7 +96,7 @@ Projects                   in      out  7 days
                                           ⠀⠄⠁⠂
   agent-bus-monitor        4.0M     360k  ⠠⢀⠈⠀     ████████     16.3M
                                           ⠀⠀⠀⠀
-  polymarket               1.4M     125k  ⡀⠠⣀⠂     ██░░░░░░      3.3M
+  myproject                1.4M     125k  ⡀⠠⣀⠂     ██░░░░░░      3.3M
 ```
 
 What the mock-ups show:
