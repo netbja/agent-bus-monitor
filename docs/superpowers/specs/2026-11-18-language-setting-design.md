@@ -1,6 +1,7 @@
 # A language setting: French or English for what the person reads
 
-Status: spec, r2, for review (subject `language-setting-spec`). r2: foureyes (the default is `en`;
+Status: spec, r3, for review (subject `language-setting-spec`). r3: reviewer-codex (`auto` reads
+the locale with its normal precedence). r2: foureyes (the default is `en`;
 the text busmon composes for the bus stays English, and the rule test covers busmon's writers). Not built. Base: origin/dev
 `5ec6e134`.
 Author: coder, task `language-setting-spec`, from master's directive of 2026-11-18 relaying the
@@ -70,8 +71,10 @@ already words them.
   - Env `AGENT_BUS_LANGUAGE` (through `config.EnvName`).
   - Shown in busmon's settings screen (Shift+C), in the Display group.
   - Read by busmon (and agentbus's `--help`, with Q2's yes).
-- **`auto`:** French when the person's `LC_ALL`, `LC_MESSAGES` or `LANG` starts with `fr`, else
-  English (Q3).
+- **`auto`:** the locale's own precedence: the first non-empty of `LC_ALL`, `LC_MESSAGES`,
+  `LANG`. French when that value starts with `fr`; English otherwise, `C` and `POSIX` included.
+  `LC_ALL=en_US.UTF-8` with `LANG=fr_FR.UTF-8` is English: `LC_ALL` overrides. A test covers
+  each conflicting pair.
 - **Fallback:** an unknown value is English, with the registry's usual settings warning.
 - **Changed while busmon runs:** applied at the next settings reload, as the theme is.
 
