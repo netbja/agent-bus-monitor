@@ -133,7 +133,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	}
 
 	switch {
-	case t.Owner == Person && onBoard && e.State == "done":
+	case t.Owner == Person && onBoard && delivered(e):
 		r.State = Done
 	// Delivery alone is never done: an unreviewed merge:false task waits for
 	// master's 'plan done' (the spec's "no verdict and no review set" case
@@ -203,9 +203,11 @@ func deriveMission(r Row, in Inputs) Row {
 }
 
 // delivered: the board request is done, i.e. delivered by its owner, which
-// is not finished (review, PR and merge come after).
+// is not finished (review, PR and merge come after). A request closed
+// unaccepted (its body lost to retention, or expired: request-lost-body)
+// is done but delivered nothing: its task is to be sent again (foureyes).
 func delivered(e bus.BoardEntry) bool {
-	return e.State == "done"
+	return e.State == "done" && (e.Request == nil || e.Request.ClosedUnaccepted == "")
 }
 
 func boardTime(e bus.BoardEntry) int64 {

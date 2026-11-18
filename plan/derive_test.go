@@ -308,3 +308,28 @@ func TestDeriveReadsTheMergeQueue(t *testing.T) {
 		t.Fatalf("rejected: %+v", r)
 	}
 }
+
+// request-lost-body (foureyes): a request closed unaccepted (its body lost
+// to retention, or expired) is state done, but nothing was delivered: its
+// task is upcoming again, to be sent anew, never in review or done.
+func TestDeriveClosedUnacceptedIsNotDelivered(t *testing.T) {
+	closed := entry("done", &bus.RequestInfo{ID: "1-0", RespondedAt: 2000, ClosedUnaccepted: "body missing"})
+	f := File{Plan: "p", Tasks: []Task{task("a"), task("b", noMerge),
+		{ID: "c", Title: "c", Owner: Person, Board: "c-impl"}}}
+	in := ok()
+	in.Board["a-impl"], in.Board["b-impl"], in.Board["c-impl"] = closed, closed, closed
+	in.Verdicts["b-impl"] = []bus.Verdict{verdict("1-0", "b-impl", "approve")}
+	if r := derive1(t, f, in, "a"); r.State != Upcoming {
+		t.Fatalf("an agent's task closed unaccepted: %+v", r)
+	}
+	if r := derive1(t, f, in, "b"); r.State == Done { // its verdict alone still reads in review, as before
+		t.Fatalf("a merge:false task closed unaccepted, approved subject: %+v", r)
+	}
+	if r := derive1(t, f, in, "c"); r.State == Done {
+		t.Fatalf("a person's task closed unaccepted: %+v", r)
+	}
+	in.Board["a-impl"] = deliveredEntry() // a real delivery still reads in review
+	if r := derive1(t, f, in, "a"); r.State != InReview {
+		t.Fatalf("delivered: %+v", r)
+	}
+}

@@ -316,7 +316,9 @@ agentbus request next                       # which one to take next (exit 64: n
 - Only the **target** agent can accept, block or complete its own request.
 - `block` does not require a prior `accept` — you may refuse work you never took, with a
   reason. After a block, `accept` again before you can complete it.
-- `done` requires a prior `accept`. A reply on the thread completes nothing, and a second
+- `done` requires a prior `accept`, except for a request nobody can accept (its body lost to
+  retention, or expired): its target or its sender closes it with `done <task> <why>`. A reply on
+  the thread completes nothing, and a second
   `done` returns the first response id without replacing what you already answered.
 - A deadline gates the **first** acceptance only: a request you never accepted cannot be
   accepted once `expires_at` has passed (nor if its body has been trimmed) — say so on the

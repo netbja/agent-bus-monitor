@@ -316,3 +316,87 @@ func TestCompleteRequestRecordsCommit(t *testing.T) {
 		t.Fatalf("commit/branch = %q/%q", r.Commit, r.Branch)
 	}
 }
+
+// request-lost-body (master, concierge-memory-opinion 98 h old): a request
+// whose body retention removed can never be accepted, and done needed an
+// accept, so nobody could close it. Its target or its sender may now close
+// it, unaccepted, with a reason; the entry says why. Anyone else is still
+// refused, and a request whose body is there still needs an accept.
+func TestRequestWithALostBodyCanBeClosed(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	for _, task := range []string{"lost-a", "lost-b", "kept"} {
+		if _, err := b.Request(ctx, task, "master", "dev", "", "body", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.r.XTrimMaxLen(ctx, StreamKey(b.project, "cmd"), 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Request(ctx, "kept2", "master", "dev", "", "body", 0); err != nil { // its body is there
+		t.Fatal(err)
+	}
+	if _, err := b.CompleteRequest(ctx, "lost-a", "coder", "not mine"); err == nil {
+		t.Fatal("a third agent closed a request")
+	}
+	if _, err := b.CompleteRequest(ctx, "lost-a", "dev", "body lost to retention; closed"); err != nil {
+		t.Fatalf("the target could not close it: %v", err)
+	}
+	if _, err := b.CompleteRequest(ctx, "lost-b", "master", "body lost to retention; dropped"); err != nil {
+		t.Fatalf("the sender could not close it: %v", err)
+	}
+	if _, err := b.CompleteRequest(ctx, "kept2", "dev", "done"); err == nil {
+		t.Fatal("an intact request was completed without an accept")
+	}
+	if _, err := b.CompleteRequest(ctx, "kept2", "master", "done"); err == nil {
+		t.Fatal("the sender completed an intact request")
+	}
+	// The sender never completes a request its target accepted.
+	if err := b.AcceptRequest(ctx, "kept2", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CompleteRequest(ctx, "kept2", "master", "done"); err == nil {
+		t.Fatal("the sender completed an accepted request")
+	}
+	if err := b.AcceptRequest(ctx, "kept", "dev"); err == nil || !strings.Contains(err.Error(), "agentbus request done") {
+		t.Fatalf("the refusal does not say how to close it: %v", err)
+	}
+	board, err := b.Board(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range []string{"lost-a", "lost-b"} {
+		e := board[task]
+		if e.State != "done" || e.Request.ClosedUnaccepted != "body missing" || e.Request.ResponseID == "" {
+			t.Fatalf("%s: %+v %+v", task, e, e.Request)
+		}
+	}
+	// The closing reply goes to the other side: the sender's close tells the
+	// target, the target's tells the sender (foureyes).
+	for task, want := range map[string]string{"lost-a": "master", "lost-b": "dev"} {
+		msgs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), board[task].Request.ResponseID, board[task].Request.ResponseID).Result()
+		if err != nil || len(msgs) != 1 || msgs[0].Values["target"] != want {
+			t.Fatalf("%s's closing reply: %v %v, want target %s", task, msgs, err, want)
+		}
+	}
+}
+
+// An expired request, never accepted, is closable the same way.
+func TestExpiredRequestCanBeClosed(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if _, err := b.Request(ctx, "late", "master", "dev", "", "body", 20*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if err := b.AcceptRequest(ctx, "late", "dev"); err == nil {
+		t.Fatal("an expired request was accepted")
+	}
+	if _, err := b.CompleteRequest(ctx, "late", "dev", "expired before I saw it"); err != nil {
+		t.Fatalf("the target could not close it: %v", err)
+	}
+	board, _ := b.Board(ctx)
+	if e := board["late"]; e.State != "done" || e.Request.ClosedUnaccepted != "expired" {
+		t.Fatalf("%+v %+v", e, e.Request)
+	}
+}

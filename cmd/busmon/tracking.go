@@ -37,6 +37,7 @@ type request struct {
 
 	Delivery          string // queued | uncertain | output_written | expired | missing | "" unknown
 	Availability      string // retained | missing | expired | "" unknown (derived read-side)
+	ClosedUnaccepted  string // why it was closed without an accept: nothing delivered (request-lost-body)
 	Attempts          int64
 	DuplicatePossible bool
 	BlockedReason     string
@@ -75,6 +76,7 @@ func boardRequests(m map[string]bus.BoardEntry) []request {
 			r.Attempts, r.DuplicatePossible = q.Attempts, q.DuplicatePossible
 			r.BlockedReason, r.ResponseID = q.BlockedReason, q.ResponseID
 			r.Priority, r.PriorityBy, r.PriorityAt = q.Priority, q.PriorityBy, msTime(q.PriorityAt)
+			r.ClosedUnaccepted = q.ClosedUnaccepted
 		}
 		out = append(out, r)
 	}
@@ -169,6 +171,9 @@ func nextAction(r request, now time.Time) (text, tone string) {
 		return fmt.Sprintf("accepted %s ago by %s — no response recorded yet",
 			humanAge(now.Sub(r.Accepted)), r.Target), "aqua"
 	case "done":
+		if r.ClosedUnaccepted != "" {
+			return fmt.Sprintf("closed unaccepted: %s; nothing delivered (%s)", r.ClosedUnaccepted, r.ResponseID), "yellow"
+		}
 		if r.Responded.IsZero() {
 			return "marked done, but no response entry was recorded", "yellow"
 		}
