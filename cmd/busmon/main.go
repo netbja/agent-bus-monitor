@@ -415,43 +415,46 @@ type agentState struct {
 	gap        bool              // entries may have been trimmed unread (detail only)
 	wake       *bus.WakeRecord   // the dispatcher's wake record, nil when none
 
-	pid           int                 // AgentSnapshot.PID (0 = not recorded)
-	pidStart      uint64              // AgentSnapshot.PIDStart
-	queueKnown    bool                // an Obligation read has succeeded at least once
-	queueFailed   bool                // the latest attempted Obligation read failed (or the broker is down)
-	queueAt       time.Time           // time of the last successful Obligation read
-	ctxRaw        string              // UsageSnapshot.Ctx exactly as read
-	ctxFill       *bus.ContextFill    // {p}:context, nil when not published (unknown)
-	bg            *bus.Background     // its background work (progress-line §4), nil when none
-	bgFailed      bool                // the latest read of it failed: the row says "… ?"
-	registered    bool                // listed in {p}:agents (the conductor only reports: not an @all target)
-	provider      string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
-	client        string              // its client (claude, codex, kimi…), from the launcher
-	identSession  string              // the session proved with its process (the U page: counted or not)
-	held          bool                // its provider is held by the dispatcher (quota)
-	loginHeld     int64               // its own login hold: the expiry (Unix ms) of hold-login:<agent>, 0 none
-	openAsk       int                 // unanswered questions of its open ask
-	askID         string              // that ask's id
-	paused        bool                // the project is paused ({p}:pause holds a record)
-	obsBusy       bool                // the dispatcher saw its pane running a turn ({p}:observed)
-	auto          bool                // its state was flipped by its client's turn hooks, not declared (auto-state)
-	idleHintAfter time.Duration       // display.idle_hint_after: idle? after this long seen ready (0 = off)
-	obsState      string              // the host's status of the terminal at that inspection
-	obsAt         time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
-	clientUpdate  *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
-	host          hostFacts           // its terminal on a holder: blocked, draft, background skip (hostfacts.go)
-	obsSince      time.Time           // first reading of that state (an episode, v0.15)
-	obsPrompt     bool                // its pane was seen blocked, fresh: its client asks something
-	swapping      bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
-	reloading     bool                // agentbus reload holds the same intent, kind reload (lifecycle part C)
-	retiring      bool                // retire --forget holds the same intent, kind retire (pop-auto-retire)
-	repairing     bool                // the self-repair watcher holds the same intent, kind self-repair (self-repair spec 4.1)
-	popDoneAt     time.Time           // the dispatcher judged this pop done for the episode declared then; zero = not done
-	handoff       bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
-	trustFolder   string              // the folder its client's prompt asks to trust, not trusted yet (first-run-trust); "" = none or unknown
-	fallback      *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
-	model         *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
-	judgedAt      time.Time           // the shell's snapshot time (clock); zero in shared's own state
+	pid            int                 // AgentSnapshot.PID (0 = not recorded)
+	pidStart       uint64              // AgentSnapshot.PIDStart
+	queueKnown     bool                // an Obligation read has succeeded at least once
+	queueFailed    bool                // the latest attempted Obligation read failed (or the broker is down)
+	queueAt        time.Time           // time of the last successful Obligation read
+	ctxRaw         string              // UsageSnapshot.Ctx exactly as read
+	ctxFill        *bus.ContextFill    // {p}:context, nil when not published (unknown)
+	bg             *bus.Background     // its background work (progress-line §4), nil when none
+	bgFailed       bool                // the latest read of it failed: the row says "… ?"
+	registered     bool                // listed in {p}:agents (the conductor only reports: not an @all target)
+	provider       string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
+	client         string              // its client (claude, codex, kimi…), from the launcher
+	identSession   string              // the session proved with its process (the U page: counted or not)
+	held           bool                // its provider is held by the dispatcher (quota)
+	loginHeld      int64               // its own login hold: the expiry (Unix ms) of hold-login:<agent>, 0 none
+	openAsk        int                 // unanswered questions of its open ask
+	askID          string              // that ask's id
+	paused         bool                // the project is paused ({p}:pause holds a record)
+	obsBusy        bool                // the dispatcher saw its pane running a turn ({p}:observed)
+	auto           bool                // its state was flipped by its client's turn hooks, not declared (auto-state)
+	idleHintAfter  time.Duration       // display.idle_hint_after: idle? after this long seen ready (0 = off)
+	obsState       string              // the host's status of the terminal at that inspection
+	obsAt          time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
+	clientUpdate   *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
+	host           hostFacts           // its terminal on a holder: blocked, draft, background skip (hostfacts.go)
+	obsSince       time.Time           // first reading of that state (an episode, v0.15)
+	obsPrompt      bool                // its pane was seen blocked, fresh: its client asks something
+	obsOwnPID      bool                // the observation is of its current process
+	obsScreenSince time.Time           // first reading of the current screen (zero: none; agent-screen-blocked §3)
+	stuckAfter     time.Duration       // dispatch.stuck_after: an unrecognised screen this long unchanged reads stuck (0 = off)
+	swapping       bool                // agentbus swap is replacing it ({p}:swap:<name>, v0.15)
+	reloading      bool                // agentbus reload holds the same intent, kind reload (lifecycle part C)
+	retiring       bool                // retire --forget holds the same intent, kind retire (pop-auto-retire)
+	repairing      bool                // the self-repair watcher holds the same intent, kind self-repair (self-repair spec 4.1)
+	popDoneAt      time.Time           // the dispatcher judged this pop done for the episode declared then; zero = not done
+	handoff        bool                // a pending declared hand-off ({p}:handoff, lifecycle part A)
+	trustFolder    string              // the folder its client's prompt asks to trust, not trusted yet (first-run-trust); "" = none or unknown
+	fallback       *bus.FallbackRecord // it runs on a fallback profile ({p}:fallback, v0.15.1)
+	model          *bus.ModelVerdict   // the last roles doctor verdict ({p}:doctor, v0.15.1)
+	judgedAt       time.Time           // the shell's snapshot time (clock); zero in shared's own state
 }
 
 // shared is every piece of bus state the polling goroutines publish to the UI.
@@ -495,6 +498,7 @@ type shared struct {
 	guardianNowAt  time.Time     // the local clock at that read: guardianNow advances from it
 	configNote     string        // non-fatal user configuration issue
 	idleHint       time.Duration // display.idle_hint_after, for every agent's idle? flag (auto-state)
+	stuckAfter     time.Duration // dispatch.stuck_after, for every agent's stuck state (agent-screen-blocked §3)
 	cmdHistory     []bus.Event   // bounded retained cmd sample used for waiting/reply correlation
 	cmdOldest      time.Time     // oldest event in the retained sample; zero when none
 	cmdHistoryOK   bool          // last bounded cmd read succeeded
@@ -661,17 +665,8 @@ func main() {
 	// Everything the background goroutines publish to the shell. Empty until
 	// the first tick: an unknown budget stays blank rather than implying 0%
 	// used. The monitor's link starts healthy because bus.Connect just pinged it.
-	st := &shared{
-		person:     self,
-		agents:     map[string]*agentState{},
-		budgets:    map[string]bus.BudgetSnapshot{},
-		board:      map[string]bus.BoardEntry{},
-		health:     health{ok: true, since: time.Now()},
-		configNote: settings.Note,
-		idleHint:   settings.IdleHint,
-		trustOf:    localTrustOf(project, os.Getenv),
-		ideasOf:    brokerIdeasOf(ctx, b),
-	}
+	st := newShared(self, settings)
+	st.trustOf, st.ideasOf = localTrustOf(project, os.Getenv), brokerIdeasOf(ctx, b)
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)
 	if cacheErr != nil {
@@ -810,4 +805,21 @@ func refuseDestructive(ctx context.Context, o busmonOpts, getenv func(string) st
 		return agentcaller.Refuse(ctx, getenv, ancestor, "purging a project's streams", "busmon")
 	}
 	return ""
+}
+
+// newShared is the state the background goroutines publish to the shell,
+// before the first tick: the person, the settings every agent's judgement
+// reads (the idle hint, stuck_after), and a healthy link (bus.Connect just
+// pinged it). The project's readers (trust, ideas) are set by the caller.
+func newShared(self string, settings busmonSettings) *shared {
+	return &shared{
+		person:     self,
+		agents:     map[string]*agentState{},
+		budgets:    map[string]bus.BudgetSnapshot{},
+		board:      map[string]bus.BoardEntry{},
+		health:     health{ok: true, since: time.Now()},
+		configNote: settings.Note,
+		idleHint:   settings.IdleHint,
+		stuckAfter: settings.StuckAfter,
+	}
 }

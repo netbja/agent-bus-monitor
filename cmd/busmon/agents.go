@@ -123,7 +123,7 @@ func (a *agentState) clock() time.Time {
 
 // waitsForPerson: a declared wait, an open ask or a prompt in its tab.
 func waitsForPerson(a *agentState) bool {
-	return a.openAsk > 0 || a.state == "waiting" && !answered(a) || promptBlocked(a)
+	return a.openAsk > 0 || a.state == "waiting" && !answered(a) || promptBlocked(a) || screenStuck(a)
 }
 
 // popDoneAt is when agent's current episode was declared, if the
@@ -238,6 +238,9 @@ func stateLook(a *agentState) (glyph, word string, role Role, group int) {
 	state := a.state
 	if promptBlocked(a) { // its client's question, in its terminal: the person's to answer
 		return GlyphBlocked, "blocked", RoleAttention, 0
+	}
+	if screenStuck(a) { // a screen nobody recognises, standing still: the person's to look at
+		return GlyphBlocked, "stuck", RoleAttention, 0
 	}
 	if answered(a) {
 		return GlyphIdle, "answered", RoleMuted, 4
@@ -575,7 +578,7 @@ func waitingQuestions(m map[string]*agentState) int {
 		switch {
 		case a.openAsk > 0:
 			n += a.openAsk
-		case a.state == "waiting" && !answered(a), promptBlocked(a):
+		case a.state == "waiting" && !answered(a), promptBlocked(a), screenStuck(a):
 			n++
 		}
 	}
@@ -599,4 +602,32 @@ func iconPair(icon, provider string) Seg {
 		return Seg{Text: "  "}
 	}
 	return Seg{Text: icon + " ", Role: providerRole(provider, RoleText)}
+}
+
+// screenStuck (agent-screen-blocked §3): the dispatcher's observation of the
+// agent's current process reads its screen as unknown (settled, its client's
+// signature reads neither ready, nor busy, nor a prompt) and that screen has
+// not changed for dispatch.stuck_after; the agent declares neither blocked
+// nor waiting and has no open ask. It reads stuck: the person's to look at.
+func screenStuck(a *agentState) bool {
+	return a.stuckAfter > 0 && a.obsOwnPID && a.obsState == "unknown" && !a.obsScreenSince.IsZero() &&
+		obsFresh(a, a.clock()) && a.obsAt.Sub(a.obsScreenSince) >= a.stuckAfter &&
+		a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+}
+
+// stuckWords is what busmon says of a stuck agent: never "prompt".
+func stuckWords(a *agentState) string {
+	return "stuck: its screen is not recognised and has not changed for " + humanAge(a.obsAt.Sub(a.obsScreenSince))
+}
+
+// attentionWords heads the agent's page when the person must look at its
+// terminal: blocked on its client's prompt, or stuck; "" otherwise.
+func attentionWords(a *agentState) string {
+	switch {
+	case promptBlocked(a):
+		return blockedWords
+	case screenStuck(a):
+		return stuckWords(a)
+	}
+	return ""
 }

@@ -96,7 +96,7 @@ func TestTermPreviewLinesAreSanitised(t *testing.T) {
 // replaced whole; the text is read live and held in memory only.
 func TestTermPreviewWhenBlocked(t *testing.T) {
 	lines := []string{"old 1", "old 2", "old 3", "Allow this command?", "export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789", "", "❯ 1. Yes", "  2. No", "  3. No, and tell Claude", "Esc to cancel", "", ""}
-	got := plainOf(termPreviewLines(termView{found: true, lines: lines, blocked: true}, 80))
+	got := plainOf(termPreviewLines(termView{found: true, lines: lines, heading: blockedWords}, 80))
 	for _, want := range []string{"blocked: waiting for an answer in its terminal", "❯ 1. Yes", "Esc to cancel", "Allow this command?"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("lacks %q:\n%s", want, got)
