@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 // Context fill (context-alert, ca1): Claude Code gives its statusLine the
@@ -48,7 +50,7 @@ func RecordContext(dir string, stdin []byte, now time.Time) error {
 		return err
 	}
 	b, _ := json.Marshal(ContextReading{Pct: *in.ContextWindow.UsedPercentage, ObservedAt: now.UnixMilli(), Session: in.SessionID})
-	if err := writeAtomic(filepath.Join(dir, in.SessionID+".json"), b); err != nil {
+	if err := files.WriteAtomic(filepath.Join(dir, in.SessionID+".json"), b); err != nil {
 		return err
 	}
 	pruneContext(dir, now)

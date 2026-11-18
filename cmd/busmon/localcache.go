@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 type busmonCache struct {
@@ -62,8 +64,8 @@ func (c *busmonCache) save(path string) error {
 	return writeFileAtomic(path, append(b, '\n'))
 }
 
-// writeFileAtomic writes b to path, mode 0600 in a 0700 directory, through
-// a synced temporary file renamed over it.
+// writeFileAtomic writes b to path through files.WriteAtomic, mode 0600, and
+// first narrows an existing directory to 0700 (the cache is private).
 func writeFileAtomic(path string, b []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -72,31 +74,7 @@ func writeFileAtomic(path string, b []byte) error {
 	if err := os.Chmod(dir, 0700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".busmon-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	if err := f.Chmod(0600); err != nil {
-		f.Close()
-		return err
-	}
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	return nil
+	return files.WriteAtomic(path, b)
 }
 
 func (c *busmonCache) snooze(key string, until time.Time) {

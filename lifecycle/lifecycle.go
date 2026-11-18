@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 // The files, in the project's state directory (<statedir>/agentbus/<p>).
@@ -191,7 +193,7 @@ func WriteCounter(dir string, es []Entry) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(dir, CounterFile, append(b, '\n'))
+	return files.WriteAtomic(filepath.Join(dir, CounterFile), append(b, '\n'))
 }
 
 // ResetCounter empties the counter: the person's resume (§3.4).
@@ -242,45 +244,7 @@ func writeRun(dir string, r Record) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(dir, RunFile, append(b, '\n'))
+	return files.WriteAtomic(filepath.Join(dir, RunFile), append(b, '\n'))
 }
 
 func stamp(now time.Time) string { return now.UTC().Format(time.RFC3339) }
-
-// writeAtomic writes name in dir: a 0600 temp file beside it, fsync'd,
-// renamed into place, then the directory fsync'd.
-func writeAtomic(dir, name string, b []byte) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, "."+name+".tmp*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp) // gone after the rename; left by nothing on an error
-	if err := f.Chmod(0o600); err != nil {
-		f.Close()
-		return err
-	}
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
-		return err
-	}
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
-}

@@ -244,16 +244,6 @@ func TestCachedReadsOncePerInterval(t *testing.T) {
 
 func TestWriteAtomicAndWithLockFailures(t *testing.T) {
 	dir := t.TempDir()
-	if err := writeAtomic(filepath.Join(dir, "missing", "f.json"), []byte("{}")); err == nil {
-		t.Error("writeAtomic into a missing directory must fail")
-	}
-	p := filepath.Join(dir, "f.json")
-	if err := writeAtomic(p, []byte("{}")); err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(p); string(b) != "{}" {
-		t.Errorf("content %q", b)
-	}
 	// A file where the directory should be: MkdirAll fails.
 	block := filepath.Join(dir, "block")
 	os.WriteFile(block, nil, 0o600)
