@@ -1,6 +1,7 @@
 # Braille sparklines: a graph style setting, with mock-ups
 
-Status: spec, r1, for review (subject `braille-sparklines-spec`). Not built. Base: origin/dev
+Status: spec, r2, for review (subject `braille-sparklines-spec`). r2: foureyes (the live change
+needs its `applySettings` case; one locale helper shared with the language setting). Not built. Base: origin/dev
 `d920cede`.
 Author: coder, from master's directive of 2026-11-18 relaying the person's yes to braille
 (sparklines only, not gauges) after the `braille-graphs-feasibility` check. The person's open
@@ -10,7 +11,8 @@ choices are §6; the build is §7.
 
 - **One sparkline in busmon:** the Tokens page (U), Projects zone, column `7 days`.
   - One cell per day, 7 cells, drawn by `sparkOf` in `cmd/busmon/tokens_view.go` from
-    `sparkSteps`, the eight lower blocks `▁▂▃▄▅▆▇█` (`theme.go`).
+    `sparkSteps` (same file), the eight lower blocks `▁▂▃▄▅▆▇█` (the `GlyphSpark*` constants in
+    `theme.go`).
   - Each day is scaled against the zone's largest day (`maxDay`), in `RoleOK`. A day with no tokens
     is a space.
 - **The data is daily.** `{p}:tokens` holds one row per day, agent and provider (`tokens.LastDays`,
@@ -38,7 +40,10 @@ choices are §6; the build is §7.
 - **An explicit value wins:** `braille` with `TERM=linux` draws braille. The person asked for it,
   and the settings screen can set it back.
 - **An unknown value** is `auto`, with the registry's usual settings warning.
-- **Changed while busmon runs:** applied at the next settings reload, as the theme is.
+- **Changed while busmon runs:** applied from the next frame on, as `display.icons` is. busmon
+  applies a changed setting only through its own case in `applySettings` (`settings_ui.go`); a
+  key without one answers "saved: next start of busmon". The build adds a `display.graphs` case
+  (`cur.Graphs = ns.Graphs`, answering "graphs applied and saved").
 
 ## 3. The styles, side by side
 
@@ -128,6 +133,11 @@ What the mock-ups show:
   - Level `k` (1 to 4 per row of cells) sets the bottom `k` dots, or only the `k`-th when dotted.
   - A day with no tokens has no dot. The empty cell is `U+2800`, the blank braille glyph, so the
     column keeps its width in every font.
+- **One locale helper, shared:** `auto` reads the locale through `localeFor(getenv, category)`,
+  which returns the first non-empty of `LC_ALL`, the category's variable, and `LANG`. Here the
+  category is `LC_CTYPE`; the language setting (approved spec, not built) reads `LC_MESSAGES`
+  through the same helper. Whichever of the two builds lands first adds it, the second reuses it,
+  so the precedence cannot drift between them. No locale reading exists in busmon today.
 - **The scale is unchanged:** a level is `int(v/max*n)` clamped to `n-1`, plus one, so any
   non-zero day shows at least its lowest step. `n` is 8 for block, ascii and 2-line braille, and
   4 for 1-line braille.
@@ -149,6 +159,11 @@ What the mock-ups show:
 - **Goldens:** every existing golden stays as it is. The harness pins `display.graphs = block`, as
   `pinLocal` pins the time zone, so a test machine's locale changes nothing. New goldens: the
   Tokens page in `braille` and in `ascii`, at 80 and 140 columns.
+- **An unknown value:** `display.graphs = dots` resolves as `auto` and the settings screen shows
+  the registry's warning for it.
+- **Live change:** on the settings page (the `selectSetting` pattern of `settings_page_test.go`,
+  as for `display.icons`), set `display.graphs` from `block` to `braille`: the answer is "graphs
+  applied and saved" and the next Tokens frame draws braille, without a restart.
 - **Gauges untouched:** a test renders the Tokens page in `ascii` and checks that the account
   bars still draw their blocks.
 
@@ -160,13 +175,19 @@ What the mock-ups show:
 - **Q2. Filled or dots?** Recommended: **filled**. With 7 daily points a dotted line reads as
   scattered dots. Filled columns keep each day's weight, as the blocks do.
 
+One consequence of the scope, for the person to see: on a locale that is not UTF-8, `auto` draws
+the sparklines in ASCII, while the gauges keep their blocks, which such a terminal may not draw
+either. Sparklines only was the person's choice; the gauges could follow later if wanted.
+
 ## 7. Steps
 
 One PR, from origin/dev, base dev, after the person's answers:
 - the key in `config/keys.go`, a hot file: master schedules the slot;
 - the encoder and `auto`'s resolution in a new `cmd/busmon/graphs.go`;
 - `tokens_view.go` calling `sparkLines`;
-- the settings screen entry, the harness pin and the goldens;
+- the settings screen entry and its `display.graphs` case in `applySettings`;
+- `localeFor`, unless the language setting's build has added it already;
+- the harness pin and the goldens;
 - an operator-notes fragment.
 
 About a day.
