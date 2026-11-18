@@ -1,6 +1,7 @@
 # Braille sparklines: a graph style setting, with mock-ups
 
-Status: spec, r2, for review (subject `braille-sparklines-spec`). r2: foureyes (the live change
+Status: spec, r2, for review (subject `braille-sparklines-spec`). r2: reviewer-codex (the tests pin
+every pair of the locale's precedence), foureyes (the live change
 needs its `applySettings` case; one locale helper shared with the language setting). Not built. Base: origin/dev
 `d920cede`.
 Author: coder, from master's directive of 2026-11-18 relaying the person's yes to braille
@@ -153,9 +154,15 @@ What the mock-ups show:
 
 - **The encoder:** a table of levels to braille code points (each dot, filled and dotted, an
   odd count, zeros), and the round trip from a cell back to its two levels.
-- **`auto`:** each case of §2: no variable set, `C`, `POSIX`, `LANG=fr_FR.UTF-8`,
-  `LC_ALL=C` with `LANG=en_US.UTF-8` (`LC_ALL` wins: ascii), `LC_CTYPE` only, `utf8` written in
-  lower case, `TERM=linux`. An explicit `braille` under `TERM=linux` stays braille.
+- **`auto`:** each case of §2:
+  - no variable set, `C`, `POSIX`: ascii; `LANG=fr_FR.UTF-8`: block; `utf8` in lower case: block;
+  - each conflicting pair, so the whole precedence is pinned:
+    - `LC_ALL=C` with `LC_CTYPE=en_US.UTF-8`: ascii (`LC_ALL` over `LC_CTYPE`);
+    - `LC_ALL=C` with `LANG=en_US.UTF-8`: ascii (`LC_ALL` over `LANG`);
+    - `LC_CTYPE=C` with `LANG=fr_FR.UTF-8`: ascii (`LC_CTYPE` over `LANG`);
+    - `LC_CTYPE=en_US.UTF-8` with `LANG=C`: block;
+  - `TERM=linux` with `LANG=en_US.UTF-8`, so the case reaches the terminal rule rather than the
+    locale's: block. An explicit `braille` under the same pair stays braille.
 - **Goldens:** every existing golden stays as it is. The harness pins `display.graphs = block`, as
   `pinLocal` pins the time zone, so a test machine's locale changes nothing. New goldens: the
   Tokens page in `braille` and in `ascii`, at 80 and 140 columns.
