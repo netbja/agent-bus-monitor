@@ -658,7 +658,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | Ctrl+P, or `/` at the start of the line | the command palette: every page and panel action by name (`/requests`, `/health`...), `/write <agent> <text>`, `/master <text>`, `/filter <words>`, `/set <key>`, `/tour`, and the person's `agentbus` commands (`/reload <role> [fresh]`, `/pause <duration>`, `/resume`, `/suspend`, `/backup`, `/self-repair reset <agent>`, `/priority <task> <level>`), each showing its exact argv and run after `y` (the three that act as you need `identity.as`); best match first, Tab completes, Enter runs, `//` sends a `/`; the F1 help lists them all |
 | `R` | the recap: "where was I?", built from what the bus retains, unread first |
 | `p` `P` | the plan in a drawer (`d` shows what is done) |
-| `U` | tokens: the account windows with a 24-hour sparkline, every project side by side, this project by agent today |
+| `U` | tokens: the account windows with a 24-hour sparkline, every project side by side (its 7 days drawn in `display.graphs`: `auto`, `block`, `braille` or `ascii`), this project by agent today |
 | `H` | history: re-read the past, the archive on this host then the live streams, newest first by day (enter opens an entry and `n`/`p` step, `o` loads three days more, `f` filters, `t` keeps the selected entry's thread) |
 | `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |
 

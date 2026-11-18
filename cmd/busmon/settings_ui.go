@@ -73,7 +73,7 @@ var themeChoices = []string{"auto", "dark", "light"}
 // settingChoices are the keys chosen with ←→ among their values, in the
 // page's order (busmon-icons: display.icons joins the theme).
 var settingChoices = map[string][]string{"display.theme": themeChoices, "display.icons": {iconsOff, iconsNerd, iconsFont},
-	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}, "display.work_layout": {"auto", "list", "kanban"},
+	"sentinel.reload": {"on", "propose", "off"}, "compose.at_path": {"absolute", "relative"}, "display.work_layout": {"auto", "list", "kanban"}, "display.graphs": {graphsAuto, graphsBlock, graphsBraille, graphsASCII},
 	"display.date_format": quota.DateFormats}
 
 // settingsMsg is the rows read again, after an open or a write.
@@ -220,6 +220,9 @@ func (m *Model) applySettings(key string) string {
 	case "display.work_layout": // requests-plan-redesign: the next frame draws it
 		cur.WorkLayout = ns.WorkLayout
 		return "applied and saved"
+	case "display.graphs": // braille-sparklines §2: the next frame draws the sparklines in it
+		cur.Graphs = ns.Graphs
+		return "graphs applied and saved"
 	case "projects.delete_files", "projects.delete_backups": // the next delete panel reads them
 		cur.DeleteFiles, cur.DeleteBackups = ns.DeleteFiles, ns.DeleteBackups
 		return "applied and saved"
@@ -1012,6 +1015,7 @@ var settingHelps = map[string]string{
 	"attach.prefix":                "agentbus attach's way out: prefix then d detaches, prefix twice sends it to the agent; f1-f12 or ctrl+<letter>; refused unless verified free for every client the project's roles run on",
 	"display.date_format":          dateFormatHelp(),
 	"display.work_layout":          "the Work tab (3): auto is the list below 130 columns of busmon's pane and the Kanban from 130; list or kanban keeps one",
+	"display.graphs":               "the Tokens page's 7-day sparklines (not the gauges): auto is ascii off a UTF-8 locale, else block; braille draws two days per cell",
 	"display.idle_hint_after":      "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after":      "the screensaver: a calm screen after this long without input; 0 = off",
 	"waiting.fade":                 "fades a waiting agent in and out and slides the gauges (true colour only)",

@@ -79,19 +79,6 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
-// sparkSteps are the eight blocks, lowest first.
-var sparkSteps = []string{GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphGauge, GlyphBarFull}
-
-// sparkOf is v on a scale to max: a space for none, the lowest block for a
-// little (the Projects zone's 7 days).
-func sparkOf(v, max float64) string {
-	if v <= 0 || max <= 0 {
-		return " "
-	}
-	i := int(v / max * float64(len(sparkSteps)))
-	return sparkSteps[clamp(i, 0, len(sparkSteps)-1)]
-}
-
 // tokCount: 0, 873, 206k, 5.1M.
 func tokCount(n int64) string {
 	switch {
@@ -106,7 +93,8 @@ func tokCount(n int64) string {
 // tokensPage is the U page's body at width cells. icons is display.icons, off
 // below 80 cells (the caller's tier): an account row's provider and an agent
 // row's provider carry their icon pair, the trailing room paying (busmon-icons §7.3).
-func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot, holds map[string]int64, agents map[string]*agentState,
+// graphs is the sparklines' resolved style (graphsStyle; "" draws blocks).
+func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.BudgetSnapshot, holds map[string]int64, agents map[string]*agentState,
 	project string, now time.Time, width int, pending bool, bars barView, all bool) []Line {
 	var b body
 	// pending: the first reading is on its way (tokensSkeleton): a shimmering
@@ -228,11 +216,13 @@ func tokensPage(icons string, st tokState, budgets map[string]bus.BudgetSnapshot
 			}
 			b.text("  ")
 			var total int64
+			week := make([]float64, 0, len(days))
 			for _, d := range days {
 				v := p.days[d]
 				total += v.In + v.Write + v.Out
-				b.seg(RoleOK, sparkOf(float64(v.In+v.Write+v.Out), float64(maxDay)))
+				week = append(week, float64(v.In+v.Write+v.Out))
 			}
+			b.seg(RoleOK, sparkLine(week, float64(maxDay), graphs))
 			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+tokCount(total)))
 		}
 		if len(none) > 0 {

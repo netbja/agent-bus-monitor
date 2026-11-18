@@ -23,6 +23,7 @@ type busmonSettings struct {
 	StuckAfter  time.Duration // dispatch.stuck_after (agent-screen-blocked §3; 0 = off)
 	IdleView    time.Duration // display.idle_view_after: the idle view after this long without input (0 = off)
 	Icons       string        // display.icons: off, nerd or agent-font (busmon-icons)
+	Graphs      string        // display.graphs resolved: block, braille or ascii; "" draws blocks (braille-sparklines)
 	AtPath      string        // compose.at_path: absolute or relative (compose-at-file §5)
 	WorkLayout  string        // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
 	DateFormat  string        // display.date_format: relative, iso or clock12 (quota settings §2.3)
@@ -58,6 +59,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		Limit: r.Int("display.limit"), UpdateCheck: r.Bool("updates.check"), IdleHint: r.Duration("display.idle_hint_after"), StuckAfter: r.Duration("dispatch.stuck_after"),
 		IdleView:    r.Duration("display.idle_view_after"),
 		Icons:       r.String("display.icons"),
+		Graphs:      graphsStyle(r.String("display.graphs"), getenv),
 		AtPath:      r.String("compose.at_path"),
 		WorkLayout:  r.String("display.work_layout"),
 		DateFormat:  r.String("display.date_format"),

@@ -126,3 +126,25 @@ func TestBusmonSettingsIcons(t *testing.T) {
 		t.Fatalf("unknown env icons %q", got.Icons)
 	}
 }
+
+// braille-sparklines §2: display.graphs is resolved at load, auto through the
+// locale; an unknown value is the registry's note, then auto.
+func TestBusmonSettingsGraphs(t *testing.T) {
+	utf := map[string]string{"LANG": "fr_FR.UTF-8"}
+	if got := loadBusmonSettings(settingsDir(t, "", "", utf), settingsFlags{}); got.Graphs != graphsBlock {
+		t.Fatalf("default graphs on UTF-8 %q", got.Graphs)
+	}
+	if got := loadBusmonSettings(settingsDir(t, "", "", map[string]string{"LANG": "C"}), settingsFlags{}); got.Graphs != graphsASCII {
+		t.Fatalf("default graphs on C %q", got.Graphs)
+	}
+	if got := loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"braille\"\n", "", map[string]string{"LANG": "C"}), settingsFlags{}); got.Graphs != graphsBraille {
+		t.Fatalf("file graphs %q", got.Graphs)
+	}
+	if got := loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"braille\"\n", "", map[string]string{"AGENT_BUS_BUSMON_GRAPHS": "ascii", "LANG": "fr_FR.UTF-8"}), settingsFlags{}); got.Graphs != graphsASCII {
+		t.Fatalf("env graphs %q", got.Graphs)
+	}
+	got := loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"dots\"\n", "", utf), settingsFlags{})
+	if got.Graphs != graphsBlock || !strings.Contains(got.Note, "display.graphs:") {
+		t.Fatalf("unknown file graphs %q, note %q", got.Graphs, got.Note)
+	}
+}

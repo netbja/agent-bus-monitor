@@ -908,3 +908,36 @@ func TestSettingsPageDeleteOptions(t *testing.T) {
 		t.Fatalf("not applied: %+v", s)
 	}
 }
+
+// braille-sparklines §2, §5: Graphs is a Display row chosen with ←→, applied
+// from the next frame without a restart: the Tokens page then draws braille.
+func TestSettingsPageGraphs(t *testing.T) {
+	getenv := settingsEnv(t, "[display]\ngraphs = \"block\"\n", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1", "LANG": "en_US.UTF-8"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	m = selectSetting(t, m, "display.graphs")
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, tea.Key{Code: tea.KeyRight})
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if !strings.Contains(configText(t, getenv), "graphs = \"braille\"") || m.cfg.settings.Graphs != graphsBraille || m.ui.flash != "graphs applied and saved" {
+		t.Fatalf("graphs: %q %q %q", configText(t, getenv), m.cfg.settings.Graphs, m.ui.flash)
+	}
+	page := linesText(tokensPage(iconsOff, m.cfg.settings.Graphs, tokFixtureState(shellNow), nil, nil, nil, "agent-bus-monitor", shellNow, 120, false, barView{}, true))
+	if !strings.ContainsRune(page, brailleBlank) && !strings.ContainsAny(page, "⡀⣀⡄⡆⡇⢀⢠⢰⢸⣿") {
+		t.Fatalf("no braille on the Tokens page:\n%s", page)
+	}
+}
+
+// An unknown display.graphs is the registry's warning on the C page, and auto.
+func TestSettingsPageGraphsUnknown(t *testing.T) {
+	getenv := settingsEnv(t, "[display]\ngraphs = \"dots\"\n", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1", "LANG": "en_US.UTF-8"})
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	m = selectSetting(t, m, "display.graphs")
+	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "display.graphs · from config.toml line 2 refused (default: auto)") {
+		t.Fatalf("no warning for display.graphs = dots:\n%s", body)
+	}
+	if got := loadBusmonSettings(getenv, settingsFlags{}).Graphs; got != graphsBlock {
+		t.Fatalf("dots resolved to %q, want auto's block", got)
+	}
+}

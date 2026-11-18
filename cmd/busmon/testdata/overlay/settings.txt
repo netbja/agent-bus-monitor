@@ -5,7 +5,8 @@
    Notifications  │   • Theme                           ‹ dark ›
    Services       │ ▶ • Icons                           ‹ nerd ›
    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font     
-   Projects       │     @ inserts paths as              ‹ absolute ›
+   Projects       │     Sparklines                      ‹ auto ›
+                  │     @ inserts paths as              ‹ absolute ›
                   │     Date format                     ‹ relative ›
                   │     Work layout                     ‹ auto ›
                   │     Activity auto-scroll            ● on

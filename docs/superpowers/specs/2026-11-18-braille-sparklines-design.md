@@ -1,6 +1,8 @@
 # Braille sparklines: a graph style setting, with mock-ups
 
-Status: spec, r2, for review (subject `braille-sparklines-spec`). r2: reviewer-codex (the tests pin
+Status: r3, built (subject `braille-sparklines`). r3: the person's answers (Q1 one line, Q2 filled) and
+their addition, that any non-zero value lights at least the bottom dot (§4). Before: spec, r2, for review (subject
+`braille-sparklines-spec`). r2: reviewer-codex (the tests pin
 every pair of the locale's precedence), foureyes (the live change
 needs its `applySettings` case; one locale helper shared with the language setting). Not built. Base: origin/dev
 `d920cede`.
@@ -142,7 +144,12 @@ What the mock-ups show:
 - **The scale is unchanged:** a level is `int(v/max*n)` clamped to `n-1`, plus one, so any
   non-zero day shows at least its lowest step. `n` is 8 for block, ascii and 2-line braille, and
   4 for 1-line braille.
-- **One function per page:** `sparkLines(vals, max, style) []string` replaces `sparkOf`. It
+- **Any non-zero value lights at least the bottom dot** (the person's addition, with Q1 and Q2):
+  however small a day is next to the zone's largest, it is level 1, never the blank of a day with
+  no tokens, so a small day never looks like zero. `TestSparkLevel` pins it (a value of 1e-9 of
+  the maximum, and 1 token against 5.1M, are level 1).
+- **One function per page:** `sparkLine(vals, max, style) string` replaces `sparkOf` (as built: one
+  line, Q1, so one string; the spec's `sparkLines` returned a row per line for 2-line braille). It
   returns one string per row (one row, or two for 2-line braille). The Projects loop prints each
   row, the upper ones with the name and number columns blank.
 - **Width:** braille and the blocks are single-width in `Width` (uniseg), so no alignment
@@ -174,7 +181,10 @@ What the mock-ups show:
 - **Gauges untouched:** a test renders the Tokens page in `ascii` and checks that the account
   bars still draw their blocks.
 
-## 6. Questions for the person
+## 6. Questions for the person (answered)
+
+The person answered on 2026-11-18: **Q1 one line**, **Q2 filled**, and added that any non-zero value
+lights at least the bottom dot (§4).
 
 - **Q1. One line or two?** Recommended: **one line**, the same height as today. The cost is 4
   levels instead of 8: close days look the same (§3). Two lines keep 8 levels but double every

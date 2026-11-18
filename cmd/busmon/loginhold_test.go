@@ -33,7 +33,7 @@ func TestLoginHoldLines(t *testing.T) {
 func TestTokensPageShowsALoginHold(t *testing.T) {
 	exp := time.Date(2026, 11, 19, 15, 40, 0, 0, time.Local)
 	agents := map[string]*agentState{"coder": {loginHeld: exp.UnixMilli()}}
-	page := linesText(tokensPage(iconsOff, tokState{}, nil, nil, agents, "agent-bus-monitor", exp, 120, false, barView{}, true))
+	page := linesText(tokensPage(iconsOff, "", tokState{}, nil, nil, agents, "agent-bus-monitor", exp, 120, false, barView{}, true))
 	if !strings.Contains(page, "  coder: Claude login expired Thu 15:40, held") {
 		t.Fatalf("no login hold line:\n%s", page)
 	}

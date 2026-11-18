@@ -67,7 +67,7 @@ func TestTokensPageGoldens(t *testing.T) {
 
 func pageText(st tokState, agents map[string]*agentState, width int) string {
 	var out []string
-	for _, l := range tokensPage(iconsOff, st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}, true) { // a: every agent listed
+	for _, l := range tokensPage(iconsOff, "", st, nil, nil, agents, "agent-bus-monitor", shellNow, width, false, barView{}, true) { // a: every agent listed
 		out = append(out, l.text())
 	}
 	return strings.Join(out, "\n")
@@ -115,8 +115,8 @@ func TestTokensPagePendingUnknownZero(t *testing.T) {
 // Bars compare across projects (scaled to the largest day of all); the
 // hour sparkline keeps the hour's last sample, a space for an hour without.
 func TestTokensSparkSteps(t *testing.T) {
-	if sparkOf(0, 100) != " " || sparkOf(100, 100) != GlyphBarFull || sparkOf(1, 100) != GlyphSpark1 {
-		t.Errorf("spark steps: %q %q %q", sparkOf(0, 100), sparkOf(100, 100), sparkOf(1, 100))
+	if got := sparkLine([]float64{0, 100, 1}, 100, graphsBlock); got != " "+GlyphBarFull+GlyphSpark1 {
+		t.Errorf("spark steps: %q", got)
 	}
 }
 
@@ -292,12 +292,12 @@ func TestTokensSkeletonAndFadeSchedule(t *testing.T) {
 		t.Error("the skeleton outlived its 2 minutes")
 	}
 	// Rendered after the window: the open project reads ? with its reason, no shimmer.
-	page := linesText(tokensPage(iconsOff, later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
+	page := linesText(tokensPage(iconsOff, "", later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
 	if strings.Contains(page, "first reading pending") || !strings.Contains(page, "agent-bus-monitor") || !strings.Contains(page, "?") || !strings.Contains(page, "not read yet") {
 		t.Errorf("after the window:\n%s", page)
 	}
 	later.snap.tok = tokState{polled: true, projects: []tokProject{{name: "agent-bus-monitor"}}}
-	page = linesText(tokensPage(iconsOff, later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
+	page = linesText(tokensPage(iconsOff, "", later.snap.tok, nil, nil, later.snap.agents, "agent-bus-monitor", later.now, 120, later.tokensSkeleton(), barView{}, false))
 	if !strings.Contains(page, "no tokens recorded") || strings.Contains(page, "first reading pending") {
 		t.Errorf("after the window, no key:\n%s", page)
 	}
@@ -336,7 +336,7 @@ func TestTokensPageProvidersInTheirColours(t *testing.T) {
 	w := []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ObservedAt: 1}}
 	budgets := map[string]bus.BudgetSnapshot{"anthropic": {Windows: w}, "openai": {Windows: w}, "acme": {Windows: w}}
 	roles := map[string]map[Role]bool{}
-	for _, l := range tokensPage(iconsOff, tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false, barView{}, true) {
+	for _, l := range tokensPage(iconsOff, "", tokFixtureState(shellNow), budgets, nil, agents, "agent-bus-monitor", shellNow, 120, false, barView{}, true) {
 		for _, s := range l {
 			// A segment of the text role merges with its neighbours: key it by
 			// the provider name it starts with.
@@ -379,7 +379,7 @@ func TestTokensPageAccountCards(t *testing.T) {
 			{Name: "5h", UsedPct: 50, ResetsAt: at(4 * time.Hour), ObservedAt: now.UnixMilli()}}}, // 60 min gone, 50 % used: the limit in 60 more
 	}
 	for _, width := range []int{70, 80, 120, 190} {
-		lines := tokensPage(iconsOff, tokFixtureState(now), budgets, nil, nil, "agent-bus-monitor", now, width, false, barView{}, true)
+		lines := tokensPage(iconsOff, "", tokFixtureState(now), budgets, nil, nil, "agent-bus-monitor", now, width, false, barView{}, true)
 		page := strings.Join(strings.Fields(linesText(lines)), " ") // a wrapped sentence reads as one
 		for _, l := range lines {
 			if l.Width() > width {

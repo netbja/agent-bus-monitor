@@ -603,7 +603,7 @@ func (m *Model) buildPage() bool {
 		if m.layout.Tier == TierNarrow { // the icon columns exist at 80 cells and wider (busmon-icons §4)
 			icons = iconsOff
 		}
-		p.body = tokensPage(icons, s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
+		p.body = tokensPage(icons, m.cfg.settings.Graphs, s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
 	case ovRecap: // the panel is on screen beside the page in the wide and medium tiers; a resize can change that (reviewer-codex)

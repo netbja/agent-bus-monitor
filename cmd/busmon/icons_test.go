@@ -293,7 +293,7 @@ func TestTokensPageIconsFit(t *testing.T) {
 	for _, budgets := range []map[string]bus.BudgetSnapshot{shellFixture(shellNow).budgets, full} {
 		for _, mode := range []string{iconsNerd, iconsFont} {
 			for width := 40; width <= 220; width++ {
-				for _, l := range tokensPage(mode, tokFixtureState(shellNow), budgets, holds, nil, "agent-bus-monitor", shellNow, width, false, barView{}, true) {
+				for _, l := range tokensPage(mode, "", tokFixtureState(shellNow), budgets, holds, nil, "agent-bus-monitor", shellNow, width, false, barView{}, true) {
 					if l.Width() > width {
 						t.Fatalf("%s at %d: a line is %d cells: %q", mode, width, l.Width(), l.text())
 					}
