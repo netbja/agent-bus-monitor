@@ -54,7 +54,7 @@ var providerHues = []struct {
 	{"moonshot", RoleProvMoonshot, "#1677FF", "#1677FF", "blue"},
 	{"xai", RoleProvXAI, "#7B6FD6", "#7B6FD6", "fuchsia"},
 	{"deepseek", RoleProvDeepSeek, "#4D6BFE", "#4D6BFE", "aqua"},
-	{"xiaomi", RoleProvXiaomi, "#FF6900", "#FF6900", "lime"},
+	{"xiaomi", RoleProvXiaomi, "#FF6900", "#E05A00", "lime"}, // light: a shade darker, 3:1 on white
 	// The local-llm peer's endpoint on this machine: no maker's colour; purple
 	// is the one 16-colour name left that reads on dark and light and is no
 	// forbidden role's (it is RoleDispatch's too, as blue is RoleDone's).
@@ -87,7 +87,15 @@ type Theme struct {
 	colors    [roleCount]tcell.Color
 	tags      [roleCount]string
 	selection tcell.Color
+	// bg is the background every cell is painted with: the terminal's own
+	// (ColorDefault) but on the light palette, which paints lightBG so its dark
+	// text reads on a dark terminal too (light-theme contrast, 2026-11-18).
+	bg tcell.Color
 }
+
+// lightBG is the light palette's painted background: the one its text roles
+// are checked against (theme_contrast_test.go).
+var lightBG = tcell.GetColor("#FFFFFF")
 
 func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (*Theme, error) {
 	name := flagVal
@@ -108,21 +116,23 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 			name = "light"
 		}
 	}
-	t := &Theme{palette: PaletteDark, selection: tcell.GetColor("#22324A")}
-	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#4A5563", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48", "#39C69E"})
+	t := &Theme{palette: PaletteDark, selection: tcell.GetColor("#22324A"), bg: tcell.ColorDefault}
+	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#717B87", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48", "#39C69E"})
 	for _, h := range providerHues {
 		t.tags[h.role] = h.dark
 	}
 	if name == "light" {
 		t.palette = PaletteLight
 		t.selection = tcell.GetColor("#DDF4FF")
-		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#B0B8C1", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE", "#0B7D60"})
+		t.bg = lightBG
+		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#848D97", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE", "#0B7D60"})
 		for _, h := range providerHues {
 			t.tags[h.role] = h.light
 		}
 	}
 	if colors < 1<<24 {
 		t.palette = Palette16
+		t.bg = tcell.ColorDefault
 		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray", "green"})
 		for _, h := range providerHues {
 			t.tags[h.role] = h.ansi
@@ -130,6 +140,7 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 	}
 	if noColor {
 		t.palette = PaletteNone
+		t.bg = tcell.ColorDefault
 	}
 	for r, name := range t.tags {
 		t.tags[r] = strings.ToLower(name)
@@ -152,7 +163,7 @@ func themeRole(r Role) Role {
 }
 
 func (t *Theme) Style(r Role) tcell.Style {
-	return tcell.StyleDefault.Foreground(t.colors[themeRole(r)]).Background(tcell.ColorDefault)
+	return tcell.StyleDefault.Foreground(t.colors[themeRole(r)]).Background(t.bg)
 }
 
 // Faded is r's colour at pct percent of the way from the frame line colour
@@ -208,7 +219,7 @@ func (t *Theme) FrameBorder(hue Role, focused bool) tcell.Style {
 		return s
 	}
 	if t.Animated() {
-		return tcell.StyleDefault.Foreground(t.Faded(hue, frameFade)).Background(tcell.ColorDefault)
+		return tcell.StyleDefault.Foreground(t.Faded(hue, frameFade)).Background(t.bg)
 	}
 	return t.Style(RoleLine)
 }
@@ -231,7 +242,7 @@ func (t *Theme) Pill(r Role) tcell.Style {
 // Tab backgrounds: an inactive tab is a block a shade off the screen's
 // background, as a terminal draws its tabs.
 var (
-	tabOffDark  = tcell.GetColor("#1F2630")
+	tabOffDark  = tcell.GetColor("#1A212A")
 	tabOffLight = tcell.GetColor("#E3E6EA")
 )
 
