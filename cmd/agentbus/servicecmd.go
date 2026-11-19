@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"runtime"
 	"runtime/debug"
@@ -20,11 +19,9 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/mission"
-	"github.com/netbja/agent-bus-monitor/notify"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -713,65 +710,6 @@ func mainServiceRun(project, host string, args []string) int {
 	hostname, _ := os.Hostname()
 	deps := serviceRunDepsFor(project, host, hostname, paths)
 	return serviceRun(ctx, b, kind, rest, deps, w)
-}
-
-// serviceDispatchConfig is the dispatch service's dispatcher: every pass the
-// service runs, and the relay (herdr exit §4.2). The relay was missing here
-// until host-relay-timeout: only the foreground agentbus dispatch set it, so
-// a host command from an agent's terminal was never read by the service.
-func serviceDispatchConfig(b *bus.Bus, project, host, escalateTo string, paths service.Paths, log io.Writer) (dispatch.Config, *dispatch.HostRuntime, error) {
-	cfg := dispatchBaseConfig()
-	if escalateTo != "" { // service run --escalate-to, else AGENT_BUS_ESCALATE_TO; master otherwise
-		cfg.EscalateTo = escalateTo
-	}
-	// target is the one escalation target the stall checks, the self-repair
-	// watcher and the reboot judge read: its own variable, set before any of
-	// them holds it, since cfg is returned by value (a pointer into cfg would
-	// point at this function's copy, not the caller's).
-	target := cfg.EscalateTo
-	cfg.Log = log
-	cfg.HostOps = hostOpsConfig(b, project, host) // host commands from inside an agent's terminal
-	cfg.Quota = serviceQuota(os.Getenv, log)
-	if cfg.Quota.Read != nil { // the thresholds re-read from the files each minute (quota settings §2.2)
-		cfg.Quota.Thresholds = quotaThresholds(os.Getenv, project, paths.EnvFile(project))
-	}
-	cfg.Login = serviceLoginExpiry(os.Getenv)                               // an expired login told to the person (login-updates)
-	cfg.Context = serviceContext(os.Getenv, exec.LookPath, notify.RunQuiet) // context fill and alert (context-alert)
-	cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)                   // proved sessions and their tokens (tokens)
-	cfg.History = serviceHistory(os.Getenv, paths.StateDir(project))        // the streams archived to day files (history)
-	cfg.Backup = serviceBackup(log)                                         // the daily backup when backup.schedule = daily
-	cfg.Observe = dispatch.ObserveEvery
-	cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, notify.RunQuiet) // a pane blocked on its client's prompt (prompt-notify)
-	cfg.Prompt.Skip = promptSkip(b, os.Getenv)                            // never rung twice with a desktop target (notifications)
-	cfg.Notify = serviceNotify(b, os.Getenv)                              // the person's phone and desktop (notifications)
-	cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)                      // what waits for the person's merge (merge-queue)
-	cfg.Clear = serviceClear(os.Getenv, exec.LookPath, notify.RunQuiet)   // /clear after a declared hand-off (lifecycle part B)
-	cfg.Clear.Decisions = dispatch.NewClearDecisions()                    // why a clear waits: logged, and read by clear-stall
-	h, err := dispatchRuntime(project, os.Getenv)                         // the dispatcher on the project's holder (herdr exit 10b)
-	if err != nil {
-		return cfg, nil, err
-	}
-	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &target)
-	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
-	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &target)
-	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
-	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), b, h, os.Getenv)
-	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))                // read at each client-update send (auto-reload)
-	workdir, _ := os.Getwd()                                                                 // the unit's WorkingDirectory: the project's repository
-	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, workdir, &target, log).run // judged once, before any loop (reboot-resume §3)
-	return cfg, h, nil
-}
-
-// serviceReloadPolicy reads the project's reload policy as agentbus reload
-// does (service.ReloadPolicy: the environment, the project's env file, then
-// config.toml), at each call, so a change on busmon's C page applies to the
-// next client update without a restart (auto-reload).
-func serviceReloadPolicy(getenv func(string) string, envFile string) func() string {
-	return func() string {
-		ef, _ := service.LoadEnvFile(envFile)
-		mode, _ := service.ReloadPolicy(getenv, ef)
-		return mode
-	}
 }
 
 // newProbeHost is the project's holder client the service's HostPing probes
