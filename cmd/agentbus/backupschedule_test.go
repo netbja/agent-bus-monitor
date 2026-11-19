@@ -67,7 +67,7 @@ func TestScheduledBackup(t *testing.T) {
 func TestScheduledBackupJudgesEachProject(t *testing.T) {
 	w := newScheduleWorld(t, "")
 	os.WriteFile(filepath.Join(w.Home, ".config", "agentbus", "projects", "other.toml"), []byte(""), 0o600)
-	if code, out, errw := runBackupWorld(w, "--project", w.B.Project()); code != 0 {
+	if code, out, errw := handArchive(w, w.B.Project()); code != 0 {
 		t.Fatalf("by hand: %s %s", out, errw)
 	}
 	if err, log := backupWorldPass(w, t); err != nil {
