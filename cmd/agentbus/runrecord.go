@@ -17,7 +17,7 @@ import (
 // judged there (§2.3).
 
 // runBootID is this host's boot id, dispatch.BootID (a variable: tests).
-var runBootID = hostBootID
+var runBootID = lifecycle.HostBootID
 
 // recordUp is agentbus up's write: the counter recreated when missing, then
 // running, this boot.

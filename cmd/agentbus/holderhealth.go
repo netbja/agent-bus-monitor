@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -211,7 +212,7 @@ func holderCheck(b *bus.Bus, evidence func() (health.HolderEvidence, error), get
 		if err == nil {
 			if snaps, aerr := b.Agents(ctx); aerr == nil {
 				if now, terr := b.ServerTime(ctx); terr == nil {
-					e = withHolderAgents(e, snaps, now, provedAlive(hostBootID(), dispatch.ProcStart))
+					e = withHolderAgents(e, snaps, now, provedAlive(lifecycle.HostBootID(), dispatch.ProcStart))
 					e.RelaunchPace = holderRelaunchPace(getenv)
 				}
 			}

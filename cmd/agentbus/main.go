@@ -27,6 +27,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -300,7 +301,7 @@ func main() {
 	case "bind":
 		os.Exit(runBind(ctx, bindDeps{Bind: b.Bind, Procs: func(ctx context.Context, term string) ([]termhost.Proc, string, error) {
 			return termProcs(ctx, project, term)
-		}, Start: dispatch.ProcStart, Boot: hostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
+		}, Start: dispatch.ProcStart, Boot: lifecycle.HostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
 		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "reload":
@@ -995,7 +996,7 @@ func statusIdent(ctx context.Context) bus.AgentIdent {
 		}
 		who.Pane, who.Terminal = string(t.ID), string(t.ID)
 		who.PID, who.PIDStart = pid, start
-		who.BootID = hostBootID()
+		who.BootID = lifecycle.HostBootID()
 		return who
 	}
 	return who
@@ -1030,12 +1031,4 @@ var identTerms = func(ctx context.Context, project string) ([]termhost.Term, err
 		return nil, err
 	}
 	return h.List(ctx, project)
-}
-
-// hostBootID is this host's boot id, "" when it cannot be read (no /proc):
-// the identity then carries no host, and readers on other hosts prove
-// nothing from it.
-func hostBootID() string {
-	id, _ := dispatch.BootID()
-	return id
 }

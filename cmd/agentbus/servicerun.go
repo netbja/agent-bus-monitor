@@ -258,7 +258,7 @@ func serviceRun(ctx context.Context, b *bus.Bus, kind string, args []string, d s
 			start = time.Time{}
 			t := time.NewTicker(d.Heartbeat)
 			for !isGitRepo(repo) {
-				if !publish(gitWaitState, detail, "") {
+				if !publish(service.GitWaitState, detail, "") {
 					t.Stop()
 					logf("project deleted: the services marker is gone; stopping")
 					return 0
@@ -496,9 +496,6 @@ func missionsActivity(ctx context.Context, b *bus.Bus) (state, detail string) {
 	}
 	return "busy", "running " + strings.Join(busy, ", ")
 }
-
-// gitWaitState: missions waits for its directory to become a Git repository.
-const gitWaitState = "waiting-git"
 
 func isGitRepo(dir string) bool {
 	return exec.Command("git", "-C", dir, "rev-parse", "--git-dir").Run() == nil
