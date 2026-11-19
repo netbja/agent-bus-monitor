@@ -15,9 +15,9 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The resume hook (v0.21.1; herdr exit §4.7): the launcher gives every

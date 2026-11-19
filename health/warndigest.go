@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // The daily review's digest of long warns (sentinel-warn-digest: master's

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // fidelity states how much of a message's original text is actually in hand.

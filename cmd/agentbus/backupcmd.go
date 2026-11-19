@@ -17,9 +17,9 @@ import (
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // agentbus backup (spec docs/superpowers/specs/2026-11-01-backup-design.md):

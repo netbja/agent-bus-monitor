@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // The Requests view (spec docs/superpowers/specs/2026-10-28-requests-view-design.md):

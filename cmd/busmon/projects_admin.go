@@ -19,11 +19,11 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The Projects page (M, spec docs/superpowers/specs/2026-11-08-projects-admin-page-design.md):

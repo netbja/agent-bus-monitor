@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/plan"
-	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The Work model (requests-plan-redesign, the person's answer of 2026-11-10):
