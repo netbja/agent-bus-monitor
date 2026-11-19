@@ -132,7 +132,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 				if rec := records[kind]; rec.Error != "" && rec.At > 0 && redisNow.Sub(time.UnixMilli(rec.At)) <= time.Hour {
 					recentError = true // never retain or display the error text
 				}
-				if rec := records[kind]; rec.State == gitWaitState && rec.At > 0 && redisNow.Sub(time.UnixMilli(rec.At)) <= time.Minute {
+				if rec := records[kind]; rec.State == service.GitWaitState && rec.At > 0 && redisNow.Sub(time.UnixMilli(rec.At)) <= time.Minute {
 					waitingGit = true
 				}
 			}

@@ -64,6 +64,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -134,7 +135,7 @@ func e2eFakeClaude() {
 	var berr bytes.Buffer
 	if code := runBind(ctx, bindDeps{Bind: b.Bind, Procs: func(ctx context.Context, t string) ([]termhost.Proc, string, error) {
 		return termProcs(ctx, project, t)
-	}, Start: dispatch.ProcStart, Boot: hostBootID, Env: os.Getenv}, []string{agent, "--pid", strconv.Itoa(os.Getpid())}, io.Discard, &berr); code != 0 {
+	}, Start: dispatch.ProcStart, Boot: lifecycle.HostBootID, Env: os.Getenv}, []string{agent, "--pid", strconv.Itoa(os.Getpid())}, io.Discard, &berr); code != 0 {
 		e2eLog("bind = %d: %s", code, berr.String())
 	}
 	// What Claude Code's SessionStart hooks do: record the resume (the bus

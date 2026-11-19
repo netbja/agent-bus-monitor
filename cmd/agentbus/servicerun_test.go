@@ -284,7 +284,7 @@ func TestServiceRunMissionsWaitsForGitThenStarts(t *testing.T) {
 	done := make(chan int, 1)
 	var log bytes.Buffer
 	go func() { done <- serviceRun(ctx, b, service.Missions, []string{"--repo", repo}, d, &log) }()
-	r := waitState(t, b, service.Missions, gitWaitState)
+	r := waitState(t, b, service.Missions, service.GitWaitState)
 	if !strings.Contains(r.Detail, "git init") || r.Error != "" {
 		t.Fatalf("record = %+v", r)
 	}
@@ -329,7 +329,7 @@ func TestServiceRunMissionsStopsWhileWaitingForGit(t *testing.T) {
 	done := make(chan int, 1)
 	var log bytes.Buffer
 	go func() { done <- serviceRun(ctx, b, service.Missions, []string{"--repo", t.TempDir()}, d, &log) }()
-	waitState(t, b, service.Missions, gitWaitState)
+	waitState(t, b, service.Missions, service.GitWaitState)
 	cancel()
 	if code := <-done; code != 0 {
 		t.Fatalf("code = %d", code)
