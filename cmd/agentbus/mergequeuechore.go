@@ -39,10 +39,12 @@ type mergeQueueChore struct {
 	getenv  func(string) string
 	environ func() []string
 
-	repo       func(ctx context.Context, dir string, env []string) error
-	origin     func(ctx context.Context, dir string, env []string) (url string, has bool, err error)
-	hasGH      func(env []string) bool
-	github     func(ctx context.Context, dir string, env []string) ([]mergequeue.PR, error)
+	repo   func(ctx context.Context, dir string, env []string) error
+	origin func(ctx context.Context, dir string, env []string) (url string, has bool, err error)
+	hasGH  func(env []string) bool
+	github func(ctx context.Context, dir string, env []string, checks bool) ([]mergequeue.PR, error)
+	// readBase reads a base branch's rollup for the CI loop (ci-loop §4).
+	readBase   func(ctx context.Context, dir string, env []string, branch string) (mergequeue.Base, error)
 	remoteTips func(ctx context.Context, dir string, env []string, base string) ([]mergequeue.Tip, string, error)
 	localTips  func(ctx context.Context, dir string, env []string, base string) ([]mergequeue.Tip, string, error)
 	fetchBase  func(ctx context.Context, dir string, env []string, base string) error
@@ -55,14 +57,20 @@ type mergeQueueChore struct {
 	// so the 72 h window is judged on it (reviewer-codex); nil reads
 	// bus.ServerTime.
 	serverNow func(ctx context.Context) (time.Time, error)
+	// master is the services' escalation target, read at each pass (the CI
+	// loop's master); nil is "master".
+	master *string
 }
 
-// serviceMergeQueue is the dispatch service's chore, in its working directory.
-func serviceMergeQueue(b *bus.Bus, getenv func(string) string) dispatch.MergeQueueConfig {
+// serviceMergeQueue is the dispatch service's chore, in its working
+// directory; target is the services' escalation target (the CI loop's
+// master).
+func serviceMergeQueue(b *bus.Bus, getenv func(string) string, target *string) dispatch.MergeQueueConfig {
 	c := serviceMergeQueueChore(b, getenv)
 	if c == nil {
 		return dispatch.MergeQueueConfig{}
 	}
+	c.master = target
 	return dispatch.MergeQueueConfig{Every: mergeQueueEvery, Pass: c.pass, Due: b.MergeQueueDue} // a delivery's mark runs a pass at once (merge-popup-setting)
 }
 
@@ -82,7 +90,7 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 			_, err := mergequeue.LookIn(env, "gh")
 			return err == nil
 		},
-		github: mergequeue.ReadGitHub, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips,
+		github: mergequeue.ReadGitHub, readBase: mergequeue.ReadBaseRollup, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips,
 		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase,
 		delivered: delivery.Delivered,
 		done: func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error) {
@@ -151,7 +159,15 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 	}
 	write := min(mergeQueueWrite, budget/2)
 	dctx, cancel := context.WithTimeout(ctx, budget-write)
-	rec, run := c.deriveRun(dctx)
+	rec, run, ci := c.deriveRun(dctx)
+	if ci.on {
+		why, err := mergequeue.RunCI(dctx, c.b, token, c.ciConfig(ci.env, ci.cap), ci.prs, ci.vs)
+		if err != nil {
+			cancel()
+			return err // the lease lost
+		}
+		rec.CI = why
+	}
 	cancel()
 	wctx, wcancel := context.WithTimeout(ctx, write)
 	defer wcancel()
@@ -175,9 +191,36 @@ type runHeads struct {
 	known bool
 }
 
-// derive reads everything one pass needs; a failed read is the reason.
+// ciPass is what the CI loop takes from a pass (ci-loop §2): the open PRs of
+// a gh read that succeeded, with their rollups, and the ledger; on only
+// while ci.loop is on and that read is complete.
+type ciPass struct {
+	on  bool
+	cap int
+	env []string
+	prs []mergequeue.PR
+	vs  []bus.Verdict
+}
+
+// ciConfig is the loop's configuration for this pass; the base is read with
+// gh in the services' directory, one call's budget each.
+func (c *mergeQueueChore) ciConfig(env []string, cap int) mergequeue.CIConfig {
+	master := "master"
+	if c.master != nil && *c.master != "" {
+		master = *c.master
+	}
+	return mergequeue.CIConfig{Project: c.b.Project(), Master: master, Cap: cap,
+		ReadBase: func(ctx context.Context, branch string) (mergequeue.Base, error) {
+			cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
+			defer cancel()
+			return c.readBase(cctx, c.dir, env, branch)
+		}}
+}
+
+// derive reads everything one pass needs; a failed read is the reason. It
+// writes nothing: the CI loop runs only in pass.
 func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
-	rec, _ := c.deriveRun(ctx)
+	rec, _, _ := c.deriveRun(ctx)
 	return rec
 }
 
@@ -192,9 +235,9 @@ func mergeQueueLive(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	return c.derive(ctx), true
 }
 
-// deriveRun is derive with the run's delivered heads (run-budget §2): none
-// known when the pass fails.
-func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads) {
+// deriveRun is derive with the run's delivered heads (run-budget §2) and the
+// CI loop's input: none known when the pass fails.
+func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads, ciPass) {
 	settings := config.Machine(c.getenv)
 	// The project's base, as deliver's (merge-popup-setting): the template's
 	// [delivery] base, else the machine's delivery.base.
@@ -202,8 +245,8 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	env := mergeQueueEnv(c.environ())
 	call := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, mergeQueueCall) }
 	forgeKind := ""
-	fail := func(source, why string) (bus.MergeQueueRecord, runHeads) {
-		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}, runHeads{}
+	fail := func(source, why string) (bus.MergeQueueRecord, runHeads, ciPass) {
+		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}, runHeads{}, ciPass{}
 	}
 	if berr != nil { // a template that does not decode: no base anybody chose
 		return fail("", "the project's base: "+berr.Error())
@@ -239,6 +282,7 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 		return fail("", "broker time unavailable")
 	}
 	in := mergequeue.Input{Verdicts: vs}
+	ci := ciPass{on: settings.Bool("ci.loop"), cap: settings.Int("ci.max_handoffs"), env: env, vs: vs}
 	source := "git"
 	// Origin's tips and the fetched base, in every mode that pushes (the gh
 	// path too, for master-idle's undelivered heads).
@@ -263,13 +307,14 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	case f.Kind == forge.GitHub && c.hasGH(env):
 		source = "gh"
 		cctx, cancel = call()
-		prs, err := c.github(cctx, c.dir, env)
+		prs, err := c.github(cctx, c.dir, env, ci.on) // the rollup only for the CI loop
 		cancel()
 		if err != nil {
 			return fail(source, err.Error())
 		}
-		in.PRs = prs
-	default: // the git fallback: GitHub without gh, GitLab and Bitbucket (no reader yet), local
+		in.PRs, ci.prs = prs, prs
+	default: // the git fallback: GitHub without gh, GitLab and Bitbucket (no reader yet), local; no CI loop
+		ci.on = false
 		tips, baseTip := remote, remoteBase
 		judgeBase = baseTip
 		if f.Kind == forge.Local {
@@ -310,7 +355,7 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	}
 	run := c.runDelivered(ctx, env, vs, judgeBase, now)
 	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting,
-		Undelivered: undelivered}, run
+		Undelivered: undelivered}, run, ci
 }
 
 // runDelivered are the approved heads within 72 h that the git test

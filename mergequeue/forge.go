@@ -44,10 +44,16 @@ type ghPR struct {
 // ReadGitHub lists the open PRs of the repository in dir with gh, run with
 // exactly env (the caller hardens it: no askpass, GH_PROMPT_DISABLED, LC_ALL;
 // gh is looked up on env's PATH). agentbus never reads a token: gh uses its
-// own credentials. Bounded by ctx.
-func ReadGitHub(ctx context.Context, dir string, env []string) ([]PR, error) {
+// own credentials. Bounded by ctx. checks asks for each PR's rollup too (the
+// CI loop's read, only while ci.loop is on: the heavier answer is never paid
+// for without it).
+func ReadGitHub(ctx context.Context, dir string, env []string, checks bool) ([]PR, error) {
+	fields := "number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable"
+	if checks {
+		fields += ",statusCheckRollup"
+	}
 	out, err := run(ctx, dir, env, "gh", "pr", "list", "--state", "open",
-		"--json", "number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable,statusCheckRollup", "--limit", fmt.Sprint(ghLimit))
+		"--json", fields, "--limit", fmt.Sprint(ghLimit))
 	if err != nil {
 		return nil, err
 	}

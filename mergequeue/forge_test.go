@@ -33,7 +33,7 @@ func prJSON(n int, head string) string {
 func TestReadGitHub(t *testing.T) {
 	out := "[" + prJSON(1, hA) + `,{"number":2,"title":"draft \u001b[31mred","url":"u","headRefName":"d","headRefOid":"` + hB + `","baseRefName":"main","isDraft":true,"mergeable":"CONFLICTING"}]`
 	dir, env := fakeGH(t, out, 0)
-	prs, err := ReadGitHub(context.Background(), dir, env)
+	prs, err := ReadGitHub(context.Background(), dir, env, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestReadGitHub(t *testing.T) {
 	}
 	// UNKNOWN (GitHub has not computed it yet) is no conflict.
 	dir2, env2 := fakeGH(t, "["+strings.Replace(prJSON(3, hA), "MERGEABLE", "UNKNOWN", 1)+"]", 0)
-	if prs, err := ReadGitHub(context.Background(), dir2, env2); err != nil || len(prs) != 1 || prs[0].Conflicting {
+	if prs, err := ReadGitHub(context.Background(), dir2, env2, true); err != nil || len(prs) != 1 || prs[0].Conflicting {
 		t.Fatalf("unknown: %+v %v", prs, err)
 	}
 	if strings.ContainsRune(prs[1].Title, 0x1b) {
@@ -56,6 +56,15 @@ func TestReadGitHub(t *testing.T) {
 	got, _ := os.ReadFile(filepath.Join(dir, "env.txt"))
 	if !strings.Contains(string(got), "GH_PROMPT_DISABLED=1") {
 		t.Fatalf("env %s", got)
+	}
+	// Without checks (ci.loop off) the rollup is not asked for.
+	dir3, env3 := fakeGH(t, "["+prJSON(4, hA)+"]", 0)
+	if prs, err := ReadGitHub(context.Background(), dir3, env3, false); err != nil || len(prs) != 1 || len(prs[0].Checks) != 0 {
+		t.Fatalf("no checks: %+v %v", prs, err)
+	}
+	args, _ = os.ReadFile(filepath.Join(dir3, "args.txt"))
+	if want := "pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable --limit 1000"; strings.TrimSpace(string(args)) != want {
+		t.Fatalf("args without checks %q", args)
 	}
 }
 
@@ -72,7 +81,7 @@ func TestReadGitHubIncompleteAndFailures(t *testing.T) {
 	}
 	b.WriteString("]")
 	dir, env := fakeGH(t, b.String(), 0)
-	if _, err := ReadGitHub(context.Background(), dir, env); !errors.Is(err, ErrIncomplete) {
+	if _, err := ReadGitHub(context.Background(), dir, env, true); !errors.Is(err, ErrIncomplete) {
 		t.Fatalf("a full page: %v", err)
 	}
 	for name, c := range map[string]struct {
@@ -85,7 +94,7 @@ func TestReadGitHubIncompleteAndFailures(t *testing.T) {
 		"bad number": {"[" + prJSON(0, hA) + "]", 0},
 	} {
 		dir, env := fakeGH(t, c.out, c.code)
-		if _, err := ReadGitHub(context.Background(), dir, env); err == nil {
+		if _, err := ReadGitHub(context.Background(), dir, env, true); err == nil {
 			t.Fatalf("%s: no error", name)
 		}
 	}
@@ -99,7 +108,7 @@ func TestReadGitHubTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if _, err := ReadGitHub(ctx, dir, []string{"PATH=" + dir + ":/usr/bin:/bin"}); err == nil || time.Since(start) > 3*time.Second {
+	if _, err := ReadGitHub(ctx, dir, []string{"PATH=" + dir + ":/usr/bin:/bin"}, true); err == nil || time.Since(start) > 3*time.Second {
 		t.Fatalf("err %v after %s", err, time.Since(start))
 	}
 }

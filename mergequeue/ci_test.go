@@ -142,7 +142,7 @@ func TestClassifyUnknownKindIgnored(t *testing.T) {
 func TestReadGitHubKeepsTheRollup(t *testing.T) {
 	pr := strings.Replace(prJSON(7, hA), `"mergeable":"MERGEABLE"`, `"mergeable":"MERGEABLE","statusCheckRollup":[{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"https://u","workflowName":"CI"}]`, 1)
 	dir, env := fakeGH(t, "["+pr+","+prJSON(8, hB)+"]", 0)
-	prs, err := ReadGitHub(context.Background(), dir, env)
+	prs, err := ReadGitHub(context.Background(), dir, env, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestReadGitHubRollupOf100IsCut(t *testing.T) {
 	pr := strings.Replace(prJSON(7, hA), `"mergeable":"MERGEABLE"`, `"mergeable":"MERGEABLE","statusCheckRollup":[`+strings.Join(e, ",")+`]`, 1)
 	pr99 := strings.Replace(prJSON(8, hB), `"mergeable":"MERGEABLE"`, `"mergeable":"MERGEABLE","statusCheckRollup":[`+strings.Join(e[:99], ",")+`]`, 1)
 	dir, env := fakeGH(t, "["+pr+","+pr99+"]", 0)
-	prs, err := ReadGitHub(context.Background(), dir, env)
+	prs, err := ReadGitHub(context.Background(), dir, env, true)
 	if err != nil {
 		t.Fatal(err)
 	}

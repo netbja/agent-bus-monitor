@@ -32,7 +32,7 @@ func mqChore(t *testing.T, origin string) (*mergeQueueChore, *bus.Bus) {
 		repo:   func(context.Context, string, []string) error { return nil },
 		origin: func(context.Context, string, []string) (string, bool, error) { return origin, origin != "", nil },
 		hasGH:  func([]string) bool { return true },
-		github: func(context.Context, string, []string) ([]mergequeue.PR, error) {
+		github: func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
 			return []mergequeue.PR{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: mqHead}}, nil
 		},
 		remoteTips: func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
@@ -65,7 +65,7 @@ func TestMergeQueueChoreGitHub(t *testing.T) {
 	}
 	// The same approved PR conflicting with its base: no item, recorded for a
 	// rebase with its own base (foureyes: the chore passes it on).
-	c.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
 		return []mergequeue.PR{{Number: 309, Branch: "feat/request-priority", Head: mqHead, Base: "release", Conflicting: true}}, nil
 	}
 	if err := c.pass(ctx, "mq"); err != nil {
@@ -74,14 +74,16 @@ func TestMergeQueueChoreGitHub(t *testing.T) {
 	if rec, _ = b.MergeQueue(ctx); len(rec.Items) != 0 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != (bus.MergeConflict{Number: 309, Base: "release"}) {
 		t.Fatalf("conflicting: %+v", rec)
 	}
-	c.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
 		return []mergequeue.PR{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: mqHead}}, nil
 	}
 	if err := c.pass(ctx, "mq"); err != nil {
 		t.Fatal(err)
 	}
 	// gh fails: unknown, the items kept (the bus keeps them), the reason said.
-	c.github = func(context.Context, string, []string) ([]mergequeue.PR, error) { return nil, mergequeue.ErrIncomplete }
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
+		return nil, mergequeue.ErrIncomplete
+	}
 	if err := c.pass(ctx, "mq"); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func TestMergeQueueChoreFallbacks(t *testing.T) {
 			remote = true
 			return rt(ctx, d, e, base)
 		}
-		ch.github = func(context.Context, string, []string) ([]mergequeue.PR, error) {
+		ch.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
 			t.Fatalf("%s: gh read", name)
 			return nil, nil
 		}
@@ -219,7 +221,7 @@ func TestMergeQueueChoreBudgetSpentStillRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.budget = 50 * time.Millisecond
-	c.github = func(ctx context.Context, _ string, _ []string) ([]mergequeue.PR, error) {
+	c.github = func(ctx context.Context, _ string, _ []string, _ bool) ([]mergequeue.PR, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
@@ -510,11 +512,104 @@ func TestMergeQueueChoreUsesTheProjectBase(t *testing.T) {
 // mark, so a delivered PR is passed for at once.
 func TestServiceMergeQueueReadsTheDueMark(t *testing.T) {
 	b, _ := dialMain(t)
-	cfg := serviceMergeQueue(b, func(string) string { return "" })
+	cfg := serviceMergeQueue(b, func(string) string { return "" }, nil)
 	if cfg.Pass == nil {
 		t.Skip("no chore in this directory")
 	}
 	if cfg.Due == nil {
 		t.Fatal("the service's merge queue never reads the delivery's mark")
+	}
+}
+
+// ci-loop (spec 2026-11-19-ci-loop-design.md §2-§5): on the gh path the pass
+// asks for the rollup only while ci.loop is on (foureyes on ci-loop-lib),
+// runs the loop with ci.max_handoffs after the read, and names the loop's
+// failure in the record's ci field, never as the queue's reason; off, it
+// neither reads the rollup nor writes; merge-queue --live never writes.
+func TestMergeQueueChoreCILoop(t *testing.T) {
+	c, b := mqChore(t, "git@github.com:o/r.git")
+	ctx := context.Background()
+	env := map[string]string{}
+	c.getenv = func(k string) string { return env[k] }
+	asked := []bool{}
+	red := func(n int, head string) mergequeue.PR {
+		return mergequeue.PR{Number: n, Branch: "feat/x", Head: head, Base: "dev",
+			Checks: []mergequeue.Check{{Name: "build", Failed: true, At: time.Unix(1, 0)}}}
+	}
+	c.github = func(_ context.Context, _ string, _ []string, checks bool) ([]mergequeue.PR, error) {
+		asked = append(asked, checks)
+		return []mergequeue.PR{red(309, mqHead)}, nil
+	}
+	bases := []string{}
+	c.readBase = func(_ context.Context, _ string, _ []string, branch string) (mergequeue.Base, error) {
+		bases = append(bases, branch)
+		return mergequeue.Base{Head: strings.Repeat("b", 40)}, nil
+	}
+	// Live: the rollup is read (the setting is on) but nothing is written.
+	if rec := c.derive(ctx); rec.Source != "gh" || rec.Reason != "" {
+		t.Fatalf("live derive: %+v", rec)
+	}
+	if rec, _ := b.CIRecord(ctx); len(rec) != 0 || len(bases) != 0 {
+		t.Fatalf("live wrote %+v, read bases %v", rec, bases)
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	ci, _ := b.CIRecord(ctx)
+	if e := ci[309]; e.Count != 1 || !strings.Contains(e.Done, "o") || len(bases) != 1 || bases[0] != "dev" {
+		t.Fatalf("the hand-off: %+v bases %v", ci, bases)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Reason != "" || rec.CI != "" {
+		t.Fatalf("a clean loop names nothing: %+v", rec)
+	}
+	// ci.max_handoffs 0: a new red head goes straight to the stop.
+	env["AGENT_BUS_CI_MAX_HANDOFFS"] = "0"
+	c.github = func(_ context.Context, _ string, _ []string, checks bool) ([]mergequeue.PR, error) {
+		asked = append(asked, checks)
+		return []mergequeue.PR{red(309, strings.Repeat("c", 40))}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if ci, _ = b.CIRecord(ctx); !ci[309].Stopped {
+		t.Fatalf("cap 0 does not stop: %+v", ci)
+	}
+	// A base that cannot be read: the loop's reason in ci, the queue's own
+	// outcome untouched.
+	delete(env, "AGENT_BUS_CI_MAX_HANDOFFS")
+	c.github = func(_ context.Context, _ string, _ []string, checks bool) ([]mergequeue.PR, error) {
+		asked = append(asked, checks)
+		return []mergequeue.PR{red(309, mqHead), red(310, strings.Repeat("d", 40))}, nil
+	}
+	c.readBase = func(context.Context, string, []string, string) (mergequeue.Base, error) {
+		return mergequeue.Base{}, errors.New("gh: 502")
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Reason != "" || !strings.Contains(rec.CI, "ci: base dev read failed: gh: 502") {
+		t.Fatalf("the base's failure: %+v", rec)
+	}
+	// ci.loop off: no rollup asked for, no base read, nothing written, the
+	// closed PRs' fields kept as they were.
+	env["AGENT_BUS_CI_LOOP"] = "off"
+	before, _ := b.CIRecord(ctx)
+	c.readBase = func(context.Context, string, []string, string) (mergequeue.Base, error) {
+		t.Fatal("a base read with the loop off")
+		return mergequeue.Base{}, nil
+	}
+	c.github = func(_ context.Context, _ string, _ []string, checks bool) ([]mergequeue.PR, error) {
+		asked = append(asked, checks)
+		return nil, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := b.CIRecord(ctx)
+	if len(after) != len(before) || asked[len(asked)-1] {
+		t.Fatalf("the loop off: record %+v -> %+v, asked %v", before, after, asked)
+	}
+	if !slices.Equal(asked[:len(asked)-1], []bool{true, true, true, true}) {
+		t.Fatalf("the rollup asked for while on: %v", asked)
 	}
 }
