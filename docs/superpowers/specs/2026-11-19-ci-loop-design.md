@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r7, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. Idea 1 of
+Status: spec, r7, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. The entries' mark has its own `ci:pr:<n>` prefix (foureyes, r6). Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -190,7 +190,10 @@ cannot use the cap: the count is decided once per episode (step 5) and does not 
 - the episode;
 - the cap;
 - the owner, master, and whether the owner is master;
-- the three texts, validated in Go first (text, names, types, as `onceCmdFields` does).
+- the three texts, validated in Go first (text, names, types, as `onceCmdFields` does). Each entry
+  carries `episode` = `ci:pr:<n>=<digest>`, the way `onceCmdFields` builds it. The `ci:` prefix is
+  the mark's own, so a swap's resume match (`bus/swap.go`) and the quota marks can never take it
+  for one of theirs (foureyes, r6).
 
 **In order:**
 
