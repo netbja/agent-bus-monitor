@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r8, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. The entries' mark has its own `ci:pr:<n>` prefix (foureyes, r6). r8, master's decision: a held owner delaying an unfinished hand-off's master copy is a known limitation, with a test, and no new mechanism. Idea 1 of
+Status: spec, r9, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. The entries' mark has its own `ci:pr:<n>` prefix (foureyes, r6). r8, master's decision: a held owner delaying an unfinished hand-off's master copy is a known limitation, with a test, and no new mechanism. r9 (reviewer-codex): the delayed copy is sent only while its episode is still red, and is otherwise superseded. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -254,8 +254,13 @@ master's decision: no new mechanism). Sequence:
 3. Before the next pass, the owner becomes `blocked` or `waiting`.
 
 The held check (§4 step 3) is decided in Go before the script, so the passes write nothing while the
-owner stays held. Master's copy is not lost. It is written by the first pass after the owner leaves
-the held state, as the retry rule says, only late. The owner already has its hand-off, and if the
+owner stays held. Master's copy is delayed, and delivery depends on the episode:
+
+- if the original episode is still red when the owner leaves the held state, the first pass after
+  that writes it, as the retry rule says, only late;
+- if the episode ends first (the PR goes green or closes, or gets a new head or a new failing set),
+  the copy is superseded under the episode-change rule above and never sent. A new episode makes its
+  own action, with its own copy to master (reviewer-codex, r8). The owner already has its hand-off, and if the
 cap is reached, the stop does not wait for a held owner (§4 step 2), so the person sees the stop
 either way. The build task tests this sequence and checks that the copy is written once the owner is
 no longer held.
@@ -310,7 +315,7 @@ Tests, with a fake `gh` and the disposable broker:
 - duplicate check names: the latest entry wins;
 - a self-addressed verdict is not an author;
 - a held owner holds a hand-off but not a stop;
-- the known limitation: owner part done, master's copy refused, owner then `waiting`: no write while held, and master's copy written once (count unchanged) on the first pass after the owner leaves held;
+- the known limitation: owner part done, master's copy refused, owner then `waiting`: no write while held, and master's copy written once (count unchanged) on the first pass after the owner leaves held, if the episode is still red; if the episode changes while the owner is held, the old copy is not sent and the new episode's action is decided;
 - master being swapped holds the stop;
 - the same episode sends once;
 - a new head sends again and counts;
