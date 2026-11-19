@@ -61,7 +61,9 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
@@ -477,34 +479,31 @@ func e2eUp(t *testing.T) *e2eWorld {
 	return w
 }
 
-// startDispatch runs the dispatcher as the service runs it (dispatchRuntime,
-// serviceSelfRepair on, its production wiring), on fast ticks; once
-// w.killed is set, each self-repair read is 25 s later than the last.
+// startDispatch runs the dispatcher as the service runs it (its runtime and
+// self-repair from serviceDispatchConfig, the production wiring, on the
+// world's service manager), on fast ticks; once w.killed is set, each
+// self-repair read is 25 s later than the last (Deps.SelfRepairSkew).
 func (w *e2eWorld) startDispatch(t *testing.T) {
 	t.Helper()
-	b, project := w.b, w.project
-	rt, err := dispatchRuntime(project, os.Getenv)
-	if err != nil {
-		t.Fatal(err)
-	}
-	chore, src := serviceSelfRepair(b, os.Getenv, nil, runBootID())
-	if chore.mode != "on" || chore.relaunch == nil {
-		t.Fatalf("self-repair is %q, not on", chore.mode)
-	}
+	b := w.b
 	var shifts atomic.Int64
-	read := chore.read
 	var last string
-	chore.read = func(ctx context.Context) (selfRepairReads, error) {
-		if out, _ := chore.check(ctx); out.Detail != last { // the previous pass's verdict, when it changes
+	var selfCheck func(context.Context) (health.Outcome, error)
+	scfg, rt := w.serviceConfig(t, func(now time.Time) time.Time {
+		if out, _ := selfCheck(context.Background()); out.Detail != last { // the previous pass's verdict, when it changes
 			last = out.Detail
 			fmt.Fprintf(&w.dlog, "self-repair %s: %s\n", out.Status, out.Detail)
 		}
-		r, err := read(ctx)
 		if w.killed.Load() { // the grace on a shifted clock: each read 25 s later
-			r.Now = r.Now.Add(time.Duration(shifts.Add(1)) * 25 * time.Second)
+			return now.Add(time.Duration(shifts.Add(1)) * 25 * time.Second)
 		}
-		return r, err
+		return now
+	})
+	if mode := config.SelfRepairMode(config.Machine(os.Getenv)); mode != "on" || scfg.SelfRepair.Pass == nil {
+		t.Fatalf("self-repair is %q, not on", mode)
 	}
+	selfCheck = e2eHealthCheck(t, scfg, "self-repair")
+	src := scfg.SelfRepair
 	src.Every = 200 * time.Millisecond
 	cfg := dispatch.DefaultConfig()
 	// dispatch.retry (60 s) spaces two wakes of one agent even after a drain
@@ -523,6 +522,37 @@ func (w *e2eWorld) startDispatch(t *testing.T) {
 	go func() { done <- dispatch.Run(dctx, b, rt, cfg) }()
 	t.Cleanup(func() { dcancel(); <-done })
 
+}
+
+// serviceConfig is the dispatch service's configuration of this world: the
+// production Deps on its service manager, the self-repair read skewed by
+// skew (nil: unskewed).
+func (w *e2eWorld) serviceConfig(t *testing.T, skew func(time.Time) time.Time) (dispatch.Config, dispatch.Runtime) {
+	t.Helper()
+	paths, err := service.PathsFrom(os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := serviceDispatchDeps(w.b, "", "", paths, io.Discard)
+	d.Manager, d.SelfRepairSkew = w.hm, skew
+	var cfg dispatch.Config
+	rt, err := serviceDispatchConfig(d, &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg, rt
+}
+
+// e2eHealthCheck is cfg's health check id, run as the dispatcher runs it.
+func e2eHealthCheck(t *testing.T, cfg dispatch.Config, id string) func(context.Context) (health.Outcome, error) {
+	t.Helper()
+	for _, c := range cfg.Health.Checks {
+		if c.Definition.ID == id {
+			return c.Run
+		}
+	}
+	t.Fatalf("no %s check in the service's config", id)
+	return nil
 }
 
 // wake sends role a directive and follows it: the turn hooks read working,
