@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r4, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. Idea 1 of
+Status: spec, r5, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 (reviewer-codex): each part is marked `tried` before its XADD and never retried once tried, so no part is ever written twice; an uncertain part is reported, not resent. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -160,13 +160,15 @@ The action has parts:
   or after it, and the action is written whole or not at all.
 - **Redis refuses a command inside the script.** Redis does **not** undo the commands a script
   already ran when a later one errors. So the script can stop with some parts written and others
-  not. It is built so that this case loses no part and duplicates at most one entry. It is also
-  reported, never hidden.
+  not. It is built so that **no part is ever written twice**. A part whose outcome is uncertain is
+  never retried blindly. It is reported, and the person or master can see it.
 
 **The record** is `{p}:ci`, a hash with one field per PR (`pr:<n>`). Its value is
-`episode|count|stopped|done`:
+`episode|count|stopped|tried|done`:
 
-- `done` is the set of parts already written for that episode (`o` owner, `m` master, `n` notice);
+- `tried` is the set of parts whose XADD has been attempted for that episode (`o` owner, `m` master,
+  `n` notice);
+- `done` is the set of parts whose XADD is known to have succeeded;
 - the script reads and writes it, never a Go struct round-trip;
 - times are Redis `TIME`.
 
@@ -207,23 +209,40 @@ The action has parts:
 
    If the field's episode equals the argument, the action is the one already recorded and
    unfinished. Its count is not decided again.
-6. **Each missing part:** XADD it, then at once HSET the field with that part added to `done`.
-7. Return `sent` or `stopped`.
+6. **Each part not yet in `tried`:**
+   1. HSET the field with the part added to `tried`, **before** its XADD. If this HSET is refused,
+      the script stops there. Nothing of this part was written, and the next pass may try it again.
+   2. XADD the part with `redis.pcall`. If the XADD is refused, try to remove the part from `tried`
+      (a `pcall` HSET), then return the error. If that HSET is refused too, the part stays
+      "tried, not done": uncertain, and handled at step 3 of the next pass, as below.
+   3. HSET the part into `done`. If this one is refused, the part was written but stays "tried, not
+      done", which is uncertain. It is not retried.
+7. Return `sent`, or `stopped`, or `uncertain` with the uncertain parts named.
+
+**Uncertain parts.** A part in `tried` but not in `done` is never written again. Step 3 counts the
+action complete when every one of its parts is in `tried`. The pass reports each uncertain part
+once in the merge-queue record and health ("ci: PR #42: the owner's hand-off may not have been
+sent"). Whoever reads it can check the stream, or re-send by hand.
+
+Each entry also carries its part's id in the `episode` field, as the once-writers do:
+`ci:pr:42=<episode>:o`. A reader can tell a hand-off it has already seen.
 
 Steps 1 to 4 write nothing. The held case (§4 step 3, a hand-off to an owner that is `blocked` or `waiting`) is decided
 in Go before the call, so it writes nothing.
 
 **Retry and recovery.** A script that errors at step 5 or 6 leaves a record of exactly what it did:
-the decision, and the parts listed in `done`. The pass returns the error, and the merge-queue
-record and health name it ("ci: write failed: …"). The next pass, 5 minutes later, sees the same
-red episode. Step 5 finds the action already decided, and step 6 writes only the parts not in
-`done`.
+the decision, the parts it tried, and the parts it finished. The pass returns the error, and the
+merge-queue record and health name it ("ci: write failed: …"). The next pass, 5 minutes later,
+sees the same red episode. Step 5 finds the action already decided, and step 6 writes only the parts
+never tried.
 
-- **No part is lost** while the PR stays red with the same episode.
-- **Each part is written once**, except one case: Redis takes the XADD, then refuses the HSET
-  right after it. Then that one part is written again on the retry. With the types checked at step 2,
-  what remains is the server refusing a write under `maxmemory` with no eviction. A duplicate
-  hand-off is harmless: the owner reads the same failure twice.
+- **No part is ever written twice.** A part is tried at most once per episode, because its `tried`
+  mark is set before its XADD. Repeated refusals therefore cannot add copies pass after pass.
+- **A part is lost only after a Redis refusal, and then it is reported.** There are two cases: a
+  refused XADD whose `tried` mark could not be removed, and a refused `done` mark after a written
+  XADD (where nothing is lost but nobody can tell). With the types checked at step 2, what remains
+  is the server refusing writes, under `maxmemory` with no eviction. The broker is failing then,
+  and health already says so.
 - If the episode changes while an action is unfinished (a new head, or other failing checks), the
   new episode's action replaces it. Its entries describe the failure as it now stands, and the
   missing parts of the old action are not sent. The count already includes the old action's
@@ -232,8 +251,8 @@ red episode. Step 5 finds the action already decided, and step 6 writes only the
 **Stated guarantee.**
 
 - If our process is interrupted, an action is written whole or not at all.
-- If Redis refuses a command, no part is lost while the episode lasts, at most one entry is
-  duplicated, and the error is reported.
+- If Redis refuses a command, no part is ever written twice. A part whose write is uncertain is
+  not retried; it is reported as uncertain. A part that failed for sure is retried on the next pass.
 
 The person's `ci reset` is the only other writer: a script that deletes the field.
 
@@ -293,7 +312,9 @@ Tests, with a fake `gh` and the disposable broker:
 - a swap in progress writes nothing, and the next pass sends;
 - a hand-off writes the owner's entry, master's copy and the record. A pass stopped before the script writes nothing, and the next pass writes all of it. A pass stopped after it writes nothing more (`same`);
 - a wrong-typed `{p}:ci`, cmd or notify key gives `bad-type` and writes nothing;
-- a script failure injected after the owner's XADD and its `done` mark: the retry writes master's copy only, the decision is not taken again, and the count does not move;
+- a refused XADD (injected) with its `tried` mark removed: the next pass writes the part once;
+- a written XADD whose `done` mark is refused (injected), repeated over several passes: exactly one entry, and the part reported uncertain;
+- a script failure injected after the owner's part is done: the retry writes master's copy only, the decision is not taken again, and the count does not move;
 - an episode that changes while its action is unfinished: the new action is decided, and the old one's missing part is not sent;
 - the owner rule: one author over two reviewers is that author; no entry, or two authors, is master;
 - no log field and no output of the command ever reaches an entry.
