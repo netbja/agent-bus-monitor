@@ -87,7 +87,6 @@ type dispatchDeps struct {
 	Bus     *bus.Bus
 	Getenv  func(string) string
 	Paths   service.Paths
-	Host    string // the broker's host, as agentbus service run resolved it
 	Workdir string // the unit's working directory: the project's repository
 	Boot    string // this boot's id (lifecycle)
 	Log     io.Writer

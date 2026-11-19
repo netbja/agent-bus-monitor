@@ -724,7 +724,7 @@ func serviceDispatchDeps(b *bus.Bus, host, escalateTo string, paths service.Path
 		base.EscalateTo = escalateTo
 	}
 	workdir, _ := os.Getwd()
-	return dispatchDeps{Bus: b, Getenv: os.Getenv, Paths: paths, Host: host, Workdir: workdir, Boot: runBootID(), Log: log,
+	return dispatchDeps{Bus: b, Getenv: os.Getenv, Paths: paths, Workdir: workdir, Boot: runBootID(), Log: log,
 		Base: base, HostOps: hostOpsConfig(b, b.Project(), host),
 		PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
 			return withPopEnd(c, b, rt, os.Getenv)
