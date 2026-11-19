@@ -140,7 +140,7 @@ func TestServiceDispatchConfigReadsDepsManager(t *testing.T) {
 	// The foreground dispatcher's checks read Deps.Manager too.
 	var fcfg dispatch.Config
 	foregroundConfig(dispatchDeps{Bus: b, Manager: unitsUnreadable{&cmdtest.Holders{Manager: cmdtest.NewManager()}},
-		PopEnd: func(c dispatch.PopRetireConfig, _ dispatch.Runtime) dispatch.PopRetireConfig { return c }}, &fcfg, noRuntime{t})
+		PopEnd: func(c dispatch.PopRetireConfig, _ dispatch.Runtime) dispatch.PopRetireConfig { return c }}, &fcfg, nil) // the holder checks read no runtime
 	for _, c := range fcfg.Health.Checks {
 		if c.Definition.ID == "holder-leftovers" {
 			if _, err := c.Run(context.Background()); err == nil {

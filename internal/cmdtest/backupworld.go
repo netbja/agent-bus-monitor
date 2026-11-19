@@ -84,3 +84,23 @@ func (w *BackupWorld) Last(t *testing.T) backup.Last {
 	}
 	return l
 }
+
+// FakeAgeBin is an age stand-in on a temporary path (see backup's fakeAge).
+func FakeAgeBin(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "age")
+	os.WriteFile(bin, []byte(`#!/bin/sh
+if [ "$1" = "-d" ]; then
+  [ -f "$3" ] || exit 1
+  read header
+  base64 -d
+else
+  echo "FAKEAGE $2"
+  base64
+fi
+`), 0o700)
+	return bin
+}
+
+// Recipient is a valid age public key, for the secrets tests.
+const Recipient = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq"
