@@ -16,7 +16,9 @@ type PR struct {
 	Title, URL, Branch, Head string
 	Base                     string
 	Draft                    bool
-	Conflicting              bool // the forge says it conflicts with its base: no merge before a rebase
+	Conflicting              bool    // the forge says it conflicts with its base: no merge before a rebase
+	Checks                   []Check // the head's rollup (gh only; the CI loop, ci-loop §2)
+	ChecksCut                bool    // the rollup may be cut (gh lists at most ghRollupMax): its checks are unknown
 }
 
 // Tip is a branch and its tip commit (the git fallback: a remote branch, or a

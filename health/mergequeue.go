@@ -12,6 +12,7 @@ type MergeQueueInput struct {
 	Reason     string
 	Items      []MergeQueueEntry
 	Unapproved int
+	CI         string // the CI loop's failure this pass, named beside the queue's outcome
 }
 
 // MergeQueueEntry is one item: its PR, or its branch under the git fallback.
@@ -25,6 +26,14 @@ type MergeQueueEntry struct {
 // items waiting for the person's merge, unknown when it was never computed,
 // cannot be read or the last pass failed. Never fail: it wakes nobody.
 func EvaluateMergeQueue(rec MergeQueueInput, readErr string) Outcome {
+	o := evaluateMergeQueue(rec, readErr)
+	if rec.CI != "" && readErr == "" {
+		o.Detail = truncateDetail(o.Detail + "; " + rec.CI)
+	}
+	return o
+}
+
+func evaluateMergeQueue(rec MergeQueueInput, readErr string) Outcome {
 	switch {
 	case readErr != "":
 		return Outcome{Status: Unknown, Detail: truncateDetail(readErr)}

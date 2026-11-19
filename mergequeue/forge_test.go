@@ -50,7 +50,7 @@ func TestReadGitHub(t *testing.T) {
 		t.Fatalf("a control reached the title: %q", prs[1].Title)
 	}
 	args, _ := os.ReadFile(filepath.Join(dir, "args.txt"))
-	if want := "pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable --limit 1000"; strings.TrimSpace(string(args)) != want {
+	if want := "pr list --state open --json number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable,statusCheckRollup --limit 1000"; strings.TrimSpace(string(args)) != want {
 		t.Fatalf("args %q", args)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "env.txt"))

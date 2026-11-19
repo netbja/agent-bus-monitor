@@ -12,9 +12,9 @@ import (
 // unapproved count and each item's number, title and branch (dispatchsvc P6,
 // moved from cmd/agentbus mergequeuecmd.go's mergeQueueInput).
 func TestHealthInput(t *testing.T) {
-	rec := bus.MergeQueueRecord{ItemsAt: 42, Reason: "gh down", Unapproved: 3, Source: "gh", Base: "dev",
+	rec := bus.MergeQueueRecord{ItemsAt: 42, Reason: "gh down", Unapproved: 3, Source: "gh", Base: "dev", CI: "ci: base dev read failed: x",
 		Items: []bus.MergeItem{{Number: 7, Title: "a", Branch: "fix/a"}, {Number: 9, Title: "b", Branch: "fix/b"}}}
-	want := health.MergeQueueInput{ItemsAt: 42, Reason: "gh down", Unapproved: 3,
+	want := health.MergeQueueInput{ItemsAt: 42, Reason: "gh down", Unapproved: 3, CI: "ci: base dev read failed: x",
 		Items: []health.MergeQueueEntry{{Number: 7, Title: "a", Branch: "fix/a"}, {Number: 9, Title: "b", Branch: "fix/b"}}}
 	if got := HealthInput(rec); !reflect.DeepEqual(got, want) {
 		t.Errorf("HealthInput = %+v, want %+v", got, want)
