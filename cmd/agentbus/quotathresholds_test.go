@@ -141,7 +141,7 @@ func TestServiceDispatcherReadsTheProjectThresholds(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
-	cfg, _, err := serviceDispatchConfig(b, "demo", "", paths, io.Discard)
+	cfg, _, err := serviceDispatchConfig(b, "demo", "", "", paths, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}

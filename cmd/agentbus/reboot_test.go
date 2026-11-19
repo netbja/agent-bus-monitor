@@ -422,14 +422,14 @@ func TestServiceDispatchConfigJudgesTheReboot(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
-	cfg, _, err := serviceDispatchConfig(b, "demo", "", paths, io.Discard)
+	cfg, _, err := serviceDispatchConfig(b, "demo", "", "", paths, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Reboot == nil {
 		t.Fatal("the dispatch service judges no reboot")
 	}
-	j := serviceRebootJudge(b, "demo", paths, os.Getenv, root, io.Discard)
+	j := serviceRebootJudge(b, "demo", paths, os.Getenv, root, nil, io.Discard)
 	if j.dir != paths.StateDir("demo") || j.boot != "B7" || j.escalate() != "master" {
 		t.Fatalf("judge %+v", j)
 	}

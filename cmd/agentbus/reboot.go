@@ -232,12 +232,18 @@ func windowText(d time.Duration) string {
 
 // serviceRebootJudge is the dispatch service's judge for project: its state
 // directory, this host's boot, the machine's settings read at the
-// judgement, the current build's holder, and the repository in workdir (the
-// unit's working directory).
-func serviceRebootJudge(b *bus.Bus, project string, paths service.Paths, getenv func(string) string, workdir string, log io.Writer) *rebootJudge {
+// judgement, the current build's holder, the repository in workdir (the
+// unit's working directory), and the service's escalation target (master
+// when nil or empty).
+func serviceRebootJudge(b *bus.Bus, project string, paths service.Paths, getenv func(string) string, workdir string, escalateTo *string, log io.Writer) *rebootJudge {
 	host, _ := os.Hostname()
 	return &rebootJudge{b: b, dir: paths.StateDir(project), boot: runBootID(), host: host, log: log,
-		escalate: func() string { return "master" },
+		escalate: func() string {
+			if escalateTo != nil && *escalateTo != "" {
+				return *escalateTo
+			}
+			return "master"
+		},
 		settings: func() rebootSettings {
 			r := config.Machine(getenv)
 			return rebootSettings{Restart: r.Bool("services.unplanned_restart"), Max: r.Int("services.unplanned_max"),

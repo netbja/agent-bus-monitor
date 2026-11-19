@@ -103,7 +103,7 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 		return 1
 	}
 
-	return superviseDispatch(ctx, b, rt, cfg, stderr)
+	return supervise(ctx, b, rt, cfg, stderr)
 }
 
 // Re-acquire backoff after a lease loss: 1s doubling to 30s (spec §6).
@@ -111,6 +111,10 @@ const (
 	dispatchRetryMin = time.Second
 	dispatchRetryMax = 30 * time.Second
 )
+
+// supervise is superviseDispatch, the call both dispatchers end on (a test
+// keeps the config it is handed instead of running it).
+var supervise = superviseDispatch
 
 // superviseDispatch runs dispatch.Run and, when its lease is lost while the
 // project lives on (a lapse after suspend or a broker restart), backs off and
