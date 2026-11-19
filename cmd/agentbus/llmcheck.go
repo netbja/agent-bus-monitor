@@ -29,7 +29,7 @@ type llmCheckDeps struct {
 
 func realLLMCheckDeps(b *bus.Bus) llmCheckDeps {
 	return llmCheckDeps{Agents: b.Agents, Config: func() *config.File { return config.Load(config.Path(os.Getenv), "config.toml") },
-		FPKey: func() ([]byte, error) { k, _, err := endpointFPKey(os.Getenv); return k, err }}
+		FPKey: func() ([]byte, error) { k, _, err := peer.EndpointFPKey(os.Getenv); return k, err }}
 }
 
 // llmEndpointCheck (local-llm-peer step 2) probes the endpoints the
@@ -148,7 +148,7 @@ func llmEndpointCheck(d llmCheckDeps) func(context.Context) (health.Outcome, err
 func probeEndpoint(ctx context.Context, ep config.Endpoint) health.EndpointProbe {
 	ctx, cancel := context.WithTimeout(ctx, llmProbeDeadline)
 	defer cancel()
-	p := health.EndpointProbe{Name: ep.Name, Host: endpointHost(ep.URL), Model: ep.Model}
+	p := health.EndpointProbe{Name: ep.Name, Host: peer.EndpointHost(ep.URL), Model: ep.Model}
 	err := (peer.Client{URL: ep.URL, Model: ep.Model}).CheckModel(ctx)
 	switch status := peer.StatusOf(err); {
 	case err == nil:

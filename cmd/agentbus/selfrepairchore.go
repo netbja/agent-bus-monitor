@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/notify"
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
@@ -412,7 +413,7 @@ func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (
 	}
 	if c.mode == selfrepair.ModeOn {
 		c.agents = b.Agents
-		c.notify = desktopNotify(exec.LookPath, runQuiet)
+		c.notify = desktopNotify(exec.LookPath, notify.RunQuiet)
 		c.relaunch = func(ctx context.Context, role, profile, session string, fence func(string) error) error {
 			return serviceRelaunch(ctx, b, getenv, role, profile, session, fence)
 		}

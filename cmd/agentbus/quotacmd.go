@@ -381,11 +381,6 @@ func desktopNotify(lookPath func(string) (string, error),
 	}
 }
 
-// runQuiet runs a command and discards its output.
-func runQuiet(ctx context.Context, bin string, args ...string) error {
-	return exec.CommandContext(ctx, bin, args...).Run()
-}
-
 // quotaListed drops the local-llm peer's built-in provider where no peer can
 // run (no [llm.<name>] endpoint in config.toml): it is always unlimited, and
 // listing it on every host hid "no quota reader configured". A local reader

@@ -24,7 +24,7 @@ func usageRefresh(b *bus.Bus) func(context.Context, string) error {
 		if err != nil {
 			return err
 		}
-		rows, _ := collectAgentUsage(agents, usage.ProjectsRoot())
+		rows, _ := usage.CollectAgentUsage(agents, usage.ProjectsRoot())
 		names := make([]string, 0, len(rows))
 		for name := range rows {
 			names = append(names, name)

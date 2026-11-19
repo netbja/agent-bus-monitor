@@ -17,13 +17,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/mission"
+	"github.com/netbja/agent-bus-monitor/notify"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/redis/go-redis/v9"
 )
 
 const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service stale | service remove --all | service login | service restart holder --kill-agents | service start holder | service stop holder <build> | service gc"
@@ -733,19 +735,19 @@ func serviceDispatchConfig(b *bus.Bus, project, host, escalateTo string, paths s
 	if cfg.Quota.Read != nil { // the thresholds re-read from the files each minute (quota settings §2.2)
 		cfg.Quota.Thresholds = quotaThresholds(os.Getenv, project, paths.EnvFile(project))
 	}
-	cfg.Login = serviceLoginExpiry(os.Getenv)                        // an expired login told to the person (login-updates)
-	cfg.Context = serviceContext(os.Getenv, exec.LookPath, runQuiet) // context fill and alert (context-alert)
-	cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)            // proved sessions and their tokens (tokens)
-	cfg.History = serviceHistory(os.Getenv, paths.StateDir(project)) // the streams archived to day files (history)
-	cfg.Backup = serviceBackup(log)                                  // the daily backup when backup.schedule = daily
+	cfg.Login = serviceLoginExpiry(os.Getenv)                               // an expired login told to the person (login-updates)
+	cfg.Context = serviceContext(os.Getenv, exec.LookPath, notify.RunQuiet) // context fill and alert (context-alert)
+	cfg.Tokens = serviceTokens(os.Getenv, os.UserHomeDir)                   // proved sessions and their tokens (tokens)
+	cfg.History = serviceHistory(os.Getenv, paths.StateDir(project))        // the streams archived to day files (history)
+	cfg.Backup = serviceBackup(log)                                         // the daily backup when backup.schedule = daily
 	cfg.Observe = dispatch.ObserveEvery
-	cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, runQuiet) // a pane blocked on its client's prompt (prompt-notify)
-	cfg.Prompt.Skip = promptSkip(b, os.Getenv)                     // never rung twice with a desktop target (notifications)
-	cfg.Notify = serviceNotify(b, os.Getenv)                       // the person's phone and desktop (notifications)
-	cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)               // what waits for the person's merge (merge-queue)
-	cfg.Clear = serviceClear(os.Getenv, exec.LookPath, runQuiet)   // /clear after a declared hand-off (lifecycle part B)
-	cfg.Clear.Decisions = dispatch.NewClearDecisions()             // why a clear waits: logged, and read by clear-stall
-	h, err := dispatchRuntime(project, os.Getenv)                  // the dispatcher on the project's holder (herdr exit 10b)
+	cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, notify.RunQuiet) // a pane blocked on its client's prompt (prompt-notify)
+	cfg.Prompt.Skip = promptSkip(b, os.Getenv)                            // never rung twice with a desktop target (notifications)
+	cfg.Notify = serviceNotify(b, os.Getenv)                              // the person's phone and desktop (notifications)
+	cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)                      // what waits for the person's merge (merge-queue)
+	cfg.Clear = serviceClear(os.Getenv, exec.LookPath, notify.RunQuiet)   // /clear after a declared hand-off (lifecycle part B)
+	cfg.Clear.Decisions = dispatch.NewClearDecisions()                    // why a clear waits: logged, and read by clear-stall
+	h, err := dispatchRuntime(project, os.Getenv)                         // the dispatcher on the project's holder (herdr exit 10b)
 	if err != nil {
 		return cfg, nil, err
 	}

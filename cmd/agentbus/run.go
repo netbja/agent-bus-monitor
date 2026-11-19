@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // agentbus run | run reset (run-budget §5, spec
@@ -64,12 +65,12 @@ func printRun(ctx context.Context, b *bus.Bus, getenv func(string) string, out, 
 	}
 	var reached []string
 	if maxDur > 0 {
-		fmt.Fprintf(out, "elapsed     %s of %s\n", runDuration(elapsed), runDuration(maxDur))
+		fmt.Fprintf(out, "elapsed     %s of %s\n", textfmt.RunDuration(elapsed), textfmt.RunDuration(maxDur))
 		if elapsed >= maxDur {
 			reached = append(reached, "duration")
 		}
 	} else {
-		fmt.Fprintf(out, "elapsed     %s (no limit)\n", runDuration(elapsed))
+		fmt.Fprintf(out, "elapsed     %s (no limit)\n", textfmt.RunDuration(elapsed))
 	}
 	if maxDel > 0 {
 		fmt.Fprintf(out, "deliveries  %d of %d\n", rec.Deliveries, maxDel)
@@ -85,7 +86,7 @@ func printRun(ctx context.Context, b *bus.Bus, getenv func(string) string, out, 
 	switch rec.State {
 	case bus.RunDraining:
 		if dm := r.Duration("run.drain_max"); dm > 0 && !strings.HasPrefix(rec.Why, "quota:") {
-			fmt.Fprintf(out, "drain       until nothing is in flight, at most %s (run.drain_max)\n", runDuration(dm))
+			fmt.Fprintf(out, "drain       until nothing is in flight, at most %s (run.drain_max)\n", textfmt.RunDuration(dm))
 		} else if strings.HasPrefix(rec.Why, "quota:") {
 			fmt.Fprintln(out, "drain       until the quota's release")
 		} else {
@@ -95,16 +96,4 @@ func printRun(ctx context.Context, b *bus.Bus, getenv func(string) string, out, 
 		fmt.Fprintln(out, "the project is paused; agentbus run reset starts a new run")
 	}
 	return 0
-}
-
-// runDuration is 3h10m, 45m, or 0m.
-func runDuration(d time.Duration) string {
-	h, m := int(d.Hours()), int(d.Minutes())%60
-	switch {
-	case h > 0 && m > 0:
-		return fmt.Sprintf("%dh%dm", h, m)
-	case h > 0:
-		return fmt.Sprintf("%dh", h)
-	}
-	return fmt.Sprintf("%dm", m)
 }

@@ -229,26 +229,6 @@ func TestPeerRootFindsTheHomeWithoutHOME(t *testing.T) {
 	}
 }
 
-// The fingerprint key lives beside config.toml; with no configuration
-// directory there is no key, and none is written in the current folder.
-func TestEndpointFPKeyNeedsTheConfigDir(t *testing.T) {
-	cwd := t.TempDir()
-	t.Chdir(cwd)
-	if _, _, err := endpointFPKey(func(string) string { return "" }); err == nil {
-		t.Fatal("a key with no configuration directory")
-	}
-	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
-		t.Fatalf("written in the cwd: %v", entries)
-	}
-	xdg := t.TempDir()
-	if key, _, err := endpointFPKey(func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }); err != nil || len(key) != 32 {
-		t.Fatalf("key = %d bytes, %v", len(key), err)
-	}
-	if _, err := os.Stat(filepath.Join(xdg, "agentbus", "endpoint-fp.key")); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // The peer's identity carries the endpoint it resolved and, with the host
 // key, its URL's keyed fingerprint: R4's wiring, without which llm-endpoint
 // falls back to matching by model and never sees a changed URL (foureyes).
@@ -257,7 +237,7 @@ func TestPeerIdentRecordsItsEndpoint(t *testing.T) {
 	getenv := func(k string) string { return map[string]string{"XDG_CONFIG_HOME": xdg}[k] }
 	s := peer.Settings{Endpoint: "used", URL: "http://127.0.0.1:11434/v1", Model: "qwen"}
 	id, note := peerIdent(bus.AgentIdent{Client: "local-llm"}, s, getenv)
-	key, _, err := endpointFPKey(getenv)
+	key, _, err := peer.EndpointFPKey(getenv)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/mergequeue"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -525,7 +526,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err != nil {
 				return health.EvaluateMergeQueue(health.MergeQueueInput{}, "merge queue unavailable"), nil
 			}
-			return health.EvaluateMergeQueue(mergeQueueInput(rec), ""), nil
+			return health.EvaluateMergeQueue(mergequeue.HealthInput(rec), ""), nil
 		}),
 		healthTask("tracked-secrets", func(ctx context.Context) (health.Status, string, error) {
 			root, err := os.Getwd()
