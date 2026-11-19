@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // RestoreOptions are restore's flags (spec "Restore").
@@ -223,7 +224,7 @@ func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOpt
 	var del []string
 	if len(present) > 0 {
 		if !o.Force {
-			refuse(p, plural(len(present), "key")+" present; --force replaces them")
+			refuse(p, textfmt.Count(len(present), "key")+" present; --force replaces them")
 			return false
 		}
 		if !o.DryRun && !d.Confirm(p, len(present)) {
@@ -237,7 +238,7 @@ func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOpt
 	}
 	if o.DryRun {
 		if len(del) > 0 {
-			fmt.Fprintf(out, "%s: --force would delete %s first\n", p, plural(len(del), "key"))
+			fmt.Fprintf(out, "%s: --force would delete %s first\n", p, textfmt.Count(len(del), "key"))
 		}
 		return true
 	}
@@ -246,7 +247,7 @@ func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOpt
 		refuse(p, err.Error())
 		return false
 	}
-	fmt.Fprintf(out, "%s: %s restored\n", p, plural(n, "key"))
+	fmt.Fprintf(out, "%s: %s restored\n", p, textfmt.Count(n, "key"))
 	// What appeared between the preflight and the script, neither restored
 	// nor in the archive.
 	if after, err := d.Broker.Keys(ctx, p); err == nil {
@@ -430,13 +431,6 @@ func versionParts(v string) []int {
 		out[i] = n
 	}
 	return out
-}
-
-func plural(n int, word string) string {
-	if n == 1 {
-		return "1 " + word
-	}
-	return fmt.Sprintf("%d %ss", n, word)
 }
 
 // restoreSecrets opens secrets.age with the person's identity (never without

@@ -32,7 +32,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"golang.org/x/term"
 	"io"
 	"os"
 	"runtime"
@@ -40,6 +39,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -51,10 +52,13 @@ import (
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/textfmt"
+
 	// holder registers the manager where none runs (service.Unmanaged,
 	// herdr exit 6c3): busmon's Detect and Local then see the supervisors.
-	_ "github.com/netbja/agent-bus-monitor/holder"
 	"github.com/redis/go-redis/v9"
+
+	_ "github.com/netbja/agent-bus-monitor/holder"
 )
 
 // streamKinds are the four streams busmon tails into the ACTIVITY feed.
@@ -101,7 +105,7 @@ func confirmReset(project string, in io.Reader) bool {
 // test.
 func confirmDelete(s bus.ProjectSummary, keys int, now time.Time, out io.Writer, in io.Reader) bool {
 	fmt.Fprintf(out, "Delete ALL %d %s for project '%s' (%d agents, last activity %s)?\n",
-		keys, plural(keys, "key"), s.Project, s.Agents, lastSeen(s.LastTS, now))
+		keys, textfmt.Plural(keys, "key"), s.Project, s.Agents, lastSeen(s.LastTS, now))
 	fmt.Fprint(out, "This is a DEL, not --reset: streams, consumer groups, agents/usage/budget/verdicts, "+
 		"pilot and gate leases all go. [y/N] ")
 	line, _ := bufio.NewReader(in).ReadString('\n')
@@ -165,7 +169,7 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 	if len(left) > 0 {
 		return fmt.Errorf("%s", cameBack(project, n, left))
 	}
-	fmt.Printf("Deleted %d %s for project '%s'.\n", n, plural(int(n), "key"), project)
+	fmt.Printf("Deleted %d %s for project '%s'.\n", n, textfmt.Plural(int(n), "key"), project)
 	if filesOK {
 		d := projfiles.Apply(fo)
 		if d.Template != "" {
@@ -178,7 +182,7 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 			fmt.Printf("Removed %s\n", a)
 		}
 		if len(d.Errs) > 0 {
-			return fmt.Errorf("deleted %s, but %d %s could not be removed: %w", project, len(d.Errs), plural(len(d.Errs), "file"), errors.Join(d.Errs...))
+			return fmt.Errorf("deleted %s, but %d %s could not be removed: %w", project, len(d.Errs), textfmt.Plural(len(d.Errs), "file"), errors.Join(d.Errs...))
 		}
 	}
 	return nil
@@ -209,7 +213,7 @@ func cameBack(project string, n int64, left []string) string {
 		shown = shown[:3]
 	}
 	return fmt.Sprintf("deleted %d %s of %s, but %d %s came back (%s): something of %s still runs; stop it, then delete again",
-		n, plural(int(n), "key"), project, len(left), plural(len(left), "key"), strings.Join(shown, ", "), project)
+		n, textfmt.Plural(int(n), "key"), project, len(left), textfmt.Plural(len(left), "key"), strings.Join(shown, ", "), project)
 }
 
 // deleteQuiet is the delete script and its re-scan (a test's seam for keys
@@ -252,7 +256,7 @@ func deleteErr(project string, n int64, kinds []string, err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &rescan): // the keys are gone
-		return fmt.Errorf("deleted %d %s of %s, then could not scan again: %v", n, plural(int(n), "key"), project, rescan.Err)
+		return fmt.Errorf("deleted %d %s of %s, then could not scan again: %v", n, textfmt.Plural(int(n), "key"), project, rescan.Err)
 	case errors.Is(err, bus.ErrOutcomeUnknown):
 		return fmt.Errorf("%s: %w; busmon --list shows what remains%s", project, err, removedNote(kinds))
 	case errors.As(err, &refused):
@@ -266,7 +270,7 @@ func removedNote(kinds []string) string {
 	if len(kinds) == 0 {
 		return ""
 	}
-	return "; its " + strings.Join(kinds, " and ") + " " + plural(len(kinds), "service") + " here was removed"
+	return "; its " + strings.Join(kinds, " and ") + " " + textfmt.Plural(len(kinds), "service") + " here was removed"
 }
 
 // removeLocalServices stops and removes the project's services on this
@@ -295,7 +299,7 @@ func reportRemovedServices(project string, removeServices func(string) ([]string
 
 func printRemovedServices(project string, kinds []string) {
 	if len(kinds) > 0 {
-		fmt.Printf("Stopped and removed the %s %s of '%s' on this machine.\n", strings.Join(kinds, " and "), plural(len(kinds), "service"), project)
+		fmt.Printf("Stopped and removed the %s %s of '%s' on this machine.\n", strings.Join(kinds, " and "), textfmt.Plural(len(kinds), "service"), project)
 	}
 }
 
@@ -343,14 +347,6 @@ func removeUnits(project string, getenv func(string) string, detect func() (serv
 		return done, err
 	}
 	return done, nil
-}
-
-// plural is the usual English -s. Only ever fed regular nouns here.
-func plural(n int, word string) string {
-	if n == 1 {
-		return word
-	}
-	return word + "s"
 }
 
 // listProjects writes the `busmon --list` table to out. A broker with no

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // fidelity states how much of a message's original text is actually in hand.
@@ -309,7 +310,7 @@ func threadLine(e bus.Event, now time.Time, self bool) []Line {
 		typ = "cmd"
 	}
 	who := Preview(e.From) + "→" + Preview(e.Target)
-	text := oneLine(Preview(e.Message))
+	text := textfmt.OneLine(Preview(e.Message))
 	stamp := Line{marker, S(RoleMuted, at.Format("15:04:05")), S(RoleText, " "), S(RoleDispatch, Fit(typ, 9))}
 	if avail := mdWidth - threadPrefix - 1; avail >= 20 {
 		return []Line{append(stamp, S(RoleText, " "), S(RoleMuted, Fit(who, 16)), S(RoleText, " "+Truncate(text, avail+1)))}
@@ -318,10 +319,6 @@ func threadLine(e bus.Event, now time.Time, self bool) []Line {
 	// go on their own indented line, still inside the width.
 	return []Line{stamp, {S(RoleText, "    "+Truncate(who+"  "+text, max(1, mdWidth-4)))}}
 }
-
-// oneLine flattens a body for a transcript row; the full text stays one Enter
-// away on the entry itself.
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // detailPlain is what `y` copies: the message text exactly as stored, newlines
 // intact, no colour tags, no metadata framing.

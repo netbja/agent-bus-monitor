@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
@@ -51,7 +53,7 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 		prev.failed = true
 		return prev
 	}
-	if !contains(names, project) {
+	if !slices.Contains(names, project) {
 		names = append(names, project)
 	}
 	out := tokState{polled: true}
@@ -68,26 +70,6 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 		out.projects = append(out.projects, p)
 	}
 	return out
-}
-
-func contains(xs []string, x string) bool {
-	for _, s := range xs {
-		if s == x {
-			return true
-		}
-	}
-	return false
-}
-
-// tokCount: 0, 873, 206k, 5.1M.
-func tokCount(n int64) string {
-	switch {
-	case n < 1000:
-		return fmt.Sprint(n)
-	case n < 1_000_000:
-		return fmt.Sprintf("%dk", n/1000)
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/1e6)
 }
 
 // tokensPage is the U page's body at width cells. icons is display.icons, off
@@ -210,9 +192,9 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 			num := func(s string) Seg { return Seg{Text: s, Role: RoleText, Bold: p.name == top} } // the zone's top consumer
 			b.text("  ").seg(role, Fit(Preview(p.name), 20))
 			if joined {
-				b.segs(num(fmt.Sprintf(" %8s", mark+tokCount(u.In+u.Write+u.Out))))
+				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write+u.Out))))
 			} else {
-				b.segs(num(fmt.Sprintf(" %8s", mark+tokCount(u.In+u.Write)))).text(fmt.Sprintf(" %8s", mark+tokCount(u.Out)))
+				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write)))).text(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.Out)))
 			}
 			b.text("  ")
 			var total int64
@@ -223,7 +205,7 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 				week = append(week, float64(v.In+v.Write+v.Out))
 			}
 			b.seg(RoleOK, sparkLine(week, float64(maxDay), graphs))
-			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+tokCount(total)))
+			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+textfmt.TokCount(total)))
 		}
 		if len(none) > 0 {
 			b.text("  ").seg(RoleMuted, Preview(strings.Join(none, " "))+"  no data (no dispatch service counting tokens)").text("\n")
@@ -292,7 +274,7 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 		bold := r.Agent == top
 		b.text("  ").text(Fit(Preview(r.Agent), 16)).text(" ")
 		provider(r)
-		b.segs(Seg{Text: fmt.Sprintf(" %8s", tokCount(*r.In)), Role: RoleText, Bold: bold}).text(fmt.Sprintf(" %8s", tokCount(*r.Out))).
+		b.segs(Seg{Text: fmt.Sprintf(" %8s", textfmt.TokCount(*r.In)), Role: RoleText, Bold: bold}).text(fmt.Sprintf(" %8s", textfmt.TokCount(*r.Out))).
 			text("  ").segs(relBar(*r.In+*r.Out, maxAgent)...).text("\n")
 	}
 	for _, why := range folded {

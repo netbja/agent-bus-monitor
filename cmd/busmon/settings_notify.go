@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/notify"
@@ -38,7 +37,7 @@ func notifyTargets(getenv func(string) string) ([]string, []notifyTargetRef) {
 	}
 	var last notify.Last
 	unread := false // the record cannot be read: no outcome is claimed (reviewer-codex)
-	if d := notifyStateDir(getenv); d == "" {
+	if d := notify.StateDir(getenv); d == "" {
 		unread = true
 	} else if l, err := notify.ReadLast(notify.LastPath(d)); err != nil {
 		unread = true
@@ -64,15 +63,4 @@ func notifyTargets(getenv func(string) string) ([]string, []notifyTargetRef) {
 		out = append(out, fmt.Sprintf("%-8s %-8s %s", t.Name, t.Kind, state))
 	}
 	return out, refs
-}
-
-// notifyStateDir is <state> (notify-last.json's folder), as agentbus reads it.
-func notifyStateDir(getenv func(string) string) string {
-	if d := getenv("XDG_STATE_HOME"); filepath.IsAbs(d) {
-		return filepath.Join(d, "agentbus")
-	}
-	if home := getenv("HOME"); filepath.IsAbs(home) {
-		return filepath.Join(home, ".local", "state", "agentbus")
-	}
-	return ""
 }

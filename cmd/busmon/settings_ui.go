@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -1159,7 +1160,7 @@ func stepSetting(k *config.Key, text string, up bool) string {
 	floor := !settingNegative(k)
 	switch k.Kind {
 	case config.Int:
-		n, err := strconv.Atoi(strings.TrimSpace(or(text, "0")))
+		n, err := strconv.Atoi(strings.TrimSpace(cmp.Or(text, "0")))
 		if err != nil {
 			return text
 		}
@@ -1169,7 +1170,7 @@ func stepSetting(k *config.Key, text string, up bool) string {
 		}
 		return strconv.Itoa(n)
 	case config.Float:
-		f, err := strconv.ParseFloat(strings.TrimSpace(or(text, "0")), 64)
+		f, err := strconv.ParseFloat(strings.TrimSpace(cmp.Or(text, "0")), 64)
 		if err != nil {
 			return text
 		}
@@ -1179,7 +1180,7 @@ func stepSetting(k *config.Key, text string, up bool) string {
 		}
 		return strconv.FormatFloat(f, 'f', -1, 64)
 	case config.Duration:
-		t := strings.TrimSpace(or(text, "0"))
+		t := strings.TrimSpace(cmp.Or(text, "0"))
 		var d time.Duration
 		unit := time.Minute
 		switch {

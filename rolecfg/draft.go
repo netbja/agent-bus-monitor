@@ -9,6 +9,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // Drafting a role on demand (specialist roles spec, addendum E): master
@@ -158,7 +160,7 @@ func DraftRole(m *Manifest, role, task string, skills []ScoredSkill) (snippet, p
 		names[i] = fmt.Sprintf("%q", s.Name)
 	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "# Drafted by master for: %s\n", oneLine(task))
+	fmt.Fprintf(&sb, "# Drafted by master for: %s\n", textfmt.OneLine(task))
 	fmt.Fprintf(&sb, "[roles.%s]\n", role)
 	if m.SchemaVersion == 2 {
 		fmt.Fprintf(&sb, "profile = %q\n", draftProfile(m))
@@ -192,8 +194,6 @@ func draftProfile(m *Manifest) string {
 	d, _ := m.Defaults["profile"].(string)
 	return d
 }
-
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func draftPrompt(role, task, skills string) string {
 	return fmt.Sprintf(`# Role: %[1]s — drafted on demand

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/relaunch"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 
 	"github.com/redis/go-redis/v9"
 
@@ -156,7 +158,7 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 				fmt.Fprintf(errw, "restore: --force on %s needs a terminal to ask, or --yes\n", p)
 				return false
 			}
-			fmt.Fprintf(errw, "restore: replace %s of %s%s? [y/N] ", plural(keys, "key"), p, projectFacts(ctx, c, p))
+			fmt.Fprintf(errw, "restore: replace %s of %s%s? [y/N] ", textfmt.Count(keys, "key"), p, projectFacts(ctx, c, p))
 			line, _ := in.ReadString('\n')
 			return strings.EqualFold(strings.TrimSpace(line), "y") || strings.EqualFold(strings.TrimSpace(line), "yes")
 		},
@@ -269,7 +271,7 @@ func projectFacts(ctx context.Context, c *redis.Client, p string) string {
 			if s.LastTS > 0 {
 				last = time.UnixMilli(s.LastTS).Local().Format("2006-01-02 15:04")
 			}
-			return fmt.Sprintf(" (%s, last activity %s)", plural(s.Agents, "agent"), last)
+			return fmt.Sprintf(" (%s, last activity %s)", textfmt.Count(s.Agents, "agent"), last)
 		}
 	}
 	return ""

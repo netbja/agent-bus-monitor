@@ -33,7 +33,7 @@ func notificationsCheck(project string, getenv func(string) string, now func() t
 				refused[parts[1]] = true
 			}
 		}
-		state := notifyStateDir(getenv)
+		state := notify.StateDir(getenv)
 		var last notify.Last
 		if state == "" {
 			in.RecordErr = "no state folder"

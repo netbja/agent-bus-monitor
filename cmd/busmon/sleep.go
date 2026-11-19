@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
@@ -99,7 +100,7 @@ func (m *Model) sleepKeyFor(project string, resume bool) tea.Cmd {
 
 // gotSleepAsk shows the question; y runs it, any other key cancels.
 func (m *Model) gotSleepAsk(msg sleepAskMsg) {
-	p := or(msg.project, m.cfg.project)
+	p := cmp.Or(msg.project, m.cfg.project)
 	m.ui.sleepAsk = &sleepAsk{resume: msg.resume, project: msg.project}
 	if msg.resume {
 		m.ui.flash = "Resume " + p + "? Services, missing agents, then the pause lifted. y / n"
@@ -129,7 +130,7 @@ func (m *Model) sleepConfirm(k Key) tea.Cmd {
 	if a.args != nil {
 		return m.startRunFor(a.project, a.verb, a.args)
 	}
-	return m.startSleepOf(or(a.project, m.cfg.project), a.resume)
+	return m.startSleepOf(cmp.Or(a.project, m.cfg.project), a.resume)
 }
 
 // startSleep runs agentbus suspend or resume for the open project, in a
