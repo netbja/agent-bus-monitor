@@ -97,6 +97,11 @@ type Deps struct {
 	Base    dispatch.Config                 // dispatch.DefaultConfig with the person's name set
 	HostOps dispatch.HostOpsConfig          // the relay's runner: CLI commands
 	PopEnd  func(dispatch.PopRetireConfig, dispatch.Runtime) dispatch.PopRetireConfig
+	Manager service.Manager                 // the service manager the health checks read
+
+	// SelfRepairSkew moves the time each self-repair read got from Redis
+	// TIME. Tests only: nil in production.
+	SelfRepairSkew func(time.Time) time.Time
 }
 
 // Config fills cfg, which the caller owns and keeps, with the dispatch service's
@@ -126,6 +131,19 @@ func MergeQueueLive(ctx context.Context, b *bus.Bus, getenv func(string) string)
   `service run --escalate-to` or `AGENT_BUS_ESCALATE_TO`). A configuration copied after those
   pointers are taken loses every later write. The pointer must be into the config the caller keeps
   and hands to the loop. A rule for any later field read through a pointer: same.
+- **`Manager` and `SelfRepairSkew` were added in P8 (architect, for the two end-to-end tests that
+  stay in `cmd/agentbus` by rule 3 of §5).** They are fields, so the exported identifiers are still
+  five.
+  - `Manager` is real dependency injection. The health checks always took the service manager as
+    a parameter (`realHealthChecks`); `realHealthConfig` detected it itself. The caller now detects
+    it, beside `Paths`, and passes it: the same `service.Detect` call, so production behaviour is
+    unchanged. The holder end-to-end test passes its world's fake manager and reads the "holder"
+    check from `Config` by id.
+  - `SelfRepairSkew` is a test seam. It adjusts the Redis `TIME` the self-repair read already got;
+    nil leaves it. It never replaces the read: persisted times come from Redis `TIME`, and a
+    replacement clock would break that rule. The release test shifts the grace with it, 25 s per
+    read once its agent is killed. `TestNoProductionSelfRepairSkew` fails if a non-test file of the
+    module sets it.
 - `Runtime` is `dispatchRuntime`, called by `main`, `suspend` and `swap`.
 - `MergeQueueLive` replaces the two symbols `merge-queue --live` reaches into (the chore's
   constructor and its `derive`). `false` is today's "no working directory".
