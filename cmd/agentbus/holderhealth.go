@@ -47,7 +47,7 @@ func realHolderProbe(getenv func(string) string) holderProbe {
 			return out, nil
 		},
 		answer: func(project, key string) ([]holder.TermInfo, bool) {
-			terms, err := holderTermList(project, key)
+			terms, err := holder.TermList(project, key)
 			return terms, err == nil
 		},
 	}
@@ -132,28 +132,6 @@ func holderEvidence(m service.Manager, paths service.Paths, project, currentRaw 
 		e.Builds = append(e.Builds, b)
 	}
 	return e
-}
-
-// holderAnswersAny: a holder of build key answers for some project of this
-// host (its socket, either name: holder.SocketFor): its binary copy is in use.
-func holderAnswersAny(getenv func(string) string, key string) bool {
-	root, err := holder.RunAgentbusDir(getenv)
-	if err != nil {
-		return true // cannot tell: keep the copy
-	}
-	ents, err := os.ReadDir(root)
-	if err != nil {
-		return true
-	}
-	for _, d := range ents {
-		if !d.IsDir() || !bus.ValidName(d.Name()) {
-			continue
-		}
-		if _, err := holderTerms(d.Name(), key); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 // withHolderAgents is health.WithHolderAgents of the agents' snapshots;

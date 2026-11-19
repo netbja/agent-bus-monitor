@@ -17,13 +17,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/redis/go-redis/v9"
 )
 
 const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service stale | service remove --all | service login | service restart holder --kill-agents | service start holder | service stop holder <build> | service gc"
@@ -56,9 +57,9 @@ func realServiceCmdDeps(host string) serviceCmdDeps {
 	bin := service.ManagerBin(runtime.GOOS, os.Getenv)
 	m, why := service.Detect(runtime.GOOS, service.CommandRunner(bin), os.Getenv)
 	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, AtLogin: func() bool { return machineAtLogin(os.Getenv) },
-		HolderBuild: holder.BuildID, HolderTerms: holderTerms, HolderLive: holderLiveTerms,
-		HolderAnswers:    func(project, key string) bool { _, err := holderTerms(project, key); return err == nil },
-		HolderAnswersAny: func(key string) bool { return holderAnswersAny(os.Getenv, key) },
+		HolderBuild: holder.BuildID, HolderTerms: holder.Terms, HolderLive: holderLiveTerms,
+		HolderAnswers:    func(project, key string) bool { _, err := holder.Terms(project, key); return err == nil },
+		HolderAnswersAny: func(key string) bool { return holder.AnswersAny(os.Getenv, key) },
 		Bus: func(project string) (*bus.Bus, error) {
 			c, err := bus.Connect(host)
 			if err != nil {

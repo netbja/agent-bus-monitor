@@ -250,7 +250,7 @@ func serviceRebootJudge(b *bus.Bus, project string, paths service.Paths, getenv 
 				Window: r.Duration("services.unplanned_window"), SelfRepair: config.SelfRepairMode(r)}
 		},
 		holderReady: func(context.Context) bool {
-			return holderReady(getenv, project, service.BuildKey(holder.BuildID()), 2*time.Second)
+			return holder.Ready(getenv, project, service.BuildKey(holder.BuildID()), 2*time.Second)
 		},
 		repo: func(ctx context.Context) string { return repoIntegrity(ctx, workdir, gitRunner(workdir)) },
 		services: func() map[string]bool {
