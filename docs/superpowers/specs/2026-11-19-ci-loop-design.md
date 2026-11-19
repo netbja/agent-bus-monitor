@@ -1,10 +1,14 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r9, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. The entries' mark has its own `ci:pr:<n>` prefix (foureyes, r6). r8, master's decision: a held owner delaying an unfinished hand-off's master copy is a known limitation, with a test, and no new mechanism. r9 (reviewer-codex): the delayed copy is sent only while its episode is still red, and is otherwise superseded. Idea 1 of
+Status: spec, r10, not built. r10, the person's answers (§8, all decided) and three points: the
+log hint names `gh run view --log-failed` only for an Actions check run (A); the base is checked
+before a hand-off, so a red base is not the author's failure (B, §4 "The base"); a check that never
+finishes, or a base that stays running, makes a PR silent, written in the operator notes (C).
+Status before r10: spec, r9. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. The entries' mark has its own `ci:pr:<n>` prefix (foureyes, r6). r8, master's decision: a held owner delaying an unfinished hand-off's master copy is a known limitation, with a test, and no new mechanism. r9 (reviewer-codex): the delayed copy is sent only while its episode is still red, and is otherwise superseded. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
-bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
-the questions for the person; nothing in §8 is decided here.
+bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 records
+the person's answers (2026-11-19, r10): every question is decided.
 
 ## 1. What exists, and what is missing
 
@@ -21,7 +25,8 @@ Missing: the check results are never read; nobody is told when a PR's checks fai
 
 **Scope.** GitHub with `gh` only, the forge the pass already reads. GitLab, Bitbucket and the
 local forge have no PR reader yet (`mergequeuechore.go`, the git fallback). They get no CI loop and
-no error; §8 Q7 asks whether they should get one. This repository has no GitHub Actions, so here
+no error until they have one (§8 Q7). Their PR readers go on the roadmap as a separate step: the
+project must run on any forge. With no forge there is no status to read, and nothing to do. This repository has no GitHub Actions, so here
 the loop stays silent: it is for the person's other projects.
 
 ## 2. Reading the checks
@@ -39,7 +44,8 @@ Anything else does not count as a failure:
 
 - `PENDING`, `QUEUED` or `IN_PROGRESS`;
 - `SUCCESS`, `NEUTRAL` or `SKIPPED`;
-- `CANCELLED` and `ACTION_REQUIRED`, which §8 Q4 asks about.
+- `CANCELLED` and `ACTION_REQUIRED` (§8 Q4). A PR whose only check is `ACTION_REQUIRED` stays
+  silent, which the person accepts.
 
 **The head's CI must be finished.** The loop acts on a PR only when its rollup has **no entry still
 running**: no check run that is not `COMPLETED`, and no commit status that is `PENDING` or
@@ -47,22 +53,31 @@ running**: no check run that is not `COMPLETED`, and no commit status that is `P
 Checks that fail one by one would otherwise make a new episode each, and use the cap on a single
 head. A PR whose CI is red but still running waits for the next pass.
 
-If a check never finishes, the PR is never handed off. That is the forge's problem to show, not this
-loop's.
+If a check never finishes, the PR is never handed off (C). A status stuck at `EXPECTED` or
+`PENDING`, for example a required check never posted because the CI server is down, keeps the PR
+silent. There is no new mechanism: the operator-notes fragment (§7) says so, so that silence is never
+read as "all green". The same holds for a base that stays running (§4, "The base").
 
 **Duplicate names.** A re-run can leave two rollup entries with the same name. The latest wins, by
 the entry's time (for a check run, its completion, else its start; for a status, its creation).
 The exact JSON field names `gh` gives are read off a real rollup at build time, not assumed here. A
 re-run that passed is then not counted red.
 
-Each failing entry keeps two fields, both cleaned with `cleanText`:
+Each failing entry keeps two fields, both cleaned with `cleanText`, and its kind:
 
 - its name: `name` for a check run, `context` for a commit status;
-- its URL: `detailsUrl`, or `targetUrl` for a commit status.
+- its URL: `detailsUrl`, or `targetUrl` for a commit status;
+- whether it is a GitHub Actions check run: a `CheckRun` whose app is GitHub Actions (the exact
+  field is read off a real rollup at build time, like the others).
 
 The list is sorted by name, and at most 10 are kept, plus "and N more". **The log is never read.**
-No CI output reaches the bus, Redis or a pane. The author reads the log itself, from the URL or
-with `gh run view --log-failed`.
+No CI output reaches the bus, Redis or a pane. The author reads the log itself, from the URL.
+
+**The log hint names `gh run view --log-failed` only for an Actions check run** (A). That command
+reads only an Actions run. A Jenkins job, or any CI that posts commit statuses (`StatusContext`) or
+its own check runs to GitHub, is detected the same way, but its entry gives the URL alone. The
+operator-notes fragment says the agent must be able to reach that URL (an internal Jenkins, for
+example): the loop hands over a link, not the log.
 
 A draft PR is skipped. If the read fails (timeout, gh missing, a cut list), the pass sends nothing,
 the same as when the merge queue cannot be read; that is never taken as "all green".
@@ -122,6 +137,12 @@ On each pass, for each red PR:
 1. **Same episode as last time:** if its action is complete, nothing; a re-run of the same head with
    the same failures sends nothing again. If its action is unfinished (a part not in `done`), only
    the missing parts are written, and nothing is decided again.
+1b. **The base holds it** ("The base" below): the PR shares a failing check with a base that is red,
+   or still running, or the base could not be read. Nothing this pass, and nothing is counted. This
+   comes before steps 2 to 4, so a held PR is neither handed off nor stopped: a red base is not the
+   author's failure, so it must not use the author's tries, nor the last of them (§8 Q10). A PR
+   already stopped stays stopped (step 0), and an unfinished action of an earlier pass is finished
+   (step 1): it was decided when the base was not red.
 2. **Hand-offs already at the cap, `ci.max_handoffs` (default 3, Q2):** this is **the stop**. The
    person gets one notice for the PR (§5), master gets a directive with `wake=no`, and the owner gets
    nothing more. A held owner does not hold the stop, because the stop writes nothing to the owner
@@ -144,8 +165,58 @@ The directive reads:
 > `gh run view --log-failed`. Fix it on the branch, have the fix reviewed as usual, and report to
 > master. The loop stops after hand-off 3 and gives the PR to the person.
 
+The words "or with `gh run view --log-failed`" are written only when at least one listed entry is an
+Actions check run (§2, A); otherwise the directive reads "Read the log from the link."
+
 A pass whose PR is no longer open (merged, closed) deletes that PR's record, so a reopened PR, a
 rare case, starts at zero.
+
+### The base, checked before a hand-off ("stop the line", B)
+
+If the base breaks, or a flaky test hits everyone, every PR goes red on the same check. Each author
+would get a hand-off for a failure that is not theirs, and the caps would be used up. On
+`pull_request`, GitHub Actions tests the merge commit with the current base, so a PR can go red
+because of its base without being rebased. A red base is not the author's failure (§8 Q10).
+
+**The read.** Each pass, after `gh pr list`, takes the distinct base branches (`baseRefName`) of the
+red PRs (those §4 would otherwise decide, at step 1b) and reads the rollup of each base's latest
+commit: **one call per base**, usually one, through `gh api graphql`. The exact query is fixed at
+build time. No red PR, no call. The base's rollup is parsed and classified with §2's rules,
+duplicate names included:
+
+- **still running:** at least one entry not finished (§2), whatever else failed;
+- **red:** finished, and at least one entry failed;
+- **not red:** finished with no failure, or an **empty rollup** (a base with no CI on push).
+
+**Per PR, by check name.** A red PR's failing set is compared, name by name, with the base's entries:
+
+- **Base red** and the PR's failing set includes at least one check that also fails on the base:
+  the PR is **held** (step 1b): not handed off this pass, and nothing is counted.
+- **Base still running** and the PR's failing set includes at least one check that is still running
+  or failed on the base: the PR **waits**, as a PR with running checks waits today (§2).
+- **Otherwise** (base not red, or the PR fails only on checks the base passes or does not have): the
+  loop runs as written. A PR red on a check the base passes, beside a base red on another check, is
+  handed off normally.
+- **Base read fails** (timeout, `gh` error, a cut answer): every red PR on that base sends nothing
+  this pass, the same as a failed PR read. It is never taken as "base green".
+
+**Master, once per base episode.** When a base is red and holds at least one PR, master gets one
+directive, **woken** (master owns the base, as build sheriff). It names the branch, the base head
+sha, the base's failing checks with their URLs (cleaned, at most 10 plus "and N more", as §2), and
+the number of PRs held. It is written with `bus.FencedCmdOnce`, mark `ci:base:<branch>`, episode
+the base digest, so the entry's `episode` reads `ci:base:<branch>=<digest>`. The digest is built
+like the PR digest: the hex sha1 of the branch, the base head sha and the sorted failing check
+names, joined by NUL. There is no new record: the mark is `FencedCmdOnce`'s own, in `{p}:quota`, one
+field per base branch. The same base episode on the next pass writes nothing more; a new base head,
+or another failing set, is a new episode and sends again. The count of held PRs is the one of the
+pass that wrote the directive; it is not updated. A swap of master returns `ErrSwapInProgress`, and
+the next pass sends it, as the other once-writers do.
+
+**When the base goes green**, the PRs' next runs decide again: a PR still red after the base is
+green is a normal hand-off, and its count is unchanged by the passes it was held. A stop (cap
+reached) is not affected: a stopped PR stays stopped.
+
+The extra call is measured with the `gh pr list` timing condition in §7: it is the same budget.
 
 ### Writes: one fenced script, with the progress of each part recorded
 
@@ -222,8 +293,8 @@ cannot use the cap: the count is decided once per episode (step 5) and does not 
 6. **Each missing part:** XADD it, then at once HSET the field with that part added to `done`.
 7. Return `sent` or `stopped`.
 
-Steps 1 to 4 write nothing. The held case (§4 step 3, a hand-off to an owner that is `blocked` or `waiting`) is decided
-in Go before the call, so it writes nothing.
+Steps 1 to 4 write nothing. The held cases (§4 step 1b, the base; §4 step 3, a hand-off to an owner
+that is `blocked` or `waiting`) are decided in Go before the call, so they write nothing.
 
 **Retry.** Redis runs a script with no other command in between, so an interruption of our process
 (a crash, a lost lease, a timeout) falls before the script or after it. Redis does not undo a
@@ -268,8 +339,8 @@ no longer held.
 The person's `ci reset` is the only other writer: a script that deletes the field.
 
 `{p}:ci` is classified in `bus/keykinds.go`, as `TestEveryWrittenKeyKindIsClassified` requires.
-It is proposed as **runtime**: a backup does not restore it, so after a restore the loop restarts at
-zero for the PRs still red. A restored count could belong to heads that have moved since (Q9).
+It is **runtime** (§8 Q9): a backup does not restore it, so after a restore the loop restarts at
+zero for the PRs still red. A restored count could belong to heads that have moved since.
 
 ## 5. The stop, to the person
 
@@ -287,14 +358,19 @@ when:
 - the PR closes and its record is deleted;
 - the person runs `agentbus ci reset <pr>` (Q5). That command deletes the PR's field with a small
   script and needs no lease, the same way `agentbus run reset` works (`bus.ResetRun`): only the
-  person may run it, and an agent caller is refused.
+  person may run it, and an agent caller is refused. busmon's `/` command palette gets a class C row,
+  `ci reset <pr>`, as `self-repair reset <agent>` has (`cmd/busmon/palette_c.go`): it shows the exact
+  argv and runs it after y, as the person, so the person needs no shell.
 
 ## 6. What stays as it is
 
 - **The dispatcher never runs repository code.** `gh` reads the forge only, as the pass does today.
 - **The dispatcher types only the wake line.** The failure text goes on the bus, never into a pane.
-- **No conflict loop in this step.** A conflicting PR is already in the merge queue for master,
-  `Conflicting`, to be rebased. Q6 asks whether a conflict should follow the same loop.
+- **No conflict loop.** A conflicting PR is already in the merge queue for master, `Conflicting`,
+  to be rebased (§8 Q6). Conflicts are not CI failures; the real fix is the file-based task split,
+  in a separate spec.
+- **No exactly-once machinery for the base.** The base check adds one read per base and one
+  `FencedCmdOnce`; at-least-once stands as §4 states it.
 - **No review-comment loop.** Our reviews already reach the author on the bus. Comments a person
   leaves on the forge are deferred, as the study says.
 - **No new process, cadence or token.**
@@ -333,32 +409,56 @@ Tests, with a fake `gh` and the disposable broker:
 - a script failure injected after the owner's part is done: the retry writes master's copy only, the decision is not taken again, and the count does not move;
 - an episode that changes while its action is unfinished: the new action is decided, and the old one's missing part is not sent;
 - the owner rule: one author over two reviewers is that author; no entry, or two authors, is master;
-- no log field and no output of the command ever reaches an entry.
+- no log field and no output of the command ever reaches an entry;
+- the log hint: an Actions check run's entry names `gh run view --log-failed`; a `StatusContext`
+  (a Jenkins status) or a non-Actions check run gives the URL alone (A);
+- the base (B), the person's seven:
+  - base red on `test-linux`, two PRs red on `test-linux`: no hand-off, counts unchanged, one
+    directive to master;
+  - the same base episode on the next pass: nothing more to master;
+  - base green again, a PR still red: a normal hand-off, count +1;
+  - a PR red on a check the base passes, beside a base red on another check: a normal hand-off;
+  - base still running: the PRs wait;
+  - base read fails: nothing sent, no count;
+  - a base with no rollup: a normal hand-off;
+- and two more for step 1b's order: a PR at the cap whose failure the red base shares is held, not
+  stopped; an already stopped PR stays stopped whatever the base.
 
-One build step, one PR: the read, the record, the loop, the stop, `ci reset`, an operator-notes
-fragment. One condition: measure the time `gh pr list` takes with the rollup, on one of the
-person's projects with real checks and with many open PRs (`ghLimit` is 1000), against the 10 s per-call budget before it ships. If it does not
-fit, the rollup becomes its own `gh` call in the same pass. That is still bounded, and it is
-decided at build time, not guessed now.
+One build step, one PR: the read, the base check, the record, the loop, the stop, `ci reset` and
+its palette row, an operator-notes fragment. The fragment says: a check that never finishes
+(`EXPECTED` or `PENDING` forever, a CI server down) or a base that stays running makes a PR silent,
+and silence is never "all green" (C); the hand-off gives a URL, which the agent must be able to
+reach (A); a base with no CI on push has an empty rollup, so it is "not red" and the loop runs as
+written (B). One condition: measure the time `gh pr list` takes with the rollup, plus the base
+call, on one of the person's projects with real checks and with many open PRs (`ghLimit` is 1000),
+against the 10 s per-call budget before it ships. If it does not fit, the rollup becomes its own
+`gh` call in the same pass. That is still bounded, and it is decided at build time, not guessed now.
 
-## 8. Questions for the person
+Next steps, each its own PR after this one: the "CI red" mark on an approved PR's row in the merge
+queue (§8 Q8, the next small step); the GitLab and Bitbucket PR readers, on the roadmap (§8 Q7).
+Longer term, not this spec: master's merge queue tests the PR rebased on the current base before
+pushing, so the base stays green.
 
-1. **Who is told?** The author, woken, with a copy to master that does not wake it (proposed).
-   Or master only, who re-dispatches.
-2. **Cap and default.** 3 hand-offs per PR, loop on by default (proposed). Or another number, or
-   off until you turn it on per project.
-3. **Does green reset the count?** No (proposed): a PR that goes red, green, then red again has used
-   2 of its 3. Or a green pass gives back the full count.
-4. **`CANCELLED` and `ACTION_REQUIRED`.** Not failures (proposed): a cancel is usually a newer run
-   replacing the old one, and an action-required check waits for a person. Or treat either one as a
-   failure.
-5. **After the stop.** `agentbus ci reset <pr>` re-opens the loop (proposed). Or the stop is final
-   for that PR until it closes.
-6. **Conflicts.** Left to master, through the merge queue, as today (proposed). Or a conflict with
-   the base also goes to the author with the same cap.
-7. **GitLab and Bitbucket.** No loop until they have a PR reader (proposed). Or build their readers
-   now, as a separate step.
-8. **The merge queue.** Should an approved PR whose checks are red be marked in the queue, so you do
-   not merge it by hand? Proposed: yes, a "CI red" mark on its row, a small second step after this one.
-9. **After a restore.** The loop's counts are not restored, so each red PR gets its full count again
-   (proposed: `{p}:ci` is runtime). Or restore them with the backup, so a stopped PR stays stopped.
+## 8. The person's answers (decided 2026-11-19, r10)
+
+1. **Who is told:** as proposed. The author is woken, and master gets a copy with `wake=no`.
+2. **Cap and default:** as proposed. 3 hand-offs per PR, and the loop is on by default. A repository
+   with no CI stays silent, so the default costs nothing.
+3. **Green does not reset the count:** as proposed. `ci reset` is the deliberate way to give more
+   tries.
+4. **`CANCELLED` and `ACTION_REQUIRED` are not failures:** as proposed. A PR whose only check is
+   `ACTION_REQUIRED` stays silent, which is acceptable.
+5. **`agentbus ci reset <pr>`:** yes, and also in busmon's `/` command palette, so the person needs
+   no shell (§5).
+6. **Conflicts stay with master, through the merge queue:** yes, for this step. Conflicts are not CI
+   failures. The real fix is the file-based task split already requested, in a separate spec.
+7. **GitLab and Bitbucket:** no loop until they have a PR reader. The readers go on the roadmap as a
+   separate step, not as a "maybe": the project must run on any forge. With no forge, there is no
+   status to read and nothing to do.
+8. **"CI red" mark in the merge queue:** yes, as the next small step after this one.
+9. **`{p}:ci` is runtime and not restored:** as proposed.
+10. **New, decided by the person: a red base is not the author's failure.** The base is checked
+    before a hand-off (§4, "The base").
+
+The rest stands as written: at least once with a harmless duplicate, a stop that is terminal, types
+preflighted, no exactly-once machinery.
