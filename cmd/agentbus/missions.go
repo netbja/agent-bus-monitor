@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/forge"
 	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/mission"
 )
@@ -62,7 +63,7 @@ func runMissions(ctx context.Context, b *bus.Bus, args []string, cwd string, std
 		repo = r
 	}
 	cfg.Repo = repo
-	base, src, err := projectDeliveryBase(os.Getenv, b.Project())
+	base, src, err := forge.ProjectDeliveryBase(os.Getenv, b.Project())
 	if err != nil {
 		fmt.Fprintln(stderr, "error: "+err.Error())
 		return 1
