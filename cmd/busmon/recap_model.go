@@ -9,7 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // recapForYou is the recap's section for the person: shown only when the

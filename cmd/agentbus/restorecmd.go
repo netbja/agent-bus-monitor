@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/relaunch"
-	"github.com/netbja/agent-bus-monitor/textfmt"
 
 	"github.com/redis/go-redis/v9"
 

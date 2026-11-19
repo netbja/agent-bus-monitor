@@ -12,7 +12,7 @@ import (
 	"github.com/rivo/uniseg"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // The compose window (busmon Charm spec, "Input"; v0.16's window): a message

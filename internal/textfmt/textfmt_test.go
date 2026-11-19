@@ -50,7 +50,7 @@ func TestTokCount(t *testing.T) {
 // binaries use the standard library's slices.Contains and cmp.Or instead of
 // their own contains and or.
 func TestNoCopyOfTheSharedHelpers(t *testing.T) {
-	root := ".."
+	root := "../.."
 	// name -> the parameter list and results it had as a copy: a function of
 	// that name with another shape (plan's oneLine(s, max) bool, projfiles'
 	// plural(n, one, many)) does something else and may keep its name.

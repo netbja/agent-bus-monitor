@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
 

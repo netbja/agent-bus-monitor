@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/netbja/agent-bus-monitor/textfmt"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // Drafting a role on demand (specialist roles spec, addendum E): master
