@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r6, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). Idea 1 of
+Status: spec, r7, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. r5 was withdrawn (more machinery). r6, on master's ruling (simple and robust): the guarantee is stated as at least once, with a harmless and bounded duplicate, and no exactly-once claim. The record keeps a digest of the episode, not the raw names. `{p}:ci` is classified as runtime (foureyes r4, build notes). r7 (reviewer-codex): a stopped field stays stopped across new episodes, and only the stop's own unfinished parts are retried. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -116,8 +116,12 @@ digest (see Writes), and the script compares digests wherever it compares episod
 
 On each pass, for each red PR:
 
-1. **Same episode as last time:** nothing. A re-run of the same head with the same failures sends
-   nothing again.
+0. **Already stopped:** nothing, whatever the episode: a new head, or other failing checks. The stop
+   is terminal until the PR closes or the person runs `ci reset` (§5). The one exception is the
+   stop's own unfinished parts, which are retried for its original episode (Writes, step 3).
+1. **Same episode as last time:** if its action is complete, nothing; a re-run of the same head with
+   the same failures sends nothing again. If its action is unfinished (a part not in `done`), only
+   the missing parts are written, and nothing is decided again.
 2. **Hand-offs already at the cap, `ci.max_handoffs` (default 3, Q2):** this is **the stop**. The
    person gets one notice for the PR (§5), master gets a directive with `wake=no`, and the owner gets
    nothing more. A held owner does not hold the stop, because the stop writes nothing to the owner
@@ -195,13 +199,17 @@ cannot use the cap: the count is decided once per episode (step 5) and does not 
    stream and not absent, return `bad-type`. That covers a key a hand or another tool wrote with
    another type, the case where a later XADD or HSET would fail.
 3. Read the field.
-   - If its episode equals the argument and every part of its action is in `done`, return `same`.
-   - If it is stopped and its stop is complete, return `stopped-before`.
+   - **If it is stopped:** if its digest equals the argument and its stop has a part not in `done`,
+     go on to step 4 and finish that stop. Otherwise return `stopped-before`, **whatever the
+     argument's digest**. A stopped field is never decided again; only the PR closing or `ci reset`
+     deletes it (reviewer-codex, r6).
+   - If its digest equals the argument and every part of its action is in `done`, return `same`.
 4. If any recipient of a part not yet written is being swapped, return `swap`: the owner for the
    owner's part, master for master's part (on a hand-off and on a stop) (foureyes, r2). The script
    takes both swap keys, `{p}:swap:<owner>` and `{p}:swap:<master>`.
    The next pass tries again, as the once-writers do (`ErrSwapInProgress`).
-5. **Decide, once per episode.** If the field's episode is not the argument, this is a new action:
+5. **Decide, once per episode.** This is reached only for a field that is absent or not stopped. If
+   the field's digest is not the argument, this is a new action:
    - a stop if the count is at or above the cap, else a hand-off;
    - HSET the field to `episode|count'|stopped'|` with nothing done, before any entry, where count'
      is count+1 for a hand-off and stays count for a stop.
@@ -288,7 +296,7 @@ Tests, with a fake `gh` and the disposable broker:
 - master being swapped holds the stop;
 - the same episode sends once;
 - a new head sends again and counts;
-- the cap stops the loop, and stops it once only;
+- the cap stops the loop, and stops it once only. After the stop, a new head or a new failing set returns `stopped-before` and writes nothing; an unfinished stop finishes for its own digest only (reviewer-codex, r6);
 - a `blocked` owner is held, then sent;
 - an unknown owner and a two-author head go to master;
 - a closed PR deletes its record;
