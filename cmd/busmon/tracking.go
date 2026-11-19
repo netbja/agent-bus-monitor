@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // request is busmon's read-only view of one tracked request on the board.
@@ -344,7 +345,7 @@ func openThreads(cmds []bus.Event, tracked []request) []openThread {
 		}
 		out = append(out, openThread{
 			ID: id, Type: e.Type, From: e.From, Target: e.Target,
-			Message: oneLine(messageBody(e)), At: entryTime(e.ID),
+			Message: textfmt.OneLine(messageBody(e)), At: entryTime(e.ID),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })

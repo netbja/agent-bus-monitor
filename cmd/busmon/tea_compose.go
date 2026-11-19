@@ -12,6 +12,7 @@ import (
 	"github.com/rivo/uniseg"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The compose window (busmon Charm spec, "Input"; v0.16's window): a message
@@ -237,7 +238,7 @@ const pasteExcerpt = 24
 // none).
 func pasteLabel(n int, s string) string {
 	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-	count := fmt.Sprintf("%d %s", len(lines), plural(len(lines), "line"))
+	count := fmt.Sprintf("%d %s", len(lines), textfmt.Plural(len(lines), "line"))
 	for _, l := range lines {
 		rs := []rune(strings.TrimSpace(l))
 		if len(rs) == 0 {

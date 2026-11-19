@@ -283,7 +283,7 @@ func nsTest(getenv func(string) string, serial int, t notify.Target) tea.Cmd {
 
 // nsRecord records a test in notify-last.json, as the CLI's test does.
 func nsRecord(getenv func(string) string, name string, err error) {
-	d := notifyStateDir(getenv)
+	d := notify.StateDir(getenv)
 	if d == "" {
 		return
 	}
@@ -365,7 +365,7 @@ func nsRename(getenv func(string) string, serial int, old, name string) tea.Cmd 
 				done.writeErr = "config.toml was not changed: " + err.Error()
 			}
 		}
-		if d := notifyStateDir(getenv); d != "" {
+		if d := notify.StateDir(getenv); d != "" {
 			_ = notify.UpdateLast(notify.LastPath(d), func(l *notify.Last) error { l.Rename(old, name); return nil })
 		}
 		return done

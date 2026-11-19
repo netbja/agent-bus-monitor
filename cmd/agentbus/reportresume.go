@@ -17,6 +17,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The resume hook (v0.21.1; herdr exit §4.7): the launcher gives every
@@ -294,8 +295,10 @@ func proveSessionSend(args []string, open func(project string) (sessionProver, f
 	return 0
 }
 
-func oneLine(out []byte, err error) string {
-	s := strings.Join(strings.Fields(string(out)), " ")
+// outputLine is a command's output on one line, at most 300 bytes, or its
+// error when it printed nothing.
+func outputLine(out []byte, err error) string {
+	s := textfmt.OneLine(string(out))
 	if len(s) > 300 {
 		s = s[:300]
 	}

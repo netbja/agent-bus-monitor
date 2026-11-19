@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The Projects page's delete (projects-admin §5): refused while the project
@@ -379,9 +381,9 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 	case len(r.left) > 0:
 		m.notice.push(notice{text: cameBack(r.project, r.keys, r.left) + noFiles, level: noticeAttention})
 	default:
-		text := fmt.Sprintf("deleted %d %s of %s", r.keys, plural(int(r.keys), "key"), r.project)
+		text := fmt.Sprintf("deleted %d %s of %s", r.keys, textfmt.Plural(int(r.keys), "key"), r.project)
 		if len(r.services) > 0 {
-			text += fmt.Sprintf("; removed the %s %s here", strings.Join(r.services, " and "), plural(len(r.services), "service"))
+			text += fmt.Sprintf("; removed the %s %s here", strings.Join(r.services, " and "), textfmt.Plural(len(r.services), "service"))
 		}
 		if len(msg.hosts) > 0 {
 			var names []string
@@ -398,7 +400,7 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 			}
 		}
 		if msg.open {
-			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --pick to open another project", r.project, r.keys, plural(int(r.keys), "key"))
+			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --pick to open another project", r.project, r.keys, textfmt.Plural(int(r.keys), "key"))
 			return tea.Quit
 		}
 		m.notice.push(notice{text: text, level: level})
@@ -416,10 +418,10 @@ func filesDoneText(d projfiles.Done) string {
 		parts = append(parts, "the template")
 	}
 	if n := len(d.Worktrees); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d %s", n, plural(n, "worktree")))
+		parts = append(parts, fmt.Sprintf("%d %s", n, textfmt.Plural(n, "worktree")))
 	}
 	if n := len(d.Archives); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d %s", n, plural(n, "archive")))
+		parts = append(parts, fmt.Sprintf("%d %s", n, textfmt.Plural(n, "archive")))
 	}
 	text := ""
 	if len(parts) > 0 {
@@ -491,7 +493,7 @@ func (m Model) deletePanelLines(w int) []Line {
 	holderCell := "holder: " + adminHolderCell(r)
 	lines := []Line{
 		muted(fmt.Sprintf("%d %s %s %d agents (%d live) %s last activity %s %s %s %s %s",
-			r.keys, plural(r.keys, "key"), GlyphNone, r.total, r.live, GlyphNone, adminLast(r, m.now), GlyphNone, svc, GlyphNone, holderCell)),
+			r.keys, textfmt.Plural(r.keys, "key"), GlyphNone, r.total, r.live, GlyphNone, adminLast(r, m.now), GlyphNone, svc, GlyphNone, holderCell)),
 	}
 	if d.unchecked {
 		lines = append(lines, Line{{Text: "agents: not checkable on this host (no /proc): only the leases, the services' records and the scan after the delete see them", Role: RoleAttention}})
@@ -607,7 +609,7 @@ func realQuiet(client *redis.Client, getenv func(string) string) func(ctx contex
 		case errors.As(err, &ref) && (ref.What == "dispatch" || ref.What == "conductor"):
 			return "a " + ref.What + " holds " + p + "'s lease: agentbus down " + p + " where it runs, or Z", nil
 		case errors.As(err, &ref):
-			return ref.What + " runs on " + or(ref.Host, "another host") + ": agentbus down " + p + " there, or Z", nil
+			return ref.What + " runs on " + cmp.Or(ref.Host, "another host") + ": agentbus down " + p + " there, or Z", nil
 		case err != nil:
 			return "", err
 		}
@@ -658,7 +660,7 @@ func realQuiet(client *redis.Client, getenv func(string) string) func(ctx contex
 		case ok && t.unread:
 			return "its holder does not answer: agentbus down " + p + " first", nil
 		case ok && t.live > 0:
-			return fmt.Sprintf("its holder runs %d %s: agentbus down %s first", t.live, plural(t.live, "terminal"), p), nil
+			return fmt.Sprintf("its holder runs %d %s: agentbus down %s first", t.live, textfmt.Plural(t.live, "terminal"), p), nil
 		}
 		return "", nil
 	}

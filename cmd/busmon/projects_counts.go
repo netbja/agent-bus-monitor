@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -53,7 +54,7 @@ func readProjectCounts(ctx context.Context, b busReader, person string, now time
 	pollOnce(ctx, r, st, 1) // every read, the throttled ones included
 	pollOnce(ctx, r, st, 2) // the gates of the agents the first tick read (they are read per known agent)
 	if !st.health.ok {
-		return workCounts{}, errors.New(or(st.health.err, "broker not read"))
+		return workCounts{}, errors.New(cmp.Or(st.health.err, "broker not read"))
 	}
 	if err := failed(); err != nil { // a kept or missing value would count as 0
 		return workCounts{}, err

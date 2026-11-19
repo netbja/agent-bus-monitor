@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/notify"
@@ -93,18 +93,6 @@ func runNotifications(ctx context.Context, args []string, d notificationsDeps, o
 	return 1 // nothing ran: 2 is a written target whose test failed (notify-guided-setup §6, foureyes)
 }
 
-// notifyStateDir is <state> = $XDG_STATE_HOME/agentbus, else
-// ~/.local/state/agentbus, where notify-last.json lives.
-func notifyStateDir(getenv func(string) string) string {
-	if d := getenv("XDG_STATE_HOME"); filepath.IsAbs(d) {
-		return filepath.Join(d, "agentbus")
-	}
-	if home := getenv("HOME"); filepath.IsAbs(home) {
-		return filepath.Join(home, ".local", "state", "agentbus")
-	}
-	return ""
-}
-
 func notificationsTest(ctx context.Context, name string, d notificationsDeps, out, errw io.Writer) int {
 	// The person's act (foureyes, master): an agent caller is refused here,
 	// whatever the spelling of its command line, so no deny has to match
@@ -157,7 +145,7 @@ func notificationsTest(ctx context.Context, name string, d notificationsDeps, ou
 		host = "this host"
 	}
 	msg := notify.Message{Title: "agentbus: a test message from " + host, Priority: notify.Default}
-	state := notifyStateDir(d.Getenv)
+	state := notify.StateDir(d.Getenv)
 	code := 0
 	for _, t := range targets {
 		msg.Lines = []string{"If you read this, the target " + t.Name + " works."}
@@ -206,7 +194,7 @@ func notificationsStatus(d notificationsDeps, out, errw io.Writer) int {
 		listed[n] = true
 	}
 	var last notify.Last
-	if state := notifyStateDir(d.Getenv); state != "" {
+	if state := notify.StateDir(d.Getenv); state != "" {
 		var err error
 		if last, err = notify.ReadLast(notify.LastPath(state)); err != nil {
 			fmt.Fprintln(errw, "agentbus notifications:", err)

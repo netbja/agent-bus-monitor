@@ -15,6 +15,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/config"
 	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/notify"
 )
 
 // The C page's Backup group (backup-page): below its keys, "Back up now",
@@ -84,7 +85,7 @@ func readBackupFacts(getenv func(string) string, host string) backupFacts {
 		}
 		f.Archives = append(f.Archives, row)
 	}
-	if state := notifyStateDir(getenv); state != "" {
+	if state := notify.StateDir(getenv); state != "" {
 		f.Log = filepath.Join(state, "backup.log")
 		l, err := backup.ReadLast(filepath.Join(state, "backup-last.json"))
 		if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // agentbus backup (spec docs/superpowers/specs/2026-11-01-backup-design.md):
@@ -240,7 +241,7 @@ func makeArchive(ctx context.Context, c *redis.Client, d backupDeps, r config.Re
 	}
 	fmt.Fprintf(out, "backup: %s\n", res.Path)
 	for _, p := range j.Projects {
-		fmt.Fprintf(out, "  %s: %s, the broker held for %s\n", p, plural(res.Keys[p], "key"), res.Exec[p].Round(time.Microsecond))
+		fmt.Fprintf(out, "  %s: %s, the broker held for %s\n", p, textfmt.Count(res.Keys[p], "key"), res.Exec[p].Round(time.Microsecond))
 	}
 	for _, l := range j.Left {
 		fmt.Fprintf(out, "  left out: %s (%s)\n", l.Path, l.Why)
@@ -310,7 +311,7 @@ func backupDryRun(ctx context.Context, c *redis.Client, dir, name string, projec
 			fmt.Fprintf(errw, "backup: %s: %v\n", p, err)
 			return 1
 		}
-		fmt.Fprintf(out, "  %s: %s on the broker (any with an expiry is skipped)\n", p, plural(len(keys), "key"))
+		fmt.Fprintf(out, "  %s: %s on the broker (any with an expiry is skipped)\n", p, textfmt.Count(len(keys), "key"))
 	}
 	for _, f := range files {
 		if st, err := os.Stat(f.Path); err == nil {
@@ -349,13 +350,6 @@ func backupList(dir, host string, out, errw io.Writer) int {
 		fmt.Fprintf(out, "  %s  %s  %s  covers %s\n", a.Name, a.At.Local().Format("2006-01-02 15:04:05"), size, covers)
 	}
 	return 0
-}
-
-func plural(n int, word string) string {
-	if n == 1 {
-		return "1 " + word
-	}
-	return fmt.Sprintf("%d %ss", n, word)
 }
 
 func sortedUnique(s []string) []string {

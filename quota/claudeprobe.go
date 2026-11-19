@@ -146,7 +146,7 @@ func runClaudeUsage(ctx context.Context, bin, configDir string, timeout time.Dur
 			continue
 		}
 		if line.Response.Subtype != "success" {
-			return nil, fmt.Errorf("refused (%s)", oneLine(line.Response.Error))
+			return nil, fmt.Errorf("refused (%s)", firstLine(line.Response.Error))
 		}
 		return line.Response.Response, nil
 	}
@@ -156,7 +156,8 @@ func runClaudeUsage(ctx context.Context, bin, configDir string, timeout time.Dur
 	return nil, fmt.Errorf("the CLI ended without an answer")
 }
 
-func oneLine(s string) string {
+// firstLine is s's first line, at most 120 bytes: the CLI's refusal, short.
+func firstLine(s string) string {
 	s, _, _ = strings.Cut(s, "\n")
 	if len(s) > 120 {
 		s = s[:120]

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -613,7 +614,7 @@ func (m *Model) buildPage() bool {
 		p.body, p.recapLine = recapBody(p.recap.Rows, p.sel, width)
 		p.threadPlain, p.threadWhat = "", "" // Y copies the selected item's report, its full text
 		if p.sel >= 0 && p.sel < len(rec.Rows) && rec.Rows[p.sel].Report.ID != "" {
-			p.threadPlain, p.threadWhat = or(rec.Rows[p.sel].Report.Full, rec.Rows[p.sel].Report.Message), "report"
+			p.threadPlain, p.threadWhat = cmp.Or(rec.Rows[p.sel].Report.Full, rec.Rows[p.sel].Report.Message), "report"
 		}
 	case ovAsk:
 		a, ok := m.pageAsk(p)
@@ -911,9 +912,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		m.pop()
 		return nil
 	case ActCopy:
-		return m.copy(p.plain, or(p.plainWhat, "text"))
+		return m.copy(p.plain, cmp.Or(p.plainWhat, "text"))
 	case ActCopyThread:
-		return m.copy(p.threadPlain, or(p.threadWhat, "thread"))
+		return m.copy(p.threadPlain, cmp.Or(p.threadWhat, "thread"))
 	case ActNextItem, ActPrevItem:
 		if m.walkPage() {
 			return m.walkStep(act == ActNextItem)
@@ -1208,7 +1209,7 @@ func (m Model) drawReader(g *grid) {
 		hints = y + " " + GlyphNone + " " + hints
 	}
 	if p.threadPlain != "" {
-		hints = "Y copy " + or(p.threadWhat, "thread") + " " + GlyphNone + " " + hints
+		hints = "Y copy " + cmp.Or(p.threadWhat, "thread") + " " + GlyphNone + " " + hints
 	}
 	title := Line{{Text: Preview(p.title), Role: RoleText}}
 	if m.walkPage() && !m.ui.walk.end { // the walk's place (busmon-queue-triage §4.1)
@@ -1417,14 +1418,6 @@ func (m Model) pageHint(act Action) string {
 		return "copy " + p.plainWhat
 	}
 	return ""
-}
-
-// or is s, or def when s is empty.
-func or(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
 }
 
 // replyQuoteLines and replyQuoteMax keep a reply's quote short: the person

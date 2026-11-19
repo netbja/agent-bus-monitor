@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The Work model (requests-plan-redesign, the person's answer of 2026-11-10):
@@ -229,7 +230,7 @@ func teamOf(in workInput, links map[string]planLink) ([]teamRow, []string) {
 			g := bus.ParseGateMeta(meta)
 			subject := g.Subject
 			if subject == "" {
-				subject = oneLine(g.Text)
+				subject = textfmt.OneLine(g.Text)
 			}
 			since := eventTimestamp(ref)
 			reviewing[n] = append(reviewing[n], teamGate{Who: g.Challenger, Subject: subject, Since: since})

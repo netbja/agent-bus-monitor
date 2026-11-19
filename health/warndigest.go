@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The daily review's digest of long warns (sentinel-warn-digest: master's
@@ -49,21 +51,19 @@ func WarnDigest(records map[string]Record, accepts map[string]Note, nowMS int64)
 		if age < WarnDigestAfter {
 			continue
 		}
-		line := fmt.Sprintf("%s warn %s: %s", def.ID, dayHours(age), oneLine(rec.Detail))
+		line := fmt.Sprintf("%s warn %s: %s", def.ID, dayHours(age), textfmt.OneLine(rec.Detail))
 		if a, accepted := accepts[def.ID]; accepted && a.At >= rec.Since {
 			since := time.Duration(nowMS-a.At) * time.Millisecond
 			if since < AcceptFor {
 				d.Accepted++
 				continue
 			}
-			line += fmt.Sprintf(" (accepted %s ago by %s: %s; still warn: fix it or accept it again)", dayHours(since), a.Author, oneLine(a.Text))
+			line += fmt.Sprintf(" (accepted %s ago by %s: %s; still warn: fix it or accept it again)", dayHours(since), a.Author, textfmt.OneLine(a.Text))
 		}
 		d.Lines = append(d.Lines, line)
 	}
 	return d
 }
-
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // Message is the digest as sentinel sends it to master, "" when nothing is
 // listed (an accepted warn alone needs no message).

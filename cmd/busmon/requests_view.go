@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The Requests view (spec docs/superpowers/specs/2026-10-28-requests-view-design.md):
@@ -277,7 +278,7 @@ func requestGroups(in reqInput) reqView {
 	for _, id := range order {
 		e := roots[id]
 		th := reqThread{ID: id, Root: e, From: e.From, Target: e.Target, At: entryTime(e.ID),
-			Subject: oneLine(messageBody(e)), State: in.state(e)}
+			Subject: textfmt.OneLine(messageBody(e)), State: in.state(e)}
 		switch {
 		case e.Type == bus.CmdChallenge:
 			th.Kind = kindChallenge
@@ -287,14 +288,14 @@ func requestGroups(in reqInput) reqView {
 					th.Subject = g.Subject
 				}
 			}
-			if !th.Gated || th.Subject == oneLine(messageBody(e)) { // no stored subject: the challenge's first word
+			if !th.Gated || th.Subject == textfmt.OneLine(messageBody(e)) { // no stored subject: the challenge's first word
 				if f := strings.Fields(th.Subject); len(f) > 0 {
 					th.Subject = f[0]
 				}
 			}
 		default:
 			if s, rid, ok := reportSubject(e.Message); ok {
-				th.Kind, th.Subject, th.ReportID = kindReports, oneLine(s), rid
+				th.Kind, th.Subject, th.ReportID = kindReports, textfmt.OneLine(s), rid
 			} else if e.From == "dispatch" || e.NoWake {
 				th.Kind = kindNotices
 			} else {

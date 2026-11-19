@@ -38,7 +38,7 @@ type notifier struct {
 func serviceNotify(b *bus.Bus, getenv func(string) string) dispatch.NotifyConfig {
 	run := desktopRun(exec.LookPath, runQuiet)
 	n := &notifier{b: b, reader: &notifyReader{b: b, grace: dispatch.PromptGrace(getenv)}, getenv: getenv, now: time.Now,
-		stateDir: notifyStateDir(getenv), sender: func(t notify.Target) notify.Sender { return t.Sender(run) }}
+		stateDir: notify.StateDir(getenv), sender: func(t notify.Target) notify.Sender { return t.Sender(run) }}
 	return dispatch.NotifyConfig{Pass: n.pass}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -28,21 +29,12 @@ func verdictGates(ctx context.Context, b *bus.Bus, author, reviewer, subject, re
 	if len(closed) > 0 {
 		lines = append(lines, fmt.Sprintf("closed gate(s) on %s: %s", reviewer, strings.Join(closed, " ")))
 	}
-	if ref != "" && !contains(closed, ref) {
+	if ref != "" && !slices.Contains(closed, ref) {
 		if msg := verdictGateNotice(ctx, b, author, reviewer, ref); msg != "" {
 			lines = append(lines, msg)
 		}
 	}
 	return lines
-}
-
-func contains(xs []string, x string) bool {
-	for _, s := range xs {
-		if s == x {
-			return true
-		}
-	}
-	return false
 }
 
 type gateRow struct {

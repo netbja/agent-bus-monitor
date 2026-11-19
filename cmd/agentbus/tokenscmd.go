@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
@@ -244,8 +245,8 @@ func tokensAll(ctx context.Context, o tokensOpts, d tokensDeps, stdout, stderr i
 		if p.Partial {
 			mark = "~" // still counting since its dispatcher started
 		}
-		fmt.Fprintf(stdout, "%-20s %9s %10s %11s  %s  %9s\n", tokTrunc(p.Project, 20), mark+tokCount(u.In+u.Write), mark+tokCount(u.Out),
-			mark+tokCount(u.Read), bars, mark+tokCount(total))
+		fmt.Fprintf(stdout, "%-20s %9s %10s %11s  %s  %9s\n", tokTrunc(p.Project, 20), mark+textfmt.TokCount(u.In+u.Write), mark+textfmt.TokCount(u.Out),
+			mark+textfmt.TokCount(u.Read), bars, mark+textfmt.TokCount(total))
 	}
 	if len(none) > 0 {
 		fmt.Fprintf(stdout, "%s   no data (no dispatch service counting tokens)\n", strings.Join(none, " "))
@@ -310,7 +311,7 @@ func tokensOneProject(ctx context.Context, o tokensOpts, d tokensDeps, stdout, s
 		fmt.Fprintf(stdout, "%-10s %9s %9s %11s %8s\n", "DAY", "IN", "OUT", "CACHE READ", "REQUESTS")
 		for _, day := range days {
 			u := p.Days[day]
-			fmt.Fprintf(stdout, "%-10s %9s %9s %11s %8d\n", day, tokCount(u.In+u.Write), tokCount(u.Out), tokCount(u.Read), u.N)
+			fmt.Fprintf(stdout, "%-10s %9s %9s %11s %8d\n", day, textfmt.TokCount(u.In+u.Write), textfmt.TokCount(u.Out), textfmt.TokCount(u.Read), u.N)
 		}
 		return 0
 	}
@@ -322,7 +323,7 @@ func tokensOneProject(ctx context.Context, o tokensOpts, d tokensDeps, stdout, s
 	for _, r := range rows {
 		in, out := "?", "?"
 		if r.In != nil {
-			in, out = tokCount(*r.In), tokCount(*r.Out)
+			in, out = textfmt.TokCount(*r.In), textfmt.TokCount(*r.Out)
 		}
 		fmt.Fprintf(stdout, "%-16s %-10s %9s %10s  %s\n", tokTrunc(r.Agent, 16), r.Provider, in, out, r.Reason)
 	}
@@ -420,7 +421,7 @@ func tokensUnattributed(ctx context.Context, o tokensOpts, d tokensDeps, stdout,
 		mark = "~"
 	}
 	fmt.Fprintf(stdout, "not attributed today   anthropic %s%s in %s %s%s out   openai %s%s in %s %s%s out   (sessions no project's record names; host scan, read-only)\n",
-		mark, tokCount(anth.In+anth.Write), "·", mark, tokCount(anth.Out), mark, tokCount(oai.In+oai.Write), "·", mark, tokCount(oai.Out))
+		mark, textfmt.TokCount(anth.In+anth.Write), "·", mark, textfmt.TokCount(anth.Out), mark, textfmt.TokCount(oai.In+oai.Write), "·", mark, textfmt.TokCount(oai.Out))
 	return 0
 }
 
@@ -446,17 +447,6 @@ func tokMaxI(a, b int64) int64 {
 		return a
 	}
 	return b
-}
-
-// tokCount: 0, 873, 206k, 5.1M.
-func tokCount(n int64) string {
-	switch {
-	case n < 1000:
-		return strconv.FormatInt(n, 10)
-	case n < 1_000_000:
-		return fmt.Sprintf("%dk", n/1000)
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/1e6)
 }
 
 func tokDur(d time.Duration) string {

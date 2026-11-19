@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -157,7 +158,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 		row := configRow{Key: k.Name, Value: config.Format(r.Value), Source: r.Source, Line: r.Line, ReadBy: k.ReadBy, Flag: k.Flag, Invalid: r.Invalid}
 		if r.Invalid {
 			row.Value = "invalid"
-			doc.Warnings = append(doc.Warnings, fmt.Sprintf("%s: %s; %s", r.Source, or(r.Why, "invalid"), k.Invalid))
+			doc.Warnings = append(doc.Warnings, fmt.Sprintf("%s: %s; %s", r.Source, cmp.Or(r.Why, "invalid"), k.Invalid))
 		}
 		if k.Env != "" && !r.Invalid && getenv(k.Env) != "" && r.Source != "env "+k.Env {
 			doc.Warnings = append(doc.Warnings, fmt.Sprintf("env %s: set but not a value its rule takes; %s applies", k.Env, r.Source))
@@ -177,7 +178,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 			}
 			if s.Invalid {
 				svc.Value = "invalid"
-				doc.Warnings = append(doc.Warnings, fmt.Sprintf("project %s %s: %s; %s", project, svcSource(s.Source, k.Env), or(s.Why, "invalid"), k.Invalid))
+				doc.Warnings = append(doc.Warnings, fmt.Sprintf("project %s %s: %s; %s", project, svcSource(s.Source, k.Env), cmp.Or(s.Why, "invalid"), k.Invalid))
 			}
 			svc.Differs = svc.Value != row.Value
 			row.Services = svc
@@ -384,14 +385,6 @@ func printConfigDoc(out io.Writer, doc configDoc) {
 	for _, w := range doc.Warnings {
 		fmt.Fprintln(out, "  "+w)
 	}
-}
-
-// or is s, else def.
-func or(s, def string) string {
-	if s != "" {
-		return s
-	}
-	return def
 }
 
 // svcSource names where a services' refused value comes from: the env file

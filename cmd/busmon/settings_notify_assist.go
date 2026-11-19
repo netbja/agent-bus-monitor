@@ -47,7 +47,7 @@ var lookNotifySend = exec.LookPath
 // readNotifyAssist reads notify.toml (as the service does) and the record.
 func readNotifyAssist(getenv func(string) string, kind string) notifyAssistFacts {
 	f := notifyAssistFacts{Path: notify.Path(getenv), File: notify.Load(notify.Path(getenv))}
-	if d := notifyStateDir(getenv); d == "" {
+	if d := notify.StateDir(getenv); d == "" {
 		f.LastErr = true
 	} else if l, err := notify.ReadLast(notify.LastPath(d)); err != nil {
 		f.LastErr = true

@@ -388,7 +388,7 @@ func testOne(ctx context.Context, t notify.Target, d notificationsDeps, out io.W
 	} else {
 		fmt.Fprintf(out, "%s: delivered: check your phone\n", t.Name)
 	}
-	if state := notifyStateDir(d.Getenv); state != "" {
+	if state := notify.StateDir(d.Getenv); state != "" {
 		_ = notify.UpdateLast(notify.LastPath(state), func(l *notify.Last) error {
 			l.Add(t.Name, o, false)
 			return nil
@@ -493,7 +493,7 @@ func notifyRename(args []string, d notificationsDeps, out io.Writer) error {
 	if err := listTarget(d.Getenv, name, old); err != nil {
 		fmt.Fprintln(out, "the target is renamed, but config.toml was not changed:", err)
 	}
-	if state := notifyStateDir(d.Getenv); state != "" {
+	if state := notify.StateDir(d.Getenv); state != "" {
 		if err := notify.UpdateLast(notify.LastPath(state), func(l *notify.Last) error {
 			l.Rename(old, name)
 			return nil

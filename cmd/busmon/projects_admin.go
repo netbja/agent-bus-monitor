@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/netbja/agent-bus-monitor/textfmt"
 )
 
 // The Projects page (M, spec docs/superpowers/specs/2026-11-08-projects-admin-page-design.md):
@@ -494,7 +496,7 @@ func adminHolderCell(r adminRow) string {
 	case r.terms.live == 0:
 		return GlyphDash
 	}
-	return fmt.Sprintf("%d %s", r.terms.live, plural(r.terms.live, "terminal"))
+	return fmt.Sprintf("%d %s", r.terms.live, textfmt.Plural(r.terms.live, "terminal"))
 }
 
 func adminStateRole(s string) Role {
@@ -623,7 +625,7 @@ func projectsBody(v adminView, sel int, tier Tier, width int, now time.Time, run
 	// Always: busmon cannot tell a tunnel (localhost:6380 to another host's
 	// broker) from a local broker, and services and holders are this machine's
 	// (foureyes).
-	body = append(body, FitLine(Line{{Text: "services and holders: this machine (" + or(v.host, "?") + "); " + GlyphDash + " means not here", Role: RoleMuted}}, width), nil)
+	body = append(body, FitLine(Line{{Text: "services and holders: this machine (" + cmp.Or(v.host, "?") + "); " + GlyphDash + " means not here", Role: RoleMuted}}, width), nil)
 	lines := make([]int, 0, len(v.rows))
 	mark := func(i int) Seg {
 		if i == sel {
@@ -703,7 +705,7 @@ func memoryText(done bool, u bus.MemoryUsage, err error) string {
 	case u.Read < u.Keys:
 		return fmt.Sprintf("%s for %d of %d keys", size, u.Read, u.Keys)
 	}
-	return fmt.Sprintf("%s (%d %s)", size, u.Keys, plural(u.Keys, "key"))
+	return fmt.Sprintf("%s (%d %s)", size, u.Keys, textfmt.Plural(u.Keys, "key"))
 }
 
 // adminDetail is the detail page; mem is its memory value, "" for none.
@@ -725,7 +727,7 @@ func adminDetail(r adminRow, v adminView, now time.Time, mem string) []Line {
 				s = append(s, fmt.Sprintf("%s %d", k, n))
 			}
 		}
-		kv("streams", or(strings.Join(s, " "+GlyphNone+" "), GlyphDash))
+		kv("streams", cmp.Or(strings.Join(s, " "+GlyphNone+" "), GlyphDash))
 		kv("last", adminLast(r, now))
 		leases := []string{}
 		if r.dispatch {
@@ -734,7 +736,7 @@ func adminDetail(r adminRow, v adminView, now time.Time, mem string) []Line {
 		if r.conductor {
 			leases = append(leases, "conductor")
 		}
-		kv("leases", or(strings.Join(leases, ", "), "none held"))
+		kv("leases", cmp.Or(strings.Join(leases, ", "), "none held"))
 	} else if r.brokerKnown {
 		kv("broker", "no key: a template only")
 	} else {
@@ -757,7 +759,7 @@ func adminDetail(r adminRow, v adminView, now time.Time, mem string) []Line {
 		}
 		kv("pause", line)
 	}
-	kv("services", adminServicesCell(r).text()+" (this machine, "+or(v.host, "?")+")")
+	kv("services", adminServicesCell(r).text()+" (this machine, "+cmp.Or(v.host, "?")+")")
 	kv("holder", adminHolderCell(r)+" (this machine)")
 	tmpl := GlyphDash
 	if r.template {
