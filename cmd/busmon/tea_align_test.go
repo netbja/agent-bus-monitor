@@ -64,6 +64,12 @@ func TestShellAlignmentSuite(t *testing.T) {
 		for _, icons := range []string{iconsOff, iconsNerd, iconsFont} { // busmon-icons §5: every mode
 			for _, down := range []bool{false, true} {
 				for _, sz := range shellAlignSizes {
+					// One hostile shell per size: its build reads the palette,
+					// down and the size, never the icons, tab or view set
+					// below; each tab and view is then switched to on it, as
+					// the person does, and refreshed (busmon test speed: the
+					// build was 35 % of this suite, once per tab and view).
+					m := hostileShell(t, sz[0], sz[1], down)
 					for _, tab := range lowerTabs {
 						views := []PanelID{PanelForYou}
 						if sz[0] < mediumMinWidth {
@@ -71,7 +77,6 @@ func TestShellAlignmentSuite(t *testing.T) {
 						}
 						for _, view := range views {
 							name := fmt.Sprintf("%s-%d/%s/down=%v/%dx%d/tab %d/view %d", pal.name, pal.colors, icons, down, sz[0], sz[1], tab, view)
-							m := hostileShell(t, sz[0], sz[1], down)
 							m.ui.tab, m.ui.view = tab, view
 							m.cfg.settings.Icons = icons
 							withIconTeam(m.snap.agents)
