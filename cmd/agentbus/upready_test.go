@@ -71,8 +71,8 @@ func TestUpWaitsForTheBrokerBeforeMarkingServices(t *testing.T) {
 	if f.calls != 3 || len(u.marks) != 1 || len(f.slept) != 2 {
 		t.Fatalf("pings = %d, marks = %d, sleeps = %v", f.calls, len(u.marks), f.slept)
 	}
-	if !u.m.saw("start demo dispatch") {
-		t.Fatalf("services not started: %v", u.m.calls)
+	if !u.m.Saw("start demo dispatch") {
+		t.Fatalf("services not started: %v", u.m.Calls)
 	}
 }
 
@@ -84,8 +84,8 @@ func TestUpGivesUpOnABrokerThatStaysLoading(t *testing.T) {
 	start := f.clock
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	if len(u.marks) != 0 || u.m.saw("start demo dispatch") {
-		t.Fatalf("marked %d, calls %v: nothing may be marked or started on a broker that never answered", len(u.marks), u.m.calls)
+	if len(u.marks) != 0 || u.m.Saw("start demo dispatch") {
+		t.Fatalf("marked %d, calls %v: nothing may be marked or started on a broker that never answered", len(u.marks), u.m.Calls)
 	}
 	if waited := f.clock.Sub(start); waited < 5*time.Second || waited > brokerWait {
 		t.Fatalf("waited %v: the wait must be bounded at a few seconds", waited)

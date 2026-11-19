@@ -192,11 +192,11 @@ func TestUpStartsTheServicesAndOpensNoServiceTab(t *testing.T) {
 		t.Fatalf("marks = %+v", u.marks)
 	}
 	for _, c := range []string{"install demo dispatch", "start demo dispatch", "install demo missions", "start demo missions"} {
-		if !u.m.saw(c) {
-			t.Fatalf("missing %q in %v", c, u.m.calls)
+		if !u.m.Saw(c) {
+			t.Fatalf("missing %q in %v", c, u.m.Calls)
 		}
 	}
-	ms := u.m.specs["demo/missions"]
+	ms := u.m.Specs["demo/missions"]
 	if ms.Exe != "/opt/ab/agentbus" || strings.Join(ms.Args, " ") != "--repo "+work || ms.WorkDir != work || ms.EnvFile != u.paths.EnvFile("demo") {
 		t.Fatalf("missions spec = %+v", ms)
 	}
@@ -234,8 +234,8 @@ func TestUpRespectsNoDispatch(t *testing.T) {
 	if code := runUp([]string{"demo", work, "--no-dispatch"}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if u.m.saw("install demo dispatch") || u.m.saw("start demo dispatch") || !u.m.saw("start demo missions") {
-		t.Fatalf("calls = %v", u.m.calls)
+	if u.m.Saw("install demo dispatch") || u.m.Saw("start demo dispatch") || !u.m.Saw("start demo missions") {
+		t.Fatalf("calls = %v", u.m.Calls)
 	}
 	if strings.Join(u.marks[0].Kinds, ",") != "missions" {
 		t.Fatalf("marks = %+v", u.marks)
@@ -247,16 +247,16 @@ func TestUpRestartsOnlyAServiceWhoseConfigurationChanged(t *testing.T) {
 	u := withServices(t, &deps)
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	u.m.calls, out = nil, bytes.Buffer{}
+	u.m.Calls, out = nil, bytes.Buffer{}
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	if u.m.saw("stop demo dispatch") || u.m.saw("start demo dispatch") || !strings.Contains(out.String(), "dispatch: already running") {
-		t.Fatalf("an unchanged running service was touched: %v\n%s", u.m.calls, out.String())
+	if u.m.Saw("stop demo dispatch") || u.m.Saw("start demo dispatch") || !strings.Contains(out.String(), "dispatch: already running") {
+		t.Fatalf("an unchanged running service was touched: %v\n%s", u.m.Calls, out.String())
 	}
 	u.exe = "/opt/ab2/agentbus"
-	u.m.calls, out = nil, bytes.Buffer{}
+	u.m.Calls, out = nil, bytes.Buffer{}
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	if !u.m.saw("stop demo dispatch") || !u.m.saw("start demo dispatch") || !strings.Contains(out.String(), "restarted") {
-		t.Fatalf("a changed unit was not restarted: %v\n%s", u.m.calls, out.String())
+	if !u.m.Saw("stop demo dispatch") || !u.m.Saw("start demo dispatch") || !strings.Contains(out.String(), "restarted") {
+		t.Fatalf("a changed unit was not restarted: %v\n%s", u.m.Calls, out.String())
 	}
 }
 
@@ -268,10 +268,10 @@ func TestUpNeverRestartsARunningConductor(t *testing.T) {
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	deps.Environ = append(deps.Environ, "LANG=fr_FR.UTF-8") // another shell
-	u.m.calls, out = nil, bytes.Buffer{}
+	u.m.Calls, out = nil, bytes.Buffer{}
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	if u.m.saw("stop demo missions") || !u.m.saw("stop demo dispatch") {
-		t.Fatalf("calls = %v", u.m.calls)
+	if u.m.Saw("stop demo missions") || !u.m.Saw("stop demo dispatch") {
+		t.Fatalf("calls = %v", u.m.Calls)
 	}
 	if !strings.Contains(out.String(), "missions: running, left as is") || !strings.Contains(out.String(), "service restart missions") {
 		t.Fatalf("out = %q", out.String())
@@ -287,10 +287,10 @@ func TestUpReloadsAChangedUnitThatIsNotRunning(t *testing.T) {
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	u.m.Stop("demo", service.Dispatch)
 	u.exe = "/opt/ab2/agentbus"
-	u.m.calls = nil
+	u.m.Calls = nil
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	stop, start := -1, -1
-	for i, c := range u.m.calls {
+	for i, c := range u.m.Calls {
 		if c == "stop demo dispatch" && stop < 0 {
 			stop = i
 		}
@@ -299,7 +299,7 @@ func TestUpReloadsAChangedUnitThatIsNotRunning(t *testing.T) {
 		}
 	}
 	if stop < 0 || start < stop {
-		t.Fatalf("a changed stopped unit was not reloaded before its start: %v", u.m.calls)
+		t.Fatalf("a changed stopped unit was not reloaded before its start: %v", u.m.Calls)
 	}
 }
 
@@ -311,8 +311,8 @@ func TestUpRefusesAGoRunBinaryForServices(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
 		t.Fatal("up accepted a temporary binary for its units")
 	}
-	if len(u.m.calls) != 0 || !strings.Contains(errw.String(), "installed agentbus") {
-		t.Fatalf("calls %v stderr %q", u.m.calls, errw.String())
+	if len(u.m.Calls) != 0 || !strings.Contains(errw.String(), "installed agentbus") {
+		t.Fatalf("calls %v stderr %q", u.m.Calls, errw.String())
 	}
 }
 
@@ -409,7 +409,7 @@ func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if got := u.m.specs["demo/dispatch"].Exe; got != bin {
+	if got := u.m.Specs["demo/dispatch"].Exe; got != bin {
 		t.Fatalf("unit runs %q, want %q", got, bin)
 	}
 	// Gone (uninstalled): the running binary, as before.
@@ -419,7 +419,7 @@ func TestUpUnitsRunTheInstalledBinary(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if got := u.m.specs["demo/dispatch"].Exe; got != u.exe {
+	if got := u.m.Specs["demo/dispatch"].Exe; got != u.exe {
 		t.Fatalf("unit runs %q, want %q", got, u.exe)
 	}
 }

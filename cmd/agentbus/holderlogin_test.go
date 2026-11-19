@@ -25,26 +25,26 @@ func newFakeLoginHolder(m *fakeManager) *fakeLoginHolder {
 }
 
 func (f *fakeLoginHolder) Enable(p string) error {
-	f.calls = append(f.calls, "enable "+p)
+	f.Calls = append(f.Calls, "enable "+p)
 	f.enabled[p] = true
 	return nil
 }
 func (f *fakeLoginHolder) Disable(p string) error {
-	f.calls = append(f.calls, "disable "+p)
+	f.Calls = append(f.Calls, "disable "+p)
 	f.enabled[p] = false
 	return nil
 }
 func (f *fakeLoginHolder) Enabled(p string) (bool, error) { return f.enabled[p], nil }
 func (f *fakeLoginHolder) EnableHolder(p, key string) error {
-	f.calls = append(f.calls, "enable-holder "+p+" "+key)
+	f.Calls = append(f.Calls, "enable-holder "+p+" "+key)
 	return nil
 }
 func (f *fakeLoginHolder) DisableHolders(p string) error {
-	f.calls = append(f.calls, "disable-holders "+p)
+	f.Calls = append(f.Calls, "disable-holders "+p)
 	return nil
 }
 
-func (f *fakeLoginHolder) at(c string) int { return slices.Index(f.calls, c) }
+func (f *fakeLoginHolder) at(c string) int { return slices.Index(f.Calls, c) }
 
 // H1: up with start at login on enables the current build's holder with the
 // other services, after its unit is installed; off, every holder of the
@@ -70,18 +70,18 @@ func TestUpEnablesTheHolderAtLogin(t *testing.T) {
 	}
 	enable := "enable-holder demo " + service.BuildKey(raw)
 	if i := m.at(enable); i < 0 || i < m.at("enable demo") {
-		t.Fatalf("calls %v: the holder not enabled with the services", m.calls)
+		t.Fatalf("calls %v: the holder not enabled with the services", m.Calls)
 	}
 	if !strings.Contains(out.String(), "holder: starts at login") {
 		t.Fatalf("out %q", out.String())
 	}
-	m.calls = nil
+	m.Calls = nil
 	deps.AtLogin = func() bool { return false }
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
 	if m.at("disable-holders demo") < 0 || m.at(enable) >= 0 {
-		t.Fatalf("off: calls %v", m.calls)
+		t.Fatalf("off: calls %v", m.Calls)
 	}
 }
 
@@ -101,19 +101,19 @@ func TestServiceLoginEnablesTheHolder(t *testing.T) {
 		t.Fatalf("login = %d: %s", code, errw.String())
 	}
 	if m.at("enable-holder demo "+service.BuildKey(raw)) < 0 {
-		t.Fatalf("on: calls %v", m.calls)
+		t.Fatalf("on: calls %v", m.Calls)
 	}
 	// This build's holder not installed for the project: said, never enabled.
-	m.units, m.calls = nil, nil
+	m.units, m.Calls = nil, nil
 	out.Reset()
 	if code := serviceLogin(d, &out, &errw); code != 0 || m.at("enable-holder demo "+service.BuildKey(raw)) >= 0 ||
 		!strings.Contains(out.String(), "no holder of this build") {
-		t.Fatalf("no unit: code %d, calls %v, out %q", code, m.calls, out.String())
+		t.Fatalf("no unit: code %d, calls %v, out %q", code, m.Calls, out.String())
 	}
-	m.calls = nil
+	m.Calls = nil
 	m.enabled["demo"] = true
 	on = false
 	if code := serviceLogin(d, &out, &errw); code != 0 || m.at("disable-holders demo") < 0 {
-		t.Fatalf("off: code %d, calls %v", code, m.calls)
+		t.Fatalf("off: code %d, calls %v", code, m.Calls)
 	}
 }

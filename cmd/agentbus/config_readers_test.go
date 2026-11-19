@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,26 +13,10 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
 func noLook(string) (string, error) { return "", os.ErrNotExist }
-
-// withConfig is a getenv whose config home holds config.toml = body, plus env.
-func withConfig(t *testing.T, body string, env map[string]string) func(string) string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "agentbus"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "agentbus", "config.toml"), []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	m := map[string]string{"XDG_CONFIG_HOME": dir}
-	for k, v := range env {
-		m[k] = v
-	}
-	return func(k string) string { return m[k] }
-}
 
 func TestServiceReadersReadConfigTOML(t *testing.T) {
 	file := "[dispatch]\nquota_warn = 70\nquota_hold = 90\nquota_max_age = \"10m\"\nquota_long_hold = \"0\"\ntokens = false\nauto_clear = true\nprompt_grace = 45\ncontext_alert = 60\n"
@@ -205,3 +188,5 @@ func TestWithPopEnd(t *testing.T) {
 		t.Error("an End with pop_retire off")
 	}
 }
+
+var withConfig = cmdtest.WithConfig

@@ -62,7 +62,11 @@ func loadModule(t *testing.T) (*token.FileSet, types.Importer, []checkedPkg) {
 			t.Fatal(err)
 		}
 		exports[p.ImportPath] = p.Export
-		if !p.DepOnly && p.Module != nil && p.Module.Path == modulePath {
+		// internal/cmdtest holds fixtures moved verbatim out of
+		// cmd/agentbus's _test.go files (dispatchsvc P8b, architect): one of
+		// them seeds a board entry raw, as those test files may; nothing but
+		// tests imports it.
+		if !p.DepOnly && p.Module != nil && p.Module.Path == modulePath && p.ImportPath != modulePath+"/internal/cmdtest" {
 			mine = append(mine, p)
 		}
 	}

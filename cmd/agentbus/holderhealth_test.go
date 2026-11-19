@@ -12,46 +12,9 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/service"
 )
-
-// fakeHolders is a HolderManager over a list of units and their activity.
-type fakeHolders struct {
-	*fakeManager
-	units  []service.HolderUnit
-	active map[string]bool
-	err    error
-}
-
-func (f *fakeHolders) InstallHolder(service.HolderSpec) (bool, error) { return false, nil }
-func (f *fakeHolders) StartHolder(project, key string) error {
-	f.calls = append(f.calls, "start-holder "+project+" "+key)
-	return nil
-}
-func (f *fakeHolders) StopHolder(string, string) error    { return nil }
-func (f *fakeHolders) RestartHolder(string, string) error { return nil }
-func (f *fakeHolders) HolderActive(project, key string) (bool, error) {
-	return f.active[key], f.err
-}
-func (f *fakeHolders) RemoveHolder(project, key string) error {
-	f.calls = append(f.calls, "remove-holder "+project+" "+key)
-	for i, u := range f.units {
-		if u.Key == key {
-			f.units = append(f.units[:i], f.units[i+1:]...)
-			break
-		}
-	}
-	return nil
-}
-func (f *fakeHolders) HolderUnits(project string) ([]service.HolderUnit, error) {
-	var out []service.HolderUnit
-	for _, u := range f.units {
-		if project == "" || u.Project == project {
-			out = append(out, u)
-		}
-	}
-	return out, nil
-}
 
 // The evidence merges, per build key, the units (and whether they run), the
 // sockets that answer (with their terminals and age) and the binary copies.
@@ -68,8 +31,8 @@ func TestHolderEvidence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	hm := &fakeHolders{fakeManager: newFakeManager(), active: map[string]bool{cur: true, old: true},
-		units: []service.HolderUnit{{Project: "demo", Key: cur, Raw: "v3"}, {Project: "demo", Key: old, Raw: "v2"},
+	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{cur: true, old: true},
+		Units: []service.HolderUnit{{Project: "demo", Key: cur, Raw: "v3"}, {Project: "demo", Key: old, Raw: "v2"},
 			{Project: "other", Key: gone, Raw: "v1"}}}
 	probe := holderProbe{
 		sockets: func(project string) (map[string]time.Duration, error) {
@@ -115,7 +78,7 @@ func TestHolderEvidence(t *testing.T) {
 	}
 
 	// A manager that cannot say is unknown, never "no holder".
-	hm.err = errors.New("systemctl failed")
+	hm.Err = errors.New("systemctl failed")
 	if e := holderEvidence(hm, paths, "demo", "v3", probe); e.Known {
 		t.Fatal("an unreadable manager read as known")
 	}
@@ -126,20 +89,20 @@ func TestHolderEvidence(t *testing.T) {
 // installed it says so.
 func TestServiceStartHolder(t *testing.T) {
 	cur := service.BuildKey("v3")
-	hm := &fakeHolders{fakeManager: newFakeManager(), active: map[string]bool{},
-		units: []service.HolderUnit{{Project: "demo", Key: cur, Raw: "v3"}, {Project: "demo", Key: service.BuildKey("v2"), Raw: "v2"}}}
+	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{},
+		Units: []service.HolderUnit{{Project: "demo", Key: cur, Raw: "v3"}, {Project: "demo", Key: service.BuildKey("v2"), Raw: "v2"}}}
 	d := serviceCmdDeps{Manager: hm, HolderBuild: func() string { return "v3" }}
 	var out, errw strings.Builder
 	if code := runServiceCmd("demo", []string{"start", "holder"}, d, &out, &errw); code != 0 {
 		t.Fatalf("exit %d: %s", code, errw.String())
 	}
-	if strings.Join(hm.calls, ",") != "start-holder demo "+cur {
-		t.Fatalf("calls %v", hm.calls)
+	if strings.Join(hm.Calls, ",") != "start-holder demo "+cur {
+		t.Fatalf("calls %v", hm.Calls)
 	}
 	d.HolderBuild = func() string { return "v4" }
-	hm.calls = nil
-	if code := runServiceCmd("demo", []string{"start", "holder"}, d, &out, &errw); code == 0 || len(hm.calls) != 0 || !strings.Contains(errw.String(), "agentbus up") {
-		t.Fatalf("no unit of the current build: calls %v err %q", hm.calls, errw.String())
+	hm.Calls = nil
+	if code := runServiceCmd("demo", []string{"start", "holder"}, d, &out, &errw); code == 0 || len(hm.Calls) != 0 || !strings.Contains(errw.String(), "agentbus up") {
+		t.Fatalf("no unit of the current build: calls %v err %q", hm.Calls, errw.String())
 	}
 }
 
@@ -161,8 +124,8 @@ func TestServiceGC(t *testing.T) {
 		}
 	}
 	// v3 current; v2 running; v1 stopped (removed); v0 a binary with no unit (removed).
-	hm := &fakeHolders{fakeManager: newFakeManager(), active: map[string]bool{keys["v2"]: true},
-		units: []service.HolderUnit{{Project: "demo", Key: keys["v3"], Raw: "v3"}, {Project: "demo", Key: keys["v2"], Raw: "v2"},
+	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{keys["v2"]: true},
+		Units: []service.HolderUnit{{Project: "demo", Key: keys["v3"], Raw: "v3"}, {Project: "demo", Key: keys["v2"], Raw: "v2"},
 			{Project: "demo", Key: keys["v1"], Raw: "v1"}}}
 	d := serviceCmdDeps{Manager: hm, Paths: paths, HolderBuild: func() string { return "v3" },
 		HolderAnswers: func(project, key string) bool { return false }, HolderAnswersAny: func(key string) bool { return false }}
@@ -175,8 +138,8 @@ func TestServiceGC(t *testing.T) {
 			t.Errorf("%s binary: present %v, want %v", raw, err == nil, want)
 		}
 	}
-	if !hm.saw("remove-holder demo "+keys["v1"]) || hm.saw("remove-holder demo "+keys["v2"]) || hm.saw("remove-holder demo "+keys["v3"]) {
-		t.Errorf("calls %v", hm.calls)
+	if !hm.Saw("remove-holder demo "+keys["v1"]) || hm.Saw("remove-holder demo "+keys["v2"]) || hm.Saw("remove-holder demo "+keys["v3"]) {
+		t.Errorf("calls %v", hm.Calls)
 	}
 	if !strings.Contains(out.String(), "v1") || !strings.Contains(out.String(), "removed") {
 		t.Errorf("out %q", out.String())
@@ -196,8 +159,8 @@ func TestServiceGCSaysASharedCopyIsKept(t *testing.T) {
 	if _, err := service.InstallHolderBinary(paths, "v1", src); err != nil {
 		t.Fatal(err)
 	}
-	hm := &fakeHolders{fakeManager: newFakeManager(), active: map[string]bool{},
-		units: []service.HolderUnit{{Project: "demo", Key: shared, Raw: "v1"}, {Project: "other", Key: shared, Raw: "v1"}}}
+	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{},
+		Units: []service.HolderUnit{{Project: "demo", Key: shared, Raw: "v1"}, {Project: "other", Key: shared, Raw: "v1"}}}
 	d := serviceCmdDeps{Manager: hm, Paths: paths, HolderBuild: func() string { return "v2" },
 		HolderAnswers: func(string, string) bool { return false }, HolderAnswersAny: func(string) bool { return false }}
 	var out, errw strings.Builder
@@ -248,3 +211,5 @@ func TestWithHolderAgentsFromSnapshots(t *testing.T) {
 		t.Fatalf("weighed %s", got)
 	}
 }
+
+type fakeHolders = cmdtest.Holders

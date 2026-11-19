@@ -102,7 +102,7 @@ func (w *resumeWorld) resume(args ...string) (int, string, string) {
 
 func TestResumeBringsTheProjectBack(t *testing.T) {
 	w := newResumeWorld(t, "master", "coder")
-	w.mgr.active[w.b.Project()+"/missions"] = false // missions was off before the suspend
+	w.mgr.Active[w.b.Project()+"/missions"] = false // missions was off before the suspend
 	w.suspendNow("--reason", "reboot")
 	w.kill("coder")
 	w.onUp = func() { w.agent("coder", "idle") } // up relaunches coder on its session
@@ -111,8 +111,8 @@ func TestResumeBringsTheProjectBack(t *testing.T) {
 		t.Fatalf("resume = %d\n%s\n%s", code, out, errw)
 	}
 	// Services from the record: dispatch was active, missions was not.
-	if !w.mgr.active[w.b.Project()+"/dispatch"] || w.mgr.active[w.b.Project()+"/missions"] {
-		t.Fatalf("services after resume: %v", w.mgr.active)
+	if !w.mgr.Active[w.b.Project()+"/dispatch"] || w.mgr.Active[w.b.Project()+"/missions"] {
+		t.Fatalf("services after resume: %v", w.mgr.Active)
 	}
 	want := []string{w.b.Project(), "--no-dispatch", "--no-missions"}
 	if len(w.upArgs) != 1 || strings.Join(w.upArgs[0], " ") != strings.Join(want, " ") {
@@ -147,7 +147,7 @@ func TestResumeKeepsTheSuspendWhileAnAgentIsMissing(t *testing.T) {
 	if p := w.pause(); p == nil || !p.Suspended() {
 		t.Fatalf("pause = %+v, want the suspend kept", p)
 	}
-	if !w.mgr.active[w.b.Project()+"/dispatch"] {
+	if !w.mgr.Active[w.b.Project()+"/dispatch"] {
 		t.Fatal("services not started: they run while the suspend is kept")
 	}
 	if code, out, errw := w.resume("--partial"); code != 0 {
@@ -198,13 +198,13 @@ func TestResumeWithoutServicesStartsEveryInstalledKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, k := range service.Kinds {
-		w.mgr.active[w.b.Project()+"/"+k] = false
+		w.mgr.Active[w.b.Project()+"/"+k] = false
 	}
 	if code, out, errw := w.resume(); code != 0 {
 		t.Fatalf("resume = %d\n%s\n%s", code, out, errw)
 	}
 	for _, k := range service.Kinds {
-		if !w.mgr.active[w.b.Project()+"/"+k] {
+		if !w.mgr.Active[w.b.Project()+"/"+k] {
 			t.Fatalf("%s not started", k)
 		}
 	}
@@ -253,7 +253,7 @@ func TestPlainResumeOfATimedPause(t *testing.T) {
 // before the suspend stays off (reviewer-codex's restart intent).
 func TestResumeServicesFromTheRecordAlone(t *testing.T) {
 	w := newResumeWorld(t, "master")
-	w.mgr.active[w.b.Project()+"/missions"] = false
+	w.mgr.Active[w.b.Project()+"/missions"] = false
 	w.suspendNow()
 	if err := os.Remove(filepath.Join(w.state, "suspend.json")); err != nil {
 		t.Fatal(err)
@@ -261,8 +261,8 @@ func TestResumeServicesFromTheRecordAlone(t *testing.T) {
 	if code, out, errw := w.resume(); code != 0 {
 		t.Fatalf("resume = %d\n%s\n%s", code, out, errw)
 	}
-	if !w.mgr.active[w.b.Project()+"/dispatch"] || w.mgr.active[w.b.Project()+"/missions"] {
-		t.Fatalf("services = %v: want dispatch only, as the record says", w.mgr.active)
+	if !w.mgr.Active[w.b.Project()+"/dispatch"] || w.mgr.Active[w.b.Project()+"/missions"] {
+		t.Fatalf("services = %v: want dispatch only, as the record says", w.mgr.Active)
 	}
 }
 
@@ -273,7 +273,7 @@ func TestResumeKeepsTheSuspendWhenTheTemplateCannotBeRead(t *testing.T) {
 	w := newResumeWorld(t, "master")
 	w.suspendNow()
 	w.kill("master")
-	w.mgr.active[w.b.Project()+"/dispatch"] = false
+	w.mgr.Active[w.b.Project()+"/dispatch"] = false
 	w.bootErr = errors.New("no such file")
 	code, _, errw := w.resume("--partial")
 	if code != 1 || !strings.Contains(errw, "template") {
@@ -282,8 +282,8 @@ func TestResumeKeepsTheSuspendWhenTheTemplateCannotBeRead(t *testing.T) {
 	if p := w.pause(); p == nil || !p.Suspended() {
 		t.Fatalf("pause = %+v, want the suspend kept", p)
 	}
-	if w.mgr.active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 0 {
-		t.Fatalf("something was done: services %v, up %v", w.mgr.active, w.upArgs)
+	if w.mgr.Active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 0 {
+		t.Fatalf("something was done: services %v, up %v", w.mgr.Active, w.upArgs)
 	}
 }
 
@@ -319,13 +319,13 @@ func TestResumeKeepsTheSuspendWhenAServiceDoesNotStart(t *testing.T) {
 		name string
 		set  func(*fakeManager, bool)
 	}{
-		{"state", func(f *fakeManager, on bool) { f.failState = on }},
-		{"start", func(f *fakeManager, on bool) { f.failStart = on }},
+		{"state", func(f *fakeManager, on bool) { f.FailState = on }},
+		{"start", func(f *fakeManager, on bool) { f.FailStart = on }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newResumeWorld(t, "master")
 			w.suspendNow()
-			w.mgr.active[w.b.Project()+"/dispatch"] = false
+			w.mgr.Active[w.b.Project()+"/dispatch"] = false
 			tc.set(w.mgr, true)
 			code, _, errw := w.resume("--partial")
 			if code != 1 || !strings.Contains(errw, "dispatch") || !strings.Contains(errw, "stays suspended") {
@@ -341,8 +341,8 @@ func TestResumeKeepsTheSuspendWhenAServiceDoesNotStart(t *testing.T) {
 			if code, out, errw := w.resume(); code != 0 {
 				t.Fatalf("retry = %d\n%s\n%s", code, out, errw)
 			}
-			if p := w.pause(); p != nil || !w.mgr.active[w.b.Project()+"/dispatch"] {
-				t.Fatalf("after the retry: pause %+v, services %v", p, w.mgr.active)
+			if p := w.pause(); p != nil || !w.mgr.Active[w.b.Project()+"/dispatch"] {
+				t.Fatalf("after the retry: pause %+v, services %v", p, w.mgr.Active)
 			}
 		})
 	}
@@ -355,7 +355,7 @@ func TestResumeHoldsTheProjectLock(t *testing.T) {
 	w := newResumeWorld(t, "master")
 	w.suspendNow()
 	w.kill("master")
-	w.mgr.active[w.b.Project()+"/dispatch"] = false
+	w.mgr.Active[w.b.Project()+"/dispatch"] = false
 	dir := t.TempDir()
 	unlock, err := upLock(dir)(w.b.Project(), false) // a suspend (or another resume) holds it
 	if err != nil {
@@ -366,8 +366,8 @@ func TestResumeHoldsTheProjectLock(t *testing.T) {
 	if code != 1 || !strings.Contains(errw, "nothing done") {
 		t.Fatalf("resume under a held lock = %d %q", code, errw)
 	}
-	if p := w.pause(); p == nil || !p.Suspended() || w.mgr.active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 0 {
-		t.Fatalf("something was done: pause %+v, services %v, up %v", p, w.mgr.active, w.upArgs)
+	if p := w.pause(); p == nil || !p.Suspended() || w.mgr.Active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 0 {
+		t.Fatalf("something was done: pause %+v, services %v, up %v", p, w.mgr.Active, w.upArgs)
 	}
 	unlock()
 	// Held for the whole run: up is called while the lock is held, so the

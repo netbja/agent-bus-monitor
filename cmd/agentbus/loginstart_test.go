@@ -23,7 +23,7 @@ func newFakeLogin() *fakeLogin {
 }
 
 func (f *fakeLogin) Enable(p string) error {
-	f.calls = append(f.calls, "enable "+p)
+	f.Calls = append(f.Calls, "enable "+p)
 	if f.failEnble {
 		return errors.New("systemctl --user enable: refused")
 	}
@@ -31,7 +31,7 @@ func (f *fakeLogin) Enable(p string) error {
 	return nil
 }
 func (f *fakeLogin) Disable(p string) error {
-	f.calls = append(f.calls, "disable "+p)
+	f.Calls = append(f.Calls, "disable "+p)
 	if f.failDisable {
 		return errors.New("systemctl --user disable: refused")
 	}
@@ -46,7 +46,7 @@ func (f *fakeLogin) Enabled(p string) (bool, error) {
 }
 
 func (f *fakeLogin) index(c string) int {
-	for i, x := range f.calls {
+	for i, x := range f.Calls {
 		if x == c {
 			return i
 		}
@@ -67,11 +67,11 @@ func TestUpEnablesLoginStartWhenTheOptionIsOn(t *testing.T) {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
 	_ = u
-	if !m.specs["demo/dispatch"].AtLogin || !m.specs["demo/missions"].AtLogin {
-		t.Fatalf("specs = %+v", m.specs)
+	if !m.Specs["demo/dispatch"].AtLogin || !m.Specs["demo/missions"].AtLogin {
+		t.Fatalf("specs = %+v", m.Specs)
 	}
 	if i := m.index("enable demo"); i < 0 || i < m.index("install demo missions") {
-		t.Fatalf("calls = %v (enable after the install)", m.calls)
+		t.Fatalf("calls = %v (enable after the install)", m.Calls)
 	}
 	if !strings.Contains(out.String(), "start at login") {
 		t.Fatalf("out = %q", out.String())
@@ -86,7 +86,7 @@ func TestUpDisablesLoginStartWhenTheOptionIsOff(t *testing.T) {
 	m := newFakeLogin()
 	m.Install(service.Spec{Project: "demo", Kind: service.Dispatch, AtLogin: true})
 	m.enabled["demo"] = true
-	m.calls = nil
+	m.Calls = nil
 	deps.Services = func() (service.Manager, string) { return m, "" }
 	deps.AtLogin = func() bool { return false }
 	var out, errw bytes.Buffer
@@ -94,15 +94,15 @@ func TestUpDisablesLoginStartWhenTheOptionIsOff(t *testing.T) {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
 	if i := m.index("disable demo"); i < 0 || i > m.index("install demo dispatch") {
-		t.Fatalf("calls = %v (disable before the install)", m.calls)
+		t.Fatalf("calls = %v (disable before the install)", m.Calls)
 	}
-	if m.specs["demo/dispatch"].AtLogin {
+	if m.Specs["demo/dispatch"].AtLogin {
 		t.Fatal("unit still written for login")
 	}
 	// Off and never enabled: nothing is touched.
-	m.calls = nil
+	m.Calls = nil
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 || m.index("disable demo") >= 0 || m.index("enable demo") >= 0 {
-		t.Fatalf("up = %d, calls = %v", code, m.calls)
+		t.Fatalf("up = %d, calls = %v", code, m.Calls)
 	}
 }
 
@@ -116,8 +116,8 @@ func TestUpRefusesLoginStartWithoutABackend(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
-	if !strings.Contains(errw.String(), service.NoLoginStart) || !u.m.saw("start demo dispatch") {
-		t.Fatalf("stderr = %q, calls = %v", errw.String(), u.m.calls)
+	if !strings.Contains(errw.String(), service.NoLoginStart) || !u.m.Saw("start demo dispatch") {
+		t.Fatalf("stderr = %q, calls = %v", errw.String(), u.m.Calls)
 	}
 	work, _, _, _, deps = upFixture(t)
 	deps.Services = func() (service.Manager, string) { return nil, "systemd --user is not available" }
@@ -139,8 +139,8 @@ func TestUpReportsAFailedEnable(t *testing.T) {
 	deps.AtLogin = func() bool { return true }
 	var out, errw bytes.Buffer
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	if !strings.Contains(errw.String(), "enable: refused") || !m.saw("start demo dispatch") {
-		t.Fatalf("stderr = %q, calls = %v", errw.String(), m.calls)
+	if !strings.Contains(errw.String(), "enable: refused") || !m.Saw("start demo dispatch") {
+		t.Fatalf("stderr = %q, calls = %v", errw.String(), m.Calls)
 	}
 }
 
@@ -158,8 +158,8 @@ func TestServiceLoginAppliesTheOption(t *testing.T) {
 	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 {
 		t.Fatalf("login = %d: %s", code, errw.String())
 	}
-	if !m.saw("enable demo") || !m.saw("enable other") || strings.Count(strings.Join(m.calls, ";"), "enable demo") != 1 {
-		t.Fatalf("calls = %v", m.calls)
+	if !m.Saw("enable demo") || !m.Saw("enable other") || strings.Count(strings.Join(m.Calls, ";"), "enable demo") != 1 {
+		t.Fatalf("calls = %v", m.Calls)
 	}
 	for _, want := range []string{"demo: starts at login", "other: starts at login"} {
 		if !strings.Contains(out.String(), want) {
@@ -172,8 +172,8 @@ func TestServiceLoginAppliesTheOption(t *testing.T) {
 	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 {
 		t.Fatalf("login off = %d: %s", code, errw.String())
 	}
-	if !m.saw("disable demo") || m.saw("disable other") {
-		t.Fatalf("calls = %v", m.calls)
+	if !m.Saw("disable demo") || m.Saw("disable other") {
+		t.Fatalf("calls = %v", m.Calls)
 	}
 	for _, want := range []string{"demo: no longer starts at login", "other: does not start at login"} {
 		if !strings.Contains(out.String(), want) {
@@ -218,15 +218,15 @@ func TestUpOffDisablesWhenTheStateIsUnknown(t *testing.T) {
 		t.Fatalf("up = %d: %s", code, errw.String())
 	}
 	if i := m.index("disable demo"); i < 0 || i > m.index("install demo dispatch") {
-		t.Fatalf("calls = %v (disable before the install)", m.calls)
+		t.Fatalf("calls = %v (disable before the install)", m.Calls)
 	}
-	m.calls, m.failDisable = nil, true
+	m.Calls, m.failDisable = nil, true
 	errw.Reset()
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code == 0 {
 		t.Fatal("up succeeded with login start neither read nor disabled")
 	}
 	if m.index("install demo dispatch") >= 0 || !strings.Contains(errw.String(), "start at login") {
-		t.Fatalf("calls = %v, stderr = %q", m.calls, errw.String())
+		t.Fatalf("calls = %v, stderr = %q", m.Calls, errw.String())
 	}
 }
 
@@ -240,8 +240,8 @@ func TestServiceLoginOffWithAnUnknownState(t *testing.T) {
 	m.enabledErr = errors.New("is-enabled: Failed to connect to bus")
 	d.AtLogin = func() bool { return false }
 	var out, errw bytes.Buffer
-	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 || !m.saw("disable demo") {
-		t.Fatalf("code %d, calls %v, stderr %q", code, m.calls, errw.String())
+	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 0 || !m.Saw("disable demo") {
+		t.Fatalf("code %d, calls %v, stderr %q", code, m.Calls, errw.String())
 	}
 	m.failDisable = true
 	if code := runServiceCmd("", []string{"login"}, d, &out, &errw); code != 1 {

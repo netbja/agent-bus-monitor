@@ -50,8 +50,8 @@ func newSuspendWorld(t *testing.T) *suspendWorld {
 	w := &suspendWorld{t: t, b: b, mgr: newFakeManager(), state: t.TempDir(), panes: map[string]dispatch.Inspection{},
 		sigs: make(chan os.Signal, 2), env: map[string]string{"HOME": t.TempDir()}}
 	for _, k := range service.Kinds {
-		w.mgr.specs[b.Project()+"/"+k] = service.Spec{Project: b.Project(), Kind: k}
-		w.mgr.active[b.Project()+"/"+k] = true
+		w.mgr.Specs[b.Project()+"/"+k] = service.Spec{Project: b.Project(), Kind: k}
+		w.mgr.Active[b.Project()+"/"+k] = true
 	}
 	return w
 }
@@ -145,7 +145,7 @@ func TestSuspendQuietProjectWholeOrder(t *testing.T) {
 	}
 	// dispatch first (right after the pause), then missions at the end.
 	want := []string{"stop " + w.b.Project() + " dispatch", "stop " + w.b.Project() + " missions"}
-	if got := w.mgr.calls; strings.Join(got, "|") != strings.Join(want, "|") {
+	if got := w.mgr.Calls; strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("manager calls = %q, want %q", got, want)
 	}
 	snap := readSnapshot(t, w.state)
@@ -202,8 +202,8 @@ func TestSuspendTimeoutCancelsAndRestartsDispatch(t *testing.T) {
 	if p == nil || p.Suspended() || p.Reason != "lunch" || p.Until != until.UnixMilli() {
 		t.Fatalf("pause after the cancel = %+v, want the previous timed pause back", p)
 	}
-	if !w.mgr.active[w.b.Project()+"/dispatch"] || !w.mgr.active[w.b.Project()+"/missions"] {
-		t.Fatalf("services after the cancel: %v", w.mgr.active)
+	if !w.mgr.Active[w.b.Project()+"/dispatch"] || !w.mgr.Active[w.b.Project()+"/missions"] {
+		t.Fatalf("services after the cancel: %v", w.mgr.Active)
 	}
 	if !strings.Contains(errw, "coder") {
 		t.Fatalf("the busy agent was not named: %q", errw)
@@ -235,7 +235,7 @@ func TestSuspendCancelSendsTheResumeDirective(t *testing.T) {
 func TestSuspendFailedRestartKeepsTheSuspend(t *testing.T) {
 	w := newSuspendWorld(t)
 	w.agent("coder", "working")
-	w.mgr.failStart = true
+	w.mgr.FailStart = true
 	code, out, errw := w.run("--wait", "50ms")
 	if code != 1 {
 		t.Fatalf("suspend = %d\n%s\n%s", code, out, errw)
@@ -303,7 +303,7 @@ func TestSuspendSignalCancels(t *testing.T) {
 	if p := w.pause(); p != nil {
 		t.Fatalf("still paused after the interrupt: %+v", p)
 	}
-	if !w.mgr.active[w.b.Project()+"/dispatch"] {
+	if !w.mgr.Active[w.b.Project()+"/dispatch"] {
 		t.Fatal("dispatch not started again")
 	}
 }
@@ -329,9 +329,9 @@ func TestSuspendRetryKeepsServices(t *testing.T) {
 		t.Fatalf("snapshot services = %+v", snap.Services)
 	}
 	// With a current snapshot, a third run changes nothing.
-	calls := len(w.mgr.calls)
-	if code, out, _ := w.run(); code != 0 || !strings.Contains(out, "already suspended") || len(w.mgr.calls) != calls {
-		t.Fatalf("third run = %d %q, calls %v", code, out, w.mgr.calls)
+	calls := len(w.mgr.Calls)
+	if code, out, _ := w.run(); code != 0 || !strings.Contains(out, "already suspended") || len(w.mgr.Calls) != calls {
+		t.Fatalf("third run = %d %q, calls %v", code, out, w.mgr.Calls)
 	}
 }
 
@@ -428,7 +428,7 @@ func TestSuspendFailedStopIsRetried(t *testing.T) {
 	w := newSuspendWorld(t)
 	w.agent("coder", "idle")
 	fails := 1
-	w.mgr.stopErr = func(_, k string) error {
+	w.mgr.StopErr = func(_, k string) error {
 		if k == service.Missions && fails > 0 {
 			fails--
 			return errors.New("unit busy")
@@ -442,12 +442,12 @@ func TestSuspendFailedStopIsRetried(t *testing.T) {
 	if snap := readSnapshot(t, w.state); snap.Services["missions"].Stopped || !snap.Services["dispatch"].Stopped {
 		t.Fatalf("snapshot services = %+v", snap.Services)
 	}
-	if !w.mgr.active[w.b.Project()+"/missions"] {
+	if !w.mgr.Active[w.b.Project()+"/missions"] {
 		t.Fatal("the fake stopped missions")
 	}
 	code, out, errw = w.run()
-	if code != 0 || w.mgr.active[w.b.Project()+"/missions"] {
-		t.Fatalf("rerun = %d, missions active %v\n%s\n%s", code, w.mgr.active[w.b.Project()+"/missions"], out, errw)
+	if code != 0 || w.mgr.Active[w.b.Project()+"/missions"] {
+		t.Fatalf("rerun = %d, missions active %v\n%s\n%s", code, w.mgr.Active[w.b.Project()+"/missions"], out, errw)
 	}
 	if snap := readSnapshot(t, w.state); !snap.Services["missions"].Stopped || !snap.Services["missions"].WasActive {
 		t.Fatalf("snapshot after the rerun = %+v", snap.Services)
@@ -539,17 +539,17 @@ func TestSuspendDryRunOnACurrentSuspend(t *testing.T) {
 	if code, _, _ := w.run(); code != 0 {
 		t.Fatal("suspend failed")
 	}
-	w.mgr.active[w.b.Project()+"/missions"] = true
+	w.mgr.Active[w.b.Project()+"/missions"] = true
 	before, _ := os.ReadFile(filepath.Join(w.state, "suspend.json"))
-	calls := len(w.mgr.calls)
+	calls := len(w.mgr.Calls)
 	code, out, errw := w.run("--dry-run")
-	if code != 0 || len(w.mgr.calls) != calls || !strings.Contains(out, "would stop") {
-		t.Fatalf("--dry-run = %d, calls %v\n%s\n%s", code, w.mgr.calls[calls:], out, errw)
+	if code != 0 || len(w.mgr.Calls) != calls || !strings.Contains(out, "would stop") {
+		t.Fatalf("--dry-run = %d, calls %v\n%s\n%s", code, w.mgr.Calls[calls:], out, errw)
 	}
 	if after, _ := os.ReadFile(filepath.Join(w.state, "suspend.json")); !bytes.Equal(before, after) {
 		t.Fatal("--dry-run rewrote the snapshot")
 	}
-	if !w.mgr.active[w.b.Project()+"/missions"] {
+	if !w.mgr.Active[w.b.Project()+"/missions"] {
 		t.Fatal("--dry-run stopped missions")
 	}
 }

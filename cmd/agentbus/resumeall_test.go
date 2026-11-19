@@ -37,15 +37,15 @@ func (w *resumeWorld) lastCmd() bus.Event {
 func TestResumeAllAfterACrash(t *testing.T) {
 	w := newResumeWorld(t, "master", "coder")
 	w.wsOpen = true
-	w.mgr.active[w.b.Project()+"/dispatch"] = false
+	w.mgr.Active[w.b.Project()+"/dispatch"] = false
 	w.kill("coder")
 	w.onUp = func() { w.agent("coder", "idle") }
 	code, out, errw := w.all("--yes")
 	if code != 0 {
 		t.Fatalf("resume --all = %d\n%s\n%s", code, out, errw)
 	}
-	if !w.mgr.active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 1 {
-		t.Fatalf("services %v, up %v", w.mgr.active, w.upArgs)
+	if !w.mgr.Active[w.b.Project()+"/dispatch"] || len(w.upArgs) != 1 {
+		t.Fatalf("services %v, up %v", w.mgr.Active, w.upArgs)
 	}
 	if want := w.b.Project() + " --no-dispatch --no-missions"; strings.Join(w.upArgs[0], " ") != want {
 		t.Fatalf("up = %q", w.upArgs[0])
@@ -133,8 +133,8 @@ func TestHookResumeTellsThePersonWhenItStaysSuspended(t *testing.T) {
 	}{
 		{"agent missing", "coder not back", func(w *resumeWorld) { w.kill("coder") }},
 		{"service not started", "missions not running", func(w *resumeWorld) {
-			w.mgr.active[w.b.Project()+"/dispatch"] = false
-			w.mgr.failStart = true
+			w.mgr.Active[w.b.Project()+"/dispatch"] = false
+			w.mgr.FailStart = true
 		}},
 		{"template unreadable", "reading the template", func(w *resumeWorld) { w.bootErr = errors.New("no such file") }},
 	} {
@@ -173,7 +173,7 @@ func TestHookResumeTellsThePersonWhenItStaysSuspended(t *testing.T) {
 // (reviewer-codex).
 func TestResumeAllChoosesUnderTheLock(t *testing.T) {
 	w := newResumeWorld(t, "master")
-	w.mgr.active[w.b.Project()+"/dispatch"] = false
+	w.mgr.Active[w.b.Project()+"/dispatch"] = false
 	locked := 0
 	w.lock = func(string) (func(), error) {
 		locked++
@@ -192,7 +192,7 @@ func TestResumeAllChoosesUnderTheLock(t *testing.T) {
 	if locked != 1 {
 		t.Fatalf("the lock was taken %d times", locked)
 	}
-	if w.mgr.active[w.b.Project()+"/dispatch"] {
+	if w.mgr.Active[w.b.Project()+"/dispatch"] {
 		t.Fatal("the crash path started dispatch on a project suspended with dispatch off")
 	}
 	if last := w.lastCmd(); !strings.Contains(last.Message, "after a suspend") {
@@ -216,7 +216,7 @@ type hookWorld struct {
 func newHookWorld(t *testing.T) *hookWorld {
 	h := &hookWorld{mgr: newFakeManager(), auto: true, boot: "boot-2", person: "charlie"}
 	for _, k := range service.Kinds {
-		h.mgr.specs["demo/"+k] = service.Spec{Project: "demo", Kind: k}
+		h.mgr.Specs["demo/"+k] = service.Spec{Project: "demo", Kind: k}
 	}
 	home := t.TempDir()
 	paths, err := service.PathsFrom(func(k string) string { return map[string]string{"HOME": home}[k] })
@@ -249,7 +249,7 @@ func (h *hookWorld) run() (int, string) {
 }
 
 func (h *hookWorld) startedAny() bool {
-	for _, c := range h.mgr.calls {
+	for _, c := range h.mgr.Calls {
 		if strings.HasPrefix(c, "start ") {
 			return true
 		}
@@ -286,7 +286,7 @@ func TestHookOnASuspendedProject(t *testing.T) {
 				t.Fatalf("hook = %d %q", code, out)
 			}
 			if h.startedAny() {
-				t.Fatalf("the hook started a service on a suspended project: %v", h.mgr.calls)
+				t.Fatalf("the hook started a service on a suspended project: %v", h.mgr.Calls)
 			}
 			if got := len(h.spawned) == 1; got != tc.spawn {
 				t.Fatalf("spawned = %v, want %v", h.spawned, tc.spawn)
@@ -384,7 +384,7 @@ func TestHookStartsServicesWhenNotSuspended(t *testing.T) {
 			h := newHookWorld(t)
 			h.rec, h.recErr = tc.rec, tc.err
 			if code, out := h.run(); code != 0 || !h.startedAny() || len(h.spawned) != 0 {
-				t.Fatalf("hook = %d %q, calls %v, spawned %v", code, out, h.mgr.calls, h.spawned)
+				t.Fatalf("hook = %d %q, calls %v, spawned %v", code, out, h.mgr.Calls, h.spawned)
 			}
 		})
 	}
