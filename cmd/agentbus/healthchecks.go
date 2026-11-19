@@ -255,7 +255,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("model-drift", func(ctx context.Context) (health.Status, string, error) {
-			rows, err := modelcheck.DoctorRows(ctx, b, modelcheck.RealDoctorDeps(os.Getenv, modelsGetenv))
+			rows, err := modelcheck.DoctorRows(ctx, b, modelcheck.RealDoctorDeps(os.Getenv, serviceModelsGetenv))
 			if err != nil {
 				return health.Unknown, "roles doctor could not complete", err
 			}
