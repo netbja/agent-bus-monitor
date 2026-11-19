@@ -11,10 +11,13 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
+// mqCmdHead is the queued head printMergeQueue shows (f98091b in its output).
+const mqCmdHead = "f98091be429b220f63dc8b4b2dde3ef7d6d832a5"
+
 func mqCmdRecord() bus.MergeQueueRecord {
 	return bus.MergeQueueRecord{AttemptedAt: 1793830000000, ItemsAt: 1793830000000, Source: "gh", Forge: "github", Base: "main", Unapproved: 1, Conflicting: []bus.MergeConflict{{Number: 500, Base: "main"}, {Number: 512, Base: "release"}},
 		Items: []bus.MergeItem{{Number: 309, Title: "request priority", URL: "https://github.com/o/r/pull/309", Branch: "feat/request-priority",
-			Head: mqHead, Subjects: []string{"request-priority"}, ApprovedAt: 1793820000000,
+			Head: mqCmdHead, Subjects: []string{"request-priority"}, ApprovedAt: 1793820000000,
 			Approvals: []bus.MergeApproval{{Reviewer: "foureyes"}, {Reviewer: "reviewer-codex"}}}}}
 }
 
