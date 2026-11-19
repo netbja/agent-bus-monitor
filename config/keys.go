@@ -364,6 +364,15 @@ var Keys = []*Key{
 	// or this long after the drain began; 0 drains until nothing is in flight.
 	{Name: "run.drain_max", Env: "AGENT_BUS_RUN_DRAIN_MAX", Kind: Duration, Default: 2 * time.Hour, ReadBy: "dispatch",
 		env: envNonNegativeDuration, file: fileDuration(true)},
+	// The CI loop (spec 2026-11-19-ci-loop-design.md): a PR whose checks fail
+	// goes back to its head's author at most ci.max_handoffs times, then to
+	// the person; 0 hand-offs sends every red PR straight to the stop. A
+	// repository with no CI stays silent, so on costs nothing.
+	{Name: "ci.loop", Env: "AGENT_BUS_CI_LOOP", Kind: Bool, Default: true, ReadBy: "dispatch",
+		env:  func(raw string) (any, envResult) { return raw != "off", envUse }, // off turns it off
+		file: fileBool},
+	{Name: "ci.max_handoffs", Env: "AGENT_BUS_CI_MAX_HANDOFFS", Kind: Int, Default: 3, ReadBy: "dispatch",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 to stop at once")},
 	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
 	// working seen ready this long reads idle for team-stall; 0 turns it off.
 	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",
