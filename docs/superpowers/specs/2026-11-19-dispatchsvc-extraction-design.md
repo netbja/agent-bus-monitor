@@ -144,6 +144,9 @@ func MergeQueueLive(ctx context.Context, b *bus.Bus, getenv func(string) string)
     replacement clock would break that rule. The release test shifts the grace with it, 25 s per
     read once its agent is killed. `TestNoProductionSelfRepairSkew` fails if a non-test file of the
     module sets it.
+- **`Host` has no reader inside the package after P8.** The caller already uses it to build
+  `HostOps` (`hostOpsConfig(b, project, host)`). It stays in `Deps` so the struct names everything
+  `service run` resolved for the dispatcher; the move does not read it.
 - `Runtime` is `dispatchRuntime`, called by `main`, `suspend` and `swap`.
 - `MergeQueueLive` replaces the two symbols `merge-queue --live` reaches into (the chore's
   constructor and its `derive`). `false` is today's "no working directory".
