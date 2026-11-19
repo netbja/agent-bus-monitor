@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r3, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. Idea 1 of
+Status: spec, r4, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. r4 (foureyes): a hand-off only once the head's CI has finished; self-addressed verdicts ignored; master's swap key checked too; a held owner does not hold the stop; the declared state is named; the latest of two same-named checks wins. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -41,8 +41,18 @@ Anything else does not count as a failure:
 - `SUCCESS`, `NEUTRAL` or `SKIPPED`;
 - `CANCELLED` and `ACTION_REQUIRED`, which §8 Q4 asks about.
 
-A pending check never triggers anything. The loop acts on a failure that has completed, never on a
-guess.
+**The head's CI must be finished.** The loop acts on a PR only when its rollup has **no entry still
+running**: no check run that is not `COMPLETED`, and no commit status that is `PENDING` or
+`EXPECTED` (foureyes, r2). Then one push gives one hand-off, which lists every failure at once.
+Checks that fail one by one would otherwise make a new episode each, and use the cap on a single
+head. A PR whose CI is red but still running waits for the next pass.
+
+If a check never finishes, the PR is never handed off. That is the forge's problem to show, not this
+loop's.
+
+**Duplicate names.** A re-run can leave two rollup entries with the same name. The latest wins
+(`completedAt`, else `startedAt`, for a check run; `createdAt` for a status), so a re-run that
+passed is not counted red.
 
 Each failing entry keeps two fields, both cleaned with `cleanText`:
 
@@ -71,8 +81,12 @@ merge queue (`vs` in `deriveRun`). There is no further read, no forge call and n
 ignores `reviewer`. If two reviewers approve one head, both entries still carry the same author:
 the coder who challenged them. That counts as one author, not several.
 
+**A self-addressed verdict is ignored** (`reviewer == author`, which some reviewers have written).
+`author` is the name the reviewer types; it is not copied from the challenge. Ignoring these follows
+`mergequeue/derive.go` (`candidates`) and `bus/verdicts.go` (foureyes, r2).
+
 **The rule.** For the PR's `headRefOid`, take the set of distinct `author` values over the ledger
-entries whose `head` equals it:
+entries whose `head` equals it and whose `reviewer` is not the `author`:
 
 - one author: that agent is the owner;
 - none, meaning no entry names that head (a head pushed without a review, or one whose entries the
@@ -102,11 +116,16 @@ On each pass, for each red PR:
 
 1. **Same episode as last time:** nothing. A re-run of the same head with the same failures sends
    nothing again.
-2. **Owner `blocked` or `waiting`:** nothing this pass. The next pass after the state ends sends it.
-   A dialog or a person's decision comes first.
-3. **Hand-offs already at the cap, `ci.max_handoffs` (default 3, Q2):** this is **the stop**. The
+2. **Hand-offs already at the cap, `ci.max_handoffs` (default 3, Q2):** this is **the stop**. The
    person gets one notice for the PR (§5), master gets a directive with `wake=no`, and the owner gets
-   nothing more.
+   nothing more. A held owner does not hold the stop, because the stop writes nothing to the owner
+   (foureyes, r2). Otherwise, if master were the owner and `waiting` on an ask, the person's notice
+   could wait without end.
+3. **A hand-off, owner `blocked` or `waiting`:** nothing this pass. The next pass after the state
+   ends sends it. This is the state the agent **declared**, in `{p}:agents`: `waiting` for a
+   person's decision, `blocked` for a 4-eyes gate. It is not busmon's screen reading. Whether the
+   owner's pane may be woken stays the dispatcher's usual rule, and the entry waits in the stream
+   until then.
 4. **Otherwise:** one directive to the owner, which wakes it, and the hand-off count goes up by one.
 
 The count is kept per PR, across heads. A fix is pushed as a new head; if that head fails again, it
@@ -156,7 +175,7 @@ The action has parts:
 - `{p}:ci`;
 - the `cmd` stream;
 - the `notify` stream;
-- the owner's swap key, `{p}:swap:<owner>`.
+- the owner's swap key, `{p}:swap:<owner>`, and master's, `{p}:swap:<master>`.
 
 **Arguments:**
 
@@ -176,7 +195,9 @@ The action has parts:
 3. Read the field.
    - If its episode equals the argument and every part of its action is in `done`, return `same`.
    - If it is stopped and its stop is complete, return `stopped-before`.
-4. If the action has an owner's part not yet written and the owner's swap key exists, return `swap`.
+4. If any recipient of a part not yet written is being swapped, return `swap`: the owner for the
+   owner's part, master for master's part (on a hand-off and on a stop) (foureyes, r2). The script
+   takes both swap keys, `{p}:swap:<owner>` and `{p}:swap:<master>`.
    The next pass tries again, as the once-writers do (`ErrSwapInProgress`).
 5. **Decide, once per episode.** If the field's episode is not the argument, this is a new action:
    - a stop if the count is at or above the cap, else a hand-off;
@@ -188,7 +209,7 @@ The action has parts:
 6. **Each missing part:** XADD it, then at once HSET the field with that part added to `done`.
 7. Return `sent` or `stopped`.
 
-Steps 1 to 4 write nothing. The held case (§4 step 2, the owner `blocked` or `waiting`) is decided
+Steps 1 to 4 write nothing. The held case (§4 step 3, a hand-off to an owner that is `blocked` or `waiting`) is decided
 in Go before the call, so it writes nothing.
 
 **Retry and recovery.** A script that errors at step 5 or 6 leaves a record of exactly what it did:
@@ -254,7 +275,12 @@ Settings, in `config/keys.go`, read by `dispatch`:
 Tests, with a fake `gh` and the disposable broker:
 
 - the rollup parsing for each status and conclusion above;
-- a pending check sends nothing;
+- a pending check sends nothing, even beside a failed one; once all are complete, one hand-off lists every failure;
+- same head, the failing set grows while checks finish: one hand-off, and the count moves once;
+- duplicate check names: the latest entry wins;
+- a self-addressed verdict is not an author;
+- a held owner holds a hand-off but not a stop;
+- master being swapped holds the stop;
 - the same episode sends once;
 - a new head sends again and counts;
 - the cap stops the loop, and stops it once only;
@@ -273,7 +299,7 @@ Tests, with a fake `gh` and the disposable broker:
 
 One build step, one PR: the read, the record, the loop, the stop, `ci reset`, an operator-notes
 fragment. One condition: measure the time `gh pr list` takes with the rollup, on one of the
-person's projects with real checks, against the 10 s per-call budget before it ships. If it does not
+person's projects with real checks and with many open PRs (`ghLimit` is 1000), against the 10 s per-call budget before it ships. If it does not
 fit, the rollup becomes its own `gh` call in the same pass. That is still bounded, and it is
 decided at build time, not guessed now.
 
