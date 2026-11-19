@@ -63,7 +63,7 @@ func (s *stallReader) idleImplementer(ctx context.Context) (health.Outcome, erro
 // manifestImplementers are the manifest's roles whose skills include
 // implement, sorted.
 func manifestImplementers() ([]string, error) {
-	path, err := manifestPath(os.Environ())
+	path, err := rolecfg.ManifestPath(os.Getenv)
 	if err != nil {
 		return nil, err
 	}

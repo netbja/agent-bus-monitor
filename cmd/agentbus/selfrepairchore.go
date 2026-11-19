@@ -461,7 +461,7 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string,
 		return r, err
 	}
 	r.Tabs = tpl.Tabs
-	path, err := manifestPath(os.Environ())
+	path, err := rolecfg.ManifestPath(os.Getenv)
 	if err != nil {
 		return r, err
 	}
