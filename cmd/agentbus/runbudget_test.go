@@ -216,7 +216,17 @@ func TestRunStepQuotaDrainDoesNotStop(t *testing.T) {
 // §3: request send from an agent (AGENT_BUS_AGENT set) is refused while the
 // run drains; the person's (unset) goes through.
 func TestRequestSendWhileDraining(t *testing.T) {
-	w := newRunWorld(t)
+	b, _ := dialMain(t)
+	w := struct {
+		b   *bus.Bus
+		ctx context.Context
+	}{b, context.Background()}
+	if ok, err := w.b.AcquireDispatch(w.ctx, "tok", time.Minute); err != nil || !ok {
+		t.Fatalf("AcquireDispatch = %v, %v", ok, err)
+	}
+	if _, _, err := w.b.FencedRunPass(w.ctx, "tok", nil, true, 15*time.Minute); err != nil { // a running run, as a merge-queue pass leaves it
+		t.Fatal(err)
+	}
 	if _, _, err := w.b.FencedRunDrain(w.ctx, "tok", bus.RunWhyDuration); err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
@@ -426,7 +427,7 @@ func TestServiceSelfRepairByMode(t *testing.T) {
 			return tc.env[k]
 		}
 		escalate := "boss"
-		c, cfg := serviceSelfRepair(b, getenv, &escalate, runBootID())
+		c, cfg := serviceSelfRepair(b, getenv, &escalate, lifecycle.HostBootID())
 		if c.mode != tc.mode || (cfg.Pass != nil) != tc.pass || c.master() != "boss" {
 			t.Errorf("%v: mode %s pass %v", tc.env, c.mode, cfg.Pass != nil)
 		}
@@ -482,7 +483,7 @@ func TestReadSelfRepairRedis(t *testing.T) {
 		}
 		return ""
 	}
-	r, err := readSelfRepair(ctx, b, getenv, runBootID())
+	r, err := readSelfRepair(ctx, b, getenv, lifecycle.HostBootID())
 	if err != nil {
 		t.Fatal(err)
 	}
