@@ -94,6 +94,11 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
 	},
 	{
+		Name: "ci", Usage: []string{"ci reset <pr>"},
+		Summary:  "the CI loop (ci.loop): reset (the person only) re-opens a PR's loop after its stop, ci.max_handoffs more hand-offs",
+		Examples: []string{"agentbus -p demo ci reset 42"},
+	},
+	{
 		Name: "pop", Usage: []string{"pop <role> [--profile <profile>] [--resume <session-id>]"},
 		Summary:  "start a role as a new terminal of the project's holder (the master's pop; agent-spawn's successor)",
 		Examples: []string{"agentbus -p demo pop docs", "agentbus -p demo pop reviewer-codex --profile codex-review"},
