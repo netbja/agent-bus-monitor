@@ -28,6 +28,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/mergequeue"
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -254,7 +255,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("model-drift", func(ctx context.Context) (health.Status, string, error) {
-			rows, err := doctorRows(ctx, b, realDoctorDeps(os.Environ()))
+			rows, err := modelcheck.DoctorRows(ctx, b, modelcheck.RealDoctorDeps(os.Getenv, modelsGetenv))
 			if err != nil {
 				return health.Unknown, "roles doctor could not complete", err
 			}

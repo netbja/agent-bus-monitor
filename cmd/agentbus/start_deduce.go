@@ -10,6 +10,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/projlist"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/trust"
 )
@@ -167,7 +168,7 @@ func deduceStart(path string, getenv func(string) string, m *rolecfg.Manifest) (
 // templateTeam is a template's agent tabs, in its order, each on the
 // --profile it names; a role roles.toml does not have is left out (up skips
 // it too). stale names each tab whose profile roles.toml no longer allows
-// (launchProfile): that role is in the team on its own profile, to be asked
+// (relaunch.LaunchProfile): that role is in the team on its own profile, to be asked
 // again. A template that cannot be read is an error, never an empty team.
 func templateTeam(path string, m *rolecfg.Manifest) (team []rolecfg.TeamRole, stale []string, err error) {
 	var tpl upTemplate
@@ -175,11 +176,11 @@ func templateTeam(path string, m *rolecfg.Manifest) (team []rolecfg.TeamRole, st
 		return nil, nil, fmt.Errorf("reading %s: %v", path, err)
 	}
 	for _, t := range tpl.Tabs {
-		_, role, profile := tabLaunch(t.Command)
+		_, role, profile := relaunch.TabLaunch(t.Command)
 		if _, known := m.Roles[role]; !known {
 			continue
 		}
-		if _, err := launchProfile(m, role, profile); err != nil {
+		if _, err := relaunch.LaunchProfile(m, role, profile); err != nil {
 			stale = append(stale, fmt.Sprintf("%s's profile %s", role, profile))
 			profile = ""
 		}

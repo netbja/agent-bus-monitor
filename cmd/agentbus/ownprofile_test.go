@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
@@ -82,7 +83,7 @@ func TestOwnProfile(t *testing.T) {
 		{"an unparsable template", "this is [ not toml", "foureyes", "", "demo.toml"},
 	} {
 		m, _, env := ownProfileFixture(t, c.tabs)
-		p, err := ownProfile(m, env, "demo", c.role)
+		p, err := relaunch.OwnProfile(m, env, "demo", c.role)
 		switch {
 		case c.err == "" && (err != nil || p.Profile != c.want):
 			t.Errorf("%s: %q, %v; want %q", c.name, p.Profile, err, c.want)

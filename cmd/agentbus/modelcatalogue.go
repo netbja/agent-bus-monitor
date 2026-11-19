@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -81,7 +82,7 @@ func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 		return in
 	}
 	in.Known = true
-	report := modelsCheckReport(tbl, cfg, m, now)
+	report := modelcheck.ModelsCheckReport(tbl, cfg, m, now)
 	used := map[string]bool{}
 	for _, row := range report.Profiles {
 		used[row.Provider] = true
@@ -175,7 +176,7 @@ func refreshForClients(ctx context.Context, path string, tiers models.TierMap, r
 // recordAliases (§3.1, G5): each running Claude alias and the id its
 // transcript shows it used become the table's alias record, a move an
 // alias event. Under the table's lock; a held lock skips.
-func recordAliases(path string, rows []doctorRow, now time.Time) error {
+func recordAliases(path string, rows []modelcheck.DoctorRow, now time.Time) error {
 	unlock, held, err := models.LockTable(path)
 	if err != nil || held {
 		return err
@@ -187,12 +188,12 @@ func recordAliases(path string, rows []doctorRow, now time.Time) error {
 	}
 	// The newest fresh use per alias: an older transcript never moves an
 	// alias back (two agents on opus, one not used since the move).
-	newest := map[string]doctorRow{}
+	newest := map[string]modelcheck.DoctorRow{}
 	for _, r := range rows {
-		if !claudeAlias.MatchString(r.Configured) || r.Used == "" || r.usedAt == 0 || now.Sub(time.UnixMilli(r.usedAt)) > 24*time.Hour {
+		if !modelcheck.ClaudeAlias.MatchString(r.Configured) || r.Used == "" || r.UsedAt == 0 || now.Sub(time.UnixMilli(r.UsedAt)) > 24*time.Hour {
 			continue
 		}
-		if cur, ok := newest[r.Configured]; !ok || r.usedAt > cur.usedAt {
+		if cur, ok := newest[r.Configured]; !ok || r.UsedAt > cur.UsedAt {
 			newest[r.Configured] = r
 		}
 	}

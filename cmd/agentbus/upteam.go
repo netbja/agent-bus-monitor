@@ -53,7 +53,7 @@ func openTeam(ctx context.Context, h teamHost, m *rolecfg.Manifest, project stri
 	}
 	var failed error
 	for _, tab := range tabs {
-		_, role, tabProfile := tabLaunch(tab.Command)
+		_, role, tabProfile := relaunch.TabLaunch(tab.Command)
 		if role == "" {
 			if relaunch.IsBusmonTab(tab, project) {
 				fmt.Fprintf(out, "busmon: run it in your own terminal: busmon --project %s\n", project)

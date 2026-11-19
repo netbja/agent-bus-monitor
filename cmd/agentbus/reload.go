@@ -169,9 +169,9 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 		return fail("unknown role in ROLES_TOML")
 	}
 	// Its own profile is the project's (the template tab's --profile, else
-	// roles.toml's: ownProfile): the relaunch runs that tab, so the preflight
+	// roles.toml's: relaunch.OwnProfile): the relaunch runs that tab, so the preflight
 	// checks that client and the proof expects it (spec, the reader table).
-	own, err := ownProfile(m, d.Env, b.Project(), role)
+	own, err := relaunch.OwnProfile(m, d.Env, b.Project(), role)
 	if err != nil {
 		return fail("%v", err)
 	}

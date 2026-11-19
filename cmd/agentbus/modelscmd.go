@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -115,7 +116,7 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		}
 		source := ""
 		if pr.SourceAt > 0 { // §3.2: the source's own age, beside our read's
-			source = "; source " + ageWords(now.Sub(time.UnixMilli(pr.SourceAt))) + " old"
+			source = "; source " + modelcheck.AgeWords(now.Sub(time.UnixMilli(pr.SourceAt))) + " old"
 		}
 		fmt.Fprintf(out, "%s  (%s; rows read %s from %s%s)\n", p, state, read, dash(pr.Home), source)
 		for _, r := range pr.Rows {
