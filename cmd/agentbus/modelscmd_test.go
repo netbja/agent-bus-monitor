@@ -125,9 +125,9 @@ func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*
 // AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
 func isolateModelSettings(t *testing.T, dir, maxAge string) {
 	t.Helper()
-	old := models.SettingsGetenv
-	t.Cleanup(func() { models.SettingsGetenv = old })
-	models.SettingsGetenv = func(k string) string {
+	old := modelsGetenv
+	t.Cleanup(func() { modelsGetenv = old })
+	modelsGetenv = func(k string) string {
 		switch k {
 		case "HOME", "XDG_CONFIG_HOME":
 			return dir

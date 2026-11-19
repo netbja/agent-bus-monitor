@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,7 +49,7 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		}
 		window = d
 	}
-	cfg, err := models.LoadConfigWithSettings(configPath)
+	cfg, err := models.LoadConfigWithSettings(configPath, modelsGetenv)
 	if err != nil {
 		fmt.Fprintf(errw, "models: %v\n", err)
 		if refresh || check {
@@ -227,3 +228,6 @@ func printChanges(tbl *models.Table, provider string, window time.Duration, now 
 	}
 	return 0
 }
+
+// modelsGetenv reads models.source_max_age (a test replaces it).
+var modelsGetenv = os.Getenv

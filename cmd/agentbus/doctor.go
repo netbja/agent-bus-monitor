@@ -115,7 +115,7 @@ func doctorTable() *models.Table {
 }
 
 func doctorConfig() models.Config {
-	c, _ := models.LoadConfigWithSettings(models.ConfigPath())
+	c, _ := models.LoadConfigWithSettings(models.ConfigPath(), modelsGetenv)
 	return c
 }
 

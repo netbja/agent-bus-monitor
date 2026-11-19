@@ -106,10 +106,8 @@ func TestRefreshTableSavesWhatWasReadOnOverrun(t *testing.T) {
 // LoadConfigWithSettings: models.toml, with models.source_max_age from the
 // settings (its env here), even when models.toml is absent.
 func TestLoadConfigWithSettings(t *testing.T) {
-	old := SettingsGetenv
-	t.Cleanup(func() { SettingsGetenv = old })
 	dir := t.TempDir()
-	SettingsGetenv = func(k string) string {
+	getenv := func(k string) string {
 		switch k {
 		case "HOME", "XDG_CONFIG_HOME":
 			return dir
@@ -118,7 +116,7 @@ func TestLoadConfigWithSettings(t *testing.T) {
 		}
 		return ""
 	}
-	cfg, err := LoadConfigWithSettings(filepath.Join(dir, "absent.toml"))
+	cfg, err := LoadConfigWithSettings(filepath.Join(dir, "absent.toml"), getenv)
 	if err != nil {
 		t.Fatal(err)
 	}

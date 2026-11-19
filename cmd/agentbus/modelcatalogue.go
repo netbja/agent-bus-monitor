@@ -63,7 +63,7 @@ func (r catalogueReader) run(ctx context.Context) (health.Outcome, error) {
 func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 	now := r.now()
 	in := health.ModelCatalogueInput{Now: now}
-	cfg, err := models.LoadConfigWithSettings(r.config)
+	cfg, err := models.LoadConfigWithSettings(r.config, modelsGetenv)
 	if err != nil {
 		in.ReadErr = "models.toml unreadable"
 		return in

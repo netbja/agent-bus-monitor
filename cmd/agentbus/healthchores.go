@@ -46,7 +46,7 @@ func modelsRefresh() func(context.Context) error {
 var dailyModelsRefresh = refreshModelsDaily
 
 func refreshModelsDaily(ctx context.Context) error {
-	cfg, err := models.LoadConfigWithSettings(models.ConfigPath())
+	cfg, err := models.LoadConfigWithSettings(models.ConfigPath(), modelsGetenv)
 	if err != nil {
 		return err
 	}
