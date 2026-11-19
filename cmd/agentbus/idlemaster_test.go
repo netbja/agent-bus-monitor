@@ -73,14 +73,14 @@ func TestIdleMasterReadsTheMergeQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := w.dispatchDirectives("master")
+	got := w.DispatchDirectives("master")
 	if len(got) != 1 || !strings.HasPrefix(got[0], "Stall guard: master idle 12m with work in hand: approved, not pushed: herdr-6c2-2 (fa2d796f).") {
 		t.Fatalf("master woken %q", got)
 	}
 	if m := w.quotaMarks(); m[health.StallMasterMark] == "" || bus.MarkAt(m, health.StallMasterMark) == 0 {
 		t.Fatalf("marks %v: want the wake and its time", m)
 	}
-	if n := w.personNotices(); len(n) != 0 {
+	if n := w.PersonNotices(); len(n) != 0 {
 		t.Fatalf("the person told at once: %q", n)
 	}
 	if out := w.run(w.s.idleMaster); out.Status != health.OK || out.Detail != "master has messages; the dispatcher wakes it" {
@@ -120,7 +120,7 @@ func TestIdleMasterSecondTierLive(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "idle-master"); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 1 {
+	if got := w.DispatchDirectives("master"); len(got) != 1 {
 		t.Fatalf("directives to master %q", got)
 	}
 	w.drain("master")
@@ -131,11 +131,11 @@ func TestIdleMasterSecondTierLive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	n := w.personNotices()
+	n := w.PersonNotices()
 	if len(n) != 1 || !strings.HasPrefix(n[0], "Stall guard: master was woken 23m ago for: requested: release-v0-30.") {
 		t.Fatalf("person told %q", n)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 1 {
+	if got := w.DispatchDirectives("master"); len(got) != 1 {
 		t.Fatalf("master woken again: %q", got)
 	}
 }
@@ -161,7 +161,7 @@ func TestIdleMasterCheckback(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "idle-master"); err != nil {
 		t.Fatal(err)
 	}
-	if n := w.personNotices(); len(n) != 0 {
+	if n := w.PersonNotices(); len(n) != 0 {
 		t.Fatalf("told at the third: %q", n)
 	}
 	if _, err := w.b.SetCheckback(ctx, "master", time.Hour, "K1/K2 checks "); err != nil {
@@ -175,7 +175,7 @@ func TestIdleMasterCheckback(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if n := w.personNotices(); len(n) != 1 || !strings.Contains(n[0], `master has postponed "K1/K2 checks" 4 times since`) {
+	if n := w.PersonNotices(); len(n) != 1 || !strings.Contains(n[0], `master has postponed "K1/K2 checks" 4 times since`) {
 		t.Fatalf("person told %q", n)
 	}
 }
@@ -293,7 +293,7 @@ func TestCheckbackPostponedWithTheCheckOff(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "idle-master"); err != nil {
 		t.Fatal(err)
 	}
-	if n := w.personNotices(); len(n) != 1 || !strings.Contains(n[0], `master has postponed "k1/k2 checks" 4 times`) {
+	if n := w.PersonNotices(); len(n) != 1 || !strings.Contains(n[0], `master has postponed "k1/k2 checks" 4 times`) {
 		t.Fatalf("person told %q", n)
 	}
 }
