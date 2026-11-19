@@ -17,13 +17,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/service"
-	"github.com/redis/go-redis/v9"
 )
 
 const serviceUsage = "usage: agentbus --project <p> service status|start|stop|restart|remove [dispatch|missions] | service logs [dispatch|missions] [-n 50] | service list | service stale | service remove --all | service login | service restart holder --kill-agents | service start holder | service stop holder <build> | service gc"
@@ -753,7 +754,7 @@ func serviceDispatchConfig(b *bus.Bus, project, host, escalateTo string, paths s
 	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
 	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &target)
 	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
-	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, h, os.Getenv)
+	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), b, h, os.Getenv)
 	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))                // read at each client-update send (auto-reload)
 	workdir, _ := os.Getwd()                                                                 // the unit's WorkingDirectory: the project's repository
 	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, workdir, &target, log).run // judged once, before any loop (reboot-resume §3)

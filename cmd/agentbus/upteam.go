@@ -27,49 +27,6 @@ type teamHost interface {
 	Start(ctx context.Context, s termhost.Spec) (termhost.Term, error)
 }
 
-// resumeChoice applies §4.7's two conditions to role's record, before any
-// Start: its profile ("" the role's own) must be the role's own or one of
-// its fallback_profiles in the local manifest, never a broker key; its
-// session must be a valid id of a client whose resume is verified. invalid
-// says why the record is not used ("" when it is, or there is none).
-//
-// A profile outside that set (a swap --force, which records the profile it
-// ran on: resume-record-profile) still resumes its session when the local
-// manifest defines it for the role on the role's own client: on the role's
-// own profile, never the recorded one, so a broker writer still chooses no
-// profile; note says so. A profile of another client is refused: its
-// session is not this client's.
-func resumeChoice(m *rolecfg.Manifest, role string, rec *bus.ResumeRecord) (profile, session, invalid, note string) {
-	if rec == nil {
-		return "", "", "", ""
-	}
-	own, err := m.Resolve(role)
-	if err != nil {
-		return "", "", err.Error(), ""
-	}
-	run, onOwn, err := m.ResumeProfile(role, rec.Profile)
-	if err != nil {
-		return "", "", err.Error(), ""
-	}
-	p := own
-	if run != "" {
-		if p, err = m.ResolveWith(role, run); err != nil {
-			return "", "", err.Error(), ""
-		}
-		profile = run
-	}
-	if onOwn { // an invalid session returns below, with no note
-		note = fmt.Sprintf("its recorded profile %s is neither %s's own nor one of its fallback_profiles: session %s resumes on its own profile %s", rec.Profile, role, rec.Session, own.Profile)
-	}
-	switch {
-	case !bus.ValidSessionID(rec.Session):
-		return "", "", "its session id is not valid", ""
-	case !rolecfg.ResumeVerified(p.Client):
-		return "", "", fmt.Sprintf("client %s has no verified resume", p.Client), ""
-	}
-	return profile, rec.Session, "", note
-}
-
 // openTeam starts every agent tab of tabs whose role has no live terminal:
 // on the recorded session when its record holds (resumeChoice), else fresh
 // on the tab's own profile, the person told why a record was not used. A
@@ -129,7 +86,7 @@ func openTeam(ctx context.Context, h teamHost, m *rolecfg.Manifest, project stri
 		if r, ok := resumes[role]; ok {
 			rec = &r
 		}
-		profile, session, invalid, note := resumeChoice(m, role, rec)
+		profile, session, invalid, note := relaunch.ResumeChoice(m, role, rec)
 		if note != "" {
 			notice(role + ": " + note)
 		}
