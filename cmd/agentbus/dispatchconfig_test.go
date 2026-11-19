@@ -178,3 +178,29 @@ func TestNoProductionSelfRepairSkew(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// spec §3: the escalation target is read through the config the caller
+// keeps. Set after Config returns, it is the target the stall notice names.
+func TestServiceDispatchConfigReadsTheTargetSetAfter(t *testing.T) {
+	w := cmdtest.NewStallWorld(t)
+	root := t.TempDir()
+	for k, v := range map[string]string{"HOME": root, "XDG_CONFIG_HOME": root + "/cfg", "XDG_STATE_HOME": root + "/state",
+		"XDG_DATA_HOME": root + "/data", "XDG_RUNTIME_DIR": root + "/run"} {
+		t.Setenv(k, v)
+	}
+	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
+	d := dispatchDeps{Bus: w.B, Getenv: os.Getenv, Paths: paths, Log: io.Discard, Base: dispatch.DefaultConfig(), Boot: "B7",
+		PopEnd: func(c dispatch.PopRetireConfig, _ dispatch.Runtime) dispatch.PopRetireConfig { return c }}
+	var cfg dispatch.Config
+	if _, err := serviceDispatchConfig(d, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.EscalateTo = "lead" // after the call, as RunDispatch sets it
+	rec := w.PutStall()
+	if err := cfg.Health.StallNotify(context.Background(), "stall-holder", rec); err != nil {
+		t.Fatal(err)
+	}
+	if notes := w.PersonNotices(); len(notes) != 1 || !strings.Contains(notes[0], "lead cannot act (lead is not registered)") {
+		t.Fatalf("stall notice %q, want it to name lead", notes)
+	}
+}
