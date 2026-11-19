@@ -15,6 +15,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -422,14 +423,15 @@ func TestServiceDispatchConfigJudgesTheReboot(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
-	cfg, _, err := serviceDispatchConfig(b, "demo", "", "", paths, io.Discard)
+	var cfg dispatch.Config
+	_, err = serviceDispatchConfig(serviceDispatchDeps(b, "", "", paths, io.Discard), &cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Reboot == nil {
 		t.Fatal("the dispatch service judges no reboot")
 	}
-	j := serviceRebootJudge(b, "demo", paths, os.Getenv, root, nil, io.Discard)
+	j := serviceRebootJudge(b, "demo", paths, os.Getenv, root, runBootID(), nil, io.Discard)
 	if j.dir != paths.StateDir("demo") || j.boot != "B7" || j.escalate() != "master" {
 		t.Fatalf("judge %+v", j)
 	}

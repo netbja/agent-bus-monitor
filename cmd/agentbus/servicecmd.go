@@ -19,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/mission"
@@ -712,6 +713,24 @@ func mainServiceRun(project, host string, args []string) int {
 	return serviceRun(ctx, b, kind, rest, deps, w)
 }
 
+// serviceDispatchDeps is what agentbus service run gives the dispatch
+// service's configuration: the base config with the service's escalation
+// target (service run --escalate-to, else AGENT_BUS_ESCALATE_TO; master
+// otherwise), the relay's runner, the pop's end, this boot and the unit's
+// working directory (the project's repository).
+func serviceDispatchDeps(b *bus.Bus, host, escalateTo string, paths service.Paths, log io.Writer) dispatchDeps {
+	base := dispatchBaseConfig()
+	if escalateTo != "" {
+		base.EscalateTo = escalateTo
+	}
+	workdir, _ := os.Getwd()
+	return dispatchDeps{Bus: b, Getenv: os.Getenv, Paths: paths, Host: host, Workdir: workdir, Boot: runBootID(), Log: log,
+		Base: base, HostOps: hostOpsConfig(b, b.Project(), host),
+		PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
+			return withPopEnd(c, b, rt, os.Getenv)
+		}}
+}
+
 // newProbeHost is the project's holder client the service's HostPing probes
 // (a test replaces it, to see that the deps probe every holder).
 var newProbeHost = func(project string) (holderProber, error) {
@@ -728,7 +747,8 @@ func serviceRunDepsFor(project, host, hostname string, paths service.Paths) serv
 		Settings:     func() []string { return settingsWarnings(os.Getenv) },
 		EnsureHolder: serviceEnsureHolder(project, func(log io.Writer) upDeps { return realUpDepsIn(nil, log, log) }),
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
-			cfg, h, err := serviceDispatchConfig(b, project, host, escalateTo, paths, log)
+			var cfg dispatch.Config
+			h, err := serviceDispatchConfig(serviceDispatchDeps(b, host, escalateTo, paths, log), &cfg)
 			if err != nil {
 				fmt.Fprintf(log, "dispatch: %v\n", err)
 				return 1

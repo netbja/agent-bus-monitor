@@ -487,7 +487,7 @@ func (w *e2eWorld) startDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	chore, src := serviceSelfRepair(b, os.Getenv, nil)
+	chore, src := serviceSelfRepair(b, os.Getenv, nil, runBootID())
 	if chore.mode != "on" || chore.relaunch == nil {
 		t.Fatalf("self-repair is %q, not on", chore.mode)
 	}

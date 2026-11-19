@@ -10,8 +10,6 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
-	"github.com/netbja/agent-bus-monitor/mission"
-	"github.com/netbja/agent-bus-monitor/service"
 )
 
 const dispatchUsage = "usage: dispatch [--horizon D] [--escalate-after D] [--escalate-to NAME] | dispatch --status"
@@ -42,13 +40,9 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 	if dispatchHostOps != nil && b != nil {
 		cfg.HostOps = dispatchHostOps(b)
 	}
-	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), b, rt, os.Getenv)
-	if paths, err := service.PathsFrom(os.Getenv); err == nil {
-		cfg.Health = realHealthConfig(b, rt, paths, cfg.Clear, &cfg.EscalateTo)
-		if b != nil { // a bad flag exits before any bus is used
-			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(b.Project()))
-		}
-	}
+	foregroundConfig(dispatchDeps{Bus: b, Getenv: os.Getenv, PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
+		return withPopEnd(c, b, rt, os.Getenv)
+	}}, &cfg, rt)
 	status := false
 	usage := func(msg string) int {
 		fmt.Fprintln(stderr, "error: "+msg)

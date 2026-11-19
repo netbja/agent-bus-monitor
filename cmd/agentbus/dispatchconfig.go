@@ -29,18 +29,18 @@ import (
 // service runs, and the relay (herdr exit §4.2). The relay was missing here
 // until host-relay-timeout: only the foreground agentbus dispatch set it, so
 // a host command from an agent's terminal was never read by the service.
-func serviceDispatchConfig(b *bus.Bus, project, host, escalateTo string, paths service.Paths, log io.Writer) (dispatch.Config, *dispatch.HostRuntime, error) {
-	cfg := dispatchBaseConfig()
-	if escalateTo != "" { // service run --escalate-to, else AGENT_BUS_ESCALATE_TO; master otherwise
-		cfg.EscalateTo = escalateTo
-	}
-	// target is the one escalation target the stall checks, the self-repair
-	// watcher and the reboot judge read: its own variable, set before any of
-	// them holds it, since cfg is returned by value (a pointer into cfg would
-	// point at this function's copy, not the caller's).
-	target := cfg.EscalateTo
+//
+// It fills cfg, which the caller owns and keeps (dispatchsvc spec §3): cfg
+// starts as d.Base, whose EscalateTo the caller has set (service run
+// --escalate-to, else AGENT_BUS_ESCALATE_TO; master otherwise). The stall
+// checks, the self-repair watcher and the reboot judge read &cfg.EscalateTo,
+// a pointer into the caller's config, never into a copy.
+func serviceDispatchConfig(d dispatchDeps, cfg *dispatch.Config) (*dispatch.HostRuntime, error) {
+	b, project, paths, log := d.Bus, d.Bus.Project(), d.Paths, d.Log
+	*cfg = d.Base
+	target := &cfg.EscalateTo
 	cfg.Log = log
-	cfg.HostOps = hostOpsConfig(b, project, host) // host commands from inside an agent's terminal
+	cfg.HostOps = d.HostOps // host commands from inside an agent's terminal
 	cfg.Quota = serviceQuota(os.Getenv, log)
 	if cfg.Quota.Read != nil { // the thresholds re-read from the files each minute (quota settings §2.2)
 		cfg.Quota.Thresholds = quotaThresholds(os.Getenv, project, paths.EnvFile(project))
@@ -59,17 +59,47 @@ func serviceDispatchConfig(b *bus.Bus, project, host, escalateTo string, paths s
 	cfg.Clear.Decisions = dispatch.NewClearDecisions()                    // why a clear waits: logged, and read by clear-stall
 	h, err := dispatchRuntime(project, os.Getenv)                         // the dispatcher on the project's holder (herdr exit 10b)
 	if err != nil {
-		return cfg, nil, err
+		return nil, err
 	}
-	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &target)
+	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, target)
 	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
-	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &target)
+	repair, repairCfg := serviceSelfRepair(b, os.Getenv, target, d.Boot)
 	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
-	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), b, h, os.Getenv)
-	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))                // read at each client-update send (auto-reload)
-	workdir, _ := os.Getwd()                                                                 // the unit's WorkingDirectory: the project's repository
-	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, workdir, &target, log).run // judged once, before any loop (reboot-resume §3)
-	return cfg, h, nil
+	cfg.PopRetire = d.PopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), h)
+	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))                         // read at each client-update send (auto-reload)
+	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, d.Workdir, d.Boot, target, log).run // judged once, before any loop (reboot-resume §3)
+	return h, nil
+}
+
+// dispatchDeps is what the dispatch service's configuration takes from its
+// caller (dispatchsvc spec §3's Deps, unexported until the move).
+type dispatchDeps struct {
+	Bus     *bus.Bus
+	Getenv  func(string) string
+	Paths   service.Paths
+	Host    string // the broker's host, as agentbus service run resolved it
+	Workdir string // the unit's working directory: the project's repository
+	Boot    string // this boot's id (lifecycle)
+	Log     io.Writer
+
+	Base    dispatch.Config        // dispatch.DefaultConfig with the person's name set
+	HostOps dispatch.HostOpsConfig // the relay's runner: CLI commands
+	PopEnd  func(dispatch.PopRetireConfig, dispatch.Runtime) dispatch.PopRetireConfig
+}
+
+// foregroundConfig adds to cfg, in place, what the foreground agentbus
+// dispatch runs: the pop's end, the health checks, the reload policy
+// (dispatchsvc spec §3, ForegroundConfig). d.Bus may be nil: a bad flag exits
+// before any bus is used.
+func foregroundConfig(d dispatchDeps, cfg *dispatch.Config, rt dispatch.Runtime) {
+	b := d.Bus
+	cfg.PopRetire = d.PopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), rt)
+	if paths, err := service.PathsFrom(os.Getenv); err == nil {
+		cfg.Health = realHealthConfig(b, rt, paths, cfg.Clear, &cfg.EscalateTo)
+		if b != nil { // a bad flag exits before any bus is used
+			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(b.Project()))
+		}
+	}
 }
 
 // serviceReloadPolicy reads the project's reload policy as agentbus reload

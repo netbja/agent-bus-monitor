@@ -396,8 +396,9 @@ func (c *selfRepairChore) check(context.Context) (health.Outcome, error) {
 
 // serviceSelfRepair is the dispatch service's watcher, its mode read once at
 // the service's start (dispatch.self_repair, a refusal read as off). Only
-// shadow runs a pass in step 6; the check is there in every mode.
-func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (*selfRepairChore, dispatch.SelfRepairConfig) {
+// shadow runs a pass in step 6; the check is there in every mode. boot is
+// this host's boot id, read by the caller.
+func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string, boot string) (*selfRepairChore, dispatch.SelfRepairConfig) {
 	r := config.Machine(getenv)
 	c := &selfRepairChore{b: b, project: b.Project(), mode: selfrepair.Mode(config.SelfRepairMode(r)),
 		every: r.Duration("dispatch.self_repair_every"), perDay: r.Int("dispatch.self_repair_per_day"),
@@ -425,7 +426,7 @@ func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (
 			return h.Close(ctx, termhost.TermID(pane))
 		}
 	}
-	c.read = func(ctx context.Context) (selfRepairReads, error) { return readSelfRepair(ctx, b, getenv) }
+	c.read = func(ctx context.Context) (selfRepairReads, error) { return readSelfRepair(ctx, b, getenv, boot) }
 	c.host = func(snaps map[string]bus.AgentSnapshot) selfRepairHost {
 		return serviceRepairHost(getenv, b.Project())
 	}
@@ -434,7 +435,7 @@ func serviceSelfRepair(b *bus.Bus, getenv func(string) string, master *string) (
 
 // readSelfRepair reads a pass's facts. A failed read fails the pass (logged
 // by the chore), never read as empty: no facts, no decision.
-func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string) (selfRepairReads, error) {
+func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string, boot string) (selfRepairReads, error) {
 	var r selfRepairReads
 	var err error
 	if r.Now, err = b.ServerTime(ctx); err != nil {
@@ -475,7 +476,7 @@ func readSelfRepair(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	if r.Past, err = b.SelfRepairPast(ctx); err != nil {
 		return r, err
 	}
-	r.Boot = runBootID()
+	r.Boot = boot
 	if rec, ok, err := b.Reboot(ctx); err != nil {
 		return r, err
 	} else if ok {

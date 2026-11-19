@@ -8,6 +8,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -141,7 +142,8 @@ func TestServiceDispatcherReadsTheProjectThresholds(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
-	cfg, _, err := serviceDispatchConfig(b, "demo", "", "", paths, io.Discard)
+	var cfg dispatch.Config
+	_, err = serviceDispatchConfig(serviceDispatchDeps(b, "", "", paths, io.Discard), &cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
