@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/cli"
@@ -137,7 +138,7 @@ func main() {
 	// backup archives every project of this host unless projects are named on
 	// the command line: the ambient AGENT_BUS_PROJECT never narrows it.
 	if len(args) >= 1 && args[0] == "backup" {
-		os.Exit(runBackup(context.Background(), args[1:], explicitProject, realBackupDeps(host), os.Stdout, os.Stderr))
+		os.Exit(runBackup(context.Background(), args[1:], explicitProject, backup.RealDeps(host), os.Stdout, os.Stderr))
 	}
 	// restore is the person's act on an archive; its projects, like backup's,
 	// come from the command line only.

@@ -54,7 +54,7 @@ func backupCheck(project string, d backupCheckDeps) func(context.Context) (healt
 			in.RecordErr = err.Error()
 			return health.EvaluateBackup(in), nil
 		}
-		last, err := backup.ReadLast(backupLastPath(paths))
+		last, err := backup.ReadLast(backup.LastPath(paths))
 		if err != nil {
 			in.RecordErr = err.Error()
 			return health.EvaluateBackup(in), nil
