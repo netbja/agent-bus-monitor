@@ -150,7 +150,7 @@ it. None needs the quiet window: they are small, and a conflict is a rebase of a
 | P2 | `lifecycle/` | `hostBootID` (main.go) | 4 |
 | P2 | `service/` | the constant `gitWaitState` (servicerun.go) | 1 |
 | P3 | `holder/` | `holderReady`, `holderTermList`, `holderTerms` (holdercmd.go); `holderAnswersAny` (holderhealth.go, used by `servicecmd.go`) | ~60 |
-| P4 | `rolecfg/` | the doctor's rows: `doctorRows`, `doctorRow`, `doctorDeps`, `realDoctorDeps`, the `claudeAlias` pattern and their closure (doctor.go, ownprofile.go); the models check: `modelsCheckReport` and its closure (modelcheck.go) | ~470 |
+| P4 | `modelcheck/` (new; see below) | the doctor's rows: `doctorRows`, `doctorRow`, `doctorDeps`, `realDoctorDeps`, the `claudeAlias` pattern and their closure (doctor.go, ownprofile.go); the models check: `modelsCheckReport` and its closure (modelcheck.go) | ~470 |
 | P4 | `models/` | `loadModelsConfig`, `modelsGetenv` (modelscmd.go); `refreshTable`, `lockTable`, `refreshModelsUnderLock` (healthchores.go, used by `agentbus models`) | ~80 |
 | P5 | `backup/` | `makeArchive`, `archiveJob`, `backupDeps`, `realBackupDeps`, `hostProjects`, `backupLastPath`, `sortedUnique` (backupcmd.go) | ~140 |
 | P6 | `usage/` | `collectAgentUsage` and its two helpers (budget.go) | ~50 |
@@ -184,9 +184,23 @@ The move's P8 and the move PR keep these tests on the `cmd/agentbus` side (rule 
 `manifestPath` (roles.go) needs no PR: `rolecfg.ManifestPath` exists; P8 points the moving files at
 it if they differ in nothing, and says so if they do.
 
-**P4 is the one prerequisite with weight.** It gives `rolecfg` an import of `usage` (no cycle:
-`usage` imports `bus` only). It is two PRs if the doctor and the models check do not review well
-together. Its CLI halves (`runDoctor`, the printing) stay.
+**P4 is the one prerequisite with weight.** It is two PRs: P4a, the models half (#626), and P4b,
+the doctor's rows and the models check. Their CLI halves (`runDoctor`, `runModelsCheck`, the
+printing) stay.
+
+**P4b does not go to `rolecfg`, as this table first said: that is an import cycle.** `doctorRows`
+calls `ownProfile`, which decodes the project's template into `relaunch.Template`, and `relaunch`
+imports `rolecfg`. So `ownProfile`, `tabLaunch` and `launchProfile` go to `relaunch`, beside
+`Template`. The doctor's rows and the models check go to a new leaf package, `modelcheck/`, which
+imports `rolecfg`, `relaunch`, `models`, `usage` and `dispatch`; none of them imports it. Leaving
+package main forces two changes, both decided with master:
+
+- `realDoctorDeps` takes `getenv` and the models settings' `getenv`. They used to be the
+  environment and `cmd/agentbus`'s test hook `modelsGetenv`, as in P4a.
+- The test hook `launchRisk` becomes a `DoctorDeps` field, so there is no exported mutable variable.
+
+`doctorRow.usedAt` is read by the moving `modelcatalogue.go`, so it becomes `UsedAt` with
+`json:"-"`, which keeps the same JSON.
 
 **P8, the reshaping in place, is the last prerequisite and needs P0-P7 merged.** Still inside
 `package main`, where every test compiles before and after:
