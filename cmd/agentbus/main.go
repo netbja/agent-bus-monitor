@@ -519,6 +519,8 @@ func main() {
 		os.Exit(runCheckback(ctx, b, self, rest, os.Stdout, os.Stderr))
 	case "run":
 		os.Exit(runRun(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
+	case "ci":
+		os.Exit(runCI(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
 	case "merge-queue":
 		os.Exit(runMergeQueue(ctx, b, self, rest, os.Stdout))
 	case "verdicts":
