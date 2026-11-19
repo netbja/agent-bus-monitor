@@ -54,7 +54,7 @@ func (w *BackupWorld) Dir() string {
 	return filepath.Join(w.Home, ".local", "share", "agentbus", "backups")
 }
 
-// scheduleWorld: a BackupWorld whose config.toml says daily, backup.dir set.
+// NewScheduleWorld is a BackupWorld whose config.toml says daily, backup.dir set.
 func NewScheduleWorld(t *testing.T, extra string) *BackupWorld {
 	t.Helper()
 	w := NewBackupWorld(t)
