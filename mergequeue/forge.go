@@ -26,14 +26,15 @@ var ErrIncomplete = errors.New("the forge's list of open PRs may be incomplete")
 
 // ghPR is gh pr list's JSON, the fields asked for.
 type ghPR struct {
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	HeadRefName string `json:"headRefName"`
-	HeadRefOid  string `json:"headRefOid"`
-	BaseRefName string `json:"baseRefName"`
-	IsDraft     bool   `json:"isDraft"`
-	Mergeable   string `json:"mergeable"` // MERGEABLE, CONFLICTING or UNKNOWN (not computed yet)
+	Number      int       `json:"number"`
+	Title       string    `json:"title"`
+	URL         string    `json:"url"`
+	HeadRefName string    `json:"headRefName"`
+	HeadRefOid  string    `json:"headRefOid"`
+	BaseRefName string    `json:"baseRefName"`
+	IsDraft     bool      `json:"isDraft"`
+	Mergeable   string    `json:"mergeable"` // MERGEABLE, CONFLICTING or UNKNOWN (not computed yet)
+	Rollup      []ghCheck `json:"statusCheckRollup"`
 }
 
 // ReadGitHub lists the open PRs of the repository in dir with gh, run with
@@ -42,7 +43,7 @@ type ghPR struct {
 // own credentials. Bounded by ctx.
 func ReadGitHub(ctx context.Context, dir string, env []string) ([]PR, error) {
 	out, err := run(ctx, dir, env, "gh", "pr", "list", "--state", "open",
-		"--json", "number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable", "--limit", fmt.Sprint(ghLimit))
+		"--json", "number,title,url,headRefName,headRefOid,baseRefName,isDraft,mergeable,statusCheckRollup", "--limit", fmt.Sprint(ghLimit))
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func ReadGitHub(ctx context.Context, dir string, env []string) ([]PR, error) {
 		}
 		prs = append(prs, PR{Number: p.Number, Title: cleanText(p.Title), URL: cleanText(p.URL), Branch: cleanText(p.HeadRefName),
 			Head: p.HeadRefOid, Base: cleanText(p.BaseRefName), Draft: p.IsDraft,
-			Conflicting: p.Mergeable == "CONFLICTING"})
+			Conflicting: p.Mergeable == "CONFLICTING", Checks: parseChecks(p.Rollup)})
 	}
 	return prs, nil
 }
