@@ -52,6 +52,11 @@ check matters for the person's other projects.
   and send it on the next pass after that.
 - The text is the PR, the failing check names and their URLs. **Never the log**: the owner reads it
   with `gh run view --log-failed`, so CI output never reaches the bus or a pane.
+- **Review comments are deferred.** Our reviews already reach the author on the bus: a verdict goes
+  to whoever opened the challenge. What is not routed is a comment a person leaves on the forge.
+  It would use the same mechanism, with one episode per review id and the forge's review state.
+  It is left out of the first step, because it needs a second `gh` read (threads) on its own
+  cadence, and it should wait until someone actually reviews on the forge.
 
 **Risks.**
 
@@ -140,7 +145,8 @@ So the change is a new observed fact beside the screen's, with its own rules:
   decides;
 - readers (For you, the stuck check, the wake gate) treat it as they treat the screen's blocked
   observation, earlier and with the tool named;
-- the declared state is never touched; `StopFailure` can also join the turn hooks as an `idle`
+- the declared state is never touched: a declared `blocked` is the 4-eyes gate's, and busmon draws
+  it as one (`cmd/busmon/agents.go`), apart from the screen's observation; `StopFailure` can also join the turn hooks as an `idle`
   flip, as Grok's profile already does.
 
 That is a small design of its own (provenance, freshness, clearing), to spec before wiring. We
