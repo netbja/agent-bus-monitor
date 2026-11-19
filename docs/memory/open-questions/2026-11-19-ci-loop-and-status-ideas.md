@@ -27,9 +27,11 @@ manager (`backend/internal/lifecycle/reactions.go`, `ApplyPRObservation`) turns 
 to the session that owns the PR: failing CI (check names, URL, a sanitized log tail), unresolved
 review comments, a merge conflict. Each nudge is sent once per (key, signature): the key is the PR
 plus the kind, the signature is the set of failing checks or the review state, persisted so a
-restart does not resend. The conflict nudge re-arms when the PR is seen mergeable again. Nudges
-wait while the agent needs input, and none goes to an agent blocked on a permission dialog.
-AO pastes the message text into the agent's terminal.
+restart does not resend. The conflict nudge re-arms when the PR is seen mergeable again.
+CI and review nudges wait while the agent needs input. The merge-conflict nudge is exempt: it
+takes an "urgent" path that may reach an agent idle at a prompt, if AO can prove the prompt is an
+idle composer. No nudge reaches an agent blocked on a permission dialog. AO pastes the message
+text into the agent's terminal.
 
 **What we have.** The merge-queue chore already runs `gh pr list` on every pass
 (`mergequeue/forge.go`, `ReadGitHub`) and records `Conflicting` in `{p}:merge-queue`. That record
@@ -78,8 +80,14 @@ cache, a health check.
 
 **Smallest change.** A `client-version` health check built on the `redislatest` pattern. Once a day
 per host, read the latest release of each client the roles use (Claude Code, Codex: a registry
-JSON), compare it with the installed version the agent snapshot reports, and report `newer
-available` in health and For you. The update itself stays the person's (or a quiet-update step):
+JSON), and report `newer available` in health and For you.
+
+The comparison must be with the version **installed now**, not with the snapshot. The snapshot's
+`ClientFP` is the launch fingerprint: after an upgrade on disk it still describes the old running
+client, so comparing with it would recommend an update that is already installed. The installed
+version comes from the on-disk probe (`realClientProbe`, the same one that fills
+`Observation.Update`), read once per client per host. When the probe gives no version label, the
+check says `unknown`, never `newer available`. The update itself stays the person's (or a quiet-update step):
 the dispatcher installs nothing. Optionally, in the same check, recognise `claude_code_version_too_old`
 on a stuck screen and name it.
 
@@ -116,18 +124,28 @@ derivation").
   3b).
 - The context fill comes from the statusLine (decision 2026-10-27).
 
-**Smallest change.**
+**Smallest change: a hook-observed fact, not a state flip.** It cannot be three more hooks wired
+into the turn path. `Bus.TurnState` only flips between `idle` and `working`, and refuses to leave
+any other state, so a declared `waiting` or a gate is never overwritten (`bus/turnstate.go`). A
+hook that set `blocked` there would also have nothing to clear it: `Stop` and `UserPromptSubmit`
+cannot leave `blocked`, and the screen check writes an observation (`bus.Observation`), never the
+declared state.
 
-- Install three more hooks on Claude profiles:
-  - `PermissionRequest` sets `blocked`, with the tool, on the first event, with no screen
-    polling;
-  - `Notification` with `permission_prompt` sets `blocked`, and with `idle_prompt` sets `idle`;
-  - `StopFailure` sets `idle`, as Grok already does.
-- They go through the same `roles turn` path, as `AutoTurn` flips of the snapshot only.
-- The screen check stays as the backstop, and as the only source for clients without hooks.
-- Clearing: AO uses the `PostToolUse` of the blocking tool. The cheaper equivalent for us is the
-  next `UserPromptSubmit` or `Stop`, plus the screen check. We should not add `PostToolUse` on
-  every tool call: it sits on the hot path, and our hook has a 2-second budget.
+So the change is a new observed fact beside the screen's, with its own rules:
+
+- `PermissionRequest`, and `Notification` with `permission_prompt`, record "blocked on a dialog
+  (tool)" with its Redis time;
+- the fact clears on the next hook of the same session showing the dialog was answered
+  (`UserPromptSubmit`, `Stop`, `StopFailure`), and is stale past a bound, after which the screen
+  decides;
+- readers (For you, the stuck check, the wake gate) treat it as they treat the screen's blocked
+  observation, earlier and with the tool named;
+- the declared state is never touched; `StopFailure` can also join the turn hooks as an `idle`
+  flip, as Grok's profile already does.
+
+That is a small design of its own (provenance, freshness, clearing), to spec before wiring. We
+should not add `PostToolUse` on every tool call to clear sooner: it sits on the hot path, and our
+hook has a 2-second budget.
 
 **Risks.**
 
@@ -141,11 +159,12 @@ derivation").
 Three ideas, each to spec separately, if the person wants it.
 
 - **Idea 1**: the person already said yes, so it is the next spec.
-- **Ideas 2 and 3**: small and independent; each can follow when the queue allows.
+- **Idea 2**: small and independent; it can follow when the queue allows.
+- **Idea 3**: independent, but a design first (a new observed fact), not a wiring.
 
 ## Evidence
 
-AO, read at its local checkout, not modified:
+AO, read at its local checkout, HEAD `134a2f0fee7b7d9267447a85578d6486452890e7`, not modified:
 
 - `docs/scm-observer.md`, `backend/internal/lifecycle/reactions.go` (`ApplyPRObservation`,
   `sendOnce`, `formatCIFailureMessage`);
@@ -163,6 +182,7 @@ Ours, on `origin/dev` `bc3b20e2`:
 - [bus/once.go](../../../bus/once.go) (`FencedCmdOnce`),
   [dispatch/clientupdate.go](../../../dispatch/clientupdate.go),
   [cmd/agentbus/redislatest.go](../../../cmd/agentbus/redislatest.go);
+- the state rules: [bus/turnstate.go](../../../bus/turnstate.go) (idle and working only);
 - the turn hooks: [cmd/agentbus/turnhook.go](../../../cmd/agentbus/turnhook.go),
   [rolecfg/launch.go](../../../rolecfg/launch.go), [rolecfg/grokhooks.go](../../../rolecfg/grokhooks.go);
 - the decisions it builds on: [event-driven dispatch](../decisions/2026-10-10-event-driven-dispatch.md),
