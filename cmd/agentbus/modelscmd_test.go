@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -41,103 +43,24 @@ func checkGolden(t *testing.T, name, got string) {
 	}
 }
 
-// checkManifest: every model-detection §3.4 case, used and unused.
-const checkManifest = `schema_version = 2
-[defaults]
-profile = "main"
-[profiles.main]
-client = "claude-code"
-provider = "anthropic"
-model = "opus"
-options = { permission = "manual" }
-[profiles.pinned]
-client = "claude-code"
-provider = "anthropic"
-model = "claude-opus-4-8"
-options = { permission = "manual" }
-[profiles.spare]
-client = "codex"
-provider = "openai"
-tier = "workhorse"
-[profiles.sol]
-client = "codex"
-provider = "openai"
-model = "gpt-6-sol"
-[profiles.old]
-client = "codex"
-provider = "openai"
-model = "gpt-5-old"
-[profiles.grok]
-client = "grok"
-provider = "xai"
-model = "grok-4.6"
-[profiles.kimi]
-client = "kimi-cli"
-provider = "moonshot"
-tier = "frontier"
-[profiles.grokfast]
-client = "grok"
-provider = "xai"
-tier = "fast"
-[profiles.gem]
-client = "agy"
-provider = "google"
-model = "gemini-3.8-flash-high"
-[roles.coder]
-tier = "boot"
-fallback_profiles = ["spare", "grok"]
-[roles.master]
-tier = "boot"
-[roles.ui]
-tier = "pop"
-profile = "sol"
-`
+const checkManifest = cmdtest.CheckManifest
 
-// checkFixture writes a fresh table (and its file young) and the manifest.
+// checkFixture is cmdtest.ModelsCheckFixture in a home the CLI's models
+// settings read.
 func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*rolecfg.Manifest, error)) {
 	t.Helper()
 	dir := t.TempDir()
 	isolateModelSettings(t, dir, "")
-	cache = filepath.Join(dir, "models.json")
-	at := now.UnixMilli()
-	tbl := &models.Table{Providers: map[string]*models.Provider{
-		"anthropic": {OK: true, At: at, ReadAt: at, Partial: true, Rows: []models.Row{{ID: "opus", Alias: true, Default: true, Tier: models.Frontier}}},
-		"openai": {OK: true, At: at, ReadAt: at, Rows: []models.Row{
-			{ID: "gpt-6.1-sol", Tier: models.Workhorse, Default: true},
-			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-6.1-sol"},
-		}},
-		"xai": {OK: true, At: at, ReadAt: at, Rows: []models.Row{{ID: "grok-4.7", Default: true, Tier: models.Frontier}, {ID: "grok-4.6"}}},
-		// Kimi: one tier for the family (§6 Q3); a tier profile gets kimi-for-coding.
-		"moonshot": {OK: true, At: at, ReadAt: at, Rows: []models.Row{{ID: "kimi-code/k3", Default: true, Tier: models.Frontier},
-			{ID: "kimi-code/kimi-for-coding-highspeed", Tier: models.Frontier}, {ID: "kimi-code/kimi-for-coding", Tier: models.Frontier}}},
-		"google": {OK: false, At: at, Error: "timeout", ReadAt: now.Add(-9 * 24 * time.Hour).UnixMilli(), Rows: []models.Row{{ID: "gemini-3.8-flash-high"}}},
-	}}
-	if err := tbl.Save(cache); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, "roles.toml")
-	if err := os.WriteFile(path, []byte(checkManifest), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return cache, func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+	return cmdtest.ModelsCheckFixture(t, dir, now)
 }
 
-// isolateModelSettings: the settings come from an empty home, with
-// AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
+// isolateModelSettings: the CLI's models settings come from an empty home,
+// with AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
 func isolateModelSettings(t *testing.T, dir, maxAge string) {
 	t.Helper()
-	old, oldService := modelsGetenv, serviceModelsGetenv
-	t.Cleanup(func() { modelsGetenv, serviceModelsGetenv = old, oldService })
-	modelsGetenv = func(k string) string {
-		switch k {
-		case "HOME", "XDG_CONFIG_HOME":
-			return dir
-		case "AGENT_BUS_MODELS_SOURCE_MAX_AGE":
-			return maxAge
-		}
-		return ""
-	}
-	serviceModelsGetenv = modelsGetenv
+	old := modelsGetenv
+	t.Cleanup(func() { modelsGetenv = old })
+	modelsGetenv = cmdtest.ModelsEnv(dir, maxAge)
 }
 
 // §3.2: the listing prints the source's own age; models check says unknown
@@ -167,12 +90,7 @@ func TestModelsSourceAge(t *testing.T) {
 	}
 }
 
-// noEnv: a client is never called (a test reads no real client).
-func noEnv() models.Env {
-	return models.Env{Getenv: func(string) string { return "" }, Home: "/nonexistent",
-		Read: func(string) ([]byte, error) { return nil, errors.New("no file") },
-		Run:  func(context.Context, string, ...string) ([]byte, error) { return nil, errors.New("not installed") }}
-}
+var noEnv = cmdtest.NoEnv
 
 // model-detection §3.4, §3.7: every profile and every fallback, judged.
 func TestModelsCheckGolden(t *testing.T) {
@@ -268,36 +186,18 @@ func TestModelsChangesGolden(t *testing.T) {
 	}
 }
 
-// age makes the table's last refresh d old (every provider's last attempt).
-func age(t *testing.T, path string, d time.Duration) {
-	t.Helper()
-	tbl, err := models.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range tbl.Providers {
-		p.At = time.Now().Add(-d).UnixMilli()
-	}
-	if err := tbl.Save(path); err != nil {
-		t.Fatal(err)
+// The fixture's adapter is one more reader for the CLI: the dispatcher's
+// TestDispatcherReadsNoAdapter reads the same roles.toml and must not see it.
+func TestModelsReadsTheFixturesAdapter(t *testing.T) {
+	path := cmdtest.AdapterRoles(t)
+	manifest := func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) }
+	if got := modelReaders(models.Env{}, manifest, io.Discard); len(got) != len(models.Readers(models.Env{}))+1 {
+		t.Fatalf("the fixture's adapter is not seen by modelReaders: %d readers", len(got))
 	}
 }
 
-// countingEnv lists grok-4.8 from the grok client and counts the calls.
-func countingEnv(calls *int, block <-chan struct{}) models.Env {
-	e := noEnv()
-	e.Run = func(_ context.Context, name string, _ ...string) ([]byte, error) {
-		if name != "grok" {
-			return nil, errors.New("not installed")
-		}
-		*calls++
-		if block != nil {
-			<-block // ignores its deadline: the refresh must not wait for it
-		}
-		return []byte("Default model: grok-4.8\n\nAvailable models:\n  * grok-4.8 (default)\n"), nil
-	}
-	return e
-}
+var age = cmdtest.Age
+var countingEnv = cmdtest.CountingEnv
 
 // §3.5, G7: any models form refreshes a table over 24 h old, and only then.
 func TestModelsAutoRefresh(t *testing.T) {
