@@ -23,7 +23,7 @@ type backupWorld struct {
 	b    *bus.Bus
 	home string
 	env  map[string]string
-	d    backupDeps
+	d    backup.Deps
 }
 
 func newBackupWorld(t *testing.T) *backupWorld {
@@ -42,7 +42,7 @@ func newBackupWorld(t *testing.T) *backupWorld {
 	os.WriteFile(filepath.Join(cfg, "projects", b.Project()+".toml"), []byte("working_dir = \"/w\"\n"), 0o600)
 	os.WriteFile(filepath.Join(cfg, "redis.env"), []byte(`REDIS_PASSWORD="pw-SECRET"`+"\n"), 0o600)
 	clock := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
-	w.d = backupDeps{
+	w.d = backup.Deps{
 		Getenv: func(k string) string { return w.env[k] },
 		Now:    func() time.Time { clock = clock.Add(time.Second); return clock },
 		Host:   "h1",

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -112,7 +113,8 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 			return usage("invalid project %q", p)
 		}
 	}
-	o.Projects = sortedUnique(o.Projects)
+	slices.Sort(o.Projects)
+	o.Projects = slices.Compact(o.Projects)
 	var age string
 	if o.Identity != "" {
 		var err error

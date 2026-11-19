@@ -29,11 +29,11 @@ import (
 const backupDueAfter = 24 * time.Hour
 
 func serviceBackup(log io.Writer) dispatch.BackupConfig {
-	d := realBackupDeps("")
+	d := backup.RealDeps("")
 	return dispatch.BackupConfig{Pass: func(ctx context.Context) error { return scheduledBackupPass(ctx, d, log) }}
 }
 
-func scheduledBackupPass(ctx context.Context, d backupDeps, log io.Writer) error {
+func scheduledBackupPass(ctx context.Context, d backup.Deps, log io.Writer) error {
 	r := config.Machine(d.Getenv)
 	if r.String("backup.schedule") != "daily" {
 		return nil
@@ -52,7 +52,7 @@ func scheduledBackupPass(ctx context.Context, d backupDeps, log io.Writer) error
 	}
 	defer c.Close() // the service runs for days: one client per pass, closed (foureyes)
 	projectsDir := rolecfg.ProjectsDir(d.Getenv)
-	projects, err := d.hostProjects(ctx, c, projectsDir)
+	projects, err := d.HostProjects(ctx, c, projectsDir)
 	if err != nil || len(projects) == 0 {
 		return err
 	}
@@ -73,7 +73,7 @@ func scheduledBackupPass(ctx context.Context, d backupDeps, log io.Writer) error
 	}
 	run := backup.ScheduledRun{At: now, Projects: projects}
 	record := func() {
-		if err := backup.RecordScheduled(backupLastPath(paths), run); err != nil {
+		if err := backup.RecordScheduled(backup.LastPath(paths), run); err != nil {
 			fmt.Fprintf(log, "backup: recording the scheduled run: %v\n", err)
 		}
 	}
@@ -85,7 +85,7 @@ func scheduledBackupPass(ctx context.Context, d backupDeps, log io.Writer) error
 		record()
 		return err
 	}
-	job := archiveJob{Projects: projects, Dir: dir, Now: now, Files: files, Left: left, Scheduled: true,
+	job := backup.Job{Projects: projects, Dir: dir, Now: now, Files: files, Left: left, Scheduled: true,
 		Notes: append(notes, "made by the daily schedule (backup.schedule = daily)")}
 	// Secrets unattended only with a recipient: no private key, no prompt.
 	// With one and no age, the archive is still made without them, and the
@@ -99,7 +99,7 @@ func scheduledBackupPass(ctx context.Context, d backupDeps, log io.Writer) error
 			job.Left = nil
 		}
 	}
-	res, err := makeArchive(ctx, c, d, r, paths, job, log, log)
+	res, err := backup.MakeArchive(ctx, c, d, r, paths, job, log, log)
 	if err != nil {
 		run.Error = err.Error()
 		record()

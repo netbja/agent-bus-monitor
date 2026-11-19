@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/backup"
-	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/internal/textfmt"
@@ -30,32 +27,7 @@ import (
 
 const backupUsage = "usage: agentbus backup [--project <p>]... [--dir <d>] [--secrets [--recipient <age1...>]] [--dry-run] | backup list [--dir <d>]"
 
-type backupDeps struct {
-	Getenv   func(string) string
-	Now      func() time.Time
-	Host     string // this host's name, in the archive's name
-	Dial     func() (*redis.Client, error)
-	LookPath func(string) (string, error) // finds age
-	Environ  func() []string              // the environment backup.after_command starts from, scrubbed
-	// Projects is the host's scope (nil: hostProjects, the broker's and the
-	// templates'); tests pin theirs on a shared test broker.
-	Projects func(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error)
-}
-
-func (d backupDeps) hostProjects(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error) {
-	if d.Projects != nil {
-		return d.Projects(ctx, c, projectsDir)
-	}
-	return hostProjects(ctx, c, projectsDir)
-}
-
-func realBackupDeps(redisHost string) backupDeps {
-	host, _ := os.Hostname()
-	return backupDeps{Getenv: os.Getenv, Now: time.Now, Host: host,
-		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }, LookPath: exec.LookPath, Environ: os.Environ}
-}
-
-func runBackup(ctx context.Context, args []string, explicitProject string, d backupDeps, out, errw io.Writer) int {
+func runBackup(ctx context.Context, args []string, explicitProject string, d backup.Deps, out, errw io.Writer) int {
 	usage := func(format string, a ...any) int {
 		if format != "" {
 			fmt.Fprintf(errw, "backup: "+format+"\n", a...)
@@ -135,12 +107,13 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	}
 	projectsDir := rolecfg.ProjectsDir(d.Getenv)
 	if len(projects) == 0 {
-		if projects, err = d.hostProjects(ctx, c, projectsDir); err != nil {
+		if projects, err = d.HostProjects(ctx, c, projectsDir); err != nil {
 			fmt.Fprintf(errw, "backup: %v\n", err)
 			return 1
 		}
 	}
-	projects = sortedUnique(projects)
+	slices.Sort(projects)
+	projects = slices.Compact(projects)
 	if len(projects) == 0 {
 		fmt.Fprintln(errw, "backup: no project on this host (none on the broker, no template)")
 		return 1
@@ -178,128 +151,18 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 		}
 		return backupDryRun(ctx, c, dir, backup.ArchiveName(d.Host, now), projects, files, left, notes, out, errw)
 	}
-	job := archiveJob{Projects: projects, Dir: dir, Now: now, Files: files, Left: left, Notes: notes}
+	job := backup.Job{Projects: projects, Dir: dir, Now: now, Files: files, Left: left, Notes: notes}
 	if secrets {
 		job.Secrets, job.Recipient, job.Age = secretSrcs, recipient, age
 	}
 	if _, defaulted, _ := config.BackupDir(r, d.Getenv); defaulted && dirArg == "" && r.String("backup.schedule") == "daily" {
 		fmt.Fprintf(errw, "backup: warning: backup.dir is the default (%s) while backup.schedule = daily: the service's environment may resolve another folder; set backup.dir in config.toml\n", dir)
 	}
-	if _, err := makeArchive(ctx, c, d, r, paths, job, out, errw); err != nil {
+	if _, err := backup.MakeArchive(ctx, c, d, r, paths, job, out, errw); err != nil {
 		fmt.Fprintf(errw, "backup: %v (no archive written)\n", err)
 		return 1
 	}
 	return 0
-}
-
-// archiveJob is one archive to make, by hand or by the schedule.
-type archiveJob struct {
-	Projects []string
-	Dir      string
-	Now      time.Time
-	Files    []backup.Source
-	Left     []backup.LeftOut
-	Notes    []string
-	// Secrets, when not nil, are sealed with Age to Recipient into secrets.age.
-	Secrets        []backup.Source
-	Recipient, Age string
-	Scheduled      bool
-}
-
-// makeArchive is a run of agentbus backup after its checks: the archive,
-// then backup.after_command (after the rename, before the retention; its
-// failure only warns and never touches the archive), then the retention.
-// An error means no archive was written.
-func makeArchive(ctx context.Context, c *redis.Client, d backupDeps, r config.Resolver, paths service.Paths, j archiveJob, out, errw io.Writer) (backup.Result, error) {
-	b, err := bus.Open(c, j.Projects[0])
-	if err != nil {
-		return backup.Result{}, err
-	}
-	info, err := b.RedisInfo(ctx)
-	if err != nil {
-		return backup.Result{}, fmt.Errorf("the broker: %w", err)
-	}
-	notes := j.Notes
-	var sealed []byte
-	if j.Secrets != nil {
-		if sealed, err = backup.SealSecrets(ctx, j.Age, j.Recipient, j.Secrets); err != nil {
-			return backup.Result{}, fmt.Errorf("secrets: %w", err)
-		}
-		names := make([]string, len(j.Secrets))
-		for i, s := range j.Secrets {
-			names[i] = s.Member
-		}
-		notes = append(notes, fmt.Sprintf("%s: %s, encrypted to %s", backup.SecretsName, strings.Join(names, ", "), j.Recipient))
-	}
-	res, err := backup.Run(ctx, j.Dir, backup.Plan{
-		Projects: j.Projects, Host: d.Host, Now: j.Now, Version: buildinfo.Version, RedisVersion: info.Version,
-		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
-		Files: j.Files, LeftOut: j.Left, Notes: notes, Secrets: sealed,
-	})
-	if err != nil {
-		return backup.Result{}, err
-	}
-	fmt.Fprintf(out, "backup: %s\n", res.Path)
-	for _, p := range j.Projects {
-		fmt.Fprintf(out, "  %s: %s, the broker held for %s\n", p, textfmt.Count(res.Keys[p], "key"), res.Exec[p].Round(time.Microsecond))
-	}
-	for _, l := range j.Left {
-		fmt.Fprintf(out, "  left out: %s (%s)\n", l.Path, l.Why)
-	}
-	for _, n := range notes {
-		fmt.Fprintf(out, "  note: %s\n", n)
-	}
-	if j.Secrets != nil {
-		fmt.Fprintf(out, "  %s opens only with the private key of %s: keep it where you keep your other keys, not on this disk\n", backup.SecretsName, j.Recipient)
-	}
-	if after := r.String("backup.after_command"); after != "" {
-		var allow []string
-		if a := r.String("backup.after_env"); a != "" {
-			allow = strings.Split(a, ",")
-		}
-		environ := os.Environ
-		if d.Environ != nil {
-			environ = d.Environ
-		}
-		ran := backup.RunAfter(ctx, backup.AfterSpec{Command: after, Dir: j.Dir, Archive: res.Path, Projects: j.Projects,
-			Scheduled: j.Scheduled, Env: environ(), Allow: allow, Timeout: r.Duration("backup.after_timeout"), Log: errw})
-		if err := backup.RecordAfter(backupLastPath(paths), j.Projects, backup.AfterEntry{At: ran.At, Archive: res.Name, Outcome: ran.Outcome}); err != nil {
-			fmt.Fprintf(errw, "backup: recording backup.after_command's outcome: %v\n", err)
-		}
-		if ran.Outcome == "ok" {
-			fmt.Fprintln(out, "  backup.after_command: ok")
-		} else {
-			fmt.Fprintf(errw, "backup: warning: backup.after_command: %s (the archive is complete and kept)\n", ran.Outcome)
-		}
-	}
-	removed, err := backup.Retain(j.Dir, d.Host, r.Int("backup.keep"))
-	for _, n := range removed {
-		fmt.Fprintf(out, "  removed %s (backup.keep = %d)\n", n, r.Int("backup.keep"))
-	}
-	if err != nil {
-		fmt.Fprintf(errw, "backup: retention: %v (the archive is complete)\n", err)
-	}
-	return res, nil
-}
-
-// hostProjects is every project of this host: the broker's and every
-// template's, sorted, once each.
-func hostProjects(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error) {
-	ps, err := bus.Projects(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, p := range ps {
-		out = append(out, p.Project)
-	}
-	tpls, _ := filepath.Glob(filepath.Join(projectsDir, "*.toml"))
-	for _, t := range tpls {
-		if name := strings.TrimSuffix(filepath.Base(t), ".toml"); bus.ValidName(name) {
-			out = append(out, name)
-		}
-	}
-	return sortedUnique(out), nil
 }
 
 func backupDryRun(ctx context.Context, c *redis.Client, dir, name string, projects []string, files []backup.Source,
@@ -350,21 +213,4 @@ func backupList(dir, host string, out, errw io.Writer) int {
 		fmt.Fprintf(out, "  %s  %s  %s  covers %s\n", a.Name, a.At.Local().Format("2006-01-02 15:04:05"), size, covers)
 	}
 	return 0
-}
-
-func sortedUnique(s []string) []string {
-	sort.Strings(s)
-	out := s[:0]
-	for i, v := range s {
-		if i == 0 || v != s[i-1] {
-			out = append(out, v)
-		}
-	}
-	return out
-}
-
-// backupLastPath is <state>/backup-last.json, the host's backup record:
-// $XDG_STATE_HOME/agentbus (else ~/.local/state/agentbus).
-func backupLastPath(p service.Paths) string {
-	return filepath.Join(p.StateHome, "agentbus", "backup-last.json")
 }

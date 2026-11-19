@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +33,8 @@ func newScheduleWorld(t *testing.T, extra string) *backupWorld {
 		for _, tpl := range tpls {
 			out = append(out, strings.TrimSuffix(filepath.Base(tpl), ".toml"))
 		}
-		return sortedUnique(out), nil
+		slices.Sort(out)
+		return slices.Compact(out), nil
 	}
 	return w
 }
