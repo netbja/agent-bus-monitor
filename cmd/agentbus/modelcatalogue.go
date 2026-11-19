@@ -63,13 +63,13 @@ func (r catalogueReader) run(ctx context.Context) (health.Outcome, error) {
 func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 	now := r.now()
 	in := health.ModelCatalogueInput{Now: now}
-	cfg, err := loadModelsConfig(r.config)
+	cfg, err := models.LoadConfigWithSettings(r.config)
 	if err != nil {
 		in.ReadErr = "models.toml unreadable"
 		return in
 	}
 	// G7: no service needed; a held lock or a failed reader keeps the table as it is.
-	_, _, _ = refreshTable(ctx, r.cache, cfg.Tiers, r.readers, now, catalogueRefreshBudget)
+	_, _, _ = models.RefreshTable(ctx, r.cache, cfg.Tiers, r.readers, now, catalogueRefreshBudget)
 	tbl, err := models.Load(r.cache)
 	if err != nil {
 		in.ReadErr = "model table unreadable"
@@ -132,7 +132,7 @@ func (r catalogueReader) input(ctx context.Context) health.ModelCatalogueInput {
 // held lock skips; a failed read is not recorded, so the next pass tries
 // again. It returns the providers read.
 func refreshForClients(ctx context.Context, path string, tiers models.TierMap, readers []models.Reader, updates map[string]string, now time.Time) ([]string, error) {
-	unlock, held, err := lockTable(path)
+	unlock, held, err := models.LockTable(path)
 	if err != nil || held {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func refreshForClients(ctx context.Context, path string, tiers models.TierMap, r
 // transcript shows it used become the table's alias record, a move an
 // alias event. Under the table's lock; a held lock skips.
 func recordAliases(path string, rows []doctorRow, now time.Time) error {
-	unlock, held, err := lockTable(path)
+	unlock, held, err := models.LockTable(path)
 	if err != nil || held {
 		return err
 	}
