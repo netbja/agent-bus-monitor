@@ -1,6 +1,6 @@
 # The dispatch service's runtime leaves `cmd/agentbus` for `internal/dispatchsvc`
 
-Status: spec, r2, for review (subject `dispatchsvc-extraction-spec`). Not built. Base: origin/dev
+Status: spec, r3, for review (subject `dispatchsvc-extraction-spec`). Not built. Base: origin/dev
 `60720b72`. Author: architect, from master's directive of 2026-11-19 relaying the person's go on
 "group A" of the extraction map (`docs/evaluations/2026-11-18-cmd-extraction-map.md` on
 `origin/ccr-b0a4afca-gd18ae`, not merged) and on architect's report `1795024304775-0`. No code in
@@ -18,8 +18,11 @@ Inside one package nothing stops a CLI command and a chore from calling each oth
 The move buys two things, and only these:
 
 1. **A wall the compiler holds.** The runtime can call the CLI only through what this spec names.
-2. **A guard test** (§6) that fails when the runtime imports what it must not, or runs a program
-   that is not on its list.
+2. **A guard test** (§6) that fails when the package imports what it must not (the CLI, the
+   screen, or a module package not on its list), or itself runs a program that is not on its
+   list. Programs run *inside* the module packages it imports (quota's readers, backup's hook,
+   the merge queue's forge CLIs, service's `systemctl`...) are not seen by the guard; a new path
+   to one is, through the pinned import list. §6 says exactly what each reaches.
 
 The move fixes no bug and changes no behaviour. The one bug found while writing this spec (the
 service's escalation target never reaches the stall checks and self-repair, §4 P0) is fixed in its
@@ -30,7 +33,7 @@ untouched. No stream, key, setting or `subscribe` field changes. `config/keys.go
 
 ## 2. The cut
 
-### 2.1 What moves (30 files, 6,376 lines, in the move PR)
+### 2.1 What moves (29 files, 6,354 lines, in the move PR; `deliverbase` leaves earlier, in P7)
 
 `healthchecks` `stallchecks` `selfrepairchore` `mergequeuechore` `selfrepairact` `notifyfacts`
 `reboot` `notifychore` `modelcatalogue` `runbudget` `redislatest` `githubcheck` `llmcheck`
@@ -147,13 +150,13 @@ it. None needs the quiet window: they are small, and a conflict is a rebase of a
 | P2 | `lifecycle/` | `hostBootID` (main.go) | 4 |
 | P2 | `service/` | the constant `gitWaitState` (servicerun.go) | 1 |
 | P3 | `holder/` | `holderReady`, `holderTermList`, `holderTerms` (holdercmd.go); `holderAnswersAny` (holderhealth.go, used by `servicecmd.go`) | ~60 |
-| P4 | `rolecfg/` | the doctor's rows: `doctorRows`, `doctorRow`, `doctorDeps`, `realDoctorDeps`, `claudeAlias` and their closure (doctor.go, ownprofile.go); the models check: `modelsCheckReport` and its closure (modelcheck.go) | ~470 |
+| P4 | `rolecfg/` | the doctor's rows: `doctorRows`, `doctorRow`, `doctorDeps`, `realDoctorDeps`, the `claudeAlias` pattern and their closure (doctor.go, ownprofile.go); the models check: `modelsCheckReport` and its closure (modelcheck.go) | ~470 |
 | P4 | `models/` | `loadModelsConfig`, `modelsGetenv` (modelscmd.go); `refreshTable`, `lockTable`, `refreshModelsUnderLock` (healthchores.go, used by `agentbus models`) | ~80 |
 | P5 | `backup/` | `makeArchive`, `archiveJob`, `backupDeps`, `realBackupDeps`, `hostProjects`, `backupLastPath`, `sortedUnique` (backupcmd.go) | ~140 |
 | P6 | `usage/` | `collectAgentUsage` and its two helpers (budget.go) | ~50 |
 | P6 | `peer/` | `endpointFPKey`, `endpointHost` (peer.go) | 14 |
 | P6 | `mergequeue/` | `mergeQueueInput` (mergequeuecmd.go) | 7 |
-| P6 | `notify/` | `desktopRun`, `notifyStateDir` (notificationscmd.go), `runQuiet` (quotacmd.go) | ~25 |
+| P6 | `notify/` | `desktopRun`, `notifyStateDir` (notificationscmd.go), `runQuiet` (quotacmd.go). `desktopRun` and `runQuiet` run a program (`exec.CommandContext(ctx, bin, args...)`): once in `notify/` they leave the guard's sight, and §6 lists `notify` as a package that runs programs | ~25 |
 | P6 | `internal/textfmt` | `runDuration` (run.go); the package comes from the small items, or this PR creates it with this one function | 10 |
 | P7 | `forge/` | `deliverbase.go` whole (`projectDeliveryBase`, used by `configcmd.go`, `missions.go` and the merge-queue chore) | 22 |
 | P8 | in place | the last reshaping inside `cmd/agentbus`, below | ~300 moved within the package |
@@ -195,7 +198,8 @@ together. Its CLI halves (`runDoctor`, the printing) stay.
    `suspend` and `swap` keep calling `dispatchRuntime`. The four future exports exist under their
    unexported names.
 3. `serviceRebootJudge` receives the boot id as an argument instead of calling `runBootID`.
-4. `withPopEnd` and `popEnd` are reached through the struct's `PopEnd` field only.
+4. `withPopEnd` (quotacmd.go 331, which stays) and `popEnd` (popend.go) are reached through the
+   struct's `PopEnd` field only.
 5. Every test function is put on its side of the cut (§5). A test file that holds both kinds is
    split in two files, its functions unchanged.
 6. The reference graph is run again. **P8 is done when the moving files need nothing from the
@@ -239,7 +243,7 @@ One test in `internal/dispatchsvc`, in the move PR. It parses the package's non-
 `config/literals_test.go` does for the module, and fails on any of:
 
 1. **An import of the CLI or the screen**: any path under `cmd/`, and `bubbletea`, `lipgloss`,
-   `bubbles`, `tcell`.
+   `bubbles` (tcell is gone from `go.mod` with remove-tcell; if not, it is on the list too).
 2. **An import of `mission`'s runner side.** The package may read mission records; it never calls
    what runs a mission's tests. The test names the forbidden functions (`mission.Run` at least).
 3. **`os/exec` in a file that is not on the list.** The list is the files that import it on the day
@@ -249,23 +253,49 @@ One test in `internal/dispatchsvc`, in the move PR. It parses the package's non-
    as its program, a string literal of the allowed set, or one of the variables the test names with
    the reason each is safe. The allowed set is what the code runs on the day of the move (`git`
    and `docker` on the base, and the probes' programs the coder lists from the code). A call whose
-   program the test cannot read fails.
+   program the test cannot read fails. Three calls take their program from a parameter on the
+   base, and the test names each as a **runner**: `runProbe` (githubcheck.go 153),
+   the default `Output` of the disk check (diskcheck.go 35-38), and the `--version` probe
+   (healthchecks.go 801). For a runner, the test checks every call site in the package instead:
+   the program argument there is a literal of the allowed set, or the test fails.
 5. **A shell.** A program that is a shell or runs one (`sh`, `bash`, `dash`, `zsh`, `env`, by
    name or as a path ending in one), whatever its arguments. A shell is never on the allowed set
    of rule 4, so this rule only makes the failure message say why. `-c` is not banned as such:
    `git -c core.fsmonitor=false -c core.pager=cat` (`gitSafe`, plandrift.go 83) is Git
    configuration and is the safe form.
 
+6. **A module import not on the list.** The package's non-test imports from this module
+   (`github.com/netbja/agent-bus-monitor/...`) are pinned to the list of the day of the move. A
+   new one fails the test, so a new path to a program through another package is reviewed, not
+   silent. The list marks the packages that run programs themselves, with what each runs (from
+   foureyes's review of r1, on the base; the coder re-reads it on the move's base):
+
+   | Package | Runs |
+   |---|---|
+   | `quota` | a configured usage reader through `sh -c` (generic.go), the Codex and Claude probes |
+   | `backup` | the after-hook (after.go), the secrets helper (secrets.go) |
+   | `mergequeue` | `git` and the forge CLIs (forge.go, git.go, delivered.go) |
+   | `service` | `systemctl` / `launchctl` |
+   | `holder` | the holder and its terminals |
+   | `models` | the model readers (readers.go) |
+   | `loginexpiry` | the keychain reader (keychain.go) |
+   | `rolecfg` | the launch and Grok hooks (launch.go, grokhooks.go) |
+   | `notify` | the desktop notifier (`desktopRun`, `runQuiet`, after P6) |
+
+   Adding a package to the list, or a program to what one runs, is a change reviewed against the
+   rule "the dispatcher never runs repository code"; the guard's comment says so.
+
 The guard also has positive cases, which must pass: `plandrift.go`'s `gitRead` with `gitSafe`,
 the `docker ps` probe, and the `--version` probe whose program is a variable (healthchecks.go 801)
 with the reason the test names for it.
 
-The PR shows the test failing four times, on a branch not pushed: with an import of
+The PR shows the test failing five times, on a branch not pushed: with an import of
 `cmd/agentbus`, with `exec.Command("make")`, with `exec.Command("sh", "-c", "true")`, and with
-`os/exec` imported in a new file.
+`os/exec` imported in a new file, and with a new import of a module package not on the list (`internal/scrub`).
 
-What the guard does not prove, stated in its comment: that `git` runs no repository code (hooks,
-`core.fsmonitor`). `plandrift.go` passes `gitSafe`; the other `git` callers do not all pass it.
+What the guard does not prove, stated in its comment: what the imported packages of rule 6 run
+(it pins *which* packages, not their insides; the table above is the review's record), and that
+`git` runs no repository code (hooks, `core.fsmonitor`). `plandrift.go` passes `gitSafe`; the other `git` callers do not all pass it.
 That is today's behaviour and it is out of scope (§9).
 
 ## 7. The move PR
@@ -359,7 +389,7 @@ detection, since each file moved whole. Its owner runs the full suite after the 
 | A branch in flight loses edits | The window; whole-file moves; abandon instead of rebase |
 | The exported surface grows | Five identifiers; a sixth needs architect's yes |
 | A pointer into the config dangles after the move | `Config` and `ForegroundConfig` take `*dispatch.Config`; P0's tests pin the escalation target on both paths |
-| The guard gives false comfort | Its comment says what it does not prove; the injected acts are named in §2.2 |
+| The guard gives false comfort | It claims only direct exec and the import list (§1, §6); rule 6 pins the module imports, and its table names what each imported package runs; the injected acts are named in §2.2 |
 | The installed build breaks | Master's live check, and a one-commit revert |
 | P4 is larger than it looks | It may be two PRs; nothing else depends on its order |
 
