@@ -92,6 +92,7 @@ func TestPaletteClassCArgv(t *testing.T) {
 		"/self-repair reset coder":       "--project agent-bus-monitor self-repair reset coder --as charlie",
 		"/priority slash-palette-c high": "--project agent-bus-monitor request priority slash-palette-c high --as charlie",
 		"/prio herdr-7b low":             "--project agent-bus-monitor request priority herdr-7b low --as charlie",
+		"/ci reset 42":                   "--project agent-bus-monitor ci reset 42",
 	} {
 		w := newPalCWorld(t, "charlie")
 		w.run(t, line)
@@ -159,6 +160,11 @@ func TestPaletteClassCChecksArguments(t *testing.T) {
 		"/priority bad! high":   "not a task name",
 		"/priority Task1 high":  "not a task name",
 		"/backup now":           "takes no argument",
+		"/ci 42":                "reset",
+		"/ci reset":             "needs its pr",
+		"/ci reset four":        "not a PR number",
+		"/ci reset 0":           "not a PR number",
+		"/ci reset -3":          "not a PR number",
 	} {
 		w := newPalCWorld(t, "charlie")
 		w.run(t, line)
@@ -227,7 +233,7 @@ func TestPaletteClassCCompletes(t *testing.T) {
 // The class C rows have no key and show none (§4.1); their usage names
 // their arguments.
 func TestPaletteClassCRows(t *testing.T) {
-	for _, n := range []string{"reload", "pause", "resume", "suspend", "backup", "self-repair", "priority"} {
+	for _, n := range []string{"reload", "pause", "resume", "suspend", "backup", "self-repair", "priority", "ci"} {
 		c := paletteFind(n)
 		if c == nil || c.Argv == nil {
 			t.Fatalf("%s: no class C row", n)
@@ -237,6 +243,9 @@ func TestPaletteClassCRows(t *testing.T) {
 		}
 	}
 	if u := paletteUsage(*paletteFind("self-repair")); u != "/self-repair reset <agent>" {
+		t.Errorf("usage %q", u)
+	}
+	if u := paletteUsage(*paletteFind("ci")); u != "/ci reset <pr>" {
 		t.Errorf("usage %q", u)
 	}
 	if u := paletteUsage(*paletteFind("reload")); u != "/reload <role> [fresh]" {
@@ -302,8 +311,8 @@ func TestPaletteClassCArgvIsInTheAgentbusTable(t *testing.T) {
 			}
 		}
 	}
-	if n != 7 {
-		t.Fatalf("%d class C rows, want 7", n)
+	if n != 8 {
+		t.Fatalf("%d class C rows, want 8", n)
 	}
 }
 
