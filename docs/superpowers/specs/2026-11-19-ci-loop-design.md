@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r1, not built. Idea 1 of
+Status: spec, r2, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -58,21 +58,40 @@ the same as when the merge queue cannot be read; that is never taken as "all gre
 
 ## 3. The owner
 
-The owner is the author of the head. For the PR's `headRefOid`, the verdict ledger is read for the
-verdicts that name that head:
+**Where the data comes from.** The owner is read from the verdict ledger, `{p}:verdicts`. That is a
+Redis stream, read with `bus.Verdicts(ctx, "")`, which the pass already calls each time for the
+merge queue (`vs` in `deriveRun`). There is no further read, no forge call and no subprocess.
 
-- one distinct `author`: that agent;
-- none (a head nobody had reviewed), or several authors: master, meaning the services' escalation
-  target, as `escalateTo` reads it today.
+**Which field.** Each ledger entry has two names:
 
-In this team every pushed head is a reviewed head: master pushes only after both approvals. So the
-author is the coder who wrote the change, and the ledger holds the answer with no new record.
+- `author`: the agent that opened the challenge, which is the one that wrote the change;
+- `reviewer`: the agent that gave the verdict.
 
-The board is not used. A request records a branch only when it is done (`--branch`), and only
+`head` is the full sha the reviewer read (`verdict --head`). The owner rule reads `author` and
+ignores `reviewer`. If two reviewers approve one head, both entries still carry the same author:
+the coder who challenged them. That counts as one author, not several.
+
+**The rule.** For the PR's `headRefOid`, take the set of distinct `author` values over the ledger
+entries whose `head` equals it:
+
+- one author: that agent is the owner;
+- none, meaning no entry names that head (a head pushed without a review, or one whose entries the
+  ledger has trimmed): master, meaning the services' escalation target, as `escalateTo` reads it
+  today;
+- two or more: master. Two agents each challenged the same commit, for example a coder and docs
+  agent on one shared branch. Neither is "the" author, and master knows who did what. This is
+  rare, and sending it to master is safe.
+
+In this team every pushed head is a reviewed head: master pushes only after both approvals. So in
+the usual case there is exactly one author, the coder, and the ledger holds the answer with no new
+record.
+
+**The board is not used.** A request records a branch only when it is done (`--branch`), and only
 sometimes; the ledger records a head on every approve.
 
 **Master is kept informed, without being woken.** The owner's directive is copied to master with
-`wake=no` (Q1). Master dispatches the work, and must know a PR went back to its author.
+`wake=no` (Q1). Master dispatches the work, so it must know a PR went back to its author. When the
+owner is master, there is no copy.
 
 ## 4. The loop
 
@@ -103,25 +122,67 @@ The directive reads:
 A pass whose PR is no longer open (merged, closed) deletes that PR's record, so a reopened PR, a
 rare case, starts at zero.
 
-### Writes: one fenced script
+### Writes: every entry of an action in one fenced script
 
-The check, the mark, the entry and the count all go in **one Lua script**, fenced by the lease token
-like every dispatcher write: `bus.FencedCIHandOff`, in `bus/`. If a pass crashes after the entry,
-it can never send it again with no count, or count it with nothing sent. The record is
-`{p}:ci`, one hash with one field per PR (`pr:<n>`). Each field holds its last episode, its count
-and whether it stopped, in a form the script reads, never a Go struct round-trip. Times are Redis
-`TIME`.
+One action (a hand-off or a stop) writes all of its entries and its record in **one Lua script**,
+fenced by the lease token like every dispatcher write. The script is `bus.FencedCIStep`, in `bus/`.
+It does not call the existing once-writers one after another. Redis runs a script with no other
+command in between, and a crash, a lost lease or a timeout in our process cannot stop it halfway.
+They can only fall **before** the script or **after** it.
 
-The script returns one of:
+Redis does not undo a script's earlier writes if a later line raises an error. So the script runs
+every check first and writes only in its last lines: the XADDs, then the HSET. Every argument
+is validated in Go before the call, so those lines have nothing left to refuse. No state exists
+where the record says "sent" but an entry is missing, or where the owner was told but master's
+copy was lost. That is why there is no outbox: there is never a write that is pending.
 
-- `sent`
-- `same` (no change)
-- `stopped` (the cap, stop announced now)
-- `stopped-before` (already stopped: nothing)
-- `not-holder`
+The record is `{p}:ci`, a hash with one field per PR (`pr:<n>`). Its value holds the last episode,
+the count and whether it stopped (`episode|count|stopped`). The script reads and writes it; it is
+never a Go struct round-trip. Times are Redis `TIME`.
 
-Master's copy and the person's notice use their existing once-writers with the same episode, so a
-retried pass writes each one at most once.
+**Keys:**
+
+- `{p}:dispatch`, the lease;
+- `{p}:ci`;
+- the `cmd` stream;
+- the `notify` stream;
+- the owner's swap key, `{p}:swap:<owner>`.
+
+**Arguments:**
+
+- the token;
+- the field;
+- the episode;
+- the cap;
+- the owner, master, and whether the owner is master;
+- the owner's directive, master's copy and the person's notice, already validated in Go (text,
+  names, types, as `onceCmdFields` does).
+
+**In order:**
+
+1. If the lease is not the token, return `not-holder`. Nothing is written.
+2. If the field's episode equals the argument, return `same`. Nothing is written.
+3. If the field says stopped, return `stopped-before`. Nothing is written.
+4. If the owner's swap key exists, return `swap`. Nothing is written, and the next pass tries again,
+   as the once-writers do (`ErrSwapInProgress`).
+5. If count is at or above the cap, this is the stop. XADD master's directive (`wake=no`) and the
+   person's notice (`for=person`). Set the field to `episode|count|1`. Return `stopped`.
+6. Otherwise, this is a hand-off. XADD the owner's directive, plus master's copy (`wake=no`) unless
+   the owner is master. Set the field to `episode|count+1|0`. Return `sent`.
+
+The held case (§4 step 2, the owner `blocked` or `waiting`) is decided in Go before the call. It
+calls nothing, so it writes nothing.
+
+**After a failure.** A pass that dies before the script, or whose script errors, wrote nothing. The
+next pass, 5 minutes later, sees the same red episode and runs the same script. A pass that dies
+after the script wrote everything. The next pass gets `same` and sends nothing again.
+
+The guarantee is: **each action is written whole, at most once per episode, and retried until it
+is written**, as long as the PR stays red with the same episode. If the episode changes before the
+write (a new head, or a different set of failing checks), the new episode is the one acted on. The
+old failure no longer exists to report.
+
+The person's `ci reset` is the only other writer: a script that deletes the field.
 
 ## 5. The stop, to the person
 
@@ -170,7 +231,10 @@ Tests, with a fake `gh` and the disposable broker:
 - an unknown owner and a two-author head go to master;
 - a closed PR deletes its record;
 - `ci reset` re-opens the loop;
-- the fenced script refuses a stale token;
+- the fenced script refuses a stale token and writes nothing;
+- a swap in progress writes nothing, and the next pass sends;
+- a hand-off writes the owner's entry, master's copy and the record together. A pass stopped before the script writes nothing, and the next pass writes all three. A pass stopped after it writes nothing more (`same`);
+- the owner rule: one author over two reviewers is that author; no entry, or two authors, is master;
 - no log field and no output of the command ever reaches an entry.
 
 One build step, one PR: the read, the record, the loop, the stop, `ci reset`, an operator-notes
