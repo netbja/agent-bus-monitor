@@ -1,6 +1,6 @@
 # A failed check goes back to its author, a few times, then to the person (ci-loop)
 
-Status: spec, r2, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. Idea 1 of
+Status: spec, r3, not built. r2: every write of one action in one script (reviewer-codex), and the owner rule's source and fields spelled out. r3 (reviewer-codex): a Redis error inside the script does not undo earlier writes. The types are preflighted, each part's progress is recorded, and the retry writes only what is missing. The guarantee is stated separately for our process stopping and for Redis refusing a command. Idea 1 of
 [the agent-orchestrator study](../../memory/open-questions/2026-11-19-ci-loop-and-status-ideas.md).
 The person said yes to a CI loop. It must stay simple and robust: when a PR's checks fail, a
 bounded loop hands the failure to the author, with a retry cap and a stop to the person. §8 lists
@@ -122,23 +122,33 @@ The directive reads:
 A pass whose PR is no longer open (merged, closed) deletes that PR's record, so a reopened PR, a
 rare case, starts at zero.
 
-### Writes: every entry of an action in one fenced script
+### Writes: one fenced script, with the progress of each part recorded
 
-One action (a hand-off or a stop) writes all of its entries and its record in **one Lua script**,
-fenced by the lease token like every dispatcher write. The script is `bus.FencedCIStep`, in `bus/`.
-It does not call the existing once-writers one after another. Redis runs a script with no other
-command in between, and a crash, a lost lease or a timeout in our process cannot stop it halfway.
-They can only fall **before** the script or **after** it.
+One action (a hand-off or a stop) is written by **one Lua script**, fenced by the lease token like
+every dispatcher write. The script is `bus.FencedCIStep`, in `bus/`. It does not call the existing
+once-writers one after another.
 
-Redis does not undo a script's earlier writes if a later line raises an error. So the script runs
-every check first and writes only in its last lines: the XADDs, then the HSET. Every argument
-is validated in Go before the call, so those lines have nothing left to refuse. No state exists
-where the record says "sent" but an entry is missing, or where the owner was told but master's
-copy was lost. That is why there is no outbox: there is never a write that is pending.
+The action has parts:
 
-The record is `{p}:ci`, a hash with one field per PR (`pr:<n>`). Its value holds the last episode,
-the count and whether it stopped (`episode|count|stopped`). The script reads and writes it; it is
-never a Go struct round-trip. Times are Redis `TIME`.
+- a hand-off: the owner's entry, and master's copy (`wake=no`) unless the owner is master;
+- a stop: master's directive (`wake=no`), and the person's notice (`for=person`).
+
+**Two kinds of failure, two guarantees.**
+
+- **Our process stops** (a crash, a lost lease, a timeout of the pass). Redis runs a script with no
+  other command in between, and our process cannot stop it halfway. The stop falls before the script
+  or after it, and the action is written whole or not at all.
+- **Redis refuses a command inside the script.** Redis does **not** undo the commands a script
+  already ran when a later one errors. So the script can stop with some parts written and others
+  not. It is built so that this case loses no part and duplicates at most one entry. It is also
+  reported, never hidden.
+
+**The record** is `{p}:ci`, a hash with one field per PR (`pr:<n>`). Its value is
+`episode|count|stopped|done`:
+
+- `done` is the set of parts already written for that episode (`o` owner, `m` master, `n` notice);
+- the script reads and writes it, never a Go struct round-trip;
+- times are Redis `TIME`.
 
 **Keys:**
 
@@ -155,32 +165,53 @@ never a Go struct round-trip. Times are Redis `TIME`.
 - the episode;
 - the cap;
 - the owner, master, and whether the owner is master;
-- the owner's directive, master's copy and the person's notice, already validated in Go (text,
-  names, types, as `onceCmdFields` does).
+- the three texts, validated in Go first (text, names, types, as `onceCmdFields` does).
 
 **In order:**
 
-1. If the lease is not the token, return `not-holder`. Nothing is written.
-2. If the field's episode equals the argument, return `same`. Nothing is written.
-3. If the field says stopped, return `stopped-before`. Nothing is written.
-4. If the owner's swap key exists, return `swap`. Nothing is written, and the next pass tries again,
-   as the once-writers do (`ErrSwapInProgress`).
-5. If count is at or above the cap, this is the stop. XADD master's directive (`wake=no`) and the
-   person's notice (`for=person`). Set the field to `episode|count|1`. Return `stopped`.
-6. Otherwise, this is a hand-off. XADD the owner's directive, plus master's copy (`wake=no`) unless
-   the owner is master. Set the field to `episode|count+1|0`. Return `sent`.
+1. If the lease is not the token, return `not-holder`.
+2. **Preflight the types.** If `{p}:ci` is not a hash and not absent, or a stream key is not a
+   stream and not absent, return `bad-type`. That covers a key a hand or another tool wrote with
+   another type, the case where a later XADD or HSET would fail.
+3. Read the field.
+   - If its episode equals the argument and every part of its action is in `done`, return `same`.
+   - If it is stopped and its stop is complete, return `stopped-before`.
+4. If the action has an owner's part not yet written and the owner's swap key exists, return `swap`.
+   The next pass tries again, as the once-writers do (`ErrSwapInProgress`).
+5. **Decide, once per episode.** If the field's episode is not the argument, this is a new action:
+   - a stop if the count is at or above the cap, else a hand-off;
+   - HSET the field to `episode|count'|stopped'|` with nothing done, before any entry, where count'
+     is count+1 for a hand-off and stays count for a stop.
 
-The held case (§4 step 2, the owner `blocked` or `waiting`) is decided in Go before the call. It
-calls nothing, so it writes nothing.
+   If the field's episode equals the argument, the action is the one already recorded and
+   unfinished. Its count is not decided again.
+6. **Each missing part:** XADD it, then at once HSET the field with that part added to `done`.
+7. Return `sent` or `stopped`.
 
-**After a failure.** A pass that dies before the script, or whose script errors, wrote nothing. The
-next pass, 5 minutes later, sees the same red episode and runs the same script. A pass that dies
-after the script wrote everything. The next pass gets `same` and sends nothing again.
+Steps 1 to 4 write nothing. The held case (§4 step 2, the owner `blocked` or `waiting`) is decided
+in Go before the call, so it writes nothing.
 
-The guarantee is: **each action is written whole, at most once per episode, and retried until it
-is written**, as long as the PR stays red with the same episode. If the episode changes before the
-write (a new head, or a different set of failing checks), the new episode is the one acted on. The
-old failure no longer exists to report.
+**Retry and recovery.** A script that errors at step 5 or 6 leaves a record of exactly what it did:
+the decision, and the parts listed in `done`. The pass returns the error, and the merge-queue
+record and health name it ("ci: write failed: …"). The next pass, 5 minutes later, sees the same
+red episode. Step 5 finds the action already decided, and step 6 writes only the parts not in
+`done`.
+
+- **No part is lost** while the PR stays red with the same episode.
+- **Each part is written once**, except one case: Redis takes the XADD, then refuses the HSET
+  right after it. Then that one part is written again on the retry. With the types checked at step 2,
+  what remains is the server refusing a write under `maxmemory` with no eviction. A duplicate
+  hand-off is harmless: the owner reads the same failure twice.
+- If the episode changes while an action is unfinished (a new head, or other failing checks), the
+  new episode's action replaces it. Its entries describe the failure as it now stands, and the
+  missing parts of the old action are not sent. The count already includes the old action's
+  hand-off.
+
+**Stated guarantee.**
+
+- If our process is interrupted, an action is written whole or not at all.
+- If Redis refuses a command, no part is lost while the episode lasts, at most one entry is
+  duplicated, and the error is reported.
 
 The person's `ci reset` is the only other writer: a script that deletes the field.
 
@@ -233,7 +264,10 @@ Tests, with a fake `gh` and the disposable broker:
 - `ci reset` re-opens the loop;
 - the fenced script refuses a stale token and writes nothing;
 - a swap in progress writes nothing, and the next pass sends;
-- a hand-off writes the owner's entry, master's copy and the record together. A pass stopped before the script writes nothing, and the next pass writes all three. A pass stopped after it writes nothing more (`same`);
+- a hand-off writes the owner's entry, master's copy and the record. A pass stopped before the script writes nothing, and the next pass writes all of it. A pass stopped after it writes nothing more (`same`);
+- a wrong-typed `{p}:ci`, cmd or notify key gives `bad-type` and writes nothing;
+- a script failure injected after the owner's XADD and its `done` mark: the retry writes master's copy only, the decision is not taken again, and the count does not move;
+- an episode that changes while its action is unfinished: the new action is decided, and the old one's missing part is not sent;
 - the owner rule: one author over two reviewers is that author; no entry, or two authors, is master;
 - no log field and no output of the command ever reaches an entry.
 
