@@ -896,7 +896,7 @@ var clientUpdateRefresh = func(ctx context.Context, ev []health.ClientEvidence) 
 	if len(updates) == 0 {
 		return
 	}
-	cfg, _ := loadModelsConfig(models.ConfigPath())
+	cfg, _ := models.LoadConfigWithSettings(models.ConfigPath(), modelsGetenv)
 	_, _ = refreshForClients(ctx, models.CachePath(), cfg.Tiers, models.Readers(models.RealEnv()), updates, time.Now())
 }
 

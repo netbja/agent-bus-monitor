@@ -372,37 +372,6 @@ func TestModelsAutoRefreshSkipsAHeldLock(t *testing.T) {
 	}
 }
 
-// foureyes (step 2, P2): a budget overrun still saves what was read: the
-// providers that answered keep their new rows, and the attempt time moves,
-// so the next `agentbus models` does not pay the budget again.
-func TestRefreshTableSavesWhatWasReadOnOverrun(t *testing.T) {
-	now := time.Now()
-	cache, _ := checkFixture(t, now)
-	age(t, cache, 25*time.Hour)
-	block := make(chan struct{})
-	defer close(block)
-	readers := []models.Reader{
-		{Provider: "xai", Read: func(context.Context) ([]models.Row, string, error) { <-block; return nil, "", nil }},
-		{Provider: "openai", Read: func(context.Context) ([]models.Row, string, error) {
-			return []models.Row{{Provider: "openai", ID: "gpt-7-sol"}}, "codex", nil
-		}},
-	}
-	failed, held, err := refreshTable(context.Background(), cache, nil, readers, now, 100*time.Millisecond)
-	if err != nil || held || failed["xai"] == "" {
-		t.Fatalf("failed %v held %v err %v", failed, held, err)
-	}
-	tbl, err := models.Load(cache)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p := tbl.Providers["openai"]; p.Rows[0].ID != "gpt-7-sol" || p.ReadAt != now.UnixMilli() {
-		t.Fatalf("the answered provider was not saved: %+v", p)
-	}
-	if tbl.RefreshedAt() != now.UnixMilli() {
-		t.Fatalf("attempt time %d, want %d", tbl.RefreshedAt(), now.UnixMilli())
-	}
-}
-
 // foureyes (step 2, P3): a table dated in the future (a clock moved back) is
 // refreshed, never trusted as young.
 func TestModelsAutoRefreshFutureTable(t *testing.T) {

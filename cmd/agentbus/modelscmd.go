@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -50,7 +49,7 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 		}
 		window = d
 	}
-	cfg, err := loadModelsConfig(configPath)
+	cfg, err := models.LoadConfigWithSettings(configPath, modelsGetenv)
 	if err != nil {
 		fmt.Fprintf(errw, "models: %v\n", err)
 		if refresh || check {
@@ -68,7 +67,7 @@ func runModels(ctx context.Context, args []string, env models.Env, cachePath, co
 			return 1
 		}
 	} else { // G7: any form refreshes a table over 24 h old, bounded, never blocking
-		failed, held, err := refreshTable(ctx, cachePath, cfg.Tiers, modelReaders(env, manifest, errw), now, autoRefreshBudget)
+		failed, held, err := models.RefreshTable(ctx, cachePath, cfg.Tiers, modelReaders(env, manifest, errw), now, autoRefreshBudget)
 		switch {
 		case err != nil:
 			fmt.Fprintf(errw, "models: automatic refresh: %v\n", err)
@@ -168,17 +167,6 @@ func modelReaders(env models.Env, manifest func() (*rolecfg.Manifest, error), er
 	return readers
 }
 
-// modelsGetenv reads models.source_max_age (a test replaces it).
-var modelsGetenv = os.Getenv
-
-// loadModelsConfig is models.toml with models.source_max_age from the
-// settings (config.toml or its env).
-func loadModelsConfig(path string) (models.Config, error) {
-	cfg, err := models.LoadConfig(path)
-	cfg.SourceMaxAge = config.Machine(modelsGetenv).Duration("models.source_max_age")
-	return cfg, err
-}
-
 // reportIncomplete names each provider a refresh could not read: its rows
 // are the previous ones (§3.5).
 func reportIncomplete(errw io.Writer, failed map[string]string) {
@@ -240,3 +228,6 @@ func printChanges(tbl *models.Table, provider string, window time.Duration, now 
 	}
 	return 0
 }
+
+// modelsGetenv reads models.source_max_age (a test replaces it).
+var modelsGetenv = os.Getenv
