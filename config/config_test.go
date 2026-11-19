@@ -114,6 +114,10 @@ func TestEnvRulesUnchanged(t *testing.T) {
 		{"dispatch.prompt_grace", "1.5", nil, "skip"},
 		{"dispatch.quota", "off", false, "use"},
 		{"dispatch.quota", "no", true, "use"},
+		{"ci.loop", "off", false, "use"}, // the operator note's "off turns it off"
+		{"ci.loop", "on", true, "use"},
+		{"ci.max_handoffs", "0", 0, "use"},
+		{"ci.max_handoffs", "-1", nil, "skip"},
 		{"dispatch.quota_warn", "70", 70.0, "use"},
 		{"dispatch.quota_warn", "x", nil, "skip"},
 		{"dispatch.quota_warn", "0", nil, "skip"},
