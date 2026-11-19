@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
 // resume-record-profile (2026-11-16), the self-repair half: master swapped
@@ -12,7 +13,7 @@ import (
 // profile; a profile of another client stays refused (its session is not
 // this client's).
 func TestSelfRepairResumesOurOwnForcedSwap(t *testing.T) {
-	m, _ := teamFixture(t)
+	m, _ := cmdtest.TeamManifest(t)
 	for _, c := range []struct {
 		name, role       string
 		rec              bus.ResumeRecord
