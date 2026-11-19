@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/netbja/agent-bus-monitor/internal/bustest"
 	"github.com/netbja/agent-bus-monitor/notify"
 )
 
@@ -78,24 +78,6 @@ topic = "agentbus-9876543210"
 
 func (h notifyHome) getenv(k string) string {
 	return map[string]string{"HOME": h.home}[k]
-}
-
-func notifyBus(t *testing.T) *bus.Bus {
-	t.Helper()
-	testredis.Configure(t)
-	r, err := bus.Connect("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := bus.Open(r, "notify"+strconv.FormatInt(time.Now().UnixNano(), 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _, _ = bus.DeleteProject(context.Background(), r, b.Project()); _ = r.Close() })
-	if ok, err := b.AcquireDispatch(context.Background(), "tok", time.Minute); err != nil || !ok {
-		t.Fatalf("lease %v %v", ok, err)
-	}
-	return b
 }
 
 func newNotifier(b *bus.Bus, h notifyHome, f *fakeSender) *notifier {
@@ -349,3 +331,5 @@ func TestPromptSkipOnlyAfterTheDesktopBaseline(t *testing.T) {
 		t.Fatal("skipped with no desktop target listed")
 	}
 }
+
+var notifyBus = bustest.Leased

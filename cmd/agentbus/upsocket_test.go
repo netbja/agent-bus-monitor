@@ -26,8 +26,8 @@ func TestUpRefusesAHolderSocketThatCannotFit(t *testing.T) {
 	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 1 {
 		t.Fatalf("up = %d, want 1\n%s\n%s", code, out.String(), errw.String())
 	}
-	if len(*boot) != 0 || len(u.m.calls) != 0 || len(h.started()) != 0 {
-		t.Fatalf("something started: bootstrap %q, manager %q, agents %v", *boot, u.m.calls, h.started())
+	if len(*boot) != 0 || len(u.m.Calls) != 0 || len(h.started()) != 0 {
+		t.Fatalf("something started: bootstrap %q, manager %q, agents %v", *boot, u.m.Calls, h.started())
 	}
 	for _, want := range []string{"agentbus up:", "holder socket path", "XDG_RUNTIME_DIR", "nothing started"} {
 		if !strings.Contains(errw.String(), want) {

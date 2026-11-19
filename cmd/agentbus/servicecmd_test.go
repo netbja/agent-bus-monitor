@@ -11,99 +11,9 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/service"
 )
-
-// fakeManager is a service manager in memory: installed specs, active set,
-// and every call.
-type fakeManager struct {
-	specs     map[string]service.Spec
-	active    map[string]bool
-	calls     []string
-	failStart bool
-	failState bool                    // every State read fails
-	stopErr   func(p, k string) error // nil = every stop succeeds
-	failList  bool                    // List fails after the first removal
-	removed   int
-	onCall    func(call string) // nil = nothing; told each start and stop as it happens
-}
-
-func newFakeManager() *fakeManager {
-	return &fakeManager{specs: map[string]service.Spec{}, active: map[string]bool{}}
-}
-
-func (f *fakeManager) Name() string { return "fake" }
-func (f *fakeManager) Install(s service.Spec) (bool, error) {
-	f.calls = append(f.calls, "install "+s.Project+" "+s.Kind)
-	key := s.Project + "/" + s.Kind
-	old, had := f.specs[key]
-	f.specs[key] = s
-	return !had || strings.Join(old.Args, " ") != strings.Join(s.Args, " ") || old.Exe != s.Exe, nil
-}
-func (f *fakeManager) Start(p, k string) error {
-	f.calls = append(f.calls, "start "+p+" "+k)
-	if f.onCall != nil {
-		f.onCall("start " + p + " " + k)
-	}
-	if f.failStart {
-		return errors.New("start refused")
-	}
-	f.active[p+"/"+k] = true
-	return nil
-}
-func (f *fakeManager) Stop(p, k string) error {
-	f.calls = append(f.calls, "stop "+p+" "+k)
-	if f.onCall != nil {
-		f.onCall("stop " + p + " " + k)
-	}
-	if f.stopErr != nil {
-		if err := f.stopErr(p, k); err != nil {
-			return err
-		}
-	}
-	f.active[p+"/"+k] = false
-	return nil
-}
-func (f *fakeManager) Remove(p, k string) error {
-	f.calls = append(f.calls, "remove "+p+" "+k)
-	delete(f.specs, p+"/"+k)
-	f.removed++
-	delete(f.active, p+"/"+k)
-	return nil
-}
-func (f *fakeManager) State(p, k string) (service.State, error) {
-	if f.failState {
-		return service.State{}, errors.New("cannot read the unit")
-	}
-	_, inst := f.specs[p+"/"+k]
-	st := service.State{Installed: inst, Status: "inactive (dead)"}
-	if f.active[p+"/"+k] {
-		st.Active, st.Status, st.PID = true, "active (running)", 99
-	}
-	return st, nil
-}
-func (f *fakeManager) List() ([]service.Unit, error) {
-	if f.failList && f.removed > 0 {
-		return nil, errors.New("cannot list units")
-	}
-	var out []service.Unit
-	for _, k := range service.Kinds {
-		for key := range f.specs {
-			if p, kind, _ := strings.Cut(key, "/"); kind == k {
-				out = append(out, service.Unit{Project: p, Kind: kind})
-			}
-		}
-	}
-	return out, nil
-}
-func (f *fakeManager) saw(c string) bool {
-	for _, x := range f.calls {
-		if x == c {
-			return true
-		}
-	}
-	return false
-}
 
 func cmdFixture(t *testing.T) (*fakeManager, serviceCmdDeps) {
 	root := t.TempDir()
@@ -125,8 +35,8 @@ func TestServiceCmdStartStopLogsRemove(t *testing.T) {
 	if code := runServiceCmd("demo", []string{"start"}, d, &out, &errw); code != 0 {
 		t.Fatalf("start = %d %s", code, errw.String())
 	}
-	if !m.saw("start demo dispatch") || !m.saw("start demo missions") || m.saw("start other dispatch") {
-		t.Fatalf("calls = %v", m.calls)
+	if !m.Saw("start demo dispatch") || !m.Saw("start demo missions") || m.Saw("start other dispatch") {
+		t.Fatalf("calls = %v", m.Calls)
 	}
 	if budget.Spent(time.Now()) {
 		t.Fatal("an explicit start kept the spent budget")
@@ -215,8 +125,8 @@ func TestDownStopsServicesAndExplainsAnInterruptedIntegration(t *testing.T) {
 	if code := runDown([]string{p}, d, &out, &errw); code != 0 {
 		t.Fatalf("down = %d %s", code, errw.String())
 	}
-	if !m.saw("stop "+p+" dispatch") || !m.saw("stop "+p+" missions") || m.saw("remove "+p+" dispatch") {
-		t.Fatalf("calls = %v", m.calls)
+	if !m.Saw("stop "+p+" dispatch") || !m.Saw("stop "+p+" missions") || m.Saw("remove "+p+" dispatch") {
+		t.Fatalf("calls = %v", m.Calls)
 	}
 	for _, want := range []string{"running roles-go rev 2", "interrupted", "redoes it at the next start", "nothing deleted", "agentbus up " + p} {
 		if !strings.Contains(out.String(), want) {
@@ -238,7 +148,7 @@ func TestServiceRemoveKeepsTheMarkerWhenTheListFails(t *testing.T) {
 	d.Bus = func(p string) (*bus.Bus, error) { return bus.Open(r, p) }
 	m.Install(service.Spec{Project: b.Project(), Kind: service.Dispatch})
 	m.Install(service.Spec{Project: b.Project(), Kind: service.Missions})
-	m.failList = true
+	m.FailList = true
 	var out, errw bytes.Buffer
 	runServiceCmd(b.Project(), []string{"remove", "dispatch"}, d, &out, &errw)
 	runServiceCmd("", []string{"remove", "--all"}, d, &out, &errw)
@@ -294,3 +204,7 @@ func TestServiceCmdDetachedSaysItsLimits(t *testing.T) {
 		t.Fatalf("login = %d %q", code, errw.String())
 	}
 }
+
+type fakeManager = cmdtest.Manager
+
+var newFakeManager = cmdtest.NewManager

@@ -14,8 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-
-	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/netbja/agent-bus-monitor/internal/bustest"
 )
 
 // lastEvent parses the final non-empty JSON line emitted by runSubscribe.
@@ -46,29 +45,6 @@ func (s *syncBuf) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
-}
-
-// dialMain returns a project-scoped Bus on a throwaway project plus a raw client
-// (tests need the client to pre-create consumer groups). Requires explicit test
-// configuration; an unavailable configured broker fails rather than skips.
-func dialMain(t *testing.T) (*bus.Bus, *redis.Client) {
-	t.Helper()
-	testredis.Configure(t)
-	r, err := bus.Connect("")
-	if err != nil {
-		t.Fatalf("explicit test Redis unavailable: %v", err)
-	}
-	project := "t" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	b, err := bus.Open(r, project)
-	if err != nil {
-		t.Fatalf("Open(%q): %v", project, err)
-	}
-	t.Cleanup(func() {
-		ctx := context.Background()
-		r.Del(ctx, bus.StreamKey(project, "cmd"), bus.ArmedKey(project, "dev"))
-		r.Close()
-	})
-	return b, r
 }
 
 func TestRunSubscribeFatalOnBadAgent(t *testing.T) {
@@ -499,3 +475,5 @@ func TestSubscribeDrainBrief(t *testing.T) {
 		t.Fatal("--brief without --drain accepted")
 	}
 }
+
+var dialMain = bustest.Open

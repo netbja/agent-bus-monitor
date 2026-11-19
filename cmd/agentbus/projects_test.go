@@ -23,10 +23,10 @@ func projectsRig(t *testing.T) (projectsDeps, *fakeManager) {
 		t.Fatal(err)
 	}
 	m := newFakeManager()
-	m.specs["demo/dispatch"] = service.Spec{}
-	m.specs["demo/missions"] = service.Spec{}
-	m.active["demo/dispatch"] = true
-	m.specs["orphan/dispatch"] = service.Spec{Project: "orphan", Kind: "dispatch"}
+	m.Specs["demo/dispatch"] = service.Spec{}
+	m.Specs["demo/missions"] = service.Spec{}
+	m.Active["demo/dispatch"] = true
+	m.Specs["orphan/dispatch"] = service.Spec{Project: "orphan", Kind: "dispatch"}
 	env := map[string]string{"AGENTBUS_PROJECTS_DIR": dir}
 	return projectsDeps{
 		Env: func(k string) string { return env[k] },

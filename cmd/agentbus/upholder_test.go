@@ -26,7 +26,7 @@ type fakeHolderManager struct {
 
 func (f *fakeHolderManager) InstallHolder(s service.HolderSpec) (bool, error) {
 	key := service.BuildKey(s.Raw)
-	f.calls = append(f.calls, "install-holder "+s.Project+" "+key)
+	f.Calls = append(f.Calls, "install-holder "+s.Project+" "+key)
 	f.holders[key] = s
 	for _, u := range f.units {
 		if u.Project == s.Project && u.Key == key {
@@ -37,7 +37,7 @@ func (f *fakeHolderManager) InstallHolder(s service.HolderSpec) (bool, error) {
 	return true, nil
 }
 func (f *fakeHolderManager) StartHolder(project, key string) error {
-	f.calls = append(f.calls, "start-holder "+project+" "+key)
+	f.Calls = append(f.Calls, "start-holder "+project+" "+key)
 	f.active[key] = true
 	return nil
 }
@@ -45,7 +45,7 @@ func (f *fakeHolderManager) HolderActive(project, key string) (bool, error) {
 	return f.active[key], f.activeErr
 }
 func (f *fakeHolderManager) RemoveHolder(project, key string) error {
-	f.calls = append(f.calls, "remove-holder "+project+" "+key)
+	f.Calls = append(f.Calls, "remove-holder "+project+" "+key)
 	for i, u := range f.units {
 		if u.Project == project && u.Key == key {
 			f.units = append(f.units[:i], f.units[i+1:]...)
@@ -98,7 +98,7 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 			return false
 		}
 		probes++
-		hm.calls = append(hm.calls, fmt.Sprintf("probe %d", probes))
+		hm.Calls = append(hm.Calls, fmt.Sprintf("probe %d", probes))
 		return probes >= 3
 	}
 	deps.Sleep = func(time.Duration) {}
@@ -127,7 +127,7 @@ func TestUpInstallsAndStartsTheHolder(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(service.HolderBinDir(u.paths, key), "agentbus")); err != nil || string(b) != "#!/bin/sh\n" {
 		t.Fatalf("the binary copy: %q %v", b, err)
 	}
-	calls := strings.Join(hm.calls, "\n")
+	calls := strings.Join(hm.Calls, "\n")
 	for _, c := range []string{"install-holder demo " + key, "start-holder demo " + key, "remove-holder demo " + gone} {
 		if !strings.Contains(calls, c) {
 			t.Fatalf("missing %q in\n%s", c, calls)
@@ -169,7 +169,7 @@ func TestUpWithoutAHolderManagerInstallsNoHolder(t *testing.T) {
 }
 
 func (f *fakeHolderManager) StopHolder(project, key string) error {
-	f.calls = append(f.calls, "stop-holder "+project+" "+key)
+	f.Calls = append(f.Calls, "stop-holder "+project+" "+key)
 	if f.failStop[key] {
 		return errors.New("manager error")
 	}
@@ -178,7 +178,7 @@ func (f *fakeHolderManager) StopHolder(project, key string) error {
 }
 
 func (f *fakeHolderManager) RestartHolder(project, key string) error {
-	f.calls = append(f.calls, "restart-holder "+project+" "+key)
+	f.Calls = append(f.Calls, "restart-holder "+project+" "+key)
 	return nil
 }
 
@@ -206,14 +206,14 @@ func TestServiceRestartHolderNeedsKillAgents(t *testing.T) {
 	if !strings.Contains(errw.String(), "3 agent") || !strings.Contains(errw.String(), "--kill-agents") {
 		t.Fatalf("stderr %q", errw.String())
 	}
-	if strings.Contains(strings.Join(hm.calls, " "), "restart-holder") {
-		t.Fatalf("restarted: %v", hm.calls)
+	if strings.Contains(strings.Join(hm.Calls, " "), "restart-holder") {
+		t.Fatalf("restarted: %v", hm.Calls)
 	}
 
 	d, hm = newDeps(0, errors.New("no holder answers"))
 	errw.Reset()
-	if code := runServiceCmd("demo", []string{"restart", "holder"}, d, &out, &errw); code == 0 || strings.Contains(strings.Join(hm.calls, " "), "restart-holder") {
-		t.Fatalf("an uncounted holder restarted: %v", hm.calls)
+	if code := runServiceCmd("demo", []string{"restart", "holder"}, d, &out, &errw); code == 0 || strings.Contains(strings.Join(hm.Calls, " "), "restart-holder") {
+		t.Fatalf("an uncounted holder restarted: %v", hm.Calls)
 	}
 	if !strings.Contains(errw.String(), "no holder answers") {
 		t.Fatalf("stderr %q", errw.String())
@@ -224,8 +224,8 @@ func TestServiceRestartHolderNeedsKillAgents(t *testing.T) {
 	if code := runServiceCmd("demo", []string{"restart", "holder", "--kill-agents"}, d, &out, &errw); code != 0 {
 		t.Fatalf("exit %d: %s", code, errw.String())
 	}
-	if !hm.saw("restart-holder demo " + key) {
-		t.Fatalf("calls %v", hm.calls)
+	if !hm.Saw("restart-holder demo " + key) {
+		t.Fatalf("calls %v", hm.Calls)
 	}
 	if !strings.Contains(out.String(), "holder: restarted") {
 		t.Fatalf("out %q", out.String())
@@ -390,8 +390,8 @@ func TestUpHolderNeverReady(t *testing.T) {
 	if waited < 4*time.Second || waited > 6*time.Second {
 		t.Fatalf("waited %v, want about 5 s", waited)
 	}
-	if !u.m.saw("start demo dispatch") || !strings.Contains(out.String(), "not answering yet") {
-		t.Fatalf("calls %v out %q", u.m.calls, out.String())
+	if !u.m.Saw("start demo dispatch") || !strings.Contains(out.String(), "not answering yet") {
+		t.Fatalf("calls %v out %q", u.m.Calls, out.String())
 	}
 }
 

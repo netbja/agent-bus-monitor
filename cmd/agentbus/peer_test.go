@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,24 +14,9 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/peer"
 )
-
-func modelsServer(t *testing.T, models ...string) *httptest.Server {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/models" {
-			http.NotFound(w, r)
-			return
-		}
-		var data []map[string]string
-		for _, m := range models {
-			data = append(data, map[string]string{"id": m})
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
 
 func peerEnv(t *testing.T, configBody string) func(string) string {
 	t.Helper()
@@ -325,3 +309,5 @@ func TestPeerRootRefusesTheConfigurationDirectory(t *testing.T) {
 		}
 	}
 }
+
+var modelsServer = cmdtest.ModelsServer

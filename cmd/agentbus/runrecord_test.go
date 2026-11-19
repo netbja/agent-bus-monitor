@@ -64,7 +64,7 @@ func TestUpWritesRunningBeforeTheServices(t *testing.T) {
 	u := withServices(t, &deps)
 	dir := u.paths.StateDir("demo")
 	starts := 0
-	u.m.onCall = func(call string) {
+	u.m.OnCall = func(call string) {
 		if r, err := lifecycle.ReadRun(dir); err != nil || r.State != lifecycle.Running || r.Boot != "boot-up" {
 			t.Errorf("%s before the run record: %+v %v", call, r, err)
 		}
@@ -87,10 +87,10 @@ func TestDownWritesDownBeforeStopping(t *testing.T) {
 	withBoot(t, "boot-down")
 	m, d := cmdFixture(t)
 	m.Install(service.Spec{Project: "demo", Kind: service.Dispatch})
-	m.Start(m.specs["demo/dispatch"].Project, service.Dispatch)
+	m.Start(m.Specs["demo/dispatch"].Project, service.Dispatch)
 	dir := d.Paths.StateDir("demo")
 	stops := 0
-	m.onCall = func(call string) {
+	m.OnCall = func(call string) {
 		if r, err := lifecycle.ReadRun(dir); err != nil || r.Cause != lifecycle.CauseDown {
 			t.Errorf("%s before the run record: %+v %v", call, r, err)
 		}
@@ -112,7 +112,7 @@ func TestSuspendWritesTheRunRecord(t *testing.T) {
 	w := newSuspendWorld(t)
 	w.agent("master", "idle")
 	stops := 0
-	w.mgr.onCall = func(call string) {
+	w.mgr.OnCall = func(call string) {
 		if r, err := lifecycle.ReadRun(w.state); err != nil || r.Cause != lifecycle.CauseSuspend || r.Boot != "boot-s" {
 			t.Errorf("%s before the run record: %+v %v", call, r, err)
 		}

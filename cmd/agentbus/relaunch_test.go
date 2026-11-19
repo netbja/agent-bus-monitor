@@ -129,14 +129,14 @@ func TestUpLockFailsClosed(t *testing.T) {
 func TestUpHookStartsStoppedServicesOnly(t *testing.T) {
 	_, _, _, boot, deps := upFixture(t)
 	u := withServices(t, &deps)
-	u.m.specs["demo/dispatch"] = service.Spec{Project: "demo", Kind: "dispatch"}
-	u.m.specs["demo/missions"] = service.Spec{Project: "demo", Kind: "missions"}
-	u.m.active["demo/missions"] = true
+	u.m.Specs["demo/dispatch"] = service.Spec{Project: "demo", Kind: "dispatch"}
+	u.m.Specs["demo/missions"] = service.Spec{Project: "demo", Kind: "missions"}
+	u.m.Active["demo/missions"] = true
 	var out, errw bytes.Buffer
 	if code := upHook(deps, "demo", "w4", &out, &errw); code != 0 {
 		t.Fatalf("hook = %d: %s", code, errw.String())
 	}
-	if got := strings.Join(u.m.calls, ","); got != "start demo dispatch" {
+	if got := strings.Join(u.m.Calls, ","); got != "start demo dispatch" {
 		t.Fatalf("manager calls = %q", got)
 	}
 	if len(*boot) != 0 || !strings.Contains(out.String(), "dispatch started") {

@@ -18,8 +18,8 @@ import (
 func TestUpStartsWithoutMissionsOnAFolderWithoutGit(t *testing.T) {
 	work, _, h, _, deps := upFixture(t)
 	u := withServices(t, &deps)
-	u.m.specs["demo/"+service.Missions] = service.Spec{Project: "demo", Kind: service.Missions} // an earlier up's unit,
-	u.m.active["demo/"+service.Missions] = true                                                 // waiting for git init
+	u.m.Specs["demo/"+service.Missions] = service.Spec{Project: "demo", Kind: service.Missions} // an earlier up's unit,
+	u.m.Active["demo/"+service.Missions] = true                                                 // waiting for git init
 	var asked []string
 	deps.GitRepo = func(dir string) bool { asked = append(asked, dir); return false }
 	var out, errw bytes.Buffer
@@ -29,14 +29,14 @@ func TestUpStartsWithoutMissionsOnAFolderWithoutGit(t *testing.T) {
 	if len(asked) != 1 || asked[0] != work {
 		t.Fatalf("git asked of %q, want the project folder", asked)
 	}
-	if len(u.m.calls) == 0 || slices.Contains(u.m.calls, "start demo "+service.Missions) || slices.Contains(u.m.calls, "install demo "+service.Missions) {
-		t.Fatalf("missions installed or started: %q", u.m.calls)
+	if len(u.m.Calls) == 0 || slices.Contains(u.m.Calls, "start demo "+service.Missions) || slices.Contains(u.m.Calls, "install demo "+service.Missions) {
+		t.Fatalf("missions installed or started: %q", u.m.Calls)
 	}
-	if !slices.Contains(u.m.calls, "start demo "+service.Dispatch) {
-		t.Fatalf("dispatch not started: %q", u.m.calls)
+	if !slices.Contains(u.m.Calls, "start demo "+service.Dispatch) {
+		t.Fatalf("dispatch not started: %q", u.m.Calls)
 	}
-	if !slices.Contains(u.m.calls, "stop demo "+service.Missions) || u.m.active["demo/"+service.Missions] {
-		t.Fatalf("the waiting missions service was left running: %q", u.m.calls)
+	if !slices.Contains(u.m.Calls, "stop demo "+service.Missions) || u.m.Active["demo/"+service.Missions] {
+		t.Fatalf("the waiting missions service was left running: %q", u.m.Calls)
 	}
 	if len(u.marks) != 1 || strings.Join(u.marks[0].Kinds, ",") != service.Dispatch {
 		t.Fatalf("marks %+v: missions must not be expected", u.marks)
@@ -79,7 +79,7 @@ func TestUpStartsMissionsInAGitRepository(t *testing.T) {
 		strings.Join(u.marks[0].Kinds, ",") != service.Dispatch+","+service.Missions {
 		t.Fatalf("up in a repository = %d (marks %+v): %s", code, u.marks, errw.String())
 	}
-	if !slices.Contains(u.m.calls, "start demo "+service.Missions) || strings.Contains(out.String(), "git init") {
-		t.Fatalf("calls %q, out %q", u.m.calls, out.String())
+	if !slices.Contains(u.m.Calls, "start demo "+service.Missions) || strings.Contains(out.String(), "git init") {
+		t.Fatalf("calls %q, out %q", u.m.Calls, out.String())
 	}
 }

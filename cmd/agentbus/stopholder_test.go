@@ -38,25 +38,25 @@ func TestServiceStopHolder(t *testing.T) {
 	}
 
 	d, hm := newDeps(live{n: 0, answered: true})
-	if code, out, errw := stop(d, old); code != 0 || !hm.saw("stop-holder demo "+service.BuildKey(old)) || !strings.Contains(out, "holder (build "+old+"): stopped") || !strings.Contains(out, "service gc") {
-		t.Fatalf("an empty older holder: code %d out %q err %q calls %v", code, out, errw, hm.calls)
+	if code, out, errw := stop(d, old); code != 0 || !hm.Saw("stop-holder demo "+service.BuildKey(old)) || !strings.Contains(out, "holder (build "+old+"): stopped") || !strings.Contains(out, "service gc") {
+		t.Fatalf("an empty older holder: code %d out %q err %q calls %v", code, out, errw, hm.Calls)
 	}
 	d, hm = newDeps(live{n: 0, answered: true})
-	if code, _, _ := stop(d, service.BuildKey(old)); code != 0 || !hm.saw("stop-holder demo "+service.BuildKey(old)) {
-		t.Fatalf("by its key: code %d calls %v", code, hm.calls)
+	if code, _, _ := stop(d, service.BuildKey(old)); code != 0 || !hm.Saw("stop-holder demo "+service.BuildKey(old)) {
+		t.Fatalf("by its key: code %d calls %v", code, hm.Calls)
 	}
 	// reviewer-codex: a holder whose unit runs but whose socket does not
 	// answer may still hold agents: refused, never stopped.
 	d, hm = newDeps(live{n: 0, answered: false})
-	if code, _, errw := stop(d, old); code == 0 || !strings.Contains(errw, "runs but does not answer") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
-		t.Fatalf("an active holder that does not answer: code %d err %q calls %v", code, errw, hm.calls)
+	if code, _, errw := stop(d, old); code == 0 || !strings.Contains(errw, "runs but does not answer") || strings.Contains(strings.Join(hm.Calls, " "), "stop-holder") {
+		t.Fatalf("an active holder that does not answer: code %d err %q calls %v", code, errw, hm.Calls)
 	}
 	// foureyes: a unit state that cannot be read is refused, never read as
 	// "not running".
 	d, hm = newDeps(live{n: 0, answered: false})
 	hm.activeErr = errors.New("systemctl: bus unreachable")
-	if code, out, errw := stop(d, old); code != 1 || !strings.Contains(errw, "cannot be read") || strings.Contains(out, "not running") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
-		t.Fatalf("unreadable state: code %d out %q err %q calls %v", code, out, errw, hm.calls)
+	if code, out, errw := stop(d, old); code != 1 || !strings.Contains(errw, "cannot be read") || strings.Contains(out, "not running") || strings.Contains(strings.Join(hm.Calls, " "), "stop-holder") {
+		t.Fatalf("unreadable state: code %d out %q err %q calls %v", code, out, errw, hm.Calls)
 	}
 	// The refusal of a running holder that does not answer names what the
 	// person can still do.
@@ -67,8 +67,8 @@ func TestServiceStopHolder(t *testing.T) {
 	// Its unit not running: nothing to stop, gc removes it.
 	d, hm = newDeps(live{n: 0, answered: false})
 	hm.active[service.BuildKey(old)] = false
-	if code, out, _ := stop(d, old); code != 0 || !strings.Contains(out, "not running") || !strings.Contains(out, "service gc") || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
-		t.Fatalf("an inactive holder: code %d out %q calls %v", code, out, hm.calls)
+	if code, out, _ := stop(d, old); code != 0 || !strings.Contains(out, "not running") || !strings.Contains(out, "service gc") || strings.Contains(strings.Join(hm.Calls, " "), "stop-holder") {
+		t.Fatalf("an inactive holder: code %d out %q calls %v", code, out, hm.Calls)
 	}
 	for name, c := range map[string]struct {
 		l    live
@@ -84,8 +84,8 @@ func TestServiceStopHolder(t *testing.T) {
 	} {
 		d, hm := newDeps(c.l)
 		code, _, errw := stop(d, c.args...)
-		if code == 0 || !strings.Contains(errw, c.want) || strings.Contains(strings.Join(hm.calls, " "), "stop-holder") {
-			t.Errorf("%s: code %d err %q calls %v", name, code, errw, hm.calls)
+		if code == 0 || !strings.Contains(errw, c.want) || strings.Contains(strings.Join(hm.Calls, " "), "stop-holder") {
+			t.Errorf("%s: code %d err %q calls %v", name, code, errw, hm.Calls)
 		}
 	}
 }

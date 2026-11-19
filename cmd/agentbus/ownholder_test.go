@@ -40,7 +40,7 @@ func TestEnsureOwnHolderInstallsTheMissingBuild(t *testing.T) {
 	if err := ensureOwnHolder(deps, hm, "demo", "/work/demo", &out); err != nil {
 		t.Fatal(err)
 	}
-	calls := strings.Join(hm.calls, "\n")
+	calls := strings.Join(hm.Calls, "\n")
 	for _, c := range []string{"install-holder demo " + key, "start-holder demo " + key} {
 		if !strings.Contains(calls, c) {
 			t.Fatalf("missing %q in\n%s", c, calls)
@@ -69,8 +69,8 @@ func TestEnsureOwnHolderLeavesAnAnsweringHolder(t *testing.T) {
 	if err := ensureOwnHolder(deps, hm, "demo", "/work/demo", &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(hm.calls) != 0 || out.Len() != 0 {
-		t.Fatalf("calls %v, out %q", hm.calls, out.String())
+	if len(hm.Calls) != 0 || out.Len() != 0 {
+		t.Fatalf("calls %v, out %q", hm.Calls, out.String())
 	}
 }
 
@@ -177,8 +177,8 @@ func TestServiceEnsureHolderRefusesAReplacedBinary(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "replaced since the dispatcher started") {
 				t.Fatalf("err = %v", err)
 			}
-			if len(hm.calls) != 0 {
-				t.Fatalf("installed from a replaced binary: %v", hm.calls)
+			if len(hm.Calls) != 0 {
+				t.Fatalf("installed from a replaced binary: %v", hm.Calls)
 			}
 		})
 	}

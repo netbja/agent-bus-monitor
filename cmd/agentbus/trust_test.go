@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
 func mkdir(t *testing.T, parts ...string) string {
@@ -13,14 +15,6 @@ func mkdir(t *testing.T, parts ...string) string {
 		t.Fatal(err)
 	}
 	return p
-}
-
-func write(t *testing.T, path, body string) string {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 func TestTabClient(t *testing.T) {
@@ -58,3 +52,5 @@ skills = ["agent-bus"]
 		}
 	}
 }
+
+var write = cmdtest.Write
