@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 // Claude Code hands its statusLine command the account's windows on stdin
@@ -174,7 +176,7 @@ func RecordStatusline(path string, stdin []byte, now time.Time) error {
 			return nil
 		}
 		b, _ := json.Marshal(claudeStore{Windows: merged})
-		return writeAtomic(path, b)
+		return files.WriteAtomic(path, b)
 	})
 }
 
@@ -193,27 +195,6 @@ func withLock(path string, f func() error) error {
 	}
 	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
 	return f()
-}
-
-// writeAtomic writes b to path (0600) through a rename.
-func writeAtomic(path string, b []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".quota-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }
 
 // ClaudeReader reads the account's windows from the CLI's get_usage first

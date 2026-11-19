@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 // Config is ~/.config/agentbus/quota.toml (spec §5): built-in readers are on
@@ -213,7 +215,7 @@ func (c Cached) Read(ctx context.Context) (Reading, error) {
 			return err
 		}
 		b, _ := json.Marshal(r)
-		return writeAtomic(path, b)
+		return files.WriteAtomic(path, b)
 	})
 	return r, err
 }

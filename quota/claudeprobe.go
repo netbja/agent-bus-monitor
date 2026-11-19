@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 // Claude Code answers a control request, get_usage, over its stream-json
@@ -72,7 +74,7 @@ func (p *ClaudeProbe) Windows(ctx context.Context) ([]Window, int64, string) {
 			rec.Windows, rec.Note = parseClaudeUsage(body)
 		}
 		b, _ := json.Marshal(rec)
-		return writeAtomic(p.Cache, b)
+		return files.WriteAtomic(p.Cache, b)
 	})
 	if err != nil {
 		return nil, 0, "get_usage: " + err.Error()

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/netbja/agent-bus-monitor/internal/files"
 )
 
 // busmon's settings page writes config.toml (spec
@@ -347,9 +349,9 @@ func target(path string) (string, error) {
 	return "", errors.New("config.toml cannot be read")
 }
 
-// writeAtomic writes text to path (its symlink's target) through a temporary
-// file in the same directory, renamed over it: a crash leaves the old file or
-// the new one.
+// writeAtomic writes text to path (its symlink's target) through
+// files.WriteAtomic: a crash leaves the old file or the new one. The directory
+// is made here first, for its own error.
 func writeAtomic(path, text string) error {
 	path, err := target(path)
 	if err != nil {
@@ -359,28 +361,7 @@ func writeAtomic(path, text string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return errors.New("the config directory cannot be created")
 	}
-	tmp, err := os.CreateTemp(dir, ".config.toml.*")
-	if err != nil {
-		return errors.New("config.toml cannot be written")
-	}
-	name := tmp.Name()
-	defer os.Remove(name) // a no-op once renamed
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return errors.New("config.toml cannot be written")
-	}
-	if _, err := tmp.WriteString(text); err != nil {
-		tmp.Close()
-		return errors.New("config.toml cannot be written")
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return errors.New("config.toml cannot be written")
-	}
-	if err := tmp.Close(); err != nil {
-		return errors.New("config.toml cannot be written")
-	}
-	if err := os.Rename(name, path); err != nil {
+	if err := files.WriteAtomic(path, []byte(text)); err != nil {
 		return errors.New("config.toml cannot be written")
 	}
 	return nil
