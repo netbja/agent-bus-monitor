@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -122,10 +123,16 @@ func TestSettingsWarningsAreSaid(t *testing.T) {
 	if strings.Count(out, "quota_warn") != 1 {
 		t.Errorf("not once:\n%s", out)
 	}
+	printSettingsWarnings(func(string) string { return "" }, &buf)
+}
+
+// TestSettingsWarningsAreSaid's bad value falls back in the dispatcher's
+// quota settings.
+func TestSettingsBadValueFallsBack(t *testing.T) {
+	getenv := withConfig(t, "[dispatch]\nquota_warn = 0\n[x]\ntoken = \"SECRET-v\"\n", nil)
 	if q := serviceQuota(getenv, io.Discard); q.WarnPct != 85 {
 		t.Errorf("the bad value did not fall back: %v", q.WarnPct)
 	}
-	printSettingsWarnings(func(string) string { return "" }, &buf)
 }
 
 // service run logs the settings warnings once at start.
@@ -166,12 +173,31 @@ func TestServicePopRetire(t *testing.T) {
 	}
 }
 
+// TestWithPopEnd's two literals are exactly what servicePopRetire gives for
+// no setting and for pop_retire = false: the link is checked, not assumed.
+func TestServicePopRetireGivesWithPopEndsLiterals(t *testing.T) {
+	missions := func(context.Context, string) ([]string, error) { return nil, nil }
+	fn := func(f any) uintptr { return reflect.ValueOf(f).Pointer() }
+	for _, tc := range []struct {
+		body string
+		want dispatch.PopRetireConfig
+	}{
+		{"", dispatch.PopRetireConfig{On: true, After: 15 * time.Minute, Missions: missions, ProcStart: dispatch.ProcStart}},
+		{"[dispatch]\npop_retire = false\n", dispatch.PopRetireConfig{On: false, After: 15 * time.Minute, Missions: missions, ProcStart: dispatch.ProcStart}},
+	} {
+		c := servicePopRetire(withConfig(t, tc.body, nil), missions)
+		if c.On != tc.want.On || c.After != tc.want.After || fn(c.Missions) != fn(tc.want.Missions) || fn(c.ProcStart) != fn(tc.want.ProcStart) || c.End != nil {
+			t.Errorf("%q: %+v, want %+v", tc.body, c, tc.want)
+		}
+	}
+}
+
 // pop-retire-auto: the dispatcher ends a done pop itself when it can reach
 // the project's herdr session (the services' env names it); without one,
 // End stays nil and master is told as before. Off, nothing is set.
 func TestWithPopEnd(t *testing.T) {
 	missions := func(context.Context, string) ([]string, error) { return nil, nil }
-	c := servicePopRetire(withConfig(t, "", nil), missions)
+	c := dispatch.PopRetireConfig{On: true, After: 15 * time.Minute, Missions: missions, ProcStart: dispatch.ProcStart} // servicePopRetire with no setting (TestServicePopRetireGivesWithPopEndsLiterals)
 	env := func(string) string { return "" }
 	if withPopEnd(c, nil, nil, env).End != nil {
 		t.Error("an End with no project's bus")
@@ -183,7 +209,7 @@ func TestWithPopEnd(t *testing.T) {
 	if withPopEnd(c, b, nil, env).End == nil { // the pop's terminal closes on the project's holder
 		t.Error("no End for a project")
 	}
-	off := servicePopRetire(withConfig(t, "[dispatch]\npop_retire = false\n", nil), missions)
+	off := dispatch.PopRetireConfig{On: false, After: 15 * time.Minute, Missions: missions, ProcStart: dispatch.ProcStart} // servicePopRetire with pop_retire = false
 	if withPopEnd(off, b, nil, env).End != nil {
 		t.Error("an End with pop_retire off")
 	}

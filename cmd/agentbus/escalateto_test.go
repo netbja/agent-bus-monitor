@@ -105,20 +105,6 @@ func TestForegroundDispatchEscalatesToItsTarget(t *testing.T) {
 	}
 }
 
-// The reboot judge the service builds escalates to the service's target,
-// master when it has none.
-func TestServiceRebootJudgeEscalatesToTheTarget(t *testing.T) {
-	w := newStallWorld(t)
-	paths := escalateEnv(t)
-	for _, tc := range []struct{ in, want string }{{"lead", "lead"}, {"", "master"}} {
-		target := tc.in
-		j := serviceRebootJudge(w.b, w.b.Project(), paths, func(string) string { return "" }, t.TempDir(), runBootID(), &target, io.Discard)
-		if got := j.escalate(); got != tc.want {
-			t.Errorf("%q: reboot judge target %q", tc.in, got)
-		}
-	}
-}
-
 // The reboot judge in the service's config (cfg.Reboot, the one the service
 // runs) tells the service's target that the team restarts: this boot is
 // already judged a restart, so the judge gives its directive again.

@@ -431,7 +431,23 @@ func TestServiceDispatchConfigJudgesTheReboot(t *testing.T) {
 	if cfg.Reboot == nil {
 		t.Fatal("the dispatch service judges no reboot")
 	}
-	j := serviceRebootJudge(b, "demo", paths, os.Getenv, root, runBootID(), nil, io.Discard)
+}
+
+// The service's reboot judge (reboot-resume §3) reads this project's state
+// directory and the boot it is given, and the machine's settings; that the
+// service's config has one is TestServiceDispatchConfigJudgesTheReboot.
+func TestServiceRebootJudgeReadsItsSettings(t *testing.T) {
+	root := t.TempDir()
+	for k, v := range map[string]string{"HOME": root, "XDG_CONFIG_HOME": root + "/cfg", "XDG_STATE_HOME": root + "/state",
+		"XDG_DATA_HOME": root + "/data", "XDG_RUNTIME_DIR": root + "/run"} {
+		t.Setenv(k, v)
+	}
+	b, err := bus.Open(redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
+	j := serviceRebootJudge(b, "demo", paths, os.Getenv, root, "B7", nil, io.Discard)
 	if j.dir != paths.StateDir("demo") || j.boot != "B7" || j.escalate() != "master" {
 		t.Fatalf("judge %+v", j)
 	}
@@ -477,5 +493,20 @@ func TestJudgeTellsAfterAStopBeforeTelling(t *testing.T) {
 	}
 	if r := w.runRecord(); r.Boot != "B1" || r.State != lifecycle.Running {
 		t.Fatalf("run record %+v", r)
+	}
+}
+
+// The reboot judge the service builds escalates to the service's target,
+// master when it has none.
+func TestServiceRebootJudgeEscalatesToTheTarget(t *testing.T) {
+	w := newStallWorld(t)
+	root := t.TempDir()
+	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
+	for _, tc := range []struct{ in, want string }{{"lead", "lead"}, {"", "master"}} {
+		target := tc.in
+		j := serviceRebootJudge(w.b, w.b.Project(), paths, func(string) string { return "" }, t.TempDir(), "B7", &target, io.Discard)
+		if got := j.escalate(); got != tc.want {
+			t.Errorf("%q: reboot judge target %q", tc.in, got)
+		}
 	}
 }
