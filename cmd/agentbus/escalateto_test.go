@@ -118,3 +118,32 @@ func TestServiceRebootJudgeEscalatesToTheTarget(t *testing.T) {
 		}
 	}
 }
+
+// The reboot judge in the service's config (cfg.Reboot, the one the service
+// runs) tells the service's target that the team restarts: this boot is
+// already judged a restart, so the judge gives its directive again.
+func TestServiceRebootEscalatesToItsTarget(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{{"lead", "lead"}, {"", "master"}} {
+		w := newStallWorld(t)
+		paths := escalateEnv(t)
+		withBoot(t, "B7")
+		got := captureSupervised(t)
+		d := serviceRunDepsFor(w.b.Project(), "", "h1", paths)
+		if code := d.RunDispatch(context.Background(), w.b, tc.in, nil, io.Discard); code != 0 {
+			t.Fatalf("RunDispatch = %d", code)
+		}
+		rec := bus.RebootRecord{Boot: "B7", Verdict: bus.RebootRestarting, N: 1, Max: 3, Window: 86400000}
+		if err := w.b.FencedPutReboot(context.Background(), "stall-holder", rec); err != nil {
+			t.Fatal(err)
+		}
+		if got.Reboot == nil {
+			t.Fatal("the service judges no reboot")
+		}
+		if err := got.Reboot(context.Background(), "stall-holder"); err != nil {
+			t.Fatal(err)
+		}
+		if told := w.dispatchDirectives(tc.want); len(told) != 1 || !strings.Contains(told[0], "restarted after an unplanned stop") {
+			t.Errorf("%q: directives to %s %q", tc.in, tc.want, told)
+		}
+	}
+}
