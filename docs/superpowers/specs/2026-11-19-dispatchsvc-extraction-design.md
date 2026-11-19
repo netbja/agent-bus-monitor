@@ -1,6 +1,6 @@
 # The dispatch service's runtime leaves `cmd/agentbus` for `internal/dispatchsvc`
 
-Status: spec, r1, for review (subject `dispatchsvc-extraction-spec`). Not built. Base: origin/dev
+Status: spec, r2, for review (subject `dispatchsvc-extraction-spec`). Not built. Base: origin/dev
 `60720b72`. Author: architect, from master's directive of 2026-11-19 relaying the person's go on
 "group A" of the extraction map (`docs/evaluations/2026-11-18-cmd-extraction-map.md` on
 `origin/ccr-b0a4afca-gd18ae`, not merged) and on architect's report `1795024304775-0`. No code in
@@ -21,7 +21,9 @@ The move buys two things, and only these:
 2. **A guard test** (§6) that fails when the runtime imports what it must not, or runs a program
    that is not on its list.
 
-The move fixes no bug and changes no behaviour. It is not a refactoring of the runtime: no function
+The move fixes no bug and changes no behaviour. The one bug found while writing this spec (the
+service's escalation target never reaches the stall checks and self-repair, §4 P0) is fixed in its
+own PR before the move, never inside it. The move is not a refactoring of the runtime: no function
 is rewritten, renamed for taste, split or merged. Both binaries keep their paths
 (`./cmd/agentbus`, `./cmd/busmon`), so the installer, the build id and the release check are
 untouched. No stream, key, setting or `subscribe` field changes. `config/keys.go` is not edited.
@@ -94,12 +96,13 @@ type Deps struct {
 	PopEnd  func(dispatch.PopRetireConfig, dispatch.Runtime) dispatch.PopRetireConfig
 }
 
-// Config is the dispatch service's whole configuration and its runtime.
-func Config(d Deps) (dispatch.Config, *dispatch.HostRuntime, error)
+// Config fills cfg, which the caller owns and keeps, with the dispatch service's
+// whole configuration, and returns its runtime. cfg starts as d.Base.
+func Config(d Deps, cfg *dispatch.Config) (*dispatch.HostRuntime, error)
 
-// ForegroundConfig adds to cfg what the foreground agentbus dispatch runs:
-// the pop's end, the health checks, the reload policy.
-func ForegroundConfig(d Deps, cfg dispatch.Config, rt dispatch.Runtime) dispatch.Config
+// ForegroundConfig adds to cfg, in place, what the foreground agentbus dispatch
+// runs: the pop's end, the health checks, the reload policy.
+func ForegroundConfig(d Deps, cfg *dispatch.Config, rt dispatch.Runtime)
 
 // Runtime is the dispatcher's runtime on the project's holder.
 func Runtime(project string, getenv func(string) string) (*dispatch.HostRuntime, error)
@@ -113,6 +116,13 @@ func MergeQueueLive(ctx context.Context, b *bus.Bus, getenv func(string) string)
   closure over `withPopEnd`, `runBootID()` and `os.Getwd()`. The values are the ones read today.
 - `ForegroundConfig` is the six lines `runDispatch` runs today (dispatchcmd.go 44-50). It keeps the
   foreground command from importing three functions by name.
+- **Both take `*dispatch.Config`, never a value.** The health checks and self-repair keep
+  `&cfg.EscalateTo` (`realHealthConfig`, `newStallReader`, `serviceSelfRepair`): the escalation
+  target is read when a check fires, and the caller sets it after building the configuration
+  (`runDispatch` parses `--escalate-to` after line 46; `RunDispatch` sets it from
+  `service run --escalate-to` or `AGENT_BUS_ESCALATE_TO`). A configuration copied after those
+  pointers are taken loses every later write. The pointer must be into the config the caller keeps
+  and hands to the loop. A rule for any later field read through a pointer: same.
 - `Runtime` is `dispatchRuntime`, called by `main`, `suspend` and `swap`.
 - `MergeQueueLive` replaces the two symbols `merge-queue --live` reaches into (the chore's
   constructor and its `derive`). `false` is today's "no working directory".
@@ -131,6 +141,7 @@ it. None needs the quiet window: they are small, and a conflict is a rebase of a
 
 | PR | To | What (from) | Lines |
 |---|---|---|---|
+| P0 | in place | **A bug fix, first** (below) | ~30 + tests |
 | P1 | `relaunch/` | `replaced` (swap.go), `resumeChoice` (upteam.go), `recoveryHint` (recoveryhint.go) | ~50 |
 | P1 | `mission/` | `missionsOf` (swap.go): it reads `mission.Store` and nothing else | 23 |
 | P2 | `lifecycle/` | `hostBootID` (main.go) | 4 |
@@ -147,6 +158,26 @@ it. None needs the quiet window: they are small, and a conflict is a rebase of a
 | P7 | `forge/` | `deliverbase.go` whole (`projectDeliveryBase`, used by `configcmd.go`, `missions.go` and the merge-queue chore) | 22 |
 | P8 | in place | the last reshaping inside `cmd/agentbus`, below | ~300 moved within the package |
 
+**P0, the escalation target of the service (a behaviour change, so not part of the move).** On
+the base, `serviceDispatchConfig` (servicecmd.go 720) builds a local `cfg`, hands `&cfg.EscalateTo`
+to `realHealthConfig` (744) and `serviceSelfRepair` (746), and returns `cfg` by value. Its caller
+`RunDispatch` (servicecmd.go 783-792) then sets `cfg.EscalateTo` on the returned copy. So with
+`agentbus service run --escalate-to coordinator`, or `AGENT_BUS_ESCALATE_TO=coordinator`, the
+loop's own notices go to `coordinator` while the stall checks and self-repair still escalate to
+the default `master`. The foreground `agentbus dispatch --escalate-to` is right today, only because
+`realHealthConfig` there points into `runDispatch`'s own variable.
+
+The fix: `serviceDispatchConfig` fills a `*dispatch.Config` its caller owns, and `RunDispatch`
+sets `EscalateTo` on that same value before `superviseDispatch`. Tests:
+
+- the service path with an escalation target `coordinator`: the stall reader's and self-repair's
+  target read `coordinator` (fails on the base);
+- the foreground path: `--escalate-to coordinator` given after the health config is built is the
+  stall reader's target (it passes on the base; it pins the pointer identity the move must keep).
+
+Mutants: return the config by value again; take the pointer of a copy. Both must fail a test.
+The move's P8 and the move PR keep these tests on the `cmd/agentbus` side (rule 3 of §5).
+
 `manifestPath` (roles.go) needs no PR: `rolecfg.ManifestPath` exists; P8 points the moving files at
 it if they differ in nothing, and says so if they do.
 
@@ -154,12 +185,13 @@ it if they differ in nothing, and says so if they do.
 `usage` imports `bus` only). It is two PRs if the doctor and the models check do not review well
 together. Its CLI halves (`runDoctor`, the printing) stay.
 
-**P8, the reshaping in place, is the last prerequisite and needs P1-P7 merged.** Still inside
+**P8, the reshaping in place, is the last prerequisite and needs P0-P7 merged.** Still inside
 `package main`, where every test compiles before and after:
 
 1. The eleven functions of §2.1 are gathered in one new file, unchanged.
-2. `serviceDispatchConfig` takes a struct shaped as §3's `Deps`; `runDispatch` calls a
-   `foregroundConfig` function; `merge-queue --live` calls a `mergeQueueLive` function; `main`,
+2. `serviceDispatchConfig` takes a struct shaped as §3's `Deps` and the caller's
+   `*dispatch.Config` (P0 already made it a pointer); `runDispatch` calls a `foregroundConfig`
+   function on `&cfg`, before its flag loop, as today; `merge-queue --live` calls a `mergeQueueLive` function; `main`,
    `suspend` and `swap` keep calling `dispatchRuntime`. The four future exports exist under their
    unexported names.
 3. `serviceRebootJudge` receives the boot id as an argument instead of calling `runBootID`.
@@ -218,10 +250,19 @@ One test in `internal/dispatchsvc`, in the move PR. It parses the package's non-
    the reason each is safe. The allowed set is what the code runs on the day of the move (`git`
    and `docker` on the base, and the probes' programs the coder lists from the code). A call whose
    program the test cannot read fails.
-5. **A shell.** `sh`, `bash`, `-c` as a program or first argument, in any call.
+5. **A shell.** A program that is a shell or runs one (`sh`, `bash`, `dash`, `zsh`, `env`, by
+   name or as a path ending in one), whatever its arguments. A shell is never on the allowed set
+   of rule 4, so this rule only makes the failure message say why. `-c` is not banned as such:
+   `git -c core.fsmonitor=false -c core.pager=cat` (`gitSafe`, plandrift.go 83) is Git
+   configuration and is the safe form.
 
-The PR shows the test failing three times, on a branch not pushed: with an import of
-`cmd/agentbus`, with `exec.Command("make")`, and with `os/exec` imported in a new file.
+The guard also has positive cases, which must pass: `plandrift.go`'s `gitRead` with `gitSafe`,
+the `docker ps` probe, and the `--version` probe whose program is a variable (healthchecks.go 801)
+with the reason the test names for it.
+
+The PR shows the test failing four times, on a branch not pushed: with an import of
+`cmd/agentbus`, with `exec.Command("make")`, with `exec.Command("sh", "-c", "true")`, and with
+`os/exec` imported in a new file.
 
 What the guard does not prove, stated in its comment: that `git` runs no repository code (hooks,
 `core.fsmonitor`). `plandrift.go` passes `gitSafe`; the other `git` callers do not all pass it.
@@ -317,6 +358,7 @@ detection, since each file moved whole. Its owner runs the full suite after the 
 | Behaviour drifts in a "move" | P8 does the reshaping while everything is one package and every test still compiles; the move PR allows five kinds of change and the diff is read with rename detection |
 | A branch in flight loses edits | The window; whole-file moves; abandon instead of rebase |
 | The exported surface grows | Five identifiers; a sixth needs architect's yes |
+| A pointer into the config dangles after the move | `Config` and `ForegroundConfig` take `*dispatch.Config`; P0's tests pin the escalation target on both paths |
 | The guard gives false comfort | Its comment says what it does not prove; the injected acts are named in §2.2 |
 | The installed build breaks | Master's live check, and a one-commit revert |
 | P4 is larger than it looks | It may be two PRs; nothing else depends on its order |
