@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -114,7 +115,7 @@ func ModelsEnv(dir, maxAge string) func(string) string {
 		switch k {
 		case "HOME", "XDG_CONFIG_HOME":
 			return dir
-		case "AGENT_BUS_MODELS_SOURCE_MAX_AGE":
+		case config.EnvName("models.source_max_age"):
 			return maxAge
 		}
 		return ""
