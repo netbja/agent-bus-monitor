@@ -24,3 +24,7 @@ From 2026-11-17:
 - [Updating from busmon, without setup.sh](open-questions/2026-11-17-busmon-update.md)
 - [The Fable profile's permission mode](open-questions/2026-11-17-fable-permissions.md)
 - [Holder G2: a PTY owner and a restartable core](open-questions/2026-11-17-holder-g2-split.md)
+
+From 2026-11-19:
+
+- [A CI loop to the branch's owner, newer-client detection, richer Claude state (from agent-orchestrator)](open-questions/2026-11-19-ci-loop-and-status-ideas.md)
