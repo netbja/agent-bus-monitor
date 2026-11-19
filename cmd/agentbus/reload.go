@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"os"
 	"os/exec"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/relaunch"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/clientfp"
@@ -341,12 +342,12 @@ func runReload(ctx context.Context, b *bus.Bus, d reloadDeps, self string, args 
 		profile = own.Profile
 	}
 	if err := d.Relaunch(ctx, role, profile, session); err != nil {
-		return failed("relaunch", "the old client is gone and the relaunch failed: %v; %s", err, recoveryHint(b.Project(), role, profile, session))
+		return failed("relaunch", "the old client is gone and the relaunch failed: %v; %s", err, relaunch.RecoveryHint(b.Project(), role, profile, session))
 	}
 	var proved bus.AgentSnapshot
 	for deadline := d.Now().Add(d.Proof); ; d.Sleep(500 * time.Millisecond) {
 		if now, err := b.Agents(ctx); err == nil {
-			if s, ok := now[role]; ok && replaced(s, snap, own, d.ProcStart) {
+			if s, ok := now[role]; ok && relaunch.Replaced(s, snap, own, d.ProcStart) {
 				proved = s
 				break
 			}

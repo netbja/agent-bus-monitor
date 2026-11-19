@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/selfrepair"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -233,7 +234,7 @@ func (c *selfRepairChore) repair(ctx context.Context, token string, d selfrepair
 			why = "failed: " + err.Error() + "; no proof"
 		}
 		fin = bus.SwapEvent{Role: role, Event: bus.SwapFailed, By: "dispatch", OldPID: snap.PID, OldPane: snap.Pane, Episode: ep, Error: why,
-			Reason: recoveryHint(c.project, role, profile, session)}
+			Reason: relaunch.RecoveryHint(c.project, role, profile, session)}
 	}
 	msg := owedMsg{Mark: "selfrepair-done:" + role, Episode: ep,
 		Text: fmt.Sprintf("self-repair: %s relaunched (pid %d -> %d, pane %s -> %s, %s).", role, snap.PID, fin.NewPID, snap.Pane, fin.NewPane, fin.Reason)}
@@ -278,7 +279,7 @@ func (c *selfRepairChore) prove(ctx context.Context, role string, old bus.AgentS
 		if err != nil {
 			continue
 		}
-		if s, ok := snaps[role]; ok && own.Client != "" && replaced(s, old, own, c.procStart) {
+		if s, ok := snaps[role]; ok && own.Client != "" && relaunch.Replaced(s, old, own, c.procStart) {
 			return s, true
 		}
 	}

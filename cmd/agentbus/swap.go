@@ -17,6 +17,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/mission"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
@@ -297,7 +298,7 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 	for deadline := d.Now().Add(d.Proof); ; d.Sleep(500 * time.Millisecond) {
 		cur, err := b.Agents(ctx)
 		if err == nil {
-			if s, ok := cur[role]; ok && replaced(s, snap, target, d.ProcStart) {
+			if s, ok := cur[role]; ok && relaunch.Replaced(s, snap, target, d.ProcStart) {
 				proved = s
 				break
 			}
@@ -395,7 +396,7 @@ func openWork(ctx context.Context, b *bus.Bus, agent string, fail func(string, .
 	if err != nil {
 		return fail("%v", err)
 	}
-	missions, err := missionsOf(ctx, b, agent)
+	missions, err := mission.HeldBy(ctx, b, agent)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -406,17 +407,6 @@ func openWork(ctx context.Context, b *bus.Bus, agent string, fail func(string, .
 	sort.Strings(open)
 	return fail("it takes part in open work that is keyed by its name; close it first (verdict, mission reassign):\n  %s",
 		strings.Join(open, "\n  "))
-}
-
-// replaced: the snapshot proves a new process of the chosen profile.
-func replaced(s, old bus.AgentSnapshot, p rolecfg.Profile, procStart func(int) (uint64, error)) bool {
-	if s.PID == 0 || s.PID == old.PID && s.PIDStart == old.PIDStart || s.Pane == "" || s.Pane == old.Pane {
-		return false
-	}
-	if start, err := procStart(s.PID); err != nil || start != s.PIDStart {
-		return false
-	}
-	return s.Client == p.Client && s.Provider == p.Provider
 }
 
 // swapResumeText is the directive of the agent's in-flight work, if any.
@@ -444,31 +434,6 @@ func swapResumeText(ctx context.Context, b *bus.Bus, role string, old bus.AgentS
 	}
 	return fmt.Sprintf("You replace %s on the profile %s: the previous process stopped mid-work. "+
 		"Resume where it stopped (%s): read the board and your thread, then report as usual.", role, profile, what), true, nil
-}
-
-// missionsOf lists the mission attempts agent is assigned to, in progress.
-func missionsOf(ctx context.Context, b *bus.Bus, agent string) ([]string, error) {
-	st := mission.Store{B: b}
-	changes, err := st.Changes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, c := range changes {
-		ms, err := st.Missions(ctx, c)
-		if err != nil {
-			return nil, err
-		}
-		for id, r := range ms {
-			switch r.State {
-			case mission.Requested, mission.Accepted, mission.Delivered, mission.Checking:
-				if r.Current.Agent == agent {
-					out = append(out, fmt.Sprintf("mission %s/%s (%s)", c, id, r.State))
-				}
-			}
-		}
-	}
-	return out, nil
 }
 
 // releaseResumeQueued: the dispatcher's resume to agent for provider's current episode

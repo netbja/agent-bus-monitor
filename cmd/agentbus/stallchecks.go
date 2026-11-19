@@ -13,6 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -402,7 +403,7 @@ func (s *stallReader) readOpenWork(ctx context.Context, team map[string]bus.Agen
 				open.Handoffs = append(open.Handoffs, name)
 			}
 		}
-		ms, err := missionsOf(ctx, s.b, name)
+		ms, err := mission.HeldBy(ctx, s.b, name)
 		if err != nil {
 			return "missions unavailable", err
 		}

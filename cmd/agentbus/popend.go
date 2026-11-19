@@ -10,6 +10,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/mission"
 )
 
 // popEnd is the dispatcher's own end of a done pop (pop-retire-auto, decision
@@ -60,7 +61,7 @@ func popEnd(ctx context.Context, b *bus.Bus, d swapDeps, token, role string, epi
 	popDone := func(own string) (bool, string) {
 		f := dispatch.ReadPopFacts(ctx, b, d.Runtime, role, dispatch.PopReadOptions{
 			Now: d.Now(), RetireAfter: d.PopRetireAfter, OwnIntent: own, Episode: episode, ProcStart: d.ProcStart,
-			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }})
+			Missions: func(ctx context.Context, agent string) ([]string, error) { return mission.HeldBy(ctx, b, agent) }})
 		switch {
 		case closed && !f.Closed:
 			return false, "its process is gone but the holder still has its terminal"
@@ -163,7 +164,7 @@ func openWorkOf(ctx context.Context, b *bus.Bus, agent string) string {
 	if err != nil {
 		return err.Error()
 	}
-	missions, err := missionsOf(ctx, b, agent)
+	missions, err := mission.HeldBy(ctx, b, agent)
 	if err != nil {
 		return err.Error()
 	}

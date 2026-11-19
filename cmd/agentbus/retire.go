@@ -12,6 +12,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/mission"
 )
 
 // `agentbus retire <role> [--reason <text>] [--now]` (v0.15.1 §11.1): close
@@ -95,7 +96,7 @@ func runRetire(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []
 	popDone := func(own string) (bool, string) {
 		f := dispatch.ReadPopFacts(ctx, b, d.Runtime, role, dispatch.PopReadOptions{
 			Now: d.Now(), RetireAfter: d.PopRetireAfter, OwnIntent: own, Episode: episode, ProcStart: d.ProcStart,
-			Missions: func(ctx context.Context, agent string) ([]string, error) { return missionsOf(ctx, b, agent) }})
+			Missions: func(ctx context.Context, agent string) ([]string, error) { return mission.HeldBy(ctx, b, agent) }})
 		switch {
 		case closed && !f.Closed:
 			return false, "its process is gone but its holder still runs its terminal: close that terminal first"
