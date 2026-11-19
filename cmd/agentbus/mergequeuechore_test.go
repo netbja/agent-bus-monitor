@@ -123,12 +123,20 @@ func TestMergeQueueChoreFallbacks(t *testing.T) {
 			t.Fatalf("%s: gh read", name)
 			return nil, nil
 		}
+		// No PR reader, no CI loop: a PR's CI record is never forgotten as closed.
+		if _, err := b.FencedCIStep(ctx, "mq", bus.CIStep{PR: 7, Digest: strings.Repeat("a", 40), Cap: 3, Owner: "coder", Master: "master",
+			Handoff: [2]string{"h", "h"}, MasterCopy: [2]string{"m", "m"}, StopMaster: "s", StopNotice: "n"}); err != nil {
+			t.Fatal(err)
+		}
 		if err := ch.pass(ctx, "mq"); err != nil {
 			t.Fatal(err)
 		}
 		rec, _ := b.MergeQueue(ctx)
 		if rec.Source != "git" || rec.Reason != "" || len(rec.Items) != 1 || rec.Items[0].Branch != "feat/request-priority" || fetched != c.fetched || remote == c.local {
 			t.Fatalf("%s: %+v fetched %v origin read %v", name, rec, fetched, remote)
+		}
+		if ci, _ := b.CIRecord(ctx); ci[7].Count != 1 {
+			t.Fatalf("%s: the git fallback ran the CI loop: %+v", name, ci)
 		}
 	}
 }
