@@ -550,8 +550,12 @@ func TestMergeQueueChoreCILoop(t *testing.T) {
 		return []mergequeue.PR{red(309, mqHead)}, nil
 	}
 	bases := []string{}
-	c.readBase = func(_ context.Context, _ string, _ []string, branch string) (mergequeue.Base, error) {
+	c.readBase = func(ctx context.Context, _ string, _ []string, branch string) (mergequeue.Base, error) {
 		bases = append(bases, branch)
+		// One call's budget, not the pass's (the reads get 18 s of 20).
+		if d, ok := ctx.Deadline(); !ok || time.Until(d) > mergeQueueCall {
+			t.Errorf("a base read without its own %s budget: %v %v", mergeQueueCall, time.Until(d), ok)
+		}
 		return mergequeue.Base{Head: strings.Repeat("b", 40)}, nil
 	}
 	// Live: the rollup is read (the setting is on) but nothing is written.
