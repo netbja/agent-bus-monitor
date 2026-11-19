@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/forge"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -145,7 +146,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 	}
 	doc := configDoc{Project: proj}
 	if proj != nil {
-		b, src, err := projectDeliveryBase(getenv, project)
+		b, src, err := forge.ProjectDeliveryBase(getenv, project)
 		if err != nil {
 			b, src = "unknown", "template"
 			doc.Warnings = append(doc.Warnings, fmt.Sprintf("project %s: %v: agentbus deliver refuses without --base", project, err))

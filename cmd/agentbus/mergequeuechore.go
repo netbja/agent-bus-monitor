@@ -187,7 +187,7 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	settings := config.Machine(c.getenv)
 	// The project's base, as deliver's (merge-popup-setting): the template's
 	// [delivery] base, else the machine's delivery.base.
-	base, _, berr := projectDeliveryBase(c.getenv, c.b.Project())
+	base, _, berr := forge.ProjectDeliveryBase(c.getenv, c.b.Project())
 	env := mergeQueueEnv(c.environ())
 	call := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, mergeQueueCall) }
 	forgeKind := ""
