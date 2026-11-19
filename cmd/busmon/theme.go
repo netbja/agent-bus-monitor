@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"strings"
-
-	"github.com/gdamore/tcell/v2"
 )
 
 type Role int
@@ -84,18 +82,18 @@ const (
 // Theme is immutable after resolution.
 type Theme struct {
 	palette   Palette
-	colors    [roleCount]tcell.Color
+	colors    [roleCount]Color
 	tags      [roleCount]string
-	selection tcell.Color
+	selection Color
 	// bg is the background every cell is painted with: the terminal's own
 	// (ColorDefault) but on the light palette, which paints lightBG so its dark
 	// text reads on a dark terminal too (light-theme contrast, 2026-11-18).
-	bg tcell.Color
+	bg Color
 }
 
 // lightBG is the light palette's painted background: the one its text roles
 // are checked against (theme_contrast_test.go).
-var lightBG = tcell.GetColor("#FFFFFF")
+var lightBG = getColor("#FFFFFF")
 
 func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (*Theme, error) {
 	name := flagVal
@@ -116,14 +114,14 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 			name = "light"
 		}
 	}
-	t := &Theme{palette: PaletteDark, selection: tcell.GetColor("#22324A"), bg: tcell.ColorDefault}
+	t := &Theme{palette: PaletteDark, selection: getColor("#22324A"), bg: colorDefault}
 	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#717B87", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48", "#39C69E"})
 	for _, h := range providerHues {
 		t.tags[h.role] = h.dark
 	}
 	if name == "light" {
 		t.palette = PaletteLight
-		t.selection = tcell.GetColor("#DDF4FF")
+		t.selection = getColor("#DDF4FF")
 		t.bg = lightBG
 		copy(t.tags[:], []string{"#1F2328", "#5A6572", "#848D97", "#0969DA", "#1A7F37", "#9A6700", "#CF222E", "#5A4FCF", "#8250DF", "#D0D7DE", "#0B7D60"})
 		for _, h := range providerHues {
@@ -132,7 +130,7 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 	}
 	if colors < 1<<24 {
 		t.palette = Palette16
-		t.bg = tcell.ColorDefault
+		t.bg = colorDefault
 		copy(t.tags[:], []string{"-", "silver", "gray", "teal", "green", "olive", "red", "blue", "purple", "gray", "green"})
 		for _, h := range providerHues {
 			t.tags[h.role] = h.ansi
@@ -140,14 +138,14 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 	}
 	if noColor {
 		t.palette = PaletteNone
-		t.bg = tcell.ColorDefault
+		t.bg = colorDefault
 	}
 	for r, name := range t.tags {
 		t.tags[r] = strings.ToLower(name)
 		if t.palette == PaletteNone || name == "-" {
-			t.colors[r] = tcell.ColorDefault
+			t.colors[r] = colorDefault
 		} else {
-			t.colors[r] = tcell.GetColor(name)
+			t.colors[r] = getColor(name)
 		}
 	}
 	return t, nil
@@ -162,14 +160,14 @@ func themeRole(r Role) Role {
 	return r
 }
 
-func (t *Theme) Style(r Role) tcell.Style {
-	return tcell.StyleDefault.Foreground(t.colors[themeRole(r)]).Background(t.bg)
+func (t *Theme) Style(r Role) Style {
+	return styleDefault.Foreground(t.colors[themeRole(r)]).Background(t.bg)
 }
 
 // Faded is r's colour at pct percent of the way from the frame line colour
 // (close to the background) to r: a fade. Without true colour there are no
 // shades to step through, so the colour stays whole (no animation).
-func (t *Theme) Faded(r Role, pct int) tcell.Color {
+func (t *Theme) Faded(r Role, pct int) Color {
 	c := t.colors[themeRole(r)]
 	if t.palette != PaletteDark && t.palette != PaletteLight {
 		return c
@@ -178,13 +176,13 @@ func (t *Theme) Faded(r Role, pct int) tcell.Color {
 	r1, g1, b1 := t.colors[RoleLine].RGB()
 	r2, g2, b2 := c.RGB()
 	mix := func(a, b int32) int32 { return a + (b-a)*int32(pct)/100 }
-	return tcell.NewRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
+	return newRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
 }
 
 // Lifted is r's colour pct percent of the way to the text colour: lighter
 // on the dark palette, darker on the light one (a sliding bar's leading
 // cell). Without true colour the colour stays whole.
-func (t *Theme) Lifted(r Role, pct int) tcell.Color {
+func (t *Theme) Lifted(r Role, pct int) Color {
 	c := t.colors[themeRole(r)]
 	if !t.Animated() {
 		return c
@@ -193,13 +191,13 @@ func (t *Theme) Lifted(r Role, pct int) tcell.Color {
 	r1, g1, b1 := c.RGB()
 	r2, g2, b2 := t.colors[RoleText].RGB()
 	mix := func(a, b int32) int32 { return a + (b-a)*int32(pct)/100 }
-	return tcell.NewRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
+	return newRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
 }
 
 // Animated: the palette has the shades a fade needs.
 func (t *Theme) Animated() bool { return t.palette == PaletteDark || t.palette == PaletteLight }
 
-func (t *Theme) Selected(r Role) tcell.Style {
+func (t *Theme) Selected(r Role) Style {
 	s := t.Style(r)
 	if t.palette == PaletteNone || t.palette == Palette16 {
 		return s.Reverse(true)
@@ -210,7 +208,7 @@ func (t *Theme) Selected(r Role) tcell.Style {
 // FrameBorder is a panel frame in its own colour: whole when the panel has
 // the focus, faded towards the background when it does not (true colour;
 // the 16-colour and no-colour palettes keep the plain line).
-func (t *Theme) FrameBorder(hue Role, focused bool) tcell.Style {
+func (t *Theme) FrameBorder(hue Role, focused bool) Style {
 	if focused {
 		s := t.Style(hue)
 		if t.palette == PaletteNone {
@@ -219,7 +217,7 @@ func (t *Theme) FrameBorder(hue Role, focused bool) tcell.Style {
 		return s
 	}
 	if t.Animated() {
-		return tcell.StyleDefault.Foreground(t.Faded(hue, frameFade)).Background(t.bg)
+		return styleDefault.Foreground(t.Faded(hue, frameFade)).Background(t.bg)
 	}
 	return t.Style(RoleLine)
 }
@@ -229,12 +227,12 @@ const frameFade = 35
 
 // Pill is text on its role's colour: a focused frame's title. Without true
 // colour it is the reverse of the role's colour.
-func (t *Theme) Pill(r Role) tcell.Style {
+func (t *Theme) Pill(r Role) Style {
 	switch t.palette {
 	case PaletteDark:
-		return tcell.StyleDefault.Foreground(tcell.GetColor("#0D1117")).Background(t.colors[themeRole(r)]).Bold(true)
+		return styleDefault.Foreground(getColor("#0D1117")).Background(t.colors[themeRole(r)]).Bold(true)
 	case PaletteLight:
-		return tcell.StyleDefault.Foreground(tcell.GetColor("#FFFFFF")).Background(t.colors[themeRole(r)]).Bold(true)
+		return styleDefault.Foreground(getColor("#FFFFFF")).Background(t.colors[themeRole(r)]).Bold(true)
 	}
 	return t.Style(r).Reverse(true).Bold(true)
 }
@@ -242,13 +240,13 @@ func (t *Theme) Pill(r Role) tcell.Style {
 // Tab backgrounds: an inactive tab is a block a shade off the screen's
 // background, as a terminal draws its tabs.
 var (
-	tabOffDark  = tcell.GetColor("#1A212A")
-	tabOffLight = tcell.GetColor("#E3E6EA")
+	tabOffDark  = getColor("#1A212A")
+	tabOffLight = getColor("#E3E6EA")
 )
 
 // TabOff is an inactive tab: muted text on the tab background. Without true
 // colour it is plain muted text.
-func (t *Theme) TabOff() tcell.Style {
+func (t *Theme) TabOff() Style {
 	switch t.palette {
 	case PaletteDark:
 		return t.Style(RoleMuted).Background(tabOffDark)
@@ -258,8 +256,8 @@ func (t *Theme) TabOff() tcell.Style {
 	return t.Style(RoleMuted)
 }
 
-// tcellStyle is a cell's style on a tcell screen.
-func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
+// termStyle is a cell's style in the theme's colours (lipStyle draws it).
+func (t *Theme) termStyle(c cellStyle) Style {
 	if c.Border {
 		return t.FrameBorder(c.Role, c.Focused)
 	}
@@ -287,9 +285,9 @@ func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 	}
 	if c.QR { // a camera reads dark on light only: black on white whatever the theme; NO_COLOR reverses the terminal's own
 		if t.palette == PaletteNone {
-			return tcell.StyleDefault.Reverse(true)
+			return styleDefault.Reverse(true)
 		}
-		return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorWhite)
+		return styleDefault.Foreground(getColor("black")).Background(getColor("white"))
 	}
 	if c.Pill { // replaces the style whole; NO_COLOR keeps its reverse in Pill
 		style = t.Pill(c.Role)
@@ -303,7 +301,7 @@ func (t *Theme) tcellStyle(c cellStyle) tcell.Style {
 	return style
 }
 
-func (t *Theme) Border(focused bool) tcell.Style {
+func (t *Theme) Border(focused bool) Style {
 	if focused {
 		s := t.Style(RoleAccent)
 		if t.palette == PaletteNone {

@@ -6,7 +6,6 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/gdamore/tcell/v2"
 
 	"charm.land/lipgloss/v2"
 )
@@ -57,19 +56,19 @@ func TestGridRenderPlacesLikeTheGrid(t *testing.T) {
 }
 
 func TestLipColor(t *testing.T) {
-	if lipColor(tcell.ColorDefault) != nil {
+	if lipColor(colorDefault) != nil {
 		t.Fatal("default colour must be none")
 	}
-	r, g, b, _ := lipColor(tcell.GetColor("#7CC4FA")).RGBA()
+	r, g, b, _ := lipColor(getColor("#7CC4FA")).RGBA()
 	if r>>8 != 0x7c || g>>8 != 0xc4 || b>>8 != 0xfa {
 		t.Fatalf("rgb = %x %x %x", r>>8, g>>8, b>>8)
 	}
-	if c, ok := lipColor(tcell.GetColor("teal")).(ansi.IndexedColor); !ok || c != 6 {
-		t.Fatalf("teal = %#v", lipColor(tcell.GetColor("teal")))
+	if c, ok := lipColor(getColor("teal")).(ansi.IndexedColor); !ok || c != 6 {
+		t.Fatalf("teal = %#v", lipColor(getColor("teal")))
 	}
 }
 
-// The painter resolves a cell exactly as the tcell sink does.
+// The painter resolves a cell exactly as the theme does.
 func TestLipStyleMatchesTcellStyle(t *testing.T) {
 	for _, pal := range []struct {
 		name   string
@@ -79,18 +78,18 @@ func TestLipStyleMatchesTcellStyle(t *testing.T) {
 		tt, _ := ResolveTheme(pal.name, "", "", pal.noCol, pal.colors)
 		for _, c := range []cellStyle{{Role: RoleAccent}, {Role: RoleOK, Bold: true}, {Role: RoleText, Selected: true},
 			{Role: RoleAttention, Fade: 40}, {Role: RoleDispatch, Pill: true}, {Role: RoleOK, Border: true}, {Role: RoleOK, Border: true, Focused: true}} {
-			fg, bg, attr := tt.tcellStyle(c).Decompose()
+			fg, bg, attr := tt.termStyle(c).Decompose()
 			s := tt.lipStyle(c)
 			if !sameColor(s.GetForeground(), fg) || !sameColor(s.GetBackground(), bg) ||
-				s.GetBold() != (attr&tcell.AttrBold != 0) || s.GetReverse() != (attr&tcell.AttrReverse != 0) {
-				t.Errorf("%s/%d %+v: lipgloss %v/%v bold %v rev %v, tcell %v/%v %v", pal.name, pal.colors, c,
+				s.GetBold() != (attr&attrBold != 0) || s.GetReverse() != (attr&attrReverse != 0) {
+				t.Errorf("%s/%d %+v: lipgloss %v/%v bold %v rev %v, theme %v/%v %v", pal.name, pal.colors, c,
 					s.GetForeground(), s.GetBackground(), s.GetBold(), s.GetReverse(), fg, bg, attr)
 			}
 		}
 	}
 }
 
-func sameColor(lc interface{ RGBA() (r, g, b, a uint32) }, tc tcell.Color) bool {
+func sameColor(lc interface{ RGBA() (r, g, b, a uint32) }, tc Color) bool {
 	want := lipColor(tc)
 	if want == nil {
 		_, isNo := lc.(lipgloss.NoColor)
@@ -111,17 +110,17 @@ func TestSoftPillWithoutTrueColour(t *testing.T) {
 		colors int
 	}{{false, 16}, {true, 1 << 24}} {
 		tt, _ := ResolveTheme("dark", "", "", pal.noCol, pal.colors)
-		if got, want := tt.tcellStyle(soft), tt.Style(RoleText).Bold(true); got != want {
+		if got, want := tt.termStyle(soft), tt.Style(RoleText).Bold(true); got != want {
 			t.Errorf("palette %v: soft pill %v, want plain bold text %v", tt.Palette(), got, want)
 		}
-		if tt.tcellStyle(soft) == tt.tcellStyle(cellStyle{Role: RoleAccent, Bold: true, Pill: true}) {
+		if tt.termStyle(soft) == tt.termStyle(cellStyle{Role: RoleAccent, Bold: true, Pill: true}) {
 			t.Errorf("palette %v: the soft pill looks like the focused one", tt.Palette())
 		}
 	}
 	tt, _ := ResolveTheme("dark", "", "", false, 1<<24)
 	hard := soft
 	hard.Soft = false
-	if tt.tcellStyle(soft) != tt.tcellStyle(hard) {
+	if tt.termStyle(soft) != tt.termStyle(hard) {
 		t.Error("true colour: a soft pill is the faded pill")
 	}
 }

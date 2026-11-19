@@ -335,8 +335,8 @@ a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
   reads one and nothing wakes for it.
 
   Files: `theme.go` (colour roles, palettes dark/light/16/none, the closed single-cell glyph set —
-  the only place colours and glyphs are named; its colours are tcell values, tcell's one remaining
-  use), `cells.go` (preview/detail sanitising, grapheme width, `Fit`/`FitLine`, `drawLine`,
+  the only place colours and glyphs are named; its colours are `color.go`'s `Color` and `Style`,
+  turned into lipgloss by the painter), `cells.go` (preview/detail sanitising, grapheme width, `Fit`/`FitLine`, `drawLine`,
   `drawFrame` with the scrollbar, on a `cellSink`), `tea_grid.go` (the `grid` sink and the lipgloss
   painter), `layout.go` + `tea_layout.go` (pure geometry: `shellLayoutFor`, three tiers wide ≥120 /
   medium 80–119 / narrow), `listview.go` (`listState`, the one selectable scrolling list: For you,
