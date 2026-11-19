@@ -128,10 +128,10 @@ func runSwap(ctx context.Context, b *bus.Bus, d swapDeps, self string, args []st
 		return fail("unknown role in ROLES_TOML")
 	}
 	// Its own profile is the project's (its template tab's --profile, else
-	// roles.toml's: ownProfile); the targets are roles.toml's own profile and
+	// roles.toml's: relaunch.OwnProfile); the targets are roles.toml's own profile and
 	// its fallback_profiles, so a role whose client the project chose can go
 	// back to roles.toml's without --force (spec, the reader table).
-	own, err := ownProfile(m, d.Env, b.Project(), role)
+	own, err := relaunch.OwnProfile(m, d.Env, b.Project(), role)
 	if err != nil {
 		return fail("%v", err)
 	}

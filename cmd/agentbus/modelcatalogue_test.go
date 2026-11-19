@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -144,12 +145,12 @@ func TestRecordAliases(t *testing.T) {
 	now := time.Now()
 	cache, _ := checkFixture(t, now)
 	fresh := now.Add(-time.Hour).UnixMilli()
-	rows := []doctorRow{
-		{Agent: "coder", Configured: "opus", Used: "claude-opus-5-5-20261001", usedAt: fresh},
-		{Agent: "master", Configured: "sonnet", Used: "claude-sonnet-5-5", usedAt: fresh},
-		{Agent: "ui", Configured: "gpt-6-sol", Used: "gpt-6-sol", usedAt: fresh},                                    // not an alias
+	rows := []modelcheck.DoctorRow{
+		{Agent: "coder", Configured: "opus", Used: "claude-opus-5-5-20261001", UsedAt: fresh},
+		{Agent: "master", Configured: "sonnet", Used: "claude-sonnet-5-5", UsedAt: fresh},
+		{Agent: "ui", Configured: "gpt-6-sol", Used: "gpt-6-sol", UsedAt: fresh},                                    // not an alias
 		{Agent: "docs", Configured: "haiku"},                                                                        // no used model
-		{Agent: "old", Configured: "haiku", Used: "claude-haiku-4-5", usedAt: now.Add(-48 * time.Hour).UnixMilli()}, // stale
+		{Agent: "old", Configured: "haiku", Used: "claude-haiku-4-5", UsedAt: now.Add(-48 * time.Hour).UnixMilli()}, // stale
 	}
 	if err := recordAliases(cache, rows, now); err != nil {
 		t.Fatal(err)
@@ -158,8 +159,8 @@ func TestRecordAliases(t *testing.T) {
 	if a := tbl.Aliases["anthropic"]; a["opus"].ID != "claude-opus-5-5" || a["sonnet"].ID != "claude-sonnet-5-5" || len(a) != 2 || len(tbl.Events) != 0 { // haiku: stale, unrecorded
 		t.Fatalf("first resolution, silent: %+v %+v", a, tbl.Events)
 	}
-	rows[0].Used, rows[0].usedAt = "claude-opus-5-6", now.Add(30*time.Minute).UnixMilli()
-	rows = append(rows, doctorRow{Agent: "arch", Configured: "opus", Used: "claude-opus-5-5", usedAt: fresh}) // older use: never moves it back
+	rows[0].Used, rows[0].UsedAt = "claude-opus-5-6", now.Add(30*time.Minute).UnixMilli()
+	rows = append(rows, modelcheck.DoctorRow{Agent: "arch", Configured: "opus", Used: "claude-opus-5-5", UsedAt: fresh}) // older use: never moves it back
 	if err := recordAliases(cache, rows, now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}

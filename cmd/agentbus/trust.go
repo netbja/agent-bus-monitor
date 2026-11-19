@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/trust"
 )
@@ -276,13 +277,13 @@ func tabExecutable(command string, env func(string) string) string {
 }
 
 // tabProfile resolves the profile a tab's agent-launch runs: the role, on the
-// --profile the tab names (launchProfile), in the manifest the command names,
+// --profile the tab names (relaunch.LaunchProfile), in the manifest the command names,
 // else the caller's. ok is false, with no error, when the tab launches no
 // agent, the manifest cannot be loaded or the role is unknown (today's skip);
 // a profile roles.toml does not allow for the role is an error (checkProfiles
 // stops up on it).
 func tabProfile(command string, env func(string) string) (rolecfg.Profile, bool, error) {
-	manifest, role, profile := tabLaunch(command)
+	manifest, role, profile := relaunch.TabLaunch(command)
 	if manifest == "" {
 		manifest = env("ROLES_TOML")
 	}
@@ -296,7 +297,7 @@ func tabProfile(command string, env func(string) string) (rolecfg.Profile, bool,
 	if _, known := m.Roles[role]; !known {
 		return rolecfg.Profile{}, false, nil
 	}
-	p, err := launchProfile(m, role, profile)
+	p, err := relaunch.LaunchProfile(m, role, profile)
 	if err != nil {
 		return rolecfg.Profile{}, false, err
 	}

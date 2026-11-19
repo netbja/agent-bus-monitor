@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
@@ -470,7 +471,7 @@ func TestModelsCheckTierOldSource(t *testing.T) {
 	}
 	var out, errw bytes.Buffer
 	runModels(context.Background(), []string{"check", "--json"}, noEnv(), cache, "", manifest, now, &out, &errw)
-	var rep checkReport
+	var rep modelcheck.CheckReport
 	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
 		t.Fatalf("%v\n%s", err, out.String())
 	}

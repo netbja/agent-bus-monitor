@@ -1,4 +1,4 @@
-package main
+package modelcheck
 
 import (
 	"path/filepath"
@@ -14,11 +14,11 @@ import (
 // alternate (fable-profile-architect), so a gone Fable model is not read as
 // an unused profile.
 func TestModelsCheckNamesAnAlternate(t *testing.T) {
-	m, err := rolecfg.Load(filepath.Join("..", "..", "roles.toml"))
+	m, err := rolecfg.Load(filepath.Join("..", "roles.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rep := modelsCheckReport(&models.Table{}, models.Config{}, m, time.Now())
+	rep := ModelsCheckReport(&models.Table{}, models.Config{}, m, time.Now())
 	for _, r := range rep.Profiles {
 		if r.Profile == "claude-fable" {
 			if !slices.Contains(r.UsedBy, "alt of architect") {

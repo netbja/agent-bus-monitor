@@ -383,7 +383,7 @@ func regenerate(m *rolecfg.Manifest, p startPlan, tpl upTemplate, repo string) s
 		case "missions":
 			missions = true
 		}
-		if mf, role, _ := tabLaunch(t.Command); role != "" && manifest == "" {
+		if mf, role, _ := relaunch.TabLaunch(t.Command); role != "" && manifest == "" {
 			manifest = mf
 			for _, w := range words {
 				if filepath.Base(w) == "agent-launch" {
@@ -408,7 +408,7 @@ func rawTeam(path string) ([]rolecfg.TeamRole, error) {
 func tabsTeam(tpl upTemplate) []rolecfg.TeamRole {
 	var team []rolecfg.TeamRole
 	for _, t := range tpl.Tabs {
-		if _, role, profile := tabLaunch(t.Command); role != "" {
+		if _, role, profile := relaunch.TabLaunch(t.Command); role != "" {
 			team = append(team, rolecfg.TeamRole{Role: role, Profile: profile})
 		}
 	}

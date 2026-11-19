@@ -29,6 +29,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -640,7 +641,7 @@ func main() {
 		if rest[0] == "adopt" {
 			os.Exit(runAdopt(ctx, b, self, rest[1:], os.Environ(), os.Stdout, os.Stderr))
 		}
-		os.Exit(runDoctor(ctx, b, realDoctorDeps(os.Environ()), rest[1:], os.Stdout, os.Stderr))
+		os.Exit(runDoctor(ctx, b, modelcheck.RealDoctorDeps(os.Getenv, modelsGetenv), rest[1:], os.Stdout, os.Stderr))
 
 	case "pop":
 		h, err := holder.NewHost(project, holder.BuildID(), os.Getenv)

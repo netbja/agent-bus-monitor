@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
-	"github.com/netbja/agent-bus-monitor/models"
+	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/usage"
 )
@@ -73,7 +73,7 @@ func TestDoctorVerdicts(t *testing.T) {
 	reg("docs", 16, "claude-opus-5-5", "s-docs")         // the API refused the model
 	reg("architect", 17, "claude-opus-5-5", "s-old")     // refused two days ago: stale, not a verdict
 	now := time.Now()
-	d := doctorDeps{
+	d := modelcheck.DoctorDeps{
 		Manifest:  func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
 		ProcStart: func(int) (uint64, error) { return 1, nil },
 		Cmdline: func(pid int) ([]string, error) {
@@ -99,7 +99,7 @@ func TestDoctorVerdicts(t *testing.T) {
 		},
 		Now: func() time.Time { return now },
 	}
-	rows, err := doctorRows(ctx, b, d)
+	rows, err := modelcheck.DoctorRows(ctx, b, d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,65 +143,9 @@ func TestDoctorVerdicts(t *testing.T) {
 	}
 }
 
-// v0.15.2: the table turns a matching launch into gone or newer, from a
-// fresh complete read only, and resolves a tier.
-func TestDoctorCatalogueVerdicts(t *testing.T) {
-	now := time.Now()
-	tbl := &models.Table{Providers: map[string]*models.Provider{
-		"openai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{
-			{ID: "gpt-6.1-sol", Tier: models.Workhorse},
-			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-6.1-sol"},
-			{ID: "gpt-6-astra", Tier: models.Frontier},
-		}},
-		"stale": {OK: false, ReadAt: now.Add(-10 * 24 * time.Hour).UnixMilli()},
-	}}
-	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
-	for _, c := range []struct{ provider, launched, want string }{
-		{"openai", "gpt-6.1-sol", ""},
-		{"openai", "gpt-6-sol", "newer"},
-		{"openai", "gpt-5-old", "gone"},
-		{"stale", "anything", ""}, // an old catalogue judges nothing
-	} {
-		if v, _ := catalogueVerdict(d, c.provider, c.launched); v != c.want {
-			t.Errorf("%s/%s: %q, want %q", c.provider, c.launched, v, c.want)
-		}
-	}
-	cfg := models.Config{Families: map[string][]string{"grok": {"grok-4.7", "grok-4.6"}}}
-	tbl.Providers["xai"] = &models.Provider{OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{{ID: "grok-4.7"}, {ID: "grok-4.6"}}}
-	d.Config = cfg
-	if v, why := catalogueVerdict(d, "xai", "grok-4.6"); v != "newer" || !strings.Contains(why, "grok-4.7") {
-		t.Fatalf("family order: %q %q", v, why)
-	}
-}
-
-func TestDoctorPartialCatalogueNeverGone(t *testing.T) {
-	now := time.Now()
-	tbl := &models.Table{Providers: map[string]*models.Provider{
-		"anthropic": {OK: true, ReadAt: now.UnixMilli(), Partial: true, Rows: []models.Row{{ID: "opus", Alias: true}}},
-	}}
-	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
-	if v, _ := catalogueVerdict(d, "anthropic", "claude-opus-5-5"); v != "" {
-		t.Fatalf("an id a partial catalogue does not list was judged %q", v)
-	}
-}
-
-// Codex re-check: "newer" only names a model the fresh catalogue lists.
-func TestDoctorNewerMustExist(t *testing.T) {
-	now := time.Now()
-	tbl := &models.Table{Providers: map[string]*models.Provider{
-		"openai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{
-			{ID: "gpt-6-sol", Tier: models.Legacy, Newer: "gpt-7-missing"},
-		}},
-	}}
-	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
-	if v, _ := catalogueVerdict(d, "openai", "gpt-6-sol"); v != "" {
-		t.Fatalf("newer pointed at a missing model: %q", v)
-	}
-}
-
 // A role on a profile its project's template chose (start's client choice)
 // is configured on that profile: no drift for its model (spec, the reader
-// table: roles doctor reads ownProfile).
+// table: roles doctor reads relaunch.OwnProfile).
 func TestDoctorReadsTheTemplatesProfile(t *testing.T) {
 	b, r := dialMain(t)
 	ctx := context.Background()
@@ -224,7 +168,7 @@ func TestDoctorReadsTheTemplatesProfile(t *testing.T) {
 	if _, err := b.Status(ctx, "foureyes", "idle", "", bus.AgentIdent{Pane: "p", PID: 12, PIDStart: 1, Model: "gpt-x", Client: "codex", Provider: "openai"}); err != nil {
 		t.Fatal(err)
 	}
-	d := doctorDeps{
+	d := modelcheck.DoctorDeps{
 		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
 		ProcStart:  func(int) (uint64, error) { return 1, nil },
 		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
@@ -232,7 +176,7 @@ func TestDoctorReadsTheTemplatesProfile(t *testing.T) {
 		Now:        time.Now,
 		Env:        func(k string) string { return map[string]string{"AGENTBUS_PROJECTS_DIR": projects}[k] },
 	}
-	rows, err := doctorRows(ctx, b, d)
+	rows, err := modelcheck.DoctorRows(ctx, b, d)
 	if err != nil || len(rows) != 1 || rows[0].Verdict != "ok" || rows[0].Profile != "alt" {
 		t.Fatalf("rows = %+v, %v; want foureyes ok on alt", rows, err)
 	}
@@ -260,7 +204,7 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	d := doctorDeps{
+	d := modelcheck.DoctorDeps{
 		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
 		ProcStart:  func(int) (uint64, error) { return 1, nil },
 		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
@@ -268,7 +212,7 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 		Now:        time.Now,
 	}
 	want := "elevated permission=skip sandbox=false; 1 tool rule has no agy form and is not enforced: Read(**/.env)"
-	rows, err := doctorRows(ctx, b, d)
+	rows, err := modelcheck.DoctorRows(ctx, b, d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,12 +233,10 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 		t.Fatalf("json:\n%s", out.String())
 	}
 	// foureyes: a risk that cannot be judged says so, never nothing.
-	old := launchRisk
-	t.Cleanup(func() { launchRisk = old })
-	launchRisk = func(*rolecfg.Manifest, string, string, string) (string, error) {
+	d.LaunchRisk = func(*rolecfg.Manifest, string, string, string) (string, error) {
 		return "", errors.New("rules do not resolve")
 	}
-	rows, err = doctorRows(ctx, b, d)
+	rows, err = modelcheck.DoctorRows(ctx, b, d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,36 +244,6 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 		if row.Risk != "not judged: rules do not resolve" {
 			t.Errorf("%s: risk %q", row.Agent, row.Risk)
 		}
-	}
-}
-
-// model-detection §3.3: a listed higher version is "newer?", with its words,
-// and never fails the doctor (it is a hint, not evidence); a family order
-// in models.toml is the evidence and wins over it.
-func TestDoctorListedNewerIsAHint(t *testing.T) {
-	now := time.Now()
-	tbl := &models.Table{Providers: map[string]*models.Provider{
-		"xai": {OK: true, ReadAt: now.UnixMilli(), Rows: []models.Row{{ID: "grok-4.7", Default: true}, {ID: "grok-4.6"}, {ID: "grok-4.7-build-fast"}}},
-	}}
-	d := doctorDeps{Table: tbl, Now: func() time.Time { return now }}
-	v, why := catalogueVerdict(d, "xai", "grok-4.6")
-	if v != "newer?" || !strings.Contains(why, "listed, not stated as a successor") || !strings.Contains(why, "grok-4.7") {
-		t.Fatalf("hint: %q %q", v, why)
-	}
-	if v, _ := catalogueVerdict(d, "xai", "grok-4.7"); v != "" {
-		t.Fatalf("the newest listed: %q", v)
-	}
-	d.Config = models.Config{Families: map[string][]string{"grok": {"grok-4.6", "grok-4.7"}}} // the person says 4.6 is newest
-	if v, _ := catalogueVerdict(d, "xai", "grok-4.6"); v != "" {
-		t.Fatalf("a family order lost to the hint: %q", v)
-	}
-	tbl.Providers["anthropic"] = &models.Provider{OK: true, ReadAt: now.UnixMilli(), Partial: true, Rows: []models.Row{
-		{ID: "opus", Alias: true, Newer: "claude-opus-5-5"}, {ID: "claude-opus-5-5"}}}
-	if v, _ := catalogueVerdict(d, "anthropic", "opus"); v != "" {
-		t.Fatalf("an alias follows its family by itself, never newer: %q", v)
-	}
-	if doctorFails("newer?") || !doctorFails("newer") || !doctorFails("gone") {
-		t.Fatal("newer? must never fail the doctor")
 	}
 }
 
@@ -349,7 +261,7 @@ func TestDoctorAgentFilter(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	d := doctorDeps{
+	d := modelcheck.DoctorDeps{
 		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
 		ProcStart:  func(int) (uint64, error) { return 1, nil },
 		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
@@ -376,32 +288,6 @@ func TestDoctorAgentFilter(t *testing.T) {
 	}
 }
 
-// model-detection §3.2: a source older than models.source_max_age withholds
-// every verdict (unknown in models check, nothing in roles doctor); an
-// unknown source age (0) withholds nothing.
-func TestJudgeModelOldSource(t *testing.T) {
-	now := time.Now()
-	tbl := &models.Table{Providers: map[string]*models.Provider{
-		"moonshot":  {OK: true, ReadAt: now.UnixMilli(), SourceAt: now.Add(-12 * 24 * time.Hour).UnixMilli(), Rows: []models.Row{{ID: "kimi-code/k3"}}},
-		"anthropic": {OK: true, ReadAt: now.UnixMilli(), Partial: true, Rows: []models.Row{{ID: "opus", Alias: true}}},
-	}}
-	cfg := models.Config{SourceMaxAge: 7 * 24 * time.Hour}
-	j := judgeModel(tbl, cfg, now, "moonshot", "kimi-code/gone")
-	if j.Verdict != "unknown" || !strings.Contains(j.Why, "12 days old") || !strings.Contains(j.Why, "models.source_max_age") {
-		t.Fatalf("old source: %+v", j)
-	}
-	if v, _ := catalogueVerdict(doctorDeps{Table: tbl, Config: cfg, Now: func() time.Time { return now }}, "moonshot", "kimi-code/gone"); v != "" {
-		t.Fatalf("doctor judged an old source: %q", v)
-	}
-	cfg.SourceMaxAge = 14 * 24 * time.Hour
-	if j := judgeModel(tbl, cfg, now, "moonshot", "kimi-code/gone"); j.Verdict != "gone" {
-		t.Fatalf("a source within its max age: %+v", j)
-	}
-	if j := judgeModel(tbl, models.Config{SourceMaxAge: time.Hour}, now, "anthropic", "opus"); j.Verdict != "ok" {
-		t.Fatalf("an unknown source age withheld: %+v", j)
-	}
-}
-
 // The person: roles doctor shows, for a role that pops, the agent-spawn rule
 // its session starts with for each other role (allow, or ask when the person
 // approves it), so a role missing from roles.toml (coder2) shows as not
@@ -421,7 +307,7 @@ func TestDoctorShowsPopRules(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	d := doctorDeps{
+	d := modelcheck.DoctorDeps{
 		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
 		ProcStart:  func(int) (uint64, error) { return 1, nil },
 		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },
@@ -471,7 +357,7 @@ func TestDoctorPopsNone(t *testing.T) {
 	if _, err := b.Status(ctx, "master", "idle", "", bus.AgentIdent{Pane: "p-master", PID: 1, PIDStart: 1, Model: "claude-opus-5-5", Client: "claude-code", Provider: "anthropic"}); err != nil {
 		t.Fatal(err)
 	}
-	d := doctorDeps{
+	d := modelcheck.DoctorDeps{
 		Manifest:   func() (*rolecfg.Manifest, error) { return rolecfg.Load(path) },
 		ProcStart:  func(int) (uint64, error) { return 1, nil },
 		Cmdline:    func(int) ([]string, error) { return nil, errors.New("none") },

@@ -286,7 +286,7 @@ func upTeamRun(d upDeps, project string, tpl upTemplate, dry bool, stdout io.Wri
 	}
 	manifest := ""
 	for _, t := range tpl.Tabs {
-		if mf, role, _ := tabLaunch(t.Command); role != "" && mf != "" {
+		if mf, role, _ := relaunch.TabLaunch(t.Command); role != "" && mf != "" {
 			manifest = mf
 			break
 		}
