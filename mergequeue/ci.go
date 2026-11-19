@@ -93,13 +93,23 @@ type Rollup struct {
 	Status map[string]Check
 }
 
-// Classify keeps each name's latest entry (a re-run that passed is not red)
-// and classifies them. Nothing runs and Failing empty is "not red", an empty
+// Classify keeps each name's latest entry (a re-run that passed is not red;
+// a running one wins over any finished one) and classifies them. Nothing runs and Failing empty is "not red", an empty
 // rollup included.
 func Classify(cs []Check) Rollup {
 	latest := map[string]Check{}
 	for _, c := range cs {
-		if p, ok := latest[c.Name]; !ok || !c.At.Before(p.At) {
+		p, ok := latest[c.Name]
+		switch {
+		case !ok:
+			latest[c.Name] = c
+		case c.Running != p.Running:
+			// A re-run still queued may have no time yet: a running entry is
+			// never beaten by a finished one of its name (foureyes).
+			if c.Running {
+				latest[c.Name] = c
+			}
+		case !c.At.Before(p.At):
 			latest[c.Name] = c
 		}
 	}

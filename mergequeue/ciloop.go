@@ -192,6 +192,10 @@ func RunCI(ctx context.Context, b *bus.Bus, token string, cfg CIConfig, prs []PR
 		if pr.Draft {
 			continue
 		}
+		if pr.ChecksCut { // a running or failing entry may be missing: never read as finished
+			reasons = append(reasons, fmt.Sprintf("ci: PR #%d has %d checks or more, more than gh lists: not read", pr.Number, ghRollupMax))
+			continue
+		}
 		roll := Classify(pr.Checks)
 		if roll.Running || len(roll.Failing) == 0 {
 			continue // still running, or not red: nothing (§2)

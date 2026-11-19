@@ -20,6 +20,10 @@ import (
 // A list of exactly the limit may be cut, so it is ErrIncomplete.
 const ghLimit = 1000
 
+// ghRollupMax is how many rollup entries gh pr list gives a PR (gh 2.104: a
+// PR of 128 checks lists 100). A rollup of that many may be cut.
+const ghRollupMax = 100
+
 // ErrIncomplete: the forge's list may be cut. A pass that reads it is unknown
 // and keeps its previous items, never a partial list read as whole.
 var ErrIncomplete = errors.New("the forge's list of open PRs may be incomplete")
@@ -61,7 +65,7 @@ func ReadGitHub(ctx context.Context, dir string, env []string) ([]PR, error) {
 		}
 		prs = append(prs, PR{Number: p.Number, Title: cleanText(p.Title), URL: cleanText(p.URL), Branch: cleanText(p.HeadRefName),
 			Head: p.HeadRefOid, Base: cleanText(p.BaseRefName), Draft: p.IsDraft,
-			Conflicting: p.Mergeable == "CONFLICTING", Checks: parseChecks(p.Rollup)})
+			Conflicting: p.Mergeable == "CONFLICTING", Checks: parseChecks(p.Rollup), ChecksCut: len(p.Rollup) >= ghRollupMax})
 	}
 	return prs, nil
 }

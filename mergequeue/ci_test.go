@@ -196,3 +196,37 @@ func TestReadBaseRollupFailures(t *testing.T) {
 		}
 	}
 }
+
+// A re-run still queued has no time yet: it is never beaten by an older
+// finished run of its name, in either order, so the PR still runs (§2,
+// foureyes on ci-loop-lib).
+func TestClassifyQueuedReRunStillRuns(t *testing.T) {
+	failedRun := `{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-11-19T10:00:00Z","completedAt":"2026-11-19T10:05:00Z"}`
+	queued := `{"__typename":"CheckRun","name":"test","status":"QUEUED"}`
+	pending := `{"__typename":"StatusContext","context":"test","state":"PENDING"}`
+	for _, js := range []string{"[" + failedRun + "," + queued + "]", "[" + queued + "," + failedRun + "]", "[" + failedRun + "," + pending + "]", "[" + pending + "," + failedRun + "]"} {
+		if r := Classify(rollupOf(t, js)); !r.Running || len(r.Failing) != 0 {
+			t.Errorf("%s: running %v failing %v, want running and nothing failing", js, r.Running, names(r.Failing))
+		}
+	}
+}
+
+// gh pr list gives at most 100 rollup entries per PR (gh 2.104: a PR of 128
+// checks read 100, gh pr view 128): a rollup of 100 may be cut, so the PR's
+// checks are unknown (foureyes on ci-loop-lib).
+func TestReadGitHubRollupOf100IsCut(t *testing.T) {
+	var e []string
+	for i := 0; i < 100; i++ {
+		e = append(e, fmt.Sprintf(`{"__typename":"CheckRun","name":"c%d","status":"COMPLETED","conclusion":"SUCCESS"}`, i))
+	}
+	pr := strings.Replace(prJSON(7, hA), `"mergeable":"MERGEABLE"`, `"mergeable":"MERGEABLE","statusCheckRollup":[`+strings.Join(e, ",")+`]`, 1)
+	pr99 := strings.Replace(prJSON(8, hB), `"mergeable":"MERGEABLE"`, `"mergeable":"MERGEABLE","statusCheckRollup":[`+strings.Join(e[:99], ",")+`]`, 1)
+	dir, env := fakeGH(t, "["+pr+","+pr99+"]", 0)
+	prs, err := ReadGitHub(context.Background(), dir, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prs[0].ChecksCut || prs[1].ChecksCut {
+		t.Fatalf("cut %v %v", prs[0].ChecksCut, prs[1].ChecksCut)
+	}
+}

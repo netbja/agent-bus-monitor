@@ -422,3 +422,19 @@ func TestCILoopLostLease(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A PR whose rollup may be cut is never handed off nor stopped, and the
+// record names it: silence is not green.
+func TestCILoopCutRollupSendsNothing(t *testing.T) {
+	w := newCIWorld(t)
+	w.authored(hA, "coder")
+	pr := redPR(1, hA, failed("build"))
+	pr.ChecksCut = true
+	reason := w.pass(pr)
+	if len(w.cmds()) != 0 || w.count(1) != 0 || len(w.reads) != 0 {
+		t.Fatalf("%+v reads %v", w.cmds(), w.reads)
+	}
+	if !strings.Contains(reason, "ci: PR #1 has 100 checks or more, more than gh lists: not read") {
+		t.Fatalf("reason %q", reason)
+	}
+}
