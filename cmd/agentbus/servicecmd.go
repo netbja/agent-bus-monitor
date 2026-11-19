@@ -57,9 +57,9 @@ func realServiceCmdDeps(host string) serviceCmdDeps {
 	bin := service.ManagerBin(runtime.GOOS, os.Getenv)
 	m, why := service.Detect(runtime.GOOS, service.CommandRunner(bin), os.Getenv)
 	return serviceCmdDeps{Manager: m, Why: why, Paths: paths, AtLogin: func() bool { return machineAtLogin(os.Getenv) },
-		HolderBuild: holder.BuildID, HolderTerms: holderTerms, HolderLive: holderLiveTerms,
-		HolderAnswers:    func(project, key string) bool { _, err := holderTerms(project, key); return err == nil },
-		HolderAnswersAny: func(key string) bool { return holderAnswersAny(os.Getenv, key) },
+		HolderBuild: holder.BuildID, HolderTerms: holder.Terms, HolderLive: holderLiveTerms,
+		HolderAnswers:    func(project, key string) bool { _, err := holder.Terms(project, key); return err == nil },
+		HolderAnswersAny: func(key string) bool { return holder.AnswersAny(os.Getenv, key) },
 		Bus: func(project string) (*bus.Bus, error) {
 			c, err := bus.Connect(host)
 			if err != nil {

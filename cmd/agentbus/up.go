@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/netbja/agent-bus-monitor/relaunch"
 	"io"
 	"maps"
 	"os"
@@ -18,7 +17,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/relaunch"
+
 	"github.com/BurntSushi/toml"
+
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
@@ -735,7 +737,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 		Installed:     buildinfo.Bin,
 		Environ:       os.Environ(),
 		HolderBuild:   holder.BuildID,
-		HolderAnswers: func(project, key string) bool { return holderReady(os.Getenv, project, key, holderProbeTimeout) },
+		HolderAnswers: func(project, key string) bool { return holder.Ready(os.Getenv, project, key, holderProbeTimeout) },
 		Team:          func(project string) (teamHost, error) { return holder.NewHost(project, holder.BuildID(), os.Getenv) },
 		Resumes: func(project string) (map[string]bus.ResumeRecord, error) {
 			return withProjectBus(project, func(ctx context.Context, b *bus.Bus) (map[string]bus.ResumeRecord, error) {

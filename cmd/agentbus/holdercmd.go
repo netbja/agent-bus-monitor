@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
@@ -229,31 +228,6 @@ func (l holderLaunch) command(s holder.Start) (holder.Command, error) {
 	return c, nil
 }
 
-// holderTerms counts the terminals of project's holder of build key, asked
-// over its socket; an error when none answers.
-func holderTerms(project, key string) (int, error) {
-	terms, err := holderTermList(project, key)
-	return len(terms), err
-}
-
-// holderTermList is the terminals of project's holder of build key.
-func holderTermList(project, key string) ([]holder.TermInfo, error) {
-	sock, err := holder.SocketFor(os.Getenv, project, key)
-	if err != nil {
-		return nil, err
-	}
-	cl, err := holder.Dial(sock, holder.BuildID())
-	if err != nil {
-		return nil, fmt.Errorf("no holder answers at %s: %w", sock, err)
-	}
-	defer cl.Close()
-	r, err := cl.Call(holder.List{})
-	if err != nil {
-		return nil, err
-	}
-	return r.Terms, nil
-}
-
 // holderLiveTerms is the live terminals of project's holder of build key, for
 // service stop holder: answered false when no holder answers there.
 func holderLiveTerms(project, key string) (int, bool, error) {
@@ -277,26 +251,6 @@ func holderLiveTerms(project, key string) (int, bool, error) {
 		}
 	}
 	return n, true, nil
-}
-
-// holderReady is up's readiness probe: project's holder of build key
-// completes its handshake within timeout. The welcome comes from the
-// holder's accept loop, so a socket that only listens (its connections
-// queued by the kernel) or accepts and stays silent is not ready
-// (reviewer-codex).
-func holderReady(getenv func(string) string, project, key string, timeout time.Duration) bool {
-	sock, err := holder.SocketFor(getenv, project, key)
-	if err != nil {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cl, err := holder.DialContext(ctx, sock, holder.BuildID())
-	if err != nil {
-		return false
-	}
-	cl.Close()
-	return true
 }
 
 // holderTermsFile is where build's holder records the last terminal number

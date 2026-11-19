@@ -445,7 +445,7 @@ func e2eUp(t *testing.T) *e2eWorld {
 		},
 		Env:           os.Getenv,
 		HolderBuild:   holder.BuildID,
-		HolderAnswers: func(p, key string) bool { return holderReady(os.Getenv, p, key, 2*time.Second) },
+		HolderAnswers: func(p, key string) bool { return holder.Ready(os.Getenv, p, key, 2*time.Second) },
 		Team:          func(p string) (teamHost, error) { return holder.NewHost(p, holder.BuildID(), os.Getenv) },
 		Resumes:       func(string) (map[string]bus.ResumeRecord, error) { return b.ResumeRecords(ctx) },
 		Notice:        func(_, text string) error { t.Logf("up notice: %s", text); return nil },
