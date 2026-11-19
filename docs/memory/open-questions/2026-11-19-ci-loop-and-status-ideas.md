@@ -89,10 +89,14 @@ JSON), and report `newer available` in health and For you.
 
 The comparison must be with the version **installed now**, not with the snapshot. The snapshot's
 `ClientFP` is the launch fingerprint: after an upgrade on disk it still describes the old running
-client, so comparing with it would recommend an update that is already installed. The installed
-version comes from the on-disk probe (`realClientProbe`, the same one that fills
-`Observation.Update`), read once per client per host. When the probe gives no version label, the
-check says `unknown`, never `newer available`. The update itself stays the person's (or a quiet-update step):
+client, so comparing with it would recommend an update that is already installed.
+`realClientProbe` itself is not the source either: it returns nothing when the client is unchanged
+(`dispatch/clientupdate.go` 65-92), which is the normal case. The check reuses the disk readers
+under it, which give an installed-now label whether or not it changed:
+`clientfp.Take(path).Label` on the fingerprint's path, or the `installed` value of
+`clientfp.ClaudeLayout`. They are read once per client per host. `unknown` is kept for missing
+evidence only: no fingerprint path and no layout, an unreadable file, or no label. It never
+means "no change". The update itself stays the person's (or a quiet-update step):
 the dispatcher installs nothing. Optionally, in the same check, recognise `claude_code_version_too_old`
 on a stuck screen and name it.
 
