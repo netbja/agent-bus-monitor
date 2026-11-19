@@ -50,9 +50,10 @@ head. A PR whose CI is red but still running waits for the next pass.
 If a check never finishes, the PR is never handed off. That is the forge's problem to show, not this
 loop's.
 
-**Duplicate names.** A re-run can leave two rollup entries with the same name. The latest wins
-(`completedAt`, else `startedAt`, for a check run; `createdAt` for a status), so a re-run that
-passed is not counted red.
+**Duplicate names.** A re-run can leave two rollup entries with the same name. The latest wins, by
+the entry's time (for a check run, its completion, else its start; for a status, its creation).
+The exact JSON field names `gh` gives are read off a real rollup at build time, not assumed here. A
+re-run that passed is then not counted red.
 
 Each failing entry keeps two fields, both cleaned with `cleanText`:
 
