@@ -37,3 +37,19 @@ func TestEvaluateMergeQueue(t *testing.T) {
 		t.Fatalf("definition %+v", d)
 	}
 }
+
+// The CI loop's failure is named beside the queue's outcome, never instead
+// of it (ci-loop §4): the status stays the queue's.
+func TestEvaluateMergeQueueNamesTheCIFailure(t *testing.T) {
+	o := EvaluateMergeQueue(MergeQueueInput{ItemsAt: 1, CI: "ci: write failed for PR #4: OOM"}, "")
+	if o.Status != OK || o.Detail != "nothing waits for a merge; ci: write failed for PR #4: OOM" {
+		t.Fatalf("%+v", o)
+	}
+	o = EvaluateMergeQueue(MergeQueueInput{ItemsAt: 1, Items: []MergeQueueEntry{{Number: 3, Title: "t"}}, CI: "ci: x"}, "")
+	if o.Status != Warn || o.Detail != "waiting for your merge: #3 t; ci: x" {
+		t.Fatalf("%+v", o)
+	}
+	if o := EvaluateMergeQueue(MergeQueueInput{CI: "ci: x"}, "unreadable"); o.Detail != "unreadable" {
+		t.Fatalf("a read error: %+v", o)
+	}
+}

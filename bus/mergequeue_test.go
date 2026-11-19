@@ -45,6 +45,19 @@ func TestMergeQueueRecord(t *testing.T) {
 	if rec, _ = b.MergeQueue(ctx); rec.Reason != "" || len(rec.Items) != 0 || rec.ItemsAt <= first || rec.Source != "git" {
 		t.Fatalf("an empty success: %+v", rec)
 	}
+	// The CI loop's failure is kept beside a success, and cleared by the next pass (ci-loop §4).
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh", CI: "ci: write failed for PR #4: OOM"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); rec.CI != "ci: write failed for PR #4: OOM" || rec.Reason != "" || rec.ItemsAt == 0 {
+		t.Fatalf("a CI failure: %+v", rec)
+	}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); rec.CI != "" {
+		t.Fatalf("a CI failure not cleared: %+v", rec)
+	}
 	if ttl := b.r.PTTL(ctx, MergeQueueKey(b.project)).Val(); ttl <= 0 || ttl > MergeQueueTTL {
 		t.Fatalf("ttl %v", ttl)
 	}
