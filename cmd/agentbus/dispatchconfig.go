@@ -61,9 +61,19 @@ func serviceDispatchConfig(d dispatchDeps, cfg *dispatch.Config) (*dispatch.Host
 	if err != nil {
 		return nil, err
 	}
-	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, target)
+	cfg.Health = realHealthConfig(b, h, d.Manager, paths, cfg.Clear, target)
 	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
 	repair, repairCfg := serviceSelfRepair(b, os.Getenv, target, d.Boot)
+	if skew := d.SelfRepairSkew; skew != nil { // tests only
+		read := repair.read
+		repair.read = func(ctx context.Context) (selfRepairReads, error) {
+			r, err := read(ctx)
+			if err == nil {
+				r.Now = skew(r.Now)
+			}
+			return r, err
+		}
+	}
 	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
 	cfg.PopRetire = d.PopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), h)
 	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))                         // read at each client-update send (auto-reload)
@@ -85,6 +95,11 @@ type dispatchDeps struct {
 	Base    dispatch.Config        // dispatch.DefaultConfig with the person's name set
 	HostOps dispatch.HostOpsConfig // the relay's runner: CLI commands
 	PopEnd  func(dispatch.PopRetireConfig, dispatch.Runtime) dispatch.PopRetireConfig
+	Manager service.Manager // the service manager the health checks read (the caller's detection)
+
+	// SelfRepairSkew moves the time each self-repair read got from Redis
+	// TIME. Tests only: nil in production (TestNoProductionSelfRepairSkew).
+	SelfRepairSkew func(time.Time) time.Time
 }
 
 // foregroundConfig adds to cfg, in place, what the foreground agentbus
@@ -95,7 +110,7 @@ func foregroundConfig(d dispatchDeps, cfg *dispatch.Config, rt dispatch.Runtime)
 	b := d.Bus
 	cfg.PopRetire = d.PopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return mission.HeldBy(ctx, b, a) }), rt)
 	if paths, err := service.PathsFrom(os.Getenv); err == nil {
-		cfg.Health = realHealthConfig(b, rt, paths, cfg.Clear, &cfg.EscalateTo)
+		cfg.Health = realHealthConfig(b, rt, d.Manager, paths, cfg.Clear, &cfg.EscalateTo)
 		if b != nil { // a bad flag exits before any bus is used
 			cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(b.Project()))
 		}
