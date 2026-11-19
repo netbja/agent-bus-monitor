@@ -717,8 +717,16 @@ func mainServiceRun(project, host string, args []string) int {
 // service runs, and the relay (herdr exit §4.2). The relay was missing here
 // until host-relay-timeout: only the foreground agentbus dispatch set it, so
 // a host command from an agent's terminal was never read by the service.
-func serviceDispatchConfig(b *bus.Bus, project, host string, paths service.Paths, log io.Writer) (dispatch.Config, *dispatch.HostRuntime, error) {
+func serviceDispatchConfig(b *bus.Bus, project, host, escalateTo string, paths service.Paths, log io.Writer) (dispatch.Config, *dispatch.HostRuntime, error) {
 	cfg := dispatchBaseConfig()
+	if escalateTo != "" { // service run --escalate-to, else AGENT_BUS_ESCALATE_TO; master otherwise
+		cfg.EscalateTo = escalateTo
+	}
+	// target is the one escalation target the stall checks, the self-repair
+	// watcher and the reboot judge read: its own variable, set before any of
+	// them holds it, since cfg is returned by value (a pointer into cfg would
+	// point at this function's copy, not the caller's).
+	target := cfg.EscalateTo
 	cfg.Log = log
 	cfg.HostOps = hostOpsConfig(b, project, host) // host commands from inside an agent's terminal
 	cfg.Quota = serviceQuota(os.Getenv, log)
@@ -741,14 +749,14 @@ func serviceDispatchConfig(b *bus.Bus, project, host string, paths service.Paths
 	if err != nil {
 		return cfg, nil, err
 	}
-	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &cfg.EscalateTo)
+	cfg.Health = realHealthConfig(b, h, paths, cfg.Clear, &target)
 	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
-	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &cfg.EscalateTo)
+	repair, repairCfg := serviceSelfRepair(b, os.Getenv, &target)
 	cfg.SelfRepair, cfg.Health.Checks = repairCfg, append(cfg.Health.Checks, selfRepairCheck(repair))
 	cfg.PopRetire = withPopEnd(servicePopRetire(os.Getenv, func(ctx context.Context, a string) ([]string, error) { return missionsOf(ctx, b, a) }), b, h, os.Getenv)
-	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))       // read at each client-update send (auto-reload)
-	workdir, _ := os.Getwd()                                                        // the unit's WorkingDirectory: the project's repository
-	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, workdir, log).run // judged once, before any loop (reboot-resume §3)
+	cfg.ReloadPolicy = serviceReloadPolicy(os.Getenv, paths.EnvFile(project))                // read at each client-update send (auto-reload)
+	workdir, _ := os.Getwd()                                                                 // the unit's WorkingDirectory: the project's repository
+	cfg.Reboot = serviceRebootJudge(b, project, paths, os.Getenv, workdir, &target, log).run // judged once, before any loop (reboot-resume §3)
 	return cfg, h, nil
 }
 
@@ -780,17 +788,14 @@ func serviceRunDepsFor(project, host, hostname string, paths service.Paths) serv
 		Settings:     func() []string { return settingsWarnings(os.Getenv) },
 		EnsureHolder: serviceEnsureHolder(project, func(log io.Writer) upDeps { return realUpDepsIn(nil, log, log) }),
 		RunDispatch: func(ctx context.Context, b *bus.Bus, escalateTo string, onLease func(bool), log io.Writer) int {
-			cfg, h, err := serviceDispatchConfig(b, project, host, paths, log)
+			cfg, h, err := serviceDispatchConfig(b, project, host, escalateTo, paths, log)
 			if err != nil {
 				fmt.Fprintf(log, "dispatch: %v\n", err)
 				return 1
 			}
 			run := newDispatchRunRecord(paths.StateDir(project), log) // stopped on a signal (reboot-resume §2.1); running is the judge's, after its verdict
 			cfg.OnLease = onLease
-			if escalateTo != "" {
-				cfg.EscalateTo = escalateTo
-			}
-			code := superviseDispatch(ctx, b, h, cfg, log)
+			code := supervise(ctx, b, h, cfg, log)
 			run.exited(ctx.Err() != nil) // the context ends on SIGTERM or SIGINT only
 			return code
 		},

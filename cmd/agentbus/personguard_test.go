@@ -114,7 +114,7 @@ func TestDispatchConfigKnowsThePerson(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
-	sc, _, err := serviceDispatchConfig(b, "demo", "", paths, io.Discard)
+	sc, _, err := serviceDispatchConfig(b, "demo", "", "", paths, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
