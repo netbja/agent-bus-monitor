@@ -34,12 +34,11 @@ func runMergeQueue(ctx context.Context, b *bus.Bus, self string, args []string, 
 	}
 	var rec bus.MergeQueueRecord
 	if live {
-		c := serviceMergeQueueChore(b, os.Getenv)
-		if c == nil {
+		var ok bool
+		if rec, ok = mergeQueueLive(ctx, b, os.Getenv); !ok {
 			fmt.Fprintln(os.Stderr, "merge-queue: no working directory")
 			return 2
 		}
-		rec = c.derive(ctx)
 		if now := time.Now().UnixMilli(); rec.Reason == "" {
 			rec.AttemptedAt, rec.ItemsAt = now, now
 		} else {

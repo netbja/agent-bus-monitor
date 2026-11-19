@@ -112,7 +112,7 @@ func TestServiceRebootJudgeEscalatesToTheTarget(t *testing.T) {
 	paths := escalateEnv(t)
 	for _, tc := range []struct{ in, want string }{{"lead", "lead"}, {"", "master"}} {
 		target := tc.in
-		j := serviceRebootJudge(w.b, w.b.Project(), paths, func(string) string { return "" }, t.TempDir(), &target, io.Discard)
+		j := serviceRebootJudge(w.b, w.b.Project(), paths, func(string) string { return "" }, t.TempDir(), runBootID(), &target, io.Discard)
 		if got := j.escalate(); got != tc.want {
 			t.Errorf("%q: reboot judge target %q", tc.in, got)
 		}

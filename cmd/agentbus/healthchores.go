@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"sort"
 	"time"
 
@@ -42,11 +43,16 @@ func modelsRefresh() func(context.Context) error {
 	return func(ctx context.Context) error { return dailyModelsRefresh(ctx) }
 }
 
+// serviceModelsGetenv reads models.source_max_age for the dispatch service's
+// model chores, as modelsGetenv does for agentbus models (a test replaces
+// both: isolateModelSettings).
+var serviceModelsGetenv = os.Getenv
+
 // dailyModelsRefresh is refreshModelsDaily (a test replaces it).
 var dailyModelsRefresh = refreshModelsDaily
 
 func refreshModelsDaily(ctx context.Context) error {
-	cfg, err := models.LoadConfigWithSettings(models.ConfigPath(), modelsGetenv)
+	cfg, err := models.LoadConfigWithSettings(models.ConfigPath(), serviceModelsGetenv)
 	if err != nil {
 		return err
 	}

@@ -181,6 +181,17 @@ func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
 	return rec
 }
 
+// mergeQueueLive derives the merge queue now, as the chore does, in the
+// current directory (merge-queue --live; dispatchsvc spec §3, MergeQueueLive):
+// false when there is no working directory.
+func mergeQueueLive(ctx context.Context, b *bus.Bus, getenv func(string) string) (bus.MergeQueueRecord, bool) {
+	c := serviceMergeQueueChore(b, getenv)
+	if c == nil {
+		return bus.MergeQueueRecord{}, false
+	}
+	return c.derive(ctx), true
+}
+
 // deriveRun is derive with the run's delivered heads (run-budget §2): none
 // known when the pass fails.
 func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads) {

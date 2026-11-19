@@ -126,8 +126,8 @@ func checkFixture(t *testing.T, now time.Time) (cache string, manifest func() (*
 // AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
 func isolateModelSettings(t *testing.T, dir, maxAge string) {
 	t.Helper()
-	old := modelsGetenv
-	t.Cleanup(func() { modelsGetenv = old })
+	old, oldService := modelsGetenv, serviceModelsGetenv
+	t.Cleanup(func() { modelsGetenv, serviceModelsGetenv = old, oldService })
 	modelsGetenv = func(k string) string {
 		switch k {
 		case "HOME", "XDG_CONFIG_HOME":
@@ -137,6 +137,7 @@ func isolateModelSettings(t *testing.T, dir, maxAge string) {
 		}
 		return ""
 	}
+	serviceModelsGetenv = modelsGetenv
 }
 
 // §3.2: the listing prints the source's own age; models check says unknown

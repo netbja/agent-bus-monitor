@@ -426,7 +426,7 @@ func TestServiceSelfRepairByMode(t *testing.T) {
 			return tc.env[k]
 		}
 		escalate := "boss"
-		c, cfg := serviceSelfRepair(b, getenv, &escalate)
+		c, cfg := serviceSelfRepair(b, getenv, &escalate, runBootID())
 		if c.mode != tc.mode || (cfg.Pass != nil) != tc.pass || c.master() != "boss" {
 			t.Errorf("%v: mode %s pass %v", tc.env, c.mode, cfg.Pass != nil)
 		}
@@ -482,7 +482,7 @@ func TestReadSelfRepairRedis(t *testing.T) {
 		}
 		return ""
 	}
-	r, err := readSelfRepair(ctx, b, getenv)
+	r, err := readSelfRepair(ctx, b, getenv, runBootID())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -205,7 +205,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			if err != nil {
 				return health.Unknown, "agent snapshots unavailable", err
 			}
-			manifestPath, err := manifestPath(os.Environ())
+			manifestPath, err := rolecfg.ManifestPath(os.Getenv)
 			if err != nil {
 				return health.Unknown, "role manifest unavailable", err
 			}
@@ -255,7 +255,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			return out.Status, out.Detail, nil
 		}),
 		healthTask("model-drift", func(ctx context.Context) (health.Status, string, error) {
-			rows, err := modelcheck.DoctorRows(ctx, b, modelcheck.RealDoctorDeps(os.Getenv, modelsGetenv))
+			rows, err := modelcheck.DoctorRows(ctx, b, modelcheck.RealDoctorDeps(os.Getenv, serviceModelsGetenv))
 			if err != nil {
 				return health.Unknown, "roles doctor could not complete", err
 			}
@@ -615,12 +615,12 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			} else if cache.Tag != "" && !versionAtLeast(buildinfo.Version, cache.Tag) {
 				problems++
 			}
-			manifestPath, err := manifestPath(os.Environ())
+			manifestPath, err := rolecfg.ManifestPath(os.Getenv)
 			if err != nil {
 				known = false
 			} else if m, err := rolecfg.Load(manifestPath); err != nil {
 				known = false
-			} else if !skillsMatch(m, os.Environ()) {
+			} else if !skillsMatch(m, os.Getenv) {
 				problems++
 			}
 			out := health.EvaluateVersions(known, problems)
@@ -813,13 +813,13 @@ func readVersion(ctx context.Context, command string) (string, error) {
 	return string(m), nil
 }
 
-func skillsMatch(m *rolecfg.Manifest, env []string) bool {
+func skillsMatch(m *rolecfg.Manifest, getenv func(string) string) bool {
 	if m == nil {
 		return false
 	}
 	root := os.Getenv("AGENTBUS_REPO")
 	if root == "" {
-		manifest, err := manifestPath(env)
+		manifest, err := rolecfg.ManifestPath(getenv)
 		if err != nil {
 			return false
 		}
@@ -835,7 +835,7 @@ func skillsMatch(m *rolecfg.Manifest, env []string) bool {
 		if err != nil {
 			return false
 		}
-		dest := skillsDestination(profile.Client, env)
+		dest := skillsDestination(profile.Client, getenv)
 		for _, name := range profile.Skills {
 			target := filepath.Join(dest, name)
 			resolved, err := filepath.EvalSymlinks(target)
@@ -847,11 +847,9 @@ func skillsMatch(m *rolecfg.Manifest, env []string) bool {
 	return true
 }
 
-func skillsDestination(client string, env []string) string {
-	for _, item := range env {
-		if key, value, ok := strings.Cut(item, "="); ok && key == "SKILLS_DEST" && value != "" {
-			return value
-		}
+func skillsDestination(client string, getenv func(string) string) string {
+	if value := getenv("SKILLS_DEST"); value != "" {
+		return value
 	}
 	home := os.Getenv("HOME")
 	if home == "" {
@@ -898,7 +896,7 @@ var clientUpdateRefresh = func(ctx context.Context, ev []health.ClientEvidence) 
 	if len(updates) == 0 {
 		return
 	}
-	cfg, _ := models.LoadConfigWithSettings(models.ConfigPath(), modelsGetenv)
+	cfg, _ := models.LoadConfigWithSettings(models.ConfigPath(), serviceModelsGetenv)
 	_, _ = refreshForClients(ctx, models.CachePath(), cfg.Tiers, models.Readers(models.RealEnv()), updates, time.Now())
 }
 
