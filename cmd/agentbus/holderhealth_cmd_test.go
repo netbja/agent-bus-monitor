@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -14,7 +15,7 @@ import (
 // installed it says so.
 func TestServiceStartHolder(t *testing.T) {
 	cur := service.BuildKey("v3")
-	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{},
+	hm := &cmdtest.Holders{Manager: newFakeManager(), Active: map[string]bool{},
 		Units: []service.HolderUnit{{Project: "demo", Key: cur, Raw: "v3"}, {Project: "demo", Key: service.BuildKey("v2"), Raw: "v2"}}}
 	d := serviceCmdDeps{Manager: hm, HolderBuild: func() string { return "v3" }}
 	var out, errw strings.Builder
@@ -49,7 +50,7 @@ func TestServiceGC(t *testing.T) {
 		}
 	}
 	// v3 current; v2 running; v1 stopped (removed); v0 a binary with no unit (removed).
-	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{keys["v2"]: true},
+	hm := &cmdtest.Holders{Manager: newFakeManager(), Active: map[string]bool{keys["v2"]: true},
 		Units: []service.HolderUnit{{Project: "demo", Key: keys["v3"], Raw: "v3"}, {Project: "demo", Key: keys["v2"], Raw: "v2"},
 			{Project: "demo", Key: keys["v1"], Raw: "v1"}}}
 	d := serviceCmdDeps{Manager: hm, Paths: paths, HolderBuild: func() string { return "v3" },
@@ -84,7 +85,7 @@ func TestServiceGCSaysASharedCopyIsKept(t *testing.T) {
 	if _, err := service.InstallHolderBinary(paths, "v1", src); err != nil {
 		t.Fatal(err)
 	}
-	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{},
+	hm := &cmdtest.Holders{Manager: newFakeManager(), Active: map[string]bool{},
 		Units: []service.HolderUnit{{Project: "demo", Key: shared, Raw: "v1"}, {Project: "other", Key: shared, Raw: "v1"}}}
 	d := serviceCmdDeps{Manager: hm, Paths: paths, HolderBuild: func() string { return "v2" },
 		HolderAnswers: func(string, string) bool { return false }, HolderAnswersAny: func(string) bool { return false }}

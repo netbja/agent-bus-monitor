@@ -16,6 +16,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/bustest"
 	"github.com/netbja/agent-bus-monitor/notify"
 )
 
@@ -288,7 +289,7 @@ func TestNotificationsTestRefusesAnAgentsChild(t *testing.T) {
 // as an agent with its verified pid and start, so it is refused; with that
 // registration gone it is the person's.
 func TestAgentAncestorFindsARegisteredParent(t *testing.T) {
-	b := notifyBus(t)
+	b := bustest.Leased(t)
 	ctx := context.Background()
 	ppid := os.Getppid()
 	start, err := dispatch.ProcStart(ppid)

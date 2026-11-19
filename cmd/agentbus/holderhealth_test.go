@@ -31,7 +31,7 @@ func TestHolderEvidence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	hm := &fakeHolders{Manager: newFakeManager(), Active: map[string]bool{cur: true, old: true},
+	hm := &fakeHolders{Manager: cmdtest.NewManager(), Active: map[string]bool{cur: true, old: true},
 		Units: []service.HolderUnit{{Project: "demo", Key: cur, Raw: "v3"}, {Project: "demo", Key: old, Raw: "v2"},
 			{Project: "other", Key: gone, Raw: "v1"}}}
 	probe := holderProbe{

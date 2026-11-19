@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
 // The dispatcher's reload policy is read at each call: a config.toml change
@@ -16,7 +18,7 @@ func TestServiceReloadPolicyReadsEachTime(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	write(t, cfg, "[sentinel]\nreload = \"propose\"\n")
+	cmdtest.Write(t, cfg, "[sentinel]\nreload = \"propose\"\n")
 	getenv := func(k string) string {
 		if k == "XDG_CONFIG_HOME" {
 			return xdg
@@ -27,11 +29,11 @@ func TestServiceReloadPolicyReadsEachTime(t *testing.T) {
 	if got := read(); got != "propose" {
 		t.Fatalf("first = %q", got)
 	}
-	write(t, cfg, "[sentinel]\nreload = \"off\"\n")
+	cmdtest.Write(t, cfg, "[sentinel]\nreload = \"off\"\n")
 	if got := read(); got != "off" {
 		t.Fatalf("after the C page = %q", got)
 	}
-	write(t, envFile, "AGENT_BUS_RELOAD=\"on\"\n")
+	cmdtest.Write(t, envFile, "AGENT_BUS_RELOAD=\"on\"\n")
 	if got := read(); got != "on" {
 		t.Fatalf("with the env file = %q", got)
 	}

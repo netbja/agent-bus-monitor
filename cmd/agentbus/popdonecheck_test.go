@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
 func TestPopDoneCheck(t *testing.T) {
@@ -26,13 +27,13 @@ func TestPopDoneCheck(t *testing.T) {
 			return map[string]string{bus.PopDoneMark("security"): itoa64(idle), bus.PopDoneMark("coder"): itoa64(idle)}, nil
 		},
 		Now:    func(context.Context) (int64, error) { return now.UnixMilli(), nil },
-		Getenv: withConfig(t, "", nil),
+		Getenv: cmdtest.WithConfig(t, "", nil),
 	}
 	out, err := popDoneCheck(d)(context.Background())
 	if err != nil || out.Status != health.Warn || !strings.Contains(out.Detail, "security done 50m ago") || strings.Contains(out.Detail, "docs") || strings.Contains(out.Detail, "coder") {
 		t.Fatalf("pop-done = %+v, %v", out, err)
 	}
-	d.Getenv = withConfig(t, "[dispatch]\npop_retire = false\n", nil)
+	d.Getenv = cmdtest.WithConfig(t, "[dispatch]\npop_retire = false\n", nil)
 	if out, _ := popDoneCheck(d)(context.Background()); out.Status != health.Unknown {
 		t.Fatalf("off = %+v", out)
 	}

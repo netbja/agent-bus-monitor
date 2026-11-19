@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -23,7 +24,7 @@ import (
 // backup.Gather's files, in backup.dir), never by the scheduled pass under
 // test. Its name and time are runBackup's (the host, d.Now in UTC); its notes
 // lack the line runBackup adds about Redis's read instant.
-func handArchive(w *backupWorld, project string) (int, string, string) {
+func handArchive(w *cmdtest.BackupWorld, project string) (int, string, string) {
 	ctx := context.Background()
 	var out, errw bytes.Buffer
 	fail := func(err error) (int, string, string) {
@@ -65,7 +66,7 @@ func handArchive(w *backupWorld, project string) (int, string, string) {
 // The reader end to end: archives made by the command, the record written
 // by the runs; the detail always names the folder.
 func TestBackupHealthCheck(t *testing.T) {
-	w := newBackupWorld(t)
+	w := cmdtest.NewBackupWorld(t)
 	p := w.B.Project()
 	cfg := filepath.Join(w.Home, ".config", "agentbus", "config.toml")
 	check := func() health.Outcome {

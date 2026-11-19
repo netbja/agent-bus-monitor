@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/bustest"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -22,7 +23,7 @@ type runWorld struct {
 
 func newRunWorld(t *testing.T) *runWorld {
 	t.Helper()
-	b, r := dialMain(t)
+	b, r := bustest.Open(t)
 	ctx := context.Background()
 	if ok, err := b.AcquireDispatch(ctx, "tok", time.Minute); err != nil || !ok {
 		t.Fatalf("AcquireDispatch = %v, %v", ok, err)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/bustest"
 )
 
 func ideaEnv(kv ...string) func(string) string {
@@ -29,7 +30,7 @@ func runIdeaT(t *testing.T, b *bus.Bus, env func(string) string, args ...string)
 // add is open to agents (by is the agent) and to a person (--as); it
 // always starts at "to discuss", whatever is typed.
 func TestIdeaAdd(t *testing.T) {
-	b := notifyBus(t)
+	b := bustest.Leased(t)
 	agent := ideaEnv("AGENT_BUS_AGENT", "coder", "AGENTBUS_TERM_ID", "w1:p2")
 	code, out, errw := runIdeaT(t, b, agent, "add", "busmon", "update", "without", "setup.sh", "--text", "why not", "--source", "memory")
 	if code != 0 || !strings.Contains(out, "i1") {
@@ -63,7 +64,7 @@ func TestIdeaAdd(t *testing.T) {
 // pane, needs a name (--as or identity.as, never pilot), and passes the
 // state it read as the compare-and-set's expected one.
 func TestIdeaSet(t *testing.T) {
-	b := notifyBus(t)
+	b := bustest.Leased(t)
 	ctx := context.Background()
 	id, _ := b.AddIdea(ctx, bus.IdeaDef{Title: "t", By: "coder"})
 	for _, env := range []func(string) string{
@@ -99,7 +100,7 @@ func TestIdeaSet(t *testing.T) {
 }
 
 func TestIdeaList(t *testing.T) {
-	b := notifyBus(t)
+	b := bustest.Leased(t)
 	ctx := context.Background()
 	a, _ := b.AddIdea(ctx, bus.IdeaDef{Title: "first", By: "coder"})
 	b.AddIdea(ctx, bus.IdeaDef{Title: "second", By: "master"})
@@ -142,7 +143,7 @@ func TestIdeaGuard(t *testing.T) {
 // request id; --request reuses one, so a retry after a lost reply finds the
 // idea it made. A malformed id is a usage error.
 func TestIdeaAddRequest(t *testing.T) {
-	b := notifyBus(t)
+	b := bustest.Leased(t)
 	env := ideaEnv("AGENT_BUS_AGENT", "coder")
 	code, out, errw := runIdeaT(t, b, env, "add", "once", "--request", "req-0001-abcd")
 	if code != 0 || !strings.Contains(out, "i1") {

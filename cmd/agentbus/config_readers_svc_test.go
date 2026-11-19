@@ -11,13 +11,14 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
 func noLook(string) (string, error) { return "", os.ErrNotExist }
 
 func TestServiceReadersReadConfigTOML(t *testing.T) {
 	file := "[dispatch]\nquota_warn = 70\nquota_hold = 90\nquota_max_age = \"10m\"\nquota_long_hold = \"0\"\ntokens = false\nauto_clear = true\nprompt_grace = 45\ncontext_alert = 60\n"
-	getenv := withConfig(t, file, nil)
+	getenv := cmdtest.WithConfig(t, file, nil)
 	q := serviceQuota(getenv, io.Discard)
 	if q.WarnPct != 70 || q.HoldPct != 90 || q.MaxAge != 10*time.Minute || q.LongHold != -1 {
 		t.Errorf("quota from config.toml = %+v", q)
@@ -35,7 +36,7 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 		t.Errorf("context alert = %v", a)
 	}
 	// The env still wins, by its own rule.
-	getenv = withConfig(t, file, map[string]string{"AGENT_BUS_QUOTA_WARN": "75", "AGENT_BUS_TOKENS": "1", "AGENT_BUS_AUTO_CLEAR": "0", "AGENT_BUS_PROMPT_GRACE": "0"})
+	getenv = cmdtest.WithConfig(t, file, map[string]string{"AGENT_BUS_QUOTA_WARN": "75", "AGENT_BUS_TOKENS": "1", "AGENT_BUS_AUTO_CLEAR": "0", "AGENT_BUS_PROMPT_GRACE": "0"})
 	if q := serviceQuota(getenv, io.Discard); q.WarnPct != 75 || q.HoldPct != 90 {
 		t.Errorf("env over file: %+v", q)
 	}
@@ -50,21 +51,21 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 	}
 	// auto-clear: on with no file at all, off by the file's false, and the
 	// env's 0 wins over a file that turns it on.
-	if !serviceClear(withConfig(t, "", nil), noLook, nil).On {
+	if !serviceClear(cmdtest.WithConfig(t, "", nil), noLook, nil).On {
 		t.Error("auto-clear is off with no setting; the default is on")
 	}
-	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = false\n", nil), noLook, nil).On {
+	if serviceClear(cmdtest.WithConfig(t, "[dispatch]\nauto_clear = false\n", nil), noLook, nil).On {
 		t.Error("auto_clear = false did not turn it off")
 	}
-	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = true\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "0"}), noLook, nil).On {
+	if serviceClear(cmdtest.WithConfig(t, "[dispatch]\nauto_clear = true\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "0"}), noLook, nil).On {
 		t.Error("AGENT_BUS_AUTO_CLEAR=0 did not turn it off over the file")
 	}
 	// A value the rule does not take is skipped: the file's false still applies.
-	if serviceClear(withConfig(t, "[dispatch]\nauto_clear = false\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "true"}), noLook, nil).On {
+	if serviceClear(cmdtest.WithConfig(t, "[dispatch]\nauto_clear = false\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "true"}), noLook, nil).On {
 		t.Error("AGENT_BUS_AUTO_CLEAR=true overrode auto_clear = false; it must be skipped")
 	}
 	// quota off in the file.
-	if q := serviceQuota(withConfig(t, "[dispatch]\nquota = false\n", nil), io.Discard); q.Read != nil {
+	if q := serviceQuota(cmdtest.WithConfig(t, "[dispatch]\nquota = false\n", nil), io.Discard); q.Read != nil {
 		t.Error("quota = false did not turn the policy off")
 	}
 }
@@ -82,11 +83,11 @@ func TestServiceReadersWithoutAFile(t *testing.T) {
 }
 
 func TestRunawayThresholdsReadConfigTOML(t *testing.T) {
-	th, ok := runawayThresholdsFromEnv(withConfig(t, "[health.runaway]\nsilent_after = \"45m\"\nscreen_repeats = 6\n", nil))
+	th, ok := runawayThresholdsFromEnv(cmdtest.WithConfig(t, "[health.runaway]\nsilent_after = \"45m\"\nscreen_repeats = 6\n", nil))
 	if !ok || th.SilentAfter != 45*time.Minute || th.RepeatedScreens != 6 || th.FastGrowth != health.RunawayFastGrowth {
 		t.Errorf("thresholds = %+v ok=%v", th, ok)
 	}
-	if _, ok := runawayThresholdsFromEnv(withConfig(t, "[health.runaway]\nsilent_after = \"45m\"\n", map[string]string{"AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER": "soon"})); ok {
+	if _, ok := runawayThresholdsFromEnv(cmdtest.WithConfig(t, "[health.runaway]\nsilent_after = \"45m\"\n", map[string]string{"AGENTBUS_HEALTH_RUNAWAY_SILENT_AFTER": "soon"})); ok {
 		t.Error("an invalid env value must make the check unknown, whatever the file says")
 	}
 }
@@ -94,7 +95,7 @@ func TestRunawayThresholdsReadConfigTOML(t *testing.T) {
 // TestSettingsWarningsAreSaid's bad value falls back in the dispatcher's
 // quota settings.
 func TestSettingsBadValueFallsBack(t *testing.T) {
-	getenv := withConfig(t, "[dispatch]\nquota_warn = 0\n[x]\ntoken = \"SECRET-v\"\n", nil)
+	getenv := cmdtest.WithConfig(t, "[dispatch]\nquota_warn = 0\n[x]\ntoken = \"SECRET-v\"\n", nil)
 	if q := serviceQuota(getenv, io.Discard); q.WarnPct != 85 {
 		t.Errorf("the bad value did not fall back: %v", q.WarnPct)
 	}
@@ -104,19 +105,19 @@ func TestSettingsBadValueFallsBack(t *testing.T) {
 // off by the file's false, the env's 0, or a delay of 0.
 func TestServicePopRetire(t *testing.T) {
 	missions := func(context.Context, string) ([]string, error) { return nil, nil }
-	if c := servicePopRetire(withConfig(t, "", nil), missions); !c.On || c.After != 15*time.Minute || c.Missions == nil || c.ProcStart == nil {
+	if c := servicePopRetire(cmdtest.WithConfig(t, "", nil), missions); !c.On || c.After != 15*time.Minute || c.Missions == nil || c.ProcStart == nil {
 		t.Errorf("default = %+v", c)
 	}
-	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire = false\n", nil), missions); c.On {
+	if c := servicePopRetire(cmdtest.WithConfig(t, "[dispatch]\npop_retire = false\n", nil), missions); c.On {
 		t.Error("pop_retire = false did not turn it off")
 	}
-	if c := servicePopRetire(withConfig(t, "", map[string]string{"AGENT_BUS_POP_RETIRE": "0"}), missions); c.On {
+	if c := servicePopRetire(cmdtest.WithConfig(t, "", map[string]string{"AGENT_BUS_POP_RETIRE": "0"}), missions); c.On {
 		t.Error("AGENT_BUS_POP_RETIRE=0 did not turn it off")
 	}
-	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire_after = \"0\"\n", nil), missions); c.On {
+	if c := servicePopRetire(cmdtest.WithConfig(t, "[dispatch]\npop_retire_after = \"0\"\n", nil), missions); c.On {
 		t.Error("pop_retire_after = 0 did not turn it off")
 	}
-	if c := servicePopRetire(withConfig(t, "[dispatch]\npop_retire_after = \"30m\"\n", nil), missions); !c.On || c.After != 30*time.Minute {
+	if c := servicePopRetire(cmdtest.WithConfig(t, "[dispatch]\npop_retire_after = \"30m\"\n", nil), missions); !c.On || c.After != 30*time.Minute {
 		t.Errorf("30m = %+v", c)
 	}
 }
@@ -133,7 +134,7 @@ func TestServicePopRetireGivesWithPopEndsLiterals(t *testing.T) {
 		{"", dispatch.PopRetireConfig{On: true, After: 15 * time.Minute, Missions: missions, ProcStart: dispatch.ProcStart}},
 		{"[dispatch]\npop_retire = false\n", dispatch.PopRetireConfig{On: false, After: 15 * time.Minute, Missions: missions, ProcStart: dispatch.ProcStart}},
 	} {
-		c := servicePopRetire(withConfig(t, tc.body, nil), missions)
+		c := servicePopRetire(cmdtest.WithConfig(t, tc.body, nil), missions)
 		if c.On != tc.want.On || c.After != tc.want.After || fn(c.Missions) != fn(tc.want.Missions) || fn(c.ProcStart) != fn(tc.want.ProcStart) || c.End != nil {
 			t.Errorf("%q: %+v, want %+v", tc.body, c, tc.want)
 		}

@@ -86,9 +86,9 @@ func TestModelCatalogueReader(t *testing.T) {
 func TestModelCatalogueRefreshesFirst(t *testing.T) {
 	now := time.Now()
 	cache, manifest := catalogueFixture(t, now)
-	age(t, cache, 25*time.Hour)
+	cmdtest.Age(t, cache, 25*time.Hour)
 	calls := 0
-	r := catalogueReader{cache: cache, manifest: manifest, readers: models.Readers(countingEnv(&calls, nil)), now: func() time.Time { return now }}
+	r := catalogueReader{cache: cache, manifest: manifest, readers: models.Readers(cmdtest.CountingEnv(&calls, nil)), now: func() time.Time { return now }}
 	r.input(context.Background())
 	if calls != 1 {
 		t.Fatalf("refresh calls %d", calls)
@@ -215,7 +215,7 @@ func TestCatalogueAdapterHint(t *testing.T) {
 	now := time.Now()
 	cache, _ := catalogueFixture(t, now)
 	path := t.TempDir() + "/roles.toml"
-	m := checkManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
+	m := cmdtest.CheckManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
 	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
 		t.Fatal(err)
 	}
