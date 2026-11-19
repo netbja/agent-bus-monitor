@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -94,7 +93,7 @@ func runPeer(args []string, getenv func(string) string, out, errw io.Writer) int
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	c := peer.Client{URL: settings.URL, Model: settings.Model, MaxTokens: settings.MaxTokens}
-	fmt.Fprintf(out, "local-llm peer %s on %s, model %s, root %s\n", agent, endpointHost(settings.URL), settings.Model, root)
+	fmt.Fprintf(out, "local-llm peer %s on %s, model %s, root %s\n", agent, peer.EndpointHost(settings.URL), settings.Model, root)
 	peerStartCheck(ctx, c, out)
 	host, _ := os.Hostname()
 	ident, note := peerIdent(statusIdent(ctx), settings, getenv)
@@ -216,22 +215,12 @@ func resolved(p string) string {
 // Without the host key no fingerprint is recorded, and note says so.
 func peerIdent(ident bus.AgentIdent, s peer.Settings, getenv func(string) string) (bus.AgentIdent, string) {
 	ident.Endpoint = s.Endpoint
-	key, note, err := endpointFPKey(getenv)
+	key, note, err := peer.EndpointFPKey(getenv)
 	if err != nil {
 		return ident, "no endpoint fingerprint key (" + err.Error() + "): health cannot tell if [llm." + s.Endpoint + "]'s URL changes"
 	}
 	ident.EndpointFP = peer.EndpointFP(key, s.URL)
 	return ident, note
-}
-
-// endpointFPKey is the host's endpoint fingerprint key, beside config.toml;
-// with no configuration directory there is none (never one in the cwd).
-func endpointFPKey(getenv func(string) string) ([]byte, string, error) {
-	p := config.Path(getenv)
-	if p == "" {
-		return nil, "", fmt.Errorf("no configuration directory")
-	}
-	return peer.FPKey(filepath.Dir(p))
 }
 
 // userHome is the user's home from the passwd entry (os/user); a test's.
@@ -267,19 +256,9 @@ func peerCheck(name string, cfg *config.File, out, errw io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := (peer.Client{URL: ep.URL, Model: ep.Model}).CheckModel(ctx); err != nil {
-		fmt.Fprintf(errw, "peer: [llm.%s] at %s: %v\n", name, endpointHost(ep.URL), err)
+		fmt.Fprintf(errw, "peer: [llm.%s] at %s: %v\n", name, peer.EndpointHost(ep.URL), err)
 		return 1
 	}
-	fmt.Fprintf(out, "[llm.%s] at %s serves %s\n", name, endpointHost(ep.URL), ep.Model)
+	fmt.Fprintf(out, "[llm.%s] at %s serves %s\n", name, peer.EndpointHost(ep.URL), ep.Model)
 	return 0
-}
-
-// endpointHost is an endpoint's host and port, never its path: what agentbus
-// config shows of it.
-func endpointHost(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "?"
-	}
-	return u.Host
 }

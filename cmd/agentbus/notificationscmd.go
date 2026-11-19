@@ -49,7 +49,7 @@ type notificationsDeps struct {
 
 func realNotificationsDeps() notificationsDeps {
 	return notificationsDeps{Getenv: os.Getenv, Now: time.Now, Hostname: os.Hostname,
-		Desktop: desktopRun(exec.LookPath, runQuiet), AgentCaller: agentAncestor,
+		Desktop: notify.NotifySend(exec.LookPath, notify.RunQuiet), AgentCaller: agentAncestor,
 		Term: openTTY, Stdin: os.Stdin, StdinTerminal: stdinIsTerminal()}
 }
 
@@ -58,20 +58,6 @@ func realNotificationsDeps() notificationsDeps {
 var errNoAncestry = agentcaller.ErrNoAncestry
 
 func agentAncestor(ctx context.Context) (string, error) { return agentcaller.Ancestor(ctx) }
-
-// desktopRun is notify-send with an urgency, bounded to 5 s; nil when it is
-// not on PATH.
-func desktopRun(lookPath func(string) (string, error), run func(ctx context.Context, bin string, args ...string) error) notify.DesktopRun {
-	bin, err := lookPath("notify-send")
-	if err != nil {
-		return nil
-	}
-	return func(ctx context.Context, title, body, urgency string) error {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		return run(ctx, bin, "-a", "agentbus", "-u", urgency, title, body)
-	}
-}
 
 const notificationsUsage = "usage: agentbus notifications status | test [<target>] | setup | add | remove | rename | show-topic"
 

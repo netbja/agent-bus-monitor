@@ -240,12 +240,3 @@ func printMergeQueue(rec bus.MergeQueueRecord, asJSON bool, out io.Writer) int {
 	}
 	return code
 }
-
-// mergeQueueInput is the record as the health check reads it.
-func mergeQueueInput(rec bus.MergeQueueRecord) health.MergeQueueInput {
-	in := health.MergeQueueInput{ItemsAt: rec.ItemsAt, Reason: rec.Reason, Unapproved: rec.Unapproved}
-	for _, it := range rec.Items {
-		in.Items = append(in.Items, health.MergeQueueEntry{Number: it.Number, Title: it.Title, Branch: it.Branch})
-	}
-	return in
-}

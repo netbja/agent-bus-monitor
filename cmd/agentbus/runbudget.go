@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -49,9 +50,9 @@ func runTotals(run bus.RunRecord, nowMs int64, l runLimits) string {
 	if l.maxDeliveries > 0 {
 		d += fmt.Sprintf(" of %d", l.maxDeliveries)
 	}
-	e := runDuration(run.Elapsed(nowMs))
+	e := textfmt.RunDuration(run.Elapsed(nowMs))
 	if l.maxDuration > 0 {
-		e += " of " + runDuration(l.maxDuration)
+		e += " of " + textfmt.RunDuration(l.maxDuration)
 	}
 	return d + ", " + e
 }
@@ -123,7 +124,7 @@ func (c *mergeQueueChore) runStepKnown(ctx context.Context, token string, run bu
 func (c *mergeQueueChore) announceStop(ctx context.Context, token string, run bus.RunRecord, now int64, l runLimits, inFlight []string) error {
 	text := fmt.Sprintf("%s: run stopped (%s; %s): the project is paused; agentbus run reset starts a new run", c.b.Project(), run.Why, runTotals(run, now, l))
 	if len(inFlight) > 0 {
-		text += fmt.Sprintf("; still in flight (run.drain_max %s passed): %s", runDuration(l.drainMax), strings.Join(inFlight, ", "))
+		text += fmt.Sprintf("; still in flight (run.drain_max %s passed): %s", textfmt.RunDuration(l.drainMax), strings.Join(inFlight, ", "))
 	}
 	_, err := c.b.FencedNotifyOnceForPerson(ctx, token, "run-stop-person", runEpisode(run), "dispatch", text)
 	return err

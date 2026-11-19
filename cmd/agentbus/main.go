@@ -867,7 +867,7 @@ func main() {
 		if err != nil {
 			notes = append(notes, fmt.Sprintf("reading agents: %v", err))
 		}
-		snaps, unotes := collectAgentUsage(agents, usage.ProjectsRoot())
+		snaps, unotes := usage.CollectAgentUsage(agents, usage.ProjectsRoot())
 		notes = append(notes, unotes...)
 		for agent, snap := range snaps {
 			if err := b.SetUsage(ctx, agent, snap); err != nil {
