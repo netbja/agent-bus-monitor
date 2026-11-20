@@ -11,8 +11,8 @@ release exists.
 - The CI loop: the dispatch service's merge-queue pass sends a PR whose checks failed back to its
   head's author, at most `ci.max_handoffs` times (default 3), then stops and tells the person, who
   re-opens it with `agentbus ci reset <pr>` (also busmon's `/ci reset`). A failure the base shares
-  holds the PR and wakes master once. `ci.loop` is on by default. It works on GitHub with `gh` only,
-  once the dispatch service runs this build.
+  holds the PR and wakes master (or the service's `--escalate-to` agent) once. `ci.loop` is on by
+  default. It works on GitHub with `gh` only, once the dispatch service runs this build.
 - busmon: the Tokens sparklines follow `display.graphs` (`auto`, `block`, `braille`, `ascii`); the
   light theme paints its background and keeps a minimum contrast; tcell is gone, with the same look.
 - Files are written atomically (lifecycle, quota, `config.toml`, busmon's cache). The service's
