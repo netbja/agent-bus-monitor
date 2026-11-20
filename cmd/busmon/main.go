@@ -51,6 +51,7 @@ import (
 	guardian "github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/internal/textfmt"
+	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/netbja/agent-bus-monitor/service"
 
@@ -512,6 +513,11 @@ type shared struct {
 	ideasOf  func() ([]bus.Idea, error)
 	ideas    []bus.Idea
 	ideasErr bool // the last read failed: IDEAS says so, never "none"
+	// notesOf reads the idea notes of the project's checkout on this machine
+	// (views-redesign §7 step 1, work_ideas.go); nil: no checkout here.
+	notesOf  func() ([]memory.Question, error)
+	notes    []memory.Question
+	notesErr bool // the last read failed: IDEAS says so too
 }
 
 func main() {
@@ -662,7 +668,7 @@ func main() {
 	// the first tick: an unknown budget stays blank rather than implying 0%
 	// used. The monitor's link starts healthy because bus.Connect just pinged it.
 	st := newShared(self, settings)
-	st.trustOf, st.ideasOf = localTrustOf(project, os.Getenv), brokerIdeasOf(ctx, b)
+	st.trustOf, st.ideasOf, st.notesOf = localTrustOf(project, os.Getenv), brokerIdeasOf(ctx, b), localNotesOf(project, os.Getenv)
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)
 	if cacheErr != nil {
