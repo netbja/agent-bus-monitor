@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -31,51 +33,81 @@ type planBoardView struct {
 	side  []Line
 }
 
-// planNow are NOW's states, in plan.Order's order.
-var planNow = []plan.State{plan.Waiting, plan.Answered, plan.Blocked, plan.InReview, plan.InProgress}
-
 // planSection is one section's rows, in the order they are drawn.
 type planSection struct {
 	name string
 	rows []plan.Row
 }
 
-// planSections splits the rows (§4.2): NOW by plan.Order, NEXT and LATER in
-// file order, DONE last. unknownOnly: a read failed and every row not done is
-// Unknown, so the board draws no NOW, NEXT or LATER but those tasks, in file
-// order, under one muted line.
-func planSections(rows []plan.Row) (secs []planSection, unknownOnly bool) {
-	var now, next, later, done, unknown []plan.Row
-	for _, s := range planNow {
-		for _, r := range rows {
-			if r.State == s {
-				now = append(now, r)
-			}
-		}
+// planApproved says both reviewers approved the task, waiting for its
+// delivery or the person's merge: APPROVED's (views-redesign §4, Q3).
+func planApproved(r plan.Row) bool {
+	return r.State != plan.Done && r.Verdict == plan.Approved && r.Task.Owner != plan.Person &&
+		(r.State == plan.InReview || r.State == plan.Waiting)
+}
+
+// planPrioRank orders by priority: high, normal, low.
+func planPrioRank(t plan.Task) int {
+	switch t.Priority {
+	case bus.PriorityHigh:
+		return 0
+	case bus.PriorityLow:
+		return 2
 	}
+	return 1
+}
+
+// planSections splits the rows into the roadmap (views-redesign §4): NOW is
+// in hand (in progress, in review, answered, blocked); APPROVED is what both
+// reviewers approved, waiting for delivery or the merge; NEXT is not started
+// and unblocked, the person's decisions among them; LATER is blocked by
+// another task, then the low-priority tasks, blocked or not, then the
+// unknown; DONE last. NOW and NEXT sort by priority, then file order.
+// unknownOnly: a read failed and every row not done is Unknown, so the board
+// draws no sections but those tasks, in file order, under one muted line.
+func planSections(rows []plan.Row) (secs []planSection, unknownOnly bool) {
+	var now, approved, next, waits, low, unknown, done []plan.Row
 	for _, r := range rows {
 		switch {
-		case r.State == plan.Upcoming && len(r.WaitingOn) == 0:
-			next = append(next, r)
-		case r.State == plan.Upcoming, r.State == plan.Unknown:
-			later = append(later, r)
 		case r.State == plan.Done:
 			done = append(done, r)
-		}
-		if r.State == plan.Unknown {
+		case r.State == plan.Unknown:
 			unknown = append(unknown, r)
+		case planApproved(r):
+			approved = append(approved, r)
+		case r.State == plan.Upcoming && len(r.WaitingOn) > 0:
+			waits = append(waits, r)
+		case (r.State == plan.Upcoming || r.State == plan.Waiting && r.Task.Owner == plan.Person) && r.Task.Priority == bus.PriorityLow:
+			low = append(low, r)
+		case r.State == plan.Upcoming, r.State == plan.Waiting && r.Task.Owner == plan.Person:
+			next = append(next, r)
+		default: // in progress, in review, answered, blocked, an agent's waiting
+			now = append(now, r)
 		}
 	}
 	if len(unknown) > 0 && len(unknown)+len(done) == len(rows) {
 		return []planSection{{"", unknown}, {"DONE", done}}, true
 	}
-	return []planSection{{"NOW", now}, {"NEXT", next}, {"LATER", later}, {"DONE", done}}, false
+	byPrio := func(rs []plan.Row) {
+		slices.SortStableFunc(rs, func(a, b plan.Row) int { return planPrioRank(a.Task) - planPrioRank(b.Task) })
+	}
+	byPrio(now)
+	byPrio(next)
+	later := append(append(waits, low...), unknown...)
+	return []planSection{{"NOW", now}, {"APPROVED", approved}, {"NEXT", next}, {"LATER", later}, {"DONE", done}}, false
 }
 
 // planBoard renders the board for width cells at tier. sel is the selected
 // item; wide asks for the side panel's lines (the caller gives the list its
 // width beside it). The narrow tier keeps the progress's count only (§6).
 func planBoard(p planState, sel int, showDone bool, now time.Time, width int, tier Tier, wide bool, reqs []request) planBoardView {
+	return planBoardOf(p, sel, showDone, false, now, width, tier, wide, reqs)
+}
+
+// planBoardOf is planBoard with LATER's fold: at the narrow tier LATER is a
+// count line until laterOpen (views-redesign §4, Q5), and DONE is its count
+// line until showDone; both lines are items Enter opens.
+func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, width int, tier Tier, wide bool, reqs []request) planBoardView {
 	var v planBoardView
 	var pl strings.Builder
 	emit := func(l Line) {
@@ -88,6 +120,12 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 	}
 	paces := ownerPaces(reqs)
 	secs, unknownOnly := planSections(p.rows)
+	secOf := map[string]string{} // each task's section: its row's first cell reads it
+	for _, sec := range secs {
+		for _, r := range sec.rows {
+			secOf[r.Task.ID] = sec.name
+		}
+	}
 	if unknownOnly {
 		emit(nil)
 		emit(Line{{Text: "a read failed: states unknown", Role: RoleMuted}})
@@ -99,7 +137,7 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 		if idx == sel {
 			selRow = &r
 		}
-		emit(planBoardRow(p, r, idx == sel, now, width))
+		emit(planBoardRow(p, r, secOf[r.Task.ID], idx == sel, now, width))
 		if l, ok := planProgressLine(r, reqs, paces, now); ok { // progress-line §3: not a row
 			emit(FitLine(append(Line{{Text: "      ", Role: RoleDim}}, l...), width))
 		}
@@ -108,12 +146,35 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 		planGroupBlocks(p, showDone, width, tier, emit, row)
 		secs = nil
 	}
+	fold := func(name string, l Line) { // a folded section's line, an item Enter opens
+		v.items = append(v.items, planItem{fold: name, line: len(v.lines)})
+		emit(append(planMark(len(v.items)-1 == sel), l...))
+	}
 	for _, sec := range secs {
 		if len(sec.rows) == 0 {
 			continue
 		}
+		if sec.name == "LATER" && tier == TierNarrow && !laterOpen {
+			emit(nil)
+			high := 0
+			for _, r := range sec.rows {
+				if r.Task.Priority == bus.PriorityHigh {
+					high++
+				}
+			}
+			text := fmt.Sprintf("LATER %d", len(sec.rows))
+			if high > 0 {
+				text += fmt.Sprintf(" %s %d %s", GlyphNone, high, GlyphUp)
+			}
+			fold("later", Line{{Text: text, Role: RoleText, Bold: true}, {Text: " (enter)", Role: RoleMuted}})
+			continue
+		}
 		if sec.name == "DONE" && !showDone {
 			emit(nil)
+			if tier == TierNarrow {
+				fold("done", Line{{Text: fmt.Sprintf("DONE %d", len(sec.rows)), Role: RoleMuted}, {Text: " (enter)", Role: RoleMuted}})
+				continue
+			}
 			emit(Line{{Text: fmt.Sprintf("DONE  %d", len(sec.rows)), Role: RoleMuted}, {Text: "   d shows", Role: RoleMuted}})
 			continue
 		}
@@ -128,7 +189,7 @@ func planBoard(p planState, sel int, showDone bool, now time.Time, width int, ti
 	v.lines = append(v.lines, nil)
 	v.plain = pl.String()
 	if wide && selRow != nil {
-		v.side = planSide(*selRow, now)
+		v.side = planSide(p, *selRow, now)
 	}
 	return v
 }
@@ -233,10 +294,24 @@ func planHead(p planState, now time.Time) Line {
 	return Line{{Text: text, Role: RoleMuted}}
 }
 
-// planBoardRow is one task: the state's glyph, the title, the owner, the
-// state's word or its reason.
-func planBoardRow(p planState, r plan.Row, selected bool, now time.Time, width int) Line {
+// planBoardRow is one task (views-redesign §4): its first cell, the title,
+// the owner (♙ before the person's), the state's word or its details, and
+// its dependencies, "after <first>" with "+N" for more. The first cell is
+// the priority (↑ high, ↓ low), else the state's glyph in NOW and ✓ in
+// APPROVED, nothing in NEXT and LATER. The person's task reads "decide",
+// never "waiting for you": what the person owes now is Work's.
+func planBoardRow(p planState, r plan.Row, sec string, selected bool, now time.Time, width int) Line {
 	glyph, role := planLook(r.State)
+	switch {
+	case r.Task.Priority == bus.PriorityHigh:
+		glyph, role = GlyphUp, RoleAccent
+	case r.Task.Priority == bus.PriorityLow:
+		glyph, role = GlyphDownArrow, RoleMuted
+	case sec == "APPROVED":
+		glyph, role = GlyphDone, RoleDispatch
+	case sec == "NEXT", sec == "LATER":
+		glyph = " "
+	}
 	owner := r.Task.Owner
 	if owner == plan.Person {
 		owner = GlyphHuman + " " + owner
@@ -244,9 +319,18 @@ func planBoardRow(p planState, r plan.Row, selected bool, now time.Time, width i
 	why := planRowDetails(r, now)
 	if why == "" {
 		why = plan.Label(r.State)
+		if r.State == plan.Waiting && r.Task.Owner == plan.Person {
+			why = "decide"
+		}
 	}
 	if p.kept(r) {
 		why += " ?" // derived from a value kept after a failed read
+	}
+	if a := r.Task.After; len(a) > 0 {
+		why += "  after " + a[0]
+		if len(a) > 1 {
+			why += fmt.Sprintf(" +%d", len(a)-1)
+		}
 	}
 	head := append(planMark(selected), Seg{Text: glyph + " ", Role: role})
 	tail := Line{{Text: "  " + clip(owner, 14), Role: RoleMuted}, {Text: "  " + why, Role: RoleMuted}}
@@ -260,8 +344,10 @@ func planBoardRow(p planState, r plan.Row, selected bool, now time.Time, width i
 }
 
 // planSide is the side panel (§4.3): the selected row's own fields, read from
-// the derived plan.Row only (Verdict is its roll-up label), then Enter's act.
-func planSide(r plan.Row, now time.Time) []Line {
+// the derived plan.Row (Verdict is its roll-up label); its dependencies, ✓
+// when done, the tasks that wait on it and its priority (views-redesign §4);
+// then Enter's act.
+func planSide(p planState, r plan.Row, now time.Time) []Line {
 	or := func(s string) string {
 		if s == "" {
 			return GlyphDash
@@ -269,9 +355,31 @@ func planSide(r plan.Row, now time.Time) []Line {
 		return s
 	}
 	review := or(r.Verdict)
-	waits := GlyphDash
-	if len(r.WaitingOn) > 0 {
-		waits = strings.Join(r.WaitingOn, ", ")
+	state := map[string]plan.State{}
+	var unblocks []string
+	for _, o := range p.rows {
+		state[o.Task.ID] = o.State
+		if slices.Contains(o.Task.After, r.Task.ID) {
+			unblocks = append(unblocks, o.Task.ID)
+		}
+	}
+	after := GlyphDash
+	if len(r.Task.After) > 0 {
+		var deps []string
+		for _, a := range r.Task.After {
+			if state[a] == plan.Done {
+				a += " " + GlyphDone
+			}
+			deps = append(deps, a)
+		}
+		after = strings.Join(deps, ", ")
+	}
+	prio := "normal"
+	switch r.Task.Priority {
+	case bus.PriorityHigh:
+		prio = GlyphUp + " high"
+	case bus.PriorityLow:
+		prio = GlyphDownArrow + " low"
 	}
 	forYou := "nothing"
 	if _, ok := planStartable(planState{loaded: true, rows: []plan.Row{r}}, r.Task.ID); ok {
@@ -293,7 +401,9 @@ func planSide(r plan.Row, now time.Time) []Line {
 		field("review", review),
 		field("PR", pr), // a PR and a reason both hold (a blocked task with its PR linked): two fields (reviewer-codex)
 		field("reason", or(r.Reason)),
-		field("waits on", waits),
+		field("after", after),
+		field("unblocks", or(strings.Join(unblocks, ", "))),
+		field("prio", prio),
 		field("for you", forYou),
 		nil,
 		{{Text: "enter", Role: RoleAccent, Bold: true}, {Text: " task page", Role: RoleMuted}},

@@ -243,10 +243,12 @@ func planLook(s plan.State) (string, Role) {
 	return GlyphIdle, RoleMuted
 }
 
-// planItem is a selectable line of the plan board: a task, by its line.
+// planItem is a selectable line of the plan board: a task, by its line, or
+// a folded section's count (narrow tier: "later" or "done", Enter opens it).
 type planItem struct {
 	task string
-	line int // its line in the body, for scrolling
+	line int    // its line in the body, for scrolling
+	fold string // "later" or "done": a folded section's line, no task
 }
 
 func planMark(selected bool) Line {

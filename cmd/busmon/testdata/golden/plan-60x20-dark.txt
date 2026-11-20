@@ -4,17 +4,17 @@
 ╭─ Plan ─────────────────────────────── y copy · esc back ─╮
 │ 1/6 16%                                                  ▲
 │                                                          ┃
-│ NOW  3                                                   ┃
-│   ♙ title notes  ♙ person  waiting for you               ┃
-│ ▶ ○ title strip  coder  #338 · approved · merge PR 338   ┃
+│ NOW  1                                                   ┃
 │   ● title drawer  coder  in progress                     ┃
 │                                                          ┃
-│ NEXT  1                                                  ┃
-│   ○ title requests  coder  upcoming                      ┃
+│ APPROVED  1                                              ┃
+│ ▶ ✓ title strip  coder  #338 · approved · merge PR 338   ┃
 │                                                          ┃
-│ LATER  1                                                 ┃
-│   ○ title tag  ♙ person  waiting on requests             ┃
+│ NEXT  2                                                  ┃
+│     title notes  ♙ person  decide                        ┃
+│     title requests  coder  upcoming                      ┃
 │                                                          │
-│ DONE  1   d shows                                        ▼
+│   LATER 1 (enter)                                        │
+│                                                          ▼
 ╰──────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done         

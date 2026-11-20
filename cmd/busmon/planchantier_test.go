@@ -89,9 +89,10 @@ func TestPlanBoardGroups(t *testing.T) {
 	if !strings.HasPrefix(done, "DONE  3") || !strings.Contains(done, "d shows") {
 		t.Fatalf("done line %q", done)
 	}
-	// Rows under their header, NOW order then NEXT then LATER; done rows
-	// folded; headers are not items.
-	want := []string{"h2", "h5", "h1", "h3", "s1", "o1"}
+	// Rows under their header in the roadmap's order (views-redesign §4):
+	// NOW (h1), APPROVED (h5), NEXT (h2, the person's decision), LATER (h3);
+	// done rows folded; headers are not items.
+	want := []string{"h1", "h5", "h2", "h3", "s1", "o1"}
 	if len(v.items) != len(want) {
 		t.Fatalf("items %+v", v.items)
 	}
@@ -100,8 +101,8 @@ func TestPlanBoardGroups(t *testing.T) {
 			t.Fatalf("item %d = %s, want %s (%+v)", i, v.items[i].task, id, v.items)
 		}
 	}
-	if l := itemLine(v, "h2"); l != hi+1 {
-		t.Fatalf("h2 on line %d, header on %d", l, hi)
+	if l := itemLine(v, "h1"); l != hi+1 {
+		t.Fatalf("h1 on line %d, header on %d", l, hi)
 	}
 	if l := itemLine(v, "s1"); l != si+1 {
 		t.Fatalf("s1 on line %d, header on %d", l, si)
@@ -176,11 +177,11 @@ func TestPlanBoardGroupsUnknownAndUngrouped(t *testing.T) {
 	}
 }
 
-// §3: selection is per task row, headers skipped: item 2 is h1, and the
-// side panel shows h1.
+// §3: selection is per task row, headers skipped: item 2 is h2 (the
+// roadmap's order, views-redesign §4), and the side panel shows h2.
 func TestPlanBoardGroupsSelection(t *testing.T) {
 	v := planBoard(chantierPlan(), 2, false, shellNow, 120, TierWide, true, nil)
-	if v.items[2].task != "h1" || len(v.side) == 0 || !strings.HasPrefix(linesText(v.side), "h1\n") {
+	if v.items[2].task != "h2" || len(v.side) == 0 || !strings.HasPrefix(linesText(v.side), "h2\n") {
 		t.Fatalf("item 2 %+v, side %q", v.items[2], linesText(v.side))
 	}
 }
