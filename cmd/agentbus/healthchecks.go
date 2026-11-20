@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,8 +44,7 @@ type usageBaseline struct {
 
 // realHealthConfig builds read-only checks for one dispatcher. The scheduler
 // runs these outside reconciliation and fences every resulting write.
-func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, paths service.Paths, clear dispatch.ClearConfig, escalateTo *string) dispatch.HealthConfig {
-	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
+func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, paths service.Paths, clear dispatch.ClearConfig, escalateTo *string) dispatch.HealthConfig {
 	stall := newStallReader(b, os.Getenv, clear, escalateTo)
 	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
 	checks = append(checks, healthOutcomeTask("model-catalogue", realCatalogueReader().run)) // model-detection §3.5

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -158,7 +159,8 @@ func TestRealHealthConfigRingsTheHolderDown(t *testing.T) {
 		t.Fatal(err)
 	}
 	master := "master"
-	cfg := realHealthConfig(b, nil, paths, dispatch.ClearConfig{}, &master)
+	manager, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv) // the host's, as the service's caller detects it
+	cfg := realHealthConfig(b, nil, manager, paths, dispatch.ClearConfig{}, &master)
 	if cfg.HolderNotify == nil {
 		t.Fatal("the dispatch service's health config has no holder notice")
 	}

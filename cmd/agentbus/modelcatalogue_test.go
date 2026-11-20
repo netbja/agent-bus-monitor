@@ -3,24 +3,42 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
+
+// catalogueFixture is cmdtest.ModelsCheckFixture in a home the dispatcher's
+// models settings read.
+func catalogueFixture(t *testing.T, now time.Time) (cache string, manifest func() (*rolecfg.Manifest, error)) {
+	t.Helper()
+	dir := t.TempDir()
+	isolateServiceModelSettings(t, dir, "")
+	return cmdtest.ModelsCheckFixture(t, dir, now)
+}
+
+// isolateServiceModelSettings: the dispatcher's models settings come from an
+// empty home, with AGENT_BUS_MODELS_SOURCE_MAX_AGE set to maxAge when not "".
+func isolateServiceModelSettings(t *testing.T, dir, maxAge string) {
+	t.Helper()
+	old := serviceModelsGetenv
+	t.Cleanup(func() { serviceModelsGetenv = old })
+	serviceModelsGetenv = cmdtest.ModelsEnv(dir, maxAge)
+}
 
 // model-detection §3.5: the reader turns the table and roles.toml into the
 // check's input: findings on configured models only, old sources and long
 // failures of the providers a profile uses, and the table's events.
 func TestModelCatalogueReader(t *testing.T) {
 	now := time.Now()
-	cache, manifest := checkFixture(t, now)
+	cache, manifest := catalogueFixture(t, now)
 	tbl, _ := models.Load(cache)
 	tbl.Providers["moonshot"].SourceAt = now.Add(-12 * 24 * time.Hour).UnixMilli()
 	tbl.Providers["google"].ReadAt = now.Add(-3 * 24 * time.Hour).UnixMilli() // failing for 3 days
@@ -67,10 +85,10 @@ func TestModelCatalogueReader(t *testing.T) {
 // The check refreshes a table over 24 h old first, bounded, under the lock.
 func TestModelCatalogueRefreshesFirst(t *testing.T) {
 	now := time.Now()
-	cache, manifest := checkFixture(t, now)
-	age(t, cache, 25*time.Hour)
+	cache, manifest := catalogueFixture(t, now)
+	cmdtest.Age(t, cache, 25*time.Hour)
 	calls := 0
-	r := catalogueReader{cache: cache, manifest: manifest, readers: models.Readers(countingEnv(&calls, nil)), now: func() time.Time { return now }}
+	r := catalogueReader{cache: cache, manifest: manifest, readers: models.Readers(cmdtest.CountingEnv(&calls, nil)), now: func() time.Time { return now }}
 	r.input(context.Background())
 	if calls != 1 {
 		t.Fatalf("refresh calls %d", calls)
@@ -85,7 +103,7 @@ func TestModelCatalogueRefreshesFirst(t *testing.T) {
 // version; a failed read is tried again at the next pass.
 func TestRefreshForClientUpdates(t *testing.T) {
 	now := time.Now()
-	cache, _ := checkFixture(t, now)
+	cache, _ := catalogueFixture(t, now)
 	reads := map[string]int{}
 	fail := false
 	reader := func(p, id string) models.Reader {
@@ -143,7 +161,7 @@ func TestClientUpdates(t *testing.T) {
 // lock skips.
 func TestRecordAliases(t *testing.T) {
 	now := time.Now()
-	cache, _ := checkFixture(t, now)
+	cache, _ := catalogueFixture(t, now)
 	fresh := now.Add(-time.Hour).UnixMilli()
 	rows := []modelcheck.DoctorRow{
 		{Agent: "coder", Configured: "opus", Used: "claude-opus-5-5-20261001", UsedAt: fresh},
@@ -182,15 +200,7 @@ func TestDispatcherReadsNoAdapter(t *testing.T) {
 		return strings.Join(p, ",")
 	}
 	// roles.toml names an adapter with a models argv: still not read.
-	path := t.TempDir() + "/roles.toml"
-	m := checkManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
-	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("ROLES_TOML", path)
-	if got := modelReaders(models.Env{}, manifestFromEnv, io.Discard); len(got) != len(models.Readers(models.Env{}))+1 {
-		t.Fatalf("the fixture's adapter is not seen by modelReaders: %d readers", len(got))
-	}
+	cmdtest.AdapterRoles(t)
 	builtin := providers(models.Readers(models.Env{}))
 	if got := providers(dispatcherModelReaders()); got != builtin {
 		t.Fatalf("dispatcher readers %s, want the built-in %s", got, builtin)
@@ -203,9 +213,9 @@ func TestDispatcherReadsNoAdapter(t *testing.T) {
 // An adapter's provider, old: the hint is the command a person runs.
 func TestCatalogueAdapterHint(t *testing.T) {
 	now := time.Now()
-	cache, _ := checkFixture(t, now)
+	cache, _ := catalogueFixture(t, now)
 	path := t.TempDir() + "/roles.toml"
-	m := checkManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
+	m := cmdtest.CheckManifest + "[adapters.deep]\nexecutable = \"./d\"\nmodels = [\"./d\"]\n[profiles.ds]\nclient = \"deep\"\nprovider = \"deepseek\"\nmodel = \"v4\"\n"
 	if err := os.WriteFile(path, []byte(m), 0o600); err != nil {
 		t.Fatal(err)
 	}

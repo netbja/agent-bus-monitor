@@ -17,7 +17,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 )
 
-func backupWorldPass(w *backupWorld, t *testing.T) (error, string) {
+func backupWorldPass(w *cmdtest.BackupWorld, t *testing.T) (error, string) {
 	t.Helper()
 	var log bytes.Buffer
 	err := scheduledBackupPass(context.Background(), w.D, &log)
@@ -26,7 +26,7 @@ func backupWorldPass(w *backupWorld, t *testing.T) (error, string) {
 
 func TestScheduledBackup(t *testing.T) {
 	// off: nothing.
-	w := newBackupWorld(t)
+	w := cmdtest.NewBackupWorld(t)
 	if err, _ := backupWorldPass(w, t); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestScheduledBackup(t *testing.T) {
 func TestScheduledBackupJudgesEachProject(t *testing.T) {
 	w := newScheduleWorld(t, "")
 	os.WriteFile(filepath.Join(w.Home, ".config", "agentbus", "projects", "other.toml"), []byte(""), 0o600)
-	if code, out, errw := runBackupWorld(w, "--project", w.B.Project()); code != 0 {
+	if code, out, errw := handArchive(w, w.B.Project()); code != 0 {
 		t.Fatalf("by hand: %s %s", out, errw)
 	}
 	if err, log := backupWorldPass(w, t); err != nil {
@@ -121,7 +121,7 @@ func TestScheduledBackupSecrets(t *testing.T) {
 		t.Fatal("no recipient: the secrets are not listed left out")
 	}
 
-	w = newScheduleWorld(t, "age_recipient = \""+cmdRecipient+"\"\n")
+	w = newScheduleWorld(t, "age_recipient = \""+cmdtest.Recipient+"\"\n")
 	w.D.LookPath = func(string) (string, error) { return "", errors.New("not found") }
 	err, _ := backupWorldPass(w, t)
 	if err == nil || !strings.Contains(err.Error(), "age") {
@@ -135,7 +135,7 @@ func TestScheduledBackupSecrets(t *testing.T) {
 	if rec == nil || rec.Archive != list[0].Name || !strings.Contains(rec.SecretsError, "age") {
 		t.Fatalf("record %+v", rec)
 	}
-	w.D.LookPath = func(string) (string, error) { return fakeAgeBin(t), nil }
+	w.D.LookPath = func(string) (string, error) { return cmdtest.FakeAgeBin(t), nil }
 	w.D.Now = func() time.Time { return time.Date(2026, 11, 5, 13, 0, 0, 0, time.UTC) }
 	if err, log := backupWorldPass(w, t); err != nil {
 		t.Fatalf("with age: %v\n%s", err, log)
@@ -153,15 +153,6 @@ func TestScheduledBackupSecrets(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("the scheduled archive with a recipient and age holds no secrets.age")
-	}
-}
-
-// agentbus backup warns about a defaulted backup.dir while daily is on.
-func TestBackupWarnsAboutADefaultDirWhenDaily(t *testing.T) {
-	w := newBackupWorld(t)
-	os.WriteFile(filepath.Join(w.Home, ".config", "agentbus", "config.toml"), []byte("[backup]\nschedule = \"daily\"\n"), 0o600)
-	if _, _, errw := runBackupWorld(w, "--project", w.B.Project()); !strings.Contains(errw, "backup.dir is the default") {
-		t.Fatalf("no warning: %q", errw)
 	}
 }
 

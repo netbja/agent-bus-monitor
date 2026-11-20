@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/bustest"
 	"github.com/netbja/agent-bus-monitor/mergequeue"
 )
 
@@ -20,7 +21,7 @@ const mqHead = "f98091be429b220f63dc8b4b2dde3ef7d6d832a5"
 // every reader faked (no network, no git).
 func mqChore(t *testing.T, origin string) (*mergeQueueChore, *bus.Bus) {
 	t.Helper()
-	b, _ := dialMain(t)
+	b, _ := bustest.Open(t)
 	ctx := context.Background()
 	if _, err := b.AppendVerdict(ctx, bus.Verdict{Subject: "request-priority", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: mqHead, Message: "suites pass"}); err != nil {
 		t.Fatal(err)
@@ -509,7 +510,7 @@ func TestMergeQueueChoreUsesTheProjectBase(t *testing.T) {
 // merge-popup-setting: the dispatch service's chore reads the delivery's
 // mark, so a delivered PR is passed for at once.
 func TestServiceMergeQueueReadsTheDueMark(t *testing.T) {
-	b, _ := dialMain(t)
+	b, _ := bustest.Open(t)
 	cfg := serviceMergeQueue(b, func(string) string { return "" })
 	if cfg.Pass == nil {
 		t.Skip("no chore in this directory")

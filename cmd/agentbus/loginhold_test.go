@@ -61,7 +61,7 @@ func TestIdleImplementerLoginHeld(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "idle-implementer"); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 0 {
+	if got := w.DispatchDirectives("master"); len(got) != 0 {
 		t.Fatalf("master woken for a login-held implementer: %q", got)
 	}
 }
@@ -69,12 +69,12 @@ func TestIdleImplementerLoginHeld(t *testing.T) {
 // CannotAct: a login-held master cannot act on a stall; the person is told why.
 func TestStallNoticeWhenMasterLoginHeld(t *testing.T) {
 	w := newStallWorld(t)
-	rec := w.putStall()
+	rec := w.PutStall()
 	w.loginHold("master")
 	if err := w.s.stallNotify(context.Background(), "stall-holder", rec); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.personNotices(); len(got) != 1 || !strings.Contains(got[0], "master cannot act (master is held: its Claude login expired)") {
+	if got := w.PersonNotices(); len(got) != 1 || !strings.Contains(got[0], "master cannot act (master is held: its Claude login expired)") {
 		t.Fatalf("notices %q", got)
 	}
 }
@@ -93,7 +93,7 @@ func TestIdleMasterLoginHeld(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "idle-master"); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 0 || out.Status != health.OK || out.Detail != "master held: its login expired" {
+	if got := w.DispatchDirectives("master"); len(got) != 0 || out.Status != health.OK || out.Detail != "master held: its login expired" {
 		t.Fatalf("login-held master: %+v, woken %q", out, got)
 	}
 }

@@ -24,7 +24,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"slices"
 	"strings"
 	"syscall"
@@ -33,7 +32,6 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
-	"github.com/netbja/agent-bus-monitor/service"
 )
 
 func TestHolderRestartEndToEnd(t *testing.T) {
@@ -47,11 +45,9 @@ func TestHolderRestartEndToEnd(t *testing.T) {
 	roles := []string{"master", "coder"}
 
 	// health holder as the dispatch service runs it, on this world's units
-	// (the fake manager up installed it with), sockets and copies.
-	paths := service.Paths{DataHome: os.Getenv("XDG_DATA_HOME")}
-	check := holderCheck(b, func() (health.HolderEvidence, error) {
-		return holderEvidence(w.hm, paths, w.project, w.raw, realHolderProbe(os.Getenv)), nil
-	}, os.Getenv)
+	// (the fake manager up installed it with, Deps.Manager), sockets and copies.
+	cfg, _ := w.serviceConfig(t, nil)
+	check := e2eHealthCheck(t, cfg, "holder")
 	var out health.Outcome
 	reads := func(st health.Status, want ...string) bool {
 		var err error

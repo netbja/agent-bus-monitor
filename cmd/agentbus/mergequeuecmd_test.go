@@ -11,10 +11,13 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
+// mqCmdHead is the queued head printMergeQueue shows (f98091b in its output).
+const mqCmdHead = "f98091be429b220f63dc8b4b2dde3ef7d6d832a5"
+
 func mqCmdRecord() bus.MergeQueueRecord {
 	return bus.MergeQueueRecord{AttemptedAt: 1793830000000, ItemsAt: 1793830000000, Source: "gh", Forge: "github", Base: "main", Unapproved: 1, Conflicting: []bus.MergeConflict{{Number: 500, Base: "main"}, {Number: 512, Base: "release"}},
 		Items: []bus.MergeItem{{Number: 309, Title: "request priority", URL: "https://github.com/o/r/pull/309", Branch: "feat/request-priority",
-			Head: mqHead, Subjects: []string{"request-priority"}, ApprovedAt: 1793820000000,
+			Head: mqCmdHead, Subjects: []string{"request-priority"}, ApprovedAt: 1793820000000,
 			Approvals: []bus.MergeApproval{{Reviewer: "foureyes"}, {Reviewer: "reviewer-codex"}}}}}
 }
 
@@ -50,18 +53,6 @@ func TestMergeQueueCmdOutput(t *testing.T) {
 	out.Reset()
 	if code := printMergeQueue(bus.MergeQueueRecord{}, false, &out); code != 2 || !strings.Contains(out.String(), "not computed") {
 		t.Fatalf("no record: %d %q", code, out.String())
-	}
-}
-
-// --live derives in the caller's checkout and writes nothing.
-func TestMergeQueueLiveWritesNothing(t *testing.T) {
-	c, b := mqChore(t, "git@github.com:o/r.git")
-	rec := c.derive(context.Background())
-	if len(rec.Items) != 1 || rec.Reason != "" {
-		t.Fatalf("%+v", rec)
-	}
-	if got, _ := b.MergeQueue(context.Background()); got.AttemptedAt != 0 {
-		t.Fatalf("live wrote the record: %+v", got)
 	}
 }
 

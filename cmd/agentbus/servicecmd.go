@@ -724,11 +724,19 @@ func serviceDispatchDeps(b *bus.Bus, host, escalateTo string, paths service.Path
 		base.EscalateTo = escalateTo
 	}
 	workdir, _ := os.Getwd()
-	return dispatchDeps{Bus: b, Getenv: os.Getenv, Paths: paths, Host: host, Workdir: workdir, Boot: runBootID(), Log: log,
+	return dispatchDeps{Bus: b, Getenv: os.Getenv, Paths: paths, Workdir: workdir, Boot: runBootID(), Log: log,
 		Base: base, HostOps: hostOpsConfig(b, b.Project(), host),
 		PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
 			return withPopEnd(c, b, rt, os.Getenv)
-		}}
+		},
+		Manager: detectedManager()}
+}
+
+// detectedManager is this host's service manager (nil when none is found),
+// the one the dispatcher's health checks read.
+func detectedManager() service.Manager {
+	m, _ := service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
+	return m
 }
 
 // newProbeHost is the project's holder client the service's HostPing probes

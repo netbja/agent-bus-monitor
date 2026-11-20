@@ -8,6 +8,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -40,26 +41,26 @@ func captureSupervised(t *testing.T) *dispatch.Config {
 // stallNoticeNames runs cfg's team-stall notice on a fresh stall (master
 // registered and idle, lead not registered): the person is told at once
 // that target cannot act only when the notice's target is "lead".
-func stallNoticeNames(t *testing.T, w *stallWorld, cfg dispatch.Config) []string {
+func stallNoticeNames(t *testing.T, w *cmdtest.StallWorld, cfg dispatch.Config) []string {
 	t.Helper()
-	rec := w.putStall()
+	rec := w.PutStall()
 	if cfg.Health.StallNotify == nil {
 		t.Fatal("no team-stall notice")
 	}
 	if err := cfg.Health.StallNotify(context.Background(), "stall-holder", rec); err != nil {
 		t.Fatal(err)
 	}
-	return w.personNotices()
+	return w.PersonNotices()
 }
 
 // The dispatch service's escalation target (service run --escalate-to, or
 // AGENT_BUS_ESCALATE_TO) reaches the stall checks, not only the loop.
 func TestServiceDispatchEscalatesToItsTarget(t *testing.T) {
-	w := newStallWorld(t)
+	w := cmdtest.NewStallWorld(t)
 	paths := escalateEnv(t)
 	got := captureSupervised(t)
-	d := serviceRunDepsFor(w.b.Project(), "", "h1", paths)
-	if code := d.RunDispatch(context.Background(), w.b, "lead", nil, io.Discard); code != 0 {
+	d := serviceRunDepsFor(w.B.Project(), "", "h1", paths)
+	if code := d.RunDispatch(context.Background(), w.B, "lead", nil, io.Discard); code != 0 {
 		t.Fatalf("RunDispatch = %d", code)
 	}
 	if got.EscalateTo != "lead" {
@@ -73,11 +74,11 @@ func TestServiceDispatchEscalatesToItsTarget(t *testing.T) {
 
 // Without a target the service escalates to master, everywhere.
 func TestServiceDispatchEscalatesToMasterByDefault(t *testing.T) {
-	w := newStallWorld(t)
+	w := cmdtest.NewStallWorld(t)
 	paths := escalateEnv(t)
 	got := captureSupervised(t)
-	d := serviceRunDepsFor(w.b.Project(), "", "h1", paths)
-	if code := d.RunDispatch(context.Background(), w.b, "", nil, io.Discard); code != 0 {
+	d := serviceRunDepsFor(w.B.Project(), "", "h1", paths)
+	if code := d.RunDispatch(context.Background(), w.B, "", nil, io.Discard); code != 0 {
 		t.Fatalf("RunDispatch = %d", code)
 	}
 	if got.EscalateTo != "master" {
@@ -90,10 +91,10 @@ func TestServiceDispatchEscalatesToMasterByDefault(t *testing.T) {
 
 // The foreground dispatcher's --escalate-to reaches the stall checks too.
 func TestForegroundDispatchEscalatesToItsTarget(t *testing.T) {
-	w := newStallWorld(t)
+	w := cmdtest.NewStallWorld(t)
 	escalateEnv(t)
 	got := captureSupervised(t)
-	if code := runDispatch(context.Background(), w.b, []string{"--escalate-to", "lead"}, noRuntime{t}, io.Discard, io.Discard); code != 0 {
+	if code := runDispatch(context.Background(), w.B, []string{"--escalate-to", "lead"}, noRuntime{t}, io.Discard, io.Discard); code != 0 {
 		t.Fatalf("runDispatch = %d", code)
 	}
 	if got.EscalateTo != "lead" {
@@ -105,35 +106,21 @@ func TestForegroundDispatchEscalatesToItsTarget(t *testing.T) {
 	}
 }
 
-// The reboot judge the service builds escalates to the service's target,
-// master when it has none.
-func TestServiceRebootJudgeEscalatesToTheTarget(t *testing.T) {
-	w := newStallWorld(t)
-	paths := escalateEnv(t)
-	for _, tc := range []struct{ in, want string }{{"lead", "lead"}, {"", "master"}} {
-		target := tc.in
-		j := serviceRebootJudge(w.b, w.b.Project(), paths, func(string) string { return "" }, t.TempDir(), runBootID(), &target, io.Discard)
-		if got := j.escalate(); got != tc.want {
-			t.Errorf("%q: reboot judge target %q", tc.in, got)
-		}
-	}
-}
-
 // The reboot judge in the service's config (cfg.Reboot, the one the service
 // runs) tells the service's target that the team restarts: this boot is
 // already judged a restart, so the judge gives its directive again.
 func TestServiceRebootEscalatesToItsTarget(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{{"lead", "lead"}, {"", "master"}} {
-		w := newStallWorld(t)
+		w := cmdtest.NewStallWorld(t)
 		paths := escalateEnv(t)
 		withBoot(t, "B7")
 		got := captureSupervised(t)
-		d := serviceRunDepsFor(w.b.Project(), "", "h1", paths)
-		if code := d.RunDispatch(context.Background(), w.b, tc.in, nil, io.Discard); code != 0 {
+		d := serviceRunDepsFor(w.B.Project(), "", "h1", paths)
+		if code := d.RunDispatch(context.Background(), w.B, tc.in, nil, io.Discard); code != 0 {
 			t.Fatalf("RunDispatch = %d", code)
 		}
 		rec := bus.RebootRecord{Boot: "B7", Verdict: bus.RebootRestarting, N: 1, Max: 3, Window: 86400000}
-		if err := w.b.FencedPutReboot(context.Background(), "stall-holder", rec); err != nil {
+		if err := w.B.FencedPutReboot(context.Background(), "stall-holder", rec); err != nil {
 			t.Fatal(err)
 		}
 		if got.Reboot == nil {
@@ -142,7 +129,7 @@ func TestServiceRebootEscalatesToItsTarget(t *testing.T) {
 		if err := got.Reboot(context.Background(), "stall-holder"); err != nil {
 			t.Fatal(err)
 		}
-		if told := w.dispatchDirectives(tc.want); len(told) != 1 || !strings.Contains(told[0], "restarted after an unplanned stop") {
+		if told := w.DispatchDirectives(tc.want); len(told) != 1 || !strings.Contains(told[0], "restarted after an unplanned stop") {
 			t.Errorf("%q: directives to %s %q", tc.in, tc.want, told)
 		}
 	}

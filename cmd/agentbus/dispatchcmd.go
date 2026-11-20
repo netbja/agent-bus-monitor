@@ -42,7 +42,7 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 	}
 	foregroundConfig(dispatchDeps{Bus: b, Getenv: os.Getenv, PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
 		return withPopEnd(c, b, rt, os.Getenv)
-	}}, &cfg, rt)
+	}, Manager: detectedManager()}, &cfg, rt)
 	status := false
 	usage := func(msg string) int {
 		fmt.Fprintln(stderr, "error: "+msg)

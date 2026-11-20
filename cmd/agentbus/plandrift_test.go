@@ -53,7 +53,7 @@ func TestPlanDriftReadsALiveProject(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "Plan drift: 1 merges not in the plan: #466") {
+	if got := w.DispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "Plan drift: 1 merges not in the plan: #466") {
 		t.Fatalf("master woken %q", got)
 	}
 	if err := w.b.PlanIgnore(ctx, 466); err != nil {

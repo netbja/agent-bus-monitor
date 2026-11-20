@@ -43,7 +43,7 @@ func TestReviewQueueReadsAHalfApproval(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "t1 approved by foureyes, not by reviewer-codex") {
+	if got := w.DispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "t1 approved by foureyes, not by reviewer-codex") {
 		t.Fatalf("master woken %q", got)
 	}
 	// A new owed review is a new episode: one more wake, then none. Master
@@ -61,7 +61,7 @@ func TestReviewQueueReadsAHalfApproval(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 2 || !strings.Contains(got[1], "t2 approved by foureyes") {
+	if got := w.DispatchDirectives("master"); len(got) != 2 || !strings.Contains(got[1], "t2 approved by foureyes") {
 		t.Fatalf("a new owed review: master woken %q", got)
 	}
 	if err := w.b.PlanDone(ctx, "t1"); err != nil {
@@ -99,7 +99,7 @@ func TestReviewQueueReadsAnOwedGate(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "review-queue"); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 0 {
+	if got := w.DispatchDirectives("master"); len(got) != 0 {
 		t.Fatalf("an off check woke master: %q", got)
 	}
 }
@@ -134,7 +134,7 @@ func TestReviewQueueTrimmedChallenge(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "review-queue"); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 0 {
+	if got := w.DispatchDirectives("master"); len(got) != 0 {
 		t.Fatalf("an unjudged gate woke master: %q", got)
 	}
 }

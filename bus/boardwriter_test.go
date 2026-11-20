@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -63,10 +64,13 @@ func loadModule(t *testing.T) (*token.FileSet, types.Importer, []checkedPkg) {
 		}
 		exports[p.ImportPath] = p.Export
 		// internal/cmdtest holds fixtures moved verbatim out of
-		// cmd/agentbus's _test.go files (dispatchsvc P8b, architect): one of
-		// them seeds a board entry raw, as those test files may; nothing but
-		// tests imports it.
-		if !p.DepOnly && p.Module != nil && p.Module.Path == modulePath && p.ImportPath != modulePath+"/internal/cmdtest" {
+		// cmd/agentbus's _test.go files (dispatchsvc P8b, architect): its
+		// backupworld.go seeds a board entry raw, as those test files may;
+		// nothing but tests imports it. Its other files are read.
+		if p.ImportPath == modulePath+"/internal/cmdtest" {
+			p.GoFiles = slices.DeleteFunc(p.GoFiles, func(f string) bool { return f == "backupworld.go" })
+		}
+		if !p.DepOnly && p.Module != nil && p.Module.Path == modulePath {
 			mine = append(mine, p)
 		}
 	}

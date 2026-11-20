@@ -126,24 +126,9 @@ func TestBackupCommandFailsOnAnUnreadableHistory(t *testing.T) {
 	}
 }
 
-// fakeAgeBin is an age stand-in on a temporary path (see backup's fakeAge).
-func fakeAgeBin(t *testing.T) string {
-	t.Helper()
-	bin := filepath.Join(t.TempDir(), "age")
-	os.WriteFile(bin, []byte(`#!/bin/sh
-if [ "$1" = "-d" ]; then
-  [ -f "$3" ] || exit 1
-  read header
-  base64 -d
-else
-  echo "FAKEAGE $2"
-  base64
-fi
-`), 0o700)
-	return bin
-}
+var fakeAgeBin = cmdtest.FakeAgeBin
 
-const cmdRecipient = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq"
+const cmdRecipient = cmdtest.Recipient
 
 // --secrets: refused before anything is written without age or a
 // recipient; with both, secrets.age holds them and the manifest no longer

@@ -31,7 +31,7 @@ func TestIdleImplementerReadsALiveProject(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "coder idle 20m while requested for it: agy-client-impl") {
+	if got := w.DispatchDirectives("master"); len(got) != 1 || !strings.Contains(got[0], "coder idle 20m while requested for it: agy-client-impl") {
 		t.Fatalf("master woken %q", got)
 	}
 	if err := w.b.AcceptRequest(ctx, "agy-client-impl", "coder"); err != nil {
@@ -65,7 +65,7 @@ func TestIdleImplementerQuotaHeld(t *testing.T) {
 	if err := w.s.stallWake(ctx, "stall-holder", "idle-implementer"); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.dispatchDirectives("master"); len(got) != 0 {
+	if got := w.DispatchDirectives("master"); len(got) != 0 {
 		t.Fatalf("master woken for a held implementer: %q", got)
 	}
 	if err := w.b.FencedQuotaDel(ctx, "stall-holder", "hold:anthropic"); err != nil {

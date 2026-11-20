@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/peer"
 )
 
@@ -41,8 +42,8 @@ func llmDeps(snaps map[string]bus.AgentSnapshot, cfg *config.File) llmCheckDeps 
 // their model, as the peer's own Resolve requires), each GET /models with a
 // 2 s deadline; only httptest endpoints, never a real one.
 func TestLLMEndpointCheck(t *testing.T) {
-	up := modelsServer(t, "qwen")
-	other := modelsServer(t, "phi4")
+	up := cmdtest.ModelsServer(t, "qwen")
+	other := cmdtest.ModelsServer(t, "phi4")
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { time.Sleep(3 * time.Second) }))
 	t.Cleanup(slow.Close)
 	conf := "[llm.local]\nurl = \"" + up.URL + "/v1\"\nmodel = \"qwen\"\n" +
@@ -100,7 +101,7 @@ func TestLLMEndpointCheck(t *testing.T) {
 
 // A redirect to another server is never followed by the check either.
 func TestLLMEndpointCheckFollowsNoRedirect(t *testing.T) {
-	target := modelsServer(t, "qwen")
+	target := cmdtest.ModelsServer(t, "qwen")
 	hops := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target.URL+r.URL.Path, http.StatusTemporaryRedirect)
 	}))
@@ -163,7 +164,7 @@ func TestLLMEndpointDetailNeverEchoesTheServer(t *testing.T) {
 // config.toml no longer has is said; a snapshot written before the field
 // existed still matches by model.
 func TestLLMEndpointCheckProbesTheSelectedEndpoint(t *testing.T) {
-	up := modelsServer(t, "qwen")
+	up := cmdtest.ModelsServer(t, "qwen")
 	conf := "[llm.used]\nurl = \"" + up.URL + "/v1\"\nmodel = \"qwen\"\n" +
 		"[llm.spare]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"qwen\"\n"
 	cfg := llmConfig(t, conf)
@@ -188,7 +189,7 @@ func TestLLMEndpointCheckProbesTheSelectedEndpoint(t *testing.T) {
 // one config.toml names now: an endpoint changed to another model after the
 // launch, serving that one only, is no ok (reviewer-codex); the change is said.
 func TestLLMEndpointCheckJudgesThePeersRunningModel(t *testing.T) {
-	srv := modelsServer(t, "phi")
+	srv := cmdtest.ModelsServer(t, "phi")
 	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"phi\"\n")
 	snaps := map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used"}}
 	out, err := llmEndpointCheck(llmDeps(snaps, cfg))(context.Background())
@@ -201,7 +202,7 @@ func TestLLMEndpointCheckJudgesThePeersRunningModel(t *testing.T) {
 // URL config.toml changed since is said, even when the new server answers
 // (reviewer-codex), by a fingerprint, never the URL.
 func TestLLMEndpointCheckSaysAURLChangedSinceTheLaunch(t *testing.T) {
-	srv := modelsServer(t, "qwen")
+	srv := cmdtest.ModelsServer(t, "qwen")
 	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"qwen\"\n")
 	snap := func(fp string) map[string]bus.AgentSnapshot {
 		return map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: fp}}
@@ -219,7 +220,7 @@ func TestLLMEndpointCheckSaysAURLChangedSinceTheLaunch(t *testing.T) {
 // read, is unknown, never ok: the URL could not be compared, and that is said
 // (reviewer-codex, master).
 func TestLLMEndpointCheckSaysAnUnreadableKey(t *testing.T) {
-	srv := modelsServer(t, "qwen")
+	srv := cmdtest.ModelsServer(t, "qwen")
 	cfg := llmConfig(t, "[llm.used]\nurl = \""+srv.URL+"/v1\"\nmodel = \"qwen\"\n")
 	d := llmDeps(map[string]bus.AgentSnapshot{"local": {Client: "local-llm", Model: "qwen", Endpoint: "used", EndpointFP: "00112233aabbccdd"}}, cfg)
 	d.FPKey = func() ([]byte, error) { return nil, errors.New("permission denied") }
