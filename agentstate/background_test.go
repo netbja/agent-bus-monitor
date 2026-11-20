@@ -147,3 +147,32 @@ func TestJudgeProcessCount(t *testing.T) {
 		t.Fatalf("no process: %d %v", j.Procs(), j.OldestAge())
 	}
 }
+
+// background-work-visible §4b: the agent's declared text is a fourth source,
+// always running; the judgement names the source that blocked; without the
+// declaration (context escalation, for auto-clear) the judgement is the
+// other sources' alone.
+func TestJudgeDeclared(t *testing.T) {
+	now := time.Unix(1000000, 0)
+	claude := Background{Authoritative: []string{SourceHooks, SourceProcess}}
+	text := "2 checks running"
+	idle := &ProcessFacts{Window: 10 * time.Second}
+	j := claude.Judge(Facts{Hooks: &HookFacts{}, Process: idle, Declared: &text}, now)
+	if j.State != BackgroundRunning || j.Source() != SourceDeclared || j.What() != "declared: 2 checks running" {
+		t.Fatalf("declared: %v %q %q", j.State, j.Source(), j.What())
+	}
+	if w := j.WithoutDeclared(); w.State != BackgroundNone || w.What() != "" {
+		t.Fatalf("without the declaration, hooks and process say none: %v %q", w.State, w.What())
+	}
+	busy := &ProcessFacts{Window: 10 * time.Second, Procs: []Proc{{Name: "make", CPUGrowth: time.Second}}}
+	j = claude.Judge(Facts{Hooks: &HookFacts{}, Process: busy, Declared: &text}, now)
+	if w := j.WithoutDeclared(); w.State != BackgroundRunning || w.Source() != SourceProcess {
+		t.Fatalf("observed work still skips: %v %q", w.State, w.Source())
+	}
+	if j := claude.Judge(Facts{Hooks: &HookFacts{Subagents: 1}, Process: idle}, now); j.Source() != SourceHooks {
+		t.Fatalf("source %q", j.Source())
+	}
+	if j := claude.Judge(Facts{}, now); j.Source() != "unknown" {
+		t.Fatalf("unknown source %q", j.Source())
+	}
+}

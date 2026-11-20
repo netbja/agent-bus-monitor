@@ -251,6 +251,26 @@ var Keys = []*Key{
 			return nil, envSkip
 		},
 		file: filePercent},
+	// How long the dispatcher may skip an agent's auto-clear or pop-retire for
+	// its background work before it tells the escalation target, once per
+	// episode (background-work-visible §4a; 0 = off, else at least 1m).
+	{Name: "dispatch.background_notice_after", Env: "AGENT_BUS_BACKGROUND_NOTICE_AFTER", Kind: Duration, Default: 2 * time.Hour, ReadBy: "dispatch",
+		env: func(raw string) (any, envResult) {
+			if d, err := time.ParseDuration(raw); err == nil && (d == 0 || d >= time.Minute) {
+				return d, envUse
+			}
+			if raw == "0" {
+				return time.Duration(0), envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			d, why := fileDuration(true)(v)
+			if why == "" && d.(time.Duration) > 0 && d.(time.Duration) < time.Minute {
+				return nil, "want a duration of at least 1m, such as \"2h\", or \"0\""
+			}
+			return d, why
+		}},
 	{Name: "dispatch.context_handoff_deadline", Env: "AGENT_BUS_CONTEXT_HANDOFF_DEADLINE", Kind: Duration, Default: 20 * time.Minute, ReadBy: "dispatch",
 		env: func(raw string) (any, envResult) {
 			if d, err := time.ParseDuration(raw); err == nil && (d == 0 || d >= time.Minute) {

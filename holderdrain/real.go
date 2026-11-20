@@ -21,7 +21,8 @@ const (
 // of the project) and gc (the service gc of the old builds).
 func NewDeps(project string, host termhost.Host, b *bus.Bus, current string, sockets func() ([]string, error), gc func() error) Deps {
 	profiles := map[string]string{} // each agent's client, from its terminal (the look judges with it)
-	rt := &dispatch.HostRuntime{Host: host, Project: project, Client: func(agent string) string { return profiles[agent] }}
+	rt := &dispatch.HostRuntime{Host: host, Project: project, Client: func(agent string) string { return profiles[agent] },
+		Declared: dispatch.DeclaredFrom(b)} // the agent's declared text holds the drain too (background-work-visible §4b)
 	return Deps{
 		Project: project,
 		Host:    host,

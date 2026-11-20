@@ -128,6 +128,14 @@ func ContextPersonMark(agent string) string   { return "context-person:" + agent
 // <session>|<alert at>: not an episode mark, never deleted with them.
 func ContextCompactedMark(agent string) string { return "context-compacted:" + agent }
 
+// BgSkipMark is the {p}:quota field of an agent's background-skip episode for
+// one dispatcher action (auto-clear, pop-retire): "<start ms>:<pid>", the
+// pass's Redis TIME when the skips began and the agent's process.
+// BgSkipNoticeMark is the episode's once mark: its value is the start mark's
+// (background-work-visible §4a). The episode's end deletes both.
+func BgSkipMark(agent, action string) string       { return "bgskip:" + agent + ":" + action }
+func BgSkipNoticeMark(agent, action string) string { return "bgskip-notice:" + agent + ":" + action }
+
 // ContextEpisodeMarks are the fields an episode's end deletes (§3.3).
 func ContextEpisodeMarks(agent string) []string {
 	return []string{ContextMark(agent), ContextMark(agent) + MarkAtSuffix, ContextNoticeMark(agent),
