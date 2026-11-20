@@ -8,7 +8,7 @@ import (
 )
 
 // The Work tab's actions (requests-plan-redesign, layout A): enter on a row,
-// y, key 4's alias, d and the decide and merge chips.
+// y, d and the decide and merge chips.
 
 // openWorkRow is enter on a Work row: each kind opens the page its own panel
 // would (For you's for what waits on the person, the request or thread page,
@@ -82,18 +82,6 @@ func (m *Model) workCopy(key string) (text, what string) {
 		}
 	}
 	return "", ""
-}
-
-// focusWorkNext is key 4 (6 at the narrow tier): Work, its first NEXT row,
-// else NEXT's heading in view.
-func (m *Model) focusWorkNext() {
-	m.focusPanel(PanelWork)
-	m.refresh()
-	if len(m.work.Next) > 0 {
-		m.lists.work.Select(m.work.Next[0].Key)
-		return
-	}
-	m.lists.work.ClearSelection()
 }
 
 // workRequest is the tracked request a Work row stands for (+ and -), with

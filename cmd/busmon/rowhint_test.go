@@ -250,6 +250,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 		PanelAgents:   {"agent"},
 		PanelActivity: {"expand", "full text"},
 		PanelBoard:    {"task"},
+		PanelPlan:     {"task"},
 		PanelRequests: {"answer", "request", "thread", "notices", "fold", "unfold"},
 		PanelWork:     {"answer", "agent", "thread", "task", "PR", "health", "request", "where", "board", "done"},
 	} {

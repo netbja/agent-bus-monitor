@@ -70,6 +70,13 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 		if key != "" {
 			return "task", true
 		}
+	case PanelPlan: // a task's page, or a folded section opened in place (below the wide tier)
+		switch {
+		case has(planTabTask):
+			return "task", true
+		case has(planTabFold):
+			return "unfold", true
+		}
 	case PanelWork:
 		switch {
 		case has("ask:"):

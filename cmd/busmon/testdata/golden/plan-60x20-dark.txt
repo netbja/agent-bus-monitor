@@ -1,20 +1,20 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
- 1 For you   2 Agents   3 Activity   4 Board   5 Work       
+ 1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Plan ─────────────────────────────── y copy · esc back ─╮
 │ 1/6 16%                                                  ▲
 │                                                          ┃
-│ NOW  3                                                   ┃
-│   ♙ title notes  ♙ person  waiting for you               ┃
-│ ▶ ○ title strip  coder  #338 · approved · merge PR 338   ┃
-│   ● title drawer  coder  in progress                     ┃
+│ NOW  1                                                   ┃
+│   ● title drawer    coder     in progress                ┃
 │                                                          ┃
-│ NEXT  1                                                  ┃
-│   ○ title requests  coder  upcoming                      ┃
+│ APPROVED  1                                              ┃
+│ ▶ ✓ title strip     coder     #338 · approved · merge P… ┃
 │                                                          ┃
-│ LATER  1                                                 ┃
-│   ○ title tag  ♙ person  waiting on requests             ┃
+│ NEXT  2                                                  ┃
+│     title notes     ♙ person  decide                     ┃
+│     title requests  coder     upcoming                   ┃
 │                                                          │
-│ DONE  1   d shows                                        ▼
+│   LATER 1 (enter)                                        │
+│                                                          ▼
 ╰──────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done         

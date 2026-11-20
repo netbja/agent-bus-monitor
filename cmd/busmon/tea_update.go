@@ -134,13 +134,13 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 	case ActNextPanel, ActPrevPanel:
 		m.cyclePanel(act == ActNextPanel)
 	case ActTab1, ActTab2, ActTab3, ActTab4:
-		m.switchTab(int(act - ActTab1))
+		cmd = m.switchTab(int(act - ActTab1))
 	case ActTabNext, ActTabPrev: // the Kanban's are workKanbanKey's
 		m.stepTab(act == ActTabNext)
 	case ActTab5:
-		m.switchTab(4)
+		cmd = m.switchTab(4)
 	case ActTab6:
-		m.switchTab(5)
+		cmd = m.switchTab(5)
 	case ActUp:
 		l.Move(-1)
 	case ActDown:
@@ -177,11 +177,15 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:
 		cmd = m.pushPlan()
-	case ActShowDone: // Work: the plan's drawer with DONE shown; the Board: its done tasks (views-redesign §3)
-		if m.ui.focus == PanelBoard {
+	case ActShowDone: // Work: the plan's drawer with DONE shown; the Board and the Plan tab: their done tasks (views-redesign §3, §4)
+		switch m.ui.focus {
+		case PanelBoard:
 			m.ui.boardDone = !m.ui.boardDone
 			m.refresh()
-		} else {
+		case PanelPlan:
+			m.ui.planDone = !m.ui.planDone
+			m.refresh()
+		default:
 			cmd = m.openPlanDone()
 		}
 	case ActTokens:
@@ -286,6 +290,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 	case PanelWork:
 		return m.openWorkRow(key)
+	case PanelPlan:
+		return m.openPlanRow(key)
 	case PanelRequests:
 		return m.openRequestRow(key)
 	}
@@ -420,6 +426,9 @@ func (m *Model) focusPanel(p PanelID) {
 	if p != PanelBoard { // the between-agents filter is Work's line's, while on the Board
 		m.ui.boardBetween = false
 	}
+	if p != PanelPlan && p != PanelRequests { // LATER opened on the Plan tab folds again once you leave it (the drawer's is per page)
+		m.ui.planLater = false
+	}
 	if isLowerTab(p) {
 		m.ui.tab = p
 	}
@@ -456,17 +465,15 @@ func (m *Model) cyclePanel(forward bool) {
 }
 
 // switchTab is a digit: the tabbed panel's tab, or the narrow tier's view.
-func (m *Model) switchTab(n int) {
+func (m *Model) switchTab(n int) tea.Cmd {
 	tabs := lowerTabs
 	if m.layout.Tier == TierNarrow {
 		tabs = narrowPanels
 	}
-	switch {
-	case n == len(tabs): // 4 (6 at the narrow tier): Work, on NEXT (correction 8)
-		m.focusWorkNext()
-	case n < len(tabs):
+	if n < len(tabs) {
 		m.focusTab(tabs[n])
 	}
+	return nil
 }
 
 // stepTab moves the focus to the lower panel's next or previous tab, wrapping

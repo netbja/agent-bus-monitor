@@ -11,7 +11,7 @@
 │  ♙│   f      filter Activity                                             │   ┃
 │  ▲│   + -    Requests: a tracked request's priority; agents take high    │   ▼
 ╰───│          first                                                       │───╯
-╭─  │   F1 ?   help, every key                                             │e ─╮
+╭─  │   F1 ?   help, every key                                             │l…─╮
 │   │   F2 F3  requests, services                                          │   ▲
 │   │   F5     project health                                              │   │
 │   │   q      quit                                                        │   │

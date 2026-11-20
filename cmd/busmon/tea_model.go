@@ -100,6 +100,8 @@ type uiState struct {
 	showAll        bool      // dormant agents listed (a)
 	agentsTouched  bool      // the person moved in Agents: stop following the top row
 	boardDone      bool      // d on the Board: its done tasks shown (views-redesign §3)
+	planDone       bool      // d on the Plan tab: DONE shown (views-redesign §4)
+	planLater      bool      // Enter on the Plan tab's folded LATER (below the wide tier): open
 	boardBetween   bool      // the Board filtered to the rows between agents (Work's line; views-redesign §3, (a))
 	reqFrom        PanelID   // the lower tab the Requests sub-view was opened from: Esc, the tab bar and the arrows read it, never d/o/+/-
 	workLevel      workLevel // where the focus is on Work's Kanban: its tab, its column selector, a column's cards
@@ -158,8 +160,8 @@ type uiState struct {
 // shellLists are the shell's lists. They live behind a pointer: the Model is
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
-	forYou, agents, activity, board, requests, work listState
-	reqView                                         reqView // the Requests view refresh computed: the layout, fillLists and the header read it
+	forYou, agents, activity, board, requests, work, plan listState
+	reqView                                               reqView // the Requests view refresh computed: the layout, fillLists and the header read it
 }
 
 func (ls *shellLists) of(p PanelID) *listState {
@@ -176,6 +178,8 @@ func (ls *shellLists) of(p PanelID) *listState {
 		return &ls.requests
 	case PanelWork:
 		return &ls.work
+	case PanelPlan:
+		return &ls.plan
 	}
 	return nil
 }

@@ -15,10 +15,10 @@
 │ v0.29  1 of 6 done  ━━━━━━━━━━━━  16%  ·  now: title strip (coder)           ▲
 │ the inbox · loaded 0s ago (abcdef0)                                          ┃
 │                                                                              ┃
-│ NOW  3                                                                       ┃
-│   ♙ title notes  ♙ person  waiting for you                                   │
-│ ▶ ○ title strip  coder  #338 · approved · merge PR 338                       │
-│   ● title drawer  coder  in progress                                         │
-│                                                                              ▼
+│ NOW  1                                                                       │
+│   ● title drawer    coder     in progress                                    │
+│                                                                              │
+│ APPROVED  1                                                                  │
+│ ▶ ✓ title strip     coder     #338 · approved · merge PR 338                 ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health   

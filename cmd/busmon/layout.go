@@ -20,7 +20,8 @@ const (
 	PanelBoard
 	PanelRequests
 	PanelForYou // the step-b shell's attention list (busmon Charm spec, decision 2)
-	PanelWork   // who owes what, the lower panel's third tab (requests-plan-redesign, layout A): in place of Requests and Plan
+	PanelWork   // who owes what, the lower panel's third tab (requests-plan-redesign, layout A): in place of Requests
+	PanelPlan   // the roadmap, the lower panel's fourth tab (views-redesign §4)
 )
 
 // Rect is a screen rectangle in cells. The zero Rect means "not shown".
@@ -213,4 +214,5 @@ var panelHue = map[PanelID]Role{
 	PanelRequests: RoleAttention,
 	PanelForYou:   RoleAttention,
 	PanelWork:     RoleDone,
+	PanelPlan:     RoleAccent,
 }

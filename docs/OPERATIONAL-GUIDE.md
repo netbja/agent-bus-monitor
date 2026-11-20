@@ -153,6 +153,9 @@ A change that takes days must not depend on one conversation, so its plan lives 
   - `done`.
 
   Its context fill and quota show beside it.
+- **The Plan tab** (`4`; `6` under 80 columns) shows the loaded plan as a roadmap: NOW, APPROVED,
+  NEXT by priority then file order, LATER (blocked, then low priority) and DONE, folded until `d`.
+  Enter opens a task; `p` or `P` opens the same roadmap as a drawer.
 - **Keys:**
   - `F3` the services and the holders, with their logs (Enter);
   - `F5` measured health;

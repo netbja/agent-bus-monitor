@@ -121,7 +121,7 @@ func TestWorkKanbanFocusLevels(t *testing.T) {
 	if m.ui.workLevel != workAtTabs {
 		t.Fatalf("3 lands at level %v, want the tab", m.ui.workLevel)
 	}
-	if r := keys(t, m, kRight); r.ui.focus != lowerTabs[0] { // the tab: → wraps to Activity
+	if r := keys(t, m, kRight); r.ui.focus != PanelPlan { // the tab: → steps to the Plan (views-redesign §4)
 		t.Fatalf("→ on Work's tab: focus %v", r.ui.focus)
 	}
 	if r := keys(t, m, kLeft); r.ui.focus != PanelBoard {
@@ -250,7 +250,7 @@ func TestWorkKanbanCardDrawnOnlyInsideItsColumn(t *testing.T) {
 	}
 }
 
-// → from Board lands on Work's tab, so the next → steps on to Activity, the
+// → from Board lands on Work's tab, so the next → steps on to the Plan, the
 // focus never caught in the columns (the trap the person met).
 func TestWorkKanbanReachedByArrowIsItsTab(t *testing.T) {
 	pinLocal(t)
@@ -259,7 +259,7 @@ func TestWorkKanbanReachedByArrowIsItsTab(t *testing.T) {
 	if m = keys(t, m, kRight); m.ui.focus != PanelWork || m.ui.workLevel != workAtTabs {
 		t.Fatalf("→ from Board: focus %v level %v", m.ui.focus, m.ui.workLevel)
 	}
-	if m = keys(t, m, kRight); m.ui.focus != PanelActivity {
+	if m = keys(t, m, kRight); m.ui.focus != PanelPlan {
 		t.Fatalf("→ again: focus %v", m.ui.focus)
 	}
 	m = keys(t, m, '3', kDown, kDown, kEsc, kEsc, kTab) // Tab at the tab cycles the panels (inside the columns it is →): back on Work by Tab, its tab too
@@ -760,7 +760,7 @@ func TestWorkKanbanPillFollowsTheCard(t *testing.T) {
 		}
 		return out
 	}
-	m := keys(t, workShell(t, 130, 40), '4') // Work, its first NEXT card
+	m := workNext(t, workShell(t, 130, 40)) // Work, its first NEXT card
 	c, _ := m.lists.work.kanban.cardPlace(m.lists.work.Selected())
 	if m.ui.workLevel != workAtCards || c != 2 {
 		t.Fatalf("4: level %v card column %d", m.ui.workLevel, c)

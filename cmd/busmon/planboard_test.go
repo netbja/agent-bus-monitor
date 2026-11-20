@@ -30,7 +30,7 @@ func sectionOf(v planBoardView, id string) string {
 	sec := ""
 	for i, l := range v.lines {
 		t := l.text()
-		for _, h := range []string{"NOW  ", "NEXT  ", "LATER  ", "DONE  "} {
+		for _, h := range []string{"NOW  ", "APPROVED  ", "NEXT  ", "LATER  ", "DONE  "} {
 			if strings.HasPrefix(t, h) {
 				sec = strings.TrimSpace(h)
 			}
@@ -44,9 +44,15 @@ func sectionOf(v planBoardView, id string) string {
 	return ""
 }
 
-// §9 Plan sections: one row per state lands in its section; Upcoming is
-// split by WaitingOn; Unknown beside known rows is LATER; DONE folds.
+// views-redesign §4: the roadmap. NOW is in hand (in progress, in review,
+// answered, blocked), by priority then file order; APPROVED holds what both
+// reviewers approved, waiting for delivery or the merge; NEXT is not
+// started and unblocked, the person's decisions among them, by priority then
+// file order; LATER is blocked by another task, then the low-priority ones,
+// blocked or not, then the unknown; DONE folds.
 func TestPlanBoardSections(t *testing.T) {
+	prio := func(r plan.Row, p string) plan.Row { r.Task.Priority = p; return r }
+	approved := func(r plan.Row) plan.Row { r.Verdict = plan.Approved; return r }
 	p := boardPlan(
 		boardRow("up-ready", plan.Upcoming, "coder"),
 		boardRow("w", plan.Waiting, plan.Person),
@@ -54,36 +60,56 @@ func TestPlanBoardSections(t *testing.T) {
 		boardRow("a", plan.Answered, "master"),
 		boardRow("b", plan.Blocked, "coder"),
 		boardRow("r", plan.InReview, "coder"),
-		boardRow("i", plan.InProgress, "coder"),
+		prio(boardRow("i", plan.InProgress, "coder"), "high"),
 		boardRow("u", plan.Unknown, "coder"),
 		boardRow("d", plan.Done, "coder"),
+		approved(boardRow("rev-ok", plan.InReview, "coder2")),
+		approved(boardRow("merge-me", plan.Waiting, "coder")),
+		prio(boardRow("up-high", plan.Upcoming, "coder"), "high"),
+		prio(boardRow("up-low", plan.Upcoming, "coder"), "low"),
+		prio(boardRow("up-later-high", plan.Upcoming, "coder", "r"), "high"),
 	)
 	v := planBoard(p, -1, true, shellNow, 120, TierWide, false, nil)
-	for id, want := range map[string]string{"w": "NOW", "a": "NOW", "b": "NOW", "r": "NOW", "i": "NOW",
-		"up-ready": "NEXT", "up-later": "LATER", "u": "LATER", "d": "DONE"} {
+	for id, want := range map[string]string{"a": "NOW", "b": "NOW", "r": "NOW", "i": "NOW",
+		"rev-ok": "APPROVED", "merge-me": "APPROVED",
+		"w": "NEXT", "up-ready": "NEXT", "up-high": "NEXT",
+		"up-later": "LATER", "up-later-high": "LATER", "up-low": "LATER", "u": "LATER", "d": "DONE"} {
 		if got := sectionOf(v, id); got != want {
 			t.Errorf("%s in %q, want %s", id, got, want)
 		}
 	}
-	// NOW follows plan.Order: waiting, answered, blocked, in review, in progress
-	var now []string
-	for _, it := range v.items {
-		if sectionOf(v, it.task) == "NOW" {
-			now = append(now, it.task)
+	order := func(sec string) string {
+		var ids []string
+		for _, it := range v.items {
+			if sectionOf(v, it.task) == sec {
+				ids = append(ids, it.task)
+			}
+		}
+		return strings.Join(ids, " ")
+	}
+	for sec, want := range map[string]string{
+		"NOW":      "i a b r",                         // the high one first, then file order
+		"NEXT":     "up-high up-ready w",              // by priority, then file order
+		"LATER":    "up-later up-later-high up-low u", // blocked by a task, then low, then unknown
+		"APPROVED": "rev-ok merge-me",
+	} {
+		if got := order(sec); got != want {
+			t.Errorf("%s order %q, want %q", sec, got, want)
 		}
 	}
-	if strings.Join(now, " ") != "w a b r i" {
-		t.Errorf("NOW order %v", now)
+	empty := planBoard(boardPlan(boardRow("x", plan.Upcoming, "coder")), -1, false, shellNow, 120, TierWide, false, nil)
+	if strings.Contains(empty.plain, "APPROVED") {
+		t.Errorf("an empty APPROVED is drawn:\n%s", empty.plain)
 	}
 	folded := planBoard(p, -1, false, shellNow, 120, TierWide, false, nil)
 	if !strings.Contains(folded.plain, "DONE  1   d shows") || sectionOf(folded, "d") != "" {
 		t.Errorf("DONE not folded:\n%s", folded.plain)
 	}
 	// The progress: the plan, done/total, the bar, the share; narrow: the count only.
-	if l := v.lines[0].text(); !strings.HasPrefix(l, "v0.29  1 of 9 done  ") || !strings.Contains(l, "  11%  ") || !strings.Contains(l, GlyphThinBar) { // progress-line §2.3: N of M, then now and next
+	if l := v.lines[0].text(); !strings.HasPrefix(l, "v0.29  1 of 14 done  ") || !strings.Contains(l, "  7%  ") || !strings.Contains(l, GlyphThinBar) { // progress-line §2.3: N of M, then now and next
 		t.Errorf("progress %q", l)
 	}
-	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); strings.TrimRight(l, " ") != "1/9 11%" {
+	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); strings.TrimRight(l, " ") != "1/14 7%" {
 		t.Errorf("narrow progress %q", l)
 	}
 }
@@ -187,17 +213,17 @@ func TestPlanSidePanel(t *testing.T) {
 		}
 		return b.String()
 	}
-	m := keys(t, planShell(t, 140, 40), 'p')
+	m := keys(t, planShell(t, 140, 40), 'p') // APPROVED's r first, then NEXT's w (views-redesign §4)
 	side := text(m.rd.top().side)
-	if !strings.Contains(side, "w\n") || !strings.Contains(side, "start it: enter, then s") {
-		t.Fatalf("drawer side for w:\n%s", side)
+	for _, w := range []string{"in review", "coder", "approved"} {
+		if !strings.Contains(side, w) {
+			t.Fatalf("side for r lacks %q:\n%s", w, side)
+		}
 	}
 	m = keys(t, m, 'j')
 	side = text(m.rd.top().side)
-	for _, w := range []string{"in review", "coder", "approved"} {
-		if !strings.Contains(side, w) {
-			t.Fatalf("after j, side lacks %q:\n%s", w, side)
-		}
+	if !strings.Contains(side, "w\n") || !strings.Contains(side, "start it: enter, then s") {
+		t.Fatalf("after j, side for w:\n%s", side)
 	}
 	if !strings.Contains(m.grid().plain(), "Task") {
 		t.Fatal("the side frame is not drawn")
@@ -210,7 +236,7 @@ func TestPlanSideShowsPRAndReason(t *testing.T) {
 	r := boardRow("b", plan.Blocked, "coder")
 	r.PR, r.Reason = 351, "waits for the CI fix"
 	var text string
-	for _, l := range planSide(r, shellNow) {
+	for _, l := range planSide(boardPlan(r), r, shellNow) {
 		text += l.text() + "\n"
 	}
 	if !strings.Contains(text, "PR       351") || !strings.Contains(text, "reason   waits for the CI fix") {
@@ -323,7 +349,7 @@ func TestPlanDrawerSideKeepsTheList(t *testing.T) {
 // foureyes on step 2: the person's done task asks nothing of them.
 func TestPlanSideForYouOnAPersonsDoneTask(t *testing.T) {
 	found := false
-	for _, l := range planSide(boardRow("d", plan.Done, plan.Person), shellNow) {
+	for _, l := range planSide(boardPlan(boardRow("d", plan.Done, plan.Person)), boardRow("d", plan.Done, plan.Person), shellNow) {
 		if strings.HasPrefix(l.text(), "for you") {
 			found = true
 			if strings.TrimRight(l.text(), " ") != "for you  nothing" {
@@ -334,4 +360,150 @@ func TestPlanSideForYouOnAPersonsDoneTask(t *testing.T) {
 	if !found {
 		t.Fatal("no for you field")
 	}
+}
+
+// views-redesign §4: a row's first cell is its priority (↑ high, ↓ low), or
+// its state's glyph in NOW (✓ in APPROVED), nothing in NEXT and LATER; its
+// dependencies read "after <first>" with "+N" for more; the person's task
+// says ♙ before its owner and "decide", never "waiting for you".
+func TestPlanBoardRowMarks(t *testing.T) {
+	prio := func(r plan.Row, p string, after ...string) plan.Row {
+		r.Task.Priority, r.Task.After = p, after
+		return r
+	}
+	approved := boardRow("ok", plan.InReview, "coder2")
+	approved.Verdict = plan.Approved
+	p := boardPlan(
+		prio(boardRow("i", plan.InProgress, "coder"), "", "dep1"),
+		approved,
+		prio(boardRow("hi", plan.Upcoming, "coder"), "high", "dep1", "dep2", "dep3"),
+		boardRow("plain", plan.Upcoming, "coder"),
+		boardRow("decide-x", plan.Waiting, plan.Person),
+		prio(boardRow("lo", plan.Upcoming, "coder"), "low"),
+		boardRow("dep1", plan.Done, "coder"),
+		boardRow("dep2", plan.Done, "coder"),
+		boardRow("dep3", plan.Done, "coder"),
+	)
+	v := planBoard(p, -1, false, shellNow, 140, TierWide, false, nil)
+	line := func(id string) string {
+		for _, it := range v.items {
+			if it.task == id {
+				return strings.TrimSpace(v.lines[it.line].text())
+			}
+		}
+		t.Fatalf("no row %s", id)
+		return ""
+	}
+	for id, want := range map[string]string{
+		"i": GlyphWorking + " title i", "ok": GlyphDone + " title ok", "hi": GlyphUp + " title hi",
+		"lo": GlyphDownArrow + " title lo", "plain": "title plain", "decide-x": "title decide-x",
+	} {
+		if got := line(id); !strings.HasPrefix(got, want) {
+			t.Errorf("%s: %q, want it to start with %q", id, got, want)
+		}
+	}
+	if got := line("hi"); !strings.Contains(got, "after dep1 +2") {
+		t.Errorf("hi: %q, want after dep1 +2", got)
+	}
+	if got := line("i"); !strings.Contains(got, "after dep1") || strings.Contains(got, "+") {
+		t.Errorf("i: %q", got)
+	}
+	if got := line("decide-x"); !strings.Contains(got, GlyphHuman+" person") || !strings.Contains(got, "decide") || strings.Contains(got, "waiting for you") {
+		t.Errorf("decide-x: %q", got)
+	}
+	if got := line("ok"); !strings.Contains(got, "approved") {
+		t.Errorf("ok: %q", got)
+	}
+}
+
+// views-redesign §4: the side panel lists every dependency, ✓ when done,
+// the tasks that wait on this one, and its priority.
+func TestPlanSideDependencies(t *testing.T) {
+	a := boardRow("a", plan.Done, "coder")
+	b := boardRow("b", plan.InProgress, "coder")
+	x := boardRow("x", plan.Upcoming, "coder", "b")
+	x.Task.After, x.Task.Priority = []string{"a", "b"}, "high"
+	y := boardRow("y", plan.Upcoming, "coder", "x")
+	y.Task.After = []string{"x"}
+	p := boardPlan(a, b, x, y)
+	text := linesText(planSide(p, x, shellNow))
+	for _, w := range []string{"after    a " + GlyphDone + ", b", "unblocks y", "prio     " + GlyphUp + " high"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("side lacks %q:\n%s", w, text)
+		}
+	}
+	if text := linesText(planSide(p, a, shellNow)); !strings.Contains(text, "after    "+GlyphDash) || !strings.Contains(text, "unblocks x") || !strings.Contains(text, "prio     normal") {
+		t.Errorf("a's side:\n%s", text)
+	}
+}
+
+// views-redesign §4 (the person's Q5): below the wide tier (the 80-column
+// mock-up: no side panel) LATER folds to a count that keeps a high-priority
+// task visible, "LATER 3 · 1 ↑ (enter)", and DONE to its count, each a line
+// Enter opens; at the wide tier LATER is drawn whole.
+func TestPlanBoardNarrowFoldsLater(t *testing.T) {
+	hi := boardRow("hi", plan.Upcoming, "coder", "now1")
+	hi.Task.Priority = "high"
+	lo := boardRow("lo", plan.Upcoming, "coder")
+	lo.Task.Priority = "low"
+	p := boardPlan(boardRow("now1", plan.InProgress, "coder"), hi, lo, boardRow("w2", plan.Upcoming, "coder", "now1"), boardRow("d", plan.Done, "coder"))
+	v := planBoardOf(p, -1, false, false, shellNow, 76, TierNarrow, false, nil)
+	if !strings.Contains(v.plain, "LATER 3 "+GlyphNone+" 1 "+GlyphUp+" (enter)") || !strings.Contains(v.plain, "DONE 1 (enter)") {
+		t.Fatalf("folded:\n%s", v.plain)
+	}
+	for _, id := range []string{"hi", "lo", "w2"} {
+		if itemLine(v, id) >= 0 {
+			t.Fatalf("%s drawn while LATER is folded:\n%s", id, v.plain)
+		}
+	}
+	var folds []string
+	for _, it := range v.items {
+		if it.fold != "" {
+			folds = append(folds, it.fold)
+		}
+	}
+	if strings.Join(folds, " ") != "later done" {
+		t.Fatalf("fold items %q", folds)
+	}
+	open := planBoardOf(p, -1, false, true, shellNow, 76, TierNarrow, false, nil)
+	if itemLine(open, "hi") < 0 || itemLine(open, "lo") < 0 {
+		t.Fatalf("LATER open:\n%s", open.plain)
+	}
+	if med := planBoardOf(p, -1, false, false, shellNow, 76, TierMedium, false, nil); itemLine(med, "hi") >= 0 || !strings.Contains(med.plain, "LATER 3 ") {
+		t.Fatalf("medium (80 columns) not folded:\n%s", med.plain)
+	}
+	if wide := planBoard(p, -1, false, shellNow, 140, TierWide, false, nil); itemLine(wide, "hi") < 0 || strings.Contains(wide.plain, "(enter)") {
+		t.Fatalf("wide:\n%s", wide.plain)
+	}
+	// Enter on the folds, in the shell at 76 columns: LATER opens, then DONE.
+	m := keys(t, planShellOf(t, p, 76, 30), 'p')
+	pg := m.rd.top()
+	for i, it := range pg.items {
+		if it.fold == "later" {
+			pg.sel = i
+		}
+	}
+	m = keys(t, m, kEnter)
+	if pg = m.rd.top(); pg.kind != ovPlan || !pg.laterOpen || !strings.Contains(pg.plain, "title hi") {
+		t.Fatalf("enter on LATER: %+v\n%s", pg.kind, pg.plain)
+	}
+	for i, it := range pg.items {
+		if it.fold == "done" {
+			pg.sel = i
+		}
+	}
+	if pg = keys(t, m, kEnter).rd.top(); !pg.expanded || !strings.Contains(pg.plain, "title d") {
+		t.Fatalf("enter on DONE:\n%s", pg.plain)
+	}
+}
+
+// planShellOf is the shell with plan p loaded, at w×h.
+func planShellOf(t *testing.T, p planState, w, h int) Model {
+	t.Helper()
+	st := &shared{agents: map[string]*agentState{}, person: "charlie"}
+	st.plan = p
+	st.plan.in = plan.Inputs{Board: map[string]bus.BoardEntry{}}
+	m := newShell(shellConfig{project: "demo", self: "charlie", st: st})
+	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
+	return step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 }

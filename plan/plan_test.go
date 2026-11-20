@@ -65,6 +65,7 @@ func TestParseRefuses(t *testing.T) {
 		"trailing data":       task(`{"id":"a","title":"x","owner":"coder"}`) + `{}`,
 		"mission and board":   task(`{"id":"a","title":"x","owner":"coder","mission":"c/a","board":"a"}`),
 		"person with mission": task(`{"id":"a","title":"x","owner":"person","mission":"c/a"}`),
+		"unknown priority":    task(`{"id":"a","title":"x","owner":"coder","priority":"urgent"}`),
 	} {
 		if _, err := Parse([]byte(in)); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -125,5 +126,17 @@ func TestParseGroups(t *testing.T) {
 	}
 	if f, err := Parse([]byte(sample)); err != nil || f.Groups != nil {
 		t.Fatalf("no groups: %+v %v", f.Groups, err)
+	}
+}
+
+// views-redesign §4: a task's optional priority, high, normal or low;
+// absent is normal, and normal reads as "" (the requests' marks).
+func TestParsePriority(t *testing.T) {
+	f, err := Parse([]byte(`{"plan":"p","goal":"g","tasks":[{"id":"a","title":"x","owner":"coder","priority":"high"},{"id":"b","title":"y","owner":"coder","priority":"low"},{"id":"c","title":"z","owner":"coder"},{"id":"d","title":"w","owner":"coder","priority":"normal"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Tasks[0].Priority != "high" || f.Tasks[1].Priority != "low" || f.Tasks[2].Priority != "" || f.Tasks[3].Priority != "" {
+		t.Fatalf("%+v", f.Tasks)
 	}
 }

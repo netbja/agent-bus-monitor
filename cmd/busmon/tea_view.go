@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,6 +52,11 @@ func (m Model) grid() *grid {
 		}
 		lst := *m.lists.of(p) // drawn from a copy: View leaves the model as it found it
 		lst.draw(g)
+		if p == PanelPlan {
+			if side := m.planTabSide(); side != nil { // its own frame at the right, as the drawer's (§4)
+				drawPlanSide(g, l.rect(p), side)
+			}
+		}
 	}
 	if reading {
 		m.drawReader(g)
@@ -118,7 +124,7 @@ func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 	if active == PanelRequests { // a caller that names no origin (tabOf does): Work's
 		active = PanelWork
 	}
-	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelWork: "Wrk"}
+	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelWork: "Wrk", PanelPlan: "Pln"}
 	names := make([]string, len(tabs))
 	for i, p := range tabs {
 		names[i] = panelLabel(p)
@@ -274,6 +280,8 @@ func (m *Model) fillLists() {
 	bd.SetFrame(m.lowerTitle(PanelBoard, Line{{Text: "Board", Role: RoleText}}), bv.label)
 	bd.SetFooter(bv.footer)
 
+	m.fillPlanTab(lower) // the roadmap, the fourth tab (views-redesign §4)
+
 	wk := &m.lists.work // who owes what (requests-plan-redesign, layout A)
 	compact := lower < workCompactW
 	wd := workDraw{requests: s.requests, now: now, width: lower}
@@ -392,7 +400,7 @@ func forYouParts(it attentionItem, now time.Time) (head, text, age Line) {
 // reqOrigin is the lower tab the Requests sub-view was opened from (r, F2,
 // views-redesign §3, (a)); Work when none was recorded.
 func (m *Model) reqOrigin() PanelID {
-	if m.ui.reqFrom == PanelActivity || m.ui.reqFrom == PanelBoard || m.ui.reqFrom == PanelWork {
+	if slices.Contains(lowerTabs, m.ui.reqFrom) {
 		return m.ui.reqFrom
 	}
 	return PanelWork
