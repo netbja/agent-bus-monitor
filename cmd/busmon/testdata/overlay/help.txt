@@ -211,6 +211,7 @@ COMMANDS
   /backup                    one archive of the project
   /self-repair reset <agent> clear an agent's crash loop and restart its budget
   /priority <task> <level>   a request's priority: low, normal or high; also /prio
+  /ci reset <pr>             re-open a PR's CI loop after its stop
 
 STATES
   ● working            the state the agent DECLARED the last time it published a status.

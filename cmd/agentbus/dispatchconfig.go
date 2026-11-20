@@ -54,7 +54,7 @@ func serviceDispatchConfig(d dispatchDeps, cfg *dispatch.Config) (*dispatch.Host
 	cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, notify.RunQuiet) // a pane blocked on its client's prompt (prompt-notify)
 	cfg.Prompt.Skip = promptSkip(b, os.Getenv)                            // never rung twice with a desktop target (notifications)
 	cfg.Notify = serviceNotify(b, os.Getenv)                              // the person's phone and desktop (notifications)
-	cfg.MergeQueue = serviceMergeQueue(b, os.Getenv)                      // what waits for the person's merge (merge-queue)
+	cfg.MergeQueue = serviceMergeQueue(b, os.Getenv, target)              // what waits for the person's merge (merge-queue)
 	cfg.Clear = serviceClear(os.Getenv, exec.LookPath, notify.RunQuiet)   // /clear after a declared hand-off (lifecycle part B)
 	cfg.Clear.Decisions = dispatch.NewClearDecisions()                    // why a clear waits: logged, and read by clear-stall
 	h, err := dispatchRuntime(project, os.Getenv)                         // the dispatcher on the project's holder (herdr exit 10b)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,6 +59,12 @@ func classCRows() []palCmd {
 		}
 		return nil
 	}, Complete: func(*Model) []string { return []string{bus.PriorityHigh, bus.PriorityNormal, bus.PriorityLow} }}
+	pr := palArg{Name: "pr", Check: func(s string) error {
+		if n, err := strconv.Atoi(s); err != nil || n <= 0 || strconv.Itoa(n) != s {
+			return fmt.Errorf("%q is not a PR number", s)
+		}
+		return nil
+	}}
 	return []palCmd{
 		{Name: "reload", Summary: "restart an idle agent on its role, resuming its session (fresh: without)", Args: []palArg{role, fresh}, As: true,
 			Argv: func(a []string) []string {
@@ -78,6 +85,10 @@ func classCRows() []palCmd {
 			Argv: func(a []string) []string { return []string{"self-repair", "reset", a[1]} }},
 		{Name: "priority", Aliases: []string{"prio"}, Summary: "a request's priority: low, normal or high", Args: []palArg{task, level}, As: true,
 			Argv: func(a []string) []string { return []string{"request", "priority", a[0], a[1]} }},
+		// The person's ci reset (ci-loop §5): a stopped PR's loop re-opened, its
+		// author given ci.max_handoffs more tries; no shell needed.
+		{Name: "ci", Summary: "re-open a PR's CI loop after its stop", Args: []palArg{reset, pr},
+			Argv: func(a []string) []string { return []string{"ci", "reset", a[1]} }},
 	}
 }
 
