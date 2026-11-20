@@ -1,3 +1,5 @@
+> **Ce document n'est plus à jour** (il décrit encore herdr) : lisez la version anglaise, [README.md](README.md), qui décrit l'équipe telle qu'elle fonctionne aujourd'hui. Sa réécriture en français viendra à part.
+
 <p align="center"><img src="docs/assets/agent-bus-monitor-logo.png" alt="agent-bus : des agents IA sur un même bus Redis, qui se passent des messages le long d'un flux partagé" width="900"></p>
 
 # agent-bus
