@@ -16,7 +16,7 @@ Il se veut **petit et léger pour vos abonnements LLM** :
 - **Un réveil d'une ligne.** Un seul dispatcher tape une ligne fixe dans le terminal d'un agent quand du travail l'attend.
 - **Des lectures locales.** Les fenêtres d'usage et le remplissage du contexte sont lus dans des fichiers locaux.
 
-<p align="center"><img src="docs/assets/busmon.png" alt="busmon sur le projet fictif acme-shop : cinq agents, le fil d'activité, le tableau des tâches et les demandes suivies" width="900"></p>
+<p align="center"><img src="docs/assets/busmon.png" alt="busmon sur le projet fictif acme-shop : cinq agents, ce qui attend la personne et le fil d'activité" width="900"></p>
 
 <p align="center"><sub>busmon sur un projet fictif (<code>acme-shop</code>), alimenté par <code>scripts/busmon-demo.sh</code>.</sub></p>
 
