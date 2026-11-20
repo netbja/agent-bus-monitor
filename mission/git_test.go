@@ -167,16 +167,39 @@ func TestRunTestTimeoutKillsGroup(t *testing.T) {
 			t.Fatal(err)
 		}
 		pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-		// A killed orphan lingers as a zombie until init reaps it: allow 3 s.
+		// Killed is the guarantee, not reaped: a killed orphan stays a zombie
+		// until its reaper takes it. Under an agent's terminal that reaper is
+		// the holder, a child subreaper that reaps an untracked zombie only
+		// after its 2 s grace (holder.orphanGrace, swept each second), so
+		// "gone within 3 s" raced it under load. A zombie is dead.
+		var state byte
 		for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
-			if err = syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			if state = procState(pid); state == 0 || state == 'Z' {
 				break
 			}
 		}
-		if !errors.Is(err, syscall.ESRCH) {
-			t.Errorf("%s %d still alive (%v)", f, pid, err)
+		if state != 0 && state != 'Z' {
+			t.Errorf("%s %d still running (state %c)", f, pid, state)
 		}
 	}
+}
+
+// procState is pid's state letter, 0 when it does not exist. /proc where
+// there is one (Linux, where a zombie reads 'Z'); elsewhere a signal 0, which
+// cannot tell a zombie from a running process ('R').
+func procState(pid int) byte {
+	if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
+		if i := strings.LastIndexByte(string(b), ')'); i >= 0 && i+2 < len(b) {
+			return b[i+2]
+		}
+	}
+	if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+		return 0
+	}
+	if _, err := os.Stat("/proc/self"); err == nil {
+		return 0 // /proc exists and holds no such pid: gone
+	}
+	return 'R'
 }
 
 func TestRunTestTailBounded(t *testing.T) {
