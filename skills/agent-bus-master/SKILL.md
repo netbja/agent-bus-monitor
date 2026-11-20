@@ -641,6 +641,8 @@ agentbus request next <agent>          # what that agent takes next, before you 
 - **Priority is the person's.** A tracked request may carry `high` or `low` (absent = normal),
   set only by the person (busmon `+`/`-` on the Requests tab, or `agentbus request priority
   <task> high|normal|low --as <person>` from their own shell; agents are refused and denied).
+  A plan task's priority is the person's too (`agentbus plan priority <task> high|normal|low
+  --as <person>`): the request you send for the task starts at it, so do not set it in your text.
   Agents take the next by `request next`: priority, then age, work in hand first. When the
   person wants something first, they set it; you do not reorder by rewording directives.
 - Use plain `cmd` for what it is good at: a nudge, an answer, an FYI, anything you will not

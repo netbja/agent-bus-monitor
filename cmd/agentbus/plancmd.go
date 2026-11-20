@@ -14,7 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
-const planUsage = "usage: plan show [--json] | plan load <path>@<commit> | plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan ignore <pr> | plan clear"
+const planUsage = "usage: plan show [--json] | plan load <path>@<commit> | plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan priority <task> high|normal|low --as <person> | plan ignore <pr> | plan clear"
 
 // runPlan publishes and reads the project's plan (spec
 // docs/superpowers/specs/2026-10-22-plan-view-design.md). It writes Redis
@@ -84,6 +84,11 @@ func runPlan(ctx context.Context, b *bus.Bus, repo string, args []string, out, e
 			return fail(err)
 		}
 		fmt.Fprintf(out, "%s noted\n", rest[0])
+		return 0
+	case "priority": // the person's, as request priority (views-redesign §4, step 4b)
+		if err := planPriority(ctx, b, rest, out); err != nil {
+			return fail(err)
+		}
 		return 0
 	case "ignore": // plan-drift: a merge that belongs to no task (notes, a release, a hotfix)
 		if len(rest) != 1 {

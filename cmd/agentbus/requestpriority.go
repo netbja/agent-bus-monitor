@@ -25,12 +25,12 @@ var requestDeps = requestCallerDeps{Getenv: os.Getenv, AgentCaller: agentAncesto
 // errNothingReady is request next with no request in hand or ready: exit 64.
 var errNothingReady = errors.New("nothing ready")
 
-// refuseAgentForPriority: a priority is the person's act, as suspend is: an
-// agent's environment or an agent among the ancestors is refused, and so is
-// a check that cannot be made.
-func refuseAgentForPriority(ctx context.Context, d requestCallerDeps) error {
+// refuseAgentForPriority: a priority (what: a request's, a plan task's) is
+// the person's act, as suspend is: an agent's environment or an agent among
+// the ancestors is refused, and so is a check that cannot be made.
+func refuseAgentForPriority(ctx context.Context, d requestCallerDeps, what string) error {
 	if self := d.Getenv("AGENT_BUS_AGENT"); self != "" {
-		return fmt.Errorf("a request's priority is the person's act, not %s's (run it from your own shell, or press + or - in busmon)", self)
+		return fmt.Errorf("%s is the person's act, not %s's (run it from your own shell, or press + or - in busmon)", what, self)
 	}
 	if d.AgentCaller == nil {
 		return nil
@@ -40,7 +40,7 @@ func refuseAgentForPriority(ctx context.Context, d requestCallerDeps) error {
 	case err != nil:
 		return fmt.Errorf("cannot check that no registered agent runs this (%v)", err)
 	case caller != "":
-		return fmt.Errorf("a request's priority is the person's act, and this runs under the agent %s", caller)
+		return fmt.Errorf("%s is the person's act, and this runs under the agent %s", what, caller)
 	}
 	return nil
 }
@@ -58,7 +58,7 @@ func requestPriority(ctx context.Context, b *bus.Bus, args []string, out io.Writ
 	if !bus.ValidName(as) {
 		return fmt.Errorf("request priority: --as %q is not a valid name", as)
 	}
-	if err := refuseAgentForPriority(ctx, requestDeps); err != nil {
+	if err := refuseAgentForPriority(ctx, requestDeps, "a request's priority"); err != nil {
 		return err
 	}
 	board, err := b.Board(ctx)
