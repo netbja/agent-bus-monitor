@@ -1,6 +1,6 @@
 # `agentbus update`, step 1: a manual update to the latest release, with a snapshot to roll back to
 
-Status: r1, spec only. Base: origin/dev `b2ccf229`. Author: architect, from the person's decision of
+Status: r2, spec only. Base: origin/dev `b2ccf229`. Author: architect, from the person's decision of
 2026-11-20 (bus thread `1795182404503-0`, relayed by master as cmd `1795182448227-0`).
 
 ## 1. The decision
@@ -87,7 +87,7 @@ It is written **before any change**, under `<state>/agentbus/updates/<id>/`:
 | Part | What | From |
 |---|---|---|
 | `bin/agentbus`, `bin/busmon` | copies of the bin dir's two binaries, mode and times kept | setup's `backup` copy (`setup/services.go`) |
-| `manifest.json` | format version; from version and build key (`service.BuildKey`); to tag; bin dir; from tree and its `HEAD`; the `agent-launch` link's target; the external skills clone's path and `HEAD`; the project; the services to restart, with their build before | read in §3.4 step 1 |
+| `manifest.json` | format version; from version and build key (`service.BuildKey`); to tag; bin dir; from tree and its `HEAD`; the `agent-launch` link's target; the external skills clone's path, `HEAD` and whether setup made it (its marker), or `absent` when there is none yet; every symlink in each skill directory the new tree's roles use (`skillDestination`, `rolecfg/skills.go:106`), name and target; the project; the services to restart, with their build before | read in §3.4 step 1 |
 
 - **The manifest is written last,** with `files.WriteAtomic` (`internal/files/atomic.go`). A
   snapshot without one is incomplete and is never restored.
@@ -141,8 +141,16 @@ can also undo them.
      (`OurScriptLink(target, fromTree)`), it is replaced by a link to the new tree, by a symlink
      beside it and then a rename. Any other link is left alone, as `RoleScriptLinks` leaves it
      today.
-   - **Skills:** `ExternalSkills` and `RoleSkills` (`setup/skills.go`), run from the new tree with
-     the new binary.
+   - **Skills,** run from the new tree with the new binary, and **strict**.
+     - Today `ExternalSkills` and `RoleSkills` (`setup/skills.go:41-111`) warn and return on a
+       failed fetch, checkout or link. `setup install` keeps that.
+     - The update needs forms of the two that return their error. Install calls them and keeps
+       its warning, so its behaviour is unchanged.
+     - **A check follows:** the external clone's `HEAD` is the pin's commit, and every role skill
+       link resolves into the new tree.
+     - An error or a failed check is a failure of step 5, so it rolls the update back.
+     - A skills folder setup did not make (no marker) is the person's. It is left alone and named,
+       as install does, and that is not a failure.
 6. **Services** (only with `--project <p>`): each of `<p>`'s stale `dispatch` and `missions`, one
    at a time.
    - The restart is `agentbus --project <p> service restart <kind>` with the new binary. That is
@@ -167,16 +175,21 @@ can also undo them.
 |---|---|
 | Steps 0 to 4 | Nothing outside the tree has changed. It says why, and exits 1. |
 | Steps 5 to 7 (including a red service) | **Automatic rollback by the same process,** then it says why. The history line has `ok=false`. |
-| The rollback itself fails | It stops and prints the exact manual commands from the manifest: `cp` of each snapshot binary, `ln -sfn` of the link, the skills clone's `git checkout`, each `service restart`. |
+| The rollback itself fails | It stops and prints the exact manual commands from the manifest: `cp` of each snapshot binary, `ln -sfn` of the `agent-launch` link and of each recorded skill link, the skills clone's `git checkout`, each `service restart`. |
 | The process is killed | The lock goes with it. The snapshot has no history line, so the next `agentbus update` refuses and names `--rollback <id>` (step 0). |
 
 **The rollback** (automatic, or `--restore`):
 1. The binaries come back from the snapshot, `busmon` first and then `agentbus`, by `InstallFile`.
    This is the reverse of the update's order, for the same reason.
 2. The `agent-launch` link goes back to its recorded target.
-3. The skills go back:
-   - the external clone, by `git checkout` of its recorded `HEAD`;
-   - the role skills, by `RoleSkills` from the from tree with the restored binary.
+3. The skills go back, link by link. Re-running `roles install` would not be enough:
+   `rolecfg.InstallSkills` creates and replaces links, but never removes one.
+   - Each recorded link is set back to its recorded target.
+   - A link that was not recorded, and points into the new tree, is removed: the release added it.
+   - Any other link is the person's, and is left alone.
+   - The external clone gets a `git checkout` of its recorded `HEAD`, only when setup made it.
+     - Recorded `absent`: the clone the update made (setup's marker) is removed.
+   - Then the same check as step 5, against the snapshot's links and `HEAD`.
 4. The services the update restarted are restarted again, and each must report the from build key
    (the same 60 s test).
 5. Never touched:
@@ -258,6 +271,9 @@ can also undo them.
   chosen; `-N-g<sha>` is allowed only as an ancestor; `dev` and `-dirty` are refused.
 - **The clone is untouched:** its `HEAD`, branch and status are the same after an update.
 - **Order:** the snapshot (with its manifest) exists before the first write to the bin dir.
+- **Skills failures roll back:** a failed external fetch or checkout, a failed link, and a link
+  that does not resolve into the new tree each roll back, with history `ok=false`.
+- **A release that adds a skill** leaves no link to it after a rollback.
 - **Each failure point** (build, snapshot, each binary, link, skills, each service) leaves the
   bin dir, link and skills byte-equal to the snapshot after the automatic rollback.
 - **A kill between the two binary renames,** then `--rollback`, restores both.
@@ -282,7 +298,8 @@ can also undo them.
 
 1. **The build tree.** Each release is built in its own tree,
    `~/.local/share/agentbus/src/<tag>`, and your clone is left untouched. After an update, the
-   binaries read that tree's `roles.toml` and scripts, not the clone's. Is that right?
+   binaries read that tree's `roles.toml` and scripts, not the clone's. The role skill links
+   point into it too. Is that right?
 2. **Services.** Should it restart only `--project <p>`'s services, listing the others with their
    commands? Or every stale service on your one yes, as `setup install` offers today?
 3. **A build that is not a release** (installed from a branch, or with local changes): should it
@@ -290,3 +307,13 @@ can also undo them.
 4. **Telling master.** Should the update be reported to master on the bus, or only in the
    terminal?
 5. **Snapshots kept:** 3?
+
+## Changelog
+
+- **r2** (reviewer-codex on r1): the skill steps are strict in an update. The forms of
+  `ExternalSkills` and `RoleSkills` it uses return their error, followed by a check, so a failure
+  rolls back. A rollback restores each recorded skill link and removes the links the release
+  added, because `InstallSkills` never removes one (reviewer-codex and foureyes on r1).
+- **r2** (foureyes on r1): an external skills clone that is absent before the update is recorded
+  `absent`, and the rollback removes the clone the update made. Question 1 says the skill links
+  follow the tree too.
