@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"time"
@@ -266,10 +267,12 @@ func (m *Model) fillLists() {
 	act.SetFrame(m.lowerTitle(PanelActivity, at), al)
 
 	bd := &m.lists.board
-	bd.SetHeader(boardHeader(s.board, lower))
-	bd.SetItems(boardItems(s.board, now, lower))
-	bt, bl := boardFrame(s.board)
-	bd.SetFrame(m.lowerTitle(PanelBoard, bt), bl)
+	bv := boardViewOf(s.board, now, lower, boardOpts{noAccept: m.cfg.settings.NoAcceptAfter, noReply: m.cfg.settings.NoReplyAfter,
+		showDone: m.ui.boardDone, masterDown: masterDown(s.agents, cmp.Or(s.pilot, "master"))})
+	bd.SetHeader(bv.header)
+	bd.SetItems(bv.items)
+	bd.SetFrame(m.lowerTitle(PanelBoard, Line{{Text: "Board", Role: RoleText}}), bv.label)
+	bd.SetFooter(bv.footer)
 
 	wk := &m.lists.work // who owes what (requests-plan-redesign, layout A)
 	compact := lower < workCompactW

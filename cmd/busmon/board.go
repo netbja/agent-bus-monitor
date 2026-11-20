@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -18,17 +19,22 @@ const (
 )
 
 func boardTaskW(m map[string]bus.BoardEntry, width int) int {
-	need := Width("task")
+	need := Width("TASK")
 	for t := range m {
 		need = max(need, Width(Preview(t)))
 	}
 	return max(1, min(need+2, width-boardOwnerW-boardStateW-boardAgeW))
 }
 
-// boardHeader is the Board column header, exactly width cells.
-func boardHeader(m map[string]bus.BoardEntry, width int) Line {
-	return FitLine(Line{col("task", boardTaskW(m, width), RoleDim), col("owner", boardOwnerW, RoleDim),
-		col("state", boardStateW, RoleDim), {Text: "age", Role: RoleDim}}, width)
+// boardAlertW is the alert column's width when one row has an alert: the
+// longest alert, "⚠ no acceptance 59m", and its gap (21 cells; the mock-up's
+// 19 showed only "no reply"), 12 below 100 columns (views-redesign §3,
+// "⚠ no reply…").
+func boardAlertW(width int) int {
+	if width < 100 {
+		return 12
+	}
+	return 21
 }
 
 // boardStateRole colours a board state (spec §3.5); the word is always shown too.
@@ -48,47 +54,163 @@ func boardStateRole(state string) Role {
 	return RoleMuted
 }
 
-// boardItems lists the tasks, most recently updated first (as the v0.8 pane
-// did). The branch lives in the task detail, not in the row.
-func boardItems(m map[string]bus.BoardEntry, now time.Time, width int) []ListItem {
-	if len(m) == 0 {
-		return []ListItem{{Line: FitLine(Line{{Text: "no task on the board", Role: RoleMuted}}, width)}}
-	}
-	tasks := make([]string, 0, len(m))
-	for t := range m {
-		tasks = append(tasks, t)
-	}
-	sort.Slice(tasks, func(i, j int) bool {
-		if m[tasks[i]].Updated != m[tasks[j]].Updated {
-			return m[tasks[i]].Updated > m[tasks[j]].Updated
-		}
-		return tasks[i] < tasks[j]
-	})
-	out := make([]ListItem, 0, len(tasks))
-	taskW := boardTaskW(m, width)
-	for _, t := range tasks {
-		e := m[t]
-		state, role, why := e.State, boardStateRole(e.State), ""
-		if e.Request != nil && e.Request.ClosedUnaccepted != "" { // done, but nothing delivered (request-lost-body)
-			state, role, why = "closed", RoleAttention, "  "+e.Request.ClosedUnaccepted+", nothing delivered"
-		}
-		l := Line{col(Preview(t), taskW, RoleText), col(Preview(e.Owner), boardOwnerW, RoleMuted),
-			col(Preview(state), boardStateW, role),
-			{Text: humanAge(now.Sub(time.Unix(e.Updated, 0))), Role: RoleMuted}, {Text: Preview(why), Role: RoleAttention}}
-		out = append(out, ListItem{Key: t, Line: FitLine(l, width), Selectable: true})
-	}
-	return out
+// boardOpts are what the Board's rows read besides the board: the two alert
+// settings (0 off), whether d shows the done tasks, and master's liveness.
+type boardOpts struct {
+	noAccept, noReply time.Duration // board.no_accept_after, board.no_reply_after
+	showDone          bool          // d: the done tasks, after the others
+	masterDown        bool          // no master to cancel or reassign (masterDown)
 }
 
-// boardFrame is the Board frame title and its "D/N done" label.
-func boardFrame(m map[string]bus.BoardEntry) (title, label Line) {
-	done := 0
-	for _, e := range m {
+// boardView is the Board panel: its rows, column header, frame label and
+// footer (views-redesign §3).
+type boardView struct {
+	items                 []ListItem
+	header, label, footer Line
+}
+
+// boardAlert is a tracked request's alert and since when, "" when on time
+// (views-redesign §3): its body no longer in the stream (body lost, at once);
+// sent and not accepted past noAccept (no acceptance); accepted with no
+// reply past noReply (no reply). A setting at 0 is off; a closed request has
+// none.
+func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
+	if !r.Tracked || !r.waiting() {
+		return "", time.Time{}
+	}
+	if r.Availability == "missing" {
+		at := r.Created
+		if at.IsZero() {
+			at = r.Updated
+		}
+		return "body lost", at
+	}
+	if r.Accepted.IsZero() {
+		if r.State == "requested" && o.noAccept > 0 && !r.Created.IsZero() && now.Sub(r.Created) >= o.noAccept {
+			return "no acceptance " + humanAge(now.Sub(r.Created)), r.Created
+		}
+		return "", time.Time{}
+	}
+	if r.Responded.IsZero() && o.noReply > 0 && now.Sub(r.Accepted) >= o.noReply {
+		return "no reply " + humanAge(now.Sub(r.Accepted)), r.Accepted
+	}
+	return "", time.Time{}
+}
+
+// masterDown says the pilot can act on no request: no entry, or its terminal
+// gone from the holder (bus.ShownState's no terminal). Self-repair relaunches
+// it; busmon asks nothing of anyone (views-redesign §3, Q8).
+func masterDown(agents map[string]*agentState, pilot string) bool {
+	a := agents[pilot]
+	return a == nil || bus.ShownState(a.state, a.pane, a.host.termsRead, a.host.live) == bus.StateNoTerminal
+}
+
+// boardViewOf lists the tasks, one line each: the alerts first, oldest alert
+// first, then the open tasks most recently updated first, then (d) the done
+// ones. The alert column exists only while a row shown has an alert, never a
+// column of blanks (the person's Q1). The branch lives in the task detail.
+func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardOpts) boardView {
+	type row struct {
+		task    string
+		e       bus.BoardEntry
+		r       request
+		alert   string
+		alertAt time.Time
+	}
+	reqOf := map[string]request{}
+	for _, r := range boardRequests(m) {
+		reqOf[r.Task] = r
+	}
+	var rows []row
+	open, done := 0, 0
+	for t, e := range m {
 		if e.State == "done" {
 			done++
+			if !o.showDone {
+				continue
+			}
+		} else {
+			open++
+		}
+		r := reqOf[t]
+		a, at := boardAlert(r, now, o)
+		rows = append(rows, row{task: t, e: e, r: r, alert: a, alertAt: at})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if (a.alert != "") != (b.alert != "") {
+			return a.alert != ""
+		}
+		if a.alert != "" && !a.alertAt.Equal(b.alertAt) {
+			return a.alertAt.Before(b.alertAt)
+		}
+		if (a.e.State == "done") != (b.e.State == "done") {
+			return b.e.State == "done"
+		}
+		if a.e.Updated != b.e.Updated {
+			return a.e.Updated > b.e.Updated
+		}
+		return a.task < b.task
+	})
+	alerts := 0
+	shown := map[string]bus.BoardEntry{}
+	for _, r := range rows {
+		shown[r.task] = r.e
+		if r.alert != "" {
+			alerts++
 		}
 	}
-	return Line{{Text: "Board", Role: RoleText}}, Line{{Text: fmt.Sprintf("%d/%d done", done, len(m)), Role: RoleMuted}}
+	alertW := 0
+	if alerts > 0 {
+		alertW = boardAlertW(width)
+	}
+	taskW := max(1, boardTaskW(shown, width-alertW))
+	var v boardView
+	head := Line{}
+	if alertW > 0 {
+		head = append(head, col("ALERT", alertW, RoleDim))
+	}
+	v.header = FitLine(append(head, col("TASK", taskW, RoleDim), col("OWNER", boardOwnerW, RoleDim),
+		col("STATE", boardStateW, RoleDim), Seg{Text: "AGE", Role: RoleDim}), width)
+	v.label = Line{{Text: fmt.Sprintf("%d open %s %d done (d)", open, GlyphNone, done), Role: RoleMuted}}
+	foot := []string{"enter diagnostics", "d done"}
+	if alerts > 0 {
+		foot = append(foot, "resend (dispatch)")
+		if !o.masterDown {
+			foot = append(foot, "cancel/reassign (master)")
+		}
+	}
+	v.footer = Line{{Text: strings.Join(foot, " "+GlyphNone+" "), Role: RoleMuted}}
+	if len(rows) == 0 {
+		word := "no task on the board"
+		if done > 0 {
+			word = fmt.Sprintf("no open task (d shows %d done)", done)
+		}
+		v.items = []ListItem{{Line: FitLine(Line{{Text: word, Role: RoleMuted}}, width)}}
+		return v
+	}
+	for _, r := range rows {
+		state, role, why := r.e.State, boardStateRole(r.e.State), ""
+		if r.e.Request != nil && r.e.Request.ClosedUnaccepted != "" { // done, but nothing delivered (request-lost-body)
+			state, role, why = "closed", RoleAttention, "  "+r.e.Request.ClosedUnaccepted+", nothing delivered"
+		}
+		l := Line{}
+		if alertW > 0 {
+			text := ""
+			if r.alert != "" {
+				text = GlyphWarn + " " + r.alert
+			}
+			l = append(l, col(text, alertW, RoleAttention))
+		}
+		l = append(l, col(Preview(r.task), taskW, RoleText), col(Preview(r.e.Owner), boardOwnerW, RoleMuted),
+			col(Preview(state), boardStateW, role),
+			Seg{Text: humanAge(now.Sub(time.Unix(r.e.Updated, 0))), Role: RoleMuted}, Seg{Text: Preview(why), Role: RoleAttention})
+		if r.alert != "" && o.masterDown {
+			l = append(l, Seg{Text: "  master is down; self-repair relaunches it", Role: RoleAttention})
+		}
+		v.items = append(v.items, ListItem{Key: r.task, Line: FitLine(l, width), Selectable: true})
+	}
+	return v
 }
 
 // forPerson keeps what is addressed to the person running busmon: tracked

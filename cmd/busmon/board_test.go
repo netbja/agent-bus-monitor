@@ -23,17 +23,19 @@ func boardFixture() map[string]bus.BoardEntry {
 
 func TestBoardItemsWidthAndRoles(t *testing.T) {
 	m := boardFixture()
+	all := boardOpts{showDone: true}
 	for w := 1; w <= 120; w++ {
-		if h := boardHeader(m, w); h.Width() != w {
+		v := boardViewOf(m, boardNow, w, all)
+		if h := v.header; h.Width() != w {
 			t.Fatalf("header width %d at %d", h.Width(), w)
 		}
-		for _, it := range boardItems(m, boardNow, w) {
+		for _, it := range v.items {
 			if it.Line.Width() != w {
 				t.Fatalf("row %q width %d at %d", it.Key, it.Line.Width(), w)
 			}
 		}
 	}
-	its := boardItems(m, boardNow, 60)
+	its := boardViewOf(m, boardNow, 60, all).items
 	if its[1].Key != "ui-theme" || its[0].Key == "release" || its[len(its)-1].Key != "release" {
 		t.Fatalf("order %v", keysOf(its))
 	}
@@ -63,17 +65,19 @@ func keysOf(its []ListItem) []string {
 }
 
 func TestBoardEmpty(t *testing.T) {
-	its := boardItems(nil, boardNow, 40)
-	if len(its) != 1 || its[0].Selectable || !strings.Contains(its[0].Line.text(), "no task on the board") {
+	v := boardViewOf(nil, boardNow, 40, boardOpts{})
+	if its := v.items; len(its) != 1 || its[0].Selectable || !strings.Contains(its[0].Line.text(), "no task on the board") {
 		t.Fatalf("empty board %+v", its)
 	}
-	title, label := boardFrame(nil)
-	if title.text() != "Board" || label.text() != "0/0 done" {
-		t.Fatalf("empty frame %q %q", title.text(), label.text())
+	if v.label.text() != "0 open "+GlyphNone+" 0 done (d)" {
+		t.Fatalf("empty frame %q", v.label.text())
 	}
-	title, label = boardFrame(boardFixture())
-	if label.text() != "1/5 done" {
-		t.Fatalf("frame label %q", label.text())
+	if l := boardViewOf(boardFixture(), boardNow, 40, boardOpts{}).label.text(); l != "4 open "+GlyphNone+" 1 done (d)" {
+		t.Fatalf("frame label %q", l)
+	}
+	only := map[string]bus.BoardEntry{"release": {Owner: "master", State: "done"}} // done hidden: says how to see it
+	if its := boardViewOf(only, boardNow, 60, boardOpts{}).items; len(its) != 1 || !strings.Contains(its[0].Line.text(), "no open task (d shows 1 done)") {
+		t.Fatalf("all done %+v", its)
 	}
 }
 
@@ -174,11 +178,12 @@ func TestBoardTaskColumnFitsContent(t *testing.T) {
 	if got := boardTaskW(m, 200); got != want {
 		t.Fatalf("task column %d at 200, want %d", got, want)
 	}
-	h := boardHeader(m, 200).text()
-	if i := strings.Index(h, "owner"); i != want {
+	all := boardOpts{showDone: true}
+	h := boardViewOf(m, boardNow, 200, all).header.text()
+	if i := strings.Index(h, "OWNER"); i != want {
 		t.Fatalf("owner at %d in %q, want %d", i, h, want)
 	}
-	for _, it := range boardItems(m, boardNow, 200) {
+	for _, it := range boardViewOf(m, boardNow, 200, all).items {
 		if it.Line.Width() != 200 {
 			t.Fatalf("row %q width %d", it.Line.text(), it.Line.Width())
 		}
@@ -191,7 +196,7 @@ func TestBoardTaskColumnFitsContent(t *testing.T) {
 		t.Fatalf("task column %d at 30", got)
 	}
 	// An empty board keeps the header word.
-	if got := boardTaskW(nil, 200); got != Width("task")+2 {
+	if got := boardTaskW(nil, 200); got != Width("TASK")+2 {
 		t.Fatalf("empty board task column %d", got)
 	}
 }
@@ -202,7 +207,7 @@ func TestBoardTaskColumnFitsContent(t *testing.T) {
 func TestBoardShowsAClosedUnacceptedRequest(t *testing.T) {
 	m := map[string]bus.BoardEntry{"lost": {Owner: "coder", State: "done", Updated: boardNow.Unix(),
 		Request: &bus.RequestInfo{ID: "1-0", Target: "coder", RespondedAt: boardNow.UnixMilli(), ResponseID: "2-0", ClosedUnaccepted: "body missing"}}}
-	its := boardItems(m, boardNow, 100)
+	its := boardViewOf(m, boardNow, 100, boardOpts{showDone: true}).items
 	if len(its) != 1 || !strings.Contains(its[0].Line.text(), "closed") || !strings.Contains(its[0].Line.text(), "body missing, nothing delivered") || strings.Contains(its[0].Line.text(), "done") {
 		t.Fatalf("row: %q", its[0].Line.text())
 	}

@@ -99,6 +99,7 @@ type uiState struct {
 	view           PanelID   // the narrow tier's view
 	showAll        bool      // dormant agents listed (a)
 	agentsTouched  bool      // the person moved in Agents: stop following the top row
+	boardDone      bool      // d on the Board: its done tasks shown (views-redesign §3)
 	workLevel      workLevel // where the focus is on Work's Kanban: its tab, its column selector, a column's cards
 	workCol        int       // the Kanban's column the selector is on
 	filter         feedFilter
