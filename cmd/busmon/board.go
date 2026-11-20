@@ -60,6 +60,8 @@ type boardOpts struct {
 	noAccept, noReply time.Duration // board.no_accept_after, board.no_reply_after
 	showDone          bool          // d: the done tasks, after the others
 	masterDown        bool          // no master to cancel or reassign (masterDown)
+	between           bool          // only the rows between agents: no request to or from self (Work's line)
+	self              string        // the person running busmon
 }
 
 // boardView is the Board panel: its rows, column header, frame label and
@@ -124,6 +126,9 @@ func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardO
 	var rows []row
 	open, done := 0, 0
 	for t, e := range m {
+		if q := e.Request; o.between && q != nil && (q.From == o.self || q.Target == o.self) {
+			continue
+		}
 		if e.State == "done" {
 			done++
 			if !o.showDone {
@@ -173,6 +178,9 @@ func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardO
 	v.header = FitLine(append(head, col("TASK", taskW, RoleDim), col("OWNER", boardOwnerW, RoleDim),
 		col("STATE", boardStateW, RoleDim), Seg{Text: "AGE", Role: RoleDim}), width)
 	v.label = Line{{Text: fmt.Sprintf("%d open %s %d done (d)", open, GlyphNone, done), Role: RoleMuted}}
+	if o.between {
+		v.label = append(Line{{Text: "between agents " + GlyphNone + " ", Role: RoleAccent}}, v.label...)
+	}
 	foot := []string{"enter diagnostics", "d done"}
 	if alerts > 0 {
 		foot = append(foot, "resend (dispatch)")
@@ -211,105 +219,4 @@ func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardO
 		v.items = append(v.items, ListItem{Key: r.task, Line: FitLine(l, width), Selectable: true})
 	}
 	return v
-}
-
-// forPerson keeps what is addressed to the person running busmon: tracked
-// requests and untracked threads whose target is self. Threads between agents
-// stay in the Requests list but are theirs to answer, not the person's.
-func forPerson(reqs []request, threads []openThread, self string) ([]request, []openThread) {
-	var rs []request
-	for _, r := range reqs {
-		if r.Target == self {
-			rs = append(rs, r)
-		}
-	}
-	var ts []openThread
-	for _, t := range threads {
-		if t.Target == self {
-			ts = append(ts, t)
-		}
-	}
-	return rs, ts
-}
-
-// requestsLabel is the Requests frame label: what waits for you first, the
-// agents' own open threads muted.
-func requestsLabel(reqs []request, threads []openThread, self string, questions int) Line {
-	base := waitingCount(forPerson(reqs, threads, self))
-	others := waitingCount(reqs, threads) - base
-	mine := base + questions
-	l := Line{}
-	if mine > 0 {
-		l = append(l, Seg{Text: fmt.Sprintf("%d for you", mine), Role: RoleAttention})
-	}
-	if others > 0 {
-		if len(l) > 0 {
-			l = append(l, Seg{Text: " " + GlyphNone + " ", Role: RoleMuted})
-		}
-		l = append(l, Seg{Text: fmt.Sprintf("%d between agents", others), Role: RoleMuted})
-	}
-	if len(l) == 0 {
-		l = Line{{Text: "nothing waiting", Role: RoleMuted}}
-	}
-	return l
-}
-
-// waitingCount is what the header and the Requests title count: tracked
-// requests still waiting plus untracked threads with no answer (openThreads
-// already leaves out the threads a tracked request accounts for).
-func waitingCount(reqs []request, threads []openThread) int {
-	n := len(threads)
-	for _, r := range trackedOnly(reqs) {
-		if r.waiting() {
-			n++
-		}
-	}
-	return n
-}
-
-// requestItems is the Requests panel: tracked requests still waiting, then the
-// untracked threads, each under a labelled section header. Every entry is two
-// items: a selectable head and a non-selectable fact line.
-func requestItems(reqs []request, threads []openThread, now time.Time, width int) []ListItem {
-	var tracked []request
-	for _, r := range trackedOnly(reqs) {
-		if r.waiting() {
-			tracked = append(tracked, r)
-		}
-	}
-	sort.SliceStable(tracked, func(i, j int) bool { return requestLess(tracked[i], tracked[j]) })
-	if len(tracked) == 0 && len(threads) == 0 {
-		return []ListItem{{Line: FitLine(Line{{Text: "nothing waiting", Role: RoleMuted}}, width)}}
-	}
-	fit := func(l Line) Line { return FitLine(l, width) }
-	var out []ListItem
-	if len(tracked) > 0 {
-		out = append(out, ListItem{Line: fit(Line{{Text: fmt.Sprintf("tracked requests %s %d waiting", GlyphNone, len(tracked)), Role: RoleDim}})})
-	}
-	for _, r := range tracked {
-		head := Line{{Text: Preview(target(r)), Role: RoleAccent}, {Text: " " + GlyphArrowL + " ", Role: RoleMuted},
-			{Text: Preview(r.From), Role: RoleText}, {Text: "  " + Preview(r.Task), Role: RoleText}}
-		since := r.Created
-		if since.IsZero() {
-			since = r.Updated
-		}
-		deadline, _ := deadlineWords(r, now)
-		facts := Line{{Text: "  ", Role: RoleMuted}, {Text: Preview(r.State), Role: boardStateRole(r.State)},
-			{Text: fmt.Sprintf(" %s %s %s %s", GlyphNone, humanAge(now.Sub(since)), GlyphNone, deadline), Role: RoleMuted}}
-		if r.State == "blocked" && r.BlockedReason != "" {
-			facts = append(facts, Seg{Text: " " + GlyphNone + " ", Role: RoleMuted}, Seg{Text: Preview(r.BlockedReason), Role: RoleError})
-		}
-		out = append(out, ListItem{Key: "req:" + r.Task, Line: fit(head), Selectable: true}, ListItem{Line: fit(facts)})
-	}
-	if len(threads) > 0 {
-		out = append(out, ListItem{Line: fit(Line{{Text: fmt.Sprintf("untracked threads, no answer in retained history %s %d", GlyphNone, len(threads)), Role: RoleDim}})})
-	}
-	for _, t := range threads {
-		head := Line{{Text: Preview(t.Type) + "  ", Role: RoleAttention}, {Text: Preview(t.From), Role: RoleText},
-			{Text: " " + GlyphArrowR + " ", Role: RoleMuted}, {Text: Preview(t.Target), Role: RoleAccent},
-			{Text: "  " + Preview(t.Message), Role: RoleText}}
-		facts := Line{{Text: "  asked " + humanAge(now.Sub(t.At)) + " ago", Role: RoleMuted}}
-		out = append(out, ListItem{Key: "thr:" + t.ID, Line: fit(head), Selectable: true}, ListItem{Line: fit(facts)})
-	}
-	return out
 }

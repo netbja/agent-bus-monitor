@@ -69,9 +69,6 @@ func overlayCaptures(t *testing.T) map[string]string {
 		ev("1792999980000-0", "cmd", bus.CmdDirective, "charlie", "master", "start lot 1", ""), directive}}
 
 	reqs := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
-	threads := openThreads([]bus.Event{
-		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "look at the flake"},
-	}, reqs)
 
 	board := map[string]bus.BoardEntry{"pr-46-review": {Owner: "grok", State: "blocked", Branch: "fix/pr-46"},
 		"other": {Owner: "kimi", State: "working"}}
@@ -108,8 +105,6 @@ func overlayCaptures(t *testing.T) map[string]string {
 		"agent-empty":       plainOf(emptyAgent),
 		"task":              plainOf(taskBody),
 		"request":           plainOf(reqBody),
-		"requests":          plainOf(requestsPanel(reqs, threads, capNow, 80)),
-		"requests-empty":    plainOf(requestsPanel(nil, nil, capNow, 80)),
 		"plan":              plainOf(planBody),
 		"plan-task":         plainOf(planTask),
 		"quota":             plainOf(quotaDetail("openai", b, true, capNow.Add(time.Hour), true, capNow)),

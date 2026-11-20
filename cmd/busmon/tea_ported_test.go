@@ -141,43 +141,6 @@ func TestShellReaderAdmitsUnknownCompletenessOnOldEntries(t *testing.T) {
 	}
 }
 
-// From TestScreenRequestsOverlayShowsEachRequestHonestly and
-// TestScreenRequestsOverlayAtFortyColumns: the requests page lists each
-// request, a deadline only where one is set, inside the terminal.
-func TestShellRequestsPageShowsEachRequestHonestly(t *testing.T) {
-	now := shellNow
-	reqs := []request{
-		{Tracked: true, Task: "task-20", Target: "foureyes", State: "requested",
-			Created: now.Add(-42 * time.Minute), Updated: now.Add(-42 * time.Minute),
-			Delivery: "output_written", Expires: now.Add(18 * time.Minute)},
-		{Tracked: true, Task: "task-21", Target: "coder", State: "accepted",
-			Created: now.Add(-2 * time.Hour), Updated: now.Add(-20 * time.Minute),
-			Accepted: now.Add(-20 * time.Minute), Delivery: "queued"},
-		{Tracked: true, Task: "task-22", Target: "coder", State: "blocked",
-			Created: now.Add(-3 * time.Hour), Updated: now.Add(-time.Hour),
-			BlockedReason: "waiting on an API key", Delivery: "output_written"},
-	}
-	screen := readerScreen(t, 140, 60, func(s *snapshot) { s.requests = reqs }, page{kind: ovRequests})
-	for _, want := range []string{"task-20", "task-21", "task-22", "deadline in 18m",
-		"no acceptance recorded", "waiting on an API key", "no deadline set"} {
-		if !strings.Contains(screen, want) {
-			t.Errorf("requests page missing %q:\n%s", want, screen)
-		}
-	}
-	if strings.Count(screen, "deadline in") != 1 {
-		t.Errorf("only the request that carries a deadline may show one:\n%s", screen)
-	}
-	noWiderThan(t, screen, 140)
-	narrow := readerScreen(t, 60, 20, func(s *snapshot) {
-		s.requests = []request{{Tracked: true, Task: "a-very-long-task-slug-indeed", Target: "foureyes",
-			State: "requested", Created: now.Add(-time.Hour), Updated: now.Add(-time.Hour), Delivery: "queued"}}
-	}, page{kind: ovRequests})
-	noWiderThan(t, narrow, 60)
-	if !strings.Contains(narrow, "a-very-long-task") {
-		t.Errorf("the task must still be identifiable at 60 columns:\n%s", narrow)
-	}
-}
-
 // drawShell is the shell on st at w x h, as text (tview's harness draw).
 func drawShell(t testing.TB, st *shared, w, h int) string {
 	t.Helper()
@@ -732,10 +695,7 @@ func TestShellDeleteClosesAnOpenThreadWithAReply(t *testing.T) {
 	id := fmt.Sprintf("%d-0", time.Now().Add(-time.Hour).UnixMilli())
 	st.cmdHistory = []bus.Event{{Kind: "cmd", ID: id, Type: "directive", From: "master", Target: "claude-hl-coder", Message: "x"}}
 	fw := &fakeWriter{}
-	m := keys(t, shellOf(t, st, 160, 45, fw), '3') // Work, then its between-agents line: Requests
-	m.lists.work.Select(workFoldBetween)
-	m.ui.workLevel = workAtCards // on its card (the Kanban at 160 columns)
-	m = keys(t, m, kEnter)
+	m := keys(t, shellOf(t, st, 160, 45, fw), 'r') // the Requests sub-view (views-redesign §3, (a))
 	m.lists.requests.Select("thr:" + id)
 	if m.lists.requests.Selected() != "thr:"+id {
 		t.Fatalf("no row for the thread")

@@ -201,7 +201,6 @@ func TestShellReaderPages(t *testing.T) {
 		}, ovMessage, "pr-122"},
 		{"agent", func(m Model) (Model, tea.Cmd) { m = keys(t, m, kTab); return pressCmd(t, m, kEnter) }, ovAgent, ""},
 		{"task", func(m Model) (Model, tea.Cmd) { m = keys(t, m, '2', kDown); return pressCmd(t, m, kEnter) }, ovTask, ""},
-		{"requests", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, 'r') }, ovRequests, ""},
 		{"health", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, tea.Key{Code: tea.KeyF5}) }, ovHealth, ""},
 		{"help", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, '?') }, ovHelp, ""},
 		{"answer", func(m Model) (Model, tea.Cmd) { return pressCmd(t, m, '!') }, ovAsk, m.snap.asks[0].ID},

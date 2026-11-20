@@ -168,18 +168,12 @@ func TestWorkTabEnter(t *testing.T) {
 	if p := open("req:kimi-quota").rd.top(); p == nil || p.kind != ovRequest {
 		t.Fatalf("request row: %+v", p)
 	}
-	m := open(workFoldBetween)
-	if m.ui.focus != PanelRequests || m.layout.Active != PanelRequests || m.rd.open() {
-		t.Fatalf("between agents: focus %v active %v", m.ui.focus, m.layout.Active)
+	m := open(workFoldBetween) // the Board, filtered (views-redesign §3, (a))
+	if m.ui.focus != PanelBoard || m.layout.Active != PanelBoard || !m.ui.boardBetween || m.rd.open() {
+		t.Fatalf("between agents: focus %v active %v filter %v", m.ui.focus, m.layout.Active, m.ui.boardBetween)
 	}
-	if bar := tabText(m.lists.requests.title); !strings.Contains(bar, "between agents") {
-		t.Fatalf("sub-view title %q", bar)
-	}
-	if r := keys(t, m, tea.Key{Code: tea.KeyRight}); r.ui.focus != PanelActivity { // Work is the last tab: → wraps
-		t.Fatalf("→ in the sub-view: focus %v", r.ui.focus)
-	}
-	if r := keys(t, m, tea.Key{Code: tea.KeyLeft}); r.ui.focus != PanelBoard {
-		t.Fatalf("← in the sub-view: focus %v", r.ui.focus)
+	if r := keys(t, m, tea.Key{Code: tea.KeyRight}); r.ui.focus != PanelWork || r.ui.boardBetween { // leaving the Board drops the filter
+		t.Fatalf("→ on the filtered Board: focus %v filter %v", r.ui.focus, r.ui.boardBetween)
 	}
 	m = keys(t, m, kEsc)
 	if m.ui.focus != PanelWork || m.lists.work.Selected() != workFoldBetween {

@@ -593,9 +593,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     pill fades while the focus is inside the columns. Too narrow for four, the
     columns stack two by two. `display.work_layout` (`C`) picks `auto` (the default), `list` or
     `kanban` at every width. Two folded lines close
-    it: **between agents** (Enter opens the full Requests list, by thread: owed by you, you wait
-    on, between agents; `o` shows the answered ones, `d` then `y` closes a thread with a reply
-    from you; Esc returns to Work) and **done** (Enter or `d` opens the plan with its done tasks).
+    it: **between agents** (Enter opens the Board filtered to the rows between agents, no request
+    to or from you; Esc returns to Work on that line; every thread is `r`/`F2`) and **done** (Enter
+    or `d` opens the plan with its done tasks).
     `+` and `-` set a tracked request's priority on a row that stands for one; on any other
     row the footer says why nothing changed. `4` is Work, on NEXT. The Projects page (`M`) counts
     each project's **for you** and **at work** by the same rule (`♙/●` under 90 columns); `?` when a
@@ -704,16 +704,19 @@ It also states **how much of the text is really there**, which the feed cannot:
 A trailing `…` is deliberately **not** read as proof of truncation: the sanitiser
 writes one when it cuts, but so do authors.
 
-**r / F2 — what is waiting on someone.** Tracked requests from the board, ordered
-by what needs attention (blocked, then unclaimed, then in progress, then done),
-each with its target, age, what would move it, and the evidence: the deadline
+**r / F2 — every thread.** The Requests view, from any panel (the Board too), drawn
+under the tab it was opened from (Esc, the tab bar and `←→` go back to it): by thread,
+owed by you, you wait on, between agents, tracked requests among them; `o` shows the
+answered ones, `d` then `y` closes an untracked thread with a reply from you (it wakes
+nobody; the history stays), a tracked request being closed by its owner, and `+` and `-`
+set a tracked request's priority, the same from wherever it was opened. Enter on a tracked
+request opens its page: its target, age, what would move it, and the evidence: the deadline
 **only when `expires_at` is set**, and the delivery disposition in words.
 `output_written` renders as *written to subscriber output (not proof it was read)* —
 never as received or accepted; `queued` means no output was **recorded**, not that
 none was ever written; a body that reads back empty is reported as *not retained,
-cause unknown* and never implies the work is done. Cmd threads
-with no answer in the retained history are listed separately and labelled as
-carrying no acceptance signal at all, because the protocol records none for them.
+cause unknown* and never implies the work is done. Untracked threads carry no
+acceptance signal at all, because the protocol records none for them.
 
 ### Liveness model (why no dedicated heartbeat)
 

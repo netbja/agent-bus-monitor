@@ -17,4 +17,4 @@
 │                                                          │
 │▶ — between agents · 0, nobody waits on you  (enter shows…▼
 ╰──────────────────────────────────────────────────────────╯
- enter requests   T triage   ←→ tab   F1 help   F5 health   
+ enter board   T triage   p P plan   F1 help   F5 health    

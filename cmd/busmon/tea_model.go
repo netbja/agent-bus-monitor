@@ -100,6 +100,8 @@ type uiState struct {
 	showAll        bool      // dormant agents listed (a)
 	agentsTouched  bool      // the person moved in Agents: stop following the top row
 	boardDone      bool      // d on the Board: its done tasks shown (views-redesign §3)
+	boardBetween   bool      // the Board filtered to the rows between agents (Work's line; views-redesign §3, (a))
+	reqFrom        PanelID   // the lower tab the Requests sub-view was opened from: Esc, the tab bar and the arrows read it, never d/o/+/-
 	workLevel      workLevel // where the focus is on Work's Kanban: its tab, its column selector, a column's cards
 	workCol        int       // the Kanban's column the selector is on
 	filter         feedFilter

@@ -163,8 +163,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.openTracked(m.ui.focus, false)
 	case ActCopy:
 		cmd = m.copySelected()
-	case ActRequests:
-		cmd = m.push(page{kind: ovRequests})
+	case ActRequests: // the Requests sub-view, every thread, from wherever (views-redesign §3, (a))
+		m.openRequestsView()
 	case ActServices:
 		cmd = m.servicesCmd(0)
 	case ActHealth:
@@ -417,6 +417,9 @@ func (m *Model) editFilter(act Action, k Key) {
 // narrow tier shows the focused view.
 func (m *Model) focusPanel(p PanelID) {
 	m.ui.focus, m.ui.view = p, p
+	if p != PanelBoard { // the between-agents filter is Work's line's, while on the Board
+		m.ui.boardBetween = false
+	}
 	if isLowerTab(p) {
 		m.ui.tab = p
 	}
@@ -469,10 +472,7 @@ func (m *Model) switchTab(n int) {
 // stepTab moves the focus to the lower panel's next or previous tab, wrapping
 // as a terminal's own next and previous tab do (busmon-keys).
 func (m *Model) stepTab(next bool) {
-	focus := m.ui.focus
-	if focus == PanelRequests { // Work's sub-view
-		focus = PanelWork
-	}
+	focus := m.tabOf(m.ui.focus) // the sub-view steps from its origin
 	i := slices.Index(lowerTabs, focus)
 	if i < 0 {
 		return
@@ -505,7 +505,9 @@ func (m *Model) escape() {
 	switch l := m.lists.of(m.ui.focus); {
 	case m.ui.expanded != "":
 		m.collapse()
-	case m.ui.focus == PanelRequests: // Work's sub-view: back to Work, on its line
+	case m.ui.focus == PanelRequests: // the sub-view: back to the tab it was opened from
+		m.focusPanel(m.reqOrigin())
+	case m.ui.focus == PanelBoard && m.ui.boardBetween: // Work's line filtered it: back to Work, on that line
 		m.focusPanel(PanelWork)
 		m.lists.work.Select(workFoldBetween)
 	case l.Selected() != "":
@@ -716,4 +718,15 @@ func tabAt(tabs []PanelID, active PanelID, width, x0, x int) (PanelID, bool) {
 		pos += w
 	}
 	return 0, false
+}
+
+// openRequestsView focuses the Requests sub-view (r, F2), remembering the
+// lower tab it is opened from for Esc, the tab bar and the arrows; d, o, +
+// and - read the focused panel only, the same from every origin.
+func (m *Model) openRequestsView() {
+	if m.ui.focus != PanelRequests {
+		m.ui.reqFrom = m.tabOf(m.ui.tab)
+	}
+	m.focusPanel(PanelRequests)
+	m.refresh()
 }

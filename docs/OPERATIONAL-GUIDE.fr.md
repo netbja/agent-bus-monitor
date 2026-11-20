@@ -481,13 +481,14 @@ noms d'onglets et d'agents, sans modèle de projet) :
   compte (`3 dormant`) et `a` les affiche. Pour en retirer un définitivement, sélectionnez-le et
   appuyez sur `d` (ou `Suppr`), puis `y` : c'est `agentbus --project myapp agents forget <nom>`. Un
   agent qui écoute, ou qui a déclaré un état dans les 10 dernières minutes, est refusé.
-- **Requests : qui doit une réponse à qui.** L'onglet Requests (`3`) regroupe les fils selon ce
+- **Requests : qui doit une réponse à qui.** La vue Requests (`r` ou `F2`, depuis n'importe quel
+  panneau, le Board compris ; Échap ramène à l'onglet d'où elle a été ouverte) regroupe les fils selon ce
   qu'ils attendent, en trois sections, chacune avec son compte : **Owed by you** (dus par vous),
   **You wait on** (attendus par vous) et **Between agents** (requêtes suivies, revues encore
-  verrouillées, directives, puis la ligne des avis). Les fils répondus et ceux de plus de 24 heures sont repliés (`o`
-  les montre) : une directive plus ancienne restée sans réponse ne réveille personne. Entrée
-  déplie un groupe ou ouvre un fil ; `d` puis `y` clôt un fil par une réponse de votre part, son
-  historique reste. Une requête suivie est close par son propriétaire (`agentbus request done`).
+  verrouillées, directives, puis la ligne des avis). Les fils répondus, et ceux restés sans réponse depuis plus de
+  7 jours, sont repliés (`o` les montre) : une directive aussi ancienne ne réveille personne. Entrée
+  déplie un groupe ou ouvre un fil ; `d` puis `y` clôt un fil non suivi par une réponse de votre part, qui ne
+  réveille personne ; son historique reste. Une requête suivie est close par son propriétaire (`agentbus request done`).
   L'en-tête reprend les mêmes comptes : ce que vous devez en orange
   (`2 requests waiting · oldest 3h`), ce que les agents se doivent entre eux en gris
   (`4 between agents`), chacun absent à 0.

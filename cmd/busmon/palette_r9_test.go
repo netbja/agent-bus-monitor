@@ -64,8 +64,8 @@ func TestPaletteEnterCase2MissingArgument(t *testing.T) {
 func TestPaletteEnterCase3TopRow(t *testing.T) {
 	m, _ := palShell(t)
 	m = palette(t, m, "/requ", kEnter)
-	if k, ok := palTop(m); !ok || k != ovRequests {
-		t.Fatalf("/requ + Enter: %v", m.rd.top())
+	if m.rd.open() || m.ui.focus != PanelRequests { // the Requests sub-view (views-redesign §3, (a))
+		t.Fatalf("/requ + Enter: page %v, focus %v", m.rd.top(), m.ui.focus)
 	}
 }
 

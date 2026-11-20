@@ -21,4 +21,4 @@
 │▶ — between agents · 0, nobody waits on you  (enter shows them) —             ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
- enter requests   T triage   p P plan   tab focus   F1 help   F5 health         
+ enter board   T triage   p P plan   tab focus   ←→ tab   F1 help   F5 health   

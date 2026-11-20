@@ -181,43 +181,10 @@ func TestOpenThreadsExcludeAnsweredExchanges(t *testing.T) {
 	}
 }
 
-func TestRequestsPanelSeparatesTrackedFromUntracked(t *testing.T) {
-	now := time.Now()
-	reqs := boardRequests(map[string]bus.BoardEntry{"task-20": requestedEntry()})
-	threads := openThreads([]bus.Event{
-		{ID: "200-0", Kind: "cmd", Type: bus.CmdDirective, From: "helper", Target: "coder", Message: "look at the flake"},
-	}, reqs)
-	panel := requestsPanel(reqs, threads, now, 80)
-	for _, want := range []string{
-		"tracked requests",
-		"task-20",
-		"no acceptance recorded",
-		"no answer in the retained history",
-		"records no acceptance",
-		"look at the flake",
-	} {
-		if !strings.Contains(plainOf(panel), want) {
-			t.Errorf("panel missing %q:\n%s", want, plainOf(panel))
-		}
-	}
-}
-
-// The empty case has to teach, not just say "0": an operator staring at an
-// empty follow-up view needs to know a cmd directive is not a tracked request.
-func TestRequestsPanelExplainsAnEmptyBoard(t *testing.T) {
-	panel := requestsPanel(nil, nil, time.Now(), 80)
-	if !strings.Contains(plainOf(panel), "agentbus request send") {
-		t.Errorf("the empty view should say how a tracked request is created:\n%s", plainOf(panel))
-	}
-}
-
 func TestSupersededIsNotWaiting(t *testing.T) {
 	r := request{State: "superseded", Tracked: true}
 	if r.waiting() {
 		t.Fatal("a superseded request counts as waiting")
-	}
-	if n := waitingCount([]request{r, {State: "accepted", Tracked: true}}, nil); n != 1 {
-		t.Fatalf("waitingCount = %d, want 1", n)
 	}
 }
 

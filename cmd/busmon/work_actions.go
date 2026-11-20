@@ -16,8 +16,10 @@ import (
 // lines open the traffic between agents or the plan with its done tasks.
 func (m *Model) openWorkRow(key string) tea.Cmd {
 	switch {
-	case key == workFoldBetween:
-		m.focusPanel(PanelRequests)
+	case key == workFoldBetween: // the Board, filtered to the rows between agents (views-redesign §3, (a))
+		m.focusPanel(PanelBoard)
+		m.ui.boardBetween = true
+		m.refresh()
 		return nil
 	case key == workFoldDone:
 		return m.openPlanDone()
