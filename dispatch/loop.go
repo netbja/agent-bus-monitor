@@ -35,6 +35,10 @@ type Config struct {
 	Horizon, Retry, EscalateAfter, Tick, Lease, Renew, MinPTTL time.Duration
 	MaxTries                                                   int
 	EscalateTo                                                 string
+	// BackgroundNoticeAfter (dispatch.background_notice_after): how long an
+	// action may be skipped for an agent's background work before the
+	// escalation target is told, once per episode; 0 = never.
+	BackgroundNoticeAfter time.Duration
 	// Person is the person's recorded name (identity.as): a human identity
 	// whatever the capped cmd stream still holds (human-not-an-agent).
 	Person string
@@ -401,12 +405,13 @@ type loop struct {
 	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
 	cleared    map[string]bool              // agents /clear was typed into this pass (clear.go)
 
-	episodes  map[string]agentstate.Episode // each agent's blocked episode, on a host (hostevents.go)
-	bgSkips   map[string]string             // the last background skip per agent and action
-	loginAt   time.Time                     // the last login-expiry read (local clock: a throttle)
-	loginDirs map[string]loginDir           // each Claude config directory's last credentials read (loginexpiry.go)
-	loginRes  loginResults                  // the last credentials pass, read by the login-expiry check
-	loginHeld map[string]bool               // agents with a login hold (hold-login:<agent>), as of the last login pass
+	episodes  map[string]agentstate.Episode    // each agent's blocked episode, on a host (hostevents.go)
+	bgSkips   map[string]string                // the last background skip per agent and action
+	bgPass    map[string]map[string]bgSkipFact // this pass's background skips, by action then agent (bgskip.go)
+	loginAt   time.Time                        // the last login-expiry read (local clock: a throttle)
+	loginDirs map[string]loginDir              // each Claude config directory's last credentials read (loginexpiry.go)
+	loginRes  loginResults                     // the last credentials pass, read by the login-expiry check
+	loginHeld map[string]bool                  // agents with a login hold (hold-login:<agent>), as of the last login pass
 }
 
 // reconcile visits every agent the bus knows of: registered (snapshot), with a

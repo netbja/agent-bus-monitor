@@ -62,6 +62,10 @@ func Config(d Deps, cfg *dispatch.Config) (*dispatch.HostRuntime, error) {
 		return nil, err
 	}
 	wireRuntime(h, b) // the bus-backed facts of the background judgement
+	// The agents' declared texts: a judgement source (background-work-visible §4b).
+	h.Declared = dispatch.DeclaredFrom(b)
+	// A skip that lasts, told once (§4a).
+	cfg.BackgroundNoticeAfter = config.Machine(os.Getenv).Duration("dispatch.background_notice_after")
 	cfg.Health = realHealthConfig(b, h, d.Manager, paths, cfg.Clear, target)
 	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
 	repair, repairCfg := serviceSelfRepair(b, os.Getenv, target, d.Boot)
