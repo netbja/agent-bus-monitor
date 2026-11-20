@@ -35,7 +35,8 @@ Install v0.32.0? [y/N]
   without it (§5).
 - **`--check`** stops after the plan and changes nothing. busmon may show its output.
 - **`agentbus update --rollback [<id>]`** restores a snapshot: by default the last update that
-  succeeded and is not rolled back yet (a failed update rolled itself back already).
+  succeeded and is not rolled back yet, or an unfinished one (killed after its snapshot), which is
+  the one step 0 names. A failed update rolled itself back already.
   **`--list`** lists the snapshots.
 - **`--project <p>`** names the project whose services are restarted. Without it, nothing is
   restarted, and every stale service is listed with its command. It is read from the command line
@@ -349,3 +350,5 @@ The macOS signature check (§6, §7) stays a blocker before the first release th
   (§3.5); a history line that cannot be written after a success rolls the update back (§3.5's table).
 - **r6** (foureyes on the step 1 build): green is an active unit with its own PID's record of the new
   build, not only "not stale" (§3.4 step 6); `--rollback` defaults to the last installed update (§2).
+- **r7** (reviewer-codex and foureyes on r6's build): `--rollback` also takes the unfinished snapshot
+  step 0 names, so an update killed between the binary renames is recoverable by the named command.

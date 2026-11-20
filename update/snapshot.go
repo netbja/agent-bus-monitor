@@ -233,10 +233,14 @@ func Interrupted(updates string) string {
 }
 
 // Live are the snapshots whose update succeeded and that no successful
-// rollback has undone since, oldest first: what --rollback undoes (a failed
-// update rolled itself back already).
+// rollback has undone since, and the unfinished one (Interrupted: killed
+// after its snapshot, which step 0 names for --rollback), oldest first: what
+// --rollback undoes. A failed update rolled itself back already.
 func Live(updates string) []string {
 	live := map[string]bool{}
+	if id := Interrupted(updates); id != "" {
+		live[id] = true
+	}
 	for _, h := range History(updates) {
 		switch {
 		case h.Kind == "update" && h.OK:

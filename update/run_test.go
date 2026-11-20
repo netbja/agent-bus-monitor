@@ -691,3 +691,54 @@ func TestRollbackDefaultsToTheLastSuccess(t *testing.T) {
 		t.Fatalf("restored %v, want s1 only", order)
 	}
 }
+
+// TestInterruptedUpdateRollsBack: an update killed between the two binary
+// renames leaves a snapshot with no history line; the next update refuses,
+// naming --rollback <id>, and that command (with the id, or none) restores
+// both binaries (spec §7; reviewer-codex and foureyes).
+func TestInterruptedUpdateRollsBack(t *testing.T) {
+	for _, withID := range []bool{true, false} {
+		f := newFlow(t)
+		updates := Dir(f.env["XDG_STATE_HOME"])
+		if err := WriteSnapshot(filepath.Join(updates, "k1"), Manifest{BinDir: f.bin, From: "v0.1.0", To: "v0.2.0"}); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(f.bin, "agentbus"), "new agentbus", 0o755) // killed after the first rename
+		if code := Run(context.Background(), f.deps(true), Options{}); code != 1 || !strings.Contains(f.errw.String(), "agentbus update --rollback k1") {
+			t.Fatalf("refusal: %d %s", code, f.errw.String())
+		}
+		id := ""
+		if withID {
+			id = "k1"
+		}
+		var restored []string
+		f.r.restore = func(c setup.Cmd) error {
+			restored = append(restored, c.Args[2])
+			if Restore(context.Background(), f.depsHeld(), c.Args[2]) != 0 {
+				return errors.New("restore failed")
+			}
+			return nil
+		}
+		if code := RollbackTo(context.Background(), f.deps(false), id, true); code != 0 {
+			t.Fatalf("rollback (id %q): %d %s", id, code, f.errw.String())
+		}
+		if strings.Join(restored, ",") != "k1" || read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" || read(t, filepath.Join(f.bin, "busmon")) != "old busmon" {
+			t.Fatalf("id %q: restored %v, agentbus %q", id, restored, read(t, filepath.Join(f.bin, "agentbus")))
+		}
+		if Interrupted(updates) != "" {
+			t.Fatal("still interrupted after its rollback")
+		}
+	}
+}
+
+// depsHeld are deps for a restore --rollback starts (the marker set).
+func (f *flow) depsHeld() Deps {
+	d := f.deps(false)
+	d.Getenv = func(k string) string {
+		if k == heldEnv {
+			return "1"
+		}
+		return f.env[k]
+	}
+	return d
+}
