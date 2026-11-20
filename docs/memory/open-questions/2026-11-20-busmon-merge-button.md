@@ -69,8 +69,8 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
      - the PR is open and not a draft.
    - **A race is left.** `--match-head-commit` binds only the head, and no `gh` flag binds the
      base. A retarget to another base between the live read and the merge (about a second)
-     would not be caught. Branch protection on `main` would close it, but only once that policy
-     is established (question 7; to design at spec time, below).
+     would not be caught. Only a guard that blocks every base but `delivery.base` closes it,
+     and only once that policy is established (question 7; to design at spec time, below).
    - **`main` is never merged here.** Promotions to `main` stay master's fast-forward, on the
      person's yes (the dev-branch-flow decision).
 5. **What is shown and logged.**
@@ -132,8 +132,11 @@ To design at spec time (not specified in this note):
   requires GitHub's merge queue, where a mergeable PR is still queued. No such proof means no
   button (the hard requirements above).
 - **The base race.** The guard that binds the base at the moment of the merge, against a
-  retarget between the live read and the merge. The candidate is branch protection on `main`
-  that refuses PR merges, established and checked before relying on it. A re-read of the base
+  retarget between the live read and the merge. The guard must block a merge into **every** base
+  other than `delivery.base`, not only `main`: a PR retargeted to another unprotected branch
+  (`release`, say) would otherwise merge there. The candidate is a forge rule that refuses PR
+  merges into any branch but `delivery.base`, established and checked before relying on it.
+  Protecting `main` alone does not meet the requirement. A re-read of the base
   after the merge, with an alert, only detects a wrong merge after it happened: it may be added,
   but it does not meet the requirement. No guard means no button.
 - **A weaker button is the person's call.** Building the button with a weaker guarantee ("refused
@@ -168,9 +171,10 @@ Questions for the person (no guesses):
    requires GitHub's merge queue. Should the button refuse, or accept that the forge queues or
    auto-merges it later? The proposal refuses: a merge happens when the person presses, not
    later.
-7. **The base race:** is the second between the live read and the merge acceptable? It is
-   closed if `main` has branch protection that refuses PR merges (promotions are master's
-   fast-forwards). Or must busmon refuse whenever the PR was retargeted at all?
+7. **The base race:** the second between the live read and the merge is closed only by a forge
+   rule that refuses PR merges into every branch but `delivery.base` (promotions to `main` are
+   master's fast-forwards, not PR merges). May such a rule be set on the repository? If not, the
+   hard requirement leaves no button. Or does the person accept the race, which relaxes it?
 8. **Running under an agent:** busmon refuses the action when an agent started it, but that is
    defence in depth, not a boundary (above). Is that enough, or should the action need
    something an agent cannot supply, such as a separate forge login used only by busmon?
