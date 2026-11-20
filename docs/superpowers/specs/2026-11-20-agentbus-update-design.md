@@ -1,6 +1,6 @@
 # `agentbus update`, step 1: a manual update to the latest release, with a snapshot to roll back to
 
-Status: r2, spec only. Base: origin/dev `b2ccf229`. Author: architect, from the person's decision of
+Status: r3, spec only. Base: origin/dev `b2ccf229`. Author: architect, from the person's decision of
 2026-11-20 (bus thread `1795182404503-0`, relayed by master as cmd `1795182448227-0`).
 
 ## 1. The decision
@@ -147,7 +147,10 @@ can also undo them.
      - The update needs forms of the two that return their error. Install calls them and keeps
        its warning, so its behaviour is unchanged.
      - **A check follows:** the external clone's `HEAD` is the pin's commit, and every role skill
-       link resolves into the new tree.
+       link resolves to the source rolecfg's `skillSources` gives it with the new tree as the
+       repository root:
+       - the new tree's `skills/` for the repository's skills;
+       - the external clone for the others (`skillRoots`).
      - An error or a failed check is a failure of step 5, so it rolls the update back.
      - A skills folder setup did not make (no marker) is the person's. It is left alone and named,
        as install does, and that is not a failure.
@@ -272,7 +275,9 @@ can also undo them.
 - **The clone is untouched:** its `HEAD`, branch and status are the same after an update.
 - **Order:** the snapshot (with its manifest) exists before the first write to the bin dir.
 - **Skills failures roll back:** a failed external fetch or checkout, a failed link, and a link
-  that does not resolve into the new tree each roll back, with history `ok=false`.
+  that does not resolve to its `skillSources` source each roll back, with history `ok=false`.
+- **The check passes** on a normal update with both kinds of skill: one from the repository, one
+  external.
 - **A release that adds a skill** leaves no link to it after a rollback.
 - **Each failure point** (build, snapshot, each binary, link, skills, each service) leaves the
   bin dir, link and skills byte-equal to the snapshot after the automatic rollback.
@@ -317,3 +322,5 @@ can also undo them.
 - **r2** (foureyes on r1): an external skills clone that is absent before the update is recorded
   `absent`, and the rollback removes the clone the update made. Question 1 says the skill links
   follow the tree too.
+- **r3** (foureyes on r2): the strict check compares each link with its `skillSources` source,
+  so an external skill, which links into the mattpocock clone, passes.
