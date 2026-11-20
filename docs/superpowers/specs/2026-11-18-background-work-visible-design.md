@@ -1,8 +1,10 @@
 # An agent's background work, visible in busmon
 
-Status: spec, r4, for review (subject `background-work-visible-spec`). r4: the person's answers
+Status: spec, r5, for review (subject `background-work-visible-spec`). r4: the person's answers
 (2026-11-20, bus thread `1795188144565-0`, relayed by master as cmd `1795188170169-0`): §6 is now
-their decisions, with two additions: the long-skip notice to master (§4a) and the bound on a
+their decisions, with two additions. r5 (foureyes on r4): the dispatcher's skips are `auto-clear`
+and `pop-retire`, not relaunch or drain; the declaration enters as a judgement source, so
+`holder drain` sees it too. r4 added: the long-skip notice to master (§4a) and the bound on a
 declaration (§4b). r4 is by architect. Base for r4: origin/dev `77eab8f2`. r3: reviewer-codex
 (`agent_type` stored for a sub-agent task; Stop and SubagentStop timing told apart, `at` is the
 event's Redis time), foureyes's step-1 notes (the parent's pid; the status set from a recorded
@@ -33,8 +35,21 @@ from origin/dev.
   - `hooks`: sub-agent start and stop.
   - `process`: the agent's descendants and their CPU over a window.
   - `screen`: a running-tasks list on screen.
-- **Who uses it.** The dispatcher's `HostRuntime.background` uses it only to skip a `/clear`, a
-  relaunch or a drain while work runs (busmon's `bg work` flag shows those skips, 10 minutes).
+- **Who uses it** (corrected in r5, foureyes on r4). The judgement reaches its readers through
+  `Inspection.BackgroundSkip`.
+  - **The dispatcher skips two actions:**
+    - `auto-clear`, the `/clear` after a declared hand-off (`dispatch/clear.go:97`, `:253`);
+    - `pop-retire`, the end of a pop judged done (`dispatch/popdone.go:110`,
+      `dispatch/popretire.go:144`; decision 2026-11-13).
+
+    busmon's `bg work` flag shows those skips for 10 minutes.
+  - **One of the person's commands refuses at once:** `agentbus holder drain` skips the agent
+    and exits 3, and `--ignore-background` overrides it (`holderdrain/drain.go:158`). It builds its
+    own `HostRuntime` (`holderdrain/real.go:24`).
+  - **No relaunch path reads it.** Self-repair relaunches a dead agent, and `agentbus reload`
+    reads no judgement.
+  - r3's "a `/clear`, a relaunch or a drain" was wrong, and the person's Q4 was worded from it
+    (§6).
 - **What the profiles declare** (`agentstate/clients/*.toml`):
   - Claude Code: `authoritative = ['hooks', 'process']`.
   - Codex, Grok, Kimi and agy declare no source.
@@ -178,7 +193,7 @@ oldest one's start, Redis-clock). No names, no arguments.
 
 ## 4a. A skip that lasts: one notice to master (Q4)
 
-**Why.** Background work makes the dispatcher skip an agent's `/clear`, relaunch or drain (4.3b).
+**Why.** Background work makes the dispatcher skip an agent's `auto-clear` or `pop-retire` (4.3b, §1).
 A forgotten task, such as a dev server left running, would hold that skip forever, and silently.
 
 **The episode.** An agent's skip episode starts with the first skip of an action for its
@@ -189,7 +204,10 @@ does not skip that action for that agent:
 - the work ended;
 - the agent's process changed.
 
-Each pending action (`auto-clear`, `relaunch`, `drain`) has its own episode.
+Each of the dispatcher's two actions (`auto-clear`, `pop-retire`) has its own episode.
+- `holder drain` has no episode. It is the person's one-shot command, and it reports the skip at
+  once.
+- A forgotten task can hold a done pop open forever, so `pop-retire` is the case Q4 names.
 
 **The notice.** When an episode has lasted `dispatch.background_notice_after`:
 - **What is sent:** one `FencedCmdOnce` to the escalation target (master by default), wake=yes,
@@ -219,7 +237,15 @@ Each pending action (`auto-clear`, `relaunch`, `drain`) has its own episode.
 ## 4b. The declared text holds the skip, within a bound (Q7)
 
 - **The declaration counts.** The agent's declared record (`{p}:background:<agent>`, not
-  expired) makes `BackgroundSkip` skip the agent, as observed work does, with source `declared`.
+  expired) becomes a fourth source of the judgement, `declared`, which always reads as running.
+  - **How it gets there:** `HostRuntime.background` reads it through a `Declared func(agent)
+    (text string, ok bool)` set beside `Hooks`. That func is wired in both places that build a
+    `HostRuntime`:
+    - the dispatcher's, `internal/dispatchsvc/dispatchhost.go:24`;
+    - `holder drain`'s, `holderdrain/real.go:24`, from its bus.
+  - **Who sees it:** every `BackgroundSkip` reader, with no change of its own: the dispatcher's
+    `auto-clear` and `pop-retire`, and `holder drain`.
+  - `holder drain`'s `--ignore-background` overrides it, as it overrides the other sources.
   - Its expiry bounds it: 30 minutes by default, 24 hours at most.
 - **Context escalation keeps priority.** A declaration never holds off the `/clear` after a
   declared hand-off while the agent's context episode has escalated (context-escalation §2 step 2:
@@ -228,8 +254,8 @@ Each pending action (`auto-clear`, `relaunch`, `drain`) has its own episode.
   - There, the declaration is ignored for `auto-clear` only. Observed work (`hooks`, `process`,
     `screen`) still skips, as 4.3b says, since a `/clear` would cut running work.
   - A declaration of up to 24 h can never let an agent's context overflow.
-- **Relaunch and drain** honour the declaration with no such exception: neither empties a context
-  that is filling.
+- **`pop-retire` and `holder drain`** honour the declaration with no such exception.
+  None of them empties a context that is filling.
 
 ## 5. Tests first, per step
 
@@ -266,7 +292,10 @@ Each pending action (`auto-clear`, `relaunch`, `drain`) has its own episode.
      - an expired one does not;
      - with `context-escalate:<agent>` set for the episode, the declaration no longer skips the
        `/clear`, while a `process` source still does;
-     - relaunch and drain honour the declaration.
+     - `pop-retire`, and `holder drain`'s Inspection, honour the declaration;
+     - `--ignore-background` overrides it for `holder drain`.
+   - **The notice's actions:** a `pop-retire` skipped for `background_notice_after` sends its own
+     notice, in its own episode.
 
 ## 6. The person's decisions (2026-11-20)
 
@@ -275,9 +304,13 @@ Each pending action (`auto-clear`, `relaunch`, `drain`) has its own episode.
   running work (§3).
 - **Q3: the program name only,** read live from the holder while the page is open, and never
   stored (§3, §4).
-- **Q4: no desktop alert.** When the dispatcher has skipped a `/clear`, relaunch or drain for
-  about 2 h (a setting), master gets one notice per episode, naming the agent and the source of
-  the skip (§4a). A forgotten task must not block the automaton silently.
+- **Q4: no desktop alert.** When the dispatcher has skipped an action for about 2 h (a setting),
+  master gets one notice per episode, naming the agent and the source of the skip (§4a). A
+  forgotten task must not block the automaton silently.
+  - The person wrote "a `/clear`, relaunch or drain", from r3's wrong premise (§1).
+  - The dispatcher's skips are `auto-clear` (the `/clear`) and `pop-retire`.
+  - `holder drain` is the person's own command, and it reports at once.
+  - Master confirms the corrected list with the person.
 - **Q5: yes,** `bg ≥1?` with its `?` for the process-only clients (§3).
 - **Q6: one mark plus the page for now.** Child rows (idea i2) come later, on the same data.
 - **Q7: yes, the skip honours the declared text, within a bound.** Context escalation keeps
@@ -296,7 +329,8 @@ One PR each, from origin/dev, base dev:
 3. busmon: one mark per agent, the page's section, the live process names (§3).
 4. The skip notice and the declaration's bound (§4a, §4b):
    - the `bgskip` marks and the notice in `dispatch/`;
-   - the declared record in `BackgroundSkip`, with the escalation exception for `auto-clear`;
+   - the declared record as the judgement's `declared` source (`Declared`, wired in
+     `dispatchsvc`), with the escalation exception for `auto-clear`;
    - the setting `dispatch.background_notice_after`.
 
    Step 1's "(and the declared record, with Q7's yes)" moves here, so the bound comes with it.
