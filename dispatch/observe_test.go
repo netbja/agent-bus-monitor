@@ -159,7 +159,7 @@ func TestObservePublishesTheProcessSource(t *testing.T) {
 	register(t, b, "dev", "p1")
 	now := time.Now()
 	j := agentstate.Background{Authoritative: []string{agentstate.SourceProcess}}.Judge(agentstate.Facts{Process: &agentstate.ProcessFacts{Window: 10 * time.Second,
-		Procs: []agentstate.Proc{{Name: "make", Start: now.Add(-14 * time.Minute)}, {Name: "go", Start: now.Add(-time.Minute)}}}}, now)
+		Procs: []agentstate.Proc{{Name: "make", Seen: now.Add(-14 * time.Minute)}, {Name: "go", Seen: now.Add(-time.Minute)}}}}, now)
 	rt := newFakeRT(func(string, int) Inspection { in := readyIn(); in.Background = &j; return in })
 	cfg := fastConfig()
 	cfg.Observe = 50 * time.Millisecond

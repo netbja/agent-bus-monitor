@@ -43,6 +43,10 @@ type Proc struct {
 	Name      string
 	Start     time.Time
 	CPUGrowth time.Duration
+	// Seen is when the host first saw it (background-work-visible step 2):
+	// OldestAge counts from it when Start is unknown. It never enters What(),
+	// whose text the dispatcher's once-per-change records compare (foureyes).
+	Seen time.Time
 }
 
 // ProcessFacts are the agent's descendants over the last Window.
@@ -146,6 +150,8 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 			if !pr.Start.IsZero() {
 				what += " " + age(now.Sub(pr.Start))
 				j.oldest = max(j.oldest, now.Sub(pr.Start))
+			} else if !pr.Seen.IsZero() {
+				j.oldest = max(j.oldest, now.Sub(pr.Seen))
 			}
 			j.running = append(j.running, what)
 		}

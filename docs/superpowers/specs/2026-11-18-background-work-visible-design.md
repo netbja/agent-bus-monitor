@@ -147,7 +147,11 @@ client fact.
 - the scheduled wakeups, with their schedule.
 
 **Ages.** Neither source gives a task's start, so its age is counted from when agentbus first saw
-it: its first Stop, or the process's own start from the process tree. The page says so.
+it: its first Stop, or, from the process tree, the dispatcher's first sight of the process (as
+built, step 2: a process's start is the platform's own ticks, so the dispatcher counts from when it
+first saw that pid and start; a dispatcher restart restarts the ages). The page says so. The age
+never enters the background skip's reason, whose text the dispatcher's once-per-change records
+compare.
 
 ## 4. What is stored, and what never is
 

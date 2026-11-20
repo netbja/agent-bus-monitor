@@ -130,13 +130,16 @@ func TestJudgeProcessCount(t *testing.T) {
 	now := time.Unix(1000000, 0)
 	claude := Background{Authoritative: []string{SourceHooks, SourceProcess}}
 	f := Facts{Process: &ProcessFacts{Window: 10 * time.Second, Procs: []Proc{
-		{Name: "make", Start: now.Add(-14 * time.Minute), CPUGrowth: 5 * time.Second},
-		{Name: "go", Start: now.Add(-3 * time.Minute), CPUGrowth: time.Second},
+		{Name: "make", Seen: now.Add(-14 * time.Minute), CPUGrowth: 5 * time.Second},
+		{Name: "go", Seen: now.Add(-3 * time.Minute), CPUGrowth: time.Second},
 		{Name: "node", Start: now.Add(-40 * time.Minute)}, // an idle MCP helper: not counted
 	}}, ExtraHelpers: []string{"node"}}
 	j := claude.Judge(f, now)
 	if j.Procs() != 2 || j.OldestAge() != 14*time.Minute {
 		t.Fatalf("procs %d oldest %v", j.Procs(), j.OldestAge())
+	}
+	if j.What() != "process 'make', process 'go'" { // a first sight never enters the text
+		t.Fatalf("what %q", j.What())
 	}
 	if j := claude.Judge(Facts{Process: &ProcessFacts{Window: 10 * time.Second}}, now); j.Procs() != 0 || j.OldestAge() != 0 {
 		t.Fatalf("no process: %d %v", j.Procs(), j.OldestAge())
