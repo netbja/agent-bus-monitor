@@ -608,6 +608,15 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus suspend --reason \"OS updates\"", "agentbus suspend --project agent-bus-monitor --dry-run", "agentbus suspend --status"},
 	},
 	{
+		Name: "update", NoProject: true, Usage: []string{"[--project <p>] update [--check] [--yes]", "update --rollback [<id>] [--yes]", "update --list"},
+		Summary: "install the latest release from your clone's origin/main: built in its own tree, a snapshot first, --project's dispatch and missions restarted, the others listed; --rollback restores a snapshot (the person only)",
+		Flags: []cli.Flag{{Long: "check", Help: "show the plan and change nothing (an agent may run it)"},
+			{Long: "yes", Help: "answer the question yes (the person's flag: an agent is refused with or without it)"},
+			{Long: "rollback", Arg: "[<id>]", Help: "restore a snapshot, the last one by default, by the binary that took it"},
+			{Long: "list", Help: "the snapshots and how each update ended"}},
+		Examples: []string{"agentbus --project myapp update", "agentbus update --check", "agentbus update --rollback"},
+	},
+	{
 		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},
 		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see",
 		Flags:    []cli.Flag{fJSON},
