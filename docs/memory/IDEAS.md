@@ -28,3 +28,7 @@ From 2026-11-17:
 From 2026-11-19:
 
 - [A CI loop to the branch's owner, newer-client detection, richer Claude state (from agent-orchestrator)](open-questions/2026-11-19-ci-loop-and-status-ideas.md)
+
+From 2026-11-20:
+
+- [A turn lost without its Stop hook (API error, Esc): one notice to master, no auto-wake](open-questions/2026-11-20-lost-turn-notice.md)
