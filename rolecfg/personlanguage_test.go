@@ -29,7 +29,15 @@ func TestMasterReadsThePersonsLanguage(t *testing.T) {
 	if role := read("roles/master.md"); !strings.Contains(role, "person.language") {
 		t.Error("roles/master.md: boot does not read person.language")
 	}
-	if peer := read("skills/agent-bus/SKILL.md"); !strings.Contains(peer, "## Language on the bus") || !strings.Contains(peer, "English") {
+	// The person's answer to §7 Q1: a peer answering the person directly stays English;
+	// only master writes to the person in person.language.
+	peer := read("skills/agent-bus/SKILL.md")
+	if !strings.Contains(peer, "## Language on the bus") {
 		t.Error("the peer skill lacks its 'Language on the bus' section")
+	}
+	for _, want := range []string{"Write in English", "answering the person directly", "Only master writes to the person in `person.language`"} {
+		if !strings.Contains(peer, want) {
+			t.Errorf("the peer skill lacks %q", want)
+		}
 	}
 }

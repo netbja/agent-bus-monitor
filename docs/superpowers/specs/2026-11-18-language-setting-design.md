@@ -1,6 +1,6 @@
 # The person's language: master talks to the person in it, the bus stays English
 
-Status: spec, r6, for review (subject `language-setting-spec`). Not built. Base: origin/dev
+Status: spec, r7, answered; built on `feat/person-language` (subject `language-setting`). Base: origin/dev
 `77eab8f2`.
 
 r5:
@@ -8,6 +8,10 @@ r5:
 - foureyes on r4: the `Invalid` text, the busmon keys `i`/`I`, and a docs guard.
 
 r6 (reviewer-codex on r5): the idea note links the spec without a revision label.
+
+r7, the person's answers to §7 (relayed by master, 2026-11-20): Q1, a peer answering the person
+directly stays English; Q2, any valid ISO 639-1 code, and an invalid value falls back to `en` and
+says so (§2).
 
 r4 is a rewrite. The person reframed idea 17 on 2026-11-20 (bus thread `1795188144565-0`,
 relayed by master as cmd `1795188170169-0`): "Idea 17 was never about translating busmon." r1 to
@@ -36,9 +40,9 @@ Nothing else changes language:
     whose env rule can refuse a value;
   - in the Identity group, beside `identity.as` (`config/group.go`), so busmon's settings page
     (Shift+C) shows and edits it with no new code.
-- **Validation:** a value that is not two lowercase letters is refused by the env rule
-  (`envInvalid`) and the file check, with the registry's usual settings warning. The effective
-  value is then `en`.
+- **Validation:** a value that is not an ISO 639-1 code in lower case is refused by the env rule
+  (`envInvalid`) and the file check (`FailClosed`), with the registry's usual settings warning.
+  The effective value is then `en` (answer to §7 Q2).
 - **No code reads it.** No Go code changes behaviour on it. busmon, the dispatcher and the CLI
   never translate anything.
 
@@ -118,7 +122,9 @@ Nothing else changes language:
   - its next directive to coder, given on that message, is English;
   - `agentbus thread` shows both.
 
-## 7. Questions for the person
+## 7. Questions for the person (answered 2026-11-20)
+
+Answers: 1, English; 2, any valid ISO 639-1 code, an invalid value falling back to `en`, said.
 
 1. **A peer answering you directly** (an `@all` message, or a reply to your busmon message): should
    it stay English, as recommended, or also use `person.language`?

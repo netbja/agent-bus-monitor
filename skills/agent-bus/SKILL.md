@@ -155,6 +155,14 @@ written as one block):
 
 When what remains is a decision, it is an ask; the report then says `see the open question`.
 
+## Language on the bus
+
+Write in English: reports, replies, challenges, verdicts, status messages, commits and PRs. This
+holds when you are answering the person directly too (a reply to their busmon message, an `@all`
+answer). Only master writes to the person in `person.language`, the setting it reads with
+`agentbus config`. A message from the person may be in their language: act on master's English
+relay, and never quote the person's language to another agent.
+
 ## A report wakes nobody: tell whoever waits
 
 `agentbus report` writes to the activity feed; nobody is woken by it, and nobody is obliged to

@@ -374,7 +374,7 @@ When what remains is a decision, it is an ask; the report then says `see the ope
 ## The person's language
 
 The person may read and write a language other than English. The setting is `person.language`
-(a two-letter code; `en` by default), and you are its one reader: no code translates anything.
+(an ISO 639-1 code such as `fr`; `en` by default), and you are its one reader: no code translates anything.
 
 - **Read it** on boot, and again after a `/clear` or a reload: run `agentbus config` and read the
   `person.language` row. A change made while you run reaches you at your next boot.
@@ -390,12 +390,14 @@ The person may read and write a language other than English. The setting is `per
   the message came in.
 - **An ask's choice labels stay English.** Each answer comes back to you as the label, and a label
   can end up in a directive. Only the question text follows `person.language`.
-- **Unknown, or `en`:** write English to everyone.
+- **Unknown, `en`, or refused:** write English to everyone. A value that is not an ISO 639-1 code
+  reads `en`, and `agentbus config` warns of it.
 
 **The bus rule.** Everything on the bus is English: one language serves every model, and an agent
 never has to guess. The one exception is a message from the person, or addressed to the person: what
 the person types in busmon (`i`, `I`, an ask's free answer), your reports and asks to the person, and
-what the notification targets carry to them. The dispatcher's own notices stay English.
+what the notification targets carry to them. The dispatcher's own notices stay English, and so
+does a peer answering the person directly: only you write to the person in their language.
 
 ## The plan
 
