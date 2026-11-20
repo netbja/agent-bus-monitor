@@ -1,7 +1,7 @@
 # busmon: restart a service from Services (F3), and a log page that reads
 
-Status: r1, spec only, no code. §6's questions are the person's: nothing in §3-§5 that depends on
-them is built before they answer. Base: origin/dev `b83d4b7b`. Author: coder, from master's directive
+Status: r2, the person's answers (§7) folded in; step 1 (§4) built with this amendment, step 2 (§3)
+next. r1 was spec only. Base: origin/dev `b83d4b7b`. Author: coder, from master's directive
 of 2026-11-20 (plan v0.31 task `services-restart-buttons`). It answers the open question
 [2026-11-17-services-view](../../memory/open-questions/2026-11-17-services-view.md) (the person's item 18).
 
@@ -60,7 +60,8 @@ of 2026-11-20 (plan v0.31 task `services-restart-buttons`). It answers the open 
   - the service is on another host (`record.Host` is not this host): `restart it on <host>`;
   - nothing is installed for that kind here;
   - another run is in progress;
-  - the card is a holder (§6 Q1) or Redis (§6 Q2), until the person answers.
+  - the card is a holder (the person's Q1: holders stay read-only in busmon, the footer names
+    the command) or Redis (Q2: no restart from the card; that is setup's job).
 - **After the run.** The card is read again at once, instead of waiting for the next tick: its
   `since` and state show the new process. A non-zero exit becomes an attention notice, with the
   command's last output line.
@@ -75,19 +76,25 @@ Each line is drawn on its own row, unchanged except for a level and a time:
 - **Format of a decision.** Fields in a fixed order: `action  agent  reason  (rule N)`. The
   `high_id` and `latency_ms` fields are left out, and the raw file keeps them.
 - **Routine lines folded.** `none` decisions are hidden by default, and `a` shows them (the same
-  page key as Health's `a`, all). The frame label counts them:
-  `412 lines · 922 routine hidden (a)`.
-- **Time.** A text line already has its time. A decision line has none (§1). This spec proposes
-  that the dispatcher add `"ts"` (the time it was written) to each decision line. That is an
-  additive field, and readers that ignore unknown fields keep working. Older lines show no time.
-  Whether to add it is §6 Q3.
+  page key as Health's `a`, all). The page's title counts them:
+  `dispatch log · 200 lines · 922 routine hidden (a)`.
+- **Read back to 200 visible lines** (the person's fix, 2026-11-20). The page reads the log back,
+  its rotated file (`.1`) after it, until it holds 200 lines that are not routine (after the `none`
+  decisions are folded), within a cap on the bytes read (8 MiB). A tail made only of `none` lines
+  still reaches the decisions above it, as far as the cap allows.
+- **Time.** A text line already has its time. A decision line had none (§1): the dispatcher now
+  writes `"ts"` on each line it logs, decisions and errors alike, in RFC 3339 with the zone, from
+  the same clock as the service's text lines (the local clock; the person's Q3). That is an
+  additive field, and readers that ignore unknown fields keep working. The page shows it as the text
+  lines show theirs (`2006-01-02 15:04:05`, local); older lines show no time.
 - `f` filters by a word, such as an agent or an action (the same page key as History's `f`). Esc
   clears the filter. `/` and `n` stay the palette and next-item keys they are on every page.
 
 ## 5. Steps (after the answers)
 
-1. The log page (§4). Its test reads a fixture log mixing JSON decisions and text lines, and
-   checks the levels, the folding count and the field order.
+1. The log page (§4) and `ts` on the dispatcher's lines. Its test reads a fixture log mixing JSON
+   decisions and text lines, and checks the levels, the folding count and the field order; another
+   reads back through a tail made only of `none` lines, and stops at the byte cap.
 2. The restart key (§3). Its tests cover:
    - the question carries the exact argv;
    - `y` runs that argv through a fake runner;
@@ -110,3 +117,12 @@ One PR per step from origin/dev.
 - **Q3. Time on dispatch decisions.** Should the dispatcher write a `ts` field on each decision
   line (§4)? Without it, the page can only say the order of decisions, not when they happened.
 - **Q4. The key.** Is `X` right for restart, or do you want a different key?
+
+## 7. The person's answers (2026-11-20)
+
+- **Q1:** (a), holders stay read-only in busmon; the footer names the command.
+- **Q2:** (a), no restart of Redis from its card: that is setup's job.
+- **Q3:** yes, `ts` on each decision line, RFC 3339 with the zone, the same clock as the text lines.
+- **Q4:** `X` is fine.
+- **Fix to §4:** the page reads back until 200 visible lines are found (after folding the `none`
+  decisions), with a cap on the bytes read; the test covers a tail made only of `none` lines.

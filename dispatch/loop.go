@@ -948,7 +948,10 @@ func (l *loop) logError(agent, op string, err error) {
 	l.log(map[string]any{"agent": agent, "op": op, "error": err.Error()})
 }
 
+// log writes one JSON line; "ts" is its local time in RFC 3339 with the zone,
+// the clock of the service's own text lines (services-restart-buttons §4, Q3).
 func (l *loop) log(v map[string]any) {
+	v["ts"] = time.Now().Format(time.RFC3339)
 	line, err := json.Marshal(v)
 	if err != nil {
 		return

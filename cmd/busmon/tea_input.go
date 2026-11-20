@@ -18,10 +18,10 @@ import (
 type lineKind int
 
 const (
-	lineNone    lineKind = iota
-	lineMessage          // a message: "@agent body", "@all body" or a broadcast
-	lineFilter           // Activity's filter
-	lineHistFilter       // the History page's filter (/ on that page)
+	lineNone       lineKind = iota
+	lineMessage             // a message: "@agent body", "@all body" or a broadcast
+	lineFilter              // Activity's filter
+	lineHistFilter          // a page's filter: History's (f), a service log's (f)
 )
 
 // filterLike: the lines edited the filter's way (ModeFilter): Enter applies,

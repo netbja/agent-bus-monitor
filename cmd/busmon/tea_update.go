@@ -406,6 +406,9 @@ func (m *Model) editFilter(act Action, k Key) {
 		if p := m.rd.top(); p != nil && p.kind == ovHistory {
 			p.histFilter, p.sel, p.dirty = parseFilter(m.ui.edit), 0, true
 		}
+		if p := m.rd.top(); p != nil && p.kind == ovServiceLog && p.slog != nil { // a word (services-restart-buttons §4)
+			p.slog.word, p.top, p.dirty = strings.TrimSpace(m.ui.edit), 0, true
+		}
 		m.leaveLine(false)
 		m.refresh()
 	case act == ActSend:
