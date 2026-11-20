@@ -204,8 +204,7 @@ until then, and `agentbus -p myapp resume` ends it early.
   - `agentbus config --project myapp` shows which applies.
   - After changing the template, run `agentbus -p myapp service restart missions`.
 - **Merging is yours.** The merge queue (`agentbus merge-queue`, and *For you* in busmon) lists each PR
-  on an approved head, with its reviewers. A PR whose checks are red carries `CI red`. You merge on
-  the forge.
+  on an approved head, with its reviewers. You merge on the forge.
 - **Promotions.** With a `dev` base, `main` moves only by master's fast-forward to a released `dev`
   head, and only on your yes.
 - **The CI loop** (GitHub with `gh`):
@@ -304,8 +303,8 @@ agents back.
    without it.
 4. **An attached terminal is the agent's.** What you type there goes to the agent's client. Run
    `agentbus` commands from your own shell.
-5. **No mark is not green.** The `CI red` mark and the CI loop read GitHub only, and only finished
-   checks.
+5. **Silence from the CI loop is not green.** The loop reads GitHub only, and acts on a PR only once
+   all its checks have finished.
 6. **A self-hosted GitLab** whose host name does not start with `gitlab.` reads as no forge. Name it
    so, or set `delivery.forge`, which applies to every project on the machine.
 
