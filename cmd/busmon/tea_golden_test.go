@@ -130,11 +130,7 @@ func inState(t testing.TB, m Model, state string) Model {
 		if state == "plan" {
 			return keys(t, m, 'p', 'j')
 		}
-		tab := rune('4')
-		if m.layout.Tier == TierNarrow {
-			tab = '6'
-		}
-		return keys(t, m, tab, 'j', 'j')
+		return keys(t, workNext(t, m), 'j', 'j') // what key 4 did before it opened the Plan
 	case "notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets":
 		return notifyGolden(t, m, state)
 	case "compose-at", "compose-at-above", "compose-at-reading", "compose-at-outside", "compose-at-incomplete": // the @ popup (compose-at-file §4.3, §9)

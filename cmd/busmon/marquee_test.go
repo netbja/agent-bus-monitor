@@ -124,7 +124,7 @@ func marqueeShell(t *testing.T, w int) Model {
 			st.plan.rows[i].Task.Title = longTitle
 		}
 	}
-	return keys(t, workShellOf(t, st, w, 40), '4') // Work, on NEXT's first row: plan:t8
+	return workNext(t, workShellOf(t, st, w, 40)) // Work, on NEXT's first row: plan:t8
 }
 
 // One pass: the focused cut row waits, scrolls a cell a frame to its end,
@@ -185,7 +185,7 @@ func TestMarqueeOnePass(t *testing.T) {
 // A row that fits arms nothing: no frame is ever scheduled.
 func TestMarqueeIdleOnAFittingRow(t *testing.T) {
 	pinLocal(t)
-	m := keys(t, workShell(t, 130, 40), '4')
+	m := workNext(t, workShell(t, 130, 40))
 	if m.lists.work.Selected() != "plan:t8" || m.lists.work.mq.key != "" {
 		t.Fatalf("armed on a fitting row: %q %+v", m.lists.work.Selected(), m.lists.work.mq)
 	}

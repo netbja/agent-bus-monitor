@@ -84,18 +84,6 @@ func (m *Model) workCopy(key string) (text, what string) {
 	return "", ""
 }
 
-// focusWorkNext is key 4 (6 at the narrow tier): Work, its first NEXT row,
-// else NEXT's heading in view.
-func (m *Model) focusWorkNext() {
-	m.focusPanel(PanelWork)
-	m.refresh()
-	if len(m.work.Next) > 0 {
-		m.lists.work.Select(m.work.Next[0].Key)
-		return
-	}
-	m.lists.work.ClearSelection()
-}
-
 // workRequest is the tracked request a Work row stands for (+ and -), with
 // why not when there is none: only a tracked request has a priority, and
 // the footer says so (correction 7).
