@@ -80,7 +80,7 @@ func TestNoCopyOfTheSharedHelpers(t *testing.T) {
 			return err
 		}
 		dir := filepath.ToSlash(filepath.Dir(p))
-		inBinary := strings.HasSuffix(dir, "cmd/agentbus") || strings.HasSuffix(dir, "cmd/busmon")
+		inBinary := strings.HasSuffix(dir, "cmd/agentbus") || strings.HasSuffix(dir, "cmd/busmon") || strings.HasSuffix(dir, "internal/dispatchsvc") // the runtime moved from cmd/agentbus
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Recv != nil {
