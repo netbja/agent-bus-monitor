@@ -368,9 +368,9 @@ var (
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread; on an agent's page: attach to its terminal", Act: ActTour, match: runeIs('t')},
-		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words", Act: ActFilter, OnPage: true, match: runeIs('f')},
+		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words; a service log (F3, enter): its lines holding a word (esc clears it)", Act: ActFilter, OnPage: true, match: runeIs('f')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
-		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command)", Act: ActShowAll, OnPage: true, match: runeIs('a')},
+		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command); a service log: show or fold the routine none decisions", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
 		{Keys: "s", Hint: "state", Help: "Ideas (F6) or an idea's page: the state picker under the idea (" + GlyphArrowL + GlyphArrowR + " choose, enter sets it as you, esc cancels)", Act: ActIdeaState, OnPage: true, match: runeIs('s')},
 		{Keys: "tab", Hint: "filter", Help: "Ideas (F6): show one state, then the next, then all", Act: ActIdeaFilter, OnPage: true, match: keyIs(keyTab)},

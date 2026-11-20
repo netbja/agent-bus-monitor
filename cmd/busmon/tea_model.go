@@ -321,7 +321,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 		m.refresh()
 	case serviceLogMsg:
-		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", body: msg.body, fixed: true})
+		v := msg.view
+		return m.push(page{kind: ovServiceLog, title: msg.kind + " log", slog: &v})
 	case redisPageMsg:
 		return m.gotRedisPage(msg)
 	case aboutVersionsMsg:

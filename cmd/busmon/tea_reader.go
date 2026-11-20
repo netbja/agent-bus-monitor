@@ -75,14 +75,15 @@ type page struct {
 	recapLine  int         // ovRecap: the body line of the cursor's row
 	recapOlder bool        // ovRecap: o shows the For you items older than a day
 
-	proj       *adminView // ovProjects: the page's read (projects_admin.go)
-	plines     []int      // ovProjects: each row's first body line
-	hist       *histView  // ovHistory: what the load read
-	histFilter feedFilter // ovHistory: / and t narrow it
-	fromHist   bool       // ovMessage opened from History: n/p step through it
-	hrows      []histItem // ovHistory: its selectable rows (sel: the selected one)
-	histKey    histKey    // ovHistory: what histRows were built for
-	histRows   []Line     // ovHistory: the rows built, none marked (markHistRow)
+	proj       *adminView  // ovProjects: the page's read (projects_admin.go)
+	plines     []int       // ovProjects: each row's first body line
+	hist       *histView   // ovHistory: what the load read
+	histFilter feedFilter  // ovHistory: / and t narrow it
+	slog       *svcLogView // ovServiceLog: the lines read back; a and f redraw from them
+	fromHist   bool        // ovMessage opened from History: n/p step through it
+	hrows      []histItem  // ovHistory: its selectable rows (sel: the selected one)
+	histKey    histKey     // ovHistory: what histRows were built for
+	histRows   []Line      // ovHistory: the rows built, none marked (markHistRow)
 	histTitle  string
 
 	set *settingsPage // ovSettings: its rows and the change in progress (sel: the selected row)
@@ -210,7 +211,7 @@ func (m *Model) gotRedisPage(msg redisPageMsg) tea.Cmd {
 // serviceLogMsg is a service's log tail, read by serviceLogCmd.
 type serviceLogMsg struct {
 	kind string
-	body []Line
+	view svcLogView
 }
 
 // answerMsg is the result of one answer sent by answerCmd.
@@ -349,7 +350,7 @@ func (m *Model) serviceLogCmd(kind string) tea.Cmd {
 	width := m.readerWidth()
 	return func() tea.Msg {
 		host, _ := os.Hostname()
-		return serviceLogMsg{kind: kind, body: serviceLogBody(rec, kind, host, width)}
+		return serviceLogMsg{kind: kind, view: serviceLogView(rec, kind, host, width)}
 	}
 }
 
@@ -601,6 +602,10 @@ func (m *Model) buildPage() bool {
 		p.body = tokensPage(icons, m.cfg.settings.Graphs, s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
+	case ovServiceLog: // read once by serviceLogCmd; a and f redraw (services-restart-buttons §4)
+		if p.slog != nil {
+			p.title, p.body = svcLogPage(*p.slog, width)
+		}
 	case ovRecap: // the panel is on screen beside the page in the wide and medium tiers; a resize can change that (reviewer-codex)
 		rec := recapFold(recapForScreen(p.recapAll, m.layout.Tier != TierNarrow, forYouEmpty(s, m.lists.reqView.count(secOwed), m.work.decideCount())), p.recapOlder)
 		p.sel = recapKeepCursor(p.recap.Rows, p.sel, rec.Rows)
@@ -850,6 +855,21 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		case act == ActServiceLog || k.Code == keyEnter:
 			return m.serviceLogCmd(svcCardKinds[p.sel])
+		}
+	}
+	if p.kind == ovServiceLog && p.slog != nil { // a: the routine lines; f: a word; esc clears it first
+		switch {
+		case act == ActShowAll:
+			p.slog.all, p.dirty = !p.slog.all, true
+			m.refresh()
+			return nil
+		case act == ActFilter:
+			m.openLine(lineHistFilter, p.slog.word)
+			return nil
+		case act == ActClose && p.slog.word != "":
+			p.slog.word, p.dirty = "", true
+			m.refresh()
+			return nil
 		}
 	}
 	if p.kind == ovTokens && act == ActShowAll { // a lists the agents folded by their reason
@@ -1385,7 +1405,7 @@ func (m Model) pageOffers(act Action) bool {
 		_, ok := planStartable(m.snap.planState, p.key)
 		return ok && p.kind == ovPlanTask
 	case ActShowAll:
-		return p.kind == ovHealth || p.kind == ovTokens
+		return p.kind == ovHealth || p.kind == ovTokens || p.kind == ovServiceLog
 	case ActIdeaAdd, ActIdeaFilter:
 		return p.kind == ovIdeas && p.ideas.pick == nil
 	case ActIdeaState:
@@ -1393,7 +1413,7 @@ func (m Model) pageOffers(act Action) bool {
 	case ActOlder:
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
 	case ActFilter:
-		return p.kind == ovHistory
+		return p.kind == ovHistory || p.kind == ovServiceLog
 	case ActReplay:
 		return p.kind == ovAbout
 	case ActShowDone:

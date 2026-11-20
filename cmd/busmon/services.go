@@ -80,31 +80,42 @@ func serviceSeg(word, short, state string, compact bool) Line {
 	return Line{{Text: glyph + " " + word + " " + text, Role: role}}
 }
 
-// serviceLogBody is a service's log page (Enter or l on its F3 card): the
-// log's tail and its crash output when the log is on this machine.
+// serviceLogBody is a service's log page (Enter or l on its F3 card), as
+// first drawn: its header, the lines read back (services_log.go) and the
+// crash file.
 func serviceLogBody(r bus.ServiceRecord, kind, host string, width int) []Line {
+	_, b := svcLogPage(serviceLogView(r, kind, host, width), width)
+	return b
+}
+
+// serviceLogView reads a service's log for its page: the local log read back
+// to svcLogVisible lines a person reads, plus the crash file; a remote one is
+// named, never read.
+func serviceLogView(r bus.ServiceRecord, kind, host string, width int) svcLogView {
+	v := svcLogView{kind: kind}
 	var b body
 	var f fields
 	f.add("log", S(RoleText, Preview(r.Log)))
 	b.fields(&f, width)
 	if r.Host != host || r.Log == "" {
 		b.seg(RoleMuted, "the log is on "+Preview(r.Host)+": agentbus --project <p> service logs "+kind+" there").text("\n")
-		return b.Lines()
+		v.head = b.Lines()
+		return v
 	}
-	lines, err := service.TailLog(r.Log, 200)
+	lines, err := readSvcLog(r.Log, svcLogVisible, svcLogMaxBytes)
 	if err != nil {
 		b.seg(RoleMuted, Preview(err.Error())).text("\n")
 	}
-	for _, l := range lines {
-		b.seg(RoleMuted, clip(Preview(l), width)).text("\n")
-	}
+	v.head, v.lines = b.Lines(), lines
 	// A panic, or what was printed before the log opened.
 	crashFile := strings.TrimSuffix(r.Log, ".log") + ".crash.log"
 	if crash, err := service.TailLog(crashFile, 20); err == nil && len(crash) > 0 {
-		b.text("\n").seg(RoleError, "crash output:").text(" " + Preview(crashFile) + "\n")
+		var c body
+		c.text("\n").seg(RoleError, "crash output:").text(" " + Preview(crashFile) + "\n")
 		for _, l := range crash {
-			b.text(clip(Preview(l), width) + "\n")
+			c.seg(RoleError, clip(Preview(l), width)).text("\n")
 		}
+		v.crash = c.Lines()
 	}
-	return b.Lines()
+	return v
 }
