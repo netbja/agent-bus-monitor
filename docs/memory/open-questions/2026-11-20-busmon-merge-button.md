@@ -69,7 +69,8 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
      - the PR is open and not a draft.
    - **A race is left.** `--match-head-commit` binds only the head, and no `gh` flag binds the
      base. A retarget to another base between the live read and the merge (about a second)
-     would not be caught. Branch protection on `main` is what closes it (question 7).
+     would not be caught. Branch protection on `main` would close it, but only once that policy
+     is established (question 7; to design at spec time, below).
    - **`main` is never merged here.** Promotions to `main` stay master's fast-forward, on the
      person's yes (the dev-branch-flow decision).
 5. **What is shown and logged.**
@@ -90,8 +91,9 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
      - the live read also asks the PR's merge state;
      - busmon runs the merge only when the forge says it can merge now;
      - otherwise it shows why and runs nothing.
-     The spec checks the exact `gh` field and values against the installed version
-     (question 6).
+     Which `gh` field proves an immediate merge is not specified here. It is to be designed at
+     spec time (below, and question 6). Until it is, this refusal is a requirement, not a
+     guarantee.
 7. **The forge matrix.**
 
 | Forge | Merge from busmon | Command (approved head bound) |
@@ -115,6 +117,26 @@ risk, a wrong number or the wrong base.
 
 Only the person decides whether busmon may run the forge's CLI. That reverses the merge-queue
 spec's "busmon never runs git or gh", for this one action. A spec follows their answers.
+
+**Hard requirements for any spec.** At the moment of the merge:
+- the head must be bound to the approved head;
+- the base must be bound to `delivery.base`;
+- a merge the forge would defer (queue or auto-merge) must be refused.
+
+If the spec cannot prove all three with the installed CLI, the button is not built. busmon
+then only copies the exact command.
+
+To design at spec time (not specified in this note):
+- **Immediate merge.** The `gh` fields and values, validated against the installed version,
+  that prove `gh pr merge` will merge at once. That includes a branch whose protection
+  requires GitHub's merge queue, where a mergeable PR is still queued. Without such proof, the
+  guarantee narrows to "refused when the forge says it cannot merge".
+- **The base race.** The guard against a retarget between the live read and the merge. Either
+  branch protection on `main` that refuses PR merges, established and checked before relying on
+  it, or a re-read of the base after the merge with an alert to master and the person if it
+  differs.
+- **Where the agent refusal runs:** at the press, or once when busmon starts for the whole
+  session (foureyes).
 
 Questions for the person (no guesses):
 
