@@ -613,7 +613,8 @@ var commands = []cli.Command{
 		Flags: []cli.Flag{{Long: "check", Help: "show the plan and change nothing (an agent may run it)"},
 			{Long: "yes", Help: "answer the question yes (the person's flag: an agent is refused with or without it)"},
 			{Long: "rollback", Arg: "[<id>]", Help: "restore a snapshot, the last one by default, by the binary that took it"},
-			{Long: "list", Help: "the snapshots and how each update ended"}},
+			{Long: "list", Help: "the snapshots and how each update ended"},
+			{Long: "restore", Arg: "<id>", Help: "what --rollback runs with the snapshot's own binary; use --rollback"}},
 		Examples: []string{"agentbus --project myapp update", "agentbus update --check", "agentbus update --rollback"},
 	},
 	{
