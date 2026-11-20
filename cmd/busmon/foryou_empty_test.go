@@ -314,3 +314,45 @@ func TestForYouEmptyCountsThePlanDecisions(t *testing.T) {
 		t.Fatalf("label %q, first line %q", lbl, first)
 	}
 }
+
+// foureyes: an owed request is counted once, as owed, never again as a plan
+// decision. The work fixture owes one directive and has one waiting plan task:
+// the strip says 2 decide, the panel splits them.
+func TestForYouEmptyOwedIsNoPlanDecision(t *testing.T) {
+	m := workShell(t, 140, 40)
+	if lbl := forYouLabel(m.work.strip(0)); lbl != "2 decide" {
+		t.Fatalf("label %q", lbl)
+	}
+	var got []string
+	for _, it := range m.lists.forYou.items {
+		got = append(got, tabText(it.Line))
+	}
+	want := []string{"Owed by you: 1 request (Requests)", "1 decision in the plan (3 Work)", "Next for you: Decide: notifications order"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("panel %q, want %q", got, want)
+	}
+}
+
+// foureyes: the recap page's For you section, at the narrow tier (no panel
+// beside it), says the plan's decisions too, never "Nothing expected".
+func TestRecapEmptyForYouNamesTheDecisions(t *testing.T) {
+	st := workShared()
+	st.cmdHistory = nil // nothing owed: the plan's decision alone
+	m := workShellOf(t, st, 70, 40)
+	if m.layout.Tier != TierNarrow {
+		t.Fatalf("tier %v", m.layout.Tier)
+	}
+	m.gotRecap(recapMsg{model: recapModel{Rows: []recapRow{{Section: recapForYou, Title: recapForYou}}}})
+	m.maybeOpenRecap()
+	p := m.rd.top()
+	if p == nil || p.kind != ovRecap {
+		t.Fatal("recap page not open")
+	}
+	var titles []string
+	for _, r := range p.recap.Rows {
+		titles = append(titles, r.Title)
+	}
+	if !slices.Contains(titles, "1 decision in the plan (3 Work)") || slices.Contains(titles, "Nothing expected from you.") {
+		t.Fatalf("recap For you: %q", titles)
+	}
+}
