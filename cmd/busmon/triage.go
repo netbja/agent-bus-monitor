@@ -257,7 +257,7 @@ func (m *Model) walkEnd() tea.Cmd {
 		lines = append(lines, Line{{Text: "merge queue unreadable", Role: RoleMuted}})
 	}
 	next := ""
-	for _, r := range forYouEmptyRows(m.snap, m.lists.reqView.count(secOwed)) {
+	for _, r := range forYouEmptyRows(m.snap, m.lists.reqView.count(secOwed), m.work.decideCount()) {
 		if task, ok := strings.CutPrefix(r.key, planNextPrefix); ok {
 			lines = append(lines, nil)
 			lines = append(lines, append(Line{{Text: GlyphSelect + " ", Role: RoleAccent}}, r.line...))

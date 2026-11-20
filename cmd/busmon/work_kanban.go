@@ -64,7 +64,9 @@ type kanbanView struct {
 // workKanban builds the four columns from the model. Every card reads the
 // same way (reviewer-codex): its first line is the card's facts, the
 // priority mark first (never cut), then its mark, verb or owner, and its age
-// or place; its second line is its title, cut with … at the column.
+// or place; its second line is its title, cut with … at the column. For
+// you's cards are the exception (views-redesign §6): the priority mark, the
+// glyph and the title first, the age and the place second.
 func workKanban(w workModel, d workDraw) kanbanView {
 	title := func(text string, role Role) Line { return Line{{Text: "  " + Preview(text), Role: role}} }
 	head := func(prio Seg, mark string, role Role, parts ...string) Line {
@@ -94,9 +96,18 @@ func workKanban(w workModel, d workDraw) kanbanView {
 		if !it.At.IsZero() {
 			a = humanAge(d.now.Sub(it.At))
 		}
+		// views-redesign §6: the glyph says the verb and "you" is the whole
+		// column's, so the first line is the glyph and the title (a merge
+		// card's "merge PR N"), the second the age and the place.
+		var facts []string
+		for _, f := range []string{a, workWho(it.Who, false), placeOf(it)} {
+			if f != "" && f != "you" {
+				facts = append(facts, f)
+			}
+		}
 		you.cards = append(you.cards, kanbanCard{key: it.Key, lines: []Line{
-			head(reqMark(it.Req), g, role, it.Verb, workWho(it.Who, false), a),
-			title(strings.TrimPrefix(it.Text, "merge "), RoleText)}})
+			{reqMark(it.Req), {Text: g + " ", Role: role}, {Text: Preview(it.Text), Role: RoleText}},
+			title(strings.Join(facts, " "+GlyphNone+" "), RoleMuted)}})
 	}
 
 	team := kanbanCol{title: fmt.Sprintf("In progress  %d", len(w.Team))}
@@ -378,4 +389,12 @@ func (k *kanbanView) step(sel string, next bool) string {
 		}
 	}
 	return sel
+}
+
+// placeOf is a For you card's place: the plan task it stands for.
+func placeOf(it workItem) string {
+	if it.Plan != "" {
+		return "#" + it.Plan
+	}
+	return ""
 }

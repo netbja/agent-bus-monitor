@@ -147,10 +147,10 @@ func TestForYouEmptyThenPointer(t *testing.T) {
 	if len(keys) != 2 || keys[0] != "" || keys[1] != planNextPrefix+"p1" {
 		t.Errorf("empty panel keys %q", keys)
 	}
-	if got := plainOf(forYouEmpty(planSnap(personTask("w", "pick the order", plan.Waiting)), 0)); got != "Nothing expected from you.\nNext for you: pick the order" {
+	if got := plainOf(forYouEmpty(planSnap(personTask("w", "pick the order", plan.Waiting)), 0, 0)); got != "Nothing expected from you.\nNext for you: pick the order" {
 		t.Errorf("a Waiting task is the pointer, not a reason to say something is owed:\n%s", got)
 	}
-	if got := plainOf(forYouEmpty(snapshot{}, 0)); got != "Nothing expected from you." {
+	if got := plainOf(forYouEmpty(snapshot{}, 0, 0)); got != "Nothing expected from you." {
 		t.Errorf("no plan, no pointer:\n%s", got)
 	}
 }
