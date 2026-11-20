@@ -97,6 +97,12 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 				}
 			}
 		}
+		if j := in.Background; j != nil && j.Procs() > 0 { // the process source (background-work-visible step 2)
+			o.BgProcs = j.Procs()
+			if age := j.OldestAge(); age > 0 {
+				o.BgOldest = now.UnixMilli() - age.Milliseconds()
+			}
+		}
 		p, ok := prev[a]
 		carryScreen(&o, p, ok)
 		obs[a] = o

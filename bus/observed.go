@@ -43,6 +43,12 @@ type Observation struct {
 	// (a launch fingerprint or the Claude Code layout), whatever the answer.
 	Update       *ClientUpdate `json:"update,omitempty"`
 	ClientJudged bool          `json:"client_judged,omitempty"`
+	// BgProcs and BgOldest (additive, background-work-visible step 2): the
+	// process source's active non-helper descendants of the agent, and the
+	// oldest one's start (Redis clock, Unix ms; 0 when none). No process
+	// name or argument is ever published.
+	BgProcs  int   `json:"bg_procs,omitempty"`
+	BgOldest int64 `json:"bg_oldest,omitempty"`
 }
 
 // ClientUpdate is an installed client newer than the running one. Labels are
