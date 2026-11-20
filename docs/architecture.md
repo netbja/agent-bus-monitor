@@ -582,5 +582,4 @@ launchd), started by `agentbus up`; herdr tabs remain only as the explicit fallb
 (`docs/memory/decisions/2026-10-14-project-services.md`).
 
 There can also be a parallel notification path that is **not** on this bus: a Claude Code `Stop`
-hook POSTing to a notification webhook of the person's own. It never touches Redis — see README
-"Example deployment".
+hook POSTing to a notification webhook of the person's own. It never touches Redis.

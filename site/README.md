@@ -34,7 +34,7 @@ The generated HTML is committed; run the script after editing either tool file a
 
 | Section | Source in this repository |
 |---|---|
-| Hero pitch, quick start, requirements | `README.md` (intro, Quick start, First run), `go.mod`, `setup/preflight.go` |
+| Hero pitch, quick start, requirements | `README.md` (intro, Install, Start a team), `go.mod`, `setup/preflight.go` |
 | What it does (13 cards) | `README.md` "What you get", `CHANGELOG.md`, `cmd/agentbus/commands.go` (each command shown exists in the table) |
 | Fig. 1 who does what | `docs/architecture.md` Architecture and "How the bus is actually consumed" |
 | Fig. 2 message and wake line | `docs/architecture.md` (wake line text, `subscribe --drain`), `dispatch/` |

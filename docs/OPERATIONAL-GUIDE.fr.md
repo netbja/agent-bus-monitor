@@ -1,3 +1,5 @@
+> **Ce guide n'est plus à jour** (il décrit encore herdr) : lisez la version anglaise, [OPERATIONAL-GUIDE.md](OPERATIONAL-GUIDE.md), qui décrit l'équipe telle qu'elle fonctionne aujourd'hui. Sa réécriture en français viendra à part.
+
 # Guide opérationnel : Agent Bus Monitor (`agent-bus`)
 
 Ce guide pratique complète le [README](../README.fr.md) (la référence complète est dans le [README anglais](../README.md)). Il fournit une marche à suivre pas à pas pour installer, configurer et utiliser `agent-bus-monitor`, le gestionnaire d'espaces de travail `herdr`, son plugin `netbja.agentbus`, ainsi que le pilotage au quotidien d'équipes d'agents IA sur un projet neuf ou existant.
