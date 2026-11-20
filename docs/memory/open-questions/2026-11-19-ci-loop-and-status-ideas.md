@@ -188,10 +188,10 @@ Ours, on `origin/dev` `bc3b20e2`:
 
 - the merge queue: [mergequeue/forge.go](../../../mergequeue/forge.go),
   [mergequeue/derive.go](../../../mergequeue/derive.go),
-  [cmd/agentbus/mergequeuechore.go](../../../cmd/agentbus/mergequeuechore.go);
+  [internal/dispatchsvc/mergequeuechore.go](../../../internal/dispatchsvc/mergequeuechore.go);
 - [bus/once.go](../../../bus/once.go) (`FencedCmdOnce`),
   [dispatch/clientupdate.go](../../../dispatch/clientupdate.go),
-  [cmd/agentbus/redislatest.go](../../../cmd/agentbus/redislatest.go);
+  [internal/dispatchsvc/redislatest.go](../../../internal/dispatchsvc/redislatest.go);
 - the state rules: [bus/turnstate.go](../../../bus/turnstate.go) (idle and working only);
 - the turn hooks: [cmd/agentbus/turnhook.go](../../../cmd/agentbus/turnhook.go),
   [rolecfg/launch.go](../../../rolecfg/launch.go), [rolecfg/grokhooks.go](../../../rolecfg/grokhooks.go);

@@ -243,6 +243,16 @@ it silently never fired.
 The old hardcoded `ValidAgents` map is gone. Agent and project names are validated by `ValidName`,
 a regex (`^[a-z][a-z0-9_-]{0,31}$`). Adding a new agent requires no code change.
 
+**`internal/dispatchsvc/`** is the dispatch service's runtime, moved whole from `cmd/agentbus`
+(dispatchsvc spec, 2026-11-19): the health checks' readers, the stall checks, the chores (merge
+queue, notifications, backup schedule, self-repair, history) and the reboot judge. What judges lives
+there; what acts on the team through a CLI command (the relay's runner, the pop's end, the base
+configuration) stays in `cmd/agentbus` and is injected. The CLI calls in through five identifiers:
+`Deps`, `Config` (the service's whole `dispatch.Config`, into a config the caller owns),
+`ForegroundConfig`, `Runtime` and `MergeQueueLive`. Its `TestGuard` holds the wall: no import of the
+CLI or the screen, no mission runner, `os/exec` only in the listed files, only the listed programs
+(no shell), and only the listed module packages, each marked with what it runs.
+
 ### The two binaries (`cmd/agentbus`, `cmd/busmon`: a `main.go` plus small per-command files)
 
 - **`agentbus`** — fire-and-forget CLI: `status`/`report`/`reports`/`notify`/`cmd`/`thread`/`history`/`challenge`/`reply`/
