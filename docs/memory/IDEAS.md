@@ -13,7 +13,7 @@ nothing calls it. Until that is wired, an idea the person should see in busmon i
 
 From 2026-11-17:
 
-- [A language setting for busmon and the CLI](open-questions/2026-11-17-language-setting.md)
+- [The person's language: master talks to them in it, the bus stays English (decided, spec r4)](open-questions/2026-11-17-language-setting.md)
 - [A services view with restart buttons and readable logs](open-questions/2026-11-17-services-view.md)
 - [A right-click context menu in busmon](open-questions/2026-11-17-context-menu.md)
 - [Agents' background shells and sub-agents visible in Agents](open-questions/2026-11-17-agent-background-work.md)

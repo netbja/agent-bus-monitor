@@ -9,17 +9,15 @@ last_verified: unknown
 author: coder2
 confidence: unknown
 ---
-# A language setting for busmon and the CLI (the person's item 17)
+# The person's language: master talks to them in it, the bus stays English (the person's item 17)
 
 ## Finding/decision
 
-busmon and agentbus speak English only; the person would choose the language of what they read.
-
-Recommendation (drafted by coder2 from master's directive of 2026-11-17; master to confirm or edit): Spec first: which surfaces follow the setting (busmon's screens, the CLI's messages to the person), with one registry key in `config/keys.go`. What agents read on the bus stays English, so one language serves every model.
+Decided (the person, 2026-11-20, bus thread `1795188144565-0`): not a translation of busmon. busmon, the CLI, logs and the project stay English. One setting, `person.language` (default `en`), read by master's role skill (the concierge's later): master writes to the person in it, and to every other agent in English, relaying the person's words in English. On the bus, only a message from or to the person may be in that language. Spec: [2026-11-18-language-setting-design](../../superpowers/specs/2026-11-18-language-setting-design.md) (r4).
 
 ## When it applies
 
-When busmon or CLI text for the person is written or translated.
+When master writes to the person, or relays the person's words to another agent.
 
 ## Evidence
 
