@@ -59,9 +59,7 @@ never types into a pane.
 - Install unattended. `updates.auto` defaults to `notify`.
 - Write to the broker, unless the release declares a migration (spec §4.6).
 
-**Recommendation.** No separate spec: amend the quiet-update spec once the person answers. The
-amendment covers the per-project scope and, if wanted, the reload step. Build the manual
-`agentbus update` first, and the `updater` service and its window later.
+**Decided (the person, 2026-11-20): split.** Step 1, the manual `agentbus update`, has its own spec, [2026-11-20-agentbus-update-design](../../superpowers/specs/2026-11-20-agentbus-update-design.md); the automatic mode, the window and the `updater` service stay in the quiet-update spec.
 
 **Questions for the person:**
 1. **Scope:** does an update restart only this project's services, with the others listed and
