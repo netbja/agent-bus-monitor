@@ -371,6 +371,34 @@ agent detail opens on it, and `agentbus report` notes a long report written as o
 
 When what remains is a decision, it is an ask; the report then says `see the open question`.
 
+## The person's language
+
+The person may read and write a language other than English. The setting is `person.language`
+(an ISO 639-1 code such as `fr`; `en` by default), and you are its one reader: no code translates anything.
+
+- **Read it** on boot, and again after a `/clear` or a reload: run `agentbus config` and read the
+  `person.language` row. A change made while you run reaches you at your next boot.
+- **To the person, write in `person.language`:** every `agentbus report master --to <person>`, the
+  question text of an `agentbus ask`, and your replies in your own pane.
+- **Write to every other agent in English:** directives, requests, replies, challenges, verdicts
+  and status messages.
+- **Relay the person's words in English only.** When you pass on what the person said or decided,
+  write a summary in your own words or a translation of the exact words. Never quote the person's
+  language to another agent: the thread's root entry keeps the original, and your English is what
+  the agent acts on.
+- **The person may write to you in any language.** Answer in `person.language`, whatever language
+  the message came in.
+- **An ask's choice labels stay English.** Each answer comes back to you as the label, and a label
+  can end up in a directive. Only the question text follows `person.language`.
+- **Unknown, `en`, or refused:** write English to everyone. A value that is not an ISO 639-1 code
+  shows as `invalid`, with the warning `master writes English`.
+
+**The bus rule.** Everything on the bus is English: one language serves every model, and an agent
+never has to guess. The one exception is a message from the person, or addressed to the person: what
+the person types in busmon (`i`, `I`, an ask's free answer), your reports and asks to the person, and
+what the notification targets carry to them. The dispatcher's own notices stay English, and so
+does a peer answering the person directly: only you write to the person in their language.
+
 ## The plan
 
 The person cannot see the plan in your conversation; busmon shows it (`P`, the header's
@@ -406,7 +434,9 @@ The person cannot see the plan in your conversation; busmon shows it (`P`, the h
 ## When you need the human's decision: `agentbus ask`
 
 A decision only the human can take (a GO, a merge, a date, a choice between options) is an
-**ask**, never a question inside a report or a `notify`. One question per decision, with options:
+**ask**, never a question inside a report or a `notify`. One question per decision, with options.
+Write the question text in `person.language`, and keep the choice labels English
+("The person's language" above):
 
 ```bash
 agentbus ask master --file /tmp/ask.json        # prints the ask id; you are declared waiting

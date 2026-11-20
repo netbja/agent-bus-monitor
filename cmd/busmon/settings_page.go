@@ -61,7 +61,7 @@ type settingGroup struct {
 var settingLabels = map[string]string{
 	"display.theme": "Theme", "display.icons": "Icons", "display.graphs": "Sparklines", "display.limit": "Activity lines at start", "display.idle_hint_after": "Idle? hint after", "display.idle_view_after": "Screensaver (idle view) after", "board.no_accept_after": "Board: no acceptance after", "board.no_reply_after": "Board: no reply after", "compose.at_path": "@ inserts paths as", "display.work_layout": "Work layout", "display.date_format": "Date format", "display.follow": "Activity auto-scroll", "attach.prefix": "Attach prefix key",
 	"waiting.fade": "Fade and slide", "waiting.popup_after": "Reminder after", "waiting.snooze": "Reminder snooze",
-	"waiting.bell": "Bell", "dispatch.focus_notice": "Focused pane notice after", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "start.team": "Default team",
+	"waiting.bell": "Bell", "dispatch.focus_notice": "Focused pane notice after", "recap.auto_after": "Recap after away", "updates.check": "Update check", "identity.as": "Your name", "person.language": "Your language", "start.team": "Default team",
 	"sentinel.reload":      "Auto-restart on update",
 	"dispatch.self_repair": "Self-repair", "dispatch.self_repair_every": "Self-repair at most once per", "dispatch.self_repair_per_day": "Self-repairs a day per agent",
 	"services.start_at_login": "Start services at login", "dev": "Development mode",

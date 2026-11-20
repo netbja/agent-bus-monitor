@@ -1032,6 +1032,7 @@ var settingHelps = map[string]string{
 	"dispatch.focus_notice":        "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
 	"updates.check":                "asks GitHub (a newer release) and npm (a newer Codex than its agents run) once a day",
 	"identity.as":                  "your name on the bus, as a person",
+	"person.language":              "the language master writes to you in (an ISO 639-1 code: en, fr...); the bus stays English",
 	"start.team":                   "the roles agentbus start opens for a new project, separated by commas",
 	"notify.on":                    "sends notifications to the targets of notify.toml",
 	"notify.targets":               "the targets of notify.toml to send to, separated by commas",

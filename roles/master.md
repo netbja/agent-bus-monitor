@@ -17,7 +17,9 @@ On boot, once:
    busmon shows "autonomous (no master)". Re-claim (same command) whenever you broadcast the
    budget or resume after a long idle, so busmon keeps showing you as master.
 3. Publish presence: `agentbus status working "master online"`.
-4. Read what the team owes and is owed: `agentbus request` and `agentbus board`.
+4. Read what the team owes and is owed: `agentbus request` and `agentbus board`. Read the
+   person's language too: the `person.language` row of `agentbus config` ("The person's language"
+   in the master skill: you write to the person in it, and to every agent in English).
 5. Arm for directives: run `agentbus subscribe master` as a background task. This is the
    wake-on-exit model — it prints ONE directive then exits and re-invokes you; do **not**
    wrap it in a `while` loop.

@@ -214,6 +214,20 @@ var Keys = []*Key{
 			}
 			return nil, "want a name: a lower-case letter, then letters, digits, - or _"
 		}},
+	{Name: "person.language", Env: "AGENT_BUS_PERSON_LANGUAGE", Kind: String, Default: "en", ReadBy: "master's role skill (agentbus config)",
+		Invalid: "master writes English", FailClosed: true, // a refused value is en, said, never the next source
+		env: func(raw string) (any, envResult) {
+			if isLanguage(raw) {
+				return raw, envUse
+			}
+			return nil, envInvalid
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && isLanguage(s) {
+				return s, ""
+			}
+			return nil, "want an ISO 639-1 code in lower case: en, fr, de..."
+		}},
 	{Name: "updates.check", Env: "AGENT_BUS_NO_UPDATE_CHECK", Kind: Bool, Default: true, ReadBy: "busmon",
 		env:  func(raw string) (any, envResult) { return raw != "1", envUse }, // 1 turns it off
 		file: fileBool},
