@@ -1,143 +1,134 @@
-# A language setting: French or English for what the person reads
+# The person's language: master talks to the person in it, the bus stays English
 
-Status: spec, r3, for review (subject `language-setting-spec`). r3: reviewer-codex (`auto` reads
-the locale with its normal precedence). r2: foureyes (the default is `en`;
-the text busmon composes for the bus stays English, and the rule test covers busmon's writers). Not built. Base: origin/dev
-`5ec6e134`.
-Author: coder, task `language-setting-spec`, from master's directive of 2026-11-18 relaying the
-person's idea 17 (`docs/memory/open-questions/2026-11-17-language-setting.md`). The person's
-decisions are §7; the build is §8's steps, one PR each from origin/dev.
+Status: spec, r6, for review (subject `language-setting-spec`). Not built. Base: origin/dev
+`77eab8f2`.
 
-## 1. What exists today
+r5:
+- reviewer-codex on r4: master never quotes the person's language to another agent;
+- foureyes on r4: the `Invalid` text, the busmon keys `i`/`I`, and a docs guard.
 
-- **One language, no catalogue.** busmon and agentbus speak English only, written in place:
-  - busmon: about 5,000 string literals in 118 files (35,000 lines), drawn through `S(role,
-    text)` segments, `Preview`, `DetailText`, `humanAge`;
-  - agentbus: about 960 `Fprint` lines, and 270 `Help`/`Summary` lines in its command registry
-    (`cmd/agentbus/commands.go`).
-  - No `i18n`, `gettext` or `golang.org/x/text` is used.
-- **A rule says English.** The UI copy was made English on purpose (the person's earlier
-  request). This spec adds French as a choice; it does not change the default.
-- **The tests read English.** 518 golden files and 22 overlay captures pin busmon's screens
-  word for word.
+r6 (reviewer-codex on r5): the idea note links the spec without a revision label.
 
-## 2. What follows the setting, and what never does
+r4 is a rewrite. The person reframed idea 17 on 2026-11-20 (bus thread `1795188144565-0`,
+relayed by master as cmd `1795188170169-0`): "Idea 17 was never about translating busmon." r1 to
+r3 specified a busmon translation: an i18n catalogue, `T()` and `display.language`. That is
+dropped, together with r3's §3 to §6. r1 to r3 were by coder (task `language-setting-spec`). r4
+is by architect.
 
-**Follows the setting: what only the person reads in busmon.**
-- Frame titles, column heads, key hints and the help page.
-- The words busmon composes itself: For you lines, a page's row labels, notices, the Services and
-  Settings pages, ages (`4m` stays `4m`; `today 17:04` becomes `aujourd'hui 17:04`).
-- The state words as busmon *shows* them (`blocked` → `bloqué`). The stored states (`idle`,
-  `working`, `blocked`) never change: they are protocol, which agents and scripts compare.
+## 1. The need
 
-**Never follows it, English always:**
-- **Everything on the bus:** reports, directives, asks, verdicts, status messages, notices that
-  agents read. One language serves every model, and an agent never has to guess.
-- **The text busmon composes for the bus**, which reaches an agent:
-  - the compose window's prefills (`@master ` plus `planStartText`, `re: <first line>`);
-  - its answers to asks (any words busmon adds to the agent's choice labels);
-  - idea states;
-  - the views redesign's triage directive (`idea <id>: yes|later|no`).
+The person wants to talk with master in their own language. Later this extends to the
+multi-project "concierge" agent.
 
-  These are written in English, never through `T`, even while busmon shows French around them.
-- **What agents write:** their reports and messages are shown as written, in whatever language
-  they used.
-- **The CLI, by default (Q2):** agents and scripts read `agentbus` output and errors and match
-  their words (the role skills tell agents what
-  a command prints). A French error would break them. Only `--help` could follow
-  the setting, and only when the caller is the person (no `AGENTBUS_TERM_ID`, no
-  `AGENT_BUS_AGENT`).
-- **Logs, the services' state details, operator notes, specs and code comments.**
+Nothing else changes language:
+- busmon, the CLI, the logs and the project's files stay English;
+- there is no i18n catalogue, no `T()` and no `display.language`.
 
-## 3. Where the strings would live
+## 2. The setting
 
-**One catalogue, keyed by the English text** (recommended):
-- `i18n/fr.go` holds a map from each English string to its French one, and `T("...")` wraps a
-  string busmon shows.
-- English needs no table: a missing French entry falls back to the English text, so a new string
-  never breaks anything.
-- Strings with values use a format string as the key: `T("%d agents")` → `"%d agents"`.
-- A test lists every `T(...)` literal in the code and fails when one has no French entry and is
-  not marked as deliberately the same (`T` of a proper name or a glyph).
+- **The key:** `person.language`, the language the person reads and writes. Its value is a
+  two-letter code (`en`, `fr`, …), and the default is `en`.
+- **In the registry** (`config/keys.go`):
+  - `Kind: String`;
+  - env `AGENT_BUS_PERSON_LANGUAGE`, through `config.EnvName`;
+  - `ReadBy: "master's role skill (agentbus config)"`;
+  - `Invalid: "master writes English"`. `config_test.go` requires an `Invalid` text on every row
+    whose env rule can refuse a value;
+  - in the Identity group, beside `identity.as` (`config/group.go`), so busmon's settings page
+    (Shift+C) shows and edits it with no new code.
+- **Validation:** a value that is not two lowercase letters is refused by the env rule
+  (`envInvalid`) and the file check, with the registry's usual settings warning. The effective
+  value is then `en`.
+- **No code reads it.** No Go code changes behaviour on it. busmon, the dispatcher and the CLI
+  never translate anything.
 
-**Not `golang.org/x/text/message` with its catalog tooling.** It is heavier (a generator, plural
-rules), for two languages. Plurals are handled by two keys (`1 agent`, `%d agents`), as busmon
-already words them.
+## 3. The rule, in master's role skill
 
-## 4. The setting
+- **Reading it.** On boot, and after a `/clear` or a reload, master runs `agentbus config` and
+  reads the `person.language` row. `agentbus config` prints each setting's effective value and
+  its source. A change made while master runs reaches it at its next boot.
+- **To the person: in `person.language`.** This covers:
+  - every `agentbus report master --to <person>`;
+  - the question text of an `agentbus ask`;
+  - master's replies in its own pane.
+- **To every other agent: English.** This covers directives, requests, replies, challenges,
+  verdicts and status messages.
+- **Relaying the person's words.** When master passes on what the person said or decided, it
+  writes it in English only: a summary in its own words, or a translation of the exact words.
+  It never quotes the person's language to another agent.
+  - The thread's root entry keeps the person's original. An agent that wants the exact words reads
+    the thread, and master's English is what it acts on.
+- **The person writes to master in any language.** Master answers in `person.language`, whatever
+  language the message came in.
+- **The ask's choice labels stay English.** Each answer comes back to master as the label, and a
+  label can end up in a directive to another agent. Only the question text follows
+  `person.language`.
+- **Unknown or `en`:** master writes English to everyone, as today.
 
-- `display.language` in the registry (`config/keys.go`), `en | fr | auto`, **default `en`**
-  (§1: the default does not change; Q3 may choose `auto`).
-  - Env `AGENT_BUS_LANGUAGE` (through `config.EnvName`).
-  - Shown in busmon's settings screen (Shift+C), in the Display group.
-  - Read by busmon (and agentbus's `--help`, with Q2's yes).
-- **`auto`:** the locale's own precedence: the first non-empty of `LC_ALL`, `LC_MESSAGES`,
-  `LANG`. French when that value starts with `fr`; English otherwise, `C` and `POSIX` included.
-  `LC_ALL=en_US.UTF-8` with `LANG=fr_FR.UTF-8` is English: `LC_ALL` overrides. A test covers
-  each conflicting pair.
-- **Fallback:** an unknown value is English, with the registry's usual settings warning.
-- **Changed while busmon runs:** applied at the next settings reload, as the theme is.
+## 4. The bus rule and its exception
 
-## 5. Tests
+- **The rule:** everything on the bus is English. One language serves every model, and an agent
+  never has to guess.
+  - It holds today, but no file says it. It is written in the peer skill and in master's skill
+    (§5).
+- **The exception:** a message from the person, or addressed to the person, may be in
+  `person.language`. That covers:
+  - what the person types in busmon (the input line `i`, the compose window `I`, an ask's free
+    answer);
+  - master's reports and asks to the person;
+  - what the notification targets carry to the person (ntfy, Discord). Those carry reports
+    addressed to the person. They never translate a text, and their own words (the dispatcher's
+    notices) stay English.
+- **Peers keep English,** including a peer answering a human message sent to several agents with
+  `@all` (question 1).
 
-- **Every existing golden stays English:** the test harness pins `display.language = en`, as
-  `pinLocal` pins the time zone. Not one of the 540 files changes.
-- **A small French set:** the dashboard at 80 and 140 columns, the agent page, For you and the
-  settings screen, as new goldens. French runs about 20-30% longer than English, so these goldens
-  are where truncation and wrapping are seen.
-- **The catalogue test** (§3): every `T` literal translated or marked; no French entry left
-  without its English key in the code.
-- **The rule test:** nothing that writes to the bus or to an agent's terminal calls `T`. It
-  scans `bus/`, `dispatch/` and the CLI's bus writers. It also covers busmon's own write paths:
-  - the compose prefills;
-  - every busmon call into a bus writer (`Send`, `Answer`, idea states, the busWriter
-    interface's methods);
-  - the strings handed to them, followed back to their literals.
+## 5. Files that change
 
-  A `T` on any of these paths fails the test. A second test renders busmon in French, sends a
-  prefill and an answer, and checks that the entries written are the English ones.
+| File | Change |
+|---|---|
+| `config/keys.go` | the `person.language` row (§2) |
+| `config/group.go` | `"person.language": GroupIdentity` |
+| `skills/agent-bus-master/SKILL.md` | a section "The person's language" after "Write reports people can read": the reading (§3), the rule (§3) and the bus rule with its exception (§4). Also one line in "When you need the human's decision: `agentbus ask`": the question in `person.language`, the choice labels in English. |
+| `skills/agent-bus/SKILL.md` | a short section "Language on the bus" after "Write reports people can read": English to every agent; a message from or to the person may be in their language; relay nothing from the person to another agent in that language. |
+| `roles/master.md` | boot step 4 also reads `person.language` (`agentbus config`) |
+| `docs/operator-notes.d/person-language.md` | a new fragment, one bullet: the setting, who reads it, and that nothing is translated |
+| `docs/memory/open-questions/2026-11-17-language-setting.md` | its finding is replaced by the person's decision and a link to this spec; title and `IDEAS.md` line to match |
 
-## 6. Cost and files
+- **Not changed:** busmon's code, the CLI, the dispatcher, `notify/`, the goldens, every other
+  role and skill.
+- **The concierge** has no role file yet. When it gets one, its skill takes §3's rule, reading
+  the same key.
+- **A role's text in another project** comes from the same skills, so it follows the next
+  `setup` (skills install).
 
-**Phased**, so the person sees French early and the long tail follows:
+## 6. Tests
 
-1. **Infrastructure:** the `i18n` package, `T`, the setting, the harness pin and the catalogue
-   test. Files:
-   - new `i18n/`;
-   - `config/keys.go` and `config/group.go` (one key; `keys.go` is the hot file);
-   - busmon's settings load;
-   - the test harness.
-
-   About half a day.
-2. **busmon's frame:** titles, column heads, key hints, the help page, the state words as shown,
-   ages and dates. About 300-400 strings, touching most of busmon's view files once. About two
-   days.
-3. **busmon's pages and composed text:** For you, the agent page, Services, Settings, notices.
-   The rest of the user text in the 5,000 literals: many of those are keys, formats and
-   protocol, not prose. About a week.
-4. **The CLI's `--help`:** with Q2's yes only, about two days.
-
-**Overlap with coder2.** Steps 2 and 3 touch nearly every busmon view file. That is the same
-ground as coder2's views redesign (#601), so they must come after it, or between its steps
-(Q4).
+- **Registry tests:**
+  - the row exists with its group and `ReadBy`;
+  - `fr` and `en` are accepted;
+  - `french`, `FR` and `f` are refused;
+  - an unset key reads `en`.
+  These are the same shape as `config/follow_test.go`.
+- **No behaviour test:** no Go code reads the value.
+- **A docs guard:** a test that master's skill names `person.language`, which pins the one reader
+  `ReadBy` claims.
+- **Docs:** `go run ./cmd/agentbus mem check` and the scrub test, as for every docs change.
+- **Live check, once built:** the person sets `person.language = fr`, then relaunches master.
+  - master answers a busmon message in French;
+  - its next directive to coder, given on that message, is English;
+  - `agentbus thread` shows both.
 
 ## 7. Questions for the person
 
-- **Q1.** Which surfaces: busmon only, or busmon and the CLI's help? Recommended: busmon only
-  first. The bus and the CLI's output stay English because agents and scripts read them.
-- **Q2.** If the CLI is included, should only `--help` follow the setting, and only for the
-  person's own shell? Recommended: yes, that limit or none at all. Errors and output stay
-  English.
-- **Q3.** Should `auto` (follow the system's `LANG`) be the default, or English unless the person
-  chooses French? Recommended: English by default, French only when chosen. A machine with a
-  French `LANG` would otherwise change busmon's text without anyone asking.
-- **Q4.** When: before or after the views redesign? Recommended: step 1 at once (no overlap);
-  steps 2-3 after the redesign lands, so the strings are translated once, on the new screens.
-- **Q5.** Should the state words be translated (`bloqué`, `en attente`, `inactif`), or kept as
-  the English terms the agents and the bus use? Recommended: translated in busmon's columns, with
-  the English word on the agent's page. The person reads French, and the page keeps the link to
-  what agents say.
+1. **A peer answering you directly** (an `@all` message, or a reply to your busmon message): should
+   it stay English, as recommended, or also use `person.language`?
+2. **Free text or a list:** should any two-letter code be accepted, or only `en` and `fr` for now?
+   Recommended: any code. The rule is in the skill, and the models write most languages.
 
 ## 8. Steps
 
-One PR each, from origin/dev, base dev: §6's steps 1 to 3, and 4 with Q1/Q2's yes.
+- **One PR, from origin/dev:** the registry row, the two skills, the role file, the operator
+  note and the idea note.
+- **After it merges,** master's next boot reads the key. Agents that are running keep the skills
+  they loaded, so master tells them with a wake=no directive (the "Skill updates" section of
+  master's skill).
