@@ -50,9 +50,10 @@ type page struct {
 
 	term *termView // ovAgent: the last read of its terminal on a holder (termpreview.go); nil none yet
 
-	sel      int        // ovPlan: the selected item; ovRecap: the cursor's row
-	expanded bool       // ovPlan: the done group is open
-	items    []planItem // ovPlan
+	sel       int        // ovPlan: the selected item; ovRecap: the cursor's row
+	expanded  bool       // ovPlan: the done group is open
+	laterOpen bool       // ovPlan: LATER open at the narrow tier (views-redesign §4)
+	items     []planItem // ovPlan
 
 	from     PanelID // the list the page was opened from (A5: n/p move in it)
 	fromList bool
@@ -552,10 +553,10 @@ func (m *Model) buildPage() bool {
 		p.title, p.body = helpTitle(), helpText()
 	case ovPlan:
 		lw, wide := m.planDrawerWidths()
-		v := planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide, s.requests)
+		v := planBoardOf(s.planState, p.sel, p.expanded, p.laterOpen, now, lw, m.layout.Tier, wide, s.requests)
 		if p.sel >= len(v.items) {
 			p.sel = max(0, len(v.items)-1)
-			v = planBoard(s.planState, p.sel, p.expanded, now, lw, m.layout.Tier, wide, s.requests)
+			v = planBoardOf(s.planState, p.sel, p.expanded, p.laterOpen, now, lw, m.layout.Tier, wide, s.requests)
 		}
 		p.body, p.plain, p.items, p.side = v.lines, v.plain, v.items, v.side
 		p.title = "Plan"
@@ -1121,6 +1122,14 @@ func (m *Model) moveSel(p *page, act Action, rows int, lines func() []int) {
 // openPlanItem expands the done group or opens a task of the plan.
 func (m *Model) openPlanItem(p *page) tea.Cmd {
 	if p.sel >= len(p.items) {
+		return nil
+	}
+	switch p.items[p.sel].fold { // a folded section's line opens it (views-redesign §4)
+	case "later":
+		p.laterOpen, p.dirty = true, true
+		return nil
+	case "done":
+		p.expanded, p.dirty = true, true
 		return nil
 	}
 	return m.push(page{kind: ovPlanTask, key: p.items[p.sel].task})

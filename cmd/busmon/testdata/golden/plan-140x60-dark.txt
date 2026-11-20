@@ -4,20 +4,20 @@
 │  ● answer master    review lot 1? (2 questions)    4m││ v0.29  1 of 6 done  ━━━━━━━  16%              ╭─ Task ─────────────────────────╮ │
 │  ♙ answer foureyes  need a decision on the width … 6m││ the inbox · loaded 0s ago (abcdef0)           │ strip                          │ │
 │  ◆ review coder     by charlie  look at b1           ││                                               │ state    in review             │ │
-│  Next for you: title notes                           ││ NOW  3                                        │ owner    coder                 │ │
-│                                                      ││   ♙ title notes  ♙ person  waiting for you    │ review   approved              │ │
-│                                                      ││ ▶ ○ title strip  coder  #338 · approved · me… │ PR       338                   │ │
-│                                                      ││   ● title drawer  coder  in progress          │ reason   merge PR 338          │ │
-│                                                      ││                                               │ waits on —                     │ │
-│                                                      ││ NEXT  1                                       │ for you  nothing               │ │
-│                                                      ││   ○ title requests  coder  upcoming           │                                │ │
-│                                                      ││                                               │ enter task page                │ │
-╰──────────────────────────────────────────────────────╯│ LATER  1                                      ╰────────────────────────────────╯ │
-                                                        │   ○ title tag  ♙ person  waiting on requests                                     │
+│  Next for you: title notes                           ││ NOW  1                                        │ owner    coder                 │ │
+│                                                      ││   ● title drawer  coder  in progress          │ review   approved              │ │
+│                                                      ││                                               │ PR       338                   │ │
+│                                                      ││ APPROVED  1                                   │ reason   merge PR 338          │ │
+│                                                      ││ ▶ ✓ title strip  coder  #338 · approved · me… │ after    —                     │ │
+│                                                      ││                                               │ unblocks —                     │ │
+│                                                      ││ NEXT  2                                       │ prio     normal                │ │
+│                                                      ││     title notes  ♙ person  decide             │ for you  nothing               │ │
+╰──────────────────────────────────────────────────────╯│     title requests  coder  upcoming           │                                │ │
+                                                        │                                               │ enter task page                │ │
+                                                        │ LATER  1                                      ╰────────────────────────────────╯ │
+                                                        │     title tag  ♙ person  waiting on requests                                     │
                                                         │                                                                                  │
                                                         │ DONE  1   d shows                                                                │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
                                                         │                                                                                  │
                                                         │                                                                                  │
                                                         │                                                                                  │
