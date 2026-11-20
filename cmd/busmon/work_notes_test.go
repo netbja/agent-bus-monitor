@@ -118,6 +118,24 @@ func TestLocalNotesOfReadsTheCheckout(t *testing.T) {
 	if projectCheckout("demo", getenv) != root {
 		t.Fatalf("checkout %q", projectCheckout("demo", getenv))
 	}
+	// working_dir as agentbus up expands it: ~ then $VARS (foureyes).
+	env["HOME"] = dir
+	if err := os.WriteFile(filepath.Join(projects, "demo.toml"), []byte("working_dir = \"~/repo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := projectCheckout("demo", getenv); got != root {
+		t.Fatalf("~ checkout %q, want %q", got, root)
+	}
+	if got, err := localNotesOf("demo", getenv)(); err != nil || len(got) != 1 {
+		t.Fatalf("~ notes %+v %v", got, err)
+	}
+	env["REPOS"] = dir
+	if err := os.WriteFile(filepath.Join(projects, "demo.toml"), []byte("working_dir = \"$REPOS/repo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := projectCheckout("demo", getenv); got != root {
+		t.Fatalf("$VARS checkout %q, want %q", got, root)
+	}
 }
 
 // On Work, a note's row draws its title and where it lives; enter says

@@ -14,7 +14,6 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/filepick"
 	"github.com/netbja/agent-bus-monitor/peer"
-	"github.com/netbja/agent-bus-monitor/projlist"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
@@ -39,7 +38,7 @@ type atSource struct {
 }
 
 // atSourceFor is the open project's source on this machine: the template's
-// working_dir (made absolute and cleaned), $HOME, and the shared denies of
+// working_dir (projectCheckout: expanded, made absolute and cleaned), $HOME, and the shared denies of
 // roles.toml found as the launcher finds it. No roles.toml is no deny
 // (secretpath still applies, §3); one that cannot be read refuses all.
 func atSourceFor(project string, getenv func(string) string) *atSource {
@@ -52,19 +51,18 @@ func atSourceFor(project string, getenv func(string) string) *atSource {
 }
 
 // projectCheckout is the project's checkout on this machine: its template's
-// working_dir, made absolute and cleaned; "" when there is none.
+// working_dir as agentbus up expands it (templateWorkingDir: ~ then $VARS),
+// made absolute and cleaned; "" when there is none.
 func projectCheckout(project string, getenv func(string) string) string {
-	root := ""
-	if rows, err := projlist.Templates(rolecfg.ProjectsDir(getenv)); err == nil {
-		for _, r := range rows {
-			if r.Name == project && r.WorkingDir != "" {
-				if abs, err := filepath.Abs(r.WorkingDir); err == nil {
-					root = filepath.Clean(abs)
-				}
-			}
-		}
+	dir, ok := templateWorkingDir(project, getenv)()
+	if !ok {
+		return ""
 	}
-	return root
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(abs)
 }
 
 // atDenies compiles roles.toml's shared Read denies against root and home.
