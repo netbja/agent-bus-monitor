@@ -26,16 +26,19 @@ import (
 //     Startup and HandleOp, Git's merges in a worktree), and a read added
 //     here is reviewed;
 //  3. os/exec imported by a file not in guardExecFiles;
-//  4. a program not in guardPrograms: every exec.Command and
-//     exec.CommandContext names its program as a string literal of the set,
-//     or is one of guardRunners, whose parameter is the program and whose
-//     every call site in the package names a literal of the set. A program
-//     the guard cannot read fails;
+//  4. a process started outside os/exec (guardStarters), or a program not
+//     in guardPrograms: every exec.Command and exec.CommandContext names its
+//     program as a string literal of the set, or is one of guardRunners,
+//     whose parameter is the program and whose every call site in the package
+//     names a literal of the set. A program the guard cannot read fails;
 //  5. a shell (sh, bash, dash, zsh, env, by name or as a path ending in one),
 //     whatever its arguments: never on the set, named so the failure says why.
 //     `git -c core.fsmonitor=false -c core.pager=cat` (plandrift's gitSafe) is
 //     Git configuration, not a shell, and passes;
 //  6. a module import not in guardModuleImports.
+//
+// Rules 2 and 4 read qualified names (exec.Command, mission.HeldBy), so a dot
+// import, which would hide them, fails as well.
 //
 // What it does not prove. It pins which module packages the runtime imports,
 // not what they run: the packages that run programs themselves are marked in
@@ -123,6 +126,13 @@ var guardRunnerCalls = []struct {
 // guardMissionReads: what the package uses of mission, on the day of the move.
 var guardMissionReads = []string{"HeldBy"}
 
+// guardStarters: the other ways to start a process; the package uses none.
+var guardStarters = map[string][]string{
+	"os":                    {"StartProcess"},
+	"syscall":               {"Exec", "ForkExec", "StartProcess"},
+	"golang.org/x/sys/unix": {"Exec"},
+}
+
 var guardShells = []string{"sh", "bash", "dash", "zsh", "env"}
 
 func TestGuard(t *testing.T) {
@@ -197,6 +207,16 @@ func f(ctx context.Context) { mission.Git{}.MergeNoFF(ctx, ".", "x", "m") }`},
 func f() { c := exec.Command; c("sh", "-c", "true").Run() }`},
 		"exec.CommandContext as a value": {"repocheck.go": pkg + `import "os/exec"
 var run = exec.CommandContext`},
+		"os/exec dot-imported": {"repocheck.go": pkg + `import . "os/exec"
+func f() { Command("make").Run() }`},
+		"mission dot-imported": {"a.go": pkg + `import . "github.com/netbja/agent-bus-monitor/mission"
+func f() { RunTest(nil, ".", "make", "", 0) }`},
+		"os.StartProcess": {"a.go": pkg + `import "os"
+func f() { os.StartProcess("/usr/bin/make", nil, nil) }`},
+		"syscall.Exec": {"a.go": pkg + `import sc "syscall"
+func f() { sc.Exec("/usr/bin/make", nil, nil) }`},
+		"unix.Exec": {"a.go": pkg + `import "golang.org/x/sys/unix"
+func f() { unix.Exec("/usr/bin/make", nil, nil) }`},
 		"a program in a variable": {"repocheck.go": pkg + `import "os/exec"
 func f(p string) { exec.Command(p).Run() }`},
 		"a runner's parameter outside the runner": {"githubcheck.go": pkg + `import "os/exec"
@@ -266,6 +286,8 @@ func guardFindings(t *testing.T, src map[string]string) ([]string, guardSeen) {
 			}
 			local[p] = n
 			switch {
+			case n == ".":
+				fail(fset, im, "dot-imports %s: the guard reads os/exec and mission by their qualified names, so the package imports nothing with a dot", p)
 			case strings.HasPrefix(p, guardModule+"cmd/"), guardScreen(p):
 				fail(fset, im, "imports %s: the runtime never imports the CLI or the screen (rule 1)", p)
 			case strings.HasPrefix(p, guardModule) && !slices.Contains(guardModuleImports, strings.TrimPrefix(p, guardModule)):
@@ -278,6 +300,12 @@ func guardFindings(t *testing.T, src map[string]string) ([]string, guardSeen) {
 			}
 		}
 		execName, missionName := local["os/exec"], local[guardModule+"mission"]
+		starters := map[string][]string{} // name in this file -> the process starters guardStarters lists for it
+		for p, fns := range guardStarters {
+			if n, ok := local[p]; ok {
+				starters[n] = fns
+			}
+		}
 		calls := map[ast.Expr]bool{} // the called function of every call
 		ast.Inspect(f, func(n ast.Node) bool {
 			if c, ok := n.(*ast.CallExpr); ok {
@@ -298,6 +326,9 @@ func guardFindings(t *testing.T, src map[string]string) ([]string, guardSeen) {
 							fail(fset, n, "uses mission.%s, not in guardMissionReads (rule 2): the runtime reads mission records, it never runs a mission", n.Sel.Name)
 						}
 						seen.missionReads[n.Sel.Name] = true
+					}
+					if x, ok := n.X.(*ast.Ident); ok && slices.Contains(starters[x.Name], n.Sel.Name) {
+						fail(fset, n, "uses %s.%s: a process started outside os/exec, which the guard cannot read (rule 4)", x.Name, n.Sel.Name)
 					}
 					if x, ok := n.X.(*ast.Ident); ok && execName != "" && x.Name == execName && (n.Sel.Name == "Command" || n.Sel.Name == "CommandContext") && !calls[n] {
 						fail(fset, n, "takes exec.%s as a value: a program the guard cannot read (rule 4)", n.Sel.Name)
