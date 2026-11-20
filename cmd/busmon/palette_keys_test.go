@@ -60,8 +60,8 @@ func TestPaletteRunsAClassARowAsItsKey(t *testing.T) {
 // when they did; typing again makes the typed line count again.
 func TestPaletteEnterRule(t *testing.T) {
 	m, _ := palShell(t)
-	if m = palette(t, m, "/r", kEnter); func() bool { k, ok := palTop(m); return !ok || k != ovRequests }() {
-		t.Fatalf("/r + Enter: %v", m.rd.top())
+	if m = palette(t, m, "/r", kEnter); m.rd.open() || m.ui.focus != PanelRequests { // the Requests sub-view (views-redesign §3, (a))
+		t.Fatalf("/r + Enter: page %v, focus %v", m.rd.top(), m.ui.focus)
 	}
 	second := paletteTable[paletteMatch("r")[1]].Name
 	m, _ = palShell(t)
@@ -76,8 +76,8 @@ func TestPaletteEnterRule(t *testing.T) {
 	}
 	m, _ = palShell(t)
 	m = palette(t, m, "/r", kDown, 'e', kEnter) // /re: no exact name; the top row (requests)
-	if k, ok := palTop(m); !ok || k != ovRequests {
-		t.Fatalf("/r ↓ e Enter: %v", m.rd.top())
+	if m.rd.open() || m.ui.focus != PanelRequests {
+		t.Fatalf("/r ↓ e Enter: page %v, focus %v", m.rd.top(), m.ui.focus)
 	}
 }
 

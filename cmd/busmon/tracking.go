@@ -365,38 +365,3 @@ func recentThreads(threads []openThread, since time.Time) []openThread {
 	}
 	return out
 }
-
-// requestsPanel renders the whole follow-up view: tracked requests first, then
-// the untracked cmd threads, each section labelled with what it can and cannot
-// tell the reader.
-func requestsPanel(reqs []request, threads []openThread, now time.Time, width int) []Line {
-	var b body
-	// Only tracked requests belong here. An ordinary board task records no
-	// acceptance and no response, so listing it as a request would invent a
-	// pending ask out of a line of ownership bookkeeping; the BOARD pane is
-	// where those live.
-	tracked := trackedOnly(reqs)
-	waiting := 0
-	for _, r := range tracked {
-		if r.waiting() {
-			waiting++
-		}
-	}
-	b.seg(RoleMuted, fmt.Sprintf("── tracked requests (%d waiting of %d) ──", waiting, len(tracked))).text("\n")
-	if len(tracked) == 0 {
-		b.seg(RoleMuted, "   no tracked request on the board. One is created by `agentbus request send`;\n"+
-			"   an ordinary cmd directive is not one and cannot record acceptance.").text("\n")
-	}
-	for _, r := range tracked {
-		b.join(requestBlock(r, now))
-	}
-	b.text("\n").seg(RoleMuted, fmt.Sprintf("── cmd threads with no answer in the retained history (%d) ──", len(threads))).text("\n")
-	b.seg(RoleMuted, "   untracked: the protocol records no acceptance for these, and an answer\n"+
-		"   that has been trimmed from the stream looks the same as one that never came.").text("\n")
-	for _, t := range threads {
-		t.Type, t.From, t.Target, t.ID, t.Message = Preview(t.Type), Preview(t.From), Preview(t.Target), Preview(t.ID), Preview(t.Message)
-		b.seg(RoleDispatch, pad(t.Type, 9)).text(" "+t.From+" ").seg(RoleMuted, "→").text(" ").seg(RoleAccent, t.Target).text("  ").
-			seg(RoleMuted, "asked "+humanAge(now.Sub(t.At))+" ago · thread "+t.ID).text("\n   " + clip(t.Message, width-4) + "\n")
-	}
-	return b.Lines()
-}

@@ -46,7 +46,7 @@ func TestRowHintTable(t *testing.T) {
 		{PanelBoard, "busmon-charm-b", false, "task"},
 		{PanelWork, "plan:t1", false, "task"},
 		{PanelWork, "idea:q", false, "where"},
-		{PanelWork, workFoldBetween, false, "requests"},
+		{PanelWork, workFoldBetween, false, "board"},
 		{PanelWork, workFoldDone, false, "done"},
 		{PanelWork, "agent:coder", false, "agent"},
 		{PanelForYou, "", false, rowNoPair},
@@ -160,8 +160,8 @@ func checkEnter(t *testing.T, m Model, p PanelID, key, what string) (Model, stri
 		if top != nil {
 			t.Errorf("%s: Enter opened %v", what, top.kind)
 		}
-	case word == "requests": // Work's between-agents line: its sub-view, no page
-		if top != nil || m.ui.focus != PanelRequests {
+	case word == "board": // Work's between-agents line: the Board, filtered, no page (views-redesign §3, (a))
+		if top != nil || m.ui.focus != PanelBoard || !m.ui.boardBetween {
 			t.Errorf("%s: Enter left focus %v, page %v", what, m.ui.focus, top)
 		}
 	case inPlaceWords[word]:
@@ -251,7 +251,7 @@ func TestRowHintEveryRowAndItsOutcome(t *testing.T) {
 		PanelActivity: {"expand", "full text"},
 		PanelBoard:    {"task"},
 		PanelRequests: {"answer", "request", "thread", "notices", "fold", "unfold"},
-		PanelWork:     {"answer", "agent", "thread", "task", "PR", "health", "request", "where", "requests", "done"},
+		PanelWork:     {"answer", "agent", "thread", "task", "PR", "health", "request", "where", "board", "done"},
 	} {
 		for _, w := range words {
 			want = append(want, fmt.Sprintf("%d %s", p, w))

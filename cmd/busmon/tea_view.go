@@ -38,7 +38,7 @@ func (m Model) grid() *grid {
 		drawLine(g, 0, l.Header.Y+i, m.width, header[i], false)
 	}
 	if l.Tabs.H > 0 {
-		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, l.Active, m.width, true), false)
+		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, m.tabOf(l.Active), m.width, true), false)
 	}
 	reading := m.rd.open()
 	drawer := reading && l.Tier == TierWide && m.rd.pages[0].drawer
@@ -115,7 +115,7 @@ func (m Model) headerData() headerData {
 // highlighted; names shorten when they do not
 // fit width.
 func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
-	if active == PanelRequests { // Work's sub-view: its tab is Work's
+	if active == PanelRequests { // a caller that names no origin (tabOf does): Work's
 		active = PanelWork
 	}
 	short := map[PanelID]string{PanelForYou: "You", PanelAgents: "Agt", PanelActivity: "Act", PanelBoard: "Brd", PanelRequests: "Req", PanelWork: "Wrk"}
@@ -268,7 +268,7 @@ func (m *Model) fillLists() {
 
 	bd := &m.lists.board
 	bv := boardViewOf(s.board, now, lower, boardOpts{noAccept: m.cfg.settings.NoAcceptAfter, noReply: m.cfg.settings.NoReplyAfter,
-		showDone: m.ui.boardDone, masterDown: masterDown(s.agents, cmp.Or(s.pilot, "master"))})
+		showDone: m.ui.boardDone, masterDown: masterDown(s.agents, cmp.Or(s.pilot, "master")), between: m.ui.boardBetween, self: m.cfg.self})
 	bd.SetHeader(bv.header)
 	bd.SetItems(bv.items)
 	bd.SetFrame(m.lowerTitle(PanelBoard, Line{{Text: "Board", Role: RoleText}}), bv.label)
@@ -296,8 +296,9 @@ func (m *Model) fillLists() {
 	rq := &m.lists.requests
 	rv := m.lists.reqView // refresh computed it before the layout
 	rq.SetItems(requestRows(rv, m.ui.reqOpen, now, lower))
-	// Work's sub-view, from its "between agents" line; esc returns to Work.
-	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: "Work", Role: RoleText}, {Text: " " + GlyphArrowR + " between agents", Role: RoleMuted}}), requestsTitle(rv, lower))
+	// The Requests sub-view, every thread (r, F2; views-redesign §3, (a)):
+	// drawn under the tab it was opened from, where esc returns.
+	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: panelNames[m.reqOrigin()], Role: RoleText}, {Text: " " + GlyphArrowR + " all threads", Role: RoleMuted}}), requestsTitle(rv, lower))
 
 	m.keepInView()
 	for _, p := range shellPanels {
@@ -321,7 +322,11 @@ func (m *Model) lowerTitle(p PanelID, own Line) Line {
 	// Inside Work's Kanban columns the focus is below the tabs: the pill
 	// fades as for an unfocused panel (busmon-work-focus).
 	inside := p == PanelWork && m.lists.work.kanban != nil && m.ui.workLevel != workAtTabs
-	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), m.ui.focus == p && !inside)
+	focused := m.ui.focus == p && !inside
+	if p == PanelRequests { // the sub-view's tab is its origin's
+		p = m.reqOrigin()
+	}
+	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), focused)
 	return append(t, suffix...)
 }
 
@@ -382,4 +387,21 @@ func forYouParts(it attentionItem, now time.Time) (head, text, age Line) {
 	}
 	head = Line{col(k.glyph, 2, k.role), col(k.word, 7, k.role), col(Preview(it.Agent), 10, RoleText)}
 	return head, Line{{Text: t, Role: RoleText}}, age
+}
+
+// reqOrigin is the lower tab the Requests sub-view was opened from (r, F2,
+// views-redesign §3, (a)); Work when none was recorded.
+func (m *Model) reqOrigin() PanelID {
+	if m.ui.reqFrom == PanelActivity || m.ui.reqFrom == PanelBoard || m.ui.reqFrom == PanelWork {
+		return m.ui.reqFrom
+	}
+	return PanelWork
+}
+
+// tabOf is the tab a panel is drawn under: the sub-view's is its origin's.
+func (m *Model) tabOf(p PanelID) PanelID {
+	if p == PanelRequests {
+		return m.reqOrigin()
+	}
+	return p
 }

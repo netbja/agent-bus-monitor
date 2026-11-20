@@ -58,13 +58,6 @@ func TestAskRowFadesWhateverTheAgentDeclared(t *testing.T) {
 	}
 }
 
-func TestRequestsLabelAddsQuestionsOnce(t *testing.T) {
-	threads := []openThread{{ID: "1", Target: "charlie"}, {ID: "2", Target: "foureyes"}, {ID: "3", Target: "coder"}}
-	if got := requestsLabel(nil, threads, "charlie", 3).text(); got != "4 for you · 2 between agents" {
-		t.Fatalf("label %q", got)
-	}
-}
-
 func TestActivityAskRowReadsTheHash(t *testing.T) {
 	currentAsks = map[string]bus.Ask{"100-0": demoAsk()}
 	t.Cleanup(func() { currentAsks = map[string]bus.Ask{} })

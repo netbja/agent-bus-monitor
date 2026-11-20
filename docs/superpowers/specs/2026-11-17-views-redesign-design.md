@@ -56,7 +56,13 @@ One list, one line per task, Board's format: **task, owner, state, age**, newest
   only while at least one row has an alert.
 - **Enter opens the row's diagnostics**, today's Requests detail for that thread: the delivery
   cursor, the pending list, the request's facts, the thread's entries. The between-agents line of
-  Work opens this Board, filtered to the rows between agents, in place of today's sub-view.
+  Work opens this Board, filtered to the rows between agents (no request to or from the person);
+  Esc returns to Work on that line. **The Requests sub-view stays, every thread** (the person's
+  choice (a), §9 Q9): the untracked threads, the notices, the directives and the open asks, with
+  its keys `d`, `o`, `+` and `-`. `r` and `F2` open it from anywhere, the Board included, in place
+  of the former read-only Requests page, which is retired: one Requests view. It remembers the tab
+  it was opened from for Esc, the tab bar and the arrows only; `d`, `o`, `+` and `-` mean the same
+  whatever opened it.
 - **busmon never changes a request itself.** The row's actions are words in the footer, each
   naming who acts:
   - `resend`: the dispatcher's (it already re-wakes; a stuck delivery is its alarm);
@@ -245,3 +251,6 @@ This needs busmon to list the notes, which it does not do today: IDEAS shows the
    (the earlier `▲`/`▼` choice did not know they were taken).
 8. **Master down:** resend only, which the dispatcher already does. No cancel while master is down:
    cancel stays master's; no new board state, no new dispatcher act, no security review (§3).
+9. **The Requests sub-view (2026-11-20):** (a), it stays, reached by `r`/`F2` from anywhere, the
+   Board included; the old read-only Requests page goes (§3). Work's between-agents line opens the
+   Board filtered to the rows between agents.

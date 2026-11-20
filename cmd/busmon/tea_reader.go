@@ -496,9 +496,6 @@ func (m *Model) buildPage() bool {
 				p.body = withLead(p.lead, p.body)
 			}
 		}
-	case ovRequests:
-		label := requestsLabel(s.requests, s.threads, m.cfg.self, openQuestionCount(s.asks)).text()
-		p.title, p.body = fmt.Sprintf("Requests %s %s", GlyphNone, label), requestsPanel(s.requests, s.threads, now, width)
 	case ovServices:
 		if p.svc != nil {
 			p.title, p.body = "Services", servicesCards(*p.svc, p.sel, now, width)

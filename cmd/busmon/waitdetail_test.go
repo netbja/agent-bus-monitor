@@ -34,22 +34,3 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 	}
 }
 
-func TestRequestsCountOnlyWhatIsForYou(t *testing.T) {
-	threads := []openThread{{ID: "1", Target: "charlie"}, {ID: "2", Target: "foureyes"}, {ID: "3", Target: "coder"}}
-	if got := requestsLabel(nil, threads, "charlie", 0).text(); got != "1 for you · 2 between agents" {
-		t.Fatalf("label %q", got)
-	}
-	if got := requestsLabel(nil, threads[1:], "charlie", 0).text(); got != "2 between agents" {
-		t.Fatalf("label %q", got)
-	}
-	if got := requestsLabel(nil, nil, "charlie", 0).text(); got != "nothing waiting" {
-		t.Fatalf("label %q", got)
-	}
-	mineR, mineT := forPerson(nil, threads, "charlie")
-	if len(mineR) != 0 || len(mineT) != 1 {
-		t.Fatal("forPerson must keep the person's thread")
-	}
-	if _, none := forPerson(nil, threads[1:], "charlie"); len(none) != 0 {
-		t.Fatal("forPerson must keep nothing when nothing is for the person")
-	}
-}

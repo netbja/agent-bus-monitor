@@ -35,9 +35,9 @@ func TestReplyKeyR(t *testing.T) {
 		t.Fatalf("r on an agent's page opened %+v", m.ui.compose)
 	}
 
-	// The shell: r is still Requests.
+	// The shell: r is still Requests, the sub-view now (views-redesign §3, (a)).
 	m = fixtureShell(t, 140, 40)
-	if m = keys(t, m, 'r'); m.ui.compose != nil || !m.rd.open() || m.rd.top().kind != ovRequests {
+	if m = keys(t, m, 'r'); m.ui.compose != nil || m.rd.open() || m.ui.focus != PanelRequests {
 		t.Fatalf("r on the shell no longer opens Requests")
 	}
 }

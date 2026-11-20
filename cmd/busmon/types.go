@@ -42,7 +42,6 @@ const (
 	ovAgent
 	ovTask
 	ovRequest
-	ovRequests
 	ovServices
 	ovHealth
 	ovHelp
