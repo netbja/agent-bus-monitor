@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -26,14 +27,18 @@ func planPriority(ctx context.Context, b *bus.Bus, args []string, out io.Writer)
 	if !bus.ValidName(as) {
 		return fmt.Errorf("--as %q is not a valid name", as)
 	}
-	if err := refuseAgentForPriority(ctx, requestDeps, "a plan task's priority"); err != nil {
+	if err := refuseAgentForPriority(ctx, requestDeps, "a plan task's priority", "on the task in the Plan tab"); err != nil {
 		return err
 	}
 	facts, err := b.PlanFacts(ctx)
 	if err != nil {
 		return err
 	}
-	was := bus.PriorityLevel(facts[task].Priority)
+	board, filePrio := planTaskOf(ctx, b, task)
+	was := bus.PriorityLevel(filePrio) // the level in force: the person's, else the file's
+	if p := facts[task].Priority; p != "" {
+		was = bus.PriorityLevel(p)
+	}
 	changed, err := b.SetPlanPriority(ctx, task, level, as)
 	if err != nil {
 		return err
@@ -42,11 +47,14 @@ func planPriority(ctx context.Context, b *bus.Bus, args []string, out io.Writer)
 		_, err = fmt.Fprintf(out, "%s: already %s\n", task, level)
 		return err
 	}
-	if _, err := fmt.Fprintf(out, "%s: %s (was %s)\n", task, level, was); err != nil {
+	line := fmt.Sprintf("%s: %s (was %s)\n", task, level, was)
+	if was == level { // the file's level, now the person's: it holds against a file change
+		line = fmt.Sprintf("%s: %s, now yours (the plan file's too)\n", task, level)
+	}
+	if _, err := fmt.Fprint(out, line); err != nil {
 		return err
 	}
 	// A request already sent for the task keeps its own level: say how to move it.
-	board := planBoardTask(ctx, b, task)
 	entries, err := b.Board(ctx)
 	if err != nil {
 		return nil // the priority is recorded; the hint is best effort
@@ -57,21 +65,22 @@ func planPriority(ctx context.Context, b *bus.Bus, args []string, out io.Writer)
 	return err
 }
 
-// planBoardTask is the board task a plan task's requests use: its board
-// field, else its id (bus.RequestBy's match, read the other way).
-func planBoardTask(ctx context.Context, b *bus.Bus, task string) string {
+// planTaskOf is the board task a plan task's requests use (its board field,
+// else its id: bus.RequestBy's match, read the other way) and the plan
+// file's priority for it.
+func planTaskOf(ctx context.Context, b *bus.Bus, task string) (board, priority string) {
 	rec, ok, err := b.Plan(ctx)
 	if err != nil || !ok {
-		return task
+		return task, ""
 	}
 	f, err := plan.Parse([]byte(rec.File))
 	if err != nil {
-		return task
+		return task, ""
 	}
 	for _, t := range f.Tasks {
-		if t.ID == task && t.Board != "" {
-			return t.Board
+		if t.ID == task {
+			return cmp.Or(t.Board, task), t.Priority
 		}
 	}
-	return task
+	return task, ""
 }

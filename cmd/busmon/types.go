@@ -27,6 +27,7 @@ type busWriter interface {
 	Thread(ctx context.Context, threadID string) ([]bus.Event, error)
 	Resume(ctx context.Context, by, message string) (bool, error)
 	SetRequestPriority(ctx context.Context, task, level, by string) (bool, error) // the person's, request-priority §6
+	SetPlanPriority(ctx context.Context, task, level, by string) (bool, error)    // the person's, views-redesign §4 (step 4b)
 	AddIdea(ctx context.Context, d bus.IdeaDef) (string, error)
 	SetIdeaState(ctx context.Context, id, expect, to, by string) error // the person's (ideas slice 1)
 	Ideas(ctx context.Context) ([]bus.Idea, error)

@@ -52,6 +52,27 @@ func TestPlanPriorityCLI(t *testing.T) {
 		!strings.Contains(out, "agentbus request priority roles-impl") {
 		t.Fatalf("low with a request: %d %q", code, out)
 	}
+	// A done request orders nothing: no hint, though its level (high) differs
+	// from the one set (normal) (foureyes P13).
+	if err := b.AcceptRequest(ctx, "roles-impl", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CompleteRequest(ctx, "roles-impl", "coder", "built"); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := runPlanT(t, b, repo, "priority", "roles", "normal", "--as", "charlie"); code != 0 || out != "roles: normal (was low)\n" {
+		t.Fatalf("a done request got a hint: %d %q", code, out)
+	}
+	// "was" is the level in force: the plan file's when the person set none.
+	if code, out, _ := runPlanT(t, b, repo, "priority", "release", "normal", "--as", "charlie"); code != 0 || out != "release: normal (was low)\n" {
+		t.Fatalf("normal over the file's low: %d %q", code, out)
+	}
+	// The file's own level, set by the person: stored (it holds against a file
+	// change), said as such rather than "low (was low)".
+	r.HDel(ctx, bus.PlanFactsKey(b.Project()), "release")
+	if code, out, _ := runPlanT(t, b, repo, "priority", "release", "low", "--as", "charlie"); code != 0 || out != "release: low, now yours (the plan file's too)\n" {
+		t.Fatalf("the file's level again: %d %q", code, out)
+	}
 }
 
 // Only a person: an agent is refused before anything is written.

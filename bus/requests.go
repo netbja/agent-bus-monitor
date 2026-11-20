@@ -81,8 +81,8 @@ func (b *Bus) RequestBy(ctx context.Context, task, from, target, ref, body strin
 
 // publishRequest starts a request at its plan task's priority (views-redesign
 // §4, step 4b): the plan task is the one whose board field names the request's
-// task, else the one with its id; its level is the person's (the plan facts),
-// else the plan file's. A plan that does not decode leaves it at normal.
+// task, else the one with its id and no board field; its level is the
+// person's (the plan facts, normal included), else the plan file's. A plan that does not decode leaves it at normal.
 var publishRequest = redis.NewScript(`
 local function planPriorityOf(plankey,factkey,task)
  local raw=redis.call('GET',plankey);if not raw then return '','' end
@@ -96,6 +96,7 @@ local function planPriorityOf(plankey,factkey,task)
  if fraw then
   local ok3,f=pcall(cjson.decode,fraw)
   if ok3 and type(f)=='table' and (f.priority=='high' or f.priority=='low') then return f.priority,(f.priority_by or '') end
+  if ok3 and type(f)=='table' and f.priority=='normal' then return '','' end
  end
  if found.priority=='high' or found.priority=='low' then return found.priority,'' end
  return '',''

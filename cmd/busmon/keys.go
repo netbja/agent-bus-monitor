@@ -257,8 +257,8 @@ var (
 		{Keys: "t", Help: "Agents: attach to the selected agent's terminal on a holder (agentbus attach; the prefix then d returns here)", Act: ActAttach, Panels: []PanelID{PanelAgents}, match: runeIs('t')},
 		{Keys: "o", Help: "Requests: show or hide the answered threads and those older than 7 days", Act: ActFold, Panels: []PanelID{PanelRequests}, match: runeIs('o')},
 		// request-priority §6: on one tracked request, written at once (the opposite key undoes it).
-		{Keys: "+ -", Hint: "priority", Help: "Requests: raise or lower a tracked request's priority (low, normal, high); agents take the high ones first", Act: ActPriorityUp, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('+')},
-		{Keys: "-", Act: ActPriorityDown, Panels: []PanelID{PanelRequests, PanelWork}, OnPage: true, match: runeIs('-')},
+		{Keys: "+ -", Hint: "priority", Help: "Requests and Plan: raise or lower a tracked request's or a plan task's priority (low, normal, high); agents take the high ones first, and a request sent for a plan task starts at its level", Act: ActPriorityUp, Panels: []PanelID{PanelRequests, PanelWork, PanelPlan}, OnPage: true, match: runeIs('+')},
+		{Keys: "-", Act: ActPriorityDown, Panels: []PanelID{PanelRequests, PanelWork, PanelPlan}, OnPage: true, match: runeIs('-')},
 		{Keys: "i", Hint: "write", Alt: ":", Act: ActCompose, match: runeIs('i', ':')},
 		{Keys: "@", Act: ActComposeAt, match: runeIs('@')},
 		{Keys: "I", Help: "write in the compose window (several lines, Ctrl+S sends)", Act: ActComposeOpen, match: runeIs('I')},
@@ -382,7 +382,7 @@ var (
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 		// After close: on a narrow footer the way out stays (message-reply-key).
-		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},
+		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page, the plan drawer (p) or a plan task's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},
 		{Keys: "-", Act: ActPriorityDown, OnPage: true, match: runeIs('-')},
 		// r is shared with About's replay: lookupOn takes the one the page offers (reply-key-r).
 		{Keys: "r", Hint: "reply", Alt: "i I", Help: "reply in the compose window: on an agent's page to that agent; on a message, report or note page to its sender, an agent, prefilled with re: and its first line", Act: ActComposeOpen, OnPage: true, match: runeIs('r', 'i', 'I')},

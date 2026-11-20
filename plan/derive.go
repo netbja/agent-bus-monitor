@@ -104,6 +104,12 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	r := Row{Task: t, WaitingOn: waitingOn}
 	fact := in.Facts[t.ID]
 	r.PR, r.Ref, r.Note, r.LastFact = fact.PR, fact.Ref, fact.Note, fact.At
+	switch fact.Priority { // the person's level over the file's (views-redesign §4, step 4b)
+	case bus.PriorityHigh, bus.PriorityLow:
+		r.Task.Priority = fact.Priority
+	case bus.PriorityNormal:
+		r.Task.Priority = ""
+	}
 	linked := fact.PR > 0 || fact.Ref != "" // a ref reads as a PR does; only a PR adds its pr:<n> subject
 	if t.Mission != "" {
 		return deriveMission(r, in)
