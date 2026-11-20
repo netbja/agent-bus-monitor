@@ -43,6 +43,11 @@ type PlanFact struct {
 	Done   int64  `json:"done,omitempty"`
 	Note   string `json:"note,omitempty"`
 	At     int64  `json:"at,omitempty"`
+	// Priority (views-redesign §4, step 4b): "high" or "low", absent =
+	// normal, set by the person; it is no progress, so At keeps its time.
+	Priority   string `json:"priority,omitempty"`
+	PriorityBy string `json:"priority_by,omitempty"`
+	PriorityAt int64  `json:"priority_at,omitempty"` // Redis TIME, Unix ms
 }
 
 // PlanNoteMax bounds a task's note (one line).
@@ -198,20 +203,41 @@ func (b *Bus) PlanNote(ctx context.Context, task, note string) error {
 	return b.planFact(ctx, task, "note", note)
 }
 
-func (b *Bus) planFact(ctx context.Context, task, op, value string) error {
-	if !ValidName(task) {
-		return fmt.Errorf("invalid task %q", task)
+// SetPlanPriority sets a plan task's level, as the person by: high or low
+// stores priority, priority_by and priority_at (Redis TIME); normal removes
+// all three. The same level as stored writes nothing (changed false). The
+// task's other facts and their time are kept: a priority is no progress. A
+// request sent for the task later starts at this level (RequestBy).
+func (b *Bus) SetPlanPriority(ctx context.Context, task, level, by string) (changed bool, err error) {
+	if !ValidPriority(level) {
+		return false, fmt.Errorf("priority must be high, normal or low")
 	}
-	err := planFactSet.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project)}, task, op, value).Err()
+	if !ValidName(by) {
+		return false, fmt.Errorf("invalid person %q", by)
+	}
+	n, err := b.planFactRun(ctx, task, "prio", level, by)
+	return n == 1, err
+}
+
+func (b *Bus) planFact(ctx context.Context, task, op, value string) error {
+	_, err := b.planFactRun(ctx, task, op, value, "")
+	return err
+}
+
+func (b *Bus) planFactRun(ctx context.Context, task, op, value, by string) (int64, error) {
+	if !ValidName(task) {
+		return 0, fmt.Errorf("invalid task %q", task)
+	}
+	n, err := planFactSet.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project)}, task, op, value, by).Int64()
 	if err != nil && strings.Contains(err.Error(), "PLAN_") {
 		switch {
 		case strings.Contains(err.Error(), "PLAN_NONE"):
-			return errors.New("no plan is loaded (agentbus plan load <path>@<commit>)")
+			return 0, errors.New("no plan is loaded (agentbus plan load <path>@<commit>)")
 		case strings.Contains(err.Error(), "PLAN_TASK"):
-			return fmt.Errorf("task %q is not in the loaded plan", task)
+			return 0, fmt.Errorf("task %q is not in the loaded plan", task)
 		}
 	}
-	return err
+	return n, err
 }
 
 var planFactSet = redis.NewScript(`
@@ -226,6 +252,15 @@ local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local f = {}
 local old = redis.call('HGET', KEYS[2], ARGV[1])
 if old then f = cjson.decode(old) end
+if ARGV[2] == 'prio' then
+  local cur = f.priority
+  if cur ~= 'high' and cur ~= 'low' then cur = 'normal' end
+  if cur == ARGV[3] then return 0 end
+  if ARGV[3] == 'normal' then f.priority = nil; f.priority_by = nil; f.priority_at = nil
+  else f.priority = ARGV[3]; f.priority_by = ARGV[4]; f.priority_at = now end
+  redis.call('HSET', KEYS[2], ARGV[1], cjson.encode(f))
+  return 1
+end
 if ARGV[2] == 'link' then f.pr = tonumber(ARGV[3]); f.ref = nil; f.linked = now
 elseif ARGV[2] == 'ref' then f.ref = ARGV[3]; f.pr = nil; f.linked = now
 elseif ARGV[2] == 'done' then f.done = now

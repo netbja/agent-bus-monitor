@@ -75,7 +75,7 @@ types the same wake line as before and takes no text.
 
 **`plan/`** (v0.22) is the batch's plan as the person reads it: `docs/plans/<name>.json` (strict,
 `Parse`), published at a commit by `agentbus plan load` into `{p}:plan` (the file kept opaque:
-cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`: PR, done, note,
+cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`: PR, done, note, and the person's priority,
 Redis `TIME`; one script each, a task not in the plan refused); neither key is in `projectKinds`,
 and a load is refused for a project with no such key. `Derive` (`derive.go`) is pure: a board
 request `done` is *delivered*, so **in review**; done needs a recorded `plan done` (shown as a

@@ -119,8 +119,8 @@ func readOnlyCommand(cmd string, rest []string) bool {
 		return first == "list" || first == "set"
 	case "board", "handoff":
 		return first == ""
-	case "plan":
-		return first == "" || first == "show"
+	case "plan": // priority is a person's, by an explicit --as (as request priority)
+		return first == "" || first == "show" || first == "priority" && slices.Contains(rest, "--as")
 	case "health":
 		// warns only reads; accept is the person's, by an explicit --as (as reload)
 		return first == "" || first == "list" || first == "detail" || first == "log" || first == "warns" ||
