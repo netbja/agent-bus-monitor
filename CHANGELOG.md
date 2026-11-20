@@ -8,11 +8,10 @@ release exists.
 
 ## v0.31.0 — a failed CI check back to its author, braille sparklines, a readable light theme, and the dispatch service in its own package
 
-- The CI loop: the dispatch service's merge-queue pass sends a PR whose checks failed back to its
-  head's author, at most `ci.max_handoffs` times (default 3), then stops and tells the person, who
-  re-opens it with `agentbus ci reset <pr>` (also busmon's `/ci reset`). A failure the base shares
-  holds the PR and wakes master (or the service's `--escalate-to` agent) once. `ci.loop` is on by
-  default. It works on GitHub with `gh` only, once the dispatch service runs this build.
+- The CI loop: when a PR's checks fail, the dispatch service wakes its author with the failing
+  checks and master gets a copy; after 3 hand-offs (`ci.max_handoffs`) it stops and tells the
+  person, and `agentbus ci reset <pr>` (or busmon's `/ci reset`) gives more tries. On by default
+  (`ci.loop`), GitHub with `gh`, once the dispatch service runs this build.
 - busmon: the Tokens sparklines follow `display.graphs` (`auto`, `block`, `braille`, `ascii`); the
   light theme paints its background and keeps a minimum contrast; tcell is gone, with the same look.
 - Files are written atomically (lifecycle, quota, `config.toml`, busmon's cache). The service's
