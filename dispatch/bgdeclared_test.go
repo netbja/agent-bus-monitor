@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/agentstate"
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // background-work-visible §4b: the agent's declared text holds the /clear
@@ -68,5 +69,22 @@ func TestDeclaredFromTheBus(t *testing.T) {
 	}
 	if _, ok := read("coder"); ok {
 		t.Fatal("a cleared record still read")
+	}
+}
+
+// The escalation counts only for the current session: a mark left from an
+// earlier one does not drop the declaration (foureyes).
+func TestContextEscalatedNow(t *testing.T) {
+	marks := map[string]string{bus.ContextEscalateMark("coder"): "s2"}
+	for _, c := range []struct {
+		rec, snap string
+		want      bool
+	}{{"s2", "", true}, {"", "s2", true}, {"s1", "s1", false}} {
+		if got := contextEscalatedNow(marks, "coder", bus.Handoff{Session: c.rec}, bus.AgentSnapshot{Session: c.snap}); got != c.want {
+			t.Errorf("%+v: %v", c, got)
+		}
+	}
+	if contextEscalatedNow(map[string]string{}, "coder", bus.Handoff{Session: "s2"}, bus.AgentSnapshot{}) {
+		t.Error("no mark read as escalated")
 	}
 }

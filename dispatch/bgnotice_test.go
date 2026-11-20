@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,11 +33,17 @@ func TestBackgroundSkipNoticeOncePerEpisode(t *testing.T) {
 		}
 		return out
 	}
-	w.pass() // the episode opens
+	w.l.cfg.BackgroundNoticeAfter = time.Hour // the threshold not reached: no notice (foureyes K3)
+	w.pass()                                  // the episode opens
 	marks, _ := w.b.QuotaMarks(context.Background())
 	if marks[bus.BgSkipMark("coder", "auto-clear")] == "" {
 		t.Fatalf("no episode mark: %v", marks)
 	}
+	w.pass()
+	if n := notices(); len(n) != 0 {
+		t.Fatalf("a notice before background_notice_after: %+v", n)
+	}
+	w.l.cfg.BackgroundNoticeAfter = time.Millisecond
 	time.Sleep(5 * time.Millisecond)
 	w.pass()
 	n := notices()
@@ -157,4 +164,38 @@ func TestBackgroundSkipEpisodeEndsWhilePaused(t *testing.T) {
 		m, _ := b.QuotaMarks(ctx)
 		return m[bus.BgSkipMark("dev", "auto-clear")] == "" && m[bus.BgSkipNoticeMark("dev", "auto-clear")] == ""
 	})
+}
+
+// A new process is a new episode (foureyes K2): the start mark takes the new
+// pid, the notice mark goes, and no notice fires until the threshold passes
+// again.
+func TestBackgroundSkipEpisodeNewProcess(t *testing.T) {
+	w := newClearWorld(t, true)
+	ctx := context.Background()
+	w.l.cfg.BackgroundNoticeAfter = time.Millisecond
+	bg := judged("running")
+	w.rt.script = func(string, int) Inspection { in := readyIn(); in.Background = bg; return in }
+	w.pass()
+	time.Sleep(5 * time.Millisecond)
+	w.pass() // noticed under the first process
+	marks, _ := w.b.QuotaMarks(ctx)
+	first := marks[bus.BgSkipMark("coder", "auto-clear")]
+	if marks[bus.BgSkipNoticeMark("coder", "auto-clear")] != first || !strings.HasSuffix(first, ":"+strconv.Itoa(testPID)) {
+		t.Fatalf("first episode %q, notice %q", first, marks[bus.BgSkipNoticeMark("coder", "auto-clear")])
+	}
+	// The same skip under another process: bgEpisodes as the pass calls it.
+	w.l.bgPassStart("auto-clear")
+	w.l.bgSkipped("auto-clear", "coder", bg, testPID+1)
+	w.l.cfg.BackgroundNoticeAfter = time.Hour
+	now, _ := w.b.ServerNowMS(ctx)
+	if err := w.l.bgEpisodes(ctx, "auto-clear", marks, now); err != nil {
+		t.Fatal(err)
+	}
+	marks, _ = w.b.QuotaMarks(ctx)
+	if got := marks[bus.BgSkipMark("coder", "auto-clear")]; got == first || !strings.HasSuffix(got, ":"+strconv.Itoa(testPID+1)) {
+		t.Fatalf("new process: start mark %q (was %q)", got, first)
+	}
+	if marks[bus.BgSkipNoticeMark("coder", "auto-clear")] != "" {
+		t.Fatalf("the old episode's notice mark kept: %v", marks)
+	}
 }
