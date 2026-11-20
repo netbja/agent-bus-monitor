@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/termhost"
@@ -38,6 +39,28 @@ type ClearFacts struct {
 	WakeState  string // its wake record's state
 	Marked     bool   // already cleared once for this record's session
 	Inspection Inspection
+	// ContextEscalated: the agent's context episode has escalated (the
+	// context-escalate mark is set): its declared text no longer holds the
+	// /clear, observed work still does (background-work-visible §4b).
+	ContextEscalated bool
+}
+
+// BackgroundSkip is the background work that holds this /clear, or "": the
+// inspection's, without the declared source once the context has escalated.
+func (f ClearFacts) BackgroundSkip() string {
+	in := f.Inspection
+	in.Background = f.background()
+	return in.BackgroundSkip()
+}
+
+// background is the judgement this /clear reads (see BackgroundSkip).
+func (f ClearFacts) background() *agentstate.Judgement {
+	j := f.Inspection.Background
+	if f.ContextEscalated && j != nil {
+		w := j.WithoutDeclared()
+		return &w
+	}
+	return j
 }
 
 // ClearDecision: Clear, or why not; WaitGates when only gates hold it.
@@ -94,7 +117,7 @@ func DecideClear(f ClearFacts) ClearDecision {
 	case in.Busy || !in.Ready:
 		return no("the pane is not ready")
 	}
-	if why := in.BackgroundSkip(); why != "" { // a /clear would lose it (herdr exit 4.3b)
+	if why := f.BackgroundSkip(); why != "" { // a /clear would lose it (herdr exit 4.3b)
 		return no(why)
 	}
 	return ClearDecision{Clear: true}
@@ -153,7 +176,7 @@ func clearWait(agent string) string { return "clear-wait:" + agent }
 
 // clearPass proves the clears in flight, then clears the agents whose
 // declared hand-off passes DecideClear. A lost lease is ErrNotHolder.
-func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot) error {
+func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot) (err error) {
 	l.cleared = map[string]bool{}
 	recs, err := l.b.Handoffs(ctx)
 	if err != nil {
@@ -167,6 +190,12 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 	if err != nil {
 		return err
 	}
+	l.bgPassStart("auto-clear")
+	defer func() { // this pass's skips: the episodes and their notice (background-work-visible §4a)
+		if err == nil {
+			err = l.bgEpisodes(ctx, "auto-clear", marks, now)
+		}
+	}()
 	pending := map[string]bool{}
 	for field, v := range marks {
 		a, ok := strings.CutPrefix(field, "clear:")
@@ -211,7 +240,7 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				return err
 			}
 		}
-		if err := l.tryClear(ctx, a, recs[a], snap, asks, armed); err != nil {
+		if err := l.tryClear(ctx, a, recs[a], snap, asks, armed, marks[bus.ContextEscalateMark(a)] != ""); err != nil {
 			if errors.Is(err, bus.ErrNotHolder) {
 				return err
 			}
@@ -223,8 +252,8 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 
 // tryClear judges one record and, when the rule passes, reserves, re-inspects
 // and types /clear.
-func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus.AgentSnapshot, asks []bus.Ask, armed map[string]string) error {
-	f := ClearFacts{On: true, Record: rec, Snap: snap, Held: l.heldBy(a, &snap)}
+func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus.AgentSnapshot, asks []bus.Ask, armed map[string]string, escalated bool) error {
+	f := ClearFacts{On: true, Record: rec, Snap: snap, Held: l.heldBy(a, &snap), ContextEscalated: escalated}
 	if void, _ := rec.VoidFor(snap, true); void {
 		return nil // no longer a hand-off: nothing to clear, nothing to say
 	}
@@ -250,8 +279,8 @@ func (l *loop) tryClear(ctx context.Context, a string, rec bus.Handoff, snap bus
 	}
 	f.Inspection = l.rt.Inspect(ctx, snap.Pane)
 	d := DecideClear(f)
-	if why := f.Inspection.BackgroundSkip(); why != "" && d.Reason == why {
-		l.backgroundSkip(ctx, a, "auto-clear", why)
+	if why := f.BackgroundSkip(); why != "" && d.Reason == why {
+		l.backgroundSkip(ctx, a, "auto-clear", why, f.background(), snap.PID)
 	}
 	if len(d.WaitGates) > 0 {
 		l.deferClear(a, d.Reason)

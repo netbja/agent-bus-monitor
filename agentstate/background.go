@@ -17,6 +17,10 @@ const (
 	SourceHooks   = "hooks"   // subagent start/stop pairs, agy's Stop field fullyIdle
 	SourceProcess = "process" // the agent's descendants, seen by its host
 	SourceScreen  = "screen"  // a running-tasks list the client shows
+	// SourceDeclared is the agent's own declared record (agentbus background):
+	// always running while it lasts, never authoritative for none
+	// (background-work-visible §4b).
+	SourceDeclared = "declared"
 )
 
 var sources = map[string]bool{SourceHooks: true, SourceProcess: true, SourceScreen: true}
@@ -82,6 +86,7 @@ type Facts struct {
 	Process      *ProcessFacts
 	Hooks        *HookFacts
 	Screen       *string
+	Declared     *string // the agent's declared text, unexpired (nil: none)
 	ExtraHelpers []string
 }
 
@@ -102,6 +107,30 @@ func (s BackgroundState) String() string {
 type Judgement struct {
 	State   BackgroundState
 	running []string
+	source  string     // the first source that said running
+	base    *Judgement // the judgement without the declaration (set only when it counted)
+}
+
+// Source is the source that made the judgement block: hooks, process,
+// screen or declared; "unknown" when no authoritative source was read
+// (background-work-visible §4a); "" when it does not block.
+func (j Judgement) Source() string {
+	switch {
+	case j.State == BackgroundUnknown:
+		return "unknown"
+	case j.State == BackgroundRunning:
+		return j.source
+	}
+	return ""
+}
+
+// WithoutDeclared is the judgement of the other sources alone: what the
+// auto-clear reads once the agent's context episode has escalated (§4b).
+func (j Judgement) WithoutDeclared() Judgement {
+	if j.base != nil {
+		return *j.base
+	}
+	return j
 }
 
 // What lists what runs: `subagent ×2, process 'pytest' 4m`.
@@ -117,13 +146,19 @@ func (j Judgement) Blocks() bool { return j.State != BackgroundNone }
 func (b Background) Judge(f Facts, now time.Time) Judgement {
 	var j Judgement
 	read := map[string]bool{}
+	say := func(src, what string) {
+		if len(j.running) == 0 {
+			j.source = src
+		}
+		j.running = append(j.running, what)
+	}
 	if h := f.Hooks; h != nil {
 		read[SourceHooks] = true
 		if h.Subagents > 0 {
-			j.running = append(j.running, fmt.Sprintf("subagent ×%d", h.Subagents))
+			say(SourceHooks, fmt.Sprintf("subagent ×%d", h.Subagents))
 		}
 		if h.FullyIdle != nil && !*h.FullyIdle {
-			j.running = append(j.running, "background tasks")
+			say(SourceHooks, "background tasks")
 		}
 	}
 	if p := f.Process; p != nil {
@@ -136,13 +171,13 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 			if !pr.Start.IsZero() {
 				what += " " + age(now.Sub(pr.Start))
 			}
-			j.running = append(j.running, what)
+			say(SourceProcess, what)
 		}
 	}
 	if f.Screen != nil { // parseProfile refuses an authoritative screen with no pattern
 		read[SourceScreen] = true
 		if anyMatch(b.Screen, Strip(*f.Screen)) {
-			j.running = append(j.running, "background work on screen")
+			say(SourceScreen, "background work on screen")
 		}
 	}
 	switch {
@@ -157,6 +192,11 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 				j.State = BackgroundUnknown
 			}
 		}
+	}
+	if d := f.Declared; d != nil { // the agent's own words: running while they last (§4b)
+		base := j
+		say(SourceDeclared, "declared: "+clean(*d, 60))
+		j.State, j.base = BackgroundRunning, &base
 	}
 	return j
 }

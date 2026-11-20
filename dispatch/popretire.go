@@ -78,7 +78,7 @@ func PopClosedText(role string, episode int64, handoffReport string) string {
 }
 
 // popRetirePass runs after the pause check (a paused project ends nobody).
-func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnapshot) error {
+func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnapshot) (err error) {
 	c := l.cfg.PopRetire
 	if !c.On {
 		return nil
@@ -92,6 +92,12 @@ func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnap
 	if err != nil {
 		return err
 	}
+	l.bgPassStart("pop-retire")
+	defer func() { // this pass's skips: the episodes and their notice (background-work-visible §4a)
+		if err == nil {
+			err = l.bgEpisodes(ctx, "pop-retire", marks, nowMS)
+		}
+	}()
 	// A mark whose agent is gone (retired and forgotten) is dropped.
 	for field := range marks {
 		if a, ok := strings.CutPrefix(field, "popdone:"); ok {
@@ -142,7 +148,7 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	}
 	done, why := PopDone(f)
 	if bg := f.Pane.BackgroundSkip(); !done && bg != "" && why == bg {
-		l.backgroundSkip(ctx, a, "pop-retire", bg)
+		l.backgroundSkip(ctx, a, "pop-retire", bg, f.Pane.Background, f.Snap.PID)
 	}
 	if !done {
 		l.logOnce("pop-kept:"+a, map[string]any{"agent": a, "action": "pop-kept", "reason": why})
