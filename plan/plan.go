@@ -63,6 +63,9 @@ type Task struct {
 	After   []string `json:"after,omitempty"`
 	Mission string   `json:"mission,omitempty"`
 	Group   string   `json:"group,omitempty"` // a listed group's id, or "" (Other)
+	// Priority is high, low or "" (normal; "normal" in the file reads as "").
+	// NEXT and NOW sort by it; a low task waits in LATER (views-redesign §4).
+	Priority string `json:"priority,omitempty"`
 }
 
 // MergeTask reports whether the task ends with a merge by the person: an
@@ -94,6 +97,11 @@ func Parse(data []byte) (File, error) {
 	}
 	if _, err := dec.Token(); err != io.EOF {
 		return File{}, fmt.Errorf("plan: data after the top-level object")
+	}
+	for i := range f.Tasks { // one spelling of normal: none
+		if f.Tasks[i].Priority == bus.PriorityNormal {
+			f.Tasks[i].Priority = ""
+		}
 	}
 	return f, Validate(f)
 }
@@ -128,6 +136,11 @@ func Validate(f File) error {
 			if n != "" && !validSubject(n) {
 				return fmt.Errorf("plan: task %s: invalid name %q", t.ID, n)
 			}
+		}
+		switch t.Priority {
+		case "", bus.PriorityHigh, bus.PriorityLow:
+		default:
+			return fmt.Errorf("plan: task %s: priority %q is not high, normal or low", t.ID, t.Priority)
 		}
 		if t.Mission != "" {
 			c, id, ok := strings.Cut(t.Mission, "/")
