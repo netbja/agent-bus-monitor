@@ -1,11 +1,13 @@
 # The person's language: master talks to the person in it, the bus stays English
 
-Status: spec, r5, for review (subject `language-setting-spec`). Not built. Base: origin/dev
+Status: spec, r6, for review (subject `language-setting-spec`). Not built. Base: origin/dev
 `77eab8f2`.
 
 r5:
 - reviewer-codex on r4: master never quotes the person's language to another agent;
 - foureyes on r4: the `Invalid` text, the busmon keys `i`/`I`, and a docs guard.
+
+r6 (reviewer-codex on r5): the idea note links the spec without a revision label.
 
 r4 is a rewrite. The person reframed idea 17 on 2026-11-20 (bus thread `1795188144565-0`,
 relayed by master as cmd `1795188170169-0`): "Idea 17 was never about translating busmon." r1 to

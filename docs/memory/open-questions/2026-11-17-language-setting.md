@@ -13,7 +13,7 @@ confidence: unknown
 
 ## Finding/decision
 
-The person's direction (2026-11-20, bus thread `1795188144565-0`; the spec's questions still open): not a translation of busmon. busmon, the CLI, logs and the project stay English. One setting, `person.language` (default `en`), read by master's role skill (the concierge's later): master writes to the person in it, and to every other agent in English, relaying the person's words in English. On the bus, only a message from or to the person may be in that language. Spec: [2026-11-18-language-setting-design](../../superpowers/specs/2026-11-18-language-setting-design.md) (r4).
+The person's direction (2026-11-20, bus thread `1795188144565-0`; the spec's questions still open): not a translation of busmon. busmon, the CLI, logs and the project stay English. One setting, `person.language` (default `en`), read by master's role skill (the concierge's later): master writes to the person in it, and to every other agent in English, relaying the person's words in English. On the bus, only a message from or to the person may be in that language. Spec: [2026-11-18-language-setting-design](../../superpowers/specs/2026-11-18-language-setting-design.md).
 
 ## When it applies
 
