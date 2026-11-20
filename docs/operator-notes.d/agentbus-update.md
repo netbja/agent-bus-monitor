@@ -1,0 +1,22 @@
+- **`agentbus update` installs the latest release, with a snapshot to roll back to (update spec step 1, `update/`).**
+  - **Where it comes from.** The newest `vX.Y.Z` tag on the clone's `origin/main`.
+    - The tag is fetched (`git fetch --tags origin`; never a branch or a working tree).
+    - It is checked out as its own worktree of the clone, `${XDG_DATA_HOME:-~/.local/share}/agentbus/src/<tag>`.
+    - Both binaries are built there. From then on they read that tree, not the clone.
+    - Because the tree is a worktree, later updates need the clone's `.git`. A moved or deleted clone is refused, with the path to put it back to.
+  - **What it refuses.** A `dev`, `-dirty` or diverged build, and a binary not built by setup. Each refusal names `./setup.sh update`.
+  - **Before any change.** A snapshot goes to `<state>/agentbus/updates/<id>/`: both binaries, then a manifest written last.
+  - **Then, in order:**
+    - `agentbus`, then `busmon`;
+    - the `agent-launch` link;
+    - the skills, strict and checked;
+    - `--project <p>`'s `dispatch` and `missions`, which must record the new build within 60 s.
+  - **On any failure** it rolls back by itself.
+  - **What it never touches.** Holders, agents, the broker, `config.toml`, env files and other projects' services, which are listed with their commands.
+  - **Running it.**
+    - `--check` prints the plan only.
+    - `--rollback [<id>]` runs the snapshot's own `bin/agentbus update --restore <id>`.
+    - `--list` shows the snapshots; 3 are kept.
+    - An update killed midway is refused until `--rollback`.
+    - It is the person's command: an agent is refused for everything but `--check` and `--list`.
+    - It writes nothing on the bus: the terminal and `<state>/agentbus/updates/history` hold its record.

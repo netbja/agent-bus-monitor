@@ -14,11 +14,15 @@ import (
 // services it names after an install.
 
 // state is setup.sh's XDG_STATE_HOME, else ~/.local/state.
-func (in *Installer) state() string {
-	if s := in.Getenv("XDG_STATE_HOME"); s != "" {
+func (in *Installer) state() string { return StateDir(in.Getenv) }
+
+// StateDir is XDG_STATE_HOME, else ~/.local/state, on Linux and macOS alike
+// (setup's state; agentbus update keeps its snapshots under it).
+func StateDir(getenv func(string) string) string {
+	if s := getenv("XDG_STATE_HOME"); s != "" {
 		return s
 	}
-	return filepath.Join(in.Getenv("HOME"), ".local", "state")
+	return filepath.Join(getenv("HOME"), ".local", "state")
 }
 
 // backup copies path to path.bak.<stamp> keeping its mode and times (cp -p).

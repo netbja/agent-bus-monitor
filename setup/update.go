@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -52,18 +51,7 @@ func (in *Installer) Update(ctx context.Context) int {
 		// A running agent keeps the skills it loaded at boot: say which changed and how master
 		// finds the agents to tell (agent-bus-master skill, "Skill updates").
 		files, _ := git("diff", "--name-only", fromRev, "HEAD", "--", "skills/")
-		seen := map[string]bool{}
-		var changed []string
-		for _, f := range strings.Split(files, "\n") {
-			parts := strings.SplitN(f, "/", 3)
-			if len(parts) < 2 || seen[parts[1]] {
-				continue
-			}
-			seen[parts[1]] = true
-			changed = append(changed, parts[1])
-		}
-		sort.Strings(changed)
-		if len(changed) > 0 {
+		if changed := SkillsChanged(files); len(changed) > 0 {
 			c := strings.Join(changed, " ")
 			o.Info("skills changed: " + c)
 			o.Info("agents to tell: agentbus roles skill-users " + c + " (then a wake=no directive to re-invoke them)")

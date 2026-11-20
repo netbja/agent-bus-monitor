@@ -108,7 +108,7 @@ func (in *Installer) Uninstall(ctx context.Context, p *Prompter) int {
 
 func (in *Installer) removeSkills(ctx context.Context, ask func(string, bool) bool) {
 	home := SkillsHome(in.Getenv)
-	if _, err := os.Stat(filepath.Join(home, ".git", "agentbus-setup")); err == nil {
+	if SkillsOurs(home) {
 		changes, err := in.R.Run(ctx, Cmd{Name: "git", Args: []string{"-C", home, "status", "--porcelain"}, Stdout: true})
 		if err != nil || len(changes) > 0 {
 			in.O.Warn(home + " has local changes, or git cannot read it: kept")

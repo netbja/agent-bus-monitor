@@ -2,8 +2,10 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -28,6 +30,31 @@ func (in *Installer) CheckPath(path string) {
 	}
 }
 
+// SkillsMarker is the file setup writes into the external skills clone it
+// made: a folder without it is the person's.
+func SkillsMarker(home string) string { return filepath.Join(home, ".git", "agentbus-setup") }
+
+// SkillsOurs: setup made the clone at home.
+func SkillsOurs(home string) bool { _, err := os.Stat(SkillsMarker(home)); return err == nil }
+
+// SkillsChanged are the skills/<name> folders named in a git diff
+// --name-only of skills/, sorted, each once (setup update's hint, and
+// agentbus update's).
+func SkillsChanged(names string) []string {
+	seen := map[string]bool{}
+	var changed []string
+	for _, f := range strings.Split(names, "\n") {
+		parts := strings.SplitN(f, "/", 3)
+		if len(parts) < 2 || seen[parts[1]] {
+			continue
+		}
+		seen[parts[1]] = true
+		changed = append(changed, parts[1])
+	}
+	sort.Strings(changed)
+	return changed
+}
+
 func (in *Installer) skillsRepo() string {
 	if r := in.Getenv("SKILLS_REPO"); r != "" {
 		return r
@@ -37,13 +64,25 @@ func (in *Installer) skillsRepo() string {
 
 // ExternalSkills is setup.sh's external-skills step: mattpocock/skills
 // cloned at its pin into SkillsHome and marked as setup's; a folder setup
-// did not make (no marker) is the person's and left as it is.
+// did not make (no marker) is the person's and left as it is. A failure
+// warns and keeps the clone as it is.
 func (in *Installer) ExternalSkills(ctx context.Context) {
+	if err := in.externalSkills(ctx); err != nil {
+		in.O.Warn(err.Error())
+	}
+}
+
+// ExternalSkillsStrict is ExternalSkills returning its failure instead of a
+// warning (agentbus update rolls back on it, update spec §3.4 step 5); a
+// folder setup did not make is still named and no failure.
+func (in *Installer) ExternalSkillsStrict(ctx context.Context) error { return in.externalSkills(ctx) }
+
+func (in *Installer) externalSkills(ctx context.Context) error {
 	if !in.Opt.InstallSkills {
-		return
+		return nil
 	}
 	home, ref, repo := SkillsHome(in.Getenv), SkillsRef(in.Getenv), in.skillsRepo()
-	mark := filepath.Join(home, ".git", "agentbus-setup")
+	mark := SkillsMarker(home)
 	git := func(args ...string) ([]byte, error) {
 		return in.R.Run(ctx, Cmd{Name: "git", Args: args})
 	}
@@ -63,14 +102,12 @@ func (in *Installer) ExternalSkills(ctx context.Context) {
 		}
 		if err != nil {
 			showTail(in.O.err, log)
-			in.O.Warn("could not update the external skills in " + home + " (kept as they are).")
-			return
+			return errors.New("could not update the external skills in " + home + " (kept as they are).")
 		}
 		if _, err := git("-C", home, "checkout", "--quiet", ref); err != nil {
 			if _, err := git("-C", home, "checkout", "--quiet", "FETCH_HEAD"); err != nil {
 				// setup.sh stops here (set -e); never report a clone that did not move as updated
-				in.O.Warn("could not check out " + ref + " in " + home + " (kept as they are).")
-				return
+				return errors.New("could not check out " + ref + " in " + home + " (kept as they are).")
 			}
 		}
 		in.O.OK("external skills: " + ref + " (" + home + ")")
@@ -79,16 +116,17 @@ func (in *Installer) ExternalSkills(ctx context.Context) {
 		log, err := git("clone", "--quiet", "--depth", "1", "--branch", ref, repo, home)
 		if err != nil {
 			showTail(in.O.err, log)
-			in.O.Warn("could not clone " + repo + " " + ref + ": agents start without wayfinder, to-tickets, to-spec, ...")
-			return
+			return errors.New("could not clone " + repo + " " + ref + ": agents start without wayfinder, to-tickets, to-spec, ...")
 		}
 		_ = os.WriteFile(mark, nil, 0o644)
 		in.O.OK("external skills: cloned " + ref + " into " + home)
 	}
+	return nil
 }
 
 // RoleSkills runs the repository's scripts/link-role-skills.sh, as setup.sh
-// does (through the Runner, its output kept for a failure's tail).
+// does (through the Runner, its output kept for a failure's tail); a failure
+// warns.
 func (in *Installer) RoleSkills(ctx context.Context) {
 	if !in.Opt.InstallSkills {
 		return
@@ -101,11 +139,27 @@ func (in *Installer) RoleSkills(ctx context.Context) {
 	if _, err := os.Stat(script); err != nil {
 		return
 	}
+	if err := in.roleSkills(ctx, script); err != nil {
+		in.O.Warn(err.Error())
+	}
+}
+
+// RoleSkillsStrict is RoleSkills for agentbus update: the tree must hold the
+// script, and a failed link is returned (update spec §3.4 step 5).
+func (in *Installer) RoleSkillsStrict(ctx context.Context) error {
+	script := filepath.Join(in.Repo, "scripts", "link-role-skills.sh")
+	if _, err := os.Stat(script); err != nil {
+		return errors.New("no " + script + ": the role skills cannot be linked")
+	}
+	return in.roleSkills(ctx, script)
+}
+
+func (in *Installer) roleSkills(ctx context.Context, script string) error {
 	in.O.Info("Linking role skills for AI clients...")
-	if log, err := in.R.Run(ctx, Cmd{Name: script}); err != nil {
+	if log, err := in.R.Run(ctx, Cmd{Name: script, Env: in.SkillsEnv}); err != nil {
 		showTail(in.O.err, log)
-		in.O.Warn("Role skills linking failed; re-run scripts/link-role-skills.sh to see the full output.")
-		return
+		return errors.New("Role skills linking failed; re-run scripts/link-role-skills.sh to see the full output.")
 	}
 	in.O.OK("Role skills: linked successfully")
+	return nil
 }

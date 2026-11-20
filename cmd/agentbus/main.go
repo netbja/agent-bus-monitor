@@ -148,6 +148,12 @@ func main() {
 	if len(args) >= 1 && args[0] == "restore" {
 		os.Exit(runRestore(context.Background(), args[1:], explicitProject, realRestoreDeps(host), os.Stdout, os.Stderr))
 	}
+	// update installs the latest release (update spec step 1): the project
+	// whose services restart comes from the command line only, like backup's,
+	// never from the ambient AGENT_BUS_PROJECT.
+	if len(args) >= 1 && args[0] == "update" {
+		os.Exit(runUpdate(context.Background(), args[1:], explicitProject, host, os.Stdout, os.Stderr))
+	}
 	// suspend puts this host's projects to sleep (spec 2026-11-03-suspend-resume):
 	// every project unless one is named on the command line, like backup.
 	if len(args) >= 1 && args[0] == "suspend" {
