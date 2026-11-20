@@ -130,7 +130,8 @@ type threadMsg struct {
 // local logs from disk).
 type servicesMsg struct {
 	facts  svcFacts
-	serial int // the page it refreshes; 0 opens one
+	serial int  // the page it refreshes; 0 opens one
+	once   bool // a read out of the tick chain (after a restart): it schedules no tick
 }
 
 // svcRefreshEvery: while the Services or Redis page is open, its facts are
@@ -190,6 +191,9 @@ func (m *Model) gotServices(msg servicesMsg) tea.Cmd {
 	}
 	p.svc, p.svcBusy, p.dirty = &f, false, true
 	m.refresh()
+	if msg.once {
+		return nil
+	}
 	return svcTick(msg.serial)
 }
 
@@ -848,6 +852,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			p.dirty = true
 			m.refresh()
 			return nil
+		case act == ActServiceRestart:
+			return m.askServiceRestart(p)
 		case (act == ActServiceLog || k.Code == keyEnter) && p.sel == len(svcCardKinds):
 			if k.Code == keyEnter { // Redis has no service log: Enter opens its page
 				return m.redisPageCmd(0)
@@ -1404,6 +1410,8 @@ func (m Model) pageOffers(act Action) bool {
 	case ActPlanStart:
 		_, ok := planStartable(m.snap.planState, p.key)
 		return ok && p.kind == ovPlanTask
+	case ActServiceRestart: // on a service card only: not Redis's (services-restart-buttons §3)
+		return p.kind == ovServices && p.svc != nil && p.sel < len(svcCardKinds)
 	case ActShowAll:
 		return p.kind == ovHealth || p.kind == ovTokens || p.kind == ovServiceLog
 	case ActIdeaAdd, ActIdeaFilter:
