@@ -61,6 +61,10 @@ func (failingTerms) Screen(context.Context, termhost.TermID, int) (termhost.Scre
 	return termhost.Screen{}, nil
 }
 
+func (failingTerms) Processes(context.Context, termhost.TermID) ([]termhost.Proc, error) {
+	return nil, nil
+}
+
 func TestTermViewReportsAFailedRead(t *testing.T) {
 	if v := readTermView(context.Background(), failingTerms{}, "p", "coder", 20); v.err == nil || v.found {
 		t.Fatalf("view %+v", v)

@@ -25,6 +25,7 @@ import (
 type termReader interface {
 	List(ctx context.Context, project string) ([]termhost.Term, error)
 	Screen(ctx context.Context, id termhost.TermID, lines int) (termhost.Screen, error)
+	Processes(ctx context.Context, id termhost.TermID) ([]termhost.Proc, error)
 }
 
 // busmonTerms is the project's holders, the current build's first; nil (no
@@ -65,6 +66,10 @@ type termView struct {
 	// client's prompt, or stuck); set when the page is drawn, from the
 	// snapshot, not by the read. The screen then shows its last lines only.
 	heading string
+	// procs: the program names of the agent's descendants, its own process
+	// left out (background-work-visible Q3): read with the screen, in this
+	// page's memory only, never stored.
+	procs []string
 }
 
 // lastNonBlank is the last n lines of ls that are not blank, in order.
@@ -112,7 +117,15 @@ func readTermView(ctx context.Context, h termReader, project, agent string, rows
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
-	return termView{found: true, lines: lines}
+	var names []string
+	if ps, err := h.Processes(ctx, t.ID); err == nil { // a failed read names nothing; the screen stands
+		for _, p := range ps {
+			if p.PID != t.PID {
+				names = append(names, p.Command)
+			}
+		}
+	}
+	return termView{found: true, lines: lines, procs: names}
 }
 
 // termPreviewLines is the page's Screen section: nothing when the agent has

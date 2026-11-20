@@ -39,7 +39,7 @@ func TestPollReadsTheBackground(t *testing.T) {
 	if got := backgroundText(st.agents["master"], time.Now()); got != GlyphEllipsis+" ?" {
 		t.Fatalf("the row's marker %q", got)
 	}
-	if got := backgroundChip(st.agents, "master"); got != "" {
+	if got := backgroundChip(st.agents, "master", time.Now()); got != "" {
 		t.Fatalf("the header shows a failed read: %q", got)
 	}
 	f.backgroundErr = nil
@@ -79,16 +79,16 @@ func TestHeaderBackgroundChip(t *testing.T) {
 		return &agentState{state: "idle", bg: &bus.Background{Text: text, Since: shellNow}}
 	}
 	agents := map[string]*agentState{"coder": bg("build"), "master": bg("2 checks running"), "foureyes": {state: "idle"}}
-	if got := backgroundChip(agents, "master"); got != GlyphEllipsis+" master: 2 checks running +1" {
+	if got := backgroundChip(agents, "master", shellNow); got != GlyphEllipsis+" master: 2 checks running +1" {
 		t.Errorf("chip %q", got)
 	}
-	if got := backgroundChip(agents, ""); got != GlyphEllipsis+" coder: build +1" { // no pilot: by name
+	if got := backgroundChip(agents, "", shellNow); got != GlyphEllipsis+" coder: build +1" { // no pilot: by name
 		t.Errorf("no pilot %q", got)
 	}
-	if got := backgroundChip(map[string]*agentState{"foureyes": {state: "idle"}}, "master"); got != "" {
+	if got := backgroundChip(map[string]*agentState{"foureyes": {state: "idle"}}, "master", shellNow); got != "" {
 		t.Errorf("none %q", got)
 	}
-	d := headerData{project: "demo", pilot: "master", background: backgroundChip(agents, "master"), now: shellNow, shell: true}
+	d := headerData{project: "demo", pilot: "master", background: backgroundChip(agents, "master", shellNow), now: shellNow, shell: true}
 	wide := ""
 	for _, l := range headerLines(d, 200, TierWide) {
 		wide += l.text() + "\n"

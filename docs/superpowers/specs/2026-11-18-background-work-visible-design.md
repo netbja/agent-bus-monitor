@@ -338,6 +338,12 @@ One PR each, from origin/dev, base dev:
      deleted (which reads as not read, so unknown).
 2. The process source in the observation (`bg_procs`, `bg_oldest`).
 3. busmon: one mark per agent, the page's section, the live process names (§3).
+   - **As built:** the wakeups' mark is `◷`, not `⏰`: busmon draws only single-cell glyphs, and
+     `⏰` is an emoji two cells wide (the glyph test refuses it). `≥` joins the glyph set for
+     `bg ≥1?`.
+   - A hooks reading of none does not hide the process source: a process the tree still sees reads
+     `bg ≥1?`.
+   - The live names leave out only the agent's own process: no client profile lists a helper yet.
 4. The skip notice and the declaration's bound (§4a, §4b):
    - the `bgskip` marks and the notice in `dispatch/`;
    - the declared record as the judgement's `declared` source (`Declared`, wired in

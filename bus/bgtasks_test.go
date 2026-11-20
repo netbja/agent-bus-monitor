@@ -85,3 +85,28 @@ func TestBgTasksRefusesRawText(t *testing.T) {
 		t.Error("a schedule not of cron shape written")
 	}
 }
+
+// busmon reads every agent's record in one round trip (background-work-visible
+// step 3): an absent one is left out, a corrupt one too, an invalid name is
+// never read.
+func TestBgTasksOf(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		b.r.Del(context.Background(), BgTasksKey(b.Project(), "coder"), BgTasksKey(b.Project(), "doc"))
+	})
+	if err := b.WriteBgTasks(ctx, "coder", "Stop", 42, []BgTask{{IDHash: BgIDHash("a"), Type: "shell", Status: "running"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	b.r.Set(ctx, BgTasksKey(b.Project(), "doc"), "{not json", time.Minute)
+	got, err := b.BgTasksOf(ctx, []string{"coder", "doc", "master", "Bad Name"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got["coder"].PID != 42 || len(got["coder"].Tasks) != 1 {
+		t.Fatalf("records %+v", got)
+	}
+	if got, err := b.BgTasksOf(ctx, nil); err != nil || len(got) != 0 {
+		t.Fatalf("no agents: %+v %v", got, err)
+	}
+}

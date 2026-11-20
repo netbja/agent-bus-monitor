@@ -420,7 +420,10 @@ type agentState struct {
 	ctxRaw         string              // UsageSnapshot.Ctx exactly as read
 	ctxFill        *bus.ContextFill    // {p}:context, nil when not published (unknown)
 	bg             *bus.Background     // its background work (progress-line §4), nil when none
-	bgFailed       bool                // the latest read of it failed: the row says "… ?"
+	bgFailed       bool                // the latest read of it, or of bgTasks, failed: the row says "… ?"
+	bgTasks        *bus.BgTasks        // what its hooks said of its background tasks ({p}:bgtasks, background-work-visible step 3), nil when none
+	obsBgProcs     int                 // the observation's active non-helper descendants (bg_procs)
+	obsBgOldest    time.Time           // the oldest one's first sight by the dispatcher (bg_oldest); zero = none
 	registered     bool                // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider       string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
 	client         string              // its client (claude, codex, kimi…), from the launcher
