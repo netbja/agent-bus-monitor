@@ -1364,7 +1364,10 @@ func (m *Model) planStart(p *page) {
 // pageOffers reports whether the reader's top page offers act, for the
 // footer's OnPage keys.
 func (m Model) pageOffers(act Action) bool {
-	if act == ActPriorityUp || act == ActPriorityDown { // the Requests tab's row, or a request's page
+	if act == ActPriorityUp || act == ActPriorityDown { // a plan task (the drawer, its page), the Requests tab's row, or a request's page
+		if _, _, why, ok := m.planPriorityTarget(); ok {
+			return why == ""
+		}
 		_, why := m.priorityTarget()
 		return why == ""
 	}

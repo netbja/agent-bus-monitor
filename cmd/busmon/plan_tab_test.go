@@ -124,6 +124,10 @@ func TestPlanTabNarrowFolds(t *testing.T) {
 	if l := keys(t, m, '5', '6'); strings.Contains(l.grid().plain(), "title hi") { // left and back: folded again
 		t.Fatalf("LATER still open after leaving the tab:\n%s", l.grid().plain())
 	}
+	// The Requests sub-view opened from the tab is no leaving: LATER stays open (foureyes V2).
+	if l := keys(t, m, 'r', kEsc); l.ui.focus != PanelPlan || !strings.Contains(l.grid().plain(), "title hi") {
+		t.Fatalf("r and esc folded LATER (focus %v):\n%s", l.ui.focus, l.grid().plain())
+	}
 	m.lists.plan.Select("fold:done")
 	if m = keys(t, m, kEnter); !strings.Contains(m.grid().plain(), "title d") {
 		t.Fatalf("enter on DONE:\n%s", m.grid().plain())

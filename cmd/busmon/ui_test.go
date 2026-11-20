@@ -68,6 +68,13 @@ func (f *fakeWriter) SetRequestPriority(_ context.Context, task, level, by strin
 	return true, f.fail
 }
 
+func (f *fakeWriter) SetPlanPriority(_ context.Context, task, level, by string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, "plan priority "+task+" "+level+" "+by)
+	return true, f.fail
+}
+
 func (f *fakeWriter) AddIdea(_ context.Context, d bus.IdeaDef) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

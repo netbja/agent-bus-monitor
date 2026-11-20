@@ -333,3 +333,19 @@ func TestDeriveClosedUnacceptedIsNotDelivered(t *testing.T) {
 		t.Fatalf("delivered: %+v", r)
 	}
 }
+
+// views-redesign §4, step 4b: the person's level (the plan facts) is the
+// task's priority, over the file's; their normal clears the file's.
+func TestDerivePriorityFromTheFacts(t *testing.T) {
+	a, b, c := task("a"), task("b"), task("c")
+	b.Priority, c.Priority = bus.PriorityLow, bus.PriorityLow
+	f := File{Plan: "p", Tasks: []Task{a, b, c}}
+	in := ok()
+	in.Facts["a"] = Fact{Priority: bus.PriorityHigh, PriorityBy: "charlie"}
+	in.Facts["b"] = Fact{Priority: bus.PriorityNormal, PriorityBy: "charlie"}
+	for id, want := range map[string]string{"a": bus.PriorityHigh, "b": "", "c": bus.PriorityLow} {
+		if r := derive1(t, f, in, id); r.Task.Priority != want {
+			t.Errorf("%s: priority %q, want %q", id, r.Task.Priority, want)
+		}
+	}
+}

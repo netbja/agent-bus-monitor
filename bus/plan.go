@@ -43,8 +43,9 @@ type PlanFact struct {
 	Done   int64  `json:"done,omitempty"`
 	Note   string `json:"note,omitempty"`
 	At     int64  `json:"at,omitempty"`
-	// Priority (views-redesign §4, step 4b): "high" or "low", absent =
-	// normal, set by the person; it is no progress, so At keeps its time.
+	// Priority (views-redesign §4, step 4b): the person's "high", "normal" or
+	// "low", over the plan file's; absent = the file's. It is no progress, so At
+	// keeps its time.
 	Priority   string `json:"priority,omitempty"`
 	PriorityBy string `json:"priority_by,omitempty"`
 	PriorityAt int64  `json:"priority_at,omitempty"` // Redis TIME, Unix ms
@@ -203,9 +204,10 @@ func (b *Bus) PlanNote(ctx context.Context, task, note string) error {
 	return b.planFact(ctx, task, "note", note)
 }
 
-// SetPlanPriority sets a plan task's level, as the person by: high or low
-// stores priority, priority_by and priority_at (Redis TIME); normal removes
-// all three. The same level as stored writes nothing (changed false). The
+// SetPlanPriority sets a plan task's level, as the person by: priority,
+// priority_by and priority_at (Redis TIME). normal is stored too, so it wins
+// over the plan file's level. The same level as stored writes nothing
+// (changed false). The
 // task's other facts and their time are kept: a priority is no progress. A
 // request sent for the task later starts at this level (RequestBy).
 func (b *Bus) SetPlanPriority(ctx context.Context, task, level, by string) (changed bool, err error) {
@@ -253,11 +255,8 @@ local f = {}
 local old = redis.call('HGET', KEYS[2], ARGV[1])
 if old then f = cjson.decode(old) end
 if ARGV[2] == 'prio' then
-  local cur = f.priority
-  if cur ~= 'high' and cur ~= 'low' then cur = 'normal' end
-  if cur == ARGV[3] then return 0 end
-  if ARGV[3] == 'normal' then f.priority = nil; f.priority_by = nil; f.priority_at = nil
-  else f.priority = ARGV[3]; f.priority_by = ARGV[4]; f.priority_at = now end
+  if f.priority == ARGV[3] then return 0 end
+  f.priority = ARGV[3]; f.priority_by = ARGV[4]; f.priority_at = now
   redis.call('HSET', KEYS[2], ARGV[1], cjson.encode(f))
   return 1
 end

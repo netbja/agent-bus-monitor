@@ -71,9 +71,9 @@ func (m *Model) fillPlanTab(lower int) {
 		l.First()
 	}
 	l.SetFrame(m.lowerTitle(PanelPlan, title), planTabLabel(s.planState, m.layout.Tier))
-	hint := "enter task"
+	hint := "+ - priority " + GlyphNone + " enter task" // the mock-ups' footer
 	if m.layout.Tier == TierWide {
-		hint = "d done " + GlyphNone + " " + hint
+		hint = "+ - priority " + GlyphNone + " d done " + GlyphNone + " enter task"
 	}
 	l.SetFooter(Line{{Text: hint, Role: RoleMuted}})
 }

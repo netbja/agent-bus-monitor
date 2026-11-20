@@ -228,6 +228,8 @@ var configDeny = []string{"Edit(~/.config/agentbus/config.toml)",
 	"Bash(agentbus suspend*)", "Bash(agentbus resume --all*)",
 	// request-priority §4: the plain form only, the command refuses agent callers.
 	"Bash(agentbus request priority*)",
+	// views-redesign §4, step 4b: a plan task's priority, the plain form only.
+	"Bash(agentbus plan priority*)",
 	// projects-admin §5.4: busmon --delete and --reset, every spelling.
 	"Bash(busmon *-delete*)", "Bash(busmon *-d *)", "Bash(busmon *-d=*)", "Bash(busmon -d *)",
 	"Bash(busmon *-reset*)", "Bash(busmon *-r)", "Bash(busmon *-r *)", "Bash(busmon *-r=*)", "Bash(busmon -r*)"}

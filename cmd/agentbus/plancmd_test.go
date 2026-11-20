@@ -15,7 +15,7 @@ import (
 
 const testPlan = `{"plan":"v0.22","goal":"one batch","tasks":[
  {"id":"roles","title":"Specialist roles","owner":"coder","board":"roles-impl"},
- {"id":"release","title":"Tag and install","owner":"person","after":["roles"]}]}`
+ {"id":"release","title":"Tag and install","owner":"person","after":["roles"],"priority":"low"}]}`
 
 // planRepo commits docs/plans/v0.22.json in a fresh repository; it returns
 // the repository and the commit.
@@ -50,7 +50,9 @@ func runPlanT(t *testing.T, b *bus.Bus, repo string, args ...string) (int, strin
 func TestPlanCLI(t *testing.T) {
 	b, r := dialMain(t)
 	ctx := context.Background()
-	t.Cleanup(func() { r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project()), bus.PlanIgnoreKey(b.Project())) })
+	t.Cleanup(func() {
+		r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project()), bus.PlanIgnoreKey(b.Project()))
+	})
 	t.Setenv("HERDR_ENV", "")
 	repo, sha := planRepo(t, testPlan)
 

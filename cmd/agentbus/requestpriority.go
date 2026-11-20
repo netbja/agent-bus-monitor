@@ -27,10 +27,11 @@ var errNothingReady = errors.New("nothing ready")
 
 // refuseAgentForPriority: a priority (what: a request's, a plan task's) is
 // the person's act, as suspend is: an agent's environment or an agent among
-// the ancestors is refused, and so is a check that cannot be made.
-func refuseAgentForPriority(ctx context.Context, d requestCallerDeps, what string) error {
+// the ancestors is refused, and so is a check that cannot be made. where is
+// busmon's place for the same act (+ or - there).
+func refuseAgentForPriority(ctx context.Context, d requestCallerDeps, what, where string) error {
 	if self := d.Getenv("AGENT_BUS_AGENT"); self != "" {
-		return fmt.Errorf("%s is the person's act, not %s's (run it from your own shell, or press + or - in busmon)", what, self)
+		return fmt.Errorf("%s is the person's act, not %s's (run it from your own shell, or press + or - %s in busmon)", what, self, where)
 	}
 	if d.AgentCaller == nil {
 		return nil
@@ -58,7 +59,7 @@ func requestPriority(ctx context.Context, b *bus.Bus, args []string, out io.Writ
 	if !bus.ValidName(as) {
 		return fmt.Errorf("request priority: --as %q is not a valid name", as)
 	}
-	if err := refuseAgentForPriority(ctx, requestDeps, "a request's priority"); err != nil {
+	if err := refuseAgentForPriority(ctx, requestDeps, "a request's priority", "on the request"); err != nil {
 		return err
 	}
 	board, err := b.Board(ctx)

@@ -47,9 +47,18 @@ func TestPlanPriority(t *testing.T) {
 	if changed, err := b.SetPlanPriority(ctx, "a", PriorityNormal, "charlie"); err != nil || !changed {
 		t.Fatalf("back to normal: %v %v", changed, err)
 	}
-	if f, _ := b.PlanFacts(ctx); f["a"].Priority != "" || f["a"].PriorityBy != "" || f["a"].PriorityAt != 0 || f["a"].Note != "a note" {
-		t.Fatalf("normal keeps no priority: %+v", f["a"])
+	// normal is the person's level too: stored, so it wins over the plan file's.
+	if f, _ := b.PlanFacts(ctx); f["a"].Priority != PriorityNormal || f["a"].PriorityBy != "charlie" || f["a"].Note != "a note" {
+		t.Fatalf("normal not stored: %+v", f["a"])
 	}
+	if changed, _ := b.SetPlanPriority(ctx, "a", PriorityNormal, "charlie"); changed {
+		t.Fatal("normal twice changed")
+	}
+	// A task with no level of the person's: normal is a change (it overrides the file).
+	if changed, err := b.SetPlanPriority(ctx, "b", PriorityNormal, "charlie"); err != nil || !changed {
+		t.Fatalf("normal on a task with none: %v %v", changed, err)
+	}
+	b.r.HDel(ctx, PlanFactsKey(b.Project()), "b")
 	// A reload keeps the facts of the tasks still in the plan, priority included.
 	b.SetPlanPriority(ctx, "b", PriorityLow, "charlie")
 	if err := b.LoadPlan(ctx, "p.json", "c2", []byte(`{}`), []string{"b"}); err != nil {
@@ -72,17 +81,22 @@ func TestRequestTakesThePlanTasksPriority(t *testing.T) {
 	file := `{"plan":"v","tasks":[{"id":"t-high","title":"x","owner":"coder"},` +
 		`{"id":"t-file","title":"x","owner":"coder","priority":"low"},` +
 		`{"id":"t-board","title":"x","owner":"coder","board":"other-name"},` +
-		`{"id":"t-none","title":"x","owner":"coder"}]}`
-	if err := b.LoadPlan(ctx, "p.json", "c1", []byte(file), []string{"t-high", "t-file", "t-board", "t-none"}); err != nil {
+		`{"id":"t-none","title":"x","owner":"coder"},` +
+		`{"id":"t-norm","title":"x","owner":"coder","priority":"low"},` +
+		`{"id":"t-idboard","title":"x","owner":"coder","board":"elsewhere","priority":"high"}]}`
+	if err := b.LoadPlan(ctx, "p.json", "c1", []byte(file), []string{"t-high", "t-file", "t-board", "t-none", "t-norm", "t-idboard"}); err != nil {
 		t.Fatal(err)
 	}
 	b.SetPlanPriority(ctx, "t-high", PriorityHigh, "charlie")
 	b.SetPlanPriority(ctx, "t-board", PriorityHigh, "charlie")
+	b.SetPlanPriority(ctx, "t-norm", PriorityNormal, "charlie") // the person's normal over the file's low
 	for _, c := range []struct{ task, want, by string }{
 		{"t-high", PriorityHigh, "charlie"}, // the broker's
 		{"t-file", PriorityLow, ""},         // the file's
 		{"other-name", PriorityHigh, "charlie"},
 		{"t-none", "", ""},
+		{"t-norm", "", ""},    // the person's normal wins over the file's low
+		{"t-idboard", "", ""}, // its id is not its board task: a request on t-idboard is not its (foureyes P8)
 		{"not-in-plan", "", ""},
 	} {
 		if _, err := b.RequestBy(ctx, c.task, "master", "coder", "", "do it", 0, false); err != nil {

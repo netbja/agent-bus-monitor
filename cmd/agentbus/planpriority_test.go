@@ -52,6 +52,20 @@ func TestPlanPriorityCLI(t *testing.T) {
 		!strings.Contains(out, "agentbus request priority roles-impl") {
 		t.Fatalf("low with a request: %d %q", code, out)
 	}
+	// A done request orders nothing: no hint (foureyes P13).
+	if err := b.AcceptRequest(ctx, "roles-impl", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CompleteRequest(ctx, "roles-impl", "coder", "built"); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := runPlanT(t, b, repo, "priority", "roles", "high", "--as", "charlie"); code != 0 || strings.Contains(out, "request priority") {
+		t.Fatalf("a done request got a hint: %d %q", code, out)
+	}
+	// "was" is the level in force: the plan file's when the person set none.
+	if code, out, _ := runPlanT(t, b, repo, "priority", "release", "normal", "--as", "charlie"); code != 0 || out != "release: normal (was low)\n" {
+		t.Fatalf("normal over the file's low: %d %q", code, out)
+	}
 }
 
 // Only a person: an agent is refused before anything is written.
