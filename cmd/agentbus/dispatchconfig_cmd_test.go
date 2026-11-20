@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -44,7 +45,7 @@ func TestDispatchConfigsTakeThePopEndFromDeps(t *testing.T) {
 	d := serviceDispatchDeps(b, "", "", paths, io.Discard)
 	d.PopEnd = svc.end
 	var cfg dispatch.Config
-	h, err := serviceDispatchConfig(d, &cfg)
+	h, err := dispatchsvc.Config(d, &cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +59,7 @@ func TestDispatchConfigsTakeThePopEndFromDeps(t *testing.T) {
 	fg := &popEndProbe{}
 	var fcfg dispatch.Config
 	rt := noRuntime{t}
-	foregroundConfig(dispatchDeps{Bus: b, PopEnd: fg.end}, &fcfg, rt)
+	dispatchsvc.ForegroundConfig(dispatchsvc.Deps{Bus: b, PopEnd: fg.end}, &fcfg, rt)
 	if !fg.called || fcfg.PopRetire.After != 4242*time.Second || fg.rt != dispatch.Runtime(rt) {
 		t.Fatalf("the foreground's pop retire did not come from Deps.PopEnd with its runtime: called %v, after %v", fg.called, fcfg.PopRetire.After)
 	}

@@ -89,7 +89,7 @@ func mentions(e ast.Node, tainted map[string]bool) bool {
 
 func TestNoProfileWriter(t *testing.T) {
 	var found []string
-	for _, dir := range []string{"../../models", "../../dispatch", "../../health", "."} {
+	for _, dir := range []string{"../../models", "../../dispatch", "../../health", "../../internal/dispatchsvc", "."} {
 		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
 		for _, path := range files {
 			if strings.HasSuffix(path, "_test.go") {

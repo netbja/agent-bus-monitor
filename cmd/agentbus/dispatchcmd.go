@@ -10,6 +10,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 )
 
 const dispatchUsage = "usage: dispatch [--horizon D] [--escalate-after D] [--escalate-to NAME] | dispatch --status"
@@ -40,7 +41,7 @@ func runDispatch(ctx context.Context, b *bus.Bus, args []string, rt dispatch.Run
 	if dispatchHostOps != nil && b != nil {
 		cfg.HostOps = dispatchHostOps(b)
 	}
-	foregroundConfig(dispatchDeps{Bus: b, Getenv: os.Getenv, PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
+	dispatchsvc.ForegroundConfig(dispatchsvc.Deps{Bus: b, Getenv: os.Getenv, PopEnd: func(c dispatch.PopRetireConfig, rt dispatch.Runtime) dispatch.PopRetireConfig {
 		return withPopEnd(c, b, rt, os.Getenv)
 	}, Manager: detectedManager()}, &cfg, rt)
 	status := false

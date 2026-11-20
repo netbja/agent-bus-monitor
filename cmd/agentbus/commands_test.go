@@ -141,6 +141,8 @@ func TestEveryFlagLiteralIsInTheTable(t *testing.T) {
 		}
 	}
 	files, _ := filepath.Glob("*.go")
+	svc, _ := filepath.Glob("../../internal/dispatchsvc/*.go") // the dispatch service's runtime, moved from here (dispatchsvc)
+	files = append(files, svc...)
 	for _, path := range files {
 		if strings.HasSuffix(path, "_test.go") {
 			continue

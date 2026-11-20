@@ -14,6 +14,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/mergequeue"
 )
 
@@ -35,7 +36,7 @@ func runMergeQueue(ctx context.Context, b *bus.Bus, self string, args []string, 
 	var rec bus.MergeQueueRecord
 	if live {
 		var ok bool
-		if rec, ok = mergeQueueLive(ctx, b, os.Getenv); !ok {
+		if rec, ok = dispatchsvc.MergeQueueLive(ctx, b, os.Getenv); !ok {
 			fmt.Fprintln(os.Stderr, "merge-queue: no working directory")
 			return 2
 		}

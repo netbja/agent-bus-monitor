@@ -11,6 +11,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -116,7 +117,7 @@ func TestDispatchConfigKnowsThePerson(t *testing.T) {
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
 	var sc dispatch.Config
-	_, err = serviceDispatchConfig(serviceDispatchDeps(b, "", "", paths, io.Discard), &sc)
+	_, err = dispatchsvc.Config(serviceDispatchDeps(b, "", "", paths, io.Discard), &sc)
 	if err != nil {
 		t.Fatal(err)
 	}

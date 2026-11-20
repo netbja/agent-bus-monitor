@@ -1,0 +1,205 @@
+package dispatchsvc
+
+import (
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/notify"
+)
+
+var nfNow = time.Date(2026, 11, 3, 14, 0, 0, 0, time.Local)
+
+func nfMS(d time.Duration) int64 { return nfNow.Add(d).UnixMilli() }
+
+func eventsByKey(evs []notify.Event) map[string]notify.Event {
+	out := map[string]notify.Event{}
+	for _, e := range evs {
+		out[e.Key()] = e
+	}
+	return out
+}
+
+// Every fact the spec names makes its event, once; nothing a person wrote,
+// no report, no warn in hand.
+func TestNotifyEventsFromFacts(t *testing.T) {
+	f := notifyFacts{
+		Asks: []bus.Ask{
+			{ID: "1793-0", From: "master", Title: "Merge PR 281?", State: "open", CreatedAt: nfMS(-time.Hour),
+				Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q1"}}, {AskQuestion: bus.AskQuestion{ID: "q2"}}}},
+			{ID: "1792-0", From: "coder", Title: "closed", CreatedAt: nfMS(-2 * time.Hour), State: "answered"},
+		},
+		Agents: map[string]bus.AgentSnapshot{
+			"coder":    {State: "waiting", Message: "pick a name", TS: nfMS(-10 * time.Minute)},
+			"foureyes": {State: "idle", TS: nfMS(-time.Hour)},
+			"sentinel": {State: "working", PID: 42, TS: nfMS(-time.Hour)},
+			"docs":     {State: "waiting", PID: 43, TS: nfMS(-time.Hour)},
+		},
+		PlanWaiting: []notifyPlanTask{{ID: "plan-view-2", Title: "Merge it"}},
+		Health: map[string]health.Record{
+			"team-stall": {ID: "team-stall", Status: health.Fail, Since: nfMS(-20 * time.Minute), ObservedAt: nfMS(0), Detail: "stall-detail-x"},
+			"disk":       {ID: "disk", Status: health.Fail, Since: nfMS(-time.Hour), ObservedAt: nfMS(0), Detail: "/ 1% free"},
+			"backup":     {ID: "backup", Status: health.Warn, Since: nfMS(-time.Hour), ObservedAt: nfMS(0), Detail: "no archive"},
+			// For you, escalated: the dispatcher's notice rings, never the check's item (context-escalation §5)
+			"context": {ID: "context", Status: health.Warn, Reason: "escalated", Since: nfMS(-time.Hour), ObservedAt: nfMS(0)},
+			"github":  {ID: "github", Status: health.OK, Since: nfMS(-time.Hour), ObservedAt: nfMS(0)},
+		},
+		Notices: []bus.RawEntry{
+			{ID: "1793710000000-0", Fields: map[string]string{"from": "dispatch", "message": "escalation nobody can act on", "for": "person"}},
+			{ID: "1793710000001-0", Fields: map[string]string{"from": "dispatch", "message": "resume"}},
+		},
+		Observed: map[string]bus.Observation{
+			"sentinel": {State: "blocked", PID: 42, Since: nfMS(-5 * time.Minute), At: nfMS(0)},
+			"docs":     {State: "blocked", PID: 43, Since: nfMS(-5 * time.Minute), At: nfMS(0)}, // declares waiting: not a prompt
+		},
+		PromptGrace: 30 * time.Second,
+	}
+	got := eventsByKey(notifyEvents(f, map[string]time.Time{"plan-view-2": nfNow.Add(-3 * time.Minute)}, nfNow))
+	want := []string{
+		"decision|ask:1793-0",
+		"decision|wait:coder|" + itoa64(nfMS(-10*time.Minute)),
+		"decision|wait:docs|" + itoa64(nfMS(-time.Hour)),
+		"decision|plan:plan-view-2",
+		"stall|" + itoa64(nfMS(-20*time.Minute)),
+		"fail|disk|" + itoa64(nfMS(-time.Hour)),
+		"for-you|backup|" + itoa64(nfMS(-time.Hour)),
+		"blocked|1793710000000-0",
+		"prompt|sentinel|42:" + itoa64(nfMS(-5*time.Minute)),
+	}
+	for _, k := range want {
+		if _, ok := got[k]; !ok {
+			t.Errorf("no event %s in %v", k, keys(got))
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("%d events, want %d: %v", len(got), len(want), keys(got))
+	}
+	// team-stall is a stall only, never a second fail line.
+	for k := range got {
+		if strings.HasPrefix(k, "fail|team-stall") {
+			t.Errorf("team-stall also as a fail: %s", k)
+		}
+	}
+	a := got["decision|ask:1793-0"]
+	if !a.At.Equal(time.UnixMilli(nfMS(-time.Hour))) || strings.Contains(a.Line, "Merge") || a.Detail != "Merge PR 281?" {
+		t.Errorf("ask event %+v", a)
+	}
+	if !strings.Contains(a.Line, "master") || !strings.Contains(a.Line, "2 questions") {
+		t.Errorf("ask line %q", a.Line)
+	}
+	if w := got["decision|wait:coder|"+itoa64(nfMS(-10*time.Minute))]; strings.Contains(w.Line, "pick a name") || w.Detail != "pick a name" {
+		t.Errorf("wait event %+v", w)
+	}
+	if p := got["decision|plan:plan-view-2"]; !p.At.Equal(nfNow.Add(-3*time.Minute)) || strings.Contains(p.Line, "Merge it") {
+		t.Errorf("plan event %+v", p)
+	}
+	for _, e := range got { // a summary line carries no free text from an agent
+		for _, s := range []string{"pick a name", "Merge", "1% free", "escalation nobody", "no archive", "stall-detail-x"} {
+			if strings.Contains(e.Line, s) {
+				t.Errorf("%s line %q carries %q", e.Key(), e.Line, s)
+			}
+		}
+	}
+}
+
+// A stale health record is unknown: no event.
+func TestNotifyEventsSkipAStaleRecord(t *testing.T) {
+	f := notifyFacts{Health: map[string]health.Record{
+		"disk": {ID: "disk", Status: health.Fail, Since: nfMS(-48 * time.Hour), ObservedAt: nfMS(-24 * time.Hour)},
+	}}
+	if evs := notifyEvents(f, nil, nfNow); len(evs) != 0 {
+		t.Fatalf("%v", evs)
+	}
+}
+
+// A prompt is an event only past its grace, for the process registered,
+// without an open ask of the agent's own.
+func TestNotifyPromptRules(t *testing.T) {
+	base := func() notifyFacts {
+		return notifyFacts{
+			Agents:      map[string]bus.AgentSnapshot{"coder": {State: "working", PID: 7}},
+			Observed:    map[string]bus.Observation{"coder": {State: "blocked", PID: 7, Since: nfMS(-time.Minute), At: nfMS(0)}},
+			PromptGrace: 30 * time.Second,
+		}
+	}
+	if n := len(notifyEvents(base(), nil, nfNow)); n != 1 {
+		t.Fatalf("a prompt: %d events", n)
+	}
+	young := base()
+	young.Observed["coder"] = bus.Observation{State: "blocked", PID: 7, Since: nfMS(-10 * time.Second), At: nfMS(0)}
+	other := base()
+	other.Observed["coder"] = bus.Observation{State: "blocked", PID: 8, Since: nfMS(-time.Minute), At: nfMS(0)}
+	asking := base()
+	asking.Asks = []bus.Ask{{ID: "1-0", From: "coder", State: "open", Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q"}}}}}
+	off := base()
+	off.PromptGrace = 0
+	for name, f := range map[string]notifyFacts{"young": young, "other pid": other, "asking": asking, "grace off": off} {
+		for _, e := range notifyEvents(f, nil, nfNow) {
+			if e.Kind == "prompt" {
+				t.Errorf("%s: %+v", name, e)
+			}
+		}
+	}
+}
+
+func keys(m map[string]notify.Event) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// foureyes: the stall guard's own notice for the person is the stall itself,
+// never an event of its own: no second line while the stall lasts, and no
+// late buzz about a stall already over once it ends (it stays in the stream).
+func TestNotifyEventsOneLineForAStall(t *testing.T) {
+	stall := map[string]health.Record{"team-stall": {ID: "team-stall", Status: health.Fail, Since: nfMS(-time.Hour), ObservedAt: nfMS(0)}}
+	notice := []bus.RawEntry{{ID: "1793710000000-0", Fields: map[string]string{"from": "dispatch", "for": "person",
+		"message": "Stall guard: the team is idle with work ready (x), and master cannot act (held). Dispatch from busmon, or wait."}}}
+	evs := notifyEvents(notifyFacts{Health: stall, Notices: notice}, nil, nfNow)
+	if len(evs) != 1 || evs[0].Kind != "stall" {
+		t.Fatalf("%v", evs)
+	}
+	if evs := notifyEvents(notifyFacts{Notices: notice}, nil, nfNow); len(evs) != 0 {
+		t.Fatalf("the stall is over: %v", evs)
+	}
+}
+
+// merge-queue §5: one decision event per change waiting for the person's
+// merge, its episode the PR (or branch) and head; never a second one for an
+// item a waiting plan task already announces, nor from the merge-queue
+// check's own warn.
+func TestNotifyEventsMergeQueue(t *testing.T) {
+	head := "f98091be429b220f63dc8b4b2dde3ef7d6d832a5"
+	f := notifyFacts{
+		Merge: []bus.MergeItem{
+			{Number: 309, Title: "request priority", Branch: "feat/rp", Head: head, Subjects: []string{"request-priority"}, ApprovedAt: nfMS(-time.Hour)},
+			{Branch: "feat/local", Head: "1111111111111111111111111111111111111111", Subjects: []string{"local"}, ApprovedAt: nfMS(-time.Hour)},
+			{Number: 311, Title: "in the plan", Branch: "feat/p", Head: "2222222222222222222222222222222222222222", Subjects: []string{"planned"}, ApprovedAt: nfMS(-time.Hour)},
+		},
+		PlanWaiting: []notifyPlanTask{{ID: "p", Title: "Merge it", Subject: "planned"}},
+		Health: map[string]health.Record{
+			"merge-queue": {ID: "merge-queue", Status: health.Warn, Since: nfMS(-time.Hour), ObservedAt: nfMS(0), Detail: "waiting for your merge: #309"},
+		},
+	}
+	evs := notifyEvents(f, map[string]time.Time{"p": nfNow}, nfNow)
+	var got []string
+	for k := range eventsByKey(evs) {
+		got = append(got, k)
+	}
+	sort.Strings(got)
+	want := []string{"decision|merge:309|" + head, "decision|merge:feat/local|1111111111111111111111111111111111111111", "decision|plan:p"}
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+	for _, e := range evs {
+		if e.Episode == "merge:309|"+head && (!strings.Contains(e.Line, "PR 309") || strings.Contains(e.Line, "request priority")) {
+			t.Fatalf("the line must carry no free text: %q", e.Line)
+		}
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/relaunch"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -82,7 +83,7 @@ func realSwapDeps(env []string, project string) swapDeps {
 		Now: time.Now, Sleep: time.Sleep,
 		PIDGone: 15 * time.Second, Proof: 60 * time.Second, Recent: 2 * time.Minute,
 	}
-	if rt, err := dispatchRuntime(project, os.Getenv); err == nil {
+	if rt, err := dispatchsvc.Runtime(project, os.Getenv); err == nil {
 		d.Runtime = rt
 	}
 	return d
