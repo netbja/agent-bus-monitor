@@ -21,7 +21,7 @@ From 2026-11-17:
 - [README and operational guide rewrite](open-questions/2026-11-17-readme-guide-rewrite.md)
 - [Migrating the person's other projects, one by one](open-questions/2026-11-17-project-migration.md)
 - [Braille graphs in the Tokens screen](open-questions/2026-11-17-braille-graphs.md)
-- [Updating from busmon, without setup.sh](open-questions/2026-11-17-busmon-update.md)
+- [Updating from busmon, without setup.sh: the person's `agentbus update` variant (questions open)](open-questions/2026-11-17-busmon-update.md)
 - [The Fable profile's permission mode](open-questions/2026-11-17-fable-permissions.md)
 - [Holder G2: a PTY owner and a restartable core](open-questions/2026-11-17-holder-g2-split.md)
 
