@@ -16,7 +16,7 @@ It aims to stay **small and light on your LLM subscriptions**:
 - **A one-line wake.** One dispatcher types a single fixed line into an agent's terminal when work is waiting for it.
 - **Local readings.** Usage windows and context fill are read from local files.
 
-<p align="center"><img src="docs/assets/busmon.png" alt="busmon showing the fictional acme-shop project: five agents, the activity feed, the task board and the tracked requests" width="900"></p>
+<p align="center"><img src="docs/assets/busmon.png" alt="busmon showing the fictional acme-shop project: five agents, what waits for the person and the activity feed" width="900"></p>
 
 <p align="center"><sub>busmon on a fictional project (<code>acme-shop</code>), seeded by <code>scripts/busmon-demo.sh</code>.</sub></p>
 

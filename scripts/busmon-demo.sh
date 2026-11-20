@@ -165,6 +165,10 @@ announced as complete — unlike the older entries."
 
   # ---- a gate on coder, so the 🔒 badge has something to show
   r HSET "$PROJECT:gate:coder" "pr-42" "foureyes|explain the full field"
+
+  # ---- a computed merge queue, so For you shows what waits for the person
+  r HSET "$PROJECT:mergequeue" source github forge github base main attempted_at "$now" items_at "$now" unapproved 0 \
+    items "[{\"number\":42,\"title\":\"add the delivery counters to the board\",\"branch\":\"pr/delivery-counters\",\"head\":\"4f2a9c1d0e7b\",\"subjects\":[\"pr-delivery-counters\"],\"approvals\":[{\"reviewer\":\"foureyes\",\"at\":$((now - 5 * 60000)),\"message\":\"suite green\"},{\"reviewer\":\"reviewer-codex\",\"at\":$((now - 4 * 60000)),\"message\":\"no findings\"}],\"approved_at\":$((now - 4 * 60000))}]"
 }
 
 # REDIS_URL wins over REDIS_HOST/PORT in bus.Connect, so leaving it set would
@@ -173,6 +177,8 @@ env_for_demo() {
   export REDIS_HOST=127.0.0.1 REDIS_PORT=$PORT REDIS_PASSWORD=$PASS
   unset REDIS_URL || true
   export AGENT_BUS_PROJECT=$PROJECT
+  # a render must never show the identity of the shell that made it
+  export AGENT_BUS_HUMAN=pilot
 }
 
 run() {
