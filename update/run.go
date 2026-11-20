@@ -133,7 +133,9 @@ func Run(ctx context.Context, d Deps, o Options) int {
 	if err := u.apply(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": rolling back")
 		rerr := Rollback(ctx, d, u.dir, u.m, u.restarted)
-		_ = AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: false, Snapshot: id})
+		if herr := AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: false, Snapshot: id}); herr != nil {
+			fmt.Fprintln(d.Err, "agentbus update: the history line cannot be written ("+herr.Error()+"): the next agentbus update names snapshot "+id+" as unfinished")
+		}
 		if rerr != nil {
 			fmt.Fprintln(d.Err, "agentbus update: the rollback failed too: "+rerr.Error())
 			for _, c := range manualCommands(u.dir, u.m) {
@@ -144,7 +146,19 @@ func Run(ctx context.Context, d Deps, o Options) int {
 		d.say("rolled back to %s", d.Version)
 		return 1
 	}
-	_ = AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: true, Snapshot: id})
+	if err := AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: true, Snapshot: id}); err != nil {
+		// unrecorded, the snapshot would read as an interrupted update: no success
+		fmt.Fprintln(d.Err, "agentbus update: the history line cannot be written ("+err.Error()+"): rolling back")
+		if rerr := Rollback(ctx, d, u.dir, u.m, u.restarted); rerr != nil {
+			fmt.Fprintln(d.Err, "agentbus update: the rollback failed too: "+rerr.Error())
+			for _, c := range manualCommands(u.dir, u.m) {
+				fmt.Fprintln(d.Err, "  "+c)
+			}
+			return 1
+		}
+		d.say("rolled back to %s; the next agentbus update names snapshot %s as unfinished until its history can be written", d.Version, id)
+		return 1
+	}
 	d.say("agentbus %s -> %s: installed; snapshot %s (agentbus update --rollback undoes it)", d.Version, rel.Tag, id)
 	if len(changed) > 0 {
 		c := strings.Join(changed, " ")
@@ -538,17 +552,30 @@ func manualCommands(dir string, m Manifest) []string {
 	return out
 }
 
+// heldEnv marks a restore --rollback started while it holds the update lock
+// for the whole sequence (reviewer-codex): the restore then runs under that
+// lock instead of taking its own.
+const heldEnv = "AGENTBUS_UPDATE_LOCK_HELD"
+
 // Restore is agentbus update --restore <id>, run by the binary that wrote
 // the snapshot (--rollback starts it): the rollback of §3.5, then its
-// history line.
+// history line. Started by --rollback (heldEnv), it runs only while that
+// lock is held; on its own, it takes the lock.
 func Restore(ctx context.Context, d Deps, id string) int {
 	updates := d.updates()
 	unlock, err := Lock(updates)
-	if err != nil {
+	switch {
+	case d.Getenv(heldEnv) != "" && errors.Is(err, ErrLocked): // --rollback holds it
+	case d.Getenv(heldEnv) != "" && err == nil:
+		unlock()
+		fmt.Fprintln(d.Err, "agentbus update: a restore for --rollback, but the update lock is not held: run agentbus update --rollback")
+		return 1
+	case err != nil:
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error())
 		return 1
+	default:
+		defer unlock()
 	}
-	defer unlock()
 	dir := filepath.Join(updates, id)
 	m, err := ReadManifest(dir)
 	if err != nil {
@@ -556,7 +583,9 @@ func Restore(ctx context.Context, d Deps, id string) int {
 		return 1
 	}
 	err = Rollback(ctx, d, dir, m, m.Services)
-	_ = AppendHistory(updates, HistoryLine{Kind: "rollback", From: m.To, To: m.From, At: d.Now().Format(time.RFC3339), OK: err == nil, Snapshot: id})
+	if herr := AppendHistory(updates, HistoryLine{Kind: "rollback", From: m.To, To: m.From, At: d.Now().Format(time.RFC3339), OK: err == nil, Snapshot: id}); herr != nil {
+		fmt.Fprintln(d.Err, "agentbus update: the history line cannot be written: "+herr.Error())
+	}
 	if err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: the rollback failed: "+err.Error())
 		for _, c := range manualCommands(dir, m) {
@@ -573,6 +602,12 @@ func Restore(ctx context.Context, d Deps, id string) int {
 // bin/agentbus (update --restore), stopping at the first that fails.
 func RollbackTo(ctx context.Context, d Deps, id string, yes bool) int {
 	updates := d.updates()
+	unlock, err := Lock(updates) // held across every restore: no update runs between two
+	if err != nil {
+		fmt.Fprintln(d.Err, "agentbus update: "+err.Error())
+		return 1
+	}
+	defer unlock()
 	ids := Snapshots(updates)
 	if len(ids) == 0 {
 		fmt.Fprintln(d.Err, "agentbus update: no snapshot to roll back to")
@@ -615,7 +650,7 @@ func RollbackTo(ctx context.Context, d Deps, id string, yes bool) int {
 		}
 	}
 	for _, s := range todo {
-		out, err := d.R.Run(ctx, setup.Cmd{Name: filepath.Join(updates, s, "bin", "agentbus"), Args: []string{"update", "--restore", s}})
+		out, err := d.R.Run(ctx, setup.Cmd{Name: filepath.Join(updates, s, "bin", "agentbus"), Args: []string{"update", "--restore", s}, Env: []string{heldEnv + "=1"}})
 		if len(out) > 0 {
 			fmt.Fprint(d.Out, string(out))
 		}

@@ -185,7 +185,7 @@ can also undo them.
 | When it fails | What happens |
 |---|---|
 | Steps 0 to 4 | Nothing outside the tree has changed. It says why, and exits 1. |
-| Steps 5 to 7 (including a red service) | **Automatic rollback by the same process,** then it says why. The history line has `ok=false`. |
+| Steps 5 to 7 (including a red service, and a history line that cannot be written: unrecorded, the snapshot would read as an interrupted update) | **Automatic rollback by the same process,** then it says why. The history line has `ok=false`. |
 | The rollback itself fails | It stops and prints the exact manual commands from the manifest: `cp` of each snapshot binary, `ln -sfn` of the `agent-launch` link and of each recorded skill link, the skills clone's `git checkout`, each `service restart`. |
 | The process is killed | The lock goes with it. The snapshot has no history line, so the next `agentbus update` refuses and names `--rollback <id>` (step 0). |
 
@@ -211,8 +211,11 @@ can also undo them.
 
 **`agentbus update --rollback [<id>]`:**
 - It asks the same yes (§2) and applies the same agent refusal.
-- Then it execs `<snapshot>/bin/agentbus update --restore <id>`. The binary that wrote the
+- Then it runs `<snapshot>/bin/agentbus update --restore <id>`. The binary that wrote the
   manifest is the one that reads it.
+- **It holds the update lock across the whole sequence,** so no update runs between two restores.
+  Each restore it starts carries `AGENTBUS_UPDATE_LOCK_HELD=1` and runs under that lock; with the
+  marker and a free lock, a restore refuses. A `--restore` run on its own takes the lock itself.
 - `--restore` runs the steps above.
 - Rolling back to an older snapshot than the last one undoes each later update in turn, newest
   first. It stops at the first that fails.
@@ -339,3 +342,5 @@ The macOS signature check (§6, §7) stays a blocker before the first release th
 - **r4** (the person's answers, relayed by master on 2026-11-20): §9 answered; §3.2 says each tree is a
   worktree of the clone and how the refusal explains a moved or deleted clone; `--project` from the
   command line only (§2); busmon's About row after step 1's PR (§3.6).
+- **r5** (reviewer-codex on the step 1 build): `--rollback` holds the lock across every restore it runs
+  (§3.5); a history line that cannot be written after a success rolls the update back (§3.5's table).

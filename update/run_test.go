@@ -112,6 +112,7 @@ type fakeRun struct {
 	wrongLink bool   // the link script succeeds but links the clone's skill, not the tree's
 	neverOK   string // "<project> <kind>": never records a build
 	restarted []string
+	restore   func(c setup.Cmd) // a snapshot's agentbus update --restore
 }
 
 func (r *fakeRun) LookPath(name string) (string, error) { return "", errors.New("no") }
@@ -129,6 +130,11 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 		return nil, nil
 	case c.Name == "git" && len(c.Args) > 3 && (c.Args[2] == "fetch" || c.Args[2] == "checkout"):
 		return nil, nil // setup's skills clone: fetched and checked out "successfully", never moved
+	case len(c.Args) == 3 && c.Args[0] == "update" && c.Args[1] == "--restore":
+		if r.restore != nil {
+			r.restore(c)
+		}
+		return nil, nil
 	case key == "agentbus version" || key == "busmon --version":
 		return []byte("ok\n"), nil
 	case filepath.Base(c.Name) == "link-role-skills.sh":
@@ -376,4 +382,83 @@ func TestUpdateSkillsCloneOffPinRollsBack(t *testing.T) {
 	if sh(t, home, "rev-parse", "HEAD") != head {
 		t.Fatal("the clone is not back on its recorded HEAD")
 	}
+}
+
+// TestUpdateHistoryUnwritableRollsBack: a success that cannot be recorded is
+// no success (the next update would read it as interrupted): rolled back,
+// exit 1 (reviewer-codex).
+func TestUpdateHistoryUnwritableRollsBack(t *testing.T) {
+	f := newFlow(t)
+	updates := Dir(f.env["XDG_STATE_HOME"])
+	if err := os.MkdirAll(filepath.Join(updates, "history"), 0o700); err != nil { // a directory: no line can be appended
+		t.Fatal(err)
+	}
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 1 {
+		t.Fatalf("exit %d\n%s", code, f.out.String())
+	}
+	if read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" || !strings.Contains(f.errw.String(), "history") {
+		t.Fatalf("not rolled back: %s", f.errw.String())
+	}
+	if strings.Contains(f.out.String(), "installed;") {
+		t.Fatalf("reported a success: %s", f.out.String())
+	}
+}
+
+// TestRollbackHoldsTheLock: --rollback holds the update lock across every
+// restore it runs, so no update runs between two of them; a restore it starts
+// (the marker in its environment) runs under that lock (reviewer-codex).
+func TestRollbackHoldsTheLock(t *testing.T) {
+	f := newFlow(t)
+	updates := Dir(f.env["XDG_STATE_HOME"])
+	for _, id := range []string{"s1", "s2"} {
+		if err := WriteSnapshot(filepath.Join(updates, id), Manifest{BinDir: f.bin, From: "v0.1.0", To: "v0.2.0"}); err != nil {
+			t.Fatal(err)
+		}
+		_ = AppendHistory(updates, HistoryLine{Kind: "update", OK: true, Snapshot: id})
+	}
+	held := 0
+	f.r.restore = func(c setup.Cmd) {
+		if _, err := Lock(updates); errors.Is(err, ErrLocked) {
+			held++
+		}
+		if !slicesContain(c.Env, heldEnv+"=1") {
+			t.Errorf("restore started without the marker: %v", c.Env)
+		}
+	}
+	if code := RollbackTo(context.Background(), f.deps(false), "s1", true); code != 0 {
+		t.Fatalf("exit %d %s", code, f.errw.String())
+	}
+	if held != 2 {
+		t.Fatalf("the lock was held for %d of 2 restores", held)
+	}
+	// a restore started under the marker proceeds while the lock is held,
+	// and refuses when it is not (nobody holds it for it).
+	unlock, err := Lock(updates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := f.deps(false)
+	d.Getenv = func(k string) string {
+		if k == heldEnv {
+			return "1"
+		}
+		return f.env[k]
+	}
+	if code := Restore(context.Background(), d, "s2"); code != 0 {
+		t.Fatalf("restore under the held lock: %d %s", code, f.errw.String())
+	}
+	unlock()
+	f.errw.Reset()
+	if code := Restore(context.Background(), d, "s2"); code != 1 || !strings.Contains(f.errw.String(), "not held") {
+		t.Fatalf("marker with a free lock: %d %s", code, f.errw.String())
+	}
+}
+
+func slicesContain(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
