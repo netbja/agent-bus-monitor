@@ -47,7 +47,11 @@ func planPriority(ctx context.Context, b *bus.Bus, args []string, out io.Writer)
 		_, err = fmt.Fprintf(out, "%s: already %s\n", task, level)
 		return err
 	}
-	if _, err := fmt.Fprintf(out, "%s: %s (was %s)\n", task, level, was); err != nil {
+	line := fmt.Sprintf("%s: %s (was %s)\n", task, level, was)
+	if was == level { // the file's level, now the person's: it holds against a file change
+		line = fmt.Sprintf("%s: %s, now yours (the plan file's too)\n", task, level)
+	}
+	if _, err := fmt.Fprint(out, line); err != nil {
 		return err
 	}
 	// A request already sent for the task keeps its own level: say how to move it.
