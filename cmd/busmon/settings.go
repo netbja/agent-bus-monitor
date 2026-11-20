@@ -22,12 +22,15 @@ type busmonSettings struct {
 	IdleHint    time.Duration // display.idle_hint_after (auto-state; 0 = off)
 	StuckAfter  time.Duration // dispatch.stuck_after (agent-screen-blocked §3; 0 = off)
 	IdleView    time.Duration // display.idle_view_after: the idle view after this long without input (0 = off)
-	Icons       string        // display.icons: off, nerd or agent-font (busmon-icons)
-	Graphs      string        // display.graphs resolved: block, braille or ascii; "" draws blocks (braille-sparklines)
-	AtPath      string        // compose.at_path: absolute or relative (compose-at-file §5)
-	WorkLayout  string        // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
-	DateFormat  string        // display.date_format: relative, iso or clock12 (quota settings §2.3)
-	NoFollow    bool          // display.follow off: Activity never scrolls by itself (palette spec §8.3); the zero value is the default, on
+	// board.no_accept_after and no_reply_after: the Board's alerts on a late
+	// tracked request (views-redesign §3; 0 = off)
+	NoAcceptAfter, NoReplyAfter time.Duration
+	Icons                       string // display.icons: off, nerd or agent-font (busmon-icons)
+	Graphs                      string // display.graphs resolved: block, braille or ascii; "" draws blocks (braille-sparklines)
+	AtPath                      string // compose.at_path: absolute or relative (compose-at-file §5)
+	WorkLayout                  string // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
+	DateFormat                  string // display.date_format: relative, iso or clock12 (quota settings §2.3)
+	NoFollow                    bool   // display.follow off: Activity never scrolls by itself (palette spec §8.3); the zero value is the default, on
 	// projects.delete_files and delete_backups: what a delete also removes
 	// from disk (projects-admin §5.5)
 	DeleteFiles, DeleteBackups bool
@@ -57,7 +60,8 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		PopupAfter: r.Duration("waiting.popup_after"), Snooze: r.Duration("waiting.snooze"),
 		Bell: r.Bool("waiting.bell"), Fade: r.Bool("waiting.fade"), AutoAfter: r.Duration("recap.auto_after"),
 		Limit: r.Int("display.limit"), UpdateCheck: r.Bool("updates.check"), IdleHint: r.Duration("display.idle_hint_after"), StuckAfter: r.Duration("dispatch.stuck_after"),
-		IdleView:    r.Duration("display.idle_view_after"),
+		IdleView:      r.Duration("display.idle_view_after"),
+		NoAcceptAfter: r.Duration("board.no_accept_after"), NoReplyAfter: r.Duration("board.no_reply_after"),
 		Icons:       r.String("display.icons"),
 		Graphs:      graphsStyle(r.String("display.graphs"), getenv),
 		AtPath:      r.String("compose.at_path"),

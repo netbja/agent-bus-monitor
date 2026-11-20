@@ -196,6 +196,10 @@ var Keys = []*Key{
 	// calm screen after this long without input; 0 (the default) is off.
 	{Name: "display.idle_view_after", Env: "AGENT_BUS_IDLE_VIEW_AFTER", Kind: Duration, Default: time.Duration(0), ReadBy: "busmon",
 		env: envIdleView, file: fileIdleView},
+	// The Board's alerts (views-redesign §3): a tracked request not accepted
+	// this long after it was sent, or accepted with no reply this long; 0 off.
+	{Name: "board.no_accept_after", Kind: Duration, Default: 30 * time.Minute, ReadBy: "busmon", file: fileDuration(true)},
+	{Name: "board.no_reply_after", Kind: Duration, Default: 2 * time.Hour, ReadBy: "busmon", file: fileDuration(true)},
 	{Name: "identity.as", Env: "AGENT_BUS_HUMAN", Kind: String, Default: "", ReadBy: "busmon, agentbus identity, ask, plugin", Legacy: true,
 		Flag: "busmon --as", Invalid: "busmon refuses to start",
 		env: func(raw string) (any, envResult) {

@@ -11,10 +11,10 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 35 default ──── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 37 default ──── esc back ─╮
 │  focus: keys · ← or tab: the tabs                                            ▲
 │  Display   Attention   Identity   Notifications   Services   Backup  …       ┃
-│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ┃
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │  Display  how busmon looks; theme, icons and fade apply at once              │
 │                                                                              │
 │      Fade and slide                  ● on                                    │

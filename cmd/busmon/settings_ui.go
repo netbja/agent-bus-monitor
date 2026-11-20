@@ -204,6 +204,9 @@ func (m *Model) applySettings(key string) string {
 	case "display.icons": // busmon-icons: drawn from the next frame on
 		cur.Icons = ns.Icons
 		return "icons applied and saved"
+	case "board.no_accept_after", "board.no_reply_after": // views-redesign §3: the next frame's alerts use them
+		cur.NoAcceptAfter, cur.NoReplyAfter = ns.NoAcceptAfter, ns.NoReplyAfter
+		return "applied and saved"
 	case "display.idle_view_after": // idle view §2: counted from the next poll on
 		cur.IdleView = ns.IdleView
 		return "applied and saved"
@@ -1019,6 +1022,8 @@ var settingHelps = map[string]string{
 	"display.graphs":               "the Tokens page's 7-day sparklines (not the gauges): auto is ascii off a UTF-8 locale, else block; braille draws two days per cell",
 	"display.idle_hint_after":      "flags idle? on a working agent whose pane looks ready this long; 0 is off",
 	"display.idle_view_after":      "the screensaver: a calm screen after this long without input; 0 = off",
+	"board.no_accept_after":        "the Board flags a tracked request not accepted this long after it was sent; 0 = off",
+	"board.no_reply_after":         "the Board flags an accepted request with no reply this long; 0 = off",
 	"waiting.fade":                 "fades a waiting agent in and out and slides the gauges (true colour only)",
 	"waiting.popup_after":          "the reminder opens once a decision has waited this long; 0 turns it off",
 	"waiting.snooze":               "how long a dismissed reminder stays away",
