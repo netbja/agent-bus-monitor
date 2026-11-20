@@ -26,20 +26,42 @@ func InstallSkillsMissingOK(m *Manifest, env []string, stdout, stderr io.Writer)
 	return installSkills(m, env, stdout, stderr)
 }
 
-func installSkills(m *Manifest, env []string, stdout, missing io.Writer) error {
+// SkillLink is one role skill's link and the directory it must resolve to.
+type SkillLink struct{ Link, Source string }
+
+// SkillLinks is the plan InstallSkills writes: each role skill's link, in each
+// client's destination, with its source (the repository's skills, else the
+// external collection: skillSources). agentbus update records these links
+// before an update and checks them after (update spec §3.4 step 5).
+func SkillLinks(m *Manifest, env []string) ([]SkillLink, error) {
+	links, err := planSkillLinks(m, env, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SkillLink, len(links))
+	for i, l := range links {
+		out[i] = SkillLink{Link: l.target, Source: l.source}
+	}
+	return out, nil
+}
+
+// planSkillLinks resolves every role's skills to their links, one per
+// destination and name, the last role's source winning in the first one's
+// place. missing != nil skips (and names) a skill no root holds.
+func planSkillLinks(m *Manifest, env []string, missing io.Writer) ([]skillLink, error) {
 	if m == nil {
-		return fmt.Errorf("manifest is required")
+		return nil, fmt.Errorf("manifest is required")
 	}
 	var links []skillLink
 	indices := make(map[string]int)
 	for _, role := range m.roleOrder {
 		profile, err := m.Resolve(role)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		dest, err := skillDestination(profile.Client, env)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		names := profile.Skills
 		if missing != nil {
@@ -47,27 +69,36 @@ func installSkills(m *Manifest, env []string, stdout, missing io.Writer) error {
 		}
 		sources, err := linkSkillSources(names, env)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for i, source := range sources {
 			// Named after the manifest's skill, never after what its directory resolves
 			// to: a symlinked skill must not take another skill's name.
-			target := filepath.Join(dest, names[i])
-			info, err := os.Lstat(target)
-			if err == nil && info.Mode()&os.ModeSymlink == 0 {
-				return fmt.Errorf("refusing to overwrite non-symlink %s", target)
-			}
-			if err != nil && !os.IsNotExist(err) {
-				return err
-			}
-			link := skillLink{target: target, source: source}
-			if index, exists := indices[target]; exists {
+			link := skillLink{target: filepath.Join(dest, names[i]), source: source}
+			if index, exists := indices[link.target]; exists {
 				// Preserve the first insertion position while the last source wins.
 				links[index] = link
 			} else {
-				indices[target] = len(links)
+				indices[link.target] = len(links)
 				links = append(links, link)
 			}
+		}
+	}
+	return links, nil
+}
+
+func installSkills(m *Manifest, env []string, stdout, missing io.Writer) error {
+	links, err := planSkillLinks(m, env, missing)
+	if err != nil {
+		return err
+	}
+	for _, link := range links {
+		info, err := os.Lstat(link.target)
+		if err == nil && info.Mode()&os.ModeSymlink == 0 {
+			return fmt.Errorf("refusing to overwrite non-symlink %s", link.target)
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return err
 		}
 	}
 
