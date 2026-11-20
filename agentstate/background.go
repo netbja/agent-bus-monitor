@@ -172,7 +172,7 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 			say(SourceHooks, fmt.Sprintf("subagent ×%d", h.Subagents))
 		}
 		if h.Tasks > 0 {
-			j.running = append(j.running, fmt.Sprintf("background task ×%d", h.Tasks))
+			say(SourceHooks, fmt.Sprintf("background task ×%d", h.Tasks))
 		}
 		if h.FullyIdle != nil && !*h.FullyIdle {
 			say(SourceHooks, "background tasks")
