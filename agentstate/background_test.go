@@ -172,6 +172,10 @@ func TestJudgeDeclared(t *testing.T) {
 	if j := claude.Judge(Facts{Hooks: &HookFacts{Subagents: 1}, Process: idle}, now); j.Source() != SourceHooks {
 		t.Fatalf("source %q", j.Source())
 	}
+	// Claude's Stop list alone (step 1's tasks, merged before this step).
+	if j := claude.Judge(Facts{Hooks: &HookFacts{Tasks: 2}, Process: idle}, now); j.Source() != SourceHooks {
+		t.Fatalf("tasks source %q", j.Source())
+	}
 	if j := claude.Judge(Facts{}, now); j.Source() != "unknown" {
 		t.Fatalf("unknown source %q", j.Source())
 	}
