@@ -231,7 +231,7 @@ you ask for it with `busmon --delete <project>`, which asks for confirmation fir
 
 ## Next
 
-- [README](../README.md): what each piece does, the first-run notes, and the settings.
-- [Operational guide](OPERATIONAL-GUIDE.md), section 6: a small task and a multi-day change,
-  step by step.
+- [README](../README.md): what each piece does, and the settings.
+- [Operations guide](OPERATIONAL-GUIDE.md): the first-run notes (section 2, "What to expect the first
+  time"), and a small task and a multi-day change step by step (section 3, "Give the team work").
 - `agentbus help <command>`: the usage, flags and examples of every command.

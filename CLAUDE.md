@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A self-contained multi-agent coordination bus over **Redis Streams**, plus the Go tooling around it.
 One Go module (`github.com/netbja/agent-bus-monitor`, Go 1.26) holds the broker config, the shared
 `bus` package, the `dispatch` package (the wake dispatcher), and two `cmd/` binaries. Nothing
-depends on any other project. See `README.md` for the user-facing reference (panes, stream
-tables, deployment topology, SSH tunneling).
+depends on any other project. See `README.md` for the user-facing reference (install, starting a
+team, busmon, settings, SSH tunneling) and `docs/architecture.md` for the stream tables.
 
 ## Shared memory — read it before you start
 
