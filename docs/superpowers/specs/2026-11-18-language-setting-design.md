@@ -1,7 +1,11 @@
 # The person's language: master talks to the person in it, the bus stays English
 
-Status: spec, r4, for review (subject `language-setting-spec`). Not built. Base: origin/dev
+Status: spec, r5, for review (subject `language-setting-spec`). Not built. Base: origin/dev
 `77eab8f2`.
+
+r5:
+- reviewer-codex on r4: master never quotes the person's language to another agent;
+- foureyes on r4: the `Invalid` text, the busmon keys `i`/`I`, and a docs guard.
 
 r4 is a rewrite. The person reframed idea 17 on 2026-11-20 (bus thread `1795188144565-0`,
 relayed by master as cmd `1795188170169-0`): "Idea 17 was never about translating busmon." r1 to
@@ -26,6 +30,8 @@ Nothing else changes language:
   - `Kind: String`;
   - env `AGENT_BUS_PERSON_LANGUAGE`, through `config.EnvName`;
   - `ReadBy: "master's role skill (agentbus config)"`;
+  - `Invalid: "master writes English"`. `config_test.go` requires an `Invalid` text on every row
+    whose env rule can refuse a value;
   - in the Identity group, beside `identity.as` (`config/group.go`), so busmon's settings page
     (Shift+C) shows and edits it with no new code.
 - **Validation:** a value that is not two lowercase letters is refused by the env rule
@@ -46,8 +52,8 @@ Nothing else changes language:
 - **To every other agent: English.** This covers directives, requests, replies, challenges,
   verdicts and status messages.
 - **Relaying the person's words.** When master passes on what the person said or decided, it
-  writes it in English: a summary in its own words, or a translation of the exact words. A quote
-  kept in the person's language is marked as a quote and followed by its English.
+  writes it in English only: a summary in its own words, or a translation of the exact words.
+  It never quotes the person's language to another agent.
   - The thread's root entry keeps the person's original. An agent that wants the exact words reads
     the thread, and master's English is what it acts on.
 - **The person writes to master in any language.** Master answers in `person.language`, whatever
@@ -65,7 +71,8 @@ Nothing else changes language:
     (§5).
 - **The exception:** a message from the person, or addressed to the person, may be in
   `person.language`. That covers:
-  - what the person types in busmon (the `I` input, the compose window, an ask's free answer);
+  - what the person types in busmon (the input line `i`, the compose window `I`, an ask's free
+    answer);
   - master's reports and asks to the person;
   - what the notification targets carry to the person (ntfy, Discord). Those carry reports
     addressed to the person. They never translate a text, and their own words (the dispatcher's
@@ -101,6 +108,8 @@ Nothing else changes language:
   - an unset key reads `en`.
   These are the same shape as `config/follow_test.go`.
 - **No behaviour test:** no Go code reads the value.
+- **A docs guard:** a test that master's skill names `person.language`, which pins the one reader
+  `ReadBy` claims.
 - **Docs:** `go run ./cmd/agentbus mem check` and the scrub test, as for every docs change.
 - **Live check, once built:** the person sets `person.language = fr`, then relaunches master.
   - master answers a busmon message in French;
