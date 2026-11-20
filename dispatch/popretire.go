@@ -80,8 +80,8 @@ func PopClosedText(role string, episode int64, handoffReport string) string {
 // popRetirePass runs after the pause check (a paused project ends nobody).
 func (l *loop) popRetirePass(ctx context.Context, snaps map[string]bus.AgentSnapshot) (err error) {
 	c := l.cfg.PopRetire
-	if !c.On {
-		return nil
+	if !c.On { // no pass, no skip: an open episode ends (reviewer-codex)
+		return l.bgEndEpisodes(ctx, "pop-retire")
 	}
 	nowMS, err := l.b.ServerNowMS(ctx)
 	if err != nil {

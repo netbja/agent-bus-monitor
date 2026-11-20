@@ -49,6 +49,23 @@ func (l *loop) bgPassStart(action string) {
 	}
 }
 
+// bgEndEpisodes ends every open episode of actions: their pass does not run
+// (the action off, the project paused), so nothing is skipped and no time
+// may count toward a notice. A read finding no mark writes nothing.
+func (l *loop) bgEndEpisodes(ctx context.Context, actions ...string) error {
+	marks, err := l.b.QuotaMarks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, a := range actions {
+		l.bgPassStart(a)
+		if err := l.bgEpisodes(ctx, a, marks, 0); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // bgEpisodes ends the episodes of action this pass did not skip, opens the new
 // ones, and tells the escalation target of those that lasted. marks is
 // {p}:quota as the pass read it, nowMS the pass's Redis TIME.
