@@ -35,6 +35,10 @@ type MergeItem struct {
 	Subjects   []string        `json:"subjects"`
 	Approvals  []MergeApproval `json:"approvals"`
 	ApprovedAt int64           `json:"approved_at"` // Unix ms of the deciding approve
+	// CIRed are the failing checks of the PR's head, sorted by name (the
+	// "CI red" mark, ci-loop §8 Q8): empty when none failed, and when the
+	// checks were not read (ci.loop off, a cut rollup, the git fallback).
+	CIRed []string `json:"ci_red,omitempty"`
 }
 
 // MergeConflict is an approved PR the forge reports conflicting with its own

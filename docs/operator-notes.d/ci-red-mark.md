@@ -1,0 +1,7 @@
+- **`agentbus merge-queue` marks an approved PR whose head's checks are red (ci-red-mark, ci-loop spec §8 Q8).**
+  - **The data.** It comes from the rollup the pass's `gh pr list` already reads, so there is no new `gh` call.
+  - **The rule.** A failed entry, taking each name's latest, under the loop's §2 rule. A PR is marked even while another check still runs.
+  - **The display.** The row gets `CI red: <checks>`, naming at most 10 then "and N more". With `--json`, the item gets `ci_red`, the sorted names.
+  - **No mark is not "green".** There is no mark when `ci.loop` is off (the rollup is not read), when the rollup is cut (100 checks or more), or under the git fallback (GitLab, Bitbucket, local).
+  - **The base is not consulted.** A red base shows as red on its PRs too.
+  - **busmon** does not show the mark yet.
