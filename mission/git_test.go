@@ -184,9 +184,10 @@ func TestRunTestTimeoutKillsGroup(t *testing.T) {
 	}
 }
 
-// procState is pid's state letter, 0 when it does not exist. /proc where
-// there is one (Linux, where a zombie reads 'Z'); elsewhere a signal 0, which
-// cannot tell a zombie from a running process ('R').
+// procState is pid's state letter, 0 only when signal 0 proves it absent.
+// /proc where there is one (Linux, where a zombie reads 'Z'); otherwise, or
+// when its stat cannot be read, 'R': a zombie that cannot be told from a
+// running process is never read as dead.
 func procState(pid int) byte {
 	if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
 		if i := strings.LastIndexByte(string(b), ')'); i >= 0 && i+2 < len(b) {
@@ -194,12 +195,9 @@ func procState(pid int) byte {
 		}
 	}
 	if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
-		return 0
+		return 0 // proven absent
 	}
-	if _, err := os.Stat("/proc/self"); err == nil {
-		return 0 // /proc exists and holds no such pid: gone
-	}
-	return 'R'
+	return 'R' // it exists and its state is unknown: never read as dead (reviewer-codex)
 }
 
 func TestRunTestTailBounded(t *testing.T) {
