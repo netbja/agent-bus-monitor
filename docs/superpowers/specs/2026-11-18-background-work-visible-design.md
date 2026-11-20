@@ -1,6 +1,9 @@
 # An agent's background work, visible in busmon
 
-Status: spec, r3, for review (subject `background-work-visible-spec`). r3: reviewer-codex
+Status: spec, r4, for review (subject `background-work-visible-spec`). r4: the person's answers
+(2026-11-20, bus thread `1795188144565-0`, relayed by master as cmd `1795188170169-0`): §6 is now
+their decisions, with two additions: the long-skip notice to master (§4a) and the bound on a
+declaration (§4b). r4 is by architect. Base for r4: origin/dev `77eab8f2`. r3: reviewer-codex
 (`agent_type` stored for a sub-agent task; Stop and SubagentStop timing told apart, `at` is the
 event's Redis time), foureyes's step-1 notes (the parent's pid; the status set from a recorded
 payload). r2: foureyes (it starts from
@@ -39,6 +42,13 @@ from origin/dev.
   installs only `SessionStart`, `UserPromptSubmit` and `Stop` (`rolecfg/launch.go`
   `settingsJSON`). So the `hooks` source never says anything. Sub-agents are only filtered out
   of the turn flips (`turnhook.go`: Claude's `agent_id`, Grok's `subagentType`).
+- **Where the code is** (r4). The judgement and the skips are in `dispatch/`:
+  - `HostRuntime.background` (`dispatch/hostruntime.go:217`);
+  - `Inspection.BackgroundSkip` (`dispatch/decide.go:43`);
+  - the skip event, `loop.backgroundSkip` (`dispatch/hostevents.go:128`).
+
+  The service that builds `HostRuntime` moved from `cmd/agentbus` to `internal/dispatchsvc` (#643,
+  `internal/dispatchsvc/dispatchhost.go:24`). So step 1 wires `Hooks` there.
 - **Nothing observed reaches busmon** but the skip events. An agent with a 40-minute build in
   the background reads `idle`, unless it declared the build itself.
 
@@ -166,6 +176,61 @@ Its value:
 like the rest): `bg_procs` (the count of active non-helper descendants) and `bg_oldest` (the
 oldest one's start, Redis-clock). No names, no arguments.
 
+## 4a. A skip that lasts: one notice to master (Q4)
+
+**Why.** Background work makes the dispatcher skip an agent's `/clear`, relaunch or drain (4.3b).
+A forgotten task, such as a dev server left running, would hold that skip forever, and silently.
+
+**The episode.** An agent's skip episode starts with the first skip of an action for its
+background work, and its start is stored at that pass's Redis time. It ends at the first pass that
+does not skip that action for that agent:
+- the action ran;
+- it is no longer pending;
+- the work ended;
+- the agent's process changed.
+
+Each pending action (`auto-clear`, `relaunch`, `drain`) has its own episode.
+
+**The notice.** When an episode has lasted `dispatch.background_notice_after`:
+- **What is sent:** one `FencedCmdOnce` to the escalation target (master by default), wake=yes,
+  episode = the episode's start.
+  - The text: `background: <agent>'s <action> has been skipped for <n> h — <source>: <what>. If
+    that work was forgotten (a dev server?), stop it or tell the agent; the dispatcher acts
+    once it ends. See its page in busmon, or agentbus background <agent>.`
+- **The source:** `<source>` is the source that made the judgement block:
+  - `hooks`, `process` or `screen`, from `agentstate.Judgement`;
+  - `declared`, from the agent's own record (§4b);
+  - `unknown`, when no authoritative source was read (fail closed).
+  - `<what>` is `Judgement.What()`, or the declared text. Neither is a command or arguments.
+- **Once per episode.** A dispatcher restart does not repeat it: the episode's start and the
+  notice are marks in the same fenced script as the other dispatcher marks
+  (`bgskip:<agent>:<action>` holds the start; `bgskip-notice:<agent>:<action>` is the once mark).
+  Their name functions go in `bus/context.go`'s style, beside the context marks.
+  The episode's end deletes both.
+- **Master's own skip:** when the agent is the escalation target itself, the notice is sent
+  wake=no (it is not woken for its own forgotten task), and busmon shows it as today's notices.
+- **No desktop alert, and no notification to the person** (the person's Q4).
+
+**The setting:** `dispatch.background_notice_after`.
+- In the registry (`config/keys.go`): Duration, default `2h`, `0` = off, `ReadBy: "dispatch"`,
+  in the Health group.
+- Its env name is `AGENT_BUS_BACKGROUND_NOTICE_AFTER`.
+
+## 4b. The declared text holds the skip, within a bound (Q7)
+
+- **The declaration counts.** The agent's declared record (`{p}:background:<agent>`, not
+  expired) makes `BackgroundSkip` skip the agent, as observed work does, with source `declared`.
+  - Its expiry bounds it: 30 minutes by default, 24 hours at most.
+- **Context escalation keeps priority.** A declaration never holds off the `/clear` after a
+  declared hand-off while the agent's context episode has escalated (context-escalation §2 step 2:
+  the `context-escalate:<agent>` mark, `bus.ContextEscalateMark` (`bus/context.go:124`), is set for
+  the current episode).
+  - There, the declaration is ignored for `auto-clear` only. Observed work (`hooks`, `process`,
+    `screen`) still skips, as 4.3b says, since a `/clear` would cut running work.
+  - A declaration of up to 24 h can never let an agent's context overflow.
+- **Relaunch and drain** honour the declaration with no such exception: neither empties a context
+  that is filling.
+
 ## 5. Tests first, per step
 
 1. **Hooks (step 1):**
@@ -187,33 +252,37 @@ oldest one's start, Redis-clock). No names, no arguments.
    - crons on the page only;
    - the page's live process names, read only while the page is open;
    - stale entries (past their hour, or another pid) not shown.
+4. **Skip notice and the declaration (step 4):**
+   - **The notice:**
+     - an `auto-clear` skipped for `background_notice_after` sends one notice to the escalation
+       target, wake=yes, naming the agent, the action and the source;
+     - a dispatcher restart in the middle sends no second one;
+     - the action running, or the work ending, ends the episode and deletes both marks, so a new
+       episode can notice again;
+     - `0` sends none;
+     - for the escalation target itself, the notice is wake=no.
+   - **The declaration:**
+     - a declared, unexpired record skips a `/clear`, with source `declared`;
+     - an expired one does not;
+     - with `context-escalate:<agent>` set for the episode, the declaration no longer skips the
+       `/clear`, while a `process` source still does;
+     - relaunch and drain honour the declaration.
 
-## 6. Questions for the person
+## 6. The person's decisions (2026-11-20)
 
-- **Q1.** An agent whose turn has ended but whose background work runs: should it read `idle`
-  with the `bg 2 · 14m` flag beside it, or get its own state word (`idle · bg`, or `waiting
-  on bg`)? Recommended: the flag. The state stays what the agent said, and the flag sits next
-  to it.
-- **Q2.** Scheduled wakeups (`/loop`, `ScheduleWakeup`, `CronCreate`): should they count as
-  background work on the row, or be shown on the page only? Recommended: the page only, with a
-  small `⏰` mark on the row. A wakeup is not running work.
-- **Q3.** On the page, how much of a shell task should show: the program name only (`make`),
-  read live from the holder, or the whole command line, also live and never stored?
-  Recommended: the program name only. Arguments can hold secrets, and the screen and `t`
-  attach show the rest.
-- **Q4.** Should long background work alert anyone (the desktop, master) after some time, say
-  2 hours? Recommended: no alert for now. Show it, and decide after a week of seeing it.
-- **Q5.** For Codex, Grok, Kimi and agy, with only the process tree: show the `bg ≥1?` flag, or
-  nothing until a client's own source is proved? Recommended: show it with its `?`. A process
-  that burns CPU under the agent is a fact worth seeing.
-
-- **Q6.** Item 24's note proposes folding this into idea i2 (sub-agent child rows under the
-  agent). Should the observed tasks become child rows under the agent's row, or stay one mark
-  on the row plus the page's list? Recommended: one mark plus the page for now. Child rows can
-  come later on the same data, without a new source.
-- **Q7.** Should the dispatcher's skip (no `/clear`, relaunch or drain while work runs) also
-  honour the agent's declared text? Recommended: yes. Expiry bounds it (30 minutes by default),
-  and a declaration is the agent saying its work must not be cut.
+- **Q1: the flag beside `idle`.** No new state word. The state stays what the agent said (§3).
+- **Q2: the page only, plus a small `⏰` mark on the row.** Scheduled wakeups are not counted as
+  running work (§3).
+- **Q3: the program name only,** read live from the holder while the page is open, and never
+  stored (§3, §4).
+- **Q4: no desktop alert.** When the dispatcher has skipped a `/clear`, relaunch or drain for
+  about 2 h (a setting), master gets one notice per episode, naming the agent and the source of
+  the skip (§4a). A forgotten task must not block the automaton silently.
+- **Q5: yes,** `bg ≥1?` with its `?` for the process-only clients (§3).
+- **Q6: one mark plus the page for now.** Child rows (idea i2) come later, on the same data.
+- **Q7: yes, the skip honours the declared text, within a bound.** Context escalation keeps
+  priority over a declaration. A declaration (up to 24 h) must never let an agent's context
+  overflow (§4b).
 
 ## 7. Steps
 
@@ -222,6 +291,12 @@ One PR each, from origin/dev, base dev:
 1. Claude's hooks: install `Stop`'s list reading (the existing `Stop` hook reads
    `background_tasks` and `session_crons`) and `SubagentStart`/`SubagentStop`; write
    `{p}:bgtasks:<agent>` as §4 says; wire `HostRuntime.Hooks` from it, so the dispatcher's skip
-   also uses the hooks it was meant to (and the declared record, with Q7's yes).
+   also uses the hooks it was meant to.
 2. The process source in the observation (`bg_procs`, `bg_oldest`).
 3. busmon: one mark per agent, the page's section, the live process names (§3).
+4. The skip notice and the declaration's bound (§4a, §4b):
+   - the `bgskip` marks and the notice in `dispatch/`;
+   - the declared record in `BackgroundSkip`, with the escalation exception for `auto-clear`;
+   - the setting `dispatch.background_notice_after`.
+
+   Step 1's "(and the declared record, with Q7's yes)" moves here, so the bound comes with it.
