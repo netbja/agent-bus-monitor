@@ -134,13 +134,13 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 	case ActNextPanel, ActPrevPanel:
 		m.cyclePanel(act == ActNextPanel)
 	case ActTab1, ActTab2, ActTab3, ActTab4:
-		m.switchTab(int(act - ActTab1))
+		cmd = m.switchTab(int(act - ActTab1))
 	case ActTabNext, ActTabPrev: // the Kanban's are workKanbanKey's
 		m.stepTab(act == ActTabNext)
 	case ActTab5:
-		m.switchTab(4)
+		cmd = m.switchTab(4)
 	case ActTab6:
-		m.switchTab(5)
+		cmd = m.switchTab(5)
 	case ActUp:
 		l.Move(-1)
 	case ActDown:
@@ -456,17 +456,18 @@ func (m *Model) cyclePanel(forward bool) {
 }
 
 // switchTab is a digit: the tabbed panel's tab, or the narrow tier's view.
-func (m *Model) switchTab(n int) {
+func (m *Model) switchTab(n int) tea.Cmd {
 	tabs := lowerTabs
 	if m.layout.Tier == TierNarrow {
 		tabs = narrowPanels
 	}
 	switch {
-	case n == len(tabs): // 4 (6 at the narrow tier): Work, on NEXT (correction 8)
-		m.focusWorkNext()
+	case n == len(tabs): // 4 (6 at the narrow tier): the Plan, as p opens it (views-redesign §4)
+		return m.pushPlan()
 	case n < len(tabs):
 		m.focusTab(tabs[n])
 	}
+	return nil
 }
 
 // stepTab moves the focus to the lower panel's next or previous tab, wrapping

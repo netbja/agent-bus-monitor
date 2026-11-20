@@ -760,7 +760,7 @@ func TestWorkKanbanPillFollowsTheCard(t *testing.T) {
 		}
 		return out
 	}
-	m := keys(t, workShell(t, 130, 40), '4') // Work, its first NEXT card
+	m := workNext(t, workShell(t, 130, 40)) // Work, its first NEXT card
 	c, _ := m.lists.work.kanban.cardPlace(m.lists.work.Selected())
 	if m.ui.workLevel != workAtCards || c != 2 {
 		t.Fatalf("4: level %v card column %d", m.ui.workLevel, c)
