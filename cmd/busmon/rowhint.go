@@ -86,7 +86,7 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 			return "PR", true
 		case has("health:"):
 			return "health", true
-		case has(workIdeaPrefix):
+		case has(workIdeaPrefix), has(workNotePrefix):
 			return "where", true
 		case key == workFoldBetween:
 			return "requests", true

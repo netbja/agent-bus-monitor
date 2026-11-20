@@ -25,6 +25,13 @@ func (m *Model) openWorkRow(key string) tea.Cmd {
 		return m.pushAgent(strings.TrimPrefix(key, workAgentPrefix))
 	case strings.HasPrefix(key, workIdeaPrefix):
 		return m.pushIdea(strings.TrimPrefix(key, workIdeaPrefix))
+	case strings.HasPrefix(key, workNotePrefix): // its triage panel is views-redesign step 5
+		for _, it := range m.work.Ideas {
+			if it.key() == key {
+				m.ui.flash, m.ui.flashErr = "idea note: "+it.Path, false
+			}
+		}
+		return nil
 	case strings.HasPrefix(key, "plan:"):
 		return m.push(page{kind: ovPlanTask, key: strings.TrimPrefix(key, "plan:")})
 	case strings.HasPrefix(key, "req:"), strings.HasPrefix(key, "thr:"):
@@ -63,7 +70,7 @@ func (m *Model) workCopy(key string) (text, what string) {
 		return it.Text, "text"
 	}
 	for _, it := range m.work.Ideas {
-		if workIdeaPrefix+it.ID == key {
+		if it.key() == key {
 			return it.Title, "title"
 		}
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/textfmt"
+	"github.com/netbja/agent-bus-monitor/memory"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -26,9 +27,12 @@ import (
 //   - NEXT: the plan's tasks not started, in file order, the person's tasks
 //     blocked by other tasks among them; then the tracked requests no plan
 //     task names (not in the plan) and not owed by the person (those are YOU).
-//   - IDEAS: the open questions recorded in the repository
-//     (docs/memory/open-questions, status proposed or active) that no plan
-//     task covers; ◇ is theirs alone.
+//   - IDEAS: the ideas still to discuss that no plan task covers, from two
+//     sources: the broker's ideas (agentbus idea, {p}:ideas) to discuss, and
+//     the idea notes of the project's checkout on this machine
+//     (docs/memory/open-questions, status proposed or active, memory.
+//     OpenQuestions; views-redesign §7 step 1), a note a broker idea already
+//     stands for shown once; ◇ is theirs alone.
 //   - TEAM: one row per agent at work (working, or holding a task or a
 //     review gate), with its task in hand, the gates it holds as a reviewer,
 //     and the reviewers of its own work; the free agents (idle, done) on one
@@ -72,9 +76,19 @@ type teamGate struct {
 	Since        time.Time
 }
 
-// workIdea is a row of IDEAS: an idea still to discuss.
+// workIdea is a row of IDEAS: an idea still to discuss, the broker's (By
+// set) or a note of the repository (Path set).
 type workIdea struct {
 	ID, Title, By string
+	Path          string // a note's path, relative to the checkout; "" for a broker idea
+}
+
+// key is the row's key: a note's and a broker idea's ids may be the same.
+func (i workIdea) key() string {
+	if i.Path != "" {
+		return workNotePrefix + i.ID
+	}
+	return workIdeaPrefix + i.ID
 }
 
 // workModel is the computed page.
@@ -85,6 +99,7 @@ type workModel struct {
 	Next     []workItem
 	Ideas    []workIdea
 	IdeasErr bool // the ideas could not be read: the page says so, never "none"
+	NotesErr bool // the idea notes could not be read: said the same way
 	Between  int  // threads between agents nobody waits on the person for
 	Done     int  // plan tasks done
 	Planned  bool // a plan is loaded
@@ -117,6 +132,8 @@ type workInput struct {
 	pilot    string
 	ideas    []bus.Idea
 	ideasErr bool
+	notes    []memory.Question // the checkout's idea notes, none without a checkout
+	notesErr bool
 	now      time.Time
 }
 
@@ -198,8 +215,14 @@ func workOf(in workInput) workModel {
 	w.Team, w.Idle = teamOf(in, links)
 	w.IdeasErr = in.ideasErr
 	for _, it := range in.ideas {
-		if it.State == bus.IdeaToDiscuss && !ideaPlanned(it, in.plan) {
+		if it.State == bus.IdeaToDiscuss && !ideaPlanned(it.ID, it.Title, in.plan) {
 			w.Ideas = append(w.Ideas, workIdea{ID: it.ID, Title: it.Title, By: it.By})
+		}
+	}
+	w.NotesErr = in.notesErr
+	for _, q := range in.notes {
+		if !ideaPlanned(q.ID, q.Title, in.plan) && !noteHasIdea(q, in.ideas) {
+			w.Ideas = append(w.Ideas, workIdea{ID: q.ID, Title: q.Title, Path: q.Path})
 		}
 	}
 	return w
@@ -296,13 +319,26 @@ func ideaKey(s string) string {
 // ideaPlanned says a plan task covers the idea (Q2: an idea never shows
 // twice): a task whose board or id names the idea's id, or whose title,
 // without "Decide:", is the idea's title.
-func ideaPlanned(q bus.Idea, p planState) bool {
+func ideaPlanned(id, title string, p planState) bool {
 	if !p.loaded {
 		return false
 	}
-	key := ideaKey(q.Title)
+	key := ideaKey(title)
 	for _, r := range p.rows {
-		if r.Task.Board == q.ID || r.Task.ID == q.ID || (key != "" && ideaKey(r.Task.Title) == key) {
+		if r.Task.Board == id || r.Task.ID == id || (key != "" && ideaKey(r.Task.Title) == key) {
+			return true
+		}
+	}
+	return false
+}
+
+// noteHasIdea says a broker idea already stands for the note, whatever its
+// state (a decided or dropped idea has been discussed): its id, its title,
+// or its source is the note's path.
+func noteHasIdea(q memory.Question, ideas []bus.Idea) bool {
+	key := ideaKey(q.Title)
+	for _, it := range ideas {
+		if it.ID == q.ID || it.Source == q.Path || (key != "" && ideaKey(it.Title) == key) {
 			return true
 		}
 	}

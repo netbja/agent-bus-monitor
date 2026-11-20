@@ -18,6 +18,7 @@ import (
 const (
 	workAgentPrefix = "agent:"         // a TEAM row: enter opens the agent
 	workIdeaPrefix  = "idea:"          // an IDEAS row: enter says where it lives
+	workNotePrefix  = "note:"          // an IDEAS row from an idea note: enter says its path
 	workFoldBetween = "between-agents" // enter: the Requests list, as a sub-view of Work
 	workFoldDone    = "plan-done"      // enter: the plan's drawer, DONE shown
 	workNextHead    = "head:next"      // NEXT's heading: where key 4 lands when NEXT is empty
@@ -245,6 +246,9 @@ func workRows(w workModel, d workDraw) []ListItem {
 	if w.IdeasErr {
 		add(workHeadPrefix+"ideas-err", Line{{Text: "  the ideas could not be read: the list may be old", Role: RoleAttention}}, false)
 	}
+	if w.NotesErr {
+		add(workHeadPrefix+"notes-err", Line{{Text: "  the idea notes could not be read: the list may be old", Role: RoleAttention}}, false)
+	}
 	for _, it := range w.Ideas {
 		l := Line{noMark, col(GlyphIdea, 2, RoleAccent)}
 		x, fw := l.Width(), 49 // col keeps a space after the title
@@ -252,9 +256,9 @@ func workRows(w workModel, d workDraw) []ListItem {
 			l = append(l, Seg{Text: Preview(it.Title), Role: RoleText})
 			fw = d.width - x
 		} else {
-			l = append(l, col(Preview(it.Title), 50, RoleText), Seg{Text: it.ID + " " + GlyphNone + " by " + it.By, Role: RoleMuted})
+			l = append(l, col(Preview(it.Title), 50, RoleText), Seg{Text: it.ID + " " + GlyphNone + ideaSource(it), Role: RoleMuted})
 		}
-		add(workIdeaPrefix+it.ID, l, true)
+		add(it.key(), l, true)
 		marq(x, fw, Preview(it.Title))
 	}
 
@@ -295,4 +299,13 @@ func (w workModel) itemOf(key string) (workItem, bool) {
 		}
 	}
 	return workItem{}, false
+}
+
+// ideaSource is where an IDEAS row comes from: the broker idea's author, or
+// "note" for an idea note of the repository.
+func ideaSource(it workIdea) string {
+	if it.Path != "" {
+		return " note"
+	}
+	return " by " + it.By
 }

@@ -159,9 +159,17 @@ func workKanban(w workModel, d workDraw) kanbanView {
 		ideas.cards = append(ideas.cards, kanbanCard{lines: []Line{
 			head(noMark, GlyphIdea, RoleAttention, "unread"), title("the ideas could not be read", RoleAttention)}})
 	}
+	if w.NotesErr {
+		ideas.cards = append(ideas.cards, kanbanCard{lines: []Line{
+			head(noMark, GlyphIdea, RoleAttention, "unread"), title("the idea notes could not be read", RoleAttention)}})
+	}
 	for _, it := range w.Ideas {
-		ideas.cards = append(ideas.cards, kanbanCard{key: workIdeaPrefix + it.ID, lines: []Line{
-			head(noMark, GlyphIdea, RoleAccent, "idea", it.ID), title(it.Title, RoleText)}})
+		kind := "idea"
+		if it.Path != "" {
+			kind = "note"
+		}
+		ideas.cards = append(ideas.cards, kanbanCard{key: it.key(), lines: []Line{
+			head(noMark, GlyphIdea, RoleAccent, kind, it.ID), title(it.Title, RoleText)}})
 	}
 	ideas.cards = append(ideas.cards, kanbanCard{key: workFoldBetween, lines: []Line{
 		head(noMark, GlyphDash, RoleMuted, "between agents", fmt.Sprint(w.Between)), title("nobody waits on you (enter)", RoleMuted)}})
