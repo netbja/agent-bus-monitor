@@ -1,0 +1,22 @@
+{
+ "session_id": "0169ef00-7b26-457f-a129-6c5eaa88f855",
+ "transcript_path": "/home/user/.claude/projects/x/transcript.jsonl",
+ "cwd": "/home/user/proj",
+ "prompt_id": "da3a4487-9da7-4bb2-809c-6a8a41659289",
+ "permission_mode": "bypassPermissions",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "Stop",
+ "stop_hook_active": false,
+ "last_assistant_message": "ok\n\nThe recurring job is scheduled (ID `c8c37280`, every 30 minutes, prompt \"say hi\"). Next run is Nov 20 at 6:42pm local time. It lives only in this session and auto-expires after 7 days.",
+ "background_tasks": [],
+ "session_crons": [
+  {
+   "id": "c8c37280",
+   "schedule": "*/30 * * * *",
+   "recurring": true,
+   "prompt": "say hi"
+  }
+ ]
+}

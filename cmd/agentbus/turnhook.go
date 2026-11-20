@@ -42,14 +42,32 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 		return 0
 	}
 	var in struct {
-		Event        string `json:"hook_event_name"`
-		SessionID    string `json:"session_id"`
-		Prompt       string `json:"prompt"`
-		AgentID      string `json:"agent_id"`
-		SubagentType string `json:"subagentType"`
+		Event        string      `json:"hook_event_name"`
+		SessionID    string      `json:"session_id"`
+		Prompt       string      `json:"prompt"`
+		AgentID      string      `json:"agent_id"`
+		SubagentType string      `json:"subagentType"`
+		Tasks        *[]hookTask `json:"background_tasks"` // nil: not said (Claude's registry not reachable)
+		Crons        []hookCron  `json:"session_crons"`
 	}
 	raw, _ := io.ReadAll(io.LimitReader(stdin, 1<<20))
-	if json.Unmarshal(raw, &in) != nil || in.AgentID != "" || in.SubagentType != "" {
+	if json.Unmarshal(raw, &in) != nil {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), turnHookBudget)
+	defer cancel()
+	// The background tasks (background-work-visible step 1): a Stop's and a
+	// sub-agent's stop's lists are the agent's own (the parent's, for a
+	// SubagentStop); SessionStart forgets them.
+	if args[0] == "end" {
+		switch {
+		case (in.Event == "Stop" || in.Event == "SubagentStop") && in.Tasks != nil:
+			_ = turnBg(ctx, project, agent, bgReportOf(in.Event, *in.Tasks, in.Crons))
+		case in.Event == "SessionStart":
+			_ = turnBg(ctx, project, agent, bgReport{event: in.Event, drop: true})
+		}
+	}
+	if in.AgentID != "" || in.SubagentType != "" {
 		return 0
 	}
 	state := "idle"
@@ -62,8 +80,6 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 	if args[0] == "end" && in.Event == "SessionStart" && get("AGENT_BUS_CLIENT") == "codex" && bus.ValidSessionID(in.SessionID) {
 		prove(project, agent, in.SessionID) // Claude Code proves through its resume hook instead
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), turnHookBudget)
-	defer cancel()
 	_ = flip(ctx, project, agent, state) // nothing is said: no broker, no proof, or a declared state means no flip
 	return 0
 }

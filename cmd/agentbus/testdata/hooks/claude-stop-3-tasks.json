@@ -1,0 +1,37 @@
+{
+ "session_id": "88df96ff-4c84-4f0a-bcfd-b131cb65fa22",
+ "transcript_path": "/home/user/.claude/projects/x/transcript.jsonl",
+ "cwd": "/home/user/proj",
+ "prompt_id": "1902e8bb-4d3e-4229-8188-7e6f489f65fe",
+ "permission_mode": "bypassPermissions",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "Stop",
+ "stop_hook_active": false,
+ "last_assistant_message": "ok",
+ "background_tasks": [
+  {
+   "id": "bfxqkrpvo",
+   "type": "shell",
+   "status": "running",
+   "description": "Sleep 120 seconds in background",
+   "command": "sleep 120"
+  },
+  {
+   "id": "bvsrx6tyi",
+   "type": "shell",
+   "status": "running",
+   "description": "Sleep 90 seconds in background",
+   "command": "sleep 90"
+  },
+  {
+   "id": "a59ba78e330701ca7",
+   "type": "subagent",
+   "status": "running",
+   "description": "List current directory files",
+   "agent_type": "Explore"
+  }
+ ],
+ "session_crons": []
+}

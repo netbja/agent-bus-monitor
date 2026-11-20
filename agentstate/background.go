@@ -55,6 +55,7 @@ type ProcessFacts struct {
 // subagents running, and agy's fullyIdle from its last Stop (nil: not said).
 type HookFacts struct {
 	Subagents int
+	Tasks     int // the other tasks in flight (shell, monitor…), from Claude's Stop list (background-work-visible step 1)
 	FullyIdle *bool
 }
 
@@ -121,6 +122,9 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 		read[SourceHooks] = true
 		if h.Subagents > 0 {
 			j.running = append(j.running, fmt.Sprintf("subagent ×%d", h.Subagents))
+		}
+		if h.Tasks > 0 {
+			j.running = append(j.running, fmt.Sprintf("background task ×%d", h.Tasks))
 		}
 		if h.FullyIdle != nil && !*h.FullyIdle {
 			j.running = append(j.running, "background tasks")

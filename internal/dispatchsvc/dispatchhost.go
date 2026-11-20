@@ -13,8 +13,9 @@ import (
 // Runtime is the dispatcher's runtime on the project's holder
 // (herdr exit, step 10, spec 4.2-4.3): termhost gives the facts, agentstate
 // judges them. An agent's client is its live terminal's profile, the one the
-// holder started it on; the hooks' subagent facts are not read yet (nil: the
-// background judgement never takes "not read" for "none").
+// holder started it on. Its Hooks are the dispatcher's to set (bgHooks, from
+// the agents' hook records); nil here: the background judgement never takes
+// "not read" for "none".
 func Runtime(project string, getenv func(string) string) (*dispatch.HostRuntime, error) {
 	h, err := holder.NewHost(project, holder.BuildID(), getenv)
 	if err != nil {

@@ -35,10 +35,11 @@ type HostRuntime struct {
 	// Client is an agent's client by its launch profile (roles.toml), "" when
 	// unknown; a client without an agentstate profile is unsupported.
 	Client func(agent string) string
-	// Hooks is what an agent's hooks said of its subagents since its session
-	// started; false (or nil Hooks): not read, which no client whose hooks
-	// are authoritative ever judges as "none".
-	Hooks func(agent string) (agentstate.HookFacts, bool)
+	// Hooks is what an agent's hooks last said of its background work, for
+	// its process pid (a report of another process is not its); false (or nil
+	// Hooks): not read, which no client whose hooks are authoritative ever
+	// judges as "none".
+	Hooks func(agent string, pid int) (agentstate.HookFacts, bool)
 	// ExtraHelpers: the MCP servers the launcher configured for an agent.
 	ExtraHelpers func(agent string) []string
 
@@ -254,7 +255,7 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 		f.Process = pf
 	}
 	if r.Hooks != nil {
-		if h, ok := r.Hooks(t.Name); ok {
+		if h, ok := r.Hooks(t.Name, t.PID); ok {
 			f.Hooks = &h
 		}
 	}

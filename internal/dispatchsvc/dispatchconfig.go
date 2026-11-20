@@ -61,6 +61,7 @@ func Config(d Deps, cfg *dispatch.Config) (*dispatch.HostRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	h.Hooks = bgHooks(b) // the agents' hook records: their background tasks (background-work-visible step 1)
 	cfg.Health = realHealthConfig(b, h, d.Manager, paths, cfg.Clear, target)
 	// The self-repair watcher: shadow passes only (step 6); its check in every mode.
 	repair, repairCfg := serviceSelfRepair(b, os.Getenv, target, d.Boot)
