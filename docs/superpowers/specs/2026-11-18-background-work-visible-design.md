@@ -179,8 +179,8 @@ Its value:
   ids.
 - `type` and `status` are Claude's labels, capped at 32 characters: an unknown `type` (Claude
   falls back to its raw discriminant) is stored as `other`, a status outside the known ones as
-  `other`. The known statuses are fixed from step 1's recorded payload (the reference lists none;
-  at least `running`), and named here then.
+  `other`. The known statuses, from step 1's recorded payload (the reference lists none): `running`
+  only; any other is stored as `other`.
 - A sub-agent's `agent_type` is stored when it matches `[A-Za-z0-9_-]{1,32}` (a built-in or a
   user-defined agent's name), else as `subagent` only: it can be any name the person wrote.
 - `schedule` is a cron expression, accepted only if it matches the five-field shape.
@@ -322,9 +322,16 @@ Each of the dispatcher's two actions (`auto-clear`, `pop-retire`) has its own ep
 One PR each, from origin/dev, base dev:
 
 1. Claude's hooks: install `Stop`'s list reading (the existing `Stop` hook reads
-   `background_tasks` and `session_crons`) and `SubagentStart`/`SubagentStop`; write
-   `{p}:bgtasks:<agent>` as §4 says; wire `HostRuntime.Hooks` from it, so the dispatcher's skip
-   also uses the hooks it was meant to.
+   `background_tasks` and `session_crons`) and `SubagentStop`; write `{p}:bgtasks:<agent>` as §4
+   says; wire `HostRuntime.Hooks` from it, so the dispatcher's skip also uses the hooks it was
+   meant to.
+   - **As built:** `SubagentStart` is not installed: the `Stop` and `SubagentStop` lists already
+     carry every sub-agent in flight, so a start adds nothing that is read.
+   - **The recording** (`cmd/agentbus/testdata/hooks`, Claude Code 2.1.329): a `SubagentStop`'s
+     list still shows the sub-agent that stopped as `running` (same id as the event's `agent_id`);
+     the hook leaves that task out.
+   - An empty list is stored as a reading (`tasks: []`): a hooks reading of none, not a record
+     deleted (which reads as not read, so unknown).
 2. The process source in the observation (`bg_procs`, `bg_oldest`).
 3. busmon: one mark per agent, the page's section, the live process names (§3).
 4. The skip notice and the declaration's bound (§4a, §4b):

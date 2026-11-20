@@ -713,6 +713,9 @@ func settingsJSON(r ToolRules, h claudeHooks) (string, error) {
 	hooks.set("SessionStart", matcher(h.Resume, h.TurnEnd)) // a new session ends a turn left stuck
 	hooks.set("UserPromptSubmit", matcher(h.TurnStart))
 	hooks.set("Stop", matcher(h.TurnEnd))
+	// A sub-agent's stop: a fresher reading of the agent's background tasks
+	// (background-work-visible step 1); the turn hook flips nothing for it.
+	hooks.set("SubagentStop", matcher(h.TurnEnd))
 	root.set("hooks", hooks)
 	return pyJSON(root)
 }

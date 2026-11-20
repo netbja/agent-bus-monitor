@@ -148,7 +148,7 @@ func TestHostRuntimeGone(t *testing.T) {
 // background); an idle helper counts for nothing, an active one runs.
 func TestHostRuntimeJudgesBackgroundWork(t *testing.T) {
 	f := newHostFixture(t)
-	f.rt.Hooks = func(string) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
+	f.rt.Hooks = func(string, int) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
 	p := f.term.PID
 	f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude", CPU: time.Second})
 	if in := f.inspect(); in.Background == nil || in.Background.State != agentstate.BackgroundUnknown {
@@ -238,7 +238,7 @@ func TestHostRuntimeOutputDuringTheReadIsNotSettled(t *testing.T) {
 // while idle; one whose CPU grew past agentstate.helper_cpu of the window is.
 func TestHostRuntimeHelperCountsOnlyWhenActive(t *testing.T) {
 	f := newHostFixture(t)
-	f.rt.Hooks = func(string) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
+	f.rt.Hooks = func(string, int) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
 	f.rt.ExtraHelpers = func(string) []string { return []string{"mcp-server"} }
 	p := f.term.PID
 	at := func(cpu time.Duration) Inspection {

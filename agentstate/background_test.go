@@ -29,6 +29,8 @@ func TestBackgroundJudgement(t *testing.T) {
 	}{
 		{"every authoritative source says none", claude, Facts{Hooks: &HookFacts{}, Process: idleProc}, BackgroundNone, ""},
 		{"a subagent", claude, Facts{Hooks: &HookFacts{Subagents: 2}, Process: idleProc}, BackgroundRunning, "subagent ×2"},
+		{"background tasks, from Stop's list", claude, Facts{Hooks: &HookFacts{Tasks: 2}, Process: idleProc}, BackgroundRunning, "background task ×2"},
+		{"the hooks say none", claude, Facts{Hooks: &HookFacts{}, Process: idleProc}, BackgroundNone, ""},
 		{"a process that is no helper", claude, Facts{Hooks: &HookFacts{}, Process: &ProcessFacts{Window: 10 * time.Second,
 			Procs: []Proc{{Name: "node"}, {Name: "pytest", Start: now.Add(-4 * time.Minute)}}}}, BackgroundRunning, "process 'pytest' 4m"},
 		{"an active helper", claude, Facts{Hooks: &HookFacts{}, Process: &ProcessFacts{Window: 10 * time.Second,
