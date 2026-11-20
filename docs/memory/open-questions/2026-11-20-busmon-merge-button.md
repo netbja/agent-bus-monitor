@@ -34,7 +34,14 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
    that second press.
 2. **The person's own action.**
    - **Who runs it.** busmon runs the command itself, as the person's process, with their own
-     forge login (`gh auth` / `glab auth`). No agent runs it.
+     forge login (`gh auth` / `glab auth`).
+   - **busmon refuses it under an agent.** The action is refused when busmon was started by an
+     agent: the same `agentcaller.Ancestor` check that refuses `--delete` and `--reset`
+     (`refuseDestructive`).
+   - **That check is not a boundary.** As the forge-delivery decision says, it is defence in
+     depth. An agent running as the same local user, with the same `gh` login, could still run
+     `gh pr merge` itself, so the button adds no new power. The real limits are the person's
+     forge login and the forge's own branch protection.
    - **No remote trigger.** Nothing on the bus can trigger the merge: no message, ask or
      directive does.
    - **No new agentbus command.** That would let an agent in a pane run it too.
@@ -51,9 +58,18 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
    - **Fresh check first.** Just before running, busmon re-reads the queue record and the
      verdict ledger. If the item is gone, or its head no longer has both approvals, the button
      is refused with the reason, and nothing runs.
-4. **Only into the project's base.**
-   - **Base check.** The item's base must be `delivery.base` (`dev` here); otherwise the button
-     is refused.
+4. **Only into the project's base, read live.**
+   - **The cache doesn't hold the base.** It does not record a PR's base: `bus.MergeItem` has
+     no base, and the record's `Base` is the configured one.
+   - **A live read first.** So just before the merge, busmon reads the PR from the forge:
+     `gh pr view <n> --repo <owner/name> --json baseRefName,headRefOid,state,isDraft`. It
+     refuses unless all of these hold:
+     - the base is `delivery.base` (`dev` here);
+     - the head is still the approved head;
+     - the PR is open and not a draft.
+   - **A race is left.** `--match-head-commit` binds only the head, and no `gh` flag binds the
+     base. A retarget to another base between the live read and the merge (about a second)
+     would not be caught. Branch protection on `main` is what closes it (question 7).
    - **`main` is never merged here.** Promotions to `main` stay master's fast-forward, on the
      person's yes (the dev-branch-flow decision).
 5. **What is shown and logged.**
@@ -67,6 +83,15 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
    - **Nothing is retried.** The popup stays open with the forge's reason (head moved, conflict,
      a required check, branch protection, no login), and the item stays in the queue.
    - **Head moved.** The fix is a new review of the new head, not a second press.
+   - **A merge that would not happen now.** On a repository that requires the forge's merge
+     queue, or while required checks are pending, `gh pr merge` may enable auto-merge or queue
+     the PR instead of merging it (GitHub's manual for `gh pr merge`). The proposal refuses
+     that case:
+     - the live read also asks the PR's merge state;
+     - busmon runs the merge only when the forge says it can merge now;
+     - otherwise it shows why and runs nothing.
+     The spec checks the exact `gh` field and values against the installed version
+     (question 6).
 7. **The forge matrix.**
 
 | Forge | Merge from busmon | Command (approved head bound) |
@@ -112,8 +137,16 @@ Questions for the person (no guesses):
    That decides whose `gh` login is used, and whether it is installed there.
 5. **The report on the bus:** under which name: their human identity, or "busmon"? And should it
    also be sent when they cancel? The proposal says no.
-6. **A merge waiting on required checks:** refuse, or use the forge's auto-merge (`--auto`)?
-   The proposal refuses: a merge happens when they press, not later.
+6. **A merge the forge would defer:** required checks still pending, or a repository that
+   requires GitHub's merge queue. Should the button refuse, or accept that the forge queues or
+   auto-merges it later? The proposal refuses: a merge happens when the person presses, not
+   later.
+7. **The base race:** is the second between the live read and the merge acceptable? It is
+   closed if `main` has branch protection that refuses PR merges (promotions are master's
+   fast-forwards). Or must busmon refuse whenever the PR was retargeted at all?
+8. **Running under an agent:** busmon refuses the action when an agent started it, but that is
+   defence in depth, not a boundary (above). Is that enough, or should the action need
+   something an agent cannot supply, such as a separate forge login used only by busmon?
 
 ## Evidence
 
@@ -122,6 +155,9 @@ Questions for the person (no guesses):
 - The queue's reader, GitHub only:
   [mergequeue/forge.go](../../../mergequeue/forge.go) (`ReadGitHub`, `gh pr list`), and the
   merged-item drop in [mergequeue/delivered.go](../../../mergequeue/delivered.go).
+- Today's agent refusal in busmon: `refuseDestructive` in
+  [cmd/busmon/main.go](../../../cmd/busmon/main.go), with `agentcaller.Ancestor`. The item's
+  fields: `MergeItem` in [bus/mergequeue.go](../../../bus/mergequeue.go), which has no PR base.
 - The forges known: [forge/forge.go](../../../forge/forge.go) (`Kind`: github, gitlab, bitbucket,
   none, local), and `delivery.forge` / `delivery.base` in
   [config/keys.go](../../../config/keys.go).
