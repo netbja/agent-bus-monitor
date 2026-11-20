@@ -5,9 +5,9 @@ scope: project
 kind: question
 status: proposed
 created: 2026-11-20
-last_verified: 2026-11-20
+last_verified: unknown
 author: architect
-confidence: inferred
+confidence: unknown
 ---
 # A turn that ends without its Stop hook while work is open: one notice to master, no auto-wake (waiting for the person)
 
@@ -24,8 +24,11 @@ message to try again". Nothing resumed coder for about 25 minutes.
   `dispatch.turn_stale_after` (2 min). The same rule covers Esc and a killed client.
 - The dispatcher wakes an agent only for a waiting message. Coder had already drained its
   directive, so nothing was waiting.
-- The only net is the team-stall check (everyone idle with open work, after `dispatch.idle_after`,
-  15 min). It is coarse, and it fits the 25 minutes seen.
+- **No check covers it.** The team-stall check (`dispatch.stall_after`, 15 min) reports a stall
+  only when no work is open: `health.EvaluateTeamStall` returns OK as soon as the board holds an
+  accepted request. `dispatch.idle_after` belongs to the idle-implementer check, which concerns
+  a request nobody has accepted yet. An agent whose turn died with accepted work stays idle
+  until a person or another agent notices.
 
 **The proposal (not specced, not built).**
 - **When it fires.** The dispatcher sees an agent's turn-hook `working` first read as idle, by the
@@ -38,8 +41,11 @@ message to try again". Nothing resumed coder for about 25 minutes.
 - **Master decides.** Master resends the directive or asks the agent. The resend wakes the agent
   through the normal path.
 - **The dispatcher's writes do not change.** It still types only the fixed wake line.
-- **If master is the agent whose turn was lost,** the notice is itself a message to master, and
-  the normal wake resumes it.
+- **If master is the agent whose turn was lost,** the notice goes to master **without a wake**
+  (`FencedCmdOnce`'s `noWake`). A wake there would be the automatic wake this note rules out,
+  since the person may have pressed Esc in master's pane. Master reads the notice at its next
+  wake, and busmon shows it. Whether master's own lost turn should wake it is the person's
+  decision (open question below).
 - **No new setting.** The notice uses `turn_stale_after`.
 
 **What it deliberately does not do.**
@@ -61,17 +67,22 @@ from its context. The risk is only waking when nobody should.
   The reader it extends (`stallchecks.go`) is one of the moving files, and the quiet window
   forbids touching it before then.
 - **The person decides** whether to build it; master routes the spec, then coder.
-- **Open question:** whether "open work" should also count a directive drained since the agent's
+- **Open question 1:** whether "open work" should also count a directive drained since the agent's
   last report. Today, master's directives are not always board requests. Counting them catches
   more lost turns. It also needs a read of the cmd and report streams that the stall check does
   not do now.
+- **Open question 2 (the person's):** whether master's own lost turn should wake master. The
+  proposal says no: the notice is recorded without a wake. Yes would resume master unattended,
+  but it would also override an Esc the person typed in master's pane.
 
 ## Evidence
 
 - The state rule: [bus/effective.go](../../../bus/effective.go) (`EffectiveState`) and its
   setting `dispatch.turn_stale_after` in [config/keys.go](../../../config/keys.go).
 - The team-stall reader, which already applies it:
-  [cmd/agentbus/stallchecks.go](../../../cmd/agentbus/stallchecks.go) (`dispatch.idle_after`).
+  [cmd/agentbus/stallchecks.go](../../../cmd/agentbus/stallchecks.go), and its evaluator
+  [health/stall.go](../../../health/stall.go) (`EvaluateTeamStall`: OK while work is open;
+  `dispatch.stall_after`).
 - The once-per-episode write: [bus/once.go](../../../bus/once.go) (`FencedCmdOnce`).
 - The screen classifier this stays out of:
   [the agent-screen-blocked spec](../../superpowers/specs/2026-11-17-agent-screen-blocked-design.md).
