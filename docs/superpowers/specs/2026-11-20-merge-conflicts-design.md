@@ -1,6 +1,6 @@
 # Fewer merge conflicts between parallel agent PRs
 
-Status: spec r2, for review (subject `merge-conflicts`; r2: the open #668 counted apart, totals out of 17, the fetch for reproduction, reviewer-codex). Not built. Base: origin/dev `07c52081`.
+Status: spec r3, for review (subject `merge-conflicts`; r2: the open #668 counted apart, totals out of 17, the fetch for reproduction; r3: the collided-with column recomputed by §1's method for #489, #494, #495, #499, #500; reviewer-codex). Not built. Base: origin/dev `07c52081`.
 Author: architect, from the person's open question of 2026-11-20 (thread `1795205976983-0`),
 relayed by master (cmd `1795206037042-0`). The constraint is the person's: no new external tool
 or service. Go in agentbus or plain git, on any forge or none.
@@ -23,10 +23,11 @@ files. It is shown below the line as a current example; every total in this spec
 | #376 | `docs/operator-notes.md` | another PR's note | A: hot file |
 | #474 | `bus/keykinds.go` | #473 (ideas 1) | A: hot file (registry) |
 | #480 | `AGENTS.md`, `docs/memory/INDEX.md` | pop-retire-auto 5 | A: hot file (index and its copy) |
-| #489, #500 | `cmd/agentbus/configcmd_test.go` (+ `config_test.go`, `keys.go`) | each other's setting | A: hot file (the row count) |
-| #495 | `configcmd_test.go`, `settings_page.go`, `settings_ui.go`, `config/group.go`, operator notes | parallel settings PRs | A: hot file (four maps per key) |
-| #494 | `cmd/busmon/tea_model.go`, operator notes | herdr exit 7a | A + C |
-| #499 | `cmd/busmon/testdata/overlay/help.txt` | herdr exit 7a | A: generated golden |
+| #489 | `cmd/agentbus/configcmd_test.go` | #488 (slash palette 1b) | A: hot file (the row count) |
+| #500 | `configcmd_test.go`, `config/config_test.go`, `config/keys.go` | #498 (herdr 6c1, #489 rebased) | A: hot file (the row count, the key list) |
+| #495 | `configcmd_test.go`, `settings_page.go`, `settings_ui.go`, `config/group.go`, operator notes | #488; the notes #491, #492 | A: hot file (four maps per key) |
+| #494 | `cmd/busmon/tea_model.go`, operator notes | #488 (`tea_model.go`); #491, #492 (the notes) | A + C |
+| #499 | `cmd/busmon/testdata/overlay/help.txt` | #496 (slash palette class C) | A: generated golden |
 | #400 | `cmd/busmon/projects_admin.go` | projects-admin steps 6 and 7 | B: sibling steps |
 | #448 | `dispatch/herdr.go` | herdr exit step 1 | B: sibling steps |
 | #451 | `cmd/busmon/settings_ui.go`, its test | self-repair step 9's own first part | B: sibling steps |
