@@ -130,7 +130,7 @@ func (in *Installer) RoleSkillsStrict(ctx context.Context) error {
 
 func (in *Installer) roleSkills(ctx context.Context, script string) error {
 	in.O.Info("Linking role skills for AI clients...")
-	if log, err := in.R.Run(ctx, Cmd{Name: script}); err != nil {
+	if log, err := in.R.Run(ctx, Cmd{Name: script, Env: in.SkillsEnv}); err != nil {
 		showTail(in.O.err, log)
 		return errors.New("Role skills linking failed; re-run scripts/link-role-skills.sh to see the full output.")
 	}

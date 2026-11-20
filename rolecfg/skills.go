@@ -45,6 +45,31 @@ func SkillLinks(m *Manifest, env []string) ([]SkillLink, error) {
 	return out, nil
 }
 
+// SkillDirs is each role client's skill directory, once, in role order,
+// whether or not its skills resolve yet.
+func SkillDirs(m *Manifest, env []string) ([]string, error) {
+	if m == nil {
+		return nil, fmt.Errorf("manifest is required")
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, role := range m.roleOrder {
+		profile, err := m.Resolve(role)
+		if err != nil {
+			return nil, err
+		}
+		dest, err := skillDestination(profile.Client, env)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[dest] {
+			seen[dest] = true
+			out = append(out, dest)
+		}
+	}
+	return out, nil
+}
+
 // planSkillLinks resolves every role's skills to their links, one per
 // destination and name, the last role's source winning in the first one's
 // place. missing != nil skips (and names) a skill no root holds.

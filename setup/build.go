@@ -36,6 +36,11 @@ type Installer struct {
 	Script string
 	Exec   func(path string, args, env []string) error
 
+	// SkillsEnv is added to the link script's environment (agentbus update
+	// names the new tree's binary as AGENTBUS_BIN, so an inherited one never
+	// links from another build); nil for install.
+	SkillsEnv []string
+
 	saidDirty bool // the dirty tree is said once per install
 }
 

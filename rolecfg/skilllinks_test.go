@@ -57,3 +57,18 @@ func TestSkillLinksMissingSkill(t *testing.T) {
 		t.Fatal("a missing skill is no error")
 	}
 }
+
+// TestSkillDirs: each role client's destination once, even for a skill no
+// root holds yet (the snapshot records these directories before the update
+// fetches the skills).
+func TestSkillDirs(t *testing.T) {
+	m := writeSkillsManifest(t,
+		"[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"test\"\n[profiles.cc]\nclient = \"claude-code\"\nprovider = \"anthropic\"\nmodel = \"test\"\n[profiles.cc.options]\npermission = \"manual\"\n",
+		"[roles.coder]\ntier = \"boot\"\nskills = [\"absent\"]\n[roles.foureyes]\ntier = \"boot\"\nskills = [\"absent\"]\n[roles.master]\ntier = \"boot\"\nprofile = \"cc\"\n")
+	root := t.TempDir()
+	got, err := SkillDirs(m, []string{"HOME=" + root})
+	want := []string{filepath.Join(root, ".agents", "skills"), filepath.Join(root, ".claude", "skills")}
+	if err != nil || len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("%v %v, want %v", got, err, want)
+	}
+}
