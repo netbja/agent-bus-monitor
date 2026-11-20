@@ -88,8 +88,8 @@ func TestPlanBoardSections(t *testing.T) {
 		return strings.Join(ids, " ")
 	}
 	for sec, want := range map[string]string{
-		"NOW":      "i a b r",                        // the high one first, then file order
-		"NEXT":     "up-high up-ready w",             // by priority, then file order
+		"NOW":      "i a b r",                         // the high one first, then file order
+		"NEXT":     "up-high up-ready w",              // by priority, then file order
 		"LATER":    "up-later up-later-high up-low u", // blocked by a task, then low, then unknown
 		"APPROVED": "rev-ok merge-me",
 	} {
@@ -437,10 +437,10 @@ func TestPlanSideDependencies(t *testing.T) {
 	}
 }
 
-// views-redesign §4 (the person's Q5): at the narrow tier LATER folds to a
-// count that keeps a high-priority task visible, "LATER 3 · 1 ↑ (enter)",
-// and DONE to its count, each a line Enter opens; at the wide tier LATER is
-// drawn whole.
+// views-redesign §4 (the person's Q5): below the wide tier (the 80-column
+// mock-up: no side panel) LATER folds to a count that keeps a high-priority
+// task visible, "LATER 3 · 1 ↑ (enter)", and DONE to its count, each a line
+// Enter opens; at the wide tier LATER is drawn whole.
 func TestPlanBoardNarrowFoldsLater(t *testing.T) {
 	hi := boardRow("hi", plan.Upcoming, "coder", "now1")
 	hi.Task.Priority = "high"
@@ -468,6 +468,9 @@ func TestPlanBoardNarrowFoldsLater(t *testing.T) {
 	open := planBoardOf(p, -1, false, true, shellNow, 76, TierNarrow, false, nil)
 	if itemLine(open, "hi") < 0 || itemLine(open, "lo") < 0 {
 		t.Fatalf("LATER open:\n%s", open.plain)
+	}
+	if med := planBoardOf(p, -1, false, false, shellNow, 76, TierMedium, false, nil); itemLine(med, "hi") >= 0 || !strings.Contains(med.plain, "LATER 3 ") {
+		t.Fatalf("medium (80 columns) not folded:\n%s", med.plain)
 	}
 	if wide := planBoard(p, -1, false, shellNow, 140, TierWide, false, nil); itemLine(wide, "hi") < 0 || strings.Contains(wide.plain, "(enter)") {
 		t.Fatalf("wide:\n%s", wide.plain)

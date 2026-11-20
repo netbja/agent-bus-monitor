@@ -12,7 +12,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
 │                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Work   ──────────────────────────────────────────────────────────── 4 for you · 1 at work · 2 next · 0 ideas ─╮
+╭─  1 Activity   2 Board   3 Work   4 Plan   ─────────────────────────────────────────────────── 4 for you · 1 at work · 2 next · 0 ideas ─╮
 │ For you  4                        In progress  1                    Next  2                           Ideas  0                           │
 │ ? review lot 1? (2 questions)   │ ● release                       │ ○ coder · #requests             │ — between agents · 0               │
 │  4m · master                    │  tagging                        │  title requests                 │  nobody waits on you (enter)       │

@@ -63,31 +63,31 @@ func workShellOf(t *testing.T, st *shared, w, h int) Model {
 	return step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 }
 
-// Tab 3 is Work, in place of Requests; 4 opens the Plan, as p does
-// (views-redesign §4: no longer an alias to Work's NEXT); at the narrow tier
+// Tab 3 is Work, in place of Requests; 4 is the Plan tab (views-redesign §4:
+// no longer an alias to Work's NEXT; plan_tab_test.go); at the narrow tier
 // 5 is Work, 6 the Plan.
 func TestWorkTabKeys(t *testing.T) {
 	pinLocal(t)
 	bar := tabText(tabBar(lowerTabs, PanelActivity, 200, true))
-	if !strings.Contains(bar, " 3 Work ") || strings.Contains(bar, "Requests") || strings.Contains(bar, "Plan") || strings.Contains(bar, " 4 ") {
+	if !strings.Contains(bar, " 3 Work ") || strings.Contains(bar, "Requests") || !strings.Contains(bar, " 4 Plan ") {
 		t.Fatalf("tab bar %q", bar)
 	}
 	m := keys(t, workShell(t, 140, 40), '3')
 	if m.ui.focus != PanelWork || m.layout.Active != PanelWork {
 		t.Fatalf("3: focus %v active %v", m.ui.focus, m.layout.Active)
 	}
-	if p := keys(t, workShell(t, 140, 40), '4').rd.top(); p == nil || p.kind != ovPlan {
-		t.Fatalf("4: %+v, want the Plan", p)
+	if m = keys(t, workShell(t, 140, 40), '4'); m.rd.open() || m.ui.focus != PanelPlan {
+		t.Fatalf("4: focus %v, want the Plan tab", m.ui.focus)
 	}
 	m = keys(t, workShell(t, 60, 24), '5')
 	if m.layout.Active != PanelWork {
 		t.Fatalf("5 at narrow: %v", m.layout.Active)
 	}
-	if p := keys(t, workShell(t, 60, 24), '6').rd.top(); p == nil || p.kind != ovPlan {
-		t.Fatalf("6 at narrow: %+v, want the Plan", p)
+	if m = keys(t, workShell(t, 60, 24), '6'); m.rd.open() || m.layout.Active != PanelPlan {
+		t.Fatalf("6 at narrow: %v, want the Plan", m.layout.Active)
 	}
 	nb := tabText(tabBar(narrowPanels, PanelForYou, 200, true))
-	if !strings.Contains(nb, "5 Work") || strings.Contains(nb, " 6 ") {
+	if !strings.Contains(nb, "5 Work") || !strings.Contains(nb, "6 Plan") {
 		t.Fatalf("narrow bar %q", nb)
 	}
 }

@@ -316,7 +316,7 @@ func plainLine(e bus.Event, et time.Time) string {
 	return ts + " " + e.Message
 }
 
-var panelNames = map[PanelID]string{PanelAgents: "Agents", PanelActivity: "Activity", PanelBoard: "Board", PanelRequests: "Requests", PanelWork: "Work"}
+var panelNames = map[PanelID]string{PanelAgents: "Agents", PanelActivity: "Activity", PanelBoard: "Board", PanelRequests: "Requests", PanelWork: "Work", PanelPlan: "Plan"}
 
 // panelLabel is a panel's name as the shell shows it, For you included.
 func panelLabel(p PanelID) string {

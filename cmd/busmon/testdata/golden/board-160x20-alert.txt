@@ -1,4 +1,4 @@
-╭─  1 Activity   2 Board   3 Work   ───────────────────────────────────────────────────────────────────────────────────────────────────── 5 open · 1 done (d) ─╮
+╭─  1 Activity   2 Board   3 Work   4 Plan   ──────────────────────────────────────────────────────────────────────────────────────────── 5 open · 1 done (d) ─╮
 │  ALERT                TASK                  OWNER     STATE      AGE                                                                                         │
 │  ⚠ no reply 3h        quota-step-3          coder     accepted   3h                                                                                          │
 │                       views-redesign-spec   coder2    accepted   5m                                                                                          │

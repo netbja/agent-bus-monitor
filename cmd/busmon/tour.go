@@ -190,7 +190,8 @@ var tourBook = []tourPage{
 			panelRow(PanelAgents, "each agent, its state and how fresh it is"),
 			panelRow(PanelActivity, "everything said on the bus, live"),
 			panelRow(PanelBoard, "who owns which task"),
-			panelRow(PanelWork, "who owes what: you, the team, what comes next, ideas")),
+			panelRow(PanelWork, "who owes what: you, the team, what comes next, ideas"),
+			panelRow(PanelPlan, "the plan's roadmap: now, next, later")),
 		para(ky(ModeShell, ActNextPanel), tx("moves the focus between panels;"), ky(ModeShell, ActTab1), tx("pick one of the tabs.")),
 	}},
 	{title: "Writing to an agent", since: 1, blocks: []tourBlock{

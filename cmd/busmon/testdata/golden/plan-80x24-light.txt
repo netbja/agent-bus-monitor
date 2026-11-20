@@ -16,9 +16,9 @@
 │ the inbox · loaded 0s ago (abcdef0)                                          ┃
 │                                                                              ┃
 │ NOW  1                                                                       │
-│   ● title drawer  coder  in progress                                         │
+│   ● title drawer    coder     in progress                                    │
 │                                                                              │
 │ APPROVED  1                                                                  │
-│ ▶ ✓ title strip  coder  #338 · approved · merge PR 338                       ▼
+│ ▶ ✓ title strip     coder     #338 · approved · merge PR 338                 ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health   

@@ -11,7 +11,7 @@
 │  ♙  master    waiting  12m  —   pilot       see my ask                      ┃
 │  ▲  sentinel  blocked  30m  —   model≠      health ok                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Work    auto-scroll on ─ 7 events · filter: none ─╮
+╭─  1 Activity   2 Board   3 Work   4 Plan    auto-scroll on ─ 7 events · fil…─╮
 │    time  from     to       type      message                                 ▲
 │    14:50 ♙ Charl… → coder  directive review lot 1                            │
 │    14:51 coder             report    Lot 1 delivered (+197)                  │
