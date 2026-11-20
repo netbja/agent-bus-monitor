@@ -240,7 +240,7 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				return err
 			}
 		}
-		if err := l.tryClear(ctx, a, recs[a], snap, asks, armed, marks[bus.ContextEscalateMark(a)] != ""); err != nil {
+		if err := l.tryClear(ctx, a, recs[a], snap, asks, armed, contextEscalatedNow(marks, a, recs[a], snap)); err != nil {
 			if errors.Is(err, bus.ErrNotHolder) {
 				return err
 			}
@@ -248,6 +248,15 @@ func (l *loop) clearPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		}
 	}
 	return nil
+}
+
+// contextEscalatedNow: agent's context episode escalated in its current
+// session (the mark holds that episode's session, as contextalert compares
+// it), the hand-off's or the snapshot's; a mark left from an earlier
+// session does not count (foureyes).
+func contextEscalatedNow(marks map[string]string, agent string, rec bus.Handoff, snap bus.AgentSnapshot) bool {
+	v := marks[bus.ContextEscalateMark(agent)]
+	return v != "" && (v == rec.Session || v == snap.Session)
 }
 
 // tryClear judges one record and, when the rule passes, reserves, re-inspects
