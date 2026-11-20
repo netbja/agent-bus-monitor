@@ -72,7 +72,7 @@
   `Read` denying everything, fail closed),
   `bus_thread`, `bus_agents`; no shell, no write, no verdict. `--check <endpoint>` asks its `/models`. Provider
   `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint). Health
-  `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `cmd/agentbus/llmcheck.go` the reader, every minute) probes
+  `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `internal/dispatchsvc/llmcheck.go` the reader, every minute) probes
   only the endpoints the registered `local-llm` agents use (the one each peer resolved, `AgentSnapshot.Endpoint`, set by
   its own status with `EndpointFP`, its URL's fingerprint (HMAC under the host key `endpoint-fp.key` beside config.toml,
   0600, made once and linked whole: a bus reader cannot test a guessed path; no key, no fingerprint; a recorded one

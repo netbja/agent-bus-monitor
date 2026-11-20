@@ -63,7 +63,7 @@ without a kill, in a new pane.
   (C), busmon-reload-deny, busmon-lifecycle-4 (B).
 - Code: `dispatch/clear.go` (`DecideClear`, `clearPass`, `proveClear`), `dispatch/herdr.go`
   (`Runtime.Clear`, `ClearText`), `bus/handoff.go` (`FencedReserveClear`, `ClearMark`),
-  `cmd/agentbus/quotacmd.go` (`serviceClear`). Tests: `TestDecideClearEveryConditionVetoesAlone`,
+  `internal/dispatchsvc/dispatchconfig.go` (`serviceClear`). Tests: `TestDecideClearEveryConditionVetoesAlone`,
   `TestClearPass*`, `TestFencedReserveClearRedis`, `TestServiceClear`, and the invariant in
   `dispatch/testhelp_test.go`.
 

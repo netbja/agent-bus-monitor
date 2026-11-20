@@ -6,7 +6,7 @@
   Sentinel may restart an identified failed project service once within its budget, or refresh the
   local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
   a fenced writer; model refresh is daily under a host-local lock. `redis-version` (redis-watch,
-  `cmd/agentbus/redislatest.go`) compares the broker's INFO version with the latest Redis release
+  `internal/dispatchsvc/redislatest.go`) compares the broker's INFO version with the latest Redis release
   **of its own major** (the major it runs, read from INFO; no claim about the compose tag): the dispatch
   service's `RedisRefresh` chore reads GitHub's recent `redis/redis` releases (5 s, drafts and
   prereleases skipped) once a day under a host-local lock into `~/.cache/agentbus/redis-latest.json`
@@ -14,7 +14,7 @@
   in its major; a newer major is never a warning, only named in the detail (changing major is the
   person's decision); unknown when the broker is unread, no release of its major is found or no check
   succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `disk` (disk-check,
-  `health/disk.go` pure, `cmd/agentbus/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
+  `health/disk.go` pure, `internal/dispatchsvc/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
   5 min): the filesystems agent-bus depends on (docker's root from `docker info` when docker is on PATH and the daemon runs
   on this host (`dockerNotLocal`: the endpoint Docker itself reports, `docker context inspect` with no name, which resolves
   `DOCKER_CONTEXT` and `DOCKER_HOST` in its own order (checked on Docker 29; never reimplemented), a local `unix://` socket): not
@@ -27,7 +27,7 @@
   said, unknown only when nothing was. For you on warn and fail with a command that only looks (`du -sh
   ~/.cache/go-build ~/.npm ~/.cache/pip`); `go clean -cache` is named in the detail as the person's choice
   (`DiskCleanChoice`, kept whole: the paths are cut to leave it room within the 300-rune detail), never in the copyable line; a fail wakes sentinel, which never deletes anything. `github`
-  (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
+  (busmon-github-check, `health/github.go` pure, `internal/dispatchsvc/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
   `git -c credential.helper= -c core.askPass= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
   under `LC_ALL=C` and without any askpass program (`probeEnviron`: `GIT_ASKPASS`/`SSH_ASKPASS` removed, `SSH_ASKPASS_REQUIRE=never`;
@@ -36,7 +36,7 @@
   judged. Both reached ok, one warn (for you), neither unknown then warn after `GitHubNeitherWarnAfter` (1 h, tracked
   in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. The stall guard (spec
   `docs/superpowers/specs/2026-11-01-stall-guard-design.md`; judgement pure in `health/stall.go`, readers in
-  `cmd/agentbus/stallchecks.go`; `dispatch.stall_after`/`clear_stall_after`/`quiet_after`, 15 min, 0 = off):
+  `internal/dispatchsvc/stallchecks.go`; `dispatch.stall_after`/`clear_stall_after`/`quiet_after`, 15 min, 0 = off):
   `team-stall` fails (waking sentinel, which sends master one waking directive with the next ready task) when every
   non-dormant agent (`bus.DormantAfter`) is idle that long, each pane seen not busy by a fresh observation (none =
   unknown), nothing is open (request, accepted task, ask, gate, pause, swap, obligation, valid hand-off, mission) and
@@ -66,7 +66,7 @@
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
   `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). `review-queue` (spec
-  `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `cmd/agentbus/reviewqueue.go`
+  `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `internal/dispatchsvc/reviewqueue.go`
   the reader) warns (master) when the same idle team (`teamIdle`, shared with `team-stall`), nothing else open (gates
   aside), owes a review: an open gate whose challenge the reviewer read, older than `stall_after` (a challenge no longer retained is
   never proved read, a group skipping trimmed entries: not judged, unknown when nothing is owed); or a subject approved
@@ -74,7 +74,7 @@
   it, or a challenge under a ref a verdict on it carries) has no approve of the deciding head; the `StallWake` hook
   wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. `idle-implementer`
   (spec `docs/superpowers/specs/2026-11-08-idle-implementer-design.md`; `health/idleimplementer.go` pure,
-  `cmd/agentbus/idleimplementer.go` the reader; `dispatch.idle_after`, 15 min, 0 = off) warns (master) for each
+  `internal/dispatchsvc/idleimplementer.go` the reader; `dispatch.idle_after`, 15 min, 0 = off) warns (master) for each
   implementer (a manifest role with the `implement` skill, `rolesWithSkill`) idle past the threshold, its pane not busy,
   its provider not held, with a board request addressed to it in state `requested`; it needs no idle team. Its clock is
   the `{p}:agents` state time, which a turn end restarts where turn hooks run (a short turn answering a wake restarts
@@ -89,7 +89,7 @@
   holds it out of the digest for a week (counted, not repeated), then the digest lists it again with the accept. It
   changes no measured status. An agent identity refuses the accept, `--as` is required (unproved, as reload's).
   `plan-drift` (the architect's design, reports 1794586011340-0 and 1794586021722-0;
-  alert only, the person approved; `health/plandrift.go` pure, `cmd/agentbus/plandrift.go` the read) warns master,
+  alert only, the person approved; `health/plandrift.go` pure, `internal/dispatchsvc/plandrift.go` the read) warns master,
   never fails, on a merge of origin/main since the plan's load that no task links and no `agentbus plan ignore <pr>`
   covers, a task whose merge came from another branch than its board entry records, and a task linked to a PR while a
   later PR of its branch stem (`feat/x-2` for `feat/x`) merged after it (its own merge in the list does not hide one). It reads local git only, in the dispatch service's

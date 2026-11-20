@@ -1,5 +1,5 @@
 - **The holder's health and its two commands (herdr exit step 6d1).** One evidence per project
-  (`cmd/agentbus/holderhealth.go`, `holderEvidence`): per build key, its unit and whether the
+  (`internal/dispatchsvc/holderhealth.go`, `holderEvidence`): per build key, its unit and whether the
   manager runs it, its socket in `<rundir>/agentbus/<p>/` (answering, terminals, age from the
   socket's mtime) and its binary copy; a copy that another project's unit records is that project's,
   never this one's leftover; a manager that cannot say makes it unknown. Three checks read it

@@ -14,7 +14,7 @@
   `InBase` (an ancestor, or no diff: "contents in base", a squash or a revert); local mode reads `LocalTips` (a local
   branch whose tip is the head; no origin with `delivery.forge = auto` is local, as for `deliver`). Every command runs
   with `mergeQueueEnv` (the github check's `probeEnviron`: no askpass, `GH_PROMPT_DISABLED=1`, `GIT_TERMINAL_PROMPT=0`,
-  `LC_ALL=C`), 10 s each; agentbus reads no token. The dispatch service's chore (`cmd/agentbus/mergequeuechore.go`,
+  `LC_ALL=C`), 10 s each; agentbus reads no token. The dispatch service's chore (`internal/dispatchsvc/mergequeuechore.go`,
   `dispatch.MergeQueueConfig`, 5 min, 20 s, only while `HoldsDispatch`) replaces the fenced cache `{p}:mergequeue`
   (`bus/mergequeue.go`, a hash, `PEXPIRE` 15 min, runtime, ignored by `HasKeysBesidesDispatch`): `attempted_at` every
   pass, `items_at` and the items only on a success, so a failed pass keeps the last items and never makes them look
