@@ -129,12 +129,17 @@ then only copies the exact command.
 To design at spec time (not specified in this note):
 - **Immediate merge.** The `gh` fields and values, validated against the installed version,
   that prove `gh pr merge` will merge at once. That includes a branch whose protection
-  requires GitHub's merge queue, where a mergeable PR is still queued. Without such proof, the
-  guarantee narrows to "refused when the forge says it cannot merge".
-- **The base race.** The guard against a retarget between the live read and the merge. Either
-  branch protection on `main` that refuses PR merges, established and checked before relying on
-  it, or a re-read of the base after the merge with an alert to master and the person if it
-  differs.
+  requires GitHub's merge queue, where a mergeable PR is still queued. No such proof means no
+  button (the hard requirements above).
+- **The base race.** The guard that binds the base at the moment of the merge, against a
+  retarget between the live read and the merge. The candidate is branch protection on `main`
+  that refuses PR merges, established and checked before relying on it. A re-read of the base
+  after the merge, with an alert, only detects a wrong merge after it happened: it may be added,
+  but it does not meet the requirement. No guard means no button.
+- **A weaker button is the person's call.** Building the button with a weaker guarantee ("refused
+  when the forge says it cannot merge", or a base checked only afterwards) would relax a hard
+  requirement. Only the person can choose that, through questions 6 and 7; the spec does not
+  choose it alone.
 - **Where the agent refusal runs:** at the press, or once when busmon starts for the whole
   session (foureyes).
 
