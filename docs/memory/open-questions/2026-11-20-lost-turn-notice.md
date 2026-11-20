@@ -63,9 +63,8 @@ from its context. The risk is only waking when nobody should.
 
 ## When it applies
 
-- **When to build it.** After the dispatch service's move to `internal/dispatchsvc` has merged.
-  The reader it extends (`stallchecks.go`) is one of the moving files, and the quiet window
-  forbids touching it before then.
+- **When to build it.** Now possible: the dispatch service's move to `internal/dispatchsvc` merged
+  in #643, with the reader it extends (`stallchecks.go`).
 - **The person decides** whether to build it; master routes the spec, then coder.
 - **Open question 1:** whether "open work" should also count a directive drained since the agent's
   last report. Today, master's directives are not always board requests. Counting them catches
@@ -80,7 +79,7 @@ from its context. The risk is only waking when nobody should.
 - The state rule: [bus/effective.go](../../../bus/effective.go) (`EffectiveState`) and its
   setting `dispatch.turn_stale_after` in [config/keys.go](../../../config/keys.go).
 - The team-stall reader, which already applies it:
-  [cmd/agentbus/stallchecks.go](../../../cmd/agentbus/stallchecks.go), and its evaluator
+  [internal/dispatchsvc/stallchecks.go](../../../internal/dispatchsvc/stallchecks.go), and its evaluator
   [health/stall.go](../../../health/stall.go) (`EvaluateTeamStall`: OK while work is open;
   `dispatch.stall_after`).
 - The once-per-episode write: [bus/once.go](../../../bus/once.go) (`FencedCmdOnce`).

@@ -50,7 +50,7 @@ dispatcher's host: under SSH or with no notification daemon, it is a logged note
 - Related: the [context-fill decision](2026-10-27-context-fill.md), whose alert this one shares the
   runner and the `{p}:quota` mark pattern with.
 - Code: `dispatch/promptnotify.go` (`promptNotices`, `PromptGrace`), `dispatch/loop.go` (called
-  after the observe pass), `cmd/agentbus/quotacmd.go` (`servicePrompt`, `desktopNotify`). Tests:
+  after the observe pass), `internal/dispatchsvc/dispatchconfig.go` (`servicePrompt`, `desktopNotify`). Tests:
   `TestPromptNotifyOncePerEpisode`, `TestPromptNotifyGrace`, `TestPromptNotifySuppressions`,
   `TestPromptNotifyWaitsForThePause`, `TestPromptNotifyRunnerFailure`,
   `TestPromptNotifyDropsTheMarkOfAnAgentNoLongerObserved`, `TestPromptNotifyJudgesEachObservationOnce`,

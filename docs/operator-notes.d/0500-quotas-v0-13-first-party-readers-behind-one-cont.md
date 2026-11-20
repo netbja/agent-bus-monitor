@@ -118,7 +118,7 @@
   `config.SelfRepairMode`, which reads a refused switch as `off`: `Get`'s value for an invalid
   key is the default, `on`. The budgets `dispatch.self_repair_every` (30m) and
   `dispatch.self_repair_per_day` (3) take only values above 0 (an env 0 is skipped).
-  Self-repair step 6b, the shadow (`cmd/agentbus/selfrepairchore.go`, `dispatch/selfrepairchore.go`):
+  Self-repair step 6b, the shadow (`internal/dispatchsvc/selfrepairchore.go`, `dispatch/selfrepairchore.go`):
   the dispatch service reads the switch once at its start (`serviceSelfRepair`). Only `shadow`
   runs a pass, every 15 s while it holds the lease: the template's agent tabs, a death counted
   per episode (`pid:start`) from its first read (the grace is Redis `TIME`), herdr read only when
@@ -146,7 +146,7 @@
   (`Deps.Fence` for `Role`) is read right before an agent's split or tab create, after its tab is
   judged: an error relaunches nothing for that role (`coder: not relaunched (…)`); the dry run
   never reads it, and `up` and `reload` set none.
-  Self-repair step 7b, on mode acts (`cmd/agentbus/selfrepairact.go`): `on` (the default) runs the pass
+  Self-repair step 7b, on mode acts (`internal/dispatchsvc/selfrepairact.go`): `on` (the default) runs the pass
   as shadow does, then applies the one decision it allows (master first, then the oldest death). A
   relaunch takes the role's intent (`BeginSelfRepair`, a fresh nonce; an intent already held skips it),
   runs the service entry (`relaunch.ServiceRole`: herdr on the services' env file's session, up's project

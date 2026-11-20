@@ -1,5 +1,5 @@
 - **Notifications** (spec `docs/superpowers/specs/2026-11-03-notifications-design.md`, package `notify/`): the
-  dispatch service's chore (`cmd/agentbus/notifychore.go`, `dispatch.NotifyConfig`, 30 s, only while
+  dispatch service's chore (`internal/dispatchsvc/notifychore.go`, `dispatch.NotifyConfig`, 30 s, only while
   `HoldsDispatch`) tells the person what waits, through ntfy, Discord and the desktop. Targets and their secrets are
   in `notify.toml` beside config.toml (`notify.Load`: refused whole when open to others or not the person's, its folder
   writable by no one else, opened once `O_NOFOLLOW` and judged by fstat; per target https, http only `insecure` on a

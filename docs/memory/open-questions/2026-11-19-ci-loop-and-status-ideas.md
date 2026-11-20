@@ -80,7 +80,7 @@ exists, at most four at a time. It also learns a model's minimum CLI version fro
 **What we have.** The second half already exists: `dispatch/clientupdate.go` sees that a client
 was updated on disk and gives sentinel one directive per update episode, and reload is sentinel's
 job (decision 2026-10-28). The models table is refreshed daily. We do not know that a newer release
-*exists*. `cmd/agentbus/redislatest.go` already does exactly that for Redis: one read a day, a host
+*exists*. `internal/dispatchsvc/redislatest.go` already does exactly that for Redis: one read a day, a host
 cache, a health check.
 
 **Smallest change.** A `client-version` health check built on the `redislatest` pattern. Once a day

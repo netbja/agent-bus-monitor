@@ -1,6 +1,6 @@
 - **After a reboot, the dispatch service judges once (reboot-resume A, with holder hardening H1 and H1b).**
   - **The judgement:** once it holds the lease, before any other loop (`dispatch.Config.Reboot`,
-    `cmd/agentbus/reboot.go`), the dispatch service reads `run.json` (`lifecycle.Judge`) and records
+    `internal/dispatchsvc/reboot.go`), the dispatch service reads `run.json` (`lifecycle.Judge`) and records
     the verdict in `{p}:reboot` (fenced, at from Redis TIME). Only then does it write `running`, so a
     stop in between judges again. The verdicts are `intentional`, `suspended`, `restarting`,
     `unplanned` (with `why`) and `stopped` (with `why`).
