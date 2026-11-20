@@ -458,6 +458,9 @@ func (l *loop) reconcile(ctx context.Context) error {
 		l.logError("", "login", err)
 	}
 	if paused, err := l.paused(ctx); err != nil || paused {
+		if err == nil { // paused: neither pass skips anything, so no episode goes on
+			err = l.bgEndEpisodes(ctx, "auto-clear", "pop-retire")
+		}
 		return err
 	}
 	// The clear runs after the pause check (a paused project is not cleared)

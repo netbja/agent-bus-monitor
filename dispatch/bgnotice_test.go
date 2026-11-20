@@ -114,3 +114,47 @@ func TestBackgroundSkipNoticePopRetire(t *testing.T) {
 		t.Fatalf("pop-retire notices %q (all %q)", n, w.directives())
 	}
 }
+
+// An action whose pass does not run skips nothing: turning pop-retire off, or
+// pausing the project, ends the open episodes, so the time off never counts
+// toward a notice (reviewer-codex).
+func TestBackgroundSkipEpisodeEndsWhenThePassDoesNotRun(t *testing.T) {
+	w := newPopWorld(t, "pop")
+	bg := judged("running")
+	w.rt.script = func(string, int) Inspection { in := readyIn(); in.Background = bg; return in }
+	w.pass()
+	marks, _ := w.b.QuotaMarks(context.Background())
+	if marks[bus.BgSkipMark("security", "pop-retire")] == "" {
+		t.Fatalf("no episode opened: %v", marks)
+	}
+	w.l.cfg.PopRetire.On = false
+	w.pass()
+	if marks, _ = w.b.QuotaMarks(context.Background()); marks[bus.BgSkipMark("security", "pop-retire")] != "" {
+		t.Fatalf("the episode stayed open with pop-retire off: %v", marks)
+	}
+	// Paused: both actions' episodes end.
+	w.l.cfg.PopRetire.On = true
+	w.pass()
+	if err := w.l.bgEndEpisodes(context.Background(), "auto-clear", "pop-retire"); err != nil {
+		t.Fatal(err)
+	}
+	if marks, _ = w.b.QuotaMarks(context.Background()); marks[bus.BgSkipMark("security", "pop-retire")] != "" {
+		t.Fatalf("an episode stayed open through the pause's end call: %v", marks)
+	}
+}
+
+// A paused project's loop ends the open episodes (the pause path, end to end).
+func TestBackgroundSkipEpisodeEndsWhilePaused(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "dev", "p1")
+	r.HSet(ctx, bus.QuotaKey(b.Project()), bus.BgSkipMark("dev", "auto-clear"), "1:42", bus.BgSkipNoticeMark("dev", "auto-clear"), "1:42")
+	if _, err := b.SetPause(ctx, "charlie", "master", "test", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	start(t, b, newFakeRT(alwaysReady), fastConfig())
+	waitFor(t, 5*time.Second, "the episode's marks gone", func() bool {
+		m, _ := b.QuotaMarks(ctx)
+		return m[bus.BgSkipMark("dev", "auto-clear")] == "" && m[bus.BgSkipNoticeMark("dev", "auto-clear")] == ""
+	})
+}
