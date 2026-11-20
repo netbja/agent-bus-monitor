@@ -252,6 +252,9 @@ func (m *Model) gotSleepDone(msg sleepDoneMsg) tea.Cmd {
 	if p := m.projectsPageOpen(); p != nil { // the list after the action (projects-admin §3.3)
 		reread = tea.Batch(reread, m.projectsCmd(p.serial))
 	}
+	if c := m.rereadServices(r.verb); c != nil { // a restart's card, read at once (services-restart-buttons §3)
+		reread = tea.Batch(reread, c)
+	}
 	if msg.err == nil {
 		text := r.verb + " done"
 		if r.project != "" {

@@ -69,9 +69,12 @@ type shellConfig struct {
 	// The settings page (C): the environment its config.toml is found and
 	// resolved through (nil = none: a test reads no file), busmon's flags
 	// (read-only rows), and how a theme applies at once (nil = next start).
-	getenv  func(string) string
-	flags   settingsFlags
-	retheme func(name string) (*Theme, error)
+	getenv func(string) string
+	// ancestor names the registered agent this busmon descends from, for the
+	// person-only acts (X on a service card); nil = no check.
+	ancestor func(context.Context) (string, error)
+	flags    settingsFlags
+	retheme  func(name string) (*Theme, error)
 	// Z (sleep.go): the runner of agentbus suspend/resume, the project's
 	// suspend.log, suspend.wait; nil = Z says there is no agentbus to run.
 	sleepRunner func(args []string, log string) (<-chan error, error)
