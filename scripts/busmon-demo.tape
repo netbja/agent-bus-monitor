@@ -13,6 +13,6 @@ Hide
 Type "export AGENT_BUS_NO_UPDATE_CHECK=1 TERM=xterm-256color; clear" Enter
 Type "scripts/busmon-demo.sh run --limit 25" Enter
 Show
-Sleep 4s
+Sleep 8s
 Screenshot "docs/assets/busmon.png"
 Sleep 500ms
