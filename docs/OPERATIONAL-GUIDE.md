@@ -469,10 +469,11 @@ agent names, no project template):
   once after a short pause, holds its end, then shows the cut text again.
   The Projects page (`M`) counts each project's **for you** and **at work** by the same rule;
   a count not read, or more than a minute old, reads `?`, never 0 (`R` reads it again).
-  The **between agents** line opens the full Requests list by thread (owed by you, you wait on,
-  between agents; answered threads folded, `o` shows them; `d` then `y` closes a thread with a
-  reply from you; Esc returns to Work). A tracked request is closed by its owner
-  (`agentbus request done`).
+  The **between agents** line opens the Board filtered to the rows between agents (no request to
+  or from you; Esc returns to Work on that line). Every thread is `r`/`F2`, from any panel: the
+  Requests view by thread (owed by you, you wait on, between agents; answered threads folded, `o`
+  shows them; `d` then `y` closes a thread with a reply from you), drawn under the tab it was
+  opened from, where Esc returns. A tracked request is closed by its owner (`agentbus request done`).
 - **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
   its tasks feed Work (a task of yours nothing blocks is a `decide` row, a blocked one is in NEXT),
   and `p` or `P` opens the plan by state (waiting for you, answered, blocked, in review, in

@@ -33,4 +33,3 @@ func TestWaitingAgentDetailShowsWhatItNeeds(t *testing.T) {
 		t.Fatalf("a working agent's detail:\n%s", plainOf(lines))
 	}
 }
-
