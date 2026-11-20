@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -211,24 +210,13 @@ func (d Deps) plan(ctx context.Context, rel Release, tree, snap string, mine, ot
 }
 
 // skillsChanged is setup update's skills diff: the skills/ folders that
-// differ between the running build and the tag.
+// differ between the running build and the tag (setup.SkillsChanged).
 func skillsChanged(ctx context.Context, rel Release) []string {
 	out, err := git(ctx, "--git-dir", rel.GitDir, "diff", "--name-only", rel.FromRev, rel.Tag, "--", "skills/")
 	if err != nil {
 		return nil
 	}
-	seen := map[string]bool{}
-	var changed []string
-	for _, f := range strings.Split(out, "\n") {
-		parts := strings.SplitN(f, "/", 3)
-		if len(parts) < 2 || seen[parts[1]] {
-			continue
-		}
-		seen[parts[1]] = true
-		changed = append(changed, parts[1])
-	}
-	sort.Strings(changed)
-	return changed
+	return setup.SkillsChanged(out)
 }
 
 // updater is one update in progress.
@@ -306,8 +294,7 @@ func (u *updater) snapshot(ctx context.Context) error {
 	if _, err := os.Stat(home); err != nil {
 		m.Skills.Absent = true
 	} else {
-		_, merr := os.Stat(filepath.Join(home, ".git", "agentbus-setup"))
-		m.Skills.Ours = merr == nil
+		m.Skills.Ours = setup.SkillsOurs(home)
 		if h, err := git(ctx, "-C", home, "rev-parse", "HEAD"); err == nil {
 			m.Skills.Head = h
 		}
@@ -391,7 +378,7 @@ func (u *updater) apply(ctx context.Context) error {
 func (u *updater) checkSkills(ctx context.Context) error {
 	d := u.d
 	home := setup.SkillsHome(d.Getenv)
-	if _, err := os.Stat(filepath.Join(home, ".git", "agentbus-setup")); err == nil {
+	if setup.SkillsOurs(home) {
 		head, err1 := git(ctx, "-C", home, "rev-parse", "HEAD")
 		pin, err2 := git(ctx, "-C", home, "rev-parse", setup.SkillsRef(d.Getenv)+"^{commit}")
 		if err1 != nil || err2 != nil || head != pin {
@@ -407,7 +394,9 @@ func (u *updater) checkSkills(ctx context.Context) error {
 		return err
 	}
 	for _, l := range links {
-		if r, err := filepath.EvalSymlinks(l.Link); err != nil || r != l.Source {
+		r, err := filepath.EvalSymlinks(l.Link)
+		src, serr := filepath.EvalSymlinks(l.Source)
+		if err != nil || serr != nil || r != src { // both resolved: a data dir behind a symlink is the same place
 			return fmt.Errorf("%s does not resolve to %s", l.Link, l.Source)
 		}
 	}
@@ -415,24 +404,50 @@ func (u *updater) checkSkills(ctx context.Context) error {
 }
 
 // restartGreen restarts one service with the bin dir's agentbus, and waits
-// until that agentbus no longer lists it as stale: it recorded that build,
-// with the unit's own PID (§3.4 step 6).
+// for it to be green (§3.4 step 6): the unit active, its record written by
+// its own PID (Running lists it with a build), and that agentbus no longer
+// listing it as stale (the build it recorded is that agentbus's). A unit
+// that crashed, exited or failed is not active, so never green, although
+// service stale drops it (foureyes).
 func restartGreen(ctx context.Context, d Deps, s Service) error {
 	ab := filepath.Join(d.BinDir, "agentbus")
 	if out, err := d.R.Run(ctx, setup.Cmd{Name: ab, Args: []string{"--project", s.Project, "service", "restart", s.Kind}}); err != nil {
 		return fmt.Errorf("%s %s: restart failed (%v): %s", s.Project, s.Kind, err, strings.TrimSpace(string(out)))
 	}
 	deadline := d.Now().Add(d.Settle)
+	why := "is not running"
 	for {
-		out, err := d.R.Run(ctx, setup.Cmd{Name: ab, Args: []string{"service", "stale"}, Stdout: true})
-		if err == nil && !listsService(string(out), s) {
+		if active, own := isRunning(ctx, d, s); !active {
+			why = "is not running"
+		} else if !own {
+			why = "has not recorded its build from its own process"
+		} else if out, err := d.R.Run(ctx, setup.Cmd{Name: ab, Args: []string{"service", "stale"}, Stdout: true}); err != nil {
+			why = "cannot be judged (service stale: " + err.Error() + ")"
+		} else if listsService(string(out), s) {
+			why = "still runs another build"
+		} else {
 			return nil
 		}
 		if !d.Now().Before(deadline) {
-			return fmt.Errorf("%s %s did not record the new build within %s", s.Project, s.Kind, d.Settle)
+			return fmt.Errorf("%s %s did not record the new build within %s: it %s", s.Project, s.Kind, d.Settle, why)
 		}
 		d.Sleep(2 * time.Second)
 	}
+}
+
+// isRunning: s's unit is active here, and its record is its own process's
+// (Running gives it a build).
+func isRunning(ctx context.Context, d Deps, s Service) (active, own bool) {
+	all, err := d.Running(ctx)
+	if err != nil {
+		return false, false
+	}
+	for _, r := range all {
+		if r.Project == s.Project && r.Kind == s.Kind {
+			return true, r.Build != ""
+		}
+	}
+	return false, false
 }
 
 // listsService: service stale's "<project> <kind> <build>" lines name s.
@@ -507,9 +522,8 @@ func restoreSkills(ctx context.Context, m Manifest) error {
 		}
 	}
 	home := m.Skills.Home
-	_, markErr := os.Stat(filepath.Join(home, ".git", "agentbus-setup"))
 	switch {
-	case m.Skills.Absent && markErr == nil:
+	case m.Skills.Absent && setup.SkillsOurs(home):
 		if err := os.RemoveAll(home); err != nil {
 			return fmt.Errorf("external skills: %w", err)
 		}
@@ -608,9 +622,9 @@ func RollbackTo(ctx context.Context, d Deps, id string, yes bool) int {
 		return 1
 	}
 	defer unlock()
-	ids := Snapshots(updates)
+	ids := Live(updates)
 	if len(ids) == 0 {
-		fmt.Fprintln(d.Err, "agentbus update: no snapshot to roll back to")
+		fmt.Fprintln(d.Err, "agentbus update: no installed update to roll back (agentbus update --list)")
 		return 1
 	}
 	if id == "" {
@@ -623,7 +637,7 @@ func RollbackTo(ctx context.Context, d Deps, id string, yes bool) int {
 		}
 	}
 	if from < 0 {
-		fmt.Fprintln(d.Err, "agentbus update: no snapshot "+id+" (agentbus update --list)")
+		fmt.Fprintln(d.Err, "agentbus update: "+id+" is no installed update (a failed one rolled itself back; agentbus update --list)")
 		return 1
 	}
 	todo := append([]string{}, ids[from:]...)

@@ -83,7 +83,7 @@ func (f *flow) deps(tty bool) Deps {
 	d := Deps{R: f.r, Getenv: func(k string) string { return f.env[k] }, Environ: environ,
 		Now: func() time.Time { return f.r.now }, Sleep: func(d time.Duration) { f.r.now = f.r.now.Add(d) },
 		Out: &f.out, Err: &f.errw, Version: "v0.1.0", Repo: f.w.clone, BinDir: f.bin, FromBuild: "v0.1.0.old",
-		Running: func(context.Context) ([]Service, error) { return f.services, nil }, Settle: 60 * time.Second}
+		Running: func(context.Context) ([]Service, error) { return f.r.running(), nil }, Settle: 60 * time.Second}
 	if tty {
 		d.TTY = &rw{in: strings.NewReader("y\n")}
 	}
@@ -112,7 +112,25 @@ type fakeRun struct {
 	wrongLink bool   // the link script succeeds but links the clone's skill, not the tree's
 	neverOK   string // "<project> <kind>": never records a build
 	restarted []string
-	restore   func(c setup.Cmd) // a snapshot's agentbus update --restore
+	restore   func(c setup.Cmd) error // a snapshot's agentbus update --restore
+	moveClone bool                    // setup's skills clone checkout really moves it
+	onRestart func()
+	downOnce  string // "<project> <kind>": inactive after its first restart (crashed), up after the next
+	down      map[string]bool
+}
+
+// running is what the real Running reads: the active units only, each with
+// the build it recorded.
+func (r *fakeRun) running() []Service {
+	var out []Service
+	for _, s := range r.f.services {
+		k := s.Project + " " + s.Kind
+		if r.down[k] {
+			continue
+		}
+		out = append(out, Service{s.Project, s.Kind, r.recorded[k]})
+	}
+	return out
 }
 
 func (r *fakeRun) LookPath(name string) (string, error) { return "", errors.New("no") }
@@ -128,11 +146,21 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 			}
 		}
 		return nil, nil
+	case c.Name == "git" && len(c.Args) > 3 && c.Args[2] == "checkout" && r.moveClone:
+		sh(r.t, c.Args[1], "checkout", "-q", c.Args[4])
+		return nil, nil
 	case c.Name == "git" && len(c.Args) > 3 && (c.Args[2] == "fetch" || c.Args[2] == "checkout"):
 		return nil, nil // setup's skills clone: fetched and checked out "successfully", never moved
+	case c.Name == "git" && len(c.Args) > 0 && c.Args[0] == "clone": // setup's first clone, at the pin
+		home := c.Args[len(c.Args)-1]
+		_ = os.MkdirAll(home, 0o755)
+		sh(r.t, home, "init", "-q", "-b", "main")
+		commit(r.t, home, "pin")
+		sh(r.t, home, "tag", "v1.3.1")
+		return nil, nil
 	case len(c.Args) == 3 && c.Args[0] == "update" && c.Args[1] == "--restore":
 		if r.restore != nil {
-			r.restore(c)
+			return nil, r.restore(c)
 		}
 		return nil, nil
 	case key == "agentbus version" || key == "busmon --version":
@@ -152,6 +180,15 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 	case c.Name == filepath.Join(r.f.bin, "agentbus") && len(c.Args) == 5 && c.Args[2] == "service" && c.Args[3] == "restart":
 		s := c.Args[1] + " " + c.Args[4]
 		r.restarted = append(r.restarted, s)
+		if r.onRestart != nil {
+			r.onRestart()
+		}
+		if r.down == nil {
+			r.down = map[string]bool{}
+		}
+		if s == r.downOnce {
+			r.down[s] = !r.down[s] && countOf(r.restarted, s) == 1
+		}
 		if s != r.neverOK {
 			b, _ := os.ReadFile(filepath.Join(r.f.bin, "agentbus"))
 			r.recorded[s] = string(b)
@@ -161,7 +198,7 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 		b, _ := os.ReadFile(filepath.Join(r.f.bin, "agentbus"))
 		var out []string
 		for s, build := range r.recorded {
-			if build != string(b) {
+			if build != string(b) && !r.down[s] { // as the real one: an inactive unit is never listed
 				out = append(out, s+" x")
 			}
 		}
@@ -214,8 +251,8 @@ func TestUpdate(t *testing.T) {
 	out := f.out.String()
 	for _, want := range []string{"agentbus v0.1.0 -> v0.2.0  (release notes: " + filepath.Join(tree, "docs", "releases", "v0.2.0.md") + ")",
 		"build from   " + tree + "  (your clone is not touched)", "restart      a dispatch, a missions",
-		"not touched  b dispatch (old): agentbus --project b service restart dispatch", "skills changed: review",
-		"not restarted: b dispatch (old): agentbus --project b service restart dispatch"} {
+		"not touched  b dispatch (old agentbus): agentbus --project b service restart dispatch", "skills changed: review",
+		"not restarted: b dispatch (old agentbus): agentbus --project b service restart dispatch"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q\n%s", want, out)
 		}
@@ -289,7 +326,7 @@ func TestUpdateCheckAndRefusals(t *testing.T) {
 	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Check: true}); code != 0 || !strings.Contains(f.out.String(), "-> v0.2.0") {
 		t.Fatalf("check: %d %s", code, f.out.String())
 	}
-	if code := Run(context.Background(), f.deps(false), Options{Project: "a"}); code != 1 || !strings.Contains(f.errw.String(), "no terminal") {
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a"}); code != 1 || !strings.Contains(f.errw.String(), "no terminal to ask on: run it in a terminal, or with --yes") {
 		t.Fatalf("no tty: %d %s", code, f.errw.String())
 	}
 	if read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" || len(Snapshots(Dir(f.env["XDG_STATE_HOME"]))) != 0 {
@@ -417,13 +454,14 @@ func TestRollbackHoldsTheLock(t *testing.T) {
 		_ = AppendHistory(updates, HistoryLine{Kind: "update", OK: true, Snapshot: id})
 	}
 	held := 0
-	f.r.restore = func(c setup.Cmd) {
+	f.r.restore = func(c setup.Cmd) error {
 		if _, err := Lock(updates); errors.Is(err, ErrLocked) {
 			held++
 		}
 		if !slicesContain(c.Env, heldEnv+"=1") {
 			t.Errorf("restore started without the marker: %v", c.Env)
 		}
+		return nil
 	}
 	if code := RollbackTo(context.Background(), f.deps(false), "s1", true); code != 0 {
 		t.Fatalf("exit %d %s", code, f.errw.String())
@@ -461,4 +499,195 @@ func slicesContain(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func countOf(xs []string, v string) int {
+	n := 0
+	for _, x := range xs {
+		if x == v {
+			n++
+		}
+	}
+	return n
+}
+
+// TestUpdateServiceDownRollsBack: a restarted unit that ends inactive (a
+// crash, a clean exit, failed) leaves service stale's list, as the real one
+// drops inactive units, yet it is red: green is active, its own PID, the new
+// build (foureyes).
+func TestUpdateServiceDownRollsBack(t *testing.T) {
+	f := newFlow(t)
+	f.r.downOnce = "a dispatch"
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 1 {
+		t.Fatalf("exit %d\n%s", code, f.out.String())
+	}
+	f.assertRolledBack(t)
+	if !strings.Contains(f.errw.String(), "a dispatch") {
+		t.Fatalf("%s", f.errw.String())
+	}
+}
+
+// TestRollbackNewestFirstStopsAtFailure: --rollback to an older snapshot
+// undoes each later update newest first, and stops at the first that fails
+// (§3.5).
+func TestRollbackNewestFirstStopsAtFailure(t *testing.T) {
+	f := newFlow(t)
+	updates := Dir(f.env["XDG_STATE_HOME"])
+	for _, id := range []string{"s1", "s2", "s3"} {
+		if err := WriteSnapshot(filepath.Join(updates, id), Manifest{BinDir: f.bin}); err != nil {
+			t.Fatal(err)
+		}
+		_ = AppendHistory(updates, HistoryLine{Kind: "update", OK: true, Snapshot: id})
+	}
+	var order []string
+	f.r.restore = func(c setup.Cmd) error {
+		order = append(order, c.Args[2])
+		if c.Args[2] == "s2" {
+			return errors.New("exit 1")
+		}
+		return nil
+	}
+	if code := RollbackTo(context.Background(), f.deps(false), "s1", true); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if strings.Join(order, ",") != "s3,s2" {
+		t.Fatalf("restored %v, want s3,s2 then stop", order)
+	}
+}
+
+// TestUpdateRestoresTheSkillsClone: a clone the update made (recorded
+// absent) is removed by the rollback; setup's clone that the update moved
+// is checked out back on its recorded HEAD (§3.5 step 3).
+func TestUpdateRestoresTheSkillsClone(t *testing.T) {
+	f := newFlow(t)
+	home := filepath.Join(f.home, ".local", "share", "agentbus", "skills", "mattpocock")
+	_ = os.RemoveAll(home)
+	f.r.neverOK = "a missions"
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 1 {
+		t.Fatalf("exit %d %s", code, f.errw.String())
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatal("the clone the update made was left")
+	}
+
+	g := newFlow(t)
+	home = filepath.Join(g.home, ".local", "share", "agentbus", "skills", "mattpocock")
+	_ = os.RemoveAll(home)
+	_ = os.MkdirAll(home, 0o755)
+	sh(t, home, "init", "-q", "-b", "main")
+	commit(t, home, "pin")
+	sh(t, home, "tag", "v1.3.1")
+	before := commit(t, home, "after the pin")
+	writeFile(t, filepath.Join(home, ".git", "agentbus-setup"), "", 0o644)
+	g.r.moveClone, g.r.neverOK = true, "a missions"
+	if code := Run(context.Background(), g.deps(false), Options{Project: "a", Yes: true}); code != 1 {
+		t.Fatalf("exit %d %s", code, g.errw.String())
+	}
+	if !strings.Contains(g.errw.String(), "a missions") || sh(t, home, "rev-parse", "HEAD") != before {
+		t.Fatalf("clone at %s, want %s back\n%s", sh(t, home, "rev-parse", "HEAD"), before, g.errw.String())
+	}
+}
+
+// TestUpdateExistingTreeRefused: a release tree with changes, or not at the
+// tag, is refused, naming it; nothing changes (§3.2).
+func TestUpdateExistingTreeRefused(t *testing.T) {
+	for _, c := range []struct{ name, at, want string }{{"dirty", "v0.2.0", "has changes"}, {"elsewhere", "v0.1.0", "is not at v0.2.0"}} {
+		f := newFlow(t)
+		tree := filepath.Join(f.home, ".local", "share", "agentbus", "src", "v0.2.0")
+		sh(t, f.w.clone, "fetch", "-q", "--tags", "origin")
+		sh(t, f.w.clone, "worktree", "add", "-q", "--detach", tree, c.at)
+		if c.name == "dirty" {
+			writeFile(t, filepath.Join(tree, "stray"), "x", 0o644)
+		}
+		if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 1 || !strings.Contains(f.errw.String(), c.want) {
+			t.Fatalf("%s: %d %s", c.name, code, f.errw.String())
+		}
+		if read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" {
+			t.Fatalf("%s: binaries changed", c.name)
+		}
+	}
+}
+
+// TestUpdateLeavesAForeignAgentLaunch: a link that is not setup's is left
+// alone (§3.4 step 5).
+func TestUpdateLeavesAForeignAgentLaunch(t *testing.T) {
+	f := newFlow(t)
+	link := filepath.Join(f.bin, "agent-launch")
+	_ = os.Remove(link)
+	if err := os.Symlink("/elsewhere/agent-launch", link); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 0 {
+		t.Fatalf("exit %d %s", code, f.errw.String())
+	}
+	if l, _ := os.Readlink(link); l != "/elsewhere/agent-launch" {
+		t.Fatalf("agent-launch -> %s", l)
+	}
+}
+
+// TestRollbackRestoresBusmonFirst: the rollback puts busmon back before
+// agentbus (an old busmon runs the agentbus beside it, §3.5 step 1): with
+// the snapshot's busmon gone, agentbus is not restored yet.
+func TestRollbackRestoresBusmonFirst(t *testing.T) {
+	f := newFlow(t)
+	updates := Dir(f.env["XDG_STATE_HOME"])
+	f.r.neverOK = "a missions"
+	f.r.onRestart = func() {
+		for _, id := range Snapshots(updates) {
+			_ = os.Remove(filepath.Join(updates, id, "bin", "busmon"))
+		}
+	}
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if read(t, filepath.Join(f.bin, "agentbus")) != "new agentbus" || !strings.Contains(f.errw.String(), "the rollback failed too") {
+		t.Fatalf("agentbus %q\n%s", read(t, filepath.Join(f.bin, "agentbus")), f.errw.String())
+	}
+}
+
+// TestUpdateDataDirBehindASymlink: the strict check resolves both sides, so
+// a data directory reached through a symlink is the same place (foureyes).
+func TestUpdateDataDirBehindASymlink(t *testing.T) {
+	f := newFlow(t)
+	real := f.env["XDG_DATA_HOME"]
+	alias := filepath.Join(f.home, "data-alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Fatal(err)
+	}
+	f.env["XDG_DATA_HOME"] = alias
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 0 {
+		t.Fatalf("exit %d %s", code, f.errw.String())
+	}
+}
+
+// TestRollbackDefaultsToTheLastSuccess: with no id, --rollback undoes the
+// last update that succeeded and is not rolled back yet, never one that
+// already rolled itself back (foureyes).
+func TestRollbackDefaultsToTheLastSuccess(t *testing.T) {
+	f := newFlow(t)
+	updates := Dir(f.env["XDG_STATE_HOME"])
+	for _, c := range []struct {
+		id   string
+		hist []HistoryLine
+	}{
+		{"s1", []HistoryLine{{Kind: "update", OK: true}}},
+		{"s2", []HistoryLine{{Kind: "update", OK: true}, {Kind: "rollback", OK: true}}},
+		{"s3", []HistoryLine{{Kind: "update", OK: false}}},
+	} {
+		if err := WriteSnapshot(filepath.Join(updates, c.id), Manifest{BinDir: f.bin}); err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range c.hist {
+			h.Snapshot = c.id
+			_ = AppendHistory(updates, h)
+		}
+	}
+	var order []string
+	f.r.restore = func(c setup.Cmd) error { order = append(order, c.Args[2]); return nil }
+	if code := RollbackTo(context.Background(), f.deps(false), "", true); code != 0 {
+		t.Fatalf("exit %d %s", code, f.errw.String())
+	}
+	if strings.Join(order, ",") != "s1" {
+		t.Fatalf("restored %v, want s1 only", order)
+	}
 }

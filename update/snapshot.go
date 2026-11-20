@@ -232,6 +232,28 @@ func Interrupted(updates string) string {
 	return last
 }
 
+// Live are the snapshots whose update succeeded and that no successful
+// rollback has undone since, oldest first: what --rollback undoes (a failed
+// update rolled itself back already).
+func Live(updates string) []string {
+	live := map[string]bool{}
+	for _, h := range History(updates) {
+		switch {
+		case h.Kind == "update" && h.OK:
+			live[h.Snapshot] = true
+		case h.Kind == "rollback" && h.OK:
+			live[h.Snapshot] = false
+		}
+	}
+	var out []string
+	for _, id := range Snapshots(updates) {
+		if live[id] {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // Prune keeps the last Keep complete snapshots and removes the older ones,
 // after a successful update only (§3.3).
 func Prune(updates string) error {

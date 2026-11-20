@@ -86,3 +86,11 @@ func TestStateDir(t *testing.T) {
 		t.Fatal(StateDir(get))
 	}
 }
+
+// TestSkillsChanged: each skills/<name> once, sorted; other paths ignored.
+func TestSkillsChanged(t *testing.T) {
+	got := SkillsChanged("skills/tdd/SKILL.md\nskills/agent-bus/SKILL.md\nskills/tdd/x.md\nREADME.md\nskills\n")
+	if strings.Join(got, ",") != "agent-bus,tdd" {
+		t.Fatalf("%v", got)
+	}
+}

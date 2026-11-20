@@ -34,7 +34,8 @@ Install v0.32.0? [y/N]
 - **`--yes`** answers that question. It is the person's flag. An agent caller is refused with or
   without it (§5).
 - **`--check`** stops after the plan and changes nothing. busmon may show its output.
-- **`agentbus update --rollback [<id>]`** restores a snapshot, the last one by default.
+- **`agentbus update --rollback [<id>]`** restores a snapshot: by default the last update that
+  succeeded and is not rolled back yet (a failed update rolled itself back already).
   **`--list`** lists the snapshots.
 - **`--project <p>`** names the project whose services are restarted. Without it, nothing is
   restarted, and every stale service is listed with its command. It is read from the command line
@@ -167,8 +168,10 @@ can also undo them.
    - The restart is `agentbus --project <p> service restart <kind>` with the new binary. That is
      `Stop`, a budget reset, then `Start` (`cmd/agentbus/servicecmd.go:285`). Unit files are not
      rewritten.
-   - **Green** means the service leaves the stale list within 60 s: it recorded the new build key,
-     with the unit's own PID. This is `staleServices`' own test.
+   - **Green** means, within 60 s: the unit is active, its record was written by the unit's own PID,
+     and the new binary's `service stale` no longer lists it (it recorded the new build). `service
+     stale` alone is not enough: it drops an inactive unit, so a service that crashed, exited or
+     went `failed` after its restart would read as green.
    - A service that is not green rolls the update back.
    - **Holders are never restarted.** The restarted dispatcher installs and starts its own build's
      holder through the existing path (`ensureOwnHolder`, `cmd/agentbus/up.go:1297`). New
@@ -344,3 +347,5 @@ The macOS signature check (§6, §7) stays a blocker before the first release th
   command line only (§2); busmon's About row after step 1's PR (§3.6).
 - **r5** (reviewer-codex on the step 1 build): `--rollback` holds the lock across every restore it runs
   (§3.5); a history line that cannot be written after a success rolls the update back (§3.5's table).
+- **r6** (foureyes on the step 1 build): green is an active unit with its own PID's record of the new
+  build, not only "not stale" (§3.4 step 6); `--rollback` defaults to the last installed update (§2).

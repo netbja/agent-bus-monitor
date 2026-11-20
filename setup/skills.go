@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -27,6 +28,31 @@ func (in *Installer) CheckPath(path string) {
 			in.O.Warn(name + " on PATH is " + found + ", which shadows " + bin + "/" + name + "; remove it or put " + bin + " first.")
 		}
 	}
+}
+
+// SkillsMarker is the file setup writes into the external skills clone it
+// made: a folder without it is the person's.
+func SkillsMarker(home string) string { return filepath.Join(home, ".git", "agentbus-setup") }
+
+// SkillsOurs: setup made the clone at home.
+func SkillsOurs(home string) bool { _, err := os.Stat(SkillsMarker(home)); return err == nil }
+
+// SkillsChanged are the skills/<name> folders named in a git diff
+// --name-only of skills/, sorted, each once (setup update's hint, and
+// agentbus update's).
+func SkillsChanged(names string) []string {
+	seen := map[string]bool{}
+	var changed []string
+	for _, f := range strings.Split(names, "\n") {
+		parts := strings.SplitN(f, "/", 3)
+		if len(parts) < 2 || seen[parts[1]] {
+			continue
+		}
+		seen[parts[1]] = true
+		changed = append(changed, parts[1])
+	}
+	sort.Strings(changed)
+	return changed
 }
 
 func (in *Installer) skillsRepo() string {
@@ -56,7 +82,7 @@ func (in *Installer) externalSkills(ctx context.Context) error {
 		return nil
 	}
 	home, ref, repo := SkillsHome(in.Getenv), SkillsRef(in.Getenv), in.skillsRepo()
-	mark := filepath.Join(home, ".git", "agentbus-setup")
+	mark := SkillsMarker(home)
 	git := func(args ...string) ([]byte, error) {
 		return in.R.Run(ctx, Cmd{Name: "git", Args: args})
 	}
