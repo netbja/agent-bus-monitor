@@ -201,6 +201,9 @@ func printMergeQueue(rec bus.MergeQueueRecord, asJSON bool, out io.Writer) int {
 			who = append(who, a.Reviewer)
 		}
 		line := fmt.Sprintf("%s  %s  %s  approved by %s", id, strings.Join(it.Subjects, ","), it.Head[:min(7, len(it.Head))], strings.Join(who, ", "))
+		if len(it.CIRed) > 0 { // ci-loop §8 Q8: the head's checks are red
+			line += "  CI red: " + mergequeue.CIRedText(it.CIRed)
+		}
 		if it.URL != "" {
 			line += "  " + it.URL
 		}

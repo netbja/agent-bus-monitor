@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -131,5 +132,37 @@ func TestMergeQueueDrop(t *testing.T) {
 	}
 	if ds, _ := b.DroppedHeads(ctx); len(ds) != 0 {
 		t.Fatalf("after undrop %+v", ds)
+	}
+}
+
+// TestMergeQueueCmdCIRed: a queued PR whose head's checks are red carries
+// the mark on its row, its failing checks named as the loop's hand-off names
+// them (at most 10, then "and N more"); a PR with no failure has no mark (ci-loop §8 Q8).
+func TestMergeQueueCmdCIRed(t *testing.T) {
+	rec := mqCmdRecord()
+	rec.Items[0].CIRed = []string{"build", "test"}
+	var out bytes.Buffer
+	printMergeQueue(rec, false, &out)
+	if !strings.Contains(out.String(), "#309  request-priority  f98091b  approved by foureyes, reviewer-codex  CI red: `build`, `test`  https://github.com/o/r/pull/309") {
+		t.Fatalf("%s", out.String())
+	}
+	var many []string
+	for i := range 12 {
+		many = append(many, fmt.Sprintf("c%02d", i))
+	}
+	rec.Items[0].CIRed = many
+	out.Reset()
+	printMergeQueue(rec, false, &out)
+	if !strings.Contains(out.String(), "CI red: `c00`, `c01`, `c02`, `c03`, `c04`, `c05`, `c06`, `c07`, `c08`, `c09`, and 2 more  https://") {
+		t.Fatalf("%s", out.String())
+	}
+	out.Reset()
+	if printMergeQueue(rec, true, &out); !strings.Contains(out.String(), `"ci_red":["c00",`) {
+		t.Fatalf("json %s", out.String())
+	}
+	out.Reset()
+	printMergeQueue(mqCmdRecord(), false, &out)
+	if strings.Contains(out.String(), "CI red") {
+		t.Fatalf("a green row has a mark: %s", out.String())
 	}
 }

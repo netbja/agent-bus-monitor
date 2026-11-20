@@ -117,7 +117,7 @@ func Derive(in Input) Result {
 			res.Conflicting = append(res.Conflicting, bus.MergeConflict{Number: pr.Number, Base: pr.Base})
 			continue
 		}
-		add(bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head}, a)
+		add(bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head, CIRed: ciRed(pr)}, a)
 	}
 	for _, tp := range in.Tips {
 		a := cand[tp.Head]
@@ -128,6 +128,30 @@ func Derive(in Input) Result {
 	}
 	sort.SliceStable(res.Items, func(i, j int) bool { return res.Items[i].ApprovedAt < res.Items[j].ApprovedAt })
 	return res
+}
+
+// ciRed is the "CI red" mark of a PR (ci-loop §8 Q8): its head's failing
+// checks by §2's rule (Classify: each name's latest entry), red even while
+// another check still runs; nil when none failed or the rollup is cut (its
+// checks are unknown, as the loop reads them).
+func ciRed(pr PR) []string {
+	if pr.ChecksCut {
+		return nil
+	}
+	if f := Classify(pr.Checks).Failing; len(f) > 0 {
+		return failingNames(f)
+	}
+	return nil
+}
+
+// CIRedText names a mark's checks as the loop's hand-off does: at most 10,
+// then "and N more".
+func CIRedText(names []string) string {
+	cs := make([]Check, len(names))
+	for i, n := range names {
+		cs[i] = Check{Name: n}
+	}
+	return ciList(cs, false)
 }
 
 // ApprovedHeads are the heads some subject's deciding approve names: the only
