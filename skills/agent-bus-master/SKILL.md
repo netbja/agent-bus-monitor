@@ -391,7 +391,7 @@ The person may read and write a language other than English. The setting is `per
 - **An ask's choice labels stay English.** Each answer comes back to you as the label, and a label
   can end up in a directive. Only the question text follows `person.language`.
 - **Unknown, `en`, or refused:** write English to everyone. A value that is not an ISO 639-1 code
-  reads `en`, and `agentbus config` warns of it.
+  shows as `invalid`, with the warning `master writes English`.
 
 **The bus rule.** Everything on the bus is English: one language serves every model, and an agent
 never has to guess. The one exception is a message from the person, or addressed to the person: what
