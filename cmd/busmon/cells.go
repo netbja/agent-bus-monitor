@@ -301,6 +301,7 @@ type ScrollState struct{ Total, Top, Visible int }
 
 type Frame struct {
 	Title, Label Line
+	Footer       Line // on the bottom border, left, cut to fit (the Board's actions)
 	Focused      bool
 	Scroll       ScrollState
 	Hue          Role // the panel's colour: its border and title (RoleAccent when unset)
@@ -404,6 +405,11 @@ func drawFrame(s cellSink, x, y, w, h int, f Frame) {
 	}
 	drawLine(s, x+2, y, titleW, title, false)
 	drawLine(s, x+w-2-labelW, y, labelW, label, false)
+	if f.Footer.Width() > 0 && available > 2 { // the words cut to fit, a space each side
+		words := FitLine(f.Footer, min(f.Footer.Width(), available-2))
+		foot := append(append(Line{{Text: " ", Role: RoleText}}, words...), Seg{Text: " ", Role: RoleText})
+		drawLine(s, x+2, y+h-1, foot.Width(), foot, false)
+	}
 	drawScrollbar(s, x+w-1, y, h, f.Scroll, style)
 }
 

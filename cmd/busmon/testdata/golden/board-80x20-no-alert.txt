@@ -1,0 +1,16 @@
+╭─ Board ──────────────────────────────────────────────── 4 open · 1 done (d) ─╮
+│  TASK                  OWNER     STATE      AGE                              │
+│  views-redesign-spec   coder2    accepted   5m                               │
+│  ask-refuses-person    coder2    working    12m                              │
+│  agent-screen-blocked  coder     working    40m                              │
+│  holder-g1-part2       coder     requested  1h                               │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰─ enter diagnostics · d done ─────────────────────────────────────────────────╯

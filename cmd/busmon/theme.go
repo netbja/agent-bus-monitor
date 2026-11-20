@@ -332,6 +332,7 @@ const (
 	GlyphFocusBar  = "━" // settings-focus-bar: heavy, unlike the light rules
 	GlyphOpenHere  = "◂" // projects (M): the project busmon has open
 	GlyphDash      = "—"
+	GlyphWarn      = "⚠" // the Board's alert column (views-redesign §3); text presentation, one cell
 	GlyphBarFull   = "█"
 	GlyphBarEmpty  = "░"
 	GlyphGauge     = "▇"
@@ -452,5 +453,5 @@ var UIGlyphs = []string{
 	GlyphDash, GlyphBarFull, GlyphBarEmpty, GlyphGauge, glyphVertical, glyphThumb,
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphUpperHalf,
-	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet, GlyphOpenHere, GlyphIdea,
+	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet, GlyphOpenHere, GlyphIdea, GlyphWarn,
 }

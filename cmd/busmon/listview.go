@@ -25,6 +25,7 @@ type listState struct {
 	focused      bool
 	header       Line
 	title, label Line
+	footer       Line // words on the frame's bottom border (the Board's actions, views-redesign §3)
 	hue          Role // the frame's colour (panelHue)
 	items        []ListItem
 	sel          string
@@ -48,6 +49,9 @@ type listState struct {
 func (l *listState) SetHeader(h Line) { l.header = h }
 
 func (l *listState) SetFrame(title, label Line) { l.title, l.label = title, label }
+
+// SetFooter puts words on the frame's bottom border, left; nil: none.
+func (l *listState) SetFooter(f Line) { l.footer = f }
 
 // SetHue gives the list's frame its panel colour.
 func (l *listState) SetHue(r Role) { l.hue = r }
@@ -410,7 +414,7 @@ func (l *listState) draw(screen cellSink) {
 	if l.kanban != nil { // each column scrolls on its own: no frame scrollbar
 		scroll = ScrollState{}
 	}
-	drawFrame(screen, x, y, w, h, Frame{Title: l.title, Label: l.label, Focused: l.focused, Scroll: scroll, Hue: l.hue})
+	drawFrame(screen, x, y, w, h, Frame{Title: l.title, Label: l.label, Footer: l.footer, Focused: l.focused, Scroll: scroll, Hue: l.hue})
 	ix, iy, iw, ih := l.inner()
 	if iw <= 0 {
 		return

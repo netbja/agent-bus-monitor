@@ -13,6 +13,8 @@
                   │     Activity lines at start         25
                   │     Idle? hint after                10m
                   │     Screensaver (idle view) after   off
+                  │     Board: no acceptance after      30m
+                  │     Board: no reply after           2h
                   │     Attach prefix key               f12
                   │
                   │ ───────────────────────────────────────────────────────────────────────────

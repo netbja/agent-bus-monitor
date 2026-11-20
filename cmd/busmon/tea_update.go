@@ -177,8 +177,13 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:
 		cmd = m.pushPlan()
-	case ActShowDone: // Work: the plan's drawer with DONE shown
-		cmd = m.openPlanDone()
+	case ActShowDone: // Work: the plan's drawer with DONE shown; the Board: its done tasks (views-redesign §3)
+		if m.ui.focus == PanelBoard {
+			m.ui.boardDone = !m.ui.boardDone
+			m.refresh()
+		} else {
+			cmd = m.openPlanDone()
+		}
 	case ActTokens:
 		cmd = m.push(page{kind: ovTokens})
 	case ActSettings:
@@ -272,8 +277,11 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		return m.openForYouItem(m.forYou[i]) // no unread row: the panel draws none (home-inbox-drawer §3.2)
 	case PanelAgents:
 		return m.pushAgent(key)
-	case PanelBoard:
-		if _, ok := s.board[key]; ok {
+	case PanelBoard: // a tracked request's diagnostics, else the task (views-redesign §3)
+		if e, ok := s.board[key]; ok {
+			if e.Request != nil {
+				return m.openRequestRow("req:" + key)
+			}
 			return m.push(page{kind: ovTask, key: key})
 		}
 	case PanelWork:

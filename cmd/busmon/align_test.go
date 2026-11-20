@@ -100,7 +100,22 @@ func checkFrameAt(t *testing.T, at func(x, y int) string, name string, r Rect, s
 			t.Errorf("%s: right border (%d,%d) = %q", name, x1, y, got)
 		}
 	}
-	for x := r.X + 1; x < x1; x++ {
+	// The bottom border is horizontal rules but for one footer (the Board's
+	// actions, views-redesign §3): a run that starts two cells in and is
+	// padded with a space each side, the border's last cell before the corner
+	// still a rule.
+	x := r.X + 1
+	if x < x1 && at(x, y1) == glyphHorizontal && x+1 < x1 && at(x+1, y1) == " " {
+		end := x + 2
+		for end < x1-1 && at(end, y1) != glyphHorizontal {
+			end++
+		}
+		if at(end-1, y1) != " " {
+			t.Errorf("%s: bottom border footer not padded at (%d,%d) = %q", name, end-1, y1, at(end-1, y1))
+		}
+		x = end
+	}
+	for ; x < x1; x++ {
 		if got := at(x, y1); got != glyphHorizontal {
 			t.Errorf("%s: bottom border (%d,%d) = %q", name, x, y1, got)
 			break
