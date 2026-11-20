@@ -108,6 +108,17 @@ type workModel struct {
 // youCount is the one counter (correction 3).
 func (w workModel) youCount() int { return len(w.You) }
 
+// decideCount is YOU's decide rows: the person's plan tasks nothing blocks.
+func (w workModel) decideCount() int {
+	n := 0
+	for _, it := range w.You {
+		if it.Verb == verbDecide {
+			n++
+		}
+	}
+	return n
+}
+
 // strip is the header's chips from the model: merge, and decide for every
 // other YOU row, so decide + merge is YOU's count.
 func (w workModel) strip(unread int) queueStrip {

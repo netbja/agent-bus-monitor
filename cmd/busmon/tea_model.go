@@ -454,7 +454,7 @@ func (m *Model) counts() shellCounts {
 	}
 	fy, extra := len(items), 0
 	if fy == 0 { // the empty state's lines (the pointer among them), shown whole, as wide as they need (capped by the layout)
-		empty := forYouEmpty(m.snap, m.lists.reqView.count(secOwed))
+		empty := forYouEmpty(m.snap, m.lists.reqView.count(secOwed), m.work.decideCount())
 		fy = len(empty)
 		for _, l := range empty {
 			w = max(w, l.Width())

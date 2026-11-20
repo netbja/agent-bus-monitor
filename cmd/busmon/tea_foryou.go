@@ -10,6 +10,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	guardian "github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 )
 
 // For you (busmon Charm spec, decision 2): one list of what waits on the
@@ -249,20 +250,22 @@ type emptyRow struct {
 }
 
 // forYouEmpty is the empty state's lines (the recap and the layout read them).
-func forYouEmpty(s snapshot, owed int) []Line {
+func forYouEmpty(s snapshot, owed, decide int) []Line {
 	var out []Line
-	for _, r := range forYouEmptyRows(s, owed) {
+	for _, r := range forYouEmptyRows(s, owed, decide) {
 		out = append(out, r.line)
 	}
 	return out
 }
 
-// forYouEmptyRows: what is owed, else "Nothing expected", then the plan
-// pointer (planPointer, the one producer), if any. What is in progress is the
-// Agents panel's: never repeated here (foryou-no-progress, the person's
-// answer). A plan task waiting for the person is the pointer, not something
-// owed (home-inbox-drawer §3.3).
-func forYouEmptyRows(s snapshot, owed int) []emptyRow {
+// forYouEmptyRows: what is owed, then the plan's decisions the strip counts
+// (decide: Work's decide rows, workModel.decideCount; views-redesign §6),
+// else "Nothing expected", then the plan pointer (planPointer, the one
+// producer), if any. "Nothing expected from you." only when the strip counts
+// nothing. What is in progress is the Agents panel's: never repeated here
+// (foryou-no-progress, the person's answer). A plan task waiting for the
+// person is the pointer, not something owed (home-inbox-drawer §3.3).
+func forYouEmptyRows(s snapshot, owed, decide int) []emptyRow {
 	var rows []emptyRow
 	if owed > 0 {
 		word := "requests"
@@ -270,7 +273,11 @@ func forYouEmptyRows(s snapshot, owed int) []emptyRow {
 			word = "request"
 		}
 		rows = append(rows, emptyRow{line: Line{{Text: fmt.Sprintf("Owed by you: %d %s (Requests)", owed, word), Role: RoleAttention}}})
-	} else {
+	}
+	if decide > 0 {
+		rows = append(rows, emptyRow{line: Line{{Text: textfmt.Count(decide, "decision") + " in the plan (3 Work)", Role: RoleAttention}}})
+	}
+	if owed == 0 && decide == 0 {
 		rows = append(rows, emptyRow{line: Line{{Text: "Nothing expected from you.", Role: RoleOK}}})
 	}
 	if p, ok := planPointer(s); ok {

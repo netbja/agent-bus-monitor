@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ func TestForYouEmptyState(t *testing.T) {
 		{Task: plan.Task{ID: "pages-4", Title: "Recap and For you", Owner: "coder"}, State: plan.InProgress},
 		{Task: plan.Task{ID: "notifications-order", Title: "Decide: notifications order", Owner: plan.Person}, State: plan.Upcoming},
 	}
-	text := plainOf(forYouEmpty(s, 0))
+	text := plainOf(forYouEmpty(s, 0, 0))
 	if text != "Nothing expected from you.\nNext for you: Decide: notifications order" {
 		t.Errorf("empty state:\n%s", text)
 	}
@@ -35,7 +36,7 @@ func TestForYouEmptyState(t *testing.T) {
 		}
 	}
 	// No plan: it still says what it knows.
-	text = plainOf(forYouEmpty(snapshot{}, 0)) // no pointer (home-inbox-drawer §3.3)
+	text = plainOf(forYouEmpty(snapshot{}, 0, 0)) // no pointer (home-inbox-drawer §3.3)
 	if text != "Nothing expected from you." {
 		t.Errorf("bare empty state:\n%s", text)
 	}
@@ -69,7 +70,7 @@ func TestRecapForYouOnlyWithoutThePanel(t *testing.T) {
 		{Section: "Agents", Title: "Agents"},
 		{Key: "agent:coder", Section: "Agents", Title: "coder · working", Selectable: true},
 	}}
-	empty := forYouEmpty(snapshot{}, 0)
+	empty := forYouEmpty(snapshot{}, 0, 0)
 	text := func(m recapModel) string {
 		var b strings.Builder
 		for _, row := range m.Rows {
@@ -100,7 +101,7 @@ func TestForYouEmptyNamesWhatIsOwed(t *testing.T) {
 		{Task: plan.Task{ID: "pick", Title: "Pick the notifications order", Owner: plan.Person}, State: plan.Waiting},
 		{Task: plan.Task{ID: "tag", Title: "Reinstall and tag", Owner: plan.Person}, State: plan.Upcoming},
 	}
-	text := plainOf(forYouEmpty(s, 2))
+	text := plainOf(forYouEmpty(s, 2, 0))
 	if items := forYou(s, nil); len(items) != 0 {
 		t.Errorf("the waiting plan task as an item: %+v", items)
 	}
@@ -142,7 +143,7 @@ func TestRecapKeepsWhatThePanelDoesNotList(t *testing.T) {
 
 // One request owed reads in the singular (foureyes' nit: owed > 1 survived).
 func TestForYouEmptyOneRequestOwed(t *testing.T) {
-	text := plainOf(forYouEmpty(snapshot{}, 1))
+	text := plainOf(forYouEmpty(snapshot{}, 1, 0))
 	if !strings.Contains(text, "Owed by you: 1 request (Requests)") || strings.Contains(text, "Nothing expected") {
 		t.Errorf("one request owed:\n%s", text)
 	}
@@ -280,5 +281,78 @@ func TestForYouEmptyRowsOpen(t *testing.T) {
 		if top := n.rd.top(); top == nil || top.kind != ovPlanTask || top.key != "tag" {
 			t.Errorf("%v: the pointer opened %+v", st, top)
 		}
+	}
+}
+
+// views-redesign §6: For you never says "Nothing expected from you." while
+// the strip counts decisions. With the plan's decisions counted and no row
+// owed, the first line names them and where they are (tab 3, Work), in the
+// attention role; the pointer stays under it. "Nothing expected" only when
+// the strip counts nothing.
+func TestForYouEmptyCountsThePlanDecisions(t *testing.T) {
+	s := planSnap(personTask("w", "pick the order", plan.Waiting))
+	rows := forYouEmptyRows(s, 0, 10)
+	if got := plainOf(forYouEmpty(s, 0, 10)); got != "10 decisions in the plan (3 Work)\nNext for you: pick the order" {
+		t.Fatalf("ten decisions:\n%s", got)
+	}
+	if rows[0].line[0].Role != RoleAttention || rows[0].key != "" {
+		t.Fatalf("the line: %+v", rows[0])
+	}
+	if got := plainOf(forYouEmpty(s, 0, 1)); !strings.HasPrefix(got, "1 decision in the plan (3 Work)\n") {
+		t.Fatalf("one decision:\n%s", got)
+	}
+	if got := plainOf(forYouEmpty(s, 2, 3)); got != "Owed by you: 2 requests (Requests)\n3 decisions in the plan (3 Work)\nNext for you: pick the order" {
+		t.Fatalf("owed and decisions:\n%s", got)
+	}
+	// In the shell: the label's decide count and the line agree.
+	m := rowsFixture(t, false, true)
+	snap := m.snap
+	snap.planState.rows = slices.Clone(snap.planState.rows)
+	snap.planState.rows[0].State = plan.Waiting // the person's task, nothing blocks it: decide
+	m = step(t, m, pollMsg{snap: snap, at: shellNow})
+	if lbl, first := forYouLabel(m.work.strip(0)), tabText(m.lists.forYou.items[0].Line); lbl != "1 decide" || first != "1 decision in the plan (3 Work)" {
+		t.Fatalf("label %q, first line %q", lbl, first)
+	}
+}
+
+// foureyes: an owed request is counted once, as owed, never again as a plan
+// decision. The work fixture owes one directive and has one waiting plan task:
+// the strip says 2 decide, the panel splits them.
+func TestForYouEmptyOwedIsNoPlanDecision(t *testing.T) {
+	m := workShell(t, 140, 40)
+	if lbl := forYouLabel(m.work.strip(0)); lbl != "2 decide" {
+		t.Fatalf("label %q", lbl)
+	}
+	var got []string
+	for _, it := range m.lists.forYou.items {
+		got = append(got, tabText(it.Line))
+	}
+	want := []string{"Owed by you: 1 request (Requests)", "1 decision in the plan (3 Work)", "Next for you: Decide: notifications order"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("panel %q, want %q", got, want)
+	}
+}
+
+// foureyes: the recap page's For you section, at the narrow tier (no panel
+// beside it), says the plan's decisions too, never "Nothing expected".
+func TestRecapEmptyForYouNamesTheDecisions(t *testing.T) {
+	st := workShared()
+	st.cmdHistory = nil // nothing owed: the plan's decision alone
+	m := workShellOf(t, st, 70, 40)
+	if m.layout.Tier != TierNarrow {
+		t.Fatalf("tier %v", m.layout.Tier)
+	}
+	m.gotRecap(recapMsg{model: recapModel{Rows: []recapRow{{Section: recapForYou, Title: recapForYou}}}})
+	m.maybeOpenRecap()
+	p := m.rd.top()
+	if p == nil || p.kind != ovRecap {
+		t.Fatal("recap page not open")
+	}
+	var titles []string
+	for _, r := range p.recap.Rows {
+		titles = append(titles, r.Title)
+	}
+	if !slices.Contains(titles, "1 decision in the plan (3 Work)") || slices.Contains(titles, "Nothing expected from you.") {
+		t.Fatalf("recap For you: %q", titles)
 	}
 }

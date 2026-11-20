@@ -72,7 +72,7 @@ func TestWorkKanbanDraws(t *testing.T) {
 			t.Fatalf("%q not on the headings' line %q:\n%s", w, heads, screen)
 		}
 	}
-	for _, w := range []string{"decide " + GlyphNone + " you", "Decide: notifications order", GlyphIdle + " sentinel", "between agents"} {
+	for _, w := range []string{GlyphHuman + " Decide: notifications order", GlyphIdle + " sentinel", "between agents"} { // views-redesign §6: no "decide · you"
 		if !strings.Contains(screen, w) {
 			t.Errorf("%q missing:\n%s", w, screen)
 		}
@@ -444,7 +444,9 @@ func TestKanbanFits(t *testing.T) {
 
 // reviewer-codex: every card reads the same way, its facts on line 1 (the
 // priority mark first, then its mark) and its title alone on line 2; a long
-// high-priority title keeps its ↑ in a 31-cell column.
+// high-priority title keeps its ↑ in a 31-cell column. For you's cards are
+// the exception views-redesign §6 makes: the mark and the title on line 1,
+// the facts on line 2.
 func TestWorkKanbanCardLines(t *testing.T) {
 	st := workShared()
 	long := "requests-plan redesign with a title far longer than any column"
@@ -460,6 +462,12 @@ func TestWorkKanbanCardLines(t *testing.T) {
 		l1, l2 := card.lines[0].text(), card.lines[1].text()
 		if !strings.HasPrefix(l1[len(card.lines[0][0].Text):], marks[c]+" ") {
 			t.Errorf("column %d line 1 %q: its mark %q does not follow the priority slot", c, l1, marks[c])
+		}
+		if c == 0 { // For you (§6): the title follows the mark on line 1
+			if l1[len(card.lines[0][0].Text):] != marks[c]+" "+Preview(titles[c]) {
+				t.Errorf("For you's line 1 %q, want its mark and the title %q", l1, titles[c])
+			}
+			continue
 		}
 		if l2 != "  "+Preview(titles[c]) {
 			t.Errorf("column %d line 2 %q, want the title %q", c, l2, titles[c])
@@ -790,6 +798,41 @@ func TestKanbanHeadingUnfocusedIsDimPill(t *testing.T) {
 	for c := range k.cols {
 		if h := k.heading(c); !h[0].Pill || h[0].Fade != frameFade {
 			t.Fatalf("at the tab, heading %d %+v", c, h)
+		}
+	}
+}
+
+// views-redesign §6: a For you card no longer repeats "decide · you". Its
+// first line is its glyph and its title; its second is the age and the place
+// (who asks, the plan task). A merge card keeps "merge PR N" as its title.
+func TestWorkKanbanForYouCards(t *testing.T) {
+	w := workModel{You: []workItem{
+		{Verb: verbDecide, Key: "plan:t8", Who: plan.Person, Text: "Decide: notifications order", At: shellNow.Add(-2 * time.Hour), Plan: "t8"},
+		{Verb: verbAnswer, Key: "ask:a1", Who: "master", Text: "review lot 1? (2 questions)", At: shellNow.Add(-4 * time.Minute)},
+		{Verb: verbMerge, Key: "merge:abc", Who: "you", Text: "merge PR 392: compose-at-file step 1"},
+	}}
+	cards := workKanban(w, workDraw{now: shellNow}).cols[0].cards
+	text := func(l Line) string { return strings.TrimSpace(tabText(l)) } // the priority mark's cell first
+	want := [][2]string{
+		{GlyphHuman + " Decide: notifications order", "2h " + GlyphNone + " #t8"},
+		{"? review lot 1? (2 questions)", "4m " + GlyphNone + " master"},
+		{GlyphGate + " merge PR 392: compose-at-file step 1", ""},
+	}
+	if len(cards) != len(want) {
+		t.Fatalf("%d cards", len(cards))
+	}
+	for i, c := range cards {
+		got := [2]string{text(c.lines[0]), ""}
+		if len(c.lines) > 1 {
+			got[1] = text(c.lines[1])
+		}
+		if got != want[i] {
+			t.Errorf("card %d: %q, want %q", i, got, want[i])
+		}
+		for _, l := range c.lines {
+			if strings.Contains(tabText(l), " you") || strings.Contains(tabText(l), "decide "+GlyphNone) {
+				t.Errorf("card %d repeats the column: %q", i, tabText(l))
+			}
 		}
 	}
 }

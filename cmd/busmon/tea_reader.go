@@ -608,7 +608,7 @@ func (m *Model) buildPage() bool {
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
 	case ovRecap: // the panel is on screen beside the page in the wide and medium tiers; a resize can change that (reviewer-codex)
-		rec := recapFold(recapForScreen(p.recapAll, m.layout.Tier != TierNarrow, forYouEmpty(s, m.lists.reqView.count(secOwed))), p.recapOlder)
+		rec := recapFold(recapForScreen(p.recapAll, m.layout.Tier != TierNarrow, forYouEmpty(s, m.lists.reqView.count(secOwed), m.work.decideCount())), p.recapOlder)
 		p.sel = recapKeepCursor(p.recap.Rows, p.sel, rec.Rows)
 		p.recap = rec
 		p.body, p.recapLine = recapBody(p.recap.Rows, p.sel, width)
