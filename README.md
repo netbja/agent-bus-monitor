@@ -227,7 +227,8 @@ watching it, answering questions, merging, updating and stopping.
 - the header with the services' state;
 - *For you*: what waits for you;
 - the agents;
-- the tabs (number keys).
+- the tabs (number keys): `1` Activity, `2` Board, `3` Work, `4` Plan, the loaded plan's roadmap
+  (`p` opens it as a drawer); under 80 columns one view at a time, `1` For you to `6` Plan.
 
 Useful keys:
 
