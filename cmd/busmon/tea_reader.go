@@ -414,11 +414,7 @@ func (m *Model) pushPlan() tea.Cmd {
 // planDrawerWidths is the plan page's list width and whether the side panel
 // goes beside it (the wide tier, with room for both, §4.3).
 func (m *Model) planDrawerWidths() (list int, side bool) {
-	w := m.readerWidth()
-	if m.layout.Tier == TierWide && w >= planListMin+planSideWidth+1 {
-		return w - planSideWidth - 1, true
-	}
-	return w, false
+	return planTabWidths(m.readerWidth(), m.layout.Tier)
 }
 
 // buildPage (re)builds the top page's body when it is stale; it reports

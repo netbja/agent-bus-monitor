@@ -115,8 +115,14 @@ func TestPlanTabNarrowFolds(t *testing.T) {
 		t.Fatalf("LATER not folded:\n%s", s)
 	}
 	m.lists.plan.Select("fold:later")
+	if w, _ := rowHint(PanelPlan, m.selectedItem(PanelPlan)); w != "unfold" {
+		t.Fatalf("the fold's word %q, want unfold", w)
+	}
 	if m = keys(t, m, kEnter); m.rd.open() || !strings.Contains(m.grid().plain(), "title hi") {
 		t.Fatalf("enter on LATER:\n%s", m.grid().plain())
+	}
+	if l := keys(t, m, '5', '6'); strings.Contains(l.grid().plain(), "title hi") { // left and back: folded again
+		t.Fatalf("LATER still open after leaving the tab:\n%s", l.grid().plain())
 	}
 	m.lists.plan.Select("fold:done")
 	if m = keys(t, m, kEnter); !strings.Contains(m.grid().plain(), "title d") {
@@ -173,5 +179,17 @@ func TestPlanTabGoldens(t *testing.T) {
 			frame = append(frame, strings.TrimRight(string([]rune(lines[y])[r.X:r.X+r.W]), " "))
 		}
 		checkGolden(t, c.name, strings.Join(frame, "\n")+"\n")
+	}
+}
+
+// The label: done/total, "?" when a read failed and the counts are partial.
+func TestPlanTabLabelPartial(t *testing.T) {
+	p := boardPlan(boardRow("a", plan.Done, "coder"), boardRow("b", plan.Upcoming, "coder"))
+	if got := planTabLabel(p, TierMedium).text(); got != "1/2 done" {
+		t.Fatalf("label %q", got)
+	}
+	p.partial = true
+	if got := planTabLabel(p, TierMedium).text(); got != "1/2? done" {
+		t.Fatalf("partial label %q", got)
 	}
 }

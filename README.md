@@ -615,8 +615,9 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     for a low one, `♙` before the person's name, and `after <id>` (`+N` for more). Its frame
     names the plan and its progress (`28/43 done` and a gauge), never a for-you count. From 120
     columns the selected task's panel sits at the right: its state, owner, review, PR, every
-    `after` (`✓` when done), the tasks it unblocks and its priority. Under 80 columns LATER and
-    DONE fold to a count Enter opens (`LATER 3 · 1 ↑`). Enter opens a task's page; `p` and `P`
+    `after` (`✓` when done), the tasks it unblocks and its priority. Under 120 columns (no side
+    panel) LATER and DONE fold to a count Enter opens (`LATER 3 · 1 ↑`), in the tab and the drawer;
+    LATER folds again when you leave the tab. Enter opens a task's page; `p` and `P`
     still open the same roadmap as a drawer.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
   (Tab completes the name), `@all <text>` every registered agent. The line edits at its cursor:
