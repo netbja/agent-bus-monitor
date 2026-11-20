@@ -21,7 +21,6 @@ const (
 	workNotePrefix  = "note:"          // an IDEAS row from an idea note: enter says its path
 	workFoldBetween = "between-agents" // enter: the Requests list, as a sub-view of Work
 	workFoldDone    = "plan-done"      // enter: the plan's drawer, DONE shown
-	workNextHead    = "head:next"      // NEXT's heading: where key 4 lands when NEXT is empty
 	workCompactW    = 100              // below this many cells, the compact rows (the 80-column view)
 	workWhyW        = 38               // the wide rows' "why it waits on you" column
 	workHeadPrefix  = "head:"          // a section heading: never selectable

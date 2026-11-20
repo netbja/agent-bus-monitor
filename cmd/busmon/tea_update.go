@@ -177,11 +177,15 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:
 		cmd = m.pushPlan()
-	case ActShowDone: // Work: the plan's drawer with DONE shown; the Board: its done tasks (views-redesign §3)
-		if m.ui.focus == PanelBoard {
+	case ActShowDone: // Work: the plan's drawer with DONE shown; the Board and the Plan tab: their done tasks (views-redesign §3, §4)
+		switch m.ui.focus {
+		case PanelBoard:
 			m.ui.boardDone = !m.ui.boardDone
 			m.refresh()
-		} else {
+		case PanelPlan:
+			m.ui.planDone = !m.ui.planDone
+			m.refresh()
+		default:
 			cmd = m.openPlanDone()
 		}
 	case ActTokens:
@@ -286,6 +290,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 	case PanelWork:
 		return m.openWorkRow(key)
+	case PanelPlan:
+		return m.openPlanRow(key)
 	case PanelRequests:
 		return m.openRequestRow(key)
 	}
@@ -461,10 +467,7 @@ func (m *Model) switchTab(n int) tea.Cmd {
 	if m.layout.Tier == TierNarrow {
 		tabs = narrowPanels
 	}
-	switch {
-	case n == len(tabs): // 4 (6 at the narrow tier): the Plan, as p opens it (views-redesign §4)
-		return m.pushPlan()
-	case n < len(tabs):
+	if n < len(tabs) {
 		m.focusTab(tabs[n])
 	}
 	return nil

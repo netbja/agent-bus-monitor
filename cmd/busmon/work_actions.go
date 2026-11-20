@@ -8,7 +8,7 @@ import (
 )
 
 // The Work tab's actions (requests-plan-redesign, layout A): enter on a row,
-// y, key 4's alias, d and the decide and merge chips.
+// y, d and the decide and merge chips.
 
 // openWorkRow is enter on a Work row: each kind opens the page its own panel
 // would (For you's for what waits on the person, the request or thread page,

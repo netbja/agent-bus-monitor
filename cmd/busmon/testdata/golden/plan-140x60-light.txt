@@ -5,17 +5,17 @@
 │  ♙ answer foureyes  need a decision on the width … 6m││ the inbox · loaded 0s ago (abcdef0)           │ strip                          │ │
 │  ◆ review coder     by charlie  look at b1           ││                                               │ state    in review             │ │
 │  Next for you: title notes                           ││ NOW  1                                        │ owner    coder                 │ │
-│                                                      ││   ● title drawer  coder  in progress          │ review   approved              │ │
+│                                                      ││   ● title drawer    coder     in progress     │ review   approved              │ │
 │                                                      ││                                               │ PR       338                   │ │
 │                                                      ││ APPROVED  1                                   │ reason   merge PR 338          │ │
-│                                                      ││ ▶ ✓ title strip  coder  #338 · approved · me… │ after    —                     │ │
+│                                                      ││ ▶ ✓ title strip     coder     #338 · approve… │ after    —                     │ │
 │                                                      ││                                               │ unblocks —                     │ │
 │                                                      ││ NEXT  2                                       │ prio     normal                │ │
-│                                                      ││     title notes  ♙ person  decide             │ for you  nothing               │ │
-╰──────────────────────────────────────────────────────╯│     title requests  coder  upcoming           │                                │ │
+│                                                      ││     title notes     ♙ person  decide          │ for you  nothing               │ │
+╰──────────────────────────────────────────────────────╯│     title requests  coder     upcoming        │                                │ │
                                                         │                                               │ enter task page                │ │
                                                         │ LATER  1                                      ╰────────────────────────────────╯ │
-                                                        │     title tag  ♙ person  waiting on requests                                     │
+                                                        │     title tag       ♙ person  blocked                                            │
                                                         │                                                                                  │
                                                         │ DONE  1   d shows                                                                │
                                                         │                                                                                  │

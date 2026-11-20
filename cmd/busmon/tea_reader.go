@@ -52,7 +52,7 @@ type page struct {
 
 	sel       int        // ovPlan: the selected item; ovRecap: the cursor's row
 	expanded  bool       // ovPlan: the done group is open
-	laterOpen bool       // ovPlan: LATER open at the narrow tier (views-redesign §4)
+	laterOpen bool       // ovPlan: LATER open below the wide tier (views-redesign §4)
 	items     []planItem // ovPlan
 
 	from     PanelID // the list the page was opened from (A5: n/p move in it)

@@ -3,17 +3,17 @@ package main
 import "slices"
 
 // The shell's screen (busmon Charm spec, "The screen"): a two-line header,
-// For you and Agents on top, Activity/Board/Requests as one tabbed panel,
+// For you and Agents on top, Activity/Board/Work/Plan as one tabbed panel,
 // the input line and the footer. Pure geometry, like computeLayout.
 
-// lowerTabs are the tabbed panel's tabs, in key order (1, 2, 3). Key 4 is an
-// alias to Work on NEXT, not a fourth tab (requests-plan-redesign,
-// correction 8); Requests is Work's sub-view, its "between agents" line.
-var lowerTabs = []PanelID{PanelActivity, PanelBoard, PanelWork}
+// lowerTabs are the tabbed panel's tabs, in key order (1, 2, 3, 4): Plan is
+// the fourth (views-redesign §4); Requests is a sub-view, drawn under the tab
+// it was opened from (§3).
+var lowerTabs = []PanelID{PanelActivity, PanelBoard, PanelWork, PanelPlan}
 
 // narrowPanels are the narrow tier's views, in Tab and digit order; 6 is
-// the alias to Work on NEXT.
-var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelWork}
+// the Plan.
+var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard, PanelWork, PanelPlan}
 
 // tabbedPanels are the lower panel's lists: its tabs and Work's sub-view.
 var tabbedPanels = append(slices.Clone(lowerTabs), PanelRequests)
@@ -82,7 +82,7 @@ func shellLayoutFor(w, h int, c shellCounts, view, tab PanelID) shellLayout {
 }
 
 func isLowerTab(p PanelID) bool {
-	return p == PanelActivity || p == PanelBoard || p == PanelWork || p == PanelRequests
+	return p == PanelActivity || p == PanelBoard || p == PanelWork || p == PanelPlan || p == PanelRequests
 }
 
 func shellWide(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {

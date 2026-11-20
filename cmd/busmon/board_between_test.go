@@ -69,7 +69,7 @@ func TestRequestsKeyOpensTheSubViewFromItsOrigin(t *testing.T) {
 		tab  rune
 		from PanelID
 		next PanelID
-	}{{'2', PanelBoard, PanelWork}, {'3', PanelWork, PanelActivity}, {'1', PanelActivity, PanelBoard}} {
+	}{{'2', PanelBoard, PanelWork}, {'3', PanelWork, PanelPlan}, {'4', PanelPlan, PanelActivity}, {'1', PanelActivity, PanelBoard}} {
 		for _, key := range []any{'r', kF2} {
 			m := keys(t, keys(t, betweenShell(t), c.tab), key)
 			if m.ui.focus != PanelRequests || m.rd.open() || m.ui.reqFrom != c.from {
