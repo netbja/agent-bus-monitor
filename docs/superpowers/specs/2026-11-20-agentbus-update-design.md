@@ -1,6 +1,6 @@
 # `agentbus update`, step 1: a manual update to the latest release, with a snapshot to roll back to
 
-Status: r3, spec only. Base: origin/dev `b2ccf229`. Author: architect, from the person's decision of
+Status: r4, the person's answers recorded (§9, 2026-11-20); step 1 built from it. Base: origin/dev `b2ccf229`. Author: architect, from the person's decision of
 2026-11-20 (bus thread `1795182404503-0`, relayed by master as cmd `1795182448227-0`).
 
 ## 1. The decision
@@ -37,7 +37,8 @@ Install v0.32.0? [y/N]
 - **`agentbus update --rollback [<id>]`** restores a snapshot, the last one by default.
   **`--list`** lists the snapshots.
 - **`--project <p>`** names the project whose services are restarted. Without it, nothing is
-  restarted, and every stale service is listed with its command.
+  restarted, and every stale service is listed with its command. It is read from the command line
+  only, as `backup` reads it: an `AGENT_BUS_PROJECT` exported in the shell never restarts a project.
 
 ## 3. Design
 
@@ -62,6 +63,13 @@ Install v0.32.0? [y/N]
   - Going back is `--rollback`, never `update`.
 
 ### 3.2 One tree per release; the clone is not touched
+
+- **Each tree is a worktree of the person's clone** (the person's answer 1). Its history stays in the
+  clone's `.git`, so every later update depends on that clone: the binaries record the tree, and the
+  tree points back to the clone.
+  - **If the clone was moved or deleted**, the tree's `.git` points to nothing. The update then
+    refuses and says it plainly: the tree is a worktree of the clone at `<path>`, later updates need
+    that clone's `.git`, put the clone back there or update with `./setup.sh update` from the clone.
 
 - **The tree:** the tag is checked out as its own detached worktree,
   `${XDG_DATA_HOME:-~/.local/share}/agentbus/src/<tag>`, with `mission.Git.AddWorktree`
@@ -211,6 +219,9 @@ can also undo them.
 
 ### 3.6 busmon
 
+Built after step 1's PR: the About row below sits in busmon's files, which the views redesign holds
+at the time of the build.
+
 - **busmon never runs it.** The header's `↑ vX.Y.Z` stays as it is (`cmd/busmon/update.go`).
 - **About's `updates` row** (`updateRow`, `cmd/busmon/about.go:236`) shows the exact command,
   `agentbus --project <p> update`, while a newer release is known.
@@ -299,19 +310,20 @@ can also undo them.
 - busmon running the update;
 - Windows.
 
-## 9. Questions for the person
+## 9. The person's answers (2026-11-20)
 
-1. **The build tree.** Each release is built in its own tree,
-   `~/.local/share/agentbus/src/<tag>`, and your clone is left untouched. After an update, the
-   binaries read that tree's `roles.toml` and scripts, not the clone's. The role skill links
-   point into it too. Is that right?
-2. **Services.** Should it restart only `--project <p>`'s services, listing the others with their
-   commands? Or every stale service on your one yes, as `setup install` offers today?
-3. **A build that is not a release** (installed from a branch, or with local changes): should it
-   refuse and point to `./setup.sh update`?
-4. **Telling master.** Should the update be reported to master on the bus, or only in the
-   terminal?
-5. **Snapshots kept:** 3?
+1. **The build tree:** yes, one tree per release, the clone left alone. Each tree is a worktree of the
+   clone, so later updates depend on the clone's `.git`; the refusal explains it when the clone was
+   moved or deleted (§3.2).
+2. **Services:** restart only `--project <p>`'s `dispatch` and `missions`, and list the other
+   projects' stale services with their commands.
+3. **A build that is not a release:** refuse, and point to `./setup.sh update`.
+4. **Telling master:** not in step 1. A bus message is a broker write, which §4 forbids: the terminal
+   output and the history line are enough. A notice to master, the skills hint included, comes with
+   quiet-update.
+5. **Snapshots kept:** 3.
+
+The macOS signature check (§6, §7) stays a blocker before the first release that ships this command.
 
 ## Changelog
 
@@ -324,3 +336,6 @@ can also undo them.
   follow the tree too.
 - **r3** (foureyes on r2): the strict check compares each link with its `skillSources` source,
   so an external skill, which links into the mattpocock clone, passes.
+- **r4** (the person's answers, relayed by master on 2026-11-20): §9 answered; §3.2 says each tree is a
+  worktree of the clone and how the refusal explains a moved or deleted clone; `--project` from the
+  command line only (§2); busmon's About row after step 1's PR (§3.6).
