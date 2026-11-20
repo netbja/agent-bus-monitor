@@ -20,8 +20,11 @@ import (
 //
 //  1. an import of the CLI or the screen (cmd/..., bubbletea, lipgloss,
 //     bubbles, tcell);
-//  2. a call into mission's runner side (guardMissionRunner): the package
-//     reads mission records, it never runs a mission's tests;
+//  2. a use of mission beyond guardMissionReads: the package reads mission
+//     records, it never runs a mission's tests. An allow list, not a deny
+//     list: the runner side is wide (Run, RunTest, the Conductor's Pass,
+//     Startup and HandleOp, Git's merges in a worktree), and a read added
+//     here is reviewed;
 //  3. os/exec imported by a file not in guardExecFiles;
 //  4. a program not in guardPrograms: every exec.Command and
 //     exec.CommandContext names its program as a string literal of the set,
@@ -64,7 +67,7 @@ var guardModuleImports = []string{
 	"lifecycle",
 	"loginexpiry", // the keychain reader (keychain.go)
 	"mergequeue",  // git and the forge CLIs (forge.go, git.go, delivered.go)
-	"mission",     // git (git.go) and RunTest, the runner side guardMissionRunner forbids
+	"mission",     // git (git.go) and RunTest (sh -c), the runner side: only guardMissionReads is used
 	"modelcheck",
 	"models", // the model readers (readers.go)
 	"notify", // the desktop notifier (desktoprun.go)
@@ -117,7 +120,8 @@ var guardRunnerCalls = []struct {
 	{"", "readVersion", "", 1},
 }
 
-var guardMissionRunner = []string{"Run", "RunTest", "RunConfig", "DefaultRunConfig"}
+// guardMissionReads: what the package uses of mission, on the day of the move.
+var guardMissionReads = []string{"HeldBy"}
 
 var guardShells = []string{"sh", "bash", "dash", "zsh", "env"}
 
@@ -155,6 +159,11 @@ func TestGuard(t *testing.T) {
 			t.Errorf("guardExecFiles: %s no longer imports os/exec, drop it", f)
 		}
 	}
+	for _, m := range guardMissionReads {
+		if !seen.missionReads[m] {
+			t.Errorf("guardMissionReads: mission.%s is no longer used, drop it", m)
+		}
+	}
 	for p := range guardPrograms {
 		if !seen.programs[p] {
 			t.Errorf("guardPrograms: %s is no longer run, drop it", p)
@@ -180,6 +189,14 @@ var _ = exec.LookPath`},
 		"a module package not on the list": {"a.go": pkg + `import _ "github.com/netbja/agent-bus-monitor/internal/scrub"`},
 		"the mission runner": {"a.go": pkg + `import m "github.com/netbja/agent-bus-monitor/mission"
 var _ = m.RunTest`},
+		"the mission conductor": {"a.go": pkg + `import "github.com/netbja/agent-bus-monitor/mission"
+func f(ctx context.Context) { (&mission.Conductor{}).Pass(ctx) }`},
+		"mission's git": {"a.go": pkg + `import "github.com/netbja/agent-bus-monitor/mission"
+func f(ctx context.Context) { mission.Git{}.MergeNoFF(ctx, ".", "x", "m") }`},
+		"exec.Command as a value": {"repocheck.go": pkg + `import "os/exec"
+func f() { c := exec.Command; c("sh", "-c", "true").Run() }`},
+		"exec.CommandContext as a value": {"repocheck.go": pkg + `import "os/exec"
+var run = exec.CommandContext`},
 		"a program in a variable": {"repocheck.go": pkg + `import "os/exec"
 func f(p string) { exec.Command(p).Run() }`},
 		"a runner's parameter outside the runner": {"githubcheck.go": pkg + `import "os/exec"
@@ -217,13 +234,13 @@ var _ = mission.HeldBy`,
 	}
 }
 
-type guardSeen struct{ imports, execFiles, programs map[string]bool }
+type guardSeen struct{ imports, execFiles, programs, missionReads map[string]bool }
 
 // guardFindings applies the guard's six rules to the sources (file name ->
 // Go source).
 func guardFindings(t *testing.T, src map[string]string) ([]string, guardSeen) {
 	t.Helper()
-	seen := guardSeen{map[string]bool{}, map[string]bool{}, map[string]bool{}}
+	seen := guardSeen{map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}}
 	var found []string
 	fail := func(fset *token.FileSet, n ast.Node, format string, a ...any) {
 		found = append(found, fset.Position(n.Pos()).String()+": "+fmt.Sprintf(format, a...))
@@ -261,6 +278,13 @@ func guardFindings(t *testing.T, src map[string]string) ([]string, guardSeen) {
 			}
 		}
 		execName, missionName := local["os/exec"], local[guardModule+"mission"]
+		calls := map[ast.Expr]bool{} // the called function of every call
+		ast.Inspect(f, func(n ast.Node) bool {
+			if c, ok := n.(*ast.CallExpr); ok {
+				calls[c.Fun] = true
+			}
+			return true
+		})
 		for _, d := range f.Decls {
 			fn := ""
 			if fd, ok := d.(*ast.FuncDecl); ok {
@@ -269,8 +293,14 @@ func guardFindings(t *testing.T, src map[string]string) ([]string, guardSeen) {
 			ast.Inspect(d, func(n ast.Node) bool {
 				switch n := n.(type) {
 				case *ast.SelectorExpr:
-					if x, ok := n.X.(*ast.Ident); ok && missionName != "" && x.Name == missionName && slices.Contains(guardMissionRunner, n.Sel.Name) {
-						fail(fset, n, "uses mission.%s: the runtime never runs a mission (rule 2)", n.Sel.Name)
+					if x, ok := n.X.(*ast.Ident); ok && missionName != "" && x.Name == missionName {
+						if !slices.Contains(guardMissionReads, n.Sel.Name) {
+							fail(fset, n, "uses mission.%s, not in guardMissionReads (rule 2): the runtime reads mission records, it never runs a mission", n.Sel.Name)
+						}
+						seen.missionReads[n.Sel.Name] = true
+					}
+					if x, ok := n.X.(*ast.Ident); ok && execName != "" && x.Name == execName && (n.Sel.Name == "Command" || n.Sel.Name == "CommandContext") && !calls[n] {
+						fail(fset, n, "takes exec.%s as a value: a program the guard cannot read (rule 4)", n.Sel.Name)
 					}
 					if x, ok := n.X.(*ast.Ident); ok && execName != "" && x.Name == execName && n.Sel.Name == "Cmd" {
 						fail(fset, n, "builds an exec.Cmd by hand: a program the guard cannot read (rule 4)")
