@@ -22,7 +22,8 @@ const (
 )
 
 // planTabWidths is the list's row width and whether the side panel goes
-// beside it, as the drawer decides (planDrawerWidths).
+// beside it: the wide tier, with room for both (§4.3); the drawer's rule too
+// (planDrawerWidths).
 func planTabWidths(lower int, tier Tier) (list int, side bool) {
 	if tier == TierWide && lower >= planListMin+planSideWidth+1 {
 		return lower - planSideWidth - 1, true

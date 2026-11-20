@@ -426,6 +426,9 @@ func (m *Model) focusPanel(p PanelID) {
 	if p != PanelBoard { // the between-agents filter is Work's line's, while on the Board
 		m.ui.boardBetween = false
 	}
+	if p != PanelPlan && p != PanelRequests { // LATER opened on the Plan tab folds again once you leave it (the drawer's is per page)
+		m.ui.planLater = false
+	}
 	if isLowerTab(p) {
 		m.ui.tab = p
 	}

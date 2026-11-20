@@ -7,6 +7,6 @@
   low-priority tasks, blocked or not), DONE as a count. NOW and NEXT sort by priority, then file order. A plan task
   may carry `"priority": "high"` or `"low"` (`"normal"` and absent are the same); the row's first cell is `↑` or `↓`,
   else the state's glyph in NOW and `✓` in APPROVED. A task's dependencies read `after <first> +N`; the side panel
-  lists them (`✓` when done), the tasks that wait on it (`unblocks`) and its priority. At the narrow tier LATER and
-  DONE fold to a line Enter opens (`LATER 3 · 1 ↑ (enter)`). A grouped plan keeps its groups, each group's rows in
+  lists them (`✓` when done), the tasks that wait on it (`unblocks`) and its priority. Below the wide tier (under 120 columns,
+  no side panel) LATER and DONE fold to a line Enter opens (`LATER 3 · 1 ↑ (enter)`), in the tab and the drawer. A grouped plan keeps its groups, each group's rows in
   the roadmap's order. Raising or lowering a plan task's priority from busmon (`+`/`-`) is step 4b, not built.
