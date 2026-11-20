@@ -1,0 +1,129 @@
+---
+id: 2026-11-20-busmon-merge-button
+project: agent-bus-monitor
+scope: project
+kind: question
+status: proposed
+created: 2026-11-20
+last_verified: unknown
+author: architect
+confidence: unknown
+---
+# Merge a PR from busmon's merge popup, showing the exact command first (the person's idea, waiting for the person)
+
+## Finding/decision
+
+**The idea (the person, relayed by master on 2026-11-20).** In the popup busmon shows for a
+change waiting for their merge, offer to **merge it from busmon**, through the forge's own CLI,
+**showing the exact command that will run**. They would stop typing it or opening the forge's page.
+
+**What busmon does today, on `dev` as of f018542c.**
+- `mergePage` (`cmd/busmon/mergequeue.go`) shows the PR, its branch at the approved head, the
+  reviewers and what they checked.
+- Its copy target is the PR's URL. In local mode it is `git switch <base> && git merge --no-ff
+  <head>`.
+- busmon reads the merge queue's cache, which the dispatch service writes. The merge-queue spec
+  says "it never runs git or `gh` itself".
+- The forge-delivery decision says "the person keeps the merge: deliver never merges". This idea
+  keeps that: the person still merges, but from busmon.
+
+**The proposal (not specced, not built).**
+1. **A Merge action in the merge popup**, for an item the queue lists. Pressing it opens a
+   confirm step that shows the exact argv, the base it merges into and the head it is bound to.
+   The two buttons are Merge and Cancel, and **Cancel is the default**. Nothing runs without
+   that second press.
+2. **The person's own action.**
+   - **Who runs it.** busmon runs the command itself, as the person's process, with their own
+     forge login (`gh auth` / `glab auth`). No agent runs it.
+   - **No remote trigger.** Nothing on the bus can trigger the merge: no message, ask or
+     directive does.
+   - **No new agentbus command.** That would let an agent in a pane run it too.
+3. **Bound to the proof.**
+   - **Head match.** The command carries the approved head, so the forge itself refuses the
+     merge if the PR's head has moved. On GitHub that is `gh pr merge <n> --repo <owner/name>
+     --match-head-commit <head> --<method>`. A pushed commit after the review cannot be merged
+     by the button.
+   - **Fresh check first.** Just before running, busmon re-reads the queue record and the
+     verdict ledger. If the item is gone, or its head no longer has both approvals, the button
+     is refused with the reason, and nothing runs.
+4. **Only into the project's base.**
+   - **Base check.** The item's base must be `delivery.base` (`dev` here); otherwise the button
+     is refused.
+   - **`main` is never merged here.** Promotions to `main` stay master's fast-forward, on the
+     person's yes (the dev-branch-flow decision).
+5. **What is shown and logged.**
+   - **In the popup.** The command, then the forge's answer: its first lines, cleaned, never a
+     token.
+   - **On the bus.** One report from the person to master: "merged PR `<n>` at `<head>` into
+     `<base>` (gh)", or "merge of PR `<n>` refused: `<reason>`". Master learns it at once instead
+     of at the queue's next pass.
+   - **The queue.** Its next pass drops the item as it does today (`mergequeue/delivered.go`).
+6. **A failed merge.**
+   - **Nothing is retried.** The popup stays open with the forge's reason (head moved, conflict,
+     a required check, branch protection, no login), and the item stays in the queue.
+   - **Head moved.** The fix is a new review of the new head, not a second press.
+7. **The forge matrix.**
+
+| Forge | Merge from busmon | Command (approved head bound) |
+|---|---|---|
+| GitHub | yes, first | `gh pr merge <n> --repo <owner/name> --match-head-commit <head> --<method>` |
+| GitLab | after its PR reader lands (roadmap: the queue reads only `gh pr list` today) | `glab mr merge <iid> -R <group/project> --sha <head> --yes` (flag to verify against glab's version) |
+| Bitbucket | no CLI: the popup keeps the link to open | none |
+| none | no forge request: copy only, as today | none |
+| local | copy only, as today (busmon may run on a laptop, away from the repository) | `git switch <base> && git merge --no-ff <head>` |
+
+`--repo` / `-R` comes from the item's URL, so the merge does not need a checkout where busmon
+runs: busmon can run on the laptop through the tunnel.
+
+**Recommendation.** Build it, **GitHub only first**, with the confirm step, the head bound
+through `--match-head-commit`, the base check and the report to master. GitLab follows its PR
+reader. Bitbucket, none and local stay as they are. It is small: one action, one confirm, one
+argv built from the item, and one report. It also removes a manual step that today is a typing
+risk, a wrong number or the wrong base.
+
+## When it applies
+
+Only the person decides whether busmon may run the forge's CLI. That reverses the merge-queue
+spec's "busmon never runs git or gh", for this one action. A spec follows their answers.
+
+Questions for the person (no guesses):
+
+1. **busmon runs the forge's CLI for this one action:** may it? The alternative is that busmon
+   only copies the exact command, which keeps the "busmon never runs gh" rule but leaves the
+   typing to them.
+2. **Merge method:** merge commit, squash or rebase? Fixed per project, chosen in the popup, or
+   left to the repository's default (`gh` asks when nothing is given, so busmon must pass one)?
+3. **The branch after the merge:** delete it (`--delete-branch`) or keep it?
+4. **Where busmon runs when they merge:** on the laptop, through the tunnel, or on the host?
+   That decides whose `gh` login is used, and whether it is installed there.
+5. **The report on the bus:** under which name: their human identity, or "busmon"? And should it
+   also be sent when they cancel? The proposal says no.
+6. **A merge waiting on required checks:** refuse, or use the forge's auto-merge (`--auto`)?
+   The proposal refuses: a merge happens when they press, not later.
+
+## Evidence
+
+- The popup today: [cmd/busmon/mergequeue.go](../../../cmd/busmon/mergequeue.go) (`mergePage`,
+  its copy target).
+- The queue's reader, GitHub only:
+  [mergequeue/forge.go](../../../mergequeue/forge.go) (`ReadGitHub`, `gh pr list`), and the
+  merged-item drop in [mergequeue/delivered.go](../../../mergequeue/delivered.go).
+- The forges known: [forge/forge.go](../../../forge/forge.go) (`Kind`: github, gitlab, bitbucket,
+  none, local), and `delivery.forge` / `delivery.base` in
+  [config/keys.go](../../../config/keys.go).
+- The rules it touches: [the merge-queue spec](../../superpowers/specs/2026-11-05-merge-queue-design.md)
+  ("never runs git or gh"), [forge delivery](../decisions/2026-11-02-forge-delivery.md) (the
+  person keeps the merge, the proof bound to the head),
+  [the dev branch flow](../decisions/2026-11-16-dev-branch-flow.md) (PRs into `dev`, `main` by
+  master).
+- The person's request: master's directive of 2026-11-20 (bus cmd `1795169686518-0`).
+
+## Limits / what would invalidate it
+
+- **CLI flags.** `gh pr merge --match-head-commit` and `glab mr merge --sha` are taken from the
+  CLIs' documented flags, not run here. The spec must check them against the installed
+  versions.
+- **The forge's own rules.** Branch protection or required reviews on the forge may refuse a
+  merge that the bus approved. The popup shows that refusal; it does not work around it.
+- **Two people in one busmon project.** If busmon ever serves several people in one project, the
+  report's "the person" needs a name. Today there is one.

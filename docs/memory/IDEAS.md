@@ -32,3 +32,4 @@ From 2026-11-19:
 From 2026-11-20:
 
 - [A turn lost without its Stop hook (API error, Esc): one notice to master, no auto-wake](open-questions/2026-11-20-lost-turn-notice.md)
+- [Merge a PR from busmon's merge popup, the exact command shown first (GitHub first)](open-questions/2026-11-20-busmon-merge-button.md)
