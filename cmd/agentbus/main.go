@@ -28,6 +28,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/modelcheck"
 	"github.com/netbja/agent-bus-monitor/models"
@@ -315,7 +316,7 @@ func main() {
 			List: b.Handoffs, Agents: b.Agents, Now: time.Now}, rest, os.Stdout, os.Stderr))
 	case "dispatch":
 		sctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-		rt, err := dispatchRuntime(project, os.Getenv)
+		rt, err := dispatchsvc.Runtime(project, os.Getenv)
 		if err != nil {
 			stop()
 			die("dispatch: " + err.Error())

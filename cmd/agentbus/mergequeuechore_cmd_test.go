@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -68,7 +69,7 @@ func TestServiceMergeQueueCIUsesTheEscalationTarget(t *testing.T) {
 	t.Chdir(work)
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
 	var cfg dispatch.Config
-	if _, err := serviceDispatchConfig(serviceDispatchDeps(b, "", "lead", paths, io.Discard), &cfg); err != nil {
+	if _, err := dispatchsvc.Config(serviceDispatchDeps(b, "", "lead", paths, io.Discard), &cfg); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := b.AcquireDispatch(ctx, "tok", time.Minute); err != nil || !ok {

@@ -14,7 +14,7 @@ package main
 //     turns with the real turn hook, and at each turn's end writes Claude's
 //     title, OSC 0 "✳ <project>:<agent>", right after `❯`: the bytes that
 //     printed on the input line under x/vt (vt-osc-title).
-//  3. The real dispatcher (dispatchRuntime: the holder, the client by the
+//  3. The real dispatcher (dispatchsvc.Runtime: the holder, the client by the
 //     terminal's profile) wakes coder twice in a row: each wake typed,
 //     submitted, the turn run and ended, the message drained with the real
 //     drain, so the second wake needs the screen ready again after a title.
@@ -65,6 +65,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -480,7 +481,7 @@ func e2eUp(t *testing.T) *e2eWorld {
 }
 
 // startDispatch runs the dispatcher as the service runs it (its runtime and
-// self-repair from serviceDispatchConfig, the production wiring, on the
+// self-repair from dispatchsvc.Config, the production wiring, on the
 // world's service manager), on fast ticks; once w.killed is set, each
 // self-repair read is 25 s later than the last (Deps.SelfRepairSkew).
 func (w *e2eWorld) startDispatch(t *testing.T) {
@@ -536,7 +537,7 @@ func (w *e2eWorld) serviceConfig(t *testing.T, skew func(time.Time) time.Time) (
 	d := serviceDispatchDeps(w.b, "", "", paths, io.Discard)
 	d.Manager, d.SelfRepairSkew = w.hm, skew
 	var cfg dispatch.Config
-	rt, err := serviceDispatchConfig(d, &cfg)
+	rt, err := dispatchsvc.Config(d, &cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

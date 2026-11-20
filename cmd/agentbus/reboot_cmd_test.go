@@ -8,6 +8,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -27,7 +28,7 @@ func TestServiceDispatchConfigJudgesTheReboot(t *testing.T) {
 	}
 	paths := service.Paths{Home: root, ConfigHome: root + "/cfg", StateHome: root + "/state", DataHome: root + "/data"}
 	var cfg dispatch.Config
-	_, err = serviceDispatchConfig(serviceDispatchDeps(b, "", "", paths, io.Discard), &cfg)
+	_, err = dispatchsvc.Config(serviceDispatchDeps(b, "", "", paths, io.Discard), &cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

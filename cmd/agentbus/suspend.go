@@ -21,6 +21,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -88,7 +89,7 @@ func realSuspendDeps(host string) suspendDeps {
 			return service.Detect(runtime.GOOS, service.CommandRunner(service.ManagerBin(runtime.GOOS, os.Getenv)), os.Getenv)
 		},
 		Inspect: func(ctx context.Context, project, pane string) dispatch.Inspection {
-			rt, err := dispatchRuntime(project, os.Getenv)
+			rt, err := dispatchsvc.Runtime(project, os.Getenv)
 			if err != nil {
 				return dispatch.Inspection{Err: err}
 			}
