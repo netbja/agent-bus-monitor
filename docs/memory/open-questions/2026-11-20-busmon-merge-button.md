@@ -43,6 +43,11 @@ change waiting for their merge, offer to **merge it from busmon**, through the f
      merge if the PR's head has moved. On GitHub that is `gh pr merge <n> --repo <owner/name>
      --match-head-commit <head> --<method>`. A pushed commit after the review cannot be merged
      by the button.
+   - **Only this project's repository.** The `--repo` / `-R` value and the number come from the
+     item's URL in the queue's cache, in Redis. The button is refused when that owner/name
+     differs from the project's own forge remote (`origin`, as `forge.Resolve` reads it). So a
+     cache entry cannot point the merge at another repository. The security role judges this
+     trust boundary in the spec.
    - **Fresh check first.** Just before running, busmon re-reads the queue record and the
      verdict ledger. If the item is gone, or its head no longer has both approvals, the button
      is refused with the reason, and nothing runs.
@@ -93,6 +98,15 @@ Questions for the person (no guesses):
    typing to them.
 2. **Merge method:** merge commit, squash or rebase? Fixed per project, chosen in the popup, or
    left to the repository's default (`gh` asks when nothing is given, so busmon must pass one)?
+   - **What a squash or rebase changes.** The team's written test says a PR is merged when its
+     head is an ancestor of `origin/dev`: CLAUDE.md, AGENTS.md and the dev-branch decision. A
+     squash or a rebase never makes the approved head an ancestor.
+   - **This already happens.** #642 went in as a single-parent commit (8faba668), and its
+     approved head 1196a630 is not an ancestor of `dev`.
+   - **The queue is fine.** It already matches squash and rebase by patch-id
+     (`mergequeue/delivered.go`).
+   - **So the choice is:** merge commits only, or a merged-test rule that also accepts the
+     queue's patch-id match.
 3. **The branch after the merge:** delete it (`--delete-branch`) or keep it?
 4. **Where busmon runs when they merge:** on the laptop, through the tunnel, or on the host?
    That decides whose `gh` login is used, and whether it is installed there.
