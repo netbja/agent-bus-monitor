@@ -264,3 +264,64 @@ func TestBoardGoldens(t *testing.T) {
 		checkGolden(t, c.name, strings.Join(frame, "\n")+"\n")
 	}
 }
+
+// foureyes: a closed request has no alert, its body lost or not (the
+// closed-unaccepted request shown under d): no ⚠, no alert column.
+func TestBoardViewClosedRequestNoAlert(t *testing.T) {
+	ms := boardNow.Add(-time.Hour).UnixMilli()
+	m := map[string]bus.BoardEntry{
+		"lost-done":   {Owner: "coder", State: "done", Updated: boardNow.Unix(), Request: &bus.RequestInfo{ID: "1-0", Target: "coder", CreatedAt: ms, Availability: "missing", ClosedUnaccepted: "body missing"}},
+		"superseded":  {Owner: "coder", State: "superseded", Updated: boardNow.Unix(), Request: &bus.RequestInfo{ID: "2-0", Target: "coder", CreatedAt: ms, Availability: "missing"}},
+		"plain-alive": {Owner: "coder2", State: "working", Updated: boardNow.Unix()},
+	}
+	v := boardViewOf(m, boardNow, 120, boardOpts{noAccept: time.Minute, noReply: time.Minute, showDone: true})
+	if h := v.header.text(); strings.Contains(h, "ALERT") {
+		t.Fatalf("header %q", h)
+	}
+	if all := strings.Join(texts(v.items), "\n"); strings.Contains(all, GlyphWarn) {
+		t.Fatalf("a closed request alerts:\n%s", all)
+	}
+}
+
+// foureyes: the shell computes master's liveness from the agents. With
+// master's terminal gone, an alert row says so and cancel/reassign leave the
+// footer; with master gone from the agents, the same.
+func TestBoardShellMasterDown(t *testing.T) {
+	pinLocal(t)
+	for _, c := range []struct {
+		name   string
+		master func(map[string]*agentState)
+	}{
+		{"no terminal", func(a map[string]*agentState) {
+			c := *a["master"]
+			c.pane, c.host.termsRead, c.host.live = "t9", true, false
+			a["master"] = &c
+		}},
+		{"no entry", func(a map[string]*agentState) { delete(a, "master") }},
+	} {
+		m := shellWith(t, 160, 40, shellConfig{}, false)
+		m.cfg.settings.NoAcceptAfter = 30 * time.Minute
+		snap := m.snap
+		snap.board = maps.Clone(snap.board)
+		snap.board["late"] = bus.BoardEntry{Owner: "coder2", State: "requested", Updated: shellNow.Add(-40 * time.Minute).Unix(),
+			Request: &bus.RequestInfo{ID: "9-0", From: "master", Target: "coder2", CreatedAt: shellNow.Add(-40 * time.Minute).UnixMilli()}}
+		snap.agents = maps.Clone(snap.agents)
+		c.master(snap.agents)
+		m = keys(t, step(t, m, pollMsg{snap: snap, at: shellNow}), '2')
+		screen := m.grid().plain()
+		if !strings.Contains(screen, "master is down; self-repair relaunches it") || strings.Contains(screen, "cancel/reassign (master)") || !strings.Contains(screen, "resend (dispatch)") {
+			t.Fatalf("%s:\n%s", c.name, screen)
+		}
+	}
+	// A live master: the footer names master's actions, no row says it is down.
+	m := shellWith(t, 160, 40, shellConfig{}, false)
+	m.cfg.settings.NoAcceptAfter = 30 * time.Minute
+	snap := m.snap
+	snap.board = maps.Clone(snap.board)
+	snap.board["late"] = bus.BoardEntry{Owner: "coder2", State: "requested", Updated: shellNow.Add(-40 * time.Minute).Unix(),
+		Request: &bus.RequestInfo{ID: "9-0", From: "master", Target: "coder2", CreatedAt: shellNow.Add(-40 * time.Minute).UnixMilli()}}
+	m = keys(t, step(t, m, pollMsg{snap: snap, at: shellNow}), '2')
+	if screen := m.grid().plain(); strings.Contains(screen, "master is down") || !strings.Contains(screen, "cancel/reassign (master)") {
+		t.Fatalf("live master:\n%s", screen)
+	}
+}
