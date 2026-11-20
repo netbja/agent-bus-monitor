@@ -707,8 +707,9 @@ writes one when it cuts, but so do authors.
 **r / F2 — every thread.** The Requests view, from any panel (the Board too), drawn
 under the tab it was opened from (Esc, the tab bar and `←→` go back to it): by thread,
 owed by you, you wait on, between agents, tracked requests among them; `o` shows the
-answered ones, `d` then `y` closes a thread with a reply from you, `+` and `-` set a
-tracked request's priority, the same from wherever it was opened. Enter on a tracked
+answered ones, `d` then `y` closes an untracked thread with a reply from you (it wakes
+nobody; the history stays), a tracked request being closed by its owner, and `+` and `-`
+set a tracked request's priority, the same from wherever it was opened. Enter on a tracked
 request opens its page: its target, age, what would move it, and the evidence: the deadline
 **only when `expires_at` is set**, and the delivery disposition in words.
 `output_written` renders as *written to subscriber output (not proof it was read)* —

@@ -472,7 +472,8 @@ agent names, no project template):
   The **between agents** line opens the Board filtered to the rows between agents (no request to
   or from you; Esc returns to Work on that line). Every thread is `r`/`F2`, from any panel: the
   Requests view by thread (owed by you, you wait on, between agents; answered threads folded, `o`
-  shows them; `d` then `y` closes a thread with a reply from you), drawn under the tab it was
+  shows them; `d` then `y` closes an untracked thread with a reply from you that wakes nobody,
+  the history kept), drawn under the tab it was
   opened from, where Esc returns. A tracked request is closed by its owner (`agentbus request done`).
 - **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
   its tasks feed Work (a task of yours nothing blocks is a `decide` row, a blocked one is in NEXT),
