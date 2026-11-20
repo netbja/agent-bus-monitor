@@ -91,14 +91,9 @@ func (in *Installer) BuildAndInstall(ctx context.Context, name, pkg string) erro
 		in.saidDirty = true
 		in.O.Warn("building from modified tracked files (git status): the build id carries +dirty")
 	}
-	in.O.Info(fmt.Sprintf("Compiling %s (%s)...", name, in.Rev))
-	built := filepath.Join(in.Tmp, name)
-	ld := Ldflags(BuildVersion(in.Rev), Tree(in.Rev), in.Repo, in.Opt.BinDir)
-	out, err := in.R.Run(ctx, Cmd{Name: "go", Args: []string{"build", "-ldflags", ld, "-o", built, pkg}, Dir: in.Repo})
+	built, err := in.Build(ctx, name, pkg)
 	if err != nil {
-		showTail(in.O.err, out)
-		in.O.Fatal(fmt.Sprintf("Failed to build %s from %s", name, pkg))
-		return fmt.Errorf("build %s: %w", name, err)
+		return err
 	}
 	dests := []string{filepath.Join(in.Repo, name)}
 	if !sameDir(in.Opt.BinDir, in.Repo) {
@@ -112,6 +107,22 @@ func (in *Installer) BuildAndInstall(ctx context.Context, name, pkg string) erro
 	}
 	in.O.OK(fmt.Sprintf("%s: installed to %s and %s/%s", name, target, in.Repo, name))
 	return nil
+}
+
+// Build compiles pkg, stamped (Ldflags with in.Repo as the tree), into
+// in.Tmp/name and installs nothing: BuildAndInstall installs after it, and
+// agentbus update after its snapshot (update spec §3.4 step 3).
+func (in *Installer) Build(ctx context.Context, name, pkg string) (string, error) {
+	in.O.Info(fmt.Sprintf("Compiling %s (%s)...", name, in.Rev))
+	built := filepath.Join(in.Tmp, name)
+	ld := Ldflags(BuildVersion(in.Rev), Tree(in.Rev), in.Repo, in.Opt.BinDir)
+	out, err := in.R.Run(ctx, Cmd{Name: "go", Args: []string{"build", "-ldflags", ld, "-o", built, pkg}, Dir: in.Repo})
+	if err != nil {
+		showTail(in.O.err, out)
+		in.O.Fatal(fmt.Sprintf("Failed to build %s from %s", name, pkg))
+		return "", fmt.Errorf("build %s: %w", name, err)
+	}
+	return built, nil
 }
 
 // InstallFile is setup.sh's install_file: copy beside dst, then rename over
