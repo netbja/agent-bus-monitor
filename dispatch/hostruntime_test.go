@@ -165,6 +165,15 @@ func TestHostRuntimeJudgesBackgroundWork(t *testing.T) {
 	if in := f.inspect(); in.BackgroundSkip() != "background work: process 'pytest'" {
 		t.Fatalf("a child: %q", in.BackgroundSkip())
 	}
+	// Its age counts from the dispatcher's first sight of it (background-work-visible step 2).
+	f.now = f.now.Add(4 * time.Minute)
+	f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude"},
+		termhost.Proc{PID: p + 1, PPID: p, Start: 7, Command: "pytest", CPU: time.Second})
+	// The skip's reason stays the same text as the work goes on: the
+	// dispatcher's once-per-change event and clear-deferred line compare it (foureyes).
+	if in := f.inspect(); in.Background.Procs() != 1 || in.Background.OldestAge() != 4*time.Minute || in.BackgroundSkip() != "background work: process 'pytest'" {
+		t.Fatalf("4 minutes on: %d %v %q", in.Background.Procs(), in.Background.OldestAge(), in.BackgroundSkip())
+	}
 	if in := f.inspect(); len(in.PIDs) != 2 || in.Starts[p+1] != 7 {
 		t.Fatalf("the tree's pids: %v %v", in.PIDs, in.Starts)
 	}

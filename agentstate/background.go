@@ -43,6 +43,10 @@ type Proc struct {
 	Name      string
 	Start     time.Time
 	CPUGrowth time.Duration
+	// Seen is when the host first saw it (background-work-visible step 2):
+	// OldestAge counts from it when Start is unknown. It never enters What(),
+	// whose text the dispatcher's once-per-change records compare (foureyes).
+	Seen time.Time
 }
 
 // ProcessFacts are the agent's descendants over the last Window.
@@ -103,7 +107,16 @@ func (s BackgroundState) String() string {
 type Judgement struct {
 	State   BackgroundState
 	running []string
+	procs   int           // the process source's active non-helper descendants
+	oldest  time.Duration // the oldest of them's age (0: none, or no start known)
 }
+
+// Procs is how many active non-helper descendants the process source saw
+// (background-work-visible step 2: the observation's bg_procs).
+func (j Judgement) Procs() int { return j.procs }
+
+// OldestAge is the oldest of them's age (bg_oldest), 0 when none.
+func (j Judgement) OldestAge() time.Duration { return j.oldest }
 
 // What lists what runs: `subagent ×2, process 'pytest' 4m`.
 func (j Judgement) What() string { return strings.Join(j.running, ", ") }
@@ -137,8 +150,12 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 				continue
 			}
 			what := "process '" + clean(pr.Name, 40) + "'"
+			j.procs++
 			if !pr.Start.IsZero() {
 				what += " " + age(now.Sub(pr.Start))
+				j.oldest = max(j.oldest, now.Sub(pr.Start))
+			} else if !pr.Seen.IsZero() {
+				j.oldest = max(j.oldest, now.Sub(pr.Seen))
 			}
 			j.running = append(j.running, what)
 		}

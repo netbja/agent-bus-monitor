@@ -3,10 +3,12 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -146,4 +148,37 @@ func TestObserveCarriesTheEpisodeAndSurvivesAFailedLook(t *testing.T) {
 		o := obs["master"]
 		return o.State == "idle" && o.Since > first.Since
 	})
+}
+
+// background-work-visible step 2: the process source's count and its oldest
+// start (Redis clock) ride the observation as bg_procs and bg_oldest; no
+// process name is published.
+func TestObservePublishesTheProcessSource(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "dev", "p1")
+	now := time.Now()
+	j := agentstate.Background{Authoritative: []string{agentstate.SourceProcess}}.Judge(agentstate.Facts{Process: &agentstate.ProcessFacts{Window: 10 * time.Second,
+		Procs: []agentstate.Proc{{Name: "make", Seen: now.Add(-14 * time.Minute)}, {Name: "go", Seen: now.Add(-time.Minute)}}}}, now)
+	rt := newFakeRT(func(string, int) Inspection { in := readyIn(); in.Background = &j; return in })
+	cfg := fastConfig()
+	cfg.Observe = 50 * time.Millisecond
+	start(t, b, rt, cfg)
+	var obs map[string]bus.Observation
+	waitFor(t, 5*time.Second, "an observation of dev", func() bool {
+		var err error
+		obs, err = b.Observed(ctx)
+		return err == nil && obs["dev"].At != 0
+	})
+	o := obs["dev"]
+	if o.BgProcs != 2 {
+		t.Fatalf("bg_procs %d", o.BgProcs)
+	}
+	if age := time.Duration(o.At-o.BgOldest) * time.Millisecond; age < 14*time.Minute || age > 15*time.Minute {
+		t.Fatalf("bg_oldest %d is %v before the look", o.BgOldest, age)
+	}
+	raw, _ := r.HGet(ctx, bus.ObservedKey(b.Project()), "dev").Result()
+	if strings.Contains(raw, "make") || strings.Contains(raw, `"go"`) {
+		t.Fatalf("a process name published: %s", raw)
+	}
 }

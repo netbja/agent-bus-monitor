@@ -48,8 +48,9 @@ type HostRuntime struct {
 	Window      time.Duration // the CPU window of the helpers' activity; 0: DefaultCPUWindow
 	Now         func() time.Time
 
-	mu      sync.Mutex
-	samples map[termhost.TermID][]cpuSample
+	mu        sync.Mutex
+	samples   map[termhost.TermID][]cpuSample
+	firstSeen map[termhost.TermID]map[procKey]time.Time // when each process was first seen (its age; background-work-visible step 2)
 }
 
 // The host path's defaults (spec 4.3 input 4, 4.3b, 4.5).
@@ -239,6 +240,20 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 		}
 	}
 	r.samples[t.ID] = append(kept, cur)
+	// A process's age counts from the dispatcher's first sight of it
+	// (background-work-visible step 2): its start ticks are the platform's.
+	if r.firstSeen == nil {
+		r.firstSeen = map[termhost.TermID]map[procKey]time.Time{}
+	}
+	seen := map[procKey]time.Time{}
+	for _, p := range procs {
+		k := procKey{p.PID, p.Start}
+		seen[k] = now
+		if at, ok := r.firstSeen[t.ID][k]; ok {
+			seen[k] = at
+		}
+	}
+	r.firstSeen[t.ID] = seen // the gone ones dropped
 	r.mu.Unlock()
 
 	var f agentstate.Facts
@@ -250,7 +265,7 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 			}
 			k := procKey{p.PID, p.Start}
 			grown := p.CPU - base.cpu[k] // a process new since the base: all its CPU
-			pf.Procs = append(pf.Procs, agentstate.Proc{Name: p.Command, CPUGrowth: grown})
+			pf.Procs = append(pf.Procs, agentstate.Proc{Name: p.Command, Seen: seen[k], CPUGrowth: grown})
 		}
 		f.Process = pf
 	}
