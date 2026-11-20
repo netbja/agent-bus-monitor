@@ -162,6 +162,8 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	fillsErr := errNotPolled
 	var bgs map[string]bus.Background
 	bgsErr := errNotPolled
+	var bgTasks map[string]bus.BgTasks
+	bgTasksErr := errNotPolled
 	var swaps map[string]bus.SwapIntent
 	swapsErr := errNotPolled
 	var handoffs map[string]bus.Handoff
@@ -176,6 +178,9 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		fills, fillsErr = b.Context(pollCtx)
 		if br, ok := b.(backgroundReader); ok {
 			bgs, bgsErr = br.Backgrounds(pollCtx, names)
+		}
+		if tr, ok := b.(bgTasksReader); ok {
+			bgTasks, bgTasksErr = tr.BgTasksOf(pollCtx, names)
 		}
 		swaps, swapsErr = b.SwapIntents(pollCtx)
 		handoffs, handoffsErr = b.Handoffs(pollCtx)
@@ -455,6 +460,16 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 				a.bg = &v
 			}
 		}
+		if bgTasksErr != errNotPolled { // the same: a failed read shows none, and says so
+			a.bgTasks = nil
+			if v, ok := bgTasks[n]; ok && bgTasksErr == nil {
+				a.bgTasks = &v
+			}
+			if bgsErr == errNotPolled {
+				a.bgFailed = false
+			}
+			a.bgFailed = a.bgFailed || bgTasksErr != nil
+		}
 		if fillsErr == nil { // a failed read keeps the last fill
 			a.ctxFill = nil
 			if f, ok := fills[n]; ok {
@@ -476,6 +491,13 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			// one (a replaced agent) is not its prompt.
 			a.obsPrompt = ok && o.State == "blocked" && o.PID != 0 && o.PID == a.pid
 			a.obsOwnPID = ok && o.PID != 0 && o.PID == a.pid
+			a.obsBgProcs, a.obsBgOldest = 0, time.Time{}
+			if ok {
+				a.obsBgProcs = o.BgProcs
+				if o.BgOldest > 0 {
+					a.obsBgOldest = time.UnixMilli(o.BgOldest)
+				}
+			}
 			a.obsScreenSince = time.Time{}
 			if ok && o.ScreenSince > 0 {
 				a.obsScreenSince = time.UnixMilli(o.ScreenSince)

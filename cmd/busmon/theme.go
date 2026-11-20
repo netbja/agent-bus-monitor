@@ -373,6 +373,11 @@ const (
 	GlyphIdea     = "◇" // an idea not decided yet (the Work page's IDEAS), nothing else
 	GlyphReturn   = "↵" // an expansion's last line: Enter again opens the full text
 	GlyphTimes    = "×" // a repeat count: a subject reviewed three times reads `a ×3`
+	// An agent's scheduled wakeups (background-work-visible Q2, the person's
+	// ⏰): the clock face, one cell, as ⏰ is an emoji two cells wide.
+	GlyphClock = "◷"
+	// A lower bound: the process source's "bg ≥1?" (background-work-visible Q5).
+	GlyphAtLeast = "≥"
 	// The settings page (settings-panels): a choice reads ‹ value ›, and •
 	// marks a key config.toml sets to other than its default.
 	GlyphChoiceL     = "‹"
@@ -454,4 +459,5 @@ var UIGlyphs = []string{
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphUpperHalf,
 	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet, GlyphOpenHere, GlyphIdea, GlyphWarn,
+	GlyphClock, GlyphAtLeast,
 }

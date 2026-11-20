@@ -225,6 +225,10 @@ type fakeReader struct {
 	// backgroundErr fails its read.
 	backgrounds   map[string]bus.Background
 	backgroundErr error
+	// bgTasks is each agent's hooks record (background-work-visible step 3);
+	// bgTasksErr fails its read.
+	bgTasks    map[string]bus.BgTasks
+	bgTasksErr error
 	contextErr error                        // returned by Context when set
 	gates      map[string]map[string]string // OpenChallenges by gated name, when set
 	// agentsErr, asksErr and gatesErr fail those reads (the Projects page's
@@ -406,6 +410,17 @@ func (f *fakeReader) Backgrounds(_ context.Context, agents []string) (map[string
 		}
 	}
 	return out, f.backgroundErr
+}
+
+func (f *fakeReader) BgTasksOf(_ context.Context, agents []string) (map[string]bus.BgTasks, error) {
+	f.n("BgTasksOf")
+	out := map[string]bus.BgTasks{}
+	for _, a := range agents {
+		if v, ok := f.bgTasks[a]; ok {
+			out[a] = v
+		}
+	}
+	return out, f.bgTasksErr
 }
 
 func (f *fakeReader) Context(context.Context) (map[string]bus.ContextFill, error) {

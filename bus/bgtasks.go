@@ -189,3 +189,33 @@ func (b *Bus) BgTasks(ctx context.Context, agent string) (BgTasks, bool, error) 
 	}
 	return r, true, nil
 }
+
+// BgTasksOf reads the agents' records in one round trip, for busmon's poll:
+// an agent without one (or with one that does not decode) is left out.
+func (b *Bus) BgTasksOf(ctx context.Context, agents []string) (map[string]BgTasks, error) {
+	pipe := b.r.Pipeline()
+	cmds := map[string]*redis.StringCmd{}
+	for _, a := range agents {
+		if ValidName(a) {
+			cmds[a] = pipe.Get(ctx, BgTasksKey(b.project, a))
+		}
+	}
+	out := map[string]BgTasks{}
+	if len(cmds) == 0 {
+		return out, nil
+	}
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
+	}
+	for a, c := range cmds {
+		raw, err := c.Result()
+		if err != nil {
+			continue
+		}
+		var r BgTasks
+		if json.Unmarshal([]byte(raw), &r) == nil {
+			out[a] = r
+		}
+	}
+	return out, nil
+}

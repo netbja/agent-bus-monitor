@@ -471,7 +471,7 @@ func (m *Model) buildPage() bool {
 			v.heading = attentionWords(a) // blocked or stuck: the last lines, and the words (agent-screen-blocked §3)
 			b.join(termPreviewLines(v, width))
 		}
-		b.join(detail).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
+		b.join(detail).join(backgroundSection(a, p.term, now)).join(quotaDetail(a.provider, snap, has, until, isHeld, now))
 		for _, l := range loginHoldLines(map[string]*agentState{p.key: a}) { // its own login hold (login-updates r9 §3.6)
 			b.segs(l...).text("\n")
 		}
