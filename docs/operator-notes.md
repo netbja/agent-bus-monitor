@@ -226,7 +226,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `service restart holder` is refused unless `--kill-agents` is given and says how many agents it
   would kill (`RestartHolder`: systemd `restart`, launchd `kickstart -k`).
 - **The holder's health and its two commands (herdr exit step 6d1).** One evidence per project
-  (`cmd/agentbus/holderhealth.go`, `holderEvidence`): per build key, its unit and whether the
+  (`internal/dispatchsvc/holderhealth.go`, `holderEvidence`): per build key, its unit and whether the
   manager runs it, its socket in `<rundir>/agentbus/<p>/` (answering, terminals, age from the
   socket's mtime) and its binary copy; a copy that another project's unit records is that project's,
   never this one's leftover; a manager that cannot say makes it unknown. Three checks read it
@@ -504,7 +504,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `Read` denying everything, fail closed),
   `bus_thread`, `bus_agents`; no shell, no write, no verdict. `--check <endpoint>` asks its `/models`. Provider
   `local` is a built-in unlimited quota reader (listed by `agentbus quota` only with an endpoint). Health
-  `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `cmd/agentbus/llmcheck.go` the reader, every minute) probes
+  `llm-endpoint` (step 2; `health/llmendpoint.go` pure, `internal/dispatchsvc/llmcheck.go` the reader, every minute) probes
   only the endpoints the registered `local-llm` agents use (the one each peer resolved, `AgentSnapshot.Endpoint`, set by
   its own status with `EndpointFP`, its URL's fingerprint (HMAC under the host key `endpoint-fp.key` beside config.toml,
   0600, made once and linked whole: a bus reader cannot test a guessed path; no key, no fingerprint; a recorded one
@@ -747,7 +747,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   Sentinel may restart an identified failed project service once within its budget, or refresh the
   local model table; everything else is escalated. Usage refresh is at most every 15 minutes with
   a fenced writer; model refresh is daily under a host-local lock. `redis-version` (redis-watch,
-  `cmd/agentbus/redislatest.go`) compares the broker's INFO version with the latest Redis release
+  `internal/dispatchsvc/redislatest.go`) compares the broker's INFO version with the latest Redis release
   **of its own major** (the major it runs, read from INFO; no claim about the compose tag): the dispatch
   service's `RedisRefresh` chore reads GitHub's recent `redis/redis` releases (5 s, drafts and
   prereleases skipped) once a day under a host-local lock into `~/.cache/agentbus/redis-latest.json`
@@ -755,7 +755,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   in its major; a newer major is never a warning, only named in the detail (changing major is the
   person's decision); unknown when the broker is unread, no release of its major is found or no check
   succeeded within 48 h. The person updates the broker; sentinel never restarts or upgrades it. `disk` (disk-check,
-  `health/disk.go` pure, `cmd/agentbus/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
+  `health/disk.go` pure, `internal/dispatchsvc/diskcheck.go` the reader behind injected `diskDeps`, so no test touches a real disk;
   5 min): the filesystems agent-bus depends on (docker's root from `docker info` when docker is on PATH and the daemon runs
   on this host (`dockerNotLocal`: the endpoint Docker itself reports, `docker context inspect` with no name, which resolves
   `DOCKER_CONTEXT` and `DOCKER_HOST` in its own order (checked on Docker 29; never reimplemented), a local `unix://` socket): not
@@ -768,7 +768,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   said, unknown only when nothing was. For you on warn and fail with a command that only looks (`du -sh
   ~/.cache/go-build ~/.npm ~/.cache/pip`); `go clean -cache` is named in the detail as the person's choice
   (`DiskCleanChoice`, kept whole: the paths are cut to leave it room within the 300-rune detail), never in the copyable line; a fail wakes sentinel, which never deletes anything. `github`
-  (busmon-github-check, `health/github.go` pure, `cmd/agentbus/githubcheck.go` the runner; 15 min, 10 s) runs only
+  (busmon-github-check, `health/github.go` pure, `internal/dispatchsvc/githubcheck.go` the runner; 15 min, 10 s) runs only
   when a remote is on github.com (origin first): `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` and
   `git -c credential.helper= -c core.askPass= ls-remote https://github.com/<o>/<r>` with `GIT_TERMINAL_PROMPT=0`, in parallel, every command
   under `LC_ALL=C` and without any askpass program (`probeEnviron`: `GIT_ASKPASS`/`SSH_ASKPASS` removed, `SSH_ASKPASS_REQUIRE=never`;
@@ -777,7 +777,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   judged. Both reached ok, one warn (for you), neither unknown then warn after `GitHubNeitherWarnAfter` (1 h, tracked
   in the check's memory: a restart starts it over); never fail, so it never wakes sentinel. The stall guard (spec
   `docs/superpowers/specs/2026-11-01-stall-guard-design.md`; judgement pure in `health/stall.go`, readers in
-  `cmd/agentbus/stallchecks.go`; `dispatch.stall_after`/`clear_stall_after`/`quiet_after`, 15 min, 0 = off):
+  `internal/dispatchsvc/stallchecks.go`; `dispatch.stall_after`/`clear_stall_after`/`quiet_after`, 15 min, 0 = off):
   `team-stall` fails (waking sentinel, which sends master one waking directive with the next ready task) when every
   non-dormant agent (`bus.DormantAfter`) is idle that long, each pane seen not busy by a fresh observation (none =
   unknown), nothing is open (request, accepted task, ask, gate, pause, swap, obligation, valid hand-off, mission) and
@@ -807,7 +807,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   tells the person once per fail episode (`FencedNotifyOnceForPerson`, mark `stall` = the record's since, kept across an
   unknown pass and deleted once the check reads ok or warn): at once when master cannot act (`dispatch.CannotAct`, the escalation rule), else at twice
   `stall_after` from the episode's first since (kept in the reader's memory across an unknown pass). `review-queue` (spec
-  `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `cmd/agentbus/reviewqueue.go`
+  `docs/superpowers/specs/2026-11-04-review-queue-design.md`; `health/reviewqueue.go` pure, `internal/dispatchsvc/reviewqueue.go`
   the reader) warns (master) when the same idle team (`teamIdle`, shared with `team-stall`), nothing else open (gates
   aside), owes a review: an open gate whose challenge the reviewer read, older than `stall_after` (a challenge no longer retained is
   never proved read, a group skipping trimmed entries: not judged, unknown when nothing is owed); or a subject approved
@@ -815,7 +815,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   it, or a challenge under a ref a verdict on it carries) has no approve of the deciding head; the `StallWake` hook
   wakes master once per owed set (mark `stall-review`, episode a hash of the owed keys); never fail. `idle-implementer`
   (spec `docs/superpowers/specs/2026-11-08-idle-implementer-design.md`; `health/idleimplementer.go` pure,
-  `cmd/agentbus/idleimplementer.go` the reader; `dispatch.idle_after`, 15 min, 0 = off) warns (master) for each
+  `internal/dispatchsvc/idleimplementer.go` the reader; `dispatch.idle_after`, 15 min, 0 = off) warns (master) for each
   implementer (a manifest role with the `implement` skill, `rolesWithSkill`) idle past the threshold, its pane not busy,
   its provider not held, with a board request addressed to it in state `requested`; it needs no idle team. Its clock is
   the `{p}:agents` state time, which a turn end restarts where turn hooks run (a short turn answering a wake restarts
@@ -830,7 +830,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   holds it out of the digest for a week (counted, not repeated), then the digest lists it again with the accept. It
   changes no measured status. An agent identity refuses the accept, `--as` is required (unproved, as reload's).
   `plan-drift` (the architect's design, reports 1794586011340-0 and 1794586021722-0;
-  alert only, the person approved; `health/plandrift.go` pure, `cmd/agentbus/plandrift.go` the read) warns master,
+  alert only, the person approved; `health/plandrift.go` pure, `internal/dispatchsvc/plandrift.go` the read) warns master,
   never fails, on a merge of origin/main since the plan's load that no task links and no `agentbus plan ignore <pr>`
   covers, a task whose merge came from another branch than its board entry records, and a task linked to a PR while a
   later PR of its branch stem (`feat/x-2` for `feat/x`) merged after it (its own merge in the list does not hide one). It reads local git only, in the dispatch service's
@@ -975,14 +975,14 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   runs suspend, `startRun` in `sleep.go`: one child at a time, its own session, output in `<state>/agentbus/backup.log`,
   its last line the notice, its end reading the page again), one row per archive of this host (`backup.List`: date, size,
   projects, secrets or not), and the last runs from `backup-last.json` (errors through `health.Redact`); Enter on an
-  archive opens its coverage, the restore dry runs to copy (`y`, the path shell-quoted) and what takes each project offline first (`agentbus down <p>`, its herdr workspace closed: a suspend keeps the agents and the workspace, which restore refuses even with `--force`; `backupOfflineSteps`); busmon restores nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `cmd/agentbus/backupcheck.go` the reader; 15 min,
+  archive opens its coverage, the restore dry runs to copy (`y`, the path shell-quoted) and what takes each project offline first (`agentbus down <p>`, its herdr workspace closed: a suspend keeps the agents and the workspace, which restore refuses even with `--force`; `backupOfflineSteps`); busmon restores nothing. Health `backup` (`health/backup.go` pure, `EvaluateBackup`; `internal/dispatchsvc/backupcheck.go` the reader; 15 min,
   for you, `agentbus backup`): per project, warn on no covering archive younger than `backup.warn_after` (168h, `0` =
   this reminder off), on the latest scheduled attempt covering it failed while `daily` (cleared by a newer covering
   archive; the age case only by one with secrets, read from `coverage.json`'s `secrets`), on its latest
   `after_command` run failed while one is set; unknown when the folder or the record cannot be read; the detail names
   the folder.
 - **Notifications** (spec `docs/superpowers/specs/2026-11-03-notifications-design.md`, package `notify/`): the
-  dispatch service's chore (`cmd/agentbus/notifychore.go`, `dispatch.NotifyConfig`, 30 s, only while
+  dispatch service's chore (`internal/dispatchsvc/notifychore.go`, `dispatch.NotifyConfig`, 30 s, only while
   `HoldsDispatch`) tells the person what waits, through ntfy, Discord and the desktop. Targets and their secrets are
   in `notify.toml` beside config.toml (`notify.Load`: refused whole when open to others or not the person's, its folder
   writable by no one else, opened once `O_NOFOLLOW` and judged by fstat; per target https, http only `insecure` on a
@@ -1211,7 +1211,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `config.SelfRepairMode`, which reads a refused switch as `off`: `Get`'s value for an invalid
   key is the default, `on`. The budgets `dispatch.self_repair_every` (30m) and
   `dispatch.self_repair_per_day` (3) take only values above 0 (an env 0 is skipped).
-  Self-repair step 6b, the shadow (`cmd/agentbus/selfrepairchore.go`, `dispatch/selfrepairchore.go`):
+  Self-repair step 6b, the shadow (`internal/dispatchsvc/selfrepairchore.go`, `dispatch/selfrepairchore.go`):
   the dispatch service reads the switch once at its start (`serviceSelfRepair`). Only `shadow`
   runs a pass, every 15 s while it holds the lease: the template's agent tabs, a death counted
   per episode (`pid:start`) from its first read (the grace is Redis `TIME`), herdr read only when
@@ -1239,7 +1239,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   (`Deps.Fence` for `Role`) is read right before an agent's split or tab create, after its tab is
   judged: an error relaunches nothing for that role (`coder: not relaunched (…)`); the dry run
   never reads it, and `up` and `reload` set none.
-  Self-repair step 7b, on mode acts (`cmd/agentbus/selfrepairact.go`): `on` (the default) runs the pass
+  Self-repair step 7b, on mode acts (`internal/dispatchsvc/selfrepairact.go`): `on` (the default) runs the pass
   as shadow does, then applies the one decision it allows (master first, then the oldest death). A
   relaunch takes the role's intent (`BeginSelfRepair`, a fresh nonce; an intent already held skips it),
   runs the service entry (`relaunch.ServiceRole`: herdr on the services' env file's session, up's project
@@ -1579,7 +1579,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `InBase` (an ancestor, or no diff: "contents in base", a squash or a revert); local mode reads `LocalTips` (a local
   branch whose tip is the head; no origin with `delivery.forge = auto` is local, as for `deliver`). Every command runs
   with `mergeQueueEnv` (the github check's `probeEnviron`: no askpass, `GH_PROMPT_DISABLED=1`, `GIT_TERMINAL_PROMPT=0`,
-  `LC_ALL=C`), 10 s each; agentbus reads no token. The dispatch service's chore (`cmd/agentbus/mergequeuechore.go`,
+  `LC_ALL=C`), 10 s each; agentbus reads no token. The dispatch service's chore (`internal/dispatchsvc/mergequeuechore.go`,
   `dispatch.MergeQueueConfig`, 5 min, 20 s, only while `HoldsDispatch`) replaces the fenced cache `{p}:mergequeue`
   (`bus/mergequeue.go`, a hash, `PEXPIRE` 15 min, runtime, ignored by `HasKeysBesidesDispatch`): `attempted_at` every
   pass, `items_at` and the items only on a success, so a failed pass keeps the last items and never makes them look
@@ -1639,6 +1639,12 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   refused unless every client the project's roles run on (own and fallback profiles) records it `free`, naming
   each other client and its free keys. Today only F12 is recorded free, for Claude Code, Grok and Codex (codex-cli 0.169.0, its
   `f12-at-input` probe, 2026-11-16): with a Kimi or agy role, attach to it still needs `--prefix`.
+- **busmon's sparklines follow `display.graphs` (braille-sparklines, 2026-11-18).** The Tokens page's
+  7-day column is drawn in `block` (eight blocks), `braille` (two days per cell, 4 levels, filled; padded
+  to 7 cells) or `ascii` (`_.-:=+*#`); `auto`, the default, is `ascii` when the locale (`LC_ALL`, then
+  `LC_CTYPE`, then `LANG`) does not name UTF-8, else `block`, and never braille. Env
+  `AGENT_BUS_BUSMON_GRAPHS`; set on the `C` page, applied from the next frame. Any non-zero day lights at
+  least the lowest step (the bottom dot in braille). Gauges and bars keep their blocks in every style.
 - **Untracked files no longer make a build "+dirty" (build-id-untracked).** Go's `vcs.modified`
   counts untracked files, so notes left in the repository root gave every setup build a "+dirty"
   build id, and that longer key put the holder's socket path over its limit (2026-11-16). setup now
@@ -1659,6 +1665,47 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   busmon, `i` or `r` on a message replies to its sender even when an unsent draft to another agent
   is saved: that draft is held and opens again once the reply is sent (before, the draft opened in
   the reply's place, its recipient shown as if it were the reply's).
+- **busmon reads `stuck` for an agent whose screen nobody recognises and that has not changed for
+  `dispatch.stuck_after`** (3 minutes by default; busmon reads the same setting as the
+  dispatcher). It is judged from the dispatcher's observation of the agent's current process:
+  settled, its client's signature reads neither ready, nor busy, nor a prompt. The state column
+  says `stuck`, For you lists it as "stuck: its screen is not recognised and has not changed for
+  <d>", and the agent's page heads its live screen with those words, the last 6 lines below. A
+  declared blocked or waiting, or an open ask, is not covered (agent-screen-blocked §3, 3b-2).
+  busmon reads the setting on its own machine and the dispatcher on its own (its env file): with
+  different values there, busmon says stuck at another time than the desktop ring. An agent being
+  swapped still reads stuck in busmon, since its screen is what it is; only the ring waits.
+- **A failed CI check goes back to its author, at most `ci.max_handoffs` times, then to the person (ci-loop,
+  spec `2026-11-19-ci-loop-design.md`).** GitHub with `gh` only: the merge-queue pass's one `gh pr list` also
+  reads `statusCheckRollup`; GitLab, Bitbucket and the local forge get no loop until they have a PR reader.
+  `ci.loop` (default on, `AGENT_BUS_CI_LOOP=off`) and `ci.max_handoffs` (default 3; 0 sends every red PR
+  straight to the stop). A PR is red when an entry failed (`FAILURE`, `TIMED_OUT`, `STARTUP_FAILURE`; a status
+  `FAILURE` or `ERROR`) and nothing still runs; `CANCELLED` and `ACTION_REQUIRED` are not failures, the
+  latest of two same-named entries wins, a draft is skipped. The owner is the one distinct `author` of the
+  verdict ledger's entries on the head (self-addressed verdicts ignored), else master; the owner's directive
+  wakes it, master gets a copy with `wake=no`. One episode (PR, head, sorted failing names; its sha1 digest in
+  `{p}:ci`, a runtime hash, `pr:<n>` = `digest|count|stopped|done`) is handed off once; a new head counts
+  toward the same cap, green does not reset it. At the cap the loop stops: master's directive (`wake=no`) and
+  the person's notice (For you) naming `agentbus ci reset <pr>` (the person's only, refused in an agent's
+  environment; also busmon's `/ci reset <pr>`). An owner that declared `blocked` or `waiting` holds a
+  hand-off, never the stop. Every write is `bus.FencedCIStep` (one fenced script, each part recorded):
+  **at least once**, a duplicate harmless (same text, same `episode`), never exactly once; a closed PR's field
+  is deleted (`bus.FencedCIForget`). The loop's failures are the merge-queue record's `ci` field, named by
+  its health check beside the queue's outcome.
+  - **The base is checked before a hand-off.** For the bases of the red PRs that reach a new decision, one
+    `gh api graphql` call per base reads its latest commit's rollup. A PR with a failing check that also
+    fails on a red base is held (neither handed off nor stopped, nothing counted), and master is woken once
+    per base episode (`FencedCmdOnce`, mark `ci:base:<branch>` in `{p}:quota`); a check that still runs on
+    the base makes the PR wait; a base that cannot be read sends nothing for its PRs (named in `ci`). A base
+    with no CI on push has an empty rollup: it is not red, and the loop runs as written. The base is matched
+    **by check name**: a CI that posts a different context for a PR than for a push (Jenkins
+    `…/pr-merge` against `…/branch`) never holds a PR, which then goes back to its author as before.
+  - **Silence is never "all green".** A check that never finishes (`EXPECTED` or `PENDING` forever, a
+    required check never posted because the CI server is down), a base that stays running, or a base read
+    that keeps failing keeps the PR silent, its stop included.
+  - **The hand-off gives a link, not the log.** It names `gh run view --log-failed` only for a GitHub
+    Actions check run (a `CheckRun` with a workflow); a commit status or another app's check run gives its
+    URL alone. The agent must be able to reach that URL (an internal Jenkins, for example).
 - **No more writes from `anonymous` (cmd-identity-anonymous, 2026-11-16).** From a shell, `agentbus` writes as
   `AGENT_BUS_AGENT`, else as the person: `AGENT_BUS_HUMAN`, else the name `agentbus identity set` recorded in
   config.toml. With neither, a command that writes is refused with that fix; before, it was sent `from anonymous`,
@@ -1716,6 +1763,12 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   - If the installed agentbus was replaced since the service started, it refuses ("replaced
     since the dispatcher started"): restart the dispatcher. `agentbus up <project>` does the same
     by hand (agent-screen-blocked Q1).
+- **The dispatch service's runtime is `internal/dispatchsvc` (dispatchsvc move, 2026-11-20).** Its health-check readers, stall
+  checks, chores and reboot judge left `cmd/agentbus` whole, unchanged; both binaries keep their paths. The CLI reaches it
+  through `Deps`, `Config`, `ForegroundConfig`, `Runtime` and `MergeQueueLive` only. `TestGuard` fails when the package
+  imports the CLI or the screen, calls the mission runner, imports `os/exec` in a new file, runs a program not on its
+  list or any shell, or imports a module package not on its list; a file path in an older note under `cmd/agentbus` for
+  one of these files now reads `internal/dispatchsvc`.
 - **A role may be popped on another profile by name: alt_profiles (fable-profile-architect).** A
   role's `alt_profiles` in `roles.toml` list profiles `agentbus pop <role> --profile <p>` and a
   template tab's `--profile` may name, on the same provider too; unlike `fallback_profiles` they
@@ -1987,6 +2040,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
 - **A person named `anonymous` is nobody too (identity-anonymous-human, 2026-11-17).** With `AGENT_BUS_AGENT` unset,
   `AGENT_BUS_HUMAN=anonymous` or `[identity] as = "anonymous"` in config.toml no longer passes as the person's
   identity: a write from the shell is refused with the fix, as with no identity at all (reviewer-codex on #571).
+- **busmon's light theme paints its own background** (white) on every cell, so `display.theme = light` reads on a dark terminal too; dark keeps the terminal's background, and 16-colour or `NO_COLOR` never paint. Each role keeps a minimum contrast in both themes (4.5:1 for text and muted, 3:1 for the rest but frame lines; `theme_contrast_test.go`): Dim, the dark inactive tab and xiaomi's light colour were raised to meet it.
 - **Login expiry, part 1: the reader and the identity (login-updates r9 §3.1-3.3, `loginexpiry/`).**
   No behaviour changes yet (part 2 runs the check). `loginexpiry.ReadFile` reads one field,
   `claudeAiOauth.refreshTokenExpiresAt` (Unix ms), from `<config dir>/.credentials.json`:
@@ -2110,6 +2164,14 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   none, the detail says `wake time unknown`; master cannot act (`dispatch.CannotAct`): the notice at once, no
   wake. On any pass, master's check-back set on the same `what` more than `dispatch.checkback_max` (3, `0`
   never) times is one notice (`checkback-person`, episode master + `what` + `first_set_id`).
+- **A delivered PR is a For you row within seconds, and only once both reviewers approved it.**
+  `agentbus deliver` refuses a head that two reviewers did not approve (`--single-approval <reason>`
+  in an emergency: the reason goes in the request's body and on the bus). After a delivery it marks
+  the merge queue due (`{p}:mergequeue:due`, the broker's time). The dispatcher reads the mark every
+  5 s and passes at once, the 5-minute pass staying the fallback, so the PR is a row in For you
+  before the person can merge it. The queue's base is the project's, as deliver's (the template's
+  `[delivery] base`, else `delivery.base`). The reminder popup (`waiting.popup_after`, Shift+C)
+  lists merges with the other decisions; 0 turns it off.
 - **A plan grouped by chantier (plan-chantier).** `docs/plans/<name>.json` may list `groups` once (`{id, title}`, at
   most 12, the id a `bus.ValidName`, the title one line of 1 to 40 characters) and give a task `group`: each named
   group is listed, and a listed group with no task is refused (a typo would hide it). busmon's Plan board then
@@ -2144,6 +2206,13 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   own start-time environment; an unreadable `config.toml` keeps the last values. `busmon --delete` (Projects page too)
   removes the project's table. Quota directives and the drain notice, stored and read later, carry the absolute date
   (`resets Tue 17 Nov 13:59`), never "today" or "tomorrow".
+- **The holder's reaper waits 2 seconds before taking an exited child it did not start.** It
+  reaps the orphans a holder inherits as a subreaper. Taking any zombie at first sight raced the
+  process's own commands (os/exec), whose `Wait` then failed with `waitid: no child processes`.
+  In the test suite, where the release test runs a holder in the same process, that was the
+  intermittent failure of git-running tests (`TestPlanDriftRealGit`, `TestMissionCLIRoundTrip`
+  and others). An orphan is now reaped once it has stayed a zombie for the grace, keyed by pid
+  and start time; a sweep runs every second as well as on each SIGCHLD.
 - **Reboot-resume, part 1: the run record (reboot-resume spec §2, `lifecycle/`).** Nothing is
   judged yet, so behaviour is unchanged. Each project's state directory now holds two local
   files, written 0600 and replaced atomically (a temp file, fsync, rename, then fsync of the
@@ -2161,7 +2230,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   unknown (the BSDs), nothing is written. A failed write is said and never stops the command.
 - **After a reboot, the dispatch service judges once (reboot-resume A, with holder hardening H1 and H1b).**
   - **The judgement:** once it holds the lease, before any other loop (`dispatch.Config.Reboot`,
-    `cmd/agentbus/reboot.go`), the dispatch service reads `run.json` (`lifecycle.Judge`) and records
+    `internal/dispatchsvc/reboot.go`), the dispatch service reads `run.json` (`lifecycle.Judge`) and records
     the verdict in `{p}:reboot` (fenced, at from Redis TIME). Only then does it write `running`, so a
     stop in between judges again. The verdicts are `intentional`, `suspended`, `restarting`,
     `unplanned` (with `why`) and `stopped` (with `why`).
@@ -2195,6 +2264,16 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `agent-launch` refuses a role that is not its environment's `AGENT_BUS_AGENT` (typed in master's terminal it
   launches only master; the holder sets each terminal's own) and a `--resume` session that `{p}:resume` records
   for another role. A `--resume` whose records cannot be read (broker down) is refused; a fresh launch reads none.
+- **busmon no longer depends on tcell** (`remove-tcell`): the theme keeps its colours in its own
+  `Color`/`Style` (`cmd/busmon/color.go`, tcell's semantics); the goldens are unchanged. `go.mod`
+  drops `gdamore/tcell`, `gdamore/encoding` and `golang.org/x/text`.
+- **A request nobody can accept can still be closed.** A tracked request whose body cmd retention
+  removed (`availability: missing`), or that expired before anyone accepted it, refuses `accept`,
+  and `done` needed an accept, so it stayed open forever (concierge-memory-opinion, 98 h). Its
+  target, or its sender (usually master), now closes it with `agentbus request done <task> <why>`,
+  unaccepted. The board entry records `closed_unaccepted` (`body missing` or `expired`), and the
+  reply goes to the other side. A request whose body is there still needs an accept, and the sender
+  never completes one its target accepted. The accept refusal names the command.
 - **A swap outside a role's profiles no longer costs its session on resume
   (resume-record-profile).** `agentbus swap --force` may put a role on any defined profile, and its
   SessionStart hook records that profile in `{p}:resume`; `up --resume`, the self-repair and `holder
@@ -2237,6 +2316,25 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   project), and the run goes on when that provider is clear (every window under the warn threshold, no hold) or
   its hold is released; a limit reached meanwhile replaces `why`, and the run then stays draining. Not in step 2:
   `{p}:held`, the held directives and the silent client's screen hold (`run.screen_hold_max`).
+- **The dispatch service's escalation target reaches every check (service-escalate-to).** Under
+  `agentbus service run dispatch --escalate-to <agent>` (or `AGENT_BUS_ESCALATE_TO` in the project's env
+  file), the stall checks (team-stall notice, clear-stall, review-queue, idle-implementer, plan-drift,
+  idle-master), the self-repair watcher and the reboot judge now escalate to that agent, as the loop
+  did; before, they still went to master. The foreground `agentbus dispatch --escalate-to` was not affected.
+- **busmon's Services page lists the project's holders, and `service stop holder <build>` stops
+  an old one** (agent-screen-blocked §4, the person's Q5).
+  - Each holder line shows its build, whether it runs (`running`, `not answering` when its unit
+    runs but its socket does not answer, `inactive`), its uptime when known, and how many agents
+    it hosts. They are read on busmon's own machine only.
+  - A holder of another build than the dispatcher's that answers with no agent is flagged
+    `old build, hosts no agent` with the commands:
+    `agentbus --project <p> service stop holder <build>`, then `service gc`.
+  - The stop refuses the current build's holder and a holder with a live terminal (`holder
+    drain` moves them first), one that answers but cannot be listed, and one whose unit runs but
+    whose socket does not answer (it may hold agents; `agentbus down <p>` stops every holder of the
+    project, its agents with them), and one whose unit state cannot be read. It never kills an agent;
+    `service restart holder --kill-agents` does.
+  - When no holder of the dispatcher's build answers, the page says so and names `agentbus up`.
 - **A stuck screen rings the desktop once per episode** (`dispatch.stuck_after`,
   `AGENT_BUS_STUCK_AFTER` in whole seconds; default 3 minutes, `0` off). A screen counts as
   stuck when it is settled, its client's signature reads it as neither ready, nor busy, nor a

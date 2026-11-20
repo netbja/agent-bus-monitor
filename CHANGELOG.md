@@ -6,6 +6,25 @@ release exists.
 
 ## Unreleased
 
+## v0.31.0 — a failed CI check back to its author, braille sparklines, a readable light theme, and the dispatch service in its own package
+
+- The CI loop: when a PR's checks fail, the dispatch service wakes its author with the failing
+  checks and master gets a copy; after 3 hand-offs (`ci.max_handoffs`) it stops and tells the
+  person, and `agentbus ci reset <pr>` (or busmon's `/ci reset`) gives more tries. On by default
+  (`ci.loop`), GitHub with `gh`, once the dispatch service runs this build.
+- busmon: the Tokens sparklines follow `display.graphs` (`auto`, `block`, `braille`, `ascii`); the
+  light theme paints its background and keeps a minimum contrast; tcell is gone, with the same look.
+- Files are written atomically (lifecycle, quota, `config.toml`, busmon's cache). The service's
+  `--escalate-to` target now reaches the stall checks, self-repair and the reboot judge.
+- The dispatch service's runtime moved to `internal/dispatchsvc`, with no change in behaviour;
+  shared text helpers in `internal/textfmt`.
+- Specs and ideas: a language setting (French or English in busmon), a lost-turn notice idea, the
+  v0.31 plan.
+- Not in it: the CI loop's timing check, the language setting's and the views redesign's code,
+  background work in busmon, services restart buttons, the README and operations guide rewrite.
+
+[Notes](docs/releases/v0.31.0.md)
+
 ## v0.30.0 — a sturdier holder, quota drain per project, agents' screens, and the person never an agent
 
 - The holder survives crashes, restarts and reboots: a dead holder is For you with its start
