@@ -69,8 +69,15 @@ func TestBgHookSubagentStopRefreshesTheParent(t *testing.T) {
 	if len(flips) != 0 {
 		t.Fatalf("a sub-agent's stop flipped the agent: %v", flips)
 	}
-	if len(got) != 1 || got[0].agent != "coder" || got[0].r.event != "SubagentStop" || len(got[0].r.tasks) != 3 {
+	// The sub-agent this event says stopped is still listed running in the
+	// recorded payload: it is not kept (reviewer-codex), the two shells are.
+	if len(got) != 1 || got[0].agent != "coder" || got[0].r.event != "SubagentStop" || len(got[0].r.tasks) != 2 {
 		t.Fatalf("reported %+v", got)
+	}
+	for _, tk := range got[0].r.tasks {
+		if tk.IDHash == bus.BgIDHash("a59ba78e330701ca7") || tk.Type == "subagent" {
+			t.Fatalf("the stopped sub-agent kept: %+v", got[0].r.tasks)
+		}
 	}
 }
 
@@ -83,10 +90,13 @@ func TestBgHookCronsAndLabels(t *testing.T) {
 		t.Fatal("a cron's prompt reported")
 	}
 	// Unknown labels and names fall back; a schedule not of cron shape is dropped.
-	r := bgReportOf("Stop", []hookTask{{ID: "x", Type: "brand new", Status: "paused", AgentType: "my agent!"}, {ID: "y", Type: "subagent", Status: "running", AgentType: "my agent!"}},
-		[]hookCron{{ID: "c", Schedule: "rm -rf /"}})
+	r := bgReportOf("Stop", "", []hookTask{{ID: "x", Type: "brand new", Status: "paused", AgentType: "my agent!"}, {ID: "y", Type: "subagent", Status: "running", AgentType: "my agent!"},
+		{ID: "z", Type: "shell", Status: "running", AgentType: "Explore"}}, []hookCron{{ID: "c", Schedule: "rm -rf /"}})
 	if r.tasks[0].Type != "other" || r.tasks[0].Status != "other" || r.tasks[0].AgentType != "" || r.tasks[1].AgentType != "" || len(r.crons) != 0 {
 		t.Fatalf("sanitised %+v", r)
+	}
+	if r.tasks[2].AgentType != "" { // a name only on a subagent task (spec §4; foureyes G6)
+		t.Fatalf("a shell task kept an agent_type: %+v", r.tasks[2])
 	}
 }
 

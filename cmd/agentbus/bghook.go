@@ -43,10 +43,15 @@ func (r bgReport) String() string {
 
 // bgReportOf cleans the payload's lists: ids digested, labels known or
 // "other", a sub-agent's name kept when it is a name, a cron kept when its
-// schedule has cron's shape.
-func bgReportOf(event string, tasks []hookTask, crons []hookCron) bgReport {
+// schedule has cron's shape. stopped is a SubagentStop's own agent_id: the
+// list Claude sends with it still shows that sub-agent running, so it is
+// left out (reviewer-codex; the recorded claude-subagentstop.json).
+func bgReportOf(event, stopped string, tasks []hookTask, crons []hookCron) bgReport {
 	r := bgReport{event: event}
 	for _, t := range tasks {
+		if stopped != "" && t.ID == stopped {
+			continue
+		}
 		bt := bus.BgTask{IDHash: bus.BgIDHash(t.ID), Type: bus.BgLabel(bus.BgTaskTypes, t.Type), Status: bus.BgLabel(bus.BgTaskStatuses, t.Status)}
 		if bt.Type == "subagent" {
 			bt.AgentType = bus.BgAgentType(t.AgentType)

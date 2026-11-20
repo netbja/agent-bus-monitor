@@ -6,7 +6,15 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 )
+
+// wireRuntime gives the dispatcher's runtime its bus-backed background facts:
+// the agents' hook records (background-work-visible step 1). Config calls it;
+// a test pins it.
+func wireRuntime(h *dispatch.HostRuntime, b *bus.Bus) {
+	h.Hooks = bgHooks(b)
+}
 
 // bgHooks is HostRuntime.Hooks from the agents' hook records
 // (background-work-visible step 1): what an agent's Stop or SubagentStop last

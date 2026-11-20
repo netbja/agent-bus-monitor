@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
@@ -43,5 +44,14 @@ func TestBgHooksFromTheRecord(t *testing.T) {
 	b.WriteBgTasks(ctx, "coder", "Stop", 42, nil, nil)
 	if h, ok := hooks("coder", 42); !ok || h.Subagents != 0 || h.Tasks != 0 {
 		t.Fatalf("an empty list is a reading of none: %+v %v", h, ok)
+	}
+}
+
+// Config's runtime reads the hook records: wireRuntime sets its Hooks (foureyes G13).
+func TestWireRuntimeSetsTheHooks(t *testing.T) {
+	var h dispatch.HostRuntime
+	wireRuntime(&h, nil)
+	if h.Hooks == nil {
+		t.Fatal("the dispatcher's runtime reads no hook record")
 	}
 }

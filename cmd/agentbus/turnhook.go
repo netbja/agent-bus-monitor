@@ -54,17 +54,15 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 	if json.Unmarshal(raw, &in) != nil {
 		return 0
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), turnHookBudget)
-	defer cancel()
 	// The background tasks (background-work-visible step 1): a Stop's and a
 	// sub-agent's stop's lists are the agent's own (the parent's, for a
 	// SubagentStop); SessionStart forgets them.
 	if args[0] == "end" {
 		switch {
 		case (in.Event == "Stop" || in.Event == "SubagentStop") && in.Tasks != nil:
-			_ = turnBg(ctx, project, agent, bgReportOf(in.Event, *in.Tasks, in.Crons))
+			reportBg(project, agent, bgReportOf(in.Event, in.AgentID, *in.Tasks, in.Crons))
 		case in.Event == "SessionStart":
-			_ = turnBg(ctx, project, agent, bgReport{event: in.Event, drop: true})
+			reportBg(project, agent, bgReport{event: in.Event, drop: true})
 		}
 	}
 	if in.AgentID != "" || in.SubagentType != "" {
@@ -80,8 +78,18 @@ func turnHook(args, env []string, stdin io.Reader, stdout io.Writer,
 	if args[0] == "end" && in.Event == "SessionStart" && get("AGENT_BUS_CLIENT") == "codex" && bus.ValidSessionID(in.SessionID) {
 		prove(project, agent, in.SessionID) // Claude Code proves through its resume hook instead
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), turnHookBudget)
+	defer cancel()
 	_ = flip(ctx, project, agent, state) // nothing is said: no broker, no proof, or a declared state means no flip
 	return 0
+}
+
+// reportBg sends one background report within its own budget, so a slow
+// dial for it never shortens the turn flip's (foureyes).
+func reportBg(project, agent string, r bgReport) {
+	ctx, cancel := context.WithTimeout(context.Background(), turnHookBudget)
+	defer cancel()
+	_ = turnBg(ctx, project, agent, r)
 }
 
 // realTurnFlip dials the broker within ctx, proves the caller as status does,
