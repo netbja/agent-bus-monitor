@@ -453,7 +453,7 @@ agent names, no project template):
   them (`3 dormant`) and `a` shows them. To retire one for good, select it and press `d` (or
   `Delete`), then `y`: same as `agentbus --project myapp agents forget <name>`. An agent that is
   listening, or declared a status in the last 10 minutes, is refused.
-- **Work: who owes what.** The Work tab (`3`; `4` opens it on NEXT) reads top-down: **YOU**
+- **Work: who owes what.** The Work tab (`3`) reads top-down: **YOU**
   (what waits on you, each with its verb: `answer`, `merge`, `decide`, `review`, `check`, and
   why), **TEAM** (the agents at work, their task in hand and its progress, who reviews whom and
   since when; the free agents on one line), **NEXT** (the plan's next tasks, then requests not in
@@ -477,9 +477,10 @@ agent names, no project template):
   opened from, where Esc returns. A tracked request is closed by its owner (`agentbus request done`).
 - **The plan.** When master loads the batch's plan (`agentbus plan load docs/plans/<name>.json@<commit>`),
   its tasks feed Work (a task of yours nothing blocks is a `decide` row, a blocked one is in NEXT),
-  and `p` or `P` opens the plan by state (waiting for you, answered, blocked, in review, in
-  progress, upcoming, done), each with its review, PR and asks; Work's **done** line and `d` open
-  it with the done tasks shown. A merge waits for you
+  and the Plan tab (`4`; `6` under 80 columns) shows it as a roadmap: NOW, APPROVED, NEXT by
+  priority then file order, LATER (blocked, then low priority) and DONE, folded until `d`; Enter
+  opens a task with its review, PR and asks. `p` or `P` opens the same roadmap as a drawer; Work's
+  **done** line and `d` open it with the done tasks shown. A merge waits for you
   only once its PR is linked ("merge PR N"); a question of yours you answered moves the task to
   answered, master to record. A task waiting for you has an
   `Action:` row: Enter or `s` opens the compose window to master, prefilled, to start it. A task

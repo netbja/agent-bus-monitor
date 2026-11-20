@@ -597,16 +597,27 @@ busmon is the person's screen: what needs you, who does what, and what was said.
     to or from you; Esc returns to Work on that line; every thread is `r`/`F2`) and **done** (Enter
     or `d` opens the plan with its done tasks).
     `+` and `-` set a tracked request's priority on a row that stands for one; on any other
-    row the footer says why nothing changed. `4` is Work, on NEXT. The Projects page (`M`) counts
+    row the footer says why nothing changed. The Projects page (`M`) counts
     each project's **for you** and **at work** by the same rule (`♙/●` under 90 columns); `?` when a
     count was not read or is more than a minute old (`R` reads them again). `p` (or `P`) opens the
-    plan as a drawer: the progress, then **NOW**, **NEXT**, **LATER** and **DONE** (folded until
+    plan as a drawer: the progress, then the Plan tab's sections (below; **DONE** folded until
     `d`), at 120 columns and more right of For you with the selected task's panel. A plan whose
     file lists `groups` (chantiers) is drawn by group instead: one header per group with a bar
     (done, then approved and waiting for a merge), `done/total`, its task in progress and what waits
     for you, then its open rows; done rows fold into one DONE line until `d` shows them under their group. Enter opens a
     task: its review, PR, asks and notes. A task waiting for you has an `Action:` row: Enter or
     `s` opens the compose window to master, prefilled, to start it.
+  - **Plan** — the roadmap of the loaded plan (`4`; `6` under 80 columns): **NOW** (in progress
+    and in review), **APPROVED** (both reviewers approved, waiting for delivery or the merge;
+    absent when empty), **NEXT** (not started and unblocked, by priority then file order, the
+    person's decisions among them as `decide`), **LATER** (blocked by another task, then the
+    low-priority ones) and **DONE**, folded until `d`. A row shows `↑` for a high priority, `↓`
+    for a low one, `♙` before the person's name, and `after <id>` (`+N` for more). Its frame
+    names the plan and its progress (`28/43 done` and a gauge), never a for-you count. From 120
+    columns the selected task's panel sits at the right: its state, owner, review, PR, every
+    `after` (`✓` when done), the tasks it unblocks and its priority. Under 80 columns LATER and
+    DONE fold to a count Enter opens (`LATER 3 · 1 ↑`). Enter opens a task's page; `p` and `P`
+    still open the same roadmap as a drawer.
 - **Input** — `i` or `:` to write, `@` to start a directive; `@<agent> <text>` wakes that agent
   (Tab completes the name), `@all <text>` every registered agent. The line edits at its cursor:
   `←` `→` by character, Home/End (or Ctrl+A/Ctrl+E) to the ends, Delete, Ctrl+W back a word, Ctrl+U to
@@ -663,7 +674,7 @@ busmon is the person's screen: what needs you, who does what, and what was said.
 | `A` | about: the project's and busmon's, agentbus's, the protocol's, Redis's, herdr's, the plugin's and Go's versions and the update state (`y` copies them), and master and coder on a bus line with a packet travelling there and back (`r` replays; still with fade off, 16 colours or no colour) |
 
 **Responsive.** At 120 columns and more, For you and Agents side by side above the tabs. From
-80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `5 Work`, `6` Work on NEXT), with health
+80 to 119 they are stacked. Under 80, one view at a time (`1 For you` … `5 Work`, `6 Plan`), with health
 and dispatch still in the header; under 30×6, busmon only says the terminal is too small. It runs
 the same inside herdr or in any terminal.
 
