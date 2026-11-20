@@ -133,6 +133,11 @@ days and compares it by cause. That count is the supersede comments plus `merge-
 
 ## 5. Questions for the person
 
+Answered 2026-11-21 (thread `1795217745802-0`, relayed by master): all four recommendations,
+yes. Rules first, the machinery parked; rerere on repo-wide, never `autoUpdate`; a conflict
+stays with master; README and the guide as today. Built: step 1 (config-rows), steps 2 and 3
+(the skills' rules and `docs/operator-notes.d/rerere.md`).
+
 1. **Rules first, machinery parked?** Do §3 now, and park the conflict-aware-dispatch spec until
    the two-week count is in. Recommended: yes.
 2. **rerere on for every worktree?** Its cache is shared, so one agent's resolution replays for

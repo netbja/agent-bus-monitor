@@ -321,6 +321,12 @@ agentbus request next                       # which one to take next (exit 64: n
   `git merge-base --is-ancestor <head> origin/<base>`. Where it is `dev`, `main` takes only
   master's promotions: never branch from it.
 
+- **No stacking, and the recovery when it happened anyway.** Never branch a step from another
+  unmerged branch. If you did, and the parent has since squash-merged, rebase your branch with
+  `git rebase --onto origin/<base> <parent's old head>` (the parent's head as your branch saw it):
+  that replays only your own commits. A plain `git rebase origin/<base>` replays the parent's
+  original commits too, and conflicts with their squashed copy.
+
 - Only the **target** agent can accept, block or complete its own request.
 - `block` does not require a prior `accept` — you may refuse work you never took, with a
   reason. After a block, `accept` again before you can complete it.
