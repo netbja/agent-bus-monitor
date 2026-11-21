@@ -1619,6 +1619,28 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   resynchronising) prints no lines. The caller is the terminal the holder named
   (`AGENTBUS_TERM_ID` on the socket `AGENTBUS_HOST`), or else `AGENT_BUS_AGENT`: it is a team
   rule, not a security boundary (agent-screen-blocked §2).
+- **`agentbus update` installs the latest release, with a snapshot to roll back to (update spec step 1, `update/`).**
+  - **Where it comes from.** The newest `vX.Y.Z` tag on the clone's `origin/main`.
+    - The tag is fetched (`git fetch --tags origin`; never a branch or a working tree).
+    - It is checked out as its own worktree of the clone, `${XDG_DATA_HOME:-~/.local/share}/agentbus/src/<tag>`.
+    - Both binaries are built there. From then on they read that tree, not the clone.
+    - Because the tree is a worktree, later updates need the clone's `.git`. A moved or deleted clone is refused, with the path to put it back to.
+  - **What it refuses.** A `dev`, `-dirty` or diverged build, and a binary not built by setup. Each refusal names `./setup.sh update`.
+  - **Before any change.** A snapshot goes to `<state>/agentbus/updates/<id>/`: both binaries, then a manifest written last.
+  - **Then, in order:**
+    - `agentbus`, then `busmon`;
+    - the `agent-launch` link;
+    - the skills, strict and checked;
+    - `--project <p>`'s `dispatch` and `missions`, which must record the new build within 60 s.
+  - **On any failure** it rolls back by itself.
+  - **What it never touches.** Holders, agents, the broker, `config.toml`, env files and other projects' services, which are listed with their commands.
+  - **Running it.**
+    - `--check` prints the plan only.
+    - `--rollback [<id>]` runs the snapshot's own `bin/agentbus update --restore <id>`.
+    - `--list` shows the snapshots; 3 are kept.
+    - An update killed midway is refused until `--rollback`.
+    - It is the person's command: an agent is refused for everything but `--check` and `--list`.
+    - It writes nothing on the bus: the terminal and `<state>/agentbus/updates/history` hold its record.
 - **An ask comes from an agent, an answer from the person.** `agentbus ask <agent>` names the asking
   agent, which must be the caller itself (`AGENT_BUS_AGENT`): another agent's name, registered or
   not, is refused, and so is any name from the person's shell. Also refused: the person's recorded
@@ -1639,6 +1661,39 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   refused unless every client the project's roles run on (own and fallback profiles) records it `free`, naming
   each other client and its free keys. Today only F12 is recorded free, for Claude Code, Grok and Codex (codex-cli 0.169.0, its
   `f12-at-input` probe, 2026-11-16): with a Kimi or agy role, attach to it still needs `--prefix`.
+- **Claude Code's hooks now report background work (background-work-visible step 1).** The turn hook reads
+  `background_tasks` and `session_crons` from Claude's `Stop` and (newly installed) `SubagentStop` payloads and
+  writes `{p}:bgtasks:<agent>`: each task's type, status, sub-agent name and first-seen time, a digest of its id, the
+  agent's proved pid; never a command, a description, a cron's prompt or a raw id. `SessionStart` drops it; it lives an
+  hour; `busmon --delete` removes it with the project. The dispatcher's background judgement reads it as the
+  `hooks` source, for the agent's own process only: a Claude agent whose last Stop listed nothing now reads
+  background none when no process works either (before, its hooks were never read, so with no busy process it read
+  unknown, which skips a `/clear` after a hand-off and a pop-retire as running work does: `background work: unknown`
+  in the dispatch log). Takes effect at the agents' next launch (the hook) and the dispatcher's restart.
+- **The process source in the observation (background-work-visible step 2).** Each verified agent's observation in
+  `{p}:observed` gains `bg_procs` (its active non-helper descendants, the background judgement's own filter) and
+  `bg_oldest` (the oldest one's start, Redis clock); no process name or argument is published. A process's age counts
+  from the dispatcher's first sight of it, so a dispatcher restart restarts the ages; the skip's reason stays without
+  an age (its once-per-change event compares it). busmon reads them in step 3.
+- **busmon shows an agent's background work (background-work-visible step 3).** One mark per agent after its
+  message, the state word unchanged (an agent with only background work still reads `idle`): its declared text
+  (`agentbus background`) first; else the tasks its Claude Code hooks reported (`… 3 bg tasks 14m`, the oldest's age
+  counted from agentbus's first sight); else the dispatcher's process count, a lower bound (`… bg ≥1? 9m`). `◷`
+  follows when it has scheduled wakeups, never counted as running work (the person's `⏰`, drawn one cell wide). A
+  record of another pid, past its hour, or an observation of another process or too old shows nothing. The header
+  chip names an agent with observed work alone as `bg`. The agent's page gains a Background section: the declared
+  text and who set it, one line per task (`subagent Explore · running · 3m`), the source and its last report, the
+  program names running under the agent (read live from the holder while the page is open, never stored), and the
+  wakeups with their schedule.
+- **A background skip that lasts is told to master, and a declaration holds the skip (background-work-visible step 4).**
+  When the dispatcher has skipped an agent's auto-clear or pop-retire for its background work for
+  `dispatch.background_notice_after` (default 2h, `0` off, Health group), the escalation target gets one notice per
+  episode, naming the agent, the action and the source (hooks, process, screen, declared, unknown); wake=no when the
+  agent is the target itself. The episode is two `{p}:quota` marks, `bgskip:<agent>:<action>` and
+  `bgskip-notice:<agent>:<action>`, ended by the first pass that does not skip, by a new process, or when the pass does not run (pop-retire off, the project paused); a pass that holds the action for another reason (the pane focused, an open gate) ends it too, so the count starts again. The agent's declared
+  text (`agentbus background`) is now a judgement source, always running while it lasts, read by the dispatcher and by
+  `holder drain` (`--ignore-background` still overrides): it holds the pop-retire and the drain, and the auto-clear
+  until the agent's context episode has escalated (the `context-escalate` mark, for its current session), when observed work alone still holds it.
 - **busmon's sparklines follow `display.graphs` (braille-sparklines, 2026-11-18).** The Tokens page's
   7-day column is drawn in `block` (eight blocks), `braille` (two days per cell, 4 levels, filled; padded
   to 7 cells) or `ascii` (`_.-:=+*#`); `auto`, the default, is `ascii` when the locale (`LC_ALL`, then
@@ -1706,6 +1761,13 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   - **The hand-off gives a link, not the log.** It names `gh run view --log-failed` only for a GitHub
     Actions check run (a `CheckRun` with a workflow); a commit status or another app's check run gives its
     URL alone. The agent must be able to reach that URL (an internal Jenkins, for example).
+- **`agentbus merge-queue` marks an approved PR whose head's checks are red (ci-red-mark, ci-loop spec §8 Q8).**
+  - **The data.** It comes from the rollup the pass's `gh pr list` already reads, so there is no new `gh` call.
+  - **The rule.** A failed entry, taking each name's latest, under the loop's §2 rule. A PR is marked even while another check still runs.
+  - **The display.** The row gets `CI red: <checks>`, naming at most 10 then "and N more". With `--json`, the item gets `ci_red`, the sorted names.
+  - **No mark is not "green".** There is no mark when `ci.loop` is off (the rollup is not read), when the rollup is cut (100 checks or more), or under the git fallback (GitLab, Bitbucket, local).
+  - **The base is not consulted.** A red base shows as red on its PRs too.
+  - **busmon** does not show the mark yet.
 - **No more writes from `anonymous` (cmd-identity-anonymous, 2026-11-16).** From a shell, `agentbus` writes as
   `AGENT_BUS_AGENT`, else as the person: `AGENT_BUS_HUMAN`, else the name `agentbus identity set` recorded in
   config.toml. With neither, a command that writes is refused with that fix; before, it was sent `from anonymous`,
@@ -2172,6 +2234,13 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   before the person can merge it. The queue's base is the project's, as deliver's (the template's
   `[delivery] base`, else `delivery.base`). The reminder popup (`waiting.popup_after`, Shift+C)
   lists merges with the other decisions; 0 turns it off.
+- **`person.language` (env `AGENT_BUS_PERSON_LANGUAGE`, default `en`) is read by master's role
+  skill only, through `agentbus config`.** Master writes to the person in it (reports to the
+  person, ask question text, its pane) and to every agent in English; ask choice labels, peers
+  answering the person, and the dispatcher's notices stay English. No code translates anything.
+  A value that is not an ISO 639-1 code shows as `invalid` in `agentbus config`, warned
+  `master writes English`, and resolves to `en`. A change reaches
+  master at its next boot.
 - **A plan grouped by chantier (plan-chantier).** `docs/plans/<name>.json` may list `groups` once (`{id, title}`, at
   most 12, the id a `bus.ValidName`, the title one line of 1 to 40 characters) and give a task `group`: each named
   group is listed, and a listed group with no task is refused (a typo would hide it). busmon's Plan board then
@@ -2274,6 +2343,12 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   unaccepted. The board entry records `closed_unaccepted` (`body missing` or `expired`), and the
   reply goes to the other side. A request whose body is there still needs an accept, and the sender
   never completes one its target accepted. The accept refusal names the command.
+- **`rerere.enabled` is on in the shared repository, `rerere.autoUpdate` is not.** Master ran
+  `git config rerere.enabled true` once (merge-conflicts spec §3, the person's yes of
+  2026-11-21). The cache is shared by every worktree, so a conflict resolved once replays for
+  the next agent who hits it. A replayed resolution stays unstaged: the agent still reads it,
+  stages it, and runs the tests. Never set `rerere.autoUpdate`, and no agent resolves conflicts
+  automatically. `git rerere forget <path>` drops a wrong recorded resolution.
 - **A swap outside a role's profiles no longer costs its session on resume
   (resume-record-profile).** `agentbus swap --force` may put a role on any defined profile, and its
   SessionStart hook records that profile in `{p}:resume`; `up --resume`, the self-repair and `holder
@@ -2335,6 +2410,20 @@ change adds its own fragment there, never an edit here; the newest notes are in 
     project, its agents with them), and one whose unit state cannot be read. It never kills an agent;
     `service restart holder --kill-agents` does.
   - When no holder of the dispatcher's build answers, the page says so and names `agentbus up`.
+- **A service's log page reads (services-restart-buttons step 1).** F3, Enter on a card: each line has a level (a
+  dispatch `escalate`, `blocked` or `unblocked` is attention, `none` muted; a text line saying `failed`, `error` or
+  `panic` is an error), a decision reads `action  agent  reason  (rule N)` (the raw file keeps `high_id` and
+  `latency_ms`), and the routine `none` decisions are folded (`a` shows them; the title counts them). `f` keeps the
+  lines holding a word, Esc clears it. The page reads the log back, `.1` after it, until 200 lines that are not
+  routine are found, within 8 MiB. The dispatcher now writes `"ts"` (RFC 3339, local zone) on every line it logs;
+  older lines show no time.
+- **Restart a service from busmon (services-restart-buttons step 2).** F3, on the dispatch or missions card: `X` asks
+  `Restart <kind> of <p>? agentbus --project <p> service restart <kind>. y / n`; `y` runs that command as Z and the
+  Projects page's `x` run agentbus (one run at a time, the output in the project's log, its last line the notice),
+  and the card is read again when it ends. busmon refuses before asking in an agent's environment
+  (`AGENT_BUS_AGENT`) or under a registered agent; the `agentbus service restart` command itself still accepts every
+  caller (the sentinel's repair). Refused too: a service on another host (`restart it on <host>`), one not installed
+  here, a run already going, and the Redis card (setup's job). Holders stay read-only.
 - **A stuck screen rings the desktop once per episode** (`dispatch.stuck_after`,
   `AGENT_BUS_STUCK_AFTER` in whole seconds; default 3 minutes, `0` off). A screen counts as
   stuck when it is settled, its client's signature reads it as neither ready, nor busy, nor a
@@ -2361,6 +2450,59 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   and no terminal restart nothing. Holders and agents are never touched. Seen 2026-11-16: three other projects
   kept the old binary after an install. The services started before this build list as
   `no build recorded` until restarted once.
+- **busmon's IDEAS lists the idea notes too (views-redesign step 1).** Beside the broker's ideas (`agentbus idea`),
+  Work's IDEAS and the Kanban's Ideas card list the notes of `docs/memory/open-questions/` still `proposed` or
+  `active` (`memory.OpenQuestions`), read in the project's checkout on this machine: its template's `working_dir`,
+  at the ideas' cadence. A busmon with no checkout (a laptop) lists the broker's ideas only. A note shows once: not
+  when a plan task names its id or title, nor when a broker idea has its id, its title or the note as its `source`.
+  A note's row says `note`; Enter shows its path (its triage panel is step 5), `y` copies its title. Notes that
+  cannot be read are said ("the idea notes could not be read"), never "none".
+- **busmon's For you no longer says "Nothing expected from you." while decisions wait (views-redesign step 2).**
+  With nothing owed but the person's plan tasks to decide (Work's decide rows), the empty For you panel's first line
+  reads `N decisions in the plan (3 Work)`, attention role, and the "Next for you" pointer stays under it; an owed
+  request keeps its `Owed by you: N requests (Requests)` line, above. "Nothing expected from you." only when nothing
+  is counted. The Kanban's For you cards drop the repeated `decide · you`: the first line is the glyph and the title
+  (a merge card's `merge PR N`), the second the age and the place (who asks, `#<plan task>`).
+- **busmon's Board flags a late or lost tracked request (views-redesign step 3).** One line per task (TASK, OWNER,
+  STATE, AGE), the alerts first, oldest alert first, then the open tasks newest first; done tasks are hidden, `d`
+  shows or folds them, and the label says `N open · M done (d)`. An ALERT column appears only while a row has one:
+  `no acceptance <age>` (requested, not accepted past `board.no_accept_after`, default 30m), `no reply <age>`
+  (accepted, no reply past `board.no_reply_after`, default 2h), `body lost` (the request's body no longer in the
+  stream, at once); both settings are in Shift+C's Display group, `0` off, applied at once. Enter on a tracked
+  request opens its diagnostics (the request's page), on a plain task its task page. The frame's bottom border names
+  who acts: `resend (dispatch)`, `cancel/reassign (master)`; busmon changes no request itself. With master's
+  terminal gone (or no master entry), an alert row says `master is down; self-repair relaunches it` and
+  cancel/reassign leave the footer. Work's `between agents` line still opens the Requests sub-view (its retirement
+  waits for the person's decision on the untracked threads, notices, asks and their keys).
+- **One Requests view, reached by `r`/`F2` from anywhere (views-redesign step 3b, the person's choice (a)).** `r`
+  and `F2` now open the Requests sub-view (every thread: tracked requests, untracked threads, notices, directives,
+  open asks, with `d`, `o`, `+`, `-`) from any panel, the Board included; the former read-only Requests page is
+  retired. The sub-view is drawn under the tab it was opened from, and Esc, the tab bar and `←`/`→` go back to that
+  tab; `d`, `o`, `+` and `-` do the same whatever opened it. Work's `between agents` line now opens the Board
+  filtered to the rows between agents (no request to or from the person), its label `between agents · …`; Esc
+  returns to Work on that line, and leaving the Board drops the filter.
+- **busmon's Plan is the fourth tab, a roadmap (views-redesign step 4a).** `4` (`6` at the narrow tier) is the Plan
+  tab, beside Activity, Board and Work (`←`/`→` step across the four); it is no longer an alias to Work's NEXT. `p`
+  and `P` still open the same roadmap as a drawer. The tab's frame names the plan and its progress, never a for-you
+  count; `d` shows DONE; Enter opens a task, Esc returns to the tab; `r` opened from it returns there. Sections: NOW (in progress, in review, answered,
+  blocked), APPROVED (both reviewers approved, waiting for delivery or the merge; folded when empty), NEXT (not
+  started and unblocked, the person's decisions among them, read `decide`), LATER (blocked by another task, then the
+  low-priority tasks, blocked or not), DONE as a count. NOW and NEXT sort by priority, then file order. A plan task
+  may carry `"priority": "high"` or `"low"` (`"normal"` and absent are the same); the row's first cell is `↑` or `↓`,
+  else the state's glyph in NOW and `✓` in APPROVED. A task's dependencies read `after <first> +N`; the side panel
+  lists them (`✓` when done), the tasks that wait on it (`unblocks`) and its priority. Below the wide tier (under 120 columns,
+  no side panel) LATER and DONE fold to a line Enter opens (`LATER 3 · 1 ↑ (enter)`), in the tab and the drawer. A grouped plan keeps its groups, each group's rows in
+  the roadmap's order. Raising or lowering a plan task's priority from busmon (`+`/`-`) is step 4b, not built.
+- **A plan task's priority is the person's, on the broker (views-redesign step 4b).** `agentbus plan priority <task>
+  high|normal|low --as <person>`, or `+`/`-` on a plan task in busmon (the Plan tab, the drawer `p`, a task's page),
+  records it with the plan's facts in `{p}:plan:facts` (one script; `normal` is stored too, so it wins over the plan
+  file's `priority`; the task's fact time is kept, since a priority is no progress; a reload keeps it while the task
+  stays in the plan). The Plan reads the person's level over the file's. An agent is refused, as for `request
+  priority`, and `roles.toml` denies `Bash(agentbus plan priority*)` to agents as a second layer. `request send`
+  starts the request for that task at its level, in the same script: the plan task is the one whose `board` field
+  names the request's task, else the one with its id and no `board` field. A request already sent keeps its own
+  level (the command says so and prints the `request priority` line that moves it; nothing for a done request). The
+  v0.29 plan's three `LOW:` titles are now `"priority": "low"`: a running plan takes it at its next `plan load`.
 - **A title no longer hides an agent's screen (vt-osc-title, 2026-11-16).** x/vt v0.1.0 honours 8-bit C1 controls
   inside a string sequence: a byte 0x80-0x9F in an OSC, DCS, APC, PM or SOS payload ends or breaks it, and the rest
   is printed. Claude Code's turn-end title `✳ <project>:<agent>` (E2 9C B3, 0x9C is ST) landed on its input line,

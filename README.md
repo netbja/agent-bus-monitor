@@ -109,8 +109,9 @@ Other `setup.sh` commands:
 | `./setup.sh uninstall [--yes] [--purge]` | removes it, asking at each step; `--purge` also removes the broker and its data |
 | `./setup.sh rotate-redis-password [--dry-run] [--yes]` | replaces the broker's password |
 
-`./setup.sh update` is the update path today. An `agentbus update` command is only a
-[spec](docs/superpowers/specs/2026-11-14-quiet-update-design.md); it is not built. After an update,
+`agentbus update` installs the latest release tag with a snapshot to roll back to
+(`agentbus update --check` prints the plan; [spec](docs/superpowers/specs/2026-11-20-agentbus-update-design.md)).
+It refuses a `dev` build, so `./setup.sh update` remains the path from a clone. After an update,
 the agents keep running on the previous build until you move them (see
 [Update](docs/OPERATIONAL-GUIDE.md#7-update-the-tools)).
 
@@ -295,8 +296,8 @@ tunnel.
 
 These are written as specs and not built:
 
-- `agentbus update`, the quiet update
-  ([spec](docs/superpowers/specs/2026-11-14-quiet-update-design.md)): use `./setup.sh update`.
+- The quiet update, `agentbus update`'s automatic mode
+  ([spec](docs/superpowers/specs/2026-11-14-quiet-update-design.md)): `agentbus update` is manual.
 - `agentbus feedback`, statistics over past reviews
   ([spec](docs/superpowers/specs/2026-10-29-feedback-loop-design.md)).
 - PR readers for GitLab and Bitbucket. Until then the merge queue and the CI loop read GitHub only,
