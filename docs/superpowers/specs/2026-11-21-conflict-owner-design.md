@@ -10,6 +10,10 @@ r2 fixes the following (reviewer-codex, foureyes):
 
 r3 adds an `escalated` state that stops every later hand-off, and fixes the cap's timing
 (reviewer-codex).
+
+r4 runs `merge-tree` in an isolated empty repository, because `--attr-source` alone still let
+`merge.default`, `.git/info/attributes` and `core.attributesFile` pick a custom driver. It also
+gates the age bound on a positive duration (reviewer-codex).
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222170445-0`), relayed by
 master (cmd `1795222242792-0`).
 
@@ -58,8 +62,15 @@ fallback. Nothing else is checked: a PR still in review is not in the queue (que
 - **Either way,** a head still absent is skipped this pass, with a reason in the record. It is
   never judged "clean".
 
-**The check:** `git --attr-source=<empty tree> merge-tree --write-tree --name-only --no-messages
-<baseTip> <head>`. `<empty tree>` is `git hash-object -t tree /dev/null`.
+**The check** runs in an **isolated repository**: an empty bare repository made for the pass in
+the services' state directory, whose `objects/info/alternates` points at the services'
+repository's object store. It runs with only `PATH`, plus `HOME=<that directory>`,
+`GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_ATTR_NOSYSTEM=1`:
+
+`git --git-dir=<isolated> --attr-source=<empty tree> merge-tree --write-tree --name-only --no-messages <baseTip> <head>`
+
+`<empty tree>` is `git hash-object -t tree /dev/null`. The directory is removed after the pass, so
+the merge's objects never land in the real repository.
 - Exit status 0: clean.
 - Exit status 1: conflict. The conflicting files are the lines after the tree id.
 - Any other status: not judged, with a reason in the record.
@@ -70,12 +81,23 @@ exit status, which is 0 on a recent git. On a git older than 2.42, an "unknown o
 too old. Otherwise `--write-tree` must appear in the usage text. An older git records the reason "git
 too old for the conflict check" and sends nothing.
 
-**No repository code runs.** Like `git merge`, a plain `merge-tree` honours `.gitattributes`. A
-`merge=<name>` attribute selects `merge.<name>.driver`, an external command, from git config.
-This was checked on git 2.56: a plain `merge-tree` ran such a driver. With `--attr-source=<empty
-tree>`, no attribute applies, so only git's built-in text merge runs, and the driver did not run.
-`merge-tree` runs no hook and writes no ref. It adds loose objects, which `git gc` collects. The
-rule that the dispatcher never runs repository code holds.
+**No repository code runs.** Like `git merge`, `merge-tree` can run an external merge driver,
+`merge.<name>.driver`. It is chosen by a `merge=<name>` attribute or by `merge.default`. Checked on
+git 2.56 in the real repository, the driver ran each time:
+- from the tree's `.gitattributes`;
+- from `merge.default`, even with `--attr-source=<empty tree>`;
+- from `.git/info/attributes`;
+- from `core.attributesFile`.
+
+In the isolated repository, none of those can reach it:
+- no local config;
+- no global or system config, and no system attributes;
+- no `info/attributes`;
+- an empty attribute source.
+
+The check there still exited 1 with the file named, and the driver did not run. A control run
+in the real repository did run it. `merge-tree` runs no hook and writes no ref. The rule that
+the dispatcher never runs repository code holds.
 
 **The record.** `MergeQueueRecord.Conflicting` gains additive fields: `branch`, `head`,
 `base_tip` and `files` (the first 10). From step 1 on, it holds what git confirmed, in every mode.
@@ -146,8 +168,9 @@ counts nothing again, and `FencedCmdOnce` sends the missing hand-off.
    step 1 removes the field, whether the escalation came from the age or the cap. The only call is
    the escalation's own `FencedCmdOnce`, which sends nothing when its mark is set (the crash case
    below).
-3. **The age bound reached** (`now - first ≥ conflict.escalate_after`, Redis time): escalate,
-   below.
+3. **The age bound reached:** only when `conflict.escalate_after` is positive, and
+   `now - first ≥ conflict.escalate_after` in Redis time. Then escalate, below. With 0 there is
+   no time bound: only the cap escalates.
 4. **A new episode** (`last` differs from the digest):
    - **the owner is `blocked` or `waiting`** (`held`, as in `RunCI`): track without counting, so
      `first` is set, and send nothing. The age still runs;
@@ -205,8 +228,15 @@ today's, master only.
   - one board entry by claim branch, one by request branch, and two entries with one owner each
     give that owner;
   - two owners, none, or an invalid name give master.
-- **No repository code:** a `.gitattributes` `merge=<name>` with a configured driver that
-  touches a file. The check runs, and the file is not created.
+- **No repository code:** a configured driver that touches a file, selected four ways:
+  - the tree's `.gitattributes`;
+  - `merge.default` in the repository's config;
+  - `.git/info/attributes`;
+  - `core.attributesFile` in a `HOME` config.
+
+  For each, the check finds the conflict and the file is not created. A control run without the
+  isolation creates it, which proves the test can see a driver run. The isolated directory is
+  gone after the pass.
 - **Track and send** (disposable broker only):
   - one hand-off per episode, with master's copy;
   - a crash after the track and before the send: the next pass sends once, and the count does
@@ -214,6 +244,7 @@ today's, master only.
   - a new base tip or a new head: a new episode, sent and counted;
   - with a cap of 3: three hand-offs, then the fourth episode escalates; a cap of 0 escalates the
     first;
+  - `conflict.escalate_after` = 0 with a cap of 3: no escalation by age, only at the cap;
   - an age escalation below the cap, then a new base or head episode: no hand-off to the owner;
   - a crash between `escalate` and its send: the next pass sends the escalation once;
   - a removed field's three `{p}:quota` marks are gone too;
