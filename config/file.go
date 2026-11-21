@@ -142,6 +142,10 @@ func load(path, label string, legacy bool) *File {
 		if known && legacy && !k.Legacy {
 			known = false
 		}
+		if known && k.ProjectOnly {
+			f.Warnings = append(f.Warnings, Warning{File: label, Line: lines[name], Key: name, Msg: "set only per project, under [project.<name>]; ignored"})
+			continue
+		}
 		if !known {
 			msg := "unknown key"
 			last := strings.ToLower(name[strings.LastIndex(name, ".")+1:])
@@ -223,7 +227,7 @@ func (f *File) loadProject(rest string, v any, line int) {
 		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: "project." + rest, Msg: "not a project's table ([project.<name>], a lowercase name)"})
 		return
 	case !known || !k.Project:
-		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: "project." + rest, Msg: "has no per-project value (only the quota thresholds do)"})
+		f.Warnings = append(f.Warnings, Warning{File: f.Label, Line: line, Key: "project." + rest, Msg: "has no per-project value (only the quota thresholds and the single-approval delivery keys do)"})
 		return
 	}
 	val, why := k.file(v)

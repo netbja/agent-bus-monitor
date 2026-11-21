@@ -65,6 +65,9 @@ type deliverDeps struct {
 	// Trace writes a delivery with one approval (--single-approval) to the
 	// bus, where the person reads it. nil = none.
 	Trace func(ctx context.Context, msg string) error
+	// Policy reads the project's single-approval settings (single-approval
+	// §3.1), only when fewer than two reviewers approve the head. nil = off.
+	Policy func() (smallPolicy, error)
 }
 
 // gitEnvRunner is the real runner for deliver: execRunner without an
@@ -125,6 +128,7 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 			_, err := b.Report(ctx, self, bus.ReportNote, msg)
 			return err
 		},
+		Policy: func() (smallPolicy, error) { return projectSmallPolicy(os.Getenv, b.Project()) },
 	}
 	if self != "master" {
 		// The plan's writes are master's (ACL answer b): another deliverer
@@ -354,9 +358,32 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// Both reviewers approve the head (merge-popup-setting, the person's
 	// answer 3): otherwise the person could merge code one reviewer never
 	// read, and the merge queue, which For you lists, would not show it.
-	if reviewers := currentApprovers(vs, h); len(reviewers) < 2 && o.single == "" {
-		return fail(3, "%s@%s has %d independent approval(s) (%s); both reviewers must approve the head: nothing delivered. "+
-			"In an emergency: --single-approval <reason>, written in the request and traced on the bus", subject, h, len(reviewers), strings.Join(reviewers, ", "))
+	// One is enough for a small change under the project's
+	// delivery.single_approval (single-approval §4, deliversingle.go).
+	reviewers := currentApprovers(vs, h)
+	policy, policyRead := defaultPolicy, false
+	one := "" // the single-approval line the body and the trace carry
+	if len(reviewers) < 2 && o.single == "" {
+		if d.Policy != nil {
+			p, err := d.Policy()
+			if err != nil {
+				return fail(1, "cannot read the single-approval settings: %v: nothing delivered", err)
+			}
+			policy, policyRead = p, true
+		}
+		if policy.Mode != "small" {
+			return fail(3, "%s@%s has %d independent approval(s) (%s); both reviewers must approve the head: nothing delivered. "+
+				"In an emergency: --single-approval <reason>, written in the request and traced on the bus", subject, h, len(reviewers), strings.Join(reviewers, ", "))
+		}
+		c, why := sizeOf(git, baseRef, h, policy)
+		if why != "" {
+			return fail(3, "%s@%s has 1 approval and its size is unknown (%s): nothing delivered", subject, h, why)
+		}
+		line, refusal := oneApproval(vs, subject, h, c, policy)
+		if refusal != "" {
+			return fail(3, "%s Nothing delivered.", refusal)
+		}
+		one = line
 	}
 
 	// The commits and the body, every line through SafeText.
@@ -379,9 +406,12 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	}
 	title = deliverTitle(title, o.branch)
 	body := deliverBody(title, commits, approvals, h, desc)
-	if o.single != "" && len(currentApprovers(vs, h)) < 2 {
+	switch {
+	case one != "":
+		body += "\n**" + one + "**\n"
+	case o.single != "" && len(reviewers) < 2:
 		body += "\n**delivered with one approval: " + safeLine(o.single) + "** (agentbus deliver --single-approval)\n"
-	} else {
+	default:
 		o.single = "" // both approved: no emergency to trace
 	}
 
@@ -414,6 +444,11 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 				fmt.Fprintf(errw, "deliver: marking the merge queue due failed (it passes within 5 minutes): %v\n", err)
 			}
 		}
+		if one != "" && d.Trace != nil {
+			if err := d.Trace(ctx, fmt.Sprintf("%s@%s delivered on one approval: %s (%s)", subject, h, one, msg)); err != nil {
+				fmt.Fprintf(errw, "deliver: tracing the single approval failed: %v\n", err)
+			}
+		}
 		if o.single != "" && d.Trace != nil {
 			if err := d.Trace(ctx, fmt.Sprintf("%s@%s delivered with one approval: %s (%s)", subject, h, o.single, msg)); err != nil {
 				fmt.Fprintf(errw, "deliver: tracing the single approval failed: %v\n", err)
@@ -428,7 +463,26 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 			fmt.Fprintf(out, "would push %s to origin %s and deliver it on %s to %s\n", h, o.branch, f.Kind, o.base)
 		}
 		fmt.Fprintf(out, "title: %s\n\n%s", title, body)
-		fmt.Fprintf(out, "\nsize: %s (single-approval §3.2; no rule reads it yet)\n", sizeClass(git, baseRef, h))
+		if !policyRead && d.Policy != nil {
+			if p, err := d.Policy(); err == nil {
+				policy = p
+			}
+		}
+		size := "unknown"
+		if c, why := sizeOf(git, baseRef, h, policy); why != "" {
+			size += " (" + why + ")"
+		} else {
+			size = c.String()
+		}
+		fmt.Fprintf(out, "\nsize: %s (single-approval §3.2)\n", size)
+		switch {
+		case one != "":
+			fmt.Fprintf(out, "approval: %s\n", one)
+		case o.single != "":
+			fmt.Fprintf(out, "approval: one, the emergency (--single-approval)\n")
+		default:
+			fmt.Fprintf(out, "approval: two approvals (%s)\n", strings.Join(reviewers, ", "))
+		}
 		return 0
 	}
 

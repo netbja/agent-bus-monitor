@@ -11,7 +11,8 @@ import (
 // The small-change classifier (spec 2026-11-21-single-approval-design §3.2,
 // build step 1): deliver decides from the merge-base diff it is about to
 // deliver, `git diff --no-renames --numstat -z <merge-base> <H>`, whether a
-// change is small. Step 1 only prints it (--dry-run); no rule reads it yet.
+// change is small; --dry-run prints it, and the single-approval rule
+// (deliversingle.go) reads it.
 
 // neverSmall is §3.2's default list: a path matching one makes the change
 // not small whatever its size. A setting may add globs, never remove one.
@@ -31,8 +32,13 @@ var neverSmall = []string{
 	// skills (a path cannot tell a safety rule from other skill text)
 	"skills/**",
 	// the gate itself
-	"cmd/agentbus/deliver.go", "cmd/agentbus/deliversmall.go", "filepick/ignore.go", "filepick/glob.go",
-	"mergequeue/**", "config/keys.go",
+	"cmd/agentbus/deliver.go", "cmd/agentbus/deliversmall.go", "cmd/agentbus/deliversingle.go", "filepick/ignore.go", "filepick/glob.go",
+	"mergequeue/**",
+	// the settings, whole: the keys and their defaults (§6 Q5), their reads
+	// (same_provider_ok's project-only read, ProjectValue) and writes (the
+	// refusal of an agent's write to a PersonOnly key), the validators and
+	// whatever helper the policy calls next (reviewer-codex, foureyes)
+	"config/**",
 }
 
 // docGlobs is documentation: a change whose every path matches one is
@@ -128,33 +134,42 @@ func (c smallClass) String() string {
 		return "small (docs only): " + size
 	case c.Small:
 		return "small: " + size
-	case c.Never != "":
-		return "not small (" + c.Never + " is never small): " + size
-	case c.Binary != "":
-		return "not small (" + c.Binary + " is binary): " + size
-	case c.Unread != "":
-		return "not small (" + c.Unread + "): " + size
-	case c.Lines > c.MaxLines:
-		return fmt.Sprintf("not small (%d lines > %d): %s", c.Lines, c.MaxLines, size)
 	}
-	return fmt.Sprintf("not small (%d files > %d): %s", c.Files, c.MaxFiles, size)
+	return c.Reason() + ": " + size
 }
 
-// Step 1's limits: §3.1's defaults, until step 2 reads them from the
-// project's settings.
-const smallMaxLines, smallMaxFiles = 150, 5
+// Reason is why the change is not small, "small" when it is.
+func (c smallClass) Reason() string {
+	switch {
+	case c.Small:
+		return "small"
+	case c.Never != "":
+		return "not small (" + c.Never + " is never small)"
+	case c.Binary != "":
+		return "not small (" + c.Binary + " is binary)"
+	case c.Unread != "":
+		return "not small (" + c.Unread + ")"
+	case c.Lines > c.MaxLines:
+		return fmt.Sprintf("not small (%d lines > %d)", c.Lines, c.MaxLines)
+	}
+	return fmt.Sprintf("not small (%d files > %d)", c.Files, c.MaxFiles)
+}
 
-// sizeClass classifies H's diff against its merge-base with baseRef, or
-// says it could not be read.
-func sizeClass(git func(args ...string) (string, error), baseRef, h string) string {
+// defaultPolicy is §3.1's defaults: what --dry-run measures with when no
+// settings were read.
+var defaultPolicy = smallPolicy{Mode: "off", MaxLines: 150, MaxFiles: 5, SameProvider: "off"}
+
+// sizeOf classifies H's diff against its merge-base with baseRef under p's
+// limits and globs; why says what could not be read.
+func sizeOf(git func(args ...string) (string, error), baseRef, h string, p smallPolicy) (c smallClass, why string) {
 	mb, err := git("merge-base", baseRef, h)
 	mb = strings.TrimSpace(mb)
 	if err != nil || mb == "" {
-		return "unknown (no merge-base with " + baseRef + ")"
+		return c, "no merge-base with " + baseRef
 	}
 	ns, err := git("diff", "--no-renames", "--numstat", "-z", mb, h)
 	if err != nil {
-		return "unknown (the diff against the merge-base could not be read)"
+		return c, "the diff against the merge-base could not be read"
 	}
-	return classify(ns, nil, smallMaxLines, smallMaxFiles).String()
+	return classify(ns, p.Never, p.MaxLines, p.MaxFiles), ""
 }

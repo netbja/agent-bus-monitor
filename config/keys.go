@@ -12,6 +12,7 @@ package config
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -72,13 +73,18 @@ type Key struct {
 	MachineOnly bool
 	// Project keys also have a value per project, in config.toml's
 	// [project.<name>] table (quota settings §2.2), read through
-	// ProjectValue: the quota thresholds.
+	// ProjectValue: the quota thresholds and the single-approval delivery keys.
 	Project bool
 	// PersonOnly keys are the person's alone (backup.after_*): read from
 	// config.toml only, never written by agentbus (Set and Unset refuse
 	// them: edit config.toml yourself). They have no env variable and are
 	// MachineOnly too.
 	PersonOnly bool
+	// ProjectOnly keys have no machine value: config.toml's
+	// [project.<name>] table alone (delivery.same_provider_ok,
+	// single-approval §4.8); a line in the machine's table is ignored with a
+	// warning, so it never applies to every project at once.
+	ProjectOnly bool
 	// List keys are a TOML list in the file, kept as one comma-joined string
 	// (backup.after_env, notify.targets...): a page edits them as text
 	// separated by commas.
@@ -604,6 +610,22 @@ var Keys = []*Key{
 		}},
 	// The broker's container runtime (broker-hardening step 3): the binary
 	// every caller of the container runs (brokerrt), with "<runtime> compose".
+	// One approval for a small change (spec 2026-11-21-single-approval-design
+	// §3.1, §4.8), per project, read by agentbus deliver. The three that widen
+	// the gate and same_provider_ok are the person's (§6 Q3); never_small
+	// only narrows it (globs added to deliver's defaults, never removing one).
+	{Name: "delivery.single_approval", Kind: String, Default: "off", ReadBy: "agentbus deliver", MachineOnly: true, Project: true, PersonOnly: true,
+		file: fileOneOf("off", "small")},
+	{Name: "delivery.small_max_lines", Kind: Int, Default: 150, ReadBy: "agentbus deliver", MachineOnly: true, Project: true, PersonOnly: true,
+		file: filePositiveInt},
+	{Name: "delivery.small_max_files", Kind: Int, Default: 5, ReadBy: "agentbus deliver", MachineOnly: true, Project: true, PersonOnly: true,
+		file: filePositiveInt},
+	{Name: "delivery.never_small", Kind: String, List: true, Default: "", ReadBy: "agentbus deliver", MachineOnly: true, Project: true,
+		file: fileNameList("want a list of path globs, such as cmd/busmon/** or *.sql", func(s string) bool {
+			return strings.TrimSpace(s) != "" && !strings.ContainsAny(s, "\n\r,")
+		})},
+	{Name: "delivery.same_provider_ok", Kind: String, Default: "off", ReadBy: "agentbus deliver", MachineOnly: true, Project: true, PersonOnly: true, ProjectOnly: true,
+		file: fileOneOf("off", "docs", "small")},
 	{Name: "broker.runtime", Env: "AGENT_BUS_BROKER_RUNTIME", Kind: String, Default: "docker", ReadBy: "./setup.sh, agentbus up, dispatch, busmon", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if IsBrokerRuntime(raw) {
@@ -1124,5 +1146,15 @@ func fileDurationRange(lo, hi time.Duration) func(any) (any, string) {
 			}
 		}
 		return nil, "want a duration from " + lo.String() + " to " + hi.String() + ", such as \"24h\""
+	}
+}
+
+// fileOneOf takes a string among values.
+func fileOneOf(values ...string) func(any) (any, string) {
+	return func(v any) (any, string) {
+		if s, ok := v.(string); ok && slices.Contains(values, s) {
+			return s, ""
+		}
+		return nil, "want " + strings.Join(values[:len(values)-1], ", ") + " or " + values[len(values)-1]
 	}
 }
