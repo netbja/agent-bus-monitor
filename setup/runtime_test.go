@@ -140,7 +140,7 @@ func TestRotateUnderPodman(t *testing.T) {
 	toPodman(f)
 	b := &fakeBroker{pw: bus.LegacyPassword}
 	f.cmds["podman compose up -d --force-recreate redis"] = fakeCmd{err: errors.New("1")}
-	if code := in.RotateRedisPassword(ctx, &Prompter{Yes: true}, b.dial); code != 1 || !strings.Contains(out.String(), "run podman compose up -d --force-recreate redis") {
+	if code := in.RotateRedisPassword(ctx, &Prompter{Yes: true}, b.dial, nil); code != 1 || !strings.Contains(out.String(), "run podman compose up -d --force-recreate redis") {
 		t.Fatalf("exit %d: %s\nran %v", code, out.String(), f.ran)
 	}
 	for _, r := range f.ran {
@@ -179,7 +179,7 @@ func TestComposeCarriesTheImage(t *testing.T) {
 	in2, _, f2, _, _ := rotateWorld(t, map[string]string{"AGENT_BUS_BROKER_IMAGE": "valkey/valkey:8"})
 	got = ""
 	f2.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{do: func(c Cmd) { got = image(c) }}
-	in2.RotateRedisPassword(ctx, &Prompter{Yes: true}, (&fakeBroker{pw: bus.LegacyPassword}).dial)
+	in2.RotateRedisPassword(ctx, &Prompter{Yes: true}, (&fakeBroker{pw: bus.LegacyPassword}).dial, nil)
 	if got != "valkey/valkey:8" {
 		t.Fatalf("the rotation's recreate: image %q", got)
 	}

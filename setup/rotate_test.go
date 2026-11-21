@@ -267,7 +267,7 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 	// running service restarted (the stopped one left alone), nothing printed of it.
 	in, out, f, path, ab := rotateWorld(t, map[string]string{})
 	b := &fakeBroker{pw: bus.LegacyPassword}
-	if code := in.RotateRedisPassword(ctx, yes, b.dial); code != 0 {
+	if code := in.RotateRedisPassword(ctx, yes, b.dial, nil); code != 0 {
 		t.Fatalf("exit %d: %s", code, out)
 	}
 	pw, err := bus.ReadPassword(path)
@@ -304,7 +304,7 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 	in, out, f, path, _ = rotateWorld(t, map[string]string{})
 	f.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{err: errors.New("1"), out: "port is already allocated\n"}
 	b = &fakeBroker{pw: bus.LegacyPassword}
-	if code := in.RotateRedisPassword(ctx, yes, b.dial); code != 1 || !strings.Contains(out.String(), "docker compose up -d") || !strings.Contains(out.String(), in.Repo) {
+	if code := in.RotateRedisPassword(ctx, yes, b.dial, nil); code != 1 || !strings.Contains(out.String(), "docker compose up -d") || !strings.Contains(out.String(), in.Repo) {
 		t.Fatalf("recreate failure: exit %d, %q", code, out)
 	}
 	if pw, _ := bus.ReadPassword(path); pw != b.pw {
@@ -317,7 +317,7 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 	in.Sleep = func(time.Duration) {}
 	b = &fakeBroker{pw: bus.LegacyPassword}
 	f.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{do: func(Cmd) { b.pw = "something-else" }}
-	if code := in.RotateRedisPassword(ctx, yes, b.dial); code != 1 || strings.Contains(out.String(), "recreated with the new password") ||
+	if code := in.RotateRedisPassword(ctx, yes, b.dial, nil); code != 1 || strings.Contains(out.String(), "recreated with the new password") ||
 		!strings.Contains(out.String(), "does not log in with the new password") {
 		t.Fatalf("a recreated broker on another password: exit %d, %q", code, out)
 	}
@@ -333,7 +333,7 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	b = &fakeBroker{pw: "first"}
-	if code := in.RotateRedisPassword(ctx, yes, b.dial); code != 0 {
+	if code := in.RotateRedisPassword(ctx, yes, b.dial, nil); code != 0 {
 		t.Fatalf("exit %d: %s", code, out)
 	}
 	if prev, _ := bus.ReadPassword(path + ".prev"); prev != "first" || !strings.Contains(out.String(), ".prev") {
@@ -371,7 +371,7 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 			c.prep(in, f, path)
 		}
 		before := c.b.pw
-		if code := in.RotateRedisPassword(ctx, yes, c.b.dial); code != 1 || !strings.Contains(out.String(), c.want) {
+		if code := in.RotateRedisPassword(ctx, yes, c.b.dial, nil); code != 1 || !strings.Contains(out.String(), c.want) {
 			t.Errorf("%s: exit %d, %q", c.name, code, out)
 		}
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || c.b.pw != before {
@@ -392,7 +392,7 @@ func TestRotateRedisPasswordCommand(t *testing.T) {
 		in, out, _, path, _ := rotateWorld(t, map[string]string{})
 		in.Opt.DryRun = c.dry
 		b := &fakeBroker{pw: bus.LegacyPassword}
-		if code := in.RotateRedisPassword(ctx, c.p, b.dial); code != 0 {
+		if code := in.RotateRedisPassword(ctx, c.p, b.dial, nil); code != 0 {
 			t.Fatalf("dry=%v: exit %d: %s", c.dry, code, out)
 		}
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) || b.pw != bus.LegacyPassword {
@@ -525,7 +525,7 @@ func TestRotateNeverRestartsTheHolder(t *testing.T) {
 	in, out, f, _, ab := rotateWorld(t, map[string]string{})
 	f.cmds[ab+" service list"] = fakeCmd{out: "demo                     dispatch  active (running), pid 7\ndemo                     holder    active, build v1\n"}
 	b := &fakeBroker{pw: bus.LegacyPassword}
-	if code := in.RotateRedisPassword(context.Background(), &Prompter{Yes: true}, b.dial); code != 0 {
+	if code := in.RotateRedisPassword(context.Background(), &Prompter{Yes: true}, b.dial, nil); code != 0 {
 		t.Fatalf("exit %d: %s", code, out)
 	}
 	for _, r := range f.ran {

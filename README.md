@@ -107,7 +107,7 @@ Other `setup.sh` commands:
 | `./setup.sh update` | `git pull --ff-only`, then install. Afterwards it lists this machine's services still on the old build and restarts them on your yes |
 | `./setup.sh status` | what is installed |
 | `./setup.sh uninstall [--yes] [--purge]` | removes it, asking at each step; `--purge` also removes the broker and its data |
-| `./setup.sh rotate-redis-password [--dry-run] [--yes]` | replaces the broker's password |
+| `./setup.sh rotate-redis-password [--dry-run] [--yes]` | replaces the broker's password; with `broker.acl` on, each ACL user's, `admin` last |
 
 `agentbus update` installs the latest release tag with a snapshot to roll back to
 (`agentbus update --check` prints the plan; [spec](docs/superpowers/specs/2026-11-20-agentbus-update-design.md)).

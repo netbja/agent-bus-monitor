@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -143,11 +144,14 @@ type Dialer func(ctx context.Context, pw string) (PasswordSetter, func(), error)
 // in), then the
 // person confirms (or --yes), then RotatePassword, then the running project
 // services are restarted so their new connections use it. It never prints a
-// password.
-func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial Dialer) int {
+// password. With broker.acl on (its variable exported is refused too, as by
+// ./setup.sh acl), it rotates the broker's ACL users instead
+// (rotateACLUsers): users dials one of them.
+func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial Dialer, users UsersDialer) int {
 	o := in.O
 	path := bus.PasswordFile(in.Getenv)
-	for _, k := range []string{"REDIS_URL", "REDIS_PASSWORD"} {
+	key, _ := config.Lookup("broker.acl")
+	for _, k := range []string{"REDIS_URL", "REDIS_PASSWORD", key.Env} {
 		if in.Getenv(k) != "" {
 			o.Fatal(k + " is exported in this shell: it wins over the password file, so a rotation would not reach this shell's clients. Unset it (and remove it from your shell profile), then run this again.")
 			return 1
@@ -171,19 +175,29 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 		o.Fatal("the broker belongs to " + where + ": rotate its password from there")
 		return 1
 	}
-	compose := ComposeCmd(ctx, in.R, in.runtime())
-	if compose == "" {
-		o.Fatal("no " + in.runtime().Compose() + " to recreate the broker with after the change (its container keeps the password it was created with): install it first")
-		return 1
-	}
-	if setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
-		o.Fatal(filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose would start the broker with it, not with the password file. Remove that line, then run this again.")
-		return 1
+	// With the broker's ACL users on (broker-hardening 4b part 3) the
+	// default user is off: each user is rotated instead, and nothing needs
+	// a recreate, since users.acl in the data volume holds them.
+	acl := config.Machine(in.Getenv).String("broker.acl") == "on"
+	compose := ""
+	if !acl {
+		compose = ComposeCmd(ctx, in.R, in.runtime())
+		if compose == "" {
+			o.Fatal("no " + in.runtime().Compose() + " to recreate the broker with after the change (its container keeps the password it was created with): install it first")
+			return 1
+		}
+		if setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
+			o.Fatal(filepath.Join(in.Repo, ".env") + " sets REDIS_PASSWORD: compose would start the broker with it, not with the password file. Remove that line, then run this again.")
+			return 1
+		}
 	}
 	if carriers := in.envFilesWithPassword(); len(carriers) > 0 {
 		o.Fatal("these projects' services carry their own Redis password in their env file (copied from a shell that exported it): " +
 			strings.Join(carriers, ", ") + ". Run agentbus up <project> from a shell without REDIS_PASSWORD and REDIS_URL, then run this again.")
 		return 1
+	}
+	if acl {
+		return in.rotateACLUsers(ctx, p, users)
 	}
 	old, err := bus.ReadPassword(path)
 	switch {

@@ -44,6 +44,7 @@ func TestStatusAllInstalled(t *testing.T) {
 		bin + "/agentbus service list":                            {out: "demo dispatch running\n"},
 		psRedis:                                                   {out: "running\n"},
 		inspectOwner:                                              {out: in.Repo + "\n"},
+		aclProbe:                                                  {out: "no\n"},
 	}
 	if code := in.Status(context.Background()); code != 0 {
 		t.Fatalf("exit %d", code)
@@ -60,7 +61,8 @@ func TestStatusAllInstalled(t *testing.T) {
 		"    • role skill links: 2\n" +
 		"    • project service: demo dispatch running\n" +
 		"    ✓ Redis broker: running (agent-bus-redis, 127.0.0.1:6380)\n" +
-		"    ! Redis password: the historical default (./setup.sh rotate-redis-password replaces it)\n"
+		"    ! Redis password: the historical default (./setup.sh rotate-redis-password replaces it)\n" +
+		"    • broker ACL: off\n"
 	if out.String() != want {
 		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)
 	}

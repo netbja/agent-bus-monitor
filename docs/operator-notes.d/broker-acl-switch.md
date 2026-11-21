@@ -15,6 +15,5 @@
     rewritten at the next `on`.
   - **On is refused while the broker's ACL is live** (it would replace the files its users log in with): to remake the users, `acl off` then `acl on`.
   - **Refused while** `REDIS_URL`, `REDIS_PASSWORD` or `AGENT_BUS_BROKER_ACL` is exported (each wins over the files).
-  - **`rotate-redis-password` does not rotate the users yet** (part 3): with ACL on it refuses,
-    since the default user no longer logs in. Run `acl off` before `uninstall --purge`, or set
-    `broker.acl` back to `off`: a fresh volume has no `users.acl`.
+  - **`rotate-redis-password` with ACL on, `setup status`, `uninstall --purge`:** see
+    `broker-acl-rotate.md` (part 3).

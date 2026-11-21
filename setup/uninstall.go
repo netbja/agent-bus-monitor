@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"github.com/netbja/agent-bus-monitor/config"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -154,10 +155,28 @@ func (in *Installer) stopBroker(ctx context.Context, ask func(string, bool) bool
 	case purge:
 		done, ok := compose("down", "-v")
 		report(done, ok, "Redis: container and data removed", "down -v")
+		if done && ok {
+			in.aclOffAfterPurge()
+		}
 	case state == "running" && ask("stop the Redis broker (its data is kept)?", true):
 		done, ok := compose("stop")
 		report(done, ok, "Redis: stopped (data kept; ./setup.sh install starts it again)", "stop")
 	case !p.Aborted():
 		in.O.Info("Redis: left as it is (" + state + ")")
 	}
+}
+
+// aclOffAfterPurge: the purged volume took users.acl with it, so a new
+// broker starts on requirepass; broker.acl on would have every client log in
+// as a user it does not have (broker-hardening 4b part 3).
+func (in *Installer) aclOffAfterPurge() {
+	cfg := config.Path(in.Getenv)
+	if cfg == "" || config.Machine(in.Getenv).String("broker.acl") != "on" {
+		return
+	}
+	if err := config.Set(cfg, "broker.acl", "off"); err != nil {
+		in.O.Warn("broker.acl: still on in " + cfg + " (" + err.Error() + "), but the new broker has no users.acl: set broker.acl = \"off\" there")
+		return
+	}
+	in.O.OK("broker.acl: set back to off (the new broker has no users.acl)")
 }
