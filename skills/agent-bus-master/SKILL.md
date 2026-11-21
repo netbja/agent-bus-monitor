@@ -701,6 +701,29 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    its merge, dispatch the next *independent* board item at once, one that touches no package of
    the work in review; the implementer takes it and tells you which. "No stacked PRs" means one
    PR per step from `origin/<base>` (the project's delivery base), never "wait for the merge".
+
+   **Four scheduling rules keep parallel PRs from colliding** (merge-conflicts spec §3; most
+   superseded PRs came from these cases). Before you send a task, list the files of each branch
+   in flight, with plain git, and compare them with what the task will touch:
+
+   ```sh
+   git diff --name-only origin/<base>...origin/<branch>
+   ```
+
+   - **Sibling steps run in series.** Step N+1 of a spec is never in flight beside step N: send
+     it once N is merged. Meanwhile the implementer takes an item from another spec.
+   - **A move or a rewrite runs alone.** A package move, a fixture move, a README or guide
+     rewrite: while one is in flight, send nothing that touches its files. A pending one waits
+     until the in-flight PRs on those files merge. Name it as a move or rewrite in its plan task.
+   - **Two settings PRs may run in parallel**, now that `agentbus config`'s row count is derived
+     from the registry (config-rows). They still share `config/config_test.go`'s key list,
+     busmon's label maps and the settings goldens: the second to merge rebases, and regenerates
+     the goldens with `-update` rather than merging them by hand.
+   - **No stacking, and the recovery when it happened anyway.** One PR per step, each from
+     `origin/<base>`. When a child branch was built on a parent that has since squash-merged,
+     rebase it with `git rebase --onto origin/<base> <parent's old head>`: that replays only the
+     child's own commits. A plain `git rebase origin/<base>` replays the parent's original
+     commits too, and conflicts with their squashed copy.
 3. **`agentbus reports --json` entries carry the full text in `.Full`** — no separate lookup needed,
    the plain-text tail view is the one that truncates.
 4. **If you poll `agentbus reports --json` yourself (e.g. from a background watcher), track the last
