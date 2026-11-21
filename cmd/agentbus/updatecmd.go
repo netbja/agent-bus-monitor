@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -108,6 +109,9 @@ func realUpdateDeps(host string, out, errw io.Writer) update.Deps {
 		Out: out, Err: errw, Version: buildinfo.Version, Repo: buildinfo.Repo, BinDir: filepath.Dir(buildinfo.Bin),
 		FromBuild: service.BuildKey(holder.BuildID()), Settle: 60 * time.Second,
 		Running: func(context.Context) ([]update.Service, error) { return runningServices(realServiceCmdDeps(host)) }}
+	sd := realServiceCmdDeps(host)
+	d.HolderKeys = func(context.Context) (map[string]bool, error) { return holderKeys(sd) }
+	d.HolderGC = func(_ context.Context, current string) error { return holderGC(sd, current) }
 	if tty := setup.OpenTTY(); tty != nil {
 		d.TTY = tty
 	}
@@ -139,4 +143,64 @@ func runningServices(d serviceCmdDeps) ([]update.Service, error) {
 		out = append(out, update.Service{Project: s.Project, Kind: s.Kind, Build: s.Build})
 	}
 	return out, nil
+}
+
+// holderKeys are the holder builds on disk (quiet-update-auto §5, rule 3):
+// every project's holder units, and every binary copy under the holder
+// directory (supervised holders, under services.manager = none, have no
+// unit). An unreadable directory or unit list is an error: the prune then
+// keeps every tree.
+func holderKeys(d serviceCmdDeps) (map[string]bool, error) {
+	keys := map[string]bool{}
+	if hm, ok := d.Manager.(service.HolderManager); ok {
+		units, err := hm.HolderUnits("")
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range units {
+			keys[u.Key] = true
+		}
+	}
+	ents, err := os.ReadDir(filepath.Dir(service.HolderBinDir(d.Paths, "x")))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	for _, e := range ents {
+		if e.IsDir() && service.ValidBuildKey(e.Name()) {
+			keys[e.Name()] = true
+		}
+	}
+	return keys, nil
+}
+
+// holderGC is service gc's holder collection for every project with a holder
+// unit, then the binary copies no unit records, current the new build: a
+// holder that runs or answers on its socket is never collected (spec 4.4a).
+func holderGC(d serviceCmdDeps, current string) error {
+	hm, ok := d.Manager.(service.HolderManager)
+	if !ok {
+		return nil
+	}
+	units, err := hm.HolderUnits("")
+	if err != nil {
+		return err
+	}
+	var errs []error
+	seen := map[string]bool{}
+	for _, u := range units {
+		if seen[u.Project] {
+			continue
+		}
+		seen[u.Project] = true
+		p := u.Project
+		answers := func(key string) bool { return d.HolderAnswers != nil && d.HolderAnswers(p, key) }
+		if _, err := service.GCHolders(hm, d.Paths, p, current, answers); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	any := func(key string) bool { return d.HolderAnswersAny != nil && d.HolderAnswersAny(key) }
+	if _, err := service.GCHolderBinaries(hm, d.Paths, current, any); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
