@@ -1,6 +1,6 @@
 # Fewer merge conflicts between parallel agent PRs
 
-Status: spec r4, for review (subject `merge-conflicts`; r4, the person via master (cmd `1795248111715-0`): §5 Q3 states the owner rule first, and §3's measure also counts breaches of the four rules, enforced in `agentbus plan` if any; r2: the open #668 counted apart, totals out of 17, the fetch for reproduction; r3: the collided-with column recomputed by §1's method for #489, #494, #495, #499, #500; reviewer-codex). Not built. Base: origin/dev `07c52081`.
+Status: spec r4, for review (subject `merge-conflicts`; r4, the person via master (cmd `1795248111715-0`): §5 Q3 states the owner rule first, and §3's measure also counts breaches of the four rules, enforced in `agentbus plan` if any; file sets read with `--no-renames` so a rename lists its old path too (reviewer-codex); #638 is 57 files, and a plan `group` is only a hint for siblings (foureyes); r2: the open #668 counted apart, totals out of 17, the fetch for reproduction; r3: the collided-with column recomputed by §1's method for #489, #494, #495, #499, #500; reviewer-codex). Not built. Base: origin/dev `07c52081`.
 Author: architect, from the person's open question of 2026-11-20 (thread `1795205976983-0`),
 relayed by master (cmd `1795206037042-0`). The constraint is the person's: no new external tool
 or service. Go in agentbus or plain git, on any forge or none.
@@ -33,7 +33,7 @@ files. It is shown below the line as a current example; every total in this spec
 | #451 | `cmd/busmon/settings_ui.go`, its test | self-repair step 9's own first part | B: sibling steps |
 | #434 | `cmd/busmon/tea_workkanban_test.go` | foureyes' Kanban test fix | C: one file, two changes |
 | #526 | `dispatch/loop.go` | login-updates 2.1, herdr exit step 9 | C: one file, two changes |
-| #639 | `cmd/agentbus/mergequeuechore_test.go` | #638 (P8b, a test-fixture move over 100+ files) | C: a broad move in flight |
+| #639 | `cmd/agentbus/mergequeuechore_test.go` | #638 (P8b, a test-fixture move over 57 files) | C: a broad move in flight |
 | #656 | `README.md`, `docs/OPERATIONAL-GUIDE.md` | #655 (the README rewrite) | C: a rewrite in flight |
 | #591 | `cmd/busmon/personborrowed_test.go` | #590, its own parent, squash-merged | D: stacked |
 | #637 | `mergequeue/ci_test.go`, `mergequeue/forge.go` | #636, its own parent (the lib), squash-merged | D: stacked |
@@ -103,7 +103,9 @@ row count (#489, #500) and the rules (B 3, C 4, D 2), and #668's kind.
    git diff --name-only origin/<base>...origin/<branch>
    ```
 
-   The skill gives this command. No new code.
+   The skill gives this command. No new code. (r4: as built, it lacks `--no-renames`, so a rename
+   lists only its new path and a task editing the old path looks clear. The skill's next edit
+   adds the flag.)
 3. **rerere on, repo-wide (point 5, first half).** Master runs `git config rerere.enabled true`
    once in the shared repository. It is not `rerere.autoUpdate`: a replayed resolution stays
    unstaged, so the agent still sees it, and tests still check it. An operator-note fragment
@@ -120,8 +122,8 @@ rule is checked from the forge's PR list (`createdAt`, `mergedAt` or `closedAt`,
 
 | Rule | A breach is | Read from |
 |---|---|---|
-| Sibling steps in series | Two PRs of one spec (the same plan `group`, or "<spec>, step N" titles) open at the same moment: one opened before the other merged or closed | the open intervals of the PRs of each group |
-| A move or rewrite alone | A PR open while a move or rewrite PR is open, whose files (`git diff --name-only <merge-base>..<head>`) intersect the move's | the plan task named a move or rewrite (§3.2), else a PR that renames a file or touches 50 files or more (a proposed threshold; #638 touched 100+) |
+| Sibling steps in series | Two PRs of one spec (matched by the spec the task links or the "<spec>, step N" title, or an `after` chain between their tasks; a plan `group` is only a hint, since groups such as `busmon` hold unrelated tasks) open at the same moment: one opened before the other merged or closed | the open intervals of the PRs of each group |
+| A move or rewrite alone | A PR open while a move or rewrite PR is open, whose files intersect the move's. Both sides' files are `git diff --no-renames --name-only <merge-base>..<head>`: without `--no-renames` a rename lists only its new path, and a PR editing the old path would not intersect | the plan task named a move or rewrite (§3.2), else a PR with a rename (an `R` line in `git diff --name-status`) or 50 changed files or more (a proposed threshold; #638 changed 57) |
 | Settings PRs in parallel | Two PRs touching `config/keys.go` open at once before step 1 merged. Step 1 (#676, `c81cffc7`) merged before the rules (#677, `62c66b42`), so the rule is already lifted for the whole window: it is reported as lifted, with no count | the PRs' files and intervals |
 | No stacking | A PR whose `baseRefName` is not the project base, or whose head contains a commit of another open PR's head not yet in the base | `baseRefName`; `git merge-base --is-ancestor` per open pair |
 
@@ -136,7 +138,8 @@ skills stated. The enforcing change is specified then, from the breaches found; 
   `parallel` flag master sets and the plan view shows).
 - **A move or rewrite alone:** a task flagged `alone` must come `after` every task in flight
   that shares its files, and a task sent while an `alone` task is in flight is refused when
-  their branches' files intersect (the §3.2 `git diff --name-only` check, run by `plan`).
+  their branches' files intersect (the §3.2 check, run by `plan` with `--no-renames` so a
+  rename's old path counts).
 - **No stacking:** `plan link` refuses a board request whose branch contains a commit of another
   in-flight task's branch that is not yet in the project base (`git merge-base --is-ancestor`).
 - **Settings PRs:** nothing to enforce while the row count is derived.
