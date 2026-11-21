@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/testredis"
 )
 
 // project-switch-ux item 3: the header counts what waits in the other
@@ -99,5 +103,88 @@ func TestOthersHeaderAndKey(t *testing.T) {
 	m2, cmd = pressCmd(t, m2, 'O')
 	if _, quit := runQuits(t, m2, cmd); quit || !strings.Contains(m2.ui.flash, "nothing waits in the other projects") {
 		t.Fatalf("O with nothing: %q", m2.ui.flash)
+	}
+}
+
+// othersShell is a shell whose other: sources are fakes: two projects on
+// the broker, one running.
+func othersShell(t *testing.T) Model {
+	t.Helper()
+	src := adminFixture(shellNow)
+	src.alive = func(_ context.Context, p string) (bool, error) { return p == "trading", nil }
+	src.counts = func(context.Context, string) (workCounts, error) { return workCounts{you: 2}, nil }
+	return shellWith(t, 140, 40, shellConfig{admin: &src,
+		listProjects: func(context.Context) ([]string, error) {
+			return []string{"agent-bus-monitor", "trading", "busdev"}, nil
+		}}, false)
+}
+
+// The read starts with busmon (foureyes: dropping it from Init passed every
+// test), and the tick reads again.
+func TestOthersReadAtStartAndOnTick(t *testing.T) {
+	m := othersShell(t)
+	var got *othersMsg
+	var walk func(tea.Cmd)
+	walk = func(c tea.Cmd) {
+		if c == nil {
+			return
+		}
+		var msg tea.Msg
+		func() {
+			defer func() { _ = recover() }() // the poll, which this fixture cannot run: not what is checked here
+			msg = c()
+		}()
+		switch msg := msg.(type) {
+		case tea.BatchMsg:
+			for _, x := range msg {
+				walk(x)
+			}
+		case othersMsg:
+			got = &msg
+		}
+	}
+	walk(m.othersCmd()) // the command Init batches
+	if got == nil || len(got.reads) != 1 || got.reads["trading"].counts.you != 2 {
+		t.Fatalf("othersCmd: %+v", got)
+	}
+	got = nil
+	walk(m.Init())
+	if got == nil {
+		t.Fatal("Init does not read the other projects")
+	}
+	got = nil
+	walk(m.update(othersTickMsg{}))
+	if got == nil {
+		t.Fatal("the tick does not read again")
+	}
+}
+
+// Each read arms the next tick (foureyes: gotOthers returning nil passed).
+func TestOthersRearm(t *testing.T) {
+	m := othersShell(t)
+	if cmd := m.gotOthers(othersMsg{}); cmd == nil {
+		t.Fatal("no next read armed")
+	}
+}
+
+// The production source reads only running projects (foureyes): alive is
+// the dispatch lease, on this broker.
+func TestOthersAliveIsTheLease(t *testing.T) {
+	testredis.Configure(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	up, down := "oa"+strconv.FormatInt(time.Now().UnixNano(), 36), "ob"+strconv.FormatInt(time.Now().UnixNano(), 36)
+	c.Set(ctx, bus.DispatchKey(up), "tok", time.Minute)
+	t.Cleanup(func() { c.Del(context.Background(), bus.DispatchKey(up)) })
+	src := adminSourceFor(c, func(string) string { return "" }, "charlie")
+	if ok, err := src.alive(ctx, up); err != nil || !ok {
+		t.Fatalf("a held lease: %v %v", ok, err)
+	}
+	if ok, err := src.alive(ctx, down); err != nil || ok {
+		t.Fatalf("no lease: %v %v", ok, err)
 	}
 }
