@@ -61,6 +61,9 @@ func TestIdeasPageRowSaysItsState(t *testing.T) {
 	// Each state its own role, so the colour tells them apart too.
 	seen := map[Role]string{}
 	for _, st := range bus.IdeaStates {
+		if ideaStateRole(st) == RoleAttention { // the not-you flag's role (foureyes)
+			t.Errorf("%s takes RoleAttention, the flag of a setter who is not the person", st)
+		}
 		if o, dup := seen[ideaStateRole(st)]; dup {
 			t.Errorf("%s and %s share a role", o, st)
 		}
@@ -80,6 +83,10 @@ func TestIdeaDetailWrapsItsText(t *testing.T) {
 			}
 		}
 		text := strings.Join(strings.Fields(plainOf(lines)), " ")
+		// The closing hint wraps too, never cut (foureyes): its end is there.
+		if !strings.Contains(text, "records who and when)") {
+			t.Fatalf("%d: the closing hint is cut:\n%s", width, plainOf(lines))
+		}
 		if !strings.Contains(text, strings.TrimSpace(strings.Repeat("a long description of the idea that runs on ", 6))+" END") {
 			t.Fatalf("%d: the text is cut:\n%s", width, plainOf(lines))
 		}
