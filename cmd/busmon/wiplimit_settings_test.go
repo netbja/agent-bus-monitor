@@ -32,6 +32,10 @@ func TestSettingsPageWritesTheWIPLimit(t *testing.T) {
 	if strings.Contains(configText(t, getenv), "wip_limit") {
 		t.Fatalf("unset: %q", configText(t, getenv))
 	}
+	// Not enforced at this step (master): the help says so plainly.
+	if h := settingHelp(settingRowOf(t, m.rd.top().set.groups, "board.wip_limit")); !strings.Contains(h, "Not enforced yet") || !strings.Contains(h, "next step") {
+		t.Fatalf("help %q", h)
+	}
 	if r := settingRowOf(t, m.rd.top().set.groups, "backup.after_command"); r.Editable {
 		t.Fatal("a PersonOnly key became editable")
 	}
