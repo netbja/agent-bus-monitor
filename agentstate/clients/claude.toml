@@ -27,6 +27,10 @@ blocked = ['(?m)^[ \t]*(?P<what>[^\n]*\S\?)[ \t]*\n[ \t]*❯ 1\. ']
 [background]
 authoritative = ['hooks', 'process']
 helpers = []
+# Its MCP stdio servers (codebase-memory-mcp, context7…) are its direct children, while every tool
+# command runs under "/bin/bash -c source …shell-snapshots… && …" (checked on 2.1.x, 2026-11-21): a direct
+# child that is not a shell is the client's own helper, never background work.
+direct_helpers = true
 screen = []
 
 # The attach prefix (herdr exit spec 4.6, 4.9): F12 is not in the client's key table

@@ -39,7 +39,18 @@ type Background struct {
 	Authoritative []string
 	Helpers       []*regexp.Regexp
 	Screen        []*regexp.Regexp
+	// DirectHelpers: the client's own direct children that are not a shell
+	// are its helpers (its MCP stdio servers, its daemons), never background
+	// work whatever their CPU: the client runs every tool command under a
+	// shell, so work it starts is a shell's descendant (Claude Code:
+	// "bash -c source …snapshot…"). A client whose commands may be exec'd in
+	// place by a one-command shell does not declare it.
+	DirectHelpers bool
 }
+
+// shells are the names a client's tool command runs under: a direct child by
+// one of these names is a command, not a helper.
+var shells = map[string]bool{"sh": true, "bash": true, "dash": true, "zsh": true, "fish": true, "ksh": true}
 
 // Proc is one descendant of the agent's process. CPUGrowth: CPU time it used
 // over the facts' window.
@@ -47,6 +58,9 @@ type Proc struct {
 	Name      string
 	Start     time.Time
 	CPUGrowth time.Duration
+	// Direct: a child of the agent's own process, not a grandchild
+	// (DirectHelpers reads it).
+	Direct bool
 	// Seen is when the host first saw it (background-work-visible step 2):
 	// OldestAge counts from it when Start is unknown. It never enters What(),
 	// whose text the dispatcher's once-per-change records compare (foureyes).
@@ -181,6 +195,9 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 	if p := f.Process; p != nil {
 		read[SourceProcess] = true
 		for _, pr := range p.Procs {
+			if b.DirectHelpers && pr.Direct && !shells[pr.Name] { // the client's own MCP server or daemon
+				continue
+			}
 			if b.helper(pr.Name, f.ExtraHelpers) && float64(pr.CPUGrowth) <= HelperCPU*float64(p.Window) {
 				continue
 			}

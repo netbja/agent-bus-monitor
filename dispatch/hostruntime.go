@@ -269,7 +269,7 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 			}
 			k := procKey{p.PID, p.Start}
 			grown := p.CPU - base.cpu[k] // a process new since the base: all its CPU
-			pf.Procs = append(pf.Procs, agentstate.Proc{Name: p.Command, Seen: seen[k], CPUGrowth: grown})
+			pf.Procs = append(pf.Procs, agentstate.Proc{Name: p.Command, Seen: seen[k], CPUGrowth: grown, Direct: p.PPID == t.PID})
 		}
 		f.Process = pf
 	}
