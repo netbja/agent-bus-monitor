@@ -239,6 +239,9 @@ type answerMsg struct {
 func (m *Model) readerRect() Rect {
 	l := m.layout
 	if l.Tier == TierWide && len(m.rd.pages) > 0 && m.rd.pages[0].drawer {
+		if l.Drawer.H > 0 { // sized to its content (fitDrawer, views-redesign §4.2)
+			return l.Drawer
+		}
 		y := l.ForYou.Y + l.ForYou.H
 		return Rect{0, y, m.width, l.Footer.Y - y}
 	}

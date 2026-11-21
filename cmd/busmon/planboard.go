@@ -114,13 +114,10 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 		v.lines = append(v.lines, l)
 		pl.WriteString(strings.TrimRight(l.text(), " ") + "\n")
 	}
-	emit(planProgress(p, width, tier))
-	if tier != TierNarrow { // the plan's goal, when it was loaded and from which commit, as the P page said
-		emit(planHead(p, now))
-	}
-	v.head = len(v.lines)
+	emit(planHeader(p, now, width, tier)) // one header line, then a rule (views-redesign §4.2)
+	emit(planRule(width))
 	paces := ownerPaces(reqs)
-	cols := planColsOf(p)
+	cols := planR2ColsOf(p)
 	secs, unknownOnly := planSections(p.rows)
 	secOf := map[string]string{} // each task's section: its row's first cell reads it
 	for _, sec := range secs {
@@ -129,7 +126,6 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 		}
 	}
 	if unknownOnly {
-		emit(nil)
 		emit(Line{{Text: "a read failed: states unknown", Role: RoleMuted}})
 	}
 	var selRow *plan.Row
@@ -139,25 +135,28 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 		if idx == sel {
 			selRow = &r
 		}
-		emit(planBoardRow(p, r, secOf[r.Task.ID], idx == sel, now, width, cols))
+		emit(planR2Row(p, r, idx == sel, now, width, cols))
 		if l, ok := planProgressLine(r, reqs, paces, now); ok { // progress-line §3: not a row
 			emit(FitLine(append(Line{{Text: "      ", Role: RoleDim}}, l...), width))
 		}
 	}
-	if len(p.file.Groups) > 0 && !unknownOnly { // plan-chantier §3: one block per group
-		planGroupBlocks(p, showDone, width, tier, emit, row)
-		secs = nil
-	}
 	fold := func(name string, l Line) { // a folded section's line, an item Enter opens
 		v.items = append(v.items, planItem{fold: name, line: len(v.lines)})
-		emit(append(planMark(len(v.items)-1 == sel), l...))
+		mark := RoleMuted // the fold's own ▶, accented when selected (views-redesign §4.2)
+		if len(v.items)-1 == sel {
+			mark = RoleAccent
+		}
+		emit(append(Line{{Text: GlyphSelect + " ", Role: mark}}, l...))
+	}
+	if len(p.file.Groups) > 0 && !unknownOnly { // plan-chantier §3: one block per group
+		planGroupBlocks(p, showDone, width, tier, emit, row, fold)
+		secs = nil
 	}
 	for _, sec := range secs {
 		if len(sec.rows) == 0 {
 			continue
 		}
 		if sec.name == "LATER" && tier != TierWide && !laterOpen {
-			emit(nil)
 			high := 0
 			for _, r := range sec.rows {
 				if r.Task.Priority == bus.PriorityHigh {
@@ -168,49 +167,25 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 			if high > 0 {
 				text += fmt.Sprintf(" %s %d %s", GlyphNone, high, GlyphUp)
 			}
-			fold("later", Line{{Text: text, Role: RoleText, Bold: true}, {Text: " (enter)", Role: RoleMuted}})
+			fold("later", Line{{Text: text, Role: RoleText, Bold: true}, {Text: "   (enter)", Role: RoleDim}})
 			continue
 		}
-		if sec.name == "DONE" && !showDone {
-			emit(nil)
-			if tier != TierWide {
-				fold("done", Line{{Text: fmt.Sprintf("DONE %d", len(sec.rows)), Role: RoleMuted}, {Text: " (enter)", Role: RoleMuted}})
-				continue
-			}
-			emit(Line{{Text: fmt.Sprintf("DONE  %d", len(sec.rows)), Role: RoleMuted}, {Text: "   d shows", Role: RoleMuted}})
+		if sec.name == "DONE" && !showDone { // folded into one line, an item Enter opens (views-redesign §4.2)
+			fold("done", Line{{Text: fmt.Sprintf("DONE %s %s", GlyphNone, planTasks(len(sec.rows))), Role: RoleMuted}, {Text: "   (d shows)", Role: RoleDim}})
 			continue
 		}
-		if sec.name != "" {
-			emit(nil)
-			emit(Line{{Text: fmt.Sprintf("%s  %d", sec.name, len(sec.rows)), Role: RoleText, Bold: true}})
+		if sec.name != "" { // no blank line between sections (views-redesign §4.2)
+			emit(Line{{Text: fmt.Sprintf("%s %s  %d", GlyphDown, sec.name, len(sec.rows)), Role: RoleText, Bold: true}})
 		}
 		for _, r := range sec.rows {
 			row(r)
 		}
 	}
-	v.lines = append(v.lines, nil)
-	v.plain = pl.String()
+	v.plain = pl.String() // no blank line at the end: the strip or the frame follows (views-redesign §4.2)
 	if wide && selRow != nil {
-		v.detail = planDetail(p, *selRow, width)
+		v.detail = planStrip(p, *selRow, now, width)
 	}
 	return v
-}
-
-// planCols are the roadmap's column widths (the mock-ups' aligned columns):
-// the widest title and owner of the plan, and the state's; zero pads nothing.
-type planCols struct{ title, owner, state int }
-
-func planColsOf(p planState) planCols {
-	c := planCols{state: 11} // "in progress", the widest state word an "after" follows
-	for _, r := range p.rows {
-		c.title = max(c.title, Width(Preview(r.Task.Title)))
-		owner := r.Task.Owner
-		if owner == plan.Person {
-			owner = GlyphHuman + " " + owner
-		}
-		c.owner = max(c.owner, Width(clip(owner, 14)))
-	}
-	return c
 }
 
 // planInHand is the plan's task in hand (the first in progress or in
@@ -300,79 +275,6 @@ func inHandOwner(r plan.Row) string {
 	return " (" + Preview(r.Task.Owner) + ")"
 }
 
-// planHead is the muted line under the progress: the goal, the load's age
-// and commit, stale or kept values.
-func planHead(p planState, now time.Time) Line {
-	text := Preview(p.file.Goal) + " " + GlyphNone + " loaded " + plan.Age(p.rec.LoadedAt, now) + " ago (" + short7(p.rec.Commit) + ")"
-	if now.Sub(time.UnixMilli(p.rec.LoadedAt)) > plan.StaleAfter {
-		text += " " + GlyphNone + " stale: master, agentbus plan load"
-	}
-	if p.partial {
-		text += " " + GlyphNone + " ? a read failed: values kept"
-	}
-	return Line{{Text: text, Role: RoleMuted}}
-}
-
-// planBoardRow is one task (views-redesign §4): its first cell, the title,
-// the owner (♙ before the person's), the state's word or its details, and
-// its dependencies, "after <first>" with "+N" for more. The first cell is
-// the priority (↑ high, ↓ low), else the state's glyph in NOW and ✓ in
-// APPROVED, nothing in NEXT and LATER. The person's task reads "decide",
-// never "waiting for you": what the person owes now is Work's; a LATER task
-// reads why it is there, "blocked" (waiting on a task) or "low".
-func planBoardRow(p planState, r plan.Row, sec string, selected bool, now time.Time, width int, cols planCols) Line {
-	glyph, role := planLook(r.State)
-	switch {
-	case r.Task.Priority == bus.PriorityHigh:
-		glyph, role = GlyphUp, RoleAccent
-	case r.Task.Priority == bus.PriorityLow:
-		glyph, role = GlyphDownArrow, RoleMuted
-	case sec == "APPROVED":
-		glyph, role = GlyphDone, RoleDispatch
-	case sec == "NEXT", sec == "LATER":
-		glyph = " "
-	}
-	owner := r.Task.Owner
-	if owner == plan.Person {
-		owner = GlyphHuman + " " + owner
-	}
-	rd := r
-	if sec == "LATER" { // "after" says what it waits on: its word is "blocked"
-		rd.WaitingOn = nil
-	}
-	why := planRowDetails(rd, now)
-	if why == "" {
-		why = plan.Label(r.State)
-		switch {
-		case r.State == plan.Waiting && r.Task.Owner == plan.Person:
-			why = "decide"
-		case sec == "LATER" && len(r.WaitingOn) > 0: // why it is later (the mock-up): waiting on a task
-			why = "blocked"
-		case sec == "LATER" && r.Task.Priority == bus.PriorityLow: // or its low priority
-			why = "low"
-		}
-	}
-	if p.kept(r) {
-		why += " ?" // derived from a value kept after a failed read
-	}
-	owner = clip(owner, 14)
-	if a := r.Task.After; len(a) > 0 {
-		why = padRight(why, cols.state) + "  after " + a[0]
-		if len(a) > 1 {
-			why += fmt.Sprintf(" +%d", len(a)-1)
-		}
-	}
-	head := append(planMark(selected), Seg{Text: glyph + " ", Role: role})
-	tail := Line{{Text: "  " + padRight(owner, cols.owner), Role: RoleMuted}, {Text: "  " + why, Role: RoleMuted}}
-	titleW := max(8, width-head.Width()-min(tail.Width(), width/2))
-	title := Seg{Text: padRight(clip(Preview(r.Task.Title), titleW), min(cols.title, titleW)), Role: RoleText}
-	if now, _, _ := planInHand(p); now != nil && now.Task.ID == r.Task.ID { // the task in hand (progress-line §2.4)
-		title.Role, title.Bold = RoleAccent, true
-	}
-	l := append(head, title)
-	return FitLine(append(l, tail...), width)
-}
-
 // planFact is one of a task's facts under the list: its key and value.
 type planFact struct{ key, val string }
 
@@ -434,30 +336,6 @@ func planFacts(p planState, r plan.Row) []planFact {
 		{"unblocks", or(strings.Join(unblocks, ", "))},
 		{"reason", or(r.Reason)},
 	}
-}
-
-// planDetail is the selected task's detail, planDetailRows rows of width
-// cells (views-redesign §4.1 point 2): a rule naming the task, enter's act at
-// its right; its first six facts; the last three. A row keeps its facts
-// whole and cuts its last one when short.
-func planDetail(p planState, r plan.Row, width int) []Line {
-	fs := planFacts(p, r)
-	facts := func(fs []planFact) Line {
-		var l Line
-		for i, f := range fs {
-			if i > 0 {
-				l = append(l, Seg{Text: " " + GlyphNone + " ", Role: RoleMuted})
-			}
-			l = append(l, Seg{Text: f.key + " ", Role: RoleMuted}, Seg{Text: Preview(f.val), Role: RoleText})
-		}
-		return FitLine(l, width)
-	}
-	head := Line{{Text: strings.Repeat(glyphHorizontal, 2) + " ", Role: RoleMuted}, {Text: "Task ", Role: RoleMuted}, {Text: Preview(r.Task.ID), Role: RoleText, Bold: true}, {Text: " ", Role: RoleMuted}}
-	act := Line{{Text: " ", Role: RoleMuted}, {Text: "enter", Role: RoleAccent, Bold: true}, {Text: " task page", Role: RoleMuted}}
-	if fill := width - head.Width() - act.Width(); fill > 0 {
-		head = append(append(head, Seg{Text: strings.Repeat(glyphHorizontal, fill), Role: RoleMuted}), act...)
-	}
-	return []Line{FitLine(head, width), facts(fs[:6]), facts(fs[6:])}
 }
 
 // drawPlanDetail draws the detail's rows from (x, y), w cells wide.

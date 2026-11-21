@@ -96,7 +96,8 @@ func TestShellTabs(t *testing.T) {
 				t.Fatalf("%v: key %d: focus %d, active %d", size, i+1, m.ui.focus, m.layout.Active)
 			}
 		}
-		// The focus can leave the tabbed panel; its tab stays.
+		// The focus can leave the tabbed panel; its tab stays (the Activity
+		// shown under a Plan sized to its content is not in the order, §4.2).
 		m = keys(t, m, kTab)
 		if m.ui.focus != PanelForYou || m.layout.Active != lowerTabs[len(lowerTabs)-1] {
 			t.Fatalf("%v: after tab: focus %d, active %d", size, m.ui.focus, m.layout.Active)

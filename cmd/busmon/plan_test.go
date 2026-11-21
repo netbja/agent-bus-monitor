@@ -163,7 +163,7 @@ func TestPlanOverlayGroupsInOrder(t *testing.T) {
 	pollOnce(context.Background(), f, st, 1)
 	v := planBoard(st.plan, -1, false, time.Now(), 100, TierWide, false, nil)
 	body, plain := v.lines, v.plain
-	order := []string{"NOW  ", "DONE  1   d shows"}
+	order := []string{GlyphDown + " NOW  ", GlyphSelect + " DONE " + GlyphNone + " 1 task"}
 	last := -1
 	for _, w := range order {
 		i := strings.Index(plain, w)
@@ -175,12 +175,23 @@ func TestPlanOverlayGroupsInOrder(t *testing.T) {
 	if strings.Contains(plain, "merged (recorded") {
 		t.Fatalf("done is collapsed to a count:\n%s", plain)
 	}
-	plain = planBoard(st.plan, -1, true, time.Now(), 100, TierWide, false, nil).plain
-	if !strings.Contains(plain, "merged (recorded 2h ago)") || !strings.Contains(plain, "#102") {
-		t.Fatalf("expanded done:\n%s", plain)
+	// A done task's row says done; how it ended is its strip's (views-redesign §4.2).
+	shown := planBoard(st.plan, -1, true, time.Now(), 100, TierWide, false, nil)
+	found := false
+	for i, it := range shown.items {
+		if it.task == "roles" {
+			found = true
+			strip := linesText(planBoard(st.plan, i, true, time.Now(), 100, TierWide, true, nil).detail)
+			if !strings.Contains(strip, "merged (recorded 2h ago)") || !strings.Contains(strip, "PR 102") {
+				t.Fatalf("a done task's strip:\n%s", strip)
+			}
+		}
 	}
-	if !strings.Contains(plainOf(body), GlyphHuman) || !strings.Contains(plain, "abcdef0") {
-		t.Fatalf("glyphs and commit:\n%s", plainOf(body))
+	if !found {
+		t.Fatalf("no done row roles:\n%s", shown.plain)
+	}
+	if !strings.Contains(plainOf(body), GlyphHuman) {
+		t.Fatalf("glyphs:\n%s", plainOf(body))
 	}
 }
 

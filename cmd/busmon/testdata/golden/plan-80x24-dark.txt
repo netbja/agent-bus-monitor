@@ -12,13 +12,13 @@
 │  ✓ architect done     40m  —   escalating  spec merged                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Plan ─────────────────────────────────────────────────── y copy · esc back ─╮
-│ v0.29  1 of 6 done  ━━━━━━━━━━━━  16%  ·  now: title strip (coder)           ▲
-│ the inbox · loaded 0s ago (abcdef0)                                          ┃
-│                                                                              ┃
-│ NOW  1                                                                       │
-│   ● title drawer    coder     in progress                                    │
-│                                                                              │
-│ APPROVED  1                                                                  │
-│ ▶ ✓ title strip     coder     #338 · approved · merge PR 338                 ▼
+│ ▼ NOW  1                                                                     ▲
+│   ● title drawer    coder   in progress                                      │
+│ ▼ APPROVED  1                                                                ┃
+│ ▶ ✓ title strip     coder   approved                                         ┃
+│ ▼ NEXT  2                                                                    │
+│ ──────────────────────────────────────────────────────────────────────────── │
+│ strip · in review · coder · approved · PR 338 · merge PR 338                 │
+│ for you: nothing        enter: task page   + - priority                      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health   

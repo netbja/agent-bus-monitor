@@ -39,6 +39,52 @@ type shellLayout struct {
 	ForYouRows, AgentRows int
 	Active                PanelID
 	Visible               []PanelID // focus order
+	// Drawer is the plan drawer's frame at the wide tier, sized to its
+	// content when the zone under it keeps room for the active tab (Lower
+	// then), zero otherwise (views-redesign §4.2: the free height goes to
+	// Activity or the Board).
+	Drawer Rect
+	// Below is a second panel's frame in the lower zone, under the Plan tab
+	// sized to its content (views-redesign §4.2): BelowPanel, Activity,
+	// shown and not in the focus order; zero when the Plan fills the zone.
+	Below      Rect
+	BelowPanel PanelID
+}
+
+// minBelow is the least a panel under the Plan tab gets: a frame and four
+// rows; less, the Plan keeps the zone.
+const minBelow = 6
+
+// fitDrawer sizes the wide drawer to its content, need rows with its
+// borders, when the zone under it keeps minShellLower rows for the active
+// tab (not the Plan tab itself, which would show the plan twice): Lower
+// is then that zone. Otherwise the drawer takes the zone down to the
+// footer, as before, and Lower is zero. need 0 (a page opened from the
+// drawer): the whole zone.
+func fitDrawer(l shellLayout, need int) shellLayout {
+	top := l.ForYou.Y + l.ForYou.H
+	l.Drawer = Rect{0, top, l.Header.W, l.Footer.Y - top}
+	if need > 0 && l.Active != PanelPlan && l.Input.Y-(top+need) >= minShellLower {
+		l.Drawer.H = need
+		l.Lower = Rect{0, top + need, l.Header.W, l.Input.Y - top - need}
+		return l
+	}
+	l.Lower = Rect{}
+	return l
+}
+
+// fitPlanTab sizes the Plan tab to its content, need rows with its
+// borders, when the zone keeps minBelow rows under it: Activity is drawn
+// there (views-redesign §4.2), shown only: focusing it would make it the
+// active tab, and the Plan would go.
+func fitPlanTab(l shellLayout, need int) shellLayout {
+	if l.Active != PanelPlan || l.Tier == TierNarrow || need <= 0 || l.Lower.H-need < minBelow {
+		return l
+	}
+	l.Below = Rect{l.Lower.X, l.Lower.Y + need, l.Lower.W, l.Lower.H - need}
+	l.BelowPanel = PanelActivity
+	l.Lower.H = need
+	return l
 }
 
 const (
@@ -201,6 +247,8 @@ func (l shellLayout) rect(p PanelID) Rect {
 		return l.Agents
 	case p == l.Active:
 		return l.Lower
+	case l.Below.H > 0 && p == l.BelowPanel:
+		return l.Below
 	}
 	return Rect{}
 }

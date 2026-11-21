@@ -26,7 +26,7 @@ const (
 // selected task's detail goes under the list: the wide tier (§4.1); the
 // drawer's rule too (planDrawerWidths).
 func planTabWidths(lower int, tier Tier) (list int, detail bool) {
-	return lower, tier == TierWide
+	return lower, tier != TierNarrow // the strip at 80 columns too (views-redesign §4.2)
 }
 
 // fillPlanTab fills the tab's list from the plan board; lower is the row
@@ -55,14 +55,14 @@ func (m *Model) fillPlanTab(lower int) {
 			if ln == nil && len(items) == 0 {
 				continue // the frame's top border is the first section's space
 			}
-			items = append(items, ListItem{Line: trimPad(ln)}) // drawn after the gutter: its padding would spill past the frame
+			items = append(items, ListItem{Line: ln, Wide: true}) // the board's own line, from the gutter: its header, rules and groups (views-redesign §4.2)
 			continue
 		}
-		key := planTabTask + it.task
-		if it.fold != "" {
-			key = planTabFold + it.fold
+		if it.fold != "" { // a fold carries its own ▶, from the gutter as in the drawer
+			items = append(items, ListItem{Key: planTabFold + it.fold, Line: ln, Selectable: true, Wide: true})
+			continue
 		}
-		items = append(items, ListItem{Key: key, Line: ln[1:], Selectable: true}) // the list draws its own mark: planMark's cell goes
+		items = append(items, ListItem{Key: planTabTask + it.task, Line: dropCells(ln, listGutter), Selectable: true}) // the list draws its own mark: planMark's two cells go (cells, not a segment: FitLine merges a blank glyph into them)
 	}
 	l.SetItems(items)
 	if l.Selected() == "" { // as the drawer: the first task selected, its detail shown
@@ -73,7 +73,7 @@ func (m *Model) fillPlanTab(lower int) {
 	} else {
 		l.SetBottom(0)
 	}
-	l.SetFrame(m.lowerTitle(PanelPlan, title), planTabLabel(s.planState, m.layout.Tier))
+	l.SetFrame(m.lowerTitle(PanelPlan, title), nil)     // the counts and the bar are the header line's (views-redesign §4.2)
 	hint := "+ - priority " + GlyphNone + " enter task" // the mock-ups' footer
 	if m.layout.Tier == TierWide {
 		hint = "+ - priority " + GlyphNone + " d done " + GlyphNone + " enter task"
@@ -94,7 +94,7 @@ func (m *Model) planTabDetail(width int) []Line {
 	}
 	for _, r := range m.snap.planState.rows {
 		if r.Task.ID == task {
-			return planDetail(m.snap.planState, r, width)
+			return planStrip(m.snap.planState, r, m.now, width)
 		}
 	}
 	return nil

@@ -7,34 +7,34 @@
 │  Next for you: title notes                                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Plan ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── y copy · esc back ─╮
-│ v0.29  1 of 6 done  ━━━━━━━━━━━━━━━━━━━━  16%  ·  now: title strip (coder)  ·  next: title requests                                      │
-│ the inbox · loaded 0s ago (abcdef0)                                                                                                      │
-│                                                                                                                                          │
-│ NOW  1                                                                                                                                   │
-│   ● title drawer    coder     in progress                                                                                                │
-│                                                                                                                                          │
-│ APPROVED  1                                                                                                                              │
-│ ▶ ✓ title strip     coder     #338 · approved · merge PR 338                                                                             │
-│                                                                                                                                          │
-│ NEXT  2                                                                                                                                  │
-│     title notes     ♙ person  decide                                                                                                     │
-│     title requests  coder     upcoming                                                                                                   │
-│                                                                                                                                          │
-│ LATER  1                                                                                                                                 │
-│     title tag       ♙ person  blocked                                                                                                    │
-│                                                                                                                                          │
-│ DONE  1   d shows                                                                                                                        │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│ ── Task strip ────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
-│ state in review · for you nothing · owner coder · prio normal · review approved · PR 338                                                 │
-│ after — · unblocks — · reason merge PR 338                                                                                               │
+│ v0.29  ██████▋░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  1/6   5 left · 2 for you                                                                │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▼ NOW  1                                                                                                                                 │
+│   ● title drawer    coder   in progress                                                                                                  │
+│ ▼ APPROVED  1                                                                                                                            │
+│ ▶ ✓ title strip     coder   approved                                                                                                     │
+│ ▼ NEXT  2                                                                                                                                │
+│   ♙ title notes     person  decide                                                                                                       │
+│     title requests  coder   upcoming                                                                                                     │
+│ ▼ LATER  1                                                                                                                               │
+│   ‖ title tag       person  after requests                                                                                               │
+│ ▶ DONE · 1 task   (d shows)                                                                                                              │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ strip · in review · coder · approved · PR 338 · merge PR 338                                                                             │
+│ for you: nothing        enter: task page   + - priority                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Work   4 Plan    auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        │
+│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│    14:24  architect            status     done · spec merged                                                                             │
+│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
+│    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
+│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
+│  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
+│  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
+│    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
+│                                                                                                                                          │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                            
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   + - priority   F5 health   F6 ideas                                     

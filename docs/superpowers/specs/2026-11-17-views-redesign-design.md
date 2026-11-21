@@ -180,7 +180,7 @@ list, and the drawer went under For you.
 At 80 columns LATER folds to a count that Enter opens, as DONE does, and the count keeps a
 high-priority task visible: `LATER 3 · 1 ↑` (the person's Q5).
 
-### 4.1 Layout r2: the person's review of the Plan view (2026-11-21)
+### 4.1 Layout r2: the person's review of the Plan view (2026-11-21; points 2 to 4 replaced by §4.2)
 
 The person's review of v0.31's Plan view (bus thread `1795220188690-0`, relayed by master as cmd
 `1795220210959-0`), four points, built in one PR (`feat/plan-tab-layout`). The plan's groups
@@ -295,6 +295,109 @@ rows, For you and Agents above it as before.
 
 The goldens `plan-groups-*` and `plantab-groups-*` (every size, dark and light, text and colours)
 are these screens as built.
+
+### 4.2 Layout r3: the person's target (2026-11-21)
+
+The person's second review (bus thread `1795225114703-0`, relayed by master as cmd
+`1795225125676-0`) gives the target. Their mock-up is the contract:
+
+```
+ v0.31  ███████████████████████████████████▌░░  33/35   2 left · 1 for you
+ ─────────────────────────────────────────────────────────────────────────
+ ▼ Docs and release                         ██████░░░░░░  1/3  in progress
+   ✓ Rewrite README and operations guide    docs     approved      10h
+   ⏸ Migrate the other projects             person   after readme
+ ▶ 5 groups done · 30 tasks                                     (d shows)
+ ─────────────────────────────────────────────────────────────────────────
+ readme-ops-guide · in review · docs · approved · unblocks migrate-projects
+ for you: nothing        enter: task page   + - priority
+```
+
+Their rules, as built (`feat/plan-tab-r2`; they replace §4.1's points 2 to 4):
+- **One header line:** the plan, one bar, done/total, what is left and what is for the person (what
+  waits for them and their own open tasks), then a rule. The tab's frame no longer repeats the
+  counts.
+- **Groups:**
+  - only a group with open tasks is expanded (`▼`);
+  - every finished group folds into one line, `▶ N groups done · M tasks (d shows)`, an item Enter or
+    `d` opens;
+  - no blank lines between groups;
+  - a plan without groups keeps its sections (`▼ NOW 2`…) under the same rules, DONE folded the same
+    way.
+- **The task's detail** is a strip at the bottom, the full width, under a rule, with no right panel:
+  - its facts on one line (id, state, owner, review, PR, dependencies, reason, a priority that is
+    not normal; how a done task ended);
+  - then `for you:` and the keys.
+
+  It shows at every tier but the narrow one, so at 80 columns too.
+- **Columns are aligned:** glyph, title, owner, state and age. The title gets the width the other
+  columns leave. The age is the time since the task's newest fact. A priority column appears only
+  when a task of the plan has one.
+- **Colours by state, for bars and state words:**
+  - orange (`RoleAttention`): waits for the person;
+  - blue (`RoleAccent`): in progress or in review;
+  - green (`RoleOK`): approved;
+  - grey: done;
+  - red (`RoleError`): blocked.
+
+  A group's colour comes from its open tasks, in this order: one waits for the person, else one is
+  blocked, else all are approved, else one has started, else "not started" in the text colour. The
+  theme's roles keep the light palette's contrast; without colour, the words say it.
+- **The frame shrinks to its content, and the free height goes to Activity or the Board** (the
+  person's answer through master, cmd `1795226188226-0`: both):
+  - the tab (`4`) is its content's height, with Activity under it, shown and not focused, when at
+    least 6 rows are left for it;
+  - the drawer (`p`, `P`) is its content's height, with the active tab under it (not the Plan tab
+    itself) when at least 8 rows are left. A page opened from the drawer takes the zone down to the
+    footer.
+- **As built, the glyphs:**
+  - the person's `⏸` (an emoji two cells wide) is drawn `‖`, a task that waits on another;
+  - `▼` and `▶` are the glyph set's own;
+  - the done line's `▶` is the fold's own mark, accented when selected.
+
+#### The tab at 140 columns, built
+
+The golden `plantab-groups-140x40-dark.txt`, the lower zone:
+
+```
+╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────────────────────────────────────────────────────────────────╮
+│v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you                                                                 │
+│──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                                                                                 │
+│▶ ● title h1  coder   in progress                                                                                                         │
+│  ✓ title h5  coder   approved                                                                                                            │
+│  ♙ title h2  person  decide                                                                                                              │
+│  ‖ title h3  coder   after h1                                                                                                            │
+│▼ Self-repair watcher  ██████░░░░░░    1/2  not started                                                                                   │
+│    title s1  coder   upcoming                                                                                                            │
+│▼ Other                ░░░░░░░░░░░░    0/1  not started                                                                                   │
+│    title o1  coder   upcoming                                                                                                            │
+│▶ 1 group done · 1 task   (d shows)                                                                                                       │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ h1 · in progress · coder                                                                                                                 │
+│ for you: nothing        enter: task page   + - priority                                                                                  │
+╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Activity  auto-scroll on ───────────────────────────────────────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        ▲
+…
+```
+
+#### The drawer at 80 columns, built
+
+The golden `plan-groups-80x24-dark.txt`'s drawer (the medium tier, the reader's frame):
+
+```
+╭─ Plan ─────────────────────────────────────────────────── y copy · esc back ─╮
+│ v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you    ▲
+│ ──────────────────────────────────────────────────────────────────────────── ┃
+│ ▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                    ┃
+│ ▶ ● title h1  coder   in progress                                            │
+│   ✓ title h5  coder   approved                                               │
+│ ──────────────────────────────────────────────────────────────────────────── │
+│ h1 · in progress · coder                                                     │
+│ for you: nothing        enter: task page   + - priority                      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
 
 ## 5. IDEAS: triage from the card
 

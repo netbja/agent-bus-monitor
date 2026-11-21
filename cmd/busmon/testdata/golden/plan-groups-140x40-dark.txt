@@ -7,34 +7,34 @@
 │  Next for you: title h2                                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Plan ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── y copy · esc back ─╮
-│ v0.29  3 of 9 done  ━━━━━━━━━━━━━━━━━━━━  33%  ·  now: title h1 (coder)  ·  next: title s1                                               │
-│ the inbox · loaded 0s ago (abcdef0)                                                                                                      │
-│                                                                                                                                          │
-│ Leave herdr         ━━━━━━━━━━━━━━━━━━━━  1/5 · in progress: h1 · waits for you: h2                                                      │
-│ ▶ ● title h1  coder     in progress                                                                                                      │
-│   ✓ title h5  coder     approved                                                                                                         │
-│     title h2  ♙ person  decide                                                                                                           │
-│     title h3  coder     blocked                                                                                                          │
-│                                                                                                                                          │
-│ Self-repair watcher ━━━━━━━━━━━━━━━━━━━━  1/2                                                                                            │
-│     title s1  coder     upcoming                                                                                                         │
-│                                                                                                                                          │
-│ Other               ━━━━━━━━━━━━━━━━━━━━  0/1                                                                                            │
-│     title o1  coder     upcoming                                                                                                         │
-│                                                                                                                                          │
-│ ✓ Work tab  1/1 done                                                                                                                     │
-│                                                                                                                                          │
-│ DONE  3   d shows                                                                                                                        │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│ ── Task h1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
-│ state in progress · for you nothing · owner coder · prio normal · review — · PR —                                                        │
-│ after — · unblocks — · reason —                                                                                                          │
+│ v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you                                                                │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                                                                                │
+│ ▶ ● title h1  coder   in progress                                                                                                        │
+│   ✓ title h5  coder   approved                                                                                                           │
+│   ♙ title h2  person  decide                                                                                                             │
+│   ‖ title h3  coder   after h1                                                                                                           │
+│ ▼ Self-repair watcher  ██████░░░░░░    1/2  not started                                                                                  │
+│     title s1  coder   upcoming                                                                                                           │
+│ ▼ Other                ░░░░░░░░░░░░    0/1  not started                                                                                  │
+│     title o1  coder   upcoming                                                                                                           │
+│ ▶ 1 group done · 1 task   (d shows)                                                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ h1 · in progress · coder                                                                                                                 │
+│ for you: nothing        enter: task page   + - priority                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Work   4 Plan    auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        │
+│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│    14:24  architect            status     done · spec merged                                                                             │
+│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
+│    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
+│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
+│  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
+│  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
+│    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
+│                                                                                                                                          │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                            
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   + - priority   F5 health   F6 ideas                                     

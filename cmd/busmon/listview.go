@@ -10,6 +10,10 @@ type ListItem struct {
 	Selectable bool
 	Expanded   bool        // its text is open below it: the gutter shows ▼, not ▶
 	Marquee    *rowMarquee // its cut title field, scrolled once when selected (marquee.go)
+	// Wide is drawn from the gutter's first cell, over the whole inside: a
+	// line that carries its own mark (the Plan's headers and folds,
+	// views-redesign §4.2); no selection marker is drawn for it.
+	Wide bool
 }
 
 // listGutter is the column every row reserves on its left for the selection
@@ -466,6 +470,10 @@ func (l *listState) draw(screen cellSink) {
 			mark = Line{{Text: GlyphDown, Role: RoleAccent}}
 		case selected:
 			mark = Line{{Text: GlyphSelect, Role: RoleAccent}}
+		}
+		if it.Wide {
+			drawLine(screen, ix, iy+r, iw, it.Line, selected)
+			continue
 		}
 		drawLine(screen, ix, iy+r, gutter, mark, selected)
 		drawLine(screen, ix+gutter, iy+r, iw-gutter, it.Line, selected)

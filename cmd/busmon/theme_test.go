@@ -11,7 +11,7 @@ import (
 )
 
 func TestGlyphsAreSingleCell(t *testing.T) {
-	if len(UIGlyphs) != 52 { // GlyphClock and GlyphAtLeast (background-work-visible step 3), GlyphWarn (views-redesign §3), GlyphThinBar and GlyphThinMark joined (usage-bars), GlyphChoiceL and GlyphSet (settings-panels), GlyphUpperHalf (about-design), GlyphOpenHere (projects-admin), GlyphIdea (requests-plan-redesign)
+	if len(UIGlyphs) != 53 { // GlyphPause (views-redesign §4.2), GlyphClock and GlyphAtLeast (background-work-visible step 3), GlyphWarn (views-redesign §3), GlyphThinBar and GlyphThinMark joined (usage-bars), GlyphChoiceL and GlyphSet (settings-panels), GlyphUpperHalf (about-design), GlyphOpenHere (projects-admin), GlyphIdea (requests-plan-redesign)
 		t.Fatal(len(UIGlyphs))
 	}
 	seen := map[string]bool{}
