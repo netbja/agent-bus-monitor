@@ -456,3 +456,27 @@ func TestRememberConcurrently(t *testing.T) {
 		t.Fatalf("%d observations, %d commits: %v", len(tp.Obs), commits(t, s), err)
 	}
 }
+
+// A store whose directories already exist with a looser mode is made
+// private on the next write: person/ and memory/ 0700, the store's own
+// (reviewer-codex on fe93e0bf; agentbus/ is shared and left as it is, a
+// 0700 person/ already closes everything under it).
+func TestStoreTightensAnExistingDirectory(t *testing.T) {
+	s := store(t)
+	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{s.Dir, filepath.Dir(s.Dir)} {
+		if err := os.Chmod(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Remember(context.Background(), reader(), decision("merge-policy", dirID, "yes, dev first")); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{s.Dir, filepath.Dir(s.Dir)} {
+		if st, err := os.Stat(d); err != nil || st.Mode().Perm() != 0o700 {
+			t.Errorf("%s: %v %v", d, st.Mode().Perm(), err)
+		}
+	}
+}

@@ -350,11 +350,27 @@ func activeDecision(t *Topic, all map[string]*Topic) string {
 	return ""
 }
 
+// private makes the store's directories, and keeps them 0700 even when they
+// existed with a looser mode (reviewer-codex): person/ and memory/ are the
+// store's own; agentbus/ is shared and left as it is, a 0700 person/
+// already closing everything under it.
+func (s *Store) private() error {
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		return err
+	}
+	for _, d := range []string{s.Dir, filepath.Dir(s.Dir)} {
+		if err := os.Chmod(d, 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // lock takes the store's lock, waiting for another writer: an exclusive
 // flock on .lock in the store (made 0700, the file 0600; git leaves it
 // untracked).
 func (s *Store) lock() (func(), error) {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+	if err := s.private(); err != nil {
 		return nil, err
 	}
 	f, err := os.OpenFile(filepath.Join(s.Dir, ".lock"), os.O_CREATE|os.O_RDWR, 0o600)
@@ -374,7 +390,7 @@ func (s *Store) lock() (func(), error) {
 // write saves t and commits it: the repository is made on the first write
 // (private: 0700, the files 0600), each write one commit.
 func (s *Store) write(ctx context.Context, t *Topic, msg string) error {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+	if err := s.private(); err != nil {
 		return err
 	}
 	if _, err := os.Stat(filepath.Join(s.Dir, ".git")); errors.Is(err, os.ErrNotExist) {
