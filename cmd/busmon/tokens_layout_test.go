@@ -156,3 +156,21 @@ func TestAccountCardWindowNamesInFull(t *testing.T) {
 		}
 	}
 }
+
+// Below the width the 14-cell sparkline needs, it narrows to one cell per
+// day, so the 7d total stays on screen (reviewer-codex on 90286e22): every
+// known row keeps its total, at the widths the page is drawn at.
+func TestTokensNarrowKeepsTheTotals(t *testing.T) {
+	pinLocal(t)
+	for width := 60; width <= 100; width++ {
+		s := pageText(tokFixtureState(shellNow), nil, width)
+		for name, total := range map[string]string{"agent-bus-monitor": "~5.1M", "blog": "170k"} {
+			if row := projectRow(t, s, name); !strings.HasSuffix(strings.TrimRight(row, " "), total) {
+				t.Errorf("%d: %s's total is cut: %q", width, name, row)
+			}
+		}
+		if !strings.Contains(s, "7d total") {
+			t.Errorf("%d: the totals' header is cut:\n%s", width, s)
+		}
+	}
+}

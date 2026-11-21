@@ -73,8 +73,13 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 }
 
 // tokSparkCells is the Projects sparkline's width: 14 cells, seven days of
-// two cells (28 braille points), whatever the data's resolution.
-const tokSparkCells = 14
+// two cells (28 braille points), whatever the data's resolution;
+// tokSparkNarrow, one cell per day, where 14 would push the 7d total off
+// the page (reviewer-codex on 90286e22).
+const (
+	tokSparkCells  = 14
+	tokSparkNarrow = 7
+)
 
 // tokensPage is the U page's body at width cells. icons is display.icons, off
 // below 80 cells (the caller's tier): an account row's provider and an agent
@@ -139,8 +144,12 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 	// The header names each column over it, and the line under it the
 	// sparkline's period (tokens-layout): the totals are the seven days' in+out.
 	lead := strings.Repeat(" ", 22-Width("Projects")) + cols + "  "
+	spark := tokSparkCells
+	if 22+Width(cols)+2+tokSparkCells+2+barW+2+8 > width { // name, in/out, spark, bar, total
+		spark = tokSparkNarrow
+	}
 	b.segs(Seg{Text: "Projects", Role: RoleText, Bold: true}).
-		seg(RoleMuted, lead+pad("7 days", tokSparkCells)+"  "+strings.Repeat(" ", barW)+fmt.Sprintf("  %8s", "7d total")).text("\n")
+		seg(RoleMuted, lead+pad("7 days", spark)+"  "+strings.Repeat(" ", barW)+fmt.Sprintf("  %8s", "7d total")).text("\n")
 	b.seg(RoleMuted, strings.Repeat(" ", 22)+strings.Repeat(" ", Width(cols)+2)+days[0][5:]+" to "+today[5:]).text("\n")
 	// unknownRow keeps the open project visible, unknown, with its reason,
 	// once no reading is pending any more (never folded, never 0).
@@ -217,7 +226,7 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 				rowMax = max(rowMax, v.In+v.Write+v.Out)
 				week = append(week, float64(v.In+v.Write+v.Out))
 			}
-			b.seg(RoleOK, sparkWide(week, float64(rowMax), tokSparkCells, graphs)) // scaled per row: its own shape, the bar compares
+			b.seg(RoleOK, sparkWide(week, float64(rowMax), spark, graphs)) // scaled per row: its own shape, the bar compares
 			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+textfmt.TokCount(total)))
 		}
 		if len(none) > 0 {
