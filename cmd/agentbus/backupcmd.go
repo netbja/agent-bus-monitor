@@ -14,6 +14,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -38,6 +39,11 @@ func runBackup(ctx context.Context, args []string, explicitProject string, d bac
 	list := len(args) > 0 && args[0] == "list"
 	if list {
 		args = args[1:]
+	} else if why := agentcaller.Refuse(ctx, d.Getenv, nil, "a backup", "agentbus backup"); why != "" {
+		// the person's act (broker-hardening step 4: backup connects as
+		// admin); defence in depth, as run reset. list reads local files only.
+		fmt.Fprintln(errw, "backup: "+why)
+		return 1
 	}
 	args, dirArg := extractFlag(args, "--dir")
 	args, dry := extractBool(args, "--dry-run")

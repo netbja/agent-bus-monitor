@@ -24,6 +24,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
@@ -81,6 +82,12 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 		}
 		fmt.Fprintln(errw, restoreUsage)
 		return 2
+	}
+	// The person's act (broker-hardening step 4: restore connects as admin);
+	// defence in depth, as run reset: an agent's environment is refused.
+	if why := agentcaller.Refuse(ctx, d.Getenv, nil, "a restore", "agentbus restore"); why != "" {
+		fmt.Fprintln(errw, "restore: "+why)
+		return 1
 	}
 	var o backup.RestoreOptions
 	args, o.RedisOnly = extractBool(args, "--redis-only")

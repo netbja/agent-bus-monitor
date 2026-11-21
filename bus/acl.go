@@ -87,16 +87,15 @@ func aclWrites(except ...map[string]bool) []string {
 // CLI holds, the person's verbs (refused in an agent's environment, so the
 // person's CLI: busmon), backup and restore (admin), and the deliverers'.
 var aclVerbs = map[string][]string{
-	"cmd/agentbus.popEnd":       {ACLDispatcher}, // the dispatcher's own end of a done pop (popend.go)
+	"cmd/agentbus.popEnd":       {ACLDispatcher}, // the dispatcher's own end of a done pop: only withPopEnd's dispatch config calls it
 	"cmd/agentbus.serviceRun":   {ACLDispatcher}, // the services' runner
 	"cmd/agentbus.runDispatch":  {ACLDispatcher},
-	"cmd/agentbus.runBackup":    {ACLAdmin},
-	"cmd/agentbus.runRestore":   {ACLAdmin},
+	"cmd/agentbus.runBackup":    {ACLAdmin},  // refuses an agent's environment (backupcmd.go); list writes nothing
+	"cmd/agentbus.runRestore":   {ACLAdmin},  // refuses an agent's environment (restorecmd.go)
 	"cmd/agentbus.planPriority": {ACLBusmon}, // refuseAgentForPriority
-	"cmd/agentbus.runRun":       {ACLBusmon}, // run reset: only the person
-	"cmd/agentbus.runCI":        {ACLBusmon}, // ci reset: only the person
-	"cmd/agentbus.runMergeDrop": {ACLMaster}, // deliverRoleCheck: the deliverers (master; docs is a question)
-	"cmd/agentbus.planLoad":     {ACLMaster}, // the plan is master's to load (spec §5 Q4)
+	"cmd/agentbus.runRun":       {ACLBusmon}, // run reset, its one write, refuses an agent
+	"cmd/agentbus.runCI":        {ACLBusmon}, // ci reset, its one write, refuses an agent
+	"cmd/agentbus.runMergeDrop": {ACLMaster}, // deliverRoleCheck: the deliverers (master; docs is question e)
 }
 
 // aclExcept is set without kinds.
@@ -111,26 +110,28 @@ func aclExcept(set map[string]bool, kinds ...string) map[string]bool {
 // ACLRoleOf is the users a recorded caller connects as (spec step 4,
 // "Choosing the user"), from its chain of frames, innermost first; nil when
 // nothing decides (a library called only from its own tests):
-//  1. a process's own package anywhere in the chain: the services
-//     (internal/dispatchsvc), busmon, setup and backup;
+//  1. a process's own package anywhere in the chain, in this order: the
+//     services (internal/dispatchsvc, whose backup chore runs backup/ as
+//     dispatcher), busmon, setup, and backup/ with no CLI frame (the
+//     CLI's backup and restore are its verbs, below);
 //  2. the outermost agent CLI function aclVerbs names;
 //  3. the service packages (dispatch, mission, holder) with no CLI frame
 //     outside them: their own tests stand for the service;
 //  4. the agent CLI: agent, and master too when it ran as master.
 func ACLRoleOf(chain []string, identity string) []string {
-	cli := false
+	in := map[string]bool{}
 	for _, f := range chain {
-		switch pkgOf(f) {
-		case "internal/dispatchsvc":
-			return []string{ACLDispatcher}
-		case "cmd/busmon":
-			return []string{ACLBusmon}
-		case "setup", "backup":
-			return []string{ACLAdmin}
-		case "cmd/agentbus":
-			cli = true
-		}
+		in[pkgOf(f)] = true
 	}
+	switch { // the process first: the dispatcher's own backup chore connects as dispatcher
+	case in["internal/dispatchsvc"]:
+		return []string{ACLDispatcher}
+	case in["cmd/busmon"]:
+		return []string{ACLBusmon}
+	case in["setup"], in["backup"] && !in["cmd/agentbus"]:
+		return []string{ACLAdmin}
+	}
+	cli := in["cmd/agentbus"]
 	for i := len(chain) - 1; i >= 0; i-- {
 		if roles, ok := aclVerbFor(chain[i]); ok {
 			return roles

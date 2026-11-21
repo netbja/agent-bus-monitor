@@ -175,6 +175,13 @@ where the person confirms "master's keys" (§5 Q4).
   disposable broker and runs every recorded shape through `ACL DRYRUN` as each user that sends it.
   It also checks that no fenced script calls a `@dangerous` command, outside the admin-only
   restore script. `bus/testdata/acl-inventory.json` is committed, so a rebuild shows up in the diff.
+- **A verb maps to a stronger user only behind a guard (reviewer-codex):** `agentbus backup` and
+  `restore` now refuse an agent's environment (`backup list` stays open). `plan load` has no guard,
+  so it is checked as `agent` and waits on question b. The dispatcher's own daily backup is
+  checked as `dispatcher`, because the process comes first in `ACLRoleOf`.
+- **Pinned shapes (foureyes):** `INFO`, `CONFIG GET` and `MEMORY USAGE`, sent by the dispatcher's
+  health checks, busmon's pages and backup, are listed in `aclPinned` with their callers. The
+  recording missed them because their tests call the bus function directly.
 - **What the first run corrected:**
   - **Key patterns:** writable kinds are `~*:<kind>`, not `%W~`. Redis wants one pattern to grant
     every flag a key needs, and a script's declared keys need read and write.

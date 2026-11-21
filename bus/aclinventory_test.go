@@ -49,7 +49,26 @@ var aclOpen = []struct{ role, caller, key, question string }{
 	{ACLAgent, "cmd/agentbus.runRequest", "run", "publishRequest's script declares {p}:run, {p}:plan and {p}:plan:facts (bus/requests.go): any agent sends a request, and a script's keys need read and write: grant them, or read the plan outside the script?"},
 	{ACLAgent, "cmd/agentbus.runPlan", "plan", "plan note, link, ref, done, ignore and the plan's unload (DEL) write {p}:plan: master's only, or any agent's?"},
 	{ACLAgent, "cmd/agentbus.runRetire", "dispatch", "retire --forget fences its writes with the dispatch lease, so it declares {p}:dispatch: master writes the dispatcher's lease key, or the retire moves to the dispatcher?"},
+	{ACLAgent, "cmd/agentbus.planLoad", "plan", "plan load writes {p}:plan and runPlan's load branch checks no role (reviewer-codex): master's only (a guard), or any agent's (question b)?"},
 	{ACLAgent, "cmd/agentbus.runMission", "missionops", "agentbus mission queues the conductor's operations in {p}:missionops: who runs it, master or any agent?"},
+}
+
+// aclPinned are shapes production callers send that the recording misses
+// (their tests call the bus function directly; foureyes), each with the user
+// that sends it and the file that holds the call, checked to be there.
+var aclPinned = []struct {
+	role, file, call string
+	args             []string
+}{
+	{ACLDispatcher, "../internal/dispatchsvc/healthchecks.go", ".Persistence(", []string{"config", "get", "appendonly"}},
+	{ACLDispatcher, "../internal/dispatchsvc/healthchecks.go", ".Persistence(", []string{"config", "get", "appendfsync"}},
+	{ACLDispatcher, "../internal/dispatchsvc/healthchecks.go", ".Persistence(", []string{"config", "get", "save"}},
+	{ACLDispatcher, "../internal/dispatchsvc/healthchecks.go", ".RedisInfo(", []string{"info", "server", "memory"}},
+	{ACLBusmon, "../cmd/busmon/about.go", ".RedisInfo(", []string{"info", "server", "memory"}},
+	{ACLBusmon, "../cmd/busmon/redis_page.go", ".RedisDetail(", []string{"info", "memory", "persistence", "clients"}},
+	{ACLBusmon, "../cmd/busmon/projects_admin.go", "ProjectMemory(", []string{"memory", "usage", "{p}:board"}},
+	{ACLAdmin, "../backup/host.go", ".RedisInfo(", []string{"info", "server", "memory"}},
+	{ACLAdmin, "../cmd/agentbus/restorecmd.go", ".RedisInfo(", []string{"info", "server", "memory"}},
 }
 
 func TestACLRoleOf(t *testing.T) {
@@ -60,10 +79,13 @@ func TestACLRoleOf(t *testing.T) {
 	}{
 		{[]string{"dispatch.(*loop).put", "dispatch.Run", "internal/dispatchsvc.Serve", "cmd/agentbus.main"}, "", []string{ACLDispatcher}},
 		{[]string{"plan.Load", "cmd/agentbus.runReport", "cmd/agentbus.main"}, "coder", []string{ACLAgent}},
-		{[]string{"plan.Load", "cmd/agentbus.planLoad", "cmd/agentbus.main"}, "coder", []string{ACLMaster}},
+		{[]string{"plan.Load", "cmd/agentbus.planLoad", "cmd/agentbus.main"}, "coder", []string{ACLAgent}}, // unguarded: an agent may run it (reviewer-codex)
 		{[]string{"cmd/agentbus.runReport"}, "master", []string{ACLAgent, ACLMaster}},
 		{[]string{"cmd/busmon.(*model).refresh"}, "", []string{ACLBusmon}},
-		{[]string{"backup.Run", "cmd/agentbus.main"}, "", []string{ACLAdmin}},
+		{[]string{"backup.Run", "cmd/agentbus.runBackup", "cmd/agentbus.main"}, "coder", []string{ACLAdmin}},
+		{[]string{"backup.Run", "cmd/agentbus.main"}, "coder", []string{ACLAgent}},
+		{[]string{"backup.Run", "dispatch.(*loop).backupPass", "internal/dispatchsvc.Serve"}, "", []string{ACLDispatcher}},
+		{[]string{"backup.Run"}, "", []string{ACLAdmin}},
 		{[]string{"mergequeue.Next"}, "", nil},
 		{[]string{"cmd/agentbus.popEnd", "cmd/agentbus.popEnd"}, "", []string{ACLDispatcher}},
 		{[]string{"mission.Store.Change", "cmd/agentbus.missionStatus", "cmd/agentbus.runMission"}, "coder", []string{ACLAgent}},
@@ -203,6 +225,15 @@ func TestACLInventory(t *testing.T) {
 			if err != nil {
 				refused = append(refused, fmt.Sprintf("%s: %s (%s): %v", role, strings.Join(e.Args, " "), strings.Join(e.Callers, ", "), err))
 			}
+		}
+	}
+	for _, p := range aclPinned {
+		src, err := os.ReadFile(p.file)
+		if err != nil || !strings.Contains(string(src), p.call) {
+			t.Errorf("pinned: %s no longer calls %s: move or drop the pin", p.file, p.call)
+		}
+		if err := dry(p.role, p.args); err != nil {
+			refused = append(refused, fmt.Sprintf("%s: %s (pinned, %s): %v", p.role, strings.Join(p.args, " "), p.file, err))
 		}
 	}
 	if len(refused) > 0 {
