@@ -1,6 +1,9 @@
 package main
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,5 +116,58 @@ func TestNewLaunchShell(t *testing.T) {
 		if !m.cfg.badge || m.cfg.lastProject != c.last {
 			t.Errorf("%+v: badge %v last %v", c, m.cfg.badge, m.cfg.lastProject)
 		}
+	}
+}
+
+// TestMainStartsTheLaunchShell: main() starts its shell through
+// newLaunchShell(opts, os.Getenv, ...) and never through newShell itself,
+// which would launch without the badge and the last-project notice.
+func TestMainStartsTheLaunchShell(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "main.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mainFn *ast.FuncDecl
+	for _, d := range f.Decls {
+		if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && fd.Name.Name == "main" {
+			mainFn = fd
+		}
+	}
+	if mainFn == nil {
+		t.Fatal("no func main in main.go")
+	}
+	launch, plain := 0, 0
+	ast.Inspect(mainFn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		id, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		switch id.Name {
+		case "newShell":
+			plain++
+		case "newLaunchShell":
+			launch++
+			if len(call.Args) != 3 {
+				t.Errorf("newLaunchShell with %d arguments", len(call.Args))
+				return true
+			}
+			if a, ok := call.Args[0].(*ast.Ident); !ok || a.Name != "opts" {
+				t.Errorf("newLaunchShell's first argument is not opts")
+			}
+			if s, ok := call.Args[1].(*ast.SelectorExpr); !ok || s.Sel.Name != "Getenv" {
+				t.Errorf("newLaunchShell's second argument is not os.Getenv")
+			} else if x, ok := s.X.(*ast.Ident); !ok || x.Name != "os" {
+				t.Errorf("newLaunchShell's second argument is not os.Getenv")
+			}
+		}
+		return true
+	})
+	if launch != 1 || plain != 0 {
+		t.Errorf("main: newLaunchShell called %d times, newShell %d; want 1 and 0", launch, plain)
 	}
 }
