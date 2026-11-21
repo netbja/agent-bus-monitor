@@ -300,7 +300,9 @@ end
 return {id, state}`)
 
 // askAnswer: KEYS asks, cmd. ARGV maxlen, id, qid, answer JSON (no at),
-// by, agent, reply text, retention ms, reply target, wake ("no" or "").
+// by, agent, reply text, retention ms, reply target, wake ("no" or ""),
+// said (the answer alone, the person's words: the reply also carries
+// typed=yes, person-memory §4.3.1).
 // Returns {id, remaining, reply id}.
 var askAnswer = redis.NewScript(sweepLua + `
 local now = nowms()
@@ -322,7 +324,7 @@ redis.call('HSET', KEYS[1], id .. '|a|' .. qid, cjson.encode(a))
 local left = remaining(KEYS[1], id)
 local text = ARGV[7]
 if left > 0 then text = text .. ' (' .. left .. ' question(s) still open)' end
-local fields = {'from', ARGV[5], 'target', ARGV[9], 'type', 'reply', 'ref', id, 'command', text, 'human', 'yes', 'text_complete', 'yes'}
+local fields = {'from', ARGV[5], 'target', ARGV[9], 'type', 'reply', 'ref', id, 'command', text, 'human', 'yes', 'typed', 'yes', 'said', ARGV[11], 'text_complete', 'yes'}
 if ARGV[10] == 'no' then table.insert(fields, 'wake'); table.insert(fields, 'no') end
 local reply = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[1], '*', unpack(fields))
 if left == 0 then
@@ -503,7 +505,7 @@ func (b *Bus) Answer(ctx context.Context, askID, qid, by, choice, text string) (
 		target, wake = PeopleTarget, "no"
 	}
 	res, err := askAnswer.Run(ctx, b.r, []string{AsksKey(b.project), StreamKey(b.project, "cmd")},
-		streamMaxLen, askID, qid, string(raw), by, def.From, reply, askRetention.Milliseconds(), target, wake).Slice()
+		streamMaxLen, askID, qid, string(raw), by, def.From, reply, askRetention.Milliseconds(), target, wake, a.Value()).Slice()
 	if err != nil {
 		return "", 0, askErr(err)
 	}

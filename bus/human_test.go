@@ -21,7 +21,7 @@ func TestHumanWritesAreMarkedRedis(t *testing.T) {
 	if _, err := b.HumanCmd(ctx, "charlie", "codex", "relis t4"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.HumanNotify(ctx, "pilot", "hello"); err != nil {
+	if _, err := b.TypedNotify(ctx, "pilot", "hello"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.HumanCmd(ctx, "Bad Name", "codex", "x"); err == nil {

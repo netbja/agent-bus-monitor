@@ -65,7 +65,9 @@ never wakes a terminal session.
   and answer every question in it on the bus with `agentbus reply --ref <id> <from> <answer...>`.
   Text typed only in your pane does not reach the person. For a long multi-line answer, publish
   it with `agentbus report <self> "<multi-line answer>"` and reply with that report's id. A directive to
-  `@all` reaches every agent; each one answers for itself.
+  `@all` reaches every agent; each one answers for itself. `"typed": true` beside it says the
+  person typed the text; without it, agentbus composed it in their name (a resume summary, a
+  close): still theirs to act on, but not their words.
 - **Re-arm iff `rearm` is `true`** *and you still have work in flight*. A `fatal` event is
   `rearm:false` → stop, you're misconfigured. When your work is done, stop re-arming on
   purpose — see "Disconnect when you have nothing left to do".

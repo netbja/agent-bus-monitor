@@ -477,3 +477,18 @@ func TestSubscribeDrainBrief(t *testing.T) {
 }
 
 var dialMain = bustest.Open
+
+// person-memory step 1: the subscribe JSON says typed, additively within
+// v1, and only for an entry the person typed.
+func TestCmdEventCarriesTyped(t *testing.T) {
+	var buf bytes.Buffer
+	_ = emit(&buf, cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "charlie", Target: "codex", Message: "x", Human: true, Typed: true}, nil))
+	if !strings.Contains(buf.String(), `"typed":true`) || !strings.Contains(buf.String(), `"v":1`) {
+		t.Fatalf("subscribe JSON lacks typed: %s", buf.String())
+	}
+	buf.Reset()
+	_ = emit(&buf, cmdEvent(bus.Event{ID: "1-0", Type: bus.CmdDirective, From: "charlie", Target: "codex", Message: "x", Human: true}, nil))
+	if strings.Contains(buf.String(), `"typed"`) {
+		t.Fatalf("a composed entry carries typed: %s", buf.String())
+	}
+}

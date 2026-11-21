@@ -18,8 +18,8 @@ import (
 
 // busWriter is what the shell sends and reads on demand. *bus.Bus satisfies it.
 type busWriter interface {
-	HumanCmd(ctx context.Context, from, target, command string) (string, error)
-	HumanNotify(ctx context.Context, from, message string) (string, error)
+	TypedCmd(ctx context.Context, from, target, command string) (string, error) // the person typed it (person-memory: typed=yes)
+	TypedNotify(ctx context.Context, from, message string) (string, error)
 	HumanClose(ctx context.Context, from, target, ref, message string) (string, error)
 	Answer(ctx context.Context, askID, qid, by, choice, text string) (string, int, error)
 	Asks(ctx context.Context) ([]bus.Ask, error)
