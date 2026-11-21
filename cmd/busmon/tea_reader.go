@@ -541,7 +541,6 @@ func (m *Model) buildPage() bool {
 	case ovIdeas:
 		v := p.ideas
 		p.title, p.body, p.iitems, p.plain = ideasPage(s.ideas, s.ideasErr, m.cfg.self, v, p.sel, now, width)
-		p.plainWhat = "title"
 		p.sel = clamp(p.sel, 0, max(0, len(p.iitems)-1))
 		for i, it := range p.iitems {
 			if it.id == v.selID {
@@ -554,11 +553,18 @@ func (m *Model) buildPage() bool {
 		if v.selID == "" && len(p.iitems) > 0 { // drawn again with the mark where it is
 			p.title, p.body, p.iitems, p.plain = ideasPage(s.ideas, s.ideasErr, m.cfg.self, p.ideas, p.sel, now, width)
 		}
-	case ovIdea:
-		p.title, p.body, p.plain, p.plainWhat = GlyphIdea+" "+p.key+" (gone)", []Line{{S(RoleMuted, "this idea is no longer on the broker")}}, "", "title"
+		// y sets decided here (ideas-triage): Y copies the selected idea whole.
+		p.plain, p.threadPlain, p.threadWhat = "", "", "idea"
 		for _, it := range s.ideas {
-			if it.ID == p.key {
-				p.title, p.plain = GlyphIdea+" "+it.ID+"  "+Preview(it.Title), it.Title
+			if it.ID == p.ideas.selID {
+				p.threadPlain = ideaCopyText(it)
+			}
+		}
+	case ovIdea:
+		p.title, p.body, p.plain, p.threadPlain, p.threadWhat = GlyphIdea+" "+p.key+" (gone)", []Line{{S(RoleMuted, "this idea is no longer on the broker")}}, "", "", "idea"
+		for _, it := range s.ideas {
+			if it.ID == p.key { // y sets decided here (ideas-triage): Y copies the idea
+				p.title, p.threadPlain = GlyphIdea+" "+it.ID+"  "+Preview(it.Title), ideaCopyText(it)
 				p.body = ideaDetail(it, m.cfg.self, now, width)
 				if p.ideas.pick != nil {
 					p.body = append(p.body, ideaPicker(*p.ideas.pick, width)...)
@@ -1433,8 +1439,10 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHealth || p.kind == ovTokens || p.kind == ovServiceLog
 	case ActIdeaAdd, ActIdeaFilter:
 		return p.kind == ovIdeas && p.ideas.pick == nil
-	case ActIdeaState:
-		return (p.kind == ovIdeas && len(p.iitems) > 0 || p.kind == ovIdea && p.plain != "") && p.ideas.pick == nil
+	case ActIdeaState, ActIdeaSet:
+		return (p.kind == ovIdeas && len(p.iitems) > 0 || p.kind == ovIdea && p.threadPlain != "") && p.ideas.pick == nil
+	case ActIdeaUndo:
+		return (p.kind == ovIdeas || p.kind == ovIdea) && p.ideas.pick == nil
 	case ActOlder:
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
 	case ActFilter:
@@ -1443,6 +1451,10 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovAbout
 	case ActShowDone:
 		return p.kind == ovPlan
+	case ActCopy: // y is decided on the Ideas pages (ideas-triage): Y copies the idea there
+		return p.kind != ovIdeas && p.kind != ovIdea
+	case ActServiceLog:
+		return p.kind == ovServices
 	}
 	return false
 }

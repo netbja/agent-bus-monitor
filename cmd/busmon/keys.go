@@ -137,6 +137,8 @@ const (
 	ActIdeaFilter     // Ideas (F6): tab, the next state shown
 	ActIdeaAdd        // Ideas (F6): a, add an idea (its title on the line)
 	ActIdeaState      // Ideas (F6) or an idea's page: s, the state picker (←→ choose, enter sets it)
+	ActIdeaSet        // Ideas (F6) or an idea's page: y decided, l later, d doing, x dropped, at once (ideas-triage)
+	ActIdeaUndo       // Ideas (F6) or an idea's page: u, this busmon's last state change undone
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -367,7 +369,12 @@ var (
 		{Keys: "pgdn", Help: "page down", Act: ActPageDown, match: keyIs(keyPgDn)},
 		{Keys: "home g", Help: "first row", Act: ActFirst, match: either(keyIs(keyHome), runeIs('g'))},
 		{Keys: "end G", Help: "last row", Act: ActLast, match: either(keyIs(keyEnd), runeIs('G'))},
-		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
+		// Before y (copy) and l (a service's log): on the Ideas pages these
+		// keys set a state (ideas-triage, the person's y = decided); every
+		// other page keeps copy and the log, and Y copies the whole idea.
+		{Keys: "y l d x", Hint: "decided later doing dropped", Help: "Ideas (F6) or an idea's page: set the selected idea's state at once, as you: y decided, l later, d doing, x dropped (s opens the picker; Y copies the idea)", Act: ActIdeaSet, OnPage: true, match: runeIs('y', 'l', 'd', 'x')},
+		{Keys: "u", Hint: "undo", Help: "Ideas (F6) or an idea's page: undo this busmon's last state change (once)", Act: ActIdeaUndo, OnPage: true, match: runeIs('u')},
+		{Keys: "y", Hint: "copy", Act: ActCopy, OnPage: true, match: runeIs('y')}, // every page but the Ideas ones (pageOffers)
 		{Keys: "Y", Hint: "copy thread", Help: "copy the whole thread (a message's page) or the whole report (an agent's page, a recap item's)", Act: ActCopyThread, OnPage: true, match: runeIs('Y')},
 		{Keys: "n p " + GlyphArrowL + GlyphArrowR, Hint: "next/prev", Help: "the next or previous item of the list the page was opened from, as it was then (reopen to see newer lines)", Act: ActNextItem, match: either(runeIs('n'), keyIs(keyRight))},
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
@@ -383,7 +390,7 @@ var (
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
 		{Keys: "d", Hint: "done", Help: "the plan (p): show or fold the done tasks", Act: ActShowDone, OnPage: true, match: runeIs('d')},
 		{Keys: "X", Hint: "restart", Help: "Services (F3): restart the selected service (dispatch, missions) with agentbus service restart, after y; the person's act, never an agent's; holders and Redis are not restarted here", Act: ActServiceRestart, OnPage: true, match: runeIs('X')},
-		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, match: runeIs('l')},
+		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, OnPage: true, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 		// After close: on a narrow footer the way out stays (message-reply-key).
 		{Keys: "+ -", Hint: "priority", Help: "a tracked request's page, the plan drawer (p) or a plan task's page: raise or lower its priority (low, normal, high)", Act: ActPriorityUp, OnPage: true, match: runeIs('+')},

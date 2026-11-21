@@ -17,8 +17,26 @@ type ideaMsg struct {
 	said  string
 	err   error
 	ideas []bus.Idea
-	add   bool   // an add: its draft is spent only once written
-	sent  string // an add's text as sent: the draft is spent only if it is still that
+	add   bool        // an add: its draft is spent only once written
+	sent  string      // an add's text as sent: the draft is spent only if it is still that
+	set   *ideaChange // a state change written: u's to undo (nil for an add)
+	undo  bool        // an undo: once written, nothing is left to undo
+}
+
+// ideaChange is one state change this busmon made: u puts from back, as a
+// compare-and-set from to (ideas-triage).
+type ideaChange struct{ id, from, to string }
+
+// ideaKeyStates are the direct keys' states (ideas-triage, the person's
+// y / later / no triage, master's y = decided on these pages).
+var ideaKeyStates = map[rune]string{'y': bus.IdeaDecided, 'l': bus.IdeaLater, 'd': bus.IdeaDoing, 'x': bus.IdeaDropped}
+
+// ideaCopyText is what Y copies of an idea: its title, then its text.
+func ideaCopyText(it bus.Idea) string {
+	if strings.TrimSpace(it.Text) == "" {
+		return it.Title
+	}
+	return it.Title + "\n\n" + it.Text
 }
 
 // ideasKey is a key on F6 or an idea's page; done when it was the page's.
@@ -43,6 +61,15 @@ func (m *Model) ideasKey(p *page, act Action, k Key) (tea.Cmd, bool) {
 		return nil, true
 	}
 	switch {
+	case act == ActIdeaUndo:
+		return m.undoIdeaState(p), true
+	case act == ActIdeaSet:
+		id, cur := m.selectedIdea(p)
+		to, ok := ideaKeyStates[k.Rune]
+		if id == "" || !ok {
+			return nil, true
+		}
+		return m.writeIdeaState(p, id, cur, to, false), true
 	case act == ActIdeaState:
 		id := p.key
 		if p.kind == ovIdeas {
@@ -97,16 +124,51 @@ func ideaLines(p *page) func() []int {
 	}
 }
 
+// selectedIdea is the page's idea and its state as shown: the selected row
+// on F6, the page's own idea on its page ("" when none).
+func (m *Model) selectedIdea(p *page) (string, string) {
+	id := p.key
+	if p.kind == ovIdeas {
+		if p.sel >= len(p.iitems) {
+			return "", ""
+		}
+		id = p.iitems[p.sel].id
+	}
+	for _, it := range m.snap.ideas {
+		if it.ID == id {
+			return id, it.State
+		}
+	}
+	return "", ""
+}
+
 // setIdeaState is enter in the picker: the state chosen, set as the person,
 // the state the picker opened on as the expected one (a change made
 // meanwhile elsewhere is refused, never overwritten).
 func (m *Model) setIdeaState(p *page) tea.Cmd {
 	pk := *p.ideas.pick
-	to := bus.IdeaStates[pk.sel]
-	p.ideas.pick, p.dirty = nil, true
+	p.ideas.pick = nil
+	return m.writeIdeaState(p, pk.id, pk.from, bus.IdeaStates[pk.sel], false)
+}
+
+// undoIdeaState is u: this busmon's last change put back, from the state it
+// set (a change made since, here or elsewhere, is refused).
+func (m *Model) undoIdeaState(p *page) tea.Cmd {
+	last := m.ui.ideaLast
+	if last == nil {
+		m.ui.flash, m.ui.flashErr = "nothing to undo: no state changed from this busmon", false
+		return nil
+	}
+	return m.writeIdeaState(p, last.id, last.to, last.from, true)
+}
+
+// writeIdeaState sets id from from to to, as the person: the picker, the
+// direct keys and u all come here, with the same refusals.
+func (m *Model) writeIdeaState(p *page, id, from, to string, undo bool) tea.Cmd {
+	p.dirty = true
 	defer m.refresh()
-	if to == pk.from {
-		m.ui.flash, m.ui.flashErr = pk.id+": already "+to, false
+	if to == from {
+		m.ui.flash, m.ui.flashErr = id+": already "+to, false
 		return nil
 	}
 	if a := m.env("AGENT_BUS_AGENT"); a != "" { // an agent's busmon inherits the person's name (reviewer-codex)
@@ -118,9 +180,18 @@ func (m *Model) setIdeaState(p *page) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = "name yourself first (agentbus identity set <name>): only a person sets an idea's state", true
 		return nil
 	}
-	return m.ideaWrite(pk.id+": "+pk.from+" → "+to, func(ctx context.Context, w busWriter) error {
-		return w.SetIdeaState(ctx, pk.id, pk.from, to, who)
+	cmd := m.ideaWrite(id+": "+from+" → "+to, func(ctx context.Context, w busWriter) error {
+		return w.SetIdeaState(ctx, id, from, to, who)
 	})
+	if cmd == nil {
+		return nil
+	}
+	change := &ideaChange{id: id, from: from, to: to}
+	return func() tea.Msg {
+		msg := cmd().(ideaMsg)
+		msg.set, msg.undo = change, undo
+		return msg
+	}
 }
 
 // env reads busmon's environment (the shell config's, else the process's).
@@ -241,6 +312,13 @@ func (m *Model) gotIdea(msg ideaMsg) {
 		m.ui.ideaReq, m.ui.ideaReqText = "", ""
 	}
 	m.ui.flash, m.ui.flashErr = msg.said, false
+	switch {
+	case msg.undo: // once: u again has nothing left
+		m.ui.ideaLast = nil
+		m.ui.flash += " (undone)"
+	case msg.set != nil:
+		m.ui.ideaLast = msg.set
+	}
 	if msg.ideas != nil {
 		m.snap.ideas, m.snap.ideasErr = msg.ideas, false
 		if st := m.cfg.st; st != nil {
