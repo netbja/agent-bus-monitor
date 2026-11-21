@@ -4,13 +4,15 @@ import "testing"
 
 // person.name (busmon-cli-flags item 3, the person's option A): the person's
 // own name, a bus name, empty by default, beside person.language; busmon's
-// identity falls back to it, and master's skill may read it.
+// identity falls back to it; busmon is its only reader (foureyes: no claim
+// of a reader that does not exist).
 func TestPersonNameKey(t *testing.T) {
 	k, ok := Lookup("person.name")
 	if !ok {
 		t.Fatal("person.name not registered")
 	}
-	if k.Kind != String || k.Default != "" || k.Env != "AGENT_BUS_PERSON_NAME" || k.Group() != GroupIdentity || k.Legacy {
+	if k.Kind != String || k.Default != "" || k.Env != "AGENT_BUS_PERSON_NAME" || k.Group() != GroupIdentity || k.Legacy ||
+		k.ReadBy != "busmon (its name after identity.as)" {
 		t.Fatalf("%+v group %q", k, k.Group())
 	}
 	for _, good := range []string{"charlie", "ana-maria", "j_2"} {

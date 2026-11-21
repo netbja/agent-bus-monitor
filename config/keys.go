@@ -220,9 +220,9 @@ var Keys = []*Key{
 			return nil, "want a name: a lower-case letter, then letters, digits, - or _"
 		}},
 	// The person's own name (busmon-cli-flags item 3, the person's option A):
-	// busmon's identity after --as and identity.as, before "pilot"; master's
-	// skill may read it. An invalid one is ignored, said, never a refusal.
-	{Name: "person.name", Env: "AGENT_BUS_PERSON_NAME", Kind: String, Default: "", ReadBy: "busmon (its name after identity.as), master's role skill (agentbus config)",
+	// busmon's identity after --as and identity.as, before "pilot". An
+	// invalid one is ignored, said, never a refusal.
+	{Name: "person.name", Env: "AGENT_BUS_PERSON_NAME", Kind: String, Default: "", ReadBy: "busmon (its name after identity.as)",
 		Invalid: "busmon writes as pilot",
 		env: func(raw string) (any, envResult) {
 			if validName(raw) {
