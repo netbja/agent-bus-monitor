@@ -127,8 +127,13 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 			}
 		}
 		switch {
-		case report && needs == "":
-			continue // Activity only (§3)
+		case report && needs == "": // Activity only (§3), attached to every item it names (reviewer-codex)
+			if unread {
+				for _, i := range tg.named(lineFullText(fl)) {
+					out[i].Unread = true
+				}
+			}
+			continue
 		case report && needs == bus.NeedsRead && !unread:
 			continue
 		case report && needs == bus.NeedsAnswer && answeredSince(s.person, sender(fl.ev), fl.at, feed):

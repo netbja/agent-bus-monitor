@@ -76,8 +76,22 @@ func TestTriageOneItemPerPR(t *testing.T) {
 	if n := activityUnread(f.feed); n != 3 {
 		t.Fatalf("Activity's unread marks: %d, want the 3 reports", n)
 	}
-	if unreadItems(items) != 0 {
-		t.Fatalf("an unread item: %+v", items)
+	// Each item the plain reports name carries their unread mark (§2, §3;
+	// reviewer-codex), with no row of their own.
+	if !items[0].Unread || !items[1].Unread || items[0].Needs != "" {
+		t.Fatalf("the named items' marks: %+v", items)
+	}
+	if !strings.HasPrefix(plainOf(forYouRow(items[0], 120, shellNow)), GlyphDotFull) {
+		t.Fatalf("the row: %q", plainOf(forYouRow(items[0], 120, shellNow)))
+	}
+	// Once read, no mark.
+	f.unread.read[rid(1)], f.unread.read[rid(3)], f.unread.read[rid(5)] = true, true, true
+	marks := f.unread.marks(f.feed, nil)
+	for i := range f.feed {
+		f.feed[i].mark = marks[f.feed[i].ev.ID]
+	}
+	if items = forYou(s, f.feed); items[0].Unread || items[1].Unread {
+		t.Fatalf("read, still marked: %+v", items)
 	}
 }
 
