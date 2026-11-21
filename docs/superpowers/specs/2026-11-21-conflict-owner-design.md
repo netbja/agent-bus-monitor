@@ -1,6 +1,20 @@
 # A conflicting approved PR goes back to its owner, git only
 
-Status: spec r2, for review (subject `conflict-owner`). Not built. Base: origin/dev `4f095697`.
+Status: spec r5, for review (subject `conflict-owner`). Not built. Base: origin/dev `2a7e0360`.
+
+r5 folds in the person's answers to r4's questions (cmd `1795282532994-0`, task `conflict-owner-r5`):
+- Q1 to Q3: yes, as recommended (§7);
+- Q4: yes, and a fallback in code: with no board entry naming the branch, the owner comes from
+  the branch name's `<role>/` prefix (§3);
+- **a base move alone no longer consumes a hand-off.** The episode is (the PR, the head). Only a
+  new head that still conflicts is counted and sent. A base-only change updates the record and
+  sends nothing; the age bound still applies (§4).
+- **the field outlives a push** (foureyes): the owner's fix is a new head, unapproved, so the PR
+  leaves the queue while it is reviewed. r5 at `6e185f86` removed the field then, so the count and
+  `first` started again at every head and the cap could never be reached. The field is now kept
+  while the PR is open, and removed only when it closes or merges, or when an approved head of it
+  is clean (§4, step 1).
+
 r2 fixes the following (reviewer-codex, foureyes):
 - the episode is the person's (PR, head, base);
 - `FencedCmdOnce` writes each episode's hand-off;
@@ -119,21 +133,54 @@ On this project's board today, 305 entries hold 10 claim branches and 92 request
 
 **The rule:** the owner of a conflicting branch is the `Owner` of every board entry whose
 `Branch` or `Request.Branch` equals the branch's name exactly.
-- **One distinct owner:** that agent.
-- **None, several, or an owner that is not a valid agent name:** master, the services'
+- **One distinct owner** that is a known agent (below): that agent.
+- **Several distinct owners, or one that is not a known agent:** master, the services'
   escalation target, as the CI loop uses it.
+- **No board entry names the branch** (the person's fallback, Q4): the branch name's prefix, the
+  part before the first `/` of `<role>/<task>`. If it is a known agent, that agent; otherwise
+  master.
+
+**A known agent** is a name that passes `bus.ValidName` and is a field of `{p}:agents`
+(`Bus.Agents`, `bus/stream.go:1008`): an agent that has published a status on this project. The
+name pattern alone is not enough: this repository's branches mostly start with `feat/`, `fix/`,
+`spec/` or `refactor/`, and each of those passes `ValidName`. They are not agents, so they go
+to master.
+
+One prefix is also a role: `docs/`. A `docs/<x>` branch that no board entry names goes to the
+docs agent, even if another role made it. The board entry wins wherever there is one, which is
+why the skills now require it (§5).
 
 A done entry still names its owner: that is the usual case, since a PR is opened once the request
 is done.
 
 The agent-bus skill shows both forms: `board claim <task> --branch <role>/<task>`
-(`skills/agent-bus/SKILL.md:276`) and, for a mission, `request done … --branch`
-(`:362`). Neither is required. Question 4 asks whether naming the branch becomes a must.
+(`skills/agent-bus/SKILL.md:298`) and, for a mission, `request done … --branch`
+(`:384`). Neither is required today. The person made naming the branch a must (Q4, §5).
 
 ## 4. The hand-off, the hold and the escalation
 
-**An episode** is (the PR, or the branch in the git fallback; the head; the base tip), as the
-person defined it. Its digest is `CIDigest("conflict", <pr or branch>, head, baseTip)`.
+**An episode** is (the PR, or the branch in the git fallback; the head). Its digest is
+`CIDigest("conflict", <pr or branch>, head)`. The base tip is not part of it (the person, r5):
+- **a new head that still conflicts** is a new episode: counted, and sent;
+- **a base move under the same head** is the same episode. The pass updates the record
+  (`MergeQueueRecord.Conflicting`: `base_tip`, `files`) and sends nothing. The age bound still
+  applies, from `first`.
+
+**The field lives as long as the PR is open,** not as long as it is a candidate. The owner's fix
+is a new head, which is unapproved until the reviewers judge it, so the PR leaves the queue in
+between. The pass still sees it:
+- in the gh path, among the open PRs it reads (`ReadGitHub`, `gh pr list --state open`,
+  `mergequeue/forge.go:50`; `Input.PRs`, unapproved and drafts included);
+- in the git fallback, among the branch tips (`RemoteTips` or `LocalTips`, every branch,
+  `mergequeue/git.go:19`, `:29`), with `Input.Merged` saying whether its tip is in the base.
+
+While the PR is open and not a candidate, its field is kept, untouched: nothing is checked,
+sent, counted or escalated. When a later head is approved, it is a candidate again. If that head
+still conflicts, it is a new episode, so `count` rises from where it was. Three failed fixes thus
+reach a cap of 3.
+
+Otherwise, on a busy base the cap would be reached before the owner could act: each merge into
+`dev` would cost a hand-off.
 
 **One directive per episode, through `bus.FencedCmdOnce`**, the person's choice. Each write is an
 entry and its mark in one script, so it is sent exactly once:
@@ -148,8 +195,8 @@ entry and its mark in one script, so it is sent exactly once:
 (or branch digest): `last|count|first|escalated`. A small fenced script, `FencedConflictTrack`
 (`bus/conflict.go`), updates it under the dispatch lease:
 - `first` is set from Redis `TIME` when the field is created;
-- with `count`, it raises `count` and sets `last` to the digest, but only when `last` differs
-  from the digest;
+- with `count`, it raises `count` and sets `last` to the digest (which names the head), but only
+  when `last` differs from the digest;
 - with `escalate`, it sets `escalated` to 1;
 - a field already `escalated` is never counted again;
 - it returns the field.
@@ -160,16 +207,22 @@ counts nothing again, and `FencedCmdOnce` sends the missing hand-off.
 
 **The pass, per candidate,** in this order:
 
-1. **Clean, or no longer a candidate** (merged, closed, gone): its `{p}:conflicts` field is
-   removed in one fenced script, as `FencedCIForget` does for the CI record. So are its three
-   `FencedCmdOnce` marks, which are fields of `{p}:quota` (`QuotaKey`), not of
-   `{p}:conflicts`. A later conflict on the same PR starts afresh.
+1. **Resolved**: an approved head of the PR that `merge-tree` finds clean, or a PR no longer
+   open (closed or merged in the gh path; in the git fallback, a branch gone or whose tip is in
+   the base). Its `{p}:conflicts` field is removed in one fenced script, as `FencedCIForget` does
+   for the CI record. So are its `FencedCmdOnce` marks, which are fields of `{p}:quota`
+   (`QuotaKey`), not of `{p}:conflicts`. A later conflict on the same PR starts afresh.
+
+   **Open but not a candidate** (a new head in review, or a draft): the field and its marks are
+   kept, and the PR is skipped (above). The steps below run only for a conflicting candidate.
 2. **Already escalated** (`escalated = 1`): no hand-off to the owner, whatever the episode, until
    step 1 removes the field, whether the escalation came from the age or the cap. The only call is
    the escalation's own `FencedCmdOnce`, which sends nothing when its mark is set (the crash case
    below).
 3. **The age bound reached:** only when `conflict.escalate_after` is positive, and
-   `now - first ≥ conflict.escalate_after` in Redis time. Then escalate, below. With 0 there is
+   `now - first ≥ conflict.escalate_after` in Redis time. It is judged only on a pass that finds
+   the PR conflicting. Time spent reviewing a fix counts, so a fix approved after the bound that
+   still conflicts escalates at once, without a hand-off. Then escalate, below. With 0 there is
    no time bound: only the cap escalates.
 4. **A new episode** (`last` differs from the digest):
    - **the owner is `blocked` or `waiting`** (`held`, as in `RunCI`): track without counting, so
@@ -179,27 +232,31 @@ counts nothing again, and `FencedCmdOnce` sends the missing hand-off.
 
      > `PR #<n> (<branch>) at <head> conflicts with <base> at <base tip>: <files>. Rebase it onto origin/<base>, resolve, push; the reviewers then approve the new head. Hand-off <k> of <cap>.`
 
+     The base tip and files are those of the pass that sends it. A later base move does not
+     resend; the record shows the current ones.
+
    - **`count ≥ conflict.max_handoffs`:** escalate. **The cap's timing,** as in the CI loop: with
      a cap of 3, three hand-offs go out. The fourth conflicting episode escalates instead of a
      fourth hand-off. A cap of 0 escalates the first episode.
-5. **The same episode** (`last` equals the digest): nothing new. After a crash, `FencedCmdOnce`
-   resends only what is missing (§4, above).
+5. **The same episode** (`last` equals the digest; the base may have moved): nothing is sent
+   or counted, and the record is updated. After a crash, `FencedCmdOnce` resends only what is
+   missing (§4, above).
 
 **Escalating** is: track with `escalate`, then `FencedCmdOnce` to master (mark
 `conflict-esc:<…>`, episode = `first`), waking: `PR #<n> (<branch>) still conflicts with <base> after <k> hand-off(s) / <age>; owner <owner>. Take it over or reassign it.`
 A crash between the two leaves `escalated` set and the mark unset. The next pass reaches step 2,
 whose `FencedCmdOnce` then sends it, once.
 
-**Following the person's episode,** a base that moves while the conflict stays is a new episode,
-sent and counted. With many merges a day into `dev`, the cap can be reached within hours.
-`conflict.max_handoffs` is where the person loosens that.
+**Only the owner's pushes count.** A hand-off is consumed when the owner pushed a new head that
+still conflicts, so the cap measures attempts that failed, not merges into the base. A conflict
+nobody works on is caught by the age bound (2 h), whatever the base does.
 
 **Settings** (registry, `ReadBy: "dispatch"`):
 
 | Name | Kind | Default | Meaning |
 |---|---|---|---|
-| `conflict.max_handoffs` | Int | 3 | Hand-offs to the owner before master; 0 sends every conflict straight to master. |
-| `conflict.escalate_after` | Duration | 2h | The age at which an unresolved conflict goes to master; 0 means no time bound. |
+| `conflict.max_handoffs` | Int | 3 | Hand-offs to the owner (one per conflicting head) before master; 0 sends every conflict straight to master. |
+| `conflict.escalate_after` | Duration | 2h | The age at which an unresolved conflict goes to master, counted from `first`, including while the owner is held; 0 means no time bound. |
 
 There is no on/off setting: with `max_handoffs` at 0 and the time bound at 0, the behaviour is
 today's, master only.
@@ -211,8 +268,14 @@ today's, master only.
 - `skills/agent-bus/SKILL.md`, for the coder: a conflict directive means rebase onto
   `origin/<base>`, resolve (rerere replays known hunks), test, push, and ask for review of the new
   head.
+- **Naming the branch is a must** (Q4), in `skills/agent-bus/SKILL.md` (the coder's skill) and
+  `skills/agent-bus-docs/SKILL.md`: a request whose work opens a PR is closed with
+  `agentbus request done <task> --commit <sha> --branch <branch> "<reply>"`, and the branch is
+  named `<role>/<task>`. The skill says why: the branch names the owner a conflict goes back to.
+  The code does not refuse a `request done` without `--branch` (a request may open no PR); the
+  fallback of §3 covers a forgotten one.
 - `docs/operator-notes.d/conflict-owner.md`.
-- **The merge-conflicts spec, §5, Q3:** its answer is amended in this PR.
+- **The merge-conflicts spec, §5, Q3:** already amended (merge-conflicts r4, on origin/dev).
 
 ## 6. Tests
 
@@ -227,7 +290,10 @@ today's, master only.
 - **Owner:**
   - one board entry by claim branch, one by request branch, and two entries with one owner each
     give that owner;
-  - two owners, none, or an invalid name give master.
+  - two owners, or an owner that is not a known agent, give master;
+  - no board entry: `coder/x` with `coder` in `{p}:agents` gives coder; `feat/x` gives master
+    (`feat` passes `ValidName` but is not in `{p}:agents`); `coder/x` with no `coder` in
+    `{p}:agents` gives master; a branch with no `/` gives master.
 - **No repository code:** a configured driver that touches a file, selected four ways:
   - the tree's `.gitattributes`;
   - `merge.default` in the repository's config;
@@ -241,32 +307,45 @@ today's, master only.
   - one hand-off per episode, with master's copy;
   - a crash after the track and before the send: the next pass sends once, and the count does
     not rise twice;
-  - a new base tip or a new head: a new episode, sent and counted;
+  - a new head that still conflicts: a new episode, sent and counted;
+  - a new base tip under the same head: nothing sent, not counted, the record's `base_tip` and
+    `files` updated, and the age bound still escalates at `conflict.escalate_after`;
+  - ten base moves under one head with a cap of 3: no escalation by the cap;
   - with a cap of 3: three hand-offs, then the fourth episode escalates; a cap of 0 escalates the
     first;
   - `conflict.escalate_after` = 0 with a cap of 3: no escalation by age, only at the cap;
-  - an age escalation below the cap, then a new base or head episode: no hand-off to the owner;
+  - an age escalation below the cap, then a new head: no hand-off to the owner;
   - a crash between `escalate` and its send: the next pass sends the escalation once;
   - a removed field's three `{p}:quota` marks are gone too;
   - a held owner: nothing sent, not counted, but `first` is set and the age escalates;
   - a swap in progress defers a `FencedCmdOnce`;
   - not the lease holder: nothing written;
-  - a clean or vanished candidate's field and marks are removed.
+  - a clean approved head, a closed or merged PR, and (git fallback) a deleted branch or a tip in
+    the base: the field and marks are removed;
+  - **a push** (foureyes, r5): a conflicting head handed off (count 1), then a new head that is
+    open but unapproved: the field, `count`, `first` and the marks are kept, and nothing is sent;
+    that head approved and still conflicting: `count` 2. Three conflicting approved heads with a
+    cap of 3: three hand-offs, then the fourth escalates;
+  - a draft or unapproved head of an open PR is never checked, sent or escalated, even past the
+    age bound; the first pass that finds its approved head still conflicting past the bound
+    escalates.
 - **Settings:** both keys are in the registry, with their env names, groups and invalid texts. A
   value of 0 for both gives master only.
 - **Budget:** candidates beyond the budget are left for the next pass, with a reason, and the
   pass still writes its record.
 
-## 7. Questions for the person
+## 7. The person's answers (r5)
 
-1. **The time bound while the owner is blocked or waiting:** does it keep running? Recommended:
-   yes. Master can reassign while the owner is stuck.
-2. **Defaults:** 3 hand-offs and 2 h? Recommended: yes.
-3. **Approved PRs only:** a PR still in review is not checked in step 1. Recommended: yes. That
-   is the queue's set, and the person's Q3 named approved PRs.
-4. **Must the coder name its branch?** About 70 % of today's board entries name none, and those
-   conflicts would go to master. Recommended: the coder and docs skills make
-   `request done --branch` a must when a PR is opened.
+1. **The time bound while the owner is blocked or waiting keeps running.** Yes: master can
+   reassign while the owner is stuck.
+2. **Defaults: 3 hand-offs and 2 h.** Yes.
+3. **Approved PRs only.** Yes: a PR still in review is not checked in step 1.
+4. **The coder names its branch.** Yes: `request done --branch` is a must in the coder and docs
+   skills (§5), with the code fallback on the branch prefix (§3).
+
+And a change: a base move alone does not consume a hand-off (§4).
+
+No question is left open.
 
 ## 8. Step 2, noted only
 
