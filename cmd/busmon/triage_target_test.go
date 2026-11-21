@@ -312,6 +312,14 @@ func TestTriageAnswerFromItsPage(t *testing.T) {
 	if reportItem(m) || !slices.Contains(m.cache_().Answered, rid(0)) {
 		t.Fatalf("answered from its page: items %+v, cache %+v", m.forYou, m.cache_().Answered)
 	}
+	snap := m.cacheSnapshot() // what saveCache writes (foureyes)
+	if !slices.Contains(snap.Answered, rid(0)) {
+		t.Fatalf("not in the saved cache: %+v", snap)
+	}
+	snap.Answered[0] = "changed" // its own copy, as Read's: a later write cannot reach the cache in use
+	if !slices.Contains(m.cache_().Answered, rid(0)) {
+		t.Fatalf("the snapshot shares the cache's slice: %+v", m.cache_().Answered)
+	}
 	// A busmon started again on that cache does not list it.
 	st := &shared{agents: map[string]*agentState{"master": {registered: true, state: "idle"}}, person: "charlie"}
 	again := newShell(shellConfig{project: "demo", self: "charlie", st: st, cache: &busmonCache{Project: "demo", Answered: []string{rid(0)}}})
