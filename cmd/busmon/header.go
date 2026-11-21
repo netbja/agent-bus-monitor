@@ -97,7 +97,7 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 	}
 	add(healthSeg(d.health, d.now, compact), 1, 0)
 	if d.guardian.Total > 0 {
-		add(guardianSeg(d.guardian, width), 1, 0).hit = hitHealth
+		add(guardianSegWhy(d.guardian, width, unknownWhy(d.dispatch)), 1, 0).hit = hitHealth
 	}
 	add(dispatchSeg(d.dispatch, compact), 2, 0)
 	if d.missions != "" {
@@ -152,6 +152,7 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	unknownQuota := false     // a provider with no reading at all: its "?" says why once, after the gauges
 	var pairs []iconAt        // the gauges' icon pairs, leftmost first
 	busiest := map[int]Line{} // a gauge's one-window form, by item
 	for i, n := range names {
@@ -162,6 +163,7 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 		} else {
 			until, isHeld := held(d.holds, n, d.now)
 			l = quotaSeg(n, b, until, isHeld, d.pace, d.now, tier, d.bars)
+			unknownQuota = unknownQuota || quotaAllUnknown(b, d.now)
 			one = quotaSegOf(n, b, until, isHeld, d.pace, d.now, tier, d.bars, true)
 		}
 		if l == nil {
@@ -175,6 +177,9 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 		if icon := providerIcon(d.icons, n); icon != "" && tier == TierWide {
 			pairs = append(pairs, iconAt{len(items) - 1, iconPair(icon, n)})
 		}
+	}
+	if why := unknownWhy(d.dispatch); unknownQuota && why != "" {
+		add(Line{{Text: "(" + why + ")", Role: RoleMuted}}, gaugePrio+len(names), second)
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short
 		add(Line{{Text: GlyphUp + " " + Preview(d.update), Role: RoleMuted}}, 101, second)

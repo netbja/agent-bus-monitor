@@ -51,7 +51,11 @@ func checkStatus(d guardian.Definition, records map[string]guardian.Record, now 
 // compact header), else the checks not measured ("?3", never the tick), else
 // a muted ● when something is only in hand (the person's answer: not counted in the
 // header), else the tick: every check measured ok.
-func guardianSeg(s guardianSummary, width int) Line {
+func guardianSeg(s guardianSummary, width int) Line { return guardianSegWhy(s, width, "") }
+
+// guardianSegWhy is guardianSeg; an unmeasured summary says why, where the
+// header has the long form (project-switch-ux item 2).
+func guardianSegWhy(s guardianSummary, width int, why string) Line {
 	name := "health " // a bare "!4" read as noise (A6); the compact header keeps the short form
 	if width < 80 {
 		name = ""
@@ -70,6 +74,12 @@ func guardianSeg(s guardianSummary, width int) Line {
 		}
 		return Line{{Text: name + label, Role: role}}
 	case s.Unmeasured > 0: // not measured yet or unreadable, never shown as healthy
+		if why != "" { // the compact header keeps a short one (reviewer-codex)
+			if name == "" {
+				why = strings.TrimPrefix(why, "project ")
+			}
+			return Line{{Text: fmt.Sprintf("%s?%d %s", name, s.Unmeasured, why), Role: RoleMuted}}
+		}
 		return Line{{Text: fmt.Sprintf("%s?%d", name, s.Unmeasured), Role: RoleMuted}}
 	case s.InHand > 0:
 		return Line{{Text: name + GlyphWorking, Role: RoleMuted}}

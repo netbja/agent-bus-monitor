@@ -50,6 +50,21 @@ func serviceFact(rec bus.ServiceRecord, has bool, legacy string, now time.Time) 
 	return "down"
 }
 
+// unknownWhy is why what the dispatcher computes (health, the quota
+// readings, the merge queue) is unknown, from its state (serviceFact's
+// words): "project stopped" when its services were stopped, "dispatch
+// <state>" when it is down or gave up; "" when it runs or its state is
+// unknown, and a "?" then keeps its old meaning (project-switch-ux item 2).
+func unknownWhy(dispatch string) string {
+	switch dispatch {
+	case "stopped":
+		return "project stopped"
+	case "down", "failed", "gave-up":
+		return "dispatch " + dispatch
+	}
+	return ""
+}
+
 // serviceSeg is the header element of a service: glyph, word, state.
 func serviceSeg(word, short, state string, compact bool) Line {
 	glyph, role, text := GlyphIdle, RoleMuted, state

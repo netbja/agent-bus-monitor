@@ -59,6 +59,8 @@ func mergeItems(s snapshot) []attentionItem {
 		// Nothing known waiting (never computed, or an empty success since
 		// gone stale): the queue is unknown, one row says why.
 		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you", Text: Preview("merge queue unknown: " + why)}}
+	case rec.ItemsAt == 0 && unknownWhy(s.dispatch) != "":
+		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you", Text: "merge queue unknown: " + unknownWhy(s.dispatch)}}
 	case rec.ItemsAt == 0:
 		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you",
 			Text: "merge queue not computed yet (the dispatch service computes it)"}}
