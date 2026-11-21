@@ -153,11 +153,11 @@ func TestIdeaDetail(t *testing.T) {
 func TestIdeasNextFilter(t *testing.T) {
 	v := ideasView{}
 	var seen []string
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 7; i++ {
 		seen = append(seen, ideaFilterName(v.filter))
 		v.filter = nextIdeaFilter(v.filter)
 	}
-	if strings.Join(seen, ",") != "all,to discuss,decided,doing,dropped,all" {
+	if strings.Join(seen, ",") != "all,to discuss,decided,doing,later,dropped,all" {
 		t.Fatalf("filters %v", seen)
 	}
 }

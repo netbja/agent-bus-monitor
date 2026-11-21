@@ -43,6 +43,34 @@ func ideaFilterName(f int) string {
 
 func nextIdeaFilter(f int) int { return (f + 1) % (len(bus.IdeaStates) + 1) }
 
+// ideaStateRole is a state's colour on F6: to discuss the page's accent
+// (it was every row's), decided agreed, doing in motion (as swapping and
+// reloading are), later plain, dropped out. Each its own, so a row's colour
+// tells its state too (ideas-triage); never RoleAttention, which flags a
+// setter who is not the person.
+func ideaStateRole(st string) Role {
+	switch st {
+	case bus.IdeaToDiscuss:
+		return RoleAccent
+	case bus.IdeaDecided:
+		return RoleOK
+	case bus.IdeaDoing:
+		return RoleDispatch
+	case bus.IdeaDropped:
+		return RoleMuted
+	}
+	return RoleText // later, and a state this busmon does not know
+}
+
+// ideaStateW is the rows' state column: the longest state.
+var ideaStateW = func() int {
+	w := 0
+	for _, st := range bus.IdeaStates {
+		w = max(w, Width(st))
+	}
+	return w
+}()
+
 // ideaSetter is an idea's last setter as a note, flagged when it is not the
 // configured person ("" person: nobody to compare with).
 func ideaSetter(it bus.Idea, person string, now time.Time) Line {
@@ -121,11 +149,12 @@ func ideasPage(ideas []bus.Idea, unread bool, person string, v ideasView, sel in
 				plain = it.Title
 			}
 			setter := ideaSetter(it, person, now)
-			lr := listRow{Sym: GlyphIdea, Role: RoleAccent, Name: it.ID + "  " + it.Title, Note: setter,
-				Age: humanAge(now.Sub(time.UnixMilli(it.At)))}
-			if it.State == bus.IdeaDropped {
-				lr.Role = RoleMuted
-			}
+			// The row says its state, a word in the state's colour, not only
+			// its section (ideas-triage): the mark column, as wide as the
+			// longest state.
+			role := ideaStateRole(it.State)
+			lr := listRow{Sym: GlyphIdea, Role: role, Name: it.ID + "  " + it.Title, Note: setter,
+				Age: humanAge(now.Sub(time.UnixMilli(it.At))), Mark: Seg{Text: it.State, Role: role}, HasMark: true, MarkW: ideaStateW}
 			if noteW == 0 { // narrow: the setter is the state column
 				lr.State = setter[0].Text
 			}
@@ -184,10 +213,16 @@ func ideaDetail(it bus.Idea, person string, now time.Time, width int) []Line {
 		f.add("set", ideaSetter(it, person, now)...)
 	}
 	out := f.lines(width)
-	if strings.TrimSpace(it.Text) != "" {
+	if strings.TrimSpace(it.Text) != "" { // wrapped to the frame, never cut on the right (ideas-triage)
 		out = append(out, Line{})
 		for _, l := range strings.Split(it.Text, "\n") {
-			out = append(out, FitLine(Line{S(RoleText, DetailText(l))}, width))
+			if strings.TrimSpace(l) == "" {
+				out = append(out, Line{})
+				continue
+			}
+			for _, w := range wrapSpans([]mdSpan{{text: DetailText(l), role: RoleText}}, width, "", "") {
+				out = append(out, FitLine(w, width))
+			}
 		}
 	}
 	if len(it.Log) > 0 {
@@ -198,6 +233,7 @@ func ideaDetail(it bus.Idea, person string, now time.Time, width int) []Line {
 				S(RoleMuted, fmt.Sprintf("  by %s %s", c.By, time.UnixMilli(c.At).Local().Format("2006-01-02 15:04")))}, width))
 		}
 	}
-	out = append(out, Line{}, Line{S(RoleMuted, "s sets its state (you only; the bus refuses an agent's name and records who and when)")})
+	out = append(out, Line{})
+	out = append(out, wrapIndented("s sets its state (you only; the bus refuses an agent's name and records who and when)", width, "")...)
 	return out
 }

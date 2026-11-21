@@ -21,7 +21,7 @@ import (
 //
 //	seq        the last number given (INCR): ids stay short, i12
 //	<id>       the definition JSON {title, text, by, at, source}; never rewritten
-//	<id>|s     the state: to discuss, decided, doing, dropped
+//	<id>|s     the state: to discuss, decided, doing, later, dropped
 //	<id>|log   the audit: a JSON list of {from, to, by, at}, the newest ideaLogMax
 //
 // An idea always starts at "to discuss", and anyone may add one. Only a
@@ -31,16 +31,19 @@ import (
 // run under the person's uid, so a deliberate `--as <person>` or a raw HSET
 // is not stopped (docs/operator-notes.md, Ideas).
 
-// The four states. No state is final: dropped can go back to discussion.
+// The five states. No state is final: dropped can go back to discussion.
+// Later (ideas-triage, the person's yes / later / no) is an idea kept for
+// another time, neither decided nor dropped.
 const (
 	IdeaToDiscuss = "to discuss"
 	IdeaDecided   = "decided"
 	IdeaDoing     = "doing"
+	IdeaLater     = "later"
 	IdeaDropped   = "dropped"
 )
 
 // IdeaStates are the states in their order of life.
-var IdeaStates = []string{IdeaToDiscuss, IdeaDecided, IdeaDoing, IdeaDropped}
+var IdeaStates = []string{IdeaToDiscuss, IdeaDecided, IdeaDoing, IdeaLater, IdeaDropped}
 
 // Idea limits.
 const (
