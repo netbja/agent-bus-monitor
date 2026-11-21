@@ -428,6 +428,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 			fmt.Fprintf(out, "would push %s to origin %s and deliver it on %s to %s\n", h, o.branch, f.Kind, o.base)
 		}
 		fmt.Fprintf(out, "title: %s\n\n%s", title, body)
+		fmt.Fprintf(out, "\nsize: %s (single-approval §3.2; no rule reads it yet)\n", sizeClass(git, baseRef, h))
 		return 0
 	}
 

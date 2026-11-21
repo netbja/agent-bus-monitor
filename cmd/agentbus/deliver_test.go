@@ -123,6 +123,9 @@ func newDeliverWorld(t *testing.T, origin string) *deliverWorld {
 			"git rev-list --count refs/heads/main.." + dlvH:                         {out: "2\n"},
 			"git log --reverse --format=%H%x09%s refs/heads/main.." + dlvH:          {out: "aaaaaaaa1\tfirst change\n" + dlvH + "\tsecond change\n"},
 			"git push origin " + dlvH + ":refs/heads/coder/x":                       {},
+			"git merge-base refs/remotes/origin/main " + dlvH:                       {out: dlvMB + "\n"},
+			"git merge-base refs/heads/main " + dlvH:                                {out: dlvMB + "\n"},
+			"git diff --no-renames --numstat -z " + dlvMB + " " + dlvH:              {out: "10\t2\tcmd/busmon/x.go\x00"},
 			"gh auth status": {},
 			"gh pr create --base main --head coder/x --title first change --body-file <file>": {out: "https://github.com/o/r/pull/12\n"},
 			"glab auth status": {},
@@ -443,6 +446,34 @@ func TestDeliverDryRunPushesNothing(t *testing.T) {
 	}
 	if !strings.Contains(out, "would push "+dlvH) {
 		t.Errorf("out %q", out)
+	}
+}
+
+const dlvMB = "bbbbbbbb0000000000000000000000000000000b"
+
+// single-approval step 1: --dry-run prints the change's size class from the
+// merge-base diff (local mode against the local base); a diff that cannot
+// be read says so and changes nothing else. A real delivery reads no diff.
+func TestDeliverDryRunPrintsTheSizeClass(t *testing.T) {
+	w := newDeliverWorld(t, "git@github.com:o/r.git")
+	code, out, errw := w.run("master", "coder/x", "--dry-run")
+	if code != 0 || !strings.Contains(out, "size: small: 12 lines, 1 files (single-approval §3.2; no rule reads it yet)\n") {
+		t.Fatalf("exit %d: %q %s", code, out, errw)
+	}
+	w = newDeliverWorld(t, "")
+	w.settings["delivery.forge"] = "local"
+	w.r.cmds["git diff --no-renames --numstat -z "+dlvMB+" "+dlvH] = dlvOut{out: "1\t0\tbus/stream.go\x00"}
+	if code, out, errw := w.run("master", "coder/x", "--dry-run"); code != 0 || !strings.Contains(out, "size: not small (bus/stream.go is never small): 1 lines, 1 files") {
+		t.Fatalf("local: exit %d: %q %s", code, out, errw)
+	}
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	w.r.cmds["git diff --no-renames --numstat -z "+dlvMB+" "+dlvH] = dlvOut{err: errExit1}
+	if code, out, _ := w.run("master", "coder/x", "--dry-run"); code != 0 || !strings.Contains(out, "size: unknown (the diff against the merge-base could not be read)") {
+		t.Fatalf("diff fails: exit %d: %q", code, out)
+	}
+	w = newDeliverWorld(t, "git@github.com:o/r.git")
+	if code, _, errw := w.run("master", "coder/x"); code != 0 || w.r.did("git diff") || w.r.did("git merge-base") {
+		t.Fatalf("a delivery read the diff: exit %d, %v %s", code, w.r.ran, errw)
 	}
 }
 
