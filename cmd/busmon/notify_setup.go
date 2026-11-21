@@ -444,6 +444,9 @@ func (m *Model) notifySetupKey(act Action, k Key) tea.Cmd {
 	if s.removeAsk { // modal: y removes, any other key keeps it
 		s.removeAsk = false
 		if k.Code == keyRune && k.Rune == 'y' {
+			if m.refuseReadOnly() { // notify.toml and config.toml are writes (readonly.go): the page stays usable
+				return nil
+			}
 			s.busy = true
 			return nsRemove(m.settingsGetenv(), p.serial, s.target)
 		}
@@ -561,6 +564,9 @@ func (m *Model) notifyFieldKey(s *notifySetup, k Key) tea.Cmd {
 		s.focus = -1
 		if s.target != "" && s.step == 0 { // the rename field: Enter renames
 			if name := s.value("rename"); name != s.target {
+				if m.refuseReadOnly() {
+					return nil
+				}
 				s.busy = true
 				return nsRename(m.settingsGetenv(), m.rd.top().serial, s.target, name)
 			}
@@ -655,6 +661,9 @@ func (m *Model) notifySetupNext(p *page, s *notifySetup) tea.Cmd {
 	case s.kind == "ntfy" && s.step == 4, s.kind != "ntfy" && s.step == 3:
 		if s.result != "" { // written and tested: Enter closes
 			m.pop()
+			return nil
+		}
+		if m.refuseReadOnly() { // notify.toml and config.toml are writes (readonly.go): the step stays
 			return nil
 		}
 		s.busy = true
