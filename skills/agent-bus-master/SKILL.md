@@ -458,7 +458,7 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
 ```
 
 - The format is the same for every question (see "Questions to the person" in the `agent-bus`
-  skill; idea from the Superpowers plugin): one question at a time, a short title, one or two lines
+  skill; idea from the Superpowers plugin): one decision per question (several in an ask only when independent), a short title, one or two lines
   of context, 2 to 4 options (a short label and a one-line consequence), exactly one `recommended`,
   and busmon adds the last "Other... (type your answer)". Never a free-text question, whatever the
   client.

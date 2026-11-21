@@ -164,7 +164,8 @@ puts it in the ask), with structured options, never as free text in a report, a 
 pane, whatever your client (Claude Code, Codex, Kimi, agy, Grok) and whether or not it has a
 question tool of its own. The format is the one the Superpowers plugin uses for its questions:
 
-- **One question at a time**, with a short title (`header`) and one or two lines of `context`.
+- **One decision per question**, with a short title (`header`) and one or two lines of `context`.
+  Ask one at a time; put several in one ask (tabs, up to 6) only when they are independent.
 - **2 to 4 options**, each a short `label` and a one-line consequence (`description`), numbered by
   busmon; **exactly one** has `"recommended": true`.
 - A last **Other... (type your answer)** is added by busmon itself: do not write it as an option.
