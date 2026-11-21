@@ -198,7 +198,7 @@ func TestMissionOpsAreMasters(t *testing.T) {
 		}
 		return ""
 	}
-	for _, args := range [][]string{{"load", "x@y"}, {"retry", "chg/t1"}, {"skip", "chg/t1", "--reason", "r"}, {"reassign", "chg/t1", "coder"}} {
+	for _, args := range [][]string{{"load", "x@y"}, {"retry", "chg/t1"}, {"skip", "chg/t1", "--reason", "r"}, {"reassign", "chg/t1", "coder"}, {"abort", "chg", "--reason", "r"}} {
 		var out, errb bytes.Buffer
 		if code := runMission(ctx, b, "coder", coder, args, &out, &errb); code == 0 || !strings.Contains(errb.String(), "master's") {
 			t.Errorf("coder %v: %d %q", args, code, errb.String())
@@ -220,5 +220,30 @@ func TestMissionOpsAreMasters(t *testing.T) {
 	errb.Reset()
 	if code := runMission(ctx, b, "master", master, []string{"retry", "chg/t1", "--wait", "1ms"}, &out, &errb); strings.Contains(errb.String(), "master's") {
 		t.Fatalf("master's retry refused: %d %s", code, errb.String())
+	}
+}
+
+// The guard's production wiring (foureyes): the built binary, in an agent's
+// environment, refuses an operation before queueing it.
+func TestMissionOpRefusedInMain(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.MissionOpsKey(b.Project())) })
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	dir := t.TempDir()
+	cmd := exec.Command(bin, "-p", b.Project(), "mission", "retry", "chg/t1")
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "XDG_CONFIG_HOME=" + dir, "AGENT_BUS_AGENT=coder",
+		"REDIS_URL=" + os.Getenv("AGENTBUS_TEST_REDIS_URL")}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 || !strings.Contains(stderr.String(), "the conductor's operations are master's") {
+		t.Fatalf("coder's mission retry: %v, stderr %q", err, stderr.String())
+	}
+	if n, _ := r.Exists(ctx, bus.MissionOpsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("the refused operation was queued")
 	}
 }

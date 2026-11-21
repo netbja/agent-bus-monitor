@@ -32,7 +32,7 @@ var aclMasterOnly = map[string]bool{
 }
 
 // aclDispatcherOnly are the leases and records the services' fenced scripts
-// own.
+// own; master writes missionops too (ACLRules).
 var aclDispatcherOnly = map[string]bool{
 	"dispatch": true, "conductor": true, "ci": true, "mergequeue": true, "mergequeue:due": true,
 	"missionops": true, "missionops:results": true, "run": true, "reboot": true,
@@ -48,7 +48,9 @@ func ACLRules(role string) []string {
 	case ACLAdmin:
 		return []string{"+@all", "-flushall", "-flushdb", "-shutdown", "-debug", "-module", "~*"}
 	case ACLMaster:
-		return append(append(data, "+info", "%R~*"), aclWrites(aclDispatcherOnly)...)
+		// missionops too: master queues the conductor's operations (ACL answer
+		// d); the dispatcher's conductor reads and trims them
+		return append(append(data, "+info", "%R~*"), aclWrites(aclExcept(aclDispatcherOnly, "missionops"))...)
 	case ACLDispatcher:
 		// mergequeue:dropped too: the merge queue's pass prunes a drop past
 		// MergeDropKeep (the inventory: internal/dispatchsvc mergeQueueChore.pass)
