@@ -1,7 +1,14 @@
 # Harden the broker, lightly
 
 Status: spec r2, for review (subject `broker-hardening`). Not built. Base: origin/dev `4f095697`.
-r2 corrects three claims of §1: `CONFIG SET` is used, `EVAL` is sent, and `docker` has more callers (foureyes).
+r2 corrects three claims of §1: `CONFIG SET` is used, `EVAL` is sent, and `docker` has more callers
+(foureyes). r3 follows the directive where r2 departed from it (reviewer-codex):
+- the data directory goes into backups (step 5);
+- the logical dump's omission of keys with a TTL is stated;
+- key-level ACLs are part of step 4, with the proposed table and the inventory that confirms it;
+- a `master` user is added;
+- busmon's grants are listed;
+- the compose healthcheck gets its own user.
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222562295-0`), relayed by
 master (cmd `1795222577984-0`). There is no new dependency. It must work on Linux and macOS, with
 podman, and without systemd. The person wants to discuss it: §5 lists what they need to decide.
@@ -19,7 +26,7 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
 | `appendfsync everysec` | Not set. Redis's own default is `everysec`, so it holds, implicitly. | Not stated. The health check `broker-persistence` (`health/evaluate.go:485`) reads `appendonly` and `save`, not `appendfsync`. |
 | RDB snapshots | No `save` line. Redis's default schedule applies when no `save` directive is given. | Implicit, as above. |
 | Valkey | Not supported. The image is fixed to `redis:8-alpine`. Clients would connect (same protocol). The restore's version check reads `redis_version` (`backup/restore.go:96`); Valkey reports a compatibility value there. | No way to choose it, and the version check is untested on Valkey. |
-| Data directory in backups | The data is the compose volume `redis-data` (`RedisVolume`, `setup/redis.go:128`). `agentbus backup` is **logical**: a `DUMP` of every key of each project (`bus/backupdump.go`, `backup/run.go:129`), classified by `bus/keykinds.go`. Every key is project-prefixed, so nothing of agentbus is missed. A restore refuses an older broker. | The raw data directory is not copied. §5 Q2 asks whether it should be. |
+| Data directory in backups | The data is the compose volume `redis-data` (`RedisVolume`, `setup/redis.go:128`). `agentbus backup` is **logical**: a `DUMP` of each project's keys (`bus/backupdump.go`, `backup/run.go:129`), classified by `bus/keykinds.go`. **Only keys without a TTL are dumped** (`keepDump`: `PTTL == -1`). A key that expires is listed as skipped (`Expiring`) and not archived. That covers the leases, intents and marks with a TTL, by design, so the logical backup is not a full copy of the broker. A restore refuses an older broker. | The data directory is not copied, and the directive asks for it (step 5). |
 
 ### Access
 
@@ -93,26 +100,66 @@ binary, with `podman compose` as the compose command.
 as the installer. A reboot is then covered by the person's own `agentbus up`. The dispatcher service
 never runs compose: the compose file is the repository's.
 
-**Step 4, ACL users,** the largest. It is built only after §5 Q3 and Q4:
-- the default user disabled (`user default off`);
-- `admin` for the person's setup, backup, restore and project delete, keeping
-  `CONFIG SET requirepass` for the rotation (or the rotation becomes `ACL SETUSER`, a change of its
-  own);
-- `service` for the dispatcher and conductor: data commands, `EVALSHA` **and `EVAL`** (the
-  fallback after a restart; without it every fenced write fails), `CONFIG GET`, `INFO` and `SCAN`;
-- `agent` for every agent's CLI: data commands, `EVALSHA` and `EVAL`, without `@dangerous` (which covers
-  `FLUSHALL`, `FLUSHDB`, `CONFIG`, `KEYS`, `DEBUG`, `SHUTDOWN`, `ACL` and `MODULE`), and without
-  `DEL` of `*`;
-- `busmon` for the person's dashboard.
+**Step 4, ACL users: commands and keys.**
 
-The client picks its user from its identity (`AGENT_BUS_AGENT` is an agent; the services' env
-is the service), with one password file per user, 0600. The key-level part ("no agent writes
-master's keys") needs an inventory of each key kind's writers. `bus/keykinds.go` lists the kinds,
-not who writes them. Every fenced Lua script runs under the caller's ACL, and the keys it
-touches must match that user's patterns.
+**The users,** the person's four roles plus `admin` for setup:
 
-**The recommendation:** step 1 now; steps 2 and 3 next; step 4 command-level first, key-level only
-if a mistake shows the need.
+| User | Who connects with it | Commands | Keys |
+|---|---|---|---|
+| `admin` | `./setup.sh`, `agentbus backup` and restore, run by the person (refused from an agent's process tree, `agentcaller.Refuse`) | all but `FLUSHALL`, `FLUSHDB`, `SHUTDOWN`, `DEBUG` and `MODULE`; it keeps `CONFIG SET requirepass` for the rotation, or the rotation becomes `ACL SETUSER`, a change of its own | `~*` |
+| `master` | the agent whose identity is `master` (`AGENT_BUS_AGENT=master`) | data commands, `EVALSHA` and `EVAL`, `SCAN`, `INFO`; not `@dangerous` | read `*`; write everything `agent` writes, plus the master-only kinds below |
+| `dispatcher` | the services (dispatcher, conductor, holder), from their env file | data commands, `EVALSHA` and `EVAL`, `SCAN`, `INFO`, `CONFIG GET`, `MEMORY USAGE`; not `CONFIG SET`, `FLUSH*`, `KEYS` or `SHUTDOWN` | read `*`; write everything except the master-only kinds |
+| `agent` | every other agent's CLI | data commands, `EVALSHA` and `EVAL`, `SCAN`; not `@dangerous` (which covers `FLUSHALL`, `FLUSHDB`, `CONFIG`, `KEYS`, `DEBUG`, `SHUTDOWN`, `ACL` and `MODULE`, and `INFO`) | read `*`; write everything except the master-only and dispatcher-only kinds |
+| `busmon` | busmon and the person's own CLI outside agents | data commands, `EVALSHA` and `EVAL`, `SCAN`, `INFO` (`RedisDetail`, `RedisInfo`), `MEMORY USAGE` (`ProjectMemory`), `CONFIG GET`, `DEL` (`--delete`), `XTRIM` (`--reset`); not `CONFIG SET`, `FLUSH*`, `KEYS`, `SHUTDOWN` or `ACL` | `~*` |
+| `ping` | the compose healthcheck (`redis-cli --user ping`) | `PING` only | none |
+
+`EVAL` is granted wherever `EVALSHA` is, because it is the fallback after a restart. The default
+user is disabled (`user default off`).
+
+**The key kinds, proposed** (`<p>` is any project, so a pattern is `%W~*:<kind>`):
+- **master-only writes:** `pilot` (the pilot lease); `plan`, `plan:facts`, `plan:ignore` (the plan,
+  loaded by `planLoad`); `mergequeue:dropped` (a head master withdrew, `mergeDrop`);
+- **dispatcher-only writes:** the leases and records its fenced scripts own: `dispatch`,
+  `conductor`, `ci`, `mergequeue`, `mergequeue:due`, `missionops`, `missionops:results`, `run`,
+  `reboot`;
+- **everything else** (the streams, `board`, `asks`, `ideas`, `gate:*`, `agents`, `usage`, and the
+  rest of `bus/keykinds.go`): any of `master`, `dispatcher`, `agent` and `busmon`.
+
+This table is a proposal. Several scripts touch keys across these lines: `publishRequest` lists
+`PlanKey` among its keys, and `reserveWake` and the run scripts list `PauseKey`. **Step 4's first
+PR is therefore the writer inventory, as a test.** On the disposable broker, it runs every
+exported `bus` write under each user's ACL, and fails on a write the table forbids to a role
+that does it. The table is corrected from that result before any ACL is enabled. That is also
+where the person confirms "master's keys" (§5 Q4).
+
+**Choosing the user.** The client reads its identity:
+- `AGENT_BUS_AGENT=master` connects as `master`;
+- any other agent as `agent`;
+- the services' env file as `dispatcher`;
+- busmon and the person's CLI as `busmon`;
+- setup, backup and restore as `admin`.
+
+There is one password file per user, 0600, in `~/.config/agentbus/`. `REDIS_URL` gains the user
+name.
+
+**Step 5, the data directory in backups** (the directive):
+- after the logical dump, `agentbus backup` runs `BGSAVE` and waits, bounded, for `LASTSAVE` to
+  move;
+- it then copies the data directory into the archive as `broker-data.tar`:
+  - the container: `<runtime> cp agent-bus-redis:/data -`, a tar stream, with the runtime of
+    step 3;
+  - a native broker: the path from `CONFIG GET dir`;
+- the copy holds the RDB and the AOF directory, so it also holds the keys with a TTL that the
+  logical dump skips.
+
+A restore never applies it automatically. The operator notes give the manual path: stop the
+broker, replace the volume's contents, start it. The logical restore stays the everyday one.
+
+**The recommendation:**
+- step 1 now;
+- steps 2 and 3 next;
+- step 4 begins with the inventory test, then the users and key patterns;
+- step 5 with step 3, since both need the runtime helper.
 
 ## 4. Tests a build owes
 
@@ -128,12 +175,19 @@ if a mistake shows the need.
 - Step 3: every caller in §1's list uses `podman` when `broker.runtime=podman` (fake runner; no
   real runtime runs in tests). A test fails on any new literal `"docker"` outside the helper.
 - Step 4:
+  - the inventory test above;
   - on a disposable broker with the ACL file: `agent` is refused `FLUSHALL`, `CONFIG SET` and
-    `KEYS`;
+    `KEYS`, and a write to `pilot` or `plan`; `master` may write them; `dispatcher` may write
+    `dispatch`, and `agent` may not;
+  - busmon's reads (`RedisDetail`, `ProjectMemory`, project discovery) pass under `busmon`;
+  - the compose healthcheck passes as `ping`, and `default` is refused;
   - every fenced script the agent CLI runs passes under `agent`, the suite's own scripts
     included, both by `EVALSHA` and after `SCRIPT FLUSH` (the `EVAL` fallback);
-  - the rotation passes under `admin`;
-  - `default` is refused.
+  - the rotation passes under `admin`.
+- Step 5:
+  - the archive holds `broker-data.tar` with the RDB;
+  - a `BGSAVE` that does not finish in time leaves a reason and a logical-only archive;
+  - no real runtime runs in tests (fake runner).
 - Tests never touch the production broker.
 
 ## 5. What the person needs to decide
@@ -141,14 +195,13 @@ if a mistake shows the need.
 1. **macOS and the socket.** Keep loopback TCP with the container (recommended: the macOS
    container lives in a VM, and a socket does not cross it), or run Redis or Valkey natively,
    from Homebrew under launchd, with a socket.
-2. **The data directory in backups.** The logical dump already restores every project's keys,
-   and checks the broker's version. Copying the raw directory (`BGSAVE` then a copy of the RDB
-   and the AOF directory, out of the container's volume) adds the runtime's commands to every
-   backup. Recommended: no; the logical dump stays the backup.
-3. **ACLs: command-level first?** Four users, with `agent` stripped of `@dangerous`, and key-level
-   rules later? Recommended: yes.
-4. **"Master's keys":** which keys are they? The pilot lease, the plan, the asks, the merge queue's
-   record? Without a list, key-level ACLs need the writer inventory first.
+2. **Restoring the data directory:** manual only, as in step 5? Recommended: yes. An automatic
+   swap of a live broker's files is the riskiest act in this spec.
+3. **Users:** the five of step 4, with `admin` kept apart from `busmon` so that day-to-day
+   watching cannot `CONFIG SET`? Recommended: yes.
+4. **"Master's keys":** the proposed list is `pilot`, `plan`, `plan:facts`, `plan:ignore` and
+   `mergequeue:dropped`. Should the asks, the board or the merge queue's record be added? The
+   inventory test then confirms it.
 5. **Valkey:** a `broker.image` setting (`redis:8-alpine` by default, `valkey/valkey:8`
    accepted), with the restore's version check taught Valkey's version field? Recommended: yes,
    with step 3.
