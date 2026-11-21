@@ -160,21 +160,24 @@ func TestHostRuntimeJudgesBackgroundWork(t *testing.T) {
 		t.Fatalf("the agent alone, busy itself: %+v", in.Background)
 	}
 	f.now = f.now.Add(10 * time.Second)
+	// A tool command runs under the client's shell (claude → bash → pytest).
 	f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude"},
-		termhost.Proc{PID: p + 1, PPID: p, Start: 7, Command: "pytest"})
-	if in := f.inspect(); in.BackgroundSkip() != "background work: process 'pytest'" {
-		t.Fatalf("a child: %q", in.BackgroundSkip())
+		termhost.Proc{PID: p + 1, PPID: p, Start: 6, Command: "bash"},
+		termhost.Proc{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest"})
+	if in := f.inspect(); in.BackgroundSkip() != "background work: process 'bash', process 'pytest'" {
+		t.Fatalf("a command: %q", in.BackgroundSkip())
 	}
 	// Its age counts from the dispatcher's first sight of it (background-work-visible step 2).
 	f.now = f.now.Add(4 * time.Minute)
 	f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude"},
-		termhost.Proc{PID: p + 1, PPID: p, Start: 7, Command: "pytest", CPU: time.Second})
+		termhost.Proc{PID: p + 1, PPID: p, Start: 6, Command: "bash"},
+		termhost.Proc{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest", CPU: time.Second})
 	// The skip's reason stays the same text as the work goes on: the
 	// dispatcher's once-per-change event and clear-deferred line compare it (foureyes).
-	if in := f.inspect(); in.Background.Procs() != 1 || in.Background.OldestAge() != 4*time.Minute || in.BackgroundSkip() != "background work: process 'pytest'" {
+	if in := f.inspect(); in.Background.Procs() != 2 || in.Background.OldestAge() != 4*time.Minute || in.BackgroundSkip() != "background work: process 'bash', process 'pytest'" {
 		t.Fatalf("4 minutes on: %d %v %q", in.Background.Procs(), in.Background.OldestAge(), in.BackgroundSkip())
 	}
-	if in := f.inspect(); len(in.PIDs) != 2 || in.Starts[p+1] != 7 {
+	if in := f.inspect(); len(in.PIDs) != 3 || in.Starts[p+2] != 7 {
 		t.Fatalf("the tree's pids: %v %v", in.PIDs, in.Starts)
 	}
 	// Without the hooks' facts, Claude Code's background is unknown.
@@ -245,6 +248,8 @@ func TestHostRuntimeOutputDuringTheReadIsNotSettled(t *testing.T) {
 
 // A helper (an MCP server the launcher configured) is no background work
 // while idle; one whose CPU grew past agentstate.helper_cpu of the window is.
+// Here it is not the client's direct child (one that is, is the client's own
+// helper whatever its CPU: TestHostRuntimeIgnoresTheClientsMCPServers).
 func TestHostRuntimeHelperCountsOnlyWhenActive(t *testing.T) {
 	f := newHostFixture(t)
 	f.rt.Hooks = func(string, int) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
@@ -252,7 +257,7 @@ func TestHostRuntimeHelperCountsOnlyWhenActive(t *testing.T) {
 	p := f.term.PID
 	at := func(cpu time.Duration) Inspection {
 		f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude"},
-			termhost.Proc{PID: p + 1, PPID: p, Start: 9, Command: "mcp-server", CPU: cpu})
+			termhost.Proc{PID: p + 1, PPID: p + 5, Start: 9, Command: "mcp-server", CPU: cpu})
 		return f.inspect()
 	}
 	at(time.Second)
@@ -310,5 +315,37 @@ func TestHostRuntimeUnrecognisedScreenIsUnknownWithAHash(t *testing.T) {
 	b, _ := json.Marshal(o)
 	if strings.Contains(string(b), "zq-secret-word") || strings.Contains(string(b), "another plain line") {
 		t.Fatalf("screen text in the observation: %s", b)
+	}
+}
+
+// master's first real false positive (2026-11-21): docs's pop-retire was
+// skipped for 2 h on "process 'codebase-memory'", Claude Code's own MCP stdio
+// server, a direct child of the client (comm cut to 15 characters). The
+// client's direct children that are not a shell are its helpers, whatever
+// their CPU; a forgotten dev server under the client's shell still blocks.
+func TestHostRuntimeIgnoresTheClientsMCPServers(t *testing.T) {
+	f := newHostFixture(t)
+	f.rt.Hooks = func(string, int) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
+	p := f.term.PID
+	mcp := func(cpu time.Duration) []termhost.Proc {
+		return []termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "claude"},
+			{PID: p + 1, PPID: p, Start: 5, Command: "codebase-memory", CPU: cpu}, // codebase-memory-mcp, as /proc names it
+			{PID: p + 2, PPID: p, Start: 5, Command: "node", CPU: cpu}}            // an npx-started one (context7)
+	}
+	f.h.SetProcesses(f.term.ID, mcp(time.Second)...)
+	f.inspect()
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, mcp(9*time.Second)...) // busy: reindexing
+	if in := f.inspect(); in.Background == nil || in.Background.State != agentstate.BackgroundNone || in.BackgroundSkip() != "" {
+		t.Fatalf("the client's MCP servers, busy: %+v %q", in.Background, in.BackgroundSkip())
+	}
+	// A dev server the agent left running: claude → bash → npm → node.
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, append(mcp(9*time.Second),
+		termhost.Proc{PID: p + 3, PPID: p, Start: 8, Command: "bash"},
+		termhost.Proc{PID: p + 4, PPID: p + 3, Start: 8, Command: "npm"},
+		termhost.Proc{PID: p + 5, PPID: p + 4, Start: 8, Command: "node"})...)
+	if in := f.inspect(); in.BackgroundSkip() != "background work: process 'bash', process 'npm', process 'node'" || in.Background.Procs() != 3 {
+		t.Fatalf("a forgotten dev server: %q (%d)", in.BackgroundSkip(), in.Background.Procs())
 	}
 }

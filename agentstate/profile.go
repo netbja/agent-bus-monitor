@@ -71,6 +71,7 @@ type profileFile struct {
 		Authoritative []string `toml:"authoritative"`
 		Helpers       []string `toml:"helpers"`
 		Screen        []string `toml:"screen"`
+		DirectHelpers bool     `toml:"direct_helpers"`
 	} `toml:"background"`
 	Keys  map[string]string `toml:"keys"`
 	Login struct {
@@ -125,7 +126,7 @@ func parseProfile(name string, data []byte) (Profile, error) {
 			return Profile{}, err
 		}
 	}
-	bg := Background{Authoritative: f.Background.Authoritative}
+	bg := Background{Authoritative: f.Background.Authoritative, DirectHelpers: f.Background.DirectHelpers}
 	if bg.Helpers, err = compile(f.Background.Helpers); err != nil {
 		return Profile{}, err
 	}

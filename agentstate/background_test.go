@@ -180,3 +180,35 @@ func TestJudgeDeclared(t *testing.T) {
 		t.Fatalf("unknown source %q", j.Source())
 	}
 }
+
+// DirectHelpers: a direct child that is not a shell is the client's helper,
+// whatever its CPU; a direct shell and any grandchild still count; a profile
+// without it counts them all (Codex: a one-command shell may exec in place).
+func TestJudgeDirectHelpers(t *testing.T) {
+	now := time.Unix(1000000, 0)
+	procs := &ProcessFacts{Window: 10 * time.Second, Procs: []Proc{
+		{Name: "codebase-memory", Direct: true, CPUGrowth: 9 * time.Second},
+		{Name: "node", Direct: true, CPUGrowth: 9 * time.Second},
+	}}
+	claude := Background{Authoritative: []string{SourceHooks, SourceProcess}, DirectHelpers: true}
+	if j := claude.Judge(Facts{Hooks: &HookFacts{}, Process: procs}, now); j.State != BackgroundNone || j.Procs() != 0 {
+		t.Fatalf("the client's helpers: %v %d %q", j.State, j.Procs(), j.What())
+	}
+	work := &ProcessFacts{Window: 10 * time.Second, Procs: append(procs.Procs, Proc{Name: "bash", Direct: true}, Proc{Name: "node", CPUGrowth: time.Second})}
+	if j := claude.Judge(Facts{Hooks: &HookFacts{}, Process: work}, now); j.State != BackgroundRunning || j.Procs() != 2 || j.What() != "process 'bash', process 'node'" {
+		t.Fatalf("a command under its shell: %v %d %q", j.State, j.Procs(), j.What())
+	}
+	codex := Background{Authoritative: []string{SourceProcess}}
+	if j := codex.Judge(Facts{Process: procs}, now); j.State != BackgroundRunning || j.Procs() != 2 {
+		t.Fatalf("without DirectHelpers: %v %d", j.State, j.Procs())
+	}
+}
+
+// The shipped Claude Code profile declares it; the others do not.
+func TestProfilesDirectHelpers(t *testing.T) {
+	for client, want := range map[string]bool{"claude": true, "codex": false, "grok": false, "kimi": false, "agy": false} {
+		if got := Profiles()[client].Background.DirectHelpers; got != want {
+			t.Errorf("%s: %v, want %v", client, got, want)
+		}
+	}
+}
