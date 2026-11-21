@@ -124,8 +124,10 @@ func (l *loop) notLanded(ctx context.Context, agent, kind string) error {
 }
 
 // backgroundSkip records, once per change of what runs, that action skipped
-// agent for its background work (4.3b).
-func (l *loop) backgroundSkip(ctx context.Context, agent, action, why string) {
+// agent for its background work (4.3b), and notes the skip for this pass's
+// episodes (bgEpisodes, background-work-visible §4a).
+func (l *loop) backgroundSkip(ctx context.Context, agent, action, why string, j *agentstate.Judgement, pid int) {
+	l.bgSkipped(action, agent, j, pid)
 	if l.bgSkips == nil {
 		l.bgSkips = map[string]string{}
 	}

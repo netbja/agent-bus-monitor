@@ -40,6 +40,10 @@ type HostRuntime struct {
 	// Hooks): not read, which no client whose hooks are authoritative ever
 	// judges as "none".
 	Hooks func(agent string, pid int) (agentstate.HookFacts, bool)
+	// Declared is the agent's own declared record (agentbus background), when
+	// one is set and unexpired: the judgement's declared source
+	// (background-work-visible §4b). nil: not read.
+	Declared func(agent string) (string, bool)
 	// ExtraHelpers: the MCP servers the launcher configured for an agent.
 	ExtraHelpers func(agent string) []string
 
@@ -272,6 +276,11 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 	if r.Hooks != nil {
 		if h, ok := r.Hooks(t.Name, t.PID); ok {
 			f.Hooks = &h
+		}
+	}
+	if r.Declared != nil {
+		if text, ok := r.Declared(t.Name); ok {
+			f.Declared = &text
 		}
 	}
 	if r.ExtraHelpers != nil {
