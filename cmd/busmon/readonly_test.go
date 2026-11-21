@@ -46,7 +46,7 @@ func TestReadOnlyWriterRefusesEveryWrite(t *testing.T) {
 		t.Fatalf("%d writes checked, the broker reached by %v", writes, inner.(*trackingWriter).calls)
 	}
 	ro.set(false)
-	if _, err := w.HumanNotify(context.Background(), "me", "hi"); err != nil || len(inner.(*trackingWriter).calls) != 1 {
+	if _, err := w.TypedNotify(context.Background(), "me", "hi"); err != nil || len(inner.(*trackingWriter).calls) != 1 {
 		t.Fatalf("running again: %v %v", err, inner.(*trackingWriter).calls)
 	}
 }
@@ -57,8 +57,8 @@ type trackingWriter struct {
 	calls []string
 }
 
-func (w *trackingWriter) HumanNotify(context.Context, string, string) (string, error) {
-	w.calls = append(w.calls, "HumanNotify")
+func (w *trackingWriter) TypedNotify(context.Context, string, string) (string, error) {
+	w.calls = append(w.calls, "TypedNotify")
 	return "1-0", nil
 }
 
@@ -110,12 +110,12 @@ func TestReadOnlyShellWriter(t *testing.T) {
 	m := shellWith(t, 140, 40, shellConfig{w: inner, from: "trading"}, false)
 	m.snap.dispatch = "down"
 	m.refresh()
-	if _, err := m.cfg.w.HumanNotify(context.Background(), "me", "hi"); !errors.Is(err, errReadOnly) || len(inner.calls) != 0 {
+	if _, err := m.cfg.w.TypedNotify(context.Background(), "me", "hi"); !errors.Is(err, errReadOnly) || len(inner.calls) != 0 {
 		t.Fatalf("stopped: %v %v", err, inner.calls)
 	}
 	m.snap.dispatch = "ready"
 	m.refresh()
-	if _, err := m.cfg.w.HumanNotify(context.Background(), "me", "hi"); err != nil || len(inner.calls) != 1 {
+	if _, err := m.cfg.w.TypedNotify(context.Background(), "me", "hi"); err != nil || len(inner.calls) != 1 {
 		t.Fatalf("running: %v %v", err, inner.calls)
 	}
 }
