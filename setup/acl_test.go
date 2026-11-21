@@ -20,19 +20,37 @@ import (
 // aclBroker is the broker as ./setup.sh acl sees it: the files put in its
 // data volume, loaded when it is recreated; a login by user and password.
 type aclBroker struct {
-	defaultPW    string
-	volume       map[string][]byte // /data/<name>
-	live         []byte            // users.acl loaded at the last recreate; nil = requirepass
-	failRecreate bool
-	logins       int
+	defaultPW string
+	volume    map[string][]byte // /data/<name>
+	live      []byte            // users.acl loaded at the last recreate; nil = requirepass
+	down      bool              // restarting: every login and exec fails
+	// failure modes of a recreate with users.acl
+	refuseFile   bool // Redis aborts on the file: down
+	adminRefused bool // loads it, but admin does not log in
+	defaultKept  bool // loads it, and the default user still logs in
+	// a recreate without users.acl refuses the default password
+	offRefusesDefault bool
+	logins            int
 }
 
 func (b *aclBroker) login(_ context.Context, user, pw string) error {
 	b.logins++
+	if b.down {
+		return errors.New("connection refused")
+	}
 	if b.live == nil {
+		if b.offRefusesDefault {
+			return errors.New("WRONGPASS")
+		}
 		if user == "" && pw == b.defaultPW {
 			return nil
 		}
+		return errors.New("WRONGPASS")
+	}
+	if user == "" && b.defaultKept && pw == b.defaultPW {
+		return nil
+	}
+	if user == bus.ACLAdmin && b.adminRefused {
 		return errors.New("WRONGPASS")
 	}
 	sum := sha256.Sum256([]byte(pw))
@@ -47,7 +65,7 @@ func (b *aclBroker) login(_ context.Context, user, pw string) error {
 const (
 	aclCpUsers = "docker cp %s/users.acl agent-bus-redis:/data/users.acl"
 	aclCpPing  = "docker cp %s/ping.pass agent-bus-redis:/data/ping.pass"
-	aclRm      = "docker exec agent-bus-redis rm -f /data/users.acl /data/ping.pass"
+	aclRm      = "docker compose run --rm --no-deps --entrypoint rm redis -f /data/users.acl /data/ping.pass"
 	aclUp      = "docker compose up -d --force-recreate redis"
 )
 
@@ -76,10 +94,8 @@ func aclWorld(t *testing.T, env map[string]string) (*Installer, *bytes.Buffer, *
 	f.cmds[sprintf(aclCpPing, in.Tmp)] = cp("ping.pass")
 	f.cmds[aclRm] = fakeCmd{do: func(Cmd) { delete(b.volume, "users.acl"); delete(b.volume, "ping.pass") }}
 	f.cmds[aclUp] = fakeCmd{do: func(Cmd) {
-		if b.failRecreate {
-			return
-		}
 		b.live = b.volume["users.acl"]
+		b.down = b.live != nil && b.refuseFile
 	}}
 	return in, out, f, b
 }
@@ -196,30 +212,71 @@ func TestACLRefusals(t *testing.T) {
 	}
 }
 
-// The recreated broker does not take the users: everything is put back,
-// the setting off, the volume emptied, the broker recreated on requirepass.
+// The recreated broker does not take its users, each way a proof can
+// fail: everything is put back (foureyes): the volume emptied without the
+// broker's container, the broker recreated on its default user, the
+// setting never on, no service restarted.
 func TestACLOnRollsBack(t *testing.T) {
 	ctx := context.Background()
+	for _, c := range []struct {
+		name string
+		mode func(b *aclBroker)
+		want string
+	}{
+		{"Redis refuses the file and restarts", func(b *aclBroker) { b.refuseFile = true }, "admin does not log in"},
+		{"admin refused", func(b *aclBroker) { b.adminRefused = true }, "admin does not log in"},
+		{"the default user still logs in", func(b *aclBroker) { b.defaultKept = true }, "still lets the default user in"},
+	} {
+		in, out, f, b := aclWorld(t, map[string]string{})
+		c.mode(b)
+		if code := in.ACL(ctx, &Prompter{Yes: true}, true, noRefusal, b.login); code != 1 {
+			t.Fatalf("%s: exit %d: %s", c.name, code, out)
+		}
+		if aclSetting(t, in) != "off" || len(b.volume) != 0 || b.down || b.live != nil {
+			t.Errorf("%s: not put back: setting %q, volume %d files, down %v", c.name, aclSetting(t, in), len(b.volume), b.down)
+		}
+		if !strings.Contains(out.String(), c.want) || !strings.Contains(out.String(), "put back") {
+			t.Errorf("%s: %s", c.name, out)
+		}
+		for _, r := range f.ran {
+			if strings.Contains(r, "service restart") {
+				t.Errorf("%s: services restarted after a failed switch", c.name)
+			}
+		}
+	}
+}
+
+// off is the way back from a broker restarting on a file it refuses
+// (foureyes): no running broker, no login needed.
+func TestACLOffRecoversADownBroker(t *testing.T) {
+	ctx := context.Background()
 	in, out, f, b := aclWorld(t, map[string]string{})
-	b.failRecreate = true
-	if code := in.ACL(ctx, &Prompter{Yes: true}, true, noRefusal, b.login); code != 1 {
+	b.volume["users.acl"], b.volume["ping.pass"] = []byte("user broken\n"), []byte("x")
+	b.live, b.down = b.volume["users.acl"], true
+	f.cmds[psRedisState] = fakeCmd{out: "restarting\n"}
+	if err := config.Set(config.Path(in.Getenv), "broker.acl", "on"); err != nil {
+		t.Fatal(err)
+	}
+	if code := in.ACL(ctx, &Prompter{Yes: true}, false, noRefusal, b.login); code != 0 {
 		t.Fatalf("exit %d: %s", code, out)
 	}
-	b.failRecreate = false
-	if aclSetting(t, in) != "off" || len(b.volume) != 0 {
-		t.Fatalf("not put back: setting %q, volume %d files", aclSetting(t, in), len(b.volume))
+	if b.down || len(b.volume) != 0 || aclSetting(t, in) != "off" || b.login(ctx, "", bus.LegacyPassword) != nil {
+		t.Fatal("the broker is not back on its default user")
 	}
-	n := 0
-	for _, r := range f.ran {
-		if r == aclUp {
-			n++
-		}
-		if strings.Contains(r, "service restart") {
-			t.Error("services restarted after a failed switch")
-		}
+}
+
+// off whose recreated broker refuses the default password: exit 1, the
+// setting left on (foureyes).
+func TestACLOffKeepsTheSettingWhenDefaultFails(t *testing.T) {
+	ctx := context.Background()
+	in, out, _, b := aclWorld(t, map[string]string{})
+	if code := in.ACL(ctx, &Prompter{Yes: true}, true, noRefusal, b.login); code != 0 {
+		t.Fatalf("on: exit %d: %s", code, out)
 	}
-	if n != 2 || !strings.Contains(out.String(), "put back") {
-		t.Fatalf("%d recreates: %s", n, out)
+	b.offRefusesDefault = true
+	out.Reset()
+	if code := in.ACL(ctx, &Prompter{Yes: true}, false, noRefusal, b.login); code != 1 || aclSetting(t, in) != "on" {
+		t.Fatalf("exit %d, setting %q: %s", code, aclSetting(t, in), out)
 	}
 }
 

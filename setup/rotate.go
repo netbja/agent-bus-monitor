@@ -234,9 +234,7 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 	// The container keeps the env_file it was created with: a restart or a
 	// reboot would start Redis on the old password (foureyes). Recreate it now
 	// from this checkout (a few seconds; the data stays in its volume).
-	name, args := composeArgs(compose, "up", "-d", "--force-recreate", "redis")
-	if out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo, Env: in.composeEnv()}); err != nil { // the same image: never a Valkey broker recreated as Redis
-		showTail(o.err, out)
+	if err := in.recreate(ctx, compose); err != nil {
 		o.Fatal("Redis password: the broker could not be recreated (" + err.Error() + "). The running broker and " + path +
 			" hold the new password, but its container still has the old one for its next start: run " + compose + " up -d --force-recreate redis in " + in.Repo + " before it restarts")
 		return 1

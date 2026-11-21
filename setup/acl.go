@@ -24,9 +24,6 @@ import (
 // default user) with pw.
 type LoginFunc func(ctx context.Context, user, pw string) error
 
-// brokerContainer is the broker's container, as docker-compose.yml names it.
-const brokerContainer = "agent-bus-redis"
-
 // ACL is ./setup.sh acl on (on) or off. refuse is the agent refusal
 // (AGENT_BUS_AGENT, a registered agent among the ancestors): it runs first,
 // before any password file is read.
@@ -49,7 +46,9 @@ func (in *Installer) ACL(ctx context.Context, p *Prompter, on bool, refuse func(
 		o.Fatal("no HOME: there is nowhere to keep the password files")
 		return 1
 	}
-	if st := in.RedisState(ctx); st != "running" {
+	// off is also the way back from a broker that does not start on its
+	// users.acl (foureyes): it needs neither a running broker nor a login.
+	if st := in.RedisState(ctx); on && st != "running" {
 		o.Fatal("the Redis broker is " + st + ": start it first (./setup.sh install)")
 		return 1
 	}
@@ -78,7 +77,7 @@ func (in *Installer) ACL(ctx context.Context, p *Prompter, on bool, refuse func(
 	}
 	// The current broker must log in, as it is now: the default user, or
 	// admin when its ACL is on.
-	if login(ctx, "", def) != nil {
+	if on && login(ctx, "", def) != nil {
 		adm, aerr := bus.ReadPassword(bus.UserPasswordFile(in.Getenv, bus.ACLAdmin))
 		if aerr != nil || login(ctx, bus.ACLAdmin, adm) != nil {
 			o.Fatal("the broker's current password does not log in (neither the default user's nor admin's): nothing changed")
@@ -86,10 +85,8 @@ func (in *Installer) ACL(ctx context.Context, p *Prompter, on bool, refuse func(
 		}
 		// Its ACL is live: on would replace the password files its users
 		// log in with (reviewer-codex). Remaking the users is off, then on.
-		if on {
-			o.Fatal("the broker's ACL users are already on: nothing changed. To remake them, run ./setup.sh acl off, then ./setup.sh acl on")
-			return 1
-		}
+		o.Fatal("the broker's ACL users are already on: nothing changed. To remake them, run ./setup.sh acl off, then ./setup.sh acl on")
+		return 1
 	}
 	if in.Opt.DryRun {
 		if on {
@@ -133,27 +130,37 @@ func (in *Installer) aclOn(ctx context.Context, compose, cfg, def string, login 
 	}
 	// ping.pass first: users.acl is the switch the compose file reads.
 	if err := in.toVolume(ctx, "ping.pass", []byte(pw[bus.ACLPing])); err != nil {
-		in.aclUndo(ctx)
+		in.aclUndo(ctx, compose)
 		o.Fatal("broker ACL: " + err.Error() + "; nothing changed")
 		return 1
 	}
 	if err := in.toVolume(ctx, "users.acl", acl); err != nil {
-		in.aclUndo(ctx)
+		in.aclUndo(ctx, compose)
 		o.Fatal("broker ACL: " + err.Error() + "; nothing changed")
 		return 1
 	}
-	if err := config.Set(cfg, "broker.acl", "on"); err != nil {
-		in.aclUndo(ctx)
-		o.Fatal("broker ACL: " + cfg + ": " + err.Error() + "; nothing changed")
-		return 1
+	// The proof, then the setting (foureyes): admin logs in, the default user
+	// is refused; broker.acl=on only once the broker holds its users.
+	why := ""
+	switch {
+	case in.recreate(ctx, compose) != nil:
+		why = "the broker could not be recreated"
+	case !in.waitUser(ctx, login, bus.ACLAdmin, pw[bus.ACLAdmin]):
+		why = "admin does not log in to the recreated broker (did it start on users.acl?)"
+	case login(ctx, "", def) == nil:
+		why = "the recreated broker still lets the default user in"
+	default:
+		if err := config.Set(cfg, "broker.acl", "on"); err != nil {
+			why = cfg + " could not be set (" + err.Error() + ")"
+		}
 	}
-	if !in.recreate(ctx, compose) || !in.waitUser(ctx, login, bus.ACLAdmin, pw[bus.ACLAdmin]) || login(ctx, "", def) == nil {
-		// Put back: the setting off, the volume emptied, the broker recreated.
-		back := config.Set(cfg, "broker.acl", "off") == nil && in.aclUndo(ctx) && in.recreate(ctx, compose) && in.waitUser(ctx, login, "", def)
-		if back {
-			o.Fatal("broker ACL: the recreated broker did not take its users; everything is put back (broker.acl=off, the broker on its default user)")
+	if why != "" {
+		// Put back: the volume emptied without the broker's container (it
+		// may be restarting on a refused file), the broker recreated.
+		if in.aclUndo(ctx, compose) && in.recreate(ctx, compose) == nil && in.waitUser(ctx, login, "", def) {
+			o.Fatal("broker ACL: " + why + "; everything is put back (broker.acl off, the broker on its default user)")
 		} else {
-			o.Fatal("broker ACL: the recreated broker did not take its users, and putting it back failed: check it with " + compose + " ps in " + in.Repo + ", then run ./setup.sh acl off")
+			o.Fatal("broker ACL: " + why + ", and putting it back failed: run ./setup.sh acl off (it works on a broker that is down), then check it with " + compose + " ps in " + in.Repo)
 		}
 		return 1
 	}
@@ -165,11 +172,11 @@ func (in *Installer) aclOn(ctx context.Context, compose, cfg, def string, login 
 
 func (in *Installer) aclOff(ctx context.Context, compose, cfg, def string, login LoginFunc) int {
 	o := in.O
-	if !in.aclUndo(ctx) {
+	if !in.aclUndo(ctx, compose) {
 		o.Fatal("broker ACL: users.acl could not be removed from the broker's data volume; nothing changed")
 		return 1
 	}
-	if !in.recreate(ctx, compose) || !in.waitUser(ctx, login, "", def) {
+	if in.recreate(ctx, compose) != nil || !in.waitUser(ctx, login, "", def) {
 		o.Fatal("broker ACL: the broker recreated without users.acl does not log in with " + bus.PasswordFile(in.Getenv) + "; check it with " + compose + " ps in " + in.Repo)
 		return 1
 	}
@@ -201,30 +208,35 @@ func (in *Installer) toVolume(ctx context.Context, name string, data []byte) err
 	}
 	defer os.Remove(src)
 	rt := in.runtime().Bin()
-	if out, err := in.R.Run(ctx, Cmd{Name: rt, Args: []string{"cp", src, brokerContainer + ":/data/" + name}}); err != nil {
+	if out, err := in.R.Run(ctx, Cmd{Name: rt, Args: []string{"cp", src, RedisContainer + ":/data/" + name}}); err != nil {
 		showTail(in.O.err, out)
 		return errors.New("could not copy " + name + " into the broker: " + err.Error())
 	}
 	return nil
 }
 
-// aclUndo removes users.acl and ping.pass from the data volume.
-func (in *Installer) aclUndo(ctx context.Context) bool {
-	out, err := in.R.Run(ctx, Cmd{Name: in.runtime().Bin(), Args: []string{"exec", brokerContainer, "rm", "-f", "/data/users.acl", "/data/ping.pass"}})
+// aclUndo removes users.acl and ping.pass from the data volume, through a
+// one-off container on the same volume: it works with the broker down or
+// restarting on a file it refuses (foureyes), where an exec cannot.
+func (in *Installer) aclUndo(ctx context.Context, compose string) bool {
+	name, args := composeArgs(compose, "run", "--rm", "--no-deps", "--entrypoint", "rm", "redis", "-f", "/data/users.acl", "/data/ping.pass")
+	out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo, Env: in.composeEnv()})
 	if err != nil {
 		showTail(in.O.err, out)
 	}
 	return err == nil
 }
 
-// recreate recreates the broker's container from this checkout.
-func (in *Installer) recreate(ctx context.Context, compose string) bool {
+// recreate recreates the broker's container from this checkout, with the
+// same image (never a Valkey broker recreated as Redis); a failure's output
+// tail is shown.
+func (in *Installer) recreate(ctx context.Context, compose string) error {
 	name, args := composeArgs(compose, "up", "-d", "--force-recreate", "redis")
 	out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo, Env: in.composeEnv()})
 	if err != nil {
 		showTail(in.O.err, out)
 	}
-	return err == nil
+	return err
 }
 
 // waitUser waits up to 30 s for a login as user with pw.
