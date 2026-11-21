@@ -1,6 +1,6 @@
 # Quiet update, step 2: the automatic mode, and pruning old trees
 
-Status: r3, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
+Status: r4, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
 2026-11-21 (cmd `1795299412029-0`, idea i1). It builds on step 1 as built: `agentbus update`
 (spec [2026-11-20](2026-11-20-agentbus-update-design.md), package `update/`,
 `cmd/agentbus/updatecmd.go`). It replaces the automatic parts of the r13 quiet-update spec
@@ -225,11 +225,12 @@ whose holders are all gone.
   (`rolecfg/configdeny_test.go`).
 - **`update --auto`** gets step 1's agent refusal (`agentcaller.Refuse`, step 1 §5). The updater
   service is started by the service manager, so no agent is among its ancestors.
-- **Under `broker.acl`,** the pass connects as the services do (`bus.ACLEntryService`, user
-  `dispatcher`, `bus/acl.go:204`): the service manager started it, it has no identity and no agent
-  among its ancestors. That user already reads `{p}:agents` and the conductor's records and writes
-  reports, which is all a pass does on the broker. A pass run by hand from the person's shell
-  connects as the CLI does (`busmon`), and reads the same.
+- **Under `broker.acl`,** a pass connects as any CLI command does: `connectEntryOf`
+  (`cmd/agentbus/connectentry.go:11`) maps `update` to `bus.ACLEntryCLI`, and with no identity and
+  no agent among its ancestors `ACLUserFor` names `busmon` (`bus/acl.go:204`). That holds whether
+  the updater service or the person's shell started it, and the build changes nothing there. The
+  `busmon` user reads `{p}:agents` and the conductor's records and writes reports, which is all a
+  pass does on the broker.
 - **`update --auto --check`** reads only, and is not refused, like `--check`.
 
 ## 7. Settings (in `config/keys.go`)
@@ -313,3 +314,5 @@ and the 3 snapshots as constants.
   not only those with running `dispatch` or `missions`; an unreadable state defers the pass
   (§4.3 step 4, §8). foureyes' notes on r1: the ACL user of a pass (§6), and a stale `working`
   caught by the `max_wait` notice (§4.3).
+- **r4** (foureyes on r3): §6 corrected: a pass connects as `busmon`, the CLI entry
+  (`connectEntryOf`), not as `dispatcher`; nothing changes in the build.
