@@ -1,6 +1,6 @@
 # Triage without duplicates: one item per action (triage-dedupe)
 
-Status: spec r1, for review (subject `triage-dedupe`). Not built. Base: origin/dev `2408c6dc`.
+Status: spec r2, for review (subject `triage-dedupe`; r2: §1's measure named as architect's, with its window and command, reviewer-codex). Not built. Base: origin/dev `2408c6dc`.
 Author: architect, from the person's brief relayed by master (cmd `1795252093773-0`, task
 `triage-dedupe-spec`). Point 5 of the brief (master's skill) is master's, not here; §3.1 says what
 that skill must tell master.
@@ -23,8 +23,10 @@ The duplicates come from the last row and one key:
 
 - **Every report to the person is a row.** `report --to <person>` writes a notice to the person
   (`personNotices`, `cmd/busmon/types.go:162`), and the report becomes a `rankUnread` row
-  whatever it says. Measured over the last 38 h of the bus (`agentbus history --agent master
-  --kind report`): master sent 108 reports to the person, so 108 triage rows. 74 of them name a
+  whatever it says. Architect's measure, on the live bus, not re-run by the reviewers: master's
+  reports from `1795115620213-0` to `1795252098915-0` (38 h), read with `agentbus history
+  --agent master --kind report --since 2d --limit 0 --json`, a PR counted as `#<n>` in the text.
+  Master sent 108 reports to the person, so 108 triage rows. 74 of them name a
   PR as `#<n>`. They name 59 distinct PRs 143 times: 84 mentions repeat a PR an earlier report already
   named. A PR waiting for the merge also has its own `rankMerge` row. So "merge #694" is one
   row, and each report that lists it again is one more.
@@ -34,7 +36,7 @@ The duplicates come from the last row and one key:
   `visited` and snoozes keyed on the old head no longer apply.
 
 Asks already dedupe: an ask's own Activity line folds into its row (`Unread`). Master opened no
-ask in those 38 h; it asks in reports.
+ask in those 38 h (`agentbus asks`: the newest is `1794957307782-0`); it asks in reports.
 
 ## 2. The rule: one item per target
 
