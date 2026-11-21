@@ -9,6 +9,11 @@ r2 corrects three claims of §1: `CONFIG SET` is used, `EVAL` is sent, and `dock
 - a `master` user is added;
 - busmon's grants are listed;
 - the compose healthcheck gets its own user.
+
+r4 makes these changes (foureyes, reviewer-codex):
+- `scripts/bootstrap` is listed as a `docker` caller, and `agentbus up` already starts the broker;
+- `RunKey` is named among `publishRequest`'s keys;
+- under step 4 the rotation is `ACL SETUSER`.
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222562295-0`), relayed by
 master (cmd `1795222577984-0`). There is no new dependency. It must work on Linux and macOS, with
 podman, and without systemd. The person wants to discuss it: §5 lists what they need to decide.
@@ -51,12 +56,18 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
     `:131`);
   - **busmon:** the Redis page's `docker port agent-bus-redis 6379/tcp` and `docker logs`
     (`cmd/busmon/redis_page.go:74`, `:108`), and the Services card's `docker inspect`
-    (`cmd/busmon/services_cards.go:130`).
+    (`cmd/busmon/services_cards.go:130`);
+  - **`scripts/bootstrap`**, on the main path: `ensure_broker` is `docker compose up -d`
+    (`:70`). It is called by the verbs `new` and `recall` (`:120`, `:125`), and `agentbus up`
+    runs bootstrap every time (`cmd/agentbus/up.go:205`). Under podman without the shim,
+    `agentbus up` stops there;
+  - `scripts/busmon-demo.sh`, the docs' screenshot tool.
 
   Podman works only through its docker shim. Without it, the installer says to start the broker
   by hand, and those checks and pages read `unknown`.
 - **Without systemd:** the broker does not need systemd. The container's `restart:
-  unless-stopped` is the docker daemon's job. Under rootless podman, a container restarts after
+  unless-stopped` is the docker daemon's job. **`agentbus up` already starts a stopped broker**,
+  through `scripts/bootstrap`'s `ensure_broker`, above. Under rootless podman, a container restarts after
   a reboot only through podman's own restart unit, which is systemd again. On macOS, podman and
   Docker Desktop run in a VM that the user's login starts.
 - **macOS and a unix socket:** containers run inside a VM. A socket created in the container and
@@ -92,13 +103,15 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
   `port 0`, and shows the socket path.
 - macOS keeps loopback TCP (§5 Q1).
 
-**Step 3, podman without the shim:** a `broker.runtime` setting (`docker`, `podman`). It is used
-by every `docker` caller in §1's list (installer, status, preflight, uninstall, rotation, the two
-health checks, busmon's Redis page and Services card), through one helper that names the
-binary, with `podman compose` as the compose command.
-"Without systemd": `agentbus up` starts the broker when it is down, with the same compose call
-as the installer. A reboot is then covered by the person's own `agentbus up`. The dispatcher service
-never runs compose: the compose file is the repository's.
+**Step 3, podman without the shim:** a `broker.runtime` setting (`docker`, `podman`).
+- It is used by every `docker` caller in §1's list: the installer, status, preflight, uninstall,
+  the rotation, the two health checks, busmon's Redis page and Services card, and
+  `scripts/bootstrap`'s `ensure_broker`, which reads it through `agentbus config`.
+- In Go it goes through one helper that names the binary, with `podman compose` as the compose
+  command.
+- "Without systemd" needs nothing new: `agentbus up` already starts the broker (§1). Only the
+  runtime's name changes there. A reboot is covered by the person's own `agentbus up`.
+- The dispatcher service never runs compose.
 
 **Step 4, ACL users: commands and keys.**
 
@@ -106,7 +119,7 @@ never runs compose: the compose file is the repository's.
 
 | User | Who connects with it | Commands | Keys |
 |---|---|---|---|
-| `admin` | `./setup.sh`, `agentbus backup` and restore, run by the person (refused from an agent's process tree, `agentcaller.Refuse`) | all but `FLUSHALL`, `FLUSHDB`, `SHUTDOWN`, `DEBUG` and `MODULE`; it keeps `CONFIG SET requirepass` for the rotation, or the rotation becomes `ACL SETUSER`, a change of its own | `~*` |
+| `admin` | `./setup.sh`, `agentbus backup` and restore, run by the person (refused from an agent's process tree, `agentcaller.Refuse`) | all but `FLUSHALL`, `FLUSHDB`, `SHUTDOWN`, `DEBUG` and `MODULE`; `ACL SETUSER` for the rotation | `~*` |
 | `master` | the agent whose identity is `master` (`AGENT_BUS_AGENT=master`) | data commands, `EVALSHA` and `EVAL`, `SCAN`, `INFO`; not `@dangerous` | read `*`; write everything `agent` writes, plus the master-only kinds below |
 | `dispatcher` | the services (dispatcher, conductor, holder), from their env file | data commands, `EVALSHA` and `EVAL`, `SCAN`, `INFO`, `CONFIG GET`, `MEMORY USAGE`; not `CONFIG SET`, `FLUSH*`, `KEYS` or `SHUTDOWN` | read `*`; write everything except the master-only kinds |
 | `agent` | every other agent's CLI | data commands, `EVALSHA` and `EVAL`, `SCAN`; not `@dangerous` (which covers `FLUSHALL`, `FLUSHDB`, `CONFIG`, `KEYS`, `DEBUG`, `SHUTDOWN`, `ACL` and `MODULE`, and `INFO`) | read `*`; write everything except the master-only and dispatcher-only kinds |
@@ -115,6 +128,14 @@ never runs compose: the compose file is the repository's.
 
 `EVAL` is granted wherever `EVALSHA` is, because it is the fallback after a restart. The default
 user is disabled (`user default off`).
+
+**The rotation under step 4.** Today `./setup.sh rotate-redis-password` runs `CONFIG SET
+requirepass` (`setup/rotate.go:31`), which sets the default user's password. With the default
+user off, that rotates nothing anyone uses. Step 4 therefore changes the rotation:
+- for each user in turn, it writes the new password file first (0600, as today), then runs
+  `ACL SETUSER <user> resetpass ><new>` as `admin`, then `ACL SAVE` to the ACL file;
+- `admin` itself goes last, with its new password used for the commands that follow;
+- `CONFIG SET requirepass` stays only for a broker without ACL users, the step 1-3 state.
 
 **The key kinds, proposed** (`<p>` is any project, so a pattern is `%W~*:<kind>`):
 - **master-only writes:** `pilot` (the pilot lease); `plan`, `plan:facts`, `plan:ignore` (the plan,
@@ -126,7 +147,8 @@ user is disabled (`user default off`).
   rest of `bus/keykinds.go`): any of `master`, `dispatcher`, `agent` and `busmon`.
 
 This table is a proposal. Several scripts touch keys across these lines: `publishRequest` lists
-`PlanKey` among its keys, and `reserveWake` and the run scripts list `PauseKey`. **Step 4's first
+`PlanKey`, `PlanFactsKey` and `RunKey` among its keys (`bus/requests.go:74`), although any agent
+may send a request. `reserveWake` and the run scripts list `PauseKey`. **Step 4's first
 PR is therefore the writer inventory, as a test.** On the disposable broker, it runs every
 exported `bus` write under each user's ACL, and fails on a write the table forbids to a role
 that does it. The table is corrected from that result before any ACL is enabled. That is also
@@ -173,7 +195,9 @@ broker, replace the volume's contents, start it. The logical restore stays the e
   - the installer makes the directory 0700 (fake runner);
   - `remote-bus.sh` builds the socket forward (a shell test with `ssh` stubbed).
 - Step 3: every caller in §1's list uses `podman` when `broker.runtime=podman` (fake runner; no
-  real runtime runs in tests). A test fails on any new literal `"docker"` outside the helper.
+  real runtime runs in tests). This includes `scripts/bootstrap` (a shell test with a stubbed
+  `podman`). A test fails on any new literal `docker` outside the helper, in the Go code and in
+  `scripts/` except `busmon-demo.sh`.
 - Step 4:
   - the inventory test above;
   - on a disposable broker with the ACL file: `agent` is refused `FLUSHALL`, `CONFIG SET` and
@@ -183,7 +207,9 @@ broker, replace the volume's contents, start it. The logical restore stays the e
   - the compose healthcheck passes as `ping`, and `default` is refused;
   - every fenced script the agent CLI runs passes under `agent`, the suite's own scripts
     included, both by `EVALSHA` and after `SCRIPT FLUSH` (the `EVAL` fallback);
-  - the rotation passes under `admin`.
+  - the rotation, with `default` off, changes each user's password: the old one is refused and
+    the new one accepted, `admin` last; a broker without ACL users still rotates through
+    `requirepass`.
 - Step 5:
   - the archive holds `broker-data.tar` with the RDB;
   - a `BGSAVE` that does not finish in time leaves a reason and a logical-only archive;
