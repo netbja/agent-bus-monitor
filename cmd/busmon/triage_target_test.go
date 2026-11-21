@@ -161,6 +161,11 @@ func TestTriageNeedsLifetime(t *testing.T) {
 	if items = forYou(s, f.feed); len(items) != 1 {
 		t.Fatalf("an answer report gone once read: %+v", items)
 	}
+	// An agent writing to master is no answer from the person (foureyes).
+	coder := bus.Event{Kind: "cmd", ID: rid(2), From: "coder", Target: "master", Type: bus.CmdDirective, Message: "step 2 done"}
+	if items, _ = itemsOf(s, ask, needsNotice(1, 0, bus.NeedsAnswer), coder); len(items) != 1 {
+		t.Fatalf("an agent's directive to master closed the person's question: %+v", items)
+	}
 	reply := bus.Event{Kind: "cmd", ID: rid(2), From: "bob", Target: "master", Type: bus.CmdDirective, Message: "the release ones", Human: true}
 	if items, _ = itemsOf(s, ask, needsNotice(1, 0, bus.NeedsAnswer), reply); len(items) != 0 {
 		t.Fatalf("answered, still listed: %+v", items)
@@ -224,6 +229,18 @@ func TestTriageOtherLinesAttach(t *testing.T) {
 	items, _ = itemsOf(s, dir(0, "good morning"))
 	if len(items) != 3 || items[2].Rank != rankUnread || items[2].Key != "unread:"+rid(0) {
 		t.Fatalf("its own row: %+v", items)
+	}
+}
+
+// containsWord: a branch is named only as a whole name, on both sides.
+func TestContainsWordBoundaries(t *testing.T) {
+	for text, want := range map[string]bool{
+		"feat/a is ready": true, "see feat/a.": true, "(feat/a)": true,
+		"xfeat/a": false, "feat/ab": false, "feat/a-2": false, "my-feat/a": false,
+	} {
+		if got := containsWord(text, "feat/a"); got != want {
+			t.Errorf("%q: %v", text, got)
+		}
 	}
 }
 
