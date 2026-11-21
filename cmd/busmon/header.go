@@ -16,6 +16,7 @@ type headerData struct {
 	health     health
 	guardian   guardianSummary
 	dispatch   string            // "", "up", "down", or a service state (serviceFact)
+	others     string            // "other: N for you · M merge" (others.go), "" when nothing waits
 	missions   string            // the same; shown only when not ""
 	pilot      string            // pilot-lease driver, "" = autonomous
 	self       string            // the person busmon writes as (humanLabel); "" = not shown
@@ -180,6 +181,9 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 	}
 	if why := unknownWhy(d.dispatch); unknownQuota && why != "" {
 		add(Line{{Text: "(" + why + ")", Role: RoleMuted}}, gaugePrio+len(names), second)
+	}
+	if d.others != "" { // the other projects' counter: dropped early, after the update notices
+		add(Line{{Text: d.others + " (O)", Role: RoleAttention}}, 100, second)
 	}
 	if d.update != "" { // a newer release: the first item to go when space is short
 		add(Line{{Text: GlyphUp + " " + Preview(d.update), Role: RoleMuted}}, 101, second)

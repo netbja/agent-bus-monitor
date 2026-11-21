@@ -69,6 +69,9 @@ type adminSource struct {
 	// memory is what one project's keys take (§3.3, the detail only); nil:
 	// not shown.
 	memory func(ctx context.Context, project string) (bus.MemoryUsage, error)
+	// alive: the project's dispatch holds its lease (the header's other:
+	// counter reads only those, others.go); nil = no counter.
+	alive func(ctx context.Context, project string) (bool, error)
 	// unitHosts reads the other hosts where the project's units remain
 	// (§5.2); nil: not shown.
 	unitHosts func(ctx context.Context, project string) ([]unitHosts, error)
@@ -916,6 +919,13 @@ func adminSourceFor(client *redis.Client, getenv func(string) string, self strin
 			return workCounts{}, err
 		}
 		return readProjectCounts(ctx, b, self, time.Now())
+	}
+	src.alive = func(ctx context.Context, p string) (bool, error) { // the other: counter reads running projects only
+		b, err := bus.Open(client, p)
+		if err != nil {
+			return false, err
+		}
+		return b.DispatchAlive(ctx)
 	}
 	return &src
 }

@@ -121,7 +121,7 @@ func (m Model) headerData() headerData {
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, codex: s.codexUpdate, note: s.configNote,
 		between: between, background: backgroundChip(s.agents, s.pilot, m.now), strip: m.work.strip(unreadItems(m.forYou)),
 		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
-		plan: s.plan, now: m.now, shell: true}
+		plan: s.plan, now: m.now, shell: true, others: othersSummary(m.others, m.cfg.project, time.Now())}
 }
 
 // tabBar is "1 Activity  2 Board  3 Requests" with the active tab
