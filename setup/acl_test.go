@@ -245,3 +245,56 @@ func TestACLDryRunAndDecline(t *testing.T) {
 		}
 	}
 }
+
+// reviewer-codex: acl on over a broker whose ACL is live would replace the
+// password files its users log in with; it is refused before anything
+// changes (acl off first).
+func TestACLOnRefusedWhenAlreadyOn(t *testing.T) {
+	ctx := context.Background()
+	yes := &Prompter{Yes: true}
+	in, out, f, b := aclWorld(t, map[string]string{})
+	if code := in.ACL(ctx, yes, true, noRefusal, b.login); code != 0 {
+		t.Fatalf("first on: exit %d: %s", code, out)
+	}
+	files := map[string]string{}
+	for _, role := range bus.ACLRoles {
+		files[role], _ = bus.ReadPassword(bus.UserPasswordFile(in.Getenv, role))
+	}
+	live, ran := string(b.live), len(f.ran)
+	out.Reset()
+	if code := in.ACL(ctx, yes, true, noRefusal, b.login); code != 1 || !strings.Contains(out.String(), "./setup.sh acl off") {
+		t.Fatalf("second on: exit %d: %s", code, out)
+	}
+	for _, role := range bus.ACLRoles {
+		if pw, _ := bus.ReadPassword(bus.UserPasswordFile(in.Getenv, role)); pw != files[role] {
+			t.Errorf("%s's password file replaced", role)
+		}
+	}
+	if string(b.live) != live || len(b.volume) != 2 || aclSetting(t, in) != "on" {
+		t.Error("the broker, its volume or the setting changed")
+	}
+	for _, r := range f.ran[ran:] {
+		if strings.Contains(r, " cp ") || strings.Contains(r, " exec ") || r == aclUp {
+			t.Errorf("ran %s", r)
+		}
+	}
+}
+
+// A copy into the volume that fails: the volume emptied, the setting off,
+// no recreate.
+func TestACLOnStagingFailure(t *testing.T) {
+	ctx := context.Background()
+	in, out, f, b := aclWorld(t, map[string]string{})
+	f.cmds[sprintf(aclCpUsers, in.Tmp)] = fakeCmd{err: errors.New("1"), out: "no space\n"}
+	if code := in.ACL(ctx, &Prompter{Yes: true}, true, noRefusal, b.login); code != 1 || !strings.Contains(out.String(), "nothing changed") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	if len(b.volume) != 0 || aclSetting(t, in) != "off" || b.login(ctx, "", bus.LegacyPassword) != nil {
+		t.Fatal("not left as it was")
+	}
+	for _, r := range f.ran {
+		if r == aclUp {
+			t.Error("recreated after a failed copy")
+		}
+	}
+}

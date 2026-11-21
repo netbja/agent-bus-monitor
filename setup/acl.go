@@ -84,6 +84,12 @@ func (in *Installer) ACL(ctx context.Context, p *Prompter, on bool, refuse func(
 			o.Fatal("the broker's current password does not log in (neither the default user's nor admin's): nothing changed")
 			return 1
 		}
+		// Its ACL is live: on would replace the password files its users
+		// log in with (reviewer-codex). Remaking the users is off, then on.
+		if on {
+			o.Fatal("the broker's ACL users are already on: nothing changed. To remake them, run ./setup.sh acl off, then ./setup.sh acl on")
+			return 1
+		}
 	}
 	if in.Opt.DryRun {
 		if on {
