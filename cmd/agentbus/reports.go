@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -75,11 +76,18 @@ func reportNotice(id, msg string) string {
 	return "Report " + id + " for you (full text: agentbus reports " + id + "): " + first
 }
 
-// sendReport is `agentbus report <agent> [--auto] [--to <name>]... <message>`:
+// sendReport is `agentbus report <agent> [--auto] [--needs answer|read] [--to <name>]... <message>`:
 // the report, its addressees named on it (busmon-reply-target), then one
 // notice per addressee, since a report wakes nobody. It returns the entry id.
 func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer) (string, error) {
 	rest, auto := extractBool(rest, "--auto")
+	rest, needs := extractFlag(rest, "--needs")
+	if !bus.ValidNeeds(needs) {
+		return "", fmt.Errorf("report: --needs %q: answer or read", needs)
+	}
+	if slices.Contains(rest, "--needs") { // no value after it, or given twice: never a report needing nothing (reviewer-codex)
+		return "", errors.New("report: --needs takes one value, answer or read, once")
+	}
 	var to []string
 	for {
 		var t string
@@ -89,7 +97,7 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 		to = append(to, t)
 	}
 	if len(rest) < 2 {
-		return "", errors.New("usage: report <agent> [--auto] [--to <agent>]... <message>")
+		return "", errors.New("usage: report <agent> [--auto] [--needs answer|read] [--to <agent>]... <message>")
 	}
 	for _, t := range to {
 		if !bus.ValidName(t) {
@@ -107,12 +115,12 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 	if note := reportShapeNote(msg); note != "" {
 		fmt.Fprintln(stderr, note)
 	}
-	id, err := b.ReportTo(ctx, rest[0], kind, msg, to)
+	id, err := b.ReportNeeds(ctx, rest[0], kind, msg, to, needs)
 	if err != nil {
 		return "", err
 	}
 	for _, t := range to {
-		if _, err := b.Cmd(ctx, rest[0], t, bus.CmdDirective, id, reportNotice(id, msg)); err != nil {
+		if _, err := b.ReportNotice(ctx, rest[0], t, id, reportNotice(id, msg), needs); err != nil {
 			return "", fmt.Errorf("report %s published, but telling %s failed: %v", id, t, err)
 		}
 	}

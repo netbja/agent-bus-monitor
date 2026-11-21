@@ -101,9 +101,10 @@ agentbus status claude1 working plan 10 shipped         # message = trailing wor
 agentbus status claude1 done
 
 # ── REPORT (curated human-facing note) ───────────────────────────────────────
-agentbus report <agent> [--auto] <message...>
+agentbus report <agent> [--auto] [--needs answer|read] [--to <agent>]... <message...>
 agentbus report claude1 bug in order router fixed
 agentbus report claude1 --auto soak 24h done            # --auto = Stop-hook safety-net report
+agentbus report master --needs answer --to charlie "Merge order for 694-696?"   # a triage item for the person; read = they must read it
 agentbus reports                                        # list recent reports; (+N) = full text retained
 agentbus reports --json                                 # same list, machine-readable JSON
 agentbus reports <id>                                   # print that report's full text (multi-line, untruncated)
@@ -373,6 +374,9 @@ The added fields are additive within `v:1`, and each says less than it looks lik
 - **`expires_at`** is omitted when zero, so an absent field means no deadline was expressed.
 - **`text_complete`** is `yes` (whole), `no` (cut at publish), or **absent** — and absent
   means *unknown*, not complete.
+- **`needs`** (`answer` or `read`) is on a report's notice when its sender wrote
+  `report --needs`: the person must answer or read it (busmon's triage). Absent means the
+  report asks nothing of the person; it does not mean nobody waits for it.
 
 Every fire leads with `"v":1` — the bus protocol version (`agentbus version`). Parse
 by key and **ignore fields you don't recognize**; a higher `"v"` than you know means
