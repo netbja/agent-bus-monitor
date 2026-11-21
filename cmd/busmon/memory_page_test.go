@@ -152,3 +152,26 @@ func TestMemoryPageKeys(t *testing.T) {
 		t.Fatalf("enter: %+v", p)
 	}
 }
+
+// foureyes: the production rule, with no injected answer: the services'
+// record names another machine, so the page reads nothing and names it; the
+// same record naming this machine reads the store.
+func TestMemoryPageHostRuleInProduction(t *testing.T) {
+	getenv := memStore(t)
+	me, _ := os.Hostname()
+	open := func(host string) *page {
+		t.Helper()
+		st := &shared{agents: map[string]*agentState{}, person: "charlie", svcRecs: map[string]bus.ServiceRecord{"dispatch": {State: "running", Host: host}}}
+		m := newShell(shellConfig{project: "demo", self: "charlie", st: st, getenv: getenv})
+		m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
+		m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
+		m = run(t, m, m.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyF7})))
+		return m.rd.top()
+	}
+	if p := open("elsewhere-host"); p == nil || len(p.mem.topics) != 0 || !strings.Contains(plainLines(p.body), "lives on elsewhere-host") {
+		t.Fatalf("another host: %+v", p)
+	}
+	if p := open(me); p == nil || len(p.mem.topics) != 2 || !strings.Contains(plainLines(p.body), "merge-policy") {
+		t.Fatalf("this host: %+v", p)
+	}
+}
