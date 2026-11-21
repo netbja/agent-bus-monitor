@@ -44,13 +44,13 @@ func TestProjectBadgeAtLaunch(t *testing.T) {
 	if s := projectSeg(t, m); !s.Pill || s.Role != RoleAccent || !s.Bold {
 		t.Fatalf("at launch: %+v", s)
 	}
-	m = step(t, m, fadeMsg(shellNow.Add(projectBadgeFor-time.Millisecond)))
+	m = step(t, m, fadeMsg(shellNow.Add(2999*time.Millisecond))) // the person's ~3 s, as a value (foureyes)
 	if s := projectSeg(t, m); !s.Pill {
-		t.Fatalf("just before the end: %+v", s)
+		t.Fatalf("at 2.999 s: %+v", s)
 	}
-	m = step(t, m, fadeMsg(shellNow.Add(projectBadgeFor)))
+	m = step(t, m, fadeMsg(shellNow.Add(3*time.Second)))
 	if s := projectSeg(t, m); s.Pill || s.Role != RoleText {
-		t.Fatalf("after %v: %+v", projectBadgeFor, s)
+		t.Fatalf("at 3 s: %+v", s)
 	}
 	// A shell not started by main (every other test, the goldens): no badge.
 	st := &shared{agents: map[string]*agentState{}}
@@ -98,5 +98,20 @@ func TestProjectBadgeGoldens(t *testing.T) {
 		lines := strings.Split(m.grid().plain(), "\n")
 		checkGolden(t, "project-badge-"+strconv.Itoa(w)+".txt", lines[0]+"\n"+lines[len(lines)-1]+"\n")
 		checkGolden(t, "project-badge-"+strconv.Itoa(w)+".ansi", strings.Split(m.View().Content, "\n")[0]+"\n")
+	}
+}
+
+// main's launch (foureyes): the shell main starts has the badge on, and the
+// notice only when neither -p nor AGENT_BUS_PROJECT named the project.
+func TestNewLaunchShell(t *testing.T) {
+	for _, c := range []struct {
+		flag, env string
+		last      bool
+	}{{"", "", true}, {"demo", "", false}, {"", "demo", false}} {
+		env := map[string]string{"AGENT_BUS_PROJECT": c.env}
+		m := newLaunchShell(busmonOpts{project: c.flag}, func(k string) string { return env[k] }, shellConfig{project: "demo", self: "charlie", st: &shared{agents: map[string]*agentState{}}})
+		if !m.cfg.badge || m.cfg.lastProject != c.last {
+			t.Errorf("%+v: badge %v last %v", c, m.cfg.badge, m.cfg.lastProject)
+		}
 	}
 }
