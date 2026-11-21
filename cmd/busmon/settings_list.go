@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -41,27 +40,11 @@ func newOptionList(opts []config.Option, current string) *optionList {
 
 // optionMatch ranks opts for q as the palette ranks its commands: the
 // value is the name, the label the summary, searched with and without its
-// accents (francais finds Français, foureyes).
+// accents (config.Option.Search; francais finds Français, foureyes).
 func optionMatch(opts []config.Option, q string) []int {
-	q = foldAccents(q)
-	return rankMatches(len(opts), q, func(i int) (string, []string, string) {
-		return opts[i].Value, nil, opts[i].Label + " " + foldAccents(opts[i].Label)
-	})
+	q = config.FoldAccents(q)
+	return rankMatches(len(opts), q, func(i int) (string, []string, string) { return opts[i].Value, nil, opts[i].Search() })
 }
-
-// accentFold maps the accented Latin letters to their base letter.
-var accentFold = strings.NewReplacer(
-	"à", "a", "á", "a", "â", "a", "ã", "a", "ä", "a", "å", "a", "ā", "a", "ă", "a", "ą", "a",
-	"ç", "c", "č", "c", "ć", "c", "ď", "d", "ḓ", "d",
-	"è", "e", "é", "e", "ê", "e", "ë", "e", "ē", "e", "ě", "e", "ę", "e", "ẽ", "e",
-	"ì", "i", "í", "i", "î", "i", "ï", "i", "ĩ", "i", "ī", "i",
-	"ñ", "n", "ň", "n", "ò", "o", "ó", "o", "ô", "o", "õ", "o", "ö", "o", "ø", "o", "ō", "o", "ő", "o",
-	"ř", "r", "š", "s", "ș", "s", "ş", "s", "ť", "t", "ț", "t",
-	"ù", "u", "ú", "u", "û", "u", "ü", "u", "ũ", "u", "ū", "u", "ů", "u", "ű", "u",
-	"ý", "y", "ÿ", "y", "ž", "z", "ŵ", "w", "ļ", "l", "ł", "l", "ğ", "g", "ı", "i", "ə", "e")
-
-// foldAccents is s lower-cased, its accented Latin letters plain.
-func foldAccents(s string) string { return accentFold.Replace(strings.ToLower(s)) }
 
 // visible are the options the filter keeps, best first.
 func (l *optionList) visible() []int { return optionMatch(l.opts, l.filter) }
