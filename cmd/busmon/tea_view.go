@@ -38,6 +38,9 @@ func (m Model) grid() *grid {
 	for i := 0; i < l.Header.H && i < len(header); i++ {
 		drawLine(g, 0, l.Header.Y+i, m.width, header[i], false)
 	}
+	if b := l.Banner; b.H > 0 {
+		drawLine(g, b.X, b.Y, b.W, m.bannerLine(b.W), false)
+	}
 	if l.Tabs.H > 0 {
 		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, m.tabOf(l.Active), m.width, true), false)
 	}

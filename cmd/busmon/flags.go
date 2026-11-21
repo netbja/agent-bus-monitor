@@ -23,6 +23,7 @@ var busmonFlags = []cli.Flag{
 	{Long: "as", Short: 'a', Arg: "<name>", Help: "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")"},
 	{Long: "version", Short: 'V', Help: "print the version and exit"},
 	{Long: "pick", Short: 'k', Help: "choose a project template and open it with agentbus up"},
+	{Long: "from", Short: 'f', Arg: "<project>", Help: "the project a switch left: B goes back to it (set by the switch itself)"},
 }
 
 var busmonHelp = cli.Command{
@@ -41,6 +42,7 @@ var busmonHelp = cli.Command{
 // busmonOpts holds the parsed flags.
 type busmonOpts struct {
 	host, project, delete, theme, as string
+	from                             string
 	limit                            int
 	reset, yes, list, version, pick  bool
 }
@@ -85,19 +87,20 @@ func optPtrs(o *busmonOpts) map[string]any {
 	return map[string]any{
 		"project": &o.project, "host": &o.host, "limit": &o.limit, "reset": &o.reset, "yes": &o.yes,
 		"list": &o.list, "delete": &o.delete, "theme": &o.theme, "as": &o.as, "version": &o.version, "pick": &o.pick,
+		"from": &o.from,
 	}
 }
 
 // switchOneShot are the flags a project switch never carries: actions that
 // end busmon before its screen, and the project itself.
-var switchOneShot = map[string]bool{"project": true, "reset": true, "delete": true, "yes": true, "list": true, "pick": true, "version": true}
+var switchOneShot = map[string]bool{"from": true, "project": true, "reset": true, "delete": true, "yes": true, "list": true, "pick": true, "version": true}
 
 // switchArgv is the command line busmon re-executes itself with to open
 // target (project-switch note §2.2): rebuilt from the parsed options, never
 // edited as text (Go's flag accepts too many spellings), --<long>=<value>
 // for each flag given that is not a one-shot, then --project=<target>. A
 // flag added later is carried by default.
-func switchArgv(o busmonOpts, set map[string]bool, target string) []string {
+func switchArgv(o busmonOpts, set map[string]bool, from, target string) []string {
 	var argv []string
 	ptr := optPtrs(&o)
 	for _, f := range busmonFlags {
@@ -113,5 +116,9 @@ func switchArgv(o busmonOpts, set map[string]bool, target string) []string {
 			argv = append(argv, "--"+f.Long+"="+strconv.FormatBool(*p))
 		}
 	}
-	return append(argv, "--project="+target)
+	argv = append(argv, "--project="+target)
+	if from != "" {
+		argv = append(argv, "--from="+from) // B's way back (project-switch-ux item 4)
+	}
+	return argv
 }

@@ -49,6 +49,25 @@ type shellLayout struct {
 	// shown and not in the focus order; zero when the Plan fills the zone.
 	Below      Rect
 	BelowPanel PanelID
+	// Banner is the row under the header for a stopped project reached by a
+	// switch (project-switch-ux item 1); zero otherwise.
+	Banner Rect
+}
+
+// withBanner is l, laid out one row shorter, with the row under the header
+// given to the banner: every frame below the header moves down one row.
+func withBanner(l shellLayout) shellLayout {
+	if l.Tier == TierTooSmall {
+		return l
+	}
+	top := l.Header.Y + l.Header.H
+	for _, r := range []*Rect{&l.Tabs, &l.ForYou, &l.Agents, &l.Lower, &l.Input, &l.Footer, &l.Drawer, &l.Below} {
+		if r.H > 0 && r.Y >= top {
+			r.Y++
+		}
+	}
+	l.Banner = Rect{0, top, l.Header.W, 1}
+	return l
 }
 
 // minBelow is the least a panel under the Plan tab gets: a frame and four
