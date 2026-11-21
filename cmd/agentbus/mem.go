@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/memory"
 )
 
-const memUsage = `usage: agentbus mem check [--stale-after 60d] [--strict] | mem new <lesson|decision|question> <slug> --title "<title>" [--scope transferable] [--note-project P] | mem sync | mem notes   (all: [--root DIR])`
+const memUsage = `usage: agentbus mem check [--stale-after 60d] [--strict] | mem new <lesson|decision|question> <slug> --title "<title>" [--scope transferable] [--note-project P] | mem sync | mem notes   (all: [--root DIR]) | mem person …   (agentbus mem person, alone, for its verbs)`
 
 // runMem is `agentbus mem`: the shared-memory tooling. It reads and writes
 // files under the repository root only — no project, no broker — so main runs
@@ -24,6 +25,9 @@ func runMem(args []string, getenv func(string) string, cwd string, today time.Ti
 		return usage()
 	}
 	sub, rest := args[0], args[1:]
+	if sub == "person" { // the person's memory: the host's store, no repository root
+		return runMemPerson(context.Background(), rest, realMemPersonDeps(getenv), stdout, stderr)
+	}
 	rest, root := extractFlag(rest, "--root")
 
 	var (

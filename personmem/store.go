@@ -143,7 +143,7 @@ func (s *Store) Remember(ctx context.Context, rd Reader, r Request) (Observation
 
 	// One writer at a time, from the read to the commit: busmon's page and
 	// the CLI may write together, and neither may lose the other's line.
-	unlock, err := s.lock()
+	unlock, err := s.lock(ctx)
 	if err != nil {
 		return Observation{}, err
 	}
@@ -366,10 +366,10 @@ func (s *Store) private() error {
 	return nil
 }
 
-// lock takes the store's lock, waiting for another writer: an exclusive
-// flock on .lock in the store (made 0700, the file 0600; git leaves it
-// untracked).
-func (s *Store) lock() (func(), error) {
+// lock takes the store's lock: an exclusive flock on .lock in the store
+// (made 0700, the file 0600; .gitignore keeps it out of git), waited for
+// until ctx ends (foureyes): a writer stuck on another never hangs.
+func (s *Store) lock(ctx context.Context) (func(), error) {
 	if err := s.private(); err != nil {
 		return nil, err
 	}
@@ -377,9 +377,21 @@ func (s *Store) lock() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, err
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			f.Close()
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return nil, fmt.Errorf("another writer holds the person's memory: %w", ctx.Err())
+		case <-time.After(lockPoll):
+		}
 	}
 	return func() {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
@@ -387,29 +399,176 @@ func (s *Store) lock() (func(), error) {
 	}, nil
 }
 
+// lockPoll is how often a waiting writer tries the lock again.
+const lockPoll = 25 * time.Millisecond
+
+// gitignore keeps the lock and a half-written file out of the repository.
+const gitignore = ".lock\n*.tmp\n"
+
 // write saves t and commits it: the repository is made on the first write
 // (private: 0700, the files 0600), each write one commit.
 func (s *Store) write(ctx context.Context, t *Topic, msg string) error {
+	return s.commit(ctx, []*Topic{t}, nil, msg)
+}
+
+// commit saves the topics in save, removes the topic files in drop, and
+// commits all of it as one commit; .gitignore goes in with the first.
+func (s *Store) commit(ctx context.Context, save []*Topic, drop []string, msg string) error {
 	if err := s.private(); err != nil {
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(s.Dir, ".git")); errors.Is(err, os.ErrNotExist) {
-		if _, err := s.git.Run(ctx, "init", "-q"); err != nil {
+	if err := s.initRepo(ctx); err != nil {
+		return err
+	}
+	var paths []string
+	if _, err := os.Stat(filepath.Join(s.Dir, ".gitignore")); errors.Is(err, os.ErrNotExist) {
+		if err := os.WriteFile(filepath.Join(s.Dir, ".gitignore"), []byte(gitignore), 0o600); err != nil {
 			return err
 		}
+		paths = append(paths, ".gitignore")
 	}
-	tmp := s.path(t.Topic) + ".tmp"
-	if err := os.WriteFile(tmp, []byte(t.Format()), 0o600); err != nil {
+	for _, t := range save {
+		tmp := s.path(t.Topic) + ".tmp"
+		if err := os.WriteFile(tmp, []byte(t.Format()), 0o600); err != nil {
+			return err
+		}
+		if err := os.Rename(tmp, s.path(t.Topic)); err != nil {
+			os.Remove(tmp)
+			return err
+		}
+		paths = append(paths, t.Topic+".md")
+	}
+	for _, name := range drop {
+		if err := os.Remove(s.path(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		paths = append(paths, name+".md")
+	}
+	if _, err := s.git.Run(ctx, append([]string{"add", "-A", "--"}, paths...)...); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, s.path(t.Topic)); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if _, err := s.git.Run(ctx, "add", "--", t.Topic+".md"); err != nil {
-		return err
-	}
-	_, err := s.git.Run(ctx, "-c", "user.name=agentbus", "-c", "user.email=agentbus@localhost", "-c", "commit.gpgsign=false",
-		"commit", "-q", "--no-verify", "-m", msg, "--", t.Topic+".md")
+	_, err := s.git.Run(ctx, append([]string{"-c", "user.name=agentbus", "-c", "user.email=agentbus@localhost", "-c", "commit.gpgsign=false",
+		"commit", "-q", "--no-verify", "-m", msg, "--"}, paths...)...)
 	return err
+}
+
+// initRepo makes the repository when there is none.
+func (s *Store) initRepo(ctx context.Context) error {
+	if _, err := os.Stat(filepath.Join(s.Dir, ".git")); errors.Is(err, os.ErrNotExist) {
+		_, err := s.git.Run(ctx, "init", "-q")
+		return err
+	}
+	return nil
+}
+
+// Forget deletes an observation (by id) or a whole topic (by name) as one
+// commit, the person's act (spec §4.2; the caller refuses an agent). An
+// observation that superseded what goes no longer points at it. It says
+// what went.
+func (s *Store) Forget(ctx context.Context, what string) (string, error) {
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	all, errs := s.loadAll()
+	gone := map[string]bool{}
+	var drop []string
+	var said, edited string // edited: the topic an observation left
+	switch _, broken := errs[what]; {
+	case ValidTopic(what) && (all[what] != nil || broken):
+		// A topic goes even when it does not parse: the person clears it.
+		drop = []string{what}
+		if t := all[what]; t != nil {
+			for _, o := range t.Obs {
+				gone[o.ID] = true
+			}
+		}
+		delete(all, what)
+		said = fmt.Sprintf("forgot the topic %s (%d observations)", what, len(gone))
+	default:
+		if len(errs) > 0 { // ids are the whole memory's: every file must parse
+			n := slices.Sorted(maps.Keys(errs))[0]
+			return "", fmt.Errorf("%s.md does not parse (%v): fix it first (agentbus mem person check)", n, errs[n])
+		}
+		for name, t := range all {
+			if i := slices.IndexFunc(t.Obs, func(o Observation) bool { return o.ID == what }); i >= 0 {
+				t.Obs = slices.Delete(t.Obs, i, i+1)
+				gone[what] = true
+				said, edited = "forgot "+what+" from "+name, name
+			}
+		}
+		if len(gone) == 0 {
+			return "", fmt.Errorf("nothing named %q: no topic, no observation (agentbus mem person list, show)", what)
+		}
+	}
+	var save []*Topic
+	for _, name := range slices.Sorted(maps.Keys(all)) {
+		t, changed := all[name], name == edited
+		for i := range t.Obs {
+			if gone[t.Obs[i].Supersedes] { // no pointer to what went (check stays clean)
+				t.Obs[i].Supersedes, changed = "", true
+			}
+		}
+		if changed {
+			save = append(save, t)
+		}
+	}
+	if err := s.commit(ctx, save, drop, said); err != nil {
+		return "", err
+	}
+	return said, nil
+}
+
+// Commits is how many commits the repository holds, 0 with none.
+func (s *Store) Commits(ctx context.Context) (int, error) {
+	if _, err := os.Stat(filepath.Join(s.Dir, ".git")); errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	out, err := s.git.Run(ctx, "rev-list", "--count", "--all")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(out))
+}
+
+// Purge rebuilds the repository from its current files as one first commit
+// (the person's answer 2), so a forgotten text leaves the disk's history
+// too; the person's act, asked first (the caller refuses an agent). It says
+// how many commits went.
+func (s *Store) Purge(ctx context.Context) (int, error) {
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	n, err := s.Commits(ctx)
+	if err != nil || n == 0 {
+		return 0, err
+	}
+	if err := os.RemoveAll(filepath.Join(s.Dir, ".git")); err != nil {
+		return 0, err
+	}
+	if err := s.initRepo(ctx); err != nil {
+		return 0, err
+	}
+	names, err := s.Topics()
+	if err != nil {
+		return 0, err
+	}
+	paths := []string{".gitignore"}
+	if err := os.WriteFile(filepath.Join(s.Dir, ".gitignore"), []byte(gitignore), 0o600); err != nil {
+		return 0, err
+	}
+	for _, name := range names {
+		paths = append(paths, name+".md")
+	}
+	if _, err := s.git.Run(ctx, append([]string{"add", "-A", "--"}, paths...)...); err != nil {
+		return 0, err
+	}
+	if _, err := s.git.Run(ctx, "-c", "user.name=agentbus", "-c", "user.email=agentbus@localhost", "-c", "commit.gpgsign=false",
+		"commit", "-q", "--no-verify", "-m", fmt.Sprintf("purge: the current files, %d commits before", n)); err != nil {
+		return 0, err
+	}
+	return n, nil
 }

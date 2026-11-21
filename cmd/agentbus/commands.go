@@ -711,8 +711,12 @@ var commands = []cli.Command{
 			"mem new <lesson|decision|question> <slug> --title <title> [--scope <scope>] [--note-project <p>]",
 			"mem sync   (all: [--root <dir>])",
 			"mem notes   (assembles docs/operator-notes.md from docs/operator-notes.d/, at a release)",
+			"mem person remember <topic> --type T --importance I --from <project>:<entry> --quote \"<words>\" [--answers <project>:<entry> --answers-quote \"<words>\"] [--supersedes <id> | --keep-both] [--kind K] [--relates <rel>:<topic>]...",
+			"mem person recall [<words>...] [--type T] [--project P] [--all] [--limit N] [--json]",
+			"mem person show <topic> | list | check",
+			"mem person forget <id or topic> | purge [--yes]   (the person's own acts: refused to an agent)",
 		},
-		Summary: "the repository's shared memory: check, new note, sync AGENTS.md",
+		Summary: "the repository's shared memory: check, new note, sync AGENTS.md; and the person's memory on this host (mem person)",
 		Flags: []cli.Flag{
 			{Long: "root", Short: 'C', Arg: "<dir>", Help: "the repository (default the working directory)"},
 			{Long: "stale-after", Short: 'S', Arg: "<dur>", Help: "check: a note older than this is stale (default 60d)"},
