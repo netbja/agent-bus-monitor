@@ -1,6 +1,7 @@
 # Harden the broker, lightly
 
-Status: spec r1, for review (subject `broker-hardening`). Not built. Base: origin/dev `4f095697`.
+Status: spec r2, for review (subject `broker-hardening`). Not built. Base: origin/dev `4f095697`.
+r2 corrects three claims of §1: `CONFIG SET` is used, `EVAL` is sent, and `docker` has more callers (foureyes).
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222562295-0`), relayed by
 master (cmd `1795222577984-0`). There is no new dependency. It must work on Linux and macOS, with
 podman, and without systemd. The person wants to discuss it: §5 lists what they need to decide.
@@ -29,15 +30,24 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
 | Remote busmon | `remote-bus.sh` runs `ssh -NL <local>:localhost:6380`, a tunnel to the TCP port. | A socket would need `ssh -L <port>:<socket path>` (OpenSSH supports forwarding to a unix socket). |
 | Password | One `requirepass`, for the default user. The file is written 0600 by `./setup.sh install` on a fresh broker, or by `./setup.sh rotate-redis-password`. **On this host there is no `~/.config/agentbus/redis.env`, so the broker still uses the historical default.** That is the `redis-password` warning sentinel keeps raising (`health/evaluate.go:243`). The fix exists, and only the person runs it: the rotation. | None in code. The person's rotation clears the warning. |
 | ACL users | None. Every client uses the default user with every command: agents, dispatcher, conductor, busmon and the person's CLI. | Everything. |
-| Commands the code uses beyond data | `CONFIG GET` (persistence), `INFO` (version, memory), `MEMORY USAGE` (busmon's project page), `SCAN *` (project discovery, `bus/projects.go:183`), `DEL` of a project (`busmon --delete`), `XTRIM` (`--reset`), `DUMP`/`RESTORE` (backup), and `EVALSHA` of the fenced scripts. No `FLUSHALL`, `KEYS` or `CONFIG SET`. | The inventory ACLs need. |
+| Commands the code uses beyond data | `CONFIG GET` (persistence); **`CONFIG SET requirepass`** (the password rotation, `setup/rotate.go:31`); `INFO` (version, memory); `MEMORY USAGE` (busmon's project page); `SCAN *` (project discovery, `bus/projects.go:183`); `DEL` of a project (`busmon --delete`); `XTRIM` (`--reset`); `DUMP`/`RESTORE` (backup). The fenced scripts are sent as `EVALSHA`, **falling back to `EVAL`** on `NOSCRIPT`, which is go-redis's `Script.Run`, after any broker restart empties the script cache. No `FLUSHALL`, `FLUSHDB` or `KEYS`: restore's key listing is `bus.ProjectKeys`, a `SCAN`. | The inventory ACLs need. |
 
 ### Platforms
 
-- **The installer and one health check assume the `docker` CLI**: `docker inspect`, `docker volume
-  inspect` and `docker compose up` in `setup/redis.go`, and `docker ps` in the `redis-password`
-  check (`internal/dispatchsvc/healthchecks.go:554`). Podman works only through its docker
-  shim. Without it the installer says to start the broker by hand, and the check reads
-  `unknown`.
+- **The `docker` CLI is assumed in many places:**
+  - **the installer:** `docker inspect`, `docker volume inspect` and compose `up` in
+    `setup/redis.go`; `docker ps -a` in `setup/status.go:58`; `setup/preflight.go:53` and `:78`;
+    and compose calls in `setup/uninstall.go:139` and `setup/rotate.go:237`;
+  - **the health checks:** `docker ps` in `redis-password`
+    (`internal/dispatchsvc/healthchecks.go:554`), and `LookPath`, `docker info` and
+    `docker context inspect` in the disk check (`internal/dispatchsvc/diskcheck.go:82`, `:86`,
+    `:131`);
+  - **busmon:** the Redis page's `docker port agent-bus-redis 6379/tcp` and `docker logs`
+    (`cmd/busmon/redis_page.go:74`, `:108`), and the Services card's `docker inspect`
+    (`cmd/busmon/services_cards.go:130`).
+
+  Podman works only through its docker shim. Without it, the installer says to start the broker
+  by hand, and those checks and pages read `unknown`.
 - **Without systemd:** the broker does not need systemd. The container's `restart:
   unless-stopped` is the docker daemon's job. Under rootless podman, a container restarts after
   a reboot only through podman's own restart unit, which is systemd again. On macOS, podman and
@@ -71,20 +81,26 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
   and services already read.
 - `remote-bus.sh` forwards to the socket path.
 - The `redis-password` check reads the socket's directory mode instead of `docker ps`.
+- busmon's Redis page stops reading `docker port … 6379/tcp`, which has nothing to report with
+  `port 0`, and shows the socket path.
 - macOS keeps loopback TCP (§5 Q1).
 
-**Step 3, podman without the shim:** a `broker.runtime` setting (`docker`, `podman`) used by the
-installer's four calls and by the health check, with `podman compose` as the compose command.
+**Step 3, podman without the shim:** a `broker.runtime` setting (`docker`, `podman`). It is used
+by every `docker` caller in §1's list (installer, status, preflight, uninstall, rotation, the two
+health checks, busmon's Redis page and Services card), through one helper that names the
+binary, with `podman compose` as the compose command.
 "Without systemd": `agentbus up` starts the broker when it is down, with the same compose call
 as the installer. A reboot is then covered by the person's own `agentbus up`. The dispatcher service
 never runs compose: the compose file is the repository's.
 
 **Step 4, ACL users,** the largest. It is built only after §5 Q3 and Q4:
 - the default user disabled (`user default off`);
-- `admin` for the person's setup, backup, restore and project delete;
-- `service` for the dispatcher and conductor: data commands, `EVALSHA`, `CONFIG GET`, `INFO`
-  and `SCAN`;
-- `agent` for every agent's CLI: data commands and `EVALSHA`, without `@dangerous` (which covers
+- `admin` for the person's setup, backup, restore and project delete, keeping
+  `CONFIG SET requirepass` for the rotation (or the rotation becomes `ACL SETUSER`, a change of its
+  own);
+- `service` for the dispatcher and conductor: data commands, `EVALSHA` **and `EVAL`** (the
+  fallback after a restart; without it every fenced write fails), `CONFIG GET`, `INFO` and `SCAN`;
+- `agent` for every agent's CLI: data commands, `EVALSHA` and `EVAL`, without `@dangerous` (which covers
   `FLUSHALL`, `FLUSHDB`, `CONFIG`, `KEYS`, `DEBUG`, `SHUTDOWN`, `ACL` and `MODULE`), and without
   `DEL` of `*`;
 - `busmon` for the person's dashboard.
@@ -109,13 +125,14 @@ if a mistake shows the need.
     `unix://` works, and TCP 6380 is closed;
   - the installer makes the directory 0700 (fake runner);
   - `remote-bus.sh` builds the socket forward (a shell test with `ssh` stubbed).
-- Step 3: the installer's calls and the health check use `podman` when `broker.runtime=podman`
-  (fake runner; no real runtime runs in tests).
+- Step 3: every caller in §1's list uses `podman` when `broker.runtime=podman` (fake runner; no
+  real runtime runs in tests). A test fails on any new literal `"docker"` outside the helper.
 - Step 4:
   - on a disposable broker with the ACL file: `agent` is refused `FLUSHALL`, `CONFIG SET` and
     `KEYS`;
   - every fenced script the agent CLI runs passes under `agent`, the suite's own scripts
-    included;
+    included, both by `EVALSHA` and after `SCRIPT FLUSH` (the `EVAL` fallback);
+  - the rotation passes under `admin`;
   - `default` is refused.
 - Tests never touch the production broker.
 
