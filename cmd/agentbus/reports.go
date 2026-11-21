@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -83,6 +84,9 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 	rest, needs := extractFlag(rest, "--needs")
 	if !bus.ValidNeeds(needs) {
 		return "", fmt.Errorf("report: --needs %q: answer or read", needs)
+	}
+	if slices.Contains(rest, "--needs") { // no value after it, or given twice: never a report needing nothing (reviewer-codex)
+		return "", errors.New("report: --needs takes one value, answer or read, once")
 	}
 	var to []string
 	for {

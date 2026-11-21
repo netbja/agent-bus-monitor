@@ -100,6 +100,20 @@ func TestReportNeedsFlag(t *testing.T) {
 	if n1, _ := client.XLen(ctx, bus.StreamKey(project, "report")).Result(); n1 != n0 {
 		t.Fatal("a refused --needs was written")
 	}
+	// reviewer-codex: a --needs with no value (last on the line) or a second
+	// --needs is refused, never left in the message as a report needing nothing.
+	for _, args := range [][]string{
+		{"master", "--to", "charlie", "Please choose", "--needs"},
+		{"master", "--needs", "answer", "--to", "charlie", "Please choose", "--needs"},
+		{"master", "--needs", "answer", "--needs", "read", "x"},
+	} {
+		if _, err := sendReport(ctx, b, args, io.Discard); err == nil || !strings.Contains(err.Error(), "--needs") {
+			t.Errorf("%q: %v", args, err)
+		}
+	}
+	if n1, _ := client.XLen(ctx, bus.StreamKey(project, "report")).Result(); n1 != n0 {
+		t.Fatal("a refused trailing --needs was written")
+	}
 	id, _ = sendReport(ctx, b, []string{"master", "--needs", "read", "Release notes are ready"}, io.Discard)
 	if e, _ := b.ReportByID(ctx, id); e.Needs != bus.NeedsRead {
 		t.Fatalf("--needs read without --to: %+v", e)
