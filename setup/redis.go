@@ -16,7 +16,7 @@ import (
 )
 
 // RedisContainer is the broker's container name, shared by every checkout.
-const RedisContainer = "agent-bus-redis"
+const RedisContainer = brokerrt.Container
 
 // Docker is what step 1 learned of the broker's runtime (broker.runtime,
 // docker or podman): the daemon answers, and the compose command to use (""

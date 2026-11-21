@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -40,16 +41,22 @@ type Plan struct {
 	LeftOut []LeftOut
 	Notes   []string
 	Secrets []byte // SealSecrets' ciphertext, the secrets.age member; nil = none
+	// Snapshot takes the broker's RDB after the logical dump (broker-hardening
+	// step 5): a staged file's path, removed after the run, or why there is
+	// none (left out, the archive logical only). nil: not taken.
+	Snapshot func(ctx context.Context) (path, why string)
 
 	beforeRead func(path string) // tests: runs between a file's stat and its read
 }
 
 // Result is a complete archive's name and what its run measured.
 type Result struct {
-	Name, Path string
-	Projects   []string
-	Keys       map[string]int           // keys archived per project
-	Exec       map[string]time.Duration // how long each project's MULTI held the server
+	Name, Path  string
+	Projects    []string
+	Keys        map[string]int           // keys archived per project
+	Exec        map[string]time.Duration // how long each project's MULTI held the server
+	Snapshot    int64                    // broker.rdb's size; 0 when left out (SnapshotWhy) or not taken
+	SnapshotWhy string
 }
 
 const archivePrefix = "agentbus-backup-"
@@ -143,6 +150,24 @@ func Run(ctx context.Context, dir string, p Plan) (Result, error) {
 		}
 		res.Keys[project], res.Exec[project] = len(d.Keys), d.Exec
 	}
+	left := p.LeftOut
+	if p.Snapshot != nil { // after the logical dump (step 5)
+		path, why := p.Snapshot(ctx)
+		if path != "" {
+			defer os.Remove(path)
+			st, err := os.Stat(path)
+			if err == nil {
+				err = addFile(w, Source{Member: SnapshotMember, Path: path, Required: true}, nil)
+			}
+			if err != nil {
+				return Result{}, err
+			}
+			res.Snapshot = st.Size()
+		} else {
+			res.SnapshotWhy = why
+			left = append(slices.Clone(left), LeftOut{Path: SnapshotMember, Why: why})
+		}
+	}
 	for _, s := range p.Files {
 		if err := addFile(w, s, p.beforeRead); err != nil {
 			return Result{}, err
@@ -153,7 +178,7 @@ func Run(ctx context.Context, dir string, p Plan) (Result, error) {
 			return Result{}, err
 		}
 	}
-	if err := w.Close(Manifest{Version: p.Version, RedisVersion: p.RedisVersion, Server: p.Server, LeftOut: p.LeftOut, Notes: p.Notes}); err != nil {
+	if err := w.Close(Manifest{Version: p.Version, RedisVersion: p.RedisVersion, Server: p.Server, LeftOut: left, Notes: p.Notes}); err != nil {
 		return Result{}, err
 	}
 	if err := tmp.Sync(); err != nil {

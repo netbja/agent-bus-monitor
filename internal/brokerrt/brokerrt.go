@@ -15,6 +15,10 @@ const (
 	Podman Runtime = "podman"
 )
 
+// Container is the broker's container, as compose names it (setup and
+// busmon name it through here).
+const Container = "agent-bus-redis"
+
 // Of is broker.runtime as configured (env, then config.toml), docker by
 // default.
 func Of(getenv func(string) string) Runtime {
