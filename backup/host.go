@@ -16,6 +16,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -34,6 +35,9 @@ type Deps struct {
 	// Projects is the host's scope (nil: HostProjects, the broker's and the
 	// templates'); tests pin theirs on a shared test broker.
 	Projects func(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error)
+	// Snapshot takes the broker's RDB for an archive in dir (broker-hardening
+	// step 5; RealDeps: RealSnapshot). nil: none taken, nothing said.
+	Snapshot func(c *redis.Client, dir string) func(ctx context.Context) (path, why string)
 }
 
 func (d Deps) HostProjects(ctx context.Context, c *redis.Client, projectsDir string) ([]string, error) {
@@ -46,7 +50,25 @@ func (d Deps) HostProjects(ctx context.Context, c *redis.Client, projectsDir str
 func RealDeps(redisHost string) Deps {
 	host, _ := os.Hostname()
 	return Deps{Getenv: os.Getenv, Now: time.Now, Host: host,
-		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }, LookPath: exec.LookPath, Environ: os.Environ}
+		Dial: func() (*redis.Client, error) { return bus.Connect(redisHost) }, LookPath: exec.LookPath, Environ: os.Environ,
+		Snapshot: RealSnapshot(os.Getenv, exec.LookPath)}
+}
+
+// RealSnapshot snapshots the broker through its container runtime
+// (broker.runtime) when that runs it here, else from its own data directory.
+func RealSnapshot(getenv func(string) string, lookPath func(string) (string, error)) func(c *redis.Client, dir string) func(ctx context.Context) (string, string) {
+	return func(c *redis.Client, dir string) func(ctx context.Context) (string, string) {
+		return func(ctx context.Context) (string, string) {
+			rt := brokerrt.Of(getenv).Bin()
+			if _, err := lookPath(rt); err != nil {
+				rt = ""
+			}
+			output := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				return exec.CommandContext(ctx, name, args...).Output()
+			}
+			return NewSnapshotter(c, rt, output, dir).Take(ctx)
+		}
+	}
 }
 
 // Job is one archive to make, by hand or by the schedule.
@@ -88,10 +110,14 @@ func MakeArchive(ctx context.Context, c *redis.Client, d Deps, r config.Resolver
 		}
 		notes = append(notes, fmt.Sprintf("%s: %s, encrypted to %s", SecretsName, strings.Join(names, ", "), j.Recipient))
 	}
+	var snapshot func(ctx context.Context) (string, string)
+	if d.Snapshot != nil {
+		snapshot = d.Snapshot(c, j.Dir)
+	}
 	res, err := Run(ctx, j.Dir, Plan{
 		Projects: j.Projects, Host: d.Host, Now: j.Now, Version: buildinfo.Version, RedisVersion: info.Version, Server: info.Product,
 		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
-		Files: j.Files, LeftOut: j.Left, Notes: notes, Secrets: sealed,
+		Files: j.Files, LeftOut: j.Left, Notes: notes, Secrets: sealed, Snapshot: snapshot,
 	})
 	if err != nil {
 		return Result{}, err
@@ -99,6 +125,12 @@ func MakeArchive(ctx context.Context, c *redis.Client, d Deps, r config.Resolver
 	fmt.Fprintf(out, "backup: %s\n", res.Path)
 	for _, p := range j.Projects {
 		fmt.Fprintf(out, "  %s: %s, the broker held for %s\n", p, textfmt.Count(res.Keys[p], "key"), res.Exec[p].Round(time.Microsecond))
+	}
+	switch {
+	case res.Snapshot > 0:
+		fmt.Fprintf(out, "  %s: the broker's snapshot, %s (restored by hand: see the operator notes)\n", SnapshotMember, textfmt.Count(int(res.Snapshot), "byte"))
+	case res.SnapshotWhy != "":
+		fmt.Fprintf(out, "  left out: %s (%s); the archive is logical only\n", SnapshotMember, res.SnapshotWhy)
 	}
 	for _, l := range j.Left {
 		fmt.Fprintf(out, "  left out: %s (%s)\n", l.Path, l.Why)

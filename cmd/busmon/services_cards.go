@@ -21,7 +21,7 @@ import (
 // raw log is a page of its own (Enter or l).
 
 // redisContainer is the broker's container name (docker-compose.yml, setup.sh).
-const redisContainer = "agent-bus-redis"
+const redisContainer = brokerrt.Container
 
 // redisInfoReader is the broker's own facts (a *bus.Bus).
 type redisInfoReader interface {

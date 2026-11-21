@@ -13,6 +13,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
 	"github.com/netbja/agent-bus-monitor/service"
+	"github.com/redis/go-redis/v9"
 )
 
 func runBackupWorld(w *backupWorld, args ...string) (int, string, string) {
@@ -280,3 +281,39 @@ func TestBackupCommandAfterCommand(t *testing.T) {
 type backupWorld = cmdtest.BackupWorld
 
 var newBackupWorld = cmdtest.NewBackupWorld
+
+// broker-hardening step 5: the run says what it did with the broker's
+// snapshot: archived (broker.rdb, its size, restored by hand) or left out
+// with the reason, the archive logical only.
+func TestBackupCommandSnapshotLines(t *testing.T) {
+	w := newBackupWorld(t)
+	p := w.B.Project()
+	w.D.Snapshot = func(_ *redis.Client, dir string) func(context.Context) (string, string) {
+		return func(context.Context) (string, string) {
+			f := filepath.Join(dir, ".broker-test.rdb")
+			_ = os.WriteFile(f, []byte("REDIS0012 keys"), 0o600)
+			return f, ""
+		}
+	}
+	code, out, errw := runBackupWorld(w, "--project", p)
+	if code != 0 || !strings.Contains(out, "broker.rdb: the broker's snapshot, 14 bytes (restored by hand: see the operator notes)") {
+		t.Fatalf("taken: %d %q %s", code, out, errw)
+	}
+	list, _ := backup.List(w.Dir(), "h1")
+	f, _ := os.Open(list[0].Path)
+	m, err := backup.Verify(f)
+	f.Close()
+	found := false
+	for _, mem := range m.Members {
+		found = found || mem.Path == backup.SnapshotMember
+	}
+	if err != nil || !found {
+		t.Fatalf("no broker.rdb member: %v", err)
+	}
+	w.D.Snapshot = func(*redis.Client, string) func(context.Context) (string, string) {
+		return func(context.Context) (string, string) { return "", "BGSAVE refused: ERR busy" }
+	}
+	if code, out, _ := runBackupWorld(w, "--project", p); code != 0 || !strings.Contains(out, "left out: broker.rdb (BGSAVE refused: ERR busy); the archive is logical only") {
+		t.Fatalf("left out: %d %q", code, out)
+	}
+}
