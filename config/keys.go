@@ -79,6 +79,12 @@ type Key struct {
 	// them: edit config.toml yourself). They have no env variable and are
 	// MachineOnly too.
 	PersonOnly bool
+	// PersonEdit keys are the person's to set, from busmon's Shift+C or
+	// config.toml (board.wip_limit, wip-limit r2 §3.3): Set and Unset refuse
+	// them for everyone (agentbus config set and unset); SetAsPerson and
+	// UnsetAsPerson, called by busmon alone, write them. A discipline, not a
+	// boundary: a shell can still write the file.
+	PersonEdit bool
 	// List keys are a TOML list in the file, kept as one comma-joined string
 	// (backup.after_env, notify.targets...): a page edits them as text
 	// separated by commas.
@@ -576,6 +582,11 @@ var Keys = []*Key{
 	// one setting for the machine, never read from a project's env file. A
 	// project's template may name its own base ([delivery] base, rolecfg.
 	// DeliveryBase, dev-branch-flow §4.1), above delivery.base.
+	// The work-in-progress limit (wip-limit r2 §3.3): requests an agent may
+	// hold accepted when it starts a new one, 0 = no limit; per project, the
+	// person's alone (Q3), from Shift+C or config.toml, no env variable.
+	{Name: "board.wip_limit", Kind: Int, Default: 2, ReadBy: "agentbus request accept, agentbus request send, busmon", MachineOnly: true, Project: true, PersonEdit: true,
+		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 or more (0: no limit)")},
 	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver, dispatch", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if isForge(raw) {
