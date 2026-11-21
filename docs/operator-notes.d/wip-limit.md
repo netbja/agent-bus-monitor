@@ -4,5 +4,5 @@
   Shift+C or `config.toml`:** a new `PersonEdit` flag makes `agentbus config set` and `unset` refuse it
   ("set it in busmon (Shift+C) or config.toml"); busmon's settings page writes through
   `config.SetAsPerson` / `UnsetAsPerson`, which no other package may call (a test scans for them).
-  `PersonOnly` keys (`backup.after_*`) stay read-only in busmon. The CLI that reads it (`request accept`,
-  `request send`) and the row's detail text come in the next steps.
+  `PersonOnly` keys (`backup.after_*`) stay read-only in busmon. **At this step nothing enforces it yet:**
+  `request accept` and `request send` read it from wip-limit step 2b; the row's detail text comes in step 3.
