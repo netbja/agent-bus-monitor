@@ -38,6 +38,13 @@ za zh zu`)
 	if !ok || fr.English != "French" || fr.Native != "français" {
 		t.Fatalf("fr: %+v %v", fr, ok)
 	}
+	// Non-Latin names pinned against their sources (reviewer-codex: ab).
+	for code, native := range map[string]string{"ab": "аҧсуа бызшәа", "ru": "русский", "ja": "日本語", "ar": "العربية",
+		"el": "Ελληνικά", "hi": "हिन्दी", "zh": "中文", "he": "עברית", "ka": "ქართული", "ko": "한국어", "uk": "українська"} {
+		if l, _ := LanguageOf(code); l.Native != native {
+			t.Errorf("%s: native %q, want %q", code, l.Native, native)
+		}
+	}
 	if _, ok := LanguageOf("xx"); ok {
 		t.Fatal("xx is a language")
 	}
@@ -61,6 +68,15 @@ func TestKeyOptions(t *testing.T) {
 		}
 		if _, why := k.file(o.Value); why != "" {
 			t.Errorf("option %q refused by its own key: %s", o.Value, why)
+		}
+	}
+	// A name that writes its prefix in lower case keeps it (foureyes).
+	for _, o := range opts {
+		if o.Value == "zu" && o.Label != "isiZulu (Zulu)" {
+			t.Errorf("zu's label %q", o.Label)
+		}
+		if o.Value == "de" && o.Label != "Deutsch (German)" {
+			t.Errorf("de's label %q", o.Label)
 		}
 	}
 	other, _ := Lookup("display.follow")

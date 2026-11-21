@@ -23,7 +23,7 @@ func languageOptions(t *testing.T) []config.Option {
 // and its English name.
 func TestOptionMatchFindsALanguage(t *testing.T) {
 	opts := languageOptions(t)
-	for _, q := range []string{"fr", "FR", "fran", "Français", "french", "Fre"} {
+	for _, q := range []string{"fr", "FR", "fran", "Français", "french", "Fre", "francais"} { // without its accent too (foureyes)
 		got := optionMatch(opts, q)
 		if len(got) == 0 || opts[got[0]].Value != "fr" {
 			first := ""
@@ -87,6 +87,19 @@ func TestSettingsLanguageList(t *testing.T) {
 		t.Fatalf("frnvv: %q, err %q", configText(t, getenv), m.rd.top().set.err)
 	}
 	for range 5 {
+		m = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	}
+	// Down stops at the last entry (foureyes): "fr" keeps fr and fy.
+	for _, r := range "fr" {
+		m = press(t, m, r)
+	}
+	for range 5 {
+		m = press(t, m, tea.Key{Code: tea.KeyDown})
+	}
+	if v := m.rd.top().set.list.current(); v != "fy" {
+		t.Fatalf("down past the end: %q, want the last entry fy", v)
+	}
+	for range 2 {
 		m = press(t, m, tea.Key{Code: tea.KeyBackspace})
 	}
 	m = press(t, m, tea.Key{Code: tea.KeyDown})
