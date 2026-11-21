@@ -50,6 +50,11 @@ func (g Git) run(ctx context.Context, dir string, args ...string) (string, error
 	return out.String(), nil
 }
 
+// Run runs one git command in the repository, in its own process group
+// (person-memory's repository uses it: the same way of running git, no
+// library).
+func (g Git) Run(ctx context.Context, args ...string) (string, error) { return g.run(ctx, "", args...) }
+
 func lines(s string) []string {
 	var out []string
 	for _, l := range strings.Split(strings.TrimSpace(s), "\n") {

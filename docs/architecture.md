@@ -73,6 +73,16 @@ the suite every adapter passes (`Run(t, harness)`; the fake today, the holder la
 runs on a `Host` yet: only `Line` is used, by `dispatch.Runtime.Prompt(ctx, pane, line)`, which
 types the same wake line as before and takes no text.
 
+**`personmem/`** is the person's long-term memory, layer 1 (spec
+`docs/superpowers/specs/2026-11-21-person-memory-design.md`): one Markdown file per topic under
+`${XDG_DATA_HOME:-~/.local/share}/agentbus/memory/person`, a git repository made on the first write
+(`mission.Git.Run`, one commit per write, 0700/0600). `Remember` takes only the person's typed words:
+the source entry must carry `typed=yes` (read by `BusReader` from the stream, else the `history`
+archive), the quote must be in its text (an ask answer's `said`, never its question), `--answers`
+quotes the proposal replied to, `health.Sensitive` refuses any field, and a second active decision
+needs `Supersedes` or `KeepBoth`. `Recall` ranks without an index (exact topic, partial topic,
+type, words; then importance, then the newest); `Check` validates hand edits.
+
 **`plan/`** (v0.22) is the batch's plan as the person reads it: `docs/plans/<name>.json` (strict,
 `Parse`), published at a commit by `agentbus plan load` into `{p}:plan` (the file kept opaque:
 cjson would rewrite `[]`) plus master's facts in `{p}:plan:facts` (`bus/plan.go`: PR, done, note, and the person's priority,
