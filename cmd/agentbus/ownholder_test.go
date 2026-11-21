@@ -197,15 +197,27 @@ func TestServiceRunDepsForTheDispatchService(t *testing.T) {
 }
 
 // foureyes's note: a failed ensure (a transient systemctl error) is tried
-// again after EnsureRetry while the lease is held; a success is final.
+// again after EnsureRetry while the lease is held; a success is final. The
+// gap is measured from the failed call's return (when the retry is armed) to
+// the next call's start, so a loaded machine can only lengthen it (foureyes:
+// counting from "ready" plus a sleep flaked under the full suite).
 func TestServiceRunRetriesAFailedEnsure(t *testing.T) {
 	b, d := runFixture(t)
 	mark(t, b)
+	const retry = 60 * time.Millisecond
+	var mu sync.Mutex
+	var failedAt, retriedAt time.Time
 	var calls atomic.Int32
-	d.EnsureRetry = 60 * time.Millisecond
+	d.EnsureRetry = retry
 	d.EnsureHolder = func(context.Context, io.Writer) error {
+		mu.Lock()
+		defer mu.Unlock()
 		if calls.Add(1) == 1 {
+			failedAt = time.Now() // the retry counts from here
 			return errors.New("systemctl: transient")
+		}
+		if retriedAt.IsZero() {
+			retriedAt = time.Now()
 		}
 		return nil
 	}
@@ -217,11 +229,15 @@ func TestServiceRunRetriesAFailedEnsure(t *testing.T) {
 	}
 	runUntilCleanup(t, b, service.Dispatch, nil, d)
 	waitState(t, b, service.Dispatch, "ready")
-	time.Sleep(30 * time.Millisecond)
-	if n := calls.Load(); n != 1 {
-		t.Fatalf("retried before EnsureRetry: %d calls", n)
+	for deadline := time.Now().Add(10 * time.Second); calls.Load() < 2 && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 	}
-	time.Sleep(250 * time.Millisecond)
+	mu.Lock()
+	gap := retriedAt.Sub(failedAt)
+	mu.Unlock()
+	if n := calls.Load(); n < 2 || gap < retry {
+		t.Fatalf("calls %d, the retry %v after the failure, want at least %v", n, gap, retry)
+	}
+	time.Sleep(4 * retry) // a success is final: no third call
 	if n := calls.Load(); n != 2 {
 		t.Fatalf("calls %d, want 2 (one retry, then success is final)", n)
 	}
