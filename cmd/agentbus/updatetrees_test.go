@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"os"
 	"slices"
 	"testing"
@@ -43,5 +45,31 @@ func TestUpdateHolderHooks(t *testing.T) {
 	}
 	if slices.Contains(left, old) || !slices.Contains(left, active) || !slices.Contains(left, answering) || !slices.Contains(left, current) {
 		t.Fatalf("units left %v", left)
+	}
+}
+
+// unitsFail is a holder manager whose unit list cannot be read.
+type unitsFail struct{ *fakeHolderManager }
+
+func (unitsFail) HolderUnits(string) ([]service.HolderUnit, error) {
+	return nil, errors.New("unit directory unreadable")
+}
+
+// foureyes: a unit list that cannot be read is an error (the prune then keeps
+// every tree), never an empty set of holder builds.
+func TestUpdateHolderKeysUnitsUnreadable(t *testing.T) {
+	hm := unitsFail{&fakeHolderManager{fakeManager: newFakeManager(), holders: map[string]service.HolderSpec{}, active: map[string]bool{}}}
+	d := serviceCmdDeps{Manager: hm, Paths: service.Paths{DataHome: t.TempDir()}}
+	if keys, err := holderKeys(d); err == nil {
+		t.Fatalf("no error, keys %v", keys)
+	}
+}
+
+// foureyes: agentbus update's real deps carry both hooks; without them the
+// prune keeps every tree and silently never removes one.
+func TestRealUpdateDepsPrune(t *testing.T) {
+	d := realUpdateDeps("", io.Discard, io.Discard)
+	if d.HolderKeys == nil || d.HolderGC == nil {
+		t.Fatalf("HolderKeys %v, HolderGC %v", d.HolderKeys != nil, d.HolderGC != nil)
 	}
 }

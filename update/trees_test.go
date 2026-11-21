@@ -134,6 +134,21 @@ func TestTreesIncompleteSnapshotNamesNothing(t *testing.T) {
 	}
 }
 
+// foureyes: a real worktree of the clone under a name that is not vX.Y.Z
+// (a person's own, under <src>) is never judged, so never removed.
+func TestPruneTreesLeavesANonTagWorktree(t *testing.T) {
+	tw := newTreeWorld(t)
+	own := filepath.Join(tw.src, "my-experiment")
+	sh(t, tw.w.clone, "worktree", "add", "-q", "--detach", own, "v0.1.0")
+	if got := whys(Trees(context.Background(), tw.d, "v0.2.0")); len(got) != 2 {
+		t.Fatalf("judged %v", got)
+	}
+	PruneTrees(context.Background(), tw.d, "v0.2.0")
+	if _, err := os.Stat(filepath.Join(own, "f")); err != nil {
+		t.Fatal("a worktree under a non-tag name was removed")
+	}
+}
+
 // PruneTrees: the holder collection first, with the new build as current;
 // then git worktree remove of what nothing needs. The installed tree, the
 // plain directory and the non-tag one stay; the clone's branches, HEAD and
