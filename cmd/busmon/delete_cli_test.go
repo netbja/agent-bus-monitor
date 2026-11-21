@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -61,7 +62,7 @@ func TestDeleteCLIRefusesWhatIsNotAsleep(t *testing.T) {
 		backedUp, removed := false, false
 		d := testDeleteDeps(func(string) ([]string, error) { removed = true; return nil, nil }, nil)
 		d.quiet = func(context.Context, *redis.Client, string) (string, error) { return q.why, q.err }
-		d.backup = func(string) (string, error) { backedUp = true; return "", nil }
+		d.backup = func(string, string, string) (string, error) { backedUp = true; return "", nil }
 		err := deleteProject("", project, true, strings.NewReader(""), time.Now(), d)
 		if err == nil || !strings.Contains(err.Error(), q.want) || !strings.Contains(err.Error(), "nothing deleted") {
 			t.Fatalf("%q: %v", q.want, err)
@@ -84,7 +85,7 @@ func TestDeleteCLIBacksUpFirst(t *testing.T) {
 	c, project := cliProject(t)
 	d := testDeleteDeps(nil, nil)
 	calls := 0
-	d.backup = func(string) (string, error) { calls++; return "", errors.New("exit status 1") }
+	d.backup = func(string, string, string) (string, error) { calls++; return "", errors.New("exit status 1") }
 	if err := deleteProject("", project, false, strings.NewReader("n\n"), time.Now(), d); err != nil || calls != 0 {
 		t.Fatalf("declined: %v, %d backups", err, calls)
 	}
@@ -96,7 +97,7 @@ func TestDeleteCLIBacksUpFirst(t *testing.T) {
 	keysAtBackup := 0
 	var out bytes.Buffer
 	d.out = &out
-	d.backup = func(p string) (string, error) {
+	d.backup = func(p, _, _ string) (string, error) {
 		keysAtBackup = keysLeft(t, c, p)
 		return "", nil
 	}
@@ -126,5 +127,45 @@ func TestRealDeleteDepsAreWired(t *testing.T) {
 	d := realDeleteDeps(nil)
 	if d.quiet == nil || d.backup == nil || d.unitHosts == nil || d.removeServices == nil || d.out == nil {
 		t.Fatalf("%+v", d)
+	}
+}
+
+// The backup targets the broker the delete deletes from (reviewer-codex,
+// foureyes on 3538d7bb): it gets --host, and the delete's broker to check.
+func TestDeleteCLIBacksUpTheDeletedBroker(t *testing.T) {
+	c, project := cliProject(t)
+	d := testDeleteDeps(nil, nil)
+	var gotHost, gotBroker string
+	d.backup = func(p, host, broker string) (string, error) { gotHost, gotBroker = host, broker; return "", nil }
+	// The test broker is REDIS_URL, which wins over the host on both sides:
+	// the host still reaches the backup as given.
+	if err := deleteProject("vdr", project, true, strings.NewReader(""), time.Now(), d); err != nil {
+		t.Fatal(err)
+	}
+	if gotHost != "vdr" || gotBroker != brokerKey(c.Options()) {
+		t.Fatalf("backup got host %q broker %q, want %q", gotHost, gotBroker, brokerKey(c.Options()))
+	}
+}
+
+// The real backup runs agentbus with the delete's host as REDIS_HOST, and
+// refuses, before running anything, a child that would reach another
+// broker.
+func TestRealDeleteBackupTarget(t *testing.T) {
+	t.Setenv("REDIS_URL", "")
+	t.Setenv("REDIS_HOST", "box")
+	env := deleteBackupEnv([]string{"PATH=/bin", "REDIS_HOST=box"}, "vdr")
+	if !slices.Contains(env, "REDIS_HOST=vdr") || slices.Contains(env, "REDIS_HOST=box") {
+		t.Fatalf("env %v", env)
+	}
+	if env := deleteBackupEnv([]string{"REDIS_HOST=box"}, ""); !slices.Equal(env, []string{"REDIS_HOST=box"}) {
+		t.Fatalf("no host: env %v", env)
+	}
+	_, err := realDeleteBackup("/nonexistent/agentbus")("demo", "vdr", "tcp box:6380 db0")
+	if err == nil || !strings.Contains(err.Error(), "another broker") {
+		t.Fatalf("mismatch: %v", err)
+	}
+	_, err = realDeleteBackup("/nonexistent/agentbus")("demo", "vdr", "tcp vdr:6380 db0")
+	if err == nil || strings.Contains(err.Error(), "another broker") {
+		t.Fatalf("a matching broker was refused, or the backup ran nothing: %v", err)
 	}
 }

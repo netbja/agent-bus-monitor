@@ -218,5 +218,5 @@ func TestDeleteProjectNowKeepsTheTableWhenRefused(t *testing.T) {
 func testDeleteDeps(remove func(string) ([]string, error), files func() (projfiles.Options, error)) deleteDeps {
 	return deleteDeps{removeServices: remove, files: files, out: io.Discard,
 		quiet:  func(context.Context, *redis.Client, string) (string, error) { return "", nil },
-		backup: func(string) (string, error) { return "", nil }}
+		backup: func(string, string, string) (string, error) { return "", nil }}
 }

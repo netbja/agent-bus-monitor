@@ -129,8 +129,11 @@ type deleteDeps struct {
 	files          func() (projfiles.Options, error) // nil: both options off
 	quiet          func(ctx context.Context, client *redis.Client, project string) (string, error)
 	unitHosts      func(ctx context.Context, client *redis.Client, project string) ([]unitHosts, error)
-	backup         func(project string) (archive string, err error) // "" archive: made, its path not named
-	out            io.Writer
+	// backup backs project up on the broker the delete deletes from: host
+	// is busmon's --host, broker that broker's brokerKey ("" archive: made,
+	// its path not named).
+	backup func(project, host, broker string) (archive string, err error)
+	out    io.Writer
 }
 
 // realDeleteDeps are busmon --delete's on this machine: the Projects page's
@@ -157,17 +160,57 @@ func realDeleteDeps(files func() (projfiles.Options, error)) deleteDeps {
 }
 
 // realDeleteBackup runs agentbus backup --project p, its output shown, and
-// names the archive it printed.
-func realDeleteBackup(bin string) func(project string) (string, error) {
-	return func(project string) (string, error) {
+// names the archive it printed. Its environment carries --host as
+// REDIS_HOST, and the broker that environment reaches (bus.ConnectOptions,
+// Connect's own rule) must be broker, the one the delete deletes from:
+// else nothing runs (reviewer-codex, foureyes: a same-named project on
+// the default broker must not stand in for the deleted one's backup).
+func realDeleteBackup(bin string) func(project, host, broker string) (string, error) {
+	return func(project, host, broker string) (string, error) {
+		env := deleteBackupEnv(os.Environ(), host)
+		opt, err := bus.ConnectOptions(envLookup(env), "")
+		if err != nil {
+			return "", fmt.Errorf("the backup's broker: %v", err)
+		}
+		if got := brokerKey(opt); got != broker {
+			return "", fmt.Errorf("agentbus backup would reach another broker (%s, not %s)", got, broker)
+		}
 		var buf bytes.Buffer
 		cmd := exec.Command(bin, "backup", "--project", project)
-		cmd.Env = os.Environ()
+		cmd.Env = env
 		cmd.Stdout, cmd.Stderr = io.MultiWriter(os.Stdout, &buf), io.MultiWriter(os.Stderr, &buf)
 		if err := cmd.Run(); err != nil {
 			return "", err
 		}
 		return backupArchiveIn(buf.String()), nil
+	}
+}
+
+// deleteBackupEnv is env with REDIS_HOST set to host (as bus.Connect's
+// host overrides it); env as it is when host is "".
+func deleteBackupEnv(env []string, host string) []string {
+	if host == "" {
+		return env
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "REDIS_HOST=") {
+			out = append(out, kv)
+		}
+	}
+	return append(out, "REDIS_HOST="+host)
+}
+
+// envLookup reads a variable from env ("K=V" entries; the last one wins).
+func envLookup(env []string) func(string) string {
+	return func(k string) string {
+		v := ""
+		for _, kv := range env {
+			if name, val, ok := strings.Cut(kv, "="); ok && name == k {
+				v = val
+			}
+		}
+		return v
 	}
 }
 
@@ -248,7 +291,7 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 		return nil
 	}
 
-	archive, err := d.backup(project)
+	archive, err := d.backup(project, host, brokerKey(client.Options()))
 	if err != nil {
 		return fmt.Errorf("backup of %s failed (%v): nothing deleted", project, err)
 	}
