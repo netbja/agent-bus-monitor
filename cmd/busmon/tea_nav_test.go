@@ -96,8 +96,13 @@ func TestShellTabs(t *testing.T) {
 				t.Fatalf("%v: key %d: focus %d, active %d", size, i+1, m.ui.focus, m.layout.Active)
 			}
 		}
-		// The focus can leave the tabbed panel; its tab stays (the Activity
-		// shown under a Plan sized to its content is not in the order, §4.2).
+		// The focus can leave the tabbed panel; its tab stays. From 130
+		// columns the Plan's Releases column is next (plan-tab-r3 item 5).
+		if m.layout.Side.W > 0 {
+			if m = keys(t, m, kTab); m.ui.focus != PanelReleases {
+				t.Fatalf("%v: tab from the Plan: focus %d", size, m.ui.focus)
+			}
+		}
 		m = keys(t, m, kTab)
 		if m.ui.focus != PanelForYou || m.layout.Active != lowerTabs[len(lowerTabs)-1] {
 			t.Fatalf("%v: after tab: focus %d, active %d", size, m.ui.focus, m.layout.Active)
@@ -386,7 +391,7 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 	m := fixtureShell(t, 140, 40)
 	r := m.layout.Lower
 	x := r.X + 3
-	for i, s := range tabLabels(lowerTabs, m.layout.Active, r.W-4) {
+	for i, s := range tabLabels(lowerTabs, m.layout.Active, r.W-4, nil) {
 		want := lowerTabs[i]
 		if m = clickAt(t, m, x+1, r.Y); m.ui.focus != want || m.layout.Active != want {
 			t.Fatalf("click on %q: focus %d", s, m.ui.focus)
@@ -401,7 +406,7 @@ func TestShellClickTabsAndTitles(t *testing.T) {
 	}
 	n := fixtureShell(t, 60, 20)
 	x = 0
-	for i, s := range tabLabels(narrowPanels, n.layout.Active, 60) {
+	for i, s := range tabLabels(narrowPanels, n.layout.Active, 60, nil) {
 		if n = clickAt(t, n, x+1, n.layout.Tabs.Y); n.layout.Active != narrowPanels[i] {
 			t.Fatalf("narrow click on %q: view %d", s, n.layout.Active)
 		}

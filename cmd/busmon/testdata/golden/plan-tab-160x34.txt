@@ -1,26 +1,26 @@
-╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│v0.29  ███████▎░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  2/11   9 left · 1 for you                                                                                    │
-│──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│▼ NOW  2                                                                                                                                                      │
-│▶ ●   agent-screen-blocked     coder   in progress                                                                                                            │
-│  ○   ask-refuses-person       coder2  in review                                                                                                              │
-│▼ APPROVED  1                                                                                                                                                 │
-│  ✓   human-not-an-agent-test  coder2  approved                                                                                                               │
-│▼ NEXT  3                                                                                                                                                     │
-│    ↑ quota-step-3             coder   upcoming                                                                                                               │
-│      holder-g1-part2          coder   upcoming                                                                                                               │
-│  ♙   decide-compose-undo      person  decide                                                                                                                 │
-│▼ LATER  3                                                                                                                                                    │
-│  ‖ ↑ quota-step-4             coder   after quota-step-3                                                                                                     │
-│  ‖ ↓ master-conversation      coder   after decide-compose-undo                                                                                              │
-│    ↓ agent-led-setup          coder   upcoming                                                                                                               │
-│▶ DONE · 2 tasks   (d shows)                                                                                                                                  │
-│                                                                                                                                                              │
-│                                                                                                                                                              │
-│                                                                                                                                                              │
-│                                                                                                                                                              │
-│                                                                                                                                                              │
-│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│ agent-screen-blocked · in progress · coder · after holder-g1 ✓                                                                                               │
-│ for you: nothing        enter: task page   + - priority                                                                                                      │
-╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────────────────────────────────────────────╮╭─ Releases ───────────────────────────╮
+│                                                                                                                      ││▶ next  2 decided ideas               │
+│v0.29  ███████▎░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  2/11   9 left · 1 for you                                            ││    ◇ a quiet update                  │
+│──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────││    ◇ project switch                  │
+│▼ NOW  2                                                                                                              ││  ● v0.29  2/11  now                  │
+│▶ ●   agent-screen-blocked     coder   in progress                                                                    ││  v0.28.1  2026-11-10                 │
+│  ○   ask-refuses-person       coder2  in review                                                                      ││  v0.28.0  2026-11-08  2 tasks        │
+│▼ APPROVED  1                                                                                                         ││  v0.27.0  2026-11-01                 │
+│  ✓   human-not-an-agent-test  coder2  approved                                                                       ││                                      │
+│▼ NEXT  3                                                                                                             ││                                      │
+│    ↑ quota-step-3             coder   upcoming                                                                       ││                                      │
+│      holder-g1-part2          coder   upcoming                                                                       ││                                      │
+│  ♙   decide-compose-undo      person  decide                                                                         ││                                      │
+│▼ LATER  3                                                                                                            ││                                      │
+│  ‖ ↑ quota-step-4             coder   after quota-step-3                                                             ││                                      │
+│  ‖ ↓ master-conversation      coder   after decide-compose-undo                                                      ││                                      │
+│    ↓ agent-led-setup          coder   upcoming                                                                       ││                                      │
+│▶ DONE · 2 tasks   (d shows)                                                                                          ││                                      │
+│                                                                                                                      ││                                      │
+│                                                                                                                      ││                                      │
+│                                                                                                                      ││                                      │
+│                                                                                                                      ││                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ││                                      │
+│ agent-screen-blocked · in progress · coder · after holder-g1 ✓                                                       ││                                      │
+│ for you: nothing        enter: task page   + - priority   d done                                                     ││                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯╰─ enter plan · V hide ────────────────╯

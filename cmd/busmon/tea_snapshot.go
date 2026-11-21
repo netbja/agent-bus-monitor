@@ -48,6 +48,7 @@ type snapshot struct {
 	ideasErr                          bool
 	notes                             []memory.Question
 	notesErr                          bool
+	releases                          releaseData // the checkout's release tags and plan files (releases.go)
 }
 
 // takeSnapshot copies st at now.
@@ -70,7 +71,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause, pauseFailed: st.pauseFailed,
 		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, mergeQ: st.mergeQ, mergeQRead: st.mergeQRead, mergeQErr: st.mergeQErr, requestsReadAt: st.requestsReadAt, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
 		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
-		svcInst: st.svcInst, svcRecs: st.svcRecs, ideas: st.ideas, ideasErr: st.ideasErr, notes: st.notes, notesErr: st.notesErr,
+		svcInst: st.svcInst, svcRecs: st.svcRecs, ideas: st.ideas, ideasErr: st.ideasErr, notes: st.notes, notesErr: st.notesErr, releases: st.releases,
 	}
 	for n, a := range st.agents {
 		c := *a

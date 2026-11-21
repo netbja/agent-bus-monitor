@@ -321,7 +321,7 @@ func planGroupBlocks(p planState, showDone bool, width int, tier Tier, emit func
 // lines, full width): a rule, then its facts on one line (id, state,
 // owner, how a done one ended, review, PR, dependencies, reason, priority),
 // then what the person
-// may do and the keys.
+// may do and the keys (planStripKeys).
 func planStrip(p planState, r plan.Row, now time.Time, width int) []Line {
 	sep := Seg{Text: " " + GlyphNone + " ", Role: RoleMuted}
 	_, role := planStateWord(r)
@@ -353,10 +353,21 @@ func planStrip(p planState, r plan.Row, now time.Time, width int) []Line {
 		}
 		l = append(l, sep, Seg{Text: Preview(text), Role: RoleText})
 	}
-	keys := Line{{Text: "for you: ", Role: RoleMuted}, {Text: Preview(forYou), Role: RoleText},
-		{Text: "        ", Role: RoleMuted}, {Text: "enter", Role: RoleAccent, Bold: true}, {Text: ": task page   ", Role: RoleMuted},
-		{Text: "+ -", Role: RoleAccent, Bold: true}, {Text: " priority", Role: RoleMuted}}
-	return []Line{planRule(width), FitLine(l, width), FitLine(keys, width)}
+	return []Line{planRule(width), FitLine(l, width), planStripKeys(forYou, width)}
+}
+
+// planStripKeys is the strip's last line: what the person may do on the
+// task, then the keys, said once in the frame (plan-tab-r3 item 3); forYou
+// "" (no task selected) leaves the keys alone.
+func planStripKeys(forYou string, width int) Line {
+	var l Line
+	if forYou != "" {
+		l = Line{{Text: "for you: ", Role: RoleMuted}, {Text: Preview(forYou), Role: RoleText}, {Text: "        ", Role: RoleMuted}}
+	}
+	l = append(l, Seg{Text: "enter", Role: RoleAccent, Bold: true}, Seg{Text: ": task page   ", Role: RoleMuted},
+		Seg{Text: "+ -", Role: RoleAccent, Bold: true}, Seg{Text: " priority   ", Role: RoleMuted},
+		Seg{Text: "d", Role: RoleAccent, Bold: true}, Seg{Text: " done", Role: RoleMuted})
+	return FitLine(l, width)
 }
 
 // planBar is a bar of cells: full blocks, one partial eighth, then the dim

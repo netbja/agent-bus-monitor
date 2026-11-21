@@ -21,7 +21,7 @@
 │ ▶ 1 group done · 1 task   (d shows)                                                                                                      │
 │ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │ h1 · in progress · coder                                                                                                                 │
-│ for you: nothing        enter: task page   + - priority                                                                                  │
+│ for you: nothing        enter: task page   + - priority   d done                                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity   2 Board   3 Work   4 Plan    auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
 │    time   from      to         type       message                                                                                        │

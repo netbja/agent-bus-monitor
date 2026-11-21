@@ -28,6 +28,13 @@ func localNotesOf(project string, getenv func(string) string) func() ([]memory.Q
 	return func() ([]memory.Question, error) { return memory.OpenQuestions(root) }
 }
 
+// wireLocalReaders gives st the readers of this machine's side of project:
+// the trust line's, and its checkout's idea notes and releases (nil without
+// a checkout here).
+func wireLocalReaders(st *shared, project string, getenv func(string) string) {
+	st.trustOf, st.notesOf, st.releasesOf = localTrustOf(project, getenv), localNotesOf(project, getenv), localReleasesOf(project, getenv)
+}
+
 // readIdeas refreshes the shared ideas and idea notes at the requests'
 // cadence, each read before the lock. A failed read keeps the last list and
 // flags it.

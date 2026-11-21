@@ -144,8 +144,8 @@ func TestPlanTabNoPlan(t *testing.T) {
 	}
 }
 
-// The mock-ups of §4 as goldens: the tab at 160 columns with its side panel,
-// at 80 without one, LATER and DONE folded.
+// The mock-ups of §4 as goldens: the tab at 160 columns with its Releases
+// column (plan-tab-r3), at 80 without it, LATER and DONE folded.
 func TestPlanTabGoldens(t *testing.T) {
 	pinLocal(t)
 	row := func(id string, st plan.State, owner, prio string, after ...string) plan.Row {
@@ -173,15 +173,16 @@ func TestPlanTabGoldens(t *testing.T) {
 		name string
 		w    int
 	}{{"plan-tab-160x34.txt", 160}, {"plan-tab-80x34.txt", 80}} {
-		m := keys(t, planShellOf(t, p, c.w, 34), '4')
+		m := keys(t, planShellWith(t, p, c.w, 34, releasesFixture), '4')
 		r := m.layout.rect(PanelPlan)
 		if m.ui.focus != PanelPlan || r.W == 0 {
 			t.Fatalf("%s: no Plan (focus %v, rect %+v)", c.name, m.ui.focus, r)
 		}
+		w := r.W + m.layout.Side.W // the Releases column too, from 130 columns (plan-tab-r3 item 5)
 		lines := strings.Split(m.grid().plain(), "\n")
 		var frame []string
 		for y := r.Y; y < r.Y+r.H && y < len(lines); y++ {
-			frame = append(frame, strings.TrimRight(string([]rune(lines[y])[r.X:r.X+r.W]), " "))
+			frame = append(frame, strings.TrimRight(string([]rune(lines[y])[r.X:r.X+w]), " "))
 		}
 		checkGolden(t, c.name, strings.Join(frame, "\n")+"\n")
 	}

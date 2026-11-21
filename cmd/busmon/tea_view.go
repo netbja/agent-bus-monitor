@@ -42,7 +42,7 @@ func (m Model) grid() *grid {
 		drawLine(g, b.X, b.Y, b.W, m.bannerLine(b.W), false)
 	}
 	if l.Tabs.H > 0 {
-		drawLine(g, 0, l.Tabs.Y, m.width, tabBar(narrowPanels, m.tabOf(l.Active), m.width, true), false)
+		drawLine(g, 0, l.Tabs.Y, m.width, tabBarNotes(narrowPanels, m.tabOf(l.Active), m.width, true, m.tabNotes()), false)
 	}
 	reading := m.rd.open()
 	drawer := reading && l.Tier == TierWide && m.rd.pages[0].drawer
@@ -60,10 +60,6 @@ func (m Model) grid() *grid {
 				drawPlanDetail(g, br.X+1, br.Y, br.W-2, m.planTabDetail(br.W-2)) // one cell each side, as the drawer's body
 			}
 		}
-	}
-	if b := l.Below; b.H > 0 && !reading { // under a Plan sized to its content (views-redesign §4.2)
-		lst := *m.lists.of(l.BelowPanel)
-		lst.draw(g)
 	}
 	if reading {
 		m.drawReader(g)
@@ -128,6 +124,31 @@ func (m Model) headerData() headerData {
 // highlighted; names shorten when they do not
 // fit width.
 func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
+	return tabBarNotes(tabs, active, width, focused, nil)
+}
+
+// tabNotes are the tab bar's notes after a tab's name: what came into
+// Activity while it was not shown, "3 new" (plan-tab-r3 item 1).
+func (m *Model) tabNotes() map[PanelID]string {
+	if m.feed == nil {
+		return nil
+	}
+	n := 0
+	for i := len(m.feed.feed) - 1; i >= 0 && m.feed.feed[i].seq > m.ui.activitySeen; i-- {
+		if !m.feed.feed[i].sep {
+			n++
+		}
+	}
+	if n == 0 {
+		return nil
+	}
+	return map[PanelID]string{PanelActivity: fmt.Sprintf("%d new", n)}
+}
+
+// tabBarNotes is tabBar with a note after an inactive tab's name, " · 3
+// new"; the notes go first when the bar is too wide, before any name
+// shortens.
+func tabBarNotes(tabs []PanelID, active PanelID, width int, focused bool, notes map[PanelID]string) Line {
 	if active == PanelRequests { // a caller that names no origin (tabOf does): Work's
 		active = PanelWork
 	}
@@ -136,13 +157,21 @@ func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 	for i, p := range tabs {
 		names[i] = panelLabel(p)
 	}
-	label := func(i int) string { return fmt.Sprintf(" %d %s ", i+1, names[i]) } // the block, a blank cell each side
+	label := func(i int) string { // the block, a blank cell each side
+		if n := notes[tabs[i]]; n != "" && tabs[i] != active {
+			return fmt.Sprintf(" %d %s %s %s ", i+1, names[i], GlyphNone, n)
+		}
+		return fmt.Sprintf(" %d %s ", i+1, names[i])
+	}
 	total := func() int {
 		n := 0
 		for i := range tabs {
 			n += Width(label(i)) + 1 // and the blank column after it
 		}
 		return n
+	}
+	if total() > width { // too wide: the notes go first
+		notes = nil
 	}
 	// Too wide: shorten the longest name first, one at a time, until the
 	// bar fits (A11's sixth view must not shorten every label).
@@ -182,8 +211,8 @@ func tabBar(tabs []PanelID, active PanelID, width int, focused bool) Line {
 
 // tabLabels are the tab bar's labels, one per tab (its block and its blank
 // column): the spans a click hits.
-func tabLabels(tabs []PanelID, active PanelID, width int) []string {
-	l := tabBar(tabs, active, width, true)
+func tabLabels(tabs []PanelID, active PanelID, width int, notes map[PanelID]string) []string {
+	l := tabBarNotes(tabs, active, width, true, notes)
 	out := make([]string, 0, len(tabs))
 	for i := 0; i+1 < len(l); i += 2 {
 		out = append(out, l[i].Text+l[i+1].Text)
@@ -288,6 +317,7 @@ func (m *Model) fillLists() {
 	bd.SetFooter(bv.footer)
 
 	m.fillPlanTab(lower) // the roadmap, the fourth tab (views-redesign §4)
+	m.fillReleases()     // its Releases column (plan-tab-r3 item 5)
 
 	wk := &m.lists.work // who owes what (requests-plan-redesign, layout A)
 	compact := lower < workCompactW
@@ -325,7 +355,7 @@ func (m *Model) fillLists() {
 // panel's name in its own title (Activity's auto-scroll state). The narrow
 // tier has its tab bar above the view: the title is the panel's own.
 func (m *Model) lowerTitle(p PanelID, own Line) Line {
-	if m.layout.Tier == TierNarrow || (m.layout.Below.H > 0 && p == m.layout.BelowPanel) { // under the Plan tab: its own name, not the tabs again (§4.2)
+	if m.layout.Tier == TierNarrow {
 		return own
 	}
 	var suffix Line
@@ -341,7 +371,7 @@ func (m *Model) lowerTitle(p PanelID, own Line) Line {
 	if p == PanelRequests { // the sub-view's tab is its origin's
 		p = m.reqOrigin()
 	}
-	t := tabBar(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), focused)
+	t := tabBarNotes(lowerTabs, p, m.layout.Lower.W-4-suffix.Width(), focused, m.tabNotes())
 	return append(t, suffix...)
 }
 

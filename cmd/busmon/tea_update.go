@@ -190,6 +190,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		}
 	case ActTokens:
 		cmd = m.push(page{kind: ovTokens})
+	case ActReleases:
+		m.toggleReleases()
 	case ActSettings:
 		cmd = m.openSettings()
 	case ActProjects:
@@ -298,6 +300,8 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		return m.openWorkRow(key)
 	case PanelPlan:
 		return m.openPlanRow(key)
+	case PanelReleases:
+		return m.openRelease(key)
 	case PanelRequests:
 		return m.openRequestRow(key)
 	}
@@ -667,7 +671,7 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		return cmd
 	}
 	if l.Tabs.H > 0 && ms.Y == l.Tabs.Y {
-		if p, ok := tabAt(narrowPanels, l.Active, m.width, 0, ms.X); ok {
+		if p, ok := tabAt(narrowPanels, l.Active, m.width, 0, ms.X, m.tabNotes()); ok {
 			m.focusTab(p)
 			m.refresh()
 		}
@@ -683,7 +687,7 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	r := l.rect(p)
 	if ms.Y == r.Y {
 		if l.Tier != TierNarrow && r == l.Lower {
-			if tab, ok := tabAt(lowerTabs, p, r.W-4, r.X+3, ms.X); ok {
+			if tab, ok := tabAt(lowerTabs, p, r.W-4, r.X+3, ms.X, m.tabNotes()); ok {
 				p = tab
 			}
 		}
@@ -724,9 +728,9 @@ func (m *Model) panelAt(x, y int) (PanelID, bool) {
 }
 
 // tabAt is the tab whose label tabBar draws at column x, the bar starting at x0.
-func tabAt(tabs []PanelID, active PanelID, width, x0, x int) (PanelID, bool) {
+func tabAt(tabs []PanelID, active PanelID, width, x0, x int, notes map[PanelID]string) (PanelID, bool) {
 	pos := x0
-	for i, label := range tabLabels(tabs, active, width) {
+	for i, label := range tabLabels(tabs, active, width, notes) {
 		w := Width(label)
 		if x >= pos && x < pos+w {
 			return tabs[i], true

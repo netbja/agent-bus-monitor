@@ -162,13 +162,20 @@ type uiState struct {
 	idle                 bool
 	idleBlurred          bool // the window was left while the view is shown: the next focus wakes it
 	lastInput, idleSince time.Time
+	// activitySeen is the feed's seq when Activity was last shown: what came
+	// after is "N new" on its tab (plan-tab-r3 item 1).
+	activitySeen int
+	// releases is V's choice on the Plan tab's Releases column: 0 the width
+	// decides (releasesMinWidth), 1 shown, -1 hidden (plan-tab-r3 item 5).
+	releases int
 }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is
 // copied by value through Update, the lists' selection rules are listState's.
 type shellLists struct {
 	forYou, agents, activity, board, requests, work, plan listState
-	reqView                                               reqView // the Requests view refresh computed: the layout, fillLists and the header read it
+	releases                                              listState // the Plan tab's Releases column (plan-tab-r3 item 5)
+	reqView                                               reqView   // the Requests view refresh computed: the layout, fillLists and the header read it
 }
 
 func (ls *shellLists) of(p PanelID) *listState {
@@ -187,6 +194,8 @@ func (ls *shellLists) of(p PanelID) *listState {
 		return &ls.work
 	case PanelPlan:
 		return &ls.plan
+	case PanelReleases:
+		return &ls.releases
 	}
 	return nil
 }
@@ -519,14 +528,13 @@ func (m *Model) refresh() {
 	if m.rd.open() && m.rd.pages[0].drawer { // the plan drawer under a For you of its own rows (views-redesign §4.1)
 		m.layout = shellDrawer(m.layout, c)
 	}
-	m.fillLists()
-	if !m.rd.open() { // the Plan tab to its content, Activity under it (views-redesign §4.2)
-		pl := &m.lists.plan
-		if l := fitPlanTab(m.layout, len(pl.items)+pl.bottom+2); l.Below.H > 0 {
-			m.layout = l
-			m.fillLists() // the frames again on the split zone: Activity's title is its own there
-		}
+	if m.releasesShown() { // the Plan tab's Releases column (plan-tab-r3 item 5)
+		m.layout = withReleases(m.layout)
 	}
+	if m.ui.focus == PanelReleases && m.layout.Side.W == 0 { // the column hidden under the focus: back to the Plan
+		m.ui.focus = PanelPlan
+	}
+	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
 		if w := m.ui.walk; w != nil && !w.moving && m.rd.top().serial == w.serial {
 			w.lost = true // the walk's own: afterUpdate moves the walk on (foureyes)
@@ -547,6 +555,24 @@ func (m *Model) refresh() {
 			m.clampPage(p)
 		}
 	}
+	if m.activityOnScreen() { // drawn: what it holds is seen (plan-tab-r3 item 1)
+		m.ui.activitySeen = m.feed.seq
+	}
+}
+
+// activityOnScreen says whether Activity is drawn: its tab (or the narrow
+// tier's view) active, the dashboard shown (not the idle view) and no page
+// over it; the wide drawer sized to its content leaves the tab under it
+// (reviewer-codex).
+func (m *Model) activityOnScreen() bool {
+	l := m.layout
+	if m.ui.idle || l.Active != PanelActivity || l.Tier == TierTooSmall {
+		return false
+	}
+	if !m.rd.open() {
+		return true
+	}
+	return l.Tier == TierWide && m.rd.pages[0].drawer && l.Lower.H > 0
 }
 
 // placeLists gives every list its frame again, after the layout moved

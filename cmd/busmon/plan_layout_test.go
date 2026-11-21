@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -179,7 +178,7 @@ func TestPlanStrip(t *testing.T) {
 	if got := strings.TrimRight(d[1].text(), " "); got != "readme"+sep+"in review"+sep+"docs"+sep+"approved"+sep+"PR 351"+sep+"unblocks migrate" {
 		t.Fatalf("facts %q", got)
 	}
-	if got := strings.TrimRight(d[2].text(), " "); got != "for you: nothing        enter: task page   + - priority" {
+	if got := strings.TrimRight(d[2].text(), " "); got != "for you: nothing        enter: task page   + - priority   d done" {
 		t.Fatalf("keys %q", got)
 	}
 	for _, l := range planStrip(p, r, shellNow, 40) {
@@ -373,29 +372,6 @@ func longPlan() planState {
 		rows = append(rows, boardRow(fmt.Sprintf("t%02d", i), plan.Upcoming, "coder"))
 	}
 	return boardPlan(rows...)
-}
-
-// §4.2 (a): the Plan tab shrinks to its content and Activity takes the
-// height left under it, named alone, shown and not in the focus order (it
-// would become the active tab); a plan longer than the zone keeps it all.
-func TestPlanTabShrinksActivityBelow(t *testing.T) {
-	for _, w := range []int{140, 100} {
-		m := keys(t, planShellOf(t, shortPlan(), w, 40), '4')
-		l, pl := m.layout, &m.lists.plan
-		if l.Lower.H != len(pl.items)+pl.bottom+2 || l.BelowPanel != PanelActivity || l.Below.Y != l.Lower.Y+l.Lower.H || l.Below.Y+l.Below.H != l.Input.Y {
-			t.Fatalf("%d: plan %+v below %+v (%v), %d items", w, l.Lower, l.Below, l.BelowPanel, len(pl.items))
-		}
-		if m.lists.activity.rect != l.Below || slices.Contains(l.Visible, PanelActivity) {
-			t.Fatalf("%d: activity at %+v, visible %v", w, m.lists.activity.rect, l.Visible)
-		}
-		lines := strings.Split(m.grid().plain(), "\n")
-		if top := lines[l.Below.Y]; !strings.Contains(top, "Activity") || strings.Contains(top, "2 Board") {
-			t.Fatalf("%d: the frame under the plan %q", w, top)
-		}
-	}
-	if m := keys(t, planShellOf(t, longPlan(), 140, 40), '4'); m.layout.Below.H != 0 {
-		t.Fatalf("a long plan shared its zone: %+v", m.layout.Below)
-	}
 }
 
 // §4.2 (b): the drawer shrinks to its content and the active tab shows
