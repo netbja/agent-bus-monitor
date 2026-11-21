@@ -758,15 +758,22 @@ func (b *Bus) Reports(ctx context.Context, n int) ([]Event, error) {
 // ReportByID returns the single {project}:report entry with the given id, or an
 // error if no such entry exists.
 func (b *Bus) ReportByID(ctx context.Context, id string) (Event, error) {
-	key := StreamKey(b.project, "report")
+	e, ok, err := b.EntryByID(ctx, "report", id)
+	if err == nil && !ok {
+		err = fmt.Errorf("no report %q", id)
+	}
+	return e, err
+}
+
+// EntryByID is the entry id of the project's kind stream (cmd, report,
+// notify...), ok false when the stream no longer holds it.
+func (b *Bus) EntryByID(ctx context.Context, kind, id string) (Event, bool, error) {
+	key := StreamKey(b.project, kind)
 	msgs, err := b.r.XRange(ctx, key, id, id).Result()
-	if err != nil {
-		return Event{}, err
+	if err != nil || len(msgs) == 0 {
+		return Event{}, false, err
 	}
-	if len(msgs) == 0 {
-		return Event{}, fmt.Errorf("no report %q", id)
-	}
-	return ParseEntry(key, msgs[0].ID, toStringMap(msgs[0].Values)), nil
+	return ParseEntry(key, msgs[0].ID, toStringMap(msgs[0].Values)), true, nil
 }
 
 // Purge clears the given stream kinds with XTRIM MAXLEN 0 and returns the total
