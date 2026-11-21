@@ -28,17 +28,17 @@
 │    GROK                                            held until today 15:44   ┃
 │    5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━  100% · resets today 15:44   ┃
 │     Limit reached: it resets today 15:44.                                    ┃
-│ Projects                 in+out  7 days                                      ┃
-│   agent-bus-monitor       ~1.8M     ▃ █▆  ████████     ~5.1M                 ┃
-│   blog                        0   ▁       ▎             170k                 ┃
+│ Projects                 in+out  7 days                    7d total          ┃
+│                                  10-20 to 10-26                              ┃
+│   agent-bus-monitor       ~1.8M        ▃▃  ██▆▆  ████████     ~5.1M          ┃
+│                                                                              ┃
+│   blog                        0    ██            ▎             170k          ┃
 │   wiki  no data (no dispatch service counting tokens)                        ┃
-│ Agents, agent-bus-monitor             in      out                            ┃
-│   foureyes          anthropic      1.2M     206k  ████████                  ┃
-│   coder             anthropic      345k      83k  ██▍                       ┃
-│   1 more · Codex session not proved  (a lists them)                          ┃
-│   1 more · no token count for google (no adapter)  (a lists them)            │
-│   3 more · no proved session  (a lists them)                                 │
-│   2 more · no token count for grok (no adapter)  (a lists them)              │
-│   2 more · Kimi logs give no token counts  (a lists them)                    ▼
+│ Agents, agent-bus-monitor             in      out                            │
+│   foureyes          anthropic      1.2M     206k  ████████                  │
+│                                                                              │
+│   coder             anthropic      345k      83k  ██▍                       │
+│   1 more · Codex session not proved  (a lists them)                          │
+│   1 more · no token count for google (no adapter)  (a lists them)            ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health    

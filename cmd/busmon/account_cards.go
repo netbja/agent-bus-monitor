@@ -46,9 +46,17 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 		tails[i] = windowTail(w, b, now)
 		tailW = max(tailW, Width(tails[i]))
 	}
-	barW := max(4, inner-4-1-5-1-tailW) // label, bar, " 100%", tail
+	// The label column is as wide as the card's longest window name (at
+	// least 3 cells, at most a quarter of the card): 7d-fable is shown in
+	// full, never cut to "7d…" (tokens-layout).
+	labelW := 3
+	for _, w := range b.Windows {
+		labelW = max(labelW, Width(Preview(accountWindowName(w.Name))))
+	}
+	labelW = min(labelW, max(3, inner/4))
+	barW := max(4, inner-(labelW+1)-1-5-1-tailW) // label, bar, " 100%", tail
 	for i, w := range b.Windows {
-		row := append(append(Line{}, indent...), S(RoleMuted, pad(Fit(Preview(accountWindowName(w.Name)), 3), 4)))
+		row := append(append(Line{}, indent...), S(RoleMuted, pad(Fit(Preview(accountWindowName(w.Name)), labelW), labelW+1)))
 		if windowUnobserved(w) { // unknown, never a 0 % bar
 			row = append(row, S(RoleMuted, "?"))
 			out = append(out, FitLine(row, width))
@@ -66,7 +74,7 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 	return out
 }
 
-// accountWindowName is a window's name in the 3-cell column: a window named
+// accountWindowName is a window's name in the label column: a window named
 // in words (xai's billing periods) gets a short label, so weekly reads wk,
 // not a cut "we…"; any other name is shown as it is, fitted.
 func accountWindowName(name string) string {

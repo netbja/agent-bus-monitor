@@ -454,7 +454,7 @@ CLI or the screen, no mission runner, `os/exec` only in the listed files, only t
   account windows and per-agent provider column. Sparklines (braille-sparklines, spec
   `docs/superpowers/specs/2026-11-18-braille-sparklines-design.md`): `display.graphs` = `auto` | `block` | `braille` |
   `ascii`, resolved once by `graphsStyle` (`graphs.go`; `auto` reads the locale through `config.Locale`), drawn by
-  `sparkLine` on the U page's 7-day column only; the gauges keep their blocks. Icons (busmon-icons, spec
+  `sparkLine` on the U page's 7-day column only, through `sparkWide` (tokens-layout: 14 cells, each day repeated to fill them, 28 braille points, scaled per row, the period on the line under the header); the gauges keep their blocks. Icons (busmon-icons, spec
   `docs/superpowers/specs/2026-11-02-busmon-icons-design.md`): `display.icons` = `off` (default, today's screen byte for
   byte, `TestIconsOffIsToday`) | `nerd` (a lettered box per provider) | `agent-font` (the maker's logo, by client then
   provider), env `AGENT_BUS_BUSMON_ICONS` (an unknown value skipped, never a broken screen), chosen on the C page with
