@@ -467,3 +467,33 @@ func TestPlanHeaderAtEveryWidth(t *testing.T) {
 		t.Errorf("80: what is left dropped before the markers shortened: %q", h)
 	}
 }
+
+// reviewer-codex: a long plan name gives way first: at a narrow width the
+// bar, the count and both markers stay whole; only the name is clipped.
+func TestPlanHeaderLongName(t *testing.T) {
+	p := boardPlan(boardRow("a", plan.Done, "coder"), boardRow("u", plan.Upcoming, "coder"))
+	p.file.Plan = strings.Repeat("n", 30)
+	p.partial = true
+	p.rec.LoadedAt = shellNow.Add(-plan.StaleAfter - time.Hour).UnixMilli()
+	for _, w := range []int{40, 45, 60} {
+		h := strings.TrimRight(planHeader(p, shellNow, w, TierNarrow).text(), " ")
+		if !strings.HasSuffix(h, "1/2?   stale "+GlyphNone+" read failed") || !strings.Contains(h, GlyphBarEmpty) || Width(h) > w {
+			t.Errorf("%d: %q", w, h)
+		}
+	}
+}
+
+// foureyes' nit: the drawer shrinks when exactly minShellLower rows stay
+// under it for the active tab, not with one fewer.
+func TestFitDrawerBoundary(t *testing.T) {
+	c := shellCounts{ForYou: 2, Agents: 3, ForYouWidth: 50}
+	l := shellDrawer(shellLayoutFor(160, 50, c, PanelForYou, PanelActivity), c)
+	top := l.ForYou.Y + l.ForYou.H
+	room := l.Input.Y - top // the rows a drawer of need leaves: room - need
+	if d := fitDrawer(l, room-minShellLower); d.Drawer.H != room-minShellLower || d.Lower.H != minShellLower {
+		t.Fatalf("at the boundary: drawer %+v lower %+v", d.Drawer, d.Lower)
+	}
+	if d := fitDrawer(l, room-minShellLower+1); d.Lower.H != 0 || d.Drawer.Y+d.Drawer.H != l.Footer.Y {
+		t.Fatalf("one row short: drawer %+v lower %+v", d.Drawer, d.Lower)
+	}
+}

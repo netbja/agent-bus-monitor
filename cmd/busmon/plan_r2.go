@@ -144,7 +144,8 @@ func planOverallRole(p planState) Role {
 // state colour, done/total, then what is left and what is for the person;
 // stale or partial, it says so. The count, those markers and a bar (4 cells
 // at least) stay at every width, the narrow tier's included
-// (reviewer-codex): the markers shorten first, then what is left goes.
+// (reviewer-codex): a long name is clipped first, then the markers
+// shorten, then what is left goes.
 func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 	done, total := plan.Count(p.rows)
 	count := fmt.Sprintf("%d/%d", done, total)
@@ -173,11 +174,17 @@ func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 	if total > 0 {
 		pct = float64(done) * 100 / float64(total)
 	}
-	name := Seg{Text: Preview(p.file.Plan), Role: RoleText, Bold: true}
 	minBar, maxBar := 6, 40
 	if tier == TierNarrow {
 		minBar, maxBar = 4, 12
 	}
+	// The name gives way first (reviewer-codex): the bar, the count and the
+	// short markers keep their room, the name is clipped to what is left.
+	reserve := 2 + minBar + 2 + Width(count)
+	if m := marks(false); m != "" {
+		reserve += 3 + Width(m)
+	}
+	name := Seg{Text: Truncate(Preview(p.file.Plan), max(1, width-reserve)), Role: RoleText, Bold: true}
 	sep := " " + GlyphNone + " "
 	build := func(barW int, tail string) Line {
 		l := Line{name, {Text: "  ", Role: RoleMuted}}
