@@ -233,7 +233,7 @@ type attachDoneMsg struct {
 
 // attachCmd hands the terminal to agentbus attach; detach returns to busmon.
 func (m *Model) attachCmd(agent string) tea.Cmd {
-	if agent == "" {
+	if agent == "" || m.refuseReadOnly() { // typing into an agent's terminal is a write
 		return nil
 	}
 	bin := m.cfg.agentbusBin

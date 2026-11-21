@@ -218,16 +218,21 @@ type Model struct {
 	exitNote string
 	// switchTo is the project busmon ends to re-execute on (main finishes
 	// the switch); knownProjects the broker's, for /project's completions.
-	switchTo      string
+	switchTo string
+	// ro is the read-only guard's state (readonly.go), shared with the
+	// guarded writer the commands call.
+	ro            *readOnlyFlag
 	knownProjects []string
 }
 
 // newShell is the shell before its first poll and size.
 func newShell(cfg shellConfig) Model {
 	cfg.from = backTarget(cfg.from, cfg.project)
+	ro := &readOnlyFlag{}
+	cfg.w = guardWriter(cfg.w, ro) // a stopped project reached by a switch writes nothing (readonly.go)
 	m := Model{cfg: cfg, feed: &activityFeed{unread: newUnreadState()}, lists: &shellLists{}, paint: newPainter(th),
 		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou, askDrafts: map[string]string{}},
-		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache), notice: &noticeState{}}
+		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache), notice: &noticeState{}, ro: ro}
 	if c := cfg.cache; c != nil { // the person's read marks; nothing older than the last visit is marked
 		for _, id := range c.Read {
 			m.feed.unread.read[id] = true
@@ -498,6 +503,7 @@ func (m *Model) refresh() {
 	m.lists.reqView = requestGroups(m.requestInput())
 	m.work = workOf(m.workInput())
 	c := m.counts()
+	m.ro.set(m.readOnly())
 	if m.stoppedBanner() {
 		m.layout = withBanner(shellLayoutFor(m.width, m.height-1, c, m.ui.view, m.ui.tab))
 	} else {

@@ -59,7 +59,7 @@ func (m *Model) askServiceStart() tea.Cmd {
 		m.ui.flash, m.ui.flashErr = why, true
 		return nil
 	}
-	args := []string{"--project", m.cfg.project, "service", "start"}
+	args := m.startServicesArgs()
 	if why := agentcaller.Refuse(context.Background(), m.env, m.cfg.ancestor, "starting the services", "agentbus "+strings.Join(args, " ")); why != "" {
 		return refuse(why)
 	}

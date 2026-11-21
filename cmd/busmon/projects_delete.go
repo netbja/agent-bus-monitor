@@ -337,6 +337,9 @@ func (m *Model) deleteBackupDone(r *sleepRun, err error, archive string) {
 
 // runDelete checks again, then deletes, in one command (§5.1, §5.3).
 func (m *Model) runDelete() tea.Cmd {
+	if m.refuseReadOnly() {
+		return nil
+	}
 	d := m.ui.del
 	d.step = delDeleting
 	name, open, hosts := d.row.name, d.row.open, d.hosts

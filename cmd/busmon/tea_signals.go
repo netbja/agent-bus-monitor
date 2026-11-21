@@ -161,8 +161,8 @@ type seenWriter interface {
 func (m *Model) writeSeen() tea.Cmd {
 	ids := m.sig.seenPending
 	m.sig.seenPending = nil
-	w, ok := m.cfg.w.(seenWriter)
-	if len(ids) == 0 || !ok || m.cfg.self == "" {
+	w, ok := innerWriter(m.cfg.w).(seenWriter)
+	if len(ids) == 0 || !ok || m.cfg.self == "" || m.readOnly() { // read-only: no receipt, quietly (readonly.go)
 		return nil
 	}
 	ctx, self := m.cfg.ctx, m.cfg.self
@@ -199,7 +199,7 @@ func (m *Model) requestRecap(auto bool) tea.Cmd {
 	if s.recapLoading {
 		return nil
 	}
-	r, ok := m.cfg.w.(recapReader)
+	r, ok := innerWriter(m.cfg.w).(recapReader)
 	if !ok || m.cfg.st == nil {
 		s.recap = buildRecap(recapInput{Now: m.now, Since: m.cfg.priorVisit, Human: m.cfg.self,
 			Errors: map[string]error{"Bus": fmt.Errorf("recap reader unavailable")}})

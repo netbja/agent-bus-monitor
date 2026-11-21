@@ -212,7 +212,7 @@ func (m *Model) openHistory() tea.Cmd {
 // the live streams.
 func (m *Model) historyLoadCmd(serial, days int) tea.Cmd {
 	dir, ctx, readCap := m.cfg.histDir, m.cfg.ctx, m.historyCap()
-	live, _ := m.cfg.w.(liveStreamReader)
+	live, _ := innerWriter(m.cfg.w).(liveStreamReader)
 	if ctx == nil {
 		ctx = context.Background()
 	}
