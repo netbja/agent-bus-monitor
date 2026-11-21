@@ -12,8 +12,8 @@ import (
 // 4b part 3): each user's password replaced with ACL SETUSER <user>
 // resetpass ><new>, its file through RotatePassword (the previous one kept
 // as .prev, put back on a refusal or a failed proof), admin last, since the
-// connection that rotates them is admin's and stays logged in; then ACL
-// SAVE writes users.acl, so a restart keeps them.
+// connection that rotates them is admin's and stays logged in; ACL SAVE
+// after each user writes users.acl, so a restart keeps them.
 
 // ACLUsers changes the live broker's users.
 type ACLUsers interface {
@@ -40,10 +40,10 @@ func (s userSetter) SetPassword(ctx context.Context, pw string) error {
 	return s.b.SetUserPassword(ctx, s.user, pw)
 }
 
-// RotateUsers rotates every user of bus.ACLRoles, admin last, then saves.
-// Every file is read before anything changes. A user that fails stops the
-// rotation: it and the users after it keep their passwords, the ones before
-// stay rotated and are saved. login proves a fresh login as user; after
+// RotateUsers rotates every user of bus.ACLRoles, admin last, with ACL SAVE
+// after each. Every file is read before anything changes. A user that fails
+// stops the rotation: it and the users after it keep their passwords, the
+// ones before stay rotated and are saved; a failed save stops it too. login proves a fresh login as user; after
 // receives ping's new password (the healthcheck's copy in the broker's
 // data volume) once the broker holds it.
 func RotateUsers(ctx context.Context, b ACLUsers, getenv func(string) string, login func(ctx context.Context, user, pw string) error, after func(user, pw string) error) error {
@@ -62,30 +62,28 @@ func RotateUsers(ctx context.Context, b ACLUsers, getenv func(string) string, lo
 		}
 		old[u] = pw
 	}
-	var failed, afterErr error
-	rotated := 0
-	for _, u := range order {
+	var afterErr error
+	for i, u := range order {
 		pw, err := bus.NewPassword()
 		if err == nil {
 			err = RotatePassword(ctx, userSetter{b, u}, bus.UserPasswordFile(getenv, u), old[u], pw,
 				func(ctx context.Context, p string) error { return login(ctx, u, p) })
 		}
 		if err != nil {
-			failed = fmt.Errorf("%s: %v", u, err)
-			break
+			saved := "the users before it are rotated and saved"
+			if i == 0 {
+				saved = "no user was rotated"
+			}
+			return fmt.Errorf("%s: %v; %s, it and the ones after keep their passwords", u, err, saved)
 		}
-		rotated++
+		// Saved after each user (spec §3 step 4; reviewer-codex): an
+		// interruption leaves no rotated file that users.acl does not hold.
+		if err := b.SaveACL(ctx); err != nil {
+			return fmt.Errorf("ACL SAVE after %s failed (%v): %s holds its new password on the broker and in its file, but users.acl its old one, so a restart would bring that back; the users before it are saved, the ones after untouched. Run the rotation again now", u, err, u)
+		}
 		if u == bus.ACLPing {
 			afterErr = after(u, pw)
 		}
-	}
-	if rotated > 0 {
-		if err := b.SaveACL(ctx); err != nil {
-			return fmt.Errorf("ACL SAVE failed (%v): the broker and the files hold the new passwords, but users.acl the old ones, so a restart would bring those back. Run the rotation again now", err)
-		}
-	}
-	if failed != nil {
-		return fmt.Errorf("%v; the users before it are rotated and saved, it and the ones after keep their passwords", failed)
 	}
 	if afterErr != nil {
 		return fmt.Errorf("ping is rotated, but the healthcheck's copy could not be written (%v): the broker shows unhealthy until it is", afterErr)
