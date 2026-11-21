@@ -88,6 +88,18 @@ func states(t *testing.T, b *bus.Bus) []string {
 	return out
 }
 
+// waitStates waits until local's status history holds want.
+func waitStates(t *testing.T, b *bus.Bus, want string) {
+	t.Helper()
+	got := ""
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if got = strings.Join(states(t, b), " "); strings.Contains(got, want) {
+			return
+		}
+	}
+	t.Fatalf("states = %s, want %s", got, want)
+}
+
 // An entry sent while the peer was down is drained; one sent later is
 // received; each gets a reply on its thread, a report, working then idle.
 func TestRunnerAnswersOnTheThread(t *testing.T) {
@@ -113,10 +125,10 @@ func TestRunnerAnswersOnTheThread(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitThread(t, b, first, 4)
+	// The runner writes the reply, then its report, then idle (run.go): stopping
+	// at the reply could cancel the last two (foureyes: once in the full suite).
+	waitStates(t, b, "working idle working idle working idle")
 	stop()
-	if got := strings.Join(states(t, b), " "); !strings.Contains(got, "working idle working idle working idle") {
-		t.Fatalf("states = %s", got)
-	}
 	reports, _, err := b.Recent(ctx, []string{"report"}, 10)
 	if err != nil || len(reports) != 3 || !strings.Contains(reports[0].Message, "master") {
 		t.Fatalf("reports = %+v %v", reports, err)
@@ -147,6 +159,7 @@ func TestRunnerBlocksWhileTheEndpointIsDown(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitThread(t, b, id, 2)
+	waitStates(t, b, "working idle") // the answer's idle, written after the reply (as above)
 	stop()
 	got := states(t, b)
 	if !strings.Contains(strings.Join(got, " "), "working blocked") || got[len(got)-1] != "idle" {
