@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -67,42 +68,99 @@ func (b *Bus) RequestBy(ctx context.Context, task, from, target, ref, body strin
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	p := "0"
-	if person {
-		p = "1"
+	// The run and the plan are read here, not in the script (ACL answer a,
+	// broker-hardening step 4): any agent sends a request, and a script's
+	// declared keys need write, which an agent has on neither. The drain
+	// check is defence in depth, so a read just before the script is enough;
+	// a run that starts draining in between lets one request through.
+	if !person { // the person's own request is never refused for a drain
+		if state, err := b.r.HGet(ctx, RunKey(b.project), "state").Result(); err != nil && !errors.Is(err, redis.Nil) {
+			return "", err
+		} else if state == RunDraining {
+			return "", ErrRunDraining
+		}
 	}
-	id, err := publishRequest.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd"), SwapKey(b.project, target), RunKey(b.project), PlanKey(b.project), PlanFactsKey(b.project)},
-		task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen, p).Text()
+	prio, by, err := b.planPriorityOf(ctx, task)
+	if err != nil {
+		return "", err
+	}
+	id, err := publishRequest.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd"), SwapKey(b.project, target)},
+		task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen, prio, by).Text()
 	if err != nil && strings.Contains(err.Error(), "RUNDRAINING") {
 		return "", ErrRunDraining
 	}
 	return id, swapping(err, target)
 }
 
-// publishRequest starts a request at its plan task's priority (views-redesign
-// §4, step 4b): the plan task is the one whose board field names the request's
-// task, else the one with its id and no board field; its level is the
-// person's (the plan facts, normal included), else the plan file's. A plan that does not decode leaves it at normal.
+// planPriorityOf is the priority a request for task starts at (views-redesign
+// §4, step 4b): the plan task is the one whose board field names task, else
+// the one with its id and no board field; its level is the person's (the
+// plan facts, normal included), else the plan file's. No plan, or one that
+// does not decode, is normal ("", ""); only a failed read is an error.
+func (b *Bus) planPriorityOf(ctx context.Context, task string) (level, by string, err error) {
+	raw, err := b.r.Get(ctx, PlanKey(b.project)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", "", nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	var rec struct {
+		File string `json:"file"`
+	}
+	var file struct {
+		Tasks []struct {
+			ID       *string `json:"id"`
+			Board    string  `json:"board"`
+			Priority string  `json:"priority"`
+		} `json:"tasks"`
+	}
+	if json.Unmarshal([]byte(raw), &rec) != nil || json.Unmarshal([]byte(rec.File), &file) != nil {
+		return "", "", nil
+	}
+	found := -1
+	for i, t := range file.Tasks {
+		if t.Board == task {
+			found = i
+			break
+		}
+	}
+	if found < 0 {
+		for i, t := range file.Tasks {
+			if t.ID != nil && *t.ID == task && t.Board == "" {
+				found = i
+				break
+			}
+		}
+	}
+	if found < 0 || file.Tasks[found].ID == nil {
+		return "", "", nil
+	}
+	t := file.Tasks[found]
+	fraw, err := b.r.HGet(ctx, PlanFactsKey(b.project), *t.ID).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return "", "", err
+	}
+	var f PlanFact
+	if err == nil && json.Unmarshal([]byte(fraw), &f) == nil {
+		switch f.Priority {
+		case PriorityHigh, PriorityLow:
+			return f.Priority, f.PriorityBy, nil
+		case PriorityNormal:
+			return "", "", nil
+		}
+	}
+	if t.Priority == PriorityHigh || t.Priority == PriorityLow {
+		return t.Priority, "", nil
+	}
+	return "", "", nil
+}
+
+// publishRequest records a request: KEYS board, cmd, the target's swap;
+// ARGV task, from, target, ref, body, ttl ms, maxlen, then the priority and
+// who set it (planPriorityOf, read by the caller).
 var publishRequest = redis.NewScript(`
-local function planPriorityOf(plankey,factkey,task)
- local raw=redis.call('GET',plankey);if not raw then return '','' end
- local ok,rec=pcall(cjson.decode,raw);if not ok or type(rec)~='table' or type(rec.file)~='string' then return '','' end
- local ok2,file=pcall(cjson.decode,rec.file);if not ok2 or type(file)~='table' or type(file.tasks)~='table' then return '','' end
- local found=nil
- for _,t in ipairs(file.tasks) do if type(t)=='table' and t.board==task then found=t;break end end
- if not found then for _,t in ipairs(file.tasks) do if type(t)=='table' and t.id==task and (t.board==nil or t.board=='') then found=t;break end end end
- if not found or type(found.id)~='string' then return '','' end
- local fraw=redis.call('HGET',factkey,found.id)
- if fraw then
-  local ok3,f=pcall(cjson.decode,fraw)
-  if ok3 and type(f)=='table' and (f.priority=='high' or f.priority=='low') then return f.priority,(f.priority_by or '') end
-  if ok3 and type(f)=='table' and f.priority=='normal' then return '','' end
- end
- if found.priority=='high' or found.priority=='low' then return found.priority,'' end
- return '',''
-end
 if redis.call('EXISTS',KEYS[3])==1 then return redis.error_reply('SWAPPING') end
-if ARGV[8]~='1' and redis.call('HGET',KEYS[4],'state')=='draining' then return redis.error_reply('RUNDRAINING') end
 local raw=redis.call('HGET',KEYS[1],ARGV[1])
 if raw then
  local e=cjson.decode(raw)
@@ -114,7 +172,7 @@ local expires=0;if tonumber(ARGV[6])>0 then expires=now+tonumber(ARGV[6]) end
 local id=redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[7],'*','from',ARGV[2],'target',ARGV[3],'type','directive','ref',ARGV[4],'command',ARGV[5],'task',ARGV[1],'expires_at',expires,'text_complete','yes')
 local thread=ARGV[4];if thread=='' then thread=id end
 local e={owner=ARGV[3],state='requested',updated=math.floor(now/1000),request={id=id,thread=thread,from=ARGV[2],target=ARGV[3],created_at=now,expires_at=expires,delivery='queued'}}
-local prio,by=planPriorityOf(KEYS[5],KEYS[6],ARGV[1])
+local prio,by=ARGV[8],ARGV[9]
 if prio=='high' or prio=='low' then e.request.priority=prio;e.request.priority_at=now;if by~='' then e.request.priority_by=by end end
 redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))
 return id`)
