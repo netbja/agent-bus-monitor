@@ -154,7 +154,7 @@ Le préfixe d'attache est `attach.prefix`, `f12` par défaut. Un client qui ne l
 comme Kimi ou agy, demande `--prefix <key>` (`f1`-`f12`, `ctrl+<letter>`, `ctrl+\` ou `ctrl+]`).
 
 **Qui vous êtes.** busmon écrit en votre nom : `--as <name>`, `AGENT_BUS_HUMAN`, ou `agentbus identity set
-<name>`. Une commande qui écrit est refusée plutôt qu'envoyée anonymement. Dans le terminal d'un agent,
+<name>`, sinon votre `person.name`, et seulement ensuite `pilot`. Une commande qui écrit est refusée plutôt qu'envoyée anonymement. Dans le terminal d'un agent,
 une commande écrit au nom de cet agent (`AGENT_BUS_AGENT`).
 
 Le [guide opérationnel](docs/OPERATIONAL-GUIDE.fr.md) suit une journée avec l'équipe : lancer du
@@ -287,8 +287,10 @@ Réglages qu'un opérateur touche d'ordinaire :
 - **Ordre de connexion.** `agentbus` et `busmon` se connectent avec `REDIS_URL` quand elle est définie.
   Sinon ils utilisent `REDIS_HOST` / `REDIS_PORT` (`localhost` / `6380`), avec le mot de passe de
   `REDIS_PASSWORD`, sinon de `~/.config/agentbus/redis.env`. `--host` l'emporte sur `REDIS_HOST`.
-  L'option `--url` (`-u`) de busmon prend une URL, socket unix (`unix:///chemin.sock`) ou utilisateur ACL
-  compris, et règle `REDIS_URL` d'après elle ; `--host` à côté d'une URL est refusé, jamais ignoré.
+  L'option `--url` (`-u`) de busmon prend une URL, socket unix (`unix:///chemin.sock`) compris, et règle
+  `REDIS_URL` d'après elle ; `--host` à côté d'une URL est refusé, jamais ignoré. Avec `broker.acl` actif,
+  busmon se connecte avec son propre utilisateur ACL, quel que soit celui de l'URL ; sinon (un portable
+  derrière un tunnel), l'utilisateur de l'URL est utilisé.
 - **Regarder le bus d'une autre machine.** Utilisez un tunnel SSH :
 
 ```bash

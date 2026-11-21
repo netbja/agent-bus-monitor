@@ -38,15 +38,11 @@ type ProjectSummary struct {
 	Project string `json:"project"`
 	Agents  int    `json:"agents"`
 	Master  string `json:"master,omitempty"` // pilot-lease driver; "" when autonomous
-	// MasterState is the registered master agent's declared state, "" when
+	// MasterState is the registered master agent's (ACLMaster's name) declared state, "" when
 	// no agent named master is registered (busmon -l's MASTER column).
 	MasterState string `json:"master_state,omitempty"`
 	LastTS      int64  `json:"last_ts"` // ms since epoch; 0 when nothing is dated
 }
-
-// MasterAgent is the team's master as every template names it: the agent
-// whose state busmon -l shows.
-const MasterAgent = "master"
 
 // Projects discovers every project on the broker, newest activity first. It is
 // read-only and tolerates a shared broker: keys it does not recognise are
@@ -81,7 +77,7 @@ func (b *Bus) summary(ctx context.Context) (ProjectSummary, error) {
 		return s, err
 	}
 	s.Agents = len(agents)
-	if m, ok := agents[MasterAgent]; ok {
+	if m, ok := agents[ACLMaster]; ok {
 		s.MasterState = m.State
 	}
 	// The :agents hash outlives a `busmon --reset` (XTRIM empties the streams but

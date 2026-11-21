@@ -219,6 +219,23 @@ var Keys = []*Key{
 			}
 			return nil, "want a name: a lower-case letter, then letters, digits, - or _"
 		}},
+	// The person's own name (busmon-cli-flags item 3, the person's option A):
+	// busmon's identity after --as and identity.as, before "pilot". An
+	// invalid one is ignored, said, never a refusal.
+	{Name: "person.name", Env: "AGENT_BUS_PERSON_NAME", Kind: String, Default: "", ReadBy: "busmon (its name after identity.as)",
+		Invalid: "busmon writes as pilot",
+		env: func(raw string) (any, envResult) {
+			if validName(raw) {
+				return raw, envUse
+			}
+			return nil, envInvalid
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "" || validName(s)) {
+				return s, ""
+			}
+			return nil, "want a name: a lower-case letter, then letters, digits, - or _"
+		}},
 	{Name: "person.language", Env: "AGENT_BUS_PERSON_LANGUAGE", Kind: String, Default: "en", ReadBy: "master's role skill (agentbus config)",
 		Invalid: "master writes English", FailClosed: true, Options: languageOptions, // a refused value is en, said, never the next source
 		env: func(raw string) (any, envResult) {

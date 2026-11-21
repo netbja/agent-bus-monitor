@@ -151,7 +151,7 @@ The attach prefix is `attach.prefix`, `f12` by default. A client that does not l
 Kimi or agy, needs `--prefix <key>` (`f1`-`f12`, `ctrl+<letter>`, `ctrl+\` or `ctrl+]`).
 
 **Who you are.** busmon writes as you: `--as <name>`, `AGENT_BUS_HUMAN`, or `agentbus identity set
-<name>`. A command that writes is refused rather than sent anonymously. Inside an agent's
+<name>`, else your `person.name`, and only then `pilot`. A command that writes is refused rather than sent anonymously. Inside an agent's
 terminal, a command writes as that agent (`AGENT_BUS_AGENT`).
 
 The [operations guide](docs/OPERATIONAL-GUIDE.md) walks through a day with the team: starting work,
@@ -281,8 +281,9 @@ Settings an operator usually touches:
 - **Connection order.** Both `agentbus` and `busmon` connect with `REDIS_URL` when it is set. Otherwise
   they use `REDIS_HOST` / `REDIS_PORT` (`localhost` / `6380`), with the password from `REDIS_PASSWORD`,
   else `~/.config/agentbus/redis.env`. `--host` overrides `REDIS_HOST`. busmon's `--url` (`-u`) takes a
-  URL, a unix socket (`unix:///path.sock`) or an ACL user included, and sets `REDIS_URL` for it; `--host`
-  beside a URL is refused rather than ignored.
+  URL, a unix socket (`unix:///path.sock`) included, and sets `REDIS_URL` for it; `--host` beside a URL is
+  refused rather than ignored. With `broker.acl` on, busmon logs in as its own ACL user whatever the URL
+  names; where it is off (a laptop through a tunnel), the URL's user is used.
 - **Watching another machine's bus.** Use an SSH tunnel:
 
 ```bash

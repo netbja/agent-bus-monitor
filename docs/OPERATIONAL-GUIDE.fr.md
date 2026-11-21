@@ -58,7 +58,7 @@ Ses options utiles :
 - **busmon a besoin d'un projet.** Lancez `busmon -p myapp`. `busmon --list` liste les projets du
   broker, et `busmon --new` les modèles.
 - **Qui vous êtes.** busmon écrit en votre nom (`--as`, `AGENT_BUS_HUMAN`, ou `agentbus identity set
-  <name>`).
+  <name>`, sinon `person.name`, puis `pilot`).
 
 **Joindre un agent :**
 

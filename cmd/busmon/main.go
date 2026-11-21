@@ -777,7 +777,7 @@ func main() {
 		}
 		os.Exit(openPicked(chosen, opts, set, os.Stderr))
 	}
-	// busmon writes as a person, never as an agent: --as, AGENT_BUS_HUMAN, else "pilot".
+	// busmon writes as a person, never as an agent: --as, AGENT_BUS_HUMAN / identity.as, then person.name, else "pilot" (loadBusmonSettings).
 	self, err := humanIdentity(settings.Identity, "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: --as: "+err.Error())
