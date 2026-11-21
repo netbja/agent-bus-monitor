@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -140,6 +141,13 @@ func (s *Store) Remember(ctx context.Context, rd Reader, r Request) (Observation
 		}
 	}
 
+	// One writer at a time, from the read to the commit: busmon's page and
+	// the CLI may write together, and neither may lose the other's line.
+	unlock, err := s.lock()
+	if err != nil {
+		return Observation{}, err
+	}
+	defer unlock()
 	// Every file must parse: a hand-edited one is never written over, and
 	// ids and supersedes are the whole memory's (reviewer-codex).
 	all, errs := s.loadAll()
@@ -340,6 +348,27 @@ func activeDecision(t *Topic, all map[string]*Topic) string {
 		}
 	}
 	return ""
+}
+
+// lock takes the store's lock, waiting for another writer: an exclusive
+// flock on .lock in the store (made 0700, the file 0600; git leaves it
+// untracked).
+func (s *Store) lock() (func(), error) {
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(filepath.Join(s.Dir, ".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+	}, nil
 }
 
 // write saves t and commits it: the repository is made on the first write

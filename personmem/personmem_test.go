@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -379,5 +380,79 @@ func TestRememberKeepsAnUnparsableTopic(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); string(b) != broken {
 		t.Fatalf("the file changed:\n%s", b)
+	}
+}
+
+// The person's memory is private (foureyes on fae1939c): the directories
+// remember makes are 0700, a topic file 0600.
+func TestStoreIsPrivate(t *testing.T) {
+	s := store(t)
+	if _, err := s.Remember(context.Background(), reader(), decision("merge-policy", dirID, "yes, dev first")); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{s.Dir, filepath.Dir(s.Dir), filepath.Dir(filepath.Dir(s.Dir))} {
+		if st, err := os.Stat(d); err != nil || st.Mode().Perm() != 0o700 {
+			t.Errorf("%s: %v %v", d, st.Mode().Perm(), err)
+		}
+	}
+	if st, err := os.Stat(filepath.Join(s.Dir, "merge-policy.md")); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("topic file: %v %v", st.Mode().Perm(), err)
+	}
+}
+
+// A topic holds at most MaxObs observations; the next is refused (spec
+// §4.3.5: the person splits the topic).
+func TestTopicBound(t *testing.T) {
+	s := store(t)
+	tp := &Topic{Topic: "big", Kind: "other"}
+	for i := range MaxObs {
+		tp.Obs = append(tp.Obs, Observation{ID: "20261120-" + strconv.Itoa(1000+i) + "-0", Type: "fact", Importance: "minor", Said: "2026-11-20 by charlie from busmon", Quote: "q" + strconv.Itoa(i)})
+	}
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.Dir, "big.md"), []byte(tp.Format()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Remember(context.Background(), reader(), Request{Topic: "big", Type: "fact", Importance: "minor", From: Source{"demo", dirID}, Quote: "yes, dev first", By: "charlie"})
+	if err == nil || !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "split it") {
+		t.Fatalf("observation %d: %v", MaxObs+1, err)
+	}
+}
+
+// The quote's case is kept: "Yes, Dev First" is not the person's "yes, dev
+// first".
+func TestQuoteKeepsCase(t *testing.T) {
+	s := store(t)
+	if _, err := s.Remember(context.Background(), reader(), decision("x", dirID, "Yes, Dev First")); err == nil || !strings.Contains(err.Error(), "not in the person's text") {
+		t.Fatalf("case-changed quote: %v", err)
+	}
+}
+
+// Two writers at once (busmon's page and the CLI) lose nothing: remember
+// holds the store's lock from its read to its commit.
+func TestRememberConcurrently(t *testing.T) {
+	s := store(t)
+	rd := reader()
+	const n = 8
+	for i := range n {
+		rd["demo:"+strconv.Itoa(2000+i)+"-0"] = Entry{Kind: "cmd", Type: "directive", Body: "fact " + strconv.Itoa(i), Human: true, Typed: true}
+	}
+	errs := make(chan error, n)
+	for i := range n {
+		go func() {
+			_, err := s.Remember(context.Background(), rd, Request{Topic: "many", Type: "fact", Importance: "minor",
+				From: Source{"demo", strconv.Itoa(2000+i) + "-0"}, Quote: "fact " + strconv.Itoa(i), By: "charlie"})
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	tp, err := s.Load("many")
+	if err != nil || len(tp.Obs) != n || commits(t, s) != n {
+		t.Fatalf("%d observations, %d commits: %v", len(tp.Obs), commits(t, s), err)
 	}
 }
