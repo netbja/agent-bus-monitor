@@ -209,6 +209,42 @@ func TestJudgeDirectHelpers(t *testing.T) {
 	}
 }
 
+// HelperBranches: a direct child whose name the profile lists is a helper,
+// with its subtree, whatever its CPU; any other direct child still counts,
+// so a command a one-command shell exec'd in place (Codex) is still work.
+func TestJudgeHelperBranches(t *testing.T) {
+	now := time.Unix(1000000, 0)
+	codex := Background{HelperBranches: []*regexp.Regexp{regexp.MustCompile(`^codex-code-mode$`), regexp.MustCompile(`^codebase-memory$`)}}
+	helpers := []Proc{
+		{Name: "codex-code-mode", Branch: "codex-code-mode", CPUGrowth: 9 * time.Second},
+		{Name: "codebase-memory", Branch: "codebase-memory", CPUGrowth: 9 * time.Second},
+		{Name: "git", Branch: "codebase-memory", CPUGrowth: 9 * time.Second},
+	}
+	if j := codex.Judge(Facts{Process: &ProcessFacts{Window: 10 * time.Second, Procs: helpers}}, now); j.State != BackgroundUnknown || j.Procs() != 0 {
+		t.Fatalf("the listed helpers: %v %d %q", j.State, j.Procs(), j.What())
+	}
+	work := append(helpers, Proc{Name: "npm", Branch: "npm"}, Proc{Name: "MainThread", Branch: "MainThread"}, Proc{Name: "pytest"})
+	if j := codex.Judge(Facts{Process: &ProcessFacts{Window: 10 * time.Second, Procs: work}}, now); j.State != BackgroundRunning ||
+		j.What() != "process 'npm', process 'MainThread', process 'pytest'" {
+		t.Fatalf("exec'd in place, an unlisted branch, an unknown one: %v %q", j.State, j.What())
+	}
+}
+
+// The shipped Codex profile lists its code-mode host and the MCP server named
+// apart from any command; node ("MainThread" on Node 24, codegraph's too) is
+// not listed: a dev server is node as well.
+func TestProfilesHelperBranches(t *testing.T) {
+	bg := Profiles()["codex"].Background
+	for name, want := range map[string]bool{"codex-code-mode": true, "codebase-memory": true, "MainThread": false, "node": false, "bash": false} {
+		if got := anyMatch(bg.HelperBranches, name); got != want {
+			t.Errorf("codex %q: %v, want %v", name, got, want)
+		}
+	}
+	if Profiles()["claude"].Background.HelperBranches != nil {
+		t.Error("claude lists helper branches: direct_helpers covers it")
+	}
+}
+
 // The shipped Claude Code profile declares it; the others do not.
 func TestProfilesDirectHelpers(t *testing.T) {
 	for client, want := range map[string]bool{"claude": true, "codex": false, "grok": false, "kimi": false, "agy": false} {

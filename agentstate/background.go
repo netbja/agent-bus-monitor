@@ -47,6 +47,11 @@ type Background struct {
 	// "bash -c source …snapshot…"). A client whose commands may be exec'd in
 	// place by a one-command shell does not declare it.
 	DirectHelpers bool
+	// HelperBranches: the names of direct children that are the client's
+	// helpers, with their subtrees, whatever their CPU (Codex's code-mode
+	// host): for a client that cannot declare DirectHelpers, since only a
+	// listed name is a helper and a command exec'd in place still counts.
+	HelperBranches []*regexp.Regexp
 }
 
 // shells are the names a client's tool command runs under: a direct child by
@@ -197,7 +202,7 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 	if p := f.Process; p != nil {
 		read[SourceProcess] = true
 		for _, pr := range p.Procs {
-			if b.DirectHelpers && pr.Branch != "" && !shells[pr.Branch] { // the client's own MCP server or daemon, or its child
+			if b.helperBranch(pr.Branch) { // the client's own MCP server or daemon, or its child
 				continue
 			}
 			if b.helper(pr.Name, f.ExtraHelpers) && float64(pr.CPUGrowth) <= HelperCPU*float64(p.Window) {
@@ -239,6 +244,15 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 		j.State, j.base = BackgroundRunning, &base
 	}
 	return j
+}
+
+// helperBranch: a process under one of the client's own direct children,
+// any non-shell one with DirectHelpers, a listed one with HelperBranches.
+func (b Background) helperBranch(branch string) bool {
+	if branch == "" {
+		return false
+	}
+	return b.DirectHelpers && !shells[branch] || anyMatch(b.HelperBranches, branch)
 }
 
 func (b Background) helper(name string, extra []string) bool {

@@ -27,6 +27,11 @@ blocked = ['(?m)^[ \t]*(?P<what>[^\n]*\S\?)[ \t]*\n[ \t]*› 1\. [^\n]*\n[ \t]*2
 [background]
 authoritative = []
 helpers = []
+# Its own direct children, by name, with their subtrees (checked on codex-cli 0.169.0, 2026-11-21): the
+# code-mode host and codebase-memory-mcp (/proc's comm, cut at 15 characters). Not direct_helpers: a
+# one-command "bash -c" execs the program in place, so any unlisted direct child still counts. Not node
+# either: Node 24 names every node process MainThread, codegraph's MCP server and a dev server alike.
+helper_branches = ['^codex-code-mode$', '^codebase-memory$']
 screen = []
 
 # The attach prefix (herdr exit spec 4.6, 4.9): F12 free by the f12-at-input probe, codex-cli 0.169.0

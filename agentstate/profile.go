@@ -68,10 +68,11 @@ type profileFile struct {
 		Blocked   []string `toml:"blocked"`
 	} `toml:"signature"`
 	Background struct {
-		Authoritative []string `toml:"authoritative"`
-		Helpers       []string `toml:"helpers"`
-		Screen        []string `toml:"screen"`
-		DirectHelpers bool     `toml:"direct_helpers"`
+		Authoritative  []string `toml:"authoritative"`
+		Helpers        []string `toml:"helpers"`
+		Screen         []string `toml:"screen"`
+		DirectHelpers  bool     `toml:"direct_helpers"`
+		HelperBranches []string `toml:"helper_branches"`
 	} `toml:"background"`
 	Keys  map[string]string `toml:"keys"`
 	Login struct {
@@ -131,6 +132,9 @@ func parseProfile(name string, data []byte) (Profile, error) {
 		return Profile{}, err
 	}
 	if bg.Screen, err = compile(f.Background.Screen); err != nil {
+		return Profile{}, err
+	}
+	if bg.HelperBranches, err = compile(f.Background.HelperBranches); err != nil {
 		return Profile{}, err
 	}
 	seen := map[string]bool{}

@@ -14,5 +14,11 @@
     - **Codex** has the same shape (its MCP servers and `codex-code-mode` are direct children, its
       commands are `/bin/bash -c …`). But a one-command `bash -c` or `bash -lc` execs the program in
       place (checked: `bash -c 'sleep 3'` leaves only `sleep`, a direct child), so a dev server would
-      read as a helper. It does not declare it, and its process source is not authoritative anyway.
+      read as a helper. Codex therefore lists its helpers by name instead,
+      `helper_branches = ['^codex-code-mode$', '^codebase-memory$']`: a listed direct child and its
+      subtree are helpers, any other direct child still counts. **codegraph is still counted:** Node 24
+      names every node process `MainThread`, so its MCP server cannot be told from a dev server by
+      name. That needs the command line, which the census does not read yet.
     - **Grok, Kimi and agy** are not checked.
+  - **What a helper starts is the helper's:** an MCP server that shells out to run real work (a
+    build, a test runner) never counts. None does on this host today.
