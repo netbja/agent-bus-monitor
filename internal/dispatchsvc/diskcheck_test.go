@@ -172,3 +172,48 @@ func TestDiskPathsRemoteDocker(t *testing.T) {
 		}
 	}
 }
+
+// broker-hardening step 3: with broker.runtime=podman the broker data is
+// podman's storage root, measured only when podman runs on this host; no
+// docker command is asked.
+func TestDiskBrokerDataUnderPodman(t *testing.T) {
+	const g = 1 << 30
+	const info = "podman info -f {{.Host.ServiceIsRemote}}|{{.Store.GraphRoot}}"
+	brokerData := func(path map[string]bool, out map[string]string, goos string) health.DiskPath {
+		d := fakeDisks(map[string][3]uint64{"/home/u/.local/share/containers/storage": {10 * g, 100 * g, 2050}}, path, out)
+		d.Getenv = func(k string) string {
+			return map[string]string{"HOME": "/home/u", "AGENT_BUS_BROKER_RUNTIME": "podman", "XDG_CONFIG_HOME": t.TempDir()}[k]
+		}
+		d.GOOS = goos
+		inner := d.Output
+		d.Output = func(ctx context.Context, name string, args ...string) (string, error) {
+			if name == "docker" {
+				t.Fatalf("docker asked: %v", args)
+			}
+			return inner(ctx, name, args...)
+		}
+		for _, p := range diskPaths(context.Background(), d) {
+			if p.Label == "broker data" {
+				return p
+			}
+		}
+		t.Fatal("no broker data")
+		return health.DiskPath{}
+	}
+	podman := map[string]bool{"podman": true, "docker": true}
+	if p := brokerData(podman, map[string]string{info: "false|/home/u/.local/share/containers/storage\n"}, "linux"); !p.Known || p.Path != "/home/u/.local/share/containers/storage" {
+		t.Errorf("local podman: %+v", p)
+	}
+	if p := brokerData(podman, map[string]string{info: "true|/var/lib/containers/storage\n"}, "linux"); p.Known || !strings.Contains(p.Note, "runs remotely") {
+		t.Errorf("remote podman: %+v", p)
+	}
+	if p := brokerData(podman, map[string]string{info: "false|/var/lib/containers/storage\n"}, "darwin"); p.Known || !strings.Contains(p.Note, "inside its VM on darwin") {
+		t.Errorf("podman on macOS: %+v", p)
+	}
+	if p := brokerData(podman, map[string]string{}, "linux"); p.Known || p.Note != "podman info failed" {
+		t.Errorf("podman info failed: %+v", p)
+	}
+	if p := brokerData(map[string]bool{"docker": true}, nil, "linux"); p.Note != "podman not on PATH" {
+		t.Errorf("no podman: %+v", p)
+	}
+}

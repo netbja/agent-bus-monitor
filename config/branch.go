@@ -27,3 +27,6 @@ func ValidBranchName(s string) bool {
 	}
 	return true
 }
+
+// IsBrokerRuntime: the container runtimes broker.runtime accepts.
+func IsBrokerRuntime(s string) bool { return s == "docker" || s == "podman" }

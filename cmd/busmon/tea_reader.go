@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"os"
 	"slices"
 	"strings"
@@ -351,7 +352,7 @@ func (m *Model) servicesCmd(serial int) tea.Cmd {
 			cancel()
 		}
 		host, _ := os.Hostname()
-		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker, holders), serial: serial}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker, holders, brokerrt.Of(os.Getenv)), serial: serial}
 	}
 }
 

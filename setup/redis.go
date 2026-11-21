@@ -12,16 +12,27 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 )
 
 // RedisContainer is the broker's container name, shared by every checkout.
 const RedisContainer = "agent-bus-redis"
 
-// Docker is what step 1 learned of docker: the daemon answers, and the
-// compose command to use ("" when there is none).
+// Docker is what step 1 learned of the broker's runtime (broker.runtime,
+// docker or podman): the daemon answers, and the compose command to use (""
+// when there is none).
 type Docker struct {
 	OK      bool
 	Compose string
+}
+
+// runtime is the broker's container runtime, from the installer's
+// environment (broker.runtime); docker without one.
+func (in *Installer) runtime() brokerrt.Runtime {
+	if in.Getenv == nil {
+		return brokerrt.Docker
+	}
+	return brokerrt.Of(in.Getenv)
 }
 
 // Owner is the checkout a broker container belongs to, read from its
@@ -38,7 +49,7 @@ type Owner struct {
 // from its own config. An error is an owner that could not be read: the
 // caller then acts as for a foreign one.
 func (in *Installer) BrokerOwner(ctx context.Context) (Owner, error) {
-	out, err := in.R.Run(ctx, Cmd{Name: "docker", Args: []string{"inspect", "--format",
+	out, err := in.R.Run(ctx, Cmd{Name: in.runtime().Bin(), Args: []string{"inspect", "--format",
 		`{{index .Config.Labels "com.docker.compose.project.working_dir"}}`, RedisContainer}})
 	if err != nil {
 		if strings.Contains(string(out), "No such object") || strings.Contains(string(out), "No such container") {
@@ -57,7 +68,7 @@ func (in *Installer) mayCompose(ctx context.Context, refused string) bool {
 	o, err := in.BrokerOwner(ctx)
 	switch {
 	case err != nil:
-		in.O.Warn("Redis broker: could not read who owns " + RedisContainer + " (docker inspect failed): " + refused)
+		in.O.Warn("Redis broker: could not read who owns " + RedisContainer + " (" + in.runtime().Bin() + " inspect failed): " + refused)
 	case !o.Exists || o.Ours:
 		return true
 	case o.Dir == "":
@@ -97,7 +108,7 @@ func (in *Installer) Redis(ctx context.Context, d Docker) {
 		in.O.Info("Redis broker not reachable on 127.0.0.1:6380 (--no-docker: not started).")
 		return
 	case !d.OK || d.Compose == "":
-		in.O.Warn("Redis broker not reachable on 127.0.0.1:6380 (run 'docker compose up -d' manually in " + in.Repo + ").")
+		in.O.Warn("Redis broker not reachable on 127.0.0.1:6380 (run '" + in.runtime().Compose() + " up -d' manually in " + in.Repo + ").")
 		return
 	case !in.mayCompose(ctx, "not started."):
 		return
@@ -174,7 +185,7 @@ func (in *Installer) freshBroker(ctx context.Context) bool {
 	if o, err := in.BrokerOwner(ctx); err != nil || o.Exists {
 		return false
 	}
-	out, err := in.R.Run(ctx, Cmd{Name: "docker", Args: []string{"volume", "inspect", "--format", "{{.Name}}", RedisVolume}})
+	out, err := in.R.Run(ctx, Cmd{Name: in.runtime().Bin(), Args: []string{"volume", "inspect", "--format", "{{.Name}}", RedisVolume}})
 	return err != nil && strings.Contains(strings.ToLower(string(out)), "no such volume")
 }
 
@@ -186,7 +197,8 @@ func (in *Installer) sleep(d time.Duration) {
 	time.Sleep(d)
 }
 
-// composeArgs splits "docker compose" or "docker-compose" and adds verb.
+// composeArgs splits a compose command ("podman compose", "docker-compose")
+// and adds verb.
 func composeArgs(compose string, verb ...string) (string, []string) {
 	f := strings.Fields(compose)
 	return f[0], append(f[1:], verb...)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"os"
 	"os/exec"
 	"strings"
@@ -87,7 +88,7 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 
 // gatherServices reads the facts; it runs in a command, never in View.
 func gatherServices(ctx context.Context, r busReader, project string, inst *bus.ServicesInstall, recs map[string]bus.ServiceRecord, host string, run svcRunner,
-	holders func(context.Context) ([]holderRow, error)) svcFacts {
+	holders func(context.Context) ([]holderRow, error), rt brokerrt.Runtime) svcFacts {
 	f := svcFacts{project: project, inst: inst, recs: recs, host: host, logs: map[string]int64{}, since: map[string]time.Time{}}
 	switch d, ok := recs["dispatch"]; {
 	case holders == nil:
@@ -127,9 +128,9 @@ func gatherServices(ctx context.Context, r busReader, project string, inst *bus.
 		f.redis.infoErr = "not read"
 	}
 	if run != nil {
-		if out, err := run(c, "docker", "inspect", "-f", "{{.Config.Image}}|{{.State.Status}}", redisContainer); err == nil && out != "" {
+		if out, err := run(c, rt.Bin(), "inspect", "-f", "{{.Config.Image}}|{{.State.Status}}", redisContainer); err == nil && out != "" { // broker.runtime (broker-hardening step 3)
 			image, status, _ := strings.Cut(out, "|")
-			f.redis.where = fmt.Sprintf("docker %s (%s), %s", redisContainer, image, status)
+			f.redis.where = fmt.Sprintf("%s %s (%s), %s", rt.Bin(), redisContainer, image, status)
 		}
 	}
 	if f.redis.where == "" && f.redis.info.PID > 0 {

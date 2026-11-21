@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ func preflightRun(t *testing.T, f *fakeRunner, opt Options) (string, string, int
 	t.Helper()
 	var out, errw bytes.Buffer
 	o := NewOutput(&out, &errw, false)
-	missing, _ := Preflight(context.Background(), f, o, opt, "1.26", "linux", "amd64")
+	missing, _ := Preflight(context.Background(), f, o, opt, "1.26", "linux", "amd64", brokerrt.Docker)
 	return out.String(), errw.String(), missing
 }
 

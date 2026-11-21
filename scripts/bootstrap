@@ -66,8 +66,12 @@ if [[ -z "$verb" ]]; then
   if [[ -f "$template" ]]; then verb="recall"; else verb="new"; fi
 fi
 
+# The broker's runtime is broker.runtime (docker or podman, broker-hardening step 3), read
+# through agentbus: never a guess, so an unreadable setting stops here.
 ensure_broker() {
-  ( cd "$REPO" && docker compose up -d ) || die "failed to start the broker (docker compose up -d)"
+  local rt
+  rt="$("$AGENTBUS_BIN" config get broker.runtime)" && [[ -n "$rt" ]] || die "cannot read broker.runtime (agentbus config get broker.runtime)"
+  ( cd "$REPO" && "$rt" compose up -d ) || die "failed to start the broker ($rt compose up -d)"
 }
 
 # --roles (agentbus start): the team, role[:profile],...; without it every boot role, as before.

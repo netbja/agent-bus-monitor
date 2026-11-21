@@ -580,6 +580,21 @@ var Keys = []*Key{
 			}
 			return nil, "want a Git branch name"
 		}},
+	// The broker's container runtime (broker-hardening step 3): the binary
+	// every caller of the container runs (brokerrt), with "<runtime> compose".
+	{Name: "broker.runtime", Env: "AGENT_BUS_BROKER_RUNTIME", Kind: String, Default: "docker", ReadBy: "./setup.sh, agentbus up, dispatch, busmon", MachineOnly: true,
+		env: func(raw string) (any, envResult) {
+			if IsBrokerRuntime(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && IsBrokerRuntime(s) {
+				return s, ""
+			}
+			return nil, "want docker or podman"
+		}},
 	// Backups (spec 2026-11-01-backup-design.md): where archives go (an
 	// absolute folder; "" = $XDG_DATA_HOME/agentbus/backups, BackupDir) and
 	// how many of this host's are kept (0 keeps every one).

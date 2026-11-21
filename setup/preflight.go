@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"strconv"
 	"strings"
 )
@@ -11,7 +12,7 @@ import (
 // Go against goWant (go.mod's version), Docker and compose.
 // It returns how many required tools are missing, and what it learned of docker; the caller stops a real run
 // after it, while a dry run goes on and lists every gap.
-func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, goos, goarch string) (int, Docker) {
+func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, goos, goarch string, rt brokerrt.Runtime) (int, Docker) {
 	missing := 0
 	var d Docker
 	need := func(s string) { missing++; o.Error(s) }
@@ -50,36 +51,39 @@ func Preflight(ctx context.Context, r Runner, o *Output, opt Options, goWant, go
 		need(fmt.Sprintf("Go %s or newer is required to build busmon and agentbus: https://go.dev/dl/", goWant))
 	}
 
-	if _, err := r.LookPath("docker"); err == nil {
-		if _, err := r.Run(ctx, Cmd{Name: "docker", Args: []string{"info"}}); err == nil {
+	bin := rt.Bin() // broker.runtime (broker-hardening step 3)
+	if _, err := r.LookPath(bin); err == nil {
+		if _, err := r.Run(ctx, Cmd{Name: bin, Args: []string{"info"}}); err == nil {
 			d.OK = true
-			o.OK("docker: daemon is running")
+			o.OK(bin + ": daemon is running")
 		} else {
-			o.Warn("docker is installed but daemon is not running (needed for Redis broker).")
+			o.Warn(bin + " is installed but daemon is not running (needed for Redis broker).")
 		}
-		d.Compose = ComposeCmd(ctx, r)
+		d.Compose = ComposeCmd(ctx, r, rt)
 		switch d.Compose {
-		case "docker compose":
-			o.OK("docker compose: plugin available")
-		case "docker-compose":
-			o.OK("docker-compose: standalone command available")
+		case rt.Compose():
+			o.OK(rt.Compose() + ": plugin available")
+		case rt.Standalone():
+			o.OK(rt.Standalone() + ": standalone command available")
 		default:
-			o.Warn("docker compose plugin is not available.")
+			o.Warn(rt.Compose() + " plugin is not available.")
 		}
+	} else if rt == brokerrt.Podman {
+		o.Warn("podman is not installed (broker.runtime=podman). Redis broker container requires it: https://podman.io/docs/installation")
 	} else {
-		o.Warn("docker is not installed. Redis broker container requires Docker: https://docs.docker.com/engine/install/")
+		o.Warn(bin + " is not installed. Redis broker container requires Docker: https://docs.docker.com/engine/install/")
 	}
 	return missing, d
 }
 
-// ComposeCmd is setup.sh's compose_cmd: the plugin first, then the
-// standalone command, else "".
-func ComposeCmd(ctx context.Context, r Runner) string {
-	if _, err := r.Run(ctx, Cmd{Name: "docker", Args: []string{"compose", "version"}}); err == nil {
-		return "docker compose"
+// ComposeCmd is setup.sh's compose_cmd for the runtime: the plugin first
+// ("<runtime> compose"), then the standalone command, else "".
+func ComposeCmd(ctx context.Context, r Runner, rt brokerrt.Runtime) string {
+	if _, err := r.Run(ctx, Cmd{Name: rt.Bin(), Args: []string{"compose", "version"}}); err == nil {
+		return rt.Compose()
 	}
-	if _, err := r.LookPath("docker-compose"); err == nil {
-		return "docker-compose"
+	if _, err := r.LookPath(rt.Standalone()); err == nil {
+		return rt.Standalone()
 	}
 	return ""
 }

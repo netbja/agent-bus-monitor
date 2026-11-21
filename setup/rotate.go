@@ -171,9 +171,9 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 		o.Fatal("the broker belongs to " + where + ": rotate its password from there")
 		return 1
 	}
-	compose := ComposeCmd(ctx, in.R)
+	compose := ComposeCmd(ctx, in.R, in.runtime())
 	if compose == "" {
-		o.Fatal("no docker compose to recreate the broker with after the change (its container keeps the password it was created with): install it first")
+		o.Fatal("no " + in.runtime().Compose() + " to recreate the broker with after the change (its container keeps the password it was created with): install it first")
 		return 1
 	}
 	if setsKey(filepath.Join(in.Repo, ".env"), "REDIS_PASSWORD") {
@@ -238,11 +238,11 @@ func (in *Installer) RotateRedisPassword(ctx context.Context, p *Prompter, dial 
 	if out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo}); err != nil {
 		showTail(o.err, out)
 		o.Fatal("Redis password: the broker could not be recreated (" + err.Error() + "). The running broker and " + path +
-			" hold the new password, but its container still has the old one for its next start: run docker compose up -d --force-recreate redis in " + in.Repo + " before it restarts")
+			" hold the new password, but its container still has the old one for its next start: run " + compose + " up -d --force-recreate redis in " + in.Repo + " before it restarts")
 		return 1
 	}
 	if !in.waitLogin(ctx, dial, pw) {
-		o.Fatal("Redis password: the recreated broker does not log in with the new password yet; check it with docker compose ps in " + in.Repo + " (the password is in " + path + ")")
+		o.Fatal("Redis password: the recreated broker does not log in with the new password yet; check it with " + compose + " ps in " + in.Repo + " (the password is in " + path + ")")
 		return 1
 	}
 	o.OK("Redis broker: recreated with the new password, so a restart keeps it")

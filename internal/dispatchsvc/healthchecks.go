@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"math"
 	"net"
 	"os"
@@ -539,42 +540,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			out := health.EvaluateSecretPaths(paths, true)
 			return out.Status, out.Detail, nil
 		}),
-		healthTask("redis-password", func(ctx context.Context) (health.Status, string, error) {
-			host := os.Getenv("REDIS_HOST")
-			if h, _, err := net.SplitHostPort(host); err == nil {
-				host = h
-			}
-			host = strings.Trim(host, "[]")
-			if host != "" && host != "localhost" && host != "127.0.0.1" && host != "::1" {
-				return health.Unknown, "Redis host is not locally verifiable", errors.New("external Redis host")
-			}
-			if os.Getenv("REDIS_PASSWORD_FILE") != "" {
-				return health.Unknown, "Redis password file cannot be classified without reading its credential", errors.New("file credential source")
-			}
-			cmd := exec.CommandContext(ctx, "docker", "ps", "--filter", "publish=6380", "--format", "{{.Ports}}")
-			cmd.WaitDelay = time.Second
-			out, err := cmd.Output()
-			if err != nil {
-				return health.Unknown, "Docker port mapping unavailable", err
-			}
-			published := strings.TrimSpace(string(out))
-			local := published == ""
-			for _, line := range strings.Split(published, "\n") {
-				for _, port := range strings.Split(line, ",") {
-					port = strings.TrimSpace(port)
-					if !strings.Contains(port, "->") {
-						continue
-					}
-					if strings.HasPrefix(port, "127.0.0.1:") || strings.HasPrefix(port, "[::1]:") {
-						local = true
-					} else {
-						return health.Fail, "Redis port is published beyond loopback", nil
-					}
-				}
-			}
-			outcome := health.EvaluateRedis(local, bus.LegacyPasswordInUse(os.Getenv))
-			return outcome.Status, outcome.Detail, nil
-		}),
+		healthTask("redis-password", redisPasswordCheck(os.Getenv, commandOutput)),
 		healthOutcomeTask("github", func(ctx context.Context) (health.Outcome, error) {
 			return github.outcome(ctx), nil
 		}),
@@ -987,4 +953,63 @@ func screenEvidence(snaps map[string]bus.AgentSnapshot, observed map[string]bus.
 			Fresh: o.Fresh(nowMs), Judged: has && len(sig.Ready) > 0})
 	}
 	return ev
+}
+
+// commandOutput runs name with args and returns its standard output.
+func commandOutput(ctx context.Context, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	return string(out), err
+}
+
+// redisPortsCommand lists the broker's published ports, one container a
+// line, for the runtime (broker.runtime, broker-hardening step 3): docker
+// filters on the published port; podman has no publish filter, so it
+// filters on the broker's container name.
+func redisPortsCommand(rt brokerrt.Runtime) (string, []string) {
+	if rt == brokerrt.Podman {
+		return rt.Bin(), []string{"ps", "--filter", "name=^agent-bus-redis$", "--format", "{{.Ports}}"}
+	}
+	return rt.Bin(), []string{"ps", "--filter", "publish=6380", "--format", "{{.Ports}}"}
+}
+
+// redisPasswordCheck is the redis-password check: a local broker, its port
+// published on loopback only, and not on the historical default password.
+func redisPasswordCheck(getenv func(string) string, output func(ctx context.Context, name string, args ...string) (string, error)) func(context.Context) (health.Status, string, error) {
+	return func(ctx context.Context) (health.Status, string, error) {
+		host := getenv("REDIS_HOST")
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		host = strings.Trim(host, "[]")
+		if host != "" && host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			return health.Unknown, "Redis host is not locally verifiable", errors.New("external Redis host")
+		}
+		if getenv("REDIS_PASSWORD_FILE") != "" {
+			return health.Unknown, "Redis password file cannot be classified without reading its credential", errors.New("file credential source")
+		}
+		name, args := redisPortsCommand(brokerrt.Of(getenv))
+		out, err := output(ctx, name, args...)
+		if err != nil {
+			return health.Unknown, "the broker's port mapping unavailable (" + name + ")", err
+		}
+		published := strings.TrimSpace(out)
+		local := published == ""
+		for _, line := range strings.Split(published, "\n") {
+			for _, port := range strings.Split(line, ",") {
+				port = strings.TrimSpace(port)
+				if !strings.Contains(port, "->") {
+					continue
+				}
+				if strings.HasPrefix(port, "127.0.0.1:") || strings.HasPrefix(port, "[::1]:") {
+					local = true
+				} else {
+					return health.Fail, "Redis port is published beyond loopback", nil
+				}
+			}
+		}
+		outcome := health.EvaluateRedis(local, bus.LegacyPasswordInUse(getenv))
+		return outcome.Status, outcome.Detail, nil
+	}
 }

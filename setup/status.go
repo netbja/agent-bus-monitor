@@ -52,10 +52,11 @@ func (in *Installer) OurSkillLinks() []string {
 
 // RedisState is setup.sh's redis_state: running, stopped or absent.
 func (in *Installer) RedisState(ctx context.Context) string {
-	if _, err := in.R.LookPath("docker"); err != nil {
+	bin := in.runtime().Bin()
+	if _, err := in.R.LookPath(bin); err != nil {
 		return "absent"
 	}
-	out, _ := in.R.Run(ctx, Cmd{Name: "docker", Args: []string{"ps", "-a", "--filter", "name=^" + RedisContainer + "$", "--format", "{{.State}}"}, Stdout: true})
+	out, _ := in.R.Run(ctx, Cmd{Name: bin, Args: []string{"ps", "-a", "--filter", "name=^" + RedisContainer + "$", "--format", "{{.State}}"}, Stdout: true})
 	st, _, _ := strings.Cut(string(out), "\n")
 	switch st {
 	case "running":

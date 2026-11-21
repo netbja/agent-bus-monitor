@@ -125,7 +125,7 @@ func (in *Installer) removeSkills(ctx context.Context, ask func(string, bool) bo
 // from this checkout only (spec: Safety, layer 2).
 func (in *Installer) stopBroker(ctx context.Context, ask func(string, bool) bool, p *Prompter) {
 	state := in.RedisState(ctx)
-	cc := ComposeCmd(ctx, in.R)
+	cc := ComposeCmd(ctx, in.R, in.runtime())
 	if state == "absent" || cc == "" || !in.mayCompose(ctx, "left as it is.") {
 		return
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"strings"
 	"testing"
 	"time"
@@ -91,18 +92,18 @@ func TestGatherServicesReadsTheHolders(t *testing.T) {
 	read := 0
 	holders := func(context.Context) ([]holderRow, error) { read++; return rows, nil }
 	here := map[string]bus.ServiceRecord{"dispatch": {Host: "here", State: "ready"}}
-	if f := gatherServices(context.Background(), r, "p", nil, here, "here", nil, holders); !f.holdersRead || len(f.holders) != 1 || f.project != "p" {
+	if f := gatherServices(context.Background(), r, "p", nil, here, "here", nil, holders, brokerrt.Docker); !f.holdersRead || len(f.holders) != 1 || f.project != "p" {
 		t.Fatalf("here: %+v", f)
 	}
 	far := map[string]bus.ServiceRecord{"dispatch": {Host: "vdr", State: "ready"}}
-	if f := gatherServices(context.Background(), r, "p", nil, far, "here", nil, holders); f.holdersRead || !strings.Contains(f.holdersErr, "vdr") {
+	if f := gatherServices(context.Background(), r, "p", nil, far, "here", nil, holders, brokerrt.Docker); f.holdersRead || !strings.Contains(f.holdersErr, "vdr") {
 		t.Fatalf("another host: %+v", f)
 	}
 	if read != 1 {
 		t.Fatalf("read %d times, want once (not for another host)", read)
 	}
 	broken := func(context.Context) ([]holderRow, error) { return nil, errors.New("no runtime dir") }
-	if f := gatherServices(context.Background(), r, "p", nil, here, "here", nil, broken); f.holdersRead || f.holdersErr != "no runtime dir" {
+	if f := gatherServices(context.Background(), r, "p", nil, here, "here", nil, broken, brokerrt.Docker); f.holdersRead || f.holdersErr != "no runtime dir" {
 		t.Fatalf("failed: %+v", f)
 	}
 }
