@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -59,13 +61,26 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintln(out, id)
-		return err
+		if _, err = fmt.Fprintln(out, id); err != nil {
+			return err
+		}
+		atLimitLine(ctx, b, args[1])
+		return nil
 	case "accept":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: request accept <task>")
 		}
-		return b.AcceptRequest(ctx, args[1], self)
+		// The project's work-in-progress limit (wip-limit §3.3): a first accept
+		// at it is refused by the bus, naming what the agent holds.
+		return b.AcceptRequestLimit(ctx, args[1], self, wipLimit(b.Project()))
+	case "review":
+		args, branch := extractFlag(args, "--branch")
+		if len(args) < 2 {
+			return fmt.Errorf("usage: request review <task> [--branch <b>] [<note>]")
+		}
+		// A step or a PR waits on its reviewers: not in flight (wip-limit
+		// §3.2); request accept resumes it. The bus checks the branch.
+		return b.ReviewRequest(ctx, args[1], self, branch, strings.Join(args[2:], " "))
 	case "block":
 		if len(args) < 3 {
 			return fmt.Errorf("usage: request block <task> <reason>")
@@ -90,7 +105,7 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		_, err = fmt.Fprintln(out, id)
 		return err
 	default:
-		return fmt.Errorf("request: want send|accept|block|done|priority|next or [--json]")
+		return fmt.Errorf("request: want send|accept|review|block|done|priority|next or [--json]")
 	}
 }
 
@@ -121,3 +136,62 @@ func validBranch(s string) bool {
 // requestGetenv reads the caller's environment for request send (a seam for
 // the tests).
 var requestGetenv = os.Getenv
+
+// requestStderr is where request send says an agent is at its limit (a seam
+// for tests).
+var requestStderr io.Writer = os.Stderr
+
+// wipLimit is board.wip_limit for project: config.toml's
+// [project.<project>.board], then [board], then 2 (wip-limit §3.3). No env
+// variable is read.
+func wipLimit(project string) int {
+	f := config.Load(config.Path(requestGetenv), "config.toml")
+	if n, ok := config.ProjectValue(f, nil, project, "board.wip_limit").Value.(int); ok {
+		return n
+	}
+	return 0
+}
+
+// atLimitLine is request send's line when its target is at its limit
+// (wip-limit §3.4, the person's Q5: queued, never refused): what the target
+// holds, and the other agents under their limit that hold a request of this
+// project, so master can route. Nothing when under the limit, no limit, or
+// the board cannot be read.
+func atLimitLine(ctx context.Context, b *bus.Bus, target string) {
+	limit := wipLimit(b.Project())
+	if limit <= 0 {
+		return
+	}
+	board, err := b.Board(ctx)
+	if err != nil {
+		return
+	}
+	held := map[string][]string{}
+	for task, e := range board {
+		if r := e.Request; r != nil {
+			if _, ok := held[r.Target]; !ok {
+				held[r.Target] = nil
+			}
+			if e.State == "accepted" {
+				held[r.Target] = append(held[r.Target], task)
+			}
+		}
+	}
+	mine := held[target]
+	if len(mine) < limit {
+		return
+	}
+	sort.Strings(mine)
+	var others []string
+	for agent, tasks := range held {
+		if agent != target && len(tasks) < limit {
+			others = append(others, fmt.Sprintf("%s %d/%d", agent, len(tasks), limit))
+		}
+	}
+	sort.Strings(others)
+	line := fmt.Sprintf("%s is at its wip limit (%d/%d: %s): queued", target, len(mine), limit, strings.Join(mine, ", "))
+	if len(others) > 0 {
+		line += "; " + strings.Join(others, ", ")
+	}
+	fmt.Fprintln(requestStderr, line)
+}

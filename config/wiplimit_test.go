@@ -23,9 +23,9 @@ func TestWIPLimitKey(t *testing.T) {
 	if k.Kind != Int || k.Default != 2 || !k.Project || k.Env != "" || !k.PersonEdit || k.PersonOnly || k.Group() != GroupServices {
 		t.Fatalf("%+v", k)
 	}
-	// What reads it at this head (foureyes): busmon shows it; request accept
-	// and send are named only as the step that wires them.
-	if !strings.HasPrefix(k.ReadBy, "busmon (shown") || !strings.Contains(k.ReadBy, "from wip-limit step 2b") {
+	// What reads it (foureyes: what reads it at this head): request accept
+	// enforces it, request send says when a target is at it, busmon shows it.
+	if k.ReadBy != "agentbus request accept, agentbus request send, busmon" {
 		t.Fatalf("ReadBy %q", k.ReadBy)
 	}
 	path := filepath.Join(t.TempDir(), "config.toml")
