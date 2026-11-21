@@ -278,8 +278,11 @@ var Keys = []*Key{
 	// episode (background-work-visible §4a; 0 = off, else at least 1m).
 	// The background judgement's never-counted process names
 	// (background-ignore-helpers): the clients' own helpers, busy or not,
-	// and a shell that only wraps them. A real command still counts.
-	{Name: "dispatch.background_ignore", Kind: String, List: true, Default: "codebase-memory,codex-code-mode,MainThread,import", ReadBy: "dispatch", MachineOnly: true,
+	// and a shell that only wraps them. A real command still counts: the
+	// default names only the clients' own helpers, never a generic name such
+	// as MainThread (every node or Python process), which would hide work
+	// (master). The person may add names.
+	{Name: "dispatch.background_ignore", Kind: String, List: true, Default: "codebase-memory,codex-code-mode", ReadBy: "dispatch", MachineOnly: true,
 		file: fileNameList("want a list of process names", func(s string) bool {
 			return s != "" && len(s) <= 64 && !strings.ContainsAny(s, ",\n\r\t ")
 		})},

@@ -330,7 +330,7 @@ func TestHostRuntimeUnrecognisedScreenIsUnknownWithAHash(t *testing.T) {
 func TestHostRuntimeCodexHelperBranches(t *testing.T) {
 	f := newHostFixture(t)
 	f.rt.Client = func(string) string { return "codex" }
-	f.rt.Ignore = []string{} // the profile alone (dispatch.background_ignore lists MainThread by default)
+	f.rt.Ignore = []string{} // the profile alone, whatever dispatch.background_ignore lists
 	p := f.term.PID
 	tree := func(cpu time.Duration, more ...termhost.Proc) []termhost.Proc {
 		return append([]termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "codex"},

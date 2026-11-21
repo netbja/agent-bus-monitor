@@ -82,6 +82,14 @@ func TestHostRuntimeReadsTheIgnoreSetting(t *testing.T) {
 	if why := set().BackgroundSkip(); why != "" {
 		t.Fatalf("the default list was not read: %q", why)
 	}
+	// A generic name is not in the default (master): a busy MainThread (a
+	// node or Python server) under the agent's shell still counts.
+	f.h.SetProcesses(f.term.ID, termhost.Proc{PID: p, Start: f.term.PIDStart, Command: "claude"},
+		termhost.Proc{PID: p + 1, PPID: p, Start: 9, Command: "bash"},
+		termhost.Proc{PID: p + 3, PPID: p + 1, Start: 9, Command: "MainThread", CPU: 9 * time.Second})
+	if why := f.inspect().BackgroundSkip(); !strings.Contains(why, "process 'MainThread'") {
+		t.Fatalf("a busy MainThread under the default list: %q", why)
+	}
 }
 
 // The setting: the default list, and config.toml's.
@@ -89,7 +97,7 @@ func TestBackgroundIgnore(t *testing.T) {
 	cfg := t.TempDir()
 	env := map[string]string{"XDG_CONFIG_HOME": cfg}
 	getenv := func(k string) string { return env[k] }
-	if got := BackgroundIgnore(getenv); !slices.Equal(got, []string{"codebase-memory", "codex-code-mode", "MainThread", "import"}) {
+	if got := BackgroundIgnore(getenv); !slices.Equal(got, []string{"codebase-memory", "codex-code-mode"}) {
 		t.Fatalf("default %q", got)
 	}
 	_ = os.MkdirAll(filepath.Join(cfg, "agentbus"), 0o700)
