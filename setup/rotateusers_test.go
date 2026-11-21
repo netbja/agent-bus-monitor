@@ -173,12 +173,10 @@ func TestRotateUsersOnADisposableRedis(t *testing.T) {
 	for _, u := range bus.ACLRoles {
 		old[u] = "old-" + u
 	}
-	var acl strings.Builder // users.acl as ./setup.sh acl on writes it
-	for _, u := range bus.ACLRoles {
-		acl.WriteString("user " + u + " reset on >" + old[u] + " " + strings.Join(bus.ACLRules(u), " ") + "\n")
+	data, err := bus.ACLFile(old) // users.acl as ./setup.sh acl on writes it
+	if err != nil {
+		t.Fatal(err)
 	}
-	acl.WriteString("user default off\n")
-	data := []byte(acl.String())
 	dir := t.TempDir()
 	aclfile := filepath.Join(dir, "users.acl")
 	_ = os.WriteFile(aclfile, data, 0o600)

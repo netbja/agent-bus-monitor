@@ -91,7 +91,7 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 }
 
 // RotateHelp is the help's line for the broker password's rotation.
-const RotateHelp = "  ./setup.sh rotate-redis-password [--dry-run] [--yes]  replace the broker's password\n" +
+const RotateHelp = "  ./setup.sh rotate-redis-password [--dry-run] [--yes]  replace the broker's password (each ACL user's with broker.acl on)\n" +
 	"  ./setup.sh acl on|off [--dry-run] [--yes]  the broker's ACL users (broker.acl), the person's act\n"
 
 // Usage is setup.sh's help text.

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // OurSkillLinks is setup.sh's our_skill_links: the role-skill symlinks
@@ -151,10 +152,12 @@ func (in *Installer) Status(ctx context.Context) int {
 		o.OK("Redis broker: running (" + RedisContainer + ", 127.0.0.1:6380)")
 		in.ownerLine(ctx)
 		in.passwordLine()
+		in.aclLine(ctx, true)
 	case "stopped":
 		o.Info("Redis broker: stopped (" + RedisContainer + ")")
 		in.ownerLine(ctx)
 		in.passwordLine()
+		in.aclLine(ctx, false)
 	default:
 		o.Info("Redis broker: no container")
 	}
@@ -207,6 +210,34 @@ func (in *Installer) passwordLine() {
 		default:
 			in.O.OK("Redis password: " + path + " (0600)")
 		}
+	}
+}
+
+// aclLine is broker.acl beside what the broker's data volume holds (the
+// compose file loads /data/users.acl when it is there): each disagreement
+// locks the clients out, so it is a warning. A stopped broker is not probed.
+func (in *Installer) aclLine(ctx context.Context, running bool) {
+	set := config.Machine(in.Getenv).String("broker.acl")
+	if set != "on" {
+		set = "off"
+	}
+	if !running {
+		in.O.Info("broker ACL: broker.acl is " + set + " (the broker is stopped: its users.acl is not checked)")
+		return
+	}
+	out, err := in.R.Run(ctx, Cmd{Name: in.runtime().Bin(), Args: []string{"exec", RedisContainer, "sh", "-c", "if [ -f /data/users.acl ]; then echo yes; else echo no; fi"}, Stdout: true})
+	has := strings.TrimSpace(string(out))
+	switch {
+	case err != nil || (has != "yes" && has != "no"):
+		in.O.Warn("broker ACL: broker.acl is " + set + "; users.acl in the broker's data volume could not be checked")
+	case set == "on" && has == "yes":
+		in.O.OK("broker ACL: on (users.acl in the broker's data volume, a password file per user beside " + bus.PasswordFile(in.Getenv) + ")")
+	case set == "off" && has == "no":
+		in.O.Info("broker ACL: off")
+	case set == "on":
+		in.O.Warn("broker ACL: broker.acl is on, but the broker's data volume holds no users.acl: the clients log in as users the broker does not have. Run ./setup.sh acl on, or set broker.acl back to off")
+	default:
+		in.O.Warn("broker ACL: broker.acl is off, but the broker's data volume holds users.acl: the clients log in as its default user, which it refuses. Run ./setup.sh acl off")
 	}
 }
 

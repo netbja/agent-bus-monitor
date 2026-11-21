@@ -92,3 +92,55 @@ func RotateUsers(ctx context.Context, b ACLUsers, getenv func(string) string, lo
 	}
 	return nil
 }
+
+// UsersDialer opens a connection to the local broker as user with pw; the
+// caller closes it.
+type UsersDialer func(ctx context.Context, user, pw string) (ACLUsers, func(), error)
+
+// rotateACLUsers is rotate-redis-password with broker.acl on: admin's file
+// logs in (nothing changes otherwise), the person confirms, RotateUsers runs
+// on that connection with a fresh login as each user for its proof, ping's
+// new password goes into the data volume for the healthcheck, then the
+// running project services are restarted. The default user is left alone:
+// it is off.
+func (in *Installer) rotateACLUsers(ctx context.Context, p *Prompter, users UsersDialer) int {
+	o := in.O
+	adm, err := bus.ReadPassword(bus.UserPasswordFile(in.Getenv, bus.ACLAdmin))
+	if err != nil {
+		o.Fatal("broker.acl is on, but admin's password file cannot be read (" + err.Error() + "): nothing changed. ./setup.sh status shows whether the broker holds its users")
+		return 1
+	}
+	live, closeLive, err := users(ctx, bus.ACLAdmin, adm)
+	if err != nil {
+		o.Fatal("broker.acl is on, but admin's password does not log in to the broker (" + err.Error() + "): nothing changed. ./setup.sh status shows whether the broker holds its users")
+		return 1
+	}
+	defer closeLive()
+	if in.Opt.DryRun {
+		o.Info("[dry-run] would write a new random password for each broker user beside " + bus.PasswordFile(in.Getenv) + " (0600, the previous one kept as .prev), set it on the running broker as admin (admin last), prove each, save users.acl, put ping's in the broker's data volume for the healthcheck, then restart the running project services")
+		return 0
+	}
+	if !p.Yes {
+		yes, err := Ask(o, p, "replace the passwords of the Redis broker's ACL users? (busmon and any client on another machine must reload them)", false)
+		if err != nil || !yes {
+			o.Info("broker ACL users: passwords left as they are")
+			return 0
+		}
+	}
+	login := func(ctx context.Context, user, pw string) error {
+		_, closeNew, err := users(ctx, user, pw)
+		if err == nil {
+			closeNew()
+		}
+		return err
+	}
+	ping := func(_, pw string) error { return in.toVolume(ctx, "ping.pass", []byte(pw)) }
+	if err := RotateUsers(ctx, live, in.Getenv, login, ping); err != nil {
+		o.Fatal("broker ACL users: " + err.Error())
+		return 1
+	}
+	o.OK("broker ACL users: each password replaced on the running broker and in its file beside " + bus.PasswordFile(in.Getenv) + " (0600, the previous ones kept as .prev), and saved to users.acl")
+	code := in.restartRunningServices(ctx)
+	o.Info("reopen busmon; a client on another machine (SSH tunnel) needs its user's new password file")
+	return code
+}

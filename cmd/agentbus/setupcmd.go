@@ -72,7 +72,7 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 			defer t.Close()
 			tty = t
 		}
-		return in.RotateRedisPassword(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty}, dialLocalBroker)
+		return in.RotateRedisPassword(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty}, dialLocalBroker, dialLocalUser)
 	case "acl":
 		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv}
 		var tty io.ReadWriter
@@ -181,4 +181,16 @@ func dialLocalBroker(ctx context.Context, pw string) (setup.PasswordSetter, func
 		return nil, nil, err
 	}
 	return setup.RedisSetter{C: c}, func() { _ = c.Close() }, nil
+}
+
+// dialLocalUser is the rotation's connection with broker.acl on: the local
+// broker as user (admin, for ACL SETUSER and ACL SAVE; each user for its
+// proof).
+func dialLocalUser(ctx context.Context, user, pw string) (setup.ACLUsers, func(), error) {
+	c := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6380", Username: user, Password: pw, DialTimeout: 5 * time.Second})
+	if err := c.Ping(ctx).Err(); err != nil {
+		_ = c.Close()
+		return nil, nil, err
+	}
+	return setup.RedisUsers{C: c}, func() { _ = c.Close() }, nil
 }
