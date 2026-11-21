@@ -148,6 +148,11 @@ func TestPlanReleasesColumn(t *testing.T) {
 			t.Fatalf("no %q in\n%s", want, text)
 		}
 	}
+	for _, row := range strings.Split(text, "\n") {
+		if strings.Contains(row, "v0.28.1") && strings.Contains(row, "tasks") {
+			t.Fatalf("a patch release counts its minor's tasks: %q", row)
+		}
+	}
 	if strings.Contains(text, "still open") {
 		t.Fatalf("an idea to discuss is listed:\n%s", text)
 	}
