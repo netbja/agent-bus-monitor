@@ -196,7 +196,7 @@ func TestGraphsLeaveTheGauges(t *testing.T) {
 			for suf < min(len(a), len(b))-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
 				suf++
 			}
-			if len(a) != len(b) || len(a)-pre-suf > 7 {
+			if len(a) != len(b) || len(a)-pre-suf > tokSparkCells {
 				t.Errorf("%s: line %d differs beyond a sparkline:\n%s\n%s", style, i, block[i], other[i])
 			}
 		}

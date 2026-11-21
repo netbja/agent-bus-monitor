@@ -116,3 +116,28 @@ func sparkLine(vals []float64, max float64, style string) string {
 	b.WriteString(strings.Repeat(" ", len(vals)-cells))
 	return b.String()
 }
+
+// sparkWide draws vals over cells (tokens-layout): each value repeated so
+// the line fills them, one point per cell (block, ascii) or two (braille),
+// on the scale of top; spaces where the values do not reach. No values is
+// cells spaces.
+func sparkWide(vals []float64, top float64, cells int, style string) string {
+	points := cells
+	if style == graphsBraille {
+		points = 2 * cells
+	}
+	var wide []float64
+	if len(vals) > 0 {
+		rep := max(1, points/len(vals))
+		for _, v := range vals {
+			for range rep {
+				wide = append(wide, v)
+			}
+		}
+	}
+	r := []rune(sparkLine(wide, top, style))
+	if len(r) > cells { // braille pads to one cell per value: keep the drawn cells
+		r = r[:cells]
+	}
+	return string(r) + strings.Repeat(" ", cells-len(r))
+}

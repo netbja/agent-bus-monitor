@@ -72,6 +72,15 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 	return out
 }
 
+// tokSparkCells is the Projects sparkline's width: 14 cells, seven days of
+// two cells (28 braille points), whatever the data's resolution;
+// tokSparkNarrow, one cell per day, where 14 would push the 7d total off
+// the page (reviewer-codex on 90286e22).
+const (
+	tokSparkCells  = 14
+	tokSparkNarrow = 7
+)
+
 // tokensPage is the U page's body at width cells. icons is display.icons, off
 // below 80 cells (the caller's tier): an account row's provider and an agent
 // row's provider carry their icon pair, the trailing room paying (busmon-icons §7.3).
@@ -132,7 +141,16 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 	if joined {
 		cols = fmt.Sprintf(" %8s", "in+out")
 	}
-	b.segs(Seg{Text: "Projects", Role: RoleText, Bold: true}).seg(RoleMuted, strings.Repeat(" ", 22-Width("Projects"))+cols+"  7 days").text("\n")
+	// The header names each column over it, and the line under it the
+	// sparkline's period (tokens-layout): the totals are the seven days' in+out.
+	lead := strings.Repeat(" ", 22-Width("Projects")) + cols + "  "
+	spark := tokSparkCells
+	if 22+Width(cols)+2+tokSparkCells+2+barW+2+8 > width { // name, in/out, spark, bar, total
+		spark = tokSparkNarrow
+	}
+	b.segs(Seg{Text: "Projects", Role: RoleText, Bold: true}).
+		seg(RoleMuted, lead+pad("7 days", spark)+"  "+strings.Repeat(" ", barW)+fmt.Sprintf("  %8s", "7d total")).text("\n")
+	b.seg(RoleMuted, strings.Repeat(" ", 22)+strings.Repeat(" ", Width(cols)+2)+days[0][5:]+" to "+today[5:]).text("\n")
 	// unknownRow keeps the open project visible, unknown, with its reason,
 	// once no reading is pending any more (never folded, never 0).
 	unknownRow := func(reason string) {
@@ -151,15 +169,13 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 			a, c := ps[i].days[today], ps[j].days[today]
 			return a.In+a.Write+a.Out > c.In+c.Write+c.Out
 		})
-		var maxDay, maxTotal, maxToday int64
+		var maxTotal, maxToday int64
 		top := ""
 		for _, p := range ps {
 			var total int64
 			for _, d := range days {
 				u := p.days[d]
-				t := u.In + u.Write + u.Out
-				total += t
-				maxDay = max(maxDay, t)
+				total += u.In + u.Write + u.Out
 			}
 			maxTotal = max(maxTotal, total)
 			if u := p.days[today]; p.known && u.In+u.Write+u.Out > maxToday {
@@ -167,6 +183,7 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 			}
 		}
 		var none []string
+		gap := false // a blank line between two rows: full-height bars never merge (tokens-layout)
 		for _, p := range ps {
 			if !p.known && p.name == project {
 				if pending {
@@ -190,6 +207,10 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 				role = RoleAccent
 			}
 			num := func(s string) Seg { return Seg{Text: s, Role: RoleText, Bold: p.name == top} } // the zone's top consumer
+			if gap {
+				b.text("\n")
+			}
+			gap = true
 			b.text("  ").seg(role, Fit(Preview(p.name), 20))
 			if joined {
 				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write+u.Out))))
@@ -197,14 +218,15 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write)))).text(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.Out)))
 			}
 			b.text("  ")
-			var total int64
+			var total, rowMax int64
 			week := make([]float64, 0, len(days))
 			for _, d := range days {
 				v := p.days[d]
 				total += v.In + v.Write + v.Out
+				rowMax = max(rowMax, v.In+v.Write+v.Out)
 				week = append(week, float64(v.In+v.Write+v.Out))
 			}
-			b.seg(RoleOK, sparkLine(week, float64(maxDay), graphs))
+			b.seg(RoleOK, sparkWide(week, float64(rowMax), spark, graphs)) // scaled per row: its own shape, the bar compares
 			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+textfmt.TokCount(total)))
 		}
 		if len(none) > 0 {
@@ -256,7 +278,14 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 	}
 	var folded []string // the short reasons of the rows a folds, in order
 	foldedN := map[string]int{}
+	gap := false
 	for _, r := range rows {
+		if r.In != nil || all {
+			if gap {
+				b.text("\n")
+			}
+			gap = true
+		}
 		if r.In == nil {
 			why := shortTokReason(r.Reason)
 			if !all {
