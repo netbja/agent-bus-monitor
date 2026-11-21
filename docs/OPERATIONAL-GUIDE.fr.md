@@ -270,8 +270,10 @@ personne d'ici là, et `agentbus -p myapp resume` y met fin plus tôt.
 
 ## 7. Mettre à jour les outils
 
-`agentbus update` n'est pas encore construit (c'est une spécification). Le chemin de mise à jour
-aujourd'hui :
+`agentbus update` installe la dernière version publiée, avec un instantané pour revenir en arrière
+(`--check` affiche le plan, `--rollback` restaure, `--list` montre les instantanés). Elle refuse un
+build `dev`, qu'on met à jour depuis son clone. Son mode automatique n'est pas construit. Le chemin
+depuis un clone :
 
 1. **Mettre à jour et installer :**
    ```bash

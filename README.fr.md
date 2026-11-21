@@ -111,9 +111,9 @@ Autres commandes de `setup.sh` :
 | `./setup.sh uninstall [--yes] [--purge]` | le retire, en demandant à chaque étape ; `--purge` retire aussi le broker et ses données |
 | `./setup.sh rotate-redis-password [--dry-run] [--yes]` | remplace le mot de passe du broker |
 
-`./setup.sh update` est aujourd'hui le chemin de mise à jour. Une commande `agentbus update` n'est
-qu'une [spécification](docs/superpowers/specs/2026-11-14-quiet-update-design.md) : elle n'est pas
-construite. Après une mise à jour, les agents continuent de tourner sur la version précédente
+`agentbus update` installe la dernière version publiée, avec un instantané pour revenir en arrière
+(`agentbus update --check` affiche le plan ; [spécification](docs/superpowers/specs/2026-11-20-agentbus-update-design.md)).
+Elle refuse un build `dev` : `./setup.sh update` reste donc le chemin depuis un clone. Après une mise à jour, les agents continuent de tourner sur la version précédente
 jusqu'à ce que vous les déplaciez (voir
 [Mettre à jour](docs/OPERATIONAL-GUIDE.fr.md#7-mettre-à-jour-les-outils)).
 
@@ -302,9 +302,8 @@ là-bas, pas à travers le tunnel.
 
 Ceci est écrit en spécifications et n'est pas construit :
 
-- `agentbus update`, la mise à jour discrète
-  ([spécification](docs/superpowers/specs/2026-11-14-quiet-update-design.md)) : utilisez
-  `./setup.sh update`.
+- La mise à jour discrète, le mode automatique de `agentbus update`
+  ([spécification](docs/superpowers/specs/2026-11-14-quiet-update-design.md)) : `agentbus update` est manuelle.
 - `agentbus feedback`, des statistiques sur les relectures passées
   ([spécification](docs/superpowers/specs/2026-10-29-feedback-loop-design.md)).
 - Des lecteurs de PR pour GitLab et Bitbucket. D'ici là, la file de fusion et la boucle de CI ne lisent

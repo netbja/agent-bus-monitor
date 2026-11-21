@@ -257,7 +257,10 @@ until then, and `agentbus -p myapp resume` ends it early.
 
 ## 7. Update the tools
 
-`agentbus update` is not built yet (a spec). The update path today:
+`agentbus update` installs the latest release tag, with a snapshot to roll back to
+(`--check` prints the plan, `--rollback` restores, `--list` shows the snapshots). It refuses a
+`dev` build, which is updated from its clone. Its automatic mode is not built. The path from a
+clone:
 
 1. **Update and install:**
    ```bash

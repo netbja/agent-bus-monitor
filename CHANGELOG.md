@@ -6,6 +6,26 @@ release exists.
 
 ## Unreleased
 
+## v0.32.0 — agentbus update, the views redesign, background work in busmon, and restart from busmon
+
+- `agentbus update` installs the latest release tag, built in its own tree, with a snapshot to roll
+  back to (`--check`, `--rollback`, `--list`). It restarts only the named project's dispatch and
+  missions services and lists the other projects' stale ones. It refuses a `dev` build: use
+  `./setup.sh update` for this release.
+- busmon: the Board flags a late or lost request, `r` and `F2` open one Requests view from any tab,
+  the Plan is the fourth tab (a roadmap), and the person sets a plan task's priority (`+`, `-`,
+  `agentbus plan priority`). For you names the plan's decisions, and IDEAS lists the idea notes.
+- busmon: a readable log page and an `X` restart key on the Services (F3) cards.
+- Background work shows beside each agent (a declared text, Claude Code's hooks' tasks, or a process
+  count; `◷` for wakeups) and a skip lasting `dispatch.background_notice_after` (2h) is told once to
+  the escalation target.
+- `agentbus merge-queue` marks an approved PR whose checks are red. `person.language` (opt-in, read
+  by master's skill). The French README and operations guide are translations of the current ones.
+  Master's skill gains four merge-conflict rules, and `rerere` is on in the shared repository.
+- Not in it: the red CI mark in busmon, code for person memory, the update's automatic mode.
+
+[Notes](docs/releases/v0.32.0.md)
+
 ## v0.31.0 — a failed CI check back to its author, braille sparklines, a readable light theme, and the dispatch service in its own package
 
 - The CI loop: when a PR's checks fail, the dispatch service wakes its author with the failing
