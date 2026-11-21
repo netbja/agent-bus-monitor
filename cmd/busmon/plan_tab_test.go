@@ -186,15 +186,3 @@ func TestPlanTabGoldens(t *testing.T) {
 		checkGolden(t, c.name, strings.Join(frame, "\n")+"\n")
 	}
 }
-
-// The label: done/total, "?" when a read failed and the counts are partial.
-func TestPlanTabLabelPartial(t *testing.T) {
-	p := boardPlan(boardRow("a", plan.Done, "coder"), boardRow("b", plan.Upcoming, "coder"))
-	if got := planTabLabel(p, TierMedium).text(); got != "1/2 done" {
-		t.Fatalf("label %q", got)
-	}
-	p.partial = true
-	if got := planTabLabel(p, TierMedium).text(); got != "1/2? done" {
-		t.Fatalf("partial label %q", got)
-	}
-}

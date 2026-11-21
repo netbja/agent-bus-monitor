@@ -1,12 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // The Plan tab (views-redesign §2, §4): the lower panel's fourth tab (4; 6 at
@@ -19,7 +16,6 @@ import (
 const (
 	planTabTask = "plan:" // a task's row: the prefix, then its id
 	planTabFold = "fold:" // a folded section's line: "later" or "done"
-	planGaugeW  = 18
 )
 
 // planTabWidths is the list's row width, the whole of it, and whether the
@@ -98,21 +94,6 @@ func (m *Model) planTabDetail(width int) []Line {
 		}
 	}
 	return nil
-}
-
-// planTabLabel is the tab's progress: done/total and, at the wide tier, a
-// gauge (the mock-ups).
-func planTabLabel(p planState, tier Tier) Line {
-	done, total := plan.Count(p.rows)
-	count := fmt.Sprintf("%d/%d", done, total)
-	if p.partial {
-		count += "?"
-	}
-	l := Line{{Text: count + " done", Role: RoleMuted}}
-	if tier != TierWide || total == 0 {
-		return l
-	}
-	return append(append(l, Seg{Text: " ", Role: RoleMuted}), gaugeSegs(float64(done)*100/float64(total), planGaugeW, RoleDone, false)...)
 }
 
 // openPlanRow is Enter on the tab: a task's page, or a folded section opened.
