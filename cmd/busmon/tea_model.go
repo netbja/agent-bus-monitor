@@ -39,6 +39,10 @@ type shellConfig struct {
 	// memoryLocal answers where the Memory page reads (tests); nil: the rule
 	// on this machine (memoryLocalOf).
 	memoryLocal func() (bool, string)
+	// badge makes the project's name a badge for its first projectBadgeFor
+	// (busmon-project-badge); main sets it, and lastProject when busmon chose
+	// the project itself (no -p, no AGENT_BUS_PROJECT): the bottom line says so.
+	badge, lastProject bool
 	// holders reads the project's holders on this host for the Services page
 	// (agent-screen-blocked §4); nil reads none.
 	holders       func(context.Context) ([]holderRow, error)
@@ -171,7 +175,24 @@ type uiState struct {
 	// releases is V's choice on the Plan tab's Releases column: 0 the width
 	// decides (releasesMinWidth), 1 shown, -1 hidden (plan-tab-r3 item 5).
 	releases int
+	// badgeUntil is when the launch's project badge ends (busmon-project-badge).
+	badgeUntil time.Time
 }
+
+// projectBadgeFor is how long the project's name stays a badge at launch.
+const projectBadgeFor = 3 * time.Second
+
+// newLaunchShell is the shell main starts: cfg with the launch's badge on,
+// and lastProject when neither -p nor AGENT_BUS_PROJECT named the project
+// (busmon-project-badge).
+func newLaunchShell(opts busmonOpts, getenv func(string) string, cfg shellConfig) Model {
+	cfg.badge, cfg.lastProject = true, projectFromLastUsed(opts.project, getenv("AGENT_BUS_PROJECT"))
+	return newShell(cfg)
+}
+
+// projectFromLastUsed: busmon chose the project itself, the last one opened
+// on this broker, since neither -p nor AGENT_BUS_PROJECT named one.
+func projectFromLastUsed(flag, env string) bool { return flag == "" && env == "" }
 
 // shellLists are the shell's lists. They live behind a pointer: the Model is
 // copied by value through Update, the lists' selection rules are listState's.
@@ -312,6 +333,12 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.gotOthers(msg)
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
+		if m.cfg.badge && m.ui.badgeUntil.IsZero() { // the launch's badge, from the first poll (busmon-project-badge)
+			m.ui.badgeUntil = msg.at.Add(projectBadgeFor)
+			if m.cfg.lastProject {
+				m.notice.push(notice{text: "last project opened: " + m.cfg.project + " (no -p) " + GlyphNone + " M to switch", level: noticeInfo})
+			}
+		}
 		if m.ui.lastInput.IsZero() { // a busmon left alone counts from its first poll (reviewer-codex)
 			m.ui.lastInput = msg.at
 		}
