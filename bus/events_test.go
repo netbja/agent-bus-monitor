@@ -118,21 +118,30 @@ func TestEveryProjectKindIsResetOrSurvives(t *testing.T) {
 	}
 }
 
-// Persistence reads CONFIG GET appendonly and save.
+// Persistence reads CONFIG GET appendonly, appendfsync and save.
 func TestPersistenceReadsTheConfig(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()
-	aof, save, err := b.Persistence(ctx)
-	if err != nil || (aof != "yes" && aof != "no") {
-		t.Fatalf("persistence %q %q %v", aof, save, err)
+	p, err := b.Persistence(ctx)
+	aof, save := p.AppendOnly, p.Save
+	if err != nil || (aof != "yes" && aof != "no") || (p.AppendFsync != "always" && p.AppendFsync != "everysec" && p.AppendFsync != "no") {
+		t.Fatalf("persistence %+v %v", p, err)
 	}
 	oldSave := save
 	t.Cleanup(func() { b.r.ConfigSet(context.Background(), "save", oldSave) })
 	if err := b.r.ConfigSet(ctx, "save", "").Err(); err != nil {
 		t.Skipf("CONFIG SET refused by this broker: %v", err)
 	}
-	if _, save, _ := b.Persistence(ctx); save != "" {
-		t.Fatalf("save %q after clearing it", save)
+	if p, _ := b.Persistence(ctx); p.Save != "" {
+		t.Fatalf("save %q after clearing it", p.Save)
+	}
+	oldFsync := p.AppendFsync
+	t.Cleanup(func() { b.r.ConfigSet(context.Background(), "appendfsync", oldFsync) })
+	if err := b.r.ConfigSet(ctx, "appendfsync", "no").Err(); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := b.Persistence(ctx); p.AppendFsync != "no" {
+		t.Fatalf("appendfsync %q after setting no", p.AppendFsync)
 	}
 }
 
@@ -152,12 +161,12 @@ func TestPersistenceTellsARefusalFromAFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := lb.Persistence(ctx); !errors.Is(err, ErrConfigRefused) {
+	if _, err := lb.Persistence(ctx); !errors.Is(err, ErrConfigRefused) {
 		t.Fatalf("a refused CONFIG: %v", err)
 	}
 	gone, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, _, err := b.Persistence(gone); err == nil || errors.Is(err, ErrConfigRefused) {
+	if _, err := b.Persistence(gone); err == nil || errors.Is(err, ErrConfigRefused) {
 		t.Fatalf("a failed read read as a refusal: %v", err)
 	}
 }

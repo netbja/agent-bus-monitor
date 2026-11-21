@@ -470,12 +470,13 @@ func parseRedisVersion(s string) ([3]int, bool) {
 	return v, true
 }
 
-// PersistenceEvidence is the broker's CONFIG GET appendonly and save; Known
-// is false when the broker refused CONFIG.
+// PersistenceEvidence is the broker's CONFIG GET appendonly, appendfsync and
+// save; Known is false when the broker refused CONFIG.
 type PersistenceEvidence struct {
-	Known      bool
-	AppendOnly string
-	Save       string
+	Known       bool
+	AppendOnly  string
+	AppendFsync string
+	Save        string
 }
 
 // EvaluateBrokerPersistence (herdr exit spec 4.7): {p}:resume must survive a
@@ -489,7 +490,13 @@ func EvaluateBrokerPersistence(e PersistenceEvidence) Outcome {
 	save := strings.TrimSpace(e.Save)
 	switch e.AppendOnly {
 	case "yes":
-		return Outcome{Status: OK, Detail: "AOF on"}
+		switch e.AppendFsync {
+		case "no": // the OS flushes when it likes: a crash may lose far more than a second (broker-hardening step 1)
+			return Outcome{Status: Warn, Detail: "AOF on, but appendfsync no: the system decides when the log reaches the disk, so a crash may lose recent writes; set appendfsync everysec"}
+		case "":
+			return Outcome{Status: OK, Detail: "AOF on"}
+		}
+		return Outcome{Status: OK, Detail: "AOF on (fsync " + e.AppendFsync + ")"}
 	case "no":
 		if save != "" {
 			return Outcome{Status: OK, Detail: "RDB snapshots (save " + save + ")"}

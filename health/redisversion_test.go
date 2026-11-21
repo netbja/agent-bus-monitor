@@ -87,7 +87,8 @@ func TestRedisVersionRemediation(t *testing.T) {
 }
 
 // broker-persistence (spec 4.7): warn when neither AOF nor RDB snapshots are
-// on (a reboot loses {p}:resume); unknown, never warn, when CONFIG is refused.
+// on (a reboot loses {p}:resume), and when AOF is on with appendfsync no
+// (broker-hardening step 1); unknown, never warn, when CONFIG is refused.
 func TestEvaluateBrokerPersistence(t *testing.T) {
 	for name, c := range map[string]struct {
 		e    PersistenceEvidence
@@ -95,6 +96,9 @@ func TestEvaluateBrokerPersistence(t *testing.T) {
 		has  string
 	}{
 		"aof":            {PersistenceEvidence{Known: true, AppendOnly: "yes", Save: ""}, OK, "AOF"},
+		"aof everysec":   {PersistenceEvidence{Known: true, AppendOnly: "yes", AppendFsync: "everysec"}, OK, "fsync everysec"},
+		"aof always":     {PersistenceEvidence{Known: true, AppendOnly: "yes", AppendFsync: "always"}, OK, "fsync always"},
+		"aof fsync no":   {PersistenceEvidence{Known: true, AppendOnly: "yes", AppendFsync: "no", Save: "3600 1"}, Warn, "appendfsync no"},
 		"rdb":            {PersistenceEvidence{Known: true, AppendOnly: "no", Save: "3600 1 300 100"}, OK, "RDB"},
 		"both":           {PersistenceEvidence{Known: true, AppendOnly: "yes", Save: "3600 1"}, OK, "AOF"},
 		"neither":        {PersistenceEvidence{Known: true, AppendOnly: "no", Save: ""}, Warn, "reboot"},
