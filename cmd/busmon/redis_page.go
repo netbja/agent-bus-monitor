@@ -6,7 +6,6 @@ import (
 	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"net"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -308,12 +307,12 @@ func projectsTable(projects []bus.ProjectRedis, width int) []Line {
 // redisPageCmd reads the page's facts and builds its body, for the page with
 // serial (0: a new one).
 func (m *Model) redisPageCmd(serial int) tea.Cmd {
-	r, ctx, width, docker, flagHost := m.cfg.reader, m.cfg.ctx, m.readerWidth(), m.cfg.docker, m.cfg.brokerHost
+	r, ctx, width, docker, flagHost, getenv := m.cfg.reader, m.cfg.ctx, m.readerWidth(), m.cfg.docker, m.cfg.brokerHost, m.env
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
-		f := gatherRedisPage(ctx, r, docker, os.Getenv, flagHost)
+		f := gatherRedisPage(ctx, r, docker, getenv, flagHost)
 		return redisPageMsg{body: redisPageBody(f, time.Now(), width), serial: serial}
 	}
 }

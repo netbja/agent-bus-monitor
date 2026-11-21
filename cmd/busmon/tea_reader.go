@@ -340,6 +340,7 @@ func (m *Model) gotThread(msg threadMsg) {
 // that read fails.
 func (m *Model) servicesCmd(serial int) tea.Cmd {
 	inst, recs, r, ctx, project, docker, holders := m.snap.svcInst, m.snap.svcRecs, m.cfg.reader, m.cfg.ctx, m.cfg.project, m.cfg.docker, m.cfg.holders
+	rt := brokerrt.Of(m.env) // broker.runtime, through busmon's environment (foureyes: a test can set it)
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -352,7 +353,7 @@ func (m *Model) servicesCmd(serial int) tea.Cmd {
 			cancel()
 		}
 		host, _ := os.Hostname()
-		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker, holders, brokerrt.Of(os.Getenv)), serial: serial}
+		return servicesMsg{facts: gatherServices(ctx, r, project, inst, recs, host, docker, holders, rt), serial: serial}
 	}
 }
 

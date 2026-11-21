@@ -35,9 +35,11 @@ func ValidBranchName(s string) bool {
 func IsBrokerRuntime(s string) bool { return s == "docker" || s == "podman" }
 
 // imageRef is a container image reference: a name of lowercase path
-// components (an optional registry host with a port), an optional tag.
-var imageRef = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?$`)
+// components (an optional registry host with a port), an optional tag, an
+// optional sha256 digest (an image pinned by content, reviewer-codex).
+var imageRef = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(@sha256:[0-9a-f]{64})?$`)
 
 // IsImageRef: broker.image's values (redis:8-alpine, valkey/valkey:8, a
-// registry's own); nothing a shell or compose would read as more.
+// registry's own, pinned by digest or not); nothing a shell or compose would
+// read as more.
 func IsImageRef(s string) bool { return len(s) <= 255 && imageRef.MatchString(s) }

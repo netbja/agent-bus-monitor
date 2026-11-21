@@ -610,7 +610,7 @@ var Keys = []*Key{
 			if s, ok := v.(string); ok && IsImageRef(s) {
 				return s, ""
 			}
-			return nil, "want an image reference, such as redis:8-alpine or valkey/valkey:8"
+			return nil, "want an image reference, such as redis:8-alpine, valkey/valkey:8 or one pinned by @sha256:<digest>"
 		}},
 	// Backups (spec 2026-11-01-backup-design.md): where archives go (an
 	// absolute folder; "" = $XDG_DATA_HOME/agentbus/backups, BackupDir) and

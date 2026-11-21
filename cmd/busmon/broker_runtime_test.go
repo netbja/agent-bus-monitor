@@ -45,3 +45,33 @@ func TestBusmonBrokerUnderPodman(t *testing.T) {
 		t.Fatalf("card %q, calls %q", s.redis.where, calls)
 	}
 }
+
+// foureyes: the pages' commands read broker.runtime from busmon's own
+// environment (cfg.getenv), so under podman the Services card and the Redis
+// page ask podman, through the model, not only through their gatherers.
+func TestBusmonPagesReadTheRuntime(t *testing.T) {
+	m := fixtureShell(t, 140, 40)
+	cfg := t.TempDir()
+	m.cfg.getenv = func(k string) string {
+		return map[string]string{"AGENT_BUS_BROKER_RUNTIME": "podman", "XDG_CONFIG_HOME": cfg, "REDIS_HOST": "127.0.0.1"}[k]
+	}
+	var asked []string
+	m.cfg.docker = func(_ context.Context, name string, args ...string) (string, error) {
+		asked = append(asked, name+" "+strings.Join(args, " "))
+		if args[0] == "port" {
+			return "127.0.0.1:6380", nil
+		}
+		return "redis:8-alpine|running", nil
+	}
+	m.cfg.reader = &fakeRedisInfo{fakeReader: &fakeReader{calls: map[string]int{}}, info: bus.RedisInfo{Version: "8.2.1"}}
+	m.servicesCmd(0)()
+	m.redisPageCmd(0)()
+	if len(asked) == 0 {
+		t.Fatal("no runtime asked")
+	}
+	for _, a := range asked {
+		if !strings.HasPrefix(a, "podman ") {
+			t.Errorf("asked %q, want podman", a)
+		}
+	}
+}
