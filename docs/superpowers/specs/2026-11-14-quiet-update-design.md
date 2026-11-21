@@ -6,6 +6,10 @@ person's review of r12). Low priority: it comes after the herdr exit work, and i
 work is built (no herdr; the holder; `services.manager` with the `none` supervisor, herdr exit
 §4.4b). The revision history is in the changelog at the end.
 
+**Superseded in part (2026-11-21):** the automatic mode (§4.4, §4.7) and the tree lifetime (§4.1)
+are replaced by [quiet update, step 2](2026-11-21-quiet-update-auto-design.md); the manual update is
+[step 1](2026-11-20-agentbus-update-design.md), built.
+
 ## 1. Problem
 
 - **Installing takes two steps and some reading.** You clone, then run `./setup.sh install`.
