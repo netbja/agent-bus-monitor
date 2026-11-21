@@ -4,5 +4,5 @@
   `docs/**` or `*.md`; within the same limits, the person's answer to §6 Q2), or `not small (<reason>)`: over the project's `small_max_lines` or `small_max_files` (150, 5), a binary
   or unreadable row, or a never-small path (`bus/**`, setup, broker and ACL files, secrets, CI,
   `skills/**`, and the gate itself: `deliver.go`, the classifier `deliversmall.go`, the rule `deliversingle.go`, its glob matcher
-  in `filepick/`, `mergequeue/**`, `config/keys.go`). The single-approval rule reads it
+  in `filepick/`, `mergequeue/**`, `config/keys.go`, `config/file.go`, `config/write.go`). The single-approval rule reads it
   (`single-approval-2.md`).

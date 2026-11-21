@@ -34,6 +34,10 @@ var neverSmall = []string{
 	// the gate itself
 	"cmd/agentbus/deliver.go", "cmd/agentbus/deliversmall.go", "cmd/agentbus/deliversingle.go", "filepick/ignore.go", "filepick/glob.go",
 	"mergequeue/**", "config/keys.go",
+	// the settings' reads and writes: same_provider_ok's project-only read
+	// (ProjectOnly, config/file.go) and the refusal of an agent's write to a
+	// PersonOnly key (config/write.go), reviewer-codex
+	"config/file.go", "config/write.go",
 }
 
 // docGlobs is documentation: a change whose every path matches one is
