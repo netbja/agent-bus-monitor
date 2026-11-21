@@ -134,7 +134,7 @@ A project name is lowercase: a letter, then letters, digits, `-` or `_`, 32 char
 
 **Later:**
 
-- **Reopen the dashboard:** `busmon -p myproject`. `busmon --pick` chooses among your project templates.
+- **Reopen the dashboard:** `busmon -p myproject`. `busmon --new` (`-k`) chooses among your project templates.
 - **Restart the team:** `agentbus up myproject`. Add `--resume` to resume the agents' sessions.
 - **Stop it:** `agentbus down myproject` stops the services and the holder, with the agents in it.
   Nothing is deleted.
@@ -280,7 +280,9 @@ Settings an operator usually touches:
   the LAN. The password travels in clear, so the broker is never exposed raw.
 - **Connection order.** Both `agentbus` and `busmon` connect with `REDIS_URL` when it is set. Otherwise
   they use `REDIS_HOST` / `REDIS_PORT` (`localhost` / `6380`), with the password from `REDIS_PASSWORD`,
-  else `~/.config/agentbus/redis.env`. `--host` overrides `REDIS_HOST`.
+  else `~/.config/agentbus/redis.env`. `--host` overrides `REDIS_HOST`. busmon's `--url` (`-u`) takes a
+  URL, a unix socket (`unix:///path.sock`) or an ACL user included, and sets `REDIS_URL` for it; `--host`
+  beside a URL is refused rather than ignored.
 - **Watching another machine's bus.** Use an SSH tunnel:
 
 ```bash

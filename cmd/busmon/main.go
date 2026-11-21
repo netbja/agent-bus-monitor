@@ -678,6 +678,10 @@ func main() {
 		fmt.Println("busmon version " + buildinfo.Version)
 		return
 	}
+	if err := applyURL(opts, set, os.Getenv, os.Setenv); err != nil { // --url: every connection below, and a switched busmon, reach it (busmon-cli-flags item 4)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
 	// The broker user, while broker.acl is on (step 4b): busmon's, unless an
 	// agent's identity or process tree makes it agent's (or master's).
 	bus.SetConnectEntry(bus.ACLEntryBusmon, agentcaller.AncestorOrNone)
@@ -686,7 +690,7 @@ func main() {
 	}
 	settings := loadBusmonSettings(os.Getenv, flags)
 	dateFormat = settings.DateFormat // every reset busmon writes (quota settings §2.3)
-	// --pick chooses the project, so like --list it must run before the
+	// --new chooses the project, so like --list it must run before the
 	// project-required exit, and before --reset and --delete: a picker never
 	// purges or deletes, whatever else is on the line. It needs only the
 	// theme, so a bad --as (it writes nothing) cannot stop it.
@@ -942,7 +946,7 @@ func terminalColors() int {
 func noProjectText() string {
 	return "error: no project: busmon --project <p> (or AGENT_BUS_PROJECT)\n" +
 		"  busmon --list   the broker's projects\n" +
-		"  busmon --pick   choose one and open it\n"
+		"  busmon --new    choose one and open it\n"
 }
 
 // refuseDestructive refuses --delete and --reset to an agent caller

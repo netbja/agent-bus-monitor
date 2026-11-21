@@ -137,7 +137,7 @@ au plus.
 
 **Ensuite :**
 
-- **Rouvrir le tableau de bord :** `busmon -p myproject`. `busmon --pick` choisit parmi vos modèles de projet.
+- **Rouvrir le tableau de bord :** `busmon -p myproject`. `busmon --new` (`-k`) choisit parmi vos modèles de projet.
 - **Redémarrer l'équipe :** `agentbus up myproject`. Ajoutez `--resume` pour reprendre les sessions des agents.
 - **L'arrêter :** `agentbus down myproject` arrête les services et le holder, avec les agents qu'il
   héberge. Rien n'est supprimé.
@@ -287,6 +287,8 @@ Réglages qu'un opérateur touche d'ordinaire :
 - **Ordre de connexion.** `agentbus` et `busmon` se connectent avec `REDIS_URL` quand elle est définie.
   Sinon ils utilisent `REDIS_HOST` / `REDIS_PORT` (`localhost` / `6380`), avec le mot de passe de
   `REDIS_PASSWORD`, sinon de `~/.config/agentbus/redis.env`. `--host` l'emporte sur `REDIS_HOST`.
+  L'option `--url` (`-u`) de busmon prend une URL, socket unix (`unix:///chemin.sock`) ou utilisateur ACL
+  compris, et règle `REDIS_URL` d'après elle ; `--host` à côté d'une URL est refusé, jamais ignoré.
 - **Regarder le bus d'une autre machine.** Utilisez un tunnel SSH :
 
 ```bash

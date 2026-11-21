@@ -410,7 +410,7 @@ func (m *Model) gotDeleteDone(msg deleteDoneMsg) tea.Cmd {
 			}
 		}
 		if msg.open {
-			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --pick to open another project", r.project, r.keys, textfmt.Plural(int(r.keys), "key"))
+			m.exitNote = fmt.Sprintf("%s deleted (%d %s); busmon --new to open another project", r.project, r.keys, textfmt.Plural(int(r.keys), "key"))
 			return tea.Quit
 		}
 		m.notice.push(notice{text: text, level: level})

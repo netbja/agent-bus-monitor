@@ -87,7 +87,7 @@ func TestPickMainHelper(t *testing.T) {
 	if os.Getenv("BUSMON_PICK_MAIN_HELPER") != "1" {
 		t.Skip("helper for TestPickRunsAboveTheProjectExit")
 	}
-	runPicker = func(host, theme string) int { fmt.Println("PICKER RAN"); return 0 }
+	runPicker = func(host, theme string) int { fmt.Println("PICKER RAN url=" + os.Getenv("REDIS_URL")); return 0 }
 	os.Args = append([]string{"busmon"}, strings.Fields(os.Getenv("BUSMON_PICK_ARGS"))...)
 	main()
 }
@@ -123,7 +123,7 @@ func TestPickRunsAboveTheProjectExit(t *testing.T) {
 	if os.Getenv("BUSMON_PICK_MAIN_HELPER") == "1" {
 		return
 	}
-	for _, args := range [][]string{{"--pick"}, {"--pick", "--reset", "--yes"}, {"--reset", "--yes", "--pick"}, {"--pick", "--delete", "demo", "--yes"}} {
+	for _, args := range [][]string{{"--new"}, {"-k"}, {"--pick"}, {"--new", "--reset", "--yes"}, {"--reset", "--yes", "--new"}, {"--new", "--delete", "demo", "--yes"}} {
 		dir := t.TempDir()
 		cmd := exec.Command(os.Args[0], "-test.run=^TestPickMainHelper$")
 		cmd.Env = append(cleanEnv(), "BUSMON_PICK_MAIN_HELPER=1", "BUSMON_PICK_ARGS="+strings.Join(args, " "),
@@ -259,5 +259,31 @@ func TestPickListingAndOpeningOnlyRead(t *testing.T) {
 	pickRun(t, m, cmd)
 	if probes.Load() != 4 {
 		t.Fatalf("open is not one fresh check: %d probes", probes.Load())
+	}
+}
+
+// busmon-cli-flags item 4, through main: --url is the broker of everything
+// after it (REDIS_URL set before the picker runs); --host beside REDIS_URL
+// stops busmon before any connection, with exit 2.
+func TestURLFlagThroughMain(t *testing.T) {
+	if os.Getenv("BUSMON_PICK_MAIN_HELPER") == "1" {
+		return
+	}
+	run := func(args []string, env ...string) (string, error) {
+		dir := t.TempDir()
+		cmd := exec.Command(os.Args[0], "-test.run=^TestPickMainHelper$")
+		cmd.Env = append(append(cleanEnv(), "BUSMON_PICK_MAIN_HELPER=1", "BUSMON_PICK_ARGS="+strings.Join(args, " "),
+			"HOME="+dir, "XDG_CONFIG_HOME="+dir, "XDG_CACHE_HOME="+dir, "AGENT_BUS_NO_UPDATE_CHECK=1"), env...)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	sock := "unix://" + filepath.Join(t.TempDir(), "acl.sock")
+	if out, err := run([]string{"--url", sock, "--new"}); err != nil || !strings.Contains(out, "PICKER RAN url="+sock) {
+		t.Fatalf("--url: %v\n%s", err, out)
+	}
+	out, err := run([]string{"-H", "vdr", "--new"}, "REDIS_URL="+sock)
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 2 || !strings.Contains(out, "REDIS_URL is set") || strings.Contains(out, "PICKER RAN") {
+		t.Fatalf("-H beside REDIS_URL: %v\n%s", err, out)
 	}
 }

@@ -169,7 +169,7 @@ KEYS
   ←                    back
   esc                  skip
   ^C                   quit (everywhere)
-  the project picker (--pick)
+  the project picker (--new)
   type                 to filter
   ↑↓                   select
   pgup                 page up

@@ -115,6 +115,18 @@ func TestProjectsFindsALiveProject(t *testing.T) {
 	if got.Master != "" {
 		t.Errorf("Master = %q, want empty (no pilot lease taken)", got.Master)
 	}
+	if got.MasterState != "" {
+		t.Errorf("MasterState = %q, want empty (no master registered)", got.MasterState)
+	}
+
+	// busmon -l's MASTER: the registered master agent's state (the person's
+	// busmon-cli-flags item 1), not the pilot lease.
+	if _, err := b.Status(ctx, "master", "waiting", "a question for you", AgentIdent{}); err != nil {
+		t.Fatalf("Status master: %v", err)
+	}
+	if info, err := ProjectInfo(ctx, b.r, b.project); err != nil || info.MasterState != "waiting" || info.Agents != 2 {
+		t.Fatalf("with master: %+v %v", info, err)
+	}
 
 	// the pilot lease is what busmon shows as MASTER
 	if err := b.Pilot(ctx, "master", time.Minute); err != nil {

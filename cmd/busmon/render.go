@@ -121,15 +121,15 @@ func projectTable(list []bus.ProjectSummary, now time.Time) string {
 		if len(p.Project) > nameW {
 			nameW = len(p.Project)
 		}
-		if len(p.Master) > masterW {
-			masterW = len(p.Master)
+		if len(p.MasterState) > masterW {
+			masterW = len(p.MasterState)
 		}
 	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%-*s  %6s  %-*s  %s\n",
 		nameW, "PROJECT", "AGENTS", masterW, "MASTER", "LAST ACTIVITY")
 	for _, p := range list {
-		master := p.Master
+		master := p.MasterState // the registered master's state, not the pilot lease (busmon-cli-flags item 1)
 		if master == "" {
 			master = "-"
 		}

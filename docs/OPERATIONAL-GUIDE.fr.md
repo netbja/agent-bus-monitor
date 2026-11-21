@@ -56,7 +56,7 @@ Ses options utiles :
   `up` démarre seul le premier agent de ce client et dit quel agent attend sur son dialogue de
   confiance. Attachez-vous à lui (`t` dans busmon), répondez, et ses autres agents démarrent.
 - **busmon a besoin d'un projet.** Lancez `busmon -p myapp`. `busmon --list` liste les projets du
-  broker, et `busmon --pick` les modèles.
+  broker, et `busmon --new` les modèles.
 - **Qui vous êtes.** busmon écrit en votre nom (`--as`, `AGENT_BUS_HUMAN`, ou `agentbus identity set
   <name>`).
 
