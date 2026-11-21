@@ -35,6 +35,17 @@ func PasswordFile(getenv func(string) string) string {
 	return ""
 }
 
+// UserPasswordFile is an ACL user's password file (broker-hardening step
+// 4b), beside PasswordFile: redis-<user>.env; "" without a home or for a
+// user that is not a valid name.
+func UserPasswordFile(getenv func(string) string, user string) string {
+	base := PasswordFile(getenv)
+	if base == "" || !ValidName(user) {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(base), "redis-"+user+".env")
+}
+
 // ReadPassword reads the file's password. A missing file is fs.ErrNotExist;
 // a file with no usable REDIS_PASSWORD line is an error that never quotes the
 // file's content.

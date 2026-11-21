@@ -1,6 +1,12 @@
 package bus
 
 import (
+	"cmp"
+	"context"
+	"sync"
+
+	"fmt"
+	"github.com/netbja/agent-bus-monitor/config"
 	"slices"
 	"sort"
 	"strings"
@@ -173,4 +179,104 @@ func pkgOf(frame string) string {
 		return frame[:slash+1+dot]
 	}
 	return frame
+}
+
+// ACLEntry is how a process came to the broker (step 4b): it, with the
+// process's identity and ancestry, fixes the user it logs in as.
+type ACLEntry int
+
+const (
+	ACLEntryCLI     ACLEntry = iota // agentbus, any command but the ones below
+	ACLEntryService                 // agentbus service run, the holder service
+	ACLEntryBusmon                  // busmon
+	ACLEntryAdmin                   // ./setup.sh, agentbus backup and restore
+)
+
+// ACLUserFor is the user a process logs in as once broker.acl is on (spec
+// step 4b): the services as dispatcher when neither an identity nor a
+// registered agent among their ancestors says otherwise (else the CLI's
+// rule); setup, backup and restore as admin,
+// from a person's shell only (refused when identity is set or ancestor, the
+// registered agent among the process's ancestors, is not ""); busmon and the
+// CLI by identity, after the process-tree check: a process under a
+// registered agent other than master is agent whatever it claims, master's
+// own tree and master's identity are master, the person's shell is busmon.
+func ACLUserFor(entry ACLEntry, identity, ancestor string) (string, error) {
+	switch entry {
+	case ACLEntryService:
+		// The service manager's launch has no registered agent among its
+		// ancestors and no identity (the services' env file drops
+		// AGENT_BUS_AGENT, service/env.go): only it is dispatcher. Any other is
+		// whoever the CLI's rule names: an agent running service run by hand,
+		// or its child that outlived it with its identity (reviewer-codex).
+		if identity == "" && ancestor == "" {
+			return ACLDispatcher, nil
+		}
+	case ACLEntryAdmin:
+		if identity != "" || ancestor != "" {
+			return "", fmt.Errorf("the admin user is the person's: not from an agent (%s)", cmp.Or(identity, ancestor))
+		}
+		return ACLAdmin, nil
+	}
+	switch {
+	case ancestor != "" && ancestor != ACLMaster: // under another agent: never more than agent
+		return ACLAgent, nil
+	case identity == ACLMaster || ancestor == ACLMaster && identity == "":
+		return ACLMaster, nil
+	case identity != "":
+		return ACLAgent, nil
+	}
+	return ACLBusmon, nil
+}
+
+// connectEntry is the process's entry for Connect's user (SetConnectEntry):
+// the CLI's, with no ancestry check, until main says otherwise.
+var connectEntry struct {
+	sync.Mutex
+	entry    ACLEntry
+	ancestor func(context.Context) (string, error)
+}
+
+// SetConnectEntry is main's statement of how this process came to the
+// broker (step 4b): Connect then logs in, while broker.acl is on, as the user
+// ACLUserFor names from entry, AGENT_BUS_AGENT and ancestor, the registered
+// agent among the process's ancestors ("" none, or no ancestry on this host;
+// an error: unknown). nil ancestor: none known.
+func SetConnectEntry(entry ACLEntry, ancestor func(context.Context) (string, error)) {
+	connectEntry.Lock()
+	defer connectEntry.Unlock()
+	connectEntry.entry, connectEntry.ancestor = entry, ancestor
+}
+
+// resolvingAncestry marks the context of the ancestry's own Connect
+// (agentcaller.Ancestor reads the agents through Connect): connectUser then
+// answers agent, which reads every key, instead of asking for the ancestry
+// again.
+type resolvingAncestry struct{}
+
+// connectUser is the user Connect logs in as: "" while broker.acl is off.
+// An ancestry that cannot be read makes the CLI and busmon agent (the least
+// rights) and refuses the admin entry.
+func connectUser(ctx context.Context, getenv func(string) string) (string, error) {
+	if config.Machine(getenv).String("broker.acl") != "on" {
+		return "", nil
+	}
+	connectEntry.Lock()
+	entry, ancestorOf := connectEntry.entry, connectEntry.ancestor
+	connectEntry.Unlock()
+	if ctx.Value(resolvingAncestry{}) != nil {
+		return ACLAgent, nil // the ancestry's own read of the agents: never asks again
+	}
+	ancestor := ""
+	if ancestorOf != nil {
+		a, err := ancestorOf(context.WithValue(ctx, resolvingAncestry{}, true))
+		switch {
+		case err != nil && entry == ACLEntryAdmin:
+			return "", fmt.Errorf("the admin user is the person's: cannot check this process's ancestry: %w", err)
+		case err != nil:
+			return ACLAgent, nil
+		}
+		ancestor = a
+	}
+	return ACLUserFor(entry, getenv("AGENT_BUS_AGENT"), ancestor)
 }

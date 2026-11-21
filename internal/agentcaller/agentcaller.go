@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -85,4 +86,25 @@ func Refuse(ctx context.Context, getenv func(string) string, ancestor func(conte
 		return what + " is the person's act, and this runs under the agent " + caller
 	}
 	return ""
+}
+
+// AncestorOrNone is Ancestor for bus.SetConnectEntry (broker-hardening step
+// 4b): a host with no process ancestry reads as none ("", nil), as Refuse
+// reads it; another failure stays an error (the CLI is then agent, the admin
+// entry refused).
+func AncestorOrNone(ctx context.Context) (string, error) {
+	a, err := Ancestor(ctx)
+	if errors.Is(err, ErrNoAncestry) {
+		return "", nil
+	}
+	return agentOf(a), err
+}
+
+// agentOf is the agent of Ancestor's "<project>/<agent>"; the broker user
+// follows the agent, whatever its project.
+func agentOf(ancestor string) string {
+	if _, name, ok := strings.Cut(ancestor, "/"); ok {
+		return name
+	}
+	return ancestor
 }

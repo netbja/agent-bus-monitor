@@ -600,6 +600,23 @@ var Keys = []*Key{
 			}
 			return nil, "want docker or podman"
 		}},
+	// The broker's users (broker-hardening step 4b): off, every process logs
+	// in as the default user (requirepass), as before; on, each logs in as its
+	// role's ACL user (bus.ACLUserFor) with its own password file. The person
+	// turns it on with ./setup.sh acl on, which also writes the users.
+	{Name: "broker.acl", Env: "AGENT_BUS_BROKER_ACL", Kind: String, Default: "off", ReadBy: "agentbus (the services included), busmon", MachineOnly: true,
+		env: func(raw string) (any, envResult) {
+			if IsBrokerACL(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && IsBrokerACL(s) {
+				return s, ""
+			}
+			return nil, "want off or on"
+		}},
 	// The broker's image (broker-hardening step 3, the person's Q5): what
 	// compose runs, redis:8-alpine by default, valkey/valkey:8 accepted. Every
 	// compose call passes it (brokerrt.ComposeEnv), since compose reads only
