@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -72,7 +73,7 @@ func TestMergeQueueChoreGitHub(t *testing.T) {
 	if err := c.pass(ctx, "mq"); err != nil {
 		t.Fatal(err)
 	}
-	if rec, _ = b.MergeQueue(ctx); len(rec.Items) != 0 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != (bus.MergeConflict{Number: 309, Base: "release"}) {
+	if rec, _ = b.MergeQueue(ctx); len(rec.Items) != 0 || len(rec.Conflicting) != 1 || !reflect.DeepEqual(rec.Conflicting[0], bus.MergeConflict{Number: 309, Base: "release", Branch: "feat/request-priority", Head: mqHead}) {
 		t.Fatalf("conflicting: %+v", rec)
 	}
 	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {

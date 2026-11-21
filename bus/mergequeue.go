@@ -47,6 +47,13 @@ type MergeItem struct {
 type MergeConflict struct {
 	Number int    `json:"number"`
 	Base   string `json:"base"`
+	// What git confirmed (conflict-owner §2), additive: the branch and head
+	// judged, the base tip they conflict with, the first conflicting files.
+	// Empty when only the forge flagged it and git could not judge.
+	Branch  string   `json:"branch,omitempty"`
+	Head    string   `json:"head,omitempty"`
+	BaseTip string   `json:"base_tip,omitempty"`
+	Files   []string `json:"files,omitempty"`
 }
 
 // UnmarshalJSON also reads the field's first form, a bare PR number: a
@@ -186,6 +193,10 @@ type MergeQueueRecord struct {
 	// that could not be read), "" when its writes went through (ci-loop §4).
 	// It never makes the queue's pass a failure.
 	CI string `json:"ci,omitempty"`
+	// ConflictCheck is what the conflict check (conflict-owner §2) could not
+	// judge this pass: the whole check (git too old) or a head, with why;
+	// "" when every candidate was judged.
+	ConflictCheck string `json:"conflict_check,omitempty"`
 }
 
 // MergeQueue reads the cache; a missing key is the zero record (unknown).
@@ -194,7 +205,7 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 	if err != nil {
 		return MergeQueueRecord{}, err
 	}
-	rec := MergeQueueRecord{Source: h["source"], Forge: h["forge"], Base: h["base"], Reason: h["reason"], CI: h["ci"]}
+	rec := MergeQueueRecord{Source: h["source"], Forge: h["forge"], Base: h["base"], Reason: h["reason"], CI: h["ci"], ConflictCheck: h["conflict_check"]}
 	rec.AttemptedAt, _ = strconv.ParseInt(h["attempted_at"], 10, 64)
 	rec.ItemsAt, _ = strconv.ParseInt(h["items_at"], 10, 64)
 	rec.Unapproved, _ = strconv.Atoi(h["unapproved"])
@@ -219,14 +230,15 @@ func (b *Bus) MergeQueue(ctx context.Context) (MergeQueueRecord, error) {
 // mergeQueuePut: KEYS[1] the dispatch lease, KEYS[2] the cache; ARGV[1]
 // token, ARGV[2] "1" a success, ARGV[3] source, ARGV[4] reason, ARGV[5] items
 // (JSON, kept opaque), ARGV[6] unapproved, ARGV[7] ttl ms, ARGV[8] forge,
-// ARGV[9] base, ARGV[10] conflicting (JSON), ARGV[11] undelivered (JSON).
+// ARGV[9] base, ARGV[10] conflicting (JSON), ARGV[11] undelivered (JSON),
+// ARGV[13] the CI loop's failure, ARGV[14] the conflict check's.
 // A failure writes the attempt, the source and the reason only. Either way
 // KEYS[3], the dropped heads, loses each drop older than ARGV[12] ms (a
 // corrupt one too).
 var mergeQueuePut = redis.NewScript(fenceCheck + `
 local t = redis.call('TIME')
 local now = tostring(tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000))
-redis.call('HSET', KEYS[2], 'attempted_at', now, 'source', ARGV[3], 'reason', ARGV[4], 'forge', ARGV[8], 'base', ARGV[9], 'ci', ARGV[13])
+redis.call('HSET', KEYS[2], 'attempted_at', now, 'source', ARGV[3], 'reason', ARGV[4], 'forge', ARGV[8], 'base', ARGV[9], 'ci', ARGV[13], 'conflict_check', ARGV[14])
 if ARGV[2] == '1' then
   redis.call('HSET', KEYS[2], 'items_at', now, 'items', ARGV[5], 'unapproved', ARGV[6], 'conflicting', ARGV[10], 'undelivered', ARGV[11])
 end
@@ -273,5 +285,5 @@ func (b *Bus) FencedPutMergeQueue(ctx context.Context, token string, rec MergeQu
 		ok = "1"
 	}
 	return notHolder(mergeQueuePut.Run(ctx, b.r, []string{DispatchKey(b.project), MergeQueueKey(b.project), MergeQueueDroppedKey(b.project)},
-		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base, string(cjs), string(ujs), MergeDropKeep.Milliseconds(), rec.CI).Err())
+		token, ok, rec.Source, rec.Reason, string(js), rec.Unapproved, MergeQueueTTL.Milliseconds(), rec.Forge, rec.Base, string(cjs), string(ujs), MergeDropKeep.Milliseconds(), rec.CI, rec.ConflictCheck).Err())
 }
