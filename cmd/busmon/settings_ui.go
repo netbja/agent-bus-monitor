@@ -37,14 +37,15 @@ type settingsPage struct {
 	targets []string          // notify.toml's targets under the Notifications rows
 	refs    []notifyTargetRef // the target each of those lines shows (selectable after the set-up lines)
 	loaded  bool
-	edit    string   // the key being edited ("" = none)
-	text    string   // the editor's text
-	choice  int      // a key of settingChoices: the option under the cursor
-	confirm string   // the key a d waits a y for
-	reset   []string // the keys a D waits a y for (nil = none)
-	err     string   // the last refusal, in the rule's own words
-	busy    bool     // a write is in flight: keys wait for its rows
-	selLine int      // the body line of the selected row, to keep it in view
+	edit    string      // the key being edited ("" = none)
+	list    *optionList // the edited key's fixed list, open (nil = none)
+	text    string      // the editor's text
+	choice  int         // a key of settingChoices: the option under the cursor
+	confirm string      // the key a d waits a y for
+	reset   []string    // the keys a D waits a y for (nil = none)
+	err     string      // the last refusal, in the rule's own words
+	busy    bool        // a write is in flight: keys wait for its rows
+	selLine int         // the body line of the selected row, to keep it in view
 	// backup is the Backup group's archives and last run (backup-page): its
 	// selectable lines follow the group's keys (backupItems).
 	backup    *backupFacts
@@ -167,9 +168,9 @@ func (m *Model) gotSettings(msg settingsMsg) {
 	case msg.err != nil && errors.As(msg.err, &refused):
 		s.err = refused.Why // the editor stays open
 	case msg.err != nil:
-		s.err, s.edit, s.confirm, s.reset = msg.err.Error(), "", "", nil
+		s.err, s.edit, s.confirm, s.reset, s.list = msg.err.Error(), "", "", nil, nil
 	case len(msg.keys) > 0:
-		s.err, s.edit, s.confirm, s.reset = "", "", "", nil
+		s.err, s.edit, s.confirm, s.reset, s.list = "", "", "", nil, nil
 		var said []string
 		for _, k := range msg.keys {
 			if w := m.applySettings(k); indexOf(said, w) < 0 {
@@ -388,6 +389,8 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 		case key.Kind == config.Bool: // one key, one meaning: written at once
 			v := row.Value != "on"
 			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
+		case key.Choices() != nil: // a fixed list: chosen from it, never typed (language-picker)
+			s.edit, s.list = row.Key, newOptionList(key.Choices(), row.Value)
 		case rowChoices(row) != nil:
 			s.edit, s.choice = row.Key, max(0, indexOf(rowChoices(row), row.Value))
 		default:
@@ -461,8 +464,11 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 	s := m.rd.top().set
 	path := config.Path(m.settingsGetenv())
 	if k.Code == keyEscape {
-		s.edit, s.err = "", ""
+		s.edit, s.err, s.list = "", "", nil
 		return nil
+	}
+	if s.list != nil && s.edit == row.Key { // a key with a fixed list (language-picker)
+		return m.optionListKey(s, k, row.Key, path)
 	}
 	if choices := rowChoices(row); s.edit == row.Key && choices != nil {
 		switch k.Code {
@@ -813,6 +819,12 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 		}
 		b.segs(settingsKeyRow(s, r, i == sel, labelW, width)...).text("\n")
 		n++
+		if s.edit == r.Key && s.list != nil {
+			for _, l := range s.list.lines(width) {
+				b.segs(l...).text("\n")
+				n++
+			}
+		}
 		if r.Key == "display.icons" {
 			b.segs(iconSample(width)...).text("\n")
 			n++
@@ -956,6 +968,9 @@ func settingsKeyRow(s *settingsPage, r settingRow, selected bool, labelW, width 
 // editor; a value from a flag, the env or busmon.toml muted, a refused one in
 // the attention colour.
 func settingControl(s *settingsPage, r settingRow) Line {
+	if s.edit == r.Key && s.list != nil {
+		return Line{S(RoleAccent, "[ "+Preview(s.list.filter)+" ]"), S(RoleMuted, "  type to filter")}
+	}
 	if s.edit == r.Key {
 		if choices := rowChoices(r); choices != nil {
 			return Line{S(RoleMuted, GlyphArrowL+" "), {Text: choices[s.choice], Role: RoleAccent, Bold: true}, S(RoleMuted, " "+GlyphArrowR)}
@@ -1032,7 +1047,7 @@ var settingHelps = map[string]string{
 	"dispatch.focus_notice":        "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
 	"updates.check":                "asks GitHub (a newer release) and npm (a newer Codex than its agents run) once a day",
 	"identity.as":                  "your name on the bus, as a person",
-	"person.language":              "the language master writes to you in (an ISO 639-1 code: en, fr...); the bus stays English",
+	"person.language":              "the language master writes to you in, chosen from the ISO 639-1 list (enter opens it, type to filter: fr, fran, french); the bus stays English",
 	"start.team":                   "the roles agentbus start opens for a new project, separated by commas",
 	"notify.on":                    "sends notifications to the targets of notify.toml",
 	"notify.targets":               "the targets of notify.toml to send to, separated by commas",
