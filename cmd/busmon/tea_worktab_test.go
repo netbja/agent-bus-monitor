@@ -160,7 +160,7 @@ func TestWorkTabEnter(t *testing.T) {
 		t.Fatalf("team row: %+v", p)
 	}
 	p := open("idea:i7").rd.top()
-	if p == nil || p.kind != ovIdea || p.plain != "Three ideas from DeepSeek's Super-Agent prototype" {
+	if p == nil || p.kind != ovIdea || p.threadPlain != "Three ideas from DeepSeek's Super-Agent prototype" { // Y copies it: y is decided there (ideas-triage)
 		t.Fatalf("idea row: %+v", p)
 	}
 	if p := open("req:kimi-quota").rd.top(); p == nil || p.kind != ovRequest {

@@ -133,6 +133,7 @@ type uiState struct {
 	askDrafts      map[string]string       // free answers being written, by ask|question
 	ideaDraft      string                  // a new idea's text while its window is closed (a on F6)
 	ideaAdding     bool                    // an add is on its way: another waits for its result
+	ideaLast       *ideaChange             // this busmon's last state change, for u (ideas-triage)
 	ideaReq        string                  // the request id of the text last sent (ideaReqText): a retry of it reuses the id
 	ideaReqText    string
 	askDraft       string            // a directive held once: its recipient has an open ask
