@@ -240,3 +240,34 @@ func TestProjectSmallPolicy(t *testing.T) {
 		t.Fatal("an unreadable config.toml read as the defaults")
 	}
 }
+
+// foureyes: the real deps wire Policy to this project's settings. Without
+// the wiring every deliver test still passes (each injects its own), and
+// the person's single_approval would do nothing; wired to another project,
+// one project's looser settings would decide another's deliveries.
+func TestRealDeliverDepsReadTheProjectsPolicy(t *testing.T) {
+	b, r := dialMain(t)
+	other, err := bus.Open(r, b.Project()+"x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if err := os.MkdirAll(filepath.Join(cfg, "agentbus"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	text := "[project." + b.Project() + ".delivery]\nsingle_approval = \"small\"\nsame_provider_ok = \"docs\"\n"
+	if err := os.WriteFile(filepath.Join(cfg, "agentbus", "config.toml"), []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d := realDeliverDeps(b, "master", t.TempDir())
+	if d.Policy == nil {
+		t.Fatal("Policy not wired")
+	}
+	if p, err := d.Policy(); err != nil || p.Mode != "small" || p.SameProvider != "docs" {
+		t.Fatalf("this project: %+v %v", p, err)
+	}
+	if p, err := realDeliverDeps(other, "master", t.TempDir()).Policy(); err != nil || p.Mode != "off" || p.SameProvider != "off" {
+		t.Fatalf("another project: %+v %v", p, err)
+	}
+}

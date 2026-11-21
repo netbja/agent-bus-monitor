@@ -46,6 +46,7 @@ func TestClassifySmall(t *testing.T) {
 		{"the single-approval rule", "1\t0\tcmd/agentbus/deliversingle.go\n", nil, false, false, 1, 1, "cmd/agentbus/deliversingle.go"},
 		{"the project-only read of the settings", "1\t0\tconfig/file.go\n", nil, false, false, 1, 1, "config/file.go"},
 		{"the refusal of an agent's write", "1\t0\tconfig/write.go\n", nil, false, false, 1, 1, "config/write.go"},
+		{"any settings file", "1\t0\tconfig/branch.go\n", nil, false, false, 1, 1, "config/branch.go"},
 		{"the glob matcher", "1\t0\tfilepick/ignore.go\n", nil, false, false, 1, 1, "filepick/ignore.go"},
 		{"a binary", "-\t-\tdocs/logo.png\n", nil, false, false, 0, 1, ""},
 		{"a rename counts two", "0\t10\tcmd/busmon/old.go\n10\t0\tcmd/busmon/new.go\n" + numstat("cmd/busmon", 4, 1), nil, false, false, 24, 6, ""},
