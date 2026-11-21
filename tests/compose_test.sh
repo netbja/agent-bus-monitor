@@ -18,7 +18,16 @@ fi
 # `docker inspect` show it, nor on redis-cli's.
 assert_contains "$compose" 'path: ${XDG_CONFIG_HOME:-${HOME}/.config}/agentbus/redis.env' "password file read through env_file"
 assert_contains "$compose" 'required: false' "the password file is optional (an older install keeps its default)"
-assert_contains "$compose" 'redis-server - --appendonly yes' "the server reads its password from a config on stdin"
+assert_contains "$compose" 'exec redis-server - <<EOF' "the server reads its password from a config on stdin"
+# broker-hardening step 1: durability is stated in that config, not on the argv nor left to defaults.
+assert_contains "$compose" 'appendonly yes' "AOF on, in the config on stdin"
+assert_contains "$compose" 'appendfsync everysec' "AOF fsynced every second"
+assert_contains "$compose" 'save 3600 1 300 100 60 10000' "the RDB snapshot schedule stated"
+if [[ "$compose" == *"--appendonly"* ]]; then
+  _bad "appendonly is on the argv as well as in the config"
+else
+  _ok "appendonly is stated in one place"
+fi
 assert_contains "$compose" 'REDISCLI_AUTH=' "the healthcheck authenticates through REDISCLI_AUTH"
 assert_contains "$compose" '$${AGENTBUS_SHELL_PASSWORD:-$${REDIS_PASSWORD:-AgentBus2025!}}' "shell, then file, then the historical default, as the clients"
 assert_contains "$compose" "sed 's/[\\\\\"]/\\\\&/g'" "a quote or backslash in the password is escaped for the config line"
