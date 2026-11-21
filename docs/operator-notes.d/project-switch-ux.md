@@ -8,6 +8,7 @@
     is.
   - **The stopped project is read-only:** while the banner shows, every write is refused with
     "stopped project: read-only, S starts services". That covers sends, answers, priorities,
-    ideas, forget, resume, agentbus runs, settings, attach and the Projects page's delete. `S`,
+    ideas, forget, resume, agentbus runs, settings, the notification set-up (notify.toml and
+    config.toml's notify.*), the palette's follow, attach and the Projects page's delete. `S`,
     its y/n and navigation still work. It lifts as soon as dispatch runs.
   - **`o` alone still starts nothing.**

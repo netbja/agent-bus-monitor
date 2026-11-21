@@ -323,6 +323,9 @@ type followMsg struct {
 // own way (config.Set, then applySettings), the new value flashed (palette
 // spec §8.3).
 func (m *Model) palFollow([]string) tea.Cmd {
+	if m.refuseReadOnly() { // a config.toml write (readonly.go)
+		return nil
+	}
 	path, on := config.Path(m.settingsGetenv()), m.cfg.settings.NoFollow
 	return func() tea.Msg {
 		if path == "" {
