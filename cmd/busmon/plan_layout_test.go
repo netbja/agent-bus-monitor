@@ -427,3 +427,34 @@ func TestPlanTabUpcomingRowKeepsItsTitle(t *testing.T) {
 		t.Fatalf("upcoming titles lost:\n%s", s)
 	}
 }
+
+// reviewer-codex on §4.2: the header keeps its bar at every width, the
+// narrow tier included, and never loses the stale or partial marker to a
+// short width: the markers shorten first, then what is left goes.
+func TestPlanHeaderAtEveryWidth(t *testing.T) {
+	p := boardPlan(boardRow("a", plan.Done, "coder"), boardRow("u", plan.Upcoming, "coder"))
+	p.file.Plan = "v0.31"
+	for _, c := range []struct {
+		w    int
+		tier Tier
+	}{{140, TierWide}, {80, TierMedium}, {60, TierNarrow}, {40, TierNarrow}} {
+		h := planHeader(p, shellNow, c.w, c.tier).text()
+		if !strings.Contains(h, GlyphBarEmpty) || !strings.Contains(h, "1/2") || Width(h) > c.w {
+			t.Errorf("%d: %q", c.w, h)
+		}
+	}
+	p.partial = true
+	p.rec.LoadedAt = shellNow.Add(-plan.StaleAfter - time.Hour).UnixMilli()
+	for _, c := range []struct {
+		w    int
+		tier Tier
+	}{{140, TierWide}, {80, TierMedium}, {60, TierNarrow}, {45, TierNarrow}} {
+		h := planHeader(p, shellNow, c.w, c.tier).text()
+		if !strings.Contains(h, "stale") || !strings.Contains(h, "read failed") || !strings.Contains(h, "1/2?") || !strings.Contains(h, GlyphBarEmpty) || Width(h) > c.w || strings.Contains(h, GlyphEllipsis) {
+			t.Errorf("stale and partial at %d: %q", c.w, h)
+		}
+	}
+	if h := planHeader(p, shellNow, 140, TierWide).text(); !strings.Contains(h, "stale: master, agentbus plan load") || !strings.Contains(h, "2 for you") && !strings.Contains(h, "1 left") {
+		t.Errorf("wide keeps the long words: %q", h)
+	}
+}

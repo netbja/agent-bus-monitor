@@ -106,11 +106,11 @@ func TestPlanBoardSections(t *testing.T) {
 		t.Errorf("DONE not folded:\n%s", folded.plain)
 	}
 	// The header line (views-redesign §4.2): the plan, a bar, done/total, what
-	// is left and what is for the person; narrow: no bar.
+	// is left and what is for the person; narrow: a shorter bar.
 	if l := strings.TrimRight(v.lines[0].text(), " "); !strings.HasPrefix(l, "v0.29  "+GlyphBarFull) || !strings.HasSuffix(l, "1/14   13 left "+GlyphNone+" 2 for you") {
 		t.Errorf("header %q", l)
 	}
-	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); strings.TrimRight(l, " ") != "v0.29  1/14  13 left "+GlyphNone+" 2 for you" {
+	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); !strings.HasPrefix(l, "v0.29  ") || !strings.Contains(l, GlyphBarEmpty) || !strings.HasSuffix(strings.TrimRight(l, " "), "1/14   13 left "+GlyphNone+" 2 for you") { // a short bar too (reviewer-codex)
 		t.Errorf("narrow header %q", l)
 	}
 }

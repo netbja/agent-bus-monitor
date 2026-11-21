@@ -142,7 +142,9 @@ func planOverallRole(p planState) Role {
 
 // planHeader is the board's one header line: the plan, a bar in the plan's
 // state colour, done/total, then what is left and what is for the person;
-// stale or partial, it says so. Narrow: the plan and the counts.
+// stale or partial, it says so. The count, those markers and a bar (4 cells
+// at least) stay at every width, the narrow tier's included
+// (reviewer-codex): the markers shorten first, then what is left goes.
 func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 	done, total := plan.Count(p.rows)
 	count := fmt.Sprintf("%d/%d", done, total)
@@ -156,26 +158,52 @@ func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 		}
 	}
 	rest := fmt.Sprintf("%d left %s %d for you", total-done, GlyphNone, forYou)
-	if p.rec.LoadedAt > 0 && now.Sub(time.UnixMilli(p.rec.LoadedAt)) > plan.StaleAfter {
-		rest += " " + GlyphNone + " stale: master, agentbus plan load"
+	stale := p.rec.LoadedAt > 0 && now.Sub(time.UnixMilli(p.rec.LoadedAt)) > plan.StaleAfter
+	marks := func(long bool) string {
+		var m []string
+		if stale {
+			m = append(m, map[bool]string{true: "stale: master, agentbus plan load", false: "stale"}[long])
+		}
+		if p.partial {
+			m = append(m, map[bool]string{true: "a read failed: values kept", false: "read failed"}[long])
+		}
+		return strings.Join(m, " "+GlyphNone+" ")
 	}
-	if p.partial {
-		rest += " " + GlyphNone + " a read failed: values kept"
-	}
-	name := Seg{Text: Preview(p.file.Plan), Role: RoleText, Bold: true}
-	if tier == TierNarrow {
-		return FitLine(Line{name, {Text: "  " + count + "  " + rest, Role: RoleMuted}}, width)
-	}
-	fixed := Width(name.Text) + 2 + 2 + Width(count) + 3 + Width(rest)
-	barW := clamp(width-fixed, 6, 40)
 	pct := 0.0
 	if total > 0 {
 		pct = float64(done) * 100 / float64(total)
 	}
-	l := Line{name, {Text: "  ", Role: RoleMuted}}
-	l = append(l, planBar(pct, barW, planOverallRole(p))...)
-	l = append(l, Seg{Text: "  " + count, Role: RoleText}, Seg{Text: "   " + rest, Role: RoleMuted})
-	return FitLine(l, width)
+	name := Seg{Text: Preview(p.file.Plan), Role: RoleText, Bold: true}
+	minBar, maxBar := 6, 40
+	if tier == TierNarrow {
+		minBar, maxBar = 4, 12
+	}
+	sep := " " + GlyphNone + " "
+	build := func(barW int, tail string) Line {
+		l := Line{name, {Text: "  ", Role: RoleMuted}}
+		l = append(l, planBar(pct, barW, planOverallRole(p))...)
+		l = append(l, Seg{Text: "  " + count, Role: RoleText})
+		if tail != "" {
+			l = append(l, Seg{Text: "   " + tail, Role: RoleMuted})
+		}
+		return l
+	}
+	join := func(parts ...string) string {
+		var out []string
+		for _, s := range parts {
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return strings.Join(out, sep)
+	}
+	for _, tail := range []string{join(rest, marks(true)), join(rest, marks(false)), marks(false)} {
+		fixed := build(0, tail).Width()
+		if barW := min(width-fixed, maxBar); barW >= minBar {
+			return FitLine(build(barW, tail), width)
+		}
+	}
+	return FitLine(build(minBar, marks(false)), width)
 }
 
 // planGroupState is a group's state word and colour, from its open tasks:
