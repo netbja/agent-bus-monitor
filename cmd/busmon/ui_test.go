@@ -22,7 +22,7 @@ type fakeWriter struct {
 	left      int             // questions left after an Answer
 	answerID  string          // the ask id Answer reports (default: the one given)
 	asks      []bus.Ask       // what Asks returns
-	failFor   map[string]bool // HumanCmd fails for these targets
+	failFor   map[string]bool // TypedCmd fails for these targets
 	resumeErr error           // returned by Resume when set
 	ideas     []bus.Idea      // what Ideas returns; AddIdea and SetIdeaState change it
 	ideaReqs  []string        // each AddIdea's request id
@@ -37,7 +37,7 @@ func (f *fakeWriter) Resume(_ context.Context, by, message string) (bool, error)
 	return f.resumeErr == nil, f.resumeErr
 }
 
-func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (string, error) {
+func (f *fakeWriter) TypedCmd(_ context.Context, from, target, command string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "cmd "+target+" "+command)
@@ -47,7 +47,7 @@ func (f *fakeWriter) HumanCmd(_ context.Context, from, target, command string) (
 	return "1-0", f.fail
 }
 
-func (f *fakeWriter) HumanNotify(_ context.Context, from, message string) (string, error) {
+func (f *fakeWriter) TypedNotify(_ context.Context, from, message string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, "notify "+message)

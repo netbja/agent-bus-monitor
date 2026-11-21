@@ -339,8 +339,12 @@ CLI or the screen, no mission runner, `os/exec` only in the listed files, only t
   `{p}:*` key) behind the same gate; the prompt states key count, agent count and last activity.
   `--theme auto|dark|light` (or `AGENT_BUS_BUSMON_THEME`). busmon writes as a **person**, never
   as an agent: `--as <name>` or `AGENT_BUS_HUMAN`, else `pilot` (`humanIdentity`, `human.go`),
-  through `Bus.HumanCmd`/`HumanNotify`, whose entries carry `human=yes` (`Event.Human`,
-  subscribe's `"human": true`). The header shows `♙ Charlie [human · pilot]`; `@all` fans a
+  through `Bus.TypedCmd`/`TypedNotify`, whose entries carry `human=yes` (`Event.Human`,
+  subscribe's `"human": true`) and `typed=yes` (`Event.Typed`, `"typed": true`): the person typed
+  it. An ask's answer carries both too, and `said`, the answer alone (`Event.Said`). Texts agentbus
+  composes in the person's name (`HumanCmd` for resume-all, `HumanClose`, the suspend's resume
+  directive, the idea move line, a person's gate close, `PersonNotice`) carry `human=yes` only
+  (person-memory spec §4.7). The header shows `♙ Charlie [human · pilot]`; `@all` fans a
   directive out to every known agent; a plain-text notify needs a second Enter, because nobody
   reads one and nothing wakes for it.
 

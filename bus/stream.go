@@ -291,9 +291,14 @@ type Event struct {
 	To           string // report: its addressees (report --to), comma-separated, field "to" (additive); "" for none
 	NoWake       bool   // cmd: field wake=no — delivered, but never worth waking the target
 	Human        bool   // cmd/notify: field human=yes — written by a person (busmon), not an agent
-	For          string // notify: field for — ForPerson marks a dispatcher notice meant for the person (additive)
-	Stale        bool   // set by drain only: entry older than the horizon
-	AgeS         int64  // set by drain only: entry age in seconds
+	// Typed: field typed=yes, text the person typed (person-memory §4.3.1):
+	// busmon's directive and broadcast, an ask's answer. human=yes alone
+	// also marks texts agentbus composes in the person's name.
+	Typed bool
+	Said  string // cmd: an ask answer's field said, the person's own words (the label chosen or the text)
+	For   string // notify: field for — ForPerson marks a dispatcher notice meant for the person (additive)
+	Stale bool   // set by drain only: entry older than the horizon
+	AgeS  int64  // set by drain only: entry age in seconds
 }
 
 // ParseEntry turns a raw stream entry into an Event. The kind is derived from
@@ -305,6 +310,8 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	e.ExpiresAt, _ = strconv.ParseInt(fields["expires_at"], 10, 64)
 	e.NoWake = fields["wake"] == "no"
 	e.Human = fields["human"] == "yes"
+	e.Typed = fields["typed"] == "yes"
+	e.Said = fields["said"]
 	e.For = fields["for"]
 	switch kind {
 	case "status":
@@ -1132,6 +1139,18 @@ func (b *Bus) HumanCmd(ctx context.Context, from, target, command string) (strin
 	return b.cmd(ctx, from, target, CmdDirective, "", command, map[string]interface{}{"human": "yes"})
 }
 
+// TypedCmd is a directive the person typed in busmon: HumanCmd's entry plus
+// typed=yes, the mark person-memory reads as the person's own words (spec
+// 2026-11-21-person-memory-design §4.3.1). Only busmon's input line and
+// compose window write it; a text agentbus composes in the person's name
+// goes through HumanCmd.
+func (b *Bus) TypedCmd(ctx context.Context, from, target, command string) (string, error) {
+	if !ValidName(from) {
+		return "", fmt.Errorf("invalid sender %q", from)
+	}
+	return b.cmd(ctx, from, target, CmdDirective, "", command, map[string]interface{}{"human": "yes", "typed": "yes"})
+}
+
 // HumanClose answers a cmd thread on a person's behalf to close it: a reply
 // (human=yes) on ref, addressed to whoever opened the thread, that never
 // wakes anyone. The thread's history stays; it is no longer open.
@@ -1155,13 +1174,14 @@ func (b *Bus) PersonNotice(ctx context.Context, from, message string) (string, e
 	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message, "human": "yes", "for": ForPerson})
 }
 
-// HumanNotify is a broadcast written by a person: nobody reads it and nothing
-// wakes for it, which busmon says before sending one.
-func (b *Bus) HumanNotify(ctx context.Context, from, message string) (string, error) {
+// TypedNotify is a broadcast the person typed in busmon (human=yes,
+// typed=yes): nobody reads it and nothing wakes for it, which busmon says
+// before sending one.
+func (b *Bus) TypedNotify(ctx context.Context, from, message string) (string, error) {
 	if !ValidName(from) {
 		return "", fmt.Errorf("invalid sender %q", from)
 	}
-	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message, "human": "yes"})
+	return b.add(ctx, "notify", map[string]interface{}{"from": from, "message": message, "human": "yes", "typed": "yes"})
 }
 
 // addressees is a report's "to" field with every part that is no valid name

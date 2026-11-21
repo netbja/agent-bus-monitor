@@ -61,15 +61,15 @@ func TestHeaderShowsTheHuman(t *testing.T) {
 	}
 }
 
-// failFor fails HumanCmd for one target only.
+// failFor fails TypedCmd for one target only.
 type failFor struct {
 	*fakeWriter
 	target string
 }
 
-func (f failFor) HumanCmd(ctx context.Context, from, target, command string) (string, error) {
+func (f failFor) TypedCmd(ctx context.Context, from, target, command string) (string, error) {
 	if target == f.target {
 		return "", errors.New("connection reset")
 	}
-	return f.fakeWriter.HumanCmd(ctx, from, target, command)
+	return f.fakeWriter.TypedCmd(ctx, from, target, command)
 }

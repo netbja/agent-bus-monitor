@@ -34,7 +34,7 @@ type sendPlan struct {
 	askDraft, broadcastDraft string // the warnings after this send
 	tgt, body                string
 	directed                 bool
-	targets                  []string // one HumanCmd each; none with notify
+	targets                  []string // one TypedCmd each; none with notify
 	notify                   bool     // a broadcast
 }
 
@@ -90,12 +90,12 @@ func planSend(in sendInput) sendPlan {
 // index-aligned with the targets (one for a broadcast).
 func (p sendPlan) exec(ctx context.Context, w busWriter, self string) []error {
 	if p.notify {
-		_, err := w.HumanNotify(ctx, self, p.body)
+		_, err := w.TypedNotify(ctx, self, p.body)
 		return []error{err}
 	}
 	errs := make([]error, len(p.targets))
 	for i, a := range p.targets {
-		_, errs[i] = w.HumanCmd(ctx, self, a, p.body)
+		_, errs[i] = w.TypedCmd(ctx, self, a, p.body)
 	}
 	return errs
 }
