@@ -92,3 +92,45 @@ func TestBusReaderRefusesAnAmbiguousID(t *testing.T) {
 		t.Fatalf("ambiguous id: %v", err)
 	}
 }
+
+// Live in one stream, archived from another: still ambiguous; the same
+// stream live and archived is one entry (reviewer-codex on 731810b4).
+func TestBusReaderAmbiguousAcrossStreamAndArchive(t *testing.T) {
+	testredis.Configure(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	project := "pb" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	t.Cleanup(func() { c.Del(ctx, bus.StreamKey(project, "cmd")) })
+	id := "1795205976983-9"
+	fields := map[string]string{"from": "charlie", "target": "master", "type": "directive", "command": "yes", "human": "yes", "typed": "yes"}
+	c.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(project, "cmd"), ID: id, Values: fields})
+	dir := t.TempDir()
+	archive := func(entries ...history.Entry) {
+		t.Helper()
+		var text []byte
+		for _, e := range entries {
+			line, _ := json.Marshal(e)
+			text = append(append(text, line...), '\n')
+		}
+		day := time.UnixMilli(1795205976983).UTC().Format("2006-01-02")
+		if err := os.MkdirAll(filepath.Join(dir, project), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, project, day+".jsonl"), text, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rd := BusReader{Client: c, HistoryDir: func(p string) string { return filepath.Join(dir, p) }}
+	archive(history.Entry{Stream: "cmd", ID: id, F: fields}) // the same entry, archived too
+	if e, ok, err := rd.Entry(ctx, Source{project, id}); err != nil || !ok || e.Body != "yes" {
+		t.Fatalf("live and archived cmd: %+v %v %v", e, ok, err)
+	}
+	archive(history.Entry{Stream: "notify", ID: id, F: map[string]string{"from": "charlie", "message": "no", "human": "yes", "typed": "yes"}})
+	if _, _, err := rd.Entry(ctx, Source{project, id}); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("live cmd, archived notify: %v", err)
+	}
+}

@@ -3,6 +3,7 @@ package personmem
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -80,50 +81,40 @@ func (r BusReader) Entry(ctx context.Context, s Source) (Entry, bool, error) {
 	if err != nil {
 		return Entry{}, false, err
 	}
-	// An id is a stream's: two streams holding it make the source
-	// ambiguous, never resolved to the first (reviewer-codex).
-	var found []bus.Event
+	// An id is a stream's: two streams holding it, live or archived, make
+	// the source ambiguous, never resolved to the first (reviewer-codex).
+	// The live entry and its archived copy in one stream are one entry.
+	found := map[string]bus.Event{}
 	for _, k := range readKinds {
 		e, ok, err := b.EntryByID(ctx, k, s.ID)
 		if err != nil {
 			return Entry{}, false, err
 		}
 		if ok {
-			found = append(found, e)
+			found[k] = e
 		}
 	}
-	if len(found) > 0 {
-		return one(s, found)
-	}
-	if r.HistoryDir == nil {
-		return Entry{}, false, nil
-	}
-	day := entryTime(s.ID)
-	es, _, err := history.ReadDays(r.HistoryDir(s.Project), day.Add(-24*time.Hour), day.Add(24*time.Hour), 0)
-	if err != nil {
-		return Entry{}, false, err
-	}
-	for _, h := range es {
-		if h.ID == s.ID && slices.Contains(readKinds, h.Stream) {
-			found = append(found, bus.ParseEntry(bus.StreamKey(s.Project, h.Stream), h.ID, h.F))
+	if r.HistoryDir != nil {
+		day := entryTime(s.ID)
+		es, _, err := history.ReadDays(r.HistoryDir(s.Project), day.Add(-24*time.Hour), day.Add(24*time.Hour), 0)
+		if err != nil {
+			return Entry{}, false, err
+		}
+		for _, h := range es {
+			if _, live := found[h.Stream]; h.ID == s.ID && slices.Contains(readKinds, h.Stream) && !live {
+				found[h.Stream] = bus.ParseEntry(bus.StreamKey(s.Project, h.Stream), h.ID, h.F)
+			}
 		}
 	}
-	if len(found) == 0 {
+	switch len(found) {
+	case 0:
 		return Entry{}, false, nil
-	}
-	return one(s, found)
-}
-
-// one is the entry found, or an error when more than one stream holds id.
-func one(s Source, found []bus.Event) (Entry, bool, error) {
-	if len(found) > 1 {
-		var kinds []string
+	case 1:
 		for _, e := range found {
-			kinds = append(kinds, e.Kind)
+			return entryOf(e), true, nil
 		}
-		return Entry{}, false, fmt.Errorf("%s is ambiguous: its id is in the %s streams", s, strings.Join(kinds, " and "))
 	}
-	return entryOf(found[0]), true, nil
+	return Entry{}, false, fmt.Errorf("%s is ambiguous: its id is in the %s streams", s, strings.Join(slices.Sorted(maps.Keys(found)), " and "))
 }
 
 func entryOf(e bus.Event) Entry {
