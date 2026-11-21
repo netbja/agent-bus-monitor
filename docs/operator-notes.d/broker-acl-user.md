@@ -9,5 +9,5 @@
       registered agent other than master, `agent` whatever it claims; master's as `master`; the
       person's as `busmon`. A process whose ancestry cannot be read gets `agent`.
   - **A missing password file is an error,** never the default user.
-  - **Not yet:** `./setup.sh acl on|off` creates the users and the files (part 2), and the rotation
-    per user (part 3). Until then, leave `broker.acl` off.
+  - **Turn it on with `./setup.sh acl on`** (part 2), never by editing `broker.acl` by hand: the
+    users and their files come from there. **Not yet:** the rotation per user (part 3).

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"io"
 	"os"
@@ -72,6 +73,17 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 			tty = t
 		}
 		return in.RotateRedisPassword(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty}, dialLocalBroker)
+	case "acl":
+		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv}
+		var tty io.ReadWriter
+		if t := setup.OpenTTY(); t != nil {
+			defer t.Close()
+			tty = t
+		}
+		refuse := func(ctx context.Context) string {
+			return agentcaller.Refuse(ctx, getenv, agentcaller.Ancestor, "turning the broker's ACL users "+opt.ACL, "./setup.sh acl "+opt.ACL)
+		}
+		return in.ACL(context.Background(), &setup.Prompter{Yes: opt.Yes, TTY: tty}, opt.ACL == "on", refuse, loginLocalBroker)
 	case "uninstall":
 		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv, Now: time.Now}
 		var tty io.ReadWriter
@@ -154,6 +166,14 @@ func isDir(p string) bool  { st, err := os.Stat(p); return err == nil && st.IsDi
 
 // dialLocalBroker is the rotation's connection: the broker this checkout's
 // compose publishes on 127.0.0.1:6380, with pw (redis-password).
+// loginLocalBroker proves a login to the local broker as user ("" = the
+// default user) for ./setup.sh acl.
+func loginLocalBroker(ctx context.Context, user, pw string) error {
+	c := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6380", Username: user, Password: pw, DialTimeout: 5 * time.Second})
+	defer c.Close()
+	return c.Ping(ctx).Err()
+}
+
 func dialLocalBroker(ctx context.Context, pw string) (setup.PasswordSetter, func(), error) {
 	c := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6380", Password: pw, DialTimeout: 5 * time.Second})
 	if err := c.Ping(ctx).Err(); err != nil {

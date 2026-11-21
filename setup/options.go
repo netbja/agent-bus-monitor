@@ -4,7 +4,8 @@ import "fmt"
 
 // Options are setup.sh's flags.
 type Options struct {
-	Sub                        string // install, update, uninstall, status, rotate-redis-password
+	Sub                        string // install, update, uninstall, status, rotate-redis-password, acl
+	ACL                        string // acl's state: on or off
 	BinDir                     string
 	DryRun, Force              bool
 	StartDocker, InstallSkills bool
@@ -38,6 +39,12 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 		switch args[0] {
 		case "install", "update", "uninstall", "status", "rotate-redis-password":
 			opt.Sub, args = args[0], args[1:]
+		case "acl":
+			if len(args) < 2 || (args[1] != "on" && args[1] != "off") {
+				o.Fatal("acl takes on or off: ./setup.sh acl on|off (see --help)")
+				return opt, 1
+			}
+			opt.Sub, opt.ACL, args = "acl", args[1], args[2:]
 		}
 	}
 	for i := 0; i < len(args); i++ {
@@ -69,8 +76,8 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 			return opt, 1
 		}
 	}
-	if opt.Sub == "rotate-redis-password" && (opt.Purge || opt.Force || !opt.StartDocker || !opt.InstallSkills) {
-		o.Fatal("rotate-redis-password takes only --dry-run and --yes (see --help)")
+	if (opt.Sub == "rotate-redis-password" || opt.Sub == "acl") && (opt.Purge || opt.Force || !opt.StartDocker || !opt.InstallSkills) {
+		o.Fatal(opt.Sub + " takes only --dry-run and --yes (see --help)")
 		return opt, 1
 	}
 	if opt.Sub == "uninstall" && opt.DryRun {
@@ -84,7 +91,8 @@ func ParseArgs(args []string, getenv func(string) string, o *Output) (Options, i
 }
 
 // RotateHelp is the help's line for the broker password's rotation.
-const RotateHelp = "  ./setup.sh rotate-redis-password [--dry-run] [--yes]  replace the broker's password\n"
+const RotateHelp = "  ./setup.sh rotate-redis-password [--dry-run] [--yes]  replace the broker's password\n" +
+	"  ./setup.sh acl on|off [--dry-run] [--yes]  the broker's ACL users (broker.acl), the person's act\n"
 
 // Usage is setup.sh's help text.
 func Usage(getenv func(string) string) string {

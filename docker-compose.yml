@@ -24,8 +24,11 @@ services:
       - |
         pw="$${AGENTBUS_SHELL_PASSWORD:-$${REDIS_PASSWORD:-AgentBus2025!}}"
         pw="$$(printf '%s' "$$pw" | sed 's/[\\"]/\\&/g')"
+        # broker.acl (step 4b): ./setup.sh acl on puts users.acl in the data volume; it then
+        # replaces requirepass (its default user is off), and acl off removes it.
+        if [ -f /data/users.acl ]; then auth="aclfile /data/users.acl"; else auth="requirepass \"$$pw\""; fi
         exec redis-server - <<EOF
-        requirepass "$$pw"
+        $$auth
         appendonly yes
         appendfsync everysec
         save 3600 1 300 100 60 10000
@@ -38,7 +41,8 @@ services:
       - redis-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${AGENTBUS_SHELL_PASSWORD:-$${REDIS_PASSWORD:-AgentBus2025!}}\" redis-cli ping | grep -q PONG"]
+      # With users.acl, as the ping user (it may only PING), with its password kept beside the file.
+      test: ["CMD-SHELL", "if [ -f /data/users.acl ]; then REDISCLI_AUTH=\"$$(cat /data/ping.pass)\" redis-cli --user ping ping; else REDISCLI_AUTH=\"$${AGENTBUS_SHELL_PASSWORD:-$${REDIS_PASSWORD:-AgentBus2025!}}\" redis-cli ping; fi | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5

@@ -94,3 +94,30 @@ func goModWant(t *testing.T, repo string) string {
 	t.Fatal("no go line")
 	return ""
 }
+
+// ./setup.sh acl on|off: the state is required, and only --dry-run and
+// --yes go with it.
+func TestParseArgsACL(t *testing.T) {
+	getenv := func(string) string { return "" }
+	for _, c := range []struct {
+		args []string
+		code int
+		acl  string
+	}{
+		{[]string{"acl", "on"}, -1, "on"},
+		{[]string{"acl", "off", "--yes", "--dry-run"}, -1, "off"},
+		{[]string{"acl"}, 1, ""},
+		{[]string{"acl", "maybe"}, 1, ""},
+		{[]string{"acl", "on", "--purge"}, 1, ""},
+		{[]string{"acl", "on", "--no-docker"}, 1, ""},
+	} {
+		var out bytes.Buffer
+		opt, code := ParseArgs(c.args, getenv, NewOutput(&out, &out, false))
+		if code != c.code || (code < 0 && (opt.Sub != "acl" || opt.ACL != c.acl)) {
+			t.Errorf("%q: code %d, sub %q, acl %q: %s", c.args, code, opt.Sub, opt.ACL, out.String())
+		}
+	}
+	if !strings.Contains(Usage(getenv), "./setup.sh acl on|off") {
+		t.Error("the help lacks acl on|off")
+	}
+}
