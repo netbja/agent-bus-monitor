@@ -135,7 +135,7 @@ days and compares it by cause. That count is the supersede comments plus `merge-
 
 Answered 2026-11-21 (thread `1795217745802-0`, relayed by master): all four recommendations,
 yes. Rules first, the machinery parked; rerere on repo-wide, never `autoUpdate`; a conflict
-stays with master; README and the guide as today. Built: step 1 (config-rows), steps 2 and 3
+stays with master (**replaced 2026-11-21**, below); README and the guide as today. Built: step 1 (config-rows), steps 2 and 3
 (the skills' rules and `docs/operator-notes.d/rerere.md`).
 
 1. **Rules first, machinery parked?** Do §3 now, and park the conflict-aware-dispatch spec until
@@ -145,6 +145,11 @@ stays with master; README and the guide as today. Built: step 1 (config-rows), s
 3. **A conflicting approved PR: does it go back to its owner, or stay with master?** "Owner"
    means point 5's second half, using the CI loop's owner rule (`mergequeue.CIOwner`).
    Recommended: it stays with master for now. Decide after the count.
+   **Replaced (the person, 2026-11-21, thread `1795222170445-0`):** a conflicting approved PR
+   goes back to its owner, found from the board, with master when no single owner is found. The
+   conflict is confirmed with `git merge-tree` against the base. It is one directive per episode,
+   and master gets it after a bounded number of hand-offs or a bounded time
+   ([2026-11-21-conflict-owner-design](2026-11-21-conflict-owner-design.md)).
 4. **README and the operations guide.** A feature PR edits them today. Should it go on doing
    that, with §3.2's "a rewrite runs alone" rule, or should only the docs agent edit them at a
    release, as with operator notes? Recommended: keep it as today. The window shows one
