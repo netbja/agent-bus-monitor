@@ -182,24 +182,29 @@ func TestJudgeDeclared(t *testing.T) {
 }
 
 // DirectHelpers: a direct child that is not a shell is the client's helper,
-// whatever its CPU; a direct shell and any grandchild still count; a profile
-// without it counts them all (Codex: a one-command shell may exec in place).
+// whatever its CPU, and so is its whole subtree (codegraph's watcher, an npx
+// MCP server's node); a direct shell and its subtree still count, and so does
+// a process of unknown branch; a profile without it counts them all.
 func TestJudgeDirectHelpers(t *testing.T) {
 	now := time.Unix(1000000, 0)
 	procs := &ProcessFacts{Window: 10 * time.Second, Procs: []Proc{
-		{Name: "codebase-memory", Direct: true, CPUGrowth: 9 * time.Second},
-		{Name: "node", Direct: true, CPUGrowth: 9 * time.Second},
+		{Name: "codebase-memory", Branch: "codebase-memory", CPUGrowth: 9 * time.Second},
+		{Name: "MainThread", Branch: "MainThread", CPUGrowth: 9 * time.Second}, // codegraph's node
+		{Name: "MainThread", Branch: "MainThread", CPUGrowth: 9 * time.Second}, // its watcher, a grandchild
+		{Name: "node", Branch: "npm exec", CPUGrowth: 9 * time.Second},         // an npx-started server
 	}}
 	claude := Background{Authoritative: []string{SourceHooks, SourceProcess}, DirectHelpers: true}
 	if j := claude.Judge(Facts{Hooks: &HookFacts{}, Process: procs}, now); j.State != BackgroundNone || j.Procs() != 0 {
-		t.Fatalf("the client's helpers: %v %d %q", j.State, j.Procs(), j.What())
+		t.Fatalf("the client's helpers and their children: %v %d %q", j.State, j.Procs(), j.What())
 	}
-	work := &ProcessFacts{Window: 10 * time.Second, Procs: append(procs.Procs, Proc{Name: "bash", Direct: true}, Proc{Name: "node", CPUGrowth: time.Second})}
-	if j := claude.Judge(Facts{Hooks: &HookFacts{}, Process: work}, now); j.State != BackgroundRunning || j.Procs() != 2 || j.What() != "process 'bash', process 'node'" {
-		t.Fatalf("a command under its shell: %v %d %q", j.State, j.Procs(), j.What())
+	work := &ProcessFacts{Window: 10 * time.Second, Procs: append(procs.Procs,
+		Proc{Name: "bash", Branch: "bash"}, Proc{Name: "node", Branch: "bash", CPUGrowth: time.Second}, Proc{Name: "pytest"})}
+	if j := claude.Judge(Facts{Hooks: &HookFacts{}, Process: work}, now); j.State != BackgroundRunning || j.Procs() != 3 ||
+		j.What() != "process 'bash', process 'node', process 'pytest'" {
+		t.Fatalf("a command under its shell, and one of unknown branch: %v %d %q", j.State, j.Procs(), j.What())
 	}
-	codex := Background{Authoritative: []string{SourceProcess}}
-	if j := codex.Judge(Facts{Process: procs}, now); j.State != BackgroundRunning || j.Procs() != 2 {
+	other := Background{Authoritative: []string{SourceProcess}}
+	if j := other.Judge(Facts{Process: procs}, now); j.State != BackgroundRunning || j.Procs() != 4 {
 		t.Fatalf("without DirectHelpers: %v %d", j.State, j.Procs())
 	}
 }

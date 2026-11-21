@@ -330,7 +330,10 @@ func TestHostRuntimeIgnoresTheClientsMCPServers(t *testing.T) {
 	mcp := func(cpu time.Duration) []termhost.Proc {
 		return []termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "claude"},
 			{PID: p + 1, PPID: p, Start: 5, Command: "codebase-memory", CPU: cpu}, // codebase-memory-mcp, as /proc names it
-			{PID: p + 2, PPID: p, Start: 5, Command: "node", CPU: cpu}}            // an npx-started one (context7)
+			{PID: p + 2, PPID: p, Start: 5, Command: "npm exec", CPU: cpu},        // an npx-started one (context7)…
+			{PID: p + 6, PPID: p + 2, Start: 5, Command: "node", CPU: cpu},        // …whose server is its child
+			{PID: p + 7, PPID: p, Start: 5, Command: "MainThread", CPU: cpu},      // codegraph's node, as /proc names it…
+			{PID: p + 8, PPID: p + 7, Start: 5, Command: "MainThread", CPU: cpu}}  // …and its watcher
 	}
 	f.h.SetProcesses(f.term.ID, mcp(time.Second)...)
 	f.inspect()
