@@ -499,6 +499,13 @@ func (m *Model) refresh() {
 		m.layout = shellDrawer(m.layout, c)
 	}
 	m.fillLists()
+	if !m.rd.open() { // the Plan tab to its content, Activity under it (views-redesign §4.2)
+		pl := &m.lists.plan
+		if l := fitPlanTab(m.layout, len(pl.items)+pl.bottom+2); l.Below.H > 0 {
+			m.layout = l
+			m.fillLists() // the frames again on the split zone: Activity's title is its own there
+		}
+	}
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
 		if w := m.ui.walk; w != nil && !w.moving && m.rd.top().serial == w.serial {
 			w.lost = true // the walk's own: afterUpdate moves the walk on (foureyes)
@@ -507,5 +514,24 @@ func (m *Model) refresh() {
 		if p := m.rd.top(); p != nil {
 			p.dirty = true
 		}
+	}
+	if m.layout.Tier == TierWide && m.rd.open() && m.rd.pages[0].drawer { // the drawer to its content, the active tab under it (views-redesign §4.2)
+		need := 0
+		if p := m.rd.top(); p.kind == ovPlan {
+			need = len(p.body) + len(p.detail) + 2
+		}
+		m.layout = fitDrawer(m.layout, need)
+		m.placeLists()
+		if p := m.rd.top(); p != nil {
+			m.clampPage(p)
+		}
+	}
+}
+
+// placeLists gives every list its frame again, after the layout moved
+// (fitDrawer, fitPlanTab): only places change, never the rows.
+func (m *Model) placeLists() {
+	for _, p := range shellPanels {
+		m.lists.of(p).rect = m.layout.rect(p)
 	}
 }

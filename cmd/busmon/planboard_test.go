@@ -29,7 +29,7 @@ func boardPlan(rows ...plan.Row) planState {
 func sectionOf(v planBoardView, id string) string {
 	sec := ""
 	for i, l := range v.lines {
-		t := l.text()
+		t := strings.TrimPrefix(l.text(), GlyphDown+" ") // a section's heading reads "▼ NOW  2" (views-redesign §4.2)
 		for _, h := range []string{"NOW  ", "APPROVED  ", "NEXT  ", "LATER  ", "DONE  "} {
 			if strings.HasPrefix(t, h) {
 				sec = strings.TrimSpace(h)
@@ -102,15 +102,16 @@ func TestPlanBoardSections(t *testing.T) {
 		t.Errorf("an empty APPROVED is drawn:\n%s", empty.plain)
 	}
 	folded := planBoard(p, -1, false, shellNow, 120, TierWide, false, nil)
-	if !strings.Contains(folded.plain, "DONE  1   d shows") || sectionOf(folded, "d") != "" {
+	if !strings.Contains(folded.plain, GlyphSelect+" DONE "+GlyphNone+" 1 task   (d shows)") || sectionOf(folded, "d") != "" {
 		t.Errorf("DONE not folded:\n%s", folded.plain)
 	}
-	// The progress: the plan, done/total, the bar, the share; narrow: the count only.
-	if l := v.lines[0].text(); !strings.HasPrefix(l, "v0.29  1 of 14 done  ") || !strings.Contains(l, "  7%  ") || !strings.Contains(l, GlyphThinBar) { // progress-line §2.3: N of M, then now and next
-		t.Errorf("progress %q", l)
+	// The header line (views-redesign §4.2): the plan, a bar, done/total, what
+	// is left and what is for the person; narrow: a shorter bar.
+	if l := strings.TrimRight(v.lines[0].text(), " "); !strings.HasPrefix(l, "v0.29  "+GlyphBarFull) || !strings.HasSuffix(l, "1/14   13 left "+GlyphNone+" 2 for you") {
+		t.Errorf("header %q", l)
 	}
-	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); strings.TrimRight(l, " ") != "1/14 7%" {
-		t.Errorf("narrow progress %q", l)
+	if l := planBoard(p, -1, false, shellNow, 40, TierNarrow, false, nil).lines[0].text(); !strings.HasPrefix(l, "v0.29  ") || !strings.Contains(l, GlyphBarEmpty) || !strings.HasSuffix(strings.TrimRight(l, " "), "1/14   13 left "+GlyphNone+" 2 for you") { // a short bar too (reviewer-codex)
+		t.Errorf("narrow header %q", l)
 	}
 }
 
@@ -120,7 +121,7 @@ func TestPlanBoardAllUnknown(t *testing.T) {
 	p := boardPlan(boardRow("x", plan.Unknown, "coder"), boardRow("d", plan.Done, "coder"), boardRow("y", plan.Unknown, plan.Person))
 	v := planBoard(p, -1, true, shellNow, 120, TierWide, false, nil)
 	for _, h := range []string{"NOW  ", "NEXT  ", "LATER  "} {
-		if strings.Contains(v.plain, h) {
+		if strings.Contains(v.plain, GlyphDown+" "+h) {
 			t.Errorf("a section %q with every state unknown:\n%s", h, v.plain)
 		}
 	}
@@ -157,15 +158,15 @@ func TestPlanDrawer(t *testing.T) {
 		if l.ForYou.X != 0 || l.ForYou.W != m.width || l.ForYou.Y != closed.ForYou.Y || l.ForYou.H != l.ForYouRows+2 || l.ForYou.H > closed.ForYou.H {
 			t.Fatalf("%c: For you %+v (%d rows), closed %+v", key, l.ForYou, l.ForYouRows, closed.ForYou)
 		}
-		if r.X != 0 || r.W != m.width || r.Y != l.ForYou.Y+l.ForYou.H || r.Y+r.H != l.Footer.Y {
-			t.Fatalf("%c: drawer %+v, For you %+v", key, r, l.ForYou)
+		if r.X != 0 || r.W != m.width || r.Y != l.ForYou.Y+l.ForYou.H || (r.Y+r.H != l.Footer.Y && l.Lower.Y != r.Y+r.H) { // down to the footer, or to its content with the active tab under it (§4.2)
+			t.Fatalf("%c: drawer %+v, For you %+v, lower %+v", key, r, l.ForYou, l.Lower)
 		}
 		screen := m.grid().plain()
 		if !strings.Contains(screen, "For you") || strings.Contains(screen, "Agents") {
 			t.Fatalf("%c: For you hidden or Agents drawn under the drawer:\n%s", key, screen)
 		}
 		m = keys(t, m, kEnter)
-		if p := m.rd.top(); p.kind != ovPlanTask || m.readerRect() != r {
+		if p := m.rd.top(); p.kind != ovPlanTask || m.readerRect().Y != r.Y || m.readerRect().Y+m.readerRect().H != m.layout.Footer.Y { // in the drawer's place, down to the footer
 			t.Fatalf("%c: enter: %v in %+v", key, p.kind, m.readerRect())
 		}
 		if m = keys(t, m, kEsc); m.rd.top() == nil || m.rd.top().kind != ovPlan {
@@ -185,8 +186,8 @@ func TestPlanDrawer(t *testing.T) {
 		if got := m.readerRect(); got != want {
 			t.Errorf("%v: drawer %+v, want the reader's %+v", size, got, want)
 		}
-		if m.rd.top().detail != nil {
-			t.Errorf("%v: a detail below the wide tier", size)
+		if narrow := m.layout.Tier == TierNarrow; (m.rd.top().detail != nil) == narrow { // the strip at every tier but the narrow one (§4.2)
+			t.Errorf("%v: tier %v, detail %v", size, m.layout.Tier, m.rd.top().detail != nil)
 		}
 	}
 }
@@ -229,10 +230,10 @@ func TestPlanSidePanel(t *testing.T) {
 	}
 	m = keys(t, m, 'j')
 	side = text(m.rd.top().detail)
-	if !strings.Contains(side, "Task w ") || !strings.Contains(side, "start it: enter, then s") {
+	if !strings.Contains(side, "\nw "+GlyphNone) || !strings.Contains(side, "start it: enter, then s") {
 		t.Fatalf("after j, side for w:\n%s", side)
 	}
-	if !strings.Contains(m.grid().plain(), "Task w ") {
+	if !strings.Contains(m.grid().plain(), "for you: start it: enter, then s") {
 		t.Fatal("the detail is not drawn")
 	}
 }
@@ -307,7 +308,7 @@ func TestPlanBoardEmptySectionNotDrawn(t *testing.T) {
 	v := planBoard(p, 0, true, shellNow, 120, TierWide, true, nil)
 	for _, l := range v.lines {
 		for _, h := range []string{"NOW", "LATER"} {
-			if strings.HasPrefix(l.text(), h+"  ") {
+			if strings.HasPrefix(l.text(), GlyphDown+" "+h+"  ") {
 				t.Errorf("empty %s drawn:\n%s", h, v.plain)
 			}
 		}
@@ -318,19 +319,19 @@ func TestPlanBoardEmptySectionNotDrawn(t *testing.T) {
 }
 
 // The drawer's list keeps the reader's whole width at every tier
-// (views-redesign §4.1: the detail went under it); the detail is the wide
-// tier's only.
+// (views-redesign §4.1: the detail went under it); the strip shows at every
+// tier but the narrow one (§4.2).
 func TestPlanDrawerSideKeepsTheList(t *testing.T) {
 	for w := 120; w <= 220; w += 4 {
 		m := keys(t, planShell(t, w, 40), 'p')
 		list, detail := m.planDrawerWidths()
-		if list != m.readerWidth() || detail != (m.layout.Tier == TierWide) {
+		if list != m.readerWidth() || detail != (m.layout.Tier != TierNarrow) {
 			t.Errorf("width %d: reader %d, list %d, detail %v", w, m.readerWidth(), list, detail)
 		}
 	}
-	m := keys(t, planShell(t, 100, 40), 'p') // medium: never a detail
-	if _, detail := m.planDrawerWidths(); detail {
-		t.Error("a drawer detail at the medium tier")
+	m := keys(t, planShell(t, 100, 40), 'p') // medium: the strip too
+	if _, detail := m.planDrawerWidths(); !detail {
+		t.Error("no drawer strip at the medium tier")
 	}
 }
 
@@ -382,21 +383,32 @@ func TestPlanBoardRowMarks(t *testing.T) {
 		t.Fatalf("no row %s", id)
 		return ""
 	}
-	for id, want := range map[string]string{
-		"i": GlyphWorking + " title i", "ok": GlyphDone + " title ok", "hi": GlyphUp + " title hi",
-		"lo": GlyphDownArrow + " title lo", "plain": "title plain", "decide-x": "title decide-x",
+	for id, want := range map[string]string{ // the state's glyph, then the priority's column (a task of this plan has one)
+		"i": GlyphWorking + "   title i", "ok": GlyphDone + "   title ok", "hi": GlyphUp + " title hi",
+		"lo": GlyphDownArrow + " title lo", "plain": "title plain", "decide-x": GlyphHuman + "   title decide-x",
 	} {
 		if got := line(id); !strings.HasPrefix(got, want) {
 			t.Errorf("%s: %q, want it to start with %q", id, got, want)
 		}
 	}
-	if got := line("hi"); !strings.Contains(got, "after dep1 +2") {
-		t.Errorf("hi: %q, want after dep1 +2", got)
+	// A row says "after" only while it waits on a task (§4.2); done
+	// dependencies are the strip's, every one listed.
+	if got := line("hi"); strings.Contains(got, "after") {
+		t.Errorf("hi: %q, its dependencies are done", got)
 	}
-	if got := line("i"); !strings.Contains(got, "after dep1") || strings.Contains(got, "+") {
-		t.Errorf("i: %q", got)
+	for _, r := range p.rows {
+		if r.Task.ID == "hi" {
+			if got := linesText(planStrip(p, r, shellNow, 140)); !strings.Contains(got, "after dep1 "+GlyphDone+", dep2 "+GlyphDone+", dep3 "+GlyphDone) {
+				t.Errorf("hi's strip %q", got)
+			}
+		}
 	}
-	if got := line("decide-x"); !strings.Contains(got, GlyphHuman+" person") || !strings.Contains(got, "decide") || strings.Contains(got, "waiting for you") {
+	waiting := boardRow("wo", plan.Upcoming, "coder")
+	waiting.WaitingOn = []string{"x", "y"}
+	if w, _ := planStateWord(waiting); w != "after x +1" {
+		t.Errorf("waiting on two: %q", w)
+	}
+	if got := line("decide-x"); !strings.Contains(got, " person ") || !strings.Contains(got, "decide") || strings.Contains(got, "waiting for you") {
 		t.Errorf("decide-x: %q", got)
 	}
 	if got := line("ok"); !strings.Contains(got, "approved") {
@@ -436,7 +448,7 @@ func TestPlanBoardNarrowFoldsLater(t *testing.T) {
 	lo.Task.Priority = "low"
 	p := boardPlan(boardRow("now1", plan.InProgress, "coder"), hi, lo, boardRow("w2", plan.Upcoming, "coder", "now1"), boardRow("d", plan.Done, "coder"))
 	v := planBoardOf(p, -1, false, false, shellNow, 76, TierNarrow, false, nil)
-	if !strings.Contains(v.plain, "LATER 3 "+GlyphNone+" 1 "+GlyphUp+" (enter)") || !strings.Contains(v.plain, "DONE 1 (enter)") {
+	if !strings.Contains(v.plain, GlyphSelect+" LATER 3 "+GlyphNone+" 1 "+GlyphUp+"   (enter)") || !strings.Contains(v.plain, GlyphSelect+" DONE "+GlyphNone+" 1 task   (d shows)") {
 		t.Fatalf("folded:\n%s", v.plain)
 	}
 	for _, id := range []string{"hi", "lo", "w2"} {

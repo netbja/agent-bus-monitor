@@ -68,7 +68,7 @@ func TestPlanInHandHighlighted(t *testing.T) {
 	title := func(id string) Seg {
 		for _, r := range p.rows {
 			if r.Task.ID == id {
-				for _, s := range planBoardRow(p, r, "", false, shellNow, 120, planCols{}) {
+				for _, s := range planR2Row(p, r, false, shellNow, 120, planR2ColsOf(p)) {
 					if strings.Contains(s.Text, "title "+id) {
 						return s
 					}

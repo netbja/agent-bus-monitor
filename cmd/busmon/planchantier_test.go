@@ -57,42 +57,40 @@ func itemLine(v planBoardView, id string) int {
 	return -1
 }
 
+// plan-chantier §3, views-redesign §4.2: one block per group with open
+// tasks, in order (waiting for the person, then in hand, then the rest,
+// Other last), each "▼ <title> <bar> done/total <state>", its rows under it;
+// every finished group folded into one line at the end; no NOW, NEXT, LATER.
 func TestPlanBoardGroups(t *testing.T) {
 	v := planBoard(chantierPlan(), 0, false, shellNow, 120, TierWide, false, nil)
 	for _, h := range []string{"NOW  ", "NEXT  ", "LATER  "} {
-		if _, i := lineWith(v, h); i >= 0 {
+		if _, i := lineWith(v, GlyphDown+" "+h); i >= 0 {
 			t.Fatalf("a grouped plan draws %q", h)
 		}
 	}
-	herdr, hi := lineWith(v, "Leave herdr")
-	self, si := lineWith(v, "Self-repair watcher")
-	other, oi := lineWith(v, "Other")
-	work, wi := lineWith(v, GlyphDone+" Work tab")
-	done, di := lineWith(v, "DONE  ")
-	// Order: waiting for the person first, then in hand, then the rest in
-	// the list's order, Other last before the finished groups, DONE at the end.
-	if !(hi >= 0 && hi < si && si < oi && oi < wi && wi < di) {
-		t.Fatalf("order herdr %d, self-repair %d, other %d, work %d, done %d:\n%s", hi, si, oi, wi, di, v.plain)
+	herdr, hi := lineWith(v, GlyphDown+" Leave herdr")
+	self, si := lineWith(v, GlyphDown+" Self-repair watcher")
+	other, oi := lineWith(v, GlyphDown+" Other")
+	done, di := lineWith(v, GlyphSelect+" 1 group done")
+	if !(hi >= 0 && hi < si && si < oi && oi < di) {
+		t.Fatalf("order herdr %d, self-repair %d, other %d, done %d:\n%s", hi, si, oi, di, v.plain)
 	}
-	if !strings.Contains(herdr, "1/5") || !strings.Contains(herdr, "in progress: h1") || !strings.Contains(herdr, "waits for you: h2") {
+	if !strings.Contains(herdr, "1/5") || !strings.Contains(herdr, "waits for you") {
 		t.Fatalf("herdr header %q", herdr)
 	}
-	if !strings.Contains(self, "1/2") || strings.Contains(self, "in progress") || strings.Contains(self, "waits") {
+	if !strings.Contains(self, "1/2") || !strings.Contains(self, "not started") {
 		t.Fatalf("self-repair header %q", self)
 	}
 	if !strings.Contains(other, "0/1") {
 		t.Fatalf("other header %q", other)
 	}
-	if !strings.Contains(work, "1/1") || !strings.Contains(work, "done") {
-		t.Fatalf("a finished group: %q", work)
-	}
-	if !strings.HasPrefix(done, "DONE  3") || !strings.Contains(done, "d shows") {
-		t.Fatalf("done line %q", done)
+	if !strings.Contains(done, GlyphNone+" 1 task") || !strings.Contains(done, "(d shows)") || strings.Contains(v.plain, "Work tab") {
+		t.Fatalf("done line %q:\n%s", done, v.plain)
 	}
 	// Rows under their header in the roadmap's order (views-redesign §4):
 	// NOW (h1), APPROVED (h5), NEXT (h2, the person's decision), LATER (h3);
-	// done rows folded; headers are not items.
-	want := []string{"h1", "h5", "h2", "h3", "s1", "o1"}
+	// done rows folded; headers are not items, the fold is the last.
+	want := []string{"h1", "h5", "h2", "h3", "s1", "o1", ""}
 	if len(v.items) != len(want) {
 		t.Fatalf("items %+v", v.items)
 	}
@@ -112,43 +110,36 @@ func TestPlanBoardGroups(t *testing.T) {
 			t.Fatalf("done row %s drawn while folded", id)
 		}
 	}
-	// The bar: done cells (in the group's colour, §4.1), then the
-	// approved-in-review ones, then the rest.
-	cells := barRoles(v, hi)
-	_, reviewRole := planLook(plan.InReview)
-	if len(cells) != 20 || cells[0] != RoleAttention || cells[3] != RoleAttention || cells[4] != reviewRole || cells[7] != reviewRole || cells[8] != RoleMuted {
-		t.Fatalf("bar cells %v", cells)
-	}
 }
 
-// §3: d shows every done row under its group, and the DONE line goes.
+// §3: d shows every done row under its group, and each finished group's
+// line with its rows instead of the fold.
 func TestPlanBoardGroupsShowDone(t *testing.T) {
 	v := planBoard(chantierPlan(), 0, true, shellNow, 120, TierWide, false, nil)
-	_, hi := lineWith(v, "Leave herdr")
-	_, si := lineWith(v, "Self-repair watcher")
-	_, wi := lineWith(v, GlyphDone+" Work tab")
+	_, hi := lineWith(v, GlyphDown+" Leave herdr")
+	_, si := lineWith(v, GlyphDown+" Self-repair watcher")
+	_, wi := lineWith(v, GlyphDown+" Work tab")
 	if l := itemLine(v, "h4"); l <= hi || l >= si {
 		t.Fatalf("h4 on line %d, not under Leave herdr (%d..%d)", l, hi, si)
 	}
 	if l := itemLine(v, "w1"); l != wi+1 {
 		t.Fatalf("w1 on line %d, Work tab on %d", l, wi)
 	}
-	if _, di := lineWith(v, "DONE  "); di >= 0 {
-		t.Fatal("a DONE line while d shows")
+	if _, di := lineWith(v, GlyphSelect+" 1 group done"); di >= 0 {
+		t.Fatal("a fold while d shows")
 	}
 }
 
-// §3: the narrow header is the title and the count; too wide, waits for
-// you stays and in progress goes.
+// §3: the narrow header is ▼, the title, the count and the state word;
+// the wide one fits its width.
 func TestPlanBoardGroupHeaderWidths(t *testing.T) {
 	v := planBoard(chantierPlan(), 0, false, shellNow, 40, TierNarrow, false, nil)
-	if h, _ := lineWith(v, "Leave herdr"); strings.TrimRight(h, " ") != "Leave herdr 1/5" {
+	if h, _ := lineWith(v, GlyphDown+" Leave herdr"); strings.TrimRight(h, " ") != GlyphDown+" Leave herdr 1/5  waits for you" {
 		t.Fatalf("narrow header %q", h)
 	}
 	v = planBoard(chantierPlan(), 0, false, shellNow, 72, TierWide, false, nil)
-	h, _ := lineWith(v, "Leave herdr")
-	if !strings.Contains(h, "waits for you: h2") || strings.Contains(h, "in progress") {
-		t.Fatalf("too wide: %q", h)
+	if h, _ := lineWith(v, GlyphDown+" Leave herdr"); !strings.Contains(h, "waits for you") || Width(h) > 72 {
+		t.Fatalf("72 cells: %q", h)
 	}
 }
 
@@ -162,13 +153,13 @@ func TestPlanBoardGroupsUnknownAndUngrouped(t *testing.T) {
 		}
 	}
 	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
-	if _, i := lineWith(v, "Leave herdr"); i >= 0 {
+	if _, i := lineWith(v, GlyphDown+" Leave herdr"); i >= 0 {
 		t.Fatalf("groups drawn on unknown reads:\n%s", v.plain)
 	}
 	p = chantierPlan()
 	p.file.Groups = nil
 	v = planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
-	if _, i := lineWith(v, "NOW  "); i < 0 {
+	if _, i := lineWith(v, GlyphDown+" NOW  "); i < 0 {
 		t.Fatalf("an ungrouped plan lost NOW:\n%s", v.plain)
 	}
 }
@@ -177,13 +168,13 @@ func TestPlanBoardGroupsUnknownAndUngrouped(t *testing.T) {
 // roadmap's order, views-redesign §4), and the detail shows h2 (§4.1).
 func TestPlanBoardGroupsSelection(t *testing.T) {
 	v := planBoard(chantierPlan(), 2, false, shellNow, 120, TierWide, true, nil)
-	if v.items[2].task != "h2" || len(v.detail) != planDetailRows || !strings.Contains(v.detail[0].text(), "Task h2 ") {
+	if v.items[2].task != "h2" || len(v.detail) != planDetailRows || !strings.HasPrefix(v.detail[1].text(), "h2 "+GlyphNone) {
 		t.Fatalf("item 2 %+v, detail %q", v.items[2], linesText(v.detail))
 	}
 }
 
 // §3 (reviewer-codex): Other is last before the finished groups, even when
-// every task in it is done.
+// every task in it is done (shown with d).
 func TestPlanBoardGroupsOtherBeforeFinished(t *testing.T) {
 	p := boardPlan(
 		inGroup(boardRow("w1", plan.Done, "coder"), "work-tab"),
@@ -191,32 +182,11 @@ func TestPlanBoardGroupsOtherBeforeFinished(t *testing.T) {
 		boardRow("o1", plan.Done, "coder"),
 	)
 	p.file.Groups = []plan.Group{{ID: "work-tab", Title: "Work tab"}, {ID: "herdr-exit", Title: "Leave herdr"}}
-	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
-	_, hi := lineWith(v, "Leave herdr")
-	_, oi := lineWith(v, GlyphDone+" Other") // all done: one line too (§4.1)
-	_, wi := lineWith(v, GlyphDone+" Work tab")
+	v := planBoard(p, 0, true, shellNow, 120, TierWide, false, nil)
+	_, hi := lineWith(v, GlyphDown+" Leave herdr")
+	_, oi := lineWith(v, GlyphDown+" Other")
+	_, wi := lineWith(v, GlyphDown+" Work tab")
 	if !(hi >= 0 && hi < oi && oi < wi) {
 		t.Fatalf("herdr %d, other %d, work %d:\n%s", hi, oi, wi, v.plain)
-	}
-}
-
-// §3 (foureyes, B3): only an approved row still in review fills the bar's
-// "nearly done" cells; a row in review without an approval stays muted.
-func TestPlanBoardGroupBarApprovedOnly(t *testing.T) {
-	approved := boardRow("a", plan.InReview, "coder")
-	approved.Verdict = plan.Approved
-	p := boardPlan(
-		inGroup(boardRow("d", plan.Done, "coder"), "g"),
-		inGroup(approved, "g"),
-		inGroup(boardRow("r", plan.InReview, "coder"), "g"),
-		inGroup(boardRow("u", plan.Upcoming, "coder"), "g"),
-	)
-	p.file.Groups = []plan.Group{{ID: "g", Title: "G"}}
-	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
-	_, gi := lineWith(v, "G ")
-	cells := barRoles(v, gi)
-	_, reviewRole := planLook(plan.InReview)
-	if len(cells) != 20 || cells[4] != RoleAccent || cells[5] != reviewRole || cells[9] != reviewRole || cells[10] != RoleMuted {
-		t.Fatalf("bar cells %v", cells)
 	}
 }

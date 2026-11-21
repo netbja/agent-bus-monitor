@@ -52,7 +52,7 @@ func TestPlanTabRows(t *testing.T) {
 	pinLocal(t)
 	m := keys(t, planShell(t, 140, 40), '4')
 	screen := m.grid().plain()
-	for _, w := range []string{"4 Plan", "v0.29", "1/3 done", "APPROVED", "NEXT", "title r", "title w", "DONE"} {
+	for _, w := range []string{"4 Plan", "v0.29", "1/3   2 left", "APPROVED", "NEXT", "title r", "title w", "DONE"} {
 		if !strings.Contains(screen, w) {
 			t.Fatalf("tab lacks %q:\n%s", w, screen)
 		}
@@ -88,7 +88,7 @@ func TestPlanTabSidePanel(t *testing.T) {
 	pinLocal(t)
 	m := keys(t, planShell(t, 160, 40), '4')
 	screen := m.grid().plain()
-	for _, w := range []string{"Task", "unblocks", "prio", "approved"} {
+	for _, w := range []string{"r " + GlyphNone + " in review", "approved", "for you:", "enter: task page"} {
 		if !strings.Contains(screen, w) {
 			t.Fatalf("detail lacks %q:\n%s", w, screen)
 		}
@@ -97,7 +97,7 @@ func TestPlanTabSidePanel(t *testing.T) {
 	if !strings.Contains(m.grid().plain(), "waiting for you") {
 		t.Fatalf("detail did not follow j:\n%s", m.grid().plain())
 	}
-	if s := keys(t, planShell(t, 100, 40), '4').grid().plain(); strings.Contains(s, "unblocks") {
+	if s := keys(t, planShell(t, 70, 40), '6').grid().plain(); strings.Contains(s, "enter: task page") { // the strip shows at every tier but the narrow one (§4.2)
 		t.Fatalf("a detail below the wide tier:\n%s", s)
 	}
 }
@@ -184,17 +184,5 @@ func TestPlanTabGoldens(t *testing.T) {
 			frame = append(frame, strings.TrimRight(string([]rune(lines[y])[r.X:r.X+r.W]), " "))
 		}
 		checkGolden(t, c.name, strings.Join(frame, "\n")+"\n")
-	}
-}
-
-// The label: done/total, "?" when a read failed and the counts are partial.
-func TestPlanTabLabelPartial(t *testing.T) {
-	p := boardPlan(boardRow("a", plan.Done, "coder"), boardRow("b", plan.Upcoming, "coder"))
-	if got := planTabLabel(p, TierMedium).text(); got != "1/2 done" {
-		t.Fatalf("label %q", got)
-	}
-	p.partial = true
-	if got := planTabLabel(p, TierMedium).text(); got != "1/2? done" {
-		t.Fatalf("partial label %q", got)
 	}
 }

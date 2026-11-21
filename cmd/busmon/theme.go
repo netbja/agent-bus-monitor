@@ -378,6 +378,9 @@ const (
 	GlyphClock = "◷"
 	// A lower bound: the process source's "bg ≥1?" (background-work-visible Q5).
 	GlyphAtLeast = "≥"
+	// A task that waits on another (the Plan r2, views-redesign §4.2: the person's
+	// ⏸, an emoji two cells wide, drawn one cell).
+	GlyphPause = "‖"
 	// The settings page (settings-panels): a choice reads ‹ value ›, and •
 	// marks a key config.toml sets to other than its default.
 	GlyphChoiceL     = "‹"
@@ -459,5 +462,5 @@ var UIGlyphs = []string{
 	glyphHorizontal, glyphTopLeft, glyphTopRight, glyphBottomLeft, glyphBottomRight, GlyphPrompt, GlyphHuman,
 	GlyphNotEqual, GlyphGate, GlyphReturn, GlyphTimes, GlyphSpark1, GlyphSpark2, GlyphSpark3, GlyphSpark4, GlyphSpark5, GlyphSpark6, GlyphUpperHalf,
 	GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7, GlyphThinBar, GlyphThinMark, GlyphChoiceL, GlyphSet, GlyphOpenHere, GlyphIdea, GlyphWarn,
-	GlyphClock, GlyphAtLeast,
+	GlyphClock, GlyphAtLeast, GlyphPause,
 }

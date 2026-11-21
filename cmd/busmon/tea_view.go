@@ -44,8 +44,8 @@ func (m Model) grid() *grid {
 	reading := m.rd.open()
 	drawer := reading && l.Tier == TierWide && m.rd.pages[0].drawer
 	for _, p := range l.Visible {
-		if reading && (p == l.Active || l.Tier == TierNarrow) {
-			continue // the reader has the lower zone (narrow: the view)
+		if reading && ((p == l.Active && !(drawer && l.Lower.H > 0)) || l.Tier == TierNarrow) {
+			continue // the reader has the lower zone (narrow: the view); a drawer sized to its content leaves it the active tab (§4.2)
 		}
 		if drawer && p == PanelAgents {
 			continue // the plan drawer is under For you, over Agents (views-redesign §4.1)
@@ -57,6 +57,10 @@ func (m Model) grid() *grid {
 				drawPlanDetail(g, br.X+1, br.Y, br.W-2, m.planTabDetail(br.W-2)) // one cell each side, as the drawer's body
 			}
 		}
+	}
+	if b := l.Below; b.H > 0 && !reading { // under a Plan sized to its content (views-redesign §4.2)
+		lst := *m.lists.of(l.BelowPanel)
+		lst.draw(g)
 	}
 	if reading {
 		m.drawReader(g)
@@ -318,7 +322,7 @@ func (m *Model) fillLists() {
 // panel's name in its own title (Activity's auto-scroll state). The narrow
 // tier has its tab bar above the view: the title is the panel's own.
 func (m *Model) lowerTitle(p PanelID, own Line) Line {
-	if m.layout.Tier == TierNarrow {
+	if m.layout.Tier == TierNarrow || (m.layout.Below.H > 0 && p == m.layout.BelowPanel) { // under the Plan tab: its own name, not the tabs again (§4.2)
 		return own
 	}
 	var suffix Line

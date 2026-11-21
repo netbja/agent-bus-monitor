@@ -11,14 +11,14 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ✓ architect done     40m  —   escalating  spec merged                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ─────────────── 3/9 done ─╮
-│  Leave herdr         ━━━━━━━━━━━━━  1/5 · in progress: h1 · waits for you: h2▲
-│▶ ● title h1  coder     in progress                                           ┃
-│  ✓ title h5  coder     approved                                              ┃
-│    title h2  ♙ person  decide                                                │
-│    title h3  coder     blocked                                               │
-│                                                                              │
-│  Self-repair watcher ━━━━━━━━━━━━━  1/2                                      ▼
+╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────╮
+│v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you     ▲
+│──────────────────────────────────────────────────────────────────────────────┃
+│▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                     │
+│▶ ● title h1  coder   in progress                                             │
+│ ──────────────────────────────────────────────────────────────────────────── │
+│ h1 · in progress · coder                                                     │
+│ for you: nothing        enter: task page   + - priority                      ▼
 ╰─ + - priority · enter task ──────────────────────────────────────────────────╯
 ›                                                                               
  enter task   + - priority   T triage   p P plan   F1 help   F5 health          

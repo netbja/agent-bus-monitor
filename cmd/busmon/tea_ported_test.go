@@ -61,8 +61,11 @@ func TestShellPlanPageKeys(t *testing.T) {
 	if p := m.rd.top(); p.kind != ovPlan || p.items[p.sel].task != second {
 		t.Fatal("esc from a task returns to the plan, selection kept")
 	}
-	m = keys(t, m, 'd') // DONE folded until d (home-inbox-drawer §4.4)
-	if p := m.rd.top(); !p.expanded || !strings.Contains(p.plain, "merged (recorded") {
+	if strings.Contains(m.rd.top().plain, "Specialist roles") {
+		t.Fatalf("a done task shown before d: %q", m.rd.top().plain)
+	}
+	m = keys(t, m, 'd') // DONE folded until d (home-inbox-drawer §4.4); how it ended is its strip's (§4.2)
+	if p := m.rd.top(); !p.expanded || !strings.Contains(p.plain, "Specialist roles") {
 		t.Fatalf("enter on done did not expand: %q", p.plain)
 	}
 	if m = keys(t, m, kEsc); m.rd.open() {
@@ -80,7 +83,7 @@ func TestShellPlanPageShowsHostileTextAsWritten(t *testing.T) {
 	st := newPlanShared()
 	st.plan = hostilePlan(time.Now())
 	scr := keys(t, shellOf(t, st, 160, 50, nil), 'P').grid().plain()
-	if !strings.Contains(scr, "Ti[red]tle") || !strings.Contains(scr, "goal [x]") {
+	if !strings.Contains(scr, "Ti[red]tle") { // the goal is no longer drawn: one header line (views-redesign §4.2)
 		t.Fatalf("hostile text not shown as written:\n%s", scr)
 	}
 }
