@@ -36,13 +36,17 @@ func (s *Store) Check() []Finding {
 	for n, err := range errs {
 		out = append(out, Finding{File: n + ".md", What: err.Error()})
 	}
-	ids := map[string]bool{}
-	for _, t := range all {
-		for _, o := range t.Obs {
-			ids[o.ID] = true
+	names, _ := s.Topics()
+	ids := map[string]string{} // id -> the first file holding it, in name order
+	for _, n := range names {
+		if t := all[n]; t != nil {
+			for _, o := range t.Obs {
+				if _, ok := ids[o.ID]; !ok {
+					ids[o.ID] = n + ".md"
+				}
+			}
 		}
 	}
-	names, _ := s.Topics()
 	for _, n := range names {
 		t := all[n]
 		if t == nil {
@@ -73,6 +77,8 @@ func (s *Store) Check() []Finding {
 				add(o.ID, "bad id (<YYYYMMDD>-<entry id>)")
 			case seen[o.ID]:
 				add(o.ID, "the id is there twice")
+			case ids[o.ID] != file: // ids are the memory's, not a topic's
+				add(o.ID, "the id is also in %s", ids[o.ID])
 			}
 			seen[o.ID] = true
 			if !slices.Contains(Types, o.Type) {
@@ -92,7 +98,7 @@ func (s *Store) Check() []Finding {
 					add(o.ID, "%s holds a credential shape", f.name)
 				}
 			}
-			if o.Supersedes != "" && !ids[o.Supersedes] {
+			if _, ok := ids[o.Supersedes]; o.Supersedes != "" && !ok {
 				add(o.ID, "supersedes %s: no such observation", o.Supersedes)
 			}
 		}

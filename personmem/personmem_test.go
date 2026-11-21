@@ -324,3 +324,60 @@ func findingTexts(fs []Finding) []string {
 	}
 	return out
 }
+
+// reviewer-codex on fae1939c: ids are the memory's, not a topic's. The same
+// source and quote in another topic is the same observation; another quote
+// of the same entry gets -2 whatever its topic; check finds an id in two
+// files.
+func TestIdsAreGlobal(t *testing.T) {
+	s := store(t)
+	ctx := context.Background()
+	rd := reader()
+	a, err := s.Remember(ctx, rd, Request{Topic: "merge-policy", Type: "fact", Importance: "minor", From: Source{"demo", dirID}, Quote: "yes, dev first", By: "charlie"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, err := s.Remember(ctx, rd, Request{Topic: "branches", Type: "fact", Importance: "minor", From: Source{"demo", dirID}, Quote: "yes, dev first", By: "charlie"})
+	if err != nil || same.ID != a.ID || commits(t, s) != 1 {
+		t.Fatalf("same source and quote in another topic: %+v %v, %d commits", same, err, commits(t, s))
+	}
+	if ts, _ := s.Topics(); len(ts) != 1 {
+		t.Fatalf("a topic was made for a duplicate: %v", ts)
+	}
+	other, err := s.Remember(ctx, rd, Request{Topic: "branches", Type: "fact", Importance: "minor", From: Source{"demo", dirID}, Quote: "main only by promotion", By: "charlie"})
+	if err != nil || other.ID != a.ID+"-2" {
+		t.Fatalf("another quote of the entry in another topic: %+v %v", other, err)
+	}
+	// A hand edit copying an id into another file is found.
+	b, _ := os.ReadFile(filepath.Join(s.Dir, "merge-policy.md"))
+	if err := os.WriteFile(filepath.Join(s.Dir, "copy.md"), []byte(strings.ReplaceAll(string(b), "merge-policy", "copy")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if all := strings.Join(findingTexts(s.Check()), "\n"); !strings.Contains(all, "also in") {
+		t.Fatalf("an id in two files not found:\n%s", all)
+	}
+}
+
+// A topic file that no longer parses (a hand edit) is never written over:
+// remember refuses, and the file stays byte for byte.
+func TestRememberKeepsAnUnparsableTopic(t *testing.T) {
+	s := store(t)
+	ctx := context.Background()
+	if _, err := s.Remember(ctx, reader(), decision("merge-policy", dirID, "yes, dev first")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(s.Dir, "merge-policy.md")
+	broken := "---\ntopic: merge-policy\nkind: other\n---\n# merge-policy\n\nhand-written prose\n"
+	if err := os.WriteFile(path, []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rd := reader()
+	rd["demo:8-0"] = Entry{Kind: "cmd", Type: "directive", Body: "keep it", Human: true, Typed: true}
+	_, err := s.Remember(ctx, rd, Request{Topic: "merge-policy", Type: "fact", Importance: "minor", From: Source{"demo", "8-0"}, Quote: "keep it", By: "charlie"})
+	if err == nil || !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "does not parse") {
+		t.Fatalf("remember over an unparsable topic: %v", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != broken {
+		t.Fatalf("the file changed:\n%s", b)
+	}
+}

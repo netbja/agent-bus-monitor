@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/history"
@@ -65,5 +68,27 @@ func TestParseSource(t *testing.T) {
 		if _, err := ParseSource(bad); err == nil {
 			t.Errorf("%q taken", bad)
 		}
+	}
+}
+
+// An id is a stream's: when two of the project's streams hold the same id,
+// the source is ambiguous and BusReader says so rather than pick one
+// (reviewer-codex on fae1939c).
+func TestBusReaderRefusesAnAmbiguousID(t *testing.T) {
+	testredis.Configure(t)
+	c, err := bus.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx := context.Background()
+	project := "pa" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	t.Cleanup(func() { c.Del(ctx, bus.StreamKey(project, "cmd"), bus.StreamKey(project, "notify")) })
+	id := "1795205976983-7"
+	c.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(project, "cmd"), ID: id, Values: []any{"from", "charlie", "target", "master", "type", "directive", "command", "yes", "human", "yes", "typed", "yes"}})
+	c.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(project, "notify"), ID: id, Values: []any{"from", "charlie", "message", "no", "human", "yes", "typed", "yes"}})
+	rd := BusReader{Client: c}
+	if _, _, err := rd.Entry(ctx, Source{project, id}); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ambiguous id: %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -139,19 +140,25 @@ func (s *Store) Remember(ctx context.Context, rd Reader, r Request) (Observation
 		}
 	}
 
-	all, _ := s.loadAll()
+	// Every file must parse: a hand-edited one is never written over, and
+	// ids and supersedes are the whole memory's (reviewer-codex).
+	all, errs := s.loadAll()
+	if len(errs) > 0 {
+		n := slices.Sorted(maps.Keys(errs))[0]
+		return Observation{}, refuse("%s.md does not parse (%v): fix it first (agentbus mem person check)", n, errs[n])
+	}
 	t := all[r.Topic]
 	if t == nil {
 		t = &Topic{Topic: r.Topic, Kind: or(r.Kind, "other")}
 	}
 	base := o.ID
-	for n := 2; ; n++ { // the same source and words: already there
-		i := slices.IndexFunc(t.Obs, func(x Observation) bool { return x.ID == o.ID })
-		if i < 0 {
+	for n := 2; ; n++ { // the same source and words, in any topic: already there
+		x, ok := findObs(all, o.ID)
+		if !ok {
 			break
 		}
-		if t.Obs[i].Quote == o.Quote {
-			return t.Obs[i], nil
+		if x.Quote == o.Quote {
+			return x, nil
 		}
 		o.ID = base + "-" + strconv.Itoa(n) // another statement of the same entry
 	}
@@ -295,14 +302,20 @@ func validPerson(s string) bool {
 func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func hasObs(all map[string]*Topic, id string) bool {
+	_, ok := findObs(all, id)
+	return ok
+}
+
+// findObs is the observation id, in any topic.
+func findObs(all map[string]*Topic, id string) (Observation, bool) {
 	for _, t := range all {
 		for _, o := range t.Obs {
 			if o.ID == id {
-				return true
+				return o, true
 			}
 		}
 	}
-	return false
+	return Observation{}, false
 }
 
 // superseded are the ids some observation supersedes.
