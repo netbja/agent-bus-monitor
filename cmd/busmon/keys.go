@@ -113,6 +113,7 @@ const (
 	ActServiceRestart // Services (F3): restart the selected service, as the person (X)
 	ActPlanStart      // a plan task waiting for the person: write to master that they start it
 	ActTokens         // open the tokens page (U)
+	ActReleases       // the Plan tab: show or hide its Releases column (V, plan-tab-r3 item 5)
 	ActSettings       // open the settings page (C)
 	ActHistory        // open the history page (H)
 	ActAbout          // open About (A): the versions and the bus line
@@ -226,7 +227,7 @@ func either(fs ...func(Key) bool) func(Key) bool {
 
 var (
 	quitBinding   = binding{Keys: "^C", Help: "quit (everywhere)", Act: ActQuit, match: keyIs(keyCtrlC)}
-	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests, PanelWork, PanelPlan}
+	notActivity   = []PanelID{PanelAgents, PanelBoard, PanelRequests, PanelWork, PanelPlan, PanelReleases}
 	activityOnly  = []PanelID{PanelActivity}
 	arrows        = GlyphUp + GlyphDownArrow
 	panelBindings = []binding{
@@ -273,6 +274,7 @@ var (
 		{Keys: "R", Help: "where was I? open the project recap", Act: ActRecap, match: runeIs('R')},
 		{Keys: "p P", Hint: "plan", Help: "the batch's plan in a drawer: NOW, NEXT, LATER, DONE, the progress; enter opens a task, d shows done, esc closes", Act: ActPlan, match: runeIs('p', 'P')},
 		{Keys: "d", Hint: "done", Help: "Work: the plan with its done tasks (the drawer; d there folds them); Board and Plan: show or fold their done tasks", Act: ActShowDone, Panels: []PanelID{PanelWork, PanelBoard, PanelPlan}, match: runeIs('d')},
+		{Keys: "V", Help: "Plan: show or hide the Releases column (past releases, the current one, the next one's decided ideas); shown by itself from 130 columns", Act: ActReleases, Panels: []PanelID{PanelPlan, PanelReleases}, match: runeIs('V')},
 		{Keys: "U", Help: "tokens: the account windows, every project side by side, this project by agent", Act: ActTokens, match: runeIs('U')},
 		{Keys: "C", Help: "settings: display, attention and your name, changed in config.toml", Act: ActSettings, match: runeIs('C')},
 		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and holder; sleep, stop or back one up", Act: ActProjects, match: runeIs('M')},

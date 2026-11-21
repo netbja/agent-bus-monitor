@@ -18,7 +18,7 @@
 │▶ ● title h1  coder   in progress                                             │
 │ ──────────────────────────────────────────────────────────────────────────── │
 │ h1 · in progress · coder                                                     │
-│ for you: nothing        enter: task page   + - priority                      ▼
-╰─ + - priority · enter task ──────────────────────────────────────────────────╯
+│ for you: nothing        enter: task page   + - priority   d done             ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
 ›                                                                               
  enter task   + - priority   T triage   p P plan   F1 help   F5 health          

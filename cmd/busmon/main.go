@@ -664,6 +664,12 @@ type shared struct {
 	notesOf  func() ([]memory.Question, error)
 	notes    []memory.Question
 	notesErr bool // the last read failed: IDEAS says so too
+	// releasesOf reads the release tags and plan files of the project's
+	// checkout on this machine (the Plan tab's Releases column, releases.go);
+	// nil: no checkout here.
+	releasesOf func(context.Context) (releaseData, error)
+	releases   releaseData
+	releasesAt time.Time // the last read attempt
 }
 
 func main() {
@@ -818,6 +824,7 @@ func main() {
 	// used. The monitor's link starts healthy because bus.Connect just pinged it.
 	st := newShared(self, settings)
 	st.trustOf, st.ideasOf, st.notesOf = localTrustOf(project, os.Getenv), brokerIdeasOf(ctx, b), localNotesOf(project, os.Getenv)
+	st.releasesOf = localReleasesOf(project, os.Getenv)
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)
 	if cacheErr != nil {

@@ -43,13 +43,13 @@ func (m *Model) fillPlanTab(lower int) {
 	for _, it := range v.items {
 		at[it.line] = it
 	}
-	var items []ListItem
+	items := []ListItem{{}} // one blank row under the tab bar (plan-tab-r3 item 2)
 	for i := v.head; i < len(v.lines); i++ {
 		ln := v.lines[i]
 		it, ok := at[i]
 		if !ok {
-			if ln == nil && len(items) == 0 {
-				continue // the frame's top border is the first section's space
+			if ln == nil && len(items) == 1 {
+				continue // the blank row is the first section's space
 			}
 			items = append(items, ListItem{Line: ln, Wide: true}) // the board's own line, from the gutter: its header, rules and groups (views-redesign §4.2)
 			continue
@@ -64,36 +64,31 @@ func (m *Model) fillPlanTab(lower int) {
 	if l.Selected() == "" { // as the drawer: the first task selected, its detail shown
 		l.First()
 	}
-	if _, detail := planTabWidths(lower, m.layout.Tier); detail { // the detail's rows, under the list (§4.1)
+	l.SetFrame(m.lowerTitle(PanelPlan, title), nil)               // the counts and the bar are the header line's (views-redesign §4.2)
+	if _, detail := planTabWidths(lower, m.layout.Tier); detail { // the detail's rows, under the list (§4.1), the keys their last (plan-tab-r3 item 3)
 		l.SetBottom(planDetailRows)
-	} else {
-		l.SetBottom(0)
+		l.SetFooter(nil)
+		return
 	}
-	l.SetFrame(m.lowerTitle(PanelPlan, title), nil)     // the counts and the bar are the header line's (views-redesign §4.2)
-	hint := "+ - priority " + GlyphNone + " enter task" // the mock-ups' footer
-	if m.layout.Tier == TierWide {
-		hint = "+ - priority " + GlyphNone + " d done " + GlyphNone + " enter task"
-	}
-	l.SetFooter(Line{{Text: hint, Role: RoleMuted}})
+	l.SetBottom(0)
+	l.SetFooter(Line{{Text: "+ - priority " + GlyphNone + " d done " + GlyphNone + " enter task", Role: RoleMuted}}) // no strip: the keys on the frame
 }
 
-// planTabDetail is the detail of the tab's selected task, width cells wide,
-// nil without one (below the wide tier, a fold or no task selected). View
-// reads it, so it follows the selection between two fills.
+// planTabDetail is the detail of the tab's selected task, width cells wide:
+// with a fold or no task selected, the rule and the keys alone; nil at the
+// narrow tier. View reads it, so it follows the selection between two fills.
 func (m *Model) planTabDetail(width int) []Line {
 	if _, wide := planTabWidths(width, m.layout.Tier); !wide || !m.snap.planState.loaded {
 		return nil
 	}
-	task, ok := strings.CutPrefix(m.lists.plan.Selected(), planTabTask)
-	if !ok {
-		return nil
-	}
-	for _, r := range m.snap.planState.rows {
-		if r.Task.ID == task {
-			return planStrip(m.snap.planState, r, m.now, width)
+	if task, ok := strings.CutPrefix(m.lists.plan.Selected(), planTabTask); ok {
+		for _, r := range m.snap.planState.rows {
+			if r.Task.ID == task {
+				return planStrip(m.snap.planState, r, m.now, width)
+			}
 		}
 	}
-	return nil
+	return []Line{planRule(width), nil, planStripKeys("", width)} // a fold selected: the rule and the keys stay
 }
 
 // openPlanRow is Enter on the tab: a task's page, or a folded section opened.

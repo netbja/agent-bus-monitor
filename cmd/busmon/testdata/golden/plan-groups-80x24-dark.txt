@@ -19,6 +19,6 @@
 │   ✓ title h5  coder   approved                                               │
 │ ──────────────────────────────────────────────────────────────────────────── │
 │ h1 · in progress · coder                                                     │
-│ for you: nothing        enter: task page   + - priority                      ▼
+│ for you: nothing        enter: task page   + - priority   d done             ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health   

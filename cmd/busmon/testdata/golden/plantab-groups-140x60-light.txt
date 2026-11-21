@@ -13,48 +13,48 @@
 │                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  │
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────────────────────────────────────────────────────────────────╮
-│v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you                                                                 │
-│──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                                                                                 │
-│▶ ● title h1  coder   in progress                                                                                                         │
-│  ✓ title h5  coder   approved                                                                                                            │
-│  ♙ title h2  person  decide                                                                                                              │
-│  ‖ title h3  coder   after h1                                                                                                            │
-│▼ Self-repair watcher  ██████░░░░░░    1/2  not started                                                                                   │
-│    title s1  coder   upcoming                                                                                                            │
-│▼ Other                ░░░░░░░░░░░░    0/1  not started                                                                                   │
-│    title o1  coder   upcoming                                                                                                            │
-│▶ 1 group done · 1 task   (d shows)                                                                                                       │
-│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│ h1 · in progress · coder                                                                                                                 │
-│ for you: nothing        enter: task page   + - priority                                                                                  │
-╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Activity  auto-scroll on ───────────────────────────────────────────────────────────────────────────────────── 7 events · filter: none ─╮
-│    time   from      to         type       message                                                                                        │
-│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
-│    14:24  architect            status     done · spec merged                                                                             │
-│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
-│    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
-│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
-│  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
-│  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
-│    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-│                                                                                                                                          │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ───────────────────────────────────────────────────╮╭─ Releases ──────────────────────╮
+│                                                                                                       ││▶ next  0 decided ideas          │
+│v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you                              ││  ● v0.29  3/9  now              │
+│───────────────────────────────────────────────────────────────────────────────────────────────────────││  no checkout here               │
+│▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                                              ││                                 │
+│▶ ● title h1  coder   in progress                                                                      ││                                 │
+│  ✓ title h5  coder   approved                                                                         ││                                 │
+│  ♙ title h2  person  decide                                                                           ││                                 │
+│  ‖ title h3  coder   after h1                                                                         ││                                 │
+│▼ Self-repair watcher  ██████░░░░░░    1/2  not started                                                ││                                 │
+│    title s1  coder   upcoming                                                                         ││                                 │
+│▼ Other                ░░░░░░░░░░░░    0/1  not started                                                ││                                 │
+│    title o1  coder   upcoming                                                                         ││                                 │
+│▶ 1 group done · 1 task   (d shows)                                                                    ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│                                                                                                       ││                                 │
+│ ───────────────────────────────────────────────────────────────────────────────────────────────────── ││                                 │
+│ h1 · in progress · coder                                                                              ││                                 │
+│ for you: nothing        enter: task page   + - priority   d done                                      ││                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────╯╰─ enter plan · V hide ───────────╯
 ›                                                                                                                                           
  enter task   + - priority   T triage   p P plan   tab focus   / ^P commands   1-4 tabs   ←→ tab   ↑↓ j k select   F1 help   F5 health      

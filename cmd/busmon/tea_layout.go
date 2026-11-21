@@ -18,8 +18,9 @@ var narrowPanels = []PanelID{PanelForYou, PanelAgents, PanelActivity, PanelBoard
 // tabbedPanels are the lower panel's lists: its tabs and Work's sub-view.
 var tabbedPanels = append(slices.Clone(lowerTabs), PanelRequests)
 
-// shellPanels are every list the shell fills: the views and Work's sub-view.
-var shellPanels = append(slices.Clone(narrowPanels), PanelRequests)
+// shellPanels are every list the shell fills: the views, Work's sub-view
+// and the Plan tab's Releases column.
+var shellPanels = append(slices.Clone(narrowPanels), PanelRequests, PanelReleases)
 
 // shellCounts is what the shell's layout needs to know about the content.
 type shellCounts struct {
@@ -44,11 +45,9 @@ type shellLayout struct {
 	// then), zero otherwise (views-redesign §4.2: the free height goes to
 	// Activity or the Board).
 	Drawer Rect
-	// Below is a second panel's frame in the lower zone, under the Plan tab
-	// sized to its content (views-redesign §4.2): BelowPanel, Activity,
-	// shown and not in the focus order; zero when the Plan fills the zone.
-	Below      Rect
-	BelowPanel PanelID
+	// Side is the Releases column right of the Plan tab (plan-tab-r3 item
+	// 5), zero when hidden; Lower is then the Plan's part of the zone.
+	Side Rect
 	// Banner is the row under the header for a stopped project reached by a
 	// switch (project-switch-ux item 1); zero otherwise.
 	Banner Rect
@@ -61,7 +60,7 @@ func withBanner(l shellLayout) shellLayout {
 		return l
 	}
 	top := l.Header.Y + l.Header.H
-	for _, r := range []*Rect{&l.Tabs, &l.ForYou, &l.Agents, &l.Lower, &l.Input, &l.Footer, &l.Drawer, &l.Below} {
+	for _, r := range []*Rect{&l.Tabs, &l.ForYou, &l.Agents, &l.Lower, &l.Input, &l.Footer, &l.Drawer, &l.Side} {
 		if r.H > 0 && r.Y >= top {
 			r.Y++
 		}
@@ -69,10 +68,6 @@ func withBanner(l shellLayout) shellLayout {
 	l.Banner = Rect{0, top, l.Header.W, 1}
 	return l
 }
-
-// minBelow is the least a panel under the Plan tab gets: a frame and four
-// rows; less, the Plan keeps the zone.
-const minBelow = 6
 
 // fitDrawer sizes the wide drawer to its content, need rows with its
 // borders, when the zone under it keeps minShellLower rows for the active
@@ -92,19 +87,31 @@ func fitDrawer(l shellLayout, need int) shellLayout {
 	return l
 }
 
-// fitPlanTab sizes the Plan tab to its content, need rows with its
-// borders, when the zone keeps minBelow rows under it: Activity is drawn
-// there (views-redesign §4.2), shown only: focusing it would make it the
-// active tab, and the Plan would go.
-func fitPlanTab(l shellLayout, need int) shellLayout {
-	if l.Active != PanelPlan || l.Tier == TierNarrow || need <= 0 || l.Lower.H-need < minBelow {
+// releasesMinWidth is busmon's width from which the Plan tab shows its
+// Releases column by itself (plan-tab-r3 item 5: the Work tab's Kanban rule).
+const releasesMinWidth = kanbanMinWidth
+
+// releasesWidth is the column's width at a zone w cells wide: a quarter,
+// between 32 and 44 cells.
+func releasesWidth(w int) int { return clamp(w/4, 32, 44) }
+
+// withReleases gives the Plan tab's zone a Releases column on its right,
+// after the Plan in the focus order; never at the narrow tier, nor when the
+// Plan would keep less than minPlanWidth cells.
+func withReleases(l shellLayout) shellLayout {
+	sw := releasesWidth(l.Lower.W)
+	if l.Active != PanelPlan || l.Tier == TierNarrow || l.Lower.H == 0 || l.Lower.W-sw < minPlanWidth {
 		return l
 	}
-	l.Below = Rect{l.Lower.X, l.Lower.Y + need, l.Lower.W, l.Lower.H - need}
-	l.BelowPanel = PanelActivity
-	l.Lower.H = need
+	l.Lower.W -= sw
+	l.Side = Rect{l.Lower.X + l.Lower.W, l.Lower.Y, sw, l.Lower.H}
+	i := slices.Index(l.Visible, PanelPlan)
+	l.Visible = slices.Insert(slices.Clone(l.Visible), i+1, PanelReleases)
 	return l
 }
+
+// minPlanWidth is the least the Plan keeps beside the Releases column.
+const minPlanWidth = 60
 
 const (
 	minShellLower     = 8 // the tabbed panel at the wide tier
@@ -266,8 +273,8 @@ func (l shellLayout) rect(p PanelID) Rect {
 		return l.Agents
 	case p == l.Active:
 		return l.Lower
-	case l.Below.H > 0 && p == l.BelowPanel:
-		return l.Below
+	case p == PanelReleases:
+		return l.Side
 	}
 	return Rect{}
 }
