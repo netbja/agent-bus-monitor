@@ -166,9 +166,19 @@ func TestTriageNeedsLifetime(t *testing.T) {
 	if items, _ = itemsOf(s, ask, needsNotice(1, 0, bus.NeedsAnswer), coder); len(items) != 1 {
 		t.Fatalf("an agent's directive to master closed the person's question: %+v", items)
 	}
-	reply := bus.Event{Kind: "cmd", ID: rid(2), From: "bob", Target: "master", Type: bus.CmdDirective, Message: "the release ones", Human: true}
-	if items, _ = itemsOf(s, ask, needsNotice(1, 0, bus.NeedsAnswer), reply); len(items) != 0 {
-		t.Fatalf("answered, still listed: %+v", items)
+	// Nor is an unrelated message of the person's to master (reviewer-codex):
+	// only a reply sent from the report's own page closes it.
+	reply := bus.Event{Kind: "cmd", ID: rid(2), From: "bob", Target: "master", Type: bus.CmdDirective, Message: "deploy later", Human: true}
+	items, f = itemsOf(s, ask, needsNotice(1, 0, bus.NeedsAnswer), reply)
+	if len(items) != 1 {
+		t.Fatalf("an unrelated message closed the question: %+v", items)
+	}
+	f.unread.answered[rid(0)] = true
+	for i := range f.feed {
+		f.feed[i].answered = f.unread.answered[lineReportID(f.feed[i])]
+	}
+	if items = forYou(s, f.feed); len(items) != 0 {
+		t.Fatalf("answered from its page, still listed: %+v", items)
 	}
 	read := needsRep(0, "master", bus.NeedsRead, "Release notes are ready")
 	items, f = itemsOf(s, read, needsNotice(1, 0, bus.NeedsRead))
@@ -259,5 +269,58 @@ func TestTriageHeaderUnreadIsActivity(t *testing.T) {
 	m = step(t, m, tailMsg{events: evs})
 	if h := m.headerData(); h.unread != 3 || h.strip.unread != 3 || len(m.forYou) != 0 {
 		t.Fatalf("unread badge %d, For you %+v", h.unread, m.forYou)
+	}
+}
+
+// Through the shell: a reply to master sent from the report's page closes
+// its item and is kept in the local cache; the same send from elsewhere
+// does not.
+func TestTriageAnswerFromItsPage(t *testing.T) {
+	start := func() Model {
+		st := &shared{agents: map[string]*agentState{"master": {registered: true, state: "idle"}}, person: "charlie"}
+		m := newShell(shellConfig{project: "demo", self: "charlie", st: st, cache: &busmonCache{Project: "demo"}})
+		m = step(t, m, tea.WindowSizeMsg{Width: 140, Height: 40})
+		m = step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
+		rep := needsRep(0, "master", bus.NeedsAnswer, "Which notes first?")
+		n := noticeEv(1, 0, "master", "charlie")
+		n.Needs = bus.NeedsAnswer
+		return step(t, m, tailMsg{events: []bus.Event{rep, n}})
+	}
+	reportItem := func(m Model) bool {
+		return slices.ContainsFunc(m.forYou, func(it attentionItem) bool { return it.Key == "report:"+rid(0) })
+	}
+	sent := sendResultMsg{plan: sendPlan{result: sendSent, directed: true, tgt: "master", targets: []string{"master"}}}
+
+	m := start()
+	if !reportItem(m) {
+		t.Fatalf("no item: %+v", m.forYou)
+	}
+	m = step(t, m, sent) // from the dashboard, no page
+	if !reportItem(m) {
+		t.Fatal("a send from elsewhere closed it")
+	}
+	i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == "report:"+rid(0) })
+	m = run(t, m, m.openForYouItem(m.forYou[i]))
+	if p := m.rd.top(); p == nil || p.kind != ovMessage {
+		t.Fatalf("the item's page: %+v", p)
+	}
+	m = step(t, m, sendResultMsg{plan: sendPlan{result: sendSent, directed: true, tgt: "coder", targets: []string{"coder"}}})
+	if !reportItem(m) {
+		t.Fatal("a send to another agent from the page closed it")
+	}
+	m = step(t, m, sent)
+	if reportItem(m) || !slices.Contains(m.cache_().Answered, rid(0)) {
+		t.Fatalf("answered from its page: items %+v, cache %+v", m.forYou, m.cache_().Answered)
+	}
+	// A busmon started again on that cache does not list it.
+	st := &shared{agents: map[string]*agentState{"master": {registered: true, state: "idle"}}, person: "charlie"}
+	again := newShell(shellConfig{project: "demo", self: "charlie", st: st, cache: &busmonCache{Project: "demo", Answered: []string{rid(0)}}})
+	again = step(t, again, tea.WindowSizeMsg{Width: 140, Height: 40})
+	again = step(t, again, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
+	rep := needsRep(0, "master", bus.NeedsAnswer, "Which notes first?")
+	n := noticeEv(1, 0, "master", "charlie")
+	n.Needs = bus.NeedsAnswer
+	if again = step(t, again, tailMsg{events: []bus.Event{rep, n}}); reportItem(again) {
+		t.Fatalf("restarted on the cache: %+v", again.forYou)
 	}
 }

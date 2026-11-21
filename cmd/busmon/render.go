@@ -89,6 +89,9 @@ type feedLine struct {
 	at   time.Time
 	to   []string // a fan-out (@all): every target of the same directive, shown as one line
 	mark mark     // unread mark for the person, set by the fill (unread.go)
+	// answered: the person replied to this --needs answer report from its
+	// page (unreadState.answered), set by the fill as mark is.
+	answered bool
 	// notices are the report notices folded into this line (report-one-row
 	// §2): on a report's line, every notice whose ref is its id; on a notice's
 	// own line (its report not at hand yet), the later notices of that report.

@@ -15,6 +15,7 @@ type busmonCache struct {
 	LastVisit int64            `json:"last_visit,omitempty"`
 	Snoozes   map[string]int64 `json:"snoozes,omitempty"`
 	Read      []string         `json:"read,omitempty"` // entries for the person that they opened (unread.go)
+	Answered  []string         `json:"answered,omitempty"` // --needs answer reports replied to from their page (triage-dedupe §3)
 }
 
 func busmonCachePath(project string) string {

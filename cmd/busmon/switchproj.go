@@ -158,6 +158,7 @@ func (m *Model) cacheSnapshot() busmonCache {
 		c.Snoozes[k] = v
 	}
 	c.Read = append([]string(nil), m.sig.cache.Read...)
+	c.Answered = append([]string(nil), m.sig.cache.Answered...)
 	return c
 }
 

@@ -136,7 +136,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 			continue
 		case report && needs == bus.NeedsRead && !unread:
 			continue
-		case report && needs == bus.NeedsAnswer && answeredSince(s.person, sender(fl.ev), fl.at, feed):
+		case report && needs == bus.NeedsAnswer && fl.answered: // replied to from its page (reviewer-codex)
 			continue
 		case !report && !unread:
 			continue
@@ -165,10 +165,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 				Text: text, At: fl.at, EventID: ids[0], IDs: ids})
 			continue
 		}
-		reportID := fl.ev.ID
-		if fl.ev.Kind == "cmd" && fl.ev.Ref != "" {
-			reportID = fl.ev.Ref // a notice alone: its report's id
-		}
+		reportID := lineReportID(fl)
 		it := attentionItem{Rank: rankReport, Key: "report:" + reportID, Agent: sender(fl.ev), Text: text, At: fl.at,
 			EventID: ids[0], IDs: ids, Needs: needs, Unread: unread}
 		sig := sender(fl.ev) + "|" + fmt.Sprint(named)
@@ -204,18 +201,18 @@ func lineFullText(fl feedLine) string {
 	return fl.ev.Message
 }
 
-// answeredSince: the person wrote to who after at (the send that closes a
-// --needs answer report, as a waiting agent's row today).
-func answeredSince(person, who string, at time.Time, feed []feedLine) bool {
-	if person == "" {
-		return false
-	}
-	for _, fl := range feed {
-		if !fl.sep && fl.ev.Kind == "cmd" && fl.ev.From == person && fl.ev.Target == who && fl.at.After(at) {
-			return true
+// lineReportID is the report a line stands for: its own id, or a notice
+// alone's report (its ref); "" for any other line.
+func lineReportID(fl feedLine) string {
+	switch {
+	case fl.ev.Kind == "report":
+		return fl.ev.ID
+	case fl.ev.Kind == "cmd" && fl.ev.Ref != "":
+		if _, _, ok := reportSubject(fl.ev.Message); ok {
+			return fl.ev.Ref
 		}
 	}
-	return false
+	return ""
 }
 
 // targets are the live items a line may name, by what names them.
