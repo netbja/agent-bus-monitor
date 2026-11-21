@@ -67,7 +67,7 @@ Short forms; the full text, with the reasons, is in the two documents below.
   release check, on the person's yes (decision 2026-11-16, dev branch flow).
 - **The project is required.** Pass `--project <p>` or set `AGENT_BUS_PROJECT`; names match
   `^[a-z][a-z0-9_-]{0,31}$` (`ValidName`). Commands that answer "which project?" (`busmon --list`,
-  `--pick`, `agentbus plugin`, `mem`, `start`, `backup`, `suspend`…) sit above the project-required
+  `--new`, `agentbus plugin`, `mem`, `start`, `backup`, `suspend`…) sit above the project-required
   exit in `main()`: keep them there.
 - **Protocol changes go in `bus/`** (`stream.go`, `bus.go`, `board.go`), not in the binaries.
 - **Every dispatcher and conductor write is fenced** by a Lua script that checks the lease token;

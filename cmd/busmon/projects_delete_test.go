@@ -228,7 +228,7 @@ func TestProjectsDeleteOpenProject(t *testing.T) {
 	}
 	w.press(t, 'y')
 	if strings.Join(w.deleted, " ") != "agent-bus-monitor" || !w.quit ||
-		w.m.exitNote != "agent-bus-monitor deleted (1204 keys); busmon --pick to open another project" {
+		w.m.exitNote != "agent-bus-monitor deleted (1204 keys); busmon --new to open another project" {
 		t.Fatalf("after y: deleted %v quit %v note %q", w.deleted, w.quit, w.m.exitNote)
 	}
 }

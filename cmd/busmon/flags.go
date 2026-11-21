@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"strconv"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/cli"
 )
 
@@ -13,7 +15,8 @@ import (
 // keeps the single-dash long forms (-project) working.
 var busmonFlags = []cli.Flag{
 	{Long: "project", Short: 'p', Arg: "<project>", Help: "project namespace (or AGENT_BUS_PROJECT, else the one last used on this broker)"},
-	{Long: "host", Short: 'H', Arg: "<host>", Help: "Redis host (overrides REDIS_HOST)"},
+	{Long: "host", Short: 'H', Arg: "<host>", Help: "Redis host (overrides REDIS_HOST; a unix socket or an ACL user: --url)"},
+	{Long: "url", Short: 'u', Arg: "<url>", Help: "Redis URL, redis://[user:password@]host:port[/db] or unix:///path.sock (or REDIS_URL; a password is safer there, out of ps); never with --host"},
 	{Long: "limit", Short: 'n', Arg: "<n>", Help: "ACTIVITY backfill: replay the last N lines on launch (0 = all history; or AGENT_BUS_BUSMON_LIMIT)"},
 	{Long: "reset", Short: 'r', Help: "purge the project's streams before launching (asks to confirm)"},
 	{Long: "yes", Short: 'y', Help: "skip the --reset or --delete question (--delete still refuses a project that is not asleep, and still backs it up first)"},
@@ -22,7 +25,7 @@ var busmonFlags = []cli.Flag{
 	{Long: "theme", Short: 't', Arg: "<theme>", Help: "colour theme: auto, dark or light (or AGENT_BUS_BUSMON_THEME; default auto)"},
 	{Long: "as", Short: 'a', Arg: "<name>", Help: "your name on the bus, shown as a human (or AGENT_BUS_HUMAN; default \"pilot\")"},
 	{Long: "version", Short: 'V', Help: "print the version and exit"},
-	{Long: "pick", Short: 'k', Help: "choose a project template and open it with agentbus up"},
+	{Long: "new", Short: 'k', Help: "choose a project template and open it with agentbus up"},
 	{Long: "from", Short: 'f', Arg: "<project>", Help: "the project a switch left: B goes back to it (set by the switch itself)"},
 }
 
@@ -42,7 +45,7 @@ var busmonHelp = cli.Command{
 // busmonOpts holds the parsed flags.
 type busmonOpts struct {
 	host, project, delete, theme, as string
-	from                             string
+	from, url                        string
 	limit                            int
 	reset, yes, list, version, pick  bool
 }
@@ -73,6 +76,8 @@ func parseFlags(args []string, out io.Writer) (busmonOpts, map[string]bool, erro
 			}
 		}
 	}
+	fs.BoolVar(&o.pick, "pick", false, "") // --new's name before busmon-cli-flags item 5: parsed, not listed
+	long["pick"] = "new"
 	if err := fs.Parse(args); err != nil {
 		return o, nil, err
 	}
@@ -86,14 +91,16 @@ func parseFlags(args []string, out io.Writer) (busmonOpts, map[string]bool, erro
 func optPtrs(o *busmonOpts) map[string]any {
 	return map[string]any{
 		"project": &o.project, "host": &o.host, "limit": &o.limit, "reset": &o.reset, "yes": &o.yes,
-		"list": &o.list, "delete": &o.delete, "theme": &o.theme, "as": &o.as, "version": &o.version, "pick": &o.pick,
-		"from": &o.from,
+		"list": &o.list, "delete": &o.delete, "theme": &o.theme, "as": &o.as, "version": &o.version, "new": &o.pick,
+		"from": &o.from, "url": &o.url,
 	}
 }
 
 // switchOneShot are the flags a project switch never carries: actions that
 // end busmon before its screen, and the project itself.
-var switchOneShot = map[string]bool{"from": true, "project": true, "reset": true, "delete": true, "yes": true, "list": true, "pick": true, "version": true}
+// --url is not carried either: applyURL set REDIS_URL, which the switched
+// busmon inherits, so a password in it never reaches an argv.
+var switchOneShot = map[string]bool{"from": true, "project": true, "reset": true, "delete": true, "yes": true, "list": true, "new": true, "version": true, "url": true}
 
 // switchArgv is the command line busmon re-executes itself with to open
 // target (project-switch note §2.2): rebuilt from the parsed options, never
@@ -121,4 +128,30 @@ func switchArgv(o busmonOpts, set map[string]bool, from, target string) []string
 		argv = append(argv, "--from="+from) // B's way back (project-switch-ux item 4)
 	}
 	return argv
+}
+
+// applyURL makes --url the broker every connection of this busmon reaches,
+// by setting REDIS_URL (bus.Connect reads it first, and so does a busmon
+// started from this one). --host beside a URL, given or in REDIS_URL, is
+// refused: bus.Connect would drop it without a word (busmon-cli-flags
+// item 4).
+func applyURL(o busmonOpts, set map[string]bool, getenv func(string) string, setenv func(string, string) error) error {
+	if set["url"] {
+		if set["host"] {
+			return fmt.Errorf("give --host and --url one at a time: the URL names the host")
+		}
+		if _, err := bus.ConnectOptions(func(k string) string {
+			if k == "REDIS_URL" {
+				return o.url
+			}
+			return getenv(k)
+		}, ""); err != nil {
+			return fmt.Errorf("--url %w", err)
+		}
+		return setenv("REDIS_URL", o.url)
+	}
+	if set["host"] && getenv("REDIS_URL") != "" {
+		return fmt.Errorf("REDIS_URL is set and names the broker: --host would be ignored; unset REDIS_URL, or give the broker with --url")
+	}
+	return nil
 }

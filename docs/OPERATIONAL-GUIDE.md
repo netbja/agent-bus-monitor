@@ -54,7 +54,7 @@ Its useful flags:
   client's first agent alone and says which agent waits on its trust dialog. Attach to it (`t` in
   busmon), answer, and its other agents start.
 - **busmon needs a project.** Run `busmon -p myapp`. `busmon --list` lists the broker's projects, and
-  `busmon --pick` the templates.
+  `busmon --new` the templates.
 - **Who you are.** busmon writes as you (`--as`, `AGENT_BUS_HUMAN`, or `agentbus identity set
   <name>`).
 

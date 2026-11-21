@@ -8,7 +8,7 @@ import (
 // stranger-test: busmon with no project says how to name one and how to find one.
 func TestNoProjectSaysHowToFindOne(t *testing.T) {
 	msg := noProjectText()
-	for _, want := range []string{"--project <p>", "AGENT_BUS_PROJECT", "busmon --list", "busmon --pick"} {
+	for _, want := range []string{"--project <p>", "AGENT_BUS_PROJECT", "busmon --list", "busmon --new"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message lacks %q:\n%s", want, msg)
 		}
@@ -16,7 +16,7 @@ func TestNoProjectSaysHowToFindOne(t *testing.T) {
 	if strings.Contains(msg, " -project") {
 		t.Errorf("message names a single-dash flag:\n%s", msg)
 	}
-	for _, f := range []string{"--project", "--list", "--pick"} { // every flag it names exists
+	for _, f := range []string{"--project", "--list", "--new"} { // every flag it names exists
 		found := false
 		for _, b := range busmonFlags {
 			if "--"+b.Long == f {

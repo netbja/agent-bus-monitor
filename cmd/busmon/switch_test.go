@@ -40,7 +40,7 @@ func TestSwitchArgv(t *testing.T) {
 			t.Errorf("%v: re-parsed %+v, want %+v", spelling, again, want)
 		}
 	}
-	o, set, err := parseFlags([]string{"-p", "a", "--reset", "-y", "--list", "--pick", "-V", "--delete", "x"}, io.Discard)
+	o, set, err := parseFlags([]string{"-p", "a", "--reset", "-y", "--list", "--new", "-V", "--delete", "x", "--url", "redis://busmon:secret@h:6380"}, io.Discard) // --url: its password stays out of argv, the switched busmon inherits REDIS_URL
 	if err != nil {
 		t.Fatal(err)
 	}
