@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/bus"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -234,10 +236,11 @@ func (m *Model) gotSend(msg sendResultMsg) tea.Cmd {
 			m.ui.edit, m.ui.tail = "", 0
 		}
 	}
+	m.noteAnswered(msg.plan)
 	// The walk's terminal act (busmon-queue-triage §4.3): a message to the
 	// waiting agent from its page. Plan tasks are no rows any more, so is
 	// their Action row's act (home-inbox-drawer §8).
-	if it, ok := m.walkItem(); ok && msg.plan.directed && it.Rank == rankWait && msg.plan.tgt == it.Agent {
+	if it, ok := m.walkItem(); ok && msg.plan.directed && (it.Rank == rankWait || it.Rank == rankReport) && msg.plan.tgt == it.Agent {
 		return m.walkDone("sent")
 	}
 	return nil
@@ -367,4 +370,35 @@ func (m *Model) completionRow(width int) Line {
 		l = append(l, Seg{Text: " " + strings.TrimSpace(c) + " ", Role: RoleAccent, Pill: i == m.ui.pick}, Seg{Text: " "})
 	}
 	return FitLine(l, width)
+}
+
+// noteAnswered records a reply to a --needs answer report sent from its own
+// page to its sender (triage-dedupe §3): its For you item goes, and the
+// local cache keeps it, as read marks are kept.
+func (m *Model) noteAnswered(p sendPlan) {
+	page := m.rd.top()
+	if page == nil || page.kind != ovMessage || !p.directed {
+		return
+	}
+	fl, ok := m.feed.lineOf(page.ev.ID)
+	if !ok || lineNeeds(fl) != bus.NeedsAnswer || p.tgt != sender(fl.ev) {
+		return
+	}
+	id := lineReportID(fl)
+	if id == "" || m.feed.unread.answered[id] {
+		return
+	}
+	m.feed.unread.answered[id] = true
+	c := m.cache_()
+	if !slices.Contains(c.Answered, id) {
+		c.Answered = append(c.Answered, id)
+	}
+	retained := map[string]bool{}
+	for _, l := range m.feed.feed {
+		if !l.sep {
+			retained[lineReportID(l)] = true
+		}
+	}
+	c.Answered = slices.DeleteFunc(c.Answered, func(x string) bool { return !retained[x] }) // the file cannot grow
+	m.sig.readDirty = true
 }

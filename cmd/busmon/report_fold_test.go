@@ -159,42 +159,44 @@ func TestFoldMarkIsTheNotices(t *testing.T) {
 	}
 }
 
-// §3: a waiting agent's report with a notice to the person is one For you
-// row (the notice's, holding all its ids); one whose only notice went to an
-// agent keeps its own row.
+// §3, with triage-dedupe step 2: a waiting agent's newest report folds into
+// its wait row (no row of its own); a --needs report from another agent,
+// re-sent, is one row holding both notices; a plain one is Activity only.
 func TestForYouOneRowPerReport(t *testing.T) {
 	waiting := &agentState{state: "waiting", stateAt: entryTime(rid(-1))}
-	s := snapshot{person: "bob", agents: map[string]*agentState{"master": waiting}}
-	rows := func(f *activityFeed) []attentionItem {
-		f.classifyWaits([]string{"master"})
+	rows := func(s snapshot, f *activityFeed) []attentionItem {
+		f.classifyWaits(waitingNames(s.agents))
 		marks := f.unread.marks(f.feed, nil)
 		for i := range f.feed {
 			f.feed[i].mark = marks[f.feed[i].ev.ID]
 		}
-		var out []attentionItem
-		for _, it := range forYou(s, f.feed) {
-			if it.Rank == rankUnread {
-				out = append(out, it)
-			}
-		}
-		return out
+		return forYou(s, f.feed)
 	}
-
+	s := snapshot{person: "bob", agents: map[string]*agentState{"master": waiting}}
 	f := newFoldFeed()
 	f.add(repEv(0, "master", "## Done\n- Vérif: ok"), "bob")
 	f.add(noticeEv(1, 0, "master", "bob"), "bob")
+	if got := rows(s, f); len(got) != 1 || got[0].Rank != rankWait || !got[0].Unread {
+		t.Fatalf("the waiting agent's report folds into its wait: %+v", got)
+	}
+
+	s = snapshot{person: "bob", agents: map[string]*agentState{}}
+	f = newFoldFeed()
+	rep := repEv(0, "master", "## Done\n- Vérif: ok")
+	rep.Needs = "read"
+	f.add(rep, "bob")
+	f.add(noticeEv(1, 0, "master", "bob"), "bob")
 	f.add(noticeEv(2, 0, "master", "bob"), "bob") // a re-send
-	got := rows(f)
-	if len(got) != 1 || got[0].Key != "unread:"+rid(1) || got[0].Text != "Vérif: ok" || len(got[0].IDs) != 2 {
-		t.Fatalf("one row, the notice's key, the headline, both ids: %+v", got)
+	got := rows(s, f)
+	if len(got) != 1 || got[0].Key != "report:"+rid(0) || got[0].Text != "Vérif: ok" || len(got[0].IDs) != 2 || got[0].EventID != rid(1) {
+		t.Fatalf("one row, the report's key, the headline, both ids: %+v", got)
 	}
 
 	f = newFoldFeed()
 	f.add(repEv(0, "master", "to coder"), "bob")
 	f.add(noticeEv(1, 0, "master", "coder"), "bob")
-	got = rows(f)
-	if len(got) != 1 || got[0].Key != "unread:"+rid(0) {
-		t.Fatalf("a report whose notice went to an agent keeps its own row: %+v", got)
+	if got = rows(s, f); len(got) != 0 {
+		t.Fatalf("a plain report to an agent is no row: %+v", got)
 	}
 }
 

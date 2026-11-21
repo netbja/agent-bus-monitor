@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,10 +78,19 @@ func mergeItems(s snapshot) []attentionItem {
 		if why != "" {
 			text += " (as of " + time.UnixMilli(rec.ItemsAt).Local().Format("15:04") + ": " + why + ")"
 		}
-		out = append(out, attentionItem{Rank: rankMerge, Key: "merge:" + it.Head, Agent: "you", Text: Preview(text),
-			At: time.UnixMilli(it.ApprovedAt)})
+		out = append(out, attentionItem{Rank: rankMerge, Key: mergeKey(it), Agent: "you", Text: Preview(text),
+			At: time.UnixMilli(it.ApprovedAt), Head: it.Head, Branch: it.Branch})
 	}
 	return out
+}
+
+// mergeKey is a merge item's For you key (triage-dedupe §2): its PR's
+// number, so a rebase keeps it; its branch when it has none.
+func mergeKey(it bus.MergeItem) string {
+	if it.Number > 0 {
+		return "merge:pr:" + strconv.Itoa(it.Number)
+	}
+	return "merge:branch:" + it.Branch
 }
 
 // mergePage is an item's page: its fields, y the URL (or, on the local forge,

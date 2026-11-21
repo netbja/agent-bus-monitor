@@ -172,8 +172,12 @@ func TestReportNoticeRowShowsTheReport(t *testing.T) {
 			t.Errorf("tier %v: %q", tier, row)
 		}
 	}
+	if items := forYou(snapshot{}, []feedLine{fl}); len(items) != 0 { // no --needs: Activity only (triage-dedupe §3)
+		t.Fatalf("For you, a plain report: %+v", items)
+	}
+	fl.ev.Needs = bus.NeedsRead
 	items := forYou(snapshot{}, []feedLine{fl})
-	if len(items) != 1 || items[0].Text != "Activity investigation: found" {
+	if len(items) != 1 || items[0].Rank != rankReport || items[0].Text != "Activity investigation: found" {
 		t.Fatalf("For you: %+v", items)
 	}
 }

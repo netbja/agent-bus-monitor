@@ -252,6 +252,9 @@ func newShell(cfg shellConfig) Model {
 		for _, id := range c.Read {
 			m.feed.unread.read[id] = true
 		}
+		for _, id := range c.Answered {
+			m.feed.unread.answered[id] = true
+		}
 		m.feed.unread.floor = c.LastVisit
 	}
 	m.lists.activity.SetTail(true)
@@ -512,6 +515,7 @@ func (m *Model) refresh() {
 	marks := m.feed.unread.marks(m.feed.feed, currentAsks)
 	for i := range m.feed.feed {
 		m.feed.feed[i].mark = marks[m.feed.feed[i].ev.ID]
+		m.feed.feed[i].answered = m.feed.unread.answered[lineReportID(m.feed.feed[i])]
 	}
 	m.forYou = forYou(m.snap, m.feed.feed)
 	if m.width == 0 {

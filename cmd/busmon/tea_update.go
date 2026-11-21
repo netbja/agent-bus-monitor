@@ -327,13 +327,13 @@ func (m *Model) openForYouItem(it attentionItem) tea.Cmd {
 		return m.push(page{kind: ovHealth})
 	case rankMerge: // the PR, who approved it and what they checked; y copies the URL
 		if key != mergeUnknownKey {
-			return m.push(page{kind: ovMerge, key: strings.TrimPrefix(key, "merge:")})
+			return m.push(page{kind: ovMerge, key: it.Head})
 		}
 	case rankGate: // the challenge thread: its ref is the root
 		ref := strings.TrimPrefix(key, "gate:"+it.Agent+":")
 		return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
-	case rankUnread:
-		if id, ok := strings.CutPrefix(key, "unread:"); ok {
+	case rankUnread, rankReport: // a report's item opens its line, as an unread one (triage-dedupe §3)
+		if id, ok := lineKeyID(key); ok {
 			return m.openFeedLine(id)
 		}
 	}

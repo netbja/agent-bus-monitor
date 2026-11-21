@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ const (
 	rankHealth        // the stall guard: the team waits on the person, or the person's focus holds a hand-off
 	rankWait          // a waiting agent with no open ask, or its client's prompt
 	rankGate          // a pending verdict: an open 4-eyes gate
+	rankReport        // a report that needs the person and names no one live target (triage-dedupe §3)
 	rankMerge         // a change waiting for the person's merge (merge-queue): Enter opens its page
 	rankUnread        // an Activity line for the person not opened yet
 )
@@ -64,33 +67,7 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 	}
 	out = append(out, stallItems(s.guardianHealth, s.guardianNow)...)
 	out = append(out, mergeItems(s)...)
-	asks := map[string]int{} // an open ask's row, by ask id (the id of its Activity line)
-	for i, it := range out {
-		if it.Rank == rankAsk {
-			asks[it.AskID] = i
-		}
-	}
-	for _, fl := range feed {
-		if fl.sep || fl.mark != markUnread {
-			continue
-		}
-		if i, ok := asks[fl.ev.ID]; ok && fl.ev.Type == bus.CmdAsk {
-			out[i].Unread = true // listed once: the ask's row carries the mark
-			continue
-		}
-		text := fl.ev.Message
-		if len(fl.personNotices) > 0 || fl.ev.Kind == "report" {
-			text = lineHeadline(fl.ev) // a report notice reads as its report's headline (report-one-row §4)
-		} else if s, _, ok := reportSubject(text); ok {
-			text = s
-		}
-		ids := []string{fl.ev.ID}
-		if len(fl.personNotices) > 0 { // one row per report, holding every notice to the person (§3)
-			ids = fl.personNotices
-		}
-		out = append(out, attentionItem{Rank: rankUnread, Key: unreadKey(fl), Agent: sender(fl.ev),
-			Text: text, At: fl.at, EventID: ids[0], IDs: ids})
-	}
+	out = foldLines(s, feed, out)
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Rank != b.Rank {
@@ -105,6 +82,232 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		return a.Key < b.Key
 	})
 	return out
+}
+
+// foldLines adds the feed's lines to the targets' items (triage-dedupe §2,
+// §3; the person's §7 answers): a line naming exactly one live target (a
+// merge item by #<n>, PR <n> or its branch, an ask by its id, a waiting
+// agent by its own newest report) attaches to it; a report is an item only
+// with --needs (answer: until the person writes to its sender; read: until
+// read), its own when it names no single live target, replaced by the same
+// sender's newer one naming the same targets; any other unread line for the
+// person stays its own row, as before.
+func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem {
+	tg := liveTargets(out)
+	newest := map[string]string{} // agent -> its newest report's id
+	for _, fl := range feed {
+		if !fl.sep && fl.ev.Kind == "report" {
+			newest[fl.ev.Agent] = fl.ev.ID
+		}
+	}
+	own := map[string]int{} // sender and targets -> its own report item
+	for _, fl := range feed {
+		if fl.sep {
+			continue
+		}
+		unread := fl.mark == markUnread
+		if i, ok := tg.asks[fl.ev.ID]; ok && fl.ev.Type == bus.CmdAsk {
+			out[i].Unread = out[i].Unread || unread // listed once: the ask's row carries the mark
+			continue
+		}
+		report := fl.ev.Kind == "report" || len(fl.personNotices) > 0
+		if !report {
+			if _, _, ok := reportSubject(fl.ev.Message); ok && fl.ev.Kind == "cmd" {
+				report = true // a notice whose report is not at hand
+			}
+		}
+		needs := lineNeeds(fl)
+		if fl.ev.Kind == "report" { // a waiting agent's own newest report is its wait's
+			if i, ok := tg.waits[fl.ev.Agent]; ok && newest[fl.ev.Agent] == fl.ev.ID {
+				out[i].Unread = out[i].Unread || unread
+				if needs != "" {
+					out[i].Needs = needs
+				}
+				continue
+			}
+		}
+		switch {
+		case report && needs == "": // Activity only (§3), attached to every item it names (reviewer-codex)
+			if unread {
+				for _, i := range tg.named(lineFullText(fl)) {
+					out[i].Unread = true
+				}
+			}
+			continue
+		case report && needs == bus.NeedsRead && !unread:
+			continue
+		case report && needs == bus.NeedsAnswer && fl.answered: // replied to from its page (reviewer-codex)
+			continue
+		case !report && !unread:
+			continue
+		}
+		ids := []string{fl.ev.ID}
+		if len(fl.personNotices) > 0 { // one row per report, holding every notice to the person
+			ids = fl.personNotices
+		}
+		named := tg.named(lineFullText(fl))
+		if len(named) == 1 {
+			i := named[0]
+			out[i].Unread = out[i].Unread || unread
+			if needs != "" {
+				out[i].Needs = needs
+			}
+			continue
+		}
+		text := fl.ev.Message
+		if report {
+			text = lineHeadline(fl.ev) // a report notice reads as its report's headline (report-one-row §4)
+		} else if sub, _, ok := reportSubject(text); ok {
+			text = sub
+		}
+		if !report {
+			out = append(out, attentionItem{Rank: rankUnread, Key: unreadKey(fl), Agent: sender(fl.ev),
+				Text: text, At: fl.at, EventID: ids[0], IDs: ids})
+			continue
+		}
+		reportID := lineReportID(fl)
+		it := attentionItem{Rank: rankReport, Key: "report:" + reportID, Agent: sender(fl.ev), Text: text, At: fl.at,
+			EventID: ids[0], IDs: ids, Needs: needs, Unread: unread}
+		sig := sender(fl.ev) + "|" + fmt.Sprint(named)
+		if j, ok := own[sig]; ok {
+			out[j] = it // the feed is in order: the newer replaces
+			continue
+		}
+		own[sig] = len(out)
+		out = append(out, it)
+	}
+	return out
+}
+
+// lineNeeds is what a line's report asks of the person: the report's own
+// field, else one of its notices' (a notice alone carries it too).
+func lineNeeds(fl feedLine) string {
+	if fl.ev.Needs != "" {
+		return fl.ev.Needs
+	}
+	for _, n := range fl.notices {
+		if n.Needs != "" {
+			return n.Needs
+		}
+	}
+	return ""
+}
+
+// lineFullText is what a line says in full, for the targets it names.
+func lineFullText(fl feedLine) string {
+	if fl.ev.Full != "" {
+		return fl.ev.Full
+	}
+	return fl.ev.Message
+}
+
+// lineReportID is the report a line stands for: its own id, or a notice
+// alone's report (its ref); "" for any other line.
+func lineReportID(fl feedLine) string {
+	switch {
+	case fl.ev.Kind == "report":
+		return fl.ev.ID
+	case fl.ev.Kind == "cmd" && fl.ev.Ref != "":
+		if _, _, ok := reportSubject(fl.ev.Message); ok {
+			return fl.ev.Ref
+		}
+	}
+	return ""
+}
+
+// targets are the live items a line may name, by what names them.
+type targets struct {
+	prs      map[int]int
+	branches map[string]int
+	asks     map[string]int
+	waits    map[string]int
+}
+
+func liveTargets(out []attentionItem) targets {
+	t := targets{prs: map[int]int{}, branches: map[string]int{}, asks: map[string]int{}, waits: map[string]int{}}
+	for i, it := range out {
+		switch {
+		case it.Rank == rankAsk:
+			t.asks[it.AskID] = i
+		case it.Rank == rankWait:
+			t.waits[it.Agent] = i
+		case it.Rank == rankMerge && it.Key != mergeUnknownKey:
+			if n, ok := strings.CutPrefix(it.Key, "merge:pr:"); ok {
+				if v, err := strconv.Atoi(n); err == nil {
+					t.prs[v] = i
+				}
+			} else if b, ok := strings.CutPrefix(it.Key, "merge:branch:"); ok {
+				t.branches[b] = i
+			}
+			if it.Branch != "" {
+				t.branches[it.Branch] = i
+			}
+		}
+	}
+	return t
+}
+
+// prRef is a PR named in text: #<n>, PR <n> or PR #<n>.
+var prRef = regexp.MustCompile(`(?i)(?:\bPR\s*#?|#)(\d+)\b`)
+
+// named are the live items text names, by index, sorted, once each; a
+// number no live item holds names nothing ("#1 priority").
+func (t targets) named(text string) []int {
+	seen := map[int]bool{}
+	for _, m := range prRef.FindAllStringSubmatch(text, -1) {
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			if i, ok := t.prs[n]; ok {
+				seen[i] = true
+			}
+		}
+	}
+	for b, i := range t.branches {
+		if containsWord(text, b) {
+			seen[i] = true
+		}
+	}
+	for id, i := range t.asks {
+		if strings.Contains(text, id) {
+			seen[i] = true
+		}
+	}
+	out := make([]int, 0, len(seen))
+	for i := range seen {
+		out = append(out, i)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// containsWord: w in s, not inside a longer name (feat/a is not in feat/ab).
+func containsWord(s, w string) bool {
+	name := func(r byte) bool {
+		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.IndexByte("-_./", r) >= 0
+	}
+	for i := 0; ; {
+		j := strings.Index(s[i:], w)
+		if j < 0 {
+			return false
+		}
+		j += i
+		end := j + len(w)
+		if (j == 0 || !name(s[j-1])) && (end == len(s) || !name(s[end]) || s[end] == '.' && (end+1 == len(s) || !name(s[end+1]))) {
+			return true
+		}
+		i = j + 1
+	}
+}
+
+// activityUnread is the unread badge (the person's §7 answer 3): Activity's
+// unread marks, the plain reports included, apart from For you's items.
+func activityUnread(feed []feedLine) int {
+	n := 0
+	for _, fl := range feed {
+		if !fl.sep && fl.mark == markUnread {
+			n++
+		}
+	}
+	return n
 }
 
 // stallItems are the stall guard's rows for the person (spec

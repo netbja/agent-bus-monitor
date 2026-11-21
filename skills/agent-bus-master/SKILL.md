@@ -376,6 +376,17 @@ restates their explanation: the item holds it. Leave the section out when nothin
 the person. A report with nothing new for the person is not sent to them at all: it stays in
 Activity (`agentbus report master` without `--to <person>`).
 
+**`--needs` makes a report a triage item** (triage-dedupe §3.1). busmon's For you lists a report to
+the person only when it says it needs them:
+- `agentbus report master --to <person> --needs answer "<question>"` for a new question the person
+  must reply to; it stays in For you until the person writes to you;
+- `--needs read` for a document they must read (release notes, a review); it leaves once read;
+- no `--needs` for everything else: a status, a "still waiting" list, "nothing new". It stays in
+  Activity, unread, and marks the items it names.
+
+Use `--needs` only for a new ask. To ask about a PR already in the merge queue, name it (`#694`):
+the question lands on its merge item instead of a row of its own.
+
 ## The person's language
 
 The person may read and write a language other than English. The setting is `person.language`

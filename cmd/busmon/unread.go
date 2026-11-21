@@ -25,10 +25,14 @@ type unreadState struct {
 	forPerson map[string]bool
 	read      map[string]bool
 	floor     int64
+	// answered are the --needs answer reports the person replied to from
+	// their page (triage-dedupe §3: the send that closes the item), by
+	// report id; kept in the local cache as read marks are.
+	answered map[string]bool
 }
 
 func newUnreadState() unreadState {
-	return unreadState{forPerson: map[string]bool{}, read: map[string]bool{}}
+	return unreadState{forPerson: map[string]bool{}, read: map[string]bool{}, answered: map[string]bool{}}
 }
 
 // personEntry reports whether an entry is addressed to the person, from its
