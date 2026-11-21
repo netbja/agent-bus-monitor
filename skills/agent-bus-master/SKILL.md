@@ -366,7 +366,7 @@ agent detail opens on it, and `agentbus report` notes a long report written as o
 - <item>, with `ids` and commits in code
 
 ## What remains for you
-- <the reader's next step, or "nothing">
+- <ids of what is asked of the reader: PR #694, an ask id> (left out when nothing new is asked)
 ```
 
 When what remains is a decision, it is an ask; the report then says `see the open question`.
