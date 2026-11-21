@@ -231,24 +231,41 @@ The inventory then refuses nothing an agent does. 4b adds the users and a switch
   - `./setup.sh acl off` reverses it: the `aclfile` line removed, the default user's password
     file kept, the broker recreated.
 - **Each process picks its user by its entry point:**
-  - `agentbus service run` and the holder connect as `dispatcher` (the services' env file
-    carries no identity, `service/env.go`);
+  - the services, `agentbus service run` and the holder service (`agentbus holder [--env …]`), connect
+    as `dispatcher`: the services' env file carries no identity (`service/env.go`). `agentbus holder
+    drain`, which master or the person runs by hand, is not the service: it follows the CLI's rule
+    below (foureyes);
   - `busmon` connects as `busmon`;
-  - `./setup.sh`, `agentbus backup` and `restore` connect as `admin`;
-  - any other `agentbus` command connects by its identity: `AGENT_BUS_AGENT=master` as
-    `master`, another agent as `agent`, the person's CLI (no identity) as `busmon`.
+  - `./setup.sh`, `agentbus backup` and `restore` connect as `admin`, **from a person's shell only**
+    (reviewer-codex, master): they refuse when `AGENT_BUS_AGENT` is set or when an ancestor process
+    is a registered agent. That is the check `X` and `busmon -d` already make,
+    `agentcaller.Refuse` with `agentcaller.Ancestor`. The `admin` password file is 0600 and owned
+    by the person;
+  - any other `agentbus` command connects by its identity:
+    - `AGENT_BUS_AGENT=master` connects as `master`;
+    - another agent connects as `agent`;
+    - the person's CLI (no identity) connects as `busmon` (the person's answer), **but only after
+      the same process-tree check**: a process descended from a registered agent connects as `agent`
+      even without `AGENT_BUS_AGENT` (master, the person). An agent that unsets its identity is
+      still an agent;
   - `bus.Connect` takes the user from the caller; the password comes from that user's file.
     With `broker.acl=off`, every process connects as today.
 - **The rotation:** `./setup.sh rotate-redis-password` rotates each user with `ACL SETUSER
   <user> resetpass ><new>` and `ACL SAVE`, as §3 step 4 says, `admin` last. With `off`, it rotates
   `requirepass` as today.
 - **Tests (the disposable broker only):** the list under step 4 in §4, plus:
+  - `./setup.sh`, `backup` and `restore` refuse `admin` both from an agent's environment and from
+    a process whose ancestor is a registered agent (a fake ancestry), before any password file is
+    read;
+  - the person's CLI under an agent's process tree, with no `AGENT_BUS_AGENT`, connects as
+    `agent`, never as `busmon`;
+  - the `admin` password file is created 0600;
   - `off` changes nothing;
   - `on` then `off` gives back a working default user;
   - every entry point connects as its user (a fake config for the password files).
-- **Open, for the person before `on` is used on this host:** the person's own CLI and busmon
-  share the `busmon` user, which has every key (`~*`). Should the person's CLI rather be `admin`?
-  Recommended: no, `busmon`. `admin` stays for setup, backup and restore.
+- **The person's CLI is `busmon` (the person's answer):** every key, no `CONFIG SET`. `admin`
+  stays for setup, backup and restore. The security role may still review whether `busmon` with
+  every key is right for the person's CLI.
 
 **Step 5, the broker's snapshot in backups** (the directive's "data directory"):
 - after the logical dump, `agentbus backup` runs `BGSAVE`;
