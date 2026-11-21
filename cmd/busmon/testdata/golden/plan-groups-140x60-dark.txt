@@ -1,0 +1,60 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+╭─ For you ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 4 decide ─╮
+│  ● answer master    review lot 1? (2 questions)                                                                                        4m│
+│  ♙ answer foureyes  need a decision on the width rule                                                                                  6m│
+│  ◆ review coder     by charlie  look at b1                                                                                               │
+│  Next for you: title h2                                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Plan ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── y copy · esc back ─╮
+│ v0.29  3 of 9 done  ━━━━━━━━━━━━━━━━━━━━  33%  ·  now: title h1 (coder)  ·  next: title s1                                               │
+│ the inbox · loaded 0s ago (abcdef0)                                                                                                      │
+│                                                                                                                                          │
+│ Leave herdr         ━━━━━━━━━━━━━━━━━━━━  1/5 · in progress: h1 · waits for you: h2                                                      │
+│ ▶ ● title h1  coder     in progress                                                                                                      │
+│   ✓ title h5  coder     approved                                                                                                         │
+│     title h2  ♙ person  decide                                                                                                           │
+│     title h3  coder     blocked                                                                                                          │
+│                                                                                                                                          │
+│ Self-repair watcher ━━━━━━━━━━━━━━━━━━━━  1/2                                                                                            │
+│     title s1  coder     upcoming                                                                                                         │
+│                                                                                                                                          │
+│ Other               ━━━━━━━━━━━━━━━━━━━━  0/1                                                                                            │
+│     title o1  coder     upcoming                                                                                                         │
+│                                                                                                                                          │
+│ ✓ Work tab  1/1 done                                                                                                                     │
+│                                                                                                                                          │
+│ DONE  3   d shows                                                                                                                        │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│ ── Task h1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
+│ state in progress · for you nothing · owner coder · prio normal · review — · PR —                                                        │
+│ after — · unblocks — · reason —                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   + - priority   F5 health   F6 ideas                                     

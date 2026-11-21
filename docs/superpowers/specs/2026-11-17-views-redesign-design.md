@@ -138,6 +138,9 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 
 ### Mock-up: Plan at 160 columns
 
+Superseded at the wide tier by §4.1 (2026-11-21): the side panel became three rows under the
+list, and the drawer went under For you.
+
 ```
 ╭─ 4 Plan · v0.29 ─────────────────────────────────────────────────────────────────────── 28/43 done ▕████████████░░░░░░▏ ─╮╭─ quota-step-3 ───────────────────╮
 │ NOW                                                                                                                      ││ owner   coder                    │
@@ -176,6 +179,122 @@ At 80 columns with an alert, the alert takes the first 12 cells (`⚠ no reply 3
 
 At 80 columns LATER folds to a count that Enter opens, as DONE does, and the count keeps a
 high-priority task visible: `LATER 3 · 1 ↑` (the person's Q5).
+
+### 4.1 Layout r2: the person's review of the Plan view (2026-11-21)
+
+The person's review of v0.31's Plan view (bus thread `1795220188690-0`, relayed by master as cmd
+`1795220210959-0`), four points, built in one PR (`feat/plan-tab-layout`). The plan's groups
+(plan-chantier §3) are the blocks below; a plan without groups keeps §4's sections.
+
+1. **For you sized to its content.** The drawer (`p`, `P`) stood right of For you, which kept the
+   top row's full height for three lines, while the drawer's lower half was empty. Now For you
+   takes the whole width, its own rows only (its items and the plan pointer, at most the top
+   row's height); the drawer takes the whole width under it, down to the footer. Agents is under
+   the drawer, as before. The narrow and medium tiers do not change.
+2. **The task's detail below the list**, inside the Plan frame, in place of the side panel (34
+   columns that cut every title, state and value). Three rows at the bottom of the frame:
+   - a rule naming the task, `enter task page` at its right;
+   - `state`, `for you`, `owner`, `prio`, `review`, `PR` (what matters to the person first, so a
+     short width cuts the least);
+   - `after`, `unblocks`, `reason`.
+
+   Each row keeps its fields whole and cuts its last one when the width is short. The list scrolls
+   above the three rows; the selected task stays in view. The tab and the drawer alike, at the wide
+   tier (as the side panel was).
+3. **A finished group is one line**: `✓ <title>  <done>/<total> done`, grey, no bar, and the
+   finished groups follow one another with no blank line between them. DONE's count line follows.
+4. **A group's bar in the colour of its state**, the colours of the tasks' own glyphs (`planLook`):
+   - orange (`RoleAttention`): a task of the group waits for the person;
+   - blue (`RoleAccent`): a task is in progress or in review, none waits for the person;
+   - grey (`RoleMuted`): finished (point 3: no bar is drawn, the line is grey);
+   - the text colour: nothing started yet.
+
+   The approved part of the bar keeps its own colour (plan-chantier §3). The roles are the theme's,
+   so the light palette's contrast rule holds (`theme_contrast_test.go`). Without colour
+   (`NO_COLOR`, the no-colour palette) the header's words say the same: `waits for you: <id>`,
+   `in progress: <id>`, `done`.
+
+#### Mock-up: the drawer at 140 columns
+
+The golden `plan-groups-140x40-dark.txt`, header and footer left out. Leave herdr's bar is orange
+(h2 waits for the person), Self-repair watcher's and Other's in the text colour (nothing
+started), the approved cell in the review colour, the rest of each bar the grey track; Work tab's
+line is grey.
+
+```
+╭─ For you ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 4 decide ─╮
+│  ● answer master    review lot 1? (2 questions)                                                                                        4m│
+│  ♙ answer foureyes  need a decision on the width rule                                                                                  6m│
+│  ◆ review coder     by charlie  look at b1                                                                                               │
+│  Next for you: title h2                                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Plan ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── y copy · esc back ─╮
+│ v0.29  3 of 9 done  ━━━━━━━━━━━━━━━━━━━━  33%  ·  now: title h1 (coder)  ·  next: title s1                                               │
+│ the inbox · loaded 0s ago (abcdef0)                                                                                                      │
+│                                                                                                                                          │
+│ Leave herdr         ━━━━━━━━━━━━━━━━━━━━  1/5 · in progress: h1 · waits for you: h2                                                      │
+│ ▶ ● title h1  coder     in progress                                                                                                      │
+│   ✓ title h5  coder     approved                                                                                                         │
+│     title h2  ♙ person  decide                                                                                                           │
+│     title h3  coder     blocked                                                                                                          │
+│                                                                                                                                          │
+│ Self-repair watcher ━━━━━━━━━━━━━━━━━━━━  1/2                                                                                            │
+│     title s1  coder     upcoming                                                                                                         │
+│                                                                                                                                          │
+│ Other               ━━━━━━━━━━━━━━━━━━━━  0/1                                                                                            │
+│     title o1  coder     upcoming                                                                                                         │
+│                                                                                                                                          │
+│ ✓ Work tab  1/1 done                                                                                                                     │
+│                                                                                                                                          │
+│ DONE  3   d shows                                                                                                                        │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│ ── Task h1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
+│ state in progress · for you nothing · owner coder · prio normal · review — · PR —                                                        │
+│ after — · unblocks — · reason —                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+#### Mock-up: the tab at 140 columns
+
+The golden `plantab-groups-140x40-dark.txt`'s lower panel (`4`): the same board and the same three
+rows, For you and Agents above it as before.
+
+```
+╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────────────────────────────────── 3/9 done ██████             ─╮
+│  Leave herdr         ━━━━━━━━━━━━━━━━━━━━  1/5 · in progress: h1 · waits for you: h2                                                     │
+│▶ ● title h1  coder     in progress                                                                                                       │
+│  ✓ title h5  coder     approved                                                                                                          │
+│    title h2  ♙ person  decide                                                                                                            │
+│    title h3  coder     blocked                                                                                                           │
+│                                                                                                                                          │
+│  Self-repair watcher ━━━━━━━━━━━━━━━━━━━━  1/2                                                                                           │
+│    title s1  coder     upcoming                                                                                                          │
+│                                                                                                                                          │
+│  Other               ━━━━━━━━━━━━━━━━━━━━  0/1                                                                                           │
+│    title o1  coder     upcoming                                                                                                          │
+│                                                                                                                                          │
+│  ✓ Work tab  1/1 done                                                                                                                    │
+│                                                                                                                                          │
+│  DONE  3   d shows                                                                                                                       │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│ ── Task h1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
+│ state in progress · for you nothing · owner coder · prio normal · review — · PR —                                                        │
+│ after — · unblocks — · reason —                                                                                                          │
+╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+The goldens `plan-groups-*` and `plantab-groups-*` (every size, dark and light, text and colours)
+are these screens as built.
 
 ## 5. IDEAS: triage from the card
 

@@ -1,18 +1,18 @@
 ╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ─────────────────────────────────────────────────────────────────────────── 2/11 done ███▎               ─╮
-│  NOW  2                                                                                                                   ╭─ Task ─────────────────────────╮ │
-│▶ ● agent-screen-blocked     coder     in progress  after holder-g1                                                        │ agent-screen-blocked           │ │
-│  ○ ask-refuses-person       coder2    in review                                                                           │ state    in progress           │ │
-│                                                                                                                           │ owner    coder                 │ │
-│  APPROVED  1                                                                                                              │ review   —                     │ │
-│  ✓ human-not-an-agent-test  coder2    approved                                                                            │ PR       —                     │ │
-│                                                                                                                           │ reason   —                     │ │
-│  NEXT  3                                                                                                                  │ after    holder-g1 ✓           │ │
-│  ↑ quota-step-3             coder     upcoming     after quota-settings-step2                                             │ unblocks —                     │ │
-│    holder-g1-part2          coder     upcoming                                                                            │ prio     normal                │ │
-│    decide-compose-undo      ♙ person  decide                                                                              │ for you  nothing               │ │
-│                                                                                                                           │                                │ │
-│  LATER  3                                                                                                                 │ enter task page                │ │
-│  ↑ quota-step-4             coder     blocked      after quota-step-3                                                     ╰────────────────────────────────╯ │
+│  NOW  2                                                                                                                                                      │
+│▶ ● agent-screen-blocked     coder     in progress  after holder-g1                                                                                           │
+│  ○ ask-refuses-person       coder2    in review                                                                                                              │
+│                                                                                                                                                              │
+│  APPROVED  1                                                                                                                                                 │
+│  ✓ human-not-an-agent-test  coder2    approved                                                                                                               │
+│                                                                                                                                                              │
+│  NEXT  3                                                                                                                                                     │
+│  ↑ quota-step-3             coder     upcoming     after quota-settings-step2                                                                                │
+│    holder-g1-part2          coder     upcoming                                                                                                               │
+│    decide-compose-undo      ♙ person  decide                                                                                                                 │
+│                                                                                                                                                              │
+│  LATER  3                                                                                                                                                    │
+│  ↑ quota-step-4             coder     blocked      after quota-step-3                                                                                        │
 │  ↓ master-conversation      coder     blocked      after decide-compose-undo                                                                                 │
 │  ↓ agent-led-setup          coder     low                                                                                                                    │
 │                                                                                                                                                              │
@@ -20,7 +20,7 @@
 │                                                                                                                                                              │
 │                                                                                                                                                              │
 │                                                                                                                                                              │
-│                                                                                                                                                              │
-│                                                                                                                                                              │
-│                                                                                                                                                              │
+│ ── Task agent-screen-blocked ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
+│ state in progress · for you nothing · owner coder · prio normal · review — · PR —                                                                            │
+│ after holder-g1 ✓ · unblocks — · reason —                                                                                                                    │
 ╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

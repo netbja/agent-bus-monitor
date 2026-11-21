@@ -110,6 +110,22 @@ func shellWide(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
 	}, true
 }
 
+// shellDrawer is the wide layout while the plan drawer is open
+// (views-redesign §4.1 point 1): For you takes the whole width and its own
+// rows only (its items, at least the "nothing" line, and the plan pointer),
+// never more than the top row it had; the drawer takes the rest, under it
+// (readerRect). Agents and the lower panel stay where they were, under the
+// drawer. The other tiers are returned as they are.
+func shellDrawer(l shellLayout, c shellCounts) shellLayout {
+	if l.Tier != TierWide {
+		return l
+	}
+	fh := min(max(c.ForYou, 1)+c.ForYouExtra+2, l.ForYou.H)
+	l.ForYou = Rect{0, l.ForYou.Y, l.Header.W, fh}
+	l.ForYouRows = fh - 2
+	return l
+}
+
 func shellMedium(w, h int, c shellCounts, tab PanelID) (shellLayout, bool) {
 	const fixed, borders = shellHeaderHeight + 2, 2 // header + input + footer; frame only
 	avail := h - fixed

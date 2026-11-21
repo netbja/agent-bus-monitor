@@ -63,7 +63,7 @@ func checkGolden(t *testing.T, name, got string) {
 // goldenStates are the screens the goldens draw (busmon Charm spec, step b
 // tests): the dashboard, the report with a long code block expanded in
 // Activity, that report in the reader, and the compose window open.
-var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "worktab",
+var goldenStates = []string{"dashboard", "expanded", "reader", "compose", "notice", "health", "settings", "plan", "worktab", "plan-groups", "plantab-groups",
 	"notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets", "projects", "projects-detail", "projects-unknown", "projects-delete-backup", "projects-delete-name", "idle",
 	"compose-at", "compose-at-above", "compose-at-reading", "compose-at-outside", "compose-at-incomplete"}
 
@@ -131,6 +131,17 @@ func inState(t testing.TB, m Model, state string) Model {
 			return keys(t, m, 'p', 'j')
 		}
 		return keys(t, workNext(t, m), 'j', 'j') // what key 4 did before it opened the Plan
+	case "plan-groups", "plantab-groups": // views-redesign §4.1: a plan with groups, the drawer (p) and the tab (4)
+		snap := shellFixture(shellNow)
+		snap.planState = chantierPlan()
+		m = step(t, m, pollMsg{snap: snap, at: shellNow})
+		if state == "plan-groups" {
+			return keys(t, m, 'p')
+		}
+		if m.layout.Tier == TierNarrow {
+			return keys(t, m, '6')
+		}
+		return keys(t, m, '4')
 	case "notify-subscribe", "notify-qr", "notify-discord", "notify-desktop", "notify-result", "notify-failed", "notify-targets":
 		return notifyGolden(t, m, state)
 	case "compose-at", "compose-at-above", "compose-at-reading", "compose-at-outside", "compose-at-incomplete": // the @ popup (compose-at-file §4.3, §9)

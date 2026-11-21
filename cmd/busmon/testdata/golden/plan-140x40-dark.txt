@@ -1,40 +1,40 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
  paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
-╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Plan ─────────────────────────────────────────────────────── y copy · esc back ─╮
-│  ● answer master    review lot 1? (2 questions)    4m││ v0.29  1 of 6 done  ━━━━━━━  16%              ╭─ Task ─────────────────────────╮ │
-│  ♙ answer foureyes  need a decision on the width … 6m││ the inbox · loaded 0s ago (abcdef0)           │ strip                          │ │
-│  ◆ review coder     by charlie  look at b1           ││                                               │ state    in review             │ │
-│  Next for you: title notes                           ││ NOW  1                                        │ owner    coder                 │ │
-│                                                      ││   ● title drawer    coder     in progress     │ review   approved              │ │
-│                                                      ││                                               │ PR       338                   │ │
-│                                                      ││ APPROVED  1                                   │ reason   merge PR 338          │ │
-│                                                      ││ ▶ ✓ title strip     coder     #338 · approve… │ after    —                     │ │
-│                                                      ││                                               │ unblocks —                     │ │
-│                                                      ││ NEXT  2                                       │ prio     normal                │ │
-╰──────────────────────────────────────────────────────╯│     title notes     ♙ person  decide          │ for you  nothing               │ │
-                                                        │     title requests  coder     upcoming        │                                │ │
-                                                        │                                               │ enter task page                │ │
-                                                        │ LATER  1                                      ╰────────────────────────────────╯ │
-                                                        │     title tag       ♙ person  blocked                                            │
-                                                        │                                                                                  │
-                                                        │ DONE  1   d shows                                                                │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        │                                                                                  │
-                                                        ╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─ For you ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 4 decide ─╮
+│  ● answer master    review lot 1? (2 questions)                                                                                        4m│
+│  ♙ answer foureyes  need a decision on the width rule                                                                                  6m│
+│  ◆ review coder     by charlie  look at b1                                                                                               │
+│  Next for you: title notes                                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Plan ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── y copy · esc back ─╮
+│ v0.29  1 of 6 done  ━━━━━━━━━━━━━━━━━━━━  16%  ·  now: title strip (coder)  ·  next: title requests                                      │
+│ the inbox · loaded 0s ago (abcdef0)                                                                                                      │
+│                                                                                                                                          │
+│ NOW  1                                                                                                                                   │
+│   ● title drawer    coder     in progress                                                                                                │
+│                                                                                                                                          │
+│ APPROVED  1                                                                                                                              │
+│ ▶ ✓ title strip     coder     #338 · approved · merge PR 338                                                                             │
+│                                                                                                                                          │
+│ NEXT  2                                                                                                                                  │
+│     title notes     ♙ person  decide                                                                                                     │
+│     title requests  coder     upcoming                                                                                                   │
+│                                                                                                                                          │
+│ LATER  1                                                                                                                                 │
+│     title tag       ♙ person  blocked                                                                                                    │
+│                                                                                                                                          │
+│ DONE  1   d shows                                                                                                                        │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│ ── Task strip ────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
+│ state in review · for you nothing · owner coder · prio normal · review approved · PR 338                                                 │
+│ after — · unblocks — · reason merge PR 338                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   + - priority   F5 health   F6 ideas                                     

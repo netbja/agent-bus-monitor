@@ -493,7 +493,11 @@ func (m *Model) refresh() {
 	// is sized and filled from the same owed count (reviewer-codex).
 	m.lists.reqView = requestGroups(m.requestInput())
 	m.work = workOf(m.workInput())
-	m.layout = shellLayoutFor(m.width, m.height, m.counts(), m.ui.view, m.ui.tab)
+	c := m.counts()
+	m.layout = shellLayoutFor(m.width, m.height, c, m.ui.view, m.ui.tab)
+	if m.rd.open() && m.rd.pages[0].drawer { // the plan drawer under a For you of its own rows (views-redesign §4.1)
+		m.layout = shellDrawer(m.layout, c)
+	}
 	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
 		if w := m.ui.walk; w != nil && !w.moving && m.rd.top().serial == w.serial {

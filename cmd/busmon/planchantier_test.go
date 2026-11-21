@@ -67,7 +67,7 @@ func TestPlanBoardGroups(t *testing.T) {
 	herdr, hi := lineWith(v, "Leave herdr")
 	self, si := lineWith(v, "Self-repair watcher")
 	other, oi := lineWith(v, "Other")
-	work, wi := lineWith(v, "Work tab")
+	work, wi := lineWith(v, GlyphDone+" Work tab")
 	done, di := lineWith(v, "DONE  ")
 	// Order: waiting for the person first, then in hand, then the rest in
 	// the list's order, Other last before the finished groups, DONE at the end.
@@ -112,15 +112,11 @@ func TestPlanBoardGroups(t *testing.T) {
 			t.Fatalf("done row %s drawn while folded", id)
 		}
 	}
-	// The bar: done cells, then the approved-in-review ones, then the rest.
-	var cells []Role
-	for _, s := range v.lines[hi] {
-		for range strings.Count(s.Text, GlyphThinBar) {
-			cells = append(cells, s.Role)
-		}
-	}
+	// The bar: done cells (in the group's colour, §4.1), then the
+	// approved-in-review ones, then the rest.
+	cells := barRoles(v, hi)
 	_, reviewRole := planLook(plan.InReview)
-	if len(cells) != 20 || cells[0] != RoleDone || cells[3] != RoleDone || cells[4] != reviewRole || cells[7] != reviewRole || cells[8] != RoleMuted {
+	if len(cells) != 20 || cells[0] != RoleAttention || cells[3] != RoleAttention || cells[4] != reviewRole || cells[7] != reviewRole || cells[8] != RoleMuted {
 		t.Fatalf("bar cells %v", cells)
 	}
 }
@@ -130,7 +126,7 @@ func TestPlanBoardGroupsShowDone(t *testing.T) {
 	v := planBoard(chantierPlan(), 0, true, shellNow, 120, TierWide, false, nil)
 	_, hi := lineWith(v, "Leave herdr")
 	_, si := lineWith(v, "Self-repair watcher")
-	_, wi := lineWith(v, "Work tab")
+	_, wi := lineWith(v, GlyphDone+" Work tab")
 	if l := itemLine(v, "h4"); l <= hi || l >= si {
 		t.Fatalf("h4 on line %d, not under Leave herdr (%d..%d)", l, hi, si)
 	}
@@ -178,11 +174,11 @@ func TestPlanBoardGroupsUnknownAndUngrouped(t *testing.T) {
 }
 
 // §3: selection is per task row, headers skipped: item 2 is h2 (the
-// roadmap's order, views-redesign §4), and the side panel shows h2.
+// roadmap's order, views-redesign §4), and the detail shows h2 (§4.1).
 func TestPlanBoardGroupsSelection(t *testing.T) {
 	v := planBoard(chantierPlan(), 2, false, shellNow, 120, TierWide, true, nil)
-	if v.items[2].task != "h2" || len(v.side) == 0 || !strings.HasPrefix(linesText(v.side), "h2\n") {
-		t.Fatalf("item 2 %+v, side %q", v.items[2], linesText(v.side))
+	if v.items[2].task != "h2" || len(v.detail) != planDetailRows || !strings.Contains(v.detail[0].text(), "Task h2 ") {
+		t.Fatalf("item 2 %+v, detail %q", v.items[2], linesText(v.detail))
 	}
 }
 
@@ -197,8 +193,8 @@ func TestPlanBoardGroupsOtherBeforeFinished(t *testing.T) {
 	p.file.Groups = []plan.Group{{ID: "work-tab", Title: "Work tab"}, {ID: "herdr-exit", Title: "Leave herdr"}}
 	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
 	_, hi := lineWith(v, "Leave herdr")
-	_, oi := lineWith(v, "Other")
-	_, wi := lineWith(v, "Work tab")
+	_, oi := lineWith(v, GlyphDone+" Other") // all done: one line too (§4.1)
+	_, wi := lineWith(v, GlyphDone+" Work tab")
 	if !(hi >= 0 && hi < oi && oi < wi) {
 		t.Fatalf("herdr %d, other %d, work %d:\n%s", hi, oi, wi, v.plain)
 	}
@@ -218,14 +214,9 @@ func TestPlanBoardGroupBarApprovedOnly(t *testing.T) {
 	p.file.Groups = []plan.Group{{ID: "g", Title: "G"}}
 	v := planBoard(p, 0, false, shellNow, 120, TierWide, false, nil)
 	_, gi := lineWith(v, "G ")
-	var cells []Role
-	for _, s := range v.lines[gi] {
-		for range strings.Count(s.Text, GlyphThinBar) {
-			cells = append(cells, s.Role)
-		}
-	}
+	cells := barRoles(v, gi)
 	_, reviewRole := planLook(plan.InReview)
-	if len(cells) != 20 || cells[4] != RoleDone || cells[5] != reviewRole || cells[9] != reviewRole || cells[10] != RoleMuted {
+	if len(cells) != 20 || cells[4] != RoleAccent || cells[5] != reviewRole || cells[9] != reviewRole || cells[10] != RoleMuted {
 		t.Fatalf("bar cells %v", cells)
 	}
 }
