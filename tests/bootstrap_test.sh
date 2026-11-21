@@ -94,4 +94,35 @@ assert_eq "$first_tab" 'name = "busmon"' "busmon is the first tab"
 run new demoas "$projdir" --as charlie >/dev/null
 assert_contains "$(cat "$proj/demoas.toml")" "busmon --project demoas --as charlie" "--as reaches the busmon tab"
 assert_exit 1 "an invalid --as is refused" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' '$B' new demoas2 '$projdir' --as Charlie"
+
+# broker-hardening step 3: the broker starts with broker.runtime's compose, read through
+# `agentbus config get`: docker by default, podman when set; never docker under podman.
+make_stub "$stub" podman 0
+: > "$stub/docker.calls"; : > "$stub/podman.calls"
+assert_exit 0 "recall starts the broker with docker compose by default" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' AGENT_BUS_BROKER_RUNTIME= '$B' recall demo >/dev/null"
+assert_eq "$(grep -c '^compose up -d$' "$stub/docker.calls")" "1" "docker compose up -d ran once"
+assert_eq "$(wc -l < "$stub/podman.calls" | tr -d ' ')" "0" "podman never ran under docker"
+: > "$stub/docker.calls"
+assert_exit 0 "recall starts the broker with podman compose when broker.runtime=podman" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' AGENT_BUS_BROKER_RUNTIME=podman '$B' recall demo >/dev/null"
+assert_eq "$(grep -c '^compose up -d$' "$stub/podman.calls")" "1" "podman compose up -d ran once"
+assert_eq "$(wc -l < "$stub/docker.calls" | tr -d ' ')" "0" "docker never ran under podman"
+# An agentbus that answers everything but `config get` (exits 1 there): bootstrap stops before
+# compose, saying why, and runs no runtime at all.
+mkdir -p "$tmp/badab"
+printf '#!/usr/bin/env bash\n[[ "$1 $2" == "config get" ]] && exit 1\nexec "%s" "$@"\n' "$AGENTBUS_BIN" > "$tmp/badab/agentbus"
+chmod +x "$tmp/badab/agentbus"
+: > "$stub/docker.calls"; : > "$stub/podman.calls"
+code=0; err="$(PATH="$stub:$PATH" AGENTBUS_BIN="$tmp/badab/agentbus" AGENTBUS_PROJECTS_DIR="$proj" "$B" recall demo 2>&1 >/dev/null)" || code=$?
+assert_eq "$code" "1" "an unreadable broker.runtime stops bootstrap"
+assert_eq "$(grep -c 'cannot read broker.runtime' <<< "$err")" "1" "it says why"
+assert_eq "$(cat "$stub/docker.calls" "$stub/podman.calls" | wc -l | tr -d ' ')" "0" "no runtime ran"
+
+# broker.image reaches compose's environment (broker-hardening step 3): a Valkey image set in the
+# setting starts a Valkey broker, never the default.
+printf '#!/usr/bin/env bash\necho "$AGENT_BUS_BROKER_IMAGE $*" >> "%s/podman.env"\n' "$stub" > "$stub/podman"
+chmod +x "$stub/podman"
+: > "$stub/podman.env"
+assert_exit 0 "recall passes broker.image to compose" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' AGENT_BUS_BROKER_RUNTIME=podman AGENT_BUS_BROKER_IMAGE=valkey/valkey:8 '$B' recall demo >/dev/null"
+assert_eq "$(cat "$stub/podman.env")" "valkey/valkey:8 compose up -d" "compose ran with the configured image"
+
 finish

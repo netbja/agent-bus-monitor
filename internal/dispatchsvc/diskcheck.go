@@ -16,6 +16,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/health"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 )
 
 // diskDeps is what the disk check reads, injected: a test never touches a
@@ -56,7 +57,7 @@ func realStatfs(path string) (uint64, uint64, uint64, error) {
 }
 
 // diskPaths are the filesystems agent-bus depends on (disk-check): the
-// broker's data (docker's root when docker is on PATH, else not measured),
+// broker's data (its runtime's root when that runtime runs on this host, else not measured),
 // the home, the Go build cache (when go is on PATH), the repository (the
 // services' working directory) and its worktrees, and the temp dir.
 func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
@@ -75,25 +76,7 @@ func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
 		}
 		out = append(out, p)
 	}
-	// The broker's data: docker's root, measured from the host only when the
-	// daemon runs on it. Docker Desktop keeps it in its own VM (on macOS, and
-	// on Linux when it says so): not measured, never a host path of that name
-	// (reviewer-codex).
-	if _, err := d.LookPath("docker"); err != nil {
-		out = append(out, health.DiskPath{Label: "broker data", Note: "docker not on PATH"})
-	} else if why := dockerNotLocal(ctx, d); why != "" {
-		out = append(out, health.DiskPath{Label: "broker data", Note: why})
-	} else if info, err := d.Output(ctx, "docker", "info", "-f", "{{.DockerRootDir}}|{{.OperatingSystem}}"); err != nil {
-		out = append(out, health.DiskPath{Label: "broker data", Note: "docker info failed"})
-	} else if root, osName, _ := strings.Cut(strings.TrimSpace(info), "|"); root == "" {
-		out = append(out, health.DiskPath{Label: "broker data", Note: "docker info failed"})
-	} else if d.GOOS != "linux" {
-		out = append(out, health.DiskPath{Label: "broker data", Note: "docker's root is inside its VM on " + d.GOOS + ": not measured from the host"})
-	} else if strings.Contains(osName, "Docker Desktop") {
-		out = append(out, health.DiskPath{Label: "broker data", Note: "Docker Desktop keeps its root inside its VM: not measured from the host"})
-	} else {
-		measure("broker data", root, false)
-	}
+	out = append(out, brokerData(ctx, d, measure)...)
 	if home := d.Getenv("HOME"); home != "" {
 		measure("home", home, false)
 	} else {
@@ -118,6 +101,49 @@ func diskPaths(ctx context.Context, d diskDeps) []health.DiskPath {
 	}
 	measure("temp", d.TempDir(), false)
 	return out
+}
+
+// brokerData is the broker's data path, measured, or said why not: the
+// root of the runtime that runs it (broker.runtime, broker-hardening step
+// 3), from the host only when that runtime runs on it. Docker Desktop, and a
+// podman machine, keep it in their own VM (on macOS, and on Linux when they
+// say so): not measured, never a host path of that name (reviewer-codex).
+func brokerData(ctx context.Context, d diskDeps, measure func(label, path string, optional bool)) []health.DiskPath {
+	note := func(n string) []health.DiskPath { return []health.DiskPath{{Label: "broker data", Note: n}} }
+	rt := brokerrt.Of(d.Getenv)
+	bin := rt.Bin()
+	if _, err := d.LookPath(bin); err != nil {
+		return note(bin + " not on PATH")
+	}
+	if rt == brokerrt.Podman { // each program a literal at its call: the guard reads it
+		info, err := d.Output(ctx, "podman", "info", "-f", "{{.Host.ServiceIsRemote}}|{{.Store.GraphRoot}}")
+		remote, root, _ := strings.Cut(strings.TrimSpace(info), "|")
+		switch {
+		case err != nil || root == "":
+			return note("podman info failed")
+		case remote != "false": // a podman machine or a remote connection: not this host's disk
+			return note("podman runs remotely (a podman machine or a connection): not measured from this host")
+		case d.GOOS != "linux":
+			return note("podman's root is inside its VM on " + d.GOOS + ": not measured from the host")
+		}
+		measure("broker data", root, false)
+		return nil
+	}
+	if why := dockerNotLocal(ctx, d); why != "" {
+		return note(why)
+	}
+	info, err := d.Output(ctx, "docker", "info", "-f", "{{.DockerRootDir}}|{{.OperatingSystem}}")
+	root, osName, _ := strings.Cut(strings.TrimSpace(info), "|")
+	switch {
+	case err != nil || root == "":
+		return note("docker info failed")
+	case d.GOOS != "linux":
+		return note("docker's root is inside its VM on " + d.GOOS + ": not measured from the host")
+	case strings.Contains(osName, "Docker Desktop"):
+		return note("Docker Desktop keeps its root inside its VM: not measured from the host")
+	}
+	measure("broker data", root, false)
+	return nil
 }
 
 // dockerNotLocal says why the selected daemon is not on this host (""

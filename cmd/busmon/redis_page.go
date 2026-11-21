@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"net"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -67,13 +67,14 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 		f.err = "not read"
 	}
 	f.legacyPW = bus.LegacyPasswordInUse(getenv)
+	bin := brokerrt.Of(getenv).Bin() // broker.runtime (broker-hardening step 3)
 	if run == nil {
-		f.bindErr, f.logsErr = "no docker", "no docker"
+		f.bindErr, f.logsErr = "no "+bin, "no "+bin
 		return f
 	}
-	out, err := run(c, "docker", "port", redisContainer, "6379/tcp")
+	out, err := run(c, bin, "port", redisContainer, "6379/tcp")
 	if err != nil || out == "" {
-		f.bindErr = "not published by docker"
+		f.bindErr = "not published by " + bin
 		if err != nil {
 			f.bindErr = err.Error()
 		}
@@ -105,7 +106,7 @@ func gatherRedisPage(ctx context.Context, r any, run svcRunner, getenv func(stri
 			f.loopback = false
 		}
 	}
-	out, err = run(c, "docker", "logs", "--tail", fmt.Sprint(redisLogLines), redisContainer)
+	out, err = run(c, bin, "logs", "--tail", fmt.Sprint(redisLogLines), redisContainer)
 	if err != nil {
 		f.logsErr = err.Error()
 		return f
@@ -306,12 +307,12 @@ func projectsTable(projects []bus.ProjectRedis, width int) []Line {
 // redisPageCmd reads the page's facts and builds its body, for the page with
 // serial (0: a new one).
 func (m *Model) redisPageCmd(serial int) tea.Cmd {
-	r, ctx, width, docker, flagHost := m.cfg.reader, m.cfg.ctx, m.readerWidth(), m.cfg.docker, m.cfg.brokerHost
+	r, ctx, width, docker, flagHost, getenv := m.cfg.reader, m.cfg.ctx, m.readerWidth(), m.cfg.docker, m.cfg.brokerHost, m.env
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return func() tea.Msg {
-		f := gatherRedisPage(ctx, r, docker, os.Getenv, flagHost)
+		f := gatherRedisPage(ctx, r, docker, getenv, flagHost)
 		return redisPageMsg{body: redisPageBody(f, time.Now(), width), serial: serial}
 	}
 }

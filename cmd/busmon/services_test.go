@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -161,7 +162,7 @@ func TestGatherServices(t *testing.T) {
 		asked = append(asked, name+" "+strings.Join(args, " "))
 		return "redis:8-alpine|running", nil
 	}
-	f := gatherServices(context.Background(), r, "p", nil, recs, "here", docker, nil)
+	f := gatherServices(context.Background(), r, "p", nil, recs, "here", docker, nil, brokerrt.Docker)
 	if f.logs["dispatch"] != 5 || !f.since["dispatch"].IsZero() { // the test process is no running service: no since
 		t.Errorf("local facts %v %v", f.logs, f.since)
 	}
@@ -171,15 +172,15 @@ func TestGatherServices(t *testing.T) {
 	if f.redis.where != "docker agent-bus-redis (redis:8-alpine), running" || len(asked) != 1 || !strings.Contains(asked[0], "inspect") {
 		t.Errorf("docker: %q %v", f.redis.where, asked)
 	}
-	bare := gatherServices(context.Background(), r, "p", nil, recs, "here", nil, nil)
+	bare := gatherServices(context.Background(), r, "p", nil, recs, "here", nil, nil, brokerrt.Docker)
 	if bare.redis.where != "process 812 (/usr/bin/redis-server)" {
 		t.Errorf("bare: %q", bare.redis.where)
 	}
 	failing := func(context.Context, string, ...string) (string, error) { return "", fmt.Errorf("no such container") }
-	if g := gatherServices(context.Background(), r, "p", nil, recs, "here", failing, nil); g.redis.where != "process 812 (/usr/bin/redis-server)" {
+	if g := gatherServices(context.Background(), r, "p", nil, recs, "here", failing, nil, brokerrt.Docker); g.redis.where != "process 812 (/usr/bin/redis-server)" {
 		t.Errorf("docker failing: %q", g.redis.where)
 	}
-	if g := gatherServices(context.Background(), &fakeReader{calls: map[string]int{}}, "p", nil, recs, "here", nil, nil); g.redis.infoErr == "" {
+	if g := gatherServices(context.Background(), &fakeReader{calls: map[string]int{}}, "p", nil, recs, "here", nil, nil, brokerrt.Docker); g.redis.infoErr == "" {
 		t.Error("a reader without RedisInfo reads as known")
 	}
 }

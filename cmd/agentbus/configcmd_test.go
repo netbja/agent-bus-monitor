@@ -372,3 +372,27 @@ func TestConfigShadowOutsideDev(t *testing.T) {
 		t.Errorf("in dev: row %v\n%s", row, out)
 	}
 }
+
+// config get prints one setting's effective value alone, for a script
+// (scripts/bootstrap reads broker.runtime with it); an unknown setting or a
+// missing name is a usage error.
+func TestConfigGet(t *testing.T) {
+	cfg := t.TempDir()
+	env := map[string]string{"XDG_CONFIG_HOME": cfg, "HOME": t.TempDir()}
+	getenv := func(k string) string { return env[k] }
+	var out, errw bytes.Buffer
+	if code := runConfig([]string{"get", "broker.runtime"}, "", getenv, &out, &errw); code != 0 || out.String() != "docker\n" {
+		t.Fatalf("default: %d %q %q", code, out.String(), errw.String())
+	}
+	env["AGENT_BUS_BROKER_RUNTIME"] = "podman"
+	out.Reset()
+	if code := runConfig([]string{"get", "broker.runtime"}, "", getenv, &out, &errw); code != 0 || out.String() != "podman\n" {
+		t.Fatalf("env: %d %q", code, out.String())
+	}
+	for _, args := range [][]string{{"get", "broker.nope"}, {"get"}, {"get", "broker.runtime", "extra"}} {
+		out.Reset()
+		if code := runConfig(args, "", getenv, &out, &errw); code != 2 || out.Len() != 0 {
+			t.Errorf("%v: %d %q", args, code, out.String())
+		}
+	}
+}

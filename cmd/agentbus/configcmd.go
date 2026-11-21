@@ -80,6 +80,18 @@ type configDoc struct {
 }
 
 func runConfig(args []string, project string, getenv func(string) string, out, errw io.Writer) int {
+	if len(args) > 0 && args[0] == "get" { // one setting's value alone, for a script (scripts/bootstrap: broker.runtime)
+		if len(args) != 2 {
+			fmt.Fprintln(errw, "usage: agentbus config get <setting>")
+			return 2
+		}
+		if _, ok := config.Lookup(args[1]); !ok {
+			fmt.Fprintf(errw, "agentbus config: no setting %q\n", args[1])
+			return 2
+		}
+		fmt.Fprintln(out, config.Machine(getenv).Get(args[1]).Value)
+		return 0
+	}
 	asJSON := false
 	for _, a := range args {
 		if a != "--json" {

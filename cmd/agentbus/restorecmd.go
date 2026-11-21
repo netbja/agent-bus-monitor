@@ -186,13 +186,13 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 // restoreBroker is backup.Broker on the broker.
 type restoreBroker struct{ c *redis.Client }
 
-func (r restoreBroker) Version(ctx context.Context) (string, error) {
+func (r restoreBroker) Server(ctx context.Context) (string, string, error) {
 	b, err := bus.Open(r.c, "restore") // RedisInfo reads no project key
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	info, err := b.RedisInfo(ctx)
-	return info.Version, err
+	return info.Product, info.Version, err
 }
 
 func (r restoreBroker) Keys(ctx context.Context, p string) ([]string, error) {

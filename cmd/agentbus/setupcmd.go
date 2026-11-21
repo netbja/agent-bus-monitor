@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/netbja/agent-bus-monitor/internal/brokerrt"
 	"io"
 	"os"
 	"os/exec"
@@ -90,7 +91,7 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 
 // runInstall is setup.sh install's steps, in its order.
 func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.Options, repo string, getenv func(string) string) int {
-	missing, docker := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH)
+	missing, docker := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH, brokerrt.Of(getenv))
 	if missing > 0 && !opt.DryRun {
 		o.Fatal(itoa(missing) + " required tool(s) missing; install them and re-run.")
 		return 1

@@ -2,7 +2,9 @@ name: agent-bus
 
 services:
   redis:
-    image: redis:8-alpine
+    # broker.image (broker-hardening step 3): setup, agentbus up and the rotation pass it to compose
+    # from the setting; redis:8-alpine when run by hand without it.
+    image: ${AGENT_BUS_BROKER_IMAGE:-redis:8-alpine}
     container_name: agent-bus-redis
     # The password (redis-password): the shell's REDIS_PASSWORD when one is exported at
     # `docker compose up`, else the person's file (written 0600 by ./setup.sh install for a fresh

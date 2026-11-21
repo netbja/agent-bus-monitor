@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 func isForge(s string) bool {
 	return s == "auto" || s == "github" || s == "gitlab" || s == "bitbucket" || s == "none" || s == "local"
@@ -27,3 +30,16 @@ func ValidBranchName(s string) bool {
 	}
 	return true
 }
+
+// IsBrokerRuntime: the container runtimes broker.runtime accepts.
+func IsBrokerRuntime(s string) bool { return s == "docker" || s == "podman" }
+
+// imageRef is a container image reference: a name of lowercase path
+// components (an optional registry host with a port), an optional tag, an
+// optional sha256 digest (an image pinned by content, reviewer-codex).
+var imageRef = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(@sha256:[0-9a-f]{64})?$`)
+
+// IsImageRef: broker.image's values (redis:8-alpine, valkey/valkey:8, a
+// registry's own, pinned by digest or not); nothing a shell or compose would
+// read as more.
+func IsImageRef(s string) bool { return len(s) <= 255 && imageRef.MatchString(s) }

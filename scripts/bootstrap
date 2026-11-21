@@ -66,8 +66,14 @@ if [[ -z "$verb" ]]; then
   if [[ -f "$template" ]]; then verb="recall"; else verb="new"; fi
 fi
 
+# The broker's runtime is broker.runtime (docker or podman, broker-hardening step 3), read
+# through agentbus: never a guess, so an unreadable setting stops here.
+# Compose reads the image only from its environment: broker.image is passed on, the same way.
 ensure_broker() {
-  ( cd "$REPO" && docker compose up -d ) || die "failed to start the broker (docker compose up -d)"
+  local rt img
+  rt="$("$AGENTBUS_BIN" config get broker.runtime)" && [[ -n "$rt" ]] || die "cannot read broker.runtime (agentbus config get broker.runtime)"
+  img="$("$AGENTBUS_BIN" config get broker.image)" && [[ -n "$img" ]] || die "cannot read broker.image (agentbus config get broker.image)"
+  ( cd "$REPO" && AGENT_BUS_BROKER_IMAGE="$img" "$rt" compose up -d ) || die "failed to start the broker ($rt compose up -d)"
 }
 
 # --roles (agentbus start): the team, role[:profile],...; without it every boot role, as before.

@@ -89,7 +89,7 @@ func MakeArchive(ctx context.Context, c *redis.Client, d Deps, r config.Resolver
 		notes = append(notes, fmt.Sprintf("%s: %s, encrypted to %s", SecretsName, strings.Join(names, ", "), j.Recipient))
 	}
 	res, err := Run(ctx, j.Dir, Plan{
-		Projects: j.Projects, Host: d.Host, Now: j.Now, Version: buildinfo.Version, RedisVersion: info.Version,
+		Projects: j.Projects, Host: d.Host, Now: j.Now, Version: buildinfo.Version, RedisVersion: info.Version, Server: info.Product,
 		Dump:  func(ctx context.Context, p string) (bus.ProjectDump, error) { return bus.DumpProject(ctx, c, p) },
 		Files: j.Files, LeftOut: j.Left, Notes: notes, Secrets: sealed,
 	})

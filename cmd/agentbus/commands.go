@@ -620,10 +620,10 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus --project myapp update", "agentbus update --check", "agentbus update --rollback"},
 	},
 	{
-		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]"},
-		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see",
+		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]", "config get <setting>"},
+		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see; get prints one setting's value alone, for a script",
 		Flags:    []cli.Flag{fJSON},
-		Examples: []string{"agentbus config", "agentbus config --project agent-bus-monitor"},
+		Examples: []string{"agentbus config", "agentbus config --project agent-bus-monitor", "agentbus config get broker.runtime"},
 	},
 	{
 		Name: "notifications", NoProject: true, Usage: []string{"notifications status", "notifications test [<target>]",
