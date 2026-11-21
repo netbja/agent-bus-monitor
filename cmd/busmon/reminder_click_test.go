@@ -106,7 +106,7 @@ func TestReminderClickRoutesEachKind(t *testing.T) {
 	}{
 		{attentionItem{Rank: rankGate, Key: "gate:coder:1793026685000-0", Agent: "coder", By: "foureyes", Text: "review lot 1", At: at}, ovMessage, "1793026685000-0"},
 		{attentionItem{Rank: rankHealth, Key: "health:team-stall:1", Agent: "stall", Text: "the team waits on you", At: at}, ovHealth, ""},
-		{attentionItem{Rank: rankMerge, Key: "merge:pr:42", Agent: "master", Text: "PR 42", At: at}, ovMerge, "pr:42"},
+		{attentionItem{Rank: rankMerge, Key: "merge:pr:42", Agent: "master", Text: "PR 42", At: at, Head: mqH}, ovMerge, mqH}, // the page by its head (triage-dedupe §2)
 	} {
 		m := shellWith(t, 140, 40, shellConfig{}, false)
 		m.ui.reminder = &reminderDialog{items: []attentionItem{c.it}}

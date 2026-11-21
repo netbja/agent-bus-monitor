@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"slices"
 	"strings"
 	"time"
@@ -115,8 +116,8 @@ func (m Model) headerData() headerData {
 	_, _, between := m.lists.reqView.titleCounts()
 	return headerData{icons: m.cfg.settings.Icons, dev: m.cfg.settings.Dev, project: m.cfg.project, health: s.health, guardian: s.guardian, dispatch: s.dispatch,
 		missions: s.missions, pilot: s.pilot, self: m.cfg.self, update: s.update, codex: s.codexUpdate, note: s.configNote,
-		between: between, background: backgroundChip(s.agents, s.pilot, m.now), strip: m.work.strip(unreadItems(m.forYou)),
-		unread: unreadItems(m.forYou), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
+		between: between, background: backgroundChip(s.agents, s.pilot, m.now), strip: m.work.strip(activityUnread(m.feed.feed)),
+		unread: activityUnread(m.feed.feed), pause: s.pause, holds: s.holds, pace: s.pace, budgets: s.budgets, bars: m.barView(),
 		plan: s.plan, now: m.now, shell: true, others: othersSummary(m.others, m.cfg.project, time.Now())}
 }
 
@@ -384,6 +385,7 @@ var forYouKinds = map[int]struct {
 	rankHealth: {GlyphBlocked, verbCheck, RoleAttention},
 	rankWait:   {GlyphHuman, verbAnswer, RoleAttention},
 	rankGate:   {GlyphGate, verbReview, RoleDispatch},
+	rankReport: {GlyphDotFull, verbAnswer, RoleAttention}, // read for a --needs read report (forYouParts)
 	rankUnread: {GlyphDotFull, "unread", RoleAccent},
 }
 
@@ -416,7 +418,17 @@ func forYouParts(it attentionItem, now time.Time) (head, text, age Line) {
 	if it.Unread { // an ask whose line is unread: the row carries the mark
 		k.glyph, k.role = GlyphDotFull, forYouKinds[rankUnread].role
 	}
+	if it.Rank == rankReport && it.Needs == bus.NeedsRead {
+		k.word = verbRead
+	}
 	t := Preview(it.Text)
+	switch { // a --needs report folded into this item (triage-dedupe §3)
+	case it.Rank == rankReport:
+	case it.Needs == bus.NeedsAnswer:
+		t += " " + GlyphNone + " needs your answer"
+	case it.Needs == bus.NeedsRead:
+		t += " " + GlyphNone + " to read"
+	}
 	switch it.Rank {
 	case rankAsk:
 		if it.Count > 1 {

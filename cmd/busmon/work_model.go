@@ -45,6 +45,7 @@ const (
 	verbDecide = "decide"
 	verbReview = "review"
 	verbCheck  = "check"
+	verbRead   = "read" // a --needs read report (triage-dedupe §3)
 )
 
 // workItem is a row of YOU or NEXT.
@@ -157,6 +158,10 @@ func workVerbOf(it attentionItem) string {
 		return verbReview
 	case rankHealth:
 		return verbCheck
+	case rankReport:
+		if it.Needs == bus.NeedsRead {
+			return verbRead
+		}
 	}
 	return verbAnswer
 }

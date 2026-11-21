@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"slices"
 	"strings"
 
@@ -60,7 +61,7 @@ func (m *Model) walkOpen(it attentionItem) (tea.Cmd, bool) {
 	if top == nil {
 		return nil, false
 	}
-	if it.Rank == rankUnread {
+	if it.Rank == rankUnread || it.Rank == rankReport && it.Needs == bus.NeedsRead {
 		w.outcome[it.Key] = "read" // opening it is the read
 	}
 	w.serial, w.end = top.serial, false
@@ -74,7 +75,7 @@ func (m *Model) walkOpenKey(key string) (tea.Cmd, bool) {
 	if i := slices.IndexFunc(m.forYou, func(it attentionItem) bool { return it.Key == key }); i >= 0 {
 		return m.walkOpen(m.forYou[i])
 	}
-	if id, ok := strings.CutPrefix(key, "unread:"); ok {
+	if id, ok := lineKeyID(key); ok {
 		w := m.ui.walk
 		w.moving = true
 		m.closeReader()

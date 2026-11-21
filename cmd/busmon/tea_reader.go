@@ -1309,7 +1309,7 @@ func (m *Model) readerStep(p *page, next bool) tea.Cmd {
 	target := ""
 	for j := i + step; i >= 0 && j >= 0 && j < len(keys); j += step {
 		// A line read since stays walkable; one gone for another reason is skipped.
-		if present[keys[j]] || strings.HasPrefix(keys[j], "unread:") {
+		if _, line := lineKeyID(keys[j]); present[keys[j]] || line {
 			target = keys[j]
 			break
 		}
@@ -1324,7 +1324,7 @@ func (m *Model) readerStep(p *page, next bool) tea.Cmd {
 	m.pop()
 	depth := len(m.rd.pages)
 	var cmd tea.Cmd
-	if id, ok := strings.CutPrefix(target, "unread:"); ok && !present[target] {
+	if id, ok := lineKeyID(target); ok && !present[target] {
 		cmd = m.openFeedLine(id) // read since: no row left to select
 	} else {
 		l.Select(target)
@@ -1383,7 +1383,7 @@ func (m *Model) openDirect(p PanelID) tea.Cmd {
 		}
 		return nil
 	case PanelForYou:
-		if id, ok := strings.CutPrefix(key, "unread:"); ok {
+		if id, ok := lineKeyID(key); ok {
 			return m.openFeedLine(id)
 		}
 	}

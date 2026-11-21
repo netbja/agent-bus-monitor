@@ -444,11 +444,15 @@ func (m *Model) reminderAct() tea.Cmd {
 		return m.push(page{kind: ovHealth})
 	case rankMerge:
 		if it.Key != mergeUnknownKey {
-			return m.push(page{kind: ovMerge, key: strings.TrimPrefix(it.Key, "merge:")})
+			return m.push(page{kind: ovMerge, key: it.Head})
 		}
 	case rankGate:
 		ref := strings.TrimPrefix(it.Key, "gate:"+it.Agent+":")
 		return m.pushMessage(bus.Event{ID: ref, Kind: "cmd", Type: bus.CmdChallenge, From: it.By, Target: it.Agent, Message: it.Text}, it.At)
+	case rankReport: // a --needs report: its line, where the person reads and answers it
+		if id, ok := lineKeyID(it.Key); ok {
+			return m.openFeedLine(id)
+		}
 	}
 	m.openMessageCompose("", it.Agent) // a declared wait: Enter answers it like i
 	return nil

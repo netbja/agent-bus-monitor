@@ -18,6 +18,11 @@ type attentionItem struct {
 	IDs      []string // every entry an unread row stands for (a report's notices to the person)
 	By       string // a gate's challenger (the gated agent is Agent)
 	Unread   bool   // an ask whose Activity line is unread: folded into its row
+	// Needs is what a --needs report asks of the person on this item
+	// (triage-dedupe §3): answer or read, its own item or one it folded into.
+	Needs string
+	Head   string // a merge item's head: its page's key (the item's own key is its PR's)
+	Branch string // a merge item's branch: a line naming it attaches to it
 }
 
 func dueAttention(items []attentionItem, cache *busmonCache, now time.Time, popupAfter time.Duration) []attentionItem {

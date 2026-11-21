@@ -248,6 +248,16 @@ func lineIDs(fl feedLine) []string {
 	return ids
 }
 
+// lineKeyID is the entry a line's For you key opens: an unread line's
+// (unread:<id>) or a --needs report's own item (report:<id>, triage-dedupe
+// §2).
+func lineKeyID(key string) (string, bool) {
+	if id, ok := strings.CutPrefix(key, "unread:"); ok {
+		return id, true
+	}
+	return strings.CutPrefix(key, "report:")
+}
+
 // unreadKey is a line's For you key: its first notice to the person when it
 // has one (report-one-row §3), else its own entry.
 func unreadKey(fl feedLine) string {

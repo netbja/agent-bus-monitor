@@ -22,7 +22,7 @@ func mqRecord(at time.Time) bus.MergeQueueRecord {
 func TestMergeItemsForYou(t *testing.T) {
 	s := snapshot{mergeQ: mqRecord(shellNow), mergeQRead: true}
 	items := mergeItems(s)
-	if len(items) != 1 || items[0].Rank != rankMerge || items[0].Key != "merge:"+mqH || items[0].Agent != "you" ||
+	if len(items) != 1 || items[0].Rank != rankMerge || items[0].Key != "merge:pr:309" || items[0].Head != mqH || items[0].Agent != "you" ||
 		items[0].Text != "merge PR 309: request priority" || !items[0].At.Equal(time.UnixMilli(s.mergeQ.Items[0].ApprovedAt)) {
 		t.Fatalf("%+v", items)
 	}
