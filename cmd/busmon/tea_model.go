@@ -182,6 +182,14 @@ type uiState struct {
 // projectBadgeFor is how long the project's name stays a badge at launch.
 const projectBadgeFor = 3 * time.Second
 
+// newLaunchShell is the shell main starts: cfg with the launch's badge on,
+// and lastProject when neither -p nor AGENT_BUS_PROJECT named the project
+// (busmon-project-badge).
+func newLaunchShell(opts busmonOpts, getenv func(string) string, cfg shellConfig) Model {
+	cfg.badge, cfg.lastProject = true, projectFromLastUsed(opts.project, getenv("AGENT_BUS_PROJECT"))
+	return newShell(cfg)
+}
+
 // projectFromLastUsed: busmon chose the project itself, the last one opened
 // on this broker, since neither -p nor AGENT_BUS_PROJECT named one.
 func projectFromLastUsed(flag, env string) bool { return flag == "" && env == "" }
