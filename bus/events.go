@@ -190,21 +190,29 @@ func configErr(err error) error {
 	return err
 }
 
-// Persistence is the broker's persistence settings: CONFIG GET appendonly
-// and save; ErrConfigRefused when the broker refuses them.
-func (b *Bus) Persistence(ctx context.Context) (appendOnly, save string, err error) {
-	aof, err := b.r.ConfigGet(ctx, "appendonly").Result()
-	if err != nil {
-		return "", "", configErr(err)
+// PersistenceConfig is the broker's persistence settings, as CONFIG GET
+// answers them: appendonly, appendfsync and save.
+type PersistenceConfig struct {
+	AppendOnly, AppendFsync, Save string
+}
+
+// Persistence is the broker's persistence settings: CONFIG GET appendonly,
+// appendfsync and save; ErrConfigRefused when the broker refuses them.
+func (b *Bus) Persistence(ctx context.Context) (PersistenceConfig, error) {
+	var p PersistenceConfig
+	for _, f := range []struct {
+		name string
+		v    *string
+	}{{"appendonly", &p.AppendOnly}, {"appendfsync", &p.AppendFsync}, {"save", &p.Save}} {
+		m, err := b.r.ConfigGet(ctx, f.name).Result()
+		if err != nil {
+			return PersistenceConfig{}, configErr(err)
+		}
+		v, ok := m[f.name]
+		if !ok {
+			return PersistenceConfig{}, fmt.Errorf("%w: no value", ErrConfigRefused)
+		}
+		*f.v = v
 	}
-	sv, err := b.r.ConfigGet(ctx, "save").Result()
-	if err != nil {
-		return "", "", configErr(err)
-	}
-	a, ok1 := aof["appendonly"]
-	s, ok2 := sv["save"]
-	if !ok1 || !ok2 {
-		return "", "", fmt.Errorf("%w: no value", ErrConfigRefused)
-	}
-	return a, s, nil
+	return p, nil
 }

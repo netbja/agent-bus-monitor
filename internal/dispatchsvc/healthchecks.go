@@ -958,7 +958,7 @@ func deliveryEvidence(groups []bus.CmdDeliveryGroup, registered map[string]bus.A
 // unknown and no error (a managed broker may refuse it for good); a broker
 // that could not be read is unknown with its error, so the runner sees the
 // failure (reviewer-codex).
-func persistenceOutcome(appendOnly, save string, err error) (health.Status, string, error) {
+func persistenceOutcome(p bus.PersistenceConfig, err error) (health.Status, string, error) {
 	switch {
 	case errors.Is(err, bus.ErrConfigRefused):
 		out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{})
@@ -966,7 +966,7 @@ func persistenceOutcome(appendOnly, save string, err error) (health.Status, stri
 	case err != nil:
 		return health.Unknown, "broker persistence unavailable", err
 	}
-	out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{Known: true, AppendOnly: appendOnly, Save: save})
+	out := health.EvaluateBrokerPersistence(health.PersistenceEvidence{Known: true, AppendOnly: p.AppendOnly, AppendFsync: p.AppendFsync, Save: p.Save})
 	return out.Status, out.Detail, nil
 }
 

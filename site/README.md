@@ -40,7 +40,7 @@ The generated HTML is committed; run the script after editing either tool file a
 | Fig. 2 message and wake line | `docs/architecture.md` (wake line text, `subscribe --drain`), `dispatch/` |
 | Fig. 3 decision flow | `dispatch/decide.go` (`Decide`, rules 1 to 9) |
 | Fig. 4 4-eyes | `docs/architecture.md` (`challenge`, `verdict`, `verdicts` exit codes), `docs/operator-notes.md` (verdict ledger, roll-up rule), `docs/memory/decisions/2026-11-02-forge-delivery.md` |
-| Fig. 5 restart-safe layers | `docker-compose.yml` (`--appendonly yes`, volume), `docs/architecture.md` (stateless services), `docs/operator-notes.md` (fenced writes, `FencedCmdOnce`) |
+| Fig. 5 restart-safe layers | `docker-compose.yml` (`appendonly yes` and `appendfsync everysec` in the config on stdin, volume), `docs/architecture.md` (stateless services), `docs/operator-notes.md` (fenced writes, `FencedCmdOnce`) |
 | Fig. 6 suspend/resume | `docs/releases/v0.27.0.md`, `docs/operator-notes.md` (suspend, resume, `suspend.auto_resume`) |
 | Screens | `cmd/busmon/testdata/golden/{dashboard,expanded,reader,health}-140x40-dark.ansi` |
 | Security stance | `docker-compose.yml`, `CLAUDE.md` (tests), `docs/operator-notes.md` (connection, password, notifications, fencing) |

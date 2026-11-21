@@ -8,6 +8,9 @@ services:
     # `docker compose up`, else the person's file (written 0600 by ./setup.sh install for a fresh
     # broker, or by ./setup.sh rotate-redis-password), else the historical default, the same
     # order as the clients. It reaches the server as a config on stdin, never on its argv.
+    # Durability is stated there too, not left to Redis's defaults (broker-hardening step 1): the
+    # AOF, fsynced every second (a crash loses at most about a second of writes), and the RDB
+    # snapshot schedule (1 h after 1 change, 5 min after 100, 1 min after 10000).
     env_file:
       - path: ${XDG_CONFIG_HOME:-${HOME}/.config}/agentbus/redis.env
         required: false
@@ -19,8 +22,11 @@ services:
       - |
         pw="$${AGENTBUS_SHELL_PASSWORD:-$${REDIS_PASSWORD:-AgentBus2025!}}"
         pw="$$(printf '%s' "$$pw" | sed 's/[\\"]/\\&/g')"
-        exec redis-server - --appendonly yes <<EOF
+        exec redis-server - <<EOF
         requirepass "$$pw"
+        appendonly yes
+        appendfsync everysec
+        save 3600 1 300 100 60 10000
         EOF
     ports:
       # loopback-only: the Redis password travels in plaintext, so the bus must
