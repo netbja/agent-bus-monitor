@@ -898,3 +898,32 @@ func TestRunQuietForARetiredAndForgottenPop(t *testing.T) {
 		return ok && w.State == "deferred" && strings.Contains(w.Reason, "no snapshot")
 	})
 }
+
+// person-never-agent: an entry under the person's recorded name is never an
+// agent, whatever terminal it names. A pre-#590 record written as the person
+// from an agent's terminal of an old holder names a pane no current agent
+// shares (not borrowed) and is not empty: the dispatcher once inspected it,
+// found it gone, and escalated "pane gone" for every report to the person.
+func TestRunDoesNotWakeTheConfiguredPersonOnAGonePane(t *testing.T) {
+	b, r := dialRun(t)
+	register(t, b, "master", "p-master")
+	register(t, b, "charlie", "p-old-holder")
+	send(t, b, "charlie", "a report for the person")
+	rt := newFakeRT(func(pane string, n int) Inspection {
+		if pane == "p-old-holder" {
+			return Inspection{Gone: true}
+		}
+		return readyIn()
+	})
+	cfg := fastConfig()
+	cfg.EscalateAfter = 100 * time.Millisecond
+	cfg.Person = "charlie"
+	start(t, b, rt, cfg)
+	time.Sleep(500 * time.Millisecond)
+	if got := escalations(t, r, b, "charlie"); len(got) != 0 {
+		t.Fatalf("the person got escalated: %+v", got)
+	}
+	if _, ok := wakeOf(t, b, "charlie"); ok {
+		t.Fatal("the person got an agent wake record")
+	}
+}

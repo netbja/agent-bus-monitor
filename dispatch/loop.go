@@ -536,9 +536,10 @@ func (l *loop) reconcile(ctx context.Context) error {
 	for _, a := range sorted {
 		// A registered agent stays an agent, unless its entry borrows another
 		// agent's terminal (the person's name written from master's pane), or
-		// is the person's recorded name with no terminal at all (written from
-		// the person's own shell, foureyes).
-		if s, agent := snaps[a]; humanIdentity[a] && (!agent || bus.BorrowedTerminal(a, snaps) || a == l.cfg.Person && s.Pane == "") {
+		// is under the person's recorded name at all: written from the
+		// person's own shell (no terminal, foureyes), or a pre-#590 record from
+		// an old holder's terminal that no agent shares now (person-never-agent).
+		if _, agent := snaps[a]; humanIdentity[a] && (!agent || bus.BorrowedTerminal(a, snaps) || a == l.cfg.Person) {
 			l.logOnce(a, map[string]any{"agent": a, "action": "none", "reason": "target is a human identity"})
 			continue
 		}

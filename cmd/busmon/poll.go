@@ -97,9 +97,11 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 	armed, armedErr := b.ArmedAgents(pollCtx)
 	lag, lagErr := b.CmdLag(pollCtx)
 	snaps, snapsErr := b.Agents(pollCtx)
-	if snapsErr == nil && st.person != "" && bus.BorrowedTerminal(st.person, snaps) {
-		// The person's name written from an agent's terminal (agentbus ask
-		// <person> in master's): no agent, not listed (human-not-an-agent).
+	if snapsErr == nil && st.person != "" {
+		// An entry under the person's name is no agent, whatever terminal it
+		// names: written from an agent's terminal (agentbus ask <person> in
+		// master's, human-not-an-agent), from an old holder's terminal before
+		// that guard, or from the person's own shell (person-never-agent).
 		delete(snaps, st.person)
 	}
 	usageSnaps, usageErr := b.Usage(pollCtx)
