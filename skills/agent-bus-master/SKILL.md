@@ -366,10 +366,15 @@ agent detail opens on it, and `agentbus report` notes a long report written as o
 - <item>, with `ids` and commits in code
 
 ## What remains for you
-- <the reader's next step, or "nothing">
+- <ids of what is asked of the reader: PR #694, an ask id> (left out when nothing new is asked)
 ```
 
 When what remains is a decision, it is an ask; the report then says `see the open question`.
+
+**What remains for you** names items by id only (`PR #694`, an ask id, a question id) and never
+restates their explanation: the item holds it. Leave the section out when nothing new is asked of
+the person. A report with nothing new for the person is not sent to them at all: it stays in
+Activity (`agentbus report master` without `--to <person>`).
 
 ## The person's language
 
