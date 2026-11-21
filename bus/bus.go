@@ -75,13 +75,6 @@ func (silentLogger) Printf(context.Context, string, ...interface{}) {}
 // changing it on every Connect races with previously opened client pools.
 func init() { redis.SetLogger(silentLogger{}) }
 
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
 // Connect resolves a Redis client the way agent_bus.py does: REDIS_URL takes
 // precedence, otherwise REDIS_HOST/PORT (defaults localhost:6380) with the
 // password from REDIS_PASSWORD, else the password file (PasswordFile), else
@@ -91,29 +84,42 @@ func Connect(host string) (*redis.Client, error) {
 	return ConnectContext(context.Background(), host)
 }
 
-// ConnectContext is Connect with its PING bounded by ctx (up-broker-ready: up
-// gives a broker that is starting a budget, and a hung one must not outlast it).
-func ConnectContext(ctx context.Context, host string) (*redis.Client, error) {
-	var opt *redis.Options
-	if url := os.Getenv("REDIS_URL"); url != "" {
-		var err error
-		if opt, err = redis.ParseURL(url); err != nil {
-			return nil, err
+// ConnectOptions is how Connect resolves its broker, from getenv and host:
+// REDIS_URL first, else host (or REDIS_HOST, else localhost) on REDIS_PORT
+// (else 6380) with the password Connect uses. With another process's
+// environment, it says which broker that process reaches (busmon
+// --delete's backup must back up the broker it deletes from).
+func ConnectOptions(getenv func(string) string, host string) (*redis.Options, error) {
+	or := func(k, def string) string {
+		if v := getenv(k); v != "" {
+			return v
 		}
-		opt.ContextTimeoutEnabled = true
-	} else {
-		if host == "" {
-			host = envOr("REDIS_HOST", "localhost")
-		}
-		pw, err := resolvePassword(os.Getenv)
+		return def
+	}
+	if url := getenv("REDIS_URL"); url != "" {
+		opt, err := redis.ParseURL(url)
 		if err != nil {
 			return nil, err
 		}
-		opt = &redis.Options{
-			ContextTimeoutEnabled: true,
-			Addr:                  host + ":" + envOr("REDIS_PORT", "6380"),
-			Password:              pw,
-		}
+		opt.ContextTimeoutEnabled = true
+		return opt, nil
+	}
+	if host == "" {
+		host = or("REDIS_HOST", "localhost")
+	}
+	pw, err := resolvePassword(getenv)
+	if err != nil {
+		return nil, err
+	}
+	return &redis.Options{ContextTimeoutEnabled: true, Addr: host + ":" + or("REDIS_PORT", "6380"), Password: pw}, nil
+}
+
+// ConnectContext is Connect with its PING bounded by ctx (up-broker-ready: up
+// gives a broker that is starting a budget, and a hung one must not outlast it).
+func ConnectContext(ctx context.Context, host string) (*redis.Client, error) {
+	opt, err := ConnectOptions(os.Getenv, host)
+	if err != nil {
+		return nil, err
 	}
 	// Record the peer each connection reaches (PeerAddr), dialing with
 	// go-redis's own dialer over opt. NewClient clones opt and sets its

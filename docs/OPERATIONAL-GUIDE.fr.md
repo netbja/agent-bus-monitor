@@ -311,7 +311,7 @@ agents.
 | Arrêter les services, le holder et les agents d'un projet | `agentbus down myapp` (ne supprime rien ; `agentbus up myapp --resume` le ramène) |
 | Dire aux agents que le travail est fini | `agentbus -p myapp shutdown` (refusé tant que du travail est en cours) |
 | Retirer les services d'un projet | `agentbus -p myapp service remove` |
-| Supprimer les clés de bus d'un projet | `busmon --delete myapp` (demande d'abord) |
+| Supprimer les clés de bus d'un projet | `busmon --delete myapp` (seulement endormi ; sauvegarde, puis demande) |
 | Retirer agent-bus de la machine | `./setup.sh uninstall` (demande à chaque étape) |
 
 ## 9. Pièges

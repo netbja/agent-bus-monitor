@@ -295,7 +295,7 @@ agents back.
 | Stop a project's services, holder and agents | `agentbus down myapp` (deletes nothing; `agentbus up myapp --resume` brings it back) |
 | Tell the agents the work is over | `agentbus -p myapp shutdown` (refused while work is in flight) |
 | Remove a project's services | `agentbus -p myapp service remove` |
-| Delete a project's bus keys | `busmon --delete myapp` (asks first) |
+| Delete a project's bus keys | `busmon --delete myapp` (only asleep; backs it up, then asks) |
 | Remove agent-bus from the machine | `./setup.sh uninstall` (asks at each step) |
 
 ## 9. Traps

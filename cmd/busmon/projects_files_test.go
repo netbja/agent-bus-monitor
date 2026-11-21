@@ -270,13 +270,13 @@ func TestDeleteCommandAlsoRemovesFiles(t *testing.T) {
 	b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}})
 	t.Cleanup(func() { c.Del(ctx, bus.ServicesKey(project)) })
 
-	if err := deleteProject("", project, false, strings.NewReader("n\n"), time.Now(), nil, files); err != nil {
+	if err := deleteProject("", project, false, strings.NewReader("n\n"), time.Now(), testDeleteDeps(nil, files)); err != nil {
 		t.Fatal(err)
 	}
 	if gone(tmpl) || gone(f.wt) {
 		t.Fatal("a declined delete removed files")
 	}
-	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), nil, files); err != nil {
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), testDeleteDeps(nil, files)); err != nil {
 		t.Fatal(err)
 	}
 	if !gone(tmpl) || !gone(f.wt) || gone(f.w) {
@@ -337,7 +337,7 @@ func TestDeleteUnreadableFilesRemoveNone(t *testing.T) {
 	files := func() (projfiles.Options, error) {
 		return projfiles.Options{Project: project, Template: tmpl, WorkingDir: f.w, Files: true}, errors.New("permission denied")
 	}
-	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), nil, files); err != nil {
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), testDeleteDeps(nil, files)); err != nil {
 		t.Fatal(err)
 	}
 	if gone(tmpl) || gone(f.wt) {
