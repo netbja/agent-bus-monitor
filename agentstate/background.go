@@ -3,6 +3,7 @@ package agentstate
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -57,6 +58,9 @@ type Background struct {
 // shells are the names a client's tool command runs under: a direct child by
 // one of these names is a command, not a helper.
 var shells = map[string]bool{"sh": true, "bash": true, "dash": true, "zsh": true, "fish": true, "ksh": true}
+
+// IsShell: name is a shell a command runs under.
+func IsShell(name string) bool { return shells[name] }
 
 // Proc is one descendant of the agent's process. CPUGrowth: CPU time it used
 // over the facts' window.
@@ -114,6 +118,10 @@ type Facts struct {
 	Screen       *string
 	Declared     *string // the agent's declared text, unexpired (nil: none)
 	ExtraHelpers []string
+	// Ignore: process names never counted as background work, whatever
+	// their CPU or branch (dispatch.background_ignore): the clients' own
+	// helpers, which may run under a shell or an unread branch.
+	Ignore []string
 }
 
 // BackgroundState is the judgement. Its zero value is unknown: fail closed.
@@ -202,6 +210,9 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 	if p := f.Process; p != nil {
 		read[SourceProcess] = true
 		for _, pr := range p.Procs {
+			if slices.Contains(f.Ignore, pr.Name) { // dispatch.background_ignore: a client's helper by name
+				continue
+			}
 			if b.helperBranch(pr.Branch) { // the client's own MCP server or daemon, or its child
 				continue
 			}
