@@ -56,7 +56,7 @@ Its useful flags:
 - **busmon needs a project.** Run `busmon -p myapp`. `busmon --list` lists the broker's projects, and
   `busmon --new` the templates.
 - **Who you are.** busmon writes as you (`--as`, `AGENT_BUS_HUMAN`, or `agentbus identity set
-  <name>`).
+  <name>`, else `person.name`, then `pilot`).
 
 **Reach an agent:**
 

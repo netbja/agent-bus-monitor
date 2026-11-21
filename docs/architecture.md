@@ -348,7 +348,8 @@ CLI or the screen, no mission runner, `os/exec` only in the listed files, only t
   (plain text, never the TUI). `--delete <p>` retires a project (`bus.DeleteProject` = `DEL` of every
   `{p}:*` key) behind the same gate; the prompt states key count, agent count and last activity.
   `--theme auto|dark|light` (or `AGENT_BUS_BUSMON_THEME`). busmon writes as a **person**, never
-  as an agent: `--as <name>` or `AGENT_BUS_HUMAN`, else `pilot` (`humanIdentity`, `human.go`),
+  as an agent: `--as <name>`, `AGENT_BUS_HUMAN` / `identity.as`, then `person.name`, else `pilot`
+  (`loadBusmonSettings`, `humanIdentity`, `human.go`),
   through `Bus.TypedCmd`/`TypedNotify`, whose entries carry `human=yes` (`Event.Human`,
   subscribe's `"human": true`) and `typed=yes` (`Event.Typed`, `"typed": true`): the person typed
   it. An ask's answer carries both too, and `said`, the answer alone (`Event.Said`). Texts agentbus

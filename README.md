@@ -151,7 +151,7 @@ The attach prefix is `attach.prefix`, `f12` by default. A client that does not l
 Kimi or agy, needs `--prefix <key>` (`f1`-`f12`, `ctrl+<letter>`, `ctrl+\` or `ctrl+]`).
 
 **Who you are.** busmon writes as you: `--as <name>`, `AGENT_BUS_HUMAN`, or `agentbus identity set
-<name>`. A command that writes is refused rather than sent anonymously. Inside an agent's
+<name>`, else your `person.name`, and only then `pilot`. A command that writes is refused rather than sent anonymously. Inside an agent's
 terminal, a command writes as that agent (`AGENT_BUS_AGENT`).
 
 The [operations guide](docs/OPERATIONAL-GUIDE.md) walks through a day with the team: starting work,
