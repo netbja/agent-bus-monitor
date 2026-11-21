@@ -179,7 +179,11 @@ func historyLine(e history.Entry, loc *time.Location) string {
 		return fmt.Sprintf("-- not archived: %s to %s (%s) --", stamp(from), end, e.F["of"])
 	}
 	who, text := history.WhoText(e)
-	return fmt.Sprintf("%s  %s  %s  %s", stamp(history.At(e)), who, history.Kind(e), strings.Join(strings.Fields(text), " "))
+	kind := history.Kind(e)
+	if n := e.F["needs"]; n != "" && bus.ValidNeeds(n) { // triage-dedupe §3: what the person must do
+		kind += " (needs " + n + ")"
+	}
+	return fmt.Sprintf("%s  %s  %s  %s", stamp(history.At(e)), who, kind, strings.Join(strings.Fields(text), " "))
 }
 
 func idTime(id string) time.Time {

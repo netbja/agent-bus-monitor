@@ -296,6 +296,10 @@ type Event struct {
 	// also marks texts agentbus composes in the person's name.
 	Typed bool
 	Said  string // cmd: an ask answer's field said, the person's own words (the label chosen or the text)
+	// Needs: field needs on a report and its notices, NeedsAnswer or
+	// NeedsRead: the sender says the person must act (triage-dedupe §3);
+	// "" for none, and for any other value read.
+	Needs string
 	For   string // notify: field for — ForPerson marks a dispatcher notice meant for the person (additive)
 	Stale bool   // set by drain only: entry older than the horizon
 	AgeS  int64  // set by drain only: entry age in seconds
@@ -313,6 +317,9 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	e.Typed = fields["typed"] == "yes"
 	e.Said = fields["said"]
 	e.For = fields["for"]
+	if n := fields["needs"]; ValidNeeds(n) {
+		e.Needs = n
+	}
 	switch kind {
 	case "status":
 		e.Agent, e.State, e.Message = fields["agent"], fields["state"], fields["message"]
@@ -426,12 +433,15 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 // restore fidelity without flooding the flat viewers. Oversize/invalid UTF-8
 // is rejected before publishing; new retained text is exact, not sanitized.
 func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
-	return b.report(ctx, agent, kind, message, "")
+	return b.report(ctx, agent, kind, message, "", "")
 }
 
-func (b *Bus) report(ctx context.Context, agent, kind, message, to string) (string, error) {
+func (b *Bus) report(ctx context.Context, agent, kind, message, to, needs string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
+	}
+	if !ValidNeeds(needs) {
+		return "", fmt.Errorf("needs %q: answer or read", needs)
 	}
 	if err := ValidateText(message, reportFullMax()); err != nil {
 		return "", err
@@ -444,6 +454,9 @@ func (b *Bus) report(ctx context.Context, agent, kind, message, to string) (stri
 	if to != "" {
 		values["to"] = to
 	}
+	if needs != "" {
+		values["needs"] = needs
+	}
 	return b.addVoidingHandoff(ctx, "report", agent, values)
 }
 
@@ -452,12 +465,42 @@ func (b *Bus) report(ctx context.Context, agent, kind, message, to string) (stri
 // recipients (busmon-reply-target). Each must be a valid name; none writes
 // no field, as Report.
 func (b *Bus) ReportTo(ctx context.Context, agent, kind, message string, to []string) (string, error) {
+	return b.ReportNeeds(ctx, agent, kind, message, to, "")
+}
+
+// What a report needs from the person (triage-dedupe §3): an answer, or a
+// read. Only these are written; a report with neither is Activity only.
+const (
+	NeedsAnswer = "answer"
+	NeedsRead   = "read"
+)
+
+// ValidNeeds is "" or one of the two values.
+func ValidNeeds(s string) bool { return s == "" || s == NeedsAnswer || s == NeedsRead }
+
+// ReportNeeds is ReportTo with field needs (report --needs): the sender
+// says the person must answer or read it; "" writes no field. Any other
+// value is refused before anything is written.
+func (b *Bus) ReportNeeds(ctx context.Context, agent, kind, message string, to []string, needs string) (string, error) {
 	for _, t := range to {
 		if !ValidName(t) {
 			return "", fmt.Errorf("invalid addressee %q", t)
 		}
 	}
-	return b.report(ctx, agent, kind, message, strings.Join(to, ","))
+	return b.report(ctx, agent, kind, message, strings.Join(to, ","), needs)
+}
+
+// ReportNotice is the directive report --to sends one addressee, its ref
+// the report's id, carrying the report's needs (subscribe shows it).
+func (b *Bus) ReportNotice(ctx context.Context, from, target, reportID, text, needs string) (string, error) {
+	if !ValidNeeds(needs) {
+		return "", fmt.Errorf("needs %q: answer or read", needs)
+	}
+	var extra map[string]interface{}
+	if needs != "" {
+		extra = map[string]interface{}{"needs": needs}
+	}
+	return b.cmd(ctx, from, target, CmdDirective, reportID, text, extra)
 }
 
 // Notify broadcasts a message on the {project}:notify stream. from is advisory
