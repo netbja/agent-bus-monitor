@@ -1,6 +1,6 @@
 # Quiet update, step 2: the automatic mode, and pruning old trees
 
-Status: r4, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
+Status: r5, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
 2026-11-21 (cmd `1795299412029-0`, idea i1). It builds on step 1 as built: `agentbus update`
 (spec [2026-11-20](2026-11-20-agentbus-update-design.md), package `update/`,
 `cmd/agentbus/updatecmd.go`). It replaces the automatic parts of the r13 quiet-update spec
@@ -38,14 +38,17 @@ tree lifetime) with a smaller design, and keeps that spec's decisions 2, 3, 4 an
   ```
 - **A night it does not run** (a project in work, a failed check), nothing changes. It tries
   again at the next window. Master hears of it only when it matters: a failure, an interrupted
-  update, or a release waiting longer than `updates.max_wait` (§4.5).
+  update, or a release waiting longer than `updates.max_wait` (§4.6).
 - **Old trees go away on their own** once nothing needs them (§5), after any successful update,
   manual or automatic.
 
 ## 3. What it never does
 
-- **Restart a project in work.** It installs only when every project whose services run on this
-  host is quiet (§4.3). It never stops an agent, never relaunches one, never restarts a holder.
+- **Restart a project in work.** It installs only when every project it judges is quiet, and
+  reads that again just before it restarts each project's services; a project found in work
+  then keeps its old services, listed (§4.3). It never stops an agent, never relaunches one,
+  never restarts a holder. Work can still start in the milliseconds between that last read and
+  the restart; §4.4 says why such a restart loses nothing.
 - **Move `main`, or any branch.** It reads tags with `git fetch --tags origin` and never pushes,
   tags, checks out or resets a branch in the person's clone. A release is a tag on `origin/main`
   (`update.Find`, step 1 §3.1), and only master makes one, a fast-forward of `main` on the person's
@@ -56,11 +59,11 @@ tree lifetime) with a smaller design, and keeps that spec's decisions 2, 3, 4 an
   r13 rule §4.6). It reports "vX needs you" instead. A manual update of such a release is
   `./setup.sh` with its notes, as in step 1 §4.
 - **Retry a release whose automatic install failed.** It reports once. The person retries by
-  hand with `agentbus update` (§4.5).
+  hand with `agentbus update` (§4.6).
 - **Remove a tree that something still needs,** a dirty tree, or anything outside
   `<src>/v*` (§5).
 - **Write to `config.toml`, an env file or `notify.toml`,** or rebuild the broker's container. Its
-  only broker writes are the reports of §4.5.
+  only broker writes are the reports of §4.6.
 - **Run under an agent** (§6).
 
 ## 4. The automatic mode
@@ -96,7 +99,7 @@ tree lifetime) with a smaller design, and keeps that spec's decisions 2, 3, 4 an
 
 1. Read `updates.auto` and `updates.window` afresh, so a change needs no restart. With `notify`,
    stop here.
-2. Read the local wall clock (`time.Now()`, `time.Local`) and the state file (§4.4).
+2. Read the local wall clock (`time.Now()`, `time.Local`) and the state file (§4.5).
 3. **Inside the window, and no pass has finished in this occurrence of it:** run a pass.
 4. **Outside the window, and the last check is more than 24 hours old:** run a check-only pass,
    `update --auto --check`. It fetches and finds the release, never stages or installs. It exists
@@ -112,7 +115,7 @@ release current.
 It is `update.Run` with these differences, in order:
 
 1. **Guards:** the agent refusal (§6); the lock (a held lock defers the pass); an interrupted
-   update (`update.Interrupted`) changes nothing and is reported once (§4.5).
+   update (`update.Interrupted`) changes nothing and is reported once (§4.6).
 2. **Find** (`update.Find`). Up to date: the pass is finished.
    - **The fetch never prompts:** `GIT_TERMINAL_PROMPT=0` and
      `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`. A service has no terminal, and may have no
@@ -140,19 +143,42 @@ It is `update.Run` with these differences, in order:
      it (foureyes on r1).
    A suspended project has no running services and no active holder, so it is not among them.
    **A stale `working`** (an agent that died without setting its state back) defers every night;
-   the `max_wait` notice of §4.5 names that agent, and the person or master clears it.
+   the `max_wait` notice of §4.6 names that agent, and the person or master clears it.
    If any project is in work, the pass is **deferred**: it changes nothing, and the next tick in
    the same window tries again.
 5. **Install:** step 1's stage, snapshot, swap, then restart **every** project's stale `dispatch`
-   and `missions` from step 4's list, one at a time, each judged green as step 1 §3.4 step 6
-   judges it. A red one rolls the whole update back, as in step 1. (Question 1: which projects
-   an automatic install restarts.)
-6. **Tell** (§4.5), then prune (§5).
+   and `missions` from step 4's list, one project at a time, each service judged green as step 1
+   §3.4 step 6 judges it. A red one rolls the whole update back, as in step 1. (Question 1: which
+   projects an automatic install restarts.)
+   - **The quiet test again, per project,** right before its first restart. A project now in work
+     is skipped: its services stay on the old build, are not a failure and roll nothing back, and
+     the report lists each with its `service restart` command (the state a manual update leaves
+     for the projects it does not name). Staging takes minutes, so this re-read is what keeps
+     a task claimed meanwhile from seeing its dispatcher restarted.
+6. **Tell** (§4.6), then prune (§5).
 
 The yes: `--auto` installs only when `updates.auto = install`, read from `config.toml` at the
 start of the pass. Without it, `--auto` behaves as `--check`. `--auto` never asks on a terminal.
 
-### 4.4 The state file
+### 4.4 Why a restart that races new work loses nothing
+
+The quiet test is not fenced: nothing stops an agent claiming a task, or the conductor starting a
+check, between the last read and `service restart`. Fencing them (a pause for every project, a
+conductor lock) would add a protocol to save a race the services already survive:
+
+- **The dispatcher** holds a fenced lease and reads the stream from its group's cursor. A wake
+  for an entry written while it restarts is delivered by the new one (the r13 §4.3 step 5
+  argument). An agent at work is never touched: it does not run under the dispatcher.
+- **The conductor** redoes what a stop interrupted, at its next start: a mission left `checking`
+  goes back to `delivered` and is checked again, and a mission left `integrating` is repaired
+  (`startupChange`, `mission/integrate.go:109`, and `repairIntegration`). Its writes are fenced by
+  its lease too.
+
+So the quiet test is about attention, as r13 §4.4 put it: a restart in the middle of work costs a
+re-run check or a few seconds of delayed wakes, never lost or doubled work. The per-project
+re-read of §4.3 step 5 keeps even that rare.
+
+### 4.5 The state file
 
 `<updates>/auto.json`, written by `files.WriteAtomic`, the host's own record in local wall-clock
 time with its zone (r13 §4.10):
@@ -166,7 +192,7 @@ time with its zone (r13 §4.10):
 
 A missing or unreadable file is an empty one: the worst case is one repeated notice.
 
-### 4.5 What master hears
+### 4.6 What master hears
 
 One `report` from `updater` to each touched project's escalation target (the project's
 `AGENT_BUS_ESCALATE_TO` in its env file, as the dispatcher reads it, `internal/dispatchsvc/dispatchconfig.go:35`; master by default). The sender `updater` is a service identity like `dispatch` and `conductor`.
@@ -256,7 +282,9 @@ and the 3 snapshots as constants.
   setting changed between ticks applies at the next.
 - **The quiet test:** an agent `working` defers; a status changed 9 minutes ago defers, 11 minutes
   ago does not; a project with no running service is not judged; a mission `checking` or `integrating` defers,
-  one `in_review` or `integrated` does not; an active holder
+  one `in_review` or `integrated` does not; a project that turns
+  busy between step 4 and its restart keeps its old services, listed, and nothing rolls back; a
+  `missions` restarted with a mission `checking` redoes the check; an active holder
   with `dispatch` and `missions` absent and one agent `working` defers; an unreadable holder state
   defers.
 - **The skips:** a `.migrate` tag is never installed and is reported once; a tag with a failed
@@ -301,7 +329,7 @@ and the 3 snapshots as constants.
      gone.
    - C: keep the N newest trees, whatever uses them.
 4. **What does master hear?**
-   - **A (recommended): the table of §4.5:** an install without a wake, a failure or a long wait
+   - **A (recommended): the table of §4.6:** an install without a wake, a failure or a long wait
      with one.
    - B: every pass, deferred ones included, without a wake.
    - C: nothing on the bus: the history line and `agentbus update --list` only.
@@ -316,3 +344,7 @@ and the 3 snapshots as constants.
   caught by the `max_wait` notice (§4.3).
 - **r4** (foureyes on r3): §6 corrected: a pass connects as `busmon`, the CLI entry
   (`connectEntryOf`), not as `dispatcher`; nothing changes in the build.
+- **r5** (reviewer-codex on r3): the quiet test is read again per project just before its
+  restarts, and a project then in work keeps its old services (§3, §4.3 step 5); §4.4 states why a
+  restart that still races new work loses nothing (the dispatcher's lease and stream, the
+  conductor's `startupChange`), so no fence is added.
