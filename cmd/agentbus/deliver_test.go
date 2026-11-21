@@ -457,7 +457,7 @@ const dlvMB = "bbbbbbbb0000000000000000000000000000000b"
 func TestDeliverDryRunPrintsTheSizeClass(t *testing.T) {
 	w := newDeliverWorld(t, "git@github.com:o/r.git")
 	code, out, errw := w.run("master", "coder/x", "--dry-run")
-	if code != 0 || !strings.Contains(out, "size: small: 12 lines, 1 files (single-approval §3.2; no rule reads it yet)\n") {
+	if code != 0 || !strings.Contains(out, "size: small: 12 lines, 1 files (single-approval §3.2)\n") {
 		t.Fatalf("exit %d: %q %s", code, out, errw)
 	}
 	w = newDeliverWorld(t, "")

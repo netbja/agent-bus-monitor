@@ -188,6 +188,13 @@ watching it, answering questions, merging, updating and stopping.
   - **The base.** The PR goes to the project template's `[delivery] base`, else `delivery.base` (`main`
     by default). This repository delivers to `dev`.
   - **main.** It moves only by master's fast-forward of a released `dev`, on your yes.
+  - **One approval for a small change** (off by default, per project, yours to set in `config.toml`'s
+    `[project.<name>.delivery]`). With `single_approval = "small"`, a change of at most
+    `small_max_lines` (150) and `small_max_files` (5), touching no never-small path (protocol, broker,
+    setup, secrets, CI, skills, the gate itself, plus your `never_small` globs), is delivered on one
+    approval by a reviewer of another provider than the author, when no reviewer's latest verdict is a
+    reject. `same_provider_ok = "docs"` or `"small"` lets a same-provider approval count for a project
+    with one reviewer. The PR body and the bus say so; `deliver --dry-run` shows the size and the rule.
   - **Your merges.** `agentbus merge-queue` lists what waits for your merge, and busmon shows it.
 - **The CI loop.** GitHub with `gh` only.
   - When a PR's checks fail, the author is woken with the failing checks and their links.
@@ -266,7 +273,7 @@ is set:
 
 Settings an operator usually touches:
 
-- **Delivery:** `delivery.base`, `delivery.forge`.
+- **Delivery:** `delivery.base`, `delivery.forge`; per project, `delivery.single_approval` and its four companions (yours alone, but `never_small`).
 - **CI loop:** `ci.loop`, `ci.max_handoffs`.
 - **Run budget:** `run.max_duration`, `run.max_deliveries`.
 - **Services and terminals:** `services.manager`, `services.start_at_login`, `attach.prefix`.
