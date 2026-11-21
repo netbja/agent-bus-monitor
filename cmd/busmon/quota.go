@@ -267,6 +267,20 @@ func (p *paceTracker) observe(budgets map[string]bus.BudgetSnapshot, now time.Ti
 // bar to slide (barTargets).
 func windowUnobserved(w bus.BudgetWindow) bool { return w.ObservedAt == 0 && w.UsedPct == 0 }
 
+// quotaAllUnknown: the provider shows no reading at all, only "?" (the
+// dispatcher, which reads them, may be down: unknownWhy).
+func quotaAllUnknown(b bus.BudgetSnapshot, now time.Time) bool {
+	if b.Unlimited {
+		return false
+	}
+	for _, w := range orderedQuotaWindows(b.Windows, now) {
+		if !windowUnobserved(w) {
+			return b.Unknown
+		}
+	}
+	return true
+}
+
 // windowAge is how old an aged window's reading is, "?" when it has none.
 func windowAge(w bus.BudgetWindow, b bus.BudgetSnapshot, now time.Time) string {
 	obs := w.ObservedAt
