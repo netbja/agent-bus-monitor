@@ -457,8 +457,13 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
      {"label": "Wed 21/10 10:00 UTC", "description": "Two more days of margin"}]}]}
 ```
 
+- The format is the same for every question (see "Questions to the person" in the `agent-bus`
+  skill; idea from the Superpowers plugin): one decision per question (several in an ask only when independent), a short title, one or two lines
+  of context, 2 to 4 options (a short label and a one-line consequence), exactly one `recommended`,
+  and busmon adds the last "Other... (type your answer)". Never a free-text question, whatever the
+  client.
 - Ids are lowercase names; `header` ≤ 16 characters (it is the tab), at most 6 questions and 6
-  options each, one `recommended` at most with the reason in its description. `context` is short
+  options each (the format above asks for 2 to 4), the `recommended` one with the reason in its description. `context` is short
   Markdown; the full analysis stays in a report, which the context may name.
 - busmon shows the questions as tabs; the human picks an option or writes an answer. **Each answer
   arrives at once**, as a reply to you (`ref` = the ask id, `Answer to "Date T": Mon 19/10 10:00 UTC`),

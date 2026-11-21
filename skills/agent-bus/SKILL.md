@@ -157,6 +157,26 @@ written as one block):
 
 When what remains is a decision, it is an ask; the report then says `see the open question`.
 
+## Questions to the person: one format
+
+Every question to the person goes through `agentbus ask` (master sends it; you ask master, who
+puts it in the ask), with structured options, never as free text in a report, a `notify` or your
+pane, whatever your client (Claude Code, Codex, Kimi, agy, Grok) and whether or not it has a
+question tool of its own. The format is the one the Superpowers plugin uses for its questions:
+
+- **One decision per question**, with a short title (`header`) and one or two lines of `context`.
+  Ask one at a time; put several in one ask (tabs, up to 6) only when they are independent.
+- **2 to 4 options**, each a short `label` and a one-line consequence (`description`), numbered by
+  busmon; **exactly one** has `"recommended": true`.
+- A last **Other... (type your answer)** is added by busmon itself: do not write it as an option.
+
+```json
+{"title": "Merge order", "questions": [{"id": "order", "header": "Merge order",
+  "question": "Which PR merges first?", "context": "Both touch config/keys.go.",
+  "options": [{"label": "#701 first", "description": "Smaller, no rebase needed", "recommended": true},
+              {"label": "#702 first", "description": "Unblocks the release, #701 rebases"}]}]}
+```
+
 ## Language on the bus
 
 Write in English: reports, replies, challenges, verdicts, status messages, commits and PRs. This
