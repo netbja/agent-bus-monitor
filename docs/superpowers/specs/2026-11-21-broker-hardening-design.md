@@ -163,6 +163,34 @@ exported `bus` write under each user's ACL, and fails on a write the table forbi
 that does it. The table is corrected from that result before any ACL is enabled. That is also
 where the person confirms "master's keys" (§5 Q4).
 
+**As built, the inventory (step 4's first PR; method approved by master, cmd `1795248577551-0`):**
+- **Recorded, not hand-written:** `bus/aclrecord.go`, built only with `-tags aclrecord`, records the
+  shape of every command a production caller sends while the whole suite runs. The shape keeps the
+  key kinds (`{p}:board`), the subcommands and keywords, never the data. The caller's frames give
+  the user (`bus.ACLRoleOf`). An agent CLI call is checked as `agent` whatever identity the test
+  used, and also as `master` when it ran as master. A short table, `aclVerbs`, names the verbs whose
+  user their own guard or doc fixes: the person's (`busmon`), backup and restore (`admin`), the
+  dispatcher's own steps.
+- **Checked by `ACL DRYRUN`:** `TestACLInventory` creates the users of `bus.ACLRules` on the
+  disposable broker and runs every recorded shape through `ACL DRYRUN` as each user that sends it.
+  It also checks that no fenced script calls a `@dangerous` command, outside the admin-only
+  restore script. `bus/testdata/acl-inventory.json` is committed, so a rebuild shows up in the diff.
+- **What the first run corrected:**
+  - **Key patterns:** writable kinds are `~*:<kind>`, not `%W~`. Redis wants one pattern to grant
+    every flag a key needs, and a script's declared keys need read and write.
+  - **The dispatcher writes `mergequeue:dropped`:** the merge queue's pass prunes old drops.
+- **Open, for the person (logged, not failed, in `aclOpen`):**
+  - `publishRequest`'s script declares `{p}:run`, `{p}:plan` and `{p}:plan:facts`, and any agent
+    sends a request;
+  - the `plan` verbs (note, link, ref, done, ignore, unload) write `{p}:plan`;
+  - `retire --forget` declares `{p}:dispatch`;
+  - `agentbus mission` writes `{p}:missionops`;
+  - `runMergeDrop`'s deliverers include docs, an `agent` user.
+- **The two gaps, reported by `TestACLInventoryGaps`:**
+  - the exported `bus` functions no production caller reached in the suite;
+  - the script calls whose key is not one of `KEYS`. `DRYRUN` checks only the declared keys, while
+    the server checks each call at run time.
+
 **Choosing the user.** The client reads its identity:
 - `AGENT_BUS_AGENT=master` connects as `master`;
 - any other agent as `agent`;

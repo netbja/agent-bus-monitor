@@ -131,6 +131,7 @@ func ConnectContext(ctx context.Context, host string) (*redis.Client, error) {
 	}
 	client := redis.NewClient(opt)
 	peers.Store(client, rec)
+	installACLRecorder(client) // a no-op unless built with -tags aclrecord (aclrecord.go)
 	if err := client.Ping(ctx).Err(); err != nil {
 		client.Close()
 		peers.Delete(client) // a client nobody gets is not kept alive by the map
