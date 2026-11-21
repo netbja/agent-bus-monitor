@@ -1,6 +1,6 @@
 # One approval for a small change (single-approval)
 
-Status: spec r3, for review (subject `single-approval`; r3, the person via master (cmd `1795282533075-0`, task `single-approval-r2`): a project with one reviewer, or reviewers of one provider only, deadlocks under §4.1; §4.8 adds the person's `delivery.same_provider_ok = off | docs | small` and busmon's warning; r2 merged as #721: the trace is the deliverer's report; busmon counts current distinct approvers from a new `MergeItem.Approvers`, not the raw approvals; Q3 covers both limits too (reviewer-codex); §4.4 and Q8 on an earlier reject by the other reviewer (foureyes)). Not built. Base: origin/dev `2a7e0360`.
+Status: spec r3, for review (subject `single-approval`; r3, the person via master (cmd `1795282533075-0`, task `single-approval-r2`; §4.1 now states §4.8's exception, reviewer-codex): a project with one reviewer, or reviewers of one provider only, deadlocks under §4.1; §4.8 adds the person's `delivery.same_provider_ok = off | docs | small` and busmon's warning; r2 merged as #721: the trace is the deliverer's report; busmon counts current distinct approvers from a new `MergeItem.Approvers`, not the raw approvals; Q3 covers both limits too (reviewer-codex); §4.4 and Q8 on an earlier reject by the other reviewer (foureyes)). Not built. Base: origin/dev `2a7e0360`.
 Author: architect, from the person's directive relayed by master (cmd `1795262117698-0`, task
 `single-approval-spec`). This **loosens a safety gate**: §2 says what is lost, with the ledger's
 numbers, before the design.
@@ -112,8 +112,11 @@ approvals (Q5).
 
 **A reviewer of a different provider from the author** (the ledger records both:
 `Verdict.AuthorProvider`, `ReviewerProvider`, `bus/stream.go:188`). Today that is
-reviewer-codex for every Claude author. With no such approver, small or not, two are needed,
-unless the person allows a same-provider approval for the project (§4.8). A provider left empty
+reviewer-codex for every Claude author. With no such approver, two are needed: always when
+`delivery.same_provider_ok` is `off` (the default), and otherwise for every change outside its
+class. The one exception is §4.8: with `single_approval = small` and `same_provider_ok` set, a
+same-provider approval alone delivers a small change of that class (`docs`: docs-only; `small`:
+any small change). A provider left empty
 on either side (an agent with no known client) is never "another provider".
 
 Why not "either" or "foureyes first": §2's 16 of 19. A same-provider approval alone is the case
