@@ -4,6 +4,7 @@ KEYS
   shift-tab            focus the previous panel
   F5                   health
   F6                   ideas
+  F7                   memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one
   / ^P                 the command palette: the line opened with /, every command searchable (also i then /)
   1-3                  view
   1-4                  view
@@ -62,6 +63,7 @@ KEYS
   an open detail
   F5                   health
   F6                   ideas
+  F7                   memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one
   / ^P                 the command palette, from any page
   ↑↓ j k               scroll
   pgup                 page up

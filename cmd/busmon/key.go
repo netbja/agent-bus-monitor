@@ -36,6 +36,7 @@ const (
 	keyF4
 	keyF5
 	keyF6
+	keyF7
 	keyCtrlA
 	keyCtrlC
 	keyCtrlE

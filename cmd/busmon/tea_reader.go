@@ -64,8 +64,10 @@ type page struct {
 	health healthView   // ovHealth: its rows open in place and a (sel: the selected row)
 	hitems []healthItem // ovHealth: its selectable rows
 
-	ideas  ideasView  // ovIdeas: its filter and picker (sel: the selected row); ovIdea: its picker
-	iitems []ideaItem // ovIdeas: its selectable rows
+	ideas  ideasView    // ovIdeas: its filter and picker (sel: the selected row); ovIdea: its picker
+	iitems []ideaItem   // ovIdeas: its selectable rows
+	mem    *memoryView  // ovMemory, ovMemoryTopic: the store as read when the page opened
+	mitems []memoryItem // ovMemory: its selectable rows
 
 	svc        *svcFacts   // ovServices: the facts the cards show (sel: the card selected)
 	about      *aboutState // ovAbout: the versions and the packet's run
@@ -538,6 +540,22 @@ func (m *Model) buildPage() bool {
 		if p.sel < len(p.hitems) {
 			p.health.selID = p.hitems[p.sel].id
 		}
+	case ovMemory, ovMemoryTopic:
+		if p.mem == nil {
+			local, host := m.memoryLocalOf()
+			getenv := m.cfg.getenv
+			if getenv == nil {
+				getenv = os.Getenv
+			}
+			v := readMemory(getenv, local, host)
+			p.mem = &v
+		}
+		if p.kind == ovMemoryTopic {
+			p.title, p.body = memoryTopicPage(*p.mem, p.key, width)
+			break
+		}
+		p.title, p.body, p.mitems = memoryPage(*p.mem, p.sel, width)
+		p.sel = clamp(p.sel, 0, max(0, len(p.mitems)-1))
 	case ovIdeas:
 		v := p.ideas
 		p.title, p.body, p.iitems, p.plain = ideasPage(s.ideas, s.ideasErr, m.cfg.self, v, p.sel, now, width)
@@ -921,6 +939,23 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 	}
+	if p.kind == ovMemory {
+		switch {
+		case k.Code == keyEnter && p.sel < len(p.mitems):
+			return m.push(page{kind: ovMemoryTopic, key: p.mitems[p.sel].topic, mem: p.mem})
+		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
+			m.moveSel(p, act, m.readerRows(), func() []int {
+				lines := make([]int, len(p.mitems))
+				for i, it := range p.mitems {
+					lines[i] = it.line
+				}
+				return lines
+			})
+			p.dirty = true
+			m.refresh()
+			return nil
+		}
+	}
 	if p.kind == ovIdeas || p.kind == ovIdea {
 		if cmd, done := m.ideasKey(p, act, k); done {
 			return cmd
@@ -971,6 +1006,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 		return m.push(page{kind: ovIdeas})
+	case ActMemory:
+		if p.kind == ovMemory {
+			return nil
+		}
+		return m.push(page{kind: ovMemory})
 	case ActTour: // the help's: the tour from its first page; an agent's page: attach
 		if p.kind == ovAgent {
 			return m.attachCmd(p.key)
