@@ -21,8 +21,8 @@ import (
 // The Plan tab's Releases column (the person's "Re: Plan tab, r3", item 5):
 // the next release with its decided ideas, the current plan highlighted,
 // then the past releases, newest first, with their date and their plan's
-// tasks. Its source is the project's checkout on this machine, read as it
-// is: the release tags (vX.Y.Z) with their date, and docs/plans/*.json by
+// planned tasks (a plan file says nothing of what was done). Its source is
+// the project's checkout on this machine, read as it is: the release tags (vX.Y.Z) with their date, and docs/plans/*.json by
 // plan name. No new store: a busmon with no checkout here lists the next
 // and the current release only.
 
@@ -176,7 +176,7 @@ func releaseItems(s snapshot, now time.Time, width int) []ListItem {
 		l := Line{{Text: Preview(t.Name), Role: RoleText}, sep, {Text: t.Date, Role: RoleMuted}}
 		if name, ok := planOfTag(t.Name); ok {
 			if f, ok := d.plans[name]; ok {
-				l = append(l, sep, Seg{Text: planTasks(len(f.Tasks)) + " done", Role: RoleMuted})
+				l = append(l, sep, Seg{Text: planTasks(len(f.Tasks)), Role: RoleMuted}) // planned: a plan file holds no completion (reviewer-codex)
 			}
 		}
 		items = append(items, ListItem{Key: releaseTagKey + t.Name, Line: FitLine(l, width), Selectable: true})

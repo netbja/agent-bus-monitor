@@ -91,6 +91,37 @@ func TestTabBarActivityNew(t *testing.T) {
 	}
 }
 
+// Item 1 (reviewer-codex): lines that came while Activity was covered (the
+// idle view, a page over it) are not seen: they count on its tab once
+// another tab is chosen.
+func TestTabBarActivityNewWhileCovered(t *testing.T) {
+	news := func(m Model, from int) Model {
+		var evs []bus.Event
+		for i := range 2 {
+			evs = append(evs, bus.Event{Kind: "report", Agent: "coder", ID: fmt.Sprintf("%d-%d", shellNow.UnixMilli(), from+i), Message: "news"})
+		}
+		return step(t, m, tailMsg{events: evs})
+	}
+	tabRow := func(m Model) string { return strings.Split(m.grid().plain(), "\n")[m.layout.Lower.Y] }
+	m := planShellOf(t, shortPlan(), 160, 40) // Activity shown
+	m.ui.idle = true
+	m = news(m, 0)
+	m.ui.idle = false
+	m.focusTab(PanelPlan)
+	m.refresh()
+	if !strings.Contains(tabRow(m), "2 new") {
+		t.Fatalf("idle: the tab bar %q", tabRow(m))
+	}
+	m = keys(t, planShellOf(t, shortPlan(), 160, 40), '?') // a page over Activity
+	m = news(m, 10)
+	m.rd.pages = nil // the page left for another tab without Activity drawn in between
+	m.focusTab(PanelPlan)
+	m.refresh()
+	if !strings.Contains(tabRow(m), "2 new") {
+		t.Fatalf("under a page: the tab bar %q", tabRow(m))
+	}
+}
+
 // Item 2: one blank row between the tab bar and the version line.
 func TestPlanTabBlankUnderTabBar(t *testing.T) {
 	for _, w := range []int{160, 100} {
@@ -143,7 +174,7 @@ func TestPlanReleasesColumn(t *testing.T) {
 		t.Fatalf("visible %v", l.Visible)
 	}
 	text := sideText(m)
-	for _, want := range []string{"Releases", "next", "2 decided", "a quiet update", "project switch", "v0.29", "1/2", "v0.28.1", "2026-11-10", "v0.28.0", "2 tasks done", "v0.27.0"} {
+	for _, want := range []string{"Releases", "next", "2 decided", "a quiet update", "project switch", "v0.29", "1/2", "v0.28.1", "2026-11-10", "v0.28.0", "2 tasks", "v0.27.0"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("no %q in\n%s", want, text)
 		}
@@ -152,6 +183,9 @@ func TestPlanReleasesColumn(t *testing.T) {
 		if strings.Contains(row, "v0.28.1") && strings.Contains(row, "tasks") {
 			t.Fatalf("a patch release counts its minor's tasks: %q", row)
 		}
+	}
+	if strings.Contains(text, "tasks done") { // a plan file says what was planned, not what was done (reviewer-codex)
+		t.Fatalf("a past release claims its tasks done:\n%s", text)
 	}
 	if strings.Contains(text, "still open") {
 		t.Fatalf("an idea to discuss is listed:\n%s", text)

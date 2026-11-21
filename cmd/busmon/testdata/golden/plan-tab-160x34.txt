@@ -4,7 +4,7 @@
 │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────││    ◇ project switch                  │
 │▼ NOW  2                                                                                                              ││  ● v0.29  2/11  now                  │
 │▶ ●   agent-screen-blocked     coder   in progress                                                                    ││  v0.28.1  2026-11-10                 │
-│  ○   ask-refuses-person       coder2  in review                                                                      ││  v0.28.0  2026-11-08  2 tasks done   │
+│  ○   ask-refuses-person       coder2  in review                                                                      ││  v0.28.0  2026-11-08  2 tasks        │
 │▼ APPROVED  1                                                                                                         ││  v0.27.0  2026-11-01                 │
 │  ✓   human-not-an-agent-test  coder2  approved                                                                       ││                                      │
 │▼ NEXT  3                                                                                                             ││                                      │

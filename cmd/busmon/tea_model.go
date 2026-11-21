@@ -534,9 +534,6 @@ func (m *Model) refresh() {
 	if m.ui.focus == PanelReleases && m.layout.Side.W == 0 { // the column hidden under the focus: back to the Plan
 		m.ui.focus = PanelPlan
 	}
-	if m.layout.Active == PanelActivity || (m.layout.Tier == TierNarrow && m.ui.view == PanelActivity) { // shown: what it holds is seen (plan-tab-r3 item 1)
-		m.ui.activitySeen = m.feed.seq
-	}
 	m.fillLists()
 	for m.rd.open() && !m.buildPage() { // an ask answered elsewhere: its page goes
 		if w := m.ui.walk; w != nil && !w.moving && m.rd.top().serial == w.serial {
@@ -558,6 +555,24 @@ func (m *Model) refresh() {
 			m.clampPage(p)
 		}
 	}
+	if m.activityOnScreen() { // drawn: what it holds is seen (plan-tab-r3 item 1)
+		m.ui.activitySeen = m.feed.seq
+	}
+}
+
+// activityOnScreen says whether Activity is drawn: its tab (or the narrow
+// tier's view) active, the dashboard shown (not the idle view) and no page
+// over it; the wide drawer sized to its content leaves the tab under it
+// (reviewer-codex).
+func (m *Model) activityOnScreen() bool {
+	l := m.layout
+	if m.ui.idle || l.Active != PanelActivity || l.Tier == TierTooSmall {
+		return false
+	}
+	if !m.rd.open() {
+		return true
+	}
+	return l.Tier == TierWide && m.rd.pages[0].drawer && l.Lower.H > 0
 }
 
 // placeLists gives every list its frame again, after the layout moved
