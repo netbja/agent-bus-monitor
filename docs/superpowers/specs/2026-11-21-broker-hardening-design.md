@@ -151,7 +151,8 @@ user off, that rotates nothing anyone uses. Step 4 therefore changes the rotatio
   loaded by `planLoad`); `mergequeue:dropped` (a head master withdrew, `mergeDrop`);
 - **dispatcher-only writes:** the leases and records its fenced scripts own: `dispatch`,
   `conductor`, `ci`, `mergequeue`, `mergequeue:due`, `missionops`, `missionops:results`, `run`,
-  `reboot`;
+  `reboot`; master writes `missionops` too, since it queues the conductor's operations (ACL answer
+  d);
 - **everything else** (the streams, `board`, `asks`, `ideas`, `gate:*`, `agents`, `usage`, and the
   rest of `bus/keykinds.go`): any of `master`, `dispatcher`, `agent` and `busmon`.
 

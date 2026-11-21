@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/mission"
 )
 
@@ -45,7 +46,7 @@ func mission1(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	b := dialDispatchMain(t)
 	var out, errb bytes.Buffer
-	code := runMission(context.Background(), b, "master", args, &out, &errb)
+	code := runMission(context.Background(), b, "master", noAgentEnv, args, &out, &errb)
 	return code, out.String(), errb.String()
 }
 
@@ -61,7 +62,7 @@ func TestMissionCLIUsage(t *testing.T) {
 	for _, args := range [][]string{{}, {"bogus"}, {"load", "no-commit"}, {"retry", "noslash"}, {"abort", "chg"},
 		{"abort", "chg", "--reason", "  "}, {"show", "x"}, {"load", "a@b", "--wait", "soon"}} {
 		var out, errb bytes.Buffer
-		if code := runMission(context.Background(), b, "master", args, &out, &errb); code != 2 {
+		if code := runMission(context.Background(), b, "master", noAgentEnv, args, &out, &errb); code != 2 {
 			t.Errorf("%q: exit %d", args, code)
 		}
 	}
@@ -89,22 +90,22 @@ func TestMissionCLIRoundTrip(t *testing.T) {
 		}
 	}
 	var out, errb bytes.Buffer
-	if code := runMission(context.Background(), b, "master", []string{"load", "docs/changes/chg/missions.json@" + commit}, &out, &errb); code != 0 {
+	if code := runMission(context.Background(), b, "master", noAgentEnv, []string{"load", "docs/changes/chg/missions.json@" + commit}, &out, &errb); code != 0 {
 		t.Fatalf("load: exit %d, %q %q", code, out.String(), errb.String())
 	}
 	if !strings.Contains(out.String(), "loaded chg rev 1: 1 missions") {
 		t.Fatalf("load output %q", out.String())
 	}
 	out.Reset()
-	if code := runMission(context.Background(), b, "master", []string{"status"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "chg rev 1 (active)") || !strings.Contains(out.String(), "t1") {
+	if code := runMission(context.Background(), b, "master", noAgentEnv, []string{"status"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "chg rev 1 (active)") || !strings.Contains(out.String(), "t1") {
 		t.Fatalf("status: exit %d\n%s", code, out.String())
 	}
 	out.Reset()
-	if code := runMission(context.Background(), b, "master", []string{"show", "chg/t1"}, &out, &errb); code != 0 || !strings.Contains(out.String(), `"id": "t1"`) {
+	if code := runMission(context.Background(), b, "master", noAgentEnv, []string{"show", "chg/t1"}, &out, &errb); code != 0 || !strings.Contains(out.String(), `"id": "t1"`) {
 		t.Fatalf("show: exit %d\n%s", code, out.String())
 	}
 	out.Reset()
-	if code := runMission(context.Background(), b, "master", []string{"retry", "chg/t1"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "not blocked") {
+	if code := runMission(context.Background(), b, "master", noAgentEnv, []string{"retry", "chg/t1"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "not blocked") {
 		t.Fatalf("retry of a running mission: exit %d %q", code, errb.String())
 	}
 	out.Reset()
@@ -117,7 +118,7 @@ func TestMissionCLILoadForceNeedsReason(t *testing.T) {
 	b := dialDispatchMain(t)
 	for _, args := range [][]string{{"load", "a@b", "--force"}, {"load", "a@b", "--force", "  "}, {"skip", "c/t1"}, {"reassign", "c/t1"}, {"reassign", "c/t1", "Bad Name"}} {
 		var out, errb bytes.Buffer
-		if code := runMission(context.Background(), b, "master", args, &out, &errb); code != 2 {
+		if code := runMission(context.Background(), b, "master", noAgentEnv, args, &out, &errb); code != 2 {
 			t.Errorf("%q: exit %d", args, code)
 		}
 	}
@@ -137,7 +138,7 @@ func TestMissionCLISkipReassignQueue(t *testing.T) {
 func TestMissionCLIRecover(t *testing.T) {
 	b := dialDispatchMain(t)
 	var out, errb bytes.Buffer
-	if code := runMission(context.Background(), b, "master", []string{"load", "--recover", "a@b", "--force", "x"}, &out, &errb); code != 2 {
+	if code := runMission(context.Background(), b, "master", noAgentEnv, []string{"load", "--recover", "a@b", "--force", "x"}, &out, &errb); code != 2 {
 		t.Fatalf("--recover with --force: exit %d", code)
 	}
 	code, _, errOut := mission1(t, "load", "--recover", "docs/changes/chg/missions.json@HEAD")
@@ -178,5 +179,71 @@ func TestMissionsReadsTheProjectsBase(t *testing.T) {
 	}
 	if alive, _ := b.ConductorAlive(context.Background()); alive {
 		t.Fatal("the conductor took the lease on a broken base")
+	}
+}
+
+// noAgentEnv is the person's environment: no AGENT_BUS_AGENT.
+func noAgentEnv(string) string { return "" }
+
+// ACL answer d (the person's yes): the conductor's operations are master's.
+// An agent's environment is refused before anything is queued; status and
+// show stay open (defence in depth, as run reset: the ACL users enforce it).
+func TestMissionOpsAreMasters(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.MissionOpsKey(b.Project())) })
+	coder := func(k string) string {
+		if k == "AGENT_BUS_AGENT" {
+			return "coder"
+		}
+		return ""
+	}
+	for _, args := range [][]string{{"load", "x@y"}, {"retry", "chg/t1"}, {"skip", "chg/t1", "--reason", "r"}, {"reassign", "chg/t1", "coder"}, {"abort", "chg", "--reason", "r"}} {
+		var out, errb bytes.Buffer
+		if code := runMission(ctx, b, "coder", coder, args, &out, &errb); code == 0 || !strings.Contains(errb.String(), "master's") {
+			t.Errorf("coder %v: %d %q", args, code, errb.String())
+		}
+	}
+	if n, _ := r.Exists(ctx, bus.MissionOpsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("a refused operation was queued")
+	}
+	var out, errb bytes.Buffer
+	if code := runMission(ctx, b, "coder", coder, []string{"status"}, &out, &errb); strings.Contains(errb.String(), "master's") {
+		t.Fatalf("coder's status refused: %d %s", code, errb.String())
+	}
+	master := func(k string) string {
+		if k == "AGENT_BUS_AGENT" {
+			return "master"
+		}
+		return ""
+	}
+	errb.Reset()
+	if code := runMission(ctx, b, "master", master, []string{"retry", "chg/t1", "--wait", "1ms"}, &out, &errb); strings.Contains(errb.String(), "master's") {
+		t.Fatalf("master's retry refused: %d %s", code, errb.String())
+	}
+}
+
+// The guard's production wiring (foureyes): the built binary, in an agent's
+// environment, refuses an operation before queueing it.
+func TestMissionOpRefusedInMain(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.MissionOpsKey(b.Project())) })
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	dir := t.TempDir()
+	cmd := exec.Command(bin, "-p", b.Project(), "mission", "retry", "chg/t1")
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "XDG_CONFIG_HOME=" + dir, "AGENT_BUS_AGENT=coder",
+		"REDIS_URL=" + os.Getenv("AGENTBUS_TEST_REDIS_URL")}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 || !strings.Contains(stderr.String(), "the conductor's operations are master's") {
+		t.Fatalf("coder's mission retry: %v, stderr %q", err, stderr.String())
+	}
+	if n, _ := r.Exists(ctx, bus.MissionOpsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("the refused operation was queued")
 	}
 }
