@@ -84,6 +84,7 @@ var guardModuleImports = []string{
 	"termhost",
 	"tokens",
 	"usage",
+	"internal/brokerrt", // names the broker's runtime (broker.runtime); runs nothing
 }
 
 // guardExecFiles: the files that import os/exec, on the day of the move.
@@ -96,6 +97,7 @@ var guardExecFiles = []string{
 var guardPrograms = map[string]string{
 	"git":    "the repository's state: merge queue, plan drift, repo and secrets checks, GitHub remotes",
 	"docker": "the broker's container and docker's root (health, disk check)",
+	"podman": "the same under broker.runtime=podman: the broker's container and podman's storage root (broker-hardening step 3)",
 	"ssh":    "the GitHub check's authentication probe (ssh -T git@github.com, BatchMode)",
 	"go":     "the disk check's GOCACHE (go env GOCACHE)",
 }
@@ -107,6 +109,7 @@ var guardRunners = []struct{ file, fn, param, why string }{
 	{"githubcheck.go", "runProbe", "name", "the GitHub check's probe runner; its call sites name ssh and git"},
 	{"diskcheck.go", "realDiskDeps", "name", "the disk check's default Output; its call sites name docker and go"},
 	{"healthchecks.go", "readVersion", "command", "the --version probe; no call site on the day of the move"},
+	{"healthchecks.go", "realPorts", "name", "redis-password's ports reader; its call sites (output) name docker and podman"},
 }
 
 // guardRunnerCalls: how a runner is called, and where its program is. A call
@@ -121,6 +124,8 @@ var guardRunnerCalls = []struct {
 	{"", "realDiskDeps", "", -1}, // builds the deps, runs nothing
 	{"diskcheck.go", "", "Output", 1},
 	{"", "readVersion", "", 1},
+	{"", "realPorts", "", -1},            // builds the reader, runs nothing
+	{"healthchecks.go", "output", "", 1}, // redis-password's reader, injected (realPorts)
 }
 
 // guardMissionReads: what the package uses of mission, on the day of the move.

@@ -540,7 +540,7 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 			out := health.EvaluateSecretPaths(paths, true)
 			return out.Status, out.Detail, nil
 		}),
-		healthTask("redis-password", redisPasswordCheck(os.Getenv, commandOutput)),
+		healthTask("redis-password", redisPasswordCheck(os.Getenv, realPorts())),
 		healthOutcomeTask("github", func(ctx context.Context) (health.Outcome, error) {
 			return github.outcome(ctx), nil
 		}),
@@ -955,23 +955,16 @@ func screenEvidence(snaps map[string]bus.AgentSnapshot, observed map[string]bus.
 	return ev
 }
 
-// commandOutput runs name with args and returns its standard output.
-func commandOutput(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.WaitDelay = time.Second
-	out, err := cmd.Output()
-	return string(out), err
-}
-
-// redisPortsCommand lists the broker's published ports, one container a
-// line, for the runtime (broker.runtime, broker-hardening step 3): docker
-// filters on the published port; podman has no publish filter, so it
-// filters on the broker's container name.
-func redisPortsCommand(rt brokerrt.Runtime) (string, []string) {
-	if rt == brokerrt.Podman {
-		return rt.Bin(), []string{"ps", "--filter", "name=^agent-bus-redis$", "--format", "{{.Ports}}"}
+// realPorts is redis-password's reader of the broker's published ports: a
+// program and its arguments, its standard output (as the disk check's
+// realDiskDeps, the guard reads its call sites).
+func realPorts() func(ctx context.Context, name string, args ...string) (string, error) {
+	return func(ctx context.Context, name string, args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, name, args...)
+		cmd.WaitDelay = time.Second
+		out, err := cmd.Output()
+		return string(out), err
 	}
-	return rt.Bin(), []string{"ps", "--filter", "publish=6380", "--format", "{{.Ports}}"}
 }
 
 // redisPasswordCheck is the redis-password check: a local broker, its port
@@ -989,8 +982,17 @@ func redisPasswordCheck(getenv func(string) string, output func(ctx context.Cont
 		if getenv("REDIS_PASSWORD_FILE") != "" {
 			return health.Unknown, "Redis password file cannot be classified without reading its credential", errors.New("file credential source")
 		}
-		name, args := redisPortsCommand(brokerrt.Of(getenv))
-		out, err := output(ctx, name, args...)
+		// The broker's published ports, one container a line, with the
+		// runtime (broker.runtime, broker-hardening step 3): docker filters on
+		// the published port; podman has no publish filter, so it filters on
+		// the container's name. Each program a literal: the guard reads it.
+		name, out, err := "docker", "", error(nil)
+		if brokerrt.Of(getenv) == brokerrt.Podman {
+			name = "podman"
+			out, err = output(ctx, "podman", "ps", "--filter", "name=^agent-bus-redis$", "--format", "{{.Ports}}")
+		} else {
+			out, err = output(ctx, "docker", "ps", "--filter", "publish=6380", "--format", "{{.Ports}}")
+		}
 		if err != nil {
 			return health.Unknown, "the broker's port mapping unavailable (" + name + ")", err
 		}

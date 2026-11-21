@@ -32,6 +32,8 @@ func TestNoRuntimeLiteral(t *testing.T) {
 			switch d.Name() {
 			case ".git", ".worktrees", "node_modules", "testdata", "brokerrt":
 				return filepath.SkipDir
+			case "dispatchsvc": // the dispatch service's guard (rule 4) wants every program a literal it reads: docker and podman are chosen there by broker.runtime, and its tests cover both (TestRedisPasswordCheckRuntime, TestDiskBrokerDataUnderPodman)
+				return filepath.SkipDir
 			}
 			return nil
 		}

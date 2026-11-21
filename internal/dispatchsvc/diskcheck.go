@@ -115,8 +115,8 @@ func brokerData(ctx context.Context, d diskDeps, measure func(label, path string
 	if _, err := d.LookPath(bin); err != nil {
 		return note(bin + " not on PATH")
 	}
-	if rt == brokerrt.Podman {
-		info, err := d.Output(ctx, bin, "info", "-f", "{{.Host.ServiceIsRemote}}|{{.Store.GraphRoot}}")
+	if rt == brokerrt.Podman { // each program a literal at its call: the guard reads it
+		info, err := d.Output(ctx, "podman", "info", "-f", "{{.Host.ServiceIsRemote}}|{{.Store.GraphRoot}}")
 		remote, root, _ := strings.Cut(strings.TrimSpace(info), "|")
 		switch {
 		case err != nil || root == "":
@@ -132,7 +132,7 @@ func brokerData(ctx context.Context, d diskDeps, measure func(label, path string
 	if why := dockerNotLocal(ctx, d); why != "" {
 		return note(why)
 	}
-	info, err := d.Output(ctx, bin, "info", "-f", "{{.DockerRootDir}}|{{.OperatingSystem}}")
+	info, err := d.Output(ctx, "docker", "info", "-f", "{{.DockerRootDir}}|{{.OperatingSystem}}")
 	root, osName, _ := strings.Cut(strings.TrimSpace(info), "|")
 	switch {
 	case err != nil || root == "":
@@ -154,7 +154,7 @@ func brokerData(ctx context.Context, d diskDeps, measure func(label, path string
 // other endpoint, or none read, means its root is not measured from here
 // (reviewer-codex). The note names the scheme only, never the host.
 func dockerNotLocal(ctx context.Context, d diskDeps) string {
-	out, err := d.Output(ctx, brokerrt.Docker.Bin(), "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
+	out, err := d.Output(ctx, "docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
 	endpoint := strings.TrimSpace(out)
 	if err != nil {
 		endpoint = ""
