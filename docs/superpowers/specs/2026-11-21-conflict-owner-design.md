@@ -9,6 +9,11 @@ r5 folds in the person's answers to r4's questions (cmd `1795282532994-0`, task 
 - **a base move alone no longer consumes a hand-off.** The episode is (the PR, the head). Only a
   new head that still conflicts is counted and sent. A base-only change updates the record and
   sends nothing; the age bound still applies (§4).
+- **the field outlives a push** (foureyes): the owner's fix is a new head, unapproved, so the PR
+  leaves the queue while it is reviewed. r5 at `6e185f86` removed the field then, so the count and
+  `first` started again at every head and the cap could never be reached. The field is now kept
+  while the PR is open, and removed only when it closes or merges, or when an approved head of it
+  is clean (§4, step 1).
 
 r2 fixes the following (reviewer-codex, foureyes):
 - the episode is the person's (PR, head, base);
@@ -161,6 +166,19 @@ The agent-bus skill shows both forms: `board claim <task> --branch <role>/<task>
   (`MergeQueueRecord.Conflicting`: `base_tip`, `files`) and sends nothing. The age bound still
   applies, from `first`.
 
+**The field lives as long as the PR is open,** not as long as it is a candidate. The owner's fix
+is a new head, which is unapproved until the reviewers judge it, so the PR leaves the queue in
+between. The pass still sees it:
+- in the gh path, among the open PRs it reads (`ReadGitHub`, `gh pr list --state open`,
+  `mergequeue/forge.go:50`; `Input.PRs`, unapproved and drafts included);
+- in the git fallback, among the branch tips (`RemoteTips` or `LocalTips`, every branch,
+  `mergequeue/git.go:19`, `:29`), with `Input.Merged` saying whether its tip is in the base.
+
+While the PR is open and not a candidate, its field is kept, untouched: nothing is checked,
+sent, counted or escalated. When a later head is approved, it is a candidate again. If that head
+still conflicts, it is a new episode, so `count` rises from where it was. Three failed fixes thus
+reach a cap of 3.
+
 Otherwise, on a busy base the cap would be reached before the owner could act: each merge into
 `dev` would cost a hand-off.
 
@@ -189,16 +207,22 @@ counts nothing again, and `FencedCmdOnce` sends the missing hand-off.
 
 **The pass, per candidate,** in this order:
 
-1. **Clean, or no longer a candidate** (merged, closed, gone): its `{p}:conflicts` field is
-   removed in one fenced script, as `FencedCIForget` does for the CI record. So are its three
-   `FencedCmdOnce` marks, which are fields of `{p}:quota` (`QuotaKey`), not of
-   `{p}:conflicts`. A later conflict on the same PR starts afresh.
+1. **Resolved**: an approved head of the PR that `merge-tree` finds clean, or a PR no longer
+   open (closed or merged in the gh path; in the git fallback, a branch gone or whose tip is in
+   the base). Its `{p}:conflicts` field is removed in one fenced script, as `FencedCIForget` does
+   for the CI record. So are its `FencedCmdOnce` marks, which are fields of `{p}:quota`
+   (`QuotaKey`), not of `{p}:conflicts`. A later conflict on the same PR starts afresh.
+
+   **Open but not a candidate** (a new head in review, or a draft): the field and its marks are
+   kept, and the PR is skipped (above). The steps below run only for a conflicting candidate.
 2. **Already escalated** (`escalated = 1`): no hand-off to the owner, whatever the episode, until
    step 1 removes the field, whether the escalation came from the age or the cap. The only call is
    the escalation's own `FencedCmdOnce`, which sends nothing when its mark is set (the crash case
    below).
 3. **The age bound reached:** only when `conflict.escalate_after` is positive, and
-   `now - first ≥ conflict.escalate_after` in Redis time. Then escalate, below. With 0 there is
+   `now - first ≥ conflict.escalate_after` in Redis time. It is judged only on a pass that finds
+   the PR conflicting. Time spent reviewing a fix counts, so a fix approved after the bound that
+   still conflicts escalates at once, without a hand-off. Then escalate, below. With 0 there is
    no time bound: only the cap escalates.
 4. **A new episode** (`last` differs from the digest):
    - **the owner is `blocked` or `waiting`** (`held`, as in `RunCI`): track without counting, so
@@ -296,7 +320,15 @@ today's, master only.
   - a held owner: nothing sent, not counted, but `first` is set and the age escalates;
   - a swap in progress defers a `FencedCmdOnce`;
   - not the lease holder: nothing written;
-  - a clean or vanished candidate's field and marks are removed.
+  - a clean approved head, a closed or merged PR, and (git fallback) a deleted branch or a tip in
+    the base: the field and marks are removed;
+  - **a push** (foureyes, r5): a conflicting head handed off (count 1), then a new head that is
+    open but unapproved: the field, `count`, `first` and the marks are kept, and nothing is sent;
+    that head approved and still conflicting: `count` 2. Three conflicting approved heads with a
+    cap of 3: three hand-offs, then the fourth escalates;
+  - a draft or unapproved head of an open PR is never checked, sent or escalated, even past the
+    age bound; the first pass that finds its approved head still conflicting past the bound
+    escalates.
 - **Settings:** both keys are in the registry, with their env names, groups and invalid texts. A
   value of 0 for both gives master only.
 - **Budget:** candidates beyond the budget are left for the next pass, with a reason, and the
