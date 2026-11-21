@@ -88,6 +88,19 @@ func (gitEnvRunner) Run(ctx context.Context, c setup.Cmd) ([]byte, error) {
 
 func (gitEnvRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
 
+// planLinkByMaster is a non-master deliverer's plan link: a directive to
+// master with the command to run, never a write of the plan's facts.
+func planLinkByMaster(b *bus.Bus, self string) (func(context.Context, string, int) error, func(context.Context, string, string) error) {
+	ask := func(ctx context.Context, command string) error {
+		_, err := b.Cmd(ctx, self, "master", bus.CmdDirective, "", "record the delivery in the plan: agentbus "+command)
+		return err
+	}
+	return func(ctx context.Context, task string, n int) error {
+			return ask(ctx, fmt.Sprintf("plan link %s --pr %d", task, n))
+		},
+		func(ctx context.Context, task, ref string) error { return ask(ctx, "plan link "+task+" --ref "+ref) }
+}
+
 func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 	settings := config.Machine(os.Getenv)
 	d := deliverDeps{
@@ -114,6 +127,9 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 		},
 	}
 	if self != "master" {
+		// The plan's writes are master's (ACL answer b): another deliverer
+		// asks master to record the link.
+		d.LinkPR, d.LinkRef = planLinkByMaster(b, self)
 		d.Report = func(ctx context.Context, msg string) error {
 			id, err := b.Report(ctx, self, bus.ReportNote, msg)
 			if err == nil {

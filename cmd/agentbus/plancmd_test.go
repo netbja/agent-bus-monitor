@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,8 +44,50 @@ func planRepo(t *testing.T, body string) (string, string) {
 func runPlanT(t *testing.T, b *bus.Bus, repo string, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errw bytes.Buffer
-	code := runPlan(context.Background(), b, repo, args, &out, &errw)
+	code := runPlan(context.Background(), b, repo, func(string) string { return "" }, args, &out, &errw) // the person
 	return code, out.String(), errw.String()
+}
+
+// ACL answer b (the person's yes): the plan's writes are master's. An agent's
+// environment is refused before any write; master and the person may; show
+// stays open to all (defence in depth, as run reset: the ACL users enforce it).
+func TestPlanWritesAreMasters(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project()), bus.PlanIgnoreKey(b.Project()))
+	})
+	t.Setenv("HERDR_ENV", "")
+	repo, sha := planRepo(t, testPlan)
+	b.Status(ctx, "master", "idle", "x", bus.AgentIdent{}) // load wants the project on the broker
+	as := func(agent string, args ...string) (int, string) {
+		var out, errw bytes.Buffer
+		code := runPlan(ctx, b, repo, func(k string) string {
+			if k == "AGENT_BUS_AGENT" {
+				return agent
+			}
+			return ""
+		}, args, &out, &errw)
+		return code, errw.String()
+	}
+	for _, args := range [][]string{{"load", "docs/plans/v0.22.json@" + sha}, {"link", "roles", "--pr", "4"}, {"done", "roles"},
+		{"note", "roles", "x"}, {"ignore", "12"}, {"clear"}} {
+		if code, errw := as("coder", args...); code == 0 || !strings.Contains(errw, "master's") {
+			t.Errorf("coder %v: %d %q", args, code, errw)
+		}
+	}
+	if _, ok, _ := b.Plan(ctx); ok {
+		t.Fatal("an agent's refused load wrote the plan")
+	}
+	if code, errw := as("master", "load", "docs/plans/v0.22.json@"+sha); code != 0 {
+		t.Fatalf("master load: %d %s", code, errw)
+	}
+	if code, errw := as("coder", "show"); code != 0 {
+		t.Fatalf("coder show: %d %s", code, errw)
+	}
+	if code, errw := as("", "note", "roles", "the person's"); code != 0 {
+		t.Fatalf("the person's note: %d %s", code, errw)
+	}
 }
 
 func TestPlanCLI(t *testing.T) {
@@ -153,5 +196,74 @@ func TestPlanShowFailsOnAFailedRead(t *testing.T) {
 	code, out, errw := runPlanT(t, b, repo, "show")
 	if code == 0 || !strings.Contains(errw, "board") || !strings.Contains(out, "?") {
 		t.Fatalf("a failed board read: %d\n%s\n%s", code, out, errw)
+	}
+}
+
+// Another deliverer (docs) does not write the plan's facts: it asks master,
+// with the command to run (ACL answer b).
+func TestPlanLinkByMaster(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.PlanFactsKey(b.Project()), bus.StreamKey(b.Project(), "cmd")) })
+	pr, ref := planLinkByMaster(b, "docs")
+	if err := pr(ctx, "roles", 42); err != nil {
+		t.Fatal(err)
+	}
+	if err := ref(ctx, "release", "docs/x@abc123"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := r.Exists(ctx, bus.PlanFactsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("the plan's facts were written")
+	}
+	msgs, err := r.XRange(ctx, bus.StreamKey(b.Project(), "cmd"), "-", "+").Result()
+	if err != nil || len(msgs) != 2 {
+		t.Fatalf("%v %v", msgs, err)
+	}
+	for i, want := range []string{"agentbus plan link roles --pr 42", "agentbus plan link release --ref docs/x@abc123"} {
+		if msgs[i].Values["target"] != "master" || msgs[i].Values["from"] != "docs" || !strings.Contains(msgs[i].Values["command"].(string), want) {
+			t.Errorf("%d: %v, want %q", i, msgs[i].Values, want)
+		}
+	}
+}
+
+// deliver's deps: master links itself; another deliverer asks master.
+func TestDeliverLinksThroughMaster(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.PlanFactsKey(b.Project()), bus.StreamKey(b.Project(), "cmd")) })
+	if err := realDeliverDeps(b, "docs", t.TempDir()).LinkPR(ctx, "roles", 7); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := r.XLen(ctx, bus.StreamKey(b.Project(), "cmd")).Result(); n != 1 {
+		t.Fatalf("docs' link: %d directives", n)
+	}
+	if n, _ := r.Exists(ctx, bus.PlanFactsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("docs wrote the plan's facts")
+	}
+}
+
+// The guard's production wiring (foureyes): the built binary, in an agent's
+// environment, refuses a plan write before writing anything.
+func TestPlanWriteRefusedInMain(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.PlanFactsKey(b.Project())) })
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := runOut("go", "build", "-o", bin, "."); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	dir := t.TempDir()
+	cmd := exec.Command(bin, "-p", b.Project(), "plan", "note", "roles", "x")
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "XDG_CONFIG_HOME=" + dir, "AGENT_BUS_AGENT=coder",
+		"REDIS_URL=" + os.Getenv("AGENTBUS_TEST_REDIS_URL")}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 2 || !strings.Contains(stderr.String(), "the plan's writes are master's") {
+		t.Fatalf("coder's plan note: %v, stderr %q", err, stderr.String())
+	}
+	if n, _ := r.Exists(ctx, bus.PlanFactsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("the refused note was written")
 	}
 }

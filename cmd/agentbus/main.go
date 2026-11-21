@@ -671,7 +671,7 @@ func main() {
 
 	case "plan":
 		wd, _ := os.Getwd()
-		os.Exit(runPlan(ctx, b, wd, rest, os.Stdout, os.Stderr))
+		os.Exit(runPlan(ctx, b, wd, os.Getenv, rest, os.Stdout, os.Stderr))
 
 	case "deliver":
 		wd, _ := os.Getwd()

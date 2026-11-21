@@ -16,10 +16,14 @@ import (
 
 const planUsage = "usage: plan show [--json] | plan load <path>@<commit> | plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan priority <task> high|normal|low --as <person> | plan ignore <pr> | plan clear"
 
+// planWrites are the plan verbs that write it: master's (priority is the
+// person's, by its own rule).
+var planWrites = map[string]bool{"load": true, "link": true, "done": true, "note": true, "ignore": true, "clear": true}
+
 // runPlan publishes and reads the project's plan (spec
 // docs/superpowers/specs/2026-10-22-plan-view-design.md). It writes Redis
 // only, never the file; repo is where load reads the file from Git.
-func runPlan(ctx context.Context, b *bus.Bus, repo string, args []string, out, errw io.Writer) int {
+func runPlan(ctx context.Context, b *bus.Bus, repo string, getenv func(string) string, args []string, out, errw io.Writer) int {
 	if len(args) == 0 {
 		args = []string{"show"}
 	}
@@ -27,6 +31,15 @@ func runPlan(ctx context.Context, b *bus.Bus, repo string, args []string, out, e
 	fail := func(err error) int {
 		fmt.Fprintf(errw, "plan %s: %v\n", verb, err)
 		return 1
+	}
+	// The plan's writes are master's (ACL answer b, broker-hardening step 4):
+	// another agent's environment is refused, the person's (none) and
+	// master's pass. Defence in depth, as run reset; the ACL users enforce it.
+	if planWrites[verb] {
+		if a := getenv("AGENT_BUS_AGENT"); a != "" && a != "master" {
+			fmt.Fprintf(errw, "plan %s: the plan's writes are master's (this is %s's agent environment, AGENT_BUS_AGENT)\n", verb, a)
+			return 2
+		}
 	}
 	switch verb {
 	case "show":
