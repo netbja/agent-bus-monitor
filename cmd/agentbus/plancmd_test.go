@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -238,5 +239,31 @@ func TestDeliverLinksThroughMaster(t *testing.T) {
 	}
 	if n, _ := r.Exists(ctx, bus.PlanFactsKey(b.Project())).Result(); n != 0 {
 		t.Fatal("docs wrote the plan's facts")
+	}
+}
+
+// The guard's production wiring (foureyes): the built binary, in an agent's
+// environment, refuses a plan write before writing anything.
+func TestPlanWriteRefusedInMain(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.PlanFactsKey(b.Project())) })
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := runOut("go", "build", "-o", bin, "."); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	dir := t.TempDir()
+	cmd := exec.Command(bin, "-p", b.Project(), "plan", "note", "roles", "x")
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "XDG_CONFIG_HOME=" + dir, "AGENT_BUS_AGENT=coder",
+		"REDIS_URL=" + os.Getenv("AGENTBUS_TEST_REDIS_URL")}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 2 || !strings.Contains(stderr.String(), "the plan's writes are master's") {
+		t.Fatalf("coder's plan note: %v, stderr %q", err, stderr.String())
+	}
+	if n, _ := r.Exists(ctx, bus.PlanFactsKey(b.Project())).Result(); n != 0 {
+		t.Fatal("the refused note was written")
 	}
 }
