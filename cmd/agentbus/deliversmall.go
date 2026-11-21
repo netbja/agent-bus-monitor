@@ -35,13 +35,15 @@ var neverSmall = []string{
 	"mergequeue/**", "config/keys.go",
 }
 
-// docGlobs is documentation: a change whose every path matches one is small
-// at any size (§3.2, the person's "spec/docs-only").
+// docGlobs is documentation: a change whose every path matches one is
+// docs-only (§4.8's docs class). It is small within the same limits as any
+// other change (§6 Q2, the person's answer), not at any size.
 var docGlobs = []string{"docs/**", "*.md"}
 
 // smallClass is what classify found.
 type smallClass struct {
-	Small, Docs  bool
+	Small        bool
+	Docs         bool // every path is documentation (docGlobs), none never small, binary or unreadable
 	Lines, Files int
 	Never        string // the first path a never-small glob matched
 	Binary       string // the first binary path
@@ -105,7 +107,7 @@ func classify(numstat string, extra []string, maxLines, maxFiles int) smallClass
 		c.Docs = false
 		return c
 	}
-	c.Small = c.Docs || c.Lines <= maxLines && c.Files <= maxFiles
+	c.Small = c.Lines <= maxLines && c.Files <= maxFiles
 	return c
 }
 

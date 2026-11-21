@@ -33,7 +33,9 @@ func TestClassifySmall(t *testing.T) {
 		{"151 lines", numstat("cmd/busmon", 5, 30) + "1\t0\tcmd/busmon/g.go\n", nil, false, false, 151, 6, ""},
 		{"151 lines, 5 files", numstat("cmd/busmon", 4, 30) + "30\t1\tcmd/busmon/g.go\n", nil, false, false, 151, 5, ""},
 		{"6 files", numstat("cmd/busmon", 6, 1), nil, false, false, 6, 6, ""},
-		{"2000-line docs", "1500\t0\tdocs/superpowers/specs/a.md\n400\t100\tREADME.md\n0\t0\tdocs/plans/v.json\n", nil, true, true, 2000, 3, ""},
+		{"2000-line docs (Q2: docs within the limits too)", "1500\t0\tdocs/superpowers/specs/a.md\n400\t100\tREADME.md\n0\t0\tdocs/plans/v.json\n", nil, false, true, 2000, 3, ""},
+		{"150-line docs", "100\t0\tdocs/a.md\n50\t0\tREADME.md\n", nil, true, true, 150, 2, ""},
+		{"6 docs files", numstat("docs", 6, 1), nil, false, true, 6, 6, ""},
 		{"a .md outside docs", "10\t0\tcmd/busmon/NOTES.md\n", nil, true, true, 10, 1, ""},
 		{"docs and code", "1500\t0\tdocs/a.md\n1\t0\tcmd/busmon/x.go\n", nil, false, false, 1501, 2, ""},
 		{"bus, 1 line", "1\t0\tbus/x.go\n", nil, false, false, 1, 1, "bus/x.go"},
@@ -63,7 +65,8 @@ func TestClassifySmall(t *testing.T) {
 func TestClassifyLine(t *testing.T) {
 	for _, c := range []struct{ numstat, want string }{
 		{"10\t2\tcmd/busmon/x.go\n", "small: 12 lines, 1 files"},
-		{"2000\t0\tdocs/a.md\n", "small (docs only): 2000 lines, 1 files"},
+		{"20\t0\tdocs/a.md\n", "small (docs only): 20 lines, 1 files"},
+		{"2000\t0\tdocs/a.md\n", "not small (2000 lines > 150): 2000 lines, 1 files"},
 		{numstat("cmd/busmon", 2, 100), "not small (200 lines > 150): 200 lines, 2 files"},
 		{numstat("cmd/busmon", 6, 1), "not small (6 files > 5): 6 lines, 6 files"},
 		{"1\t0\tbus/stream.go\n", "not small (bus/stream.go is never small): 1 lines, 1 files"},
