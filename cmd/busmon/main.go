@@ -28,12 +28,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -118,14 +120,73 @@ func confirmDelete(s bus.ProjectSummary, keys int, now time.Time, out io.Writer,
 	}
 }
 
-// deleteProject implements `busmon --delete <project>`. A project with no keys is
-// a no-op success: that is the typo signal (you asked to delete 31 keys and were
-// told there are none) without making a repeated cleanup script fail. files
-// (nil: both options off) is where the project's files are, with the options
-// on: what they would remove is printed before the prompt, and removed only
-// after a clean delete (projects-admin §5.5). No backup is made here, so no
-// archive is exempt.
-func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, removeServices func(project string) ([]string, error), files func() (projfiles.Options, error)) error {
+// deleteDeps is what busmon --delete reads and runs besides the broker, a
+// test's seams: the services removed on this machine, the files option,
+// the Projects page's quiet check, the hosts where units remain, the backup
+// taken just before the delete, and where it writes.
+type deleteDeps struct {
+	removeServices func(project string) ([]string, error)
+	files          func() (projfiles.Options, error) // nil: both options off
+	quiet          func(ctx context.Context, client *redis.Client, project string) (string, error)
+	unitHosts      func(ctx context.Context, client *redis.Client, project string) ([]unitHosts, error)
+	backup         func(project string) (archive string, err error) // "" archive: made, its path not named
+	out            io.Writer
+}
+
+// realDeleteDeps are busmon --delete's on this machine: the Projects page's
+// own checks (realQuiet, remoteUnitHosts) and agentbus backup.
+func realDeleteDeps(files func() (projfiles.Options, error)) deleteDeps {
+	host, _ := os.Hostname()
+	return deleteDeps{removeServices: localServices, files: files, out: os.Stdout,
+		quiet: func(ctx context.Context, c *redis.Client, p string) (string, error) {
+			return realQuiet(c, os.Getenv)(ctx, p)
+		},
+		unitHosts: func(ctx context.Context, c *redis.Client, p string) ([]unitHosts, error) {
+			b, err := bus.Open(c, p)
+			if err != nil {
+				return nil, err
+			}
+			inst, recs, err := b.ServiceStates(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return remoteUnitHosts(inst, recs, host), nil
+		},
+		backup: realDeleteBackup(agentbusBeside()),
+	}
+}
+
+// realDeleteBackup runs agentbus backup --project p, its output shown, and
+// names the archive it printed.
+func realDeleteBackup(bin string) func(project string) (string, error) {
+	return func(project string) (string, error) {
+		var buf bytes.Buffer
+		cmd := exec.Command(bin, "backup", "--project", project)
+		cmd.Env = os.Environ()
+		cmd.Stdout, cmd.Stderr = io.MultiWriter(os.Stdout, &buf), io.MultiWriter(os.Stderr, &buf)
+		if err := cmd.Run(); err != nil {
+			return "", err
+		}
+		return backupArchiveIn(buf.String()), nil
+	}
+}
+
+// deleteProject implements `busmon --delete <project>` under the Projects
+// page's rules (projects-admin §5, busmon-cli-flags): a live project is
+// refused whatever -y says (its reason, as the page gives it: Z, x or
+// agentbus down first), the hosts where its units remain are named, and a
+// backup is taken just before the delete; a failed backup deletes nothing.
+// The delete itself checks once more in its script (deleteProjectNow). A
+// project with no keys is a no-op success: the typo signal (you asked to
+// delete 31 keys and were told there are none) without making a repeated
+// cleanup script fail. With a files option on, what it would remove is
+// printed before the prompt, and removed only after a clean delete
+// (projects-admin §5.5), the backup just made kept.
+func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, d deleteDeps) error {
+	out := d.out
+	if out == nil {
+		out = os.Stdout
+	}
 	client, err := bus.Connect(host)
 	if err != nil {
 		return fmt.Errorf("Redis connection failed: %w", err)
@@ -139,30 +200,66 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 	}
 	if len(keys) == 0 {
 		fmt.Fprintf(os.Stderr, "no keys for project '%s' — nothing to delete\n", project)
-		return reportRemovedServices(project, removeServices)
+		return reportRemovedServices(project, d.removeServices)
+	}
+	if d.quiet == nil || d.backup == nil {
+		return fmt.Errorf("%s: cannot check that it is quiet or back it up here: nothing deleted", project)
+	}
+	// The page's check, -y or not: a live project is never deleted from
+	// here (busmon-cli-flags item 2). An unknown is never quiet.
+	why, err := d.quiet(ctx, client, project)
+	if err != nil {
+		return fmt.Errorf("cannot check that %s is quiet (%v): nothing deleted", project, err)
+	}
+	if why != "" {
+		return fmt.Errorf("%s is not asleep: %s; nothing deleted", project, why)
 	}
 
 	summary, err := bus.ProjectInfo(ctx, client, project)
 	if err != nil {
 		return err
 	}
+	var hosts []unitHosts
+	if d.unitHosts != nil {
+		var herr error
+		hosts, herr = d.unitHosts(ctx, client, project)
+		switch {
+		case herr != nil:
+			fmt.Fprintf(out, "warning: the hosts where %s's units remain could not be read (%v): check the other machines after the delete\n", project, herr)
+		case len(hosts) > 0:
+			fmt.Fprintf(out, "warning: %s's units remain on %s: the delete removes this machine's only; run agentbus --project %s service remove there\n",
+				project, unitHostsText(hosts), project)
+		}
+	}
 	var fo projfiles.Options
 	filesOK := false
-	if files != nil {
+	if d.files != nil {
 		var plan projfiles.Plan
-		fo, err = files()
+		fo, err = d.files()
 		if err == nil {
 			plan, err = projfiles.PlanFor(fo)
 		}
-		fmt.Print(filesPlanText(project, plan, err))
+		fmt.Fprint(out, filesPlanText(project, plan, err))
 		filesOK = err == nil
 	}
-	if !yes && !confirmDelete(summary, len(keys), now, os.Stdout, in) {
-		fmt.Println("Cancelled.")
+	fmt.Fprintf(out, "A backup of %s is taken just before the delete.\n", project)
+	if !yes && !confirmDelete(summary, len(keys), now, out, in) {
+		fmt.Fprintln(out, "Cancelled.")
 		return nil
 	}
 
-	n, kinds, left, err := deleteProjectNow(ctx, client, project, removeServices)
+	archive, err := d.backup(project)
+	if err != nil {
+		return fmt.Errorf("backup of %s failed (%v): nothing deleted", project, err)
+	}
+	if archive != "" {
+		fmt.Fprintf(out, "Backed up to %s\n", archive)
+	} else {
+		fo.Backups = false // the new archive cannot be told apart: none goes (§5.5, fail closed)
+	}
+	fo.KeepArchive = archive
+
+	n, kinds, left, err := deleteProjectNow(ctx, client, project, d.removeServices)
 	printRemovedServices(project, kinds)
 	if err != nil {
 		return err
@@ -170,20 +267,23 @@ func deleteProject(host, project string, yes bool, in io.Reader, now time.Time, 
 	if len(left) > 0 {
 		return fmt.Errorf("%s", cameBack(project, n, left))
 	}
-	fmt.Printf("Deleted %d %s for project '%s'.\n", n, textfmt.Plural(int(n), "key"), project)
+	fmt.Fprintf(out, "Deleted %d %s for project '%s'.\n", n, textfmt.Plural(int(n), "key"), project)
+	if len(hosts) > 0 {
+		fmt.Fprintf(out, "Units remain on %s: agentbus --project %s service remove there\n", unitHostsText(hosts), project)
+	}
 	if filesOK {
-		d := projfiles.Apply(fo)
-		if d.Template != "" {
-			fmt.Printf("Removed %s\n", d.Template)
+		done := projfiles.Apply(fo)
+		if done.Template != "" {
+			fmt.Fprintf(out, "Removed %s\n", done.Template)
 		}
-		for _, w := range d.Worktrees {
-			fmt.Printf("Removed worktree %s\n", w)
+		for _, w := range done.Worktrees {
+			fmt.Fprintf(out, "Removed worktree %s\n", w)
 		}
-		for _, a := range d.Archives {
-			fmt.Printf("Removed %s\n", a)
+		for _, a := range done.Archives {
+			fmt.Fprintf(out, "Removed %s\n", a)
 		}
-		if len(d.Errs) > 0 {
-			return fmt.Errorf("deleted %s, but %d %s could not be removed: %w", project, len(d.Errs), textfmt.Plural(len(d.Errs), "file"), errors.Join(d.Errs...))
+		if len(done.Errs) > 0 {
+			return fmt.Errorf("deleted %s, but %d %s could not be removed: %w", project, len(done.Errs), textfmt.Plural(len(done.Errs), "file"), errors.Join(done.Errs...))
 		}
 	}
 	return nil
@@ -586,7 +686,7 @@ func main() {
 				return o, err
 			}
 		}
-		if err := deleteProject(opts.host, opts.delete, opts.yes, os.Stdin, time.Now(), localServices, files); err != nil {
+		if err := deleteProject(opts.host, opts.delete, opts.yes, os.Stdin, time.Now(), realDeleteDeps(files)); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

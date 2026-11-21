@@ -227,7 +227,7 @@ These are the ways to stop, from the lightest:
   ```
 
 The agents' panes stay open in herdr until you close them. Nothing on the bus is deleted unless
-you ask for it with `busmon --delete <project>`, which asks for confirmation first.
+you ask for it with `busmon --delete <project>`, which deletes only a project asleep, asks for confirmation, and backs it up just before.
 
 ## Next
 

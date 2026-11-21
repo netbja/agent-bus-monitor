@@ -242,7 +242,14 @@ func backupArchiveInLog(log string) string {
 		f.Seek(-64<<10, io.SeekEnd)
 	}
 	b, _ := io.ReadAll(io.LimitReader(f, 64<<10))
-	lines := strings.Split(string(b), "\n")
+	return backupArchiveIn(string(b))
+}
+
+// backupArchiveIn is backupArchiveInLog's rule on a run's output: the first
+// "backup: <path>" line after the last "--- " header, an existing regular
+// .tar.zst at an absolute path, else "" (busmon --delete reads its own run).
+func backupArchiveIn(text string) string {
+	lines := strings.Split(text, "\n")
 	start := 0
 	for i, l := range lines {
 		if strings.HasPrefix(l, "--- ") {

@@ -227,20 +227,20 @@ func TestDeleteRemovesTheServicesFirst(t *testing.T) {
 	b.MarkServicesInstalled(ctx, bus.ServicesInstall{Kinds: []string{"dispatch"}})
 	t.Cleanup(func() { c.Del(ctx, bus.ServicesKey(project)) })
 
-	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), func(string) ([]string, error) {
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), testDeleteDeps(func(string) ([]string, error) {
 		return nil, errors.New("systemctl refused")
-	}, nil); err == nil || !strings.Contains(err.Error(), "nothing deleted") {
+	}, nil)); err == nil || !strings.Contains(err.Error(), "nothing deleted") {
 		t.Fatalf("err = %v", err)
 	}
 	if ok, _ := b.ServicesInstalled(ctx); !ok {
 		t.Fatal("keys deleted although the services were not removed")
 	}
 	var keysAtRemoval int
-	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), func(p string) ([]string, error) {
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), testDeleteDeps(func(p string) ([]string, error) {
 		keys, _ := bus.ProjectKeys(ctx, c, p)
 		keysAtRemoval = len(keys)
 		return []string{"dispatch"}, nil
-	}, nil); err != nil {
+	}, nil)); err != nil {
 		t.Fatal(err)
 	}
 	if keysAtRemoval == 0 {

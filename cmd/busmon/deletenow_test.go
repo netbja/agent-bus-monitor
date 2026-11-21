@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/internal/testredis"
+	"github.com/netbja/agent-bus-monitor/projfiles"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -96,7 +98,7 @@ func TestDeleteProjectNowRefusesALiveProject(t *testing.T) {
 	if ok, _ := b.ServicesInstalled(ctx); !ok {
 		t.Fatal("a refused delete deleted keys")
 	}
-	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), nil, nil); err == nil || !strings.Contains(err.Error(), "dispatch holds its lease") {
+	if err := deleteProject("", project, true, strings.NewReader(""), time.Now(), testDeleteDeps(nil, nil)); err == nil || !strings.Contains(err.Error(), "dispatch holds its lease") {
 		t.Fatalf("--delete on a live project: %v", err)
 	}
 }
@@ -209,4 +211,12 @@ func TestDeleteProjectNowKeepsTheTableWhenRefused(t *testing.T) {
 	if got, _ := os.ReadFile(cfg); string(got) != text {
 		t.Fatalf("a refused delete removed the table:\n%s", got)
 	}
+}
+
+// testDeleteDeps are --delete's seams for a test: the project quiet, a
+// backup that names no archive, no remote hosts, output discarded.
+func testDeleteDeps(remove func(string) ([]string, error), files func() (projfiles.Options, error)) deleteDeps {
+	return deleteDeps{removeServices: remove, files: files, out: io.Discard,
+		quiet:  func(context.Context, *redis.Client, string) (string, error) { return "", nil },
+		backup: func(string) (string, error) { return "", nil }}
 }
