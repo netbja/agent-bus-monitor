@@ -1,6 +1,6 @@
 # One approval for a small change (single-approval)
 
-Status: spec r1, for review (subject `single-approval`). Not built. Base: origin/dev `570c16be`.
+Status: spec r2, for review (subject `single-approval`; r2: the trace is the deliverer's report; busmon counts current distinct approvers from a new `MergeItem.Approvers`, not the raw approvals; Q3 covers both limits too (reviewer-codex); §4.4 and Q8 on an earlier reject by the other reviewer (foureyes)). Not built. Base: origin/dev `570c16be`.
 Author: architect, from the person's directive relayed by master (cmd `1795262117698-0`, task
 `single-approval-spec`). This **loosens a safety gate**: §2 says what is lost, with the ledger's
 numbers, before the design.
@@ -15,8 +15,8 @@ numbers, before the design.
    an independent approve (reviewer ≠ author) naming `H` (`deliver.go:357`).
 
 The one way past the second rule is `--single-approval <reason>`: the emergency. Its reason is
-written in the PR body (`deliver.go:383`) and traced on the bus as master's report (`Trace`,
-`deliver.go:124`). Nothing checks the size or the paths of the change.
+written in the PR body (`deliver.go:383`) and traced on the bus as the delivering role's report
+(`Trace` → `b.Report(ctx, self, …)`, `deliver.go:124`; master or docs may deliver). Nothing checks the size or the paths of the change.
 
 The merge queue (`mergequeue/derive.go`) lists a PR whose subject rolls up `APPROVED` on its head,
 with its approvals (`bus.MergeItem.Approvals`), so busmon can already count them.
@@ -69,7 +69,8 @@ reviewer found (§4.1 narrows it to 3).
 | `delivery.never_small` | List | `""` | globs **added** to the defaults of §3.2; never removes one |
 
 All four are `Project` keys (a value per project, `[project.<name>]`). They are read by
-`agentbus deliver` and shown in busmon. Who may write them is Q3.
+`agentbus deliver` and shown in busmon. Who may write the three that widen the gate
+(`single_approval`, `small_max_lines`, `small_max_files`) is Q3. `never_small` only narrows it.
 
 ### 3.2 Small, decided by code
 
@@ -128,10 +129,16 @@ with one, without this rule, it would.
 
 ### 4.4 The other reviewer
 
-Under `small`, master challenges only the counting reviewer. If the other one was challenged
+Under `small`, master (or docs, for its own PR) challenges only the counting reviewer. If the other one was challenged
 too, its gate stays open and its review goes on. A **later** reject makes the subject roll up
 `REJECTED`, so the PR leaves the merge queue (`mergequeue.candidates` keeps only `APPROVED`). That
 happens before the person merges, because For you lists only the queue.
+
+**An earlier objection still blocks** (foureyes). §4.3 reads every reviewer's latest verdict. If
+the other reviewer rejected an earlier head and was not challenged on the fix, its latest verdict
+is still that reject. The fix then needs that reviewer's approve too: two approvals in practice.
+So `small` saves a review only where the other reviewer never objected. Recommended: keep it (an
+objection is answered by the one who raised it). The alternative is Q8.
 
 ### 4.5 What `deliver` records
 
@@ -140,8 +147,18 @@ happens before the person merges, because For you lists only the queue.
 - `--dry-run` prints the classification: small or not, lines, files, and the first
   never-small path that matched.
 
-busmon's merge row and page show **"1 approval"** when `len(MergeItem.Approvals) == 1`. No new
-field: the reason is in the PR body and the trace, and the page shows the trace's line.
+busmon's merge row and page show **"1 approval"** when the item's head has one current approver.
+`MergeItem.Approvals` cannot tell that (reviewer-codex): `mergequeue.candidates` keeps every
+independent approve naming the head, a reviewer's stale or repeated ones included. Example: A
+approves H, then H2; B approves H. The roll-up decides on H, and its current approvers are B
+alone. But `Approvals` holds A's and B's, so its length is 2. So:
+
+- `currentApprovers` moves from `cmd/agentbus/deliver.go` to `bus` (`bus.CurrentApprovers`), so
+  `deliver` and the merge queue count the same way;
+- `MergeItem` gets `Approvers []string`: the head's current distinct approvers. It is additive, and
+  `Approvals` stays.
+
+The reason is in the PR body and the trace, and the page shows the trace's line.
 
 ### 4.6 Above the threshold
 
@@ -173,8 +190,11 @@ the person's yes (--single-approval).
    - a reject by the other reviewer on any head is refused, even with a later approve;
    - a push after the approve is refused;
    - not small is refused with §4.7's message;
-   - the emergency flag still works.
-3. **busmon**: the Shift+C rows, and "1 approval" on the merge row and page.
+   - the emergency flag still works;
+   - a reviewer who approved H and then H2 does not count for H.
+3. **The merge queue and busmon**: `bus.CurrentApprovers` used by `mergequeue` for
+   `MergeItem.Approvers`; the Shift+C rows; "1 approval" on the merge row and page. Tests: §4.5's
+   example shows "1 approval", and two current approvers show none.
 
 ## 6. Questions for the person
 
@@ -184,9 +204,11 @@ the person's yes (--single-approval).
 2. **Docs-only at any size?** It is where reviewers disagree most (17 of 43 small docs-only heads).
    Recommended: docs-only counts as small only within the same line and file limits, not at any
    size. The alternative is your text as written.
-3. **Who may set `delivery.single_approval`?** An agent could run `agentbus config set` itself
-   and loosen its own gate. Recommended: you only, from busmon's Shift+C or `config.toml`, the
-   way `backup.after_*` is `PersonOnly`. Agents' `config set` is refused.
+3. **Who may set `delivery.single_approval`, `small_max_lines` and `small_max_files`?** An agent
+   could run `agentbus config set` itself and loosen its own gate: switch it on, or raise a
+   limit so a larger change counts as small. Recommended: you only, for all three, from busmon's
+   Shift+C or `config.toml`, the way `backup.after_*` is `PersonOnly`. Agents' `config set` is
+   refused. `never_small` only narrows the gate, so anyone may add to it.
 4. **Skills: all of `skills/**` never small, or only some?** A path cannot tell a safety rule
    from other skill text. Recommended: all of it.
 5. **`config/keys.go` never small?** Needed so a small PR cannot raise its own limits; the cost
@@ -196,3 +218,6 @@ the person's yes (--single-approval).
    emergency flag with the ask's id in its reason, traced on the bus, is enough.
 7. **Defaults: 150 lines and 5 files?** In §2, 11 of the 54 small heads were code; the rest were
    docs. Recommended: yes.
+8. **An earlier reject by the other reviewer (§4.4).** Should it still block one approval on a
+   later head? Recommended: yes, until that reviewer approves. The alternative: only a reject
+   on the current head blocks, so a fix can go out on the counting reviewer alone.
