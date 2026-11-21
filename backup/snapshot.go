@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -32,6 +34,8 @@ const SnapshotMember = "broker.rdb"
 
 // snapBroker is the broker side of a snapshot.
 type snapBroker interface {
+	Mark(ctx context.Context, key, value string, ttl time.Duration) error
+	Unmark(ctx context.Context, key string) error
 	Time(ctx context.Context) (time.Time, error)
 	BgSave(ctx context.Context) error
 	Persistence(ctx context.Context) (map[string]string, error)
@@ -41,8 +45,12 @@ type snapBroker interface {
 // redisSnap is snapBroker on a client.
 type redisSnap struct{ c *redis.Client }
 
-func (r redisSnap) Time(ctx context.Context) (time.Time, error) { return r.c.Time(ctx).Result() }
-func (r redisSnap) BgSave(ctx context.Context) error            { return r.c.BgSave(ctx).Err() }
+func (r redisSnap) Mark(ctx context.Context, key, value string, ttl time.Duration) error {
+	return r.c.Set(ctx, key, value, ttl).Err()
+}
+func (r redisSnap) Unmark(ctx context.Context, key string) error { return r.c.Del(ctx, key).Err() }
+func (r redisSnap) Time(ctx context.Context) (time.Time, error)  { return r.c.Time(ctx).Result() }
+func (r redisSnap) BgSave(ctx context.Context) error             { return r.c.BgSave(ctx).Err() }
 
 func (r redisSnap) Persistence(ctx context.Context) (map[string]string, error) {
 	s, err := r.c.Info(ctx, "persistence").Result()
@@ -89,6 +97,24 @@ type Snapshotter struct {
 	Wait    time.Duration // how long the save may take; 0: DefaultSnapshotWait
 	Poll    time.Duration // 0: 200 ms
 	Sleep   func(time.Duration)
+	nonce   func() string // tests: the marker's value
+}
+
+// SnapshotMarkKey is the key a snapshot writes on the broker it asked to
+// save, its value one run's random marker (reviewer-codex): a copied RDB that
+// does not hold it is not that broker's (REDIS_URL names a remote broker
+// while a local container runs, another broker's file in the same path).
+// Set with a TTL and deleted after; it is not in any project's keys.
+const SnapshotMarkKey = "agentbus:backup:snapshot-mark"
+
+// markValue is 16 hex characters: an RDB stores a string of at most 20
+// bytes uncompressed, so the marker is found as written.
+func markValue() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // DefaultSnapshotWait bounds the wait for BGSAVE.
@@ -112,6 +138,18 @@ func (s Snapshotter) Take(ctx context.Context) (string, string) {
 	if sleep == nil {
 		sleep = time.Sleep
 	}
+	nonce := markValue
+	if s.nonce != nil {
+		nonce = s.nonce
+	}
+	mark := nonce()
+	if mark == "" {
+		return "", "no random marker"
+	}
+	if err := s.broker.Mark(ctx, SnapshotMarkKey, mark, 10*time.Minute); err != nil {
+		return "", "the snapshot's marker: " + err.Error()
+	}
+	defer s.broker.Unmark(context.WithoutCancel(ctx), SnapshotMarkKey)
 	before, err := s.broker.Persistence(ctx)
 	if err != nil {
 		return "", "INFO persistence: " + err.Error()
@@ -146,13 +184,33 @@ func (s Snapshotter) Take(ctx context.Context) (string, string) {
 	if s.Runtime != "" && s.Output != nil {
 		out, err := s.Output(ctx, s.Runtime, "ps", "-a", "--filter", "name=^"+brokerrt.Container+"$", "--format", "{{.State}}")
 		if err == nil && strings.TrimSpace(string(out)) == "running" {
-			return s.fromContainer(ctx, src, asked)
+			return s.marked(s.fromContainer(ctx, src, asked))(mark)
 		}
 	}
 	if st, err := os.Stat(src); err == nil && st.Mode().IsRegular() {
-		return s.fromHost(src, asked)
+		return s.marked(s.fromHost(src, asked))(mark)
 	}
 	return "", "the broker's data directory is not on this host (no running " + brokerrt.Container + ", no " + src + ")"
+}
+
+// marked keeps a staged copy only if it holds this run's marker, written on
+// the connected broker before its save: proof that the file is that
+// broker's snapshot, not another's at the same path.
+func (s Snapshotter) marked(path, why string) func(mark string) (string, string) {
+	return func(mark string) (string, string) {
+		if path == "" {
+			return "", why
+		}
+		found, err := fileHolds(path, []byte(mark))
+		if err == nil && found {
+			return path, ""
+		}
+		os.Remove(path)
+		if err != nil {
+			return "", err.Error()
+		}
+		return "", "the RDB copied does not hold this run's marker: not the connected broker's snapshot (REDIS_URL names another broker than the local one?)"
+	}
 }
 
 // newSave: a save finished after asked, by the save count when the broker
@@ -231,4 +289,33 @@ func (s Snapshotter) stage(r io.Reader, mod, asked time.Time) (string, string) {
 	}
 	ok = true
 	return f.Name(), ""
+}
+
+// fileHolds says whether the file at path holds mark, read in chunks (an
+// RDB may be large): each chunk keeps the previous one's last len(mark)-1
+// bytes, so a marker across two reads is found.
+func fileHolds(path string, mark []byte) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	buf := make([]byte, 0, 64<<10+len(mark))
+	chunk := make([]byte, 64<<10)
+	for {
+		n, err := f.Read(chunk)
+		buf = append(buf, chunk[:n]...)
+		if bytes.Contains(buf, mark) {
+			return true, nil
+		}
+		if keep := len(mark) - 1; len(buf) > keep {
+			buf = append(buf[:0], buf[len(buf)-keep:]...)
+		}
+		if err == io.EOF {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
 }

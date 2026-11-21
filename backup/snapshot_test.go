@@ -28,6 +28,27 @@ type fakeSnap struct {
 	asked    bool
 	noCounts bool // an older broker without rdb_saves
 	lag      int  // polls after BGSAVE that show no save running yet (it starts late)
+	marks    map[string]string
+	unmarked bool
+	markErr  error
+}
+
+const testMark = "0123456789abcdef"
+
+func (f *fakeSnap) Mark(_ context.Context, key, value string, _ time.Duration) error {
+	if f.markErr != nil {
+		return f.markErr
+	}
+	if f.marks == nil {
+		f.marks = map[string]string{}
+	}
+	f.marks[key] = value
+	return nil
+}
+func (f *fakeSnap) Unmark(_ context.Context, key string) error {
+	delete(f.marks, key)
+	f.unmarked = true
+	return nil
 }
 
 func (f *fakeSnap) Time(context.Context) (time.Time, error) { return f.now, nil }
@@ -67,7 +88,7 @@ func (f *fakeSnap) DataFile(context.Context) (string, string, error) { return f.
 // rdbFile writes an RDB-looking file at path with mtime at.
 func rdbFile(t *testing.T, path string, at time.Time) []byte {
 	t.Helper()
-	data := []byte("REDIS0012 some keys")
+	data := []byte("REDIS0012 some keys " + testMark + " more")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +111,7 @@ func tarOf(t *testing.T, name string, data []byte, at time.Time) []byte {
 }
 
 func snapWith(f *fakeSnap, stage string) Snapshotter {
-	return Snapshotter{broker: f, Dir: stage, Poll: time.Millisecond, Sleep: func(time.Duration) {}}
+	return Snapshotter{broker: f, Dir: stage, Poll: time.Millisecond, Sleep: func(time.Duration) {}, nonce: func() string { return testMark }}
 }
 
 // A native broker (its data directory on this host): BGSAVE, the wait until
@@ -110,6 +131,9 @@ func TestSnapshotFromTheHost(t *testing.T) {
 		if f.saves != 1 || f.asked {
 			t.Fatalf("noCounts %v: returned before the save finished (saves %d)", noCounts, f.saves)
 		}
+		if !f.unmarked || len(f.marks) != 0 {
+			t.Fatalf("the marker was not removed: %v", f.marks)
+		}
 		got, _ := os.ReadFile(path)
 		st, _ := os.Stat(path)
 		if !bytes.Equal(got, data) || st.Mode().Perm() != 0o600 {
@@ -123,7 +147,7 @@ func TestSnapshotTakesAValkeyRDB(t *testing.T) {
 	dir, stage := t.TempDir(), t.TempDir()
 	now := time.Now().Truncate(time.Second)
 	f := &fakeSnap{now: now, status: "ok", dir: dir, file: "dump.rdb"}
-	_ = os.WriteFile(filepath.Join(dir, "dump.rdb"), []byte("VALKEY080 keys"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "dump.rdb"), []byte("VALKEY080 keys "+testMark), 0o600)
 	_ = os.Chtimes(filepath.Join(dir, "dump.rdb"), now.Add(time.Second), now.Add(time.Second))
 	if path, why := snapWith(f, stage).Take(context.Background()); why != "" || path == "" {
 		t.Fatalf("%q %q", path, why)
@@ -135,7 +159,7 @@ func TestSnapshotTakesAValkeyRDB(t *testing.T) {
 // and never the AOF.
 func TestSnapshotFromTheContainer(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
-	data := []byte("REDIS0012 container keys")
+	data := []byte("REDIS0012 container keys " + testMark)
 	var ran []string
 	s := snapWith(&fakeSnap{now: now, status: "ok", dir: "/data", file: "dump.rdb"}, t.TempDir())
 	s.Runtime = "podman"
@@ -170,6 +194,7 @@ func TestSnapshotLeftOut(t *testing.T) {
 		set  func(f *fakeSnap, dir string, s *Snapshotter)
 		want string
 	}{
+		{"the marker refused", func(f *fakeSnap, _ string, _ *Snapshotter) { f.markErr = errors.New("NOPERM") }, "the snapshot's marker: NOPERM"},
 		{"BGSAVE refused", func(f *fakeSnap, _ string, _ *Snapshotter) {
 			f.bgErr = errors.New("ERR Background save already in progress")
 		}, "BGSAVE refused: ERR Background save already in progress"},
@@ -192,6 +217,22 @@ func TestSnapshotLeftOut(t *testing.T) {
 				return tarOf(t, "dump.rdb", []byte("REDIS0012"), now.Add(-time.Hour)), nil
 			}
 		}, "predates the save asked for"},
+		// reviewer-codex: REDIS_URL names a remote broker while a local
+		// container runs; its file is new and an RDB, but not the connected
+		// broker's: it does not hold the marker.
+		{"another broker's RDB", func(f *fakeSnap, _ string, s *Snapshotter) {
+			s.Runtime = "docker"
+			s.Output = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "ps" {
+					return []byte("running\n"), nil
+				}
+				return tarOf(t, "dump.rdb", []byte("REDIS0012 another broker's keys"), now.Add(time.Second)), nil
+			}
+		}, "does not hold this run's marker"},
+		{"another broker's file on this host", func(f *fakeSnap, dir string, _ *Snapshotter) {
+			_ = os.WriteFile(filepath.Join(dir, "dump.rdb"), []byte("REDIS0012 a native broker's keys"), 0o600)
+			_ = os.Chtimes(filepath.Join(dir, "dump.rdb"), now.Add(time.Second), now.Add(time.Second))
+		}, "does not hold this run's marker"},
 		{"the container's cp fails", func(f *fakeSnap, _ string, s *Snapshotter) {
 			s.Runtime = "docker"
 			s.Output = func(_ context.Context, _ string, args ...string) ([]byte, error) {
@@ -206,7 +247,7 @@ func TestSnapshotLeftOut(t *testing.T) {
 			dir, stage := t.TempDir(), t.TempDir()
 			f := &fakeSnap{now: now, status: "ok", dir: dir, file: "dump.rdb"}
 			s := snapWith(f, stage)
-			if c.name == "the container's cp fails" || c.name == "the container's copy is older" {
+			if c.name == "the container's cp fails" || c.name == "the container's copy is older" || c.name == "another broker's RDB" {
 				f.dir = "/data"
 			}
 			c.set(f, dir, &s)
@@ -268,5 +309,19 @@ func TestRunArchivesTheSnapshot(t *testing.T) {
 func TestRealDepsSnapshot(t *testing.T) {
 	if RealDeps("").Snapshot == nil {
 		t.Fatal("RealDeps takes no snapshot")
+	}
+}
+
+// The marker across two reads of the RDB is still found.
+func TestFileHoldsAcrossChunks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f")
+	data := bytes.Repeat([]byte("x"), 64<<10-5)
+	data = append(data, []byte(testMark)...)
+	_ = os.WriteFile(path, append(data, "tail"...), 0o600)
+	if ok, err := fileHolds(path, []byte(testMark)); !ok || err != nil {
+		t.Fatalf("across the chunk: %v %v", ok, err)
+	}
+	if ok, _ := fileHolds(path, []byte("fedcba9876543210")); ok {
+		t.Fatal("found a marker it does not hold")
 	}
 }

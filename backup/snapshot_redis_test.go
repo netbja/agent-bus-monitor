@@ -84,6 +84,9 @@ func TestSnapshotAndManualRestoreOnADisposableRedis(t *testing.T) {
 	if why != "" {
 		t.Fatalf("snapshot: %s", why)
 	}
+	if n, _ := admin.Exists(ctx, SnapshotMarkKey).Result(); n != 0 {
+		t.Fatal("the snapshot's marker was left on the broker")
+	}
 	stop()
 
 	// The procedure: a fresh data directory keeping users.acl, broker.rdb
