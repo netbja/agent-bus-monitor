@@ -454,7 +454,16 @@ func TestPlanHeaderAtEveryWidth(t *testing.T) {
 			t.Errorf("stale and partial at %d: %q", c.w, h)
 		}
 	}
-	if h := planHeader(p, shellNow, 140, TierWide).text(); !strings.Contains(h, "stale: master, agentbus plan load") || !strings.Contains(h, "2 for you") && !strings.Contains(h, "1 left") {
+	if h := planHeader(p, shellNow, 140, TierWide).text(); !strings.Contains(h, "stale: master, agentbus plan load") || !strings.Contains(h, "1 left") {
 		t.Errorf("wide keeps the long words: %q", h)
+	}
+	// Below the room for every short form, the count and the first marker
+	// still come first.
+	if h := planHeader(p, shellNow, 38, TierNarrow).text(); !strings.Contains(h, "1/2?") || !strings.Contains(h, "stale") || Width(h) > 38 {
+		t.Errorf("38: %q", h)
+	}
+	// The markers shorten before what is left goes: at 80 both fit.
+	if h := planHeader(p, shellNow, 80, TierMedium).text(); !strings.Contains(h, "1 left") || !strings.Contains(h, "stale "+GlyphNone+" read failed") {
+		t.Errorf("80: what is left dropped before the markers shortened: %q", h)
 	}
 }
