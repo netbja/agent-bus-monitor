@@ -83,12 +83,22 @@ func runMissions(ctx context.Context, b *bus.Bus, args []string, cwd string, std
 
 // runMission is `agentbus mission …`: reads go to Redis directly; changes are
 // queued for the conductor, which alone applies them.
-func runMission(ctx context.Context, b *bus.Bus, self string, args []string, stdout, stderr io.Writer) int {
+func runMission(ctx context.Context, b *bus.Bus, self string, getenv func(string) string, args []string, stdout, stderr io.Writer) int {
 	usage := func() int { fmt.Fprintln(stderr, missionUsage); return 2 }
 	if len(args) == 0 {
 		return usage()
 	}
 	sub, rest := args[0], args[1:]
+	// The conductor's operations are master's (ACL answer d, broker-hardening
+	// step 4): another agent's environment is refused, the person's (none)
+	// and master's pass. Defence in depth, as run reset; the ACL users
+	// enforce it. status and show only read.
+	if sub != "status" && sub != "show" {
+		if a := getenv("AGENT_BUS_AGENT"); a != "" && a != "master" {
+			fmt.Fprintf(stderr, "mission %s: the conductor's operations are master's (this is %s's agent environment, AGENT_BUS_AGENT)\n", sub, a)
+			return 2
+		}
+	}
 	rest, waitArg := extractFlag(rest, "--wait")
 	wait := 30 * time.Second
 	if waitArg != "" {

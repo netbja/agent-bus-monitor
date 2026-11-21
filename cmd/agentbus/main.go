@@ -312,7 +312,7 @@ func main() {
 			return termProcs(ctx, project, term)
 		}, Start: dispatch.ProcStart, Boot: lifecycle.HostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
-		os.Exit(runMission(ctx, b, self, rest, os.Stdout, os.Stderr))
+		os.Exit(runMission(ctx, b, self, os.Getenv, rest, os.Stdout, os.Stderr))
 	case "reload":
 		os.Exit(runReload(ctx, b, realReloadDeps(os.Environ(), project, os.Stdout, os.Stderr), self, rest, os.Stdout, os.Stderr))
 	case "background":
