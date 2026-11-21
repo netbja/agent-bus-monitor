@@ -13,6 +13,7 @@ import (
 // headerData is everything the header reports (spec §3.2).
 type headerData struct {
 	project    string
+	badge      bool // the project's name as the launch's badge
 	health     health
 	guardian   guardianSummary
 	dispatch   string            // "", "up", "down", or a service state (serviceFact)
@@ -92,7 +93,11 @@ func headerLayout(d headerData, width int, tier Tier, rows int) ([]Line, []heade
 		items = append(items, hItem{line: l, prio: prio, row: row, order: len(items)})
 		return &items[len(items)-1]
 	}
-	add(Line{{Text: Preview(d.project), Role: RoleText, Bold: true}}, 3, 0).trunc = true
+	proj := Seg{Text: Preview(d.project), Role: RoleText, Bold: true}
+	if d.badge { // the launch's badge: a pill in the accent colour, reverse under NO_COLOR (busmon-project-badge)
+		proj = Seg{Text: " " + Preview(d.project) + " ", Role: RoleAccent, Bold: true, Pill: true}
+	}
+	add(Line{proj}, 3, 0).trunc = true
 	if d.dev { // development mode unlocks values such as shadow: never out of sight
 		add(Line{{Text: "dev", Role: RoleAttention, Bold: true}}, 1, 0)
 	}
