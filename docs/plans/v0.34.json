@@ -1,0 +1,102 @@
+{
+ "plan": "v0.34",
+ "goal": "Harden the broker behind an ACL, build the specs the person answered (person memory, triage, single approval, conflict owner), and finish the busmon Plan tab",
+ "groups": [
+  {
+   "id": "broker",
+   "title": "Broker hardening"
+  },
+  {
+   "id": "busmon",
+   "title": "busmon"
+  },
+  {
+   "id": "person-memory",
+   "title": "Person memory"
+  },
+  {
+   "id": "team-flow",
+   "title": "Triage, approval and conflicts"
+  },
+  {
+   "id": "specs",
+   "title": "Specs to write"
+  },
+  {
+   "id": "docs",
+   "title": "Docs and release"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "broker-acl-4b-parts-2-3",
+   "title": "Broker ACL 4b, parts 2 and 3: ./setup.sh acl on|off, users and password files, per-user rotation (part 1: PR 718)",
+   "owner": "coder2",
+   "group": "broker"
+  },
+  {
+   "id": "busmon-cli-flags-pr2",
+   "title": "busmon CLI flags, PR 2 (PR 1 made --delete keep the Projects page's rules, PR 703)",
+   "owner": "coder",
+   "group": "busmon"
+  },
+  {
+   "id": "plan-tab-r3",
+   "title": "busmon Plan tab, round 3: the person's feedback \"Re: Plan tab, r3\"",
+   "owner": "coder",
+   "group": "busmon"
+  },
+  {
+   "id": "person-memory-step3",
+   "title": "Person memory, step 3 (spec person-memory-design, section 10); steps 1 and 2 merged (PRs 704, 716)",
+   "owner": "coder",
+   "group": "person-memory"
+  },
+  {
+   "id": "triage-dedupe-build",
+   "title": "Build the triage de-duplication (spec triage-dedupe-design, PR 700)",
+   "owner": "coder",
+   "group": "team-flow"
+  },
+  {
+   "id": "single-approval-build",
+   "title": "Build the single approval (spec single-approval-design, PR 721)",
+   "owner": "coder",
+   "group": "team-flow"
+  },
+  {
+   "id": "conflict-owner-build",
+   "title": "Build the conflict owner (spec conflict-owner-design, PR 687); waits for the person's answers",
+   "owner": "coder",
+   "group": "team-flow"
+  },
+  {
+   "id": "wip-limit-spec",
+   "title": "Spec: a work-in-progress limit",
+   "owner": "architect",
+   "group": "specs"
+  },
+  {
+   "id": "quiet-update-spec",
+   "title": "Spec: the quiet update (the update's automatic mode and its removal of old trees)",
+   "owner": "architect",
+   "group": "specs"
+  },
+  {
+   "id": "readme-ops-guide",
+   "title": "Rewrite the README and the operations guide for the holder-hosted team",
+   "owner": "docs",
+   "group": "docs",
+   "review": "readme-ops-guide"
+  },
+  {
+   "id": "migrate-projects",
+   "title": "Migrate the person's other projects to this release (the person's command)",
+   "owner": "person",
+   "group": "docs",
+   "after": [
+    "readme-ops-guide"
+   ]
+  }
+ ]
+}
