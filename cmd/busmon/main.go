@@ -822,9 +822,7 @@ func main() {
 	// Everything the background goroutines publish to the shell. Empty until
 	// the first tick: an unknown budget stays blank rather than implying 0%
 	// used. The monitor's link starts healthy because bus.Connect just pinged it.
-	st := newShared(self, settings)
-	st.trustOf, st.ideasOf, st.notesOf = localTrustOf(project, os.Getenv), brokerIdeasOf(ctx, b), localNotesOf(project, os.Getenv)
-	st.releasesOf = localReleasesOf(project, os.Getenv)
+	st := projectShared(ctx, b, project, self, settings, os.Getenv)
 	cachePath := busmonCachePath(project)
 	cache, cacheErr := loadBusmonCache(cachePath, project)
 	if cacheErr != nil {
@@ -970,6 +968,16 @@ func refuseDestructive(ctx context.Context, o busmonOpts, getenv func(string) st
 // before the first tick: the person, the settings every agent's judgement
 // reads (the idle hint, stuck_after), and a healthy link (bus.Connect just
 // pinged it). The project's readers (trust, ideas) are set by the caller.
+// projectShared is the shared state main starts with for project: its
+// broker's ideas, and this machine's trust line, idea notes and releases
+// (wireLocalReaders).
+func projectShared(ctx context.Context, b *bus.Bus, project, self string, settings busmonSettings, getenv func(string) string) *shared {
+	st := newShared(self, settings)
+	st.ideasOf = brokerIdeasOf(ctx, b)
+	wireLocalReaders(st, project, getenv)
+	return st
+}
+
 func newShared(self string, settings busmonSettings) *shared {
 	return &shared{
 		person:     self,

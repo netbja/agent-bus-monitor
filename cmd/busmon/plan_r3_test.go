@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -337,5 +340,121 @@ func TestReadReleases(t *testing.T) {
 	}
 	if f, ok := d.plans["v0.1"]; !ok || len(f.Tasks) != 2 || f.Goal != "first" || len(d.plans) != 1 {
 		t.Fatalf("plans %+v", d.plans)
+	}
+}
+
+// foureyes: the poll reads the checkout through releasesOf on a requests
+// tick, then not again before releasesEvery; a failed read keeps the tags
+// it had and says so.
+func TestPollReadsReleases(t *testing.T) {
+	calls, fail := 0, false
+	st := &shared{person: "charlie", agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}}
+	st.releasesOf = func(context.Context) (releaseData, error) {
+		calls++
+		if fail {
+			return releaseData{}, errors.New("git gone")
+		}
+		return releaseData{read: true, tags: []releaseTag{{Name: "v0.1.0", Date: "2026-01-02"}}}, nil
+	}
+	f := &fakeReader{calls: map[string]int{}}
+	pollOnce(t.Context(), f, st, 1)
+	if calls != 1 || len(st.releases.tags) != 1 || st.releases.err {
+		t.Fatalf("first requests tick: %d calls, %+v", calls, st.releases)
+	}
+	pollOnce(t.Context(), f, st, 1+requestPoll)
+	if calls != 1 {
+		t.Fatalf("read again within %v: %d calls", releasesEvery, calls)
+	}
+	fail = true
+	readReleasesDue(t.Context(), st, st.releasesAt.Add(releasesEvery-time.Second))
+	if calls != 1 {
+		t.Fatalf("read a second early: %d calls", calls)
+	}
+	readReleasesDue(t.Context(), st, st.releasesAt.Add(releasesEvery))
+	if calls != 2 || !st.releases.err || !st.releases.read || len(st.releases.tags) != 1 {
+		t.Fatalf("a failed read: %d calls, %+v", calls, st.releases)
+	}
+}
+
+// foureyes: busmon's start gives the shared state the checkout's readers;
+// a project with no template has none.
+func TestLocalReadersWired(t *testing.T) {
+	dir := t.TempDir()
+	root, projects := filepath.Join(dir, "repo"), filepath.Join(dir, "projects")
+	for _, d := range []string{filepath.Join(root, "docs", "plans"), projects} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projects, "demo.toml"), []byte("working_dir = \""+root+"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "plans", "v0.1.json"), []byte(`{"plan":"v0.1","goal":"g","tasks":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", root, "init", "-q").CombinedOutput(); err != nil {
+		t.Skipf("git init: %v %s", err, out)
+	}
+	env := map[string]string{"AGENTBUS_PROJECTS_DIR": projects}
+	getenv := func(k string) string { return env[k] }
+	st := projectShared(t.Context(), nil, "demo", "charlie", busmonSettings{}, getenv) // as main builds it
+	if st.releasesOf == nil || st.notesOf == nil || st.trustOf == nil || st.ideasOf == nil {
+		t.Fatalf("readers: releases %v notes %v trust %v", st.releasesOf != nil, st.notesOf != nil, st.trustOf != nil)
+	}
+	d, err := st.releasesOf(t.Context())
+	if err != nil || !d.read || d.plans["v0.1"].Goal != "g" {
+		t.Fatalf("read %+v %v", d, err)
+	}
+	if other := projectShared(t.Context(), nil, "other", "charlie", busmonSettings{}, getenv); other.releasesOf != nil || other.notesOf != nil {
+		t.Fatal("a project with no template has a checkout reader")
+	}
+}
+
+// foureyes: the column hidden under the focus gives it back to the Plan.
+func TestReleasesFocusFallsBack(t *testing.T) {
+	m := keys(t, planShellWith(t, shortPlan(), 160, 40, releasesFixture), '4', tea.Key{Code: tea.KeyTab})
+	if m.ui.focus != PanelReleases {
+		t.Fatalf("focus %v", m.ui.focus)
+	}
+	m = step(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	if m.layout.Side.W != 0 || m.ui.focus != PanelPlan {
+		t.Fatalf("120 columns: side %+v, focus %v", m.layout.Side, m.ui.focus)
+	}
+}
+
+// foureyes: next lists five decided ideas, then "+N more".
+func TestReleasesIdeasCapped(t *testing.T) {
+	m := keys(t, planShellWith(t, shortPlan(), 160, 40, func(st *shared) {
+		releasesFixture(st)
+		st.ideas = nil
+		for i := range 7 {
+			st.ideas = append(st.ideas, bus.Idea{ID: fmt.Sprintf("i%d", i), IdeaDef: bus.IdeaDef{Title: fmt.Sprintf("idea %d", i)}, State: bus.IdeaDecided})
+		}
+	}), '4')
+	text := sideText(m)
+	if !strings.Contains(text, "7 decided ideas") || !strings.Contains(text, "idea 4") || strings.Contains(text, "idea 5") || !strings.Contains(text, "+2 more") {
+		t.Fatalf("seven decided ideas:\n%s", text)
+	}
+}
+
+// foureyes (non-blocking): only vX.Y.Z is a release tag; V back to the
+// width's own choice.
+func TestReleaseTagsAndToggleBack(t *testing.T) {
+	for tag, want := range map[string]bool{"v0.2.0": true, "v10.20.30": true, "v0.2.0-rc1": false, "v0.2": false, "0.2.0": false, "v0.2.0.1": false} {
+		if releaseTagRe.MatchString(tag) != want {
+			t.Errorf("%s: release %v", tag, !want)
+		}
+	}
+	m := keys(t, planShellWith(t, shortPlan(), 110, 40, releasesFixture), '4', 'V')
+	if m.ui.releases != 1 {
+		t.Fatalf("V at 110: %d", m.ui.releases)
+	}
+	m = keys(t, m, 'V')
+	if m.ui.releases != 0 {
+		t.Fatalf("V again at 110: %d, want the width's choice", m.ui.releases)
+	}
+	m = step(t, m, tea.WindowSizeMsg{Width: 160, Height: 40})
+	if m.layout.Side.W == 0 {
+		t.Fatal("back to auto: 160 columns hide the column")
 	}
 }
