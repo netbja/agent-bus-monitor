@@ -155,6 +155,9 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		l.Last()
 	case ActLive:
 		m.lists.activity.Resume()
+		if !m.lists.activity.Follows() { // G jumps once but stays put: say why (busmon-three-fixes 2)
+			m.ui.flash, m.ui.flashErr = "auto-scroll is off (display.follow): /follow or the settings (Shift+C) turn it on", false
+		}
 	case ActFold:
 		m.ui.reqOpen.folded = !m.ui.reqOpen.folded
 	case ActPriorityUp, ActPriorityDown:
@@ -671,6 +674,9 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		return cmd
 	}
 	if l.Tabs.H > 0 && ms.Y == l.Tabs.Y {
+		if l.Active == PanelRequests { // no tab bar drawn there (busmon-three-fixes 3)
+			return nil
+		}
 		if p, ok := tabAt(narrowPanels, l.Active, m.width, 0, ms.X, m.tabNotes()); ok {
 			m.focusTab(p)
 			m.refresh()
@@ -686,7 +692,7 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	}
 	r := l.rect(p)
 	if ms.Y == r.Y {
-		if l.Tier != TierNarrow && r == l.Lower {
+		if l.Tier != TierNarrow && r == l.Lower && p != PanelRequests { // Requests' title holds no tabs
 			if tab, ok := tabAt(lowerTabs, p, r.W-4, r.X+3, ms.X, m.tabNotes()); ok {
 				p = tab
 			}

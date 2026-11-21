@@ -99,6 +99,13 @@ func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
 		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
 		return nil
 	}
+	// Nothing to resume: no red y/n for a command with nothing to do (the
+	// person, busmon-three-fixes 1). An unread pause state still asks.
+	if c.Name == "resume" && m.snap.pause == nil && !m.snap.pauseFailed {
+		m.leaveLine(false)
+		m.ui.flash, m.ui.flashErr = "the project is not paused or suspended: nothing to resume", false
+		return nil
+	}
 	argv := append([]string{"--project", m.cfg.project}, c.Argv(args)...)
 	if c.As {
 		as := m.cfg.settings.Identity

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // Class C (palette spec §4.1, slice 2): the person's agentbus commands, run
@@ -95,6 +97,9 @@ func TestPaletteClassCArgv(t *testing.T) {
 		"/ci reset 42":                   "--project agent-bus-monitor ci reset 42",
 	} {
 		w := newPalCWorld(t, "charlie")
+		if line == "/resume" { // resume asks only when there is something to resume
+			w.m.snap.pause = &bus.PauseRecord{By: "charlie", At: time.Now().UnixMilli()}
+		}
 		w.run(t, line)
 		if w.m.ui.sleepAsk == nil || !strings.Contains(w.m.ui.flash, "agentbus "+want) || !strings.Contains(w.m.ui.flash, "y / n") {
 			t.Errorf("%s: no confirmation naming the argv: flash %q", line, w.m.ui.flash)

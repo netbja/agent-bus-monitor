@@ -41,7 +41,7 @@ func (m Model) grid() *grid {
 	if b := l.Banner; b.H > 0 {
 		drawLine(g, b.X, b.Y, b.W, m.bannerLine(b.W), false)
 	}
-	if l.Tabs.H > 0 {
+	if l.Tabs.H > 0 && l.Active != PanelRequests { // the Requests view has its own title, not the tabs
 		drawLine(g, 0, l.Tabs.Y, m.width, tabBarNotes(narrowPanels, m.tabOf(l.Active), m.width, true, m.tabNotes()), false)
 	}
 	reading := m.rd.open()
@@ -343,7 +343,9 @@ func (m *Model) fillLists() {
 	rq.SetItems(requestRows(rv, m.ui.reqOpen, now, lower))
 	// The Requests sub-view, every thread (r, F2; views-redesign §3, (a)):
 	// drawn under the tab it was opened from, where esc returns.
-	rq.SetFrame(m.lowerTitle(PanelRequests, Line{{Text: panelNames[m.reqOrigin()], Role: RoleText}, {Text: " " + GlyphArrowR + " all threads", Role: RoleMuted}}), requestsTitle(rv, lower))
+	// Its own title, not the tab bar (busmon-three-fixes 3): a full view, as
+	// For you and Agents are titled; the tab it came from is the way back.
+	rq.SetFrame(Line{{Text: "Requests", Role: RoleText}, {Text: " " + GlyphArrowR + " all threads, esc back to " + panelNames[m.reqOrigin()], Role: RoleMuted}}, requestsTitle(rv, lower))
 
 	m.keepInView()
 	for _, p := range shellPanels {
