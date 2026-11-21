@@ -265,7 +265,7 @@ DELIVERY
   ● bus ok             busmon's OWN link to Redis. ▲ bus down Ns: busmon is blind,
                        the agents may be fine; values on screen are the last ones read.
   F5 health            measured project checks; unknown counts as unhealthy, and remediation is guidance only.
-  F6 ideas             the project's ideas by state (to discuss, decided, doing, dropped); s sets one, the person only.
+  F6 ideas             the project's ideas by state (to discuss, decided, doing, later, dropped); s sets one, the person only.
   ● dispatch up        a dispatcher holds the lease: unarmed agents are woken in their panes.
   ○ dispatch down      none runs: nothing wakes an unarmed agent. ? dispatch: not measured yet.
   ● missions up        a missions conductor runs; down: a change is loaded but no conductor runs (its work is stalled).

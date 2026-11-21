@@ -296,7 +296,7 @@ var commands = []cli.Command{
 	{
 		Name: "idea", Text: true, Usage: []string{"idea add <title...> [--text <text>] [--source <where>] [--as <person>] [--request <id>]",
 			"idea list [--state <state>] [--json]", "idea set <id> <state> [--from <state>] [--as <person>]"},
-		Summary: "the project's ideas: add one (anyone; it starts at 'to discuss'), list them, or set a state (to discuss, decided, doing, dropped: the person only, from their own shell)",
+		Summary: "the project's ideas: add one (anyone; it starts at 'to discuss'), list them, or set a state (to discuss, decided, doing, later, dropped: the person only, from their own shell)",
 		Flags: []cli.Flag{
 			{Long: "text", Short: 't', Arg: "<text>", Help: "add: what the idea is, in a few lines"},
 			{Long: "source", Arg: "<where>", Help: "add: where it came from (a file, a note, a thread)"},
