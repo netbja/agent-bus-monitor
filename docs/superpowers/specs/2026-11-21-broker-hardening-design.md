@@ -14,6 +14,9 @@ r4 makes these changes (foureyes, reviewer-codex):
 - `scripts/bootstrap` is listed as a `docker` caller, and `agentbus up` already starts the broker;
 - `RunKey` is named among `publishRequest`'s keys;
 - under step 4 the rotation is `ACL SETUSER`.
+
+r5 makes step 5's copy the finished RDB alone, a point-in-time snapshot, never the live AOF
+files; it also names the `aclfile` line (reviewer-codex, foureyes).
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222562295-0`), relayed by
 master (cmd `1795222577984-0`). There is no new dependency. It must work on Linux and macOS, with
 podman, and without systemd. The person wants to discuss it: §5 lists what they need to decide.
@@ -127,7 +130,9 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
 | `ping` | the compose healthcheck (`redis-cli --user ping`) | `PING` only | none |
 
 `EVAL` is granted wherever `EVALSHA` is, because it is the fallback after a restart. The default
-user is disabled (`user default off`).
+user is disabled (`user default off`). The users live in an ACL file: the compose config gains
+`aclfile /data/users.acl`, on the data volume, so the file outlives the container and `ACL SAVE`
+can write it. The installer creates it, 0600, before the first start with users.
 
 **The rotation under step 4.** Today `./setup.sh rotate-redis-password` runs `CONFIG SET
 requirepass` (`setup/rotate.go:31`), which sets the default user's password. With the default
@@ -164,18 +169,30 @@ where the person confirms "master's keys" (§5 Q4).
 There is one password file per user, 0600, in `~/.config/agentbus/`. `REDIS_URL` gains the user
 name.
 
-**Step 5, the data directory in backups** (the directive):
-- after the logical dump, `agentbus backup` runs `BGSAVE` and waits, bounded, for `LASTSAVE` to
-  move;
-- it then copies the data directory into the archive as `broker-data.tar`:
-  - the container: `<runtime> cp agent-bus-redis:/data -`, a tar stream, with the runtime of
+**Step 5, the broker's snapshot in backups** (the directive's "data directory"):
+- after the logical dump, `agentbus backup` runs `BGSAVE`;
+- it waits, bounded, until `INFO persistence` shows `rdb_bgsave_in_progress:0`, a
+  `rdb_last_save_time` later than the request, and `rdb_last_bgsave_status:ok`;
+- it then copies **only the RDB file** that save completed (`dbfilename`, in `CONFIG GET dir`)
+  into the archive as `broker.rdb`:
+  - the container: `<runtime> cp agent-bus-redis:/data/<dbfilename> -`, with the runtime of
     step 3;
-  - a native broker: the path from `CONFIG GET dir`;
-- the copy holds the RDB and the AOF directory, so it also holds the keys with a TTL that the
-  logical dump skips.
+  - a native broker: the file itself.
 
-A restore never applies it automatically. The operator notes give the manual path: stop the
-broker, replace the volume's contents, start it. The logical restore stays the everyday one.
+The RDB is written whole to a temporary file and renamed by Redis, so the copied file is one
+complete point-in-time snapshot. It holds the keys with a TTL that the logical dump skips. **The
+AOF files are never copied**: Redis keeps appending to them while the copy runs, so they are not
+a snapshot. If the save does not finish within the bound, or reports an error, the archive is
+logical only, with the reason.
+
+**The restore of `broker.rdb` is manual,** a procedure in the operator notes, never automatic:
+1. stop the broker;
+2. empty the data volume, AOF directory included, and put `broker.rdb` in it as `<dbfilename>`;
+3. start it once with `--appendonly no`, so that Redis loads the RDB rather than an AOF;
+4. run `CONFIG SET appendonly yes`, which writes a fresh AOF from memory;
+5. restart it with the normal config.
+
+The logical restore stays the everyday one.
 
 **The recommendation:**
 - step 1 now;
@@ -211,8 +228,11 @@ broker, replace the volume's contents, start it. The logical restore stays the e
     the new one accepted, `admin` last; a broker without ACL users still rotates through
     `requirepass`.
 - Step 5:
-  - the archive holds `broker-data.tar` with the RDB;
-  - a `BGSAVE` that does not finish in time leaves a reason and a logical-only archive;
+  - the archive holds `broker.rdb`, copied only after `rdb_bgsave_in_progress:0` and status `ok`,
+    and no AOF file;
+  - a `BGSAVE` that does not finish in time, or fails, leaves a reason and a logical-only archive;
+  - the restore procedure, run on a disposable broker in a test: `broker.rdb` loaded with
+    `--appendonly no`, then AOF switched on, gives back the keys, TTL keys included;
   - no real runtime runs in tests (fake runner).
 - Tests never touch the production broker.
 
@@ -221,7 +241,7 @@ broker, replace the volume's contents, start it. The logical restore stays the e
 1. **macOS and the socket.** Keep loopback TCP with the container (recommended: the macOS
    container lives in a VM, and a socket does not cross it), or run Redis or Valkey natively,
    from Homebrew under launchd, with a socket.
-2. **Restoring the data directory:** manual only, as in step 5? Recommended: yes. An automatic
+2. **The data directory, as its snapshot:** step 5 copies the RDB that `BGSAVE` completed, not the whole directory, because the live AOF files cannot be copied consistently while the broker runs. Is that the "data directory in backups" you meant? And is restoring it manual only? Recommended: yes. An automatic
    swap of a live broker's files is the riskiest act in this spec.
 3. **Users:** the five of step 4, with `admin` kept apart from `busmon` so that day-to-day
    watching cannot `CONFIG SET`? Recommended: yes.
