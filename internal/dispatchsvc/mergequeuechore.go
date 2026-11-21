@@ -3,8 +3,11 @@ package dispatchsvc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/mergequeue"
 	"github.com/netbja/agent-bus-monitor/plan"
+	"github.com/netbja/agent-bus-monitor/service"
 )
 
 // The merge queue's chore (spec docs/superpowers/specs/2026-11-05-merge-queue-design.md §3c):
@@ -60,6 +64,10 @@ type mergeQueueChore struct {
 	// master is the services' escalation target, read at each pass (the CI
 	// loop's master); nil is "master".
 	master *string
+	// conflicts is the conflict check (conflict-owner §2), run in scratch
+	// (the project's state directory); nil checks nothing.
+	conflicts func(ctx context.Context, c mergequeue.ConflictCheck, baseTip string, cands []mergequeue.Candidate) (map[string]mergequeue.Judged, string)
+	scratch   string
 }
 
 // serviceMergeQueue is the dispatch service's chore, in its working
@@ -83,7 +91,11 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 	}
 	delivery := mergequeue.NewDelivery()
 	delivery.Call = mergeQueueCall
-	return &mergeQueueChore{b: b, dir: dir, getenv: getenv, environ: os.Environ,
+	scratch := ""
+	if paths, err := service.PathsFrom(getenv); err == nil {
+		scratch = paths.StateDir(b.Project())
+	}
+	return &mergeQueueChore{b: b, dir: dir, getenv: getenv, environ: os.Environ, conflicts: mergequeue.CheckConflicts, scratch: scratch,
 		repo:   gitRepoCheck,
 		origin: gitOrigin,
 		hasGH: func(env []string) bool {
@@ -342,6 +354,11 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 		in.Tips, in.Merged = tips, func(h string) bool { return in2[h] }
 	}
 	res := mergequeue.Derive(in)
+	checkTip := judgeBase
+	if checkTip == "" {
+		checkTip = remoteBase // the gh path: origin's base
+	}
+	res, conflictCheck := c.checkConflicts(ctx, env, res, checkTip, base, f.Kind != forge.Local)
 	var undelivered []bus.MergeUndelivered
 	if f.Kind != forge.Local {
 		u, why := c.undelivered(ctx, env, vs, remote, remoteBase, base, now)
@@ -355,8 +372,93 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	}
 	run := c.runDelivered(ctx, env, vs, judgeBase, now)
 	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting,
-		Undelivered: undelivered}, run, ci
+		Undelivered: undelivered, ConflictCheck: conflictCheck}, run, ci
 }
+
+// checkConflicts judges the approved heads and the forge-flagged PRs with
+// git (conflict-owner §2), oldest approved first: a conflict leaves the
+// items for Conflicting with its branch, head, base tip and files; a flagged
+// PR git finds clean is an item again; one git could not judge stays as the
+// forge said. why says what was not judged, "" when all were.
+func (c *mergeQueueChore) checkConflicts(ctx context.Context, env []string, res mergequeue.Result, baseTip, base string, fetch bool) (mergequeue.Result, string) {
+	if c.conflicts == nil || len(res.Items)+len(res.Flagged) == 0 {
+		return res, ""
+	}
+	type cand struct {
+		it      bus.MergeItem
+		flagged bool
+	}
+	var all []cand
+	var notes []string
+	items, conflicting := []bus.MergeItem{}, []bus.MergeConflict{}
+	keep := func(it bus.MergeItem, flagged bool) { // as the forge said
+		if flagged {
+			conflicting = append(conflicting, bus.MergeConflict{Number: it.Number, Base: res.Bases[it.Number], Branch: it.Branch, Head: it.Head})
+		} else {
+			items = append(items, it)
+		}
+	}
+	for _, list := range []struct {
+		its     []bus.MergeItem
+		flagged bool
+	}{{res.Items, false}, {res.Flagged, true}} {
+		for _, it := range list.its {
+			if b := res.Bases[it.Number]; b != "" && b != base { // onto another base: never judged against this one (reviewer-codex)
+				notes = append(notes, fmt.Sprintf("#%d onto %s: not checked against %s", it.Number, b, base))
+				keep(it, list.flagged)
+				continue
+			}
+			all = append(all, cand{it, list.flagged})
+		}
+	}
+	if len(all) == 0 {
+		res.Items, res.Conflicting, res.Flagged = items, conflicting, nil
+		return res, strings.Join(capNotes(notes), "; ")
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].it.ApprovedAt < all[j].it.ApprovedAt })
+	key := func(it bus.MergeItem) string {
+		if it.Number > 0 {
+			return "#" + strconv.Itoa(it.Number)
+		}
+		return it.Branch
+	}
+	cands := make([]mergequeue.Candidate, len(all))
+	for i, cd := range all {
+		cands[i] = mergequeue.Candidate{Key: key(cd.it), Branch: cd.it.Branch, Head: cd.it.Head}
+	}
+	judged, why := c.conflicts(ctx, mergequeue.ConflictCheck{Dir: c.dir, Scratch: c.scratch, Env: env, Fetch: fetch, Call: mergeQueueCall}, baseTip, cands)
+	if why != "" {
+		return res, strings.Join(capNotes(append([]string{why}, notes...)), "; ")
+	}
+	for _, cd := range all {
+		j, k := judged[key(cd.it)], key(cd.it)
+		cf := bus.MergeConflict{Number: cd.it.Number, Base: base, Branch: cd.it.Branch, Head: cd.it.Head}
+		switch {
+		case j.Why != "":
+			notes = append(notes, k+": "+j.Why)
+			keep(cd.it, cd.flagged)
+		case j.Conflict:
+			cf.BaseTip, cf.Files = baseTip, j.Files
+			conflicting = append(conflicting, cf)
+		default:
+			items = append(items, cd.it)
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].ApprovedAt < items[j].ApprovedAt })
+	res.Items, res.Conflicting, res.Flagged = items, conflicting, nil
+	return res, strings.Join(capNotes(notes), "; ")
+}
+
+// capNotes keeps the first conflictNotes, then says how many more.
+func capNotes(notes []string) []string {
+	if len(notes) > conflictNotes {
+		return append(notes[:conflictNotes:conflictNotes], fmt.Sprintf("%d more", len(notes)-conflictNotes))
+	}
+	return notes
+}
+
+// conflictNotes is how many unjudged candidates the record names.
+const conflictNotes = 5
 
 // runDelivered are the approved heads within 72 h that the git test
 // (master-idle §3.1) finds in the base: a run's deliveries are counted

@@ -34,6 +34,17 @@ func TestMergeQueueCmdOutput(t *testing.T) {
 		!strings.Contains(got, "approved but conflicting with their base, to rebase: #500 onto main, #512 onto release") {
 		t.Fatalf("code %d\n%s", code, got)
 	}
+	// conflict-owner §2: a branch git confirmed (no PR number in the git
+	// fallback) with its files, and what the check could not judge.
+	rec := mqCmdRecord()
+	rec.Conflicting = []bus.MergeConflict{{Number: 500, Base: "main", Files: []string{"bus/x.go", "f"}}, {Branch: "coder/y", Base: "main", Files: []string{"g"}}}
+	rec.ConflictCheck = "#512: the head is absent here, even after a fetch"
+	out.Reset()
+	printMergeQueue(rec, false, &out)
+	if got := out.String(); !strings.Contains(got, "to rebase: #500 onto main (bus/x.go, f), coder/y onto main (g)") ||
+		!strings.Contains(got, "conflict check: #512: the head is absent here") {
+		t.Fatalf("confirmed conflicts:\n%s", got)
+	}
 	out.Reset()
 	if code := printMergeQueue(mqCmdRecord(), true, &out); code != 0 {
 		t.Fatalf("json code %d", code)

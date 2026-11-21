@@ -3,6 +3,8 @@ package bus
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,7 +24,7 @@ func TestMergeQueueRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec, err := b.MergeQueue(ctx)
-	if err != nil || rec.Reason != "" || rec.Source != "gh" || rec.Unapproved != 2 || len(rec.Conflicting) != 1 || rec.Conflicting[0] != (MergeConflict{Number: 500, Base: "release"}) || len(rec.Items) != 1 || rec.Items[0].Number != 309 ||
+	if err != nil || rec.Reason != "" || rec.Source != "gh" || rec.Unapproved != 2 || len(rec.Conflicting) != 1 || !reflect.DeepEqual(rec.Conflicting[0], MergeConflict{Number: 500, Base: "release"}) || len(rec.Items) != 1 || rec.Items[0].Number != 309 ||
 		rec.ItemsAt == 0 || rec.AttemptedAt != rec.ItemsAt {
 		t.Fatalf("after a success: %+v %v", rec, err)
 	}
@@ -61,6 +63,20 @@ func TestMergeQueueRecord(t *testing.T) {
 	if ttl := b.r.PTTL(ctx, MergeQueueKey(b.project)).Val(); ttl <= 0 || ttl > MergeQueueTTL {
 		t.Fatalf("ttl %v", ttl)
 	}
+	// conflict-owner §2: what git confirmed, and what it could not judge.
+	confirmed := MergeConflict{Number: 7, Base: "dev", Branch: "feat/x", Head: strings.Repeat("a", 40), BaseTip: strings.Repeat("b", 40), Files: []string{"f", "g"}}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh", Conflicting: []MergeConflict{confirmed}, ConflictCheck: "#9: the head is absent here"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); len(rec.Conflicting) != 1 || !reflect.DeepEqual(rec.Conflicting[0], confirmed) || rec.ConflictCheck != "#9: the head is absent here" {
+		t.Fatalf("a confirmed conflict: %+v", rec)
+	}
+	if err := b.FencedPutMergeQueue(ctx, "mq", MergeQueueRecord{Source: "gh"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); rec.ConflictCheck != "" {
+		t.Fatalf("the check's reason not cleared: %+v", rec)
+	}
 	if err := b.FencedPutMergeQueue(ctx, "not-holder", MergeQueueRecord{Source: "gh"}); !errors.Is(err, ErrNotHolder) {
 		t.Fatalf("without the lease: %v", err)
 	}
@@ -94,7 +110,7 @@ func TestMergeQueueReadsBareConflictNumbers(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec, err := b.MergeQueue(ctx)
-	if err != nil || len(rec.Conflicting) != 2 || rec.Conflicting[0] != (MergeConflict{Number: 500}) || rec.Conflicting[1] != (MergeConflict{Number: 512}) {
+	if err != nil || len(rec.Conflicting) != 2 || !reflect.DeepEqual(rec.Conflicting, []MergeConflict{{Number: 500}, {Number: 512}}) {
 		t.Fatalf("%+v %v", rec.Conflicting, err)
 	}
 }

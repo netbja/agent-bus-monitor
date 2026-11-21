@@ -44,6 +44,13 @@ type Result struct {
 	// with their base): never an item, the person cannot merge them; master
 	// has them rebased (the person, merge-queue-stale-rows).
 	Conflicting []bus.MergeConflict
+	// Flagged are those same PRs as the items they would be: the conflict
+	// check (conflict-owner §2) makes one an item again when git finds it
+	// clean (a forge's flag lags).
+	Flagged []bus.MergeItem
+	// Bases are the PRs' own bases, by number: the conflict check judges only
+	// those onto the queue's base (reviewer-codex).
+	Bases map[int]string
 }
 
 // approved is a subject's deciding approve.
@@ -108,16 +115,25 @@ func Derive(in Input) Result {
 		if pr.Draft {
 			continue
 		}
+		if pr.Base != "" {
+			if res.Bases == nil {
+				res.Bases = map[int]string{}
+			}
+			res.Bases[pr.Number] = pr.Base
+		}
 		a := cand[pr.Head]
 		if pr.Head == "" || a == nil {
 			res.Unapproved++
 			continue
 		}
+		it := bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head, CIRed: ciRed(pr)}
 		if pr.Conflicting {
-			res.Conflicting = append(res.Conflicting, bus.MergeConflict{Number: pr.Number, Base: pr.Base})
+			res.Conflicting = append(res.Conflicting, bus.MergeConflict{Number: pr.Number, Base: pr.Base, Branch: pr.Branch, Head: pr.Head})
+			it.Subjects, it.Approvals, it.ApprovedAt = a.subjects, a.approvals, a.at
+			res.Flagged = append(res.Flagged, it)
 			continue
 		}
-		add(bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head, CIRed: ciRed(pr)}, a)
+		add(it, a)
 	}
 	for _, tp := range in.Tips {
 		a := cand[tp.Head]

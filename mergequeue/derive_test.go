@@ -1,6 +1,7 @@
 package mergequeue
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -137,7 +138,11 @@ func TestDeriveConflictingPR(t *testing.T) {
 	if len(got.Items) != 2 || got.Items[0].Number != 501 || got.Items[1].Number != 502 {
 		t.Fatalf("items %+v", got.Items)
 	}
-	if len(got.Conflicting) != 1 || got.Conflicting[0] != (bus.MergeConflict{Number: 500, Base: "release"}) || got.Unapproved != 1 {
+	if len(got.Conflicting) != 1 || !reflect.DeepEqual(got.Conflicting[0], bus.MergeConflict{Number: 500, Base: "release", Branch: "feat/a", Head: hA}) || got.Unapproved != 1 {
 		t.Fatalf("conflicting %v unapproved %d", got.Conflicting, got.Unapproved)
+	}
+	// The flagged PR as its item, for the conflict check (conflict-owner §2).
+	if len(got.Flagged) != 1 || got.Flagged[0].Number != 500 || got.Flagged[0].Head != hA || got.Flagged[0].ApprovedAt == 0 || len(got.Flagged[0].Subjects) != 1 {
+		t.Fatalf("flagged %+v", got.Flagged)
 	}
 }

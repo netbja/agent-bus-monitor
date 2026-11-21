@@ -250,9 +250,19 @@ func printMergeQueue(rec bus.MergeQueueRecord, asJSON bool, out io.Writer) int {
 	if len(rec.Conflicting) > 0 {
 		prs := make([]string, len(rec.Conflicting))
 		for i, c := range rec.Conflicting {
-			prs[i] = fmt.Sprintf("#%d onto %s", c.Number, cmp.Or(c.Base, "its base"))
+			name := c.Branch // the git fallback: no PR number
+			if c.Number > 0 {
+				name = fmt.Sprintf("#%d", c.Number)
+			}
+			prs[i] = fmt.Sprintf("%s onto %s", name, cmp.Or(c.Base, "its base"))
+			if len(c.Files) > 0 { // what git confirmed (conflict-owner §2)
+				prs[i] += " (" + strings.Join(c.Files, ", ") + ")"
+			}
 		}
 		fmt.Fprintf(out, "approved but conflicting with their base, to rebase: %s\n", strings.Join(prs, ", "))
+	}
+	if rec.ConflictCheck != "" {
+		fmt.Fprintln(out, "conflict check: "+rec.ConflictCheck)
 	}
 	return code
 }
