@@ -1,6 +1,6 @@
 # One approval for a small change (single-approval)
 
-Status: spec r2, for review (subject `single-approval`; r2: the trace is the deliverer's report; busmon counts current distinct approvers from a new `MergeItem.Approvers`, not the raw approvals; Q3 covers both limits too (reviewer-codex); §4.4 and Q8 on an earlier reject by the other reviewer (foureyes)). Not built. Base: origin/dev `570c16be`.
+Status: spec r3, for review (subject `single-approval`; r3, the person via master (cmd `1795282533075-0`, task `single-approval-r2`; §4.1 now states §4.8's exception, reviewer-codex): a project with one reviewer, or reviewers of one provider only, deadlocks under §4.1; §4.8 adds the person's `delivery.same_provider_ok = off | docs | small` and busmon's warning; r2 merged as #721: the trace is the deliverer's report; busmon counts current distinct approvers from a new `MergeItem.Approvers`, not the raw approvals; Q3 covers both limits too (reviewer-codex); §4.4 and Q8 on an earlier reject by the other reviewer (foureyes)). Not built. Base: origin/dev `2a7e0360`.
 Author: architect, from the person's directive relayed by master (cmd `1795262117698-0`, task
 `single-approval-spec`). This **loosens a safety gate**: §2 says what is lost, with the ledger's
 numbers, before the design.
@@ -67,10 +67,12 @@ reviewer found (§4.1 narrows it to 3).
 | `delivery.small_max_lines` | Int | 150 | added + deleted lines, over the merge-base diff |
 | `delivery.small_max_files` | Int | 5 | changed paths, a rename counted as two |
 | `delivery.never_small` | List | `""` | globs **added** to the defaults of §3.2; never removes one |
+| `delivery.same_provider_ok` | `off` \| `docs` \| `small` | `off` | which small changes a same-provider approval may deliver alone (§4.8); **the person's only** |
 
-All four are `Project` keys (a value per project, `[project.<name>]`). They are read by
+All five are `Project` keys (a value per project, `[project.<name>]`). They are read by
 `agentbus deliver` and shown in busmon. Who may write the three that widen the gate
 (`single_approval`, `small_max_lines`, `small_max_files`) is Q3. `never_small` only narrows it.
+`same_provider_ok` is `PersonOnly` whatever Q3 answers (§4.8).
 
 ### 3.2 Small, decided by code
 
@@ -110,7 +112,12 @@ approvals (Q5).
 
 **A reviewer of a different provider from the author** (the ledger records both:
 `Verdict.AuthorProvider`, `ReviewerProvider`, `bus/stream.go:188`). Today that is
-reviewer-codex for every Claude author. With no such approver, small or not, two are needed.
+reviewer-codex for every Claude author. With no such approver, two are needed: always when
+`delivery.same_provider_ok` is `off` (the default), and otherwise for every change outside its
+class. The one exception is §4.8: with `single_approval = small` and `same_provider_ok` set, a
+same-provider approval alone delivers a small change of that class (`docs`: docs-only; `small`:
+any small change). A provider left empty
+on either side (an agent with no known client) is never "another provider".
 
 Why not "either" or "foureyes first": §2's 16 of 19. A same-provider approval alone is the case
 that let the defects through. The rule names no agent, so it holds when roles change. Q1 asks it.
@@ -174,10 +181,70 @@ another provider: not small (163 lines > 150), or: bus/stream.go is never small.
 the person's yes (--single-approval).
 ```
 
+Under §4.8, a same-provider approval refused for its class says so: `… approved by foureyes, of
+the author's provider: delivery.same_provider_ok is docs, and this change is not docs-only.`
+
+### 4.8 A project with one reviewer, or one provider (r3)
+
+**The gap** (the person). `morning-check` has foureyes alone, of the author's provider. Under
+§4.1 one approval never counts there, and two approvals cannot be had: the deadlock this spec
+set out to remove.
+
+**The setting**, per project, the person's only:
+
+| `delivery.same_provider_ok` | A same-provider approval counts alone for |
+|---|---|
+| `off` (default) | nothing: §4.1 as written |
+| `docs` | a small change (§3.2) whose every path is documentation (`docs/**`, `*.md`) |
+| `small` | any small change (§3.2): docs, and code such as Ansible roles or scripts, within `small_max_lines` and `small_max_files` |
+
+**How it composes with `delivery.single_approval`.** `single_approval` says whether one approval
+can ever be enough, and for what size; `same_provider_ok` only widens *whose* approval may be
+that one. So:
+- with `single_approval = off`, `same_provider_ok` has no effect. Shift+C shows it with "no
+  effect: delivery.single_approval is off". A project like `morning-check` sets both
+  (`single_approval = small`, `same_provider_ok = docs` or `small`);
+- with `single_approval = small`, one approval delivers when the change is small (§3.2) and the
+  approver is of another provider (§4.1), or of the same provider and the change is in
+  `same_provider_ok`'s class.
+
+Every other rule stays:
+- **never-small paths always need two approvals**, whatever the value (§3.2). In a one-reviewer
+  project such a change is delivered only on the person's yes (§4.6, `--single-approval`);
+- the approver is independent (reviewer ≠ author), on the exact head (§4.2), and no reviewer's
+  latest verdict on the subject is a reject (§4.3);
+- a different-provider approval, where one exists, is still preferred: `deliver` names it when
+  both kinds are present.
+
+**Person-only.** The key is `PersonOnly` and `Project`: read from `config.toml`'s
+`[project.<name>]` table only, never from an env variable, and `agentbus config set` refuses it,
+as it does `backup.after_*` (`config/keys.go:77`, `config/write.go:60`). Today every `PersonOnly`
+key is machine-wide; a `PersonOnly` key with a per-project value is new, and its test says so.
+busmon shows it, not editable, like the other `PersonOnly` rows.
+
+**What `deliver` records**, as §4.5, with the provider named:
+- the PR body: `**single approval, same provider (small docs: 42 lines, 2 files; approved by foureyes)**`;
+- the bus: the same line, traced (`Trace`);
+- `--dry-run` prints which rule would apply: another provider, same provider (`docs` or
+  `small`), or none.
+
+**busmon's warning: no reviewer of another provider.** Over the project's verdict ledger of the
+last 7 days, when there is at least one independent verdict and none whose `ReviewerProvider` is
+set and differs from its `AuthorProvider`, busmon shows one line on the Shift+C delivery rows and
+on a merge item's page:
+
+> `no reviewer of another provider in 7 days: one approval needs delivery.same_provider_ok (now off)`
+
+The value shown is the project's current one; with `docs` or `small` the line still shows, as
+information, without "needs". A project with no verdict in 7 days shows nothing. The ledger is
+the source because it records the providers of the agents that actually reviewed
+(`verdictProviders`, `cmd/agentbus/verdicts.go:142`); the roles file says nothing about who
+reviews.
+
 ## 5. Steps (in series)
 
 1. **The classifier** (pure, no setting yet): `deliver.classify(numstat, globs, max)` → small,
-   lines, files, matched path; `--dry-run` prints it. Tests:
+   docs-only (for §4.8), lines, files, matched path; `--dry-run` prints it. Tests:
    - a 150-line, 5-file change is small, and 151 lines or 6 files is not;
    - a 2 000-line `docs/` change is small;
    - `bus/x.go` with 1 line, `skills/a/SKILL.md`, a binary file and `config/keys.go` are not;
@@ -191,10 +258,19 @@ the person's yes (--single-approval).
    - a push after the approve is refused;
    - not small is refused with §4.7's message;
    - the emergency flag still works;
-   - a reviewer who approved H and then H2 does not count for H.
+   - a reviewer who approved H and then H2 does not count for H;
+   - §4.8: with `same_provider_ok = off`, a same-provider approve alone is refused; with `docs`,
+     it delivers a small docs-only change and refuses a small code change; with `small`, it
+     delivers both; with `single_approval = off`, any `same_provider_ok` changes nothing; a
+     never-small path is refused under every value; an empty provider on either side is not
+     "another provider"; the PR body and the trace say "single approval, same provider";
+   - `same_provider_ok` read from `[project.<name>]` in `config.toml` only: an env variable is
+     not read, `agentbus config set` refuses it, and another project's value does not leak.
 3. **The merge queue and busmon**: `bus.CurrentApprovers` used by `mergequeue` for
-   `MergeItem.Approvers`; the Shift+C rows; "1 approval" on the merge row and page. Tests: §4.5's
-   example shows "1 approval", and two current approvers show none.
+   `MergeItem.Approvers`; the Shift+C rows; "1 approval" on the merge row and page; §4.8's
+   warning. Tests: §4.5's example shows "1 approval", and two current approvers show none; a
+   ledger with only same-provider verdicts in 7 days shows the warning, one different-provider
+   verdict hides it, and an empty ledger shows nothing.
 
 ## 6. Questions for the person
 
