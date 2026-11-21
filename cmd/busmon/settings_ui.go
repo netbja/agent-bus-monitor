@@ -1050,6 +1050,7 @@ var settingHelps = map[string]string{
 	"dispatch.focus_notice":        "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
 	"updates.check":                "asks GitHub (a newer release) and npm (a newer Codex than its agents run) once a day",
 	"identity.as":                  "your name on the bus, as a person",
+	"person.name":                  "your own name, a bus name (charlie): busmon writes as it when \"Your name on the bus\" is empty, and master may call you by it",
 	"person.language":              "the language master writes to you in, chosen from the ISO 639-1 list (enter opens it, type to filter: fr, fran, french); the bus stays English",
 	"start.team":                   "the roles agentbus start opens for a new project, separated by commas",
 	"notify.on":                    "sends notifications to the targets of notify.toml",

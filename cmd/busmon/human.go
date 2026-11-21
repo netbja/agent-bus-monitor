@@ -12,8 +12,9 @@ import (
 // person piloting the agents, never an agent (not the CLI's default sender).
 const defaultHuman = "pilot"
 
-// humanIdentity is the bus name busmon writes as: --as, else AGENT_BUS_HUMAN,
-// else "pilot". It must be a valid bus name (lowercase).
+// humanIdentity is the bus name busmon writes as: flag (loadBusmonSettings'
+// --as, AGENT_BUS_HUMAN, identity.as, then person.name), else env, else
+// "pilot". It must be a valid bus name (lowercase).
 func humanIdentity(flag, env string) (string, error) {
 	name := flag
 	if name == "" {

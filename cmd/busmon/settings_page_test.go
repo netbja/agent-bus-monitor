@@ -73,7 +73,7 @@ func TestSettingsRows(t *testing.T) {
 		{"waiting.fade", fromElsewhere, false, "Fade and slide", "off", "busmon.toml (legacy)", true},
 		{"waiting.bell", fromDefault, false, "Bell", "on", "default", true},
 		{"updates.check", fromElsewhere, false, "Update check", "off", "env AGENT_BUS_NO_UPDATE_CHECK", false},
-		{"identity.as", fromFile, true, "Your name", "charlie", "config.toml", true},
+		{"identity.as", fromFile, true, "Your name on the bus", "charlie", "config.toml", true},
 		{"display.idle_view_after", fromDefault, false, "Screensaver (idle view) after", "off", "default", true},
 	} {
 		r := settingRowOf(t, groups, c.key)

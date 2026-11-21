@@ -82,6 +82,9 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 	} else {
 		s.Identity = as.Value.(string)
 	}
+	if s.Identity == "" { // the person's own name, before "pilot" (busmon-cli-flags item 3); an invalid one resolves to its default, ""
+		s.Identity = r.String("person.name")
+	}
 	if flags.LimitSet {
 		s.Limit = flags.Limit
 	}

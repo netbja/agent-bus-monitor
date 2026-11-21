@@ -287,8 +287,10 @@ Réglages qu'un opérateur touche d'ordinaire :
 - **Ordre de connexion.** `agentbus` et `busmon` se connectent avec `REDIS_URL` quand elle est définie.
   Sinon ils utilisent `REDIS_HOST` / `REDIS_PORT` (`localhost` / `6380`), avec le mot de passe de
   `REDIS_PASSWORD`, sinon de `~/.config/agentbus/redis.env`. `--host` l'emporte sur `REDIS_HOST`.
-  L'option `--url` (`-u`) de busmon prend une URL, socket unix (`unix:///chemin.sock`) ou utilisateur ACL
-  compris, et règle `REDIS_URL` d'après elle ; `--host` à côté d'une URL est refusé, jamais ignoré.
+  L'option `--url` (`-u`) de busmon prend une URL, socket unix (`unix:///chemin.sock`) compris, et règle
+  `REDIS_URL` d'après elle ; `--host` à côté d'une URL est refusé, jamais ignoré. Avec `broker.acl` actif,
+  busmon se connecte avec son propre utilisateur ACL, quel que soit celui de l'URL ; sinon (un portable
+  derrière un tunnel), l'utilisateur de l'URL est utilisé.
 - **Regarder le bus d'une autre machine.** Utilisez un tunnel SSH :
 
 ```bash

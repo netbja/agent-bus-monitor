@@ -281,8 +281,9 @@ Settings an operator usually touches:
 - **Connection order.** Both `agentbus` and `busmon` connect with `REDIS_URL` when it is set. Otherwise
   they use `REDIS_HOST` / `REDIS_PORT` (`localhost` / `6380`), with the password from `REDIS_PASSWORD`,
   else `~/.config/agentbus/redis.env`. `--host` overrides `REDIS_HOST`. busmon's `--url` (`-u`) takes a
-  URL, a unix socket (`unix:///path.sock`) or an ACL user included, and sets `REDIS_URL` for it; `--host`
-  beside a URL is refused rather than ignored.
+  URL, a unix socket (`unix:///path.sock`) included, and sets `REDIS_URL` for it; `--host` beside a URL is
+  refused rather than ignored. With `broker.acl` on, busmon logs in as its own ACL user whatever the URL
+  names; where it is off (a laptop through a tunnel), the URL's user is used.
 - **Watching another machine's bus.** Use an SSH tunnel:
 
 ```bash
