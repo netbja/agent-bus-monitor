@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -254,6 +256,49 @@ func TestPlanTabLinesEndInsideTheFrame(t *testing.T) {
 		row := []rune(lines[y])
 		if row[r.X+r.W-2] == []rune(GlyphEllipsis)[0] {
 			t.Errorf("row %d cut: %q", y, string(row[r.X:r.X+r.W]))
+		}
+	}
+}
+
+// §4.1 point 2 (foureyes): a click on the drawer's detail rows is no click
+// on the body hidden under them: the selection stays and no page opens; a
+// click on the last body row above them still selects its task.
+func TestPlanDrawerClickOnTheDetail(t *testing.T) {
+	var rows []plan.Row
+	for i := 0; i < 40; i++ {
+		rows = append(rows, boardRow(fmt.Sprintf("t%02d", i), plan.Upcoming, "coder"))
+	}
+	m := keys(t, planShellOf(t, boardPlan(rows...), 160, 40), 'p')
+	r, p := m.readerRect(), m.rd.top()
+	body := m.pageRows(p)
+	if len(p.body) <= body {
+		t.Fatalf("fixture: body %d lines in %d rows", len(p.body), body)
+	}
+	for i := 0; i < planDetailRows; i++ {
+		y := r.Y + 1 + body + i
+		m = step(t, m, tea.MouseClickMsg{X: r.X + 10, Y: y, Button: tea.MouseLeft})
+		if top := m.rd.top(); top.kind != ovPlan || top.sel != 0 || len(m.rd.pages) != 1 {
+			t.Fatalf("a click on detail row %d: page %v, sel %d, %d pages", i, top.kind, top.sel, len(m.rd.pages))
+		}
+	}
+	m = step(t, m, tea.MouseClickMsg{X: r.X + 10, Y: r.Y + body, Button: tea.MouseLeft}) // the last body row
+	top := m.rd.top()
+	if top.kind != ovPlan || top.sel == 0 || top.items[top.sel].line != top.top+body-1 {
+		t.Fatalf("the last body row: sel %d (line %d), top %d", top.sel, top.items[top.sel].line, top.top)
+	}
+}
+
+// The kept rows and the items share the frame's inside: in a frame shorter
+// than its header and the kept rows, the kept rows still end above the
+// bottom border, right under the items (foureyes' nit).
+func TestListBottomRectInsideAShortFrame(t *testing.T) {
+	for h := 2; h <= 8; h++ {
+		l := listState{rect: Rect{0, 0, 40, h}, header: Line{{Text: "head"}}}
+		l.SetBottom(planDetailRows)
+		_, iy, _, ih := l.inner()
+		br := l.BottomRect()
+		if br.H > 0 && (br.Y != iy+ih || br.Y+br.H > h-1) {
+			t.Errorf("height %d: items %d+%d, kept %+v", h, iy, ih, br)
 		}
 	}
 }

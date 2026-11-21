@@ -57,7 +57,11 @@ func (l *listState) SetBottom(n int) { l.bottom = max(0, n) }
 // zero height when none, or when the frame has no room for them.
 func (l *listState) BottomRect() Rect {
 	x, y, w, h := l.inner()
-	b := min(l.bottom, l.rect.H-2)
+	full := l.rect.H - 2 // inner()'s height before it takes the kept rows: the same clamp (foureyes)
+	if l.showHeader() {
+		full--
+	}
+	b := min(l.bottom, max(full, 0))
 	if b <= 0 || w <= 0 {
 		return Rect{}
 	}
