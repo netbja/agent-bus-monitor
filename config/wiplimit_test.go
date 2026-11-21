@@ -23,6 +23,11 @@ func TestWIPLimitKey(t *testing.T) {
 	if k.Kind != Int || k.Default != 2 || !k.Project || k.Env != "" || !k.PersonEdit || k.PersonOnly || k.Group() != GroupServices {
 		t.Fatalf("%+v", k)
 	}
+	// What reads it at this head (foureyes): busmon shows it; request accept
+	// and send are named only as the step that wires them.
+	if !strings.HasPrefix(k.ReadBy, "busmon (shown") || !strings.Contains(k.ReadBy, "from wip-limit step 2b") {
+		t.Fatalf("ReadBy %q", k.ReadBy)
+	}
 	path := filepath.Join(t.TempDir(), "config.toml")
 	want := "board.wip_limit: the person's own setting: set it in busmon (Shift+C) or config.toml"
 	if err := Set(path, "board.wip_limit", 3); err == nil || err.Error() != want {
