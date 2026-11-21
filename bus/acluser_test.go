@@ -13,9 +13,11 @@ func TestACLUserFor(t *testing.T) {
 		refused            bool
 	}{
 		{ACLEntryService, "", "", ACLDispatcher, false},
-		{ACLEntryService, "", "coder", ACLAgent, false},      // an agent running service run by hand: never dispatcher (reviewer-codex)
-		{ACLEntryService, "", "master", ACLMaster, false},    // nor master's
-		{ACLEntryService, "coder", "", ACLDispatcher, false}, // no agent among the ancestors: the service manager's launch
+		{ACLEntryService, "", "coder", ACLAgent, false},   // an agent running service run by hand: never dispatcher (reviewer-codex)
+		{ACLEntryService, "", "master", ACLMaster, false}, // nor master's
+		{ACLEntryService, "", "", ACLDispatcher, false},   // the service manager's launch: no identity, no agent ancestor
+		{ACLEntryService, "coder", "", ACLAgent, false},   // an agent's child that outlived it: its identity, never dispatcher (reviewer-codex)
+		{ACLEntryService, "master", "", ACLMaster, false},
 		{ACLEntryAdmin, "", "", ACLAdmin, false},
 		{ACLEntryAdmin, "coder", "", "", true},  // an agent's environment
 		{ACLEntryAdmin, "", "coder", "", true},  // an agent's process tree
