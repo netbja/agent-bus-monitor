@@ -16,7 +16,8 @@ r4 makes these changes (foureyes, reviewer-codex):
 - under step 4 the rotation is `ACL SETUSER`.
 
 r5 makes step 5's copy the finished RDB alone, a point-in-time snapshot, never the live AOF
-files; it also names the `aclfile` line (reviewer-codex, foureyes).
+files; it also names the `aclfile` line (reviewer-codex, foureyes). r6 keeps `users.acl` through
+the restore, and puts `user default off` in it (foureyes).
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222562295-0`), relayed by
 master (cmd `1795222577984-0`). There is no new dependency. It must work on Linux and macOS, with
 podman, and without systemd. The person wants to discuss it: §5 lists what they need to decide.
@@ -129,10 +130,13 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
 | `busmon` | busmon and the person's own CLI outside agents | data commands, `EVALSHA` and `EVAL`, `SCAN`, `INFO` (`RedisDetail`, `RedisInfo`), `MEMORY USAGE` (`ProjectMemory`), `CONFIG GET`, `DEL` (`--delete`), `XTRIM` (`--reset`); not `CONFIG SET`, `FLUSH*`, `KEYS`, `SHUTDOWN` or `ACL` | `~*` |
 | `ping` | the compose healthcheck (`redis-cli --user ping`) | `PING` only | none |
 
-`EVAL` is granted wherever `EVALSHA` is, because it is the fallback after a restart. The default
-user is disabled (`user default off`). The users live in an ACL file: the compose config gains
-`aclfile /data/users.acl`, on the data volume, so the file outlives the container and `ACL SAVE`
-can write it. The installer creates it, 0600, before the first start with users.
+`EVAL` is granted wherever `EVALSHA` is, because it is the fallback after a restart.
+
+**Where the users live:** an ACL file. The compose config on stdin gains `aclfile
+/data/users.acl`, on the data volume, so the file outlives the container and `ACL SAVE` can write
+it. Every `user` line goes in that file, `user default off` included. The server refuses `user`
+lines in its config when `aclfile` is set, and refuses to start when the file is missing. The
+installer creates the file, 0600, before the first start with users.
 
 **The rotation under step 4.** Today `./setup.sh rotate-redis-password` runs `CONFIG SET
 requirepass` (`setup/rotate.go:31`), which sets the default user's password. With the default
@@ -187,7 +191,9 @@ logical only, with the reason.
 
 **The restore of `broker.rdb` is manual,** a procedure in the operator notes, never automatic:
 1. stop the broker;
-2. empty the data volume, AOF directory included, and put `broker.rdb` in it as `<dbfilename>`;
+2. in the data volume, remove the AOF directory and the old RDB, **keep `users.acl`**, and put
+   `broker.rdb` in as `<dbfilename>`. A broker with `aclfile` set and the file missing does not
+   start, and without it every user is gone;
 3. start it once with `--appendonly no`, so that Redis loads the RDB rather than an AOF;
 4. run `CONFIG SET appendonly yes`, which writes a fresh AOF from memory;
 5. restart it with the normal config.
@@ -232,7 +238,8 @@ The logical restore stays the everyday one.
     and no AOF file;
   - a `BGSAVE` that does not finish in time, or fails, leaves a reason and a logical-only archive;
   - the restore procedure, run on a disposable broker in a test: `broker.rdb` loaded with
-    `--appendonly no`, then AOF switched on, gives back the keys, TTL keys included;
+    `--appendonly no`, then AOF switched on, gives back the keys, TTL keys included. The users
+    of `users.acl` still authenticate, and `default` is still refused;
   - no real runtime runs in tests (fake runner).
 - Tests never touch the production broker.
 
