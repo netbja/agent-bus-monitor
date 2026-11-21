@@ -2,7 +2,10 @@ package update
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,17 +44,7 @@ func Trees(ctx context.Context, d Deps, installed string) []Tree {
 	if err != nil {
 		return nil
 	}
-	named := map[string]string{} // tree -> the kept snapshot that names it
-	updates := d.updates()
-	for _, id := range Snapshots(updates) {
-		if m, err := ReadManifest(filepath.Join(updates, id)); err == nil {
-			for _, t := range []string{m.FromTree, m.NewTree} {
-				if t != "" {
-					named[filepath.Clean(t)] = id
-				}
-			}
-		}
-	}
+	named, snapErr := snapshotTrees(d.updates())
 	var holders map[string]bool
 	holdersErr := fmt.Errorf("not read")
 	if d.HolderKeys != nil {
@@ -74,6 +67,8 @@ func Trees(ctx context.Context, d Deps, installed string) []Tree {
 			t.Why = "the installed version cannot be read"
 		case e.Name() == installed:
 			t.Why = "installed"
+		case snapErr != nil:
+			t.Why = "the snapshots cannot all be read (" + snapErr.Error() + ")"
 		case named[path] != "":
 			t.Why = "snapshot " + named[path] + " needs it for a rollback"
 		case holdersErr != nil:
@@ -95,6 +90,49 @@ func Trees(ctx context.Context, d Deps, installed string) []Tree {
 		out = append(out, t)
 	}
 	return out
+}
+
+// snapshotTrees are the trees each kept snapshot names (from_tree,
+// new_tree), read from its manifest whatever its format (reviewer-codex): a
+// rollback runs the snapshot's own binary, so an older format is still
+// restorable and still needs its trees. An updates directory or a manifest
+// that cannot be read or decoded is an error, and the caller keeps every
+// tree. An incomplete snapshot (no manifest) is never restored: it names
+// nothing.
+func snapshotTrees(updates string) (map[string]string, error) {
+	named := map[string]string{}
+	ents, err := os.ReadDir(updates)
+	if errors.Is(err, fs.ErrNotExist) {
+		return named, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(updates, e.Name(), "manifest.json"))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		var refs struct {
+			FromTree string `json:"from_tree"`
+			NewTree  string `json:"new_tree"`
+		}
+		if err == nil {
+			err = json.Unmarshal(b, &refs)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("snapshot %s: %w", e.Name(), err)
+		}
+		for _, t := range []string{refs.FromTree, refs.NewTree} {
+			if t != "" {
+				named[filepath.Clean(t)] = e.Name()
+			}
+		}
+	}
+	return named, nil
 }
 
 // worktreeOf is path's clone's git dir, when that clone lists path as a

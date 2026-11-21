@@ -75,6 +75,26 @@ func TestTreesKept(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, "v0.2.0", "snapshot 20261121T000000Z-v0.1.0-v0.2.0 needs it for a rollback"},
+		// reviewer-codex: a snapshot of another format is still restorable
+		// by its own binary, so it still pins its trees.
+		{"an older format's snapshot names it", func(tw *treeWorld) {
+			dir := filepath.Join(tw.d.updates(), "20251121T000000Z-v0.0.1-v0.1.0")
+			_ = os.MkdirAll(dir, 0o700)
+			_ = os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(`{"format":0,"from_tree":"`+filepath.Join(tw.src, "v0.1.0")+`"}`), 0o600)
+		}, "v0.2.0", "snapshot 20251121T000000Z-v0.0.1-v0.1.0 needs it for a rollback"},
+		{"a manifest that cannot be decoded", func(tw *treeWorld) {
+			dir := filepath.Join(tw.d.updates(), "20261121T000000Z-v0.1.0-v0.2.0")
+			_ = os.MkdirAll(dir, 0o700)
+			_ = os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(`{not json`), 0o600)
+		}, "v0.2.0", "the snapshots cannot all be read"},
+		{"a manifest that cannot be read", func(tw *treeWorld) {
+			dir := filepath.Join(tw.d.updates(), "20261121T000000Z-v0.1.0-v0.2.0")
+			_ = os.MkdirAll(filepath.Join(dir, "manifest.json"), 0o700) // a directory: ReadFile fails
+		}, "v0.2.0", "the snapshots cannot all be read"},
+		{"the snapshots directory cannot be read", func(tw *treeWorld) {
+			_ = os.MkdirAll(filepath.Dir(tw.d.updates()), 0o700)
+			_ = os.WriteFile(tw.d.updates(), []byte("a file, not a directory"), 0o600)
+		}, "v0.2.0", "the snapshots cannot all be read"},
 		{"a holder build of it is on disk", func(tw *treeWorld) {
 			key := service.BuildKey("v0.1.0+" + tw.w.v1[:12])
 			tw.d.HolderKeys = func(context.Context) (map[string]bool, error) { return map[string]bool{key: true}, nil }
@@ -102,6 +122,15 @@ func TestTreesKept(t *testing.T) {
 				t.Fatalf("v0.1.0: %q, want %q…", got["v0.1.0"], c.want)
 			}
 		})
+	}
+}
+
+// An incomplete snapshot (no manifest) is never restored: it pins nothing.
+func TestTreesIncompleteSnapshotNamesNothing(t *testing.T) {
+	tw := newTreeWorld(t)
+	_ = os.MkdirAll(filepath.Join(tw.d.updates(), "20261121T000000Z-v0.1.0-v0.2.0", "bin"), 0o700)
+	if got := whys(Trees(context.Background(), tw.d, "v0.2.0")); got["v0.1.0"] != "" {
+		t.Fatalf("%v", got)
 	}
 }
 

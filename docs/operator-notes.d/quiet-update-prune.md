@@ -4,5 +4,5 @@
   with `git worktree remove` (never `--force`) unless it is the installed version, a kept snapshot names
   it (a rollback needs it), a holder build of it is still on disk (a unit or a binary copy), or it has
   changes (yours: kept and named). The old holders that neither run nor answer are collected first, so a
-  forgotten one does not pin its tree. An unreadable fact keeps every tree. Nothing else under `src` is
+  forgotten one does not pin its tree. An unreadable fact keeps every tree, a snapshots directory or manifest that cannot be read or decoded included (an older format's snapshot still pins its trees: its own binary restores it). Nothing else under `src` is
   touched. `agentbus update --list` shows each tree and why it is kept.
