@@ -132,15 +132,18 @@ func (m *Model) gotOthers(msg othersMsg) tea.Cmd {
 }
 
 // openBusiestOther is O: the switch to the other project with the most for
-// you (ties: by name), its read fresh.
+// you as the header counts it (merges apart, reviewer-codex): the most
+// non-merge rows, then the most merges, then by name; its read fresh.
 func (m *Model) openBusiestOther() tea.Cmd {
-	now, best, most := time.Now(), "", 0
+	now, best := time.Now(), ""
+	var bestYou, bestMerge int
 	for p, r := range m.others {
-		if p == m.cfg.project || now.Sub(r.at) > othersFresh || r.counts.you == 0 {
+		you, merge := max(0, r.counts.you-r.counts.merge), r.counts.merge
+		if p == m.cfg.project || now.Sub(r.at) > othersFresh || you+merge == 0 {
 			continue
 		}
-		if r.counts.you > most || r.counts.you == most && p < best {
-			best, most = p, r.counts.you
+		if best == "" || you > bestYou || you == bestYou && (merge > bestMerge || merge == bestMerge && p < best) {
+			best, bestYou, bestMerge = p, you, merge
 		}
 	}
 	if best == "" {

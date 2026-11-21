@@ -188,3 +188,26 @@ func TestOthersAliveIsTheLease(t *testing.T) {
 		t.Fatalf("no lease: %v %v", ok, err)
 	}
 }
+
+// O ranks as the header counts (reviewer-codex): non-merge rows first, then
+// merges; a project with only merges waiting is still opened.
+func TestOthersKeyRanksAsTheHeader(t *testing.T) {
+	now := time.Now()
+	for _, c := range []struct {
+		reads map[string]otherRead
+		want  string
+	}{
+		{map[string]otherRead{"agent-bus-monitor": {}, "trading": {counts: workCounts{you: 5, merge: 4}, at: now}, "busdev": {counts: workCounts{you: 3}, at: now}}, "busdev"},
+		{map[string]otherRead{"trading": {counts: workCounts{you: 2, merge: 2}, at: now}}, "trading"},
+		{map[string]otherRead{"trading": {counts: workCounts{you: 3, merge: 2}, at: now}, "busdev": {counts: workCounts{you: 1}, at: now}}, "trading"},
+	} {
+		src := adminFixture(shellNow)
+		m := shellWith(t, 140, 40, shellConfig{admin: &src, projectHasKeys: func(context.Context, string) (bool, error) { return true, nil }}, false)
+		m.others = c.reads
+		m, cmd := pressCmd(t, m, 'O')
+		m, quit := runQuits(t, m, cmd)
+		if !quit || m.switchTo != c.want {
+			t.Errorf("%v: switchTo %q (flash %q), want %q", c.reads, m.switchTo, m.ui.flash, c.want)
+		}
+	}
+}

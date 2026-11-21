@@ -6,5 +6,5 @@
     holds its lease. A stopped project is read on M and R as before.
   - **What counts:** a read that fails, or is older than the period plus its read time, drops out
     of the sum; it never counts as 0.
-  - **`O`** opens the project with the most for-you rows, by the same checked switch, so `B` comes
+  - **`O`** opens the project with the most for-you rows as the header counts them (merges apart, then merges), by the same checked switch, so `B` comes
     back.
