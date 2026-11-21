@@ -1,6 +1,6 @@
 # Quiet update, step 2: the automatic mode, and pruning old trees
 
-Status: r1, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
+Status: r2, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
 2026-11-21 (cmd `1795299412029-0`, idea i1). It builds on step 1 as built: `agentbus update`
 (spec [2026-11-20](2026-11-20-agentbus-update-design.md), package `update/`,
 `cmd/agentbus/updatecmd.go`). It replaces the automatic parts of the r13 quiet-update spec
@@ -124,7 +124,13 @@ It is `update.Run` with these differences, in order:
    (`update.Deps.Running`, as step 1 reads them). A project is **in work** when, read on its broker
    with Redis `TIME`:
    - one of its agents in `{p}:agents` has state `working`; or
-   - one of its agents' status changed less than 10 minutes ago.
+   - one of its agents' status changed less than 10 minutes ago; or
+   - **its conductor is at work:** a mission of any change is `checking` (the conductor runs the
+     change's tests) or `integrating` (it merges the change), the states of `mission/state.go:15`,
+     `:18`. They are read without a token: `mission.Store.Changes`, then `Store.Missions` per
+     change (`mission/store.go:100`, `:127`). The `{p}:agents` hash does not hold the conductor,
+     so without this a mission at work at night would have its `missions` service restarted under
+     it (foureyes on r1).
    A suspended project has no running services, so it is not among them.
    If any project is in work, the pass is **deferred**: it changes nothing, and the next tick in
    the same window tries again.
@@ -234,7 +240,8 @@ and the 3 snapshots as constants.
   24 hours outside; a window across midnight; a last pass in the future; `notify` runs nothing; a
   setting changed between ticks applies at the next.
 - **The quiet test:** an agent `working` defers; a status changed 9 minutes ago defers, 11 minutes
-  ago does not; a project with no running service is not judged.
+  ago does not; a project with no running service is not judged; a mission `checking` or `integrating` defers,
+  one `in_review` or `integrated` does not.
 - **The skips:** a `.migrate` tag is never installed and is reported once; a tag with a failed
   automatic install is not retried; a manual `update` of it still runs.
 - **Never a branch:** after a pass, the clone's branches, `HEAD` and status are unchanged.
@@ -281,3 +288,8 @@ and the 3 snapshots as constants.
      with one.
    - B: every pass, deferred ones included, without a wake.
    - C: nothing on the bus: the history line and `agentbus update --list` only.
+
+## Changelog
+
+- **r2** (foureyes on r1): the quiet test also reads the conductor's missions: a mission
+  `checking` or `integrating` keeps its project in work (§4.3 step 4, §8).
