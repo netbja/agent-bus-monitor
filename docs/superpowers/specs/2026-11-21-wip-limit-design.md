@@ -1,6 +1,10 @@
 # A work-in-progress limit per agent (wip-limit)
 
-Status: spec r1, for review (subject `wip-limit`). Not built. Base: origin/dev `3bebd070`.
+Status: spec r2, for review (subject `wip-limit`). Not built. Base: origin/dev `d1760436` (r1
+merged as #734). r2: the person's answers (cmd `1795289356825-0`): Q1 no, Q2 2, Q4 the person's
+high priority, Q5 queued, as recommended; Q3 differs: the person alone sets `board.wip_limit`,
+but from busmon's Shift+C as well as `config.toml`, with a message saying what the value
+implies (§3.3, §3.5). The questions are now answers (§7).
 Author: architect, from master's directive (cmd `1795288231080-0`, plan v0.34 task
 `wip-limit-spec`). No new dependency. Questions for the person are last (§7).
 
@@ -71,7 +75,7 @@ honest (`review`, §3.2), then limits it (§3.3).
 - `requested`: queued, not started;
 - `review` (new, §3.2): a PR or a step waits on reviewers. This is master's "a PR in review is
   not counted";
-- `blocked`: waiting on someone else (Q1);
+- `blocked`: waiting on someone else (the person, Q1);
 - `done`.
 
 Only tracked requests count. A plain `cmd` directive is not recorded anywhere, so it cannot be
@@ -104,9 +108,30 @@ straight to `done`, as today.
 
 | Name | Kind | Default | Meaning |
 |---|---|---|---|
-| `board.wip_limit` | Int | 2 (Q2) | Requests an agent may hold `accepted` at once when it starts a new one; 0 = no limit |
+| `board.wip_limit` | Int | 2 (the person, Q2) | Requests an agent may hold `accepted` at once when it starts a new one; 0 = no limit |
 
-It is a `Project` key: one value per project, `[project.<name>]`. Who may set it is Q3.
+It is a `Project` key, with **no env variable**: config.toml's machine value
+(`board.wip_limit`), overridden per project in `[project.<name>]` (`config.ProjectValue`,
+`config/file.go:250`).
+
+**The person alone sets it, from Shift+C or `config.toml`** (Q3). Today a `PersonOnly` key
+(`backup.after_*`) is refused by `config.Set` and `Unset` (`config/write.go:60`, `:98`), and
+busmon shows it without editing it (`cmd/busmon/settings_ui.go:402`). That is too strict here,
+so the registry gets one more flag:
+
+- **`PersonEdit`** (`config.Key`): `config.Set` and `config.Unset` refuse it with `board.wip_limit:
+  the person's own setting: set it in busmon (Shift+C) or config.toml`, so `agentbus config set`
+  and `unset` refuse it for everyone. A new `config.SetAsPerson` and `config.UnsetAsPerson`
+  write it, with `Set`'s checks otherwise unchanged; busmon's Shift+C is their only caller.
+  A test pins that no other package calls them.
+- busmon is the person's own tool: agents do not drive its pages. The agents' launch settings
+  already deny `Edit(~/.config/agentbus/config.toml)` (`roles.toml`'s shared `[tool_rules]`,
+  pinned by `rolecfg/configdeny_test.go`), though a shell can still write the file. A
+  `PersonEdit` key is a discipline, defence in depth, not a security boundary, like §3.3's
+  limit itself.
+- Shift+C writes the machine value. When `[project.<name>]` holds a value for the shown
+  project, the row says so and is not edited there, as busmon already does for a value set
+  above the file ("set by …: unset it there").
 
 **Where it is enforced:** in `requestTransitionSrc`, on a **first accept** only (the request has
 no `accepted_at`). The caller reads the setting and passes it as an argument. The script counts
@@ -123,7 +148,7 @@ The new refusal joins `requestRefusals`, so it is `ErrRequestRefused`.
 - **A resume is never refused:** re-accepting a request that has an `accepted_at` (back from
   `review` or `blocked`). Answering a reject is finishing, not starting.
 - **The person's high priority passes** (`request.priority = high`, set only by a person through
-  `request priority … --as`; Q4).
+  `request priority … --as`; the person, Q4).
 - The count is read in the same script as the write, so two accepts at once cannot both pass.
 - The board is one hash of about 300 entries: one `HGETALL` and a decode per first accept.
 - The limit is a discipline, not a security boundary. An old binary that passes no limit is not
@@ -131,7 +156,7 @@ The new refusal joins `requestRefusals`, so it is `ErrRequestRefused`.
 
 ### 3.4 What master does
 
-- **`request send`** to an agent at its limit is **not refused** (Q5). It is queued as today
+- **`request send`** to an agent at its limit is **not refused** (the person, Q5). It is queued as today
   (`requested`). `send` prints one line on stderr: `coder is at its wip limit (2/2:
   conflict-owner-build, language-picker): queued; coder2 0/2`. It names the other agents under
   their limit that already hold a request of the same project, so master can route.
@@ -152,7 +177,18 @@ The new refusal joins `requestRefusals`, so it is `ErrRequestRefused`.
   `bus/board.go:23`). A queued request whose target is at its limit reads `waits: coder at wip
   limit`.
 - **For you:** nothing. A limit is master's routing, not the person's action.
-- **Shift+C:** the `board.wip_limit` row (editable or not, Q3).
+- **Shift+C:** the `board.wip_limit` row, in the Services group, **editable** (Q3). Its detail
+  zone, shown when the row is selected and again in the edit, says what the value implies:
+
+  > Each agent may hold this many requests accepted when it starts a new one. At the limit a new
+  > accept is refused until the agent finishes one or marks it review or blocked; your high
+  > priority passes. Lower: work finishes before more starts. Higher: more in parallel, more
+  > PRs in review at once and more merge conflicts. 0: no limit. Agents cannot change it.
+
+  After a save, the flash says when it applies: `wip limit 2: applies at each agent's next
+  accept`. Requests already accepted are not touched.
+- **`agentbus config`** lists the key with its value and source, and its refusal (above) names
+  where the person sets it.
 
 ### 3.6 Rollout
 
@@ -167,16 +203,18 @@ Nothing is migrated automatically.
    `requestTransitionSrc`; the new refusal in `requestRefusals`; `NextRequest` skips `review`;
    `AcceptRequest` takes the limit.
 2. **CLI and skills:** `request review`, the limit read in `request accept`, `send`'s stderr
-   line; `board.wip_limit` in the registry; the agent-bus, agent-bus-docs and agent-bus-master
+   line; `board.wip_limit` in the registry with the new `PersonEdit` flag, `SetAsPerson` and
+   `UnsetAsPerson`; the agent-bus, agent-bus-docs and agent-bus-master
    skills; an operator-notes fragment `docs/operator-notes.d/wip-limit.md`.
-3. **busmon:** the TEAM `wip n/m`, the agent page's list, the `waits:` tag, the Shift+C row.
+3. **busmon:** the TEAM `wip n/m`, the agent page's list, the `waits:` tag, the Shift+C row with
+   its detail text and flash, written through `SetAsPerson`.
 
 ## 5. Tests
 
 - **Script** (disposable broker only):
   - a limit of 2: a first accept with 2 others `accepted` is refused, with the text naming them;
     with 1, it passes;
-  - `review` and `blocked` entries are not counted (and `blocked` is, if Q1 says so);
+  - `review` and `blocked` entries are not counted (Q1);
   - another agent's `accepted` entries are not counted;
   - a resume from `review` or `blocked` passes at the limit;
   - a high-priority request passes at the limit, and a normal one does not;
@@ -187,9 +225,14 @@ Nothing is migrated automatically.
 - **`NextRequest`:** a `review` request does not hold the agent; `finish first` still names an
   `accepted` one.
 - **CLI:** `send` to an agent at its limit queues it and prints the line; under it, nothing.
-- **Settings:** `board.wip_limit` in the registry, per project, its env name (if Q3 allows one),
-  and its invalid text.
-- **busmon:** goldens for `wip 1/2`, `wip 2/2` in the warn role, none at 0; the `waits:` tag.
+- **Settings:** `board.wip_limit` in the registry, `Project`, `PersonEdit`, no env variable, and
+  its invalid text; a `[project.<name>]` value beats the machine value for that project only;
+  `config.Set` and `Unset` refuse it with the text above; `SetAsPerson` writes it and reads back;
+  no package but busmon calls `SetAsPerson` or `UnsetAsPerson`; the `backup.after_*` keys
+  (`PersonOnly`) stay not editable in busmon.
+- **busmon:** goldens for `wip 1/2`, `wip 2/2` in the warn role, none at 0; the `waits:` tag; the
+  Shift+C row's detail text, its edit saved through `SetAsPerson`, the flash; a
+  `[project.<name>]` value shown as set there and not edited.
 
 ## 6. What this does not do
 
@@ -197,29 +240,14 @@ Nothing is migrated automatically.
 - It does not close stale requests: busmon shows them and master asks (§3.4).
 - It does not limit how many requests master sends, or how many PRs wait for review.
 
-## 7. Questions for the person
+## 7. The person's answers (r2)
 
-1. **Is a blocked request in flight?**
-   - **(a) No (recommended):** blocked waits on someone else, often you, and the agent can do
-     other work meanwhile; `request next` already skips it.
-   - (b) Yes: a blocked request takes a place, so blocks are cleared before new work starts.
-2. **The default limit?**
-   - **(a) 2 (recommended):** one request in hand plus one that a reject or a quick fix brings
-     back, with little friction at the start.
-   - (b) 1: strict "finish first"; any request not marked `review` stops new work.
-   - (c) 3.
-   - (d) 0: off until you turn it on.
-3. **Who sets `board.wip_limit`?**
-   - **(a) You only (recommended):** the limit is a brake on the agents, master included, so none
-     of them may raise it. Set in `config.toml`'s `[project.<name>]`, shown in Shift+C but not
-     editable there, like `backup.after_*`.
-   - (b) Anyone: editable in Shift+C and with `agentbus config set`; master's skill says not to
-     touch it.
-4. **What passes the limit?**
-   - **(a) Your high priority (recommended):** a request you set `high` is accepted even at the
-     limit; nothing else is.
-   - (b) Nothing: at the limit you raise the setting yourself.
-5. **`request send` to an agent at its limit?**
-   - **(a) Queued, with a line to master (recommended):** the work waits its turn and master can
-     route it elsewhere.
-   - (b) Refused: master must send it to an agent under its limit, or wait.
+1. **A blocked request is not in flight.** As recommended.
+2. **The default limit is 2.** As recommended.
+3. **The person alone sets `board.wip_limit`, from Shift+C or `config.toml`,** with a message on
+   what the value implies. Not the recommended "shown only": §3.3's `PersonEdit` and §3.5's
+   detail text.
+4. **The person's high priority passes the limit;** nothing else does. As recommended.
+5. **A request sent to an agent at its limit is queued,** with a line to master. As recommended.
+
+No question is left open.
