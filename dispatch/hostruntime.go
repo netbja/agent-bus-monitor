@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/config"
+	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +49,12 @@ type HostRuntime struct {
 	Declared func(agent string) (string, bool)
 	// ExtraHelpers: the MCP servers the launcher configured for an agent.
 	ExtraHelpers func(agent string) []string
+	// Ignore: process names never counted as background work: the clients'
+	// own helpers, busy or not, and a shell that only wraps them. nil reads
+	// dispatch.background_ignore at each look (BackgroundIgnore, the
+	// process's environment), so every runtime has it and a change applies
+	// at once; an empty list ignores none.
+	Ignore []string
 
 	PersonQuiet time.Duration // dispatch.person_quiet; 0: DefaultPersonQuiet
 	Settle      time.Duration // output quiet for a settled screen; 0: DefaultSettle
@@ -260,13 +269,18 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 	r.firstSeen[t.ID] = seen // the gone ones dropped
 	r.mu.Unlock()
 
+	ignore := r.Ignore
+	if ignore == nil {
+		ignore = BackgroundIgnore(os.Getenv)
+	}
 	var f agentstate.Facts
 	if base != nil {
 		pf := &agentstate.ProcessFacts{Window: now.Sub(base.at)}
 		branch := branches(t.PID, procs)
+		wrap := wrappers(procs, ignore)
 		for _, p := range procs {
-			if p.PID == t.PID {
-				continue // the agent itself, never its own background
+			if p.PID == t.PID || wrap[p.PID] {
+				continue // the agent itself, never its own background; a shell wrapping ignored helpers
 			}
 			k := procKey{p.PID, p.Start}
 			grown := p.CPU - base.cpu[k] // a process new since the base: all its CPU
@@ -287,6 +301,7 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 	if r.ExtraHelpers != nil {
 		f.ExtraHelpers = r.ExtraHelpers(t.Name)
 	}
+	f.Ignore = ignore
 	j := bg.Judge(f, now)
 	return &j
 }
@@ -337,3 +352,47 @@ func (r *HostRuntime) Clear(ctx context.Context, pane string) error {
 
 // Ping reports whether the host answers.
 func (r *HostRuntime) Ping(ctx context.Context) error { return r.Host.Ping(ctx) }
+
+// wrappers are the shells in procs that only wrap ignored processes: at
+// least one child, every child ignored by name or itself such a wrapper (a
+// helper launched through "bash -c"). A shell with no child, or with any
+// other child, is a command and still counts.
+func wrappers(procs []termhost.Proc, ignore []string) map[int]bool {
+	if len(ignore) == 0 {
+		return nil
+	}
+	kids := map[int][]termhost.Proc{}
+	for _, p := range procs {
+		kids[p.PPID] = append(kids[p.PPID], p)
+	}
+	memo := map[int]bool{}
+	var wrapper func(p termhost.Proc, depth int) bool
+	wrapper = func(p termhost.Proc, depth int) bool {
+		if v, ok := memo[p.PID]; ok {
+			return v
+		}
+		memo[p.PID] = false // a cycle in a bad list is no wrapper
+		ok := depth < 16 && agentstate.IsShell(p.Command) && len(kids[p.PID]) > 0
+		for _, c := range kids[p.PID] {
+			if !ok {
+				break
+			}
+			ok = slices.Contains(ignore, c.Command) || wrapper(c, depth+1)
+		}
+		memo[p.PID] = ok
+		return ok
+	}
+	out := map[int]bool{}
+	for _, p := range procs {
+		if wrapper(p, 0) {
+			out[p.PID] = true
+		}
+	}
+	return out
+}
+
+// BackgroundIgnore is dispatch.background_ignore: the process names the
+// background judgement never counts.
+func BackgroundIgnore(getenv func(string) string) []string {
+	return config.SplitList(config.Machine(getenv).String("dispatch.background_ignore"))
+}

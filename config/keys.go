@@ -282,6 +282,16 @@ var Keys = []*Key{
 	// How long the dispatcher may skip an agent's auto-clear or pop-retire for
 	// its background work before it tells the escalation target, once per
 	// episode (background-work-visible §4a; 0 = off, else at least 1m).
+	// The background judgement's never-counted process names
+	// (background-ignore-helpers): the clients' own helpers, busy or not,
+	// and a shell that only wraps them. A real command still counts: the
+	// default names only the clients' own helpers, never a generic name such
+	// as MainThread (every node or Python process), which would hide work
+	// (master). The person may add names.
+	{Name: "dispatch.background_ignore", Kind: String, List: true, Default: "codebase-memory,codex-code-mode", ReadBy: "dispatch", MachineOnly: true,
+		file: fileNameList("want a list of process names", func(s string) bool {
+			return s != "" && len(s) <= 64 && !strings.ContainsAny(s, ",\n\r\t ")
+		})},
 	{Name: "dispatch.background_notice_after", Env: "AGENT_BUS_BACKGROUND_NOTICE_AFTER", Kind: Duration, Default: 2 * time.Hour, ReadBy: "dispatch",
 		env: func(raw string) (any, envResult) {
 			if d, err := time.ParseDuration(raw); err == nil && (d == 0 || d >= time.Minute) {
