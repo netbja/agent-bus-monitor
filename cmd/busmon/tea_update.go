@@ -173,6 +173,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		m.openPalette()
 	case ActIdeas:
 		cmd = m.push(page{kind: ovIdeas})
+	case ActMemory:
+		cmd = m.push(page{kind: ovMemory})
 	case ActHelp:
 		cmd = m.push(page{kind: ovHelp})
 	case ActPlan:

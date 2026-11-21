@@ -136,6 +136,7 @@ const (
 	ActBackupNow      // projects (M): back the selected project up (agentbus backup --project)
 	ActPalette        // Ctrl+P: the command palette, the line opened with / (palette spec §4.3)
 	ActIdeas          // open the Ideas page (F6)
+	ActMemory         // open the Memory page (F7): the person's facts (person-memory §4.4)
 	ActIdeaFilter     // Ideas (F6): tab, the next state shown
 	ActIdeaAdd        // Ideas (F6): a, add an idea (its title on the line)
 	ActIdeaState      // Ideas (F6) or an idea's page: s, the state picker (←→ choose, enter sets it)
@@ -235,6 +236,7 @@ var (
 		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(keyBacktab)},
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
+		{Keys: "F7", Help: "memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one", Act: ActMemory, match: keyIs(keyF7)},
 		{Keys: "/ ^P", Hint: "commands", Help: "the command palette: the line opened with /, every command searchable (also i then /)", Act: ActPalette, match: either(runeIs('/'), keyIs(keyCtrlP))},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
@@ -366,6 +368,7 @@ var (
 	overlayBindings = []binding{
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
+		{Keys: "F7", Help: "memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one", Act: ActMemory, match: keyIs(keyF7)},
 		{Keys: "/ ^P", Help: "the command palette, from any page", Act: ActPalette, match: either(runeIs('/'), keyIs(keyCtrlP))},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},

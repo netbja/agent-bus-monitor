@@ -36,6 +36,9 @@ type fadeMsg time.Time
 
 // shellConfig is what the shell is started with.
 type shellConfig struct {
+	// memoryLocal answers where the Memory page reads (tests); nil: the rule
+	// on this machine (memoryLocalOf).
+	memoryLocal func() (bool, string)
 	// holders reads the project's holders on this host for the Services page
 	// (agent-screen-blocked §4); nil reads none.
 	holders       func(context.Context) ([]holderRow, error)
