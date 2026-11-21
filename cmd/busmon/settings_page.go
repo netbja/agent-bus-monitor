@@ -68,6 +68,7 @@ var settingLabels = map[string]string{
 	"notify.on": "Send notifications", "notify.targets": "Targets", "notify.events": "Events", "notify.detail": "Detail",
 	"notify.delay": "Delay", "notify.max_per_hour": "At most per hour", "notify.quiet": "Quiet hours", "notify.quiet_exempt": "Sent in quiet hours",
 	"projects.delete_files": "Delete also its template and worktrees", "projects.delete_backups": "Delete also its backups",
+	"board.wip_limit":      "Requests per agent at once (wip limit)",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
 }
 
@@ -87,7 +88,8 @@ func settingOnPage(k *config.Key) bool {
 // servicesOnPage are the Services keys the page shows: auto-reload's, and
 // self-repair's (the person: the mode, the budgets and the login option).
 var servicesOnPage = map[string]bool{"sentinel.reload": true, "dispatch.self_repair": true, "dispatch.self_repair_every": true,
-	"dispatch.self_repair_per_day": true, "services.start_at_login": true, "dev": true}
+	"dispatch.self_repair_per_day": true, "services.start_at_login": true, "dev": true,
+	"board.wip_limit": true} // the person's alone, set here (wip-limit r2 §3.3)
 
 // settingFlags are the flags above a key's env: busmon's own, read-only here.
 var settingFlags = map[string]string{"display.theme": "busmon --theme", "display.limit": "busmon --limit", "identity.as": "busmon --as"}

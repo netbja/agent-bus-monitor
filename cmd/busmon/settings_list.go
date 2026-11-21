@@ -84,7 +84,7 @@ func (m *Model) optionListKey(s *settingsPage, k Key, name, path string) tea.Cmd
 			return nil
 		}
 		s.err = ""
-		return m.settingsCmd(func() error { return config.Set(path, name, v) }, name)
+		return m.settingsCmd(func() error { return config.SetAsPerson(path, name, v) }, name)
 	}
 	return nil
 }

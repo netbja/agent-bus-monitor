@@ -52,13 +52,28 @@ var errNotReadBack = errors.New("this change cannot be made safely here: config.
 // duration). The value must pass the key's file rule, and the edited text
 // must read back with that one change before it is written (a temporary file
 // renamed over the old one, 0600 in a 0700 directory).
-func Set(path, name string, v any) error {
+func Set(path, name string, v any) error { return set(path, name, v, false) }
+
+// SetAsPerson is Set by the person: it also writes a PersonEdit key
+// (board.wip_limit). busmon's settings page alone calls it
+// (TestOnlyBusmonWritesAsThePerson); a PersonOnly key stays refused.
+func SetAsPerson(path, name string, v any) error { return set(path, name, v, true) }
+
+// personEditRefusal is Set's and Unset's refusal of a PersonEdit key.
+func personEditRefusal(name string) error {
+	return fmt.Errorf("%s: the person's own setting: set it in busmon (Shift+C) or config.toml", name)
+}
+
+func set(path, name string, v any, asPerson bool) error {
 	k, ok := Lookup(name)
 	if !ok {
 		return fmt.Errorf("%s: not a setting", name)
 	}
 	if k.PersonOnly {
 		return fmt.Errorf("%s: the person's own setting: edit config.toml yourself", name)
+	}
+	if k.PersonEdit && !asPerson {
+		return personEditRefusal(name)
 	}
 	lit, err := literal(k, v)
 	if err != nil {
@@ -90,13 +105,21 @@ func Set(path, name string, v any) error {
 
 // Unset removes key's line from the config.toml at path, every other byte
 // kept; an absent key or file is no edit at all.
-func Unset(path, name string) error {
+func Unset(path, name string) error { return unset(path, name, false) }
+
+// UnsetAsPerson is Unset by the person (SetAsPerson's pair).
+func UnsetAsPerson(path, name string) error { return unset(path, name, true) }
+
+func unset(path, name string, asPerson bool) error {
 	k, ok := Lookup(name)
 	if !ok {
 		return fmt.Errorf("%s: not a setting", name)
 	}
 	if k.PersonOnly {
 		return fmt.Errorf("%s: the person's own setting: edit config.toml yourself", name)
+	}
+	if k.PersonEdit && !asPerson {
+		return personEditRefusal(name)
 	}
 	text, old, err := readForEdit(path)
 	if err != nil {

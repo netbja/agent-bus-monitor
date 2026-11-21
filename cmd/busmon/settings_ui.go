@@ -273,11 +273,11 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 		if key != "" {
-			return m.settingsCmd(func() error { return config.Unset(path, key) }, key)
+			return m.settingsCmd(func() error { return config.UnsetAsPerson(path, key) }, key)
 		}
 		return m.settingsCmd(func() error {
 			for _, key := range keys {
-				if err := config.Unset(path, key); err != nil {
+				if err := config.UnsetAsPerson(path, key); err != nil {
 					return err
 				}
 			}
@@ -391,7 +391,7 @@ func (m *Model) settingsKey(act Action, k Key) tea.Cmd {
 		switch {
 		case key.Kind == config.Bool: // one key, one meaning: written at once
 			v := row.Value != "on"
-			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
+			return m.settingsCmd(func() error { return config.SetAsPerson(path, row.Key, v) }, row.Key)
 		case key.Choices() != nil: // a fixed list: chosen from it, never typed (language-picker)
 			s.edit, s.list = row.Key, newOptionList(key.Choices(), row.Value)
 		case rowChoices(row) != nil:
@@ -481,7 +481,7 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 			s.choice = (s.choice + 1) % len(choices)
 		case keyEnter:
 			v := choices[s.choice]
-			return m.settingsCmd(func() error { return config.Set(path, row.Key, v) }, row.Key)
+			return m.settingsCmd(func() error { return config.SetAsPerson(path, row.Key, v) }, row.Key)
 		}
 		return nil
 	}
@@ -504,7 +504,7 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 			return nil
 		}
 		name := s.edit
-		return m.settingsCmd(func() error { return config.Set(path, name, v) }, name)
+		return m.settingsCmd(func() error { return config.SetAsPerson(path, name, v) }, name)
 	}
 	return nil
 }
@@ -1030,6 +1030,7 @@ func settingsDetail(r settingRow) []mdSpan {
 // by its kind (settingHelp).
 var settingHelps = map[string]string{
 	"display.theme":                "auto follows the terminal's background; dark or light forces one",
+	"board.wip_limit":              "requests each agent may hold accepted when it starts a new one; 0: no limit; agents cannot change it. Not enforced yet: it takes effect with the next step (agentbus request accept, wip-limit 2b)",
 	"display.icons":                "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":                "Activity lines replayed when busmon starts; 0 or below: all history",
 	"compose.at_path":              "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
