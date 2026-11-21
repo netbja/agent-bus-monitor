@@ -242,7 +242,10 @@ The inventory then refuses nothing an agent does. 4b adds the users and a switch
     `agentcaller.Refuse` with `agentcaller.Ancestor`. The `admin` password file is 0600 and owned
     by the person;
   - any other `agentbus` command connects by its identity:
-    - `AGENT_BUS_AGENT=master` connects as `master`;
+    - `AGENT_BUS_AGENT=master` connects as `master`, **unless an ancestor process is a registered
+      agent other than master**: that process connects as `agent` (master, the person; the same
+      process-tree check). An agent cannot claim master by setting the variable. A hostile agent
+      that reads the password files is still out of scope (§2);
     - another agent connects as `agent`;
     - the person's CLI (no identity) connects as `busmon` (the person's answer), **but only after
       the same process-tree check**: a process descended from a registered agent connects as `agent`
@@ -260,6 +263,8 @@ The inventory then refuses nothing an agent does. 4b adds the users and a switch
   - the person's CLI under an agent's process tree, with no `AGENT_BUS_AGENT`, connects as
     `agent`, never as `busmon`;
   - the `admin` password file is created 0600;
+  - `AGENT_BUS_AGENT=master` under the process tree of a registered agent other than master
+    connects as `agent`; under master's own tree, or the person's shell, it connects as `master`;
   - `off` changes nothing;
   - `on` then `off` gives back a working default user;
   - every entry point connects as its user (a fake config for the password files).
