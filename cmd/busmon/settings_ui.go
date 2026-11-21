@@ -1030,6 +1030,7 @@ func settingsDetail(r settingRow) []mdSpan {
 // by its kind (settingHelp).
 var settingHelps = map[string]string{
 	"display.theme":                "auto follows the terminal's background; dark or light forces one",
+	"board.wip_limit":              "requests each agent may hold accepted when it starts a new one; 0: no limit; agents cannot change it. Not enforced yet: it takes effect with the next step (agentbus request accept, wip-limit 2b)",
 	"display.icons":                "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":                "Activity lines replayed when busmon starts; 0 or below: all history",
 	"compose.at_path":              "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
