@@ -64,6 +64,13 @@ func TestReadOnlyNotifyTargetRemoveAndRename(t *testing.T) {
 	if _, ok := w.file(t).Target("phone"); !ok || !strings.Contains(w.m.ui.flash, readOnlyLine) {
 		t.Fatalf("x y while read-only: flash %q", w.m.ui.flash)
 	}
+	if s := w.m.rd.top().ns; s == nil || s.busy {
+		t.Fatal("a refused removal left the page busy")
+	}
+	w.key(t, kEsc) // the page still answers
+	if p := w.m.rd.top(); p.kind == ovNotifySetup {
+		t.Fatal("Esc swallowed after a refused removal")
+	}
 }
 
 func TestReadOnlyPaletteFollow(t *testing.T) {

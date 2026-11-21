@@ -444,10 +444,10 @@ func (m *Model) notifySetupKey(act Action, k Key) tea.Cmd {
 	if s.removeAsk { // modal: y removes, any other key keeps it
 		s.removeAsk = false
 		if k.Code == keyRune && k.Rune == 'y' {
-			s.busy = true
-			if m.refuseReadOnly() { // notify.toml and config.toml are writes (readonly.go)
+			if m.refuseReadOnly() { // notify.toml and config.toml are writes (readonly.go): the page stays usable
 				return nil
 			}
+			s.busy = true
 			return nsRemove(m.settingsGetenv(), p.serial, s.target)
 		}
 		m.ui.flash, m.ui.flashErr = s.target+" kept", false
