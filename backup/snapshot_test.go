@@ -35,15 +35,18 @@ type fakeSnap struct {
 
 const testMark = "0123456789abcdef"
 
-func (f *fakeSnap) Mark(_ context.Context, key, value string, _ time.Duration) error {
+func (f *fakeSnap) Mark(_ context.Context, key, value string, _ time.Duration) (bool, error) {
 	if f.markErr != nil {
-		return f.markErr
+		return false, f.markErr
 	}
 	if f.marks == nil {
 		f.marks = map[string]string{}
 	}
+	if _, ok := f.marks[key]; ok { // SET NX
+		return false, nil
+	}
 	f.marks[key] = value
-	return nil
+	return true, nil
 }
 func (f *fakeSnap) Unmark(_ context.Context, key string) error {
 	delete(f.marks, key)
@@ -195,6 +198,11 @@ func TestSnapshotLeftOut(t *testing.T) {
 		want string
 	}{
 		{"the marker refused", func(f *fakeSnap, _ string, _ *Snapshotter) { f.markErr = errors.New("NOPERM") }, "the snapshot's marker: NOPERM"},
+		// reviewer-codex: a value already at the run's key is neither
+		// overwritten nor deleted.
+		{"the marker key exists", func(f *fakeSnap, _ string, _ *Snapshotter) {
+			f.marks = map[string]string{SnapshotMarkPrefix + testMark: "someone else's"}
+		}, "already exists on the broker: not overwritten"},
 		{"BGSAVE refused", func(f *fakeSnap, _ string, _ *Snapshotter) {
 			f.bgErr = errors.New("ERR Background save already in progress")
 		}, "BGSAVE refused: ERR Background save already in progress"},
@@ -254,6 +262,9 @@ func TestSnapshotLeftOut(t *testing.T) {
 			path, why := s.Take(context.Background())
 			if path != "" || !strings.Contains(why, c.want) {
 				t.Fatalf("%q %q", path, why)
+			}
+			if c.name == "the marker key exists" && (f.marks[SnapshotMarkPrefix+testMark] != "someone else's" || f.unmarked) {
+				t.Fatalf("the existing value was touched: %v (unmarked %v)", f.marks, f.unmarked)
 			}
 			if left, _ := os.ReadDir(stage); len(left) != 0 {
 				t.Fatalf("staged files left: %v", left)

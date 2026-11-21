@@ -34,7 +34,7 @@ const SnapshotMember = "broker.rdb"
 
 // snapBroker is the broker side of a snapshot.
 type snapBroker interface {
-	Mark(ctx context.Context, key, value string, ttl time.Duration) error
+	Mark(ctx context.Context, key, value string, ttl time.Duration) (created bool, err error)
 	Unmark(ctx context.Context, key string) error
 	Time(ctx context.Context) (time.Time, error)
 	BgSave(ctx context.Context) error
@@ -45,8 +45,8 @@ type snapBroker interface {
 // redisSnap is snapBroker on a client.
 type redisSnap struct{ c *redis.Client }
 
-func (r redisSnap) Mark(ctx context.Context, key, value string, ttl time.Duration) error {
-	return r.c.Set(ctx, key, value, ttl).Err()
+func (r redisSnap) Mark(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
+	return r.c.SetNX(ctx, key, value, ttl).Result() // never over another value
 }
 func (r redisSnap) Unmark(ctx context.Context, key string) error { return r.c.Del(ctx, key).Err() }
 func (r redisSnap) Time(ctx context.Context) (time.Time, error)  { return r.c.Time(ctx).Result() }
@@ -100,12 +100,14 @@ type Snapshotter struct {
 	nonce   func() string // tests: the marker's value
 }
 
-// SnapshotMarkKey is the key a snapshot writes on the broker it asked to
-// save, its value one run's random marker (reviewer-codex): a copied RDB that
-// does not hold it is not that broker's (REDIS_URL names a remote broker
-// while a local container runs, another broker's file in the same path).
-// Set with a TTL and deleted after; it is not in any project's keys.
-const SnapshotMarkKey = "agentbus:backup:snapshot-mark"
+// SnapshotMarkPrefix starts the key a snapshot writes on the broker it asked
+// to save, the run's random marker after it and as its value
+// (reviewer-codex): a copied RDB that does not hold it is not that broker's
+// (REDIS_URL names a remote broker while a local container runs, another
+// broker's file in the same path). One key per run, created only if absent
+// (SET NX) with a TTL, deleted only by the run that created it: a value
+// already there is never overwritten or removed. It is in no project's keys.
+const SnapshotMarkPrefix = "agentbus:backup:snapshot-mark:"
 
 // markValue is 16 hex characters: an RDB stores a string of at most 20
 // bytes uncompressed, so the marker is found as written.
@@ -146,10 +148,15 @@ func (s Snapshotter) Take(ctx context.Context) (string, string) {
 	if mark == "" {
 		return "", "no random marker"
 	}
-	if err := s.broker.Mark(ctx, SnapshotMarkKey, mark, 10*time.Minute); err != nil {
+	key := SnapshotMarkPrefix + mark
+	created, err := s.broker.Mark(ctx, key, mark, 10*time.Minute)
+	if err != nil {
 		return "", "the snapshot's marker: " + err.Error()
 	}
-	defer s.broker.Unmark(context.WithoutCancel(ctx), SnapshotMarkKey)
+	if !created { // not this run's: left as it is
+		return "", "the snapshot's marker " + key + " already exists on the broker: not overwritten, no snapshot"
+	}
+	defer s.broker.Unmark(context.WithoutCancel(ctx), key)
 	before, err := s.broker.Persistence(ctx)
 	if err != nil {
 		return "", "INFO persistence: " + err.Error()

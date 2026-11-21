@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,10 @@ func TestSnapshotAndManualRestoreOnADisposableRedis(t *testing.T) {
 	}
 	admin := login(sock, bus.ACLAdmin, pw[bus.ACLAdmin])
 	defer admin.Close()
+	// A key under the marker's prefix that is not this run's stays as it is.
+	if err := admin.Set(ctx, SnapshotMarkPrefix+"someone", "theirs", 0).Err(); err != nil {
+		t.Fatal(err)
+	}
 	if err := admin.Set(ctx, "demo:board", "kept", 0).Err(); err != nil {
 		t.Fatal(err)
 	}
@@ -80,12 +85,29 @@ func TestSnapshotAndManualRestoreOnADisposableRedis(t *testing.T) {
 		t.Fatal(err)
 	}
 	stage := t.TempDir()
+	// A run whose marker key already holds a value (a collision): no
+	// overwrite, no delete, no snapshot.
+	clash := NewSnapshotter(admin, "", nil, stage)
+	clash.nonce = func() string { return "0123456789abcdef" }
+	if err := admin.Set(ctx, SnapshotMarkPrefix+"0123456789abcdef", "theirs", 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if path, why := clash.Take(ctx); path != "" || !strings.Contains(why, "already exists") {
+		t.Fatalf("a taken key: %q %q", path, why)
+	}
+	if v, _ := admin.Get(ctx, SnapshotMarkPrefix+"0123456789abcdef").Result(); v != "theirs" {
+		t.Fatalf("an existing value overwritten or removed: %q", v)
+	}
+	_ = admin.Del(ctx, SnapshotMarkPrefix+"0123456789abcdef")
 	path, why := NewSnapshotter(admin, "", nil, stage).Take(ctx)
 	if why != "" {
 		t.Fatalf("snapshot: %s", why)
 	}
-	if n, _ := admin.Exists(ctx, SnapshotMarkKey).Result(); n != 0 {
-		t.Fatal("the snapshot's marker was left on the broker")
+	if keys, _ := admin.Keys(ctx, SnapshotMarkPrefix+"*").Result(); len(keys) != 1 || keys[0] != SnapshotMarkPrefix+"someone" {
+		t.Fatalf("the run's marker left, or another removed: %v", keys)
+	}
+	if v, _ := admin.Get(ctx, SnapshotMarkPrefix+"someone").Result(); v != "theirs" {
+		t.Fatalf("another value under the prefix changed: %q", v)
 	}
 	stop()
 
