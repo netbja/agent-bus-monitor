@@ -166,3 +166,30 @@ func TestMergeQueueCmdCIRed(t *testing.T) {
 		t.Fatalf("a green row has a mark: %s", out.String())
 	}
 }
+
+// ACL answer e (the person's yes): dropping a head is master's; docs, though
+// it delivers, asks master. Another agent is refused before the deliverers'
+// check; master and the person go on to it.
+func TestMergeDropMayIsMasters(t *testing.T) {
+	calls := 0
+	inner := func(string) error { calls++; return nil }
+	for _, c := range []struct {
+		env  []string
+		ok   bool
+		next bool
+	}{
+		{[]string{"AGENT_BUS_AGENT=docs"}, false, false},
+		{[]string{"AGENT_BUS_AGENT=coder"}, false, false},
+		{[]string{"AGENT_BUS_AGENT=master"}, true, true},
+		{nil, true, true}, // the person
+	} {
+		calls = 0
+		err := mergeDropMay(c.env, inner)("x")
+		if (err == nil) != c.ok || (calls == 1) != c.next {
+			t.Errorf("%v: err %v, deliverers' check called %d", c.env, err, calls)
+		}
+		if err != nil && !strings.Contains(err.Error(), "master's") {
+			t.Errorf("%v: %v", c.env, err)
+		}
+	}
+}
