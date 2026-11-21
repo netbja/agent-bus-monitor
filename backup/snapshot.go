@@ -151,7 +151,7 @@ func (s Snapshotter) Take(ctx context.Context) (string, string) {
 	key := SnapshotMarkPrefix + mark
 	created, err := s.broker.Mark(ctx, key, mark, 10*time.Minute)
 	if err != nil {
-		return "", "the snapshot's marker: " + err.Error()
+		return "", aclHint("the snapshot's marker: " + err.Error())
 	}
 	if !created { // not this run's: left as it is
 		return "", "the snapshot's marker " + key + " already exists on the broker: not overwritten, no snapshot"
@@ -166,7 +166,7 @@ func (s Snapshotter) Take(ctx context.Context) (string, string) {
 		return "", "TIME: " + err.Error()
 	}
 	if err := s.broker.BgSave(ctx); err != nil {
-		return "", "BGSAVE refused: " + err.Error()
+		return "", aclHint("BGSAVE refused: " + err.Error())
 	}
 	for start := time.Now(); ; sleep(poll) {
 		now, err := s.broker.Persistence(ctx)
@@ -218,6 +218,18 @@ func (s Snapshotter) marked(path, why string) func(mark string) (string, string)
 		}
 		return "", "the RDB copied does not hold this run's marker: not the connected broker's snapshot (REDIS_URL names another broker than the local one?)"
 	}
+}
+
+// aclHint adds, to a refusal by the broker's ACL (NOPERM), who may take
+// the snapshot (foureyes): with broker.acl on, the scheduled backup runs in
+// the dispatch service as the dispatcher user, which may neither BGSAVE nor
+// write the marker, so its archives are logical only; agentbus backup run by
+// hand connects as admin and takes it.
+func aclHint(why string) string {
+	if !strings.Contains(why, "NOPERM") {
+		return why
+	}
+	return why + " (with broker.acl on, only admin takes the snapshot: run agentbus backup by hand; the scheduled backup, as the dispatcher, is logical only)"
 }
 
 // newSave: a save finished after asked, by the save count when the broker

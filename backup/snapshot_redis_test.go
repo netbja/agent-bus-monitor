@@ -99,6 +99,18 @@ func TestSnapshotAndManualRestoreOnADisposableRedis(t *testing.T) {
 		t.Fatalf("an existing value overwritten or removed: %q", v)
 	}
 	_ = admin.Del(ctx, SnapshotMarkPrefix+"0123456789abcdef")
+	// foureyes: the scheduled backup connects as the dispatcher with
+	// broker.acl on; its ACL refuses the marker (and BGSAVE): no snapshot,
+	// the reason says who takes it, and nothing is written.
+	disp := login(sock, bus.ACLDispatcher, pw[bus.ACLDispatcher])
+	defer disp.Close()
+	if path, why := NewSnapshotter(disp, "", nil, stage).Take(ctx); path != "" || !strings.Contains(why, "NOPERM") ||
+		!strings.Contains(why, "only admin takes the snapshot: run agentbus backup by hand") {
+		t.Fatalf("as the dispatcher: %q %q", path, why)
+	}
+	if keys, _ := admin.Keys(ctx, SnapshotMarkPrefix+"*").Result(); len(keys) != 1 {
+		t.Fatalf("the dispatcher's refused run left keys: %v", keys)
+	}
 	path, why := NewSnapshotter(admin, "", nil, stage).Take(ctx)
 	if why != "" {
 		t.Fatalf("snapshot: %s", why)

@@ -1,5 +1,5 @@
 - **Backups hold the broker's snapshot, `broker.rdb`** (broker-hardening step 5). After the logical dump,
-  `agentbus backup` (and the schedule) runs `BGSAVE`, waits (2 min at most) for that save to finish
+  `agentbus backup` (and the schedule while `broker.acl` is off) runs `BGSAVE`, waits (2 min at most) for that save to finish
   `ok`, then copies only the RDB it completed: from the container (`<runtime> cp agent-bus-redis:/data/<dbfilename> -`,
   `broker.runtime`) or, for a native broker, the file itself. It holds the keys with a TTL that the
   logical dump skips. The AOF files are never copied. **The copy must be the connected broker's:** before
@@ -19,3 +19,7 @@
     3. start it once with `--appendonly no`, so it loads the RDB rather than an AOF;
     4. run `CONFIG SET appendonly yes` (as `admin`), which writes a fresh AOF from memory;
     5. restart it with its normal config (`./setup.sh install`, or `<runtime> compose up -d redis`).
+  - **With `broker.acl` on, only `admin` takes it:** the scheduled backup runs in the dispatch service as
+    the `dispatcher` user, which may neither `BGSAVE` nor write the marker, so its archives are logical
+    only and say why (NOPERM, "run agentbus backup by hand"); `agentbus backup` by hand connects as
+    `admin` and takes the snapshot.
