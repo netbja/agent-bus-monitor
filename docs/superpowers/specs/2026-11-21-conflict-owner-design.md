@@ -7,6 +7,9 @@ r2 fixes the following (reviewer-codex, foureyes):
 - the CI script's write order is stated correctly;
 - custom merge drivers are disabled;
 - local mode is named.
+
+r3 adds an `escalated` state that stops every later hand-off, and fixes the cap's timing
+(reviewer-codex).
 Author: architect, from the person's directive of 2026-11-21 (thread `1795222170445-0`), relayed by
 master (cmd `1795222242792-0`).
 
@@ -62,7 +65,9 @@ fallback. Nothing else is checked: a PR still in review is not in the queue (que
 - Any other status: not judged, with a reason in the record.
 
 `--write-tree` needs git 2.38 or later, and `--attr-source` needs 2.42. One probe per pass
-checks both (`git --attr-source=<empty tree> merge-tree -h`). An older git records the reason "git
+checks both: `git --attr-source=<empty tree> merge-tree -h`. It is judged by its output, not its
+exit status, which is 0 on a recent git. On a git older than 2.42, an "unknown option" error means
+too old. Otherwise `--write-tree` must appear in the usage text. An older git records the reason "git
 too old for the conflict check" and sends nothing.
 
 **No repository code runs.** Like `git merge`, a plain `merge-tree` honours `.gitattributes`. A
@@ -117,37 +122,54 @@ entry and its mark in one script, so it is sent exactly once:
   master. It is waking, unlike the CI loop's stop, which is a `wake=no` directive plus a person
   notice: here master is expected to act.
 
-**The count and the age** live in a new hash `{p}:conflicts`, one field per PR (or branch
-digest): `last|count|first`. A small fenced script, `FencedConflictTrack` (`bus/conflict.go`),
-updates it under the dispatch lease:
+**The count, the age and the escalation** live in a new hash `{p}:conflicts`, one field per PR
+(or branch digest): `last|count|first|escalated`. A small fenced script, `FencedConflictTrack`
+(`bus/conflict.go`), updates it under the dispatch lease:
 - `first` is set from Redis `TIME` when the field is created;
-- if asked to count, it raises `count` and sets `last` to the digest, but only when `last`
-  differs from the digest;
+- with `count`, it raises `count` and sets `last` to the digest, but only when `last` differs
+  from the digest;
+- with `escalate`, it sets `escalated` to 1;
+- a field already `escalated` is never counted again;
 - it returns the field.
 
 The pass calls the track script before `FencedCmdOnce`. A crash between the two leaves the
 count raised and the mark unset. The next pass then finds `last` equal to the digest, so it
 counts nothing again, and `FencedCmdOnce` sends the missing hand-off.
 
-**The pass, per candidate:**
+**The pass, per candidate,** in this order:
 
-1. **Clean, or no longer a candidate** (merged, closed, gone): its `{p}:conflicts` field and its
-   three marks are removed, in one fenced script, as `FencedCIForget` does for the CI record.
-2. **Conflict, owner not held, `count < conflict.max_handoffs`:** track with counting. If this
-   episode is new, `FencedCmdOnce` sends the hand-off and master's copy:
+1. **Clean, or no longer a candidate** (merged, closed, gone): its `{p}:conflicts` field is
+   removed in one fenced script, as `FencedCIForget` does for the CI record. So are its three
+   `FencedCmdOnce` marks, which are fields of `{p}:quota` (`QuotaKey`), not of
+   `{p}:conflicts`. A later conflict on the same PR starts afresh.
+2. **Already escalated** (`escalated = 1`): no hand-off to the owner, whatever the episode, until
+   step 1 removes the field, whether the escalation came from the age or the cap. The only call is
+   the escalation's own `FencedCmdOnce`, which sends nothing when its mark is set (the crash case
+   below).
+3. **The age bound reached** (`now - first ≥ conflict.escalate_after`, Redis time): escalate,
+   below.
+4. **A new episode** (`last` differs from the digest):
+   - **the owner is `blocked` or `waiting`** (`held`, as in `RunCI`): track without counting, so
+     `first` is set, and send nothing. The age still runs;
+   - **`count < conflict.max_handoffs`:** track with counting, then `FencedCmdOnce` sends the
+     hand-off (`Hand-off <count> of <cap>`) and master's copy:
 
-   > `PR #<n> (<branch>) at <head> conflicts with <base> at <base tip>: <files>. Rebase it onto origin/<base>, resolve, push; the reviewers then approve the new head. Hand-off <k> of <cap>.`
+     > `PR #<n> (<branch>) at <head> conflicts with <base> at <base tip>: <files>. Rebase it onto origin/<base>, resolve, push; the reviewers then approve the new head. Hand-off <k> of <cap>.`
 
-   **Following the person's episode,** a base that moves while the conflict stays is a new
-   episode, so a new hand-off is sent and counted. With many merges a day into `dev`, the cap
-   can be reached within hours. `conflict.max_handoffs` is where the person loosens that.
-3. **The owner is `blocked` or `waiting`** (`held`, as in `RunCI`): track without counting, so
-   `first` is set, and send nothing. The age still runs.
-4. **Escalation,** once per conflict, through its own `FencedCmdOnce`. It happens when either:
-   - a new episode arrives with `count ≥ conflict.max_handoffs`; or
-   - `now - first ≥ conflict.escalate_after` (Redis time).
+   - **`count ≥ conflict.max_handoffs`:** escalate. **The cap's timing,** as in the CI loop: with
+     a cap of 3, three hand-offs go out. The fourth conflicting episode escalates instead of a
+     fourth hand-off. A cap of 0 escalates the first episode.
+5. **The same episode** (`last` equals the digest): nothing new. After a crash, `FencedCmdOnce`
+   resends only what is missing (§4, above).
 
-   The directive: `PR #<n> (<branch>) still conflicts with <base> after <k> hand-off(s) / <age>; owner <owner>. Take it over or reassign it.` After it, no hand-off goes to the owner for that conflict until it is resolved (step 1).
+**Escalating** is: track with `escalate`, then `FencedCmdOnce` to master (mark
+`conflict-esc:<…>`, episode = `first`), waking: `PR #<n> (<branch>) still conflicts with <base> after <k> hand-off(s) / <age>; owner <owner>. Take it over or reassign it.`
+A crash between the two leaves `escalated` set and the mark unset. The next pass reaches step 2,
+whose `FencedCmdOnce` then sends it, once.
+
+**Following the person's episode,** a base that moves while the conflict stays is a new episode,
+sent and counted. With many merges a day into `dev`, the cap can be reached within hours.
+`conflict.max_handoffs` is where the person loosens that.
 
 **Settings** (registry, `ReadBy: "dispatch"`):
 
@@ -190,7 +212,11 @@ today's, master only.
   - a crash after the track and before the send: the next pass sends once, and the count does
     not rise twice;
   - a new base tip or a new head: a new episode, sent and counted;
-  - escalation at the cap and at the age, once each;
+  - with a cap of 3: three hand-offs, then the fourth episode escalates; a cap of 0 escalates the
+    first;
+  - an age escalation below the cap, then a new base or head episode: no hand-off to the owner;
+  - a crash between `escalate` and its send: the next pass sends the escalation once;
+  - a removed field's three `{p}:quota` marks are gone too;
   - a held owner: nothing sent, not counted, but `first` is set and the age escalates;
   - a swap in progress defers a `FencedCmdOnce`;
   - not the lease holder: nothing written;
