@@ -20,7 +20,7 @@ func TestSwitchArgv(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := switchArgv(o, set, "b")
+		got := switchArgv(o, set, "", "b")
 		if n := slices.IndexFunc(got, func(a string) bool { return strings.Contains(a, "project") }); n < 0 || got[n] != "--project=b" ||
 			slices.ContainsFunc(got[n+1:], func(a string) bool { return strings.Contains(a, "project") }) {
 			t.Fatalf("%v: %v", spelling, got)
@@ -44,7 +44,26 @@ func TestSwitchArgv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := switchArgv(o, set, "b"); !slices.Equal(got, []string{"--project=b"}) {
+	if got := switchArgv(o, set, "", "b"); !slices.Equal(got, []string{"--project=b"}) {
 		t.Fatalf("one-shot flags carried: %v", got)
+	}
+}
+
+// A switch names the project it leaves (--from), for B to go back to; a
+// --from given before is never carried (project-switch-ux item 4).
+func TestSwitchArgvFrom(t *testing.T) {
+	o, set, err := parseFlags([]string{"-p", "b", "--from", "old", "-H", "vdr"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.from != "old" {
+		t.Fatalf("--from parsed as %q", o.from)
+	}
+	got := switchArgv(o, set, "b", "c")
+	if !slices.Equal(got, []string{"--host=vdr", "--project=c", "--from=b"}) {
+		t.Fatalf("%v", got)
+	}
+	if got := switchArgv(o, set, "", "c"); slices.ContainsFunc(got, func(a string) bool { return strings.HasPrefix(a, "--from") }) {
+		t.Fatalf("no from, yet %v", got)
 	}
 }

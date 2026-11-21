@@ -161,7 +161,7 @@ func TestFinishSwitch(t *testing.T) {
 	if code := finishSwitch(m, opts, set, &errw); code != 1 || len(calls) != 1 {
 		t.Fatalf("exit %d, %d execs", code, len(calls))
 	}
-	if got := calls[0][1:]; !slices.Equal(got, []string{"--host=vdr", "--project=trading"}) {
+	if got := calls[0][1:]; !slices.Equal(got, []string{"--host=vdr", "--project=trading", "--from=agent-bus-monitor"}) { // B goes back (project-switch-ux)
 		t.Fatalf("argv %v", got)
 	}
 	if !strings.Contains(errw.String(), "busmon --host=vdr --project=trading") {
@@ -227,5 +227,38 @@ func TestOpenPicked(t *testing.T) {
 	}
 	if !strings.Contains(errw.String(), "busmon --host=vdr --project=trading") {
 		t.Fatalf("stderr %q", errw.String())
+	}
+}
+
+// B goes back to the project a switch left (--from), by the same checked
+// switch; with none, it says so and changes nothing (project-switch-ux 4).
+func TestBackKey(t *testing.T) {
+	src := adminFixture(shellNow)
+	has := func(_ context.Context, p string) (bool, error) {
+		return p == "trading" || p == "agent-bus-monitor", nil
+	}
+	m := shellWith(t, 140, 40, shellConfig{admin: &src, projectHasKeys: has, from: "trading"}, false)
+	m, cmd := pressCmd(t, m, 'B')
+	m, quit := runQuits(t, m, cmd)
+	if !quit || m.switchTo != "trading" {
+		t.Fatalf("B with --from=trading: quit %v, switchTo %q, flash %q", quit, m.switchTo, m.ui.flash)
+	}
+	m = shellWith(t, 140, 40, shellConfig{admin: &src, projectHasKeys: has}, false)
+	m, cmd = pressCmd(t, m, 'B')
+	if _, quit := runQuits(t, m, cmd); quit || m.switchTo != "" || !strings.Contains(m.ui.flash, "no project to go back to") {
+		t.Fatalf("B with no --from: quit %v, flash %q", quit, m.ui.flash)
+	}
+}
+
+// A --from that is not a project name, or is the project itself, is dropped
+// at the start: B never offers it.
+func TestFromSanitised(t *testing.T) {
+	for _, from := range []string{"Bad Name", "agent-bus-monitor", ""} {
+		if got := backTarget(from, "agent-bus-monitor"); got != "" {
+			t.Errorf("%q: %q", from, got)
+		}
+	}
+	if got := backTarget("trading", "agent-bus-monitor"); got != "trading" {
+		t.Errorf("trading: %q", got)
 	}
 }

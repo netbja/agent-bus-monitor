@@ -121,6 +121,9 @@ func (m *Model) openSettings() tea.Cmd {
 // settingsCmd runs write (a config.Set, Unsets, or nothing) for keys then
 // reads the rows again once, in a command.
 func (m *Model) settingsCmd(write func() error, keys ...string) tea.Cmd {
+	if m.refuseReadOnly() {
+		return nil
+	}
 	if p := m.settingsPageOpen(); p != nil && len(keys) > 0 {
 		p.set.busy = true
 	}

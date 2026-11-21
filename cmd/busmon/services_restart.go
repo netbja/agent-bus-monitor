@@ -50,6 +50,33 @@ func (m *Model) askServiceRestart(p *page) tea.Cmd {
 	return nil
 }
 
+// askServiceStart is S (project-switch-ux item 1): start a stopped
+// project's services with agentbus service start (every installed one,
+// dispatch then missions), after y. The agents stay down; the person's act,
+// as X is.
+func (m *Model) askServiceStart() tea.Cmd {
+	refuse := func(why string) tea.Cmd {
+		m.ui.flash, m.ui.flashErr = why, true
+		return nil
+	}
+	args := m.startServicesArgs()
+	if why := agentcaller.Refuse(context.Background(), m.env, m.cfg.ancestor, "starting the services", "agentbus "+strings.Join(args, " ")); why != "" {
+		return refuse(why)
+	}
+	switch d := m.snap.dispatch; {
+	case d == "":
+		return refuse("dispatch's state is not known yet: nothing started")
+	case !stoppedStates[d]:
+		return refuse("dispatch is " + d + ": the services run already (X on F3 restarts one)")
+	}
+	if r := m.ui.sleepRun; r != nil {
+		return refuse(r.verb + " already running (see " + r.log + ")")
+	}
+	m.ui.sleepAsk = &sleepAsk{verb: "start services", args: args}
+	m.ui.flash, m.ui.flashErr = "Start the services of "+m.cfg.project+" (dispatch, missions; the agents stay down)? agentbus "+strings.Join(args, " ")+". y / n", true
+	return nil
+}
+
 // rereadServices reads the open Services page once after a restart, so its
 // card shows the new process at once; the page's tick chain goes on as it was.
 func (m *Model) rereadServices(verb string) tea.Cmd {

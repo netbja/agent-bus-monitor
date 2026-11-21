@@ -91,6 +91,44 @@ func (m *Model) gotSwitchChecked(msg switchCheckedMsg) tea.Cmd {
 	return tea.Quit
 }
 
+// backTarget is the project B goes back to: from, when it names a project
+// other than the current one, else "" (a hand-typed --from is checked like
+// any target, and again by the switch itself).
+func backTarget(from, project string) string {
+	if !bus.ValidName(from) || from == project {
+		return ""
+	}
+	return from
+}
+
+// goBack is B: the switch to the project a switch left.
+func (m *Model) goBack() tea.Cmd {
+	if m.cfg.from == "" {
+		m.ui.flash, m.ui.flashErr = "no project to go back to: B returns to the project a switch (M, o) left", true
+		return nil
+	}
+	return m.switchProject(m.cfg.from)
+}
+
+// stoppedStates are the dispatch facts of a project whose services do not
+// run (serviceFact's words); "" is unknown, never stopped.
+var stoppedStates = map[string]bool{"down": true, "stopped": true, "failed": true, "gave-up": true}
+
+// stoppedBanner: the project was reached by a switch and its dispatch does
+// not run (project-switch-ux item 1).
+func (m Model) stoppedBanner() bool { return m.cfg.from != "" && stoppedStates[m.snap.dispatch] }
+
+// bannerLine is the stopped project's row under the header: what it is,
+// then the keys out, the way back last.
+func (m Model) bannerLine(width int) Line {
+	sep := Seg{Text: " · ", Role: RoleMuted}
+	l := Line{{Text: " stopped project", Role: RoleAttention, Bold: true}, sep, {Text: "read-only", Role: RoleAttention},
+		sep, {Text: "S", Role: RoleAccent, Bold: true}, {Text: " start services", Role: RoleMuted},
+		sep, {Text: "M", Role: RoleAccent, Bold: true}, {Text: " projects", Role: RoleMuted},
+		sep, {Text: "B", Role: RoleAccent, Bold: true}, {Text: " back to " + m.cfg.from, Role: RoleMuted}}
+	return FitLine(l, width)
+}
+
 // palProject is /project <name>.
 func (m *Model) palProject(args []string) tea.Cmd { return m.switchProject(args[0]) }
 
@@ -132,7 +170,7 @@ var execFn = func(path string, argv, env []string) error { return syscallExec(pa
 // then busmon re-executed on the target. A cache that cannot be written, or
 // an exec that fails, stops with the command to type.
 func finishSwitch(fm Model, opts busmonOpts, set map[string]bool, stderr io.Writer) int {
-	argv := switchArgv(opts, set, fm.switchTo)
+	argv := switchArgv(opts, set, fm.cfg.project, fm.switchTo)
 	again := "busmon " + strings.Join(argv, " ")
 	if path := fm.cfg.cachePath; path != "" {
 		c := fm.cacheSnapshot()
@@ -190,7 +228,7 @@ func pickToOpen(host, theme string) (string, int) {
 
 // openPicked opens the picked project by the same exec as a switch.
 func openPicked(project string, opts busmonOpts, set map[string]bool, stderr io.Writer) int {
-	argv := switchArgv(opts, set, project)
+	argv := switchArgv(opts, set, "", project)
 	exe, err := os.Executable()
 	if err == nil {
 		err = execFn(exe, append([]string{exe}, argv...), os.Environ())

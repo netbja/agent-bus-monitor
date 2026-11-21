@@ -176,6 +176,9 @@ func (m *Model) startRunFor(p, verb string, args []string) tea.Cmd {
 // one run at a time whatever it is (Z's suspend or resume, the C page's
 // backup): its last line is the notice until it exits.
 func (m *Model) startRun(verb string, args []string, log string) tea.Cmd {
+	if !m.isStartServices(args) && m.refuseReadOnly() { // S's own run is the one allowed (readonly.go)
+		return nil
+	}
 	if r := m.ui.sleepRun; r != nil {
 		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
 		return nil
