@@ -193,7 +193,8 @@ const (
 )
 
 // ACLUserFor is the user a process logs in as once broker.acl is on (spec
-// step 4b): the services as dispatcher; setup, backup and restore as admin,
+// step 4b): the services as dispatcher when no registered agent is among
+// their ancestors (else that agent's role); setup, backup and restore as admin,
 // from a person's shell only (refused when identity is set or ancestor, the
 // registered agent among the process's ancestors, is not ""); busmon and the
 // CLI by identity, after the process-tree check: a process under a
@@ -202,7 +203,16 @@ const (
 func ACLUserFor(entry ACLEntry, identity, ancestor string) (string, error) {
 	switch entry {
 	case ACLEntryService:
-		return ACLDispatcher, nil
+		// The service manager's launch has no registered agent among its
+		// ancestors; one an agent runs by hand gets that agent's role, never
+		// dispatcher (reviewer-codex: the command's name proves nothing).
+		switch ancestor {
+		case "":
+			return ACLDispatcher, nil
+		case ACLMaster:
+			return ACLMaster, nil
+		}
+		return ACLAgent, nil
 	case ACLEntryAdmin:
 		if identity != "" || ancestor != "" {
 			return "", fmt.Errorf("the admin user is the person's: not from an agent (%s)", cmp.Or(identity, ancestor))
@@ -250,7 +260,7 @@ func connectUser(ctx context.Context, getenv func(string) string) (string, error
 	entry, ancestorOf := connectEntry.entry, connectEntry.ancestor
 	connectEntry.Unlock()
 	ancestor := ""
-	if ancestorOf != nil && entry != ACLEntryService {
+	if ancestorOf != nil {
 		a, err := ancestorOf(ctx)
 		switch {
 		case err != nil && entry == ACLEntryAdmin:

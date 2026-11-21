@@ -76,6 +76,8 @@ func TestConnectPicksTheEntrysUser(t *testing.T) {
 		{ACLEntryCLI, "", failing, ACLAgent}, // ancestry unknown: the least
 		{ACLEntryBusmon, "", none, ACLBusmon},
 		{ACLEntryBusmon, "", under("coder"), ACLAgent},
+		{ACLEntryService, "", under("coder"), ACLAgent}, // service run by an agent: not dispatcher
+		{ACLEntryService, "", failing, ACLAgent},
 	} {
 		t.Setenv("AGENT_BUS_AGENT", c.identity)
 		SetConnectEntry(c.entry, c.ancestor)
