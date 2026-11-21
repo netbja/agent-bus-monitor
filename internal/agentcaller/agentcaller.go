@@ -86,3 +86,15 @@ func Refuse(ctx context.Context, getenv func(string) string, ancestor func(conte
 	}
 	return ""
 }
+
+// AncestorOrNone is Ancestor for bus.SetConnectEntry (broker-hardening step
+// 4b): a host with no process ancestry reads as none ("", nil), as Refuse
+// reads it; another failure stays an error (the CLI is then agent, the admin
+// entry refused).
+func AncestorOrNone(ctx context.Context) (string, error) {
+	a, err := Ancestor(ctx)
+	if errors.Is(err, ErrNoAncestry) {
+		return "", nil
+	}
+	return a, err
+}

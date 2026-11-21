@@ -28,6 +28,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/modelcheck"
@@ -78,6 +79,9 @@ func main() {
 		cli.Index(os.Stderr, "agentbus", globalFlags, commands)
 		os.Exit(1)
 	}
+	// The broker user, while broker.acl is on (step 4b): by command, identity
+	// and ancestry; nothing changes while it is off.
+	bus.SetConnectEntry(connectEntryOf(args), agentcaller.AncestorOrNone)
 	// Inside an agent's terminal, the host commands go through the
 	// dispatcher (herdr exit §4.2): the holder refuses them from there.
 	if code, ok := relayFromTerminal(context.Background(), args, host, project, os.Getenv, os.Stdout, os.Stderr); ok {

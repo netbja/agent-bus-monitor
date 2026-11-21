@@ -678,6 +678,9 @@ func main() {
 		fmt.Println("busmon version " + buildinfo.Version)
 		return
 	}
+	// The broker user, while broker.acl is on (step 4b): busmon's, unless an
+	// agent's identity or process tree makes it agent's (or master's).
+	bus.SetConnectEntry(bus.ACLEntryBusmon, agentcaller.AncestorOrNone)
 	flags := settingsFlags{
 		LimitSet: set["limit"], Limit: opts.limit, Theme: ifSet(set["theme"], opts.theme), As: ifSet(set["as"], opts.as),
 	}

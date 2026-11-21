@@ -117,9 +117,32 @@ func ConnectOptions(getenv func(string) string, host string) (*redis.Options, er
 // ConnectContext is Connect with its PING bounded by ctx (up-broker-ready: up
 // gives a broker that is starting a budget, and a hung one must not outlast it).
 func ConnectContext(ctx context.Context, host string) (*redis.Client, error) {
+	user, err := connectUser(ctx, os.Getenv) // "" while broker.acl is off (step 4b)
+	if err != nil {
+		return nil, err
+	}
+	return ConnectAsContext(ctx, host, user)
+}
+
+// ConnectAsContext is ConnectContext logged in as user, an ACL user of
+// broker-hardening step 4b, with the password of its own file
+// (UserPasswordFile); "" is ConnectContext, the default user. A user with no
+// password file is an error, never the default user instead.
+func ConnectAsContext(ctx context.Context, host, user string) (*redis.Client, error) {
 	opt, err := ConnectOptions(os.Getenv, host)
 	if err != nil {
 		return nil, err
+	}
+	if user != "" {
+		path := UserPasswordFile(os.Getenv, user)
+		if path == "" {
+			return nil, fmt.Errorf("broker user %q: no home for its password file", user)
+		}
+		pw, err := ReadPassword(path)
+		if err != nil {
+			return nil, fmt.Errorf("broker user %q: %w (broker.acl is on: ./setup.sh acl on writes the users' passwords)", user, err)
+		}
+		opt.Username, opt.Password = user, pw
 	}
 	// Record the peer each connection reaches (PeerAddr), dialing with
 	// go-redis's own dialer over opt. NewClient clones opt and sets its

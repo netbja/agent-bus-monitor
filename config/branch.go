@@ -34,6 +34,10 @@ func ValidBranchName(s string) bool {
 // IsBrokerRuntime: the container runtimes broker.runtime accepts.
 func IsBrokerRuntime(s string) bool { return s == "docker" || s == "podman" }
 
+// IsBrokerACL is a broker.acl value: off (the default user, as before) or on
+// (one user per role, broker-hardening step 4b).
+func IsBrokerACL(s string) bool { return s == "off" || s == "on" }
+
 // imageRef is a container image reference: a name of lowercase path
 // components (an optional registry host with a port), an optional tag, an
 // optional sha256 digest (an image pinned by content, reviewer-codex).
