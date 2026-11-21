@@ -123,6 +123,7 @@ func (m Model) stoppedBanner() bool { return m.cfg.from != "" && stoppedStates[m
 func (m Model) bannerLine(width int) Line {
 	sep := Seg{Text: " · ", Role: RoleMuted}
 	l := Line{{Text: " stopped project", Role: RoleAttention, Bold: true}, sep, {Text: "read-only", Role: RoleAttention},
+		sep, {Text: "S", Role: RoleAccent, Bold: true}, {Text: " start services", Role: RoleMuted},
 		sep, {Text: "M", Role: RoleAccent, Bold: true}, {Text: " projects", Role: RoleMuted},
 		sep, {Text: "B", Role: RoleAccent, Bold: true}, {Text: " back to " + m.cfg.from, Role: RoleMuted}}
 	return FitLine(l, width)
