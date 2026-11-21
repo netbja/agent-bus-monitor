@@ -142,6 +142,9 @@ const (
 	ActIdeaState      // Ideas (F6) or an idea's page: s, the state picker (←→ choose, enter sets it)
 	ActIdeaSet        // Ideas (F6) or an idea's page: y decided, l later, d doing, x dropped, at once (ideas-triage)
 	ActIdeaUndo       // Ideas (F6) or an idea's page: u, this busmon's last state change undone
+	ActMemoryAdd      // Memory (F7) or a topic's page: a, the person's words in the compose window
+	ActMemoryEdit     // Memory (F7) or a topic's page: e, the topic file in $EDITOR, checked on save
+	ActMemoryForget   // a topic's page (F7, enter): x, forget the selected observation, after y
 )
 
 // binding is one row of a mode's key table. The same rows drive the handler
@@ -236,7 +239,7 @@ var (
 		{Keys: "shift-tab", Help: "focus the previous panel", Act: ActPrevPanel, match: keyIs(keyBacktab)},
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
-		{Keys: "F7", Help: "memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one", Act: ActMemory, match: keyIs(keyF7)},
+		{Keys: "F7", Help: "memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one, a remembers your words, e edits a topic's file, x forgets (on a topic's page)", Act: ActMemory, match: keyIs(keyF7)},
 		{Keys: "/ ^P", Hint: "commands", Help: "the command palette: the line opened with /, every command searchable (also i then /)", Act: ActPalette, match: either(runeIs('/'), keyIs(keyCtrlP))},
 		{Keys: "1-3", Hint: "view", Act: ActTab1, Tiers: []Tier{TierMedium}, match: runeIs('1')},
 		{Keys: "1-4", Hint: "view", Act: ActTab1, Tiers: []Tier{TierNarrow}, match: runeIs('1')},
@@ -368,7 +371,7 @@ var (
 	overlayBindings = []binding{
 		{Keys: "F5", Hint: "health", Act: ActHealth, match: keyIs(keyF5)},
 		{Keys: "F6", Hint: "ideas", Act: ActIdeas, match: keyIs(keyF6)},
-		{Keys: "F7", Help: "memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one", Act: ActMemory, match: keyIs(keyF7)},
+		{Keys: "F7", Help: "memory: the person's facts kept on this host (agentbus mem person), a topic per row; enter opens one, a remembers your words, e edits a topic's file, x forgets (on a topic's page)", Act: ActMemory, match: keyIs(keyF7)},
 		{Keys: "/ ^P", Help: "the command palette, from any page", Act: ActPalette, match: either(runeIs('/'), keyIs(keyCtrlP))},
 		{Keys: arrows + " j k", Hint: "scroll", Act: ActUp, match: either(keyIs(keyUp), runeIs('k'))},
 		{Keys: "j", Act: ActDown, match: either(keyIs(keyDown), runeIs('j'))},
@@ -391,6 +394,9 @@ var (
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command); a service log: show or fold the routine none decisions", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
+		{Keys: "a", Hint: "remember", Help: "Memory (F7) or a topic's page: remember your own words, in the compose window: its first line topic type importance (keep-both or supersedes=<id> for a second decision), the rest your words", Act: ActMemoryAdd, OnPage: true, match: runeIs('a')},
+		{Keys: "e", Hint: "edit", Help: "Memory (F7) or a topic's page: open the topic's file in $VISUAL or $EDITOR; on save it is checked (agentbus mem person check) and committed when clean, else left as saved with what is wrong", Act: ActMemoryEdit, OnPage: true, match: runeIs('e')},
+		{Keys: "x", Hint: "forget", Help: "a topic's page (F7, enter): forget the selected observation, after y (git history keeps it until agentbus mem person purge)", Act: ActMemoryForget, OnPage: true, match: runeIs('x')},
 		{Keys: "s", Hint: "state", Help: "Ideas (F6) or an idea's page: the state picker under the idea (" + GlyphArrowL + GlyphArrowR + " choose, enter sets it as you, esc cancels)", Act: ActIdeaState, OnPage: true, match: runeIs('s')},
 		{Keys: "tab", Hint: "filter", Help: "Ideas (F6): show one state, then the next, then all", Act: ActIdeaFilter, OnPage: true, match: keyIs(keyTab)},
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},

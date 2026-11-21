@@ -136,6 +136,7 @@ type uiState struct {
 	askDrafts      map[string]string       // free answers being written, by ask|question
 	ideaDraft      string                  // a new idea's text while its window is closed (a on F6)
 	ideaAdding     bool                    // an add is on its way: another waits for its result
+	memoryDraft    string                  // the Memory page's a: its text while the window is closed
 	ideaLast       *ideaChange             // this busmon's last state change, for u (ideas-triage)
 	ideaReq        string                  // the request id of the text last sent (ideaReqText): a retry of it reuses the id
 	ideaReqText    string
@@ -401,6 +402,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.knownProjects = msg.names
 	case projectMemoryMsg:
 		m.gotMemory(msg)
+	case personMemoryMsg:
+		m.gotPersonMemory(msg)
+	case memoryEditMsg:
+		return m.gotMemoryEdit(msg)
 	case projectsMsg:
 		return m.gotProjects(msg)
 	case deleteCheckMsg:

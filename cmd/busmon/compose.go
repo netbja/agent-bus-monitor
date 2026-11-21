@@ -17,7 +17,8 @@ type composeKind int
 const (
 	composeMessage composeKind = iota
 	composeAnswer
-	composeIdea // a new idea (a on F6): the first line its title, the rest its text
+	composeIdea   // a new idea (a on F6): the first line its title, the rest its text
+	composeMemory // the person's words to remember (a on F7): the first line topic type importance, the rest the words
 )
 
 // answerMaxRunes is the free answer's cap (the question panel's, before v0.16).

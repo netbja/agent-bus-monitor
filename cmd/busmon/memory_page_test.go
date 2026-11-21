@@ -64,7 +64,7 @@ func TestMemoryPageLists(t *testing.T) {
 
 func TestMemoryTopicPage(t *testing.T) {
 	v := readMemory(memStore(t), true, "")
-	title, body := memoryTopicPage(v, "merge-policy", 100)
+	title, body, _ := memoryTopicPage(v, "merge-policy", 0, 100)
 	text := plainLines(body)
 	if !strings.Contains(title, "merge-policy") {
 		t.Fatalf("title %q", title)
@@ -74,7 +74,7 @@ func TestMemoryTopicPage(t *testing.T) {
 			t.Fatalf("no %q in\n%s", want, text)
 		}
 	}
-	if _, body := memoryTopicPage(v, "gone", 100); !strings.Contains(plainLines(body), "no topic gone") {
+	if _, body, _ := memoryTopicPage(v, "gone", 0, 100); !strings.Contains(plainLines(body), "no topic gone") {
 		t.Fatalf("a missing topic: %s", plainLines(body))
 	}
 }

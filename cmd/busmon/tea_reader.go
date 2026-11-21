@@ -68,6 +68,8 @@ type page struct {
 	iitems []ideaItem   // ovIdeas: its selectable rows
 	mem    *memoryView  // ovMemory, ovMemoryTopic: the store as read when the page opened
 	mitems []memoryItem // ovMemory: its selectable rows
+	oitems []memoryItem // ovMemoryTopic: its observations, selectable for x
+	forget string       // ovMemoryTopic: the observation x asks about, until y or another key
 
 	svc        *svcFacts   // ovServices: the facts the cards show (sel: the card selected)
 	about      *aboutState // ovAbout: the versions and the packet's run
@@ -551,7 +553,11 @@ func (m *Model) buildPage() bool {
 			p.mem = &v
 		}
 		if p.kind == ovMemoryTopic {
-			p.title, p.body = memoryTopicPage(*p.mem, p.key, width)
+			p.title, p.body, p.oitems = memoryTopicPage(*p.mem, p.key, p.sel, width)
+			if n := clamp(p.sel, 0, max(0, len(p.oitems)-1)); n != p.sel { // clamped: drawn again with the mark where it is
+				p.sel = n
+				p.title, p.body, p.oitems = memoryTopicPage(*p.mem, p.key, p.sel, width)
+			}
 			break
 		}
 		p.title, p.body, p.mitems = memoryPage(*p.mem, p.sel, width)
@@ -939,22 +945,8 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 	}
-	if p.kind == ovMemory {
-		switch {
-		case k.Code == keyEnter && p.sel < len(p.mitems):
-			return m.push(page{kind: ovMemoryTopic, key: p.mitems[p.sel].topic, mem: p.mem})
-		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
-			m.moveSel(p, act, m.readerRows(), func() []int {
-				lines := make([]int, len(p.mitems))
-				for i, it := range p.mitems {
-					lines[i] = it.line
-				}
-				return lines
-			})
-			p.dirty = true
-			m.refresh()
-			return nil
-		}
+	if cmd, done := m.memoryKey(p, act, k); done {
+		return cmd
 	}
 	if p.kind == ovIdeas || p.kind == ovIdea {
 		if cmd, done := m.ideasKey(p, act, k); done {
@@ -1479,6 +1471,10 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHealth || p.kind == ovTokens || p.kind == ovServiceLog
 	case ActIdeaAdd, ActIdeaFilter:
 		return p.kind == ovIdeas && p.ideas.pick == nil
+	case ActMemoryAdd, ActMemoryEdit:
+		return (p.kind == ovMemory || p.kind == ovMemoryTopic) && p.mem != nil && p.mem.local && p.forget == ""
+	case ActMemoryForget:
+		return p.kind == ovMemoryTopic && len(p.oitems) > 0 && p.forget == ""
 	case ActIdeaState, ActIdeaSet:
 		return (p.kind == ovIdeas && len(p.iitems) > 0 || p.kind == ovIdea && p.threadPlain != "") && p.ideas.pick == nil
 	case ActIdeaUndo:
