@@ -157,8 +157,15 @@ func (b *Bus) forgetIfClear(ctx context.Context, token, role, own string, was Re
 		return ForgetResult{}, fmt.Errorf("invalid agent %q", role)
 	}
 	p := b.project
+	// The lease is declared only when a token checks it (the dispatcher's
+	// fenced forget): master's unfenced retire never reads it, and must not
+	// need the right to it (ACL answer c). A key that never exists stands in.
+	lease := p + ":swap:"
+	if token != "" {
+		lease = DispatchKey(p)
+	}
 	keys := []string{SwapKey(p, role), StreamKey(p, "cmd"), AsksKey(p), BoardKey(p), GateKey(p, role),
-		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role), DispatchKey(p), CheckbackKey(p)}
+		AgentsKey(p), UsageKey(p), WakeKey(p, role), ArmedKey(p, role), ReceiverKey(p, role), lease, CheckbackKey(p)}
 	held, err := forgetIfClear.Run(ctx, b.r, keys, own, role,
 		strconv.Itoa(was.PID), strconv.FormatUint(was.PIDStart, 10), strconv.FormatInt(was.Episode, 10), token).StringSlice()
 	if err != nil {
