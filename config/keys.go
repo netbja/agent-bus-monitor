@@ -90,6 +90,11 @@ type Key struct {
 	// its line, never the next source down (a switch whose default is on:
 	// self_repair = false must not leave it on, foureyes).
 	FailClosed bool
+	// Options, when set, is the key's fixed list of values (language-picker):
+	// a page offers them as a list to choose from, never free text. The
+	// key's own rules still judge every value (agentbus config set, a hand
+	// edit of config.toml).
+	Options func() []Option
 
 	env  func(raw string) (any, envResult) // today's env rule, for a non-empty value
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
@@ -215,7 +220,7 @@ var Keys = []*Key{
 			return nil, "want a name: a lower-case letter, then letters, digits, - or _"
 		}},
 	{Name: "person.language", Env: "AGENT_BUS_PERSON_LANGUAGE", Kind: String, Default: "en", ReadBy: "master's role skill (agentbus config)",
-		Invalid: "master writes English", FailClosed: true, // a refused value is en, said, never the next source
+		Invalid: "master writes English", FailClosed: true, Options: languageOptions, // a refused value is en, said, never the next source
 		env: func(raw string) (any, envResult) {
 			if isLanguage(raw) {
 				return raw, envUse

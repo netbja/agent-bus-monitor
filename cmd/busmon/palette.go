@@ -129,20 +129,33 @@ func paletteAliasMatch(alias, q string) bool {
 // prefix, a word start in the name or summary, a subsequence of the name;
 // ties keep the table's order. An empty q lists every command.
 func paletteMatch(q string) []int {
+	return rankMatches(len(paletteTable), q, func(i int) (string, []string, string) {
+		c := paletteTable[i]
+		return c.Name, c.Aliases, c.Summary
+	})
+}
+
+// rankMatches is the palette's ranking over n items (also a setting's list,
+// language-picker): item i gives its name, aliases and summary; an exact
+// name or alias, a name prefix, a word start in the name or summary, a
+// subsequence of the name; ties keep the items' order. An empty q keeps
+// every item.
+func rankMatches(n int, q string, item func(i int) (name string, aliases []string, summary string)) []int {
 	q = strings.TrimSpace(q)
+	lq := strings.ToLower(q)
 	var tiers [4][]int
-	for i, c := range paletteTable {
-		lq := strings.ToLower(q)
+	for i := range n {
+		name, aliases, summary := item(i)
 		switch {
 		case q == "":
 			tiers[0] = append(tiers[0], i)
-		case strings.EqualFold(c.Name, q) || anyAlias(c.Aliases, q):
+		case strings.EqualFold(name, q) || anyAlias(aliases, q):
 			tiers[0] = append(tiers[0], i)
-		case strings.HasPrefix(c.Name, lq):
+		case strings.HasPrefix(name, lq):
 			tiers[1] = append(tiers[1], i)
-		case wordStart(c.Name+" "+strings.ToLower(c.Summary), lq):
+		case wordStart(name+" "+strings.ToLower(summary), lq):
 			tiers[2] = append(tiers[2], i)
-		case subsequence(c.Name, lq):
+		case subsequence(name, lq):
 			tiers[3] = append(tiers[3], i)
 		}
 	}
