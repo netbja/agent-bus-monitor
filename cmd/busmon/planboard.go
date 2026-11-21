@@ -11,27 +11,26 @@ import (
 )
 
 // The plan board (home-inbox-drawer §4): one producer, planBoard, for the
-// Plan tab (4) and the plan's page (p, P), which is a drawer right of For you
+// Plan tab (4) and the plan's page (p, P), which is a drawer under For you
 // at the wide tier. The sections are NOW, NEXT, LATER and DONE (folded to a
-// count until d shows it); the progress sits above them; at the wide tier a
-// side panel holds the selected task's facts.
+// count until d shows it); the progress sits above them; at the wide tier the
+// selected task's detail is under the list, inside the frame (views-redesign
+// §4.1).
 
-// planSideWidth is the side panel's frame, borders included; the board takes
-// it beside the list only when the list keeps planListMin cells.
-const (
-	planSideWidth = 34
-	planListMin   = 40
-)
+// planDetailRows is the selected task's detail under the list, inside the
+// frame (views-redesign §4.1 point 2): a rule naming it, then two rows of
+// its facts.
+const planDetailRows = 3
 
 // planBoardView is what the tab and the page draw: the body's lines, its
-// text for y, its selectable items (a task, by line) and the side panel's
-// lines for the selected task (nil when there is no side panel).
+// text for y, its selectable items (a task, by line) and the selected task's
+// detail, planDetailRows lines (nil without one: below the wide tier).
 type planBoardView struct {
-	lines []Line
-	plain string
-	items []planItem
-	side  []Line
-	head  int // the lines above the sections (the progress, the goal): the Plan tab's frame says them instead
+	lines  []Line
+	plain  string
+	items  []planItem
+	detail []Line
+	head   int // the lines above the sections (the progress, the goal): the Plan tab's frame says them instead
 }
 
 // planSection is one section's rows, in the order they are drawn.
@@ -99,14 +98,13 @@ func planSections(rows []plan.Row) (secs []planSection, unknownOnly bool) {
 }
 
 // planBoard renders the board for width cells at tier. sel is the selected
-// item; wide asks for the side panel's lines (the caller gives the list its
-// width beside it). The narrow tier keeps the progress's count only (§6).
+// item; wide asks for the selected task's detail (drawn under the list). The narrow tier keeps the progress's count only (§6).
 func planBoard(p planState, sel int, showDone bool, now time.Time, width int, tier Tier, wide bool, reqs []request) planBoardView {
 	return planBoardOf(p, sel, showDone, false, now, width, tier, wide, reqs)
 }
 
-// planBoardOf is planBoard with LATER's fold: below the wide tier (no side
-// panel: the 80-column mock-up) LATER is a count line until laterOpen
+// planBoardOf is planBoard with LATER's fold: below the wide tier (no detail:
+// the 80-column mock-up) LATER is a count line until laterOpen
 // (views-redesign §4, Q5), and DONE is its count line until showDone; both
 // lines are items Enter opens.
 func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, width int, tier Tier, wide bool, reqs []request) planBoardView {
@@ -193,7 +191,7 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 	v.lines = append(v.lines, nil)
 	v.plain = pl.String()
 	if wide && selRow != nil {
-		v.side = planSide(p, *selRow, now)
+		v.detail = planDetail(p, *selRow, width)
 	}
 	return v
 }
@@ -375,18 +373,20 @@ func planBoardRow(p planState, r plan.Row, sec string, selected bool, now time.T
 	return FitLine(append(l, tail...), width)
 }
 
-// planSide is the side panel (§4.3): the selected row's own fields, read from
-// the derived plan.Row (Verdict is its roll-up label); its dependencies, ✓
-// when done, the tasks that wait on it and its priority (views-redesign §4);
-// then Enter's act.
-func planSide(p planState, r plan.Row, now time.Time) []Line {
+// planFact is one of a task's facts under the list: its key and value.
+type planFact struct{ key, val string }
+
+// planFacts are the selected row's facts, read from the derived plan.Row
+// (Verdict is its roll-up label): its state, what the person may do, its
+// owner, priority, review and PR, then its dependencies (✓ when done), the tasks that
+// wait on it and its reason (views-redesign §4, §4.1).
+func planFacts(p planState, r plan.Row) []planFact {
 	or := func(s string) string {
 		if s == "" {
 			return GlyphDash
 		}
 		return s
 	}
-	review := or(r.Verdict)
 	state := map[string]plan.State{}
 	var unblocks []string
 	for _, o := range p.rows {
@@ -423,35 +423,47 @@ func planSide(p planState, r plan.Row, now time.Time) []Line {
 	if r.PR > 0 {
 		pr = fmt.Sprintf("%d", r.PR)
 	}
-	field := func(k, v string) Line {
-		return Line{{Text: fmt.Sprintf("%-9s", k), Role: RoleMuted}, {Text: v, Role: RoleText}}
-	}
-	return []Line{
-		{{Text: Preview(r.Task.ID), Role: RoleText, Bold: true}},
-		field("state", plan.Label(r.State)),
-		field("owner", or(r.Task.Owner)),
-		field("review", review),
-		field("PR", pr), // a PR and a reason both hold (a blocked task with its PR linked): two fields (reviewer-codex)
-		field("reason", or(r.Reason)),
-		field("after", after),
-		field("unblocks", or(strings.Join(unblocks, ", "))),
-		field("prio", prio),
-		field("for you", forYou),
-		nil,
-		{{Text: "enter", Role: RoleAccent, Bold: true}, {Text: " task page", Role: RoleMuted}},
+	return []planFact{ // the first row by what matters to the person, so a short width cuts the least
+		{"state", plan.Label(r.State)},
+		{"for you", forYou},
+		{"owner", or(r.Task.Owner)},
+		{"prio", prio},
+		{"review", or(r.Verdict)},
+		{"PR", pr}, // a PR and a reason both hold (a blocked task with its PR linked): two facts (reviewer-codex)
+		{"after", after},
+		{"unblocks", or(strings.Join(unblocks, ", "))},
+		{"reason", or(r.Reason)},
 	}
 }
 
-// drawPlanSide draws the side panel inside the frame r, at its right, over
-// the list's selection highlight (the list's rows are narrower).
-func drawPlanSide(g cellSink, r Rect, side []Line) {
-	x, h := r.X+r.W-2-planSideWidth, min(len(side)+2, r.H-2)
-	drawFrame(g, x, r.Y+1, planSideWidth, h, Frame{Title: Line{{Text: "Task", Role: RoleText}}, Hue: RoleMuted})
-	for i, l := range side {
-		if i >= h-2 {
-			break
+// planDetail is the selected task's detail, planDetailRows rows of width
+// cells (views-redesign §4.1 point 2): a rule naming the task, enter's act at
+// its right; its first six facts; the last three. A row keeps its facts
+// whole and cuts its last one when short.
+func planDetail(p planState, r plan.Row, width int) []Line {
+	fs := planFacts(p, r)
+	facts := func(fs []planFact) Line {
+		var l Line
+		for i, f := range fs {
+			if i > 0 {
+				l = append(l, Seg{Text: " " + GlyphNone + " ", Role: RoleMuted})
+			}
+			l = append(l, Seg{Text: f.key + " ", Role: RoleMuted}, Seg{Text: Preview(f.val), Role: RoleText})
 		}
-		drawLine(g, x+2, r.Y+2+i, planSideWidth-4, l, false)
+		return FitLine(l, width)
+	}
+	head := Line{{Text: strings.Repeat(glyphHorizontal, 2) + " ", Role: RoleMuted}, {Text: "Task ", Role: RoleMuted}, {Text: Preview(r.Task.ID), Role: RoleText, Bold: true}, {Text: " ", Role: RoleMuted}}
+	act := Line{{Text: " ", Role: RoleMuted}, {Text: "enter", Role: RoleAccent, Bold: true}, {Text: " task page", Role: RoleMuted}}
+	if fill := width - head.Width() - act.Width(); fill > 0 {
+		head = append(append(head, Seg{Text: strings.Repeat(glyphHorizontal, fill), Role: RoleMuted}), act...)
+	}
+	return []Line{FitLine(head, width), facts(fs[:6]), facts(fs[6:])}
+}
+
+// drawPlanDetail draws the detail's rows from (x, y), w cells wide.
+func drawPlanDetail(g cellSink, x, y, w int, detail []Line) {
+	for i, l := range detail {
+		drawLine(g, x, y+i, w, l, false)
 	}
 }
 

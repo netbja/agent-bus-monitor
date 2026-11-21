@@ -48,13 +48,13 @@ func (m Model) grid() *grid {
 			continue // the reader has the lower zone (narrow: the view)
 		}
 		if drawer && p == PanelAgents {
-			continue // the plan drawer is right of For you, over Agents (home-inbox-drawer §4.4)
+			continue // the plan drawer is under For you, over Agents (views-redesign §4.1)
 		}
 		lst := *m.lists.of(p) // drawn from a copy: View leaves the model as it found it
 		lst.draw(g)
 		if p == PanelPlan {
-			if side := m.planTabSide(); side != nil { // its own frame at the right, as the drawer's (§4)
-				drawPlanSide(g, l.rect(p), side)
+			if br := lst.BottomRect(); br.H > 0 { // the selected task's detail under the list (views-redesign §4.1)
+				drawPlanDetail(g, br.X+1, br.Y, br.W-2, m.planTabDetail(br.W-2)) // one cell each side, as the drawer's body
 			}
 		}
 	}

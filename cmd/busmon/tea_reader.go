@@ -34,8 +34,8 @@ type page struct {
 	built       pageStamp
 	dirty       bool   // its own state changed since the build (cursor, thread)
 	fixed       bool   // its body was given at open (services, a verdict): never rebuilt
-	drawer      bool   // ovPlan opened as the plan drawer (p, P): at the wide tier, right of For you (home-inbox-drawer §4.4)
-	side        []Line // ovPlan: the side panel of the selected task (wide tier), drawn beside the body
+	drawer      bool   // ovPlan opened as the plan drawer (p, P): at the wide tier, under For you (views-redesign §4.1)
+	detail      []Line // ovPlan: the selected task's detail (wide tier), drawn under the body, inside the frame (views-redesign §4.1)
 
 	plainWhat, threadWhat string // what y and Y copy, as the frame and the footer name it ("" = text, thread)
 
@@ -232,14 +232,15 @@ type answerMsg struct {
 // readerRect is the reader's zone: the tabbed panel and the input, or at the
 // narrow tier the view, down to the footer.
 //
-// The plan drawer, at the wide tier, is right of For you, from the top panels'
-// row to the footer; a page opened from it is drawn there too: the bottom
-// page's flag decides for the whole stack (home-inbox-drawer §4.4).
+// The plan drawer, at the wide tier, is under For you (whose rows are its
+// own then: shellDrawer), the whole width, down to the footer; a page opened
+// from it is drawn there too: the bottom page's flag decides for the whole
+// stack (home-inbox-drawer §4.4, views-redesign §4.1 point 1).
 func (m *Model) readerRect() Rect {
 	l := m.layout
 	if l.Tier == TierWide && len(m.rd.pages) > 0 && m.rd.pages[0].drawer {
-		fw := l.ForYou.W
-		return Rect{fw, l.ForYou.Y, m.width - fw, l.Footer.Y - l.ForYou.Y}
+		y := l.ForYou.Y + l.ForYou.H
+		return Rect{0, y, m.width, l.Footer.Y - y}
 	}
 	switch l.Tier {
 	case TierWide, TierMedium:
@@ -257,6 +258,15 @@ func (r Rect) contains(x, y int) bool { return x >= r.X && x < r.X+r.W && y >= r
 func (m *Model) readerWidth() int { return max(20, m.readerRect().W-4) }
 
 func (m *Model) readerRows() int { return max(0, m.readerRect().H-2) }
+
+// pageRows is the top page's body rows: the reader's, less the plan's
+// detail drawn under the body (views-redesign §4.1).
+func (m *Model) pageRows(p *page) int {
+	if p == nil {
+		return m.readerRows()
+	}
+	return max(0, m.readerRows()-len(p.detail))
+}
 
 // push opens a page over the current one; a message page also reads its thread.
 func (m *Model) push(p page) tea.Cmd {
@@ -416,8 +426,8 @@ func (m *Model) pushPlan() tea.Cmd {
 	return m.push(page{kind: ovPlan, drawer: true})
 }
 
-// planDrawerWidths is the plan page's list width and whether the side panel
-// goes beside it (the wide tier, with room for both, §4.3).
+// planDrawerWidths is the plan page's list width and whether the selected
+// task's detail goes under it (the wide tier, §4.1).
 func (m *Model) planDrawerWidths() (list int, side bool) {
 	return planTabWidths(m.readerWidth(), m.layout.Tier)
 }
@@ -559,7 +569,7 @@ func (m *Model) buildPage() bool {
 			p.sel = max(0, len(v.items)-1)
 			v = planBoardOf(s.planState, p.sel, p.expanded, p.laterOpen, now, lw, m.layout.Tier, wide, s.requests)
 		}
-		p.body, p.plain, p.items, p.side = v.lines, v.plain, v.items, v.side
+		p.body, p.plain, p.items, p.detail = v.lines, v.plain, v.items, v.detail
 		p.title = "Plan"
 		if s.plan != nil {
 			p.title += " " + GlyphNone + " " + strings.TrimPrefix(planSeg(*s.plan, now).text(), "plan ")
@@ -638,7 +648,7 @@ func (m *Model) buildPage() bool {
 
 // clampPage keeps the page's scroll inside its body.
 func (m *Model) clampPage(p *page) {
-	p.top = clamp(p.top, 0, max(0, len(p.body)-m.readerRows()))
+	p.top = clamp(p.top, 0, max(0, len(p.body)-m.pageRows(p)))
 }
 
 // askPlain is the question as y copies it.
@@ -926,7 +936,7 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		}
 		return nil
 	}
-	rows := m.readerRows()
+	rows := m.pageRows(p) // the plan drawer's detail rows are not the body's (views-redesign §4.1)
 	switch act {
 	case ActClose:
 		m.pop()
@@ -1185,7 +1195,7 @@ func (m *Model) readerWheel(up bool) {
 func (m *Model) readerClick(x, y int) tea.Cmd {
 	p, r := m.rd.top(), m.readerRect()
 	line := p.top + y - (r.Y + 1)
-	if y <= r.Y || y >= r.Y+r.H-1 || x <= r.X || x >= r.X+r.W-1 || line >= len(p.body) {
+	if y <= r.Y || y >= r.Y+1+m.pageRows(p) || x <= r.X || x >= r.X+r.W-1 || line >= len(p.body) { // the plan's detail rows are no body line
 		return nil
 	}
 	switch p.kind {
@@ -1227,7 +1237,7 @@ func (m Model) drawReader(g *grid) {
 	if p == nil || r.W < 6 || r.H < 3 {
 		return
 	}
-	rows := r.H - 2
+	rows := m.pageRows(p)
 	hints := "esc back"
 	if p.plain != "" {
 		y := "y copy"
@@ -1247,9 +1257,8 @@ func (m Model) drawReader(g *grid) {
 		Label: Line{{Text: hints, Role: RoleMuted}}, Focused: true,
 		Scroll: ScrollState{Total: len(p.body), Top: p.top, Visible: rows}, Hue: RoleAccent})
 	bodyW := r.W - 4
-	if p.side != nil { // the plan's side panel, its own frame at the right (§4.3)
-		bodyW = r.W - 4 - planSideWidth - 1
-		drawPlanSide(g, r, p.side)
+	if p.detail != nil { // the selected task's detail under the body, inside the frame (§4.1)
+		drawPlanDetail(g, r.X+2, r.Y+1+rows, bodyW, p.detail)
 	}
 	for i := 0; i < rows; i++ {
 		var l Line

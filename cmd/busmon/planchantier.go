@@ -117,9 +117,22 @@ func planGroupBlocks(p planState, showDone bool, width int, tier Tier, emit func
 	for _, g := range groups {
 		titleW = max(titleW, len([]rune(Preview(g.title))))
 	}
-	doneN := 0
+	doneN, finished := 0, 0
 	for _, g := range groups {
 		doneN += len(g.done)
+		if len(g.open) == 0 { // finished: one grey line, the finished groups together (views-redesign §4.1)
+			if finished == 0 || showDone {
+				emit(nil)
+			}
+			finished++
+			emit(planFinishedGroup(g, width))
+			if showDone {
+				for _, r := range g.done {
+					row(r)
+				}
+			}
+			continue
+		}
 		emit(nil)
 		emit(planGroupHeader(g, titleW, width, tier))
 		for _, r := range g.open {
@@ -164,14 +177,11 @@ func planGroupHeader(g planGroup, titleW, width int, tier Tier) Line {
 	}
 	_, reviewRole := planLook(plan.InReview)
 	l := Line{{Text: title + pad + " ", Role: RoleText, Bold: true},
-		{Text: strings.Repeat(GlyphThinBar, fillDone), Role: RoleDone},
+		{Text: strings.Repeat(GlyphThinBar, fillDone), Role: planGroupRole(g)},
 		{Text: strings.Repeat(GlyphThinBar, fillReady), Role: reviewRole},
 		{Text: strings.Repeat(GlyphThinBar, barW-fillDone-fillReady), Role: RoleMuted},
 		{Text: "  " + count, Role: RoleMuted}}
 	sep := Seg{Text: " " + GlyphNone + " ", Role: RoleMuted}
-	if len(g.open) == 0 {
-		return FitLine(append(l, sep, Seg{Text: "done", Role: RoleMuted}), width)
-	}
 	waiting := firstIn(g.open, plan.Waiting)
 	var hand *plan.Row
 	if h := groupInHand(g.byFile); h != nil && (waiting == nil || h.Task.ID != waiting.Task.ID) {
@@ -188,4 +198,27 @@ func planGroupHeader(g planGroup, titleW, width int, tier Tier) Line {
 		}
 	}
 	return FitLine(append(l, wait...), width)
+}
+
+// planGroupRole is a group's bar colour (views-redesign §4.1 point 4), the
+// tasks' own (planLook): orange when one of its tasks waits for the person,
+// blue when one is in progress or in review, the text colour when nothing
+// has started. The header's words say the same without colour.
+func planGroupRole(g planGroup) Role {
+	if firstIn(g.open, plan.Waiting) != nil {
+		return RoleAttention
+	}
+	for _, r := range g.open {
+		if r.State == plan.InProgress || r.State == plan.InReview {
+			return RoleAccent
+		}
+	}
+	return RoleText
+}
+
+// planFinishedGroup is a finished group's one line (views-redesign §4.1
+// point 3): "✓ <title>  <done>/<total> done", grey, no bar.
+func planFinishedGroup(g planGroup, width int) Line {
+	n := len(g.done)
+	return FitLine(Line{{Text: fmt.Sprintf("%s %s  %d/%d done", GlyphDone, Preview(g.title), n, n), Role: RoleMuted}}, width)
 }

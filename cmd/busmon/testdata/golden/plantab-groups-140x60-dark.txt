@@ -1,0 +1,60 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─────────────── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) ─╮
+│  ● answer master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    │
+│  ♙ answer foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…│
+│  ◆ review coder     by charlie  look at b1           ││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask │
+│  Next for you: title h2                              ││  ✓ architect done      40m     —        —         escalating          spec merged│
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…│
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…│
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…│
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping            reviewed   │
+│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
+│                                                      ││  ○ sentinel  paused    30m     —        —         model≠              health ok  │
+│                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ──────────────────────────────────────────────────────── 3/9 done ██████             ─╮
+│  Leave herdr         ━━━━━━━━━━━━━━━━━━━━  1/5 · in progress: h1 · waits for you: h2                                                     │
+│▶ ● title h1  coder     in progress                                                                                                       │
+│  ✓ title h5  coder     approved                                                                                                          │
+│    title h2  ♙ person  decide                                                                                                            │
+│    title h3  coder     blocked                                                                                                           │
+│                                                                                                                                          │
+│  Self-repair watcher ━━━━━━━━━━━━━━━━━━━━  1/2                                                                                           │
+│    title s1  coder     upcoming                                                                                                          │
+│                                                                                                                                          │
+│  Other               ━━━━━━━━━━━━━━━━━━━━  0/1                                                                                           │
+│    title o1  coder     upcoming                                                                                                          │
+│                                                                                                                                          │
+│  ✓ Work tab  1/1 done                                                                                                                    │
+│                                                                                                                                          │
+│  DONE  3   d shows                                                                                                                       │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│ ── Task h1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────── enter task page │
+│ state in progress · for you nothing · owner coder · prio normal · review — · PR —                                                        │
+│ after — · unblocks — · reason —                                                                                                          │
+╰─ + - priority · d done · enter task ─────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                                           
+ enter task   + - priority   T triage   p P plan   tab focus   / ^P commands   1-4 tabs   ←→ tab   ↑↓ j k select   F1 help   F5 health      

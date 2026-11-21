@@ -82,22 +82,23 @@ func TestPlanTabRows(t *testing.T) {
 	}
 }
 
-// The side panel at the wide tier follows the selection; none below it.
+// The detail at the wide tier (views-redesign §4.1) follows the selection;
+// none below it.
 func TestPlanTabSidePanel(t *testing.T) {
 	pinLocal(t)
 	m := keys(t, planShell(t, 160, 40), '4')
 	screen := m.grid().plain()
 	for _, w := range []string{"Task", "unblocks", "prio", "approved"} {
 		if !strings.Contains(screen, w) {
-			t.Fatalf("side lacks %q:\n%s", w, screen)
+			t.Fatalf("detail lacks %q:\n%s", w, screen)
 		}
 	}
 	m = keys(t, m, 'j')
 	if !strings.Contains(m.grid().plain(), "waiting for you") {
-		t.Fatalf("side did not follow j:\n%s", m.grid().plain())
+		t.Fatalf("detail did not follow j:\n%s", m.grid().plain())
 	}
 	if s := keys(t, planShell(t, 100, 40), '4').grid().plain(); strings.Contains(s, "unblocks") {
-		t.Fatalf("a side panel below the wide tier:\n%s", s)
+		t.Fatalf("a detail below the wide tier:\n%s", s)
 	}
 }
 

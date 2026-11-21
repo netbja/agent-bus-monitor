@@ -44,9 +44,29 @@ type listState struct {
 	onOpen         func(key string)
 	kanban         *kanbanView // set: the rows are a Kanban's cards, drawn as columns (the Work tab)
 	mq             marquee     // the selected row's scroll (Work, marquee.go)
+	bottom         int         // rows kept under the items, inside the frame, for the caller to draw (the Plan tab's detail)
 }
 
 func (l *listState) SetHeader(h Line) { l.header = h }
+
+// SetBottom keeps n rows under the items, inside the frame, for the caller
+// to draw (BottomRect); the items scroll above them.
+func (l *listState) SetBottom(n int) { l.bottom = max(0, n) }
+
+// BottomRect is the rows SetBottom kept: inside the frame, under the items;
+// zero height when none, or when the frame has no room for them.
+func (l *listState) BottomRect() Rect {
+	x, y, w, h := l.inner()
+	full := l.rect.H - 2 // inner()'s height before it takes the kept rows: the same clamp (foureyes)
+	if l.showHeader() {
+		full--
+	}
+	b := min(l.bottom, max(full, 0))
+	if b <= 0 || w <= 0 {
+		return Rect{}
+	}
+	return Rect{x, y + h, w, b}
+}
 
 func (l *listState) SetFrame(title, label Line) { l.title, l.label = title, label }
 
@@ -344,6 +364,7 @@ func (l *listState) inner() (x, y, w, h int) {
 	if l.showHeader() {
 		y, h = y+1, h-1
 	}
+	h -= min(l.bottom, max(h, 0)) // the caller's rows under the items
 	return x, y, max(w, 0), max(h, 0)
 }
 

@@ -140,18 +140,24 @@ func planShell(t *testing.T, w, h int) Model {
 	return step(t, m, pollMsg{snap: takeSnapshot(st, shellNow), at: shellNow})
 }
 
-// §9 The drawer: p opens it; at the wide tier right of For you, For you still
-// drawn, Agents not; Enter opens the task page in the same frame; Esc
-// returns, Esc closes; at medium and narrow it is the reader's frame. P too.
+// §9 The drawer: p opens it; at the wide tier under For you (views-redesign
+// §4.1 point 1: For you the whole width, its own rows only; the drawer the
+// whole width under it), For you still drawn, Agents not; Enter opens the
+// task page in the same frame; Esc returns, Esc closes; at medium and narrow
+// it is the reader's frame. P too.
 func TestPlanDrawer(t *testing.T) {
 	for _, key := range []rune{'p', 'P'} {
 		m := planShell(t, 140, 40)
+		closed := m.layout
 		m = keys(t, m, key)
 		if p := m.rd.top(); p == nil || p.kind != ovPlan || !p.drawer {
 			t.Fatalf("%c did not open the drawer", key)
 		}
 		r, l := m.readerRect(), m.layout
-		if r.X != l.ForYou.W || r.Y != l.ForYou.Y || r.X+r.W != m.width || r.Y+r.H != l.Footer.Y {
+		if l.ForYou.X != 0 || l.ForYou.W != m.width || l.ForYou.Y != closed.ForYou.Y || l.ForYou.H != l.ForYouRows+2 || l.ForYou.H > closed.ForYou.H {
+			t.Fatalf("%c: For you %+v (%d rows), closed %+v", key, l.ForYou, l.ForYouRows, closed.ForYou)
+		}
+		if r.X != 0 || r.W != m.width || r.Y != l.ForYou.Y+l.ForYou.H || r.Y+r.H != l.Footer.Y {
 			t.Fatalf("%c: drawer %+v, For you %+v", key, r, l.ForYou)
 		}
 		screen := m.grid().plain()
@@ -179,8 +185,8 @@ func TestPlanDrawer(t *testing.T) {
 		if got := m.readerRect(); got != want {
 			t.Errorf("%v: drawer %+v, want the reader's %+v", size, got, want)
 		}
-		if m.rd.top().side != nil {
-			t.Errorf("%v: a side panel below the wide tier", size)
+		if m.rd.top().detail != nil {
+			t.Errorf("%v: a detail below the wide tier", size)
 		}
 	}
 }
@@ -203,8 +209,9 @@ func TestPlanDrawerDoneKey(t *testing.T) {
 	}
 }
 
-// §9 Side panel: at the wide tier its lines are the selected row's fields and
-// it follows j/k, on the tab and in the drawer.
+// §9 Side panel, now the detail under the list (views-redesign §4.1): at the
+// wide tier its lines are the selected row's facts and it follows j/k, on
+// the tab and in the drawer.
 func TestPlanSidePanel(t *testing.T) {
 	text := func(ls []Line) string {
 		var b strings.Builder
@@ -214,32 +221,29 @@ func TestPlanSidePanel(t *testing.T) {
 		return b.String()
 	}
 	m := keys(t, planShell(t, 140, 40), 'p') // APPROVED's r first, then NEXT's w (views-redesign §4)
-	side := text(m.rd.top().side)
+	side := text(m.rd.top().detail)
 	for _, w := range []string{"in review", "coder", "approved"} {
 		if !strings.Contains(side, w) {
 			t.Fatalf("side for r lacks %q:\n%s", w, side)
 		}
 	}
 	m = keys(t, m, 'j')
-	side = text(m.rd.top().side)
-	if !strings.Contains(side, "w\n") || !strings.Contains(side, "start it: enter, then s") {
+	side = text(m.rd.top().detail)
+	if !strings.Contains(side, "Task w ") || !strings.Contains(side, "start it: enter, then s") {
 		t.Fatalf("after j, side for w:\n%s", side)
 	}
-	if !strings.Contains(m.grid().plain(), "Task") {
-		t.Fatal("the side frame is not drawn")
+	if !strings.Contains(m.grid().plain(), "Task w ") {
+		t.Fatal("the detail is not drawn")
 	}
 }
 
-// The side panel shows the PR and the reason as two fields: a blocked task
-// keeps its linked PR (reviewer-codex).
+// The detail shows the PR and the reason as two facts: a blocked task keeps
+// its linked PR (reviewer-codex).
 func TestPlanSideShowsPRAndReason(t *testing.T) {
 	r := boardRow("b", plan.Blocked, "coder")
 	r.PR, r.Reason = 351, "waits for the CI fix"
-	var text string
-	for _, l := range planSide(boardPlan(r), r, shellNow) {
-		text += l.text() + "\n"
-	}
-	if !strings.Contains(text, "PR       351") || !strings.Contains(text, "reason   waits for the CI fix") {
+	text := factsText(planFacts(boardPlan(r), r))
+	if !strings.Contains(text, "PR 351\n") || !strings.Contains(text, "reason waits for the CI fix\n") {
 		t.Fatalf("side:\n%s", text)
 	}
 }
@@ -313,47 +317,31 @@ func TestPlanBoardEmptySectionNotDrawn(t *testing.T) {
 	}
 }
 
-// foureyes on step 2: the drawer's side panel never leaves the list under
-// planListMin cells; without that room there is none.
+// The drawer's list keeps the reader's whole width at every tier
+// (views-redesign §4.1: the detail went under it); the detail is the wide
+// tier's only.
 func TestPlanDrawerSideKeepsTheList(t *testing.T) {
-	sides := 0
 	for w := 120; w <= 220; w += 4 {
 		m := keys(t, planShell(t, w, 40), 'p')
-		list, side := m.planDrawerWidths()
-		room := m.readerWidth() >= planListMin+planSideWidth+1
-		if side != room || side && list < planListMin {
-			t.Errorf("width %d: reader %d, list %d, side %v", w, m.readerWidth(), list, side)
-		}
-		if side {
-			sides++
+		list, detail := m.planDrawerWidths()
+		if list != m.readerWidth() || detail != (m.layout.Tier == TierWide) {
+			t.Errorf("width %d: reader %d, list %d, detail %v", w, m.readerWidth(), list, detail)
 		}
 	}
-	if sides == 0 {
-		t.Fatal("no wide width gave the drawer a side panel")
-	}
-	m := keys(t, planShell(t, 100, 40), 'p') // medium: never a side panel
-	if _, side := m.planDrawerWidths(); side {
-		t.Error("a drawer side panel at the medium tier")
-	}
-	// The wide tier's own drawer is 80 cells at least; the rule itself, on a
-	// frame one cell short of a list of planListMin beside the panel.
-	m.layout.Tier = TierWide
-	if r := m.readerWidth(); r >= planListMin+planSideWidth+1 {
-		t.Fatalf("fixture: reader %d leaves room", r)
-	}
-	if _, side := m.planDrawerWidths(); side {
-		t.Errorf("a side panel leaving the list %d cells", m.readerWidth()-planSideWidth-1)
+	m := keys(t, planShell(t, 100, 40), 'p') // medium: never a detail
+	if _, detail := m.planDrawerWidths(); detail {
+		t.Error("a drawer detail at the medium tier")
 	}
 }
 
 // foureyes on step 2: the person's done task asks nothing of them.
 func TestPlanSideForYouOnAPersonsDoneTask(t *testing.T) {
 	found := false
-	for _, l := range planSide(boardPlan(boardRow("d", plan.Done, plan.Person)), boardRow("d", plan.Done, plan.Person), shellNow) {
-		if strings.HasPrefix(l.text(), "for you") {
+	for _, f := range planFacts(boardPlan(boardRow("d", plan.Done, plan.Person)), boardRow("d", plan.Done, plan.Person)) {
+		if f.key == "for you" {
 			found = true
-			if strings.TrimRight(l.text(), " ") != "for you  nothing" {
-				t.Fatalf("for you on a done task: %q", l.text())
+			if f.val != "nothing" {
+				t.Fatalf("for you on a done task: %q", f.val)
 			}
 		}
 	}
@@ -426,13 +414,13 @@ func TestPlanSideDependencies(t *testing.T) {
 	y := boardRow("y", plan.Upcoming, "coder", "x")
 	y.Task.After = []string{"x"}
 	p := boardPlan(a, b, x, y)
-	text := linesText(planSide(p, x, shellNow))
-	for _, w := range []string{"after    a " + GlyphDone + ", b", "unblocks y", "prio     " + GlyphUp + " high"} {
+	text := factsText(planFacts(p, x))
+	for _, w := range []string{"after a " + GlyphDone + ", b\n", "unblocks y\n", "prio " + GlyphUp + " high\n"} {
 		if !strings.Contains(text, w) {
 			t.Errorf("side lacks %q:\n%s", w, text)
 		}
 	}
-	if text := linesText(planSide(p, a, shellNow)); !strings.Contains(text, "after    "+GlyphDash) || !strings.Contains(text, "unblocks x") || !strings.Contains(text, "prio     normal") {
+	if text := factsText(planFacts(p, a)); !strings.Contains(text, "after "+GlyphDash+"\n") || !strings.Contains(text, "unblocks x\n") || !strings.Contains(text, "prio normal\n") {
 		t.Errorf("a's side:\n%s", text)
 	}
 }
