@@ -703,7 +703,7 @@ func main() {
 		if err != nil {
 			die(err.Error())
 		}
-		m, missing := selectAgents(all, names)
+		m, missing := listedAgents(all, names, settingsIdentity(os.Getenv))
 		if asJSON {
 			out, _ := json.MarshalIndent(m, "", "  ")
 			fmt.Println(string(out))

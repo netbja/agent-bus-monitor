@@ -63,6 +63,26 @@ func selectAgents(m map[string]bus.AgentSnapshot, names []string) (map[string]bu
 	return out, missing
 }
 
+// listedAgents is what `agentbus agents` shows: selectAgents, and with no
+// names, every entry but the person's (identity.as), which is never an agent
+// whatever terminal it names (person-never-agent). Named, it is shown: the
+// operator inspects it before agents forget. all is never changed.
+func listedAgents(all map[string]bus.AgentSnapshot, names []string, person string) (map[string]bus.AgentSnapshot, []string) {
+	if len(names) > 0 || person == "" {
+		return selectAgents(all, names)
+	}
+	if _, ok := all[person]; !ok {
+		return all, nil
+	}
+	out := make(map[string]bus.AgentSnapshot, len(all)-1)
+	for n, s := range all {
+		if n != person {
+			out[n] = s
+		}
+	}
+	return out, nil
+}
+
 // liveTerminals are the agents of project with a live terminal on the holder
 // list (item 22).
 func liveTerminals(list []termhost.Term, project string) map[string]bool {
