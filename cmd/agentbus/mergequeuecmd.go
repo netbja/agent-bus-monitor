@@ -25,7 +25,7 @@ import (
 // printed).
 func runMergeQueue(ctx context.Context, b *bus.Bus, self string, args []string, out io.Writer) int {
 	if len(args) > 0 && (args[0] == "drop" || args[0] == "undrop") {
-		return runMergeDrop(ctx, b, self, deliverRoleCheck(os.Environ()), args, out, os.Stderr)
+		return runMergeDrop(ctx, b, self, mergeDropMay(os.Environ(), deliverRoleCheck(os.Environ())), args, out, os.Stderr)
 	}
 	args, asJSON := extractBool(args, "--json")
 	args, live := extractBool(args, "--live")
@@ -59,6 +59,19 @@ func runMergeQueue(ctx context.Context, b *bus.Bus, self string, args []string, 
 		}
 	}
 	return code
+}
+
+// mergeDropMay is who may drop or undrop a head: master's act (ACL answer
+// e, broker-hardening step 4; docs, though it delivers, asks master). Another
+// agent's environment is refused first, defence in depth as run reset; master
+// and the person then pass deliver's own check (deliverers).
+func mergeDropMay(env []string, deliverers func(string) error) func(string) error {
+	return func(self string) error {
+		if a, _ := lookupEnv(env, "AGENT_BUS_AGENT"); a != "" && a != "master" {
+			return fmt.Errorf("dropping a head is master's (this is %s's agent environment, AGENT_BUS_AGENT): ask master", a)
+		}
+		return deliverers(self)
+	}
 }
 
 // runMergeDrop: merge-queue drop <head> "<reason>" withdraws an approved

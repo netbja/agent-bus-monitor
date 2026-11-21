@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -164,5 +167,62 @@ func TestMergeQueueCmdCIRed(t *testing.T) {
 	printMergeQueue(mqCmdRecord(), false, &out)
 	if strings.Contains(out.String(), "CI red") {
 		t.Fatalf("a green row has a mark: %s", out.String())
+	}
+}
+
+// ACL answer e (the person's yes): dropping a head is master's; docs, though
+// it delivers, asks master. Another agent is refused before the deliverers'
+// check; master and the person go on to it.
+func TestMergeDropMayIsMasters(t *testing.T) {
+	calls := 0
+	inner := func(string) error { calls++; return nil }
+	for _, c := range []struct {
+		env  []string
+		ok   bool
+		next bool
+	}{
+		{[]string{"AGENT_BUS_AGENT=docs"}, false, false},
+		{[]string{"AGENT_BUS_AGENT=coder"}, false, false},
+		{[]string{"AGENT_BUS_AGENT=master"}, true, true},
+		{nil, true, true}, // the person
+	} {
+		calls = 0
+		err := mergeDropMay(c.env, inner)("x")
+		if (err == nil) != c.ok || (calls == 1) != c.next {
+			t.Errorf("%v: err %v, deliverers' check called %d", c.env, err, calls)
+		}
+		if err != nil && !strings.Contains(err.Error(), "master's") {
+			t.Errorf("%v: %v", c.env, err)
+		}
+	}
+}
+
+// The guard's production wiring (foureyes): with the repository's manifest,
+// where docs delivers, deliver's own check would let docs drop; the built
+// binary refuses it as master's.
+func TestMergeDropRefusedInMain(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.MergeQueueDroppedKey(b.Project())) })
+	manifest, err := filepath.Abs("../../roles.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	dir := t.TempDir()
+	cmd := exec.Command(bin, "-p", b.Project(), "merge-queue", "drop", "fa2d796f", "not ours")
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "XDG_CONFIG_HOME=" + dir, "AGENT_BUS_AGENT=docs",
+		"ROLES_TOML=" + manifest, "REDIS_URL=" + os.Getenv("AGENTBUS_TEST_REDIS_URL")}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 || !strings.Contains(stderr.String(), "dropping a head is master's") {
+		t.Fatalf("docs' drop: %v, stderr %q", err, stderr.String())
+	}
+	if n, _ := r.Exists(ctx, bus.MergeQueueDroppedKey(b.Project())).Result(); n != 0 {
+		t.Fatal("the refused drop was written")
 	}
 }
