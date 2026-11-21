@@ -56,6 +56,9 @@ func realMemPersonDeps(getenv func(string) string) memPersonDeps {
 		}}
 }
 
+// memPersonWait bounds one verb: the broker read, the store's lock and git.
+var memPersonWait = time.Minute
+
 // runMemPerson runs one verb. Exit 0 done, 1 refused or failed, 2 usage.
 func runMemPerson(ctx context.Context, args []string, d memPersonDeps, stdout, stderr io.Writer) int {
 	usage := func(why string) int {
@@ -70,6 +73,8 @@ func runMemPerson(ctx context.Context, args []string, d memPersonDeps, stdout, s
 		return usage("")
 	}
 	verb, rest := args[0], args[1:]
+	ctx, cancel := context.WithTimeout(ctx, memPersonWait) // a writer behind a stuck one gives up (personmem's lock waits for ctx)
+	defer cancel()
 	s, err := personmem.Open(d.Getenv)
 	if err != nil {
 		return fail(err)
@@ -277,8 +282,6 @@ func memPurge(ctx context.Context, s *personmem.Store, yes bool, in io.Reader, s
 			return 1
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
 	gone, err := s.Purge(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "error: "+err.Error())

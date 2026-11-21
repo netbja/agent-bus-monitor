@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/history"
 	"github.com/netbja/agent-bus-monitor/personmem"
 )
 
@@ -42,6 +45,7 @@ func memPersonEnv(t *testing.T) (memPersonDeps, map[string]string) {
 		"demo:" + pmTyped: {Kind: "cmd", Type: "directive", From: "charlie", Body: "yes, dev first", Human: true, Typed: true},
 		"demo:" + pmAgent: {Kind: "report", From: "master", Body: "dev?", Full: "Should PRs go to dev first?"},
 		"demo:7-0":        {Kind: "cmd", Type: "directive", From: "charlie", Body: "no sound at night", Human: true, Typed: true},
+		"demo:8-0":        {Kind: "cmd", Type: "directive", From: "charlie", Body: "main first after all", Human: true, Typed: true},
 	}
 	d := memPersonDeps{
 		Getenv:   func(k string) string { return env[k] },
@@ -90,6 +94,20 @@ func TestMemPersonRememberShowListRecall(t *testing.T) {
 	if code != 0 || json.Unmarshal([]byte(out), &hits) != nil || len(hits) != 1 || hits[0]["topic"] != "notifications" || hits[0]["quote"] != "no sound" {
 		t.Fatalf("recall --json: %d %s", code, out)
 	}
+	// recall --json carries supersedes (foureyes): a second decision replacing the first.
+	code, out, _ = mp(t, d, "recall", "--json", "merge")
+	var first []map[string]any
+	if json.Unmarshal([]byte(out), &first) != nil || len(first) != 1 {
+		t.Fatalf("recall merge --json: %s", out)
+	}
+	if code, _, errw := mp(t, d, "remember", "merge-policy", "--type", "decision", "--importance", "critical", "--from", "demo:8-0", "--quote", "main first", "--supersedes", first[0]["id"].(string)); code != 0 {
+		t.Fatalf("superseding remember: %s", errw)
+	}
+	code, out, _ = mp(t, d, "recall", "--json", "merge")
+	hits = nil
+	if code != 0 || json.Unmarshal([]byte(out), &hits) != nil || len(hits) != 1 || hits[0]["supersedes"] != first[0]["id"] {
+		t.Fatalf("recall --json after supersede: %d %s", code, out)
+	}
 	if code, out, _ = mp(t, d, "recall", "--limit", "1"); code != 0 || strings.Count(strings.TrimSpace(out), "\n") != 0 {
 		t.Fatalf("recall --limit 1: %d\n%s", code, out)
 	}
@@ -111,6 +129,8 @@ func TestMemPersonRememberRefuses(t *testing.T) {
 		{[]string{"remember", "t", "--type", "decision", "--importance", "critical", "--from", "nope", "--quote", "dev"}, 2, "<project>:<entry>"},
 		{[]string{"remember", "t", "--type", "decision", "--importance", "critical", "--from", "demo:" + pmTyped, "--quote", "dev", "--relates", "nocolon"}, 2, "<rel>:<topic>"},
 		{[]string{"remember", "t", "--type", "decision", "--importance", "critical", "--from", "demo:" + pmTyped, "--quote", "dev", "--supersedes", "x", "--keep-both"}, 2, "one of"},
+		{[]string{"remember", "t", "--type", "decision", "--importance", "critical", "--from", "demo:" + pmTyped, "--quote", "dev", "--answers-quote", "dev?"}, 2, "go together"},
+		{[]string{"remember", "t", "--type", "decision", "--importance", "critical", "--from", "demo:" + pmTyped, "--quote", "dev", "--answers", "demo:" + pmAgent}, 2, "go together"},
 	} {
 		code, _, errw := mp(t, d, c.args...)
 		if code != c.code || !strings.Contains(errw, c.why) {
@@ -237,5 +257,57 @@ func TestMemPersonThroughRunMem(t *testing.T) {
 	out.Reset()
 	if code := runMem([]string{"person", "list"}, getenv, t.TempDir(), time.Now(), &out, &errw); code != 0 || !strings.Contains(out.String(), "reports") {
 		t.Fatalf("list: %d %q", code, out.String())
+	}
+	// foureyes: an entry the stream has trimmed is read from the project's
+	// history archive under XDG_STATE_HOME (spec §4.3.1), through the same
+	// production deps.
+	old := "1795205976983-0"
+	line, _ := json.Marshal(history.Entry{Stream: "cmd", ID: old, F: map[string]string{"from": "charlie", "target": "master",
+		"type": "directive", "command": "never merge on a Friday", "human": "yes", "typed": "yes"}})
+	arch := history.Dir(filepath.Join(env["XDG_STATE_HOME"], "agentbus", b.Project()))
+	if err := os.MkdirAll(arch, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	day := time.UnixMilli(1795205976983).UTC().Format("2006-01-02")
+	if err := os.WriteFile(filepath.Join(arch, day+".jsonl"), append(line, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errw.Reset()
+	code = runMem([]string{"person", "remember", "merge-days", "--type", "constraint", "--importance", "critical",
+		"--from", b.Project() + ":" + old, "--quote", "never merge on a Friday"}, getenv, t.TempDir(), time.Now(), &out, &errw)
+	if code != 0 || !strings.Contains(out.String(), "remembered 20261120-"+old+" in merge-days") {
+		t.Fatalf("remember from the archive: %d %q %q", code, out.String(), errw.String())
+	}
+}
+
+// foureyes (non-blocking): a CLI writer behind a stuck one gives up after
+// memPersonWait, writing nothing.
+func TestMemPersonWaitBounded(t *testing.T) {
+	d, env := memPersonEnv(t)
+	if code, _, errw := mp(t, d, "remember", "notifications", "--type", "preference", "--importance", "minor", "--from", "demo:7-0", "--quote", "no sound"); code != 0 {
+		t.Fatal(errw)
+	}
+	f, err := os.OpenFile(filepath.Join(env["XDG_DATA_HOME"], "agentbus", "memory", "person", ".lock"), os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	old := memPersonWait
+	memPersonWait = 150 * time.Millisecond
+	t.Cleanup(func() { memPersonWait = old })
+	done := make(chan int, 1)
+	var errw string
+	go func() { c, _, e := mp(t, d, "forget", "notifications"); errw = e; done <- c }()
+	select {
+	case code := <-done:
+		if code != 1 || !strings.Contains(errw, "another writer") {
+			t.Fatalf("forget behind a held lock: %d %q", code, errw)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the CLI still waits for the lock")
 	}
 }
