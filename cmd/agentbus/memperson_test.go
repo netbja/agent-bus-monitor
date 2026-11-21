@@ -311,3 +311,37 @@ func TestMemPersonWaitBounded(t *testing.T) {
 		t.Fatal("the CLI still waits for the lock")
 	}
 }
+
+// foureyes: the bound never counts the person's time on purge's question: a
+// yes typed after memPersonWait still purges.
+func TestMemPersonPurgeSlowYes(t *testing.T) {
+	d, env := memPersonEnv(t)
+	for _, q := range []string{"no sound", "sound"} {
+		if code, _, errw := mp(t, d, "remember", "notifications", "--type", "preference", "--importance", "minor", "--from", "demo:7-0", "--quote", q); code != 0 {
+			t.Fatal(errw)
+		}
+	}
+	old := memPersonWait
+	memPersonWait = 100 * time.Millisecond
+	t.Cleanup(func() { memPersonWait = old })
+	d.In = slowReader{wait: 300 * time.Millisecond, text: "yes\n"}
+	code, out, errw := mp(t, d, "purge")
+	if code != 0 || !strings.Contains(out, "purged") {
+		t.Fatalf("a slow yes: %d %q %q", code, out, errw)
+	}
+	s, _ := personmem.Open(func(k string) string { return env[k] })
+	if n, _ := s.Commits(context.Background()); n != 1 {
+		t.Fatalf("%d commits after a slow yes", n)
+	}
+}
+
+// slowReader answers text after wait, as a person who thinks first.
+type slowReader struct {
+	wait time.Duration
+	text string
+}
+
+func (r slowReader) Read(p []byte) (int, error) {
+	time.Sleep(r.wait)
+	return copy(p, r.text), nil
+}

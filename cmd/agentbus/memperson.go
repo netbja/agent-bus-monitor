@@ -73,11 +73,14 @@ func runMemPerson(ctx context.Context, args []string, d memPersonDeps, stdout, s
 		return usage("")
 	}
 	verb, rest := args[0], args[1:]
-	ctx, cancel := context.WithTimeout(ctx, memPersonWait) // a writer behind a stuck one gives up (personmem's lock waits for ctx)
-	defer cancel()
 	s, err := personmem.Open(d.Getenv)
 	if err != nil {
 		return fail(err)
+	}
+	if verb != "purge" { // purge bounds its reads and its write, never the person's answer (foureyes)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, memPersonWait) // a writer behind a stuck one gives up (personmem's lock waits for ctx)
+		defer cancel()
 	}
 	switch verb {
 	case "remember":
@@ -265,7 +268,9 @@ func memRecall(s *personmem.Store, args []string, stdout io.Writer, usage func(s
 // memPurge says what goes and asks for a typed yes (--yes skips it; an
 // agent never reaches here).
 func memPurge(ctx context.Context, s *personmem.Store, yes bool, in io.Reader, stdout, stderr io.Writer) int {
-	n, err := s.Commits(ctx)
+	count, cancel := context.WithTimeout(ctx, memPersonWait)
+	n, err := s.Commits(count)
+	cancel()
 	if err != nil {
 		fmt.Fprintln(stderr, "error: "+err.Error())
 		return 1
@@ -282,6 +287,8 @@ func memPurge(ctx context.Context, s *personmem.Store, yes bool, in io.Reader, s
 			return 1
 		}
 	}
+	ctx, cancel = context.WithTimeout(ctx, memPersonWait) // from the answer on: the person may take their time to decide
+	defer cancel()
 	gone, err := s.Purge(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "error: "+err.Error())
