@@ -80,18 +80,18 @@ type roWriter struct {
 	ro *readOnlyFlag
 }
 
-func (w roWriter) HumanCmd(ctx context.Context, from, target, command string) (string, error) {
+func (w roWriter) TypedCmd(ctx context.Context, from, target, command string) (string, error) {
 	if w.ro.on() {
 		return "", errReadOnly
 	}
-	return w.busWriter.HumanCmd(ctx, from, target, command)
+	return w.busWriter.TypedCmd(ctx, from, target, command)
 }
 
-func (w roWriter) HumanNotify(ctx context.Context, from, message string) (string, error) {
+func (w roWriter) TypedNotify(ctx context.Context, from, message string) (string, error) {
 	if w.ro.on() {
 		return "", errReadOnly
 	}
-	return w.busWriter.HumanNotify(ctx, from, message)
+	return w.busWriter.TypedNotify(ctx, from, message)
 }
 
 func (w roWriter) HumanClose(ctx context.Context, from, target, ref, message string) (string, error) {
