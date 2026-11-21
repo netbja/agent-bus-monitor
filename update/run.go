@@ -43,6 +43,14 @@ type Deps struct {
 	Running func(ctx context.Context) ([]Service, error)
 	// Settle is how long a restarted service has to record its build (60 s).
 	Settle time.Duration
+	// HolderKeys are the holder builds on disk, every project's: a unit's or
+	// a binary copy's key (service.BuildKey). nil or an error keeps every
+	// tree (quiet-update-auto §5, rule 3).
+	HolderKeys func(ctx context.Context) (map[string]bool, error)
+	// HolderGC collects the old holders that neither run nor answer, with
+	// current the new build's key (service.GCHolders, GCHolderBinaries), before
+	// the trees are judged. nil: none.
+	HolderGC func(ctx context.Context, current string) error
 }
 
 func (d Deps) updates() string { return Dir(setup.StateDir(d.Getenv)) }
@@ -169,6 +177,7 @@ func Run(ctx context.Context, d Deps, o Options) int {
 	if err := Prune(updates); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: an old snapshot could not be removed: "+err.Error())
 	}
+	PruneTrees(ctx, d, rel.Tag) // after the snapshots: a tree only they named is free now
 	return 0
 }
 
@@ -684,6 +693,7 @@ func List(d Deps) int {
 	ids := Snapshots(updates)
 	if len(ids) == 0 {
 		d.say("no snapshot (%s)", updates)
+		listTrees(context.Background(), d)
 		return 0
 	}
 	for _, id := range ids {
@@ -700,5 +710,17 @@ func List(d Deps) int {
 		}
 		d.say("%s  %s -> %s  %s", id, m.From, m.To, state)
 	}
+	listTrees(context.Background(), d)
 	return 0
+}
+
+// listTrees is List's release trees, each with why it is kept.
+func listTrees(ctx context.Context, d Deps) {
+	for _, t := range Trees(ctx, d, installedTag(ctx, d)) {
+		why := t.Why
+		if why == "" {
+			why = "nothing needs it: the next update removes it"
+		}
+		d.say("tree %s  %s", t.Path, why)
+	}
 }

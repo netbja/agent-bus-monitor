@@ -108,6 +108,7 @@ type fakeRun struct {
 	now       time.Time
 	ran       []string
 	recorded  map[string]string
+	version   string // what the installed agentbus's version prints ("" = ok)
 	failLink  bool
 	wrongLink bool   // the link script succeeds but links the clone's skill, not the tree's
 	neverOK   string // "<project> <kind>": never records a build
@@ -163,6 +164,8 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 			return nil, r.restore(c)
 		}
 		return nil, nil
+	case key == "agentbus version" && r.version != "":
+		return []byte("agentbus protocol v1\nagentbus version " + r.version + "\n"), nil
 	case key == "agentbus version" || key == "busmon --version":
 		return []byte("ok\n"), nil
 	case filepath.Base(c.Name) == "link-role-skills.sh":
