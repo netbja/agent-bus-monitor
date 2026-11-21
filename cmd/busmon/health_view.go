@@ -74,7 +74,10 @@ func guardianSegWhy(s guardianSummary, width int, why string) Line {
 		}
 		return Line{{Text: name + label, Role: role}}
 	case s.Unmeasured > 0: // not measured yet or unreadable, never shown as healthy
-		if why != "" && name != "" {
+		if why != "" { // the compact header keeps a short one (reviewer-codex)
+			if name == "" {
+				why = strings.TrimPrefix(why, "project ")
+			}
 			return Line{{Text: fmt.Sprintf("%s?%d %s", name, s.Unmeasured, why), Role: RoleMuted}}
 		}
 		return Line{{Text: fmt.Sprintf("%s?%d", name, s.Unmeasured), Role: RoleMuted}}

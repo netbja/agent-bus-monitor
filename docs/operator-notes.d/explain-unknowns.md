@@ -5,6 +5,6 @@
     - "dispatch down", "dispatch failed" or "dispatch gave-up" otherwise.
   - **Where it shows:**
     - For you's merge line reads "merge queue unknown: <why>";
-    - the header's health summary adds it after `?N`, at 80 columns or more;
+    - the header's health summary adds it after `?N` ("stopped" for short in the compact header);
     - the quota gauges get one "(<why>)" after them when a provider has no reading at all.
   - **When dispatch runs, or its state is unknown,** the old wording stays.

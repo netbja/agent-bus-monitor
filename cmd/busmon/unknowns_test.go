@@ -39,8 +39,11 @@ func TestHealthUnknownSaysWhy(t *testing.T) {
 	if got := guardianSegWhy(s, 140, "dispatch down").text(); got != "health ?5 dispatch down" {
 		t.Fatalf("wide: %q", got)
 	}
-	if got := guardianSegWhy(s, 60, "dispatch down").text(); got != "?5" {
-		t.Fatalf("narrow keeps the short form: %q", got)
+	if got := guardianSegWhy(s, 60, "dispatch down").text(); got != "?5 dispatch down" {
+		t.Fatalf("narrow: %q", got)
+	}
+	if got := guardianSegWhy(s, 60, "project stopped").text(); got != "?5 stopped" {
+		t.Fatalf("narrow, stopped: %q", got)
 	}
 	if got := guardianSegWhy(guardianSummary{Total: 5, ToDo: 1}, 140, "dispatch down").text(); strings.Contains(got, "dispatch down") {
 		t.Fatalf("a measured problem is not explained away: %q", got)
@@ -91,5 +94,31 @@ func TestQuotaReasonOnlyForUnknown(t *testing.T) {
 		if got := quotaAllUnknown(c.b, now); got != c.want {
 			t.Errorf("%s: %v, want %v", name, got, c.want)
 		}
+	}
+}
+
+// The header itself shows the reason, wide and compact (foureyes: the
+// production caller, not only the function).
+func TestHeaderHealthSaysWhy(t *testing.T) {
+	for _, c := range []struct {
+		dispatch string
+		width    int
+		tier     Tier
+		want     string
+	}{
+		{"stopped", 140, TierWide, "health ?5 project stopped"},
+		{"down", 140, TierWide, "health ?5 dispatch down"},
+		{"stopped", 60, TierNarrow, "?5 stopped"},
+		{"down", 60, TierNarrow, "?5 dispatch down"},
+	} {
+		d := headerData{project: "demo", now: time.Now(), dispatch: c.dispatch, guardian: guardianSummary{Total: 5, Unmeasured: 5}}
+		text := strings.Join(lineTexts(headerRows(d, c.width, c.tier, 2)), "\n")
+		if !strings.Contains(text, c.want) {
+			t.Errorf("%s at %d: want %q in\n%s", c.dispatch, c.width, c.want, text)
+		}
+	}
+	d := headerData{project: "demo", now: time.Now(), dispatch: "ready", guardian: guardianSummary{Total: 5, Unmeasured: 5}}
+	if text := strings.Join(lineTexts(headerRows(d, 140, TierWide, 2)), "\n"); !strings.Contains(text, "health ?5") || strings.Contains(text, "?5 dispatch") || strings.Contains(text, "?5 project") || strings.Contains(text, "?5 stopped") {
+		t.Errorf("running: %s", text)
 	}
 }
