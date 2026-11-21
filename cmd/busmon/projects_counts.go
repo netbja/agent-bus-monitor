@@ -17,11 +17,12 @@ import (
 // header's, read for every project on the broker.
 
 // workCounts is one project's two numbers.
-type workCounts struct{ you, team int }
+type workCounts struct{ you, team, merge int } // merge: the merge-queue rows among you (the header's other: counter)
 
 // countsFresh: past it, another project's counts read ? rather than an old
 // number (the person: "? rather than 0 when a remote broker's data is not
-// fresh"). The page is read on M and R, never polled.
+// fresh"). The page is read on M and R; the header's other: counter
+// (others.go) reads the running projects every othersEvery.
 const countsFresh = time.Minute
 
 // countsReadTimeout bounds one project's count read (two poll ticks, each
@@ -40,7 +41,13 @@ const countsSplitW = 88
 func workCountsOf(s snapshot, self string, now time.Time) workCounts {
 	w := workOf(workInput{forYou: forYou(s, nil), reqs: requestGroups(requestInputOf(s, self, now)),
 		requests: s.requests, plan: s.planState, agents: s.agents, pilot: s.pilot, now: now})
-	return workCounts{you: w.youCount(), team: len(w.Team)}
+	merge := 0
+	for _, it := range mergeItems(s) {
+		if it.Key != mergeUnknownKey { // a merge waiting, not the unknown queue's row
+			merge++
+		}
+	}
+	return workCounts{you: w.youCount(), team: len(w.Team), merge: merge}
 }
 
 // readProjectCounts reads one project as the poll does (two ticks: the

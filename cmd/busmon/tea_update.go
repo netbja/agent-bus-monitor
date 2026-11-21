@@ -198,6 +198,8 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.goBack()
 	case ActStartServices:
 		cmd = m.askServiceStart()
+	case ActOtherProject:
+		cmd = m.openBusiestOther()
 	case ActHistory:
 		cmd = m.openHistory()
 	case ActAbout:

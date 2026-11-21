@@ -130,6 +130,7 @@ const (
 	ActSwitchProject  // projects (M): open the selected project in this busmon (project-switch note)
 	ActBack           // B: back to the project a switch left (project-switch-ux)
 	ActStartServices  // S: start a stopped project's services, as the person (project-switch-ux)
+	ActOtherProject   // O: open the other project with the most for you (project-switch-ux)
 	ActStopServices   // projects (M): stop the selected project's services here (agentbus down)
 	ActBackupNow      // projects (M): back the selected project up (agentbus backup --project)
 	ActPalette        // Ctrl+P: the command palette, the line opened with / (palette spec §4.3)
@@ -277,6 +278,7 @@ var (
 		{Keys: "M", Help: "projects: every project of this host, its state, agents, keys, services and holder; sleep, stop or back one up", Act: ActProjects, match: runeIs('M')},
 		{Keys: "B", Help: "back to the project you switched from (M, o): one key, the same checked switch", Act: ActBack, match: runeIs('B')},
 		{Keys: "S", Help: "start a stopped project's services (agentbus service start: dispatch, then missions; the agents stay down), after y; the person's act, never an agent's", Act: ActStartServices, match: runeIs('S')},
+		{Keys: "O", Help: "open the other project with the most for you, as the header's other: counter shows (read every 2 min, running projects only)", Act: ActOtherProject, match: runeIs('O')},
 		{Keys: "H", Help: "history: re-read the past, the archive on this host then the live streams (enter opens an entry)", Act: ActHistory, match: runeIs('H')},
 		{Keys: "A", Help: "about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work", Act: ActAbout, match: runeIs('A')},
 		{Keys: "F1", Hint: "help", Alt: "?", Act: ActHelp, match: either(keyIs(keyF1), runeIs('?'))},

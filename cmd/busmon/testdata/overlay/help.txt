@@ -40,6 +40,7 @@ KEYS
   M                    projects: every project of this host, its state, agents, keys, services and holder; sleep, stop or back one up
   B                    back to the project you switched from (M, o): one key, the same checked switch
   S                    start a stopped project's services (agentbus service start: dispatch, then missions; the agents stay down), after y; the person's act, never an agent's
+  O                    open the other project with the most for you, as the header's other: counter shows (read every 2 min, running projects only)
   H                    history: re-read the past, the archive on this host then the live streams (enter opens an entry)
   A                    about: busmon's, agentbus's and Redis's versions (y copies them), and the bus at work
   F1 ?                 help

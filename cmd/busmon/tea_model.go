@@ -222,7 +222,9 @@ type Model struct {
 	switchTo string
 	// ro is the read-only guard's state (readonly.go), shared with the
 	// guarded writer the commands call.
-	ro            *readOnlyFlag
+	ro *readOnlyFlag
+	// others is the other projects' counts, by project (others.go).
+	others        map[string]otherRead
 	knownProjects []string
 }
 
@@ -248,7 +250,7 @@ func newShell(cfg shellConfig) Model {
 	return m
 }
 
-func (m Model) Init() tea.Cmd { return tea.Batch(m.pollCmd(1), m.projectNamesCmd()) }
+func (m Model) Init() tea.Cmd { return tea.Batch(m.pollCmd(1), m.projectNamesCmd(), m.othersCmd()) }
 
 // pollCmd runs today's pollOnce against the reader and returns its snapshot.
 func (m Model) pollCmd(tick int) tea.Cmd {
@@ -289,6 +291,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.refresh()
 		m.noteCut()
 		m.layoutCompose()
+	case othersTickMsg:
+		return m.othersCmd()
+	case othersMsg:
+		return m.gotOthers(msg)
 	case pollMsg:
 		m.applySnapshot(msg.snap, msg.at)
 		if m.ui.lastInput.IsZero() { // a busmon left alone counts from its first poll (reviewer-codex)
