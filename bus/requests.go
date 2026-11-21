@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/config"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +31,8 @@ type RequestInfo struct {
 	RespondedAt       int64  `json:"responded_at,omitempty"`
 	BlockedReason     string `json:"blocked_reason,omitempty"`
 	Commit            string `json:"commit,omitempty"`       // request done --commit (missions)
-	Branch            string `json:"branch,omitempty"`       // request done --branch
+	Branch            string `json:"branch,omitempty"`       // request done --branch, request review --branch
+	ReviewNote        string `json:"review_note,omitempty"`  // request review's note (wip-limit §3.2)
 	Availability      string `json:"availability,omitempty"` // derived, never persisted
 	// ClosedUnaccepted says why a request was closed without an accept:
 	// "body missing" (cmd retention removed it) or "expired" (request-lost-body).
@@ -178,7 +181,34 @@ redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))
 return id`)
 
 func (b *Bus) AcceptRequest(ctx context.Context, task, agent string) error {
-	_, err := b.transitionRequest(ctx, task, agent, "accept", "")
+	return b.AcceptRequestLimit(ctx, task, agent, 0)
+}
+
+// AcceptRequestLimit is AcceptRequest under a work-in-progress limit
+// (wip-limit §3.3, board.wip_limit): a first accept is refused while agent
+// holds limit or more other requests accepted, unless the person set this
+// one high (priority high with priority_by). A resume (a request accepted
+// before, back from review or blocked) is never refused, so resumes can
+// take an agent above the limit; a first accept then waits until it is
+// under again. 0 is no limit. The count is read in the script that writes.
+func (b *Bus) AcceptRequestLimit(ctx context.Context, task, agent string, limit int) error {
+	if limit < 0 {
+		return fmt.Errorf("wip limit must be 0 or more")
+	}
+	_, err := b.transitionRequest(ctx, task, agent, "accept", "", "", "", strconv.Itoa(limit))
+	return err
+}
+
+// ReviewRequest marks an accepted request review (wip-limit §3.2): a step
+// or a PR waits on its reviewers, so it is not in flight. By its target
+// only, from accepted only; it records branch and note when given and
+// writes no stream entry (the review's own challenge tells the reviewers).
+// accept resumes it, done and block pass from it.
+func (b *Bus) ReviewRequest(ctx context.Context, task, agent, branch, note string) error {
+	if branch != "" && !config.ValidBranchName(branch) {
+		return fmt.Errorf("invalid branch %q", branch)
+	}
+	_, err := b.transitionRequest(ctx, task, agent, "review", note, "", branch)
 	return err
 }
 func (b *Bus) BlockRequest(ctx context.Context, task, agent, reason string) error {
@@ -204,9 +234,12 @@ func (b *Bus) CompleteRequestAt(ctx context.Context, task, agent, body, commit, 
 	return b.transitionRequest(ctx, task, agent, "done", body, commit, branch)
 }
 func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body string, extra ...string) (string, error) {
-	commit, branch := "", ""
-	if len(extra) == 2 {
+	commit, branch, limit := "", "", "0"
+	if len(extra) >= 2 {
 		commit, branch = extra[0], extra[1]
+	}
+	if len(extra) == 3 {
+		limit = extra[2]
 	}
 	if !ValidName(task) || !ValidName(agent) {
 		return "", fmt.Errorf("invalid task or agent")
@@ -214,7 +247,7 @@ func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body strin
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	out, err := requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch).Text()
+	out, err := requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch, limit).Text()
 	return out, requestError(err)
 }
 
@@ -225,7 +258,8 @@ var ErrRequestRefused = errors.New("request refused")
 
 // requestRefusals are the request script's own error replies.
 var requestRefusals = []string{"unknown request", "board task is not a tracked request", "only the target agent may",
-	"request already completed", "request expired", "request body missing", "request must be explicitly accepted", "blocked request"}
+	"request already completed", "request expired", "request body missing", "request must be explicitly accepted", "blocked request",
+	"wip limit reached", "only an accepted request goes to review"}
 
 // refusal is a script refusal, its message unchanged.
 type refusal struct{ msg string }
@@ -269,9 +303,27 @@ if ARGV[3]=='accept' then
  if not r.accepted_at then
   if r.expires_at and r.expires_at>0 and r.expires_at<=now then return redis.error_reply('request expired; cannot accept (its target or sender closes it: agentbus request done <task> <why>)') end
   if #redis.call('XRANGE',KEYS[2],r.id,r.id)==0 then return redis.error_reply('request body missing; cannot accept (its target or sender closes it: agentbus request done <task> <why>)') end
+  local lim=tonumber(ARGV[8]) or 0
+  if lim>0 and not (r.priority=='high' and r.priority_by and r.priority_by~='') then
+   local held={}
+   local all=redis.call('HGETALL',KEYS[1])
+   for i=1,#all,2 do
+    local ok,o=pcall(cjson.decode,all[i+1])
+    if ok and type(o)=='table' and o.state=='accepted' and type(o.request)=='table' and o.request.target==ARGV[2] then held[#held+1]=all[i] end
+   end
+   if #held>=lim then
+    table.sort(held)
+    return redis.error_reply('wip limit reached for '..ARGV[2]..' ('..#held..' of '..lim..' accepted: '..table.concat(held,', ')..'): finish one, or mark it review (agentbus request review <task>) or blocked; then accept '..ARGV[1])
+   end
+  end
   r.accepted_at=now
  end
  e.state='accepted';r.blocked_reason=nil
+elseif ARGV[3]=='review' then
+ if e.state~='accepted' then return redis.error_reply('only an accepted request goes to review') end
+ e.state='review'
+ if ARGV[7]~='' then r.branch=ARGV[7] end
+ if ARGV[4]~='' then r.review_note=ARGV[4] end
 elseif ARGV[3]=='block' then
  if e.state~='blocked' or r.blocked_reason~=ARGV[4] then
   redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',r.from,'type','blocked','ref',r.thread,'command',ARGV[4],'task',ARGV[1],'text_complete','yes')
