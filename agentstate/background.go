@@ -40,12 +40,18 @@ type Background struct {
 	Helpers       []*regexp.Regexp
 	Screen        []*regexp.Regexp
 	// DirectHelpers: the client's own direct children that are not a shell
-	// are its helpers (its MCP stdio servers, its daemons), never background
-	// work whatever their CPU: the client runs every tool command under a
+	// are its helpers (its MCP stdio servers, its daemons), and so are their
+	// descendants (npx's node, codegraph's watcher), never background work
+	// whatever their CPU: the client runs every tool command under a
 	// shell, so work it starts is a shell's descendant (Claude Code:
 	// "bash -c source …snapshot…"). A client whose commands may be exec'd in
 	// place by a one-command shell does not declare it.
 	DirectHelpers bool
+	// HelperBranches: the names of direct children that are the client's
+	// helpers, with their subtrees, whatever their CPU (Codex's code-mode
+	// host): for a client that cannot declare DirectHelpers, since only a
+	// listed name is a helper and a command exec'd in place still counts.
+	HelperBranches []*regexp.Regexp
 }
 
 // shells are the names a client's tool command runs under: a direct child by
@@ -58,9 +64,10 @@ type Proc struct {
 	Name      string
 	Start     time.Time
 	CPUGrowth time.Duration
-	// Direct: a child of the agent's own process, not a grandchild
-	// (DirectHelpers reads it).
-	Direct bool
+	// Branch: the name of the agent's direct child whose subtree holds it,
+	// its own name when it is that child; "" when unknown (DirectHelpers
+	// reads it: a process under a helper is the helper's).
+	Branch string
 	// Seen is when the host first saw it (background-work-visible step 2):
 	// OldestAge counts from it when Start is unknown. It never enters What(),
 	// whose text the dispatcher's once-per-change records compare (foureyes).
@@ -195,7 +202,7 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 	if p := f.Process; p != nil {
 		read[SourceProcess] = true
 		for _, pr := range p.Procs {
-			if b.DirectHelpers && pr.Direct && !shells[pr.Name] { // the client's own MCP server or daemon
+			if b.helperBranch(pr.Branch) { // the client's own MCP server or daemon, or its child
 				continue
 			}
 			if b.helper(pr.Name, f.ExtraHelpers) && float64(pr.CPUGrowth) <= HelperCPU*float64(p.Window) {
@@ -237,6 +244,15 @@ func (b Background) Judge(f Facts, now time.Time) Judgement {
 		j.State, j.base = BackgroundRunning, &base
 	}
 	return j
+}
+
+// helperBranch: a process under one of the client's own direct children,
+// any non-shell one with DirectHelpers, a listed one with HelperBranches.
+func (b Background) helperBranch(branch string) bool {
+	if branch == "" {
+		return false
+	}
+	return b.DirectHelpers && !shells[branch] || anyMatch(b.HelperBranches, branch)
 }
 
 func (b Background) helper(name string, extra []string) bool {

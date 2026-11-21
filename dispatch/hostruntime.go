@@ -263,13 +263,14 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 	var f agentstate.Facts
 	if base != nil {
 		pf := &agentstate.ProcessFacts{Window: now.Sub(base.at)}
+		branch := branches(t.PID, procs)
 		for _, p := range procs {
 			if p.PID == t.PID {
 				continue // the agent itself, never its own background
 			}
 			k := procKey{p.PID, p.Start}
 			grown := p.CPU - base.cpu[k] // a process new since the base: all its CPU
-			pf.Procs = append(pf.Procs, agentstate.Proc{Name: p.Command, Seen: seen[k], CPUGrowth: grown, Direct: p.PPID == t.PID})
+			pf.Procs = append(pf.Procs, agentstate.Proc{Name: p.Command, Seen: seen[k], CPUGrowth: grown, Branch: branch[p.PID]})
 		}
 		f.Process = pf
 	}
@@ -288,6 +289,32 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 	}
 	j := bg.Judge(f, now)
 	return &j
+}
+
+// branches names, for each of root's descendants, the direct child of root
+// whose subtree holds it (agentstate.Proc.Branch); a process whose parents do
+// not lead to root within the list is left out ("" when read).
+func branches(root int, procs []termhost.Proc) map[int]string {
+	byPID := make(map[int]termhost.Proc, len(procs))
+	for _, p := range procs {
+		byPID[p.PID] = p
+	}
+	out := map[int]string{}
+	for _, p := range procs {
+		cur := p
+		for range len(procs) { // bounded: a pid cycle cannot loop
+			if cur.PPID == root {
+				out[p.PID] = cur.Command
+				break
+			}
+			next, ok := byPID[cur.PPID]
+			if !ok {
+				break
+			}
+			cur = next
+		}
+	}
+	return out
 }
 
 // Prompt submits a wake line; observed means the host saw it land and sent

@@ -1,7 +1,9 @@
 - **A client's own MCP servers are not background work (background-work census, 2026-11-21).**
   - **The rule:** a client profile may declare `direct_helpers = true` under `[background]`. The
     client's direct children that are not a shell (sh, bash, dash, zsh, fish, ksh) are then its
-    helpers: its MCP stdio servers and its daemons. They never count, whatever their CPU.
+    helpers: its MCP stdio servers and its daemons. They never count, whatever their CPU, and
+    neither does anything under them (the `node` an `npx`-started server runs, codegraph's watcher):
+    the census names each process's branch, the client's direct child whose subtree holds it.
   - **What still counts:** work the agent starts runs under the client's shell, so a dev server it
     left running still blocks `auto-clear` and `pop-retire`, and still gets the long-skip notice.
   - **Who declares it:** Claude Code does, as checked on this host. Every agent's
@@ -10,6 +12,13 @@
     `pop-retire` skipped for 2 h on `process 'codebase-memory'`.
   - **Who does not, and why:**
     - **Codex** has the same shape (its MCP servers and `codex-code-mode` are direct children, its
-      commands are `/bin/bash -c …`). But a one-command `bash -c` may exec the program in place, so it
-      does not declare it, and its process source is not authoritative anyway.
+      commands are `/bin/bash -c …`). But a one-command `bash -c` or `bash -lc` execs the program in
+      place (checked: `bash -c 'sleep 3'` leaves only `sleep`, a direct child), so a dev server would
+      read as a helper. Codex therefore lists its helpers by name instead,
+      `helper_branches = ['^codex-code-mode$', '^codebase-memory$']`: a listed direct child and its
+      subtree are helpers, any other direct child still counts. **codegraph is still counted:** Node 24
+      names every node process `MainThread`, so its MCP server cannot be told from a dev server by
+      name. That needs the command line, which the census does not read yet.
     - **Grok, Kimi and agy** are not checked.
+  - **What a helper starts is the helper's:** an MCP server that shells out to run real work (a
+    build, a test runner) never counts. None does on this host today.

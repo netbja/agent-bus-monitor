@@ -323,6 +323,35 @@ func TestHostRuntimeUnrecognisedScreenIsUnknownWithAHash(t *testing.T) {
 // server, a direct child of the client (comm cut to 15 characters). The
 // client's direct children that are not a shell are its helpers, whatever
 // their CPU; a forgotten dev server under the client's shell still blocks.
+// Codex (reviewer-codex's tree, 2026-11-21): its code-mode host and
+// codebase-memory-mcp are listed helper branches; codegraph's node is
+// MainThread like any node, so it still counts, and so does a command bash
+// exec'd in place.
+func TestHostRuntimeCodexHelperBranches(t *testing.T) {
+	f := newHostFixture(t)
+	f.rt.Client = func(string) string { return "codex" }
+	p := f.term.PID
+	tree := func(cpu time.Duration, more ...termhost.Proc) []termhost.Proc {
+		return append([]termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "codex"},
+			{PID: p + 1, PPID: p, Start: 5, Command: "codex-code-mode", CPU: cpu},
+			{PID: p + 2, PPID: p, Start: 5, Command: "codebase-memory", CPU: cpu}}, more...)
+	}
+	f.h.SetProcesses(f.term.ID, tree(time.Second)...)
+	f.inspect()
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, tree(9*time.Second)...)
+	if in := f.inspect(); in.Background == nil || in.Background.Procs() != 0 || in.Background.What() != "" {
+		t.Fatalf("codex's own helpers, busy: %+v", in.Background)
+	}
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, tree(9*time.Second,
+		termhost.Proc{PID: p + 3, PPID: p, Start: 8, Command: "MainThread"},
+		termhost.Proc{PID: p + 4, PPID: p, Start: 8, Command: "npm"})...)
+	if in := f.inspect(); in.Background.What() != "process 'MainThread', process 'npm'" {
+		t.Fatalf("node and a command exec'd in place: %q", in.Background.What())
+	}
+}
+
 func TestHostRuntimeIgnoresTheClientsMCPServers(t *testing.T) {
 	f := newHostFixture(t)
 	f.rt.Hooks = func(string, int) (agentstate.HookFacts, bool) { return agentstate.HookFacts{}, true }
@@ -330,7 +359,10 @@ func TestHostRuntimeIgnoresTheClientsMCPServers(t *testing.T) {
 	mcp := func(cpu time.Duration) []termhost.Proc {
 		return []termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "claude"},
 			{PID: p + 1, PPID: p, Start: 5, Command: "codebase-memory", CPU: cpu}, // codebase-memory-mcp, as /proc names it
-			{PID: p + 2, PPID: p, Start: 5, Command: "node", CPU: cpu}}            // an npx-started one (context7)
+			{PID: p + 2, PPID: p, Start: 5, Command: "npm exec", CPU: cpu},        // an npx-started one (context7)…
+			{PID: p + 6, PPID: p + 2, Start: 5, Command: "node", CPU: cpu},        // …whose server is its child
+			{PID: p + 7, PPID: p, Start: 5, Command: "MainThread", CPU: cpu},      // codegraph's node, as /proc names it…
+			{PID: p + 8, PPID: p + 7, Start: 5, Command: "MainThread", CPU: cpu}}  // …and its watcher
 	}
 	f.h.SetProcesses(f.term.ID, mcp(time.Second)...)
 	f.inspect()
