@@ -137,7 +137,7 @@ func (in *Installer) stopBroker(ctx context.Context, ask func(string, bool) bool
 			return false, false
 		}
 		name, args := composeArgs(cc, verb...)
-		_, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo})
+		_, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo, Env: in.composeEnv()})
 		return true, err == nil
 	}
 	report := func(done, ok bool, success, verb string) {

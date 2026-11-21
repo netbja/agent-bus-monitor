@@ -12,7 +12,8 @@ import (
 // RedisInfo is what busmon's Services page says about the broker itself
 // (read-only: INFO server and memory, DBSIZE).
 type RedisInfo struct {
-	Version    string // redis_version
+	Product    string // the server: "redis", or "valkey" when INFO names it (server_name, valkey_version)
+	Version    string // redis_version (Valkey keeps a compatibility value there)
 	UptimeSecs int64  // uptime_in_seconds
 	UsedMemory string // used_memory_human
 	Keys       int64  // DBSIZE: every key of the database, all projects
@@ -22,29 +23,11 @@ type RedisInfo struct {
 
 // RedisInfo reads the broker's own facts.
 func (b *Bus) RedisInfo(ctx context.Context) (RedisInfo, error) {
-	var ri RedisInfo
 	raw, err := b.r.Info(ctx, "server", "memory").Result()
 	if err != nil {
-		return ri, err
+		return RedisInfo{}, err
 	}
-	for _, line := range strings.Split(raw, "\n") {
-		k, v, ok := strings.Cut(strings.TrimSpace(line), ":")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "redis_version":
-			ri.Version = v
-		case "uptime_in_seconds":
-			ri.UptimeSecs, _ = strconv.ParseInt(v, 10, 64)
-		case "used_memory_human":
-			ri.UsedMemory = v
-		case "process_id":
-			ri.PID, _ = strconv.Atoi(v)
-		case "executable":
-			ri.Executable = v
-		}
-	}
+	ri := parseServerInfo(raw)
 	if ri.Keys, err = b.r.DBSize(ctx).Result(); err != nil {
 		return ri, err
 	}
@@ -154,3 +137,35 @@ func ProjectFootprint(ctx context.Context, r *redis.Client, project string) (Pro
 
 // DetailStreams are the stream kinds RedisDetail measures, in display order.
 func DetailStreams() []string { return slices.Clone(detailStreams) }
+
+// parseServerInfo reads INFO server and memory's lines: the product (valkey
+// when the server says so, broker-hardening step 3), the version, uptime,
+// memory, pid and executable.
+func parseServerInfo(raw string) RedisInfo {
+	ri := RedisInfo{Product: "redis"}
+	for _, line := range strings.Split(raw, "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "redis_version":
+			ri.Version = v
+		case "server_name":
+			if v == "valkey" {
+				ri.Product = "valkey"
+			}
+		case "valkey_version":
+			ri.Product = "valkey"
+		case "uptime_in_seconds":
+			ri.UptimeSecs, _ = strconv.ParseInt(v, 10, 64)
+		case "used_memory_human":
+			ri.UsedMemory = v
+		case "process_id":
+			ri.PID, _ = strconv.Atoi(v)
+		case "executable":
+			ri.Executable = v
+		}
+	}
+	return ri
+}

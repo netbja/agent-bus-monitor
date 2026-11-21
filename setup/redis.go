@@ -35,6 +35,16 @@ func (in *Installer) runtime() brokerrt.Runtime {
 	return brokerrt.Of(in.Getenv)
 }
 
+// composeEnv is every compose call's environment: the broker's image
+// (broker.image), which compose reads only from there.
+func (in *Installer) composeEnv() []string {
+	getenv := in.Getenv
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
+	return brokerrt.ComposeEnv(getenv)
+}
+
 // Owner is the checkout a broker container belongs to, read from its
 // compose label. A zero Owner is no container at all.
 type Owner struct {
@@ -120,7 +130,7 @@ func (in *Installer) Redis(ctx context.Context, d Docker) {
 	in.password(ctx)
 	in.O.Info("Redis not detected on :6380. Starting broker container...")
 	name, args := composeArgs(d.Compose, "up", "-d")
-	if out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo}); err != nil {
+	if out, err := in.R.Run(ctx, Cmd{Name: name, Args: args, Dir: in.Repo, Env: in.composeEnv()}); err != nil {
 		showTail(in.O.err, out)
 		in.O.Warn("Failed to launch Redis container via " + d.Compose + " up -d")
 		return

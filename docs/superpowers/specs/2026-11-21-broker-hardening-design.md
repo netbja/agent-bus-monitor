@@ -34,7 +34,7 @@ Read from `docker-compose.yml`, `setup/redis.go`, `setup/rotate.go`, `bus/bus.go
 | AOF | `redis-server - --appendonly yes` (compose `command`) | none |
 | `appendfsync everysec` | Not set. Redis's own default is `everysec`, so it holds, implicitly. | Not stated. The health check `broker-persistence` (`health/evaluate.go:485`) reads `appendonly` and `save`, not `appendfsync`. |
 | RDB snapshots | No `save` line. Redis's default schedule applies when no `save` directive is given. | Implicit, as above. |
-| Valkey | Not supported. The image is fixed to `redis:8-alpine`. Clients would connect (same protocol). The restore's version check reads `redis_version` (`backup/restore.go:96`); Valkey reports a compatibility value there. | No way to choose it, and the version check is untested on Valkey. |
+| Valkey | Not supported (step 3 adds `broker.image`, §5 Q5 as amended). The image is fixed to `redis:8-alpine`. Clients would connect (same protocol). The restore's version check reads `redis_version` (`backup/restore.go:96`); Valkey reports a compatibility value there. | No way to choose it, and the version check is untested on Valkey. |
 | Data directory in backups | The data is the compose volume `redis-data` (`RedisVolume`, `setup/redis.go:128`). `agentbus backup` is **logical**: a `DUMP` of each project's keys (`bus/backupdump.go`, `backup/run.go:129`), classified by `bus/keykinds.go`. **Only keys without a TTL are dumped** (`keepDump`: `PTTL == -1`). A key that expires is listed as skipped (`Expiring`) and not archived. That covers the leases, intents and marks with a TTL, by design, so the logical backup is not a full copy of the broker. A restore refuses an older broker. | The data directory is not copied, and the directive asks for it (step 5). |
 
 ### Access
@@ -256,7 +256,24 @@ The logical restore stays the everyday one.
    `mergequeue:dropped`. Should the asks, the board or the merge queue's record be added? The
    inventory test then confirms it.
 5. **Valkey:** a `broker.image` setting (`redis:8-alpine` by default, `valkey/valkey:8`
-   accepted), with the restore's version check taught Valkey's version field? Recommended: yes,
-   with step 3.
+   accepted). The person answered yes, with step 3. **Amended at the build (master's decision,
+   cmd `1795225390975-0`):** the restore's check is not taught `valkey_version`.
+   - **Why:** a DUMP payload's compatibility is the RDB format, not the product's version number.
+     Valkey reports `redis_version` 7.2.4 for compatibility, so today's check already refuses a
+     Redis 8 archive on Valkey. Read `valkey_version` instead, and Valkey 8 would pass a Redis 8
+     archive whose keys it then refuses one by one (RDB 12 against 11).
+   - **Instead:** the manifest records the server's product (`server`: `redis` or `valkey`, from
+     INFO's `server_name` or `valkey_version`). A restore across products is refused with that
+     reason. An archive from before the field is a Redis broker's. Within a product, the version
+     check stays as it was.
+   - **The image:** `broker.image` is compose's `image: ${AGENT_BUS_BROKER_IMAGE:-redis:8-alpine}`.
+     Every compose call passes it from the setting (`brokerrt.ComposeEnv`: setup, the rotation's
+     recreate, uninstall, `scripts/bootstrap`). A recreate without it would bring a Valkey broker
+     back as Redis.
+   - **Left open, not verified at the build:**
+     - that the `valkey/valkey:8` image carries the `redis-server` and `redis-cli` names compose's
+       command and healthcheck call (Valkey installs them as compatibility links by default);
+     - the `redis-version` health check, which reads `redis_version` (7.2.4 on Valkey).
+
 6. **The rotation now:** run `./setup.sh rotate-redis-password` on this host, to end the
    repeated warning? It needs only the person.

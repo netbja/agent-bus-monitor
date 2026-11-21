@@ -15,3 +15,18 @@ func TestValidBranchName(t *testing.T) {
 		}
 	}
 }
+
+// broker.image accepts an image reference, and nothing compose or a shell
+// would read as more (broker-hardening step 3).
+func TestIsImageRef(t *testing.T) {
+	for _, ok := range []string{"redis:8-alpine", "valkey/valkey:8", "redis", "docker.io/library/redis:8.2.1", "registry.local:5000/team/valkey:8.0"} {
+		if !IsImageRef(ok) {
+			t.Errorf("%q refused", ok)
+		}
+	}
+	for _, bad := range []string{"", "Redis:8", "redis:8 alpine", "redis;rm -rf /", "${X}", "redis:8\n", "-redis", "redis:", "../redis"} {
+		if IsImageRef(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

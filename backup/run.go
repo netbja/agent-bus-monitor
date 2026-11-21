@@ -33,6 +33,7 @@ type Plan struct {
 	Now          time.Time
 	Version      string // agentbus's
 	RedisVersion string
+	Server       string // the broker's product (redis, valkey): the manifest's server
 	// Dump reads a project's keys at one instant (bus.DumpProject).
 	Dump    func(ctx context.Context, project string) (bus.ProjectDump, error)
 	Files   []Source
@@ -152,7 +153,7 @@ func Run(ctx context.Context, dir string, p Plan) (Result, error) {
 			return Result{}, err
 		}
 	}
-	if err := w.Close(Manifest{Version: p.Version, RedisVersion: p.RedisVersion, LeftOut: p.LeftOut, Notes: p.Notes}); err != nil {
+	if err := w.Close(Manifest{Version: p.Version, RedisVersion: p.RedisVersion, Server: p.Server, LeftOut: p.LeftOut, Notes: p.Notes}); err != nil {
 		return Result{}, err
 	}
 	if err := tmp.Sync(); err != nil {

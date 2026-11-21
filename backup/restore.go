@@ -34,7 +34,9 @@ type RestoreOptions struct {
 
 // Broker is what restore needs of the broker.
 type Broker interface {
-	Version(ctx context.Context) (string, error)
+	// Server is the broker's product (redis, valkey) and its INFO
+	// redis_version.
+	Server(ctx context.Context) (product, version string, err error)
 	Keys(ctx context.Context, project string) ([]string, error)
 	Restore(ctx context.Context, project string, keys []bus.DumpedKey, del []string) (int, error)
 }
@@ -89,9 +91,12 @@ func Restore(ctx context.Context, archive string, o RestoreOptions, d RestoreDep
 		scope = o.Projects
 	}
 	if !o.FilesOnly {
-		v, err := d.Broker.Version(ctx)
+		product, v, err := d.Broker.Server(ctx)
 		if err != nil {
 			return rep, fmt.Errorf("the broker: %w", err)
+		}
+		if from := m.ServerOf(); product != from { // broker-hardening step 3: RDB formats differ between the two
+			return rep, fmt.Errorf("the archive was written from a %s broker and this one runs %s: a DUMP payload is not portable between them (their RDB formats differ); restore it on a %s broker", from, product, from)
 		}
 		if older(v, m.RedisVersion) {
 			return rep, fmt.Errorf("the broker runs Redis %s, older than the archive's %s: a DUMP payload is refused by an older broker; upgrade the broker first", v, m.RedisVersion)

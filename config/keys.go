@@ -595,6 +595,23 @@ var Keys = []*Key{
 			}
 			return nil, "want docker or podman"
 		}},
+	// The broker's image (broker-hardening step 3, the person's Q5): what
+	// compose runs, redis:8-alpine by default, valkey/valkey:8 accepted. Every
+	// compose call passes it (brokerrt.ComposeEnv), since compose reads only
+	// its environment.
+	{Name: "broker.image", Env: "AGENT_BUS_BROKER_IMAGE", Kind: String, Default: "redis:8-alpine", ReadBy: "./setup.sh, agentbus up", MachineOnly: true,
+		env: func(raw string) (any, envResult) {
+			if IsImageRef(raw) {
+				return raw, envUse
+			}
+			return nil, envSkip
+		},
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && IsImageRef(s) {
+				return s, ""
+			}
+			return nil, "want an image reference, such as redis:8-alpine or valkey/valkey:8"
+		}},
 	// Backups (spec 2026-11-01-backup-design.md): where archives go (an
 	// absolute folder; "" = $XDG_DATA_HOME/agentbus/backups, BackupDir) and
 	// how many of this host's are kept (0 keeps every one).

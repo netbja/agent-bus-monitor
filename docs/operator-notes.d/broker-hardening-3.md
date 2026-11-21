@@ -15,3 +15,8 @@
     rootless podman, a reboot needs the person's own `agentbus up`.
   - **The guard:** `TestNoRuntimeLiteral` fails on a new `"docker"` literal in the Go code, or a
     script line calling docker (`busmon-demo.sh` aside).
+  - **Valkey (`broker.image`):** compose runs `${AGENT_BUS_BROKER_IMAGE:-redis:8-alpine}`, and
+    every compose call passes the setting (`brokerrt.ComposeEnv`). A backup's manifest records the
+    server (`redis` or `valkey`), and a restore across them is refused, since their RDB formats
+    differ. Not verified yet: the Valkey image's `redis-server` and `redis-cli` names, and the
+    `redis-version` check on Valkey.

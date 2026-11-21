@@ -16,13 +16,19 @@ import (
 
 // fakeBroker holds each project's keys as name -> payload.
 type fakeBroker struct {
+	product  string // "" reads as redis
 	version  string
 	keys     map[string]map[string]string
 	restored map[string][]string
 	failOn   string // a project whose Restore fails
 }
 
-func (f *fakeBroker) Version(context.Context) (string, error) { return f.version, nil }
+func (f *fakeBroker) Server(context.Context) (string, string, error) {
+	if f.product == "" {
+		return "redis", f.version, nil
+	}
+	return f.product, f.version, nil
+}
 func (f *fakeBroker) Keys(_ context.Context, p string) ([]string, error) {
 	var out []string
 	for k := range f.keys[p] {
@@ -67,7 +73,11 @@ type restoreWorld struct {
 	repo    string
 }
 
-func newRestoreWorld(t *testing.T) *restoreWorld {
+func newRestoreWorld(t *testing.T) *restoreWorld { t.Helper(); return newRestoreWorldOf(t, "") }
+
+// newRestoreWorldOf is newRestoreWorld with the archive written from a
+// server of that product ("" as an archive from before the field).
+func newRestoreWorldOf(t *testing.T, server string) *restoreWorld {
 	t.Helper()
 	src := t.TempDir()
 	repo := filepath.Join(t.TempDir(), "repo")
@@ -78,6 +88,7 @@ func newRestoreWorld(t *testing.T) *restoreWorld {
 		return p
 	}
 	p := plan(t, "demo", "quiet")
+	p.Server = server
 	p.Dump = fakeDump(map[string][]bus.DumpedKey{"demo": {
 		{Key: "demo:board", Type: "hash", Class: bus.KeyRecord, Dump: []byte("B")},
 		{Key: "demo:agents", Type: "hash", Class: bus.KeyRuntime, Dump: []byte("A")},
@@ -319,6 +330,35 @@ func TestDestinationRefusesAnUnsafeManifestPath(t *testing.T) {
 		}
 		if dest, _, _, why := destination("roles/demo/roles/coder.md", loc, tpl); why == "" {
 			t.Errorf("%s: a prompt restored to %s", m, dest)
+		}
+	}
+}
+
+// broker-hardening step 3 (master's decision on Q5): a DUMP payload is not
+// portable between Redis and Valkey (their RDB formats differ), so a restore
+// across products is refused with that reason, before anything is written;
+// an archive from before the field is a Redis broker's. Within a product the
+// version check stays.
+func TestRestoreRefusesAnotherProduct(t *testing.T) {
+	for _, c := range []struct {
+		archive, broker string
+		refused         bool
+	}{
+		{"", "redis", false},
+		{"", "valkey", true},
+		{"redis", "redis", false},
+		{"redis", "valkey", true},
+		{"valkey", "redis", true},
+		{"valkey", "valkey", false},
+	} {
+		w := newRestoreWorldOf(t, c.archive)
+		w.broker.product = c.broker
+		_, out, err := w.run(RestoreOptions{})
+		switch {
+		case c.refused && (err == nil || !strings.Contains(err.Error(), "not portable") || len(w.broker.restored) != 0):
+			t.Errorf("%s archive on %s: %v, restored %v\n%s", c.archive, c.broker, err, w.broker.restored, out)
+		case !c.refused && err != nil:
+			t.Errorf("%s archive on %s refused: %v\n%s", c.archive, c.broker, err, out)
 		}
 	}
 }

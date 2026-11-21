@@ -65,10 +65,14 @@ type Manifest struct {
 	Host         string    `json:"host"`
 	Version      string    `json:"version"`       // agentbus's
 	RedisVersion string    `json:"redis_version"` // the broker's INFO redis_version
-	Projects     []string  `json:"projects"`
-	Members      []Member  `json:"members"`
-	LeftOut      []LeftOut `json:"left_out,omitempty"`
-	Notes        []string  `json:"notes,omitempty"`
+	// Server is the broker's product, redis or valkey (broker-hardening
+	// step 3); absent in an archive from before it, which was a Redis
+	// broker's (ServerOf).
+	Server   string    `json:"server,omitempty"`
+	Projects []string  `json:"projects"`
+	Members  []Member  `json:"members"`
+	LeftOut  []LeftOut `json:"left_out,omitempty"`
+	Notes    []string  `json:"notes,omitempty"`
 }
 
 // Writer streams members into a .tar.zst: zstd at its default level, one
@@ -358,4 +362,14 @@ func Walk(r io.Reader, m Manifest, fn func(Member, io.Reader) error) error {
 			return err
 		}
 	}
+}
+
+// ServerOf is the product of the broker an archive was written from: its
+// manifest's, else redis (no Valkey broker wrote an archive before the
+// field existed).
+func (m Manifest) ServerOf() string {
+	if m.Server == "" {
+		return "redis"
+	}
+	return m.Server
 }

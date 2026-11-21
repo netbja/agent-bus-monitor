@@ -117,4 +117,12 @@ assert_eq "$code" "1" "an unreadable broker.runtime stops bootstrap"
 assert_eq "$(grep -c 'cannot read broker.runtime' <<< "$err")" "1" "it says why"
 assert_eq "$(cat "$stub/docker.calls" "$stub/podman.calls" | wc -l | tr -d ' ')" "0" "no runtime ran"
 
+# broker.image reaches compose's environment (broker-hardening step 3): a Valkey image set in the
+# setting starts a Valkey broker, never the default.
+printf '#!/usr/bin/env bash\necho "$AGENT_BUS_BROKER_IMAGE $*" >> "%s/podman.env"\n' "$stub" > "$stub/podman"
+chmod +x "$stub/podman"
+: > "$stub/podman.env"
+assert_exit 0 "recall passes broker.image to compose" -- bash -c "PATH='$stub:$PATH' AGENTBUS_PROJECTS_DIR='$proj' AGENT_BUS_BROKER_RUNTIME=podman AGENT_BUS_BROKER_IMAGE=valkey/valkey:8 '$B' recall demo >/dev/null"
+assert_eq "$(cat "$stub/podman.env")" "valkey/valkey:8 compose up -d" "compose ran with the configured image"
+
 finish

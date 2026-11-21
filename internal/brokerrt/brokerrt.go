@@ -39,3 +39,12 @@ func (r Runtime) Compose() string { return r.Bin() + " compose" }
 // Standalone is the standalone compose command the plugin's absence falls
 // back to: docker-compose or podman-compose.
 func (r Runtime) Standalone() string { return r.Bin() + "-compose" }
+
+// ComposeEnv is what every compose call adds to its environment: the
+// broker's image (broker.image), since compose reads only its environment
+// and the setting may live in config.toml. A compose call without it would
+// recreate the broker from the default image (a Valkey broker as Redis).
+func ComposeEnv(getenv func(string) string) []string {
+	k, _ := config.Lookup("broker.image")
+	return []string{k.Env + "=" + config.Machine(getenv).String("broker.image")}
+}

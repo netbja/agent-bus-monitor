@@ -149,3 +149,47 @@ func TestRotateUnderPodman(t *testing.T) {
 		}
 	}
 }
+
+// broker.image reaches compose on every call that may create the container
+// (broker-hardening step 3): the start and, above all, the rotation's
+// recreate, which would otherwise bring a Valkey broker back as Redis.
+func TestComposeCarriesTheImage(t *testing.T) {
+	ctx := context.Background()
+	image := func(c Cmd) string {
+		for _, e := range c.Env {
+			if v, ok := strings.CutPrefix(e, "AGENT_BUS_BROKER_IMAGE="); ok {
+				return v
+			}
+		}
+		return ""
+	}
+	in, _, _, f := redisWorld(t, false, true)
+	cfg := t.TempDir()
+	in.Getenv = func(k string) string {
+		return map[string]string{"AGENT_BUS_BROKER_IMAGE": "valkey/valkey:8", "XDG_CONFIG_HOME": cfg}[k]
+	}
+	f.cmds[inspectOwner] = fakeCmd{err: errors.New("1"), out: "No such object\n"}
+	f.cmds[inspectVolume] = fakeCmd{err: errors.New("1"), out: "no such volume\n"}
+	got := ""
+	f.cmds["docker compose up -d"] = fakeCmd{do: func(c Cmd) { got = image(c) }}
+	in.Redis(ctx, Docker{OK: true, Compose: "docker compose"})
+	if got != "valkey/valkey:8" {
+		t.Fatalf("start: image %q", got)
+	}
+	in2, _, f2, _, _ := rotateWorld(t, map[string]string{"AGENT_BUS_BROKER_IMAGE": "valkey/valkey:8"})
+	got = ""
+	f2.cmds["docker compose up -d --force-recreate redis"] = fakeCmd{do: func(c Cmd) { got = image(c) }}
+	in2.RotateRedisPassword(ctx, &Prompter{Yes: true}, (&fakeBroker{pw: bus.LegacyPassword}).dial)
+	if got != "valkey/valkey:8" {
+		t.Fatalf("the rotation's recreate: image %q", got)
+	}
+	in3, _, _, f3 := redisWorld(t, false, true)
+	in3.Getenv = func(k string) string { return map[string]string{"XDG_CONFIG_HOME": t.TempDir()}[k] }
+	f3.cmds[inspectOwner] = fakeCmd{err: errors.New("1"), out: "No such object\n"}
+	f3.cmds[inspectVolume] = fakeCmd{err: errors.New("1"), out: "no such volume\n"}
+	f3.cmds["docker compose up -d"] = fakeCmd{do: func(c Cmd) { got = image(c) }}
+	in3.Redis(ctx, Docker{OK: true, Compose: "docker compose"})
+	if got != "redis:8-alpine" {
+		t.Fatalf("default: image %q", got)
+	}
+}
