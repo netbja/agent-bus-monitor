@@ -65,15 +65,15 @@ func TestMergeQueueChoreConflictCheck(t *testing.T) {
 
 	// The forge flags it, git finds it clean: an item (forges' flags lag).
 	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
-		return []mergequeue.PR{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: mqHead, Base: "release", Conflicting: true}}, nil
+		return []mergequeue.PR{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: mqHead, Base: "main", Conflicting: true}}, nil
 	}
 	c.conflicts = judgeAs(&calls, map[string]mergequeue.Judged{"#309": {}}, "")
 	if rec = pass(c, b); len(rec.Items) != 1 || rec.Items[0].Number != 309 || len(rec.Conflicting) != 0 {
 		t.Fatalf("flagged, clean by git: %+v", rec)
 	}
-	// Flagged and confirmed: its own base kept, the files added.
+	// Flagged and confirmed: the files added.
 	c.conflicts = judgeAs(&calls, map[string]mergequeue.Judged{"#309": {Conflict: true, Files: []string{"f"}}}, "")
-	if rec = pass(c, b); len(rec.Conflicting) != 1 || rec.Conflicting[0].Base != "release" || !reflect.DeepEqual(rec.Conflicting[0].Files, []string{"f"}) {
+	if rec = pass(c, b); len(rec.Conflicting) != 1 || rec.Conflicting[0].Base != "main" || !reflect.DeepEqual(rec.Conflicting[0].Files, []string{"f"}) {
 		t.Fatalf("flagged, confirmed: %+v", rec)
 	}
 	// Flagged, not judged (absent): the forge's word, the reason recorded.
@@ -105,6 +105,48 @@ func TestMergeQueueChoreConflictCheck(t *testing.T) {
 	rec = pass(c, b)
 	if len(calls) != 1 || calls[0].check.Fetch || calls[0].cands[0].Key != "feat/request-priority" || len(rec.Conflicting) != 1 || rec.Conflicting[0].Number != 0 || rec.Conflicting[0].Branch != "feat/request-priority" {
 		t.Fatalf("local: %+v %+v", calls, rec)
+	}
+}
+
+// reviewer-codex: a PR onto another base than the queue's is never judged
+// against the queue's base tip: it stays as the forge said (an approved one
+// an item, a flagged one conflicting with its own base), the reason named.
+func TestMergeQueueChoreConflictOtherBase(t *testing.T) {
+	ctx := context.Background()
+	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
+	c.scratch = t.TempDir()
+	var calls []judgeCall
+	c.conflicts = judgeAs(&calls, map[string]mergequeue.Judged{"#309": {Conflict: true, Files: []string{"f"}}}, "")
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
+		return []mergequeue.PR{{Number: 309, Title: "request priority", Branch: "feat/request-priority", Head: mqHead, Base: "release"}}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := b.MergeQueue(ctx)
+	if len(calls) != 0 || len(rec.Items) != 1 || len(rec.Conflicting) != 0 || !strings.Contains(rec.ConflictCheck, "#309 onto release: not checked against main") {
+		t.Fatalf("an approved PR onto release: calls %+v, %+v", calls, rec)
+	}
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
+		return []mergequeue.PR{{Number: 309, Branch: "feat/request-priority", Head: mqHead, Base: "release", Conflicting: true}}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = b.MergeQueue(ctx)
+	if len(calls) != 0 || len(rec.Items) != 0 || len(rec.Conflicting) != 1 || rec.Conflicting[0].Base != "release" || rec.Conflicting[0].BaseTip != "" ||
+		!strings.Contains(rec.ConflictCheck, "onto release") {
+		t.Fatalf("a flagged PR onto release: calls %+v, %+v", calls, rec)
+	}
+	// Onto the queue's base, named so: judged as before.
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) {
+		return []mergequeue.PR{{Number: 309, Branch: "feat/request-priority", Head: mqHead, Base: "main"}}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = b.MergeQueue(ctx); len(calls) != 1 || len(rec.Conflicting) != 1 || rec.Conflicting[0].BaseTip != mqBaseTip {
+		t.Fatalf("onto main: %+v %+v", calls, rec)
 	}
 }
 

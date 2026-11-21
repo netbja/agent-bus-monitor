@@ -145,7 +145,12 @@ func CheckConflicts(ctx context.Context, c ConflictCheck, baseTip string, cands 
 			out[cd.Key] = Judged{Why: "the head is absent here, even after a fetch"}
 			continue
 		}
-		res, code, err := g(isoEnv, iso, "--git-dir="+gitDir, "--attr-source="+tree, "merge-tree", "--write-tree", "--name-only", "--no-messages", baseTip, cd.Head)
+		cctx, cancel := ctx, context.CancelFunc(func() {})
+		if c.Call > 0 {
+			cctx, cancel = context.WithTimeout(ctx, c.Call)
+		}
+		res, _, code, err := gitStreams(cctx, iso, isoEnv, "--git-dir="+gitDir, "--attr-source="+tree, "merge-tree", "--write-tree", "--name-only", "--no-messages", baseTip, cd.Head)
+		cancel()
 		switch {
 		case err != nil:
 			out[cd.Key] = Judged{Why: "git merge-tree did not finish: " + err.Error()}
@@ -197,25 +202,33 @@ func isolatedEnv(env []string, home string) []string {
 // (stdout, then stderr), its exit code, and an error only when it did not
 // run or did not finish.
 func gitCode(ctx context.Context, dir string, env []string, args ...string) ([]byte, int, error) {
+	out, errOut, code, err := gitStreams(ctx, dir, env, args...)
+	return append(out, errOut...), code, err
+}
+
+// gitStreams is gitCode with the two outputs apart: what merge-tree names
+// is on its standard output only, never a warning on its error output
+// (foureyes).
+func gitStreams(ctx context.Context, dir string, env []string, args ...string) (stdout, stderr []byte, code int, err error) {
 	path, err := lookIn(env, "git")
 	if err != nil {
-		return nil, -1, err
+		return nil, nil, -1, err
 	}
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir, cmd.Env, cmd.WaitDelay = dir, env, time.Second
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
 	var ee *exec.ExitError
 	switch {
 	case ctx.Err() != nil:
-		return nil, -1, errors.New("git timed out")
+		return nil, nil, -1, errors.New("git timed out")
 	case errors.As(err, &ee):
-		return out.Bytes(), ee.ExitCode(), nil
+		return out.Bytes(), errb.Bytes(), ee.ExitCode(), nil
 	case err != nil:
-		return nil, -1, err
+		return nil, nil, -1, err
 	}
-	return out.Bytes(), 0, nil
+	return out.Bytes(), errb.Bytes(), 0, nil
 }
 
 // ConflictOwner is who a conflicting branch goes back to (§3): the one owner

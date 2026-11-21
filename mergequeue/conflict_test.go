@@ -118,7 +118,7 @@ func TestMergeTreeProbe(t *testing.T) {
 		}
 	}
 	fake := t.TempDir()
-	script := "#!/bin/sh\ncase \"$*\" in\n*merge-tree*) echo \"usage: git merge-tree <base-tree> <branch1> <branch2>\" >&2; exit 129;;\n*hash-object*) echo 4b825dc642cb6eb9a060e54bf8d69288fbee4904;;\n*init*) mkdir -p \"$4/objects/info\";;\nesac\nexit 0\n"
+	script := "#!/bin/sh\ncase \"$*\" in\n*merge-tree*) echo \"usage: git merge-tree <base-tree> <branch1> <branch2>\" >&2; exit 129;;\n*hash-object*) echo 4b825dc642cb6eb9a060e54bf8d69288fbee4904;;\n*init*) /bin/mkdir -p \"$5/objects/info\";;\nesac\nexit 0\n"
 	os.WriteFile(filepath.Join(fake, "git"), []byte(script), 0o755)
 	env := []string{"PATH=" + fake}
 	got, why := CheckConflicts(context.Background(), ConflictCheck{Dir: t.TempDir(), Scratch: t.TempDir(), Env: env}, strings.Repeat("a", 40),
@@ -240,5 +240,24 @@ func TestCheckConflictsOutOfTime(t *testing.T) {
 		if j.Why != notReached || j.Conflict {
 			t.Errorf("%s: %+v", k, j)
 		}
+	}
+}
+
+// foureyes: only merge-tree's standard output names files; a warning git
+// writes on its error output is never one.
+func TestCheckConflictsReadsStdoutOnly(t *testing.T) {
+	fake := t.TempDir()
+	script := "#!/bin/sh\ncase \"$*\" in\n" +
+		"*merge-tree\\ -h*) echo \"usage: git merge-tree [--write-tree] <b1> <b2>\"; exit 129;;\n" +
+		"*merge-tree*) echo 4b825dc642cb6eb9a060e54bf8d69288fbee4904; echo f; echo \"warning: in the working copy\" >&2; exit 1;;\n" +
+		"*hash-object*) echo 4b825dc642cb6eb9a060e54bf8d69288fbee4904;;\n" +
+		"*init*) /bin/mkdir -p \"$5/objects/info\";;\n" +
+		"*rev-parse*) echo \"$PWD/.git\";;\n" +
+		"esac\nexit 0\n"
+	os.WriteFile(filepath.Join(fake, "git"), []byte(script), 0o755)
+	got, why := CheckConflicts(context.Background(), ConflictCheck{Dir: t.TempDir(), Scratch: t.TempDir(), Env: []string{"PATH=" + fake}}, strings.Repeat("a", 40),
+		[]Candidate{{Key: "x", Branch: "x", Head: strings.Repeat("b", 40)}})
+	if j := got["x"]; why != "" || !j.Conflict || !slices.Equal(j.Files, []string{"f"}) {
+		t.Fatalf("%+v %q", j, why)
 	}
 }

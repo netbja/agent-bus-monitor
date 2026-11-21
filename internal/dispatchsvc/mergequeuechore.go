@@ -389,11 +389,31 @@ func (c *mergeQueueChore) checkConflicts(ctx context.Context, env []string, res 
 		flagged bool
 	}
 	var all []cand
-	for _, it := range res.Items {
-		all = append(all, cand{it, false})
+	var notes []string
+	items, conflicting := []bus.MergeItem{}, []bus.MergeConflict{}
+	keep := func(it bus.MergeItem, flagged bool) { // as the forge said
+		if flagged {
+			conflicting = append(conflicting, bus.MergeConflict{Number: it.Number, Base: res.Bases[it.Number], Branch: it.Branch, Head: it.Head})
+		} else {
+			items = append(items, it)
+		}
 	}
-	for _, it := range res.Flagged {
-		all = append(all, cand{it, true})
+	for _, list := range []struct {
+		its     []bus.MergeItem
+		flagged bool
+	}{{res.Items, false}, {res.Flagged, true}} {
+		for _, it := range list.its {
+			if b := res.Bases[it.Number]; b != "" && b != base { // onto another base: never judged against this one (reviewer-codex)
+				notes = append(notes, fmt.Sprintf("#%d onto %s: not checked against %s", it.Number, b, base))
+				keep(it, list.flagged)
+				continue
+			}
+			all = append(all, cand{it, list.flagged})
+		}
+	}
+	if len(all) == 0 {
+		res.Items, res.Conflicting, res.Flagged = items, conflicting, nil
+		return res, strings.Join(capNotes(notes), "; ")
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].it.ApprovedAt < all[j].it.ApprovedAt })
 	key := func(it bus.MergeItem) string {
@@ -408,29 +428,15 @@ func (c *mergeQueueChore) checkConflicts(ctx context.Context, env []string, res 
 	}
 	judged, why := c.conflicts(ctx, mergequeue.ConflictCheck{Dir: c.dir, Scratch: c.scratch, Env: env, Fetch: fetch, Call: mergeQueueCall}, baseTip, cands)
 	if why != "" {
-		return res, why
+		return res, strings.Join(capNotes(append([]string{why}, notes...)), "; ")
 	}
-	forgeBase := map[int]string{}
-	for _, cf := range res.Conflicting {
-		forgeBase[cf.Number] = cf.Base
-	}
-	var notes []string
-	items, conflicting := []bus.MergeItem{}, []bus.MergeConflict{}
 	for _, cd := range all {
 		j, k := judged[key(cd.it)], key(cd.it)
-		cbase := base
-		if b := forgeBase[cd.it.Number]; cd.flagged && b != "" {
-			cbase = b
-		}
-		cf := bus.MergeConflict{Number: cd.it.Number, Base: cbase, Branch: cd.it.Branch, Head: cd.it.Head}
+		cf := bus.MergeConflict{Number: cd.it.Number, Base: base, Branch: cd.it.Branch, Head: cd.it.Head}
 		switch {
 		case j.Why != "":
 			notes = append(notes, k+": "+j.Why)
-			if cd.flagged {
-				conflicting = append(conflicting, cf)
-			} else {
-				items = append(items, cd.it)
-			}
+			keep(cd.it, cd.flagged)
 		case j.Conflict:
 			cf.BaseTip, cf.Files = baseTip, j.Files
 			conflicting = append(conflicting, cf)
@@ -438,11 +444,17 @@ func (c *mergeQueueChore) checkConflicts(ctx context.Context, env []string, res 
 			items = append(items, cd.it)
 		}
 	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].ApprovedAt < items[j].ApprovedAt })
 	res.Items, res.Conflicting, res.Flagged = items, conflicting, nil
+	return res, strings.Join(capNotes(notes), "; ")
+}
+
+// capNotes keeps the first conflictNotes, then says how many more.
+func capNotes(notes []string) []string {
 	if len(notes) > conflictNotes {
-		notes = append(notes[:conflictNotes], fmt.Sprintf("%d more", len(notes)-conflictNotes))
+		return append(notes[:conflictNotes:conflictNotes], fmt.Sprintf("%d more", len(notes)-conflictNotes))
 	}
-	return res, strings.Join(notes, "; ")
+	return notes
 }
 
 // conflictNotes is how many unjudged candidates the record names.

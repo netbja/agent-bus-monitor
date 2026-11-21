@@ -48,6 +48,9 @@ type Result struct {
 	// check (conflict-owner §2) makes one an item again when git finds it
 	// clean (a forge's flag lags).
 	Flagged []bus.MergeItem
+	// Bases are the PRs' own bases, by number: the conflict check judges only
+	// those onto the queue's base (reviewer-codex).
+	Bases map[int]string
 }
 
 // approved is a subject's deciding approve.
@@ -111,6 +114,12 @@ func Derive(in Input) Result {
 	for _, pr := range in.PRs {
 		if pr.Draft {
 			continue
+		}
+		if pr.Base != "" {
+			if res.Bases == nil {
+				res.Bases = map[int]string{}
+			}
+			res.Bases[pr.Number] = pr.Base
 		}
 		a := cand[pr.Head]
 		if pr.Head == "" || a == nil {
