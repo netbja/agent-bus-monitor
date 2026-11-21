@@ -1,6 +1,6 @@
 # Quiet update, step 2: the automatic mode, and pruning old trees
 
-Status: r2, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
+Status: r3, spec only. Base: origin/dev `25a34672`. Author: architect, from master's directive of
 2026-11-21 (cmd `1795299412029-0`, idea i1). It builds on step 1 as built: `agentbus update`
 (spec [2026-11-20](2026-11-20-agentbus-update-design.md), package `update/`,
 `cmd/agentbus/updatecmd.go`). It replaces the automatic parts of the r13 quiet-update spec
@@ -120,9 +120,16 @@ It is `update.Run` with these differences, in order:
      2026-11-21: `git ls-remote origin` over SSH works with `SSH_AUTH_SOCK` unset.)
 3. **Skip what it must not install:** a tag with a `.migrate` file, and a tag whose last
    automatic install has `ok=false` in the history. Each is reported once.
-4. **The quiet test.** The projects are those whose `dispatch` or `missions` run on this host
-   (`update.Deps.Running`, as step 1 reads them). A project is **in work** when, read on its broker
-   with Redis `TIME`:
+4. **The quiet test.** The projects judged are every project with any of these on this host:
+   - a running `dispatch` or `missions` (`update.Deps.Running`, as step 1 reads them);
+   - an active holder of any build: `HolderManager.HolderUnits("")` with `HolderActive`
+     (`service/holder.go`), or under `services.manager = none` a holder supervisor whose pidfile
+     names a live process. A project whose dispatch and missions are stopped or failed can still
+     have agents at work in its holder (`down` itself says agents may still run when a holder
+     cannot be stopped), so its agents are judged too (reviewer-codex on r2).
+   **It fails closed:** when the services, a holder's state or a project's broker cannot be read,
+   the pass is deferred, never run.
+   A project is **in work** when, read on its broker with Redis `TIME`:
    - one of its agents in `{p}:agents` has state `working`; or
    - one of its agents' status changed less than 10 minutes ago; or
    - **its conductor is at work:** a mission of any change is `checking` (the conductor runs the
@@ -131,7 +138,9 @@ It is `update.Run` with these differences, in order:
      change (`mission/store.go:100`, `:127`). The `{p}:agents` hash does not hold the conductor,
      so without this a mission at work at night would have its `missions` service restarted under
      it (foureyes on r1).
-   A suspended project has no running services, so it is not among them.
+   A suspended project has no running services and no active holder, so it is not among them.
+   **A stale `working`** (an agent that died without setting its state back) defers every night;
+   the `max_wait` notice of §4.5 names that agent, and the person or master clears it.
    If any project is in work, the pass is **deferred**: it changes nothing, and the next tick in
    the same window tries again.
 5. **Install:** step 1's stage, snapshot, swap, then restart **every** project's stale `dispatch`
@@ -216,6 +225,11 @@ whose holders are all gone.
   (`rolecfg/configdeny_test.go`).
 - **`update --auto`** gets step 1's agent refusal (`agentcaller.Refuse`, step 1 §5). The updater
   service is started by the service manager, so no agent is among its ancestors.
+- **Under `broker.acl`,** the pass connects as the services do (`bus.ACLEntryService`, user
+  `dispatcher`, `bus/acl.go:204`): the service manager started it, it has no identity and no agent
+  among its ancestors. That user already reads `{p}:agents` and the conductor's records and writes
+  reports, which is all a pass does on the broker. A pass run by hand from the person's shell
+  connects as the CLI does (`busmon`), and reads the same.
 - **`update --auto --check`** reads only, and is not refused, like `--check`.
 
 ## 7. Settings (in `config/keys.go`)
@@ -241,7 +255,9 @@ and the 3 snapshots as constants.
   setting changed between ticks applies at the next.
 - **The quiet test:** an agent `working` defers; a status changed 9 minutes ago defers, 11 minutes
   ago does not; a project with no running service is not judged; a mission `checking` or `integrating` defers,
-  one `in_review` or `integrated` does not.
+  one `in_review` or `integrated` does not; an active holder
+  with `dispatch` and `missions` absent and one agent `working` defers; an unreadable holder state
+  defers.
 - **The skips:** a `.migrate` tag is never installed and is reported once; a tag with a failed
   automatic install is not retried; a manual `update` of it still runs.
 - **Never a branch:** after a pass, the clone's branches, `HEAD` and status are unchanged.
@@ -293,3 +309,7 @@ and the 3 snapshots as constants.
 
 - **r2** (foureyes on r1): the quiet test also reads the conductor's missions: a mission
   `checking` or `integrating` keeps its project in work (§4.3 step 4, §8).
+- **r3** (reviewer-codex on r1): the projects judged include every project with an active holder,
+  not only those with running `dispatch` or `missions`; an unreadable state defers the pass
+  (§4.3 step 4, §8). foureyes' notes on r1: the ACL user of a pass (§6), and a stale `working`
+  caught by the `max_wait` notice (§4.3).
