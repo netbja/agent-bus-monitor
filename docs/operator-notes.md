@@ -1694,12 +1694,95 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   text (`agentbus background`) is now a judgement source, always running while it lasts, read by the dispatcher and by
   `holder drain` (`--ignore-background` still overrides): it holds the pop-retire and the drain, and the auto-clear
   until the agent's context episode has escalated (the `context-escalate` mark, for its current session), when observed work alone still holds it.
+- **A client's own MCP servers are not background work (background-work census, 2026-11-21).**
+  - **The rule:** a client profile may declare `direct_helpers = true` under `[background]`. The
+    client's direct children that are not a shell (sh, bash, dash, zsh, fish, ksh) are then its
+    helpers: its MCP stdio servers and its daemons. They never count, whatever their CPU, and
+    neither does anything under them (the `node` an `npx`-started server runs, codegraph's watcher):
+    the census names each process's branch, the client's direct child whose subtree holds it.
+  - **What still counts:** work the agent starts runs under the client's shell, so a dev server it
+    left running still blocks `auto-clear` and `pop-retire`, and still gets the long-skip notice.
+  - **Who declares it:** Claude Code does, as checked on this host. Every agent's
+    `codebase-memory-mcp` is a direct child of `claude`, and each tool command is
+    `/bin/bash -c source …shell-snapshots… && …`. This ends the first real false positive: docs's
+    `pop-retire` skipped for 2 h on `process 'codebase-memory'`.
+  - **Who does not, and why:**
+    - **Codex** has the same shape (its MCP servers and `codex-code-mode` are direct children, its
+      commands are `/bin/bash -c …`). But a one-command `bash -c` or `bash -lc` execs the program in
+      place (checked: `bash -c 'sleep 3'` leaves only `sleep`, a direct child), so a dev server would
+      read as a helper. Codex therefore lists its helpers by name instead,
+      `helper_branches = ['^codex-code-mode$', '^codebase-memory$']`: a listed direct child and its
+      subtree are helpers, any other direct child still counts. **codegraph is still counted:** Node 24
+      names every node process `MainThread`, so its MCP server cannot be told from a dev server by
+      name. That needs the command line, which the census does not read yet.
+    - **Grok, Kimi and agy** are not checked.
+  - **What a helper starts is the helper's:** an MCP server that shells out to run real work (a
+    build, a test runner) never counts. None does on this host today.
 - **busmon's sparklines follow `display.graphs` (braille-sparklines, 2026-11-18).** The Tokens page's
   7-day column is drawn in `block` (eight blocks), `braille` (two days per cell, 4 levels, filled; padded
   to 7 cells) or `ascii` (`_.-:=+*#`); `auto`, the default, is `ascii` when the locale (`LC_ALL`, then
   `LC_CTYPE`, then `LANG`) does not name UTF-8, else `block`, and never braille. Env
   `AGENT_BUS_BUSMON_GRAPHS`; set on the `C` page, applied from the next frame. Any non-zero day lights at
   least the lowest step (the bottom dot in braille). Gauges and bars keep their blocks in every style.
+- **The broker user per process (broker-hardening step 4b, part 1; off by default, nothing changes yet).**
+  - **The setting:** `broker.acl` (`off` or `on`).
+  - **With it on,** each process logs in as its role's user, with the password of
+    `~/.config/agentbus/redis-<user>.env`:
+    - the services (`service run`, the holder service) as `dispatcher` when no registered agent is
+      among their ancestors and they carry no identity (a service manager's launch); otherwise the CLI's rule;
+    - `setup`, `backup` and `restore` as `admin`, and only from the person's shell;
+    - busmon and every other command by `AGENT_BUS_AGENT` and the process tree: under a
+      registered agent other than master, `agent` whatever it claims; master's as `master`; the
+      person's as `busmon`. A process whose ancestry cannot be read gets `agent`.
+  - **A missing password file is an error,** never the default user.
+  - **Not yet:** `./setup.sh acl on|off` creates the users and the files (part 2), and the rotation
+    per user (part 3). Until then, leave `broker.acl` off.
+- **The broker's durability is stated, and its access has a stated limit (broker-hardening step 1).**
+  - **Durability:** `docker-compose.yml` gives the broker its persistence in the config on stdin,
+    not on the argv and not left to Redis's defaults: `appendonly yes`, `appendfsync everysec` (a
+    crash loses at most about a second of writes) and `save 3600 1 300 100 60 10000`.
+    `bus.Persistence` reads `appendfsync` too. The `broker-persistence` check now also warns when
+    AOF is on with `appendfsync no`.
+  - **The limit:** agents run as the person's OS user, so they can read every credential the
+    person's files hold, ACL passwords included. ACL users protect against mistakes (a wrong
+    command, a wrong key), not against a hostile agent. A separate OS user for agents is out of
+    scope for now.
+  - **The password:** the broker's historical default password ends only when the person runs
+    `./setup.sh rotate-redis-password`; no agent runs it.
+- **The broker's runtime is a setting, `broker.runtime` (docker or podman; broker-hardening step 3).**
+  - **What follows it:** every caller of the broker's container names its binary through
+    `internal/brokerrt`, with `<runtime> compose` as the compose command:
+    - the installer: preflight, the owner and volume checks, status, uninstall and the rotation;
+    - the `redis-password` and disk health checks;
+    - busmon's Redis page and Services card;
+    - `scripts/bootstrap`'s `ensure_broker`, which reads it through the new `agentbus config get
+      broker.runtime`, and stops rather than guess when it cannot.
+  - **Under podman:**
+    - `redis-password` filters the broker's container by name, because podman has no `publish=`
+      filter;
+    - the disk check measures podman's storage root, only when `podman info` says the service is
+      not remote (a podman machine is not measured).
+  - **Without systemd:** nothing new is needed, since `agentbus up` starts the broker. Under
+    rootless podman, a reboot needs the person's own `agentbus up`.
+  - **The guard:** `TestNoRuntimeLiteral` fails on a new `"docker"` literal in the Go code, or a
+    script line calling docker (`busmon-demo.sh` aside).
+  - **Valkey (`broker.image`):** compose runs `${AGENT_BUS_BROKER_IMAGE:-redis:8-alpine}`, and
+    every compose call passes the setting (`brokerrt.ComposeEnv`). A backup's manifest records the
+    server (`redis` or `valkey`), and a restore across them is refused, since their RDB formats
+    differ. Not verified yet: the Valkey image's `redis-server` and `redis-cli` names, and the
+    `redis-version` check on Valkey.
+- **The ACL writer inventory (broker hardening step 4, first PR; no ACL user is enabled yet).**
+  - **The check:** `bus.ACLRules` holds the proposed users. `TestACLInventory` runs every command
+    shape the suite's production callers sent (`bus/testdata/acl-inventory.json`) through
+    `ACL DRYRUN` on the disposable broker, as each user that sends it.
+  - **Rebuild it** after adding a writer: record the suite, then fold the recording.
+    - Record:
+      `GOFLAGS=-tags=aclrecord AGENTBUS_ACL_RECORD=/tmp/acl.jsonl AGENTBUS_TEST_REDIS_URL=… go test ./... -count=1`,
+      with `AGENT_BUS_AGENT` unset.
+    - Fold: `go test ./bus -run TestACLInventory -acl-update=/tmp/acl.jsonl`.
+    - Without the tag the recorder is not built.
+  - **Not covered:** a writer no test reaches, and a key a script builds itself. The check logs
+    both.
 - **Untracked files no longer make a build "+dirty" (build-id-untracked).** Go's `vcs.modified`
   counts untracked files, so notes left in the repository root gave every setup build a "+dirty"
   build id, and that longer key put the holder's socket path over its limit (2026-11-16). setup now
@@ -1714,6 +1797,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   6 non-blank lines, read live from the holder while the page is open; a line that looks like a
   credential is hidden. The row no longer carries the `prompt` flag or the holder-event
   `blocked` flag: the state column says it (agent-screen-blocked §3, step 3a).
+- **`busmon --delete` keeps the Projects page's rules** (busmon-cli-flags, item 2): a project that is not asleep is refused with the page's reason (Z, x, or `agentbus down` first), `--yes` included, and an unknown counts as live; the hosts where its units remain are named before the question and after the delete; a backup (`agentbus backup --project <p>`, given `--host` as `REDIS_HOST` and refused if its environment would reach another broker than the delete's) is taken just before the delete, and a failed backup deletes nothing. The archive it makes is never removed by `projects.delete_backups`. An agent's process tree is still refused (`refuseDestructive`).
 - **A report names its addressees, and a reply goes to its sender (busmon-reply-target).**
   `agentbus report --to <name>` now records the addressees on the report entry itself (field `to`,
   additive; older reports have none), so busmon's page shows the addressee (the person, or an agent), not "broadcast". In
@@ -1831,6 +1915,16 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   imports the CLI or the screen, calls the mission runner, imports `os/exec` in a new file, runs a program not on its
   list or any shell, or imports a module package not on its list; a file path in an older note under `cmd/agentbus` for
   one of these files now reads `internal/dispatchsvc`.
+- **busmon says why something is unknown (project-switch-ux item 2).** The dispatcher computes the
+  health checks, the quota readings and the merge queue.
+  - **When it does not run,** busmon names the reason instead of a bare `?` or "not computed yet":
+    - "project stopped" when its services were stopped;
+    - "dispatch down", "dispatch failed" or "dispatch gave-up" otherwise.
+  - **Where it shows:**
+    - For you's merge line reads "merge queue unknown: <why>";
+    - the header's health summary adds it after `?N` ("stopped" for short in the compact header);
+    - the quota gauges get one "(<why>)" after them when a provider has no reading at all.
+  - **When dispatch runs, or its state is unknown,** the old wording stays.
 - **A role may be popped on another profile by name: alt_profiles (fable-profile-architect).** A
   role's `alt_profiles` in `roles.toml` list profiles `agentbus pop <role> --profile <p>` and a
   template tab's `--profile` may name, on the same provider too; unlike `fallback_profiles` they
@@ -2094,14 +2188,20 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   the person's recorded name (`identity.as`) is refused for both, before any broker call (an
   agent of that name, the person's own shell and `ask --withdraw` still pass). `agentbus ask
   <person>` run in master's terminal once wrote the person into `{p}:agents` with master's terminal.
-  busmon then listed them under Agents, and the dispatcher woke and escalated them. An entry that
-  borrows another agent's terminal is no agent: the dispatcher skips a human identity with such an
-  entry (a human sender still in the capped cmd stream, or the person's `identity.as`, which it
-  reads at start), and busmon drops the person's. A leftover entry is removed with `agentbus agents forget
-  <person> --force` (`--force`: its status is recent), or busmon's d.
+  busmon then listed them under Agents, and the dispatcher woke and escalated them. An entry under
+  the person's `identity.as` is no agent, whatever terminal it names (person-never-agent): one
+  written before that guard from an old holder's terminal no agent shares now once made the
+  dispatcher escalate "pane gone" for every report to the person. The dispatcher skips it (it
+  reads `identity.as` at start), busmon drops it, and `agentbus agents` leaves it out of the list
+  (`agentbus agents <person>` still shows it). A human sender still in the capped cmd stream is
+  skipped when its entry borrows another agent's terminal. A leftover entry is removed with
+  `agentbus agents forget <person>` (`--force` if its status is recent), or busmon's d.
+- **F6 sets an idea's state with one key** (ideas-triage part 2, the person's feedback): on the Ideas list and an idea's page, `y` decided, `l` later, `d` doing, `x` dropped, at once and as the person (the same refusals as the `s` picker, which stays), and `u` undoes this busmon's last change once (a compare-and-set from the state it set). There, `y` is no longer copy: `Y` copies the whole idea (title and text); every other page keeps `y` = copy, and `l` stays the Services page's log. Copy and the log are now page-offered keys (`pageOffers`), so no binding shadows another.
+- **Ideas have a fifth state, `later`** (ideas-triage): kept for another time, neither decided nor dropped, between doing and dropped in the order of life (`agentbus idea set <id> later`, F6's picker and tab filter). Each F6 row now says its state in the state's colour, and an idea's text wraps to the page instead of being cut. An older busmon or agentbus lists a `later` idea under no section and refuses `later` as a state: update both on every host that triages.
 - **A person named `anonymous` is nobody too (identity-anonymous-human, 2026-11-17).** With `AGENT_BUS_AGENT` unset,
   `AGENT_BUS_HUMAN=anonymous` or `[identity] as = "anonymous"` in config.toml no longer passes as the person's
   identity: a write from the shell is refused with the fix, as with no identity at all (reviewer-codex on #571).
+- **busmon's settings page chooses `person.language` from a list** (language-picker): Enter on "Your language" opens the ISO 639-1 table under the row, each entry its code, its own name and its English name (`fr  Français (French)`), the current value under the cursor; typing filters with the command palette's ranking (`fr`, `fran` and `french` all find it), and only a list entry can be written. `agentbus config set` and a hand edit of config.toml are still judged by the key's own rule (refused, or `invalid` and `en`). Any setting given `Options` in `config/keys.go` gets the same list.
 - **busmon's light theme paints its own background** (white) on every cell, so `display.theme = light` reads on a dark terminal too; dark keeps the terminal's background, and 16-colour or `NO_COLOR` never paint. Each role keeps a minimum contrast in both themes (4.5:1 for text and muted, 3:1 for the rest but frame lines; `theme_contrast_test.go`): Dim, the dark inactive tab and xiaomi's light colour were raised to meet it.
 - **Login expiry, part 1: the reader and the identity (login-updates r9 §3.1-3.3, `loginexpiry/`).**
   No behaviour changes yet (part 2 runs the check). `loginexpiry.ReadFile` reads one field,
@@ -2234,6 +2334,29 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   before the person can merge it. The queue's base is the project's, as deliver's (the template's
   `[delivery] base`, else `delivery.base`). The reminder popup (`waiting.popup_after`, Shift+C)
   lists merges with the other decisions; 0 turns it off.
+- **Dropping a head from the merge queue is master's (broker-hardening step 4, ACL answer e).**
+  - `agentbus merge-queue drop` and `undrop` refuse any agent but master, even docs, which
+    delivers. docs asks master instead.
+  - Master and the person then pass deliver's own check, as before.
+  - **Where the barrier is:** the broker's ACL. `bus.ACLRules` gives `{p}:mergequeue:dropped` write to
+    master and to the dispatcher (which prunes old drops), never to `agent`. It is enforced only once
+    `broker.acl=on` (step 4b, not built yet); until then the CLI's refusal is a courtesy message.
+- **The conductor's operations are master's (broker-hardening step 4, ACL answer d).** `agentbus mission
+  load`, `retry`, `skip`, `reassign` and `abort` refuse another agent's environment. Master and the person pass;
+  `mission status` and `show` stay open to everyone.
+  - **Where the barrier is:** the broker's ACL. `bus.ACLRules` gives `{p}:missionops` write to
+    master and the dispatcher, never to `agent`, and that is enforced only once `broker.acl=on`
+    (step 4b, not built yet). Until then the CLI's refusal is a courtesy message.
+- **busmon's header counts what waits in the other projects (project-switch-ux item 3).**
+  - **The counter:** "other: N for you · M merge (O)", summed over this broker's other projects.
+    N is the for-you rows other than merges, M the merges waiting. It shows only when something
+    waits.
+  - **How it reads them:** every 2 minutes, 4 at a time, read-only, and only projects whose dispatch
+    holds its lease. A stopped project is read on M and R as before.
+  - **What counts:** a read that fails, or is older than the period plus its read time, drops out
+    of the sum; it never counts as 0.
+  - **`O`** opens the project with the most for-you rows as the header counts them (merges apart, then merges), by the same checked switch, so `B` comes
+    back.
 - **`person.language` (env `AGENT_BUS_PERSON_LANGUAGE`, default `en`) is read by master's role
   skill only, through `agentbus config`.** Master writes to the person in it (reports to the
   person, ask question text, its pane) and to every agent in English; ask choice labels, peers
@@ -2241,6 +2364,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   A value that is not an ISO 639-1 code shows as `invalid` in `agentbus config`, warned
   `master writes English`, and resolves to `en`. A change reaches
   master at its next boot.
+- **`typed=yes` marks what the person typed** (person-memory step 1, spec `2026-11-21-person-memory-design` §4.3.1): busmon's directives and broadcasts (`Bus.TypedCmd`, `TypedNotify`) and an ask's answer, which also carries `said`, the chosen label or the free text alone. `human=yes` alone means "written in the person's name" (resume-all's summary, busmon's close, the suspend's resume directive, the idea move line, a person's gate close, `PersonNotice`) and is never a source for the person's memory. The subscribe JSON says `"typed": true`, additively within v1. Entries written before this carry `human=yes` only.
 - **A plan grouped by chantier (plan-chantier).** `docs/plans/<name>.json` may list `groups` once (`{id, title}`, at
   most 12, the id a `bus.ValidName`, the title one line of 1 to 40 characters) and give a task `group`: each named
   group is listed, and a listed group with no task is refused (a typo would hide it). busmon's Plan board then
@@ -2256,6 +2380,54 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   change in its old process, even when the binary was replaced in place): the service parses the plan too
   (`plan.Load` in the stall checks, review-queue, the notify facts), and a service still on the old binary fails
   those reads (team-stall, review-queue, plan-drift unknown).
+- **busmon's Plan view, after the person's two reviews (views-redesign §4.1, §4.2).**
+  - **The drawer:** `p` and `P` open it under For you, which takes the whole width with only its
+    own rows (`shellDrawer`).
+  - **The board:**
+    - one header line (the plan, a bar, done/total, what is left and what is for the person), then a
+      rule (`planHeader`);
+    - only the groups with open tasks are expanded (`▼`), and every finished group folds into one
+      line, `▶ N groups done · M tasks`, an item Enter or `d` opens;
+    - no blank lines;
+    - the rows are aligned (glyph, title, owner, state word, age since the task's newest fact).
+  - **Colours:** bars and state words take the state's colour (`planStateWord`, `planGroupState`):
+    orange waits for the person, blue in progress or in review, green approved, grey done, red
+    blocked. `‖` marks a task waiting on another.
+  - **The strip:** the selected task's detail is a strip under a rule at the bottom (`planStrip`).
+    It shows at every tier but the narrow one: in the tab through `listState.SetBottom`, and in the
+    drawer through `pageRows`.
+  - **Sizing:** each frame shrinks to its content.
+    - The tab's free height goes to Activity under it, shown but not focusable (`fitPlanTab`, the
+      layout's `Below`).
+    - The drawer's free height goes to the active tab under it (`fitDrawer`, the layout's
+      `Drawer`), but not when that tab is the Plan.
+  - **Lists:** a `ListItem` with `Wide` is drawn from the gutter. The tab removes a task row's mark
+    with `dropCells` (two cells), because `FitLine` can merge the mark with a blank glyph.
+- **The plan's writes are master's (broker-hardening step 4, ACL answer b).**
+  - **Refused to other agents:** `agentbus plan load`, `link`, `done`, `note`, `ignore` and `clear` refuse
+    another agent's environment (`AGENT_BUS_AGENT` other than master).
+  - **Still open:** master and the person; `plan show` to everyone. `plan priority` keeps its
+    person-only rule.
+  - **docs' delivery:** when docs (or any deliverer but master) delivers, its plan link becomes a
+    directive to master carrying the command to run (`agentbus plan link <task> --pr <n>`).
+  - **Where the barrier is:** the broker's ACL. `bus.ACLRules` gives the `agent` user no write on
+    `{p}:plan`, `{p}:plan:facts` or `{p}:plan:ignore`, and that is enforced only once
+    `broker.acl=on` (step 4b, not built yet). Until then the CLI's refusal is a courtesy message: an
+    agent calling the bus functions directly is not stopped.
+- **busmon, after a project switch (M, o; project-switch-ux, PR 1).**
+  - **Back:** `B` goes back to the project the switch left. The switch passes `--from=<p>`, so `B`
+    toggles between the two.
+  - **Stopped project:** when the project you switched to has no running dispatch, a banner under the
+    header says "stopped project · read-only", with `S`, `M` and `B`.
+  - **`S` starts its services:** it runs `agentbus service start` (dispatch, then missions), after a
+    y. The agents stay down. It is the person's act, refused from an agent's environment, as `X`
+    is.
+  - **The stopped project is read-only:** while the banner shows, every write is refused with
+    "stopped project: read-only, S starts services". That covers sends, answers, priorities,
+    ideas, forget, resume, agentbus runs, settings, the notification set-up (notify.toml and
+    config.toml's notify.*), the palette's follow, attach and the Projects page's delete. `S`,
+    its y/n and navigation still work. It lifts as soon as dispatch runs.
+  - **`o` alone still starts nothing.**
 - **A reset is written with its day (quota settings step 1, 2026-11-16).** Every reset and time to come is written
   by `quota.ResetLabel`: `today 13:59`, `tomorrow 13:59`, `Wed 18 Nov 13:59` (the year only when it is not this
   one), in the dispatcher's quota messages (master's warning, an agent's, the drain's announcement), busmon's
@@ -2434,6 +2606,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   client update that changes the idle screen can make several agents of that client stuck at
   once, one ring each. The observation gains `screen_since`, the time of the first reading of
   the current screen; no screen text is written (agent-screen-blocked §3).
+- **The Tokens page (U) reads its 7-day column per row** (tokens-layout): each project's sparkline is scaled to its own busiest day, so its shape shows, while the bar beside it compares projects; the right-hand number is the seven days' in+out (`7d total`), and the in/out columns are today's. The sparkline is 14 cells of daily data: `{p}:tokens` keeps one row per day, so a 6-hour resolution would need a bus change, which waits for the person. Bar rows are one line with a blank line between them, and an account window's name (`7d-fable`) is shown in full.
 - **A project folder without Git starts without missions (up-git-repo, 2026-11-16).** A project needs no forge and no
   repository (the person's answer). Only the missions service (the conductor) needs Git, and it used to wait for
   one out of sight (`no Git repository in <dir>: run git init there`, seen only in its state). `agentbus up` (and

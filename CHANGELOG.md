@@ -6,6 +6,27 @@ release exists.
 
 ## Unreleased
 
+## v0.33.0 — busmon for several projects, ideas triage, broker hardening (off by default), and the first steps of person memory
+
+- Nothing in it changes the live broker. Durability (`appendfsync everysec`, the RDB schedule) is
+  stated in `docker-compose.yml` and applies when the person recreates the broker; the per-role ACL
+  users sit behind `broker.acl`, `off` by default, and `setup.sh` cannot turn it on yet.
+- busmon: `B` goes back after a project switch, a stopped project is read-only with `S` to start its
+  services, the header counts what waits in the other projects (`other: N for you · M merge`, `O`),
+  and it says why something is unknown. Ideas gain a `later` state and `y`/`l`/`d`/`x`/`u` keys; the
+  Plan and Tokens pages are re-laid out; `person.language` is picked from a list; `busmon --delete`
+  keeps the Projects page's rules and takes a backup first.
+- Background work: a client's own MCP servers and daemons, and their subtrees, are not counted
+  (Claude Code; Codex by name).
+- Broker: `broker.runtime` (docker or podman), `broker.image`, a stated durability, and plan,
+  mission and merge-queue-drop writes made master's (a CLI refusal until `broker.acl` is on).
+- Person memory, steps 1 and 2: `typed=yes` marks what the person typed, and a store package exists
+  with no command or page on it yet.
+- Master's reports name items by id; one question format for every `agentbus ask`.
+- Not in it: the ACL switch in `setup.sh`, any use of person memory, the update's automatic mode.
+
+[Notes](docs/releases/v0.33.0.md)
+
 ## v0.32.0 — agentbus update, the views redesign, background work in busmon, and restart from busmon
 
 - `agentbus update` installs the latest release tag, built in its own tree, with a snapshot to roll
