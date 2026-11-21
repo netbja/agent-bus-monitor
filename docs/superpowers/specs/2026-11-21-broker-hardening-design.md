@@ -235,7 +235,10 @@ The inventory then refuses nothing an agent does. 4b adds the users and a switch
     as `dispatcher`: the services' env file carries no identity (`service/env.go`). `agentbus holder
     drain`, which master or the person runs by hand, is not the service: it follows the CLI's rule
     below (foureyes);
-  - `busmon` connects as `busmon`;
+  - `busmon` connects as `busmon`, **after the same process-tree check** (reviewer-codex): a busmon
+    started with `AGENT_BUS_AGENT` set to another agent than master, or under a registered agent's
+    process tree, connects as `agent`, never with the every-key `busmon` user. Master's busmon
+    connects as `master`;
   - `./setup.sh`, `agentbus backup` and `restore` connect as `admin`, **from a person's shell only**
     (reviewer-codex, master): they refuse when `AGENT_BUS_AGENT` is set or when an ancestor process
     is a registered agent. That is the check `X` and `busmon -d` already make,
@@ -263,6 +266,8 @@ The inventory then refuses nothing an agent does. 4b adds the users and a switch
   - the person's CLI under an agent's process tree, with no `AGENT_BUS_AGENT`, connects as
     `agent`, never as `busmon`;
   - the `admin` password file is created 0600;
+  - busmon under an agent's process tree, or with `AGENT_BUS_AGENT` set to another agent,
+    connects as `agent`, and master's busmon as `master`;
   - `AGENT_BUS_AGENT=master` under the process tree of a registered agent other than master
     connects as `agent`; under master's own tree, or the person's shell, it connects as `master`;
   - `off` changes nothing;
