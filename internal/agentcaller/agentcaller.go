@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -96,5 +97,14 @@ func AncestorOrNone(ctx context.Context) (string, error) {
 	if errors.Is(err, ErrNoAncestry) {
 		return "", nil
 	}
-	return a, err
+	return agentOf(a), err
+}
+
+// agentOf is the agent of Ancestor's "<project>/<agent>"; the broker user
+// follows the agent, whatever its project.
+func agentOf(ancestor string) string {
+	if _, name, ok := strings.Cut(ancestor, "/"); ok {
+		return name
+	}
+	return ancestor
 }

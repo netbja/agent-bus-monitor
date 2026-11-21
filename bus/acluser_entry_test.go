@@ -96,3 +96,27 @@ func TestConnectPicksTheEntrysUser(t *testing.T) {
 		t.Error("admin with an unreadable ancestry connected")
 	}
 }
+
+// Resolving the ancestry connects to the broker too (agentcaller.Ancestor):
+// that inner Connect must not ask for the ancestry again (it would never
+// end); it reads the agents as the agent user.
+func TestConnectUserResolvesAncestryOnce(t *testing.T) {
+	t.Setenv(brokerACLEnv(t), "on")
+	t.Setenv("AGENT_BUS_AGENT", "")
+	t.Cleanup(func() { SetConnectEntry(ACLEntryCLI, nil) })
+	calls := 0
+	var inner string
+	SetConnectEntry(ACLEntryCLI, func(ctx context.Context) (string, error) {
+		calls++
+		if calls > 1 {
+			return "", nil // asked again: fail on the count below, not by recursing forever
+		}
+		u, err := connectUser(ctx, os.Getenv) // what the ancestry's own Connect asks
+		inner = u
+		return "", err
+	})
+	u, err := connectUser(context.Background(), os.Getenv)
+	if err != nil || u != ACLBusmon || calls != 1 || inner != ACLAgent {
+		t.Fatalf("user %q err %v, ancestry asked %d times, inner user %q", u, err, calls, inner)
+	}
+}

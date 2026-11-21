@@ -604,7 +604,7 @@ var Keys = []*Key{
 	// in as the default user (requirepass), as before; on, each logs in as its
 	// role's ACL user (bus.ACLUserFor) with its own password file. The person
 	// turns it on with ./setup.sh acl on, which also writes the users.
-	{Name: "broker.acl", Env: "AGENT_BUS_BROKER_ACL", Kind: String, Default: "off", ReadBy: "agentbus, busmon, dispatch, ./setup.sh", MachineOnly: true,
+	{Name: "broker.acl", Env: "AGENT_BUS_BROKER_ACL", Kind: String, Default: "off", ReadBy: "agentbus (the services included), busmon", MachineOnly: true,
 		env: func(raw string) (any, envResult) {
 			if IsBrokerACL(raw) {
 				return raw, envUse

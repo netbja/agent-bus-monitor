@@ -249,6 +249,12 @@ func SetConnectEntry(entry ACLEntry, ancestor func(context.Context) (string, err
 	connectEntry.entry, connectEntry.ancestor = entry, ancestor
 }
 
+// resolvingAncestry marks the context of the ancestry's own Connect
+// (agentcaller.Ancestor reads the agents through Connect): connectUser then
+// answers agent, which reads every key, instead of asking for the ancestry
+// again.
+type resolvingAncestry struct{}
+
 // connectUser is the user Connect logs in as: "" while broker.acl is off.
 // An ancestry that cannot be read makes the CLI and busmon agent (the least
 // rights) and refuses the admin entry.
@@ -259,9 +265,12 @@ func connectUser(ctx context.Context, getenv func(string) string) (string, error
 	connectEntry.Lock()
 	entry, ancestorOf := connectEntry.entry, connectEntry.ancestor
 	connectEntry.Unlock()
+	if ctx.Value(resolvingAncestry{}) != nil {
+		return ACLAgent, nil // the ancestry's own read of the agents: never asks again
+	}
 	ancestor := ""
 	if ancestorOf != nil {
-		a, err := ancestorOf(ctx)
+		a, err := ancestorOf(context.WithValue(ctx, resolvingAncestry{}, true))
 		switch {
 		case err != nil && entry == ACLEntryAdmin:
 			return "", fmt.Errorf("the admin user is the person's: cannot check this process's ancestry: %w", err)
