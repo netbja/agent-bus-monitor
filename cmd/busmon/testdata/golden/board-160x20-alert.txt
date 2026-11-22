@@ -1,10 +1,10 @@
 ╭─  1 Activity   2 Board   3 Work   4 Plan   ──────────────────────────────────────────────────────────────────────────────────────────── 5 open · 1 done (d) ─╮
-│  ALERT                TASK                  OWNER     STATE      AGE                                                                                         │
-│  ⚠ no reply 3h        quota-step-3          coder     accepted   3h                                                                                          │
-│                       views-redesign-spec   coder2    accepted   5m                                                                                          │
-│                       ask-refuses-person    coder2    working    12m                                                                                         │
-│                       agent-screen-blocked  coder     working    40m                                                                                         │
-│                       holder-g1-part2       coder     requested  1h                                                                                          │
+│  ALERT                             TASK                  OWNER     STATE      CHANGED                                                                        │
+│  ⚠ no reply 3h since accept        quota-step-3          coder     accepted   3h                                                                             │
+│                                    views-redesign-spec   coder2    accepted   5m                                                                             │
+│                                    ask-refuses-person    coder2    working    12m                                                                            │
+│                                    agent-screen-blocked  coder     working    40m                                                                            │
+│                                    holder-g1-part2       coder     requested  1h                                                                             │
 │                                                                                                                                                              │
 │                                                                                                                                                              │
 ╰─ enter diagnostics · d done · resend (dispatch) · cancel/reassign (master) ──────────────────────────────────────────────────────────────────────────────────╯

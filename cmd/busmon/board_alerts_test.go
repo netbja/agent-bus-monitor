@@ -70,10 +70,10 @@ func TestBoardViewAlerts(t *testing.T) {
 	if got := keysOf(v.items); strings.Join(got, " ") != "late-reply late-accept lost plain on-time" {
 		t.Fatalf("order %q", got)
 	}
-	if h := v.header.text(); !strings.HasPrefix(h, "ALERT") || !strings.Contains(h, "TASK") || !strings.Contains(h, "OWNER") || !strings.Contains(h, "STATE") || !strings.Contains(h, "AGE") {
+	if h := v.header.text(); !strings.HasPrefix(h, "ALERT") || !strings.Contains(h, "TASK") || !strings.Contains(h, "OWNER") || !strings.Contains(h, "STATE") || !strings.Contains(h, "CHANGED") || strings.Contains(h, "AGE") {
 		t.Fatalf("header %q", h)
 	}
-	want := map[string]string{"late-reply": GlyphWarn + " no reply 3h", "late-accept": GlyphWarn + " no acceptance 40m", "lost": GlyphWarn + " body lost"}
+	want := map[string]string{"late-reply": GlyphWarn + " no reply 3h since accept", "late-accept": GlyphWarn + " no acceptance 40m since request", "lost": GlyphWarn + " body lost (request 2m)"}
 	for _, it := range v.items {
 		text := it.Line.text()
 		if w, ok := want[it.Key]; ok != strings.HasPrefix(text, w) && ok {
@@ -323,5 +323,40 @@ func TestBoardShellMasterDown(t *testing.T) {
 	m = keys(t, step(t, m, pollMsg{snap: snap, at: shellNow}), '2')
 	if screen := m.grid().plain(); strings.Contains(screen, "master is down") || !strings.Contains(screen, "cancel/reassign (master)") {
 		t.Fatalf("live master:\n%s", screen)
+	}
+}
+
+// board-drift §7 (step 4): no reply is the accepted request's alert alone; a
+// request in review waits on its reviewers, a blocked one on someone else.
+func TestBoardNoReplyOnlyWhenAccepted(t *testing.T) {
+	ms := func(d time.Duration) int64 { return boardNow.Add(-d).UnixMilli() }
+	for _, state := range []string{"review", "blocked"} {
+		m := map[string]bus.BoardEntry{"t": {Owner: "coder", State: state, Updated: boardNow.Add(-time.Minute).Unix(),
+			Request: &bus.RequestInfo{ID: "2-0", From: "master", Target: "coder", CreatedAt: ms(4 * time.Hour), AcceptedAt: ms(3 * time.Hour)}}}
+		if v := boardViewOf(m, boardNow, 120, boardDefaults); strings.Contains(v.items[0].Line.text(), GlyphWarn) {
+			t.Errorf("%s: %q", state, v.items[0].Line.text())
+		}
+	}
+}
+
+// board-drift §7: the task detail lists the request's times, each from its
+// own field; the board's own time is Changed.
+func TestTaskDetailRequestTimes(t *testing.T) {
+	ms := func(d time.Duration) int64 { return boardNow.Add(-d).UnixMilli() }
+	e := bus.BoardEntry{Owner: "coder", State: "review", Updated: boardNow.Add(-20 * time.Minute).Unix(),
+		Request: &bus.RequestInfo{ID: "2-0", From: "master", Target: "coder", CreatedAt: ms(4 * time.Hour), AcceptedAt: ms(3 * time.Hour)}}
+	_, lines, _ := taskDetail(e, "t", boardNow)
+	got := plainLines(lines)
+	for _, want := range []string{"Changed", "20m ago", "Requested", "4h ago", "Accepted", "3h ago", "In review", "since 20m ago"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("no %q in\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Responded") || strings.Contains(got, "Updated") {
+		t.Fatalf("a time the request has not, or the old word:\n%s", got)
+	}
+	e.State, e.Request.RespondedAt = "done", ms(5*time.Minute)
+	if _, lines, _ = taskDetail(e, "t", boardNow); !strings.Contains(plainLines(lines), "Responded") || strings.Contains(plainLines(lines), "In review") {
+		t.Fatalf("done:\n%s", plainLines(lines))
 	}
 }
