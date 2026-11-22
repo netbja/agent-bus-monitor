@@ -25,7 +25,7 @@ var Groups = []Group{GroupDisplay, GroupAttention, GroupIdentity, GroupNotificat
 var groups = map[string]Group{
 	"display.theme": GroupDisplay, "display.icons": GroupDisplay, "display.graphs": GroupDisplay, "display.limit": GroupDisplay, "display.idle_hint_after": GroupDisplay, "display.idle_view_after": GroupDisplay, "board.no_accept_after": GroupDisplay, "board.no_reply_after": GroupDisplay, "compose.at_path": GroupDisplay, "display.work_layout": GroupDisplay, "display.date_format": GroupDisplay, "display.follow": GroupDisplay, "attach.prefix": GroupDisplay, "waiting.fade": GroupDisplay,
 	"waiting.popup_after": GroupAttention, "waiting.snooze": GroupAttention, "waiting.bell": GroupAttention,
-	"recap.auto_after": GroupAttention, "updates.check": GroupAttention, "dispatch.focus_notice": GroupAttention,
+	"recap.auto_after": GroupAttention, "updates.check": GroupAttention, "updates.auto": GroupAttention, "updates.window": GroupAttention, "updates.max_wait": GroupAttention, "dispatch.focus_notice": GroupAttention,
 	"identity.as": GroupIdentity, "person.name": GroupIdentity, "person.language": GroupIdentity, "start.team": GroupIdentity,
 	"dispatch.context_alert": GroupServices, "dispatch.context_urgent": GroupServices, "dispatch.context_handoff_deadline": GroupServices, "dispatch.prompt_grace": GroupServices, "dispatch.stuck_after": GroupServices, "dispatch.quota": GroupServices,
 	"dispatch.quota_warn": GroupServices, "dispatch.quota_drain": GroupServices, "dispatch.quota_hold": GroupServices, "dispatch.quota_max_age": GroupServices,

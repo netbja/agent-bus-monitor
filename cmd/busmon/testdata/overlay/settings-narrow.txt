@@ -8,6 +8,9 @@
    • Bell                        ○ off
      Recap after away            8h
      Update check                ○ off
+     Automatic update            notify
+     Automatic update window     03:00-05:00
+     Tell master after waiting   168h
      Focused pane notice after   30s
 
  ────────────────────────────────────────────────────────────────────

@@ -265,6 +265,31 @@ var Keys = []*Key{
 	{Name: "updates.check", Env: "AGENT_BUS_NO_UPDATE_CHECK", Kind: Bool, Default: true, ReadBy: "busmon",
 		env:  func(raw string) (any, envResult) { return raw != "1", envUse }, // 1 turns it off
 		file: fileBool},
+	// The automatic update (quiet-update-auto §6, §7; the person's answers):
+	// install or only notify, when it may run, and when to tell master a
+	// release is still waiting. The host's (the updater belongs to no
+	// project), the person's: auto and max_wait in config.toml alone, the
+	// window from busmon's Shift+C as well (Q2). No env variable.
+	{Name: "updates.auto", Kind: String, Default: "notify", ReadBy: "busmon (shown; agentbus update --auto reads it from quiet-update step 3)", MachineOnly: true, PersonOnly: true,
+		file: fileOneOf("notify", "install")},
+	{Name: "updates.window", Kind: String, Default: "03:00-05:00", ReadBy: "busmon (shown; the updater reads it from quiet-update step 3)", MachineOnly: true, PersonEdit: true,
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok {
+				if _, _, ok := ParseWindow(s); ok {
+					return s, ""
+				}
+			}
+			return nil, "want a local time window HH:MM-HH:MM, such as \"03:00-05:00\" (it may cross midnight)"
+		}},
+	{Name: "updates.max_wait", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "busmon (shown; agentbus update --auto reads it from quiet-update step 3)", MachineOnly: true, PersonOnly: true,
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok {
+				if d, ok := parseAge(s); ok {
+					return d, ""
+				}
+			}
+			return nil, "want days such as \"7d\", or a duration such as \"36h\", above 0 and at most 365d"
+		}},
 	{Name: "dispatch.context_alert", Env: "AGENT_BUS_CONTEXT_ALERT", Kind: Float, Default: 80.0, ReadBy: "dispatch, busmon, health",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.ParseFloat(raw, 64); err == nil && n >= 0 && n <= 100 {
