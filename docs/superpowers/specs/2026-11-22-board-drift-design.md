@@ -1,6 +1,8 @@
 # The board follows the work (board-drift)
 
-Status: spec r1, for review (subject `board-drift`). Not built. Base: origin/dev `a5e9847b`.
+Status: spec r2, for review (subject `board-drift`). Not built. Base: origin/dev `a5e9847b`.
+r2 (foureyes' r1 review): §3.2 never judges a head already in the base (`review_base`); four
+citation fixes; §4's note names its own refusals.
 Author: architect, from master's directive (cmd `1795347811956-0`, task `board-drift-spec`),
 which carries the person's directive. No new dependency. Questions for the person are last (§8).
 
@@ -41,7 +43,7 @@ where only a person or master can judge.
 
   The "no reply" alert does not check the state, so it also fires on a request in `review` (waiting
   on reviewers) or `blocked` (waiting on someone else). The AGE column is `BoardEntry.Updated`
-  (`board.go:226`). Every transition rewrites `Updated`. So "no reply 17h" can sit beside "AGE 1h"
+  (`cmd/busmon/board.go:215`, header `:179`). Every transition rewrites `Updated`. So "no reply 17h" can sit beside "AGE 1h"
   on the same row: the two ages measure different events, and neither says which.
 - **Sentinel** is woken on a new health failure and once a day (`bus/health.go:138`, `:203`). Its
   skill forwards `agentbus health warns` to master. It never edits anyone's work.
@@ -73,6 +75,19 @@ case, `request review` now also records the head it was given:
 The pass judges the tip if it has one, else the recorded commit. With neither, the request is not
 judged, and §5 reports it.
 
+**A head already in the base is never judged** (foureyes, r1). `Delivered` counts an ancestor as
+delivered. So without a guard, a review on a branch with no commit beyond the base would close at
+the next pass with nothing merged. That happens with a branch never committed to, a branch reused
+after an earlier merge, or a `--commit` naming a base commit. The guard has two parts:
+- `request review` also records **`review_base`**: the base tip the CLI read, `git rev-parse
+  --verify origin/<base>` after a best-effort `git fetch origin <base>`. It **refuses** the review
+  when the recorded head is already an ancestor of that tip: "nothing to review: `<head>` is
+  already in `<base>`". A CLI that cannot resolve the base records no `review_base` and refuses
+  nothing.
+- The pass judges a request only when it has a `review_base` and the head judged is **not** an
+  ancestor of it (`git merge-base --is-ancestor`, as `InBase` runs it). A request with no
+  `review_base` is not judged, and §5 reports it ("cannot be judged").
+
 These candidates are added to the heads that `Delivered` already judges, in the same pass and with
 the same patch-id cache, under the same 20-second budget. A pass that runs out of budget judges the
 rest on its next run. Nothing new is polled.
@@ -80,7 +95,9 @@ rest on its next run. Nothing new is polled.
 ### 3.3 The write
 
 A new fenced script, `FencedRequestMerged(token, task, branch, head)`, checks in one call:
-- the lease;
+- the lease: the dispatcher's own key, `DispatchKey`, which the merge queue's other writes
+  (`FencedCIStep`, `bus/ci.go:140`) also fence on. `fenceCheck` is the generic check; the
+  conductor's `FencedBoardState` fences on the conductor's key instead;
 - that the request is still in `review`;
 - that its `request.branch` is still the branch the pass read.
 
@@ -96,9 +113,9 @@ and the next pass judges again.
 
 It appends **no `reply`** to the cmd stream, so it wakes nobody (Q3). Instead it writes one entry
 to the events stream (`request-merged`: task, branch, head). busmon's Board detail shows "closed on
-merge `<head>` into `<base>`" where a reply would be. `plan/derive.go`'s `delivered` treats
-`closed_on_merge` as delivered. A done request with `closed_unaccepted` stays "closed", as it is
-today.
+merge `<head>` into `<base>`" where a reply would be. `plan/derive.go`'s `delivered` already counts
+any done request that is not `closed_unaccepted`, so a close on merge counts as delivered with no
+change there. A done request with `closed_unaccepted` stays "closed", as it is today.
 
 ### 3.4 A step, not the whole request (Q1)
 
@@ -118,9 +135,11 @@ in review (`request review <task> --branch <b>`, `--more` if steps follow); its 
 
 `agentbus report <self> --task <t> [--done] <text…>`:
 - `--task <t>` writes `task` on the report entry. A new transition, `note`, sets
-  `request.reported_at` and `request.report_id` on that request, in any state but `done`. Only the
-  target may run it, under the same refusals as `accept`, with no state change. A task that is not
-  a tracked request targeted at `<self>` is refused before anything is published.
+  `request.reported_at` and `request.report_id` on that request, with no state change. Its
+  refusals are only these: an unknown task or one that is not a tracked request, a request whose
+  target is not `<self>`, and a `done` request. It does not inherit `accept`'s other refusals
+  (the WIP limit, an expired request, a lost body), because a note changes no state. A refused
+  note is checked before anything is published.
 - `--done` also completes it, as `request done <t>`, with the report's first line and
   `(report <id>)` as the reply. It is refused where `done` would be (not accepted, blocked), and
   then nothing is published. In the CLI, `--done` is report-then-done: a refused `done` after a
@@ -163,8 +182,8 @@ reassigns or edits a task. That stays with the owner, the sender or master.
    not relaunched: agentbus … pop architect --resume c2bf3f3b…", and the same for docs, coder2 and
    reviewer-codex. Nobody ran those lines.
 2. **Self-repair only covers the template's tabs** (`facts`, `internal/dispatchsvc/selfrepairchore.go:203`).
-   It skips a retired pop (`selfrepair/decide.go:177`), and `roles.toml` forbids `required` on a
-   pop: "a pop comes back through master only". architect and docs are pops, so self-repair was
+   It skips a retired pop (`selfrepair/decide.go:177`), and the roles.toml loader refuses `required` on a
+   pop (`rolecfg/config.go:165`): "a pop comes back through master only". architect and docs are pops, so self-repair was
    right not to act.
 3. **The silent path.** The dispatcher saw the problem and said nothing. Its log
    (`~/.local/state/agentbus/agent-bus-monitor/dispatch.log`, 2026-11-22 10:17 and 12:37) shows:
@@ -224,7 +243,8 @@ One PR each, from `origin/dev`, in this order. Steps 1 and 4 are independent.
 - **§3, real git on a disposable repository** (the merge queue's own seam): a merge, a squash and a
   rebase. Each must close a `review` request and leave an `accepted` one open. `--more` sends the
   request back to `accepted`. A changed branch between read and write writes nothing. A lost lease
-  is `NOTHOLDER`.
+  is `NOTHOLDER`. A review on a branch with no commit beyond the base is refused by the CLI; one
+  whose head is an ancestor of its `review_base`, or that has no `review_base`, stays open.
 - **§6:** a closed pop that owns a request gets exactly one notice per episode. A live pop gets
   none, and so does a closed pop that owns nothing.
 - **§4:** the target-only refusal, and `--done` refused on a request that was not accepted.
