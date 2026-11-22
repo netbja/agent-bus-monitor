@@ -70,6 +70,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.confirmKey(k)
 	case m.ui.sleepAsk != nil:
 		cmd = m.sleepConfirm(k)
+	case m.ui.quitAsk:
+		cmd = m.quitKey(k)
 	case m.ui.del != nil:
 		cmd = m.deleteKey(k)
 	default:
@@ -87,8 +89,8 @@ func (m *Model) modeKey(k Key) tea.Cmd {
 	if mode == ModeOverlay { // a page key shared by two pages resolves by the page (reply-key-r)
 		act = lookupOn(mode, m.ui.focus, m.layout.Tier, k, m.pageOffers)
 	}
-	if act == ActQuit {
-		return tea.Quit
+	if act == ActQuit { // q (Ctrl-C quit above, in key): asked first (busmon-quit-confirm)
+		return m.askQuit()
 	}
 	if act != ActNone || mode == ModeCompose || mode == ModeComposeFile || mode == ModeInput {
 		m.ui.flash, m.ui.flashErr = "", false
@@ -622,7 +624,7 @@ func (m *Model) wheel(ms tea.Mouse) {
 	if m.ui.pausePopup == nil && m.atWheel(ms.X, ms.Y, delta) {
 		return // the @ popup's list
 	}
-	if m.ui.compose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary {
+	if m.ui.compose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.quitAsk {
 		return // a window or a dialog is over the screen
 	}
 	if m.rd.open() && m.readerRect().contains(ms.X, ms.Y) {
@@ -653,6 +655,8 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 	switch {
 	case m.ui.pausePopup != nil: // modal: a click is the popup's
 		return m.pauseClick(ms.X, ms.Y)
+	case m.ui.quitAsk: // modal: only its keys answer it
+		return nil
 	case m.ui.tour != nil: // modal too
 		cmd := m.tourClick(ms.X, ms.Y)
 		m.refresh()

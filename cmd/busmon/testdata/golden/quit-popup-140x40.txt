@@ -1,0 +1,40 @@
+ agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ ♙ Charlie [human]   pilot master   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 16:44                                 
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-9 of 10 ─╮
+│  ● answer master    review lot 1? (2 questions)    4m││    agent     state     updated queue    ctx       flags               message    ▲
+│  ♙ answer foureyes  need a decision on the width … 6m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
+│  ♙ answer sentinel  blocked: waiting for an answe… 1m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
+│  ◆ review coder     by charlie  look at b1           ││  ▲ sentinel  blocked   30m     —        —         model≠              health ok  ┃
+│                                                      ││  ✓ architect done      40m     —        —         escalating · busy   spec merged┃
+│                                                      ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
+│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…┃
+│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   │
+│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─  1 Activity   2 Board   3 Work   4 Plan    auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        │
+│  ── Mon 2026-10-26 - (today) ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│    15:24  architect            status     done╭─ Quit busmon? ───────────────────────────╮                                               │
+│    15:50  ♙ Charlie → coder    directive  revi│ y quits                                  │                                               │
+│    15:51  coder                report     Lot │                                          │                                               │
+│  ○ 15:52  master    → charlie  directive  plea│ n, enter or esc stay                     │                                               │
+│  ● 15:56  dispatch             notify     proj╰──────────────────────────────────────────╯                                               │
+│  ● 16:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
+│    16:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                                           
+ T triage   p P plan   tab focus   / ^P commands   1-4 tabs   ↑↓ j k select   y copy   f filter   ! answer   q quit   F1 help   F5 health   

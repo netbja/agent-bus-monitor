@@ -309,7 +309,8 @@ func (m *Model) busyForModal() bool {
 		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.tour != nil ||
 		m.ui.walk != nil || // the walk's gap between two pages (busmon-queue-triage §4.5)
 		m.ui.idle || // the idle view: a due modal waits until it is left (foureyes)
-		m.ui.del != nil // the Projects page's delete confirmation
+		m.ui.del != nil || // the Projects page's delete confirmation
+		m.ui.quitAsk // q's popup
 }
 
 // maybeReminder opens the reminder when decisions are due (PopupAfter) and
