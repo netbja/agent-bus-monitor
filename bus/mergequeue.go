@@ -195,7 +195,9 @@ type MergeQueueRecord struct {
 	CI string `json:"ci,omitempty"`
 	// ConflictCheck is what the conflict check (conflict-owner §2) could not
 	// judge this pass: the whole check (git too old) or a head, with why;
-	// "" when every candidate was judged.
+	// then what the hand-off (§4) could not write ("conflicts: …"); "" when
+	// every candidate was judged and every write went through. It never
+	// makes the queue's pass a failure.
 	ConflictCheck string `json:"conflict_check,omitempty"`
 }
 

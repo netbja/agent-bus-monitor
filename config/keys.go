@@ -480,6 +480,14 @@ var Keys = []*Key{
 		file: fileBool},
 	{Name: "ci.max_handoffs", Env: "AGENT_BUS_CI_MAX_HANDOFFS", Kind: Int, Default: 3, ReadBy: "dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 to stop at once")},
+	// A conflicting approved PR (conflict-owner §4): back to its owner once
+	// per conflicting head, at most conflict.max_handoffs times, then to
+	// master; master too once the conflict is conflict.escalate_after old
+	// (from its first sight, the owner held or not). Both 0: master only.
+	{Name: "conflict.max_handoffs", Env: "AGENT_BUS_CONFLICT_MAX_HANDOFFS", Kind: Int, Default: 3, ReadBy: "dispatch",
+		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 to send every conflict to master")},
+	{Name: "conflict.escalate_after", Env: "AGENT_BUS_CONFLICT_ESCALATE_AFTER", Kind: Duration, Default: 2 * time.Hour, ReadBy: "dispatch",
+		env: envNonNegativeDuration, file: fileDuration(true)},
 	// The automatic state (spec 2026-11-01-auto-state-design.md): a turn's
 	// working seen ready this long reads idle for team-stall; 0 turns it off.
 	{Name: "dispatch.turn_stale_after", Env: "AGENT_BUS_TURN_STALE_AFTER", Kind: Duration, Default: 2 * time.Minute, ReadBy: "dispatch",

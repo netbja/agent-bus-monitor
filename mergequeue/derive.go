@@ -51,6 +51,9 @@ type Result struct {
 	// Bases are the PRs' own bases, by number: the conflict check judges only
 	// those onto the queue's base (reviewer-codex).
 	Bases map[int]string
+	// Clean are the items git judged clean this pass (the conflict check):
+	// their conflict hand-off, if any, is resolved (conflict-owner §4 step 1).
+	Clean []bus.MergeItem
 }
 
 // approved is a subject's deciding approve.

@@ -358,6 +358,20 @@ agentbus request next                       # which one to take next (exit 64: n
   that replays only your own commits. A plain `git rebase origin/<base>` replays the parent's
   original commits too, and conflicts with their squashed copy.
 
+- **Name your branch `<role>/<task>`, and close the request with it.** A request whose work opens
+  a PR is closed with `agentbus request done <task> --commit <sha> --branch <role>/<task>
+  "<reply>"` (`coder/triage-dedupe-3`). The branch names the owner a merge conflict goes back to:
+  the dispatcher reads it from the board, else from the branch's `<role>/` prefix when that is a
+  registered agent, else it gives the conflict to master.
+
+- **A conflict hand-off from `dispatch`** ("PR #<n> (<branch>) at <head> conflicts with <base> at
+  <tip>: <files>. … Hand-off <k> of <N>"): your approved head no longer merges. Rebase it onto
+  `origin/<base>`, resolve (rerere replays hunks resolved before), run the suite, and ask your
+  reviewers for the new head; it is delivered as usual. Each new head that still conflicts costs
+  one hand-off; after `conflict.max_handoffs` (3) of them, or once the conflict is
+  `conflict.escalate_after` (2 h) old, master takes it over. A base that moves under the same head
+  costs nothing.
+
 - Only the **target** agent can accept, block or complete its own request.
 - `block` does not require a prior `accept` — you may refuse work you never took, with a
   reason. After a block, `accept` again before you can complete it.

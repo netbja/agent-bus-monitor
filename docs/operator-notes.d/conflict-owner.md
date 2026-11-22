@@ -10,4 +10,4 @@
   a forge flag git finds clean is an item again; what git could not judge (absent head, time) stays as
   before and is named in the record's `conflict_check`, also printed by `agentbus merge-queue`.
   `mergequeue.ConflictOwner` (the board's claim or request branch, else a `<role>/` prefix that is a
-  registered agent, else master) is built and tested, used by build B, which sends the hand-offs.
+  registered agent, else master) names the owner the hand-off goes to (build B).

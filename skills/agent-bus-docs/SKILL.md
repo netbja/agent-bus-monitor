@@ -15,6 +15,9 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - the change's plan in `docs/changes/<c>/`;
    - the commit messages and the release notes already written.
 2. **Branch** `pr/<c>` from `<head>`: `git worktree add ../<repo>-pr-<c> -b pr/<c> <head>`.
+   Close a tracked request for it with `agentbus request done <task> --commit <sha> --branch
+   pr/<c> "<reply>"`: the board's branch names you as the owner a merge conflict goes back to
+   (conflict-owner); without it, `pr/` names no agent and the conflict goes to master.
 3. **Update only what the change made stale.** Usually:
    - `README.md`: what a new user needs. Keep it short. Release history goes in CHANGELOG.md,
      never in the README.

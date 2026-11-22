@@ -40,7 +40,7 @@ var aclMasterOnly = map[string]bool{
 // aclDispatcherOnly are the leases and records the services' fenced scripts
 // own; master writes missionops too (ACLRules).
 var aclDispatcherOnly = map[string]bool{
-	"dispatch": true, "conductor": true, "ci": true, "mergequeue": true, "mergequeue:due": true,
+	"dispatch": true, "conductor": true, "ci": true, "conflicts": true, "mergequeue": true, "mergequeue:due": true,
 	"missionops": true, "missionops:results": true, "run": true, "reboot": true,
 }
 

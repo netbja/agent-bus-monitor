@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -171,7 +172,7 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 	}
 	write := min(mergeQueueWrite, budget/2)
 	dctx, cancel := context.WithTimeout(ctx, budget-write)
-	rec, run, ci := c.deriveRun(dctx)
+	rec, run, ci, cf := c.deriveRun(dctx)
 	if ci.on {
 		why, err := mergequeue.RunCI(dctx, c.b, token, c.ciConfig(ci.env, ci.cap), ci.prs, ci.vs)
 		if err != nil {
@@ -179,6 +180,16 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 			return err // the lease lost
 		}
 		rec.CI = why
+	}
+	if cf.on { // conflict-owner §4: after the check, before the record's write
+		why, err := mergequeue.RunConflicts(dctx, c.b, token, mergequeue.ConflictConfig{Master: c.masterName(), Cap: cf.cap, EscalateAfter: cf.after}, cf.pass)
+		if err != nil {
+			cancel()
+			return err // the lease lost
+		}
+		if why != "" {
+			rec.ConflictCheck = strings.Join(slices.DeleteFunc([]string{rec.ConflictCheck, why}, func(s string) bool { return s == "" }), "; ")
+		}
 	}
 	cancel()
 	wctx, wcancel := context.WithTimeout(ctx, write)
@@ -214,13 +225,28 @@ type ciPass struct {
 	vs  []bus.Verdict
 }
 
+// conflictPass is what the conflict hand-off takes from a pass
+// (conflict-owner §4): on only when the pass read everything, so the open
+// set is complete (a field not in it is forgotten).
+type conflictPass struct {
+	on    bool
+	cap   int
+	after time.Duration
+	pass  mergequeue.ConflictPass
+}
+
+// masterName is the escalation target the chore was given, else master.
+func (c *mergeQueueChore) masterName() string {
+	if c.master != nil && *c.master != "" {
+		return *c.master
+	}
+	return "master"
+}
+
 // ciConfig is the loop's configuration for this pass; the base is read with
 // gh in the services' directory, one call's budget each.
 func (c *mergeQueueChore) ciConfig(env []string, cap int) mergequeue.CIConfig {
-	master := "master"
-	if c.master != nil && *c.master != "" {
-		master = *c.master
-	}
+	master := c.masterName()
 	return mergequeue.CIConfig{Project: c.b.Project(), Master: master, Cap: cap,
 		ReadBase: func(ctx context.Context, branch string) (mergequeue.Base, error) {
 			cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
@@ -232,7 +258,7 @@ func (c *mergeQueueChore) ciConfig(env []string, cap int) mergequeue.CIConfig {
 // derive reads everything one pass needs; a failed read is the reason. It
 // writes nothing: the CI loop runs only in pass.
 func (c *mergeQueueChore) derive(ctx context.Context) bus.MergeQueueRecord {
-	rec, _, _ := c.deriveRun(ctx)
+	rec, _, _, _ := c.deriveRun(ctx)
 	return rec
 }
 
@@ -247,9 +273,9 @@ func MergeQueueLive(ctx context.Context, b *bus.Bus, getenv func(string) string)
 	return c.derive(ctx), true
 }
 
-// deriveRun is derive with the run's delivered heads (run-budget §2) and the
-// CI loop's input: none known when the pass fails.
-func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads, ciPass) {
+// deriveRun is derive with the run's delivered heads (run-budget §2), the
+// CI loop's input and the conflict hand-off's: none known when the pass fails.
+func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, runHeads, ciPass, conflictPass) {
 	settings := config.Machine(c.getenv)
 	// The project's base, as deliver's (merge-popup-setting): the template's
 	// [delivery] base, else the machine's delivery.base.
@@ -257,8 +283,8 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	env := mergeQueueEnv(c.environ())
 	call := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, mergeQueueCall) }
 	forgeKind := ""
-	fail := func(source, why string) (bus.MergeQueueRecord, runHeads, ciPass) {
-		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}, runHeads{}, ciPass{}
+	fail := func(source, why string) (bus.MergeQueueRecord, runHeads, ciPass, conflictPass) {
+		return bus.MergeQueueRecord{Source: source, Reason: why, Forge: forgeKind, Base: base}, runHeads{}, ciPass{}, conflictPass{}
 	}
 	if berr != nil { // a template that does not decode: no base anybody chose
 		return fail("", "the project's base: "+berr.Error())
@@ -295,6 +321,8 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 	}
 	in := mergequeue.Input{Verdicts: vs}
 	ci := ciPass{on: settings.Bool("ci.loop"), cap: settings.Int("ci.max_handoffs"), env: env, vs: vs}
+	open := map[string]bool{} // the conflict hand-off's open PRs or live branches
+	cf := conflictPass{on: true, cap: settings.Int("conflict.max_handoffs"), after: settings.Duration("conflict.escalate_after")}
 	source := "git"
 	// Origin's tips and the fetched base, in every mode that pushes (the gh
 	// path too, for master-idle's undelivered heads).
@@ -325,6 +353,9 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 			return fail(source, err.Error())
 		}
 		in.PRs, ci.prs = prs, prs
+		for _, pr := range prs { // drafts and heads in review too: a fix under review keeps its field (§4)
+			open[mergequeue.ConflictField(pr.Number, pr.Branch)] = true
+		}
 	default: // the git fallback: GitHub without gh, GitLab and Bitbucket (no reader yet), local; no CI loop
 		ci.on = false
 		tips, baseTip := remote, remoteBase
@@ -352,6 +383,28 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 			return fail(source, "an approved head cannot be judged: "+err.Error())
 		}
 		in.Tips, in.Merged = tips, func(h string) bool { return in2[h] }
+		// A live branch, unless its tip is in the base: approved, judged
+		// above; a tracked one's other tip, judged here (a reset or a
+		// fast-forward to the base, reviewer-codex); a read that fails
+		// keeps it open.
+		tracked, terr := c.b.ConflictRecord(ctx)
+		var others []string
+		for _, tp := range tips {
+			if _, ok := tracked[mergequeue.ConflictField(0, tp.Branch)]; ok && terr == nil && !approved[tp.Head] {
+				others = append(others, tp.Head)
+			}
+		}
+		var in3 map[string]bool
+		if len(others) > 0 {
+			cctx, cancel = call()
+			in3, _ = c.inBase(cctx, c.dir, env, baseTip, others)
+			cancel()
+		}
+		for _, tp := range tips {
+			if !in2[tp.Head] && !in3[tp.Head] {
+				open[mergequeue.ConflictField(0, tp.Branch)] = true
+			}
+		}
 	}
 	res := mergequeue.Derive(in)
 	checkTip := judgeBase
@@ -371,8 +424,12 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 		judgeBase = remoteBase // the gh path: origin's base
 	}
 	run := c.runDelivered(ctx, env, vs, judgeBase, now)
+	cf.pass = mergequeue.ConflictPass{Base: base, Local: f.Kind == forge.Local, Now: now, Conflicting: res.Conflicting, Open: open}
+	for _, it := range res.Clean {
+		cf.pass.Clean = append(cf.pass.Clean, mergequeue.ConflictField(it.Number, it.Branch))
+	}
 	return bus.MergeQueueRecord{Source: source, Forge: forgeKind, Base: base, Items: res.Items, Unapproved: res.Unapproved, Conflicting: res.Conflicting,
-		Undelivered: undelivered, ConflictCheck: conflictCheck}, run, ci
+		Undelivered: undelivered, ConflictCheck: conflictCheck}, run, ci, cf
 }
 
 // checkConflicts judges the approved heads and the forge-flagged PRs with
@@ -442,6 +499,7 @@ func (c *mergeQueueChore) checkConflicts(ctx context.Context, env []string, res 
 			conflicting = append(conflicting, cf)
 		default:
 			items = append(items, cd.it)
+			res.Clean = append(res.Clean, cd.it)
 		}
 	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].ApprovedAt < items[j].ApprovedAt })
