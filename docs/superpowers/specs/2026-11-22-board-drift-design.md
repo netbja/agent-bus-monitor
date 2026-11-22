@@ -1,10 +1,12 @@
 # The board follows the work (board-drift)
 
-Status: spec r2, for review (subject `board-drift`). Not built. Base: origin/dev `a5e9847b`.
+Status: spec r3, for review (subject `board-drift`). Not built. Base: origin/dev `a5e9847b`.
 r2 (foureyes' r1 review): §3.2 never judges a head already in the base (`review_base`); four
 citation fixes; §4's note names its own refusals.
+r3: master's item 7 (cmd `1795348884780-0`): the person's directives are answered, enforced by
+the dispatcher (§8, Q5). §3.2 takes foureyes' two r2 notes: a local-forge base, and a failed fetch.
 Author: architect, from master's directive (cmd `1795347811956-0`, task `board-drift-spec`),
-which carries the person's directive. No new dependency. Questions for the person are last (§8).
+which carries the person's directive. No new dependency. Questions for the person are last (§10).
 
 ## 1. The problem
 
@@ -79,11 +81,15 @@ judged, and §5 reports it.
 delivered. So without a guard, a review on a branch with no commit beyond the base would close at
 the next pass with nothing merged. That happens with a branch never committed to, a branch reused
 after an earlier merge, or a `--commit` naming a base commit. The guard has two parts:
-- `request review` also records **`review_base`**: the base tip the CLI read, `git rev-parse
-  --verify origin/<base>` after a best-effort `git fetch origin <base>`. It **refuses** the review
-  when the recorded head is already an ancestor of that tip: "nothing to review: `<head>` is
-  already in `<base>`". A CLI that cannot resolve the base records no `review_base` and refuses
-  nothing.
+- `request review` also records **`review_base`**: the base tip the CLI read. On a forge with a
+  remote, that is `git rev-parse --verify origin/<base>` after `git fetch origin <base>`. In local
+  mode (no remote; foureyes, r2), it is the local `<base>`, as conflict-owner's
+  `ConflictPass.Local` reads it (`mergequeue/conflictloop.go:34`). The CLI **refuses** the review when the recorded head is already
+  an ancestor of that tip: "nothing to review: `<head>` is already in `<base>`".
+- **A failed fetch records no `review_base`** (foureyes, r2). A stale tip could miss a newer base
+  that already holds the head, and that head would then be judged and closed. The review itself
+  still goes through: only its close on merge is lost, and §5 reports it. A CLI that cannot resolve
+  the base also records nothing and refuses nothing.
 - The pass judges a request only when it has a `review_base` and the head judged is **not** an
   ancestor of it (`git merge-base --is-ancestor`, as `InBase` runs it). A request with no
   `review_base` is not judged, and §5 reports it ("cannot be judged").
@@ -226,7 +232,63 @@ closed owns nothing, so it is never told about.
 - The alert keeps its place in the sort (oldest alert first). The sort key is the alert's own start
   time, as today.
 
-## 8. Build steps
+## 8. The person's directives are answered (item 7)
+
+**The rule.** An agent answers every directive the person sends it on the bus, with `report <self>
+--to <person>` or `reply --ref <id> <person>`. Today that is a habit, written in the agent-bus
+skill. busmon is where the person reads; text typed only in a pane never reaches them. This
+section makes the dispatcher enforce it.
+
+**What is judged.** A new health check, `person-unanswered` (Handler `dispatch`, every minute). It
+sits beside `quiet-agent` in the stall guard (`internal/dispatchsvc/stallchecks.go`), whose shape
+it copies: `QuietDirectiveFor` and `QuietAgentWakes` in `health/stall.go`.
+
+For each agent A, the check takes the oldest **person's directive** D addressed to A after A's
+last answer to the person:
+- D is a `directive` with `human = yes` and `typed = yes`, from the project's person (the dispatcher's
+  `Config.Person`, `identity.as`, `dispatch/loop.go:42`), with no `wake=no` (Q5);
+- an **answer** is any cmd entry from A to the person with an id above D's: a `reply`, or the
+  directive that `report --to <person>` writes (`ReportNotice`, `bus/stream.go:495`).
+
+One answer covers every earlier directive. A directive to `@all` is one directive per agent, so
+each agent answers for itself, as the skill already says. A directive older than the oldest
+retained cmd entry is not judged.
+
+**The two stages.** The setting is `dispatch.answer_after` (default 10m, 0 = off), added to the
+registry (`config/keys.go`).
+1. **After `answer_after`,** the check warns. It wakes A once per D, with `FencedCmdOnce` under
+   the mark `answer-wake:<A>` (episode = D's id), as `QuietAgentWakes` does:
+
+   > Answer guard: the person's directive `<id>` ("<first 80 chars>") has no answer from you after
+   > 10m. Answer on the bus: agentbus report `<A>` --to `<person>` "…", or agentbus reply --ref
+   > `<id>` `<person>` "…".
+
+   The dispatcher delivers it like any directive, so a working agent is woken once it is idle.
+2. **After twice `answer_after`,** still unanswered, the person is told once per D. This uses
+   `FencedNotifyOnceForPerson` (`bus/once.go:181`) under the mark `answer-person:<A>`:
+
+   > Answer guard: `<A>` has not answered your directive `<id>` ("<first 80 chars>") for 20m
+   > (`<state>`; no terminal, if so). Look at its pane in busmon.
+
+   Its prefix, "Answer guard: ", is added beside `stallNoticePrefix`
+   (`internal/dispatchsvc/notifyfacts.go:135`), so the person's notifications ring for it as they
+   do for the stall guard.
+
+**What it never does.** It never answers for the agent, types into a pane, or resends the
+directive. An agent with no terminal still reaches stage 2: the person is told, and §6's notice
+reaches master if it is a pop.
+
+**Tests** (the stall guard's seam, `health` package, no Redis):
+- an answered directive is not judged;
+- an unanswered one warns at 10 min and its wake is owed once;
+- the person's notice is owed at 20 min, once;
+- a later answer clears both;
+- an untyped (composed) directive is not judged (Q5 A);
+- a directive past the retained history is not judged.
+
+The dispatcher writes, fenced and once-only, are tested against Redis.
+
+## 9. Build steps
 
 One PR each, from `origin/dev`, in this order. Steps 1 and 4 are independent.
 
@@ -238,6 +300,8 @@ One PR each, from `origin/dev`, in this order. Steps 1 and 4 are independent.
 4. **§7, alert wording and CHANGED:** busmon only (uses `reported_at` once step 3 is in; before it,
    only `accepted_at`).
 5. **§5, `board drift` and the sentinel skill's daily review.**
+6. **§8, the answer guard:** the health check, the two once-only writes, the setting, the notice
+   prefix. Independent of steps 1-5.
 
 **Tests:**
 - **§3, real git on a disposable repository** (the merge queue's own seam): a merge, a squash and a
@@ -251,7 +315,7 @@ One PR each, from `origin/dev`, in this order. Steps 1 and 4 are independent.
 - **§7:** `boardAlert` cases on `review`, `blocked` and `reported_at`.
 - **Redis cases** use `AGENTBUS_TEST_REDIS_URL` only.
 
-## 9. Questions for the person
+## 10. Questions for the person
 
 **Q1. A multi-step request whose step in review merges.**
 - **(A) recommended:** `request review --more` marks a step that is not the last. Its merge sends
@@ -278,3 +342,8 @@ One PR each, from `origin/dev`, in this order. Steps 1 and 4 are independent.
   back.
 - **(B)** The dispatcher relaunches it itself through self-repair. This reverses the decision that
   "a pop comes back through master only" (2026-11-09) and needs that decision reopened.
+
+**Q5. Which of the person's directives must be answered (§8).**
+- **(A) recommended:** only those the person typed (`typed = yes`). A directive that agentbus
+  composed in their name, such as a resume summary or a close, needs no answer.
+- **(B)** Every directive with `human = yes`, composed ones included.
