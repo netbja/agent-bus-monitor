@@ -96,7 +96,7 @@ func TestHelpNeedsNoProjectOrBroker(t *testing.T) {
 	}
 	for _, args := range [][]string{{"help"}, {"--help"}, {"-h"}, {"-p", "demo", "-h"}} {
 		out, errOut, code := run(args...)
-		if code != 0 || !strings.HasPrefix(out, "usage: agentbus [flags] <command>") || !strings.Contains(out, "\n  subscribe ") {
+		if code != 0 || !strings.HasPrefix(out, "USAGE\n  agentbus [flags] <command>") || !strings.Contains(out, "\n  subscribe: ") {
 			t.Errorf("%q: code %d stdout %q stderr %q", args, code, out, errOut)
 		}
 	}
@@ -112,7 +112,7 @@ func TestHelpNeedsNoProjectOrBroker(t *testing.T) {
 	// No command: the index on stderr, exit 1, and -p was read as the project.
 	for _, args := range [][]string{{}, {"-p", "demo"}} {
 		out, errOut, code := run(args...)
-		if code != 1 || out != "" || !strings.HasPrefix(errOut, "usage: agentbus [flags] <command>") {
+		if code != 1 || out != "" || !strings.HasPrefix(errOut, "USAGE\n  agentbus [flags] <command>") {
 			t.Errorf("%q: code %d stdout %q stderr %q", args, code, out, errOut)
 		}
 	}
@@ -159,4 +159,55 @@ func TestMessageCommandsAreText(t *testing.T) {
 // runOut runs a command and returns its combined output.
 func runOut(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
+}
+
+// The top-level help, gh's layout: UPPERCASE sections, one line per command.
+func TestHelpIndexGolden(t *testing.T) {
+	var out, errw strings.Builder
+	if code := runHelp("", &out, &errw); code != 0 {
+		t.Fatalf("runHelp: %d %s", code, errw.String())
+	}
+	checkGolden(t, "help-index.golden", out.String())
+}
+
+// Nothing in the top-level help is wider than 80 columns, and each command's
+// line is "  name: brief" with a brief of 2 to 6 words.
+func TestHelpIndexFits80Columns(t *testing.T) {
+	var out, errw strings.Builder
+	runHelp("", &out, &errw)
+	for _, line := range strings.Split(out.String(), "\n") {
+		if n := len([]rune(line)); n > 80 {
+			t.Errorf("%d columns: %q", n, line)
+		}
+	}
+	for _, c := range commands {
+		if n := len(strings.Fields(c.Brief)); n < 2 || n > 6 {
+			t.Errorf("%s: brief %q has %d words, want 2-6", c.Name, c.Brief, n)
+		}
+		if !strings.Contains(out.String(), "\n  "+c.Name+": ") {
+			t.Errorf("%s: no \"  %s: \" line", c.Name, c.Name)
+		}
+	}
+}
+
+// Every registered command sits in exactly one section, and a section names
+// only registered commands.
+func TestEveryCommandInOneSection(t *testing.T) {
+	seen := map[string]string{}
+	for _, s := range helpSections {
+		for _, n := range s.Names {
+			if prev, ok := seen[n]; ok {
+				t.Errorf("%s: in %s and %s", n, prev, s.Title)
+			}
+			seen[n] = s.Title
+			if _, ok := cli.Lookup(commands, n); !ok {
+				t.Errorf("%s (%s): not a registered command", n, s.Title)
+			}
+		}
+	}
+	for _, c := range commands {
+		if _, ok := seen[c.Name]; !ok {
+			t.Errorf("%s: in no section", c.Name)
+		}
+	}
 }

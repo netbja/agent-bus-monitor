@@ -104,21 +104,37 @@ examples:
 }
 
 func TestIndex(t *testing.T) {
+	cmds := append(testCmds, Command{Name: "notifications", Usage: []string{"notifications"}, Brief: "notification targets"})
+	cmds[0].Brief, cmds[1].Brief, cmds[2].Brief = "show one thread", "wait for one command", "hook entry points"
 	var sb strings.Builder
-	Index(&sb, "agentbus", testGlobals[:1], testCmds)
-	want := `usage: agentbus [flags] <command> [args...]
+	Index(&sb, "agentbus", testGlobals[:1], cmds, Page{
+		Sections: []Section{
+			{Title: "MESSAGE COMMANDS", Names: []string{"subscribe", "thread"}},
+			{Title: "INTERNAL COMMANDS", Names: []string{"plugin", "notifications"}},
+		},
+		Examples:  []string{"agentbus thread 1-0"},
+		LearnMore: []string{"Use `agentbus help <command>` for more about a command."},
+	})
+	want := `USAGE
+  agentbus [flags] <command> [args...]
 
-flags:
+MESSAGE COMMANDS
+  subscribe:      wait for one command
+  thread:         show one thread
+
+INTERNAL COMMANDS
+  plugin:         hook entry points
+  notifications:  notification targets
+
+FLAGS
   -p, --project <project>
+  -h, --help               show help for a command
 
-commands:
-  thread     show one :cmd thread
-  subscribe  wait for one addressed command
+EXAMPLES
+  $ agentbus thread 1-0
 
-internal (scripts, hooks, units):
-  plugin     hook entry points
-
-agentbus help <command>, or agentbus <command> --help, shows one command.
+LEARN MORE
+  Use ` + "`agentbus help <command>`" + ` for more about a command.
 `
 	if sb.String() != want {
 		t.Fatalf("Index:\n%s\nwant:\n%s", sb.String(), want)
