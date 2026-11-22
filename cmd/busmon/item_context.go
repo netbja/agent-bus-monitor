@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/bus"
 )
 
 // An item's Context (triage-dedupe spec §5, step 3): the messages attached
@@ -105,4 +108,54 @@ func isReply(fl feedLine, root string) bool {
 	}
 	_, _, notice := reportSubject(fl.ev.Message)
 	return !notice
+}
+
+// ctxRef is a Context line on a page: the feed line it opens, its body line.
+type ctxRef struct {
+	id   string
+	line int
+}
+
+// contextSection is the Context section under a page's own fields, its
+// first line at body line at: a heading, each line numbered, a folded
+// report saying what it asks, the older count.
+func contextSection(c itemContext, now time.Time, width, at int) ([]Line, []ctxRef) {
+	out := []Line{nil, {S(RoleAccent, "Context")}}
+	var refs []ctxRef
+	for i, l := range c.Lines {
+		seg := Line{S(RoleAccent, fmt.Sprintf("%d  ", i+1)), S(RoleText, Preview(l.Who)), S(RoleMuted, "  "+humanAge(now.Sub(l.At))+"  ")}
+		if l.Folded {
+			seg = append(seg, S(RoleAttention, needsWord(l.Needs)+" "+GlyphNone+" "))
+		}
+		seg = append(seg, S(RoleText, Preview(l.Text)))
+		refs = append(refs, ctxRef{id: l.ID, line: at + len(out)})
+		out = append(out, FitLine(seg, width))
+	}
+	if c.Older > 0 {
+		out = append(out, Line{S(RoleMuted, fmt.Sprintf("%d older in Activity", c.Older))})
+	}
+	return out, refs
+}
+
+// needsWord is how a folded report says what it asks.
+func needsWord(needs string) string {
+	if needs == bus.NeedsRead {
+		return "for you to read"
+	}
+	return "needs your answer"
+}
+
+// pageItemKey is the For you item a page is the page of: a merge by its
+// head, an ask, a waiting agent, a gate's or a report item's message; "".
+func (m *Model) pageItemKey(p *page) string {
+	for _, it := range m.forYou {
+		switch {
+		case p.kind == ovMerge && it.Rank == rankMerge && it.Head != "" && it.Head == p.key,
+			p.kind == ovAsk && it.Rank == rankAsk && it.AskID == p.key,
+			p.kind == ovAgent && it.Rank == rankWait && it.Agent == p.key,
+			p.kind == ovMessage && p.ev.ID != "" && (it.Rank == rankGate || it.Rank == rankReport) && itemRoot(it) == p.ev.ID:
+			return it.Key
+		}
+	}
+	return ""
 }

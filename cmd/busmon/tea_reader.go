@@ -68,6 +68,7 @@ type page struct {
 	iitems []ideaItem   // ovIdeas: its selectable rows
 	mem    *memoryView  // ovMemory, ovMemoryTopic: the store as read when the page opened
 	mitems []memoryItem // ovMemory: its selectable rows
+	ctx    []ctxRef     // an item's page: its Context lines, opened by 1-3 or a click (triage-dedupe §5)
 	oitems []memoryItem // ovMemoryTopic: its observations, selectable for x
 	forget string       // ovMemoryTopic: the observation x asks about, until y or another key
 
@@ -676,6 +677,14 @@ func (m *Model) buildPage() bool {
 		p.body, p.spans = askPanelLayout(a, p.ask, width)
 		p.plain = askPlain(a.Questions[p.ask.q])
 	}
+	p.ctx = nil
+	if key := m.pageItemKey(p); key != "" { // an item's page ends with its Context (triage-dedupe §5)
+		if c := contextOf(m.forYou, key, m.feed.feed); len(c.Lines) > 0 {
+			var lines []Line
+			lines, p.ctx = contextSection(c, now, width, len(p.body))
+			p.body = append(p.body, lines...)
+		}
+	}
 	p.built, p.dirty = stamp, false
 	m.clampPage(p)
 	return true
@@ -981,6 +990,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return nil
 	case ActCopy:
 		return m.copy(p.plain, cmp.Or(p.plainWhat, "text"))
+	case ActContext: // 1-3: the n-th Context line in full
+		if n := int(k.Rune - '1'); n >= 0 && n < len(p.ctx) {
+			return m.openFeedLine(p.ctx[n].id)
+		}
+		return nil
 	case ActCopyThread:
 		return m.copy(p.threadPlain, cmp.Or(p.threadWhat, "thread"))
 	case ActNextItem, ActPrevItem:
@@ -1241,6 +1255,11 @@ func (m *Model) readerClick(x, y int) tea.Cmd {
 	if y <= r.Y || y >= r.Y+1+m.pageRows(p) || x <= r.X || x >= r.X+r.W-1 || line >= len(p.body) { // the plan's detail rows are no body line
 		return nil
 	}
+	for _, c := range p.ctx { // a Context line opens in full (triage-dedupe §5)
+		if c.line == line {
+			return m.openFeedLine(c.id)
+		}
+	}
 	switch p.kind {
 	case ovAsk:
 		for i, s := range p.spans {
@@ -1483,6 +1502,8 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
 	case ActFilter:
 		return p.kind == ovHistory || p.kind == ovServiceLog
+	case ActContext:
+		return len(p.ctx) > 0
 	case ActReplay:
 		return p.kind == ovAbout
 	case ActShowDone:
