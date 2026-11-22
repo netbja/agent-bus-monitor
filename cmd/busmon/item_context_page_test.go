@@ -144,7 +144,9 @@ func TestContextOnTheAskPage(t *testing.T) {
 	if p.kind != ovAsk || !strings.Contains(plainLines(p.body), "the options explained") {
 		t.Fatalf("ask page %+v\n%s", p.kind, plainLines(p.body))
 	}
-	line := slices.IndexFunc(p.body, func(l Line) bool { return strings.HasPrefix(plainOf(l), "1  ") && strings.Contains(plainOf(l), "explained") })
+	line := slices.IndexFunc(p.body, func(l Line) bool {
+		return strings.HasPrefix(plainOf(l), "1  ") && strings.Contains(plainOf(l), "explained")
+	})
 	r := m.readerRect()
 	m = run(t, m, m.readerClick(r.X+3, r.Y+1+line-p.top))
 	if q := m.rd.top(); q.kind != ovMessage || q.ev.ID != rid(0) {
