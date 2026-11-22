@@ -69,6 +69,7 @@ type page struct {
 	mem    *memoryView  // ovMemory, ovMemoryTopic: the store as read when the page opened
 	mitems []memoryItem // ovMemory: its selectable rows
 	ctx    []ctxRef     // an item's page: its Context lines, opened by 1-3 or a click (triage-dedupe §5)
+	titems []triageRow  // ovTriageSummary: its rows (sel: the selected one)
 	oitems []memoryItem // ovMemoryTopic: its observations, selectable for x
 	forget string       // ovMemoryTopic: the observation x asks about, until y or another key
 
@@ -678,6 +679,8 @@ func (m *Model) buildPage() bool {
 		p.title = askTitle(a)
 		p.body, p.spans = askPanelLayout(a, p.ask, width)
 		p.plain = askPlain(a.Questions[p.ask.q])
+	case ovTriageSummary:
+		m.triageSummary(p, width)
 	}
 	p.ctx = nil
 	if it, ok := m.pageItem(p); ok { // an item's page ends with its Context (triage-dedupe §5)
@@ -979,11 +982,22 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		}
 	}
-	if p.kind == ovTriageEnd && k.Code == keyEnter { // the next decision's row (busmon-queue-triage §4.4)
-		if p.key != "" {
-			return m.push(page{kind: ovPlanTask, key: p.key})
+	if p.kind == ovTriageSummary { // its rows: ↑↓ choose, Enter opens (triage-dedupe §4)
+		switch {
+		case k.Code == keyEnter:
+			return m.summaryOpen(p)
+		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
+			m.moveSel(p, act, m.readerRows(), func() []int {
+				lines := make([]int, len(p.titems))
+				for i, r := range p.titems {
+					lines[i] = r.line
+				}
+				return lines
+			})
+			p.dirty = true
+			m.refresh()
+			return nil
 		}
-		return nil
 	}
 	rows := m.pageRows(p) // the plan drawer's detail rows are not the body's (views-redesign §4.1)
 	switch act {

@@ -260,7 +260,7 @@ var (
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "filter", Act: ActFilter, match: runeIs('f')},
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
-		{Keys: "T", Hint: "triage", Help: "triage: open what waits for you one item at a time, the next after each answer or send (n next, p back, esc ends); not t, the tour", Act: ActTriage, match: runeIs('T')},
+		{Keys: "T", Hint: "triage", Help: "triage: a summary of what waits for you, one line per action; enter opens one, the next after each answer or send (n next, p back), esc returns to the summary, esc there ends; not t, the tour", Act: ActTriage, match: runeIs('T')},
 		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
 		{Keys: "w", Help: "answer the open question, or with none open write to master", Act: ActAskOrWrite, match: runeIs('w')},
 		{Keys: "Z", Help: "put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first", Act: ActSleep, match: runeIs('Z')},
