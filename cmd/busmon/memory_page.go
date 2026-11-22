@@ -15,7 +15,7 @@ import (
 // kind, its count and its newest quote; Enter opens a topic. The files live
 // on the host: elsewhere (busmon through a tunnel) the page says where, and
 // shows nothing (the person's answer 3). Editing, forgetting and adding
-// (e, x, a) are part b.
+// (e, x, a) are part b (memory_actions.go).
 
 // memTopic is one topic as read: its observations, or why it does not parse.
 type memTopic struct {
@@ -32,10 +32,11 @@ type memoryView struct {
 	topics []memTopic
 }
 
-// memoryItem is a selectable row: its topic and body line.
+// memoryItem is a selectable row: its topic, its observation on a topic's
+// page, and its body line.
 type memoryItem struct {
-	topic string
-	line  int
+	topic, id string
+	line      int
 }
 
 // memoryHere says whether busmon runs on the host of the person's memory:
@@ -99,7 +100,7 @@ func memoryPage(v memoryView, sel, width int) (title string, body []Line, items 
 		return title, []Line{{S(RoleError, "the memory cannot be read: "+Preview(v.err))}}, nil
 	}
 	if len(v.topics) == 0 {
-		return title, []Line{{S(RoleMuted, "nothing remembered yet: master files the person's own words with agentbus mem person remember")}}, nil
+		return title, []Line{{S(RoleMuted, "nothing remembered yet: master files the person's own words with agentbus mem person remember, and a here adds yours")}}, nil
 	}
 	title += fmt.Sprintf(" %s %d topics", GlyphNone, len(v.topics))
 	nameW := 0
@@ -127,19 +128,24 @@ func memoryPage(v memoryView, sel, width int) (title string, body []Line, items 
 }
 
 // memoryTopicPage is one topic: each observation's filing, its quote, who
-// said it, and the question it answers.
-func memoryTopicPage(v memoryView, topic string, width int) (title string, body []Line) {
+// said it, and the question it answers; the observation sel is marked (x).
+func memoryTopicPage(v memoryView, topic string, sel, width int) (title string, body []Line, items []memoryItem) {
 	title = "Memory " + GlyphNone + " " + Preview(topic)
 	for _, t := range v.topics {
 		if t.name != topic {
 			continue
 		}
 		if t.bad != "" {
-			return title, []Line{{S(RoleAttention, t.bad)}}
+			return title, []Line{{S(RoleAttention, t.bad)}}, nil
 		}
 		body = append(body, Line{S(RoleMuted, "kind "+t.kind+fmt.Sprintf(", %d observations", len(t.obs)))}, nil)
-		for _, o := range t.obs {
-			body = append(body, FitLine(Line{S(RoleAccent, o.Type), S(RoleMuted, " "+GlyphNone+" "+o.Importance+"  "+o.ID)}, width))
+		for i, o := range t.obs {
+			mark := "  "
+			if i == sel {
+				mark = GlyphSelect + " "
+			}
+			items = append(items, memoryItem{topic: topic, id: o.ID, line: len(body)})
+			body = append(body, FitLine(Line{S(RoleAccent, mark+o.Type), S(RoleMuted, " "+GlyphNone+" "+o.Importance+"  "+o.ID)}, width))
 			body = append(body, wrapSpans([]mdSpan{{text: "\"" + Preview(o.Quote) + "\"", role: RoleText}}, width, "  ", "  ")...)
 			if o.Question != "" {
 				body = append(body, wrapIndented("answers: "+Preview(o.Question), width, "  ")...)
@@ -149,9 +155,9 @@ func memoryTopicPage(v memoryView, topic string, width int) (title string, body 
 			}
 			body = append(body, Line{S(RoleMuted, "  "+Preview(o.Said))}, nil)
 		}
-		return title, body
+		return title, body, items
 	}
-	return title, []Line{{S(RoleMuted, "no topic "+Preview(topic))}}
+	return title, []Line{{S(RoleMuted, "no topic "+Preview(topic))}}, nil
 }
 
 // memoryLocalOf is where the page reads: the test's answer, else the rule

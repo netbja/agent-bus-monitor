@@ -700,6 +700,8 @@ func (m *Model) closeCompose() {
 	}
 	if c.kind == composeIdea {
 		m.ui.ideaDraft = c.area.value()
+	} else if c.kind == composeMemory {
+		m.ui.memoryDraft = c.area.value()
 	} else if c.kind == composeMessage {
 		m.saveMessageCompose()
 	} else if t := c.area.value(); c.orphan && strings.TrimSpace(t) != "" {
@@ -949,6 +951,9 @@ func (m *Model) composeSend() tea.Cmd {
 	if c.kind == composeIdea {
 		return m.sendIdeaCompose(c)
 	}
+	if c.kind == composeMemory {
+		return m.sendMemoryCompose(c)
+	}
 	if c.kind == composeAnswer {
 		if body == "" {
 			m.ui.flash, m.ui.flashErr = "nothing to send", true
@@ -1077,6 +1082,8 @@ func (m Model) drawCompose(g *grid) {
 		title = "Answer " + GlyphNone + " " + Preview(c.agent)
 	case composeIdea:
 		title = "New idea " + GlyphNone + " to discuss"
+	case composeMemory:
+		title = "Remember " + GlyphNone + " your own words"
 	}
 	rows := c.area.rowsAt(tr.W)
 	drawFrame(g, f.X, f.Y, f.W, f.H, Frame{Title: Line{{Text: title, Role: RoleText}}, Focused: true, Hue: panelHue[PanelActivity],
@@ -1099,6 +1106,8 @@ func (m Model) drawCompose(g *grid) {
 		drawLine(g, f.X+2+fw+4, f.Y+1, iw-fw-4, tail, false)
 	} else if c.kind == composeIdea {
 		drawLine(g, f.X+2, f.Y+1, iw, Line{{Text: "the first line is its title, the rest what it is", Role: RoleMuted}}, false)
+	} else if c.kind == composeMemory {
+		drawLine(g, f.X+2, f.Y+1, iw, Line{{Text: "first line: topic type importance (keep-both or supersedes=<id> for a second decision); then your words", Role: RoleMuted}}, false)
 	} else {
 		drawLine(g, f.X+2, f.Y+1, iw, Line{{Text: "Answer to ", Role: RoleMuted}, {Text: Preview(c.header), Role: RoleAccent}}, false)
 	}
@@ -1108,6 +1117,8 @@ func (m Model) drawCompose(g *grid) {
 		placeholder = "your answer " + GlyphNone + " Ctrl+S: send"
 	case composeIdea:
 		placeholder = "its title, then what it is " + GlyphNone + " Ctrl+S: add"
+	case composeMemory:
+		placeholder = "topic type importance, then your words " + GlyphNone + " Ctrl+S: remember"
 	}
 	for i, l := range c.area.lines(tr.W, tr.H, !c.onTo || c.kind != composeMessage, placeholder) {
 		drawLine(g, tr.X, tr.Y+i, tr.W, l, false)

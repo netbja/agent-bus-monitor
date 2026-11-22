@@ -444,6 +444,11 @@ func (s *Store) commit(ctx context.Context, save []*Topic, drop []string, msg st
 		}
 		paths = append(paths, name+".md")
 	}
+	return s.addCommit(ctx, msg, paths)
+}
+
+// addCommit stages paths and commits them alone, as agentbus.
+func (s *Store) addCommit(ctx context.Context, msg string, paths []string) error {
 	if _, err := s.git.Run(ctx, append([]string{"add", "-A", "--"}, paths...)...); err != nil {
 		return err
 	}
@@ -571,4 +576,35 @@ func (s *Store) Purge(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// CommitEdit follows a hand edit of topic's file (busmon's e, spec §4.4):
+// the whole memory is checked, and only a clean one commits the file as
+// saved, as one commit. With findings, nothing is committed and the file
+// stays as the person saved it; a file saved unchanged commits nothing.
+func (s *Store) CommitEdit(ctx context.Context, topic string) ([]Finding, bool, error) {
+	if !ValidTopic(topic) {
+		return nil, false, refuse("the topic must match %s", topicRE)
+	}
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+	if fs := s.Check(); len(fs) > 0 {
+		return fs, false, nil
+	}
+	if err := s.private(); err != nil {
+		return nil, false, err
+	}
+	if err := s.initRepo(ctx); err != nil {
+		return nil, false, err
+	}
+	file := topic + ".md"
+	out, err := s.git.Run(ctx, "status", "--porcelain", "--", file)
+	if err != nil || strings.TrimSpace(out) == "" {
+		return nil, false, err
+	}
+	err = s.addCommit(ctx, "edit "+topic+" (by hand, from busmon)", []string{file})
+	return nil, err == nil, err
 }
