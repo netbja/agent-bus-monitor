@@ -152,6 +152,9 @@ func (l *loop) popRetire(ctx context.Context, a string, now time.Time) error {
 	}
 	if !done {
 		l.logOnce("pop-kept:"+a, map[string]any{"agent": a, "action": "pop-kept", "reason": why})
+		if f.Closed && len(f.OwnedTasks) > 0 && len(f.Unknown) == 0 { // stranded: board-drift §6
+			return l.popStranded(ctx, a, f)
+		}
 		return nil
 	}
 	episode := PopEpisode(f.Snap)
@@ -205,6 +208,36 @@ func (l *loop) popEnd(ctx context.Context, a string, episode int64) error {
 			action = "pop-end-failed"
 		}
 		l.log(map[string]any{"agent": a, "action": action, "to": l.cfg.EscalateTo, "episode": episode, "reason": r.Failed})
+	}
+	return nil
+}
+
+// PopStrandedText is board-drift §6's notice to master: the closed pop, what
+// it owns, and the line that brings it back (the dispatcher never does: Q4).
+func PopStrandedText(role string, owned []string, back string) string {
+	return fmt.Sprintf("%s has no terminal and owns open requests: %s. Bring it back: %s", role, strings.Join(owned, ", "), back)
+}
+
+// popStranded tells master once per episode that a closed pop still owns
+// open requests (it was silent for hours: board-drift §6), with the session
+// {p}:resume holds for it, else a plain pop.
+func (l *loop) popStranded(ctx context.Context, a string, f PopFacts) error {
+	if cannot := l.recipientCannotAct(a); cannot != "" { // as pop-done's: the mark kept for when master can act (reviewer-codex)
+		l.logOnce("pop-stranded:"+a, map[string]any{"agent": a, "action": "pop-stranded-wait", "reason": cannot})
+		return nil
+	}
+	back := "agentbus --project " + l.b.Project() + " pop " + a
+	if r, err := l.b.ResumeOf(ctx, a); err == nil && r != nil && bus.ValidSessionID(r.Session) {
+		back += " --resume " + r.Session
+	}
+	episode := PopEpisode(f.Snap)
+	sent, err := l.b.FencedCmdOnce(ctx, l.token, bus.PopStrandedMark(a), strconv.FormatInt(episode, 10), dispatchFrom,
+		l.cfg.EscalateTo, bus.CmdDirective, PopStrandedText(a, f.OwnedTasks, back), false)
+	if err != nil {
+		return err
+	}
+	if sent {
+		l.log(map[string]any{"agent": a, "action": "pop-stranded", "to": l.cfg.EscalateTo, "episode": episode})
 	}
 	return nil
 }
