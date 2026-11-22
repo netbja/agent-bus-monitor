@@ -26,6 +26,7 @@ type Command struct {
 	Aliases   []string
 	Usage     []string // synopsis lines, without the binary's name
 	Summary   string
+	Brief     string // 2 to 6 words: its line in the index ("name: brief")
 	Flags     []Flag
 	Examples  []string
 	NoProject bool // runs with no project and no broker
@@ -171,34 +172,52 @@ func Render(w io.Writer, bin string, c Command) {
 	}
 }
 
-// Index writes the overview: global flags, then every command with its
-// summary, the internal ones apart.
-func Index(w io.Writer, bin string, globals []Flag, cmds []Command) {
-	fmt.Fprintf(w, "usage: %s [flags] <command> [args...]\n", bin)
-	if len(globals) > 0 {
-		fmt.Fprint(w, "\nflags:\n")
-		writeFlags(w, globals)
-	}
+// Section is one group of the index, its commands in the order listed.
+type Section struct {
+	Title string
+	Names []string
+}
+
+// Page is what the index shows besides the table: its sections, examples and
+// closing pointers.
+type Page struct {
+	Sections  []Section
+	Examples  []string
+	LearnMore []string
+}
+
+// Index writes the overview in gh's layout: USAGE, each section with one
+// "name: brief" line per command, FLAGS (the globals and -h), EXAMPLES and
+// LEARN MORE. A name the table does not know is skipped.
+func Index(w io.Writer, bin string, globals []Flag, cmds []Command, p Page) {
+	fmt.Fprintf(w, "USAGE\n  %s [flags] <command> [args...]\n", bin)
 	width := 0
-	for _, c := range cmds {
-		width = max(width, len(c.Name))
-	}
-	section := func(title string, internal bool) {
-		first := true
-		for _, c := range cmds {
-			if c.Internal != internal {
-				continue
-			}
-			if first {
-				fmt.Fprintf(w, "\n%s:\n", title)
-				first = false
-			}
-			fmt.Fprintln(w, strings.TrimRight(fmt.Sprintf("  %-*s  %s", width, c.Name, c.Summary), " "))
+	for _, s := range p.Sections {
+		for _, n := range s.Names {
+			width = max(width, len(n)+1)
 		}
 	}
-	section("commands", false)
-	section("internal (scripts, hooks, units)", true)
-	fmt.Fprintf(w, "\n%s help <command>, or %s <command> --help, shows one command.\n", bin, bin)
+	for _, s := range p.Sections {
+		fmt.Fprintf(w, "\n%s\n", s.Title)
+		for _, n := range s.Names {
+			if c, ok := Lookup(cmds, n); ok {
+				fmt.Fprintln(w, strings.TrimRight(fmt.Sprintf("  %-*s  %s", width, n+":", c.Brief), " "))
+			}
+		}
+	}
+	fmt.Fprint(w, "\nFLAGS\n")
+	writeFlags(w, append(slices.Clone(globals), Flag{Long: "help", Short: 'h', Help: "show help for a command"}))
+	block := func(title, lead string, lines []string) {
+		if len(lines) == 0 {
+			return
+		}
+		fmt.Fprintf(w, "\n%s\n", title)
+		for _, l := range lines {
+			fmt.Fprintf(w, "  %s%s\n", lead, l)
+		}
+	}
+	block("EXAMPLES", "$ ", p.Examples)
+	block("LEARN MORE", "", p.LearnMore)
 }
 
 // FlagLabel is "-s, --since <id>", or "    --loop" without a short.

@@ -23,11 +23,13 @@ var commands = []cli.Command{
 	// --- publishing and reading
 	{
 		Name: "status", Text: true, Usage: []string{"status <agent> <working|idle|blocked|waiting|done> [message...]"},
+		Brief:    "declare your state",
 		Summary:  "declare your state; it is also your heartbeat",
 		Examples: []string{"agentbus -p demo status coder working \"task 3: parser\""},
 	},
 	{
 		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--needs answer|read] [--to <agent>]... <message...>"},
+		Brief:   "publish a report",
 		Summary: "publish a report (full text kept) and print its id; --to also tells who waits for it",
 		Flags: []cli.Flag{
 			{Long: "auto", Short: 'a', Help: "mark it automatic, not a note"},
@@ -38,6 +40,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "reports", Usage: []string{"reports [--json] [<id>]", "reports --unread [--to <target>] [--json]"},
+		Brief:   "list or read reports",
 		Summary: "list recent reports with each notice's read state, or print one report's full text",
 		Flags: []cli.Flag{
 			{Long: "unread", Short: 'u', Help: "only the reports a person has not opened in busmon (exit 64 when none)"},
@@ -48,6 +51,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "reload", Usage: []string{"reload <role> [--fresh] [--dry-run] [--reason <text>] [--as <person>]"},
+		Brief:   "restart an idle agent",
 		Summary: "restart an idle agent on its role and profile, resuming its session (sentinel, master for sentinel, a person)",
 		Flags: []cli.Flag{
 			{Long: "fresh", Short: 'F', Help: "relaunch without resuming: its conversation is lost"},
@@ -59,6 +63,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "background", Usage: []string{"background <agent> <text...> [--for <duration>]", "background <agent> --clear"},
+		Brief:   "show background work",
 		Summary: "show an agent's background work in busmon (\"2 checks running\") until cleared or its time runs out",
 		Flags: []cli.Flag{
 			{Long: "for", Short: 'f', Arg: "<duration>", Help: "how long it may run: 30m by default, at most 24h; it disappears after"},
@@ -68,6 +73,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "handoff", Usage: []string{"handoff [--json]", "handoff <self> --report <id>"},
+		Brief:   "declare or list hand-offs",
 		Summary: "list declared hand-offs, or declare your own (its report id); declaring sets you idle",
 		Flags: []cli.Flag{
 			{Long: "report", Short: 'r', Arg: "<id>", Help: "the report that carries your hand-off"},
@@ -77,11 +83,13 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "notify", Text: true, Usage: []string{"notify <message...>"},
+		Brief:    "post a notice",
 		Summary:  "post a notice for the record; wakes nobody",
 		Examples: []string{"agentbus -p demo notify \"broker restarted\""},
 	},
 	{
 		Name: "cmd", Text: true, Usage: []string{"cmd [--ref <id>] [--no-wake] <target> <command...>"},
+		Brief:   "send a directive",
 		Summary: "send a directive; prints its id (the thread root)",
 		Flags: []cli.Flag{
 			fRef,
@@ -91,21 +99,25 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "run", Usage: []string{"run", "run reset"},
+		Brief:    "the run budget",
 		Summary:  "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run",
 		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
 	},
 	{
 		Name: "ci", Usage: []string{"ci reset <pr>"},
+		Brief:    "the CI loop",
 		Summary:  "the CI loop (ci.loop): reset (the person only) re-opens a PR's loop after its stop, ci.max_handoffs more hand-offs",
 		Examples: []string{"agentbus -p demo ci reset 42"},
 	},
 	{
 		Name: "pop", Usage: []string{"pop <role> [--profile <profile>] [--resume <session-id>]"},
+		Brief:    "start a role's terminal",
 		Summary:  "start a role as a new terminal of the project's holder (the master's pop; agent-spawn's successor)",
 		Examples: []string{"agentbus -p demo pop docs", "agentbus -p demo pop reviewer-codex --profile codex-review"},
 	},
 	{
 		Name: "checkback", Usage: []string{"checkback <duration> \"<what is in flight>\"", "checkback --clear", "checkback"},
+		Brief:   "say when to look again",
 		Summary: "say when to look again at work in flight off the bus (a test run, a build), so the stall guard sees it; no argument lists them",
 		Flags: []cli.Flag{
 			{Long: "clear", Arg: "", Help: "delete your check-back (the work is done, or no longer yours)"},
@@ -114,6 +126,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "merge-queue", Usage: []string{"merge-queue [--json] [--live]", "merge-queue drop <head> \"<reason>\"", "merge-queue undrop <head>"},
+		Brief:   "what waits for merge",
 		Summary: "what waits for the person's merge: open PRs on an approved head, approved heads not pushed; drop withdraws a head nobody will deliver (master, docs, the person)",
 		Flags: []cli.Flag{
 			fJSON,
@@ -123,6 +136,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "history", Usage: []string{"history [--agent A] [--thread T] [--kind K] [--since D] [--until D] [--grep TEXT] [--limit N] [--json]"},
+		Brief:   "re-read the past",
 		Summary: "re-read the past: the archive on this host, then the live streams (redaction is best effort)",
 		Flags: []cli.Flag{
 			{Long: "agent", Short: 'a', Arg: "<agent>", Help: "entries from or to it, and its own reports and statuses"},
@@ -138,17 +152,20 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "thread", Usage: []string{"thread <thread-id>"},
+		Brief:    "show one thread",
 		Summary:  "show every :cmd entry of one thread, oldest first",
 		Examples: []string{"agentbus -p demo thread 1792537337865-0"},
 	},
 	{
 		Name: "listen", Usage: []string{"listen [status] [report] [notify] [cmd]"},
+		Brief:    "tail the streams live",
 		Summary:  "tail the streams live (debugging)",
 		Examples: []string{"agentbus -p demo listen cmd"},
 	},
 	{
 		Name: "subscribe", Aliases: []string{"watch"},
 		Usage:   []string{"subscribe [--loop] [--since <cursor>] <agent> [idle_secs]", "subscribe --drain [--brief] <agent>"},
+		Brief:   "wait for one command",
 		Summary: "wait for one addressed command, print it as JSON, exit; --drain empties the queue",
 		Flags: []cli.Flag{
 			{Long: "since", Short: 's', Arg: "<cursor>", Help: "floor: the id of the last event handled (0 = all retained)"},
@@ -162,6 +179,7 @@ var commands = []cli.Command{
 	// --- 4-eyes
 	{
 		Name: "challenge", Text: true, Usage: []string{"challenge <target> [--ref <id>] [--subject <s>] <message...>"},
+		Brief:   "open a 4-eyes gate",
 		Summary: "open a 4-eyes gate on an agent (the gated agent's verdict on --subject closes it)",
 		Flags: []cli.Flag{fRef,
 			{Long: "subject", Short: 's', Arg: "<s>", Help: "the verdict subject the review is for (no spaces)"}},
@@ -170,12 +188,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "reply", Text: true, Usage: []string{"reply --ref <id> <target> <message...>"},
+		Brief:    "answer on a thread",
 		Summary:  "answer on a thread",
 		Flags:    []cli.Flag{fRef},
 		Examples: []string{"agentbus -p demo reply -r 1792537337865-0 master \"yes, on main\""},
 	},
 	{
 		Name: "verdict", Text: true, Usage: []string{"verdict (--pr <n> | --subject <s>) [--ref <id>] [--head <sha>] <author> <approve|reject> [message...]"},
+		Brief:   "record a 4-eyes verdict",
 		Summary: "record a 4-eyes verdict in the ledger (resolves a matching gate)",
 		Flags: []cli.Flag{
 			{Long: "pr", Short: 'P', Arg: "<n>", Help: "the pull request number"},
@@ -188,6 +208,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "verdicts", Usage: []string{"verdicts [--json] [--pr <n> | --subject <s>]"},
+		Brief:   "show 4-eyes verdicts",
 		Summary: "4-eyes state of a subject (exit 0 approved, 2 pending, 3 rejected), or recent verdicts",
 		Flags: []cli.Flag{
 			{Long: "pr", Short: 'P', Arg: "<n>", Help: "the pull request number"},
@@ -199,6 +220,7 @@ var commands = []cli.Command{
 	{
 		Name: "gate", Usage: []string{"gate <agent>", "gate close <agent> <ref> --note <text> [--as <person>]",
 			"gate close (--subject <s> | --mine | --by <name>) [--dry-run] [--note <text>] [--as <person>]"},
+		Brief:   "list or close open gates",
 		Summary: "list an agent's open challenges, or close stale ones without a verdict (its challenger or a person)",
 		Flags: []cli.Flag{
 			{Long: "note", Short: 'N', Arg: "<text>", Help: "why it closes (the audit trace; required unless --dry-run)"},
@@ -215,6 +237,7 @@ var commands = []cli.Command{
 	// --- team state
 	{
 		Name: "pilot", Usage: []string{"pilot <claim|renew|release|status> [--ttl <dur>]"},
+		Brief:    "show the pilot lease",
 		Summary:  "the pilot lease: who drives the panes",
 		Flags:    []cli.Flag{{Long: "ttl", Short: 't', Arg: "<dur>", Help: "lease duration (default 90s)"}},
 		Examples: []string{"agentbus -p demo pilot status", "agentbus -p demo pilot claim -t 5m"},
@@ -222,6 +245,7 @@ var commands = []cli.Command{
 	{
 		Name: "agents", Usage: []string{"agents [<agent>...] [--json]", "agents forget <agent>... [--force]",
 			"agents wait <agent> [--since <unix-ms>] [--timeout <dur>]"},
+		Brief:   "every agent's state",
 		Summary: "every agent's declared state (or only the agents named); forget retires gone agents; wait for an agent's first status",
 		Flags: []cli.Flag{fJSON, fForce,
 			{Long: "since", Arg: "<unix-ms>", Help: "wait: only a status at or after this time counts"},
@@ -230,11 +254,13 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "pane", Usage: []string{"pane <agent>"},
+		Brief:    "print an agent's terminal id",
 		Summary:  "print an agent's registered terminal id",
 		Examples: []string{"agentbus -p demo pane coder"},
 	},
 	{
 		Name: "bind", Usage: []string{"bind <agent> [--pane <pane>] [--pid <pid>]"},
+		Brief:   "bind a verified pane",
 		Summary: "bind a verified pane identity (lists candidates without --pid)",
 		Flags: []cli.Flag{
 			{Long: "pane", Short: 'P', Arg: "<pane>", Help: "terminal id (AGENTBUS_TERM_ID)"},
@@ -244,18 +270,21 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "usage", Usage: []string{"usage [--json]", "usage <agent> <json>"},
+		Brief:    "per-agent model and context",
 		Summary:  "per-agent model and context, or write one snapshot",
 		Flags:    []cli.Flag{fJSON},
 		Examples: []string{"agentbus -p demo usage"},
 	},
 	{
 		Name: "budget", Usage: []string{"budget [--json]", "budget <provider> <json>"},
+		Brief:    "account usage windows",
 		Summary:  "account usage windows per provider, or publish one",
 		Flags:    []cli.Flag{fJSON},
 		Examples: []string{"agentbus -p demo budget"},
 	},
 	{
 		Name: "board", Usage: []string{"board [--json]", "board claim <task> [--branch <b>]", "board state <task> <state> | board done <task> | board drop <task>"},
+		Brief:   "the shared task board",
 		Summary: "the shared task board: who owns what",
 		Flags: []cli.Flag{
 			fJSON,
@@ -272,6 +301,7 @@ var commands = []cli.Command{
 			"request done <task> [--commit <sha>] [--branch <b>] <reply...>",
 			"request priority <task> high|normal|low --as <person> | request next [<agent>] [--json]",
 		},
+		Brief:   "tracked requests",
 		Summary: "tracked requests: sent, accepted, in review, blocked, done; the person's priority, the next to take; a first accept is refused at the project's board.wip_limit",
 		Flags: []cli.Flag{
 			fJSON, fRef,
@@ -285,12 +315,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "shutdown", Usage: []string{"shutdown [--force]"},
+		Brief:    "end the team's work",
 		Summary:  "tell every agent the work is over (refused while work is in flight)",
 		Flags:    []cli.Flag{fForce},
 		Examples: []string{"agentbus -p demo shutdown"},
 	},
 	{
 		Name: "refresh", Usage: []string{"refresh [--quiet]"},
+		Brief:    "publish agents' usage",
 		Summary:  "read local transcripts and publish each agent's usage",
 		Flags:    []cli.Flag{{Long: "quiet", Short: 'q', Help: "print nothing"}},
 		Examples: []string{"agentbus -p demo refresh -q"},
@@ -298,6 +330,7 @@ var commands = []cli.Command{
 	{
 		Name: "idea", Text: true, Usage: []string{"idea add <title...> [--text <text>] [--source <where>] [--as <person>] [--request <id>]",
 			"idea list [--state <state>] [--json]", "idea set <id> <state> [--from <state>] [--as <person>]"},
+		Brief:   "the project's ideas",
 		Summary: "the project's ideas: add one (anyone; it starts at 'to discuss'), list them, or set a state (to discuss, decided, doing, later, dropped: the person only, from their own shell)",
 		Flags: []cli.Flag{
 			{Long: "text", Short: 't', Arg: "<text>", Help: "add: what the idea is, in a few lines"},
@@ -314,6 +347,7 @@ var commands = []cli.Command{
 	{
 		Name: "health", Text: true, Usage: []string{"health [list | <check>... | detail <id> | log [<after-id>] | note <id> <text...>]",
 			"health warns", "health accept <id> --as <person> <reason...>"},
+		Brief:   "the project's health",
 		Summary: "the project's measured health and its notes; named checks: status, reason and detail only; warns: the checks in warn over 24 h (sentinel's daily digest); accept: the person accepts a check's current warn for a week",
 		Flags:   []cli.Flag{{Long: "as", Short: 'a', Arg: "<person>", Help: "accept: your name (a person accepts a warn, never an agent)"}},
 		Examples: []string{"agentbus -p demo health", "agentbus -p demo health team-stall clear-stall", "agentbus -p demo health detail services",
@@ -321,6 +355,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "pause", Text: true, Usage: []string{"pause --for <dur> | --until <HH:MM> | --until-reset [--to <agent>] [reason...]", "pause --status"},
+		Brief:   "wake nobody until then",
 		Summary: "nobody is woken until then",
 		Flags: []cli.Flag{
 			{Long: "for", Short: 'f', Arg: "<dur>", Help: "pause for a duration"},
@@ -333,6 +368,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "resume", Text: true, Usage: []string{"resume [--partial] [--yes] [message...]", "resume --all [--dry-run] [--partial] [--yes]"},
+		Brief:   "end a pause or suspension",
 		Summary: "end a pause now; on a suspended project, bring it back: its services, its agents on their sessions, then the pause lifted and master told",
 		Flags: []cli.Flag{
 			{Long: "partial", Help: "a suspended project: lift the pause even if an agent it needs is not back (never a service that did not start)"},
@@ -344,6 +380,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "ask", Usage: []string{"ask <agent> [--file <questions.json> | < questions.json] [--replace <id>] [--task <plan-task>]", "ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"},
+		Brief:   "ask a person questions",
 		Summary: "put structured questions to a person",
 		Flags: []cli.Flag{
 			{Long: "file", Short: 'F', Arg: "<file>", Help: "the questions (JSON); default stdin"},
@@ -357,12 +394,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "asks", Usage: []string{"asks [--open] [--json]"},
+		Brief:    "list asks and answers",
 		Summary:  "list asks and their answers",
 		Flags:    []cli.Flag{{Long: "open", Short: 'o', Help: "only open ones"}, fJSON},
 		Examples: []string{"agentbus -p demo asks -o"},
 	},
 	{
 		Name: "answer", Text: true, Usage: []string{"answer <ask-id> <question> (--choice <label> | --text <words...>) [--as <person>]"},
+		Brief:   "answer an ask's question",
 		Summary: "answer one question of an ask",
 		Flags: []cli.Flag{
 			{Long: "choice", Short: 'c', Arg: "<label>", Help: "pick an offered choice"},
@@ -375,6 +414,7 @@ var commands = []cli.Command{
 	// --- services, dispatch, missions, swaps
 	{
 		Name: "dispatch", Usage: []string{"dispatch [--horizon <dur>] [--escalate-after <dur>] [--escalate-to <agent>]", "dispatch --status"},
+		Brief:   "run the wake dispatcher",
 		Summary: "the wake dispatcher, in the foreground (the service runs it for you)",
 		Flags: []cli.Flag{
 			{Long: "horizon", Short: 'z', Arg: "<dur>", Help: "older entries are stale (default 24h)"},
@@ -386,6 +426,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "missions", Usage: []string{"missions [--repo <dir>] [--escalate-to <agent>]", "missions --status"},
+		Brief:   "run the missions conductor",
 		Summary: "the missions conductor, in the foreground (the service runs it for you)",
 		Flags: []cli.Flag{
 			{Long: "repo", Short: 'C', Arg: "<dir>", Help: "the repository (default the working directory)"},
@@ -401,6 +442,7 @@ var commands = []cli.Command{
 			"mission skip <change>/<id> --reason <text> | mission abort <change> --reason <text>",
 			"mission status [<change>] | mission show <change>/<id>",
 		},
+		Brief:   "operate missions",
 		Summary: "operate missions (queued for the conductor)",
 		Flags: []cli.Flag{
 			{Long: "force", Short: 'f', Arg: "<reason>", Help: "load over a live change"},
@@ -412,6 +454,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "swap", Usage: []string{"swap <role> (--profile <profile> | --back) [--reason <text>] [--now] [--force]"},
+		Brief:   "swap an agent's profile",
 		Summary: "replace an agent by its role on a fallback profile, or back",
 		Flags: []cli.Flag{
 			{Long: "profile", Short: 'P', Arg: "<profile>", Help: "one of the role's fallback profiles"},
@@ -424,6 +467,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "retire", Usage: []string{"retire <role> [--reason <text>] [--now]", "retire <role> --forget --episode <ms> [--reason <text>]"},
+		Brief:   "close a role's terminal",
 		Summary: "close one role's tab, with the swap checks; --forget ends a finished pop and unregisters it",
 		Flags: []cli.Flag{
 			{Long: "reason", Short: 'r', Arg: "<text>", Help: "recorded in the ledger"},
@@ -441,6 +485,7 @@ var commands = []cli.Command{
 			"plan ignore <pr>",
 			"plan priority <task> high|normal|low --as <person>",
 		},
+		Brief:   "the batch's plan",
 		Summary: "the batch's plan, as busmon's Plan view (P) shows it",
 		Flags: []cli.Flag{
 			fJSON,
@@ -453,6 +498,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "deliver", Usage: []string{"deliver <branch> [--task <plan-task>] [--subject <s>] [--base <b>] [--title <t>] [--body-file <path>] [--dry-run]"},
+		Brief:   "push and open a PR",
 		Summary: "push a branch's approved head and open its pull or merge request (github, gitlab), print the page to open (bitbucket, no CLI) or hand it to the person to merge (local); master and docs only",
 		Flags: []cli.Flag{
 			{Long: "task", Short: 't', Arg: "<plan-task>", Help: "the plan task: its review subject and title, and plan link once delivered"},
@@ -467,12 +513,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "swaps", Usage: []string{"swaps [--role <role>] [--json]"},
+		Brief:    "the swap ledger",
 		Summary:  "the swap ledger",
 		Flags:    []cli.Flag{{Long: "role", Short: 'R', Arg: "<role>", Help: "only this role"}, fJSON},
 		Examples: []string{"agentbus -p demo swaps"},
 	},
 	{
 		Name: "self-repair", Usage: []string{"self-repair reset <agent> [--as <person>]"},
+		Brief:    "clear a crash loop",
 		Summary:  "clear an agent's self-repair crash loop and restart its budget (master, or a person with --as)",
 		Flags:    []cli.Flag{{Long: "as", Short: 'a', Arg: "<person>", Help: "your name: a person resets, not an agent"}},
 		Examples: []string{"agentbus -p demo self-repair reset coder --as charlie"},
@@ -480,6 +528,7 @@ var commands = []cli.Command{
 	{
 		Name: "up", NoProject: true,
 		Usage:   []string{"up <project> [<path>] [--as <name>] [--tabs] [--resume] [--dry-run] [--escalate-to <agent>] [--reload on|propose|off] [bootstrap flags]"},
+		Brief:   "provision and start a project",
 		Summary: "provision a project, start its services and its agents on the project's holder",
 		Flags: []cli.Flag{
 			{Long: "as", Short: 'a', Arg: "<name>", Help: "your name in busmon"},
@@ -499,6 +548,7 @@ var commands = []cli.Command{
 	{
 		Name: "start", NoProject: true,
 		Usage:   []string{"start [<path>] [--yes] [--dry-run] [--name <project>] [--as <name>] [--roles <role[:profile],...>]"},
+		Brief:   "start the project here",
 		Summary: "deduce a project from its folder, show it, then run up",
 		Flags: []cli.Flag{
 			{Long: "yes", Short: 'y', Help: "take the deduced values without asking"},
@@ -511,6 +561,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "screen", Usage: []string{"screen <agent> [--lines N] [--json]"},
+		Brief:   "print an agent's screen",
 		Summary: "print an agent's last screen text from the project's holder, read-only (master, sentinel, or the person outside the agents' terminals)",
 		Flags: []cli.Flag{fJSON,
 			{Long: "lines", Arg: "<n>", Help: "how many lines (default 40, at most 200)"},
@@ -519,6 +570,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "attach", Usage: []string{"attach <agent> [--observe] [--prefix <key>]"},
+		Brief:   "attach to an agent's terminal",
 		Summary: "put this terminal on an agent's terminal in the project's holder; <prefix> d detaches, <prefix> <prefix> sends one (attach.prefix, default f12)",
 		Flags: []cli.Flag{
 			{Long: "observe", Help: "watch only: never types or resizes"},
@@ -528,6 +580,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "holder", Usage: []string{"holder [--env <file>] [--record-groups]", "holder drain <project> [--ignore-background]"},
+		Brief:   "serve the agent terminals",
 		Summary: "serve the project's agent terminals (what a holder unit runs; agentbus up installs it); drain: relaunch each agent still on an older build onto the current one, one at a time (exit 3: some skipped, run it again; --ignore-background relaunches an agent whose background work is running or unknown, the person only)",
 		Flags: []cli.Flag{
 			{Long: "env", Arg: "<file>", Help: "the project's service environment file"},
@@ -538,6 +591,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "down", NoProject: true, Usage: []string{"down <project>"},
+		Brief:    "stop a project's services",
 		Summary:  "stop a project's services; deletes nothing",
 		Examples: []string{"agentbus down demo"},
 	},
@@ -552,6 +606,7 @@ var commands = []cli.Command{
 			"service start holder | service stop holder <build> | service gc",
 			"service supervise holder <p> <build key> | dispatch <p> | missions <p> (no service manager: started detached, never by hand)",
 		},
+		Brief:   "the project's user services",
 		Summary: "the project's user services (systemd --user, launchd, or detached supervisors without either)",
 		Flags: []cli.Flag{
 			{Long: "all", Short: 'a', Help: "remove: every project's services"},
@@ -565,12 +620,14 @@ var commands = []cli.Command{
 	// --- no project, no broker
 	{
 		Name: "projects", NoProject: true, Usage: []string{"projects [--json]"},
+		Brief:    "every known project",
 		Summary:  "every known project: templates, broker, services, agents",
 		Flags:    []cli.Flag{fJSON},
 		Examples: []string{"agentbus projects"},
 	},
 	{
 		Name: "tokens", NoProject: true, Usage: []string{"tokens [--project <p> | --all] [--days N] [--by agent|day] [--json]", "tokens --unattributed [--json]"},
+		Brief:   "tokens spent",
 		Summary: "tokens spent per project (all side by side), per agent or per day; no cost, by rule",
 		Flags: []cli.Flag{{Long: "all", Help: "every project side by side (the default; only --project named on the command line narrows it, never AGENT_BUS_PROJECT)"},
 			{Long: "days", Arg: "<N>", Help: "days of the chart, 1 to 8 (default 7)"},
@@ -580,6 +637,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "backup", NoProject: true, Usage: []string{"backup [--project <p>]... [--dir <d>] [--secrets [--recipient <age1...>]] [--dry-run]", "backup list [--dir <d>]"},
+		Brief:   "archive this host's projects",
 		Summary: "one archive (.tar.zst) of every project of this host, or of the ones named with --project (repeatable; never narrowed by AGENT_BUS_PROJECT): Redis keys, settings, templates, roles, history; secrets left out and listed",
 		Flags: []cli.Flag{{Long: "dir", Arg: "<d>", Help: "an absolute folder for this run (default backup.dir, else $XDG_DATA_HOME/agentbus/backups)"},
 			{Long: "secrets", Help: "include the password file and the services' env files, encrypted with age to a recipient (needs age on PATH)"},
@@ -589,6 +647,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "restore", NoProject: true, Usage: []string{"restore <archive> [--project <p>]... [--redis-only | --files-only] [--with-runtime] [--identity <file>] [--dry-run] [--force [--yes]]"},
+		Brief:   "restore an archive",
 		Summary: "restore an archive: every member verified first; never a live project; existing keys or differing files only with --force",
 		Flags: []cli.Flag{{Long: "redis-only", Help: "the Redis keys only"}, {Long: "files-only", Help: "the files only"},
 			{Long: "with-runtime", Help: "the runtime keys too (services, agents, wake records, holds...), for a person who knows why"},
@@ -601,6 +660,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "suspend", NoProject: true, Usage: []string{"suspend [--project <p>] [--wait <d> | --no-wait] [--force] [--reason <text>] [--dry-run] [--yes]", "suspend --status"},
+		Brief:   "put projects to sleep",
 		Summary: "put every project of this host to sleep (or the one named with --project): pause, let running turns end, record a snapshot, stop the services; agentbus resume brings it back",
 		Flags: []cli.Flag{{Long: "wait", Arg: "<d>", Help: "how long running turns may take to end (default suspend.wait, 10m); past it the suspend is cancelled unless --force"},
 			{Long: "no-wait", Help: "no wait: suspend only a project already quiet (the same as suspend.wait = 0)"},
@@ -613,6 +673,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "update", NoProject: true, Usage: []string{"[--project <p>] update [--check] [--yes]", "update --rollback [<id>] [--yes]", "update --list"},
+		Brief:   "install the latest release",
 		Summary: "install the latest release from your clone's origin/main: built in its own tree, a snapshot first, --project's dispatch and missions restarted, the others listed; --rollback restores a snapshot (the person only)",
 		Flags: []cli.Flag{{Long: "check", Help: "show the plan and change nothing (an agent may run it)"},
 			{Long: "yes", Help: "answer the question yes (the person's flag: an agent is refused with or without it)"},
@@ -623,6 +684,7 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "config", NoProject: true, Usage: []string{"config [--project <p>] [--json]", "config get <setting>"},
+		Brief:    "show the settings",
 		Summary:  "each setting's effective value and where it comes from (env, config.toml, busmon.toml, default); --project adds what that project's services see; get prints one setting's value alone, for a script",
 		Flags:    []cli.Flag{fJSON},
 		Examples: []string{"agentbus config", "agentbus config --project agent-bus-monitor", "agentbus config get broker.runtime"},
@@ -631,6 +693,7 @@ var commands = []cli.Command{
 		Name: "notifications", NoProject: true, Usage: []string{"notifications status", "notifications test [<target>]",
 			"notifications setup", "notifications add ntfy|discord|desktop [--name N] …", "notifications remove <name> [--yes]",
 			"notifications rename <old> <new>", "notifications show-topic <name>"},
+		Brief:   "the notification targets",
 		Summary: "the notification targets of notify.toml (never a URL) and their last sends (no broker); test sends one message now; setup, add, remove, rename and show-topic write the file or show a topic on the terminal only: the person's acts (they read the broker's agents to refuse an agent's process)",
 		Flags: []cli.Flag{
 			{Long: "name", Arg: "<target>", Help: "add: the target's name (phone, team or here by default)"},
@@ -646,11 +709,13 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "identity", NoProject: true, Usage: []string{"identity [set <name>]"},
+		Brief:    "your name as a person",
 		Summary:  "your name as a person in busmon",
 		Examples: []string{"agentbus identity set charlie"},
 	},
 	{
 		Name: "quota", NoProject: true, Usage: []string{"quota [--json]"},
+		Brief:    "providers' usage windows",
 		Summary:  "every provider's usage windows, read now from local sources",
 		Flags:    []cli.Flag{fJSON},
 		Examples: []string{"agentbus quota"},
@@ -662,6 +727,7 @@ var commands = []cli.Command{
 			"models --changes [--since <7d|24h>] [--provider <p>] [--json]   (what moved: added, removed, default, alias)",
 			"models check [--json]   (every roles.toml profile and fallback, used or not; exit 3 on gone, newer, untiered)",
 		},
+		Brief:   "this machine's model table",
 		Summary: "this machine's model table; a table over 24 h old is refreshed first (10 s at most)",
 		Flags: []cli.Flag{
 			{Long: "refresh", Short: 'r', Help: "read every client's catalogue again (20 s per reader)"},
@@ -683,6 +749,7 @@ var commands = []cli.Command{
 			"roles adopt <role> --ask <id> [--from <dir>]   (needs --project; only after the person answered adopt)",
 			"roles validate|exists|tier|field|launch|install|template|check-toml ...   (scripts)",
 		},
+		Brief:   "the role manifest",
 		Summary: "the role manifest; doctor compares configured, launched and used models",
 		Flags: []cli.Flag{
 			fJSON,
@@ -700,6 +767,7 @@ var commands = []cli.Command{
 	{
 		Name: "setup", NoProject: true, Internal: true,
 		Usage:   []string{"setup [--repo <dir>] install|update|uninstall|status|rotate-redis-password [setup.sh's flags]"},
+		Brief:   "the installer in Go",
 		Summary: "the installer in Go, run by ./setup.sh (its flags and help are the bash installer's)",
 		Flags: []cli.Flag{
 			{Long: "repo", Arg: "<dir>", Help: "the checkout to install from (the thin script passes it)"},
@@ -718,6 +786,7 @@ var commands = []cli.Command{
 			"mem person show <topic> | list | check",
 			"mem person forget <id or topic> | purge [--yes]   (the person's own acts: refused to an agent)",
 		},
+		Brief:   "the shared memory",
 		Summary: "the repository's shared memory: check, new note, sync AGENTS.md; and the person's memory on this host (mem person)",
 		Flags: []cli.Flag{
 			{Long: "root", Short: 'C', Arg: "<dir>", Help: "the repository (default the working directory)"},
@@ -743,6 +812,7 @@ var commands = []cli.Command{
 			"term record <client> <fixture> [--script <file>] [--cmd \"<command line>\"] [--size <cols>x<rows>] [--out <dir>] [--force]",
 			"term dump <recording> [--between <mark> <mark>]",
 		},
+		Brief:   "record a client fixture",
 		Summary: "record a client under a PTY to a raw fixture (herdr exit step 3), or print one",
 		Flags: []cli.Flag{
 			{Long: "script", Arg: "<file>", Help: "record: the steps (type, key, sleep, quiet, mark, resize); f12-at-input, empty and typed have one built in"},
@@ -756,16 +826,19 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "limits", NoProject: true, Usage: []string{"limits"},
+		Brief:    "size and retention limits",
 		Summary:  "the writers' size and retention limits",
 		Examples: []string{"agentbus limits"},
 	},
 	{
 		Name: "version", NoProject: true, Usage: []string{"version"},
+		Brief:    "protocol version and build",
 		Summary:  "the protocol version and the build",
 		Examples: []string{"agentbus version"},
 	},
 	{
 		Name: "help", NoProject: true, Usage: []string{"help [<command>]"},
+		Brief:    "help about a command",
 		Summary:  "this list, or one command's usage, flags and examples",
 		Examples: []string{"agentbus help", "agentbus help subscribe", "agentbus subscribe --help"},
 	},
@@ -774,6 +847,7 @@ var commands = []cli.Command{
 	{
 		Name: "peer", NoProject: true, Internal: true,
 		Usage:   []string{"peer --spec-file <launch.json>", "peer --check <endpoint>"},
+		Brief:   "a local test peer",
 		Summary: "a local model as a read-only test peer (launched by agent-launch through scripts/local-llm-peer); --check asks config.toml's [llm.<endpoint>] whether it serves its model",
 		Flags: []cli.Flag{
 			{Long: "spec-file", Arg: "<launch.json>", Help: "the launcher's resolved launch spec (the adapter script passes it)"},
@@ -784,6 +858,7 @@ var commands = []cli.Command{
 	{
 		Name: "check", NoProject: true,
 		Usage:   []string{"check holder-restart [--clients fake|real] [--rounds <n>] [--keep]"},
+		Brief:   "the holder's live check",
 		Summary: "the holder's live check, before a release: on a disposable project of its own (master and coder), kill the holder, time its restart, self-repair's relaunches on their sessions, the wakes and health; removes the project at the end",
 		Flags: []cli.Flag{
 			{Long: "clients", Arg: "fake|real", Help: "fake (default): agentbus fake-client as claude, no quota; real: Claude Code (a few turns of quota; trust its folder once)"},
@@ -795,12 +870,14 @@ var commands = []cli.Command{
 	{
 		Name: "fake-client", NoProject: true, Internal: true,
 		Usage:    []string{"fake-client claude [Claude Code's options] [prompt]"},
+		Brief:    "a fake Claude Code",
 		Summary:  "a fake Claude Code, the live check's claude (the launcher's argv, its --settings hooks, the wake's drain)",
 		Examples: []string{"agentbus fake-client claude --help"},
 	},
 	{
 		Name: "statusline", NoProject: true, Internal: true,
 		Usage:   []string{"statusline [--then <command>]", "statusline --print-install [--then <command>]"},
+		Brief:   "Claude Code's statusLine",
 		Summary: "Claude Code's statusLine: records rate limits from stdin",
 		Flags: []cli.Flag{
 			{Long: "then", Arg: "<command>", Help: "the status line command to run after"},

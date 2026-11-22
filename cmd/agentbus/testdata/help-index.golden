@@ -1,0 +1,111 @@
+USAGE
+  agentbus [flags] <command> [args...]
+
+AGENT COMMANDS
+  status:         declare your state
+  report:         publish a report
+  reports:        list or read reports
+  background:     show background work
+  handoff:        declare or list hand-offs
+  checkback:      say when to look again
+
+MESSAGE COMMANDS
+  cmd:            send a directive
+  reply:          answer on a thread
+  notify:         post a notice
+  thread:         show one thread
+  ask:            ask a person questions
+  asks:           list asks and answers
+  answer:         answer an ask's question
+  listen:         tail the streams live
+  subscribe:      wait for one command
+  history:        re-read the past
+
+REVIEW COMMANDS
+  challenge:      open a 4-eyes gate
+  verdict:        record a 4-eyes verdict
+  verdicts:       show 4-eyes verdicts
+  gate:           list or close open gates
+
+WORK COMMANDS
+  board:          the shared task board
+  request:        tracked requests
+  plan:           the batch's plan
+  idea:           the project's ideas
+  merge-queue:    what waits for merge
+  deliver:        push and open a PR
+  ci:             the CI loop
+  run:            the run budget
+
+TERMINAL COMMANDS
+  agents:         every agent's state
+  pop:            start a role's terminal
+  retire:         close a role's terminal
+  reload:         restart an idle agent
+  swap:           swap an agent's profile
+  swaps:          the swap ledger
+  pane:           print an agent's terminal id
+  bind:           bind a verified pane
+  screen:         print an agent's screen
+  attach:         attach to an agent's terminal
+  self-repair:    clear a crash loop
+  pilot:          show the pilot lease
+
+PROJECT COMMANDS
+  up:             provision and start a project
+  start:          start the project here
+  down:           stop a project's services
+  pause:          wake nobody until then
+  resume:         end a pause or suspension
+  suspend:        put projects to sleep
+  shutdown:       end the team's work
+  projects:       every known project
+  service:        the project's user services
+  holder:         serve the agent terminals
+  dispatch:       run the wake dispatcher
+  missions:       run the missions conductor
+  mission:        operate missions
+
+USAGE COMMANDS
+  usage:          per-agent model and context
+  budget:         account usage windows
+  tokens:         tokens spent
+  quota:          providers' usage windows
+  models:         this machine's model table
+  refresh:        publish agents' usage
+  limits:         size and retention limits
+
+ADMIN COMMANDS
+  config:         show the settings
+  identity:       your name as a person
+  notifications:  the notification targets
+  roles:          the role manifest
+  health:         the project's health
+  backup:         archive this host's projects
+  restore:        restore an archive
+  update:         install the latest release
+  mem:            the shared memory
+  check:          the holder's live check
+  term:           record a client fixture
+  version:        protocol version and build
+  help:           help about a command
+
+INTERNAL COMMANDS
+  setup:          the installer in Go
+  peer:           a local test peer
+  fake-client:    a fake Claude Code
+  statusline:     Claude Code's statusLine
+
+FLAGS
+  -p, --project <project>  project namespace (or AGENT_BUS_PROJECT)
+  -H, --host <host>        Redis host (overrides REDIS_HOST)
+  -h, --help               show help for a command
+
+EXAMPLES
+  $ agentbus up
+  $ agentbus status
+  $ agentbus board
+  $ agentbus update
+
+LEARN MORE
+  Use `agentbus help <command>` for more about a command.

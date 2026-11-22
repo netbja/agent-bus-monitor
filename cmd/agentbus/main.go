@@ -76,7 +76,7 @@ func main() {
 		os.Exit(runHelp(name, os.Stdout, os.Stderr))
 	}
 	if len(args) == 0 {
-		cli.Index(os.Stderr, "agentbus", globalFlags, commands)
+		cli.Index(os.Stderr, "agentbus", globalFlags, commands, helpPage)
 		os.Exit(1)
 	}
 	// The broker user, while broker.acl is on (step 4b): by command, identity

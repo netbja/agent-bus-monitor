@@ -118,7 +118,7 @@ func helpRequest(args []string) (string, bool) {
 // unknown command.
 func runHelp(name string, out, errw io.Writer) int {
 	if name == "" {
-		cli.Index(out, "agentbus", globalFlags, commands)
+		cli.Index(out, "agentbus", globalFlags, commands, helpPage)
 		return 0
 	}
 	c, ok := cli.Lookup(commands, name)
@@ -128,4 +128,26 @@ func runHelp(name string, out, errw io.Writer) int {
 	}
 	cli.Render(out, "agentbus", c)
 	return 0
+}
+
+// helpSections groups every command for the top-level help, in the order
+// shown (TestEveryCommandInOneSection: each registered command exactly once).
+var helpSections = []cli.Section{
+	{Title: "AGENT COMMANDS", Names: []string{"status", "report", "reports", "background", "handoff", "checkback"}},
+	{Title: "MESSAGE COMMANDS", Names: []string{"cmd", "reply", "notify", "thread", "ask", "asks", "answer", "listen", "subscribe", "history"}},
+	{Title: "REVIEW COMMANDS", Names: []string{"challenge", "verdict", "verdicts", "gate"}},
+	{Title: "WORK COMMANDS", Names: []string{"board", "request", "plan", "idea", "merge-queue", "deliver", "ci", "run"}},
+	{Title: "TERMINAL COMMANDS", Names: []string{"agents", "pop", "retire", "reload", "swap", "swaps", "pane", "bind", "screen", "attach", "self-repair", "pilot"}},
+	{Title: "PROJECT COMMANDS", Names: []string{"up", "start", "down", "pause", "resume", "suspend", "shutdown", "projects", "service", "holder", "dispatch", "missions", "mission"}},
+	{Title: "USAGE COMMANDS", Names: []string{"usage", "budget", "tokens", "quota", "models", "refresh", "limits"}},
+	{Title: "ADMIN COMMANDS", Names: []string{"config", "identity", "notifications", "roles", "health", "backup", "restore", "update", "mem", "check", "term", "version", "help"}},
+	{Title: "INTERNAL COMMANDS", Names: []string{"setup", "peer", "fake-client", "statusline"}},
+}
+
+// helpPage is the top-level help: the sections, then the examples and where
+// to read more.
+var helpPage = cli.Page{
+	Sections:  helpSections,
+	Examples:  []string{"agentbus up", "agentbus status", "agentbus board", "agentbus update"},
+	LearnMore: []string{"Use `agentbus help <command>` for more about a command."},
 }
