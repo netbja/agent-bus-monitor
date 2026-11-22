@@ -42,7 +42,17 @@ func contextOf(items []attentionItem, key string, feed []feedLine) itemContext {
 	if idx < 0 {
 		return itemContext{}
 	}
-	it, tg, root := items[idx], liveTargets(items), itemRoot(items[idx])
+	return contextFor(items, items[idx], feed)
+}
+
+// contextFor is it's Context; it need not be among items any more (a read
+// report, its page still open: reviewer-codex): it is then judged as one of them.
+func contextFor(items []attentionItem, it attentionItem, feed []feedLine) itemContext {
+	idx := slices.IndexFunc(items, func(x attentionItem) bool { return x.Key == it.Key })
+	if idx < 0 {
+		items, idx = append(slices.Clone(items), it), len(items)
+	}
+	tg, root := liveTargets(items), itemRoot(it)
 	newest := map[string]string{} // agent -> its newest report's id
 	for _, fl := range feed {
 		if !fl.sep && fl.ev.Kind == "report" {
@@ -52,7 +62,7 @@ func contextOf(items []attentionItem, key string, feed []feedLine) itemContext {
 	var all []ctxLine
 	for i := len(feed) - 1; i >= 0; i-- { // newest first
 		fl := feed[i]
-		if fl.sep || fl.ev.Kind != "report" && fl.ev.Kind != "cmd" { // an ask's own line never names its id: written before it had one
+		if fl.sep || fl.ev.Kind != "report" && fl.ev.Kind != "cmd" && fl.ev.Kind != "notify" { // what foldLines attaches (reviewer-codex); an ask's own line never names its id
 			continue
 		}
 		named := tg.named(lineFullText(fl))
@@ -145,17 +155,21 @@ func needsWord(needs string) string {
 	return "needs your answer"
 }
 
-// pageItemKey is the For you item a page is the page of: a merge by its
-// head, an ask, a waiting agent, a gate's or a report item's message; "".
-func (m *Model) pageItemKey(p *page) string {
+// pageItem is the For you item a page is the page of: the one it was opened
+// as, kept when the item leaves the list (reviewer-codex), else a merge by
+// its head, an ask, a waiting agent, a gate's or a report item's message.
+func (m *Model) pageItem(p *page) (attentionItem, bool) {
+	if p.item != nil {
+		return *p.item, true
+	}
 	for _, it := range m.forYou {
 		switch {
 		case p.kind == ovMerge && it.Rank == rankMerge && it.Head != "" && it.Head == p.key,
 			p.kind == ovAsk && it.Rank == rankAsk && it.AskID == p.key,
 			p.kind == ovAgent && it.Rank == rankWait && it.Agent == p.key,
 			p.kind == ovMessage && p.ev.ID != "" && (it.Rank == rankGate || it.Rank == rankReport) && itemRoot(it) == p.ev.ID:
-			return it.Key
+			return it, true
 		}
 	}
-	return ""
+	return attentionItem{}, false
 }

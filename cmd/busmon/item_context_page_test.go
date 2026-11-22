@@ -153,3 +153,40 @@ func TestContextOnTheAskPage(t *testing.T) {
 		t.Fatalf("click opened %+v", q)
 	}
 }
+
+// reviewer-codex: a notice for the person naming a live PR attaches to its
+// item (foldLines does), so its Context shows it, openable, and it makes no
+// item of its own.
+func TestContextHoldsANoticeForThePerson(t *testing.T) {
+	m := ctxShell(t, mergeShared(), bus.Event{Kind: "notify", ID: rid(0), From: "dispatch", For: bus.ForPerson, Message: "PR #694 is approved, waiting for your merge"})
+	if got := itemKeys(m.forYou); !slices.Equal(got, []string{"merge:pr:694", "merge:pr:695"}) {
+		t.Fatalf("items %v", got)
+	}
+	m = openItem(t, m, "merge:pr:694")
+	if body := plainLines(m.rd.top().body); !hasContext(m.rd.top()) || !strings.Contains(body, "waiting for your merge") {
+		t.Fatalf("no notice in the context:\n%s", body)
+	}
+	m = run(t, m, m.update(tea.KeyPressMsg(tea.Key{Code: '1', Text: "1"})))
+	if q := m.rd.top(); q.kind != ovMessage || q.ev.ID != rid(0) {
+		t.Fatalf("1 opened %+v", q)
+	}
+}
+
+// reviewer-codex: a --needs read report leaves For you once opened (read);
+// its page keeps the item it was opened as, so the replies on it still show.
+func TestContextOutlivesReadingTheItem(t *testing.T) {
+	m := ctxShell(t, mergeShared(), needsRep(0, "master", bus.NeedsRead, "Release notes are ready"), needsNotice(1, 0, bus.NeedsRead),
+		bus.Event{Kind: "cmd", ID: rid(2), From: "master", Target: "bob", Type: bus.CmdDirective, Ref: rid(0), Message: "page 3 changed"})
+	m = openItem(t, m, "report:"+rid(0))
+	if slices.Contains(itemKeys(m.forYou), "report:"+rid(0)) {
+		t.Fatalf("still an item once read: %v", itemKeys(m.forYou))
+	}
+	p := m.rd.top()
+	if body := plainLines(p.body); p.kind != ovMessage || !hasContext(p) || !strings.Contains(body, "page 3 changed") {
+		t.Fatalf("the read report's page:\n%s", body)
+	}
+	m = run(t, m, m.update(tea.KeyPressMsg(tea.Key{Code: '1', Text: "1"})))
+	if q := m.rd.top(); q.kind != ovMessage || q.ev.ID != rid(2) {
+		t.Fatalf("1 opened %+v", q)
+	}
+}

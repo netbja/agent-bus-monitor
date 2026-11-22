@@ -72,6 +72,8 @@ type page struct {
 	oitems []memoryItem // ovMemoryTopic: its observations, selectable for x
 	forget string       // ovMemoryTopic: the observation x asks about, until y or another key
 
+	item *attentionItem // the For you item this page was opened as (openForYouItem): its Context outlives the item
+
 	svc        *svcFacts   // ovServices: the facts the cards show (sel: the card selected)
 	about      *aboutState // ovAbout: the versions and the packet's run
 	svcBusy    bool        // ovServices, ovRedis: a refresh read is in flight
@@ -678,8 +680,8 @@ func (m *Model) buildPage() bool {
 		p.plain = askPlain(a.Questions[p.ask.q])
 	}
 	p.ctx = nil
-	if key := m.pageItemKey(p); key != "" { // an item's page ends with its Context (triage-dedupe §5)
-		if c := contextOf(m.forYou, key, m.feed.feed); len(c.Lines) > 0 {
+	if it, ok := m.pageItem(p); ok { // an item's page ends with its Context (triage-dedupe §5)
+		if c := contextFor(m.forYou, it, m.feed.feed); len(c.Lines) > 0 {
 			var lines []Line
 			lines, p.ctx = contextSection(c, now, width, len(p.body))
 			p.body = append(p.body, lines...)
