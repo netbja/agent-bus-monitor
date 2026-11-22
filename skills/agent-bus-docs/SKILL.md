@@ -14,7 +14,10 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    - `git log --oneline <base>..<head>` and `git diff --stat <base>..<head>`;
    - the change's plan in `docs/changes/<c>/`;
    - the commit messages and the release notes already written.
-2. **Branch** `pr/<c>` from `<head>`: `git worktree add ../<repo>-pr-<c> -b pr/<c> <head>`.
+2. **Branch** `docs/<c>` from `<head>`: `git worktree add ../<repo>-docs-<c> -b docs/<c> <head>`.
+   The `docs/` prefix names you as the owner a merge conflict goes back to (conflict-owner); close
+   a tracked request for it with `agentbus request done <task> --commit <sha> --branch docs/<c>
+   "<reply>"`.
 3. **Update only what the change made stale.** Usually:
    - `README.md`: what a new user needs. Keep it short. Release history goes in CHANGELOG.md,
      never in the README.

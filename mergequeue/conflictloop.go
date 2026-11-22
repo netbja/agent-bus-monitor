@@ -77,7 +77,7 @@ func conflictHandoff(c bus.MergeConflict, base string, k, cap int) string {
 		more = fmt.Sprintf(" and %d more", len(files)-conflictFilesMax)
 		files = files[:conflictFilesMax]
 	}
-	return fmt.Sprintf("%s at %s conflicts with %s at %s: %s%s. Rebase it onto origin/%s, resolve, push; the reviewers then approve the new head. Hand-off %d of %d.",
+	return fmt.Sprintf("%s at %s conflicts with %s at %s: %s%s. Rebase it onto origin/%s, resolve, test, and have the new head reviewed; it is delivered as usual. Hand-off %d of %d.",
 		conflictWhere(c), short(c.Head), base, short(c.BaseTip), strings.Join(files, ", "), more, base, k, cap)
 }
 

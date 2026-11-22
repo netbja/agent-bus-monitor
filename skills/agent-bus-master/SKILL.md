@@ -843,6 +843,14 @@ line screened for credentials), followed by the verdicts; without it, the commit
   - the PR counted as "not on an approved head" (a newer push, a merge-only head: get a verdict
     on the head you delivered);
   - a draft.
+- **A conflict goes to its owner first** (conflict-owner). The merge queue's pass confirms a
+  conflict with git; the dispatcher hands it back to the branch's owner (the board's claim or
+  request branch, else a `<role>/` prefix that is a registered agent, else you), once per
+  conflicting head, with a copy to you (wake=no). After `conflict.max_handoffs` (3) conflicting
+  heads, or once it is `conflict.escalate_after` (2 h) old, the owner held or not, you get the
+  escalation, woken: take it over or reassign it. A branch with no known owner comes to you
+  directly. A base that moves under the same head costs no hand-off. `agentbus merge-queue` lists
+  the conflicts; its `conflict_check` line names what was not judged or not written.
 - **An approved head you have not delivered is yours** (master-idle): `agentbus merge-queue` lists
   it under "approved, not pushed" (no branch tip on origin, and git finds none of its change in the
   base, whatever the forge merged it with). Deliver it, or, when nobody ever will (dropped,
