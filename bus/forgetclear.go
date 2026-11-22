@@ -43,6 +43,11 @@ func (b *Bus) SwapIntentRaw(ctx context.Context, role string) (string, error) {
 // busmon reads to flag the pop done.
 func PopDoneMark(agent string) string { return "popdone:" + agent }
 
+// PopStrandedMark is the {p}:quota mark of the dispatcher's notice that a
+// closed pop still owns open requests (board-drift §6); its value is the
+// episode it was sent for.
+func PopStrandedMark(agent string) string { return "popstranded:" + agent }
+
 // BoardOwes reports whether a board task in state still owes work: any
 // state but done (the board's states are free words, only done is special;
 // foureyes on pop-auto-retire-code), so an unknown word fails closed.
