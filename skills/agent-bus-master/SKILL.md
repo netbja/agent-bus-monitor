@@ -262,6 +262,11 @@ them) and acts on them, with no help from you:
   in flight, dispatch nothing new to agents of that provider.
 - at **95%** it stops waking that provider's agents (busmon shows them `held`) until the reset;
   their directives wait in their queues.
+- A quota pause means **finish what is in flight, start nothing new**. Delivering an
+  already-approved head *is* finishing in-flight work: it is cheap, and a quota pause never holds
+  it. Under a quota pause you still deliver approved heads, answer the person, and record any wait
+  with `agentbus checkback` so idle-master wakes you when it is due. What a quota pause holds: new
+  tasks, new reviews, new specs.
 - when **your own** provider reaches 95%, it pauses the whole project until the reset and sends
   you the resume directive then. Nothing to schedule.
 
