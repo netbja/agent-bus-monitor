@@ -31,6 +31,7 @@ type ConflictConfig struct {
 // field not in it is forgotten.
 type ConflictPass struct {
 	Base        string
+	Local       bool                // local mode: the base is the local branch, there is no origin (reviewer-codex)
 	Now         time.Time           // Redis time
 	Conflicting []bus.MergeConflict // the pass's; git confirmed those with a BaseTip
 	Clean       []string            // the fields of the approved heads git judged clean this pass
@@ -70,15 +71,19 @@ func conflictWhere(c bus.MergeConflict) string {
 	return "Branch " + c.Branch
 }
 
-func conflictHandoff(c bus.MergeConflict, base string, k, cap int) string {
+func conflictHandoff(c bus.MergeConflict, base string, local bool, k, cap int) string {
+	onto := "origin/" + base
+	if local {
+		onto = base
+	}
 	files := c.Files
 	more := ""
 	if len(files) > conflictFilesMax {
 		more = fmt.Sprintf(" and %d more", len(files)-conflictFilesMax)
 		files = files[:conflictFilesMax]
 	}
-	return fmt.Sprintf("%s at %s conflicts with %s at %s: %s%s. Rebase it onto origin/%s, resolve, test, and have the new head reviewed; it is delivered as usual. Hand-off %d of %d.",
-		conflictWhere(c), short(c.Head), base, short(c.BaseTip), strings.Join(files, ", "), more, base, k, cap)
+	return fmt.Sprintf("%s at %s conflicts with %s at %s: %s%s. Rebase it onto %s, resolve, test, and have the new head reviewed; it is delivered as usual. Hand-off %d of %d.",
+		conflictWhere(c), short(c.Head), base, short(c.BaseTip), strings.Join(files, ", "), more, onto, k, cap)
 }
 
 // conflictAge is an age in hours and minutes ("3h0m", "45m").
@@ -166,7 +171,7 @@ func RunConflicts(ctx context.Context, b *bus.Bus, token string, cfg ConflictCon
 			return escalation(e)
 		}
 		handoff := func(k int) error {
-			text := conflictHandoff(c, p.Base, k, cfg.Cap)
+			text := conflictHandoff(c, p.Base, p.Local, k, cfg.Cap)
 			if _, err := b.FencedCmdOnce(ctx, token, marks[0], digest, "dispatch", owner, "directive", text, false); err != nil {
 				return note(err, what) // the copy waits for the next pass too
 			}

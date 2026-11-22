@@ -383,8 +383,25 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 			return fail(source, "an approved head cannot be judged: "+err.Error())
 		}
 		in.Tips, in.Merged = tips, func(h string) bool { return in2[h] }
-		for _, tp := range tips { // a live branch, unless its approved tip is in the base
-			if !(approved[tp.Head] && in2[tp.Head]) {
+		// A live branch, unless its tip is in the base: approved, judged
+		// above; a tracked one's other tip, judged here (a reset or a
+		// fast-forward to the base, reviewer-codex); a read that fails
+		// keeps it open.
+		tracked, terr := c.b.ConflictRecord(ctx)
+		var others []string
+		for _, tp := range tips {
+			if _, ok := tracked[mergequeue.ConflictField(0, tp.Branch)]; ok && terr == nil && !approved[tp.Head] {
+				others = append(others, tp.Head)
+			}
+		}
+		var in3 map[string]bool
+		if len(others) > 0 {
+			cctx, cancel = call()
+			in3, _ = c.inBase(cctx, c.dir, env, baseTip, others)
+			cancel()
+		}
+		for _, tp := range tips {
+			if !in2[tp.Head] && !in3[tp.Head] {
 				open[mergequeue.ConflictField(0, tp.Branch)] = true
 			}
 		}
@@ -407,7 +424,7 @@ func (c *mergeQueueChore) deriveRun(ctx context.Context) (bus.MergeQueueRecord, 
 		judgeBase = remoteBase // the gh path: origin's base
 	}
 	run := c.runDelivered(ctx, env, vs, judgeBase, now)
-	cf.pass = mergequeue.ConflictPass{Base: base, Now: now, Conflicting: res.Conflicting, Open: open}
+	cf.pass = mergequeue.ConflictPass{Base: base, Local: f.Kind == forge.Local, Now: now, Conflicting: res.Conflicting, Open: open}
 	for _, it := range res.Clean {
 		cf.pass.Clean = append(cf.pass.Clean, mergequeue.ConflictField(it.Number, it.Branch))
 	}
