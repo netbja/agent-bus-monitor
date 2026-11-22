@@ -60,7 +60,7 @@ const (
 	ovNotifySetup   // the guided notifications setup (notify-guided-setup §5), or a target's page
 	ovProjects      // projects (M): every project of this host, read once (projects_admin.go)
 	ovProjectDetail // one project of the Projects page: every column, read only
-	ovTriageEnd     // the triage walk's end page (busmon-queue-triage §4.4), its key the next plan task
+	ovTriageSummary // the triage walk's summary (triage-dedupe §4): one line per item, then the next plan task
 	ovIdea          // an idea (Work, F6): its facts, text and changes, its key the idea's id
 	ovIdeas         // the Ideas page (F6): the project's ideas by state
 	ovMemory        // the Memory page (F7): the person's facts on this host (memory_page.go)

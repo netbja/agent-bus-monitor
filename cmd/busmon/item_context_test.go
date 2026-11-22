@@ -186,3 +186,20 @@ func TestContextFoldedAsForYouFolds(t *testing.T) {
 		t.Fatalf("the merge page: %+v", c)
 	}
 }
+
+// foureyes (non-blocking on step 3): only the waiting agent's NEWEST report
+// folds into its wait; an older --needs report of it naming #694 folds into
+// 694, so its Context line there is folded.
+func TestContextWaitingAgentsOlderReport(t *testing.T) {
+	s := targetSnap()
+	s.agents = map[string]*agentState{"coder": {state: "waiting", stateAt: entryTime(rid(-1))}}
+	_, f := itemsOf(s, needsRep(0, "coder", bus.NeedsAnswer, "Rebase #694 or not?"), repEv(2, "coder", "blocked on the base"))
+	items := forYou(s, f.feed)
+	if i := slices.IndexFunc(items, func(it attentionItem) bool { return it.Key == "merge:pr:694" }); i < 0 || items[i].Needs != bus.NeedsAnswer {
+		t.Fatalf("694 not folded into: %+v", items)
+	}
+	c := contextOf(items, "merge:pr:694", f.feed)
+	if len(c.Lines) != 1 || c.Lines[0].ID != rid(0) || !c.Lines[0].Folded {
+		t.Fatalf("694's context: %+v", c)
+	}
+}

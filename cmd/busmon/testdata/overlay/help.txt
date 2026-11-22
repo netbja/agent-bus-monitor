@@ -19,7 +19,7 @@ KEYS
   y                    copy
   f                    filter
   u                    Activity: the next unread message for you (●), wrapping
-  T                    triage: open what waits for you one item at a time, the next after each answer or send (n next, p back, esc ends); not t, the tour
+  T                    triage: a summary of what waits for you, one line per action; enter opens one, the next after each answer or send (n next, p back), esc returns to the summary, esc there ends; not t, the tour
   ! F4                 answer
   w                    answer the open question, or with none open write to master
   Z                    put the project to sleep (agentbus suspend), or, when it is suspended, bring it back (agentbus resume); asks first

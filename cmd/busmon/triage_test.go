@@ -36,7 +36,7 @@ func TestTriageWalksEveryRankInOrder(t *testing.T) {
 				want = append(want, it)
 			}
 		}
-		m = keys(t, m, kT)
+		m = keys(t, m, kT, kEnter) // the summary, then its first item (triage-dedupe §4)
 		for i, it := range want {
 			if !m.walkPage() || topKind(t, m) != walkKinds[it.Rank] {
 				t.Fatalf("unknown=%v item %d (%s): page %v, want %v", unknown, i, it.Key, m.rd.top().kind, walkKinds[it.Rank])
@@ -61,17 +61,18 @@ func TestTriageWalksEveryRankInOrder(t *testing.T) {
 			}
 			m = keys(t, m, 'n')
 		}
-		if topKind(t, m) != ovTriageEnd {
-			t.Fatalf("after the last item: %v, want the end page", m.rd.top().kind)
+		if topKind(t, m) != ovTriageSummary {
+			t.Fatalf("after the last item: %v, want the summary", m.rd.top().kind)
 		}
 		end := m.grid().plain()
-		if !strings.Contains(end, "Triage done: everything was seen once") || strings.Contains(end, "Nothing waits") {
-			t.Fatalf("end title:\n%s", end)
+		// The unread line was read on its page: it left the list; the others still wait.
+		if !strings.Contains(end, "Triage: "+itoa(len(want)-1)+" actions") || strings.Contains(end, "Nothing waits") {
+			t.Fatalf("summary title:\n%s", end)
 		}
 		if strings.Contains(end, "merge queue unreadable") != unknown {
-			t.Fatalf("unknown=%v: the end page and merge:unknown:\n%s", unknown, end)
+			t.Fatalf("unknown=%v: the summary and merge:unknown:\n%s", unknown, end)
 		}
-		if !strings.Contains(end, "read 1") || !strings.Contains(end, "skipped "+itoa(len(want)-1)) {
+		if !strings.Contains(end, "read 1") {
 			t.Fatalf("counts:\n%s", end)
 		}
 	}
@@ -81,7 +82,7 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 func walkTo(t *testing.T, m Model, ok func(attentionItem) bool) (Model, attentionItem) {
 	t.Helper()
-	m = keys(t, m, kT)
+	m = keys(t, m, kT, kEnter) // the summary, then its first item (triage-dedupe §4)
 	for i := 0; i < 20; i++ {
 		if it, found := m.walkItem(); found && ok(it) {
 			return m, it
@@ -189,13 +190,13 @@ func TestTriageBackSkipsGoneReachesRead(t *testing.T) {
 			unread = it
 		}
 	}
-	m = keys(t, m, kT)
+	m = keys(t, m, kT, kEnter)
 	for i := 0; i < 20 && !(m.rd.top().kind == ovMessage && "unread:"+m.rd.top().ev.ID == unread.Key); i++ {
 		m = keys(t, m, 'n')
 	}
-	m = keys(t, m, 'n') // the end page
-	if topKind(t, m) != ovTriageEnd {
-		t.Fatal("no end page")
+	m = keys(t, m, 'n') // the summary
+	if topKind(t, m) != ovTriageSummary {
+		t.Fatal("no summary")
 	}
 	m = keys(t, m, 'p') // the line read under the walk, gone from the list
 	if _, still := m.forYouItem(unread.Key); still || topKind(t, m) != ovMessage || "unread:"+m.rd.top().ev.ID != unread.Key {
@@ -214,7 +215,7 @@ func TestTriageBackSkipsGoneReachesRead(t *testing.T) {
 func TestTriageEmptyOpensTheEndPage(t *testing.T) {
 	m := rowsFixture(t, false, true)
 	m = keys(t, m, kT)
-	if topKind(t, m) != ovTriageEnd || !strings.Contains(m.grid().plain(), "Nothing waits for you") {
+	if topKind(t, m) != ovTriageSummary || !strings.Contains(m.grid().plain(), "Nothing waits for you") {
 		t.Fatalf("empty: %v\n%s", m.rd.top().kind, m.grid().plain())
 	}
 	m = keys(t, m, kEnter)
@@ -222,7 +223,7 @@ func TestTriageEmptyOpensTheEndPage(t *testing.T) {
 		t.Fatalf("enter on the end page: %v %q", m.rd.top().kind, m.rd.top().key)
 	}
 	m = keys(t, m, kEsc)
-	if topKind(t, m) != ovTriageEnd || m.ui.walk == nil {
+	if topKind(t, m) != ovTriageSummary || m.ui.walk == nil {
 		t.Fatal("esc from the task did not return to the end page")
 	}
 	m = keys(t, m, kEsc)
@@ -233,7 +234,7 @@ func TestTriageEmptyOpensTheEndPage(t *testing.T) {
 
 func TestTriageEscEndsAndHoldsModals(t *testing.T) {
 	m := rowsFixture(t, false, false)
-	m = keys(t, m, kT, 'n')
+	m = keys(t, m, kT, kEnter, 'n')
 	if !m.busyForModal() {
 		t.Fatal("the reminder could open during the walk")
 	}
@@ -242,12 +243,12 @@ func TestTriageEscEndsAndHoldsModals(t *testing.T) {
 		t.Fatal("the walk's own flag does not hold the modals")
 	}
 	m = rowsFixture(t, false, false)
-	m = keys(t, m, kT, 'n', kEsc)
+	m = keys(t, m, kT, kEnter, 'n', kEsc, kEsc) // the item, then the summary
 	if m.rd.open() || m.ui.walk != nil {
 		t.Fatal("esc did not end the walk")
 	}
 	// a page opened above the walk's: n is that page's, esc returns to the walk
-	m = keys(t, m, kT, 'n') // health
+	m = keys(t, m, kT, kEnter, 'n') // health
 	m = keys(t, m, tea.Key{Code: tea.KeyF5})
 	if m.walkPage() {
 		t.Fatal("the page above counted as the walk's")
@@ -326,34 +327,33 @@ func TestTriageOnlyUnknownMerge(t *testing.T) {
 	}
 	m = keys(t, m, kT)
 	got := m.grid().plain()
-	if topKind(t, m) != ovTriageEnd || strings.Contains(got, "Nothing waits for you") ||
-		!strings.Contains(got, "Triage done: everything was seen once") || !strings.Contains(got, "merge queue unreadable") {
+	if topKind(t, m) != ovTriageSummary || strings.Contains(got, "Nothing waits for you") ||
+		!strings.Contains(got, "Triage: 0 actions") || !strings.Contains(got, "merge queue unreadable") {
 		t.Fatalf("only merge:unknown:\n%s", got)
 	}
 }
 
-// An item dealt with elsewhere (gone from the list) is not counted skipped.
+// An item dealt with elsewhere (gone from the list) leaves the summary.
 func TestTriageGoneIsNotSkipped(t *testing.T) {
 	m := rowsFixture(t, false, false)
 	m, _ = walkTo(t, m, func(it attentionItem) bool { return it.Rank == rankMerge })
 	s := m.snap
 	s.mergeQ = bus.MergeQueueRecord{AttemptedAt: shellNow.UnixMilli()} // merged meanwhile
 	m = step(t, m, pollMsg{snap: s, at: shellNow})
-	for i := 0; i < 5 && m.rd.top().kind != ovTriageEnd; i++ {
+	for i := 0; i < 5 && m.rd.top().kind != ovTriageSummary; i++ {
 		m = keys(t, m, 'n')
 	}
 	end := m.grid().plain()
-	// visited: ask, health, 3 waits, gate, merge (gone), unread (read): 6 skipped
-	// (no plan row: home-inbox-drawer §3.3)
-	if !strings.Contains(end, "read 1") || !strings.Contains(end, "skipped 6") {
-		t.Fatalf("a row gone from the list counted as skipped:\n%s", end)
+	// ask, health, 3 waits, gate still wait; merge gone, unread read (triage-dedupe §4)
+	if !strings.Contains(end, "read 1") || !strings.Contains(end, "Triage: 6 actions") || strings.Contains(end, "PR 309") {
+		t.Fatalf("a row gone from the list still on the summary:\n%s", end)
 	}
 }
 
 // n after p goes forward through the visited items before the live list.
 func TestTriageForwardThroughVisited(t *testing.T) {
 	m := rowsFixture(t, false, false)
-	m = keys(t, m, kT, 'n', 'n') // ask, health, the first wait
+	m = keys(t, m, kT, kEnter, 'n', 'n') // ask, health, the first wait
 	third, _ := m.walkItem()
 	m = keys(t, m, 'p', 'p') // back to the ask
 	if it, _ := m.walkItem(); it.Rank != rankAsk {
@@ -372,23 +372,23 @@ func TestTriageForwardThroughVisited(t *testing.T) {
 	}
 }
 
-// The end page's frame carries no walk place.
+// The summary's frame carries no walk place, at the start or after a walk.
 func TestTriageEndPageHasNoPlace(t *testing.T) {
 	m := rowsFixture(t, false, true)
 	m = keys(t, m, kT)
-	if topKind(t, m) != ovTriageEnd {
-		t.Fatal("no end page")
+	if topKind(t, m) != ovTriageSummary {
+		t.Fatal("no summary")
 	}
 	if got := m.grid().plain(); strings.Contains(got, "triage ") {
-		t.Fatalf("the end page shows a walk place:\n%s", got)
+		t.Fatalf("the summary shows a walk place:\n%s", got)
 	}
 	m = rowsFixture(t, false, false)
-	m = keys(t, m, kT)
-	for i := 0; i < 12 && m.rd.top().kind != ovTriageEnd; i++ {
+	m = keys(t, m, kT, kEnter)
+	for i := 0; i < 12 && m.rd.top().kind != ovTriageSummary; i++ {
 		m = keys(t, m, 'n')
 	}
-	if got := m.grid().plain(); strings.Contains(got, "triage ") || !strings.Contains(got, "Triage done") {
-		t.Fatalf("the end page after a walk shows a walk place:\n%s", got)
+	if got := m.grid().plain(); strings.Contains(got, "triage ") || !strings.Contains(got, "Triage: ") {
+		t.Fatalf("the summary after a walk shows a walk place:\n%s", got)
 	}
 }
 
@@ -409,18 +409,15 @@ func TestTriageAnswerAboveTheWalkKeepsIt(t *testing.T) {
 	}
 }
 
-// The walk's ask closed elsewhere: the refresh that drops its page moves the
-// walk on, never ends it (foureyes).
+// The walk's ask closed elsewhere: the refresh that drops its page returns
+// the walk to the summary (triage-dedupe §4), never ends it (foureyes).
 func TestTriageAskClosedElsewhereMovesOn(t *testing.T) {
 	m := rowsFixture(t, false, false)
-	m = keys(t, m, kT)
+	m = keys(t, m, kT, kEnter)
 	s := m.snap
 	s.asks = nil
 	m = step(t, m, pollMsg{snap: s, at: shellNow}) // the refresh drops the ask's page
-	if m.ui.walk == nil || !m.walkPage() {
-		t.Fatal("the walk ended")
-	}
-	if it, ok := m.walkItem(); !ok || it.Rank == rankAsk {
-		t.Fatalf("the walk did not move on: %+v", it)
+	if m.ui.walk == nil || !m.walkPage() || topKind(t, m) != ovTriageSummary {
+		t.Fatalf("the walk ended, or is not on the summary: %v", m.ui.walk)
 	}
 }

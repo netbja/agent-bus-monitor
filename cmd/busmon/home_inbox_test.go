@@ -117,7 +117,7 @@ func TestPlanPointerIsNotADecision(t *testing.T) {
 		}
 	}
 	m = keys(t, m, kT)
-	for i := 0; i < 30 && m.rd.open() && m.rd.top().kind != ovTriageEnd; i++ {
+	for i := 0; i < 30 && m.rd.open() && m.rd.top().kind != ovTriageSummary; i++ {
 		if it, ok := m.walkItem(); ok && strings.HasPrefix(it.Key, "plan") {
 			t.Fatalf("the walk visits %q", it.Key)
 		}
