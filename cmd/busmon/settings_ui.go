@@ -239,6 +239,9 @@ func (m *Model) applySettings(key string) string {
 	case "services.start_at_login": // self-repair step 9: the service manager applies it, not busmon
 		return "saved: applies at the next agentbus up, or now with agentbus service login"
 	}
+	if k, ok := config.Lookup(key); ok && k.Applies() != config.AppliesBusmon && k.Applies() != config.AppliesUnknown {
+		return "saved: applies " + k.Applies().String() // settings-read-when: a key busmon does not read, or not only
+	}
 	return "saved: next start of busmon"
 }
 
@@ -1009,7 +1012,8 @@ func settingControl(s *settingsPage, r settingRow) Line {
 }
 
 // settingsDetail is the selected key's line: its label, file key, source in
-// agentbus config's words, default and who reads it (wrapped by the page).
+// agentbus config's words, default, who reads it and when a change applies
+// (wrapped by the page).
 func settingsDetail(r settingRow) []mdSpan {
 	from := r.Source
 	if from == "default" {
@@ -1022,6 +1026,9 @@ func settingsDetail(r settingRow) []mdSpan {
 	}
 	if r.ReadBy != "" {
 		spans = append(spans, mdSpan{text: " " + GlyphNone + " read by " + Preview(r.ReadBy), role: RoleMuted})
+	}
+	if r.Applies != "" {
+		spans = append(spans, mdSpan{text: " " + GlyphNone + " applies " + r.Applies, role: RoleMuted})
 	}
 	return spans
 }

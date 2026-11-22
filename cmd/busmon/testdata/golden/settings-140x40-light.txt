@@ -33,7 +33,7 @@
 │                   │     Attach prefix key               f12                                                                              │
 │                   │                                                                                                                      │
 │                   │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────  │
-│                   │ Icons · display.icons · from config.toml (default: off) · read by busmon                                             │
+│                   │ Icons · display.icons · from config.toml (default: off) · read by busmon · applies live                              │
 │                   │ off: none · nerd: a lettered box per provider · agent-font: the maker's logo                                         │
 │                   │                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

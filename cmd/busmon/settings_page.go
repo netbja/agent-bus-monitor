@@ -43,6 +43,7 @@ type settingRow struct {
 	AfterUnset string
 	Default    string // the default, in the person's words (the detail zone)
 	ReadBy     string // who reads it (the registry's words)
+	Applies    string // when a change applies (settings-read-when)
 	Kind       config.Kind
 	List       bool
 	// Choices are the values ←→ picks among when they depend on the
@@ -150,6 +151,7 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 				row.From, row.Source = fromDefault, "default"
 			}
 			row.Default, row.ReadBy, row.Kind, row.List = settingValue(k, k.Default), k.ReadBy, k.Kind, k.List
+			row.Applies = k.Applies().String()
 			if k.Name == "dispatch.self_repair" {
 				row.Choices = selfRepairChoices(r.Bool("dev"))
 			}
