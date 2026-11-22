@@ -601,7 +601,7 @@ var Keys = []*Key{
 	// The work-in-progress limit (wip-limit r2 §3.3): requests an agent may
 	// hold accepted when it starts a new one, 0 = no limit; per project, the
 	// person's alone (Q3), from Shift+C or config.toml, no env variable.
-	{Name: "board.wip_limit", Kind: Int, Default: 2, ReadBy: "busmon (shown; agentbus request accept and send read it from wip-limit step 2b)", MachineOnly: true, Project: true, PersonEdit: true,
+	{Name: "board.wip_limit", Kind: Int, Default: 2, ReadBy: "agentbus request accept, agentbus request send, busmon", MachineOnly: true, Project: true, PersonEdit: true,
 		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 or more (0: no limit)")},
 	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver, dispatch", MachineOnly: true,
 		env: func(raw string) (any, envResult) {

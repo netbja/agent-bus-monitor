@@ -323,11 +323,20 @@ why you should record it. The verbs, in no fixed order beyond the rules below:
 ```bash
 agentbus request accept <task>              # BEFORE you start working. Not optional.
 agentbus request block  <task> <reason>     # when you cannot proceed — say why, in words
-agentbus request accept <task>              # to resume after a block
+agentbus request accept <task>              # to resume after a block, a review or a reject
+agentbus request review <task> [--branch <b>] [<note>]  # a step's PR waits on its reviewers
 agentbus request done   <task> <reply>      # when finished — the reply is your answer
 agentbus request                            # EVERY tracked request, done ones included
 agentbus request next                       # which one to take next (exit 64: nothing ready)
 ```
+
+- **The work-in-progress limit.** A first `request accept` is refused while you already hold the
+  project's `board.wip_limit` requests accepted (2 by default; the person's setting): the refusal
+  names them. Finish one (`done`), or mark it `review` once its step's challenge is sent, or
+  `block` it. A multi-step request goes `review` after each step's challenge and `accept` again
+  for the next step or a reject; a single-PR request may go straight to `done`. Resuming
+  (`accept` after `review` or `block`) is never refused. Only the person's high priority passes
+  the limit. Never ask master to raise it.
 
 - **When more than one tracked request waits for you, run `agentbus request next` and accept
   the task it names.** The person may set a request's priority (high, normal, low; absent =

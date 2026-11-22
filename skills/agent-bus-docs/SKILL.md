@@ -57,6 +57,13 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    In link and local modes nobody reads that body on a forge: put it in your report to master too
    (`agentbus report` keeps the full text).
 
+## Your tracked request
+
+Accept it when you start (`agentbus request accept <task>`). Once the PR is challenged, mark it
+`agentbus request review <task> --branch <b>`: it then does not count against the project's
+work-in-progress limit (`board.wip_limit`). Accept it again for a reject, and `request done` when
+it is delivered.
+
 ## Shared memory
 
 Read [the shared memory index](../../docs/memory/INDEX.md) before you start, with the rules in

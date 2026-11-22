@@ -643,6 +643,11 @@ This changes how you dispatch:
 - **Assign with `request send`.** A tracked request is recorded on the **board**, which is
   read on demand. It survives the peer's absence with no listener, and the peer picks it up
   at boot by reading `agentbus request` — no session had to idle for that to work.
+- **The work-in-progress limit (`board.wip_limit`, the person's).** A request sent to an agent at
+  its limit is queued, never refused: `request send` prints `coder is at its wip limit (2/2: a, b):
+  queued; coder2 0/2`. Route it to an agent under its limit, or let it wait; never tell an agent to
+  go over it (only the person's high priority passes). When an agent's accepted list holds a
+  request past `board.no_reply_after`, ask it whether it is done, in review or blocked.
 - **The dispatcher wakes the peer.** A request or a directive addressed to it is enough: with
   `dispatch up` it types the wake line into the peer's terminal when the peer is idle, and
   escalates to you if it cannot. You never type into a peer's terminal yourself (the holder refuses
