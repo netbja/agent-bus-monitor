@@ -222,6 +222,10 @@ func PopStrandedText(role string, owned []string, back string) string {
 // open requests (it was silent for hours: board-drift §6), with the session
 // {p}:resume holds for it, else a plain pop.
 func (l *loop) popStranded(ctx context.Context, a string, f PopFacts) error {
+	if cannot := l.recipientCannotAct(a); cannot != "" { // as pop-done's: the mark kept for when master can act (reviewer-codex)
+		l.logOnce("pop-stranded:"+a, map[string]any{"agent": a, "action": "pop-stranded-wait", "reason": cannot})
+		return nil
+	}
 	back := "agentbus --project " + l.b.Project() + " pop " + a
 	if r, err := l.b.ResumeOf(ctx, a); err == nil && r != nil && bus.ValidSessionID(r.Session) {
 		back += " --resume " + r.Session

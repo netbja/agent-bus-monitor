@@ -4,4 +4,5 @@
   agentbus --project <p> pop <role> --resume <session>" (the session `{p}:resume` holds; without one,
   plain `pop <role>`). It sends it through `FencedCmdOnce` under the `{p}:quota` mark
   `popstranded:<role>` (episode = the pop's snapshot time), only when the pop is closed (no terminal,
-  process gone), and not when a read failed. The dispatcher still never relaunches a pop (Q4).
+  process gone), and not when a read failed. While master cannot act (held by its limit or login, or
+  its own tab blocked) it waits, as pop-done's notice does, and the mark stays unset. The dispatcher still never relaunches a pop (Q4).

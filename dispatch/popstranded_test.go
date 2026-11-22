@@ -75,3 +75,26 @@ func TestPopStrandedNotForALivePopOrOneOwningNothing(t *testing.T) {
 		}
 	}
 }
+
+// reviewer-codex: the notice waits while master cannot act (its own tab
+// blocked, or held), as pop-done's does: nothing sent, the mark not
+// consumed; once master can act, it goes.
+func TestPopStrandedWaitsWhileMasterCannotAct(t *testing.T) {
+	ctx := context.Background()
+	w := newPopWorld(t, "pop")
+	if _, err := w.b.Request(ctx, "t1", "master", "security", "", "x", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	w.closePop()
+	w.l.obs = map[string]Observation{"master": {State: "blocked"}}
+	w.pass()
+	marks, _ := w.r.HGetAll(ctx, bus.QuotaKey(w.b.Project())).Result()
+	if got := w.directives(); len(got) != 0 || marks[bus.PopStrandedMark("security")] != "" {
+		t.Fatalf("sent while master is blocked: %q, mark %q", got, marks[bus.PopStrandedMark("security")])
+	}
+	w.l.obs = map[string]Observation{}
+	w.pass()
+	if got := w.directives(); len(got) != 1 || !strings.Contains(got[0], "owns open requests") {
+		t.Fatalf("once master can act: %q", got)
+	}
+}
