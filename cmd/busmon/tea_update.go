@@ -317,6 +317,17 @@ func (m *Model) open(p PanelID) tea.Cmd {
 // triage walk): an unread line's message page straight away (Enter expands
 // it first), nothing for merge:unknown.
 func (m *Model) openForYouItem(it attentionItem) tea.Cmd {
+	serial := m.rd.serial
+	cmd := m.openForYouPage(it)
+	if p := m.rd.top(); p != nil && p.serial != serial { // the item's page: it keeps the item (triage-dedupe §5)
+		p.item, p.dirty = &it, true
+		m.refresh()
+	}
+	return cmd
+}
+
+// openForYouPage pushes the item's page.
+func (m *Model) openForYouPage(it attentionItem) tea.Cmd {
 	key := it.Key
 	switch it.Rank {
 	case rankAsk:
