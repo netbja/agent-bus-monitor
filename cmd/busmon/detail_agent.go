@@ -302,10 +302,24 @@ func taskDetail(e bus.BoardEntry, task string, now time.Time) (title string, lin
 	row("Owner", S(RoleText, Preview(e.Owner)))
 	row("State", S(boardStateRole(e.State), Preview(e.State)))
 	row("Branch", S(RoleText, Preview(branch)))
-	if e.Updated > 0 {
-		row("Updated", S(RoleText, humanAge(now.Sub(time.Unix(e.Updated, 0)))+" ago"))
+	ago := func(t time.Time) string { return humanAge(now.Sub(t)) + " ago" }
+	if e.Updated > 0 { // the last transition, the Board's CHANGED (board-drift §7)
+		row("Changed", S(RoleText, ago(time.Unix(e.Updated, 0))))
 	} else {
-		row("Updated", S(RoleMuted, GlyphDash))
+		row("Changed", S(RoleMuted, GlyphDash))
+	}
+	if q := e.Request; q != nil { // the request's own times, each from its field
+		for _, t := range []struct {
+			name string
+			ms   int64
+		}{{"Requested", q.CreatedAt}, {"Accepted", q.AcceptedAt}, {"Responded", q.RespondedAt}} {
+			if t.ms > 0 {
+				row(t.name, S(RoleText, ago(time.UnixMilli(t.ms))))
+			}
+		}
+		if e.State == "review" && e.Updated > 0 { // no field of its own: the review is the last transition
+			row("In review", S(RoleText, "since "+ago(time.Unix(e.Updated, 0))))
+		}
 	}
 	if e.Request != nil {
 		row("Request", S(RoleMuted, "tracked - open it from Requests (F2) for delivery and acceptance"))

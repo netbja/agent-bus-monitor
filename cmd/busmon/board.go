@@ -34,7 +34,7 @@ func boardAlertW(width int) int {
 	if width < 100 {
 		return 12
 	}
-	return 21
+	return 34 // "no acceptance 40m since request" whole: the alert says what it measures (board-drift §7)
 }
 
 // boardStateRole colours a board state (spec §3.5); the word is always shown too.
@@ -72,10 +72,12 @@ type boardView struct {
 }
 
 // boardAlert is a tracked request's alert and since when, "" when on time
-// (views-redesign §3): its body no longer in the stream (body lost, at once);
-// sent and not accepted past noAccept (no acceptance); accepted with no
-// reply past noReply (no reply). A setting at 0 is off; a closed request has
-// none.
+// (views-redesign §3), each naming what it measures from (board-drift §7):
+// its body no longer in the stream (body lost, at once, with the request's
+// age); sent and not accepted past noAccept (no acceptance … since request);
+// accepted, still accepted, with no reply past noReply (no reply … since
+// accept): a request in review waits on its reviewers, a blocked one on
+// someone else. A setting at 0 is off; a closed request has none.
 func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
 	if !r.Tracked || !r.waiting() {
 		return "", time.Time{}
@@ -85,16 +87,16 @@ func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
 		if at.IsZero() {
 			at = r.Updated
 		}
-		return "body lost", at
+		return "body lost (request " + humanAge(now.Sub(at)) + ")", at
 	}
 	if r.Accepted.IsZero() {
 		if r.State == "requested" && o.noAccept > 0 && !r.Created.IsZero() && now.Sub(r.Created) >= o.noAccept {
-			return "no acceptance " + humanAge(now.Sub(r.Created)), r.Created
+			return "no acceptance " + humanAge(now.Sub(r.Created)) + " since request", r.Created
 		}
 		return "", time.Time{}
 	}
-	if r.Responded.IsZero() && o.noReply > 0 && now.Sub(r.Accepted) >= o.noReply {
-		return "no reply " + humanAge(now.Sub(r.Accepted)), r.Accepted
+	if r.State == "accepted" && r.Responded.IsZero() && o.noReply > 0 && now.Sub(r.Accepted) >= o.noReply {
+		return "no reply " + humanAge(now.Sub(r.Accepted)) + " since accept", r.Accepted
 	}
 	return "", time.Time{}
 }
@@ -176,7 +178,7 @@ func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardO
 		head = append(head, col("ALERT", alertW, RoleDim))
 	}
 	v.header = FitLine(append(head, col("TASK", taskW, RoleDim), col("OWNER", boardOwnerW, RoleDim),
-		col("STATE", boardStateW, RoleDim), Seg{Text: "AGE", Role: RoleDim}), width)
+		col("STATE", boardStateW, RoleDim), Seg{Text: "CHANGED", Role: RoleDim}), width) // the last transition (board-drift §7)
 	v.label = Line{{Text: fmt.Sprintf("%d open %s %d done (d)", open, GlyphNone, done), Role: RoleMuted}}
 	if o.between {
 		v.label = append(Line{{Text: "between agents " + GlyphNone + " ", Role: RoleAccent}}, v.label...)
