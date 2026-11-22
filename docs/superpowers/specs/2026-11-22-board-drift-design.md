@@ -1,10 +1,12 @@
 # The board follows the work (board-drift)
 
-Status: spec r3, for review (subject `board-drift`). Not built. Base: origin/dev `a5e9847b`.
+Status: spec r4, for review (subject `board-drift`). Not built. Base: origin/dev `a5e9847b`.
 r2 (foureyes' r1 review): §3.2 never judges a head already in the base (`review_base`); four
 citation fixes; §4's note names its own refusals.
 r3: master's item 7 (cmd `1795348884780-0`): the person's directives are answered, enforced by
 the dispatcher (§8, Q5). §3.2 takes foureyes' two r2 notes: a local-forge base, and a failed fetch.
+r4 (foureyes' r3 review): §8's notice rings as a `blocked` event, with no prefix change (the
+prefix list is a skip list); the check's warn is In hand, so the person gets one ring.
 Author: architect, from master's directive (cmd `1795347811956-0`, task `board-drift-spec`),
 which carries the person's directive. No new dependency. Questions for the person are last (§10).
 
@@ -270,9 +272,17 @@ registry (`config/keys.go`).
    > Answer guard: `<A>` has not answered your directive `<id>` ("<first 80 chars>") for 20m
    > (`<state>`; no terminal, if so). Look at its pane in busmon.
 
-   Its prefix, "Answer guard: ", is added beside `stallNoticePrefix`
-   (`internal/dispatchsvc/notifyfacts.go:135`), so the person's notifications ring for it as they
-   do for the stall guard.
+   The notice rings with no change to the notifications code (foureyes, r3). The notifications
+   chore makes a `blocked` event ("a notice only you can act on") of every dispatch notice for
+   the person (`internal/dispatchsvc/notifyfacts.go:131-141`). The only exceptions are the
+   prefixes on its skip list, `stallNoticePrefix` and `holderNoticePrefix`, which other events
+   already cover. "Answer guard: " stays **off** that list. One notice per D gives one ring per D.
+
+   **One ring, not two.** The check's own warn does not ring. Its definition lists no `Person`
+   statuses and no `Reasons`, so `Definition.PlaceOf` places its warn In hand, never For you
+   (`health/health.go:55`, `:71`). Only the For-you warns and the fails become notification
+   events (`notifyfacts.go:125-128`). The warn shows in busmon's health view; the notice is the
+   person's one ring.
 
 **What it never does.** It never answers for the agent, types into a pane, or resends the
 directive. An agent with no terminal still reaches stage 2: the person is told, and §6's notice
@@ -286,7 +296,9 @@ reaches master if it is a pop.
 - an untyped (composed) directive is not judged (Q5 A);
 - a directive past the retained history is not judged.
 
-The dispatcher writes, fenced and once-only, are tested against Redis.
+The dispatcher writes, fenced and once-only, are tested against Redis. In the notifications
+facts (`internal/dispatchsvc`), the answer guard's notice yields exactly one `blocked` event, and
+the check's warn yields none.
 
 ## 9. Build steps
 
