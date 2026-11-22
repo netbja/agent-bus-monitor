@@ -105,3 +105,43 @@ func TestContextOfAWaitAndAnAsk(t *testing.T) {
 		t.Fatalf("ask: %v", got)
 	}
 }
+
+// Master's answer to Q2: a line also attaches when it replies on the item's
+// thread (its ref is the ask, the gate's challenge, or the report); a
+// report's own notices are not replies.
+func TestContextThreadReplies(t *testing.T) {
+	reply := func(ms int64, ref, msg string) bus.Event {
+		return bus.Event{Kind: "cmd", ID: rid(ms), From: "master", Target: "bob", Type: bus.CmdDirective, Ref: ref, Message: msg}
+	}
+	// A gate on the person: its challenge's replies.
+	s := targetSnap()
+	gateRef := rid(-9)
+	s.personGates = map[string]string{gateRef: "master|sign off the release"}
+	_, f := itemsOf(s, reply(0, gateRef, "the release notes are attached"), reply(2, rid(-50), "elsewhere"))
+	items := forYou(s, f.feed)
+	if got := ctxIDs(contextOf(items, "gate:bob:"+gateRef, f.feed)); !slices.Equal(got, []string{rid(0)}) {
+		t.Fatalf("gate: %v (items %v)", got, itemKeys(items))
+	}
+	// A --needs report's own item: a reply on it, not its notice.
+	s = targetSnap()
+	_, f = itemsOf(s, needsRep(0, "master", bus.NeedsAnswer, "Release notes are ready"), needsNotice(1, 0, bus.NeedsAnswer),
+		reply(2, rid(0), "page 3 changed"))
+	items = forYou(s, f.feed)
+	if got := ctxIDs(contextOf(items, "report:"+rid(0), f.feed)); !slices.Equal(got, []string{rid(2)}) {
+		t.Fatalf("report: %v (items %v)", got, itemKeys(items))
+	}
+	// Its notice alone (the report out of reach): the item, not a reply to it.
+	_, f = itemsOf(s, needsNotice(1, 0, bus.NeedsAnswer))
+	items = forYou(s, f.feed)
+	if c := contextOf(items, "report:"+rid(0), f.feed); len(c.Lines) != 0 || !slices.Contains(itemKeys(items), "report:"+rid(0)) {
+		t.Fatalf("a notice alone: %+v (items %v)", c, itemKeys(items))
+	}
+	// An ask: a reply on it.
+	s.asks = []bus.Ask{{ID: rid(-5), From: "master", Title: "Language", CreatedAt: entryTime(rid(-5)).UnixMilli(), State: "open",
+		Questions: []bus.AskQuestionState{{AskQuestion: bus.AskQuestion{ID: "q", Header: "L", Question: "which?", Options: []bus.AskOption{{Label: "fr"}}}}}}}
+	_, f = itemsOf(s, reply(0, rid(-5), "the options explained"))
+	items = forYou(s, f.feed)
+	if got := ctxIDs(contextOf(items, "ask:"+rid(-5), f.feed)); !slices.Equal(got, []string{rid(0)}) {
+		t.Fatalf("ask: %v", got)
+	}
+}

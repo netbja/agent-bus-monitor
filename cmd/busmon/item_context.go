@@ -7,7 +7,9 @@ import (
 )
 
 // An item's Context (triage-dedupe spec §5, step 3): the messages attached
-// to it by §2's rule (a line naming it, a waiting agent's own newest report),
+// to it by §2's rule (a line naming it, a waiting agent's own newest report)
+// or replying on its thread (master's answer to Q2: its ref is the ask, the
+// gate's challenge or the report),
 // newest first, at most contextMax; a --needs report folded into the item
 // first, saying so; the rest counted ("n older in Activity").
 
@@ -37,7 +39,7 @@ func contextOf(items []attentionItem, key string, feed []feedLine) itemContext {
 	if idx < 0 {
 		return itemContext{}
 	}
-	it, tg := items[idx], liveTargets(items)
+	it, tg, root := items[idx], liveTargets(items), itemRoot(items[idx])
 	newest := map[string]string{} // agent -> its newest report's id
 	for _, fl := range feed {
 		if !fl.sep && fl.ev.Kind == "report" {
@@ -52,7 +54,7 @@ func contextOf(items []attentionItem, key string, feed []feedLine) itemContext {
 		}
 		named := tg.named(lineFullText(fl))
 		wait := it.Rank == rankWait && fl.ev.Kind == "report" && fl.ev.Agent == it.Agent && newest[it.Agent] == fl.ev.ID
-		if !wait && !slices.Contains(named, idx) {
+		if !wait && !slices.Contains(named, idx) && !isReply(fl, root) {
 			continue
 		}
 		text := fl.ev.Message
@@ -78,4 +80,29 @@ func contextOf(items []attentionItem, key string, feed []feedLine) itemContext {
 		c.Lines, c.Older = all[:contextMax], len(all)-contextMax
 	}
 	return c
+}
+
+// itemRoot is the thread an item stands for: an ask's id, a gate's
+// challenge, a report item's report; "" for the others.
+func itemRoot(it attentionItem) string {
+	switch it.Rank {
+	case rankAsk:
+		return it.AskID
+	case rankGate:
+		return strings.TrimPrefix(it.Key, "gate:"+it.Agent+":")
+	case rankReport:
+		id, _ := lineKeyID(it.Key)
+		return id
+	}
+	return ""
+}
+
+// isReply: the line replies on root's thread, and is not one of a report's
+// own notices to the person.
+func isReply(fl feedLine, root string) bool {
+	if root == "" || fl.ev.Ref != root || fl.ev.ID == root {
+		return false
+	}
+	_, _, notice := reportSubject(fl.ev.Message)
+	return !notice
 }
