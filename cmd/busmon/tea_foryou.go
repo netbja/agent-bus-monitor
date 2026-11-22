@@ -120,7 +120,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		if fl.ev.Kind == "report" { // a waiting agent's own newest report is its wait's
 			if i, ok := tg.waits[fl.ev.Agent]; ok && newest[fl.ev.Agent] == fl.ev.ID {
 				out[i].Unread = out[i].Unread || unread
-				if needs != "" {
+				if foldsInto(fl, tg, newest) == i {
 					out[i].Needs = needs
 				}
 				continue
@@ -149,7 +149,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		if len(named) == 1 {
 			i := named[0]
 			out[i].Unread = out[i].Unread || unread
-			if needs != "" {
+			if foldsInto(fl, tg, newest) == i {
 				out[i].Needs = needs
 			}
 			continue
@@ -177,6 +177,29 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		out = append(out, it)
 	}
 	return out
+}
+
+// foldsInto is the item a --needs line folds into (triage-dedupe §2, §3),
+// foldLines' decision and the Context's (foureyes): a waiting agent's newest
+// report into its wait; else, while it still asks (read: unread; answer:
+// not answered from its page), the one live target it names; -1 none.
+func foldsInto(fl feedLine, tg targets, newest map[string]string) int {
+	needs := lineNeeds(fl)
+	if needs == "" {
+		return -1
+	}
+	if fl.ev.Kind == "report" {
+		if i, ok := tg.waits[fl.ev.Agent]; ok && newest[fl.ev.Agent] == fl.ev.ID {
+			return i
+		}
+	}
+	if needs == bus.NeedsRead && fl.mark != markUnread || needs == bus.NeedsAnswer && fl.answered {
+		return -1
+	}
+	if named := tg.named(lineFullText(fl)); len(named) == 1 {
+		return named[0]
+	}
+	return -1
 }
 
 // lineNeeds is what a line's report asks of the person: the report's own

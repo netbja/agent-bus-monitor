@@ -145,3 +145,44 @@ func TestContextThreadReplies(t *testing.T) {
 		t.Fatalf("ask: %v", got)
 	}
 }
+
+// foureyes: Folded is foldLines' own decision. A --needs report read (or
+// answered) no longer folds, so it is no longer first; a waiting agent's
+// newest --needs report folds into its wait, not into the PR it names.
+func TestContextFoldedAsForYouFolds(t *testing.T) {
+	s := targetSnap()
+	_, f := itemsOf(s, needsRep(0, "master", bus.NeedsRead, "Read #694's notes"), needsNotice(1, 0, bus.NeedsRead),
+		repEv(2, "master", "#694 later"))
+	f.unread.read[rid(0)], f.unread.read[rid(1)] = true, true
+	marks := f.unread.marks(f.feed, nil)
+	for i := range f.feed {
+		f.feed[i].mark = marks[f.feed[i].ev.ID]
+	}
+	items := forYou(s, f.feed)
+	c := contextOf(items, "merge:pr:694", f.feed)
+	if items[0].Needs != "" || len(c.Lines) != 2 || c.Lines[0].ID != rid(2) || c.Lines[1].Folded {
+		t.Fatalf("read: needs %q, %+v", items[0].Needs, c)
+	}
+	// Answered from its page: the same.
+	_, f = itemsOf(s, needsRep(0, "master", bus.NeedsAnswer, "Merge #694 first?"), needsNotice(1, 0, bus.NeedsAnswer), repEv(2, "master", "#694 later"))
+	for i := range f.feed {
+		if f.feed[i].ev.ID == rid(0) {
+			f.feed[i].answered = true
+		}
+	}
+	items = forYou(s, f.feed)
+	if c := contextOf(items, "merge:pr:694", f.feed); items[0].Needs != "" || c.Lines[0].ID != rid(2) || c.Lines[1].Folded {
+		t.Fatalf("answered: needs %q, %+v", items[0].Needs, c)
+	}
+	// A waiting agent's newest --needs report: folded into its wait only.
+	s.agents = map[string]*agentState{"coder": {state: "waiting", stateAt: entryTime(rid(-1))}}
+	_, f = itemsOf(s, needsRep(0, "coder", bus.NeedsAnswer, "Rebase #694 or not?"))
+	items = forYou(s, f.feed)
+	wait := items[slices.IndexFunc(items, func(it attentionItem) bool { return it.Rank == rankWait })]
+	if c := contextOf(items, wait.Key, f.feed); len(c.Lines) != 1 || !c.Lines[0].Folded {
+		t.Fatalf("the wait: %+v", c)
+	}
+	if c := contextOf(items, "merge:pr:694", f.feed); len(c.Lines) != 1 || c.Lines[0].Folded {
+		t.Fatalf("the merge page: %+v", c)
+	}
+}

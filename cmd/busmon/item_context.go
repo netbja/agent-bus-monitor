@@ -77,7 +77,7 @@ func contextFor(items []attentionItem, it attentionItem, feed []feedLine) itemCo
 		text, _, _ = strings.Cut(text, "\n")
 		needs := lineNeeds(fl)
 		all = append(all, ctxLine{ID: fl.ev.ID, Who: sender(fl.ev), At: fl.at, Text: text, Needs: needs,
-			Folded: needs != "" && (wait || len(named) == 1)})
+			Folded: foldsInto(fl, tg, newest) == idx}) // as For you folds it (foureyes)
 	}
 	slices.SortStableFunc(all, func(a, b ctxLine) int { // folded first, each group newest first
 		switch {
