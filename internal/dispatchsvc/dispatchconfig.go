@@ -206,6 +206,7 @@ func serviceContext(getenv func(string) string, lookPath func(string) (string, e
 		Urgent: settings.Float("dispatch.context_urgent"), Deadline: settings.Duration("dispatch.context_handoff_deadline"),
 		Read:      func(s string) (quota.ContextReading, bool) { return quota.ReadContext(quota.ContextDir(), s) },
 		Compacted: serviceCompacted(getenv, os.UserHomeDir),
+		Compact:   func() bool { return config.Machine(getenv).Bool("dispatch.auto_compact") }, // live: each minute's judgement
 		Notify:    desktopNotify(lookPath, run)}
 }
 

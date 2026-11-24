@@ -76,7 +76,11 @@ func TestSubmitLands(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitScreen(t, cl, "t1", "SUBMITTED: /clear")
-	if got := submitted(t, cl, "t1"); len(got) != 2 {
+	if _, err := cl.Call(Submit{Kind: "compact", Term: "t1"}); err != nil {
+		t.Fatal(err)
+	}
+	waitScreen(t, cl, "t1", "SUBMITTED: /compact")
+	if got := submitted(t, cl, "t1"); len(got) != 3 {
 		t.Fatalf("submitted %q", got)
 	}
 }

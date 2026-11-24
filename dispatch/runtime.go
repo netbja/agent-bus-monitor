@@ -18,6 +18,9 @@ type Runtime interface {
 	// other write besides the wake line. It takes no text: the constant is
 	// all it can type.
 	Clear(ctx context.Context, pane string) error
+	// Compact types termhost.CompactLine's /compact (auto-compact): at the
+	// urgent fill with no hand-off. It takes no text either.
+	Compact(ctx context.Context, pane string) error
 }
 
 // ClearText is the only thing Clear types: termhost.ClearLine's text.

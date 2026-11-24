@@ -157,8 +157,11 @@ func (s *Server) submit(t *terminal, f Submit) Reply {
 // project it serves, the terminal's role): the frame carries no text and no
 // name (spec 4.2). token is what the landing check looks for.
 func (s *Server) lineOf(t *terminal, f Submit) (termhost.Line, string, error) {
-	if f.Kind == "clear" {
+	switch f.Kind {
+	case "clear":
 		return termhost.ClearLine(), "/clear", nil
+	case "compact":
+		return termhost.CompactLine(), "/compact", nil
 	}
 	l, err := termhost.WakeLine(s.cfg.Project, t.role, int64(f.Count), f.Nonce)
 	return l, "agentbus#" + f.Nonce, err

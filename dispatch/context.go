@@ -31,6 +31,10 @@ type ContextConfig struct {
 	// (its preTokens), from its transcript under configDir (the agent's
 	// CLAUDE_CONFIG_DIR, "" = the default) (§3.5; nil = no notice).
 	Compacted func(configDir, session string, afterMs int64) (preTokens int64, found bool)
+	// Compact reports whether dispatch.auto_compact is on, read at each
+	// judgement (nil = off): /compact after CompactAfter at Urgent with no
+	// hand-off (auto-compact).
+	Compact func() bool
 	// Notify shows a desktop notification (nil = none).
 	Notify func(ctx context.Context, title, body string) error
 }

@@ -205,7 +205,10 @@ func TestHostRuntimeSubmits(t *testing.T) {
 	if err := f.rt.Clear(ctx, string(f.term.ID)); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.h.Submitted(f.term.ID); len(got) != 2 || got[0] != line.Text() || got[1] != termhost.ClearLine().Text() {
+	if err := f.rt.Compact(ctx, string(f.term.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.h.Submitted(f.term.ID); len(got) != 3 || got[0] != line.Text() || got[1] != termhost.ClearLine().Text() || got[2] != "/compact" {
 		t.Fatalf("submitted %q", got)
 	}
 	if ok, err := f.rt.Prompt(ctx, string(f.term.ID), termhost.ClearLine()); ok || err == nil {

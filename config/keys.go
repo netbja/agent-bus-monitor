@@ -438,6 +438,12 @@ var Keys = []*Key{
 	{Name: "dispatch.auto_clear", Env: "AGENT_BUS_AUTO_CLEAR", Kind: Bool, Default: true, ReadBy: "dispatch",
 		env:  envZeroOne,
 		file: fileBool},
+	// auto-compact (the person's answer A): at dispatch.context_urgent for
+	// 10 minutes with no hand-off declared, the dispatcher types /compact
+	// into the idle pane. On by default; the person's alone (no env, busmon
+	// or config.toml), read again at each minute's judgement.
+	{Name: "dispatch.auto_compact", Kind: Bool, Default: true, ReadBy: "dispatch", MachineOnly: true, PersonEdit: true,
+		file: fileBool},
 	// The stall guard (spec 2026-11-01-stall-guard-design.md): how long before
 	// each check judges a stall; 0 turns the check off.
 	{Name: "dispatch.stall_after", Env: "AGENT_BUS_STALL_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",

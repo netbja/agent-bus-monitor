@@ -8,23 +8,28 @@ import (
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
-// LineKind is what a Line types: the wake line or /clear (spec
-// 2026-11-10-herdr-exit-design.md, 4.2). The holder's submit frame carries
+// LineKind is what a Line types: the wake line, /clear or /compact (spec
+// 2026-11-10-herdr-exit-design.md, 4.2; auto-compact). The holder's submit frame carries
 // the kind, never text.
 type LineKind int
 
 const (
-	KindNone  LineKind = iota // the zero Line: never submitted
-	KindWake                  // the wake line
-	KindClear                 // /clear, after a declared hand-off
+	KindNone    LineKind = iota // the zero Line: never submitted
+	KindWake                    // the wake line
+	KindClear                   // /clear, after a declared hand-off
+	KindCompact                 // /compact, at the urgent fill with no hand-off (auto-compact)
 )
 
 // MaxCount is the highest count a wake line shows; a larger backlog reads
 // "999+" (capped, never refused: the agent that needs it most still wakes).
 const MaxCount = 999
 
-// clearText is the only thing a clear line types.
-const clearText = "/clear"
+// clearText and compactText are the only things a clear line and a compact
+// line type.
+const (
+	clearText   = "/clear"
+	compactText = "/compact"
+)
 
 // wakeFormat is the wake line, the one the dispatcher has always typed:
 // nonce, project, count, agent, project, agent. It carries no message body:
@@ -33,8 +38,9 @@ const wakeFormat = "[agentbus#%s] %s: %s message(s) waiting for %s. Run: agentbu
 
 var nonceRE = regexp.MustCompile(`^[0-9a-f]{6,16}$`)
 
-// Line is one of the two lines a host may type into a terminal. Its fields
-// are unexported and its only constructors are WakeLine and ClearLine, so no
+// Line is one of the three lines a host may type into a terminal. Its fields
+// are unexported and its only constructors are WakeLine, ClearLine and
+// CompactLine, so no
 // caller can make it carry other text (TestLineIsAClosedSet).
 type Line struct {
 	kind           LineKind
@@ -64,13 +70,16 @@ func WakeLine(project, agent string, count int64, nonce string) (Line, error) {
 // ClearLine is /clear.
 func ClearLine() Line { return Line{kind: KindClear} }
 
+// CompactLine is /compact.
+func CompactLine() Line { return Line{kind: KindCompact} }
+
 // Kind is the line's kind; KindNone for the zero Line.
 func (l Line) Kind() LineKind { return l.kind }
 
-// Valid reports whether l was made by WakeLine or ClearLine.
-func (l Line) Valid() bool { return l.kind == KindWake || l.kind == KindClear }
+// Valid reports whether l was made by WakeLine, ClearLine or CompactLine.
+func (l Line) Valid() bool { return l.kind == KindWake || l.kind == KindClear || l.kind == KindCompact }
 
-// Nonce is a wake line's nonce ("" for /clear).
+// Nonce is a wake line's nonce ("" for /clear and /compact).
 func (l Line) Nonce() string { return l.nonce }
 
 // Count is the count a wake line shows, at most MaxCount.
@@ -87,18 +96,22 @@ func (l Line) Text() string {
 		return fmt.Sprintf(wakeFormat, l.nonce, l.project, n, l.agent, l.project, l.agent)
 	case KindClear:
 		return clearText
+	case KindCompact:
+		return compactText
 	}
 	return ""
 }
 
 // Marker is what shows the line landed: a wake line's "[agentbus#<nonce>]",
-// or /clear itself.
+// or /clear and /compact themselves.
 func (l Line) Marker() string {
 	switch l.kind {
 	case KindWake:
 		return "[agentbus#" + l.nonce + "]"
 	case KindClear:
 		return clearText
+	case KindCompact:
+		return compactText
 	}
 	return ""
 }

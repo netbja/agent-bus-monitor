@@ -136,10 +136,21 @@ func ContextCompactedMark(agent string) string { return "context-compacted:" + a
 func BgSkipMark(agent, action string) string       { return "bgskip:" + agent + ":" + action }
 func BgSkipNoticeMark(agent, action string) string { return "bgskip-notice:" + agent + ":" + action }
 
-// ContextEpisodeMarks are the fields an episode's end deletes (§3.3).
+// The auto-compact's marks (auto-compact): CompactSinceMark holds
+// "<session>|<ms>", the Redis time the fill was first seen at the urgent
+// threshold in that session (deleted when a fresh reading falls below it);
+// CompactMark the session /compact was reserved for, typed at most once;
+// CompactNoticeMark master's wake=no notice of it.
+func CompactSinceMark(agent string) string  { return "compact-since:" + agent }
+func CompactMark(agent string) string       { return "compact:" + agent }
+func CompactNoticeMark(agent string) string { return "compact-notice:" + agent }
+
+// ContextEpisodeMarks are the fields an episode's end deletes (§3.3), the
+// auto-compact's with them: the next rise may compact again.
 func ContextEpisodeMarks(agent string) []string {
 	return []string{ContextMark(agent), ContextMark(agent) + MarkAtSuffix, ContextNoticeMark(agent),
-		ContextEscalateMark(agent), ContextPersonMark(agent)}
+		ContextEscalateMark(agent), ContextPersonMark(agent),
+		CompactSinceMark(agent), CompactMark(agent), CompactNoticeMark(agent)}
 }
 
 // ContextEscalated: agent's escalation was sent in session's episode.

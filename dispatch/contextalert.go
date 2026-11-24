@@ -102,6 +102,12 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 			}
 			l.logError(a, "context escalation", err)
 		}
+		if err := esc.compact(ctx, a, f, marks); err != nil {
+			if errors.Is(err, bus.ErrNotHolder) {
+				return err
+			}
+			l.logError(a, "auto-compact", err)
+		}
 	}
 	return nil
 }

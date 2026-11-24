@@ -171,7 +171,8 @@ watching it, answering questions, merging, updating and stopping.
 - **The dispatcher.** A service (`agentbus dispatch`), and the only automated writer to an agent's
   terminal. It types:
   - the fixed wake line;
-  - `/clear` after an agent's declared hand-off (`dispatch.auto_clear`).
+  - `/clear` after an agent's declared hand-off (`dispatch.auto_clear`);
+  - `/compact` when no hand-off comes 10 minutes after the urgent fill (`dispatch.auto_compact`).
 
   It also:
   - waits while you are typing in that terminal;
@@ -277,7 +278,7 @@ Settings an operator usually touches:
 - **CI loop:** `ci.loop`, `ci.max_handoffs`.
 - **Run budget:** `run.max_duration`, `run.max_deliveries`.
 - **Services and terminals:** `services.manager`, `services.start_at_login`, `attach.prefix`.
-- **Context:** `dispatch.context_alert` (80 %), `dispatch.auto_clear`.
+- **Context:** `dispatch.context_alert` (80 %), `dispatch.auto_clear`, `dispatch.auto_compact`.
 - **Notifications:** `notify.on`.
 - **Backups:** `backup.schedule`.
 

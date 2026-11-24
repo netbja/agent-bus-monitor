@@ -89,6 +89,10 @@ type fakeRT struct {
 	// Clear without it, or unreserved, breaks the dispatchTypes invariant.
 	reserved func(pane string) bool
 	clearErr error
+	// compactReserved answers whether a /compact of pane is reserved on the
+	// bus; a Compact without it breaks the dispatchTypes invariant too.
+	compactReserved func(pane string) bool
+	compactErr      error
 }
 
 // wakeLinePattern is WakeText's format: the dispatchTypes invariant (lifecycle
@@ -127,6 +131,16 @@ func (f *fakeRT) Clear(_ context.Context, pane string) error {
 	f.prompts = append(f.prompts, promptRec{Pane: pane, Text: ClearText, At: time.Now()})
 	f.mu.Unlock()
 	return f.clearErr
+}
+
+func (f *fakeRT) Compact(_ context.Context, pane string) error {
+	if f.compactReserved == nil || !f.compactReserved(pane) {
+		panic("dispatchTypes: /compact typed into " + pane + " without its reservation")
+	}
+	f.mu.Lock()
+	f.prompts = append(f.prompts, promptRec{Pane: pane, Text: termhost.CompactLine().Text(), At: time.Now()})
+	f.mu.Unlock()
+	return f.compactErr
 }
 
 func (f *fakeRT) Prompts() []promptRec {

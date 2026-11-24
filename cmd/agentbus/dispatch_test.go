@@ -36,6 +36,10 @@ func (n noRuntime) Clear(context.Context, string) error {
 	n.t.Error("Clear called")
 	return nil
 }
+func (n noRuntime) Compact(context.Context, string) error {
+	n.t.Error("Compact called")
+	return nil
+}
 
 func TestDispatchStatusExitCodes(t *testing.T) {
 	b := dialDispatchMain(t)

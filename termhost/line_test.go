@@ -24,6 +24,9 @@ func TestWakeLineIsTodaysLine(t *testing.T) {
 	if c := ClearLine(); c.Text() != "/clear" || c.Kind() != KindClear || c.Marker() != "/clear" {
 		t.Fatalf("clear %q kind %v", c.Text(), c.Kind())
 	}
+	if c := CompactLine(); c.Text() != "/compact" || c.Kind() != KindCompact || c.Marker() != "/compact" || !c.Valid() {
+		t.Fatalf("compact %q kind %v", c.Text(), c.Kind())
+	}
 	var zero Line
 	if zero.Valid() || zero.Text() != "" || !l.Valid() || !ClearLine().Valid() {
 		t.Fatal("validity")
@@ -83,7 +86,7 @@ func TestLineIsAClosedSet(t *testing.T) {
 				continue
 			}
 			for _, r := range fn.Type.Results.List {
-				if id, ok := r.Type.(*ast.Ident); ok && id.Name == "Line" && fn.Name.Name != "WakeLine" && fn.Name.Name != "ClearLine" {
+				if id, ok := r.Type.(*ast.Ident); ok && id.Name == "Line" && fn.Name.Name != "WakeLine" && fn.Name.Name != "ClearLine" && fn.Name.Name != "CompactLine" {
 					t.Errorf("%s returns a Line", fn.Name.Name)
 				}
 			}

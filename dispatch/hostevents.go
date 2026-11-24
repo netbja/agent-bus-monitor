@@ -106,8 +106,11 @@ func (l *loop) promptOutcome(ctx context.Context, agent string, observed bool, e
 // in agent's input (spec 4.2): no CR was sent, and the terminal takes no
 // line until its input reads empty.
 func NotLandedText(agent, kind string) string {
-	if kind == "clear" {
+	switch kind {
+	case "clear":
 		return fmt.Sprintf("/clear may be left unsent in %s's input — submitting it clears the conversation. Attach and erase it.", agent)
+	case "compact":
+		return fmt.Sprintf("/compact may be left unsent in %s's input — submitting it compacts the conversation. Attach and erase it, or submit it.", agent)
 	}
 	return fmt.Sprintf("wake line may be left unsent in %s's input. Attach and erase it, or submit it.", agent)
 }
