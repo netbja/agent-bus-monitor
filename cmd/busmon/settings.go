@@ -10,6 +10,7 @@ import (
 )
 
 type busmonSettings struct {
+	ConfirmQuit bool // q asks first (display.confirm_quit)
 	PopupAfter  time.Duration
 	Snooze      time.Duration
 	Bell        bool
@@ -68,6 +69,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		WorkLayout:  r.String("display.work_layout"),
 		DateFormat:  r.String("display.date_format"),
 		NoFollow:    !r.Bool("display.follow"),
+		ConfirmQuit: r.Bool("display.confirm_quit"),
 		DeleteFiles: r.Bool("projects.delete_files"), DeleteBackups: r.Bool("projects.delete_backups"),
 		Dev: r.Bool("dev"),
 	}

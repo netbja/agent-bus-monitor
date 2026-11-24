@@ -10,6 +10,7 @@
                   │     Date format                     ‹ relative ›
                   │     Work layout                     ‹ auto ›
                   │     Activity auto-scroll            ● on
+                  │     Ask before q quits              ● on
                   │     Activity lines at start         25
                   │     Idle? hint after                10m
                   │     Screensaver (idle view) after   off

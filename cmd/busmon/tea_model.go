@@ -155,6 +155,7 @@ type uiState struct {
 	palMoved       bool              // ↑↓ moved it since the last edit: Enter runs that row
 	palHidden      bool              // Esc hid the list; the next edit shows it again
 	sleepAsk       *sleepAsk         // a Z waiting for its y
+	quitAsk        bool              // q's popup: y quits (busmon-quit-confirm)
 	sleepRun       *sleepRun         // agentbus suspend or resume running
 	sleepSeq       int               // the last run's id
 	reminder       *reminderDialog   // the reminder, when open

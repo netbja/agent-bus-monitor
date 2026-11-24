@@ -217,6 +217,9 @@ func (m *Model) applySettings(key string) string {
 	case "compose.at_path": // compose-at-file §5: the next @ pick uses it
 		cur.AtPath = ns.AtPath
 		return "applied and saved"
+	case "display.confirm_quit": // busmon-quit-confirm: the next q
+		cur.ConfirmQuit = ns.ConfirmQuit
+		return "applied and saved"
 	case "display.follow": // palette spec §8.3: Activity follows (or not) from now
 		cur.NoFollow = ns.NoFollow
 		m.lists.activity.SetFollow(!cur.NoFollow)
@@ -1034,6 +1037,7 @@ var settingHelps = map[string]string{
 	"display.icons":                "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":                "Activity lines replayed when busmon starts; 0 or below: all history",
 	"compose.at_path":              "the path @ inserts in the compose window: absolute, or relative to the project; a home path is always absolute",
+	"display.confirm_quit":         "q asks before busmon quits (y quits; n, enter or esc stay); off, q quits at once. Ctrl-C always quits at once",
 	"display.follow":               "Activity scrolls with new lines (a wheel up or a selection above the newest lines pauses it); off, it never scrolls by itself and end or G jumps to the newest line once",
 	"attach.prefix":                "agentbus attach's way out: prefix then d detaches, prefix twice sends it to the agent; f1-f12 or ctrl+<letter>; refused unless verified free for every client the project's roles run on",
 	"display.date_format":          dateFormatHelp(),

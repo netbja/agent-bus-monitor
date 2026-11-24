@@ -197,6 +197,9 @@ var Keys = []*Key{
 	// lines (a wheel up or a selection above the live window pauses it); off,
 	// it never scrolls by itself and end/G jumps to the newest line once.
 	{Name: "display.follow", Kind: Bool, Default: true, ReadBy: "busmon", file: fileBool},
+	// q asks before busmon quits (busmon-quit-confirm, the person); off, q
+	// quits at once. Ctrl-C always quits at once.
+	{Name: "display.confirm_quit", Kind: Bool, Default: true, ReadBy: "busmon", file: fileBool},
 	{Name: "display.limit", Env: "AGENT_BUS_BUSMON_LIMIT", Kind: Int, Default: 25, ReadBy: "busmon", Legacy: true, Flag: "busmon --limit",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {

@@ -106,6 +106,9 @@ func (m Model) grid() *grid {
 	if d := m.ui.pausePopup; d != nil {
 		drawPausePopup(g, m.pauseDialogRect(), d.rec, d.sel, m.now)
 	}
+	if m.ui.quitAsk {
+		drawQuitPopup(g, quitRect(m.width, m.height))
+	}
 	return g
 }
 
