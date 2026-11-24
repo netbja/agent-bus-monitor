@@ -14,8 +14,12 @@ import (
 // a review_base, whose head (the branch's tip this pass read, else the
 // commit review recorded) is not already in that review_base.
 
-// mergeClose is one request whose branch head is delivered.
-type mergeClose struct{ task, branch, head string }
+// mergeClose is one request whose branch head is delivered, and the review
+// read (the write applies to that review only).
+type mergeClose struct {
+	task, branch, head string
+	reviewN            int
+}
 
 // mergeClosePass is what the pass closes, and into which base.
 type mergeClosePass struct {
@@ -38,21 +42,51 @@ func (c *mergeQueueChore) closeOnMerge(ctx context.Context, env []string, tips [
 	for _, t := range tips {
 		tipOf[t.Branch] = t.Head
 	}
-	type cand struct{ task, branch, head, reviewBase string }
+	var localOf map[string]string // the local refs, read once and only when a branch is not in tips (§3.2)
+	localRead := false
+	local := func(branch string) (string, bool) {
+		if !localRead {
+			localRead = true
+			cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
+			ts, _, err := c.localTips(cctx, c.dir, env, base)
+			cancel()
+			if err == nil {
+				localOf = map[string]string{}
+				for _, t := range ts {
+					localOf[t.Branch] = t.Head
+				}
+			}
+		}
+		if localOf == nil {
+			return "", false // unread: not judged this pass
+		}
+		return localOf[branch], true
+	}
+	type cand struct {
+		task, branch, head, reviewBase string
+		reviewN                        int
+	}
 	var cands []cand
 	for task, e := range board {
 		r := e.Request
 		if e.State != "review" || r == nil || r.Branch == "" || r.ReviewBase == "" {
 			continue // not judged (§3.1); §5 reports one with no base
 		}
-		head := tipOf[r.Branch]
+		head := tipOf[r.Branch] // the remote tip (the local one in local mode)
+		if head == "" {
+			h, ok := local(r.Branch)
+			if !ok {
+				continue
+			}
+			head = h
+		}
 		if head == "" {
 			head = r.Commit // its branch deleted after the merge (§3.2)
 		}
 		if head == "" {
 			continue
 		}
-		cands = append(cands, cand{task, r.Branch, head, r.ReviewBase})
+		cands = append(cands, cand{task, r.Branch, head, r.ReviewBase, r.ReviewN})
 	}
 	sort.Slice(cands, func(i, j int) bool { return cands[i].task < cands[j].task })
 	var judged []cand
@@ -77,7 +111,7 @@ func (c *mergeQueueChore) closeOnMerge(ctx context.Context, env []string, tips [
 	cancel()
 	for _, cd := range judged {
 		if delivered[cd.head] {
-			out.closes = append(out.closes, mergeClose{cd.task, cd.branch, cd.head})
+			out.closes = append(out.closes, mergeClose{cd.task, cd.branch, cd.head, cd.reviewN})
 		}
 	}
 	return out

@@ -138,3 +138,41 @@ func TestMergeQueueChoreCloseOnMergeFailures(t *testing.T) {
 		t.Fatalf("the queue's own outcome changed: %+v", rec)
 	}
 }
+
+// reviewer-codex: with a remote, a branch gone from origin is read from the
+// local refs before the recorded commit (§3.2's remote, then local): a
+// local tip that moved to an unmerged head keeps the request open; a branch
+// gone from both falls back to the commit; a local read that fails judges
+// nothing.
+func TestMergeQueueChoreCloseOnMergeLocalBeforeCommit(t *testing.T) {
+	ctx := context.Background()
+	const h1, h2 = "6666666666666666666666666666666666666666", "7777777777777777777777777777777777777777"
+	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
+	reviewed(t, b, "moved", bus.ReviewOpts{Branch: "feat/moved", Commit: h1, ReviewBase: cmReviewBase})
+	reviewed(t, b, "deleted", bus.ReviewOpts{Branch: "feat/deleted", Commit: h1, ReviewBase: cmReviewBase})
+	c.localTips = func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
+		return []mergequeue.Tip{{Branch: "feat/moved", Head: h2}}, mqBaseTip, nil
+	}
+	c.delivered = func(context.Context, string, []string, string, []string) (map[string]bool, error) {
+		return map[string]bool{h1: true}, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := stateOf(t, b, "moved"); s != "review" {
+		t.Fatalf("closed on the recorded commit despite a newer local tip: %s", s)
+	}
+	if s, _ := stateOf(t, b, "deleted"); s != "done" {
+		t.Fatalf("a branch gone everywhere, its commit merged: %s", s)
+	}
+	reviewed(t, b, "unread", bus.ReviewOpts{Branch: "feat/unread", Commit: h1, ReviewBase: cmReviewBase})
+	c.localTips = func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
+		return nil, "", errors.New("git: busy")
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := stateOf(t, b, "unread"); s != "review" {
+		t.Fatalf("closed with the local refs unread: %s", s)
+	}
+}

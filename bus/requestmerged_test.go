@@ -73,7 +73,7 @@ func TestRequestMergedCloses(t *testing.T) {
 	inReview(t, b, "t1", ReviewOpts{Branch: "coder/t1", ReviewBase: mBase})
 	cmds := func() int64 { n, _ := b.r.XLen(ctx, StreamKey(b.project, "cmd")).Result(); return n }
 	before := cmds()
-	got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev")
+	got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev", 1)
 	if err != nil || got != MergedClosed {
 		t.Fatalf("%q %v", got, err)
 	}
@@ -92,7 +92,7 @@ func TestRequestMergedCloses(t *testing.T) {
 		t.Fatalf("no request-merged event: %+v", evs)
 	}
 	// Done: a second call writes nothing.
-	if got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev"); err != nil || got != MergedNone {
+	if got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev", 1); err != nil || got != MergedNone {
 		t.Fatalf("again: %q %v", got, err)
 	}
 }
@@ -103,7 +103,7 @@ func TestRequestMergedStep(t *testing.T) {
 	b := ciLease(t)
 	ctx := context.Background()
 	inReview(t, b, "t1", ReviewOpts{Branch: "coder/t1-a", Commit: mHead, ReviewBase: mBase, More: true})
-	got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1-a", mHead, "dev")
+	got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1-a", mHead, "dev", 1)
 	if err != nil || got != MergedStep {
 		t.Fatalf("%q %v", got, err)
 	}
@@ -115,7 +115,7 @@ func TestRequestMergedStep(t *testing.T) {
 	if err := b.ReviewRequestOpts(ctx, "t1", "coder", ReviewOpts{Branch: "coder/t1-b", ReviewBase: mBase}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1-b", mBase, "dev"); got != MergedClosed {
+	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1-b", mBase, "dev", 2); got != MergedClosed {
 		t.Fatalf("the last step: %q", got)
 	}
 	if e = boardReq(t, b, "t1"); e.State != "done" || !slices.Equal(e.Request.MergedSteps, []string{mHead}) {
@@ -130,22 +130,71 @@ func TestRequestMergedRefusals(t *testing.T) {
 	b := ciLease(t)
 	ctx := context.Background()
 	inReview(t, b, "t1", ReviewOpts{Branch: "coder/t1", ReviewBase: mBase})
-	if _, err := b.FencedRequestMerged(ctx, "other", "t1", "coder/t1", mHead, "dev"); !errors.Is(err, ErrNotHolder) {
+	if _, err := b.FencedRequestMerged(ctx, "other", "t1", "coder/t1", mHead, "dev", 1); !errors.Is(err, ErrNotHolder) {
 		t.Fatalf("not the holder: %v", err)
 	}
-	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/other", mHead, "dev"); got != MergedNone {
+	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/other", mHead, "dev", 1); got != MergedNone {
 		t.Fatalf("another branch: %q", got)
 	}
 	if err := b.AcceptRequest(ctx, "t1", "coder"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev"); got != MergedNone {
+	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev", 1); got != MergedNone {
 		t.Fatalf("accepted: %q", got)
 	}
-	if got, _ := b.FencedRequestMerged(ctx, "tok", "nope", "coder/t1", mHead, "dev"); got != MergedNone {
+	if got, _ := b.FencedRequestMerged(ctx, "tok", "nope", "coder/t1", mHead, "dev", 1); got != MergedNone {
 		t.Fatalf("unknown: %q", got)
 	}
 	if e := boardReq(t, b, "t1"); e.State != "accepted" {
 		t.Fatalf("written: %+v", e)
+	}
+}
+
+// reviewer-codex: the pass read review N; the owner resumed and put the
+// same branch in review again (N+1) before the write: the stale write
+// changes nothing, whatever --more says now.
+func TestRequestMergedStaleReview(t *testing.T) {
+	b := ciLease(t)
+	ctx := context.Background()
+	inReview(t, b, "t1", ReviewOpts{Branch: "coder/t1", ReviewBase: mBase})
+	n := boardReq(t, b, "t1").Request.ReviewN
+	if n != 1 {
+		t.Fatalf("review_n %d", n)
+	}
+	for _, o := range []ReviewOpts{{Branch: "coder/t1", ReviewBase: mBase}, {Branch: "coder/t1", ReviewBase: mBase, More: true}} {
+		if err := b.AcceptRequest(ctx, "t1", "coder"); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.ReviewRequestOpts(ctx, "t1", "coder", o); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev", n); err != nil || got != MergedNone {
+			t.Fatalf("%+v: a stale review closed: %q %v", o, got, err)
+		}
+		if e := boardReq(t, b, "t1"); e.State != "review" || e.Request.ClosedOnMerge != nil || len(e.Request.MergedSteps) != 0 {
+			t.Fatalf("%+v: written %+v", o, e.Request)
+		}
+		n = boardReq(t, b, "t1").Request.ReviewN
+	}
+	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev", n); got != MergedStep {
+		t.Fatalf("the current review: %q", got)
+	}
+}
+
+// reviewer-codex: request done on a request closed on merge is the same
+// idempotent answer as on any done request: no error, no reply.
+func TestDoneAfterCloseOnMerge(t *testing.T) {
+	b := ciLease(t)
+	ctx := context.Background()
+	inReview(t, b, "t1", ReviewOpts{Branch: "coder/t1", ReviewBase: mBase})
+	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1", mHead, "dev", 1); got != MergedClosed {
+		t.Fatalf("close: %q", got)
+	}
+	n, _ := b.r.XLen(ctx, StreamKey(b.project, "cmd")).Result()
+	if id, err := b.CompleteRequestAt(ctx, "t1", "coder", "delivered", mHead, "coder/t1"); err != nil || id != "" {
+		t.Fatalf("done after the close: %q %v", id, err)
+	}
+	if m, _ := b.r.XLen(ctx, StreamKey(b.project, "cmd")).Result(); m != n {
+		t.Fatal("a reply was written")
 	}
 }

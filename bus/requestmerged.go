@@ -23,12 +23,12 @@ const (
 )
 
 // requestMergedScript: KEYS lease, board, events. ARGV token, task, branch,
-// head, base, events maxlen.
+// head, base, events maxlen, the review's number the pass read.
 var requestMergedScript = redis.NewScript(`
 if redis.call('GET',KEYS[1])~=ARGV[1] then return 'not-holder' end
 local raw=redis.call('HGET',KEYS[2],ARGV[2]);if not raw then return '' end
 local e=cjson.decode(raw);local r=e.request
-if type(r)~='table' or e.state~='review' or r.branch~=ARGV[3] then return '' end
+if type(r)~='table' or e.state~='review' or r.branch~=ARGV[3] or (tonumber(r.review_n) or 0)~=tonumber(ARGV[7]) then return '' end
 local t=redis.call('TIME');local now=t[1]*1000+math.floor(t[2]/1000)
 local out='closed'
 if r.review_more then
@@ -50,13 +50,14 @@ redis.call('XADD',KEYS[3],'MAXLEN','~',ARGV[6],'*','kind','request-merged','agen
 return out`)
 
 // FencedRequestMerged closes task on its branch's merge, fenced by the
-// dispatch lease; MergedNone when the request changed since it was read.
-func (b *Bus) FencedRequestMerged(ctx context.Context, token, task, branch, head, base string) (string, error) {
+// dispatch lease; MergedNone when the request changed since it was read:
+// another state or branch, or another review (reviewN, its review_n then).
+func (b *Bus) FencedRequestMerged(ctx context.Context, token, task, branch, head, base string, reviewN int) (string, error) {
 	if !ValidName(task) || !config.ValidBranchName(branch) || !ValidHead(head) || !config.ValidBranchName(base) {
 		return "", fmt.Errorf("request merged: invalid task, branch, head or base")
 	}
 	v, err := requestMergedScript.Run(ctx, b.r, []string{DispatchKey(b.project), BoardKey(b.project), EventsKey(b.project)},
-		token, task, branch, head, base, eventsMaxLen).Text()
+		token, task, branch, head, base, eventsMaxLen, reviewN).Text()
 	if err == redis.Nil {
 		return MergedNone, nil
 	}

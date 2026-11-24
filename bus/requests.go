@@ -38,6 +38,9 @@ type RequestInfo struct {
 	ReviewBase string `json:"review_base,omitempty"`
 	// ReviewMore: request review --more, a step that is not the last (§3.4).
 	ReviewMore bool `json:"review_more,omitempty"`
+	// ReviewN counts the request's reviews: the merge queue's write applies
+	// only to the review it read (reviewer-codex).
+	ReviewN int `json:"review_n,omitempty"`
 	// MergedSteps are the heads of the --more steps merged so far (§3.4).
 	MergedSteps []string `json:"merged_steps,omitempty"`
 	// ClosedOnMerge: the dispatcher closed it, its branch's head delivered
@@ -336,7 +339,7 @@ if r.target~=ARGV[2] then
  bysender=true
 end
 if e.state=='done' then
- if ARGV[3]=='done' then return r.response_id end
+ if ARGV[3]=='done' then return r.response_id or '' end
  return redis.error_reply('request already completed')
 end
 local t=redis.call('TIME');local now=t[1]*1000+math.floor(t[2]/1000)
@@ -366,7 +369,7 @@ elseif ARGV[3]=='review' then
  e.state='review'
  if ARGV[7]~='' then r.branch=ARGV[7] end
  if ARGV[4]~='' then r.review_note=ARGV[4] end
- r.commit=nil;r.review_base=nil;r.review_more=nil
+ r.commit=nil;r.review_base=nil;r.review_more=nil;r.review_n=(tonumber(r.review_n) or 0)+1
  if ARGV[6]~='' then r.commit=ARGV[6] end
  if ARGV[9]~='' then r.review_base=ARGV[9] end
  if ARGV[10]=='1' then r.review_more=true end

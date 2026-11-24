@@ -192,7 +192,7 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 		}
 	}
 	for _, m := range mc.closes { // board-drift §3.3: each fenced; a request changed since the read is left
-		if _, err := c.b.FencedRequestMerged(dctx, token, m.task, m.branch, m.head, mc.base); errors.Is(err, bus.ErrNotHolder) {
+		if _, err := c.b.FencedRequestMerged(dctx, token, m.task, m.branch, m.head, mc.base, m.reviewN); errors.Is(err, bus.ErrNotHolder) {
 			cancel()
 			return err
 		}
