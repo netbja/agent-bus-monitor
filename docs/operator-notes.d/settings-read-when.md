@@ -4,7 +4,8 @@
   or `on agent restart`; the slowest reader decides. It is `config/applies.go`, beside the registry
   (not in `config/keys.go`, which every settings PR edits), shown last in `agentbus config` (`applies`,
   also in `--json`), in busmon's Shift+C detail, and in the save message, which no longer says "next
-  start of busmon" for a key busmon does not read. A services env file is read when a service starts,
-  whatever the key. A new key needs its entry (`TestEveryKeySaysWhenItApplies`), and when you move a
+  start of busmon" for a key busmon does not read. A service reads its env file when it starts, except
+  the dispatcher's quota thresholds and reload policy (`sentinel.reload`), which reload it at each check,
+  so an edit there applies live too. A new key needs its entry (`TestEveryKeySaysWhenItApplies`), and when you move a
   read from a service's start into a pass, or back, change its entry; busmon's own switch is held
   equal to the registry by `TestBusmonAppliesAgreeWithTheRegistry`.

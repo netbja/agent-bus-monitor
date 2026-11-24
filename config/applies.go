@@ -3,8 +3,10 @@ package config
 // Applies is when a change of a key takes effect (settings-read-when): a
 // change made in config.toml or busmon's Shift+C. It is the slowest of the
 // key's readers: a key the dispatcher reads once at its start applies on
-// service restart even when a command also reads it at each run. A services
-// env file is read when a service starts, whatever the key.
+// service restart even when a command also reads it at each run. A service
+// reads its env file when it starts, except where a reader reloads it at each
+// call: the quota thresholds (serviceQuota) and the reload policy
+// (serviceReloadPolicy), both live.
 type Applies int
 
 const (
@@ -85,7 +87,7 @@ var applies = map[string]Applies{
 	"bus.report_max": AppliesLive, "bus.report_full_max": AppliesLive, "bus.verdict_max": AppliesLive,
 	// commands, at each run
 	"services.manager": AppliesRun, "attach.prefix": AppliesRun, "services.start_at_login": AppliesRun, "start.team": AppliesRun,
-	"sentinel.reload": AppliesRun, "suspend.wait": AppliesRun, "suspend.auto_resume": AppliesRun, "board.wip_limit": AppliesRun,
+	"sentinel.reload": AppliesLive, "suspend.wait": AppliesRun, "suspend.auto_resume": AppliesRun, "board.wip_limit": AppliesRun,
 	"delivery.single_approval": AppliesRun, "delivery.small_max_lines": AppliesRun, "delivery.small_max_files": AppliesRun,
 	"delivery.never_small": AppliesRun, "delivery.same_provider_ok": AppliesRun, "broker.image": AppliesRun,
 }
