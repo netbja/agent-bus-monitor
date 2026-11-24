@@ -1,6 +1,9 @@
 package rolecfg
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The person (master-auto-default, then roles-auto-mode 2026-11-24): every
 // Claude Code role starts in Claude Code's auto mode but security and infra,
@@ -57,5 +60,33 @@ func TestClaudeRolesStartInAutoMode(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("master's launch: %v", args)
+	}
+}
+
+// The person (roles-auto-mode 2026-11-24): reviewer-codex runs on Luna, its
+// sandbox read-only, its approval requests reviewed by Codex's own automatic
+// review (approvals_reviewer, what --approve-for-me sets, without that flag's
+// workspace-write sandbox), and its status line shows the tokens used.
+func TestReviewerCodexRunsOnLunaWithAutoReview(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := m.Resolve("reviewer-codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Model != "gpt-6-luna" || p.Options["sandbox"] != "read-only" || p.Options["approval"] != "on-request" || p.Options["reviewer"] != "auto_review" {
+		t.Fatalf("reviewer-codex: model %q, options %v", p.Model, p.Options)
+	}
+	args, err := build(p, ToolRules{}, "p", "prompt", "/tmp/prompt", "", true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.Join(args, " ")
+	for _, want := range []string{"--sandbox read-only", `-c approvals_reviewer="auto_review"`, `"used-tokens"`} {
+		if !strings.Contains(line, want) {
+			t.Errorf("reviewer-codex's launch lacks %q: %s", want, line)
+		}
 	}
 }

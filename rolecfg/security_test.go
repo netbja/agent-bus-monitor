@@ -50,6 +50,9 @@ func TestElevatedPermissionsAreAnnounced(t *testing.T) {
 	for _, c := range []struct{ client, options, want string }{
 		{"claude-code", "[profiles.main.options]\npermission = \"bypassPermissions\"", "permission=bypassPermissions"},
 		{"codex", "[profiles.main.options]\nsandbox = \"danger-full-access\"\napproval = \"never\"", "sandbox=danger-full-access approval=never"},
+		// approvals_reviewer=auto_review: an escalation runs outside the sandbox
+		// on Codex's own automatic review, without the person (roles-auto-mode).
+		{"codex", "[profiles.main.options]\nreviewer = \"auto_review\"", "reviewer=auto_review"},
 		{"kimi-cli", "[profiles.main.options]\npermission = \"yolo\"", "permission=yolo"},
 		// kimi --help: --auto is "Never Ask mode", more permissive than --yolo.
 		{"kimi-cli", "[profiles.main.options]\npermission = \"auto\"", "permission=auto"},
@@ -63,6 +66,10 @@ func TestElevatedPermissionsAreAnnounced(t *testing.T) {
 	m := f.config("codex", "", "", "")
 	if _, errOut, _ := f.launch(m, "coder"); strings.Contains(errOut, "elevated") {
 		t.Fatalf("default sandbox announced as elevated: %q", errOut)
+	}
+	m = f.config("codex", "", "", "[profiles.main.options]\nreviewer = \"user\"")
+	if _, errOut, _ := f.launch(m, "coder"); strings.Contains(errOut, "elevated") {
+		t.Fatalf("reviewer user announced as elevated: %q", errOut)
 	}
 	m = f.config("kimi-cli", "", "", "[profiles.main.options]\npermission = \"plan\"")
 	if _, errOut, _ := f.launch(m, "coder"); strings.Contains(errOut, "elevated") {

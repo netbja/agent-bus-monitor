@@ -85,7 +85,12 @@ Optional native permissions live in `profiles.<name>.options`:
   `default` mode to pass, so it would fall back to `permissions.defaultMode` in the user's
   `~/.claude/settings.json`, which would then decide silently (it can be `auto`). `manual` asks
   for everything. A schema 1 role names it on the role.
-- Codex: `sandbox` (default `read-only`), `approval` (default `on-request`).
+- Codex: `sandbox` (default `read-only`), `approval` (default `on-request`), `reviewer` (`user`
+  or `auto_review`; absent, Codex's own default), passed as `-c approvals_reviewer=`: who answers
+  an approval request. `auto_review` is what `--approve-for-me` sets, without that flag's
+  `workspace-write` sandbox; an escalation it approves runs outside the sandbox. Every Codex
+  launch also sets `tui.status_line` to the model, the context used and the tokens used, which
+  Codex's footer does not show by default.
 - Kimi: `permission` (`default`, `yolo`, `auto`, `plan`); default omits the flag.
 - Grok: `permission` (`default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`,
   passed as `--permission-mode`, **always**, `default` included: grok otherwise takes the mode of
@@ -118,7 +123,7 @@ or the profile names it as an `env_refs` target. Native base URL/token variables
 available. `env_refs` cannot set the dynamic-linker, shell, interpreter or git hook
 variables (`LD_*`, `DYLD_*`, `BASH_ENV`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `GIT_CONFIG*`, `PYTHON*`, editors and pagers, …)
 nor `HERDR_*`. A profile with elevated options (`bypassPermissions`, `dontAsk`, `danger-full-access`,
-`approval = "never"`, Kimi's `yolo` and `auto`) is announced on stderr before the client starts. Optional profile
+`approval = "never"`, `reviewer = "auto_review"`, Kimi's `yolo` and `auto`) is announced on stderr before the client starts. Optional profile
 `env_refs` maps target environment variable names to existing source variable names
 without storing their values in the manifest:
 

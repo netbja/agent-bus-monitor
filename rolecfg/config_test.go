@@ -326,6 +326,7 @@ func TestLoadRefusals(t *testing.T) {
 		{"Claude fallback valid type", base("client=\"claude-code\"\nprovider=\"anthropic\"\nmodel=\"m\"\nreasoning=\"standard\"\nreasoning_levels=[\"standard\"]\n[profiles.p.options]\nfallback=\"sonnet\"\npermission=\"manual\"\n", "", ""), "unsupported Claude reasoning level"},
 		{"Codex sandbox", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\n[profiles.p.options]\nsandbox=\"full\"\n", "", ""), "unsupported Codex sandbox"},
 		{"Codex approval", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\n[profiles.p.options]\napproval=\"ask\"\n", "", ""), "unsupported Codex approval"},
+		{"Codex reviewer", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\n[profiles.p.options]\nreviewer=\"me\"\n", "", ""), "unsupported Codex reviewer"},
 		{"Codex reasoning", base("client=\"codex\"\nprovider=\"openai\"\nmodel=\"m\"\nreasoning=\"standard\"\nreasoning_levels=[\"standard\"]\n", "", ""), "unsupported Codex reasoning level"},
 		{"Kimi unknown option", base("client=\"kimi-cli\"\nprovider=\"moonshot\"\nmodel=\"alias\"\n[profiles.p.options]\nsandbox=\"read-only\"\n", "", ""), "unknown fields in Kimi options: sandbox"},
 		{"Kimi permission", base("client=\"kimi-cli\"\nprovider=\"moonshot\"\nmodel=\"alias\"\n[profiles.p.options]\npermission=\"bypass\"\n", "", ""), "unsupported Kimi permission"},

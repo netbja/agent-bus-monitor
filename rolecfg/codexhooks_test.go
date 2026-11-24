@@ -59,6 +59,7 @@ func TestCodexDryRunCarriesTheTurnHooks(t *testing.T) {
 	m := f.config("codex", "", "", "")
 	out, _, err := f.launch(m, "coder", "AGENT_LAUNCH_DRYRUN=1")
 	want := `codex --model test-model -c 'model_provider="test-provider"' --sandbox read-only --ask-for-approval on-request` +
+		` -c 'tui.status_line=["model-with-reasoning","context-used","used-tokens"]'` +
 		` -c features.hooks=true` +
 		` -c 'hooks.UserPromptSubmit=[{hooks=[{type="command",command="/opt/bus/agentbus roles turn start"}]}]'` +
 		` -c 'hooks.Stop=[{hooks=[{type="command",command="/opt/bus/agentbus roles turn end"}]}]'` +

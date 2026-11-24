@@ -105,20 +105,23 @@ client = "kimi-cli"
 provider = "moonshot"
 model = "kimi-code/k3"
 
-# A second 4-eyes reviewer from another maker (reviewer-codex): the model table's openai frontier
-# model on 2026-10-27, pinned so `roles field` and the shipped-manifest tests see it
-# (`agentbus roles doctor` reports `newer` once the table states a successor).
-# read-only: nothing in the checkout (nor coder's worktrees) is writable by the sandbox, which
-# is what holds "never write", not the prompt. A review worktree, a test broker, a go test
-# (GOCACHE is outside the writable roots anyway) and every bus call ask the person once each
-# (approval on-request); so would any push. Same as examples/roles.mixed.toml [profiles.review].
+# A second 4-eyes reviewer from another maker (reviewer-codex), on Luna, openai's fast model (the
+# person, roles-auto-mode 2026-11-24), pinned so `roles field` and the shipped-manifest tests see it.
+# read-only: nothing in the checkout (nor coder's worktrees) is writable by the sandbox. A review
+# worktree, a test broker, a go test and every bus call need an escalation (approval on-request),
+# which reviewer = "auto_review" hands to Codex's own automatic review instead of the person
+# (approvals_reviewer, what --approve-for-me sets, without that flag's workspace-write sandbox).
+# An approved escalation runs outside the sandbox: "never write" then rests on the prompt and the
+# automatic review too, not on the sandbox alone. Every Codex launch also shows the tokens used in
+# Codex's status line (launch.go, codexStatusLine).
 [profiles.codex-review]
 client = "codex"
 provider = "openai"
-model = "gpt-6-astra"
+model = "gpt-6-luna"
 [profiles.codex-review.options]
 sandbox = "read-only"
 approval = "on-request"
+reviewer = "auto_review"
 
 # agy (Antigravity CLI, Google): a reviewer or panelist from another maker. permission stays
 # default: the session pins toolPermission=request-review and empties the person's agy allows
