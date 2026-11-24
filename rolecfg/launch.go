@@ -276,6 +276,10 @@ func launchCache(e *envMap) (string, error) {
 	return root, nil
 }
 
+// codexStatusLine is the Codex status line every Codex agent starts with:
+// its model and reasoning, the context used and the tokens used.
+const codexStatusLine = `tui.status_line=["model-with-reasoning","context-used","used-tokens"]`
+
 // jsonString is Python's json.dumps of one string (codex -c values).
 func jsonString(s string) string {
 	q, _ := pyJSON(s) // Python json.dumps: ASCII escapes
@@ -329,6 +333,12 @@ func build(p Profile, rules ToolRules, project, prompt, promptPath, resumeID str
 		}
 		cmd := []string{"codex", "--model", model, "-c", "model_provider=" + jsonString(p.Provider),
 			"--sandbox", sandbox, "--ask-for-approval", approval}
+		if r := opts["reviewer"]; r != "" {
+			cmd = append(cmd, "-c", "approvals_reviewer="+jsonString(r))
+		}
+		// The token count, which Codex's footer leaves out by default
+		// (roles-auto-mode): its status line items, codex 0.169.
+		cmd = append(cmd, "-c", codexStatusLine)
 		if p.Reasoning != "" {
 			cmd = append(cmd, "-c", "model_reasoning_effort="+jsonString(p.Reasoning))
 		}
@@ -1021,6 +1031,9 @@ func elevated(p Profile, rules ToolRules) string {
 		}
 		if p.Options["approval"] == "never" {
 			parts = append(parts, "approval=never")
+		}
+		if p.Options["reviewer"] == "auto_review" { // an escalation runs on Codex's review, not the person's
+			parts = append(parts, "reviewer=auto_review")
 		}
 	case "kimi-cli": // --yolo asks only for risky actions; --auto ("Never Ask") never asks
 		if perm := p.Options["permission"]; perm == "yolo" || perm == "auto" {

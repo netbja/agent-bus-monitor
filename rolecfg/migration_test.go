@@ -116,8 +116,10 @@ func TestShippedManifestMigrationKeepsEveryLaunch(t *testing.T) {
 		if !o1.Empty() {
 			a = strings.Replace(a, settings(o1), settings(o2), 1)
 		}
-		if role == "master" { // the person (master-auto-default): master starts in auto, on purpose
-			a = strings.Replace(a, "--permission-mode acceptEdits", "--permission-mode auto", 1)
+		// The person: master starts in auto (master-auto-default), and every
+		// other Claude Code role but security and infra too (roles-auto-mode).
+		for _, from := range []string{"acceptEdits", "bypassPermissions"} {
+			a = strings.Replace(a, "--permission-mode "+from, "--permission-mode auto", 1)
 		}
 		if a != b {
 			t.Errorf("%s launches differently:\nschema 1: %s\nschema 2: %s", role, a, b)

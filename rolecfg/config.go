@@ -647,7 +647,7 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 			return Profile{}, fmt.Errorf("unsupported Claude reasoning level")
 		}
 	} else if client == "codex" {
-		if err := checkKeys(optionMap, set("sandbox", "approval"), "Codex options"); err != nil {
+		if err := checkKeys(optionMap, set("sandbox", "approval", "reviewer"), "Codex options"); err != nil {
 			return Profile{}, err
 		}
 		if v, exists := optionMap["sandbox"]; exists && v != "read-only" && v != "workspace-write" && v != "danger-full-access" {
@@ -655,6 +655,12 @@ func (m *Manifest) resolve(role, override string) (Profile, error) {
 		}
 		if v, exists := optionMap["approval"]; exists && v != "on-request" && v != "never" {
 			return Profile{}, fmt.Errorf("unsupported Codex approval")
+		}
+		// reviewer: who answers an approval request, Codex's approvals_reviewer
+		// (codex 0.169: "user", the default, or "auto_review", what
+		// --approve-for-me sets; roles-auto-mode).
+		if v, exists := optionMap["reviewer"]; exists && v != "user" && v != "auto_review" {
+			return Profile{}, fmt.Errorf("unsupported Codex reviewer")
 		}
 		if reasoning != "" && !contains([]string{"minimal", "low", "medium", "high", "xhigh", "max", "ultra", "none"}, reasoning) {
 			return Profile{}, fmt.Errorf("unsupported Codex reasoning level")

@@ -163,12 +163,13 @@ func TestLaunchCommandLines(t *testing.T) {
 	if got := f.execed[1 : len(f.execed)-2]; f.execed[len(f.execed)-1] != BootLine || strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("claude argv = %q", got)
 	}
-	m = f.config("codex", `reasoning = "xhigh"`+"\nreasoning_levels = [\"xhigh\"]", "", "[profiles.main.options]\nsandbox = \"workspace-write\"\napproval = \"never\"")
+	m = f.config("codex", `reasoning = "xhigh"`+"\nreasoning_levels = [\"xhigh\"]", "", "[profiles.main.options]\nsandbox = \"workspace-write\"\napproval = \"never\"\nreviewer = \"auto_review\"")
 	if _, e, err := f.launch(m, "coder"); err != nil {
 		t.Fatal(err, e)
 	}
 	h := launchHooks(newEnv(f.env))
-	want = []string{"codex", "--model", "test-model", "-c", `model_provider="test-provider"`, "--sandbox", "workspace-write", "--ask-for-approval", "never", "-c", `model_reasoning_effort="xhigh"`,
+	want = []string{"codex", "--model", "test-model", "-c", `model_provider="test-provider"`, "--sandbox", "workspace-write", "--ask-for-approval", "never",
+		"-c", `approvals_reviewer="auto_review"`, "-c", `tui.status_line=["model-with-reasoning","context-used","used-tokens"]`, "-c", `model_reasoning_effort="xhigh"`,
 		"-c", "features.hooks=true",
 		"-c", `hooks.UserPromptSubmit=[{hooks=[{type="command",command="` + h.TurnStart + `"}]}]`,
 		"-c", `hooks.Stop=[{hooks=[{type="command",command="` + h.TurnEnd + `"}]}]`,

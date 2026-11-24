@@ -12,8 +12,15 @@
 # required = true: a boot role the dispatcher's self-repair (once built) brings back when its tab is closed
 # (absent: false, the closed tab is only reported to master). Never on a pop: a pop comes back
 # through master only. Stop a required agent on purpose with agentbus retire or suspend.
-# Shared Claude Code denies apply to every role, including bypassPermissions. Defence in depth,
+# Shared Claude Code denies apply to every role, whatever its permission mode. Defence in depth,
 # not a boundary: processes an agent starts (tests, dotenv, and similar tools) can still read env.
+# permission = "auto" (the person, roles-auto-mode 2026-11-24): every Claude Code role but security
+# and infra, which stay manual (least privilege: auto would let Claude Code's classifier approve a
+# command no rule names). In auto mode an explicit ask rule still prompts (master's deploy and
+# infra pops), every deny rule blocks, and broad allow rules are dropped (ours are narrow). The
+# classifier decides the rest; after 3 blocks in a row, or 20 in a session, Claude Code falls back
+# to asking in the pane, which prompt-notify rings. Workspace trust is not pre-accepted: Claude Code
+# has no flag or setting for it, and agent-bus never writes ~/.claude.json (first-run-trust, (b)).
 
 schema_version = 2
 
@@ -27,14 +34,14 @@ client = "claude-code"
 provider = "anthropic"
 model = "opus"
 [profiles.claude-opus.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 [profiles.claude-opus-fallback]
 client = "claude-code"
 provider = "anthropic"
 model = "opus"
 [profiles.claude-opus-fallback.options]
-permission = "bypassPermissions"
+permission = "auto"
 fallback = "claude-opus-5"
 
 # Fable, Anthropic's frontier model above Opus, by Claude Code's alias (the models table lists `fable`
@@ -46,7 +53,7 @@ client = "claude-code"
 provider = "anthropic"
 model = "fable"
 [profiles.claude-fable.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 [profiles.claude-opus-manual]
 client = "claude-code"
@@ -60,7 +67,7 @@ client = "claude-code"
 provider = "anthropic"
 model = "sonnet"
 [profiles.claude-sonnet.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 [profiles.claude-sonnet-edits]
 client = "claude-code"
@@ -69,9 +76,8 @@ model = "sonnet"
 [profiles.claude-sonnet-edits.options]
 permission = "acceptEdits"
 
-# master's (the person, 2026-11-08: they switched master to auto at every start). Claude Code's
-# auto mode still prompts on an explicit ask rule (master's deploy and infra pops) and blocks on
-# every deny rule; broad allow rules are dropped on entering it, master's are narrow.
+# master's and docs' (the person, 2026-11-08: master to auto at every start; 2026-11-24,
+# roles-auto-mode: docs too, which acceptEdits left blocked on Bash prompts).
 [profiles.claude-sonnet-auto]
 client = "claude-code"
 provider = "anthropic"
@@ -84,7 +90,7 @@ client = "claude-code"
 provider = "anthropic"
 model = "haiku"
 [profiles.claude-haiku.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 # Other makers, for the busmon interface panel (ui-grok, ui-kimi). permission stays default:
 # the client asks the person before each tool use. plan mode is not used: neither --help says
@@ -99,20 +105,23 @@ client = "kimi-cli"
 provider = "moonshot"
 model = "kimi-code/k3"
 
-# A second 4-eyes reviewer from another maker (reviewer-codex): the model table's openai frontier
-# model on 2026-10-27, pinned so `roles field` and the shipped-manifest tests see it
-# (`agentbus roles doctor` reports `newer` once the table states a successor).
-# read-only: nothing in the checkout (nor coder's worktrees) is writable by the sandbox, which
-# is what holds "never write", not the prompt. A review worktree, a test broker, a go test
-# (GOCACHE is outside the writable roots anyway) and every bus call ask the person once each
-# (approval on-request); so would any push. Same as examples/roles.mixed.toml [profiles.review].
+# A second 4-eyes reviewer from another maker (reviewer-codex), on Luna, openai's fast model (the
+# person, roles-auto-mode 2026-11-24), pinned so `roles field` and the shipped-manifest tests see it.
+# read-only: nothing in the checkout (nor coder's worktrees) is writable by the sandbox. A review
+# worktree, a test broker, a go test and every bus call need an escalation (approval on-request),
+# which reviewer = "auto_review" hands to Codex's own automatic review instead of the person
+# (approvals_reviewer, what --approve-for-me sets, without that flag's workspace-write sandbox).
+# An approved escalation runs outside the sandbox: "never write" then rests on the prompt and the
+# automatic review too, not on the sandbox alone. Every Codex launch also shows the tokens used in
+# Codex's status line (launch.go, codexStatusLine).
 [profiles.codex-review]
 client = "codex"
 provider = "openai"
-model = "gpt-6-astra"
+model = "gpt-6-luna"
 [profiles.codex-review.options]
 sandbox = "read-only"
 approval = "on-request"
+reviewer = "auto_review"
 
 # agy (Antigravity CLI, Google): a reviewer or panelist from another maker. permission stays
 # default: the session pins toolPermission=request-review and empties the person's agy allows
@@ -269,7 +278,7 @@ skills = ["agent-bus", "agent-bus-security"]
 deny = ["Bash(agentbus deliver *)"]
 
 [roles.docs]
-profile = "claude-sonnet-edits"
+profile = "claude-sonnet-auto"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]
 delivers = true
