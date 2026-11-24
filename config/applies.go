@@ -46,7 +46,7 @@ var applies = map[string]Applies{
 	"waiting.popup_after": AppliesLive, "waiting.snooze": AppliesLive, "waiting.bell": AppliesLive, "waiting.fade": AppliesLive,
 	"recap.auto_after": AppliesLive, "display.theme": AppliesLive, "display.icons": AppliesLive, "display.graphs": AppliesLive,
 	"compose.at_path": AppliesLive, "display.date_format": AppliesLive, "display.work_layout": AppliesLive, "display.follow": AppliesLive,
-	"display.idle_view_after": AppliesLive, "board.no_accept_after": AppliesLive, "board.no_reply_after": AppliesLive,
+	"display.idle_view_after": AppliesLive, "display.confirm_quit": AppliesLive, "board.no_accept_after": AppliesLive, "board.no_reply_after": AppliesLive,
 	"projects.delete_files": AppliesLive, "projects.delete_backups": AppliesLive,
 	// busmon, read at its start
 	"display.limit": AppliesBusmon, "display.idle_hint_after": AppliesBusmon, "identity.as": AppliesBusmon, "person.name": AppliesBusmon,
