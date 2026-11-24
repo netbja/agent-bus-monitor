@@ -12,8 +12,15 @@
 # required = true: a boot role the dispatcher's self-repair (once built) brings back when its tab is closed
 # (absent: false, the closed tab is only reported to master). Never on a pop: a pop comes back
 # through master only. Stop a required agent on purpose with agentbus retire or suspend.
-# Shared Claude Code denies apply to every role, including bypassPermissions. Defence in depth,
+# Shared Claude Code denies apply to every role, whatever its permission mode. Defence in depth,
 # not a boundary: processes an agent starts (tests, dotenv, and similar tools) can still read env.
+# permission = "auto" (the person, roles-auto-mode 2026-11-24): every Claude Code role but security
+# and infra, which stay manual (least privilege: auto would let Claude Code's classifier approve a
+# command no rule names). In auto mode an explicit ask rule still prompts (master's deploy and
+# infra pops), every deny rule blocks, and broad allow rules are dropped (ours are narrow). The
+# classifier decides the rest; after 3 blocks in a row, or 20 in a session, Claude Code falls back
+# to asking in the pane, which prompt-notify rings. Workspace trust is not pre-accepted: Claude Code
+# has no flag or setting for it, and agent-bus never writes ~/.claude.json (first-run-trust, (b)).
 
 schema_version = 2
 
@@ -27,14 +34,14 @@ client = "claude-code"
 provider = "anthropic"
 model = "opus"
 [profiles.claude-opus.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 [profiles.claude-opus-fallback]
 client = "claude-code"
 provider = "anthropic"
 model = "opus"
 [profiles.claude-opus-fallback.options]
-permission = "bypassPermissions"
+permission = "auto"
 fallback = "claude-opus-5"
 
 # Fable, Anthropic's frontier model above Opus, by Claude Code's alias (the models table lists `fable`
@@ -46,7 +53,7 @@ client = "claude-code"
 provider = "anthropic"
 model = "fable"
 [profiles.claude-fable.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 [profiles.claude-opus-manual]
 client = "claude-code"
@@ -60,7 +67,7 @@ client = "claude-code"
 provider = "anthropic"
 model = "sonnet"
 [profiles.claude-sonnet.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 [profiles.claude-sonnet-edits]
 client = "claude-code"
@@ -69,9 +76,8 @@ model = "sonnet"
 [profiles.claude-sonnet-edits.options]
 permission = "acceptEdits"
 
-# master's (the person, 2026-11-08: they switched master to auto at every start). Claude Code's
-# auto mode still prompts on an explicit ask rule (master's deploy and infra pops) and blocks on
-# every deny rule; broad allow rules are dropped on entering it, master's are narrow.
+# master's and docs' (the person, 2026-11-08: master to auto at every start; 2026-11-24,
+# roles-auto-mode: docs too, which acceptEdits left blocked on Bash prompts).
 [profiles.claude-sonnet-auto]
 client = "claude-code"
 provider = "anthropic"
@@ -84,7 +90,7 @@ client = "claude-code"
 provider = "anthropic"
 model = "haiku"
 [profiles.claude-haiku.options]
-permission = "bypassPermissions"
+permission = "auto"
 
 # Other makers, for the busmon interface panel (ui-grok, ui-kimi). permission stays default:
 # the client asks the person before each tool use. plan mode is not used: neither --help says
@@ -269,7 +275,7 @@ skills = ["agent-bus", "agent-bus-security"]
 deny = ["Bash(agentbus deliver *)"]
 
 [roles.docs]
-profile = "claude-sonnet-edits"
+profile = "claude-sonnet-auto"
 tier = "pop"
 skills = ["agent-bus", "agent-bus-docs"]
 delivers = true
