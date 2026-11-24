@@ -324,7 +324,7 @@ why you should record it. The verbs, in no fixed order beyond the rules below:
 agentbus request accept <task>              # BEFORE you start working. Not optional.
 agentbus request block  <task> <reason>     # when you cannot proceed — say why, in words
 agentbus request accept <task>              # to resume after a block, a review or a reject
-agentbus request review <task> [--branch <b>] [<note>]  # a step's PR waits on its reviewers
+agentbus request review <task> [--branch <b>] [--more] [<note>]  # a step's PR waits on its reviewers
 agentbus request done   <task> <reply>      # when finished — the reply is your answer
 agentbus request                            # EVERY tracked request, done ones included
 agentbus request next                       # which one to take next (exit 64: nothing ready)
@@ -337,6 +337,13 @@ agentbus request next                       # which one to take next (exit 64: n
   for the next step or a reject; a single-PR request may go straight to `done`. Resuming
   (`accept` after `review` or `block`) is never refused. Only the person's high priority passes
   the limit. Never ask master to raise it.
+
+- **Put a delivered branch in review (`request review <task> --branch <b>`, `--more` if steps
+  follow); its merge closes it.** Run it in the branch's checkout: it records the head and the
+  base it is judged against, and refuses a branch with nothing beyond the base. When the merge
+  queue sees that head merged, the dispatcher closes the request ("closed on merge", no reply), or
+  with `--more` sends it back to `accepted` for the next step. `request done --branch` is still
+  the normal close; close-on-merge is the net under it.
 
 - **When more than one tracked request waits for you, run `agentbus request next` and accept
   the task it names.** The person may set a request's priority (high, normal, low; absent =

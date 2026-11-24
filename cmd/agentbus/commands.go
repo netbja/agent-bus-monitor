@@ -297,7 +297,7 @@ var commands = []cli.Command{
 			"request [--json]",
 			"request send <task> <target> [--ref <id>] [--ttl <dur>] <body...>",
 			"request accept <task> | request block <task> <reason...>",
-			"request review <task> [--branch <b>] [<note...>]",
+			"request review <task> [--branch <b>] [--commit <sha>] [--more] [<note...>]",
 			"request done <task> [--commit <sha>] [--branch <b>] <reply...>",
 			"request priority <task> high|normal|low --as <person> | request next [<agent>] [--json]",
 		},
