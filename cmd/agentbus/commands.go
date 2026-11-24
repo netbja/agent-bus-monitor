@@ -306,8 +306,9 @@ var commands = []cli.Command{
 		Flags: []cli.Flag{
 			fJSON, fRef,
 			{Long: "ttl", Short: 't', Arg: "<dur>", Help: "deadline for the first acceptance"},
-			{Long: "commit", Short: 'c', Arg: "<sha>", Help: "the delivered commit (missions)"},
-			{Long: "branch", Short: 'b', Arg: "<b>", Help: "done: the delivered branch; review: the branch in review"},
+			{Long: "commit", Short: 'c', Arg: "<sha>", Help: "done: the delivered commit (missions); review: the head in review, else the branch's tip"},
+			{Long: "branch", Short: 'b', Arg: "<b>", Help: "done: the delivered branch; review: the branch in review (its merge closes the request)"},
+			{Long: "more", Help: "review: a step that is not the last: its merge sends the request back to accepted"},
 			{Long: "as", Arg: "<person>", Help: "priority: the person who sets it (required; an agent is refused); send starts a plan task's request at the task's priority (plan priority)"},
 		},
 		Examples: []string{"agentbus -p demo request accept parser", "agentbus -p demo request done parser \"merged in #12\"",
