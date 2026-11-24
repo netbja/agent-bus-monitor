@@ -5,8 +5,10 @@
   ("set it in busmon (Shift+C) or config.toml"); busmon's settings page writes through
   `config.SetAsPerson` / `UnsetAsPerson`, which no other package may call (a test scans for them).
   `PersonOnly` keys (`backup.after_*`) stay read-only in busmon. **Enforced by `agentbus request accept`:** a first
-  accept is refused while the agent holds that many requests `accepted` (naming them); a resume, a
-  `review` or `blocked` one, and the person's high priority never count against it. `agentbus request
+  accept is refused while the agent holds that many requests `accepted` (naming them). A resume, and a first accept of a request the person marked `high`, are never
+  refused; once accepted, a `high` or resumed request still counts as held, like any `accepted`
+  one. A request in `review` or `blocked` is not `accepted`, so it does not count. `agentbus request
   review <task> [--branch <b>] [<note>]` marks a step in review. `request send` to an agent at its
   limit is queued with one line on stderr naming what it holds and the agents under their limit. The
-  row's detail text in Shift+C comes in step 3.
+  row's detail text in Shift+C says what the value implies. **It is on by default (2):** upgrading
+  enables the limit at once; `0` turns it off.
