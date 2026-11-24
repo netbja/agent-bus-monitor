@@ -4,9 +4,11 @@
   fetch; the local `<base>` in local mode). It refuses a head already in that base ("nothing to
   review"); a failed fetch records no base, and the request is then never closed on merge. Each pass,
   the merge queue judges the review requests that have a branch and a `review_base` with its
-  `Delivered` test (the branch's remote tip, else its local one, else the recorded commit, which covers
-  a branch auto-deleted after the merge; a head already in its `review_base` is never judged; local
-  refs that cannot be read judge nothing). Each review counts (`review_n`): the write applies only to
+  `Delivered` test, on the head that was reviewed: the recorded commit, judged only when the branch's
+  tip (remote, else local) is that commit or is gone (deleted after the merge); a tip that differs is
+  not judged (origin's old tip after a squash merge, the branch reused for the next step, or work pushed
+  with no new review); with no commit recorded, the tip. A head already in its `review_base` is never
+  judged; local refs that cannot be read judge nothing. Each review counts (`review_n`): the write applies only to
   the review the pass read, so one put in review again meanwhile is left. `request done` on a request
   closed on merge answers as on any done request: no error, no reply. A delivered one is closed by
   the fenced `FencedRequestMerged`: done, `closed_on_merge {head, base}`, no reply, so nobody is woken

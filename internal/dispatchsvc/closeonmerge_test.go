@@ -176,3 +176,37 @@ func TestMergeQueueChoreCloseOnMergeLocalBeforeCommit(t *testing.T) {
 		t.Fatalf("closed with the local refs unread: %s", s)
 	}
 }
+
+// foureyes: squash merges leave the branch on origin at its old tip. A
+// --more build's next step on the same branch, reviewed at h2 while origin
+// still shows step 1's h1 (delivered by content), stays open: the head
+// judged is the one reviewed, and a tip that differs from it is not judged
+// this pass. Once origin shows h2, h2 is judged.
+func TestMergeQueueChoreCloseOnMergeStaleOriginTip(t *testing.T) {
+	ctx := context.Background()
+	const h1, h2 = "6666666666666666666666666666666666666666", "7777777777777777777777777777777777777777"
+	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
+	reviewed(t, b, "step2", bus.ReviewOpts{Branch: "feat/step", Commit: h2, ReviewBase: cmReviewBase, More: true})
+	tip := h1
+	c.remoteTips = func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
+		return []mergequeue.Tip{{Branch: "feat/request-priority", Head: mqHead}, {Branch: "feat/step", Head: tip}}, mqBaseTip, nil
+	}
+	merged := map[string]bool{h1: true}
+	c.delivered = func(_ context.Context, _ string, _ []string, _ string, heads []string) (map[string]bool, error) {
+		return merged, nil
+	}
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if s, r := stateOf(t, b, "step2"); s != "review" || len(r.MergedSteps) != 0 {
+		t.Fatalf("closed on origin's stale tip: %s %+v", s, r)
+	}
+	tip = h2 // pushed; then merged
+	merged[h2] = true
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if s, r := stateOf(t, b, "step2"); s != "accepted" || len(r.MergedSteps) != 1 || r.MergedSteps[0] != h2 {
+		t.Fatalf("the reviewed head, merged: %s %+v", s, r)
+	}
+}

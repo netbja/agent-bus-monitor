@@ -11,8 +11,9 @@ import (
 // review requests' heads with the same Delivered test it runs on the
 // approved heads, and closes the delivered ones through the fenced
 // FencedRequestMerged. Judged only: a request in review, on a branch, with
-// a review_base, whose head (the branch's tip this pass read, else the
-// commit review recorded) is not already in that review_base.
+// a review_base, whose head (the commit review recorded, when the branch's
+// tip is that commit or gone; the tip when no commit was recorded) is not
+// already in that review_base.
 
 // mergeClose is one request whose branch head is delivered, and the review
 // read (the write applies to that review only).
@@ -72,16 +73,26 @@ func (c *mergeQueueChore) closeOnMerge(ctx context.Context, env []string, tips [
 		if e.State != "review" || r == nil || r.Branch == "" || r.ReviewBase == "" {
 			continue // not judged (§3.1); §5 reports one with no base
 		}
-		head := tipOf[r.Branch] // the remote tip (the local one in local mode)
-		if head == "" {
+		tip := tipOf[r.Branch] // the remote tip (the local one in local mode), else the local ref
+		if tip == "" {
 			h, ok := local(r.Branch)
 			if !ok {
 				continue
 			}
-			head = h
+			tip = h
 		}
-		if head == "" {
-			head = r.Commit // its branch deleted after the merge (§3.2)
+		// The head judged is the one reviewed (foureyes): the recorded commit.
+		// A tip that differs from it is not judged this pass: origin's old
+		// tip after a squash merge (the branch reused for the next step), or
+		// work pushed after the review with no new review; §5 reports it.
+		// With no tip (the branch deleted after its merge), the commit; with
+		// no commit recorded, the tip.
+		head := r.Commit
+		switch {
+		case head == "":
+			head = tip
+		case tip != "" && tip != head:
+			continue
 		}
 		if head == "" {
 			continue
