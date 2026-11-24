@@ -31,7 +31,8 @@ func TestWhenAKeyApplies(t *testing.T) {
 	}
 	for name, want := range map[string]Applies{"dispatch.quota_warn": AppliesLive, "dispatch.stall_after": AppliesLive,
 		"dispatch.self_repair": AppliesService, "holder.scrollback": AppliesService, "person.language": AppliesAgent,
-		"display.limit": AppliesBusmon, "display.icons": AppliesLive, "board.wip_limit": AppliesRun} {
+		"display.limit": AppliesBusmon, "display.icons": AppliesLive, "board.wip_limit": AppliesRun,
+		"sentinel.reload": AppliesLive} { // the dispatcher re-reads it at each client update (serviceReloadPolicy)
 		if k, _ := Lookup(name); k.Applies() != want {
 			t.Errorf("%s applies %q, want %q", name, k.Applies(), want)
 		}
