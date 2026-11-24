@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -129,6 +128,9 @@ func TestChoosePlayer(t *testing.T) {
 		{"linux", []string{"mpg123"}, "a.ogg", ""},
 		{"linux", []string{"aplay"}, "a.wav", ""},
 		{"linux", []string{"paplay"}, "a.flac", ""},
+		{"linux", []string{"paplay", "mpv"}, "/x/alert.", ""},
+		{"linux", []string{"paplay", "mpv"}, "a.wa", ""},
+		{"linux", []string{"mpg123"}, "a.mp", ""},
 		{"darwin", []string{"afplay", "paplay"}, "a.wav", "afplay"},
 		{"darwin", []string{"afplay"}, "a.mp3", "afplay"},
 		{"windows", []string{"powershell"}, "a.wav", "powershell"},
@@ -346,6 +348,10 @@ func TestResolveFile(t *testing.T) {
 		{"done", "/abs/x.mp3", Path, "/abs/x.mp3"},
 		{"done", "nonsense", Builtin, "done"},
 		{"done", "x.flac", Builtin, "done"},
+		{"done", "beep.mp", Builtin, "done"},
+		{"done", "beep.og", Builtin, "done"},
+		{"done", "beep.wa", Builtin, "done"},
+		{"done", "alert.", Builtin, "done"},
 	}
 	for _, c := range cases {
 		k, got := ResolveFile(c.event, c.val, "/home/u/.config/agentbus")
@@ -353,7 +359,7 @@ func TestResolveFile(t *testing.T) {
 			t.Errorf("%s=%q: (%v, %q), want (%v, %q)", c.event, c.val, k, got, c.kind, c.want)
 		}
 	}
-	if !strings.HasSuffix(PlayableExts, ".mp3") {
+	if !reflect.DeepEqual(PlayableExts, []string{".wav", ".ogg", ".mp3"}) {
 		t.Errorf("PlayableExts %q", PlayableExts)
 	}
 }

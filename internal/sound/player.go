@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ type Runner func(ctx context.Context, bin string, args ...string) error
 
 type kind struct {
 	name string
-	exts string // formats it reads natively
+	exts []string // formats it reads natively, exact extensions
 	argv func(bin, file string, vol int) []string
 }
 
@@ -27,32 +28,32 @@ func frac(vol int) string { return fmt.Sprintf("%.2f", float64(vol)/100) }
 
 // Linux candidates in order; never aplay (it plays an MP3 as noise).
 var linuxKinds = []kind{
-	{"paplay", ".wav .ogg", func(b, f string, v int) []string {
+	{"paplay", []string{".wav", ".ogg"}, func(b, f string, v int) []string {
 		return []string{b, fmt.Sprintf("--volume=%d", v*65536/100), f}
 	}},
-	{"pw-play", ".wav .ogg", func(b, f string, v int) []string {
+	{"pw-play", []string{".wav", ".ogg"}, func(b, f string, v int) []string {
 		return []string{b, "--volume", frac(v), f}
 	}},
-	{"ffplay", ".wav .ogg .mp3", func(b, f string, v int) []string {
+	{"ffplay", []string{".wav", ".ogg", ".mp3"}, func(b, f string, v int) []string {
 		return []string{b, "-nodisp", "-autoexit", "-loglevel", "quiet", "-volume", fmt.Sprint(v), f}
 	}},
-	{"mpg123", ".mp3", func(b, f string, v int) []string {
+	{"mpg123", []string{".mp3"}, func(b, f string, v int) []string {
 		return []string{b, "-q", "-f", fmt.Sprint(v * 32768 / 100), f}
 	}},
-	{"mpv", ".wav .ogg .mp3", func(b, f string, v int) []string {
+	{"mpv", []string{".wav", ".ogg", ".mp3"}, func(b, f string, v int) []string {
 		return []string{b, "--no-video", "--really-quiet", fmt.Sprintf("--volume=%d", v), f}
 	}},
 }
 
 var darwinKinds = []kind{
-	{"afplay", ".wav .mp3", func(b, f string, v int) []string {
+	{"afplay", []string{".wav", ".mp3"}, func(b, f string, v int) []string {
 		return []string{b, "-v", frac(v), f}
 	}},
 }
 
 // SoundPlayer reads WAV only and has no volume: the file's own level plays.
 var windowsKinds = []kind{
-	{"powershell", ".wav", func(b, f string, _ int) []string {
+	{"powershell", []string{".wav"}, func(b, f string, _ int) []string {
 		q := strings.ReplaceAll(f, "'", "''")
 		return []string{b, "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
 			"(New-Object System.Media.SoundPlayer '" + q + "').PlaySync()"}
@@ -100,11 +101,8 @@ func (ps Players) Any() bool { return len(ps) > 0 }
 // For is the first player that reads file's format.
 func (ps Players) For(file string) (PlayerBin, bool) {
 	ext := strings.ToLower(filepath.Ext(file))
-	if ext == "" {
-		return PlayerBin{}, false
-	}
 	for _, p := range ps {
-		if strings.Contains(p.k.exts, ext) {
+		if slices.Contains(p.k.exts, ext) {
 			return p, true
 		}
 	}

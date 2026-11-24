@@ -10,6 +10,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -116,7 +117,7 @@ func ResolveMode(in ModeInput) Mode {
 }
 
 // PlayableExts are the formats a custom sound file may have.
-const PlayableExts = ".wav .ogg .mp3"
+var PlayableExts = []string{".wav", ".ogg", ".mp3"}
 
 // FileKind is what a sound.file.<event> setting names.
 type FileKind int
@@ -140,7 +141,7 @@ func ResolveFile(event, val, configDir string) (FileKind, string) {
 			return Builtin, b
 		}
 	}
-	if ext := strings.ToLower(filepath.Ext(v)); ext != "" && strings.Contains(PlayableExts, ext) {
+	if slices.Contains(PlayableExts, strings.ToLower(filepath.Ext(v))) {
 		if !filepath.IsAbs(v) {
 			v = filepath.Join(configDir, v)
 		}
