@@ -1,4 +1,4 @@
-- **The merge queue's conflict check (conflict-owner §2, build A: detection, nothing sent yet).** Each
+- **The merge queue's conflict check (conflict-owner §2, build A: detection; the hand-off is `conflict-owner-handoff.md`).** Each
   pass judges the approved heads and the PRs the forge flags with `git merge-tree --write-tree` against
   the base tip (`mergequeue.CheckConflicts`), oldest approved first. It runs in an empty bare repository
   made for the pass in the project's state directory and removed after, with only `PATH` and an

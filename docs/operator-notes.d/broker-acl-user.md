@@ -10,4 +10,4 @@
       person's as `busmon`. A process whose ancestry cannot be read gets `agent`.
   - **A missing password file is an error,** never the default user.
   - **Turn it on with `./setup.sh acl on`** (part 2), never by editing `broker.acl` by hand: the
-    users and their files come from there. **Not yet:** the rotation per user (part 3).
+    users and their files come from there. Rotation per user is `./setup.sh rotate-redis-password` (part 3).

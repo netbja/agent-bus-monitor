@@ -1803,7 +1803,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
       person's as `busmon`. A process whose ancestry cannot be read gets `agent`.
   - **A missing password file is an error,** never the default user.
   - **Turn it on with `./setup.sh acl on`** (part 2), never by editing `broker.acl` by hand: the
-    users and their files come from there. **Not yet:** the rotation per user (part 3).
+    users and their files come from there. Rotation per user is `./setup.sh rotate-redis-password` (part 3).
 - **Backups hold the broker's snapshot, `broker.rdb`** (broker-hardening step 5). After the logical dump,
   `agentbus backup` (and the schedule while `broker.acl` is off) runs `BGSAVE`, waits (2 min at most) for that save to finish
   `ok`, then copies only the RDB it completed: from the container (`<runtime> cp agent-bus-redis:/data/<dbfilename> -`,
@@ -2021,7 +2021,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   `conflict_check` ("conflicts: …"). The hand-off says rebase, resolve, test and have the new head
   reviewed: it is delivered as usual (only master and docs push here); it names `origin/<base>`, or
   the local `<base>` in local mode.
-- **The merge queue's conflict check (conflict-owner §2, build A: detection, nothing sent yet).** Each
+- **The merge queue's conflict check (conflict-owner §2, build A: detection; the hand-off is `conflict-owner-handoff.md`).** Each
   pass judges the approved heads and the PRs the forge flags with `git merge-tree --write-tree` against
   the base tip (`mergequeue.CheckConflicts`), oldest approved first. It runs in an empty bare repository
   made for the pass in the project's state directory and removed after, with only `PATH` and an
@@ -2721,8 +2721,8 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   field `needs` (`bus.NeedsAnswer`, `bus.NeedsRead`, `Bus.ReportNeeds`); each `--to` notice carries it too
   (`Bus.ReportNotice`), so `subscribe`'s JSON shows `"needs"` (additive in v1) and `agentbus history` prints
   `report (needs answer)`. Any other value is refused before anything is written, and a value a hand
-  write put on an entry reads as none. Nothing in busmon reads it yet: step 2 makes a report a triage
-  item only with `needs`.
+  write put on an entry reads as none. busmon reads it (triage-dedupe step 2, `triage-by-target.md`): a
+  report is a triage item only with `needs`.
 - **A request nobody can accept can still be closed.** A tracked request whose body cmd retention
   removed (`availability: missing`), or that expired before anyone accepted it, refuses `accept`,
   and `done` needed an accept, so it stayed open forever (concierge-memory-opinion, 98 h). Its
@@ -2966,8 +2966,10 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   ("set it in busmon (Shift+C) or config.toml"); busmon's settings page writes through
   `config.SetAsPerson` / `UnsetAsPerson`, which no other package may call (a test scans for them).
   `PersonOnly` keys (`backup.after_*`) stay read-only in busmon. **Enforced by `agentbus request accept`:** a first
-  accept is refused while the agent holds that many requests `accepted` (naming them); a resume, a
-  `review` or `blocked` one, and the person's high priority never count against it. `agentbus request
+  accept is refused while the agent holds that many requests `accepted` (naming them). A resume, and a first accept of a request the person marked `high`, are never
+  refused; once accepted, a `high` or resumed request still counts as held, like any `accepted`
+  one. A request in `review` or `blocked` is not `accepted`, so it does not count. `agentbus request
   review <task> [--branch <b>] [<note>]` marks a step in review. `request send` to an agent at its
   limit is queued with one line on stderr naming what it holds and the agents under their limit. The
-  row's detail text in Shift+C comes in step 3.
+  row's detail text in Shift+C says what the value implies. **It is on by default (2):** upgrading
+  enables the limit at once; `0` turns it off.

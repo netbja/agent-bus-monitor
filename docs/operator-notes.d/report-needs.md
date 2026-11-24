@@ -2,5 +2,5 @@
   field `needs` (`bus.NeedsAnswer`, `bus.NeedsRead`, `Bus.ReportNeeds`); each `--to` notice carries it too
   (`Bus.ReportNotice`), so `subscribe`'s JSON shows `"needs"` (additive in v1) and `agentbus history` prints
   `report (needs answer)`. Any other value is refused before anything is written, and a value a hand
-  write put on an entry reads as none. Nothing in busmon reads it yet: step 2 makes a report a triage
-  item only with `needs`.
+  write put on an entry reads as none. busmon reads it (triage-dedupe step 2, `triage-by-target.md`): a
+  report is a triage item only with `needs`.

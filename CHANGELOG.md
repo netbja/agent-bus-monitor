@@ -8,9 +8,10 @@ release exists.
 
 ## v0.34.0 — the broker's users can be switched on, one approval for a small change, a triage walk, conflicts go back to their owner, and a limit on work in flight
 
-- Nothing turns on by itself. `./setup.sh acl on|off` (with rotation, status and a `broker.rdb`
-  snapshot in backups) is the person's act and `broker.acl` stays `off`; `single_approval` defaults to
-  `off`; `board.wip_limit` (default 2, the person's alone) limits what an agent holds accepted.
+- `./setup.sh acl on|off` (with rotation, status and a `broker.rdb` snapshot in backups) is the person's
+  act and `broker.acl` stays `off`; `single_approval` defaults to `off`. **`board.wip_limit` is on by
+  default (2; 0 turns it off; the person's alone)**: after upgrading, `request accept` refuses a first
+  accept for an agent already holding 2 accepted requests.
 - `deliver --dry-run` prints a change's size class; with `single_approval = "small"` one approval
   passes a small change from another provider (or a docs-only one, per `same_provider_ok`).
 - Triage: `report --needs answer|read`, one For you item per target, a Context on each item's page, and
