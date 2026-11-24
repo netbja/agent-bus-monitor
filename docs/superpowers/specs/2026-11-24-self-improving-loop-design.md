@@ -1,6 +1,9 @@
 # A retrospective after a task with friction (retro)
 
-Status: spec r1, for review (subject `retro-spec`). Not built. Base: origin/dev `af527c19`.
+Status: spec r2, for review (subject `retro-spec`). Not built. Base: origin/dev `af527c19`.
+r2: foureyes's two notes on r1 (report `1795560028942-0`): `agentbus answer` refuses through
+`agentcaller.Refuse`, because the approval rests on it (§5, build step 2); busmon starts a retro
+from the palette, since `R` is the recap key (§3.3).
 Author: architect, from master's directive (cmd `1795559518593-0`, task `specs-from-person-docs`),
 which hands on the person's note "Directive for archi: self-improving loop for agents".
 Reference design: `codeursenior/product-engineer-kit`, skill `pek-auto-improve` (MIT). Its rules
@@ -75,8 +78,9 @@ A retro request never triggers a retro. `request done retro-…` skips the frict
 ### 3.3 The person's manual fix
 
 `agentbus retro request <task>` is the person's trigger, for a fix the person made by hand. It
-is refused from an agent's process tree (`agentcaller.Refuse`). In busmon, `R` on a task row of
-the Requests view runs it. If the task's owner is a pop that has ended, the retro request goes to
+is refused from an agent's process tree (`agentcaller.Refuse`). In busmon, the palette's `/retro` runs it
+on the selected task row of the Requests view. `R` is taken: it is the recap key
+(`cmd/busmon/keys.go:280`). If the task's owner is a pop that has ended, the retro request goes to
 master, who pops the role again or retires the retro (§6).
 
 ## 4. The retro itself
@@ -128,6 +132,14 @@ and the table. Then the agent runs `request done retro-<task>`.
   stays open until answered, and a later retro may propose it again. An unanswered proposal is never applied.
 - "All", "none" or a subset are answered one question at a time. busmon already lets the person
   answer each one.
+
+- **The answer's own guard must hold.** `typed=yes` is written on every answer, whoever runs
+  `agentbus answer` (`bus/asks.go:327`). Today `runAnswer` (`cmd/agentbus/askcmd.go:198`) refuses
+  an agent only when `AGENT_BUS_AGENT` or `AGENTBUS_TERM_ID` is set. An agent that unsets both
+  could answer in the person's name. The build adds `agentcaller.Refuse` (the process tree) to
+  `answer`, as `retro request` has, before any retro is applied. The security role reviews
+  that step. On one host, the same user can still write the stream directly. That is the limit
+  the person-memory spec states, until the broker ACL is on.
 
 `bus.RetroApproved(task, n)` is the one check. It returns the approving entry's id, or a reason
 for refusing. Every later step calls it. No step reads the approval any other way.
@@ -186,9 +198,10 @@ cannot.
 1. Bus: `TaskFriction`, the `retro-<task>` request from `request done`, the `agent` field on
    escalations, and `agentbus retro request/evidence/none`.
 2. Bus and CLI: `{p}:retros`, `retro propose` (with its checks), the ask, `RetroApproved`,
-   `retro show/rejected/close`, and the settings in `config/keys.go`.
+   `retro show/rejected/close`, and the settings in `config/keys.go`. `agentbus answer` refuses
+   through `agentcaller.Refuse` (§5). The security role reviews this step.
 3. Skills: the agent-bus skill's retro section (the §4 rules). The master skill's routing
-   (§6). The docs skill's apply steps. busmon `R`.
+   (§6). The docs skill's apply steps. busmon's palette `/retro`.
 
 **Tests (one seam, the `bus` package, against the disposable Redis):**
 
@@ -201,7 +214,8 @@ cannot.
   person's typed `yes`.
 - `retro propose` refuses each of: four rows, a missing evidence id, a file outside the
   destinations, a sensitive field, a repeated rejected row, and a fifth retro on a capped day.
-- `retro request` refuses from an agent's process tree (the `agentcaller` test pattern).
+- `retro request` and `answer` refuse from an agent's process tree, even with `AGENT_BUS_AGENT`
+  and `AGENTBUS_TERM_ID` unset (the `agentcaller` test pattern).
 - A mutant run on `RetroApproved`'s `typed` check must fail a test.
 
 **Not doing:** no retro on a green task. No automatic apply, and no apply without the person's
