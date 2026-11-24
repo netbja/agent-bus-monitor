@@ -1619,6 +1619,12 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   resynchronising) prints no lines. The caller is the terminal the holder named
   (`AGENTBUS_TERM_ID` on the socket `AGENTBUS_HOST`), or else `AGENT_BUS_AGENT`: it is a team
   rule, not a security boundary (agent-screen-blocked §2).
+- **`agentbus --help` is gh's layout** (agentbus-help-gh step 1): USAGE, nine UPPERCASE groups
+  (agent, message, review, work, terminal, project, usage, admin, internal last), one
+  `name: brief` line per command, then FLAGS, EXAMPLES and LEARN MORE, no color, nothing over 80
+  columns. A new command needs a `Brief` (2 to 6 words) in `cmd/agentbus/commands.go` and its
+  name in exactly one of `helpSections` (`cmd/agentbus/help.go`), or the suite fails; its detail
+  stays in `agentbus help <command>`.
 - **`agentbus update` installs the latest release, with a snapshot to roll back to (update spec step 1, `update/`).**
   - **Where it comes from.** The newest `vX.Y.Z` tag on the clone's `origin/main`.
     - The tag is fetched (`git fetch --tags origin`; never a branch or a working tree).
@@ -1661,6 +1667,14 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   refused unless every client the project's roles run on (own and fallback profiles) records it `free`, naming
   each other client and its free keys. Today only F12 is recorded free, for Claude Code, Grok and Codex (codex-cli 0.169.0, its
   `f12-at-input` probe, 2026-11-16): with a Kimi or agy role, attach to it still needs `--prefix`.
+- **`dispatch.background_ignore`: the clients' own helpers are never background work**
+  (background-ignore-helpers). A process named in the list (default `codebase-memory` and
+  `codex-code-mode`, the clients' own helpers; config.toml only) never holds a hand-off's `/clear`, a
+  pop's retire or the holder drain, whatever its CPU or where it runs. A shell whose every child is
+  such a helper is its wrapper and is ignored too. A shell running anything else, or nothing, still
+  counts, as does any unlisted process (`go test`, a dev server). The list is read at each look, so
+  a change applies without a restart. Generic names (`MainThread`, every node or Python process;
+  `import`; `bash`) are left out on purpose: they would hide real work. Add one only knowingly.
 - **Claude Code's hooks now report background work (background-work-visible step 1).** The turn hook reads
   `background_tasks` and `session_crons` from Claude's `Stop` and (newly installed) `SubagentStop` payloads and
   writes `{p}:bgtasks:<agent>`: each task's type, status, sub-agent name and first-seen time, a digest of its id, the
@@ -1718,12 +1732,65 @@ change adds its own fragment there, never an edit here; the newest notes are in 
     - **Grok, Kimi and agy** are not checked.
   - **What a helper starts is the helper's:** an MCP server that shells out to run real work (a
     build, a test runner) never counts. None does on this host today.
+- **The Board's alerts say what they measure (board-drift step 4, spec §7).** "no acceptance 40m since
+  request", "no reply 3h since accept", "body lost (request 27h)". "No reply" fires only on an
+  `accepted` request: one in `review` waits on its reviewers, a `blocked` one on someone else. The AGE
+  column is now CHANGED (the last transition, `Updated`, as before), and a task's detail lists the
+  request's own times: Requested, Accepted, Responded, and In review (since its last change, while in
+  review). From 100 columns the alert column is 34 wide, so the starting point is never cut. "since
+  report" (a newer `reported_at`) comes with step 3's `report --task`.
+- **A closed pop that owns open requests is no longer silent (board-drift step 1, spec §6).** The
+  dispatcher keeps such a pop (its board tasks still owe work), as before, but now tells master once per
+  episode, woken: "<role> has no terminal and owns open requests: <task (state)>, …. Bring it back:
+  agentbus --project <p> pop <role> --resume <session>" (the session `{p}:resume` holds; without one,
+  plain `pop <role>`). It sends it through `FencedCmdOnce` under the `{p}:quota` mark
+  `popstranded:<role>` (episode = the pop's snapshot time), only when the pop is closed (no terminal,
+  process gone), and not when a read failed. While master cannot act (held by its limit or login, or
+  its own tab blocked) it waits, as pop-done's notice does, and the mark stays unset. The dispatcher still never relaunches a pop (Q4).
 - **busmon's sparklines follow `display.graphs` (braille-sparklines, 2026-11-18).** The Tokens page's
   7-day column is drawn in `block` (eight blocks), `braille` (two days per cell, 4 levels, filled; padded
   to 7 cells) or `ascii` (`_.-:=+*#`); `auto`, the default, is `ascii` when the locale (`LC_ALL`, then
   `LC_CTYPE`, then `LANG`) does not name UTF-8, else `block`, and never braille. Env
   `AGENT_BUS_BUSMON_GRAPHS`; set on the `C` page, applied from the next frame. Any non-zero day lights at
   least the lowest step (the bottom dot in braille). Gauges and bars keep their blocks in every style.
+- **The broker's ACL users, part 3 (broker-hardening step 4b): rotation, status, purge.**
+  - **`./setup.sh rotate-redis-password` with `broker.acl` on** rotates each ACL user instead of the
+    default user's `requirepass`:
+    - as `admin` (from its password file), each user in turn: the new password file first (the
+      previous kept as `.prev`), then `ACL SETUSER <user> resetpass ><new>`, then a fresh login as
+      that user, then `ACL SAVE`, so `users.acl` in the volume holds each new hash as soon as it
+      is set; `admin` last; no recreate is needed;
+    - ping's new password copied into the volume (`/data/ping.pass`) for the healthcheck;
+    - the running project services restarted.
+    - **A user the broker refuses stops it:** that user and the ones after keep their passwords,
+      the ones before stay rotated and are saved. A failed `ACL SAVE` stops it at that user and
+      says to run it again before the broker restarts.
+    - Refused while `REDIS_URL`, `REDIS_PASSWORD` or the `broker.acl` variable is exported;
+      admin's file that does not log in changes nothing.
+  - **`./setup.sh status`** shows `broker.acl` beside whether the broker's volume holds `users.acl`,
+    and warns when they disagree (either way the clients are locked out). A stopped broker is not
+    probed.
+  - **`./setup.sh uninstall --purge`** sets `broker.acl` back to `off` once the volume is removed: a
+    new broker has no `users.acl`. A plain stop keeps both.
+- **`./setup.sh acl on|off` (broker-hardening step 4b, part 2): the person's act**, refused from an
+  agent's environment or process tree before any password file is read.
+  - **On:**
+    - a new password file per user, `~/.config/agentbus/redis-<user>.env` (0600);
+    - `users.acl` (passwords hashed, `user default off` last) and the healthcheck's `ping.pass` put
+      in the broker's data volume;
+    - the broker recreated, proved by an `admin` login with the default user refused;
+    - then `broker.acl=on` in `config.toml`, and the running project services restarted.
+    - A broker that does not take its users is put back: files removed, recreated, setting left off.
+  - **The compose file switches on the file:** with `/data/users.acl` present it loads it instead of
+    `requirepass`, and the healthcheck logs in as `ping`; `docker compose up` by hand keeps that.
+  - **Off:** removes both files from the volume (a one-off `compose run`, so it works on a broker
+    restarting on a file it refuses: `off` needs no running broker), recreates the broker, proves
+    `redis.env`'s password, then sets `broker.acl=off`. The user password files stay; they are
+    rewritten at the next `on`.
+  - **On is refused while the broker's ACL is live** (it would replace the files its users log in with): to remake the users, `acl off` then `acl on`.
+  - **Refused while** `REDIS_URL`, `REDIS_PASSWORD` or `AGENT_BUS_BROKER_ACL` is exported (each wins over the files).
+  - **`rotate-redis-password` with ACL on, `setup status`, `uninstall --purge`:** see
+    `broker-acl-rotate.md` (part 3).
 - **The broker user per process (broker-hardening step 4b, part 1; off by default, nothing changes yet).**
   - **The setting:** `broker.acl` (`off` or `on`).
   - **With it on,** each process logs in as its role's user, with the password of
@@ -1735,8 +1802,33 @@ change adds its own fragment there, never an edit here; the newest notes are in 
       registered agent other than master, `agent` whatever it claims; master's as `master`; the
       person's as `busmon`. A process whose ancestry cannot be read gets `agent`.
   - **A missing password file is an error,** never the default user.
-  - **Not yet:** `./setup.sh acl on|off` creates the users and the files (part 2), and the rotation
-    per user (part 3). Until then, leave `broker.acl` off.
+  - **Turn it on with `./setup.sh acl on`** (part 2), never by editing `broker.acl` by hand: the
+    users and their files come from there. **Not yet:** the rotation per user (part 3).
+- **Backups hold the broker's snapshot, `broker.rdb`** (broker-hardening step 5). After the logical dump,
+  `agentbus backup` (and the schedule while `broker.acl` is off) runs `BGSAVE`, waits (2 min at most) for that save to finish
+  `ok`, then copies only the RDB it completed: from the container (`<runtime> cp agent-bus-redis:/data/<dbfilename> -`,
+  `broker.runtime`) or, for a native broker, the file itself. It holds the keys with a TTL that the
+  logical dump skips. The AOF files are never copied. **The copy must be the connected broker's:** before
+  the save, a random marker is written to it under its own key (`agentbus:backup:snapshot-mark:<marker>`,
+  created only if absent, 10 min TTL, deleted after by that run alone: an existing value is never
+  overwritten or removed, and no snapshot is taken then),
+  and a copied file that does not hold it is left out (`REDIS_URL` naming another broker than the local
+  container, or another broker's file at the same path); a restored broker holds that key until its TTL
+  ends. A save that is refused, fails or does not finish, a data directory not on this host, a file
+  older than the save asked for, or one without the marker leaves `broker.rdb` out,
+  with the reason in the run's output and the manifest's `left_out`; the archive is then logical only.
+  - **Restoring it is manual** (the logical restore stays the everyday one):
+    1. stop the broker (`<runtime> stop agent-bus-redis`);
+    2. in its data volume, remove the AOF directory (`appendonlydir`) and the old RDB, **keep `users.acl`**
+       (a broker with `aclfile` set and the file missing does not start, and without it every user is
+       gone), and put `broker.rdb` in as `<dbfilename>` (`dump.rdb`);
+    3. start it once with `--appendonly no`, so it loads the RDB rather than an AOF;
+    4. run `CONFIG SET appendonly yes` (as `admin`), which writes a fresh AOF from memory;
+    5. restart it with its normal config (`./setup.sh install`, or `<runtime> compose up -d redis`).
+  - **With `broker.acl` on, only `admin` takes it:** the scheduled backup runs in the dispatch service as
+    the `dispatcher` user, which may neither `BGSAVE` nor write the marker, so its archives are logical
+    only and say why (NOPERM, "run agentbus backup by hand"); `agentbus backup` by hand connects as
+    `admin` and takes the snapshot.
 - **The broker's durability is stated, and its access has a stated limit (broker-hardening step 1).**
   - **Durability:** `docker-compose.yml` gives the broker its persistence in the config on stdin,
     not on the argv and not left to Redis's defaults: `appendonly yes`, `appendfsync everysec` (a
@@ -1797,7 +1889,42 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   6 non-blank lines, read live from the holder while the page is open; a line that looks like a
   credential is hidden. The row no longer carries the `prompt` flag or the holder-event
   `blocked` flag: the state column says it (agent-screen-blocked §3, step 3a).
+- **busmon's flags, the person's corrections (busmon-cli-flags items 1, 4, 5).** `-l`'s MASTER is the
+  registered `master` agent's declared state (`bus.ProjectSummary.MasterState`, the agent named `bus.ACLMaster`), `-`
+  without one; the pilot lease (`Master`) is no longer shown there. `--url` (`-u`) sets `REDIS_URL` before
+  any connection (`applyURL`), so a unix socket or an ACL user reaches every path, and a switched busmon
+  inherits it without the URL in its argv (`--url` is a one-shot in `switchArgv`); `--host` beside a URL,
+  given or in `REDIS_URL`, exits 2. The picker is `--new` (`-k`); `--pick` still parses, unlisted.
+  With `broker.acl` on, busmon still logs in as its own ACL user (`bus.ConnectAsContext`): a URL's
+  user and password are replaced, so `--url` names the broker's address there, never another user.
 - **`busmon --delete` keeps the Projects page's rules** (busmon-cli-flags, item 2): a project that is not asleep is refused with the page's reason (Z, x, or `agentbus down` first), `--yes` included, and an unknown counts as live; the hosts where its units remain are named before the question and after the delete; a backup (`agentbus backup --project <p>`, given `--host` as `REDIS_HOST` and refused if its environment would reach another broker than the delete's) is taken just before the delete, and a failed backup deletes nothing. The archive it makes is never removed by `projects.delete_backups`. An agent's process tree is still refused (`refuseDestructive`).
+- **busmon's Memory page writes, the person's own acts (person-memory step 4, part b).** `a` opens the
+  compose window: its first line `topic type importance` (prefilled with the selected topic and
+  `preference standard`; `keep-both` or `supersedes=<id>` after it for a second decision on a topic),
+  the rest the person's words, whitespace collapsed to one line; Ctrl+S remembers them with busmon as
+  the source (`said: <date> by <you> from busmon`). A refusal (a topic that already holds a decision,
+  a credential shape, a bad filing) opens the window again with the text kept. `x` on a topic's page
+  forgets the selected observation after `y` (any other key keeps it; git history keeps the text
+  until `agentbus mem person purge`). `e` hands the terminal to `$VISUAL`, else `$EDITOR`, else `vi`
+  on the topic's file; on its return the whole memory is checked (`Store.CommitEdit`): clean, the file
+  is committed as `edit <topic> (by hand, from busmon)`; not, nothing is committed, the file stays as
+  saved and the bottom line names the first finding. All three are refused in an agent's environment
+  (`AGENT_BUS_AGENT` or a registered agent among busmon's ancestors) and on a machine that is not the
+  memory's host, and write nothing.
+- **busmon's Memory page, F7 (person-memory step 4, part a: reading).** The person's facts kept on this
+  host (`personmem`, `${XDG_DATA_HOME}/agentbus/memory/person`), a topic a row with its kind, its count
+  and its newest quote; Enter opens a topic (each observation's type, importance, id, quote, the
+  question it answers, what it supersedes, who said it). A file that does not parse is listed as such.
+  The store is read when the page opens. On a machine that is not the host (`memoryHere`: the host the
+  project's services report, else the one holding the project's checkout), the page says where the
+  memory lives and reads nothing. Adding (`a`), forgetting (`x`) and editing (`e`) came with part b.
+- **busmon shows which project it opened (busmon-project-badge, part 1).** For its first 3 s
+  (`projectBadgeFor`, from the first poll) the project's name in the header is a pill in the accent
+  colour (reverse video under NO_COLOR, the pill's own fallback). When neither `-p` nor
+  `AGENT_BUS_PROJECT` named the project (busmon took the last one opened on this broker), the bottom
+  line says `last project opened: <p> (no -p) · M to switch` once. A switch from the Projects page
+  re-executes busmon with `--project`, so it gets the badge and no notice. Only main sets
+  `shellConfig.badge`: tests and goldens start without it. Part 2 (a per-project accent colour) follows.
 - **A report names its addressees, and a reply goes to its sender (busmon-reply-target).**
   `agentbus report --to <name>` now records the addressees on the report entry itself (field `to`,
   additive; older reports have none), so busmon's page shows the addressee (the person, or an agent), not "broadcast". In
@@ -1814,6 +1941,14 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   busmon reads the setting on its own machine and the dispatcher on its own (its env file): with
   different values there, busmon says stuck at another time than the desktop ring. An agent being
   swapped still reads stuck in busmon, since its screen is what it is; only the ring waits.
+- **busmon, three fixes for the person** (busmon-three-fixes):
+  - `/resume` on a project neither paused nor suspended asks nothing: it says there is nothing to
+    resume (no red "Run agentbus … resume --yes? y / n"). An unreadable pause state still asks.
+  - `G` (live) on Activity with auto-scroll off says so and names the setting (`display.follow`, `/follow`
+    or Shift+C turn it on); it still jumps once to the newest lines.
+  - The Requests view (`r`, `/requests`) is titled "Requests", with the tab it came from as the way back
+    ("esc back to Work"), instead of the tab bar; in the narrow layout the tab row is not drawn under it,
+    and a click where a tab used to be switches nothing.
 - **A failed CI check goes back to its author, at most `ci.max_handoffs` times, then to the person (ci-loop,
   spec `2026-11-19-ci-loop-design.md`).** GitHub with `gh` only: the merge-queue pass's one `gh pr list` also
   reads `statusCheckRollup`; GitLab, Bitbucket and the local forge get no loop until they have a PR reader.
@@ -1868,6 +2003,37 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   menu without a question mark still reads unknown. F12, attach's default prefix, is now recorded
   free for Codex (probe `agentbus term record codex f12-at-input`, codex-cli 0.169.0), so attach to
   a Codex agent no longer needs `--prefix`.
+- **A conflicting approved PR goes back to its owner (conflict-owner §4, build B).** After the
+  conflict check, each pass hands every conflict git confirmed to its owner, once per episode (the PR,
+  or the branch in the git fallback, and its head; a base move under the same head is the same
+  episode and sends nothing), with master's copy (wake=no): "Hand-off k of N". `{p}:conflicts` holds
+  one field per PR (`pr:<n>`) or branch (`br:<digest>`), `last|count|first|escalated`, written by
+  `FencedConflictTrack` under the dispatch lease (`first` from Redis `TIME`); every directive is a
+  `FencedCmdOnce` with its mark in `{p}:quota` (`conflict:`, `conflict-copy:`, `conflict-esc:`).
+  Past `conflict.max_handoffs` (default 3; 0 sends the first to master) or `conflict.escalate_after`
+  (default 2h, from `first`, the owner held or not; 0 no time bound) master gets the escalation,
+  woken, and the owner nothing more until the field goes. An owner `blocked` or `waiting` gets
+  nothing and is not counted (the age still runs). The field goes, with its marks, when an approved
+  head of the PR is clean or the PR is closed or merged (git fallback: the branch gone, or its tip
+  in the base, approved or not: a reset or fast-forward resolves it; a read that fails keeps it); a fix
+  in review or turned draft keeps it, so three failed fixes reach the cap. Only a
+  pass that read everything forgets; a failed one touches nothing. What could not be written joins
+  `conflict_check` ("conflicts: …"). The hand-off says rebase, resolve, test and have the new head
+  reviewed: it is delivered as usual (only master and docs push here); it names `origin/<base>`, or
+  the local `<base>` in local mode.
+- **The merge queue's conflict check (conflict-owner §2, build A: detection, nothing sent yet).** Each
+  pass judges the approved heads and the PRs the forge flags with `git merge-tree --write-tree` against
+  the base tip (`mergequeue.CheckConflicts`), oldest approved first. It runs in an empty bare repository
+  made for the pass in the project's state directory and removed after, with only `PATH` and an
+  isolated `HOME`, no global or system config or attributes, and `--attr-source=<empty tree>`, its
+  objects through `objects/info/alternates`: no merge driver, hook or attribute of the repository
+  runs, and no ref or `FETCH_HEAD` is written (absent heads are fetched once with `--refmap=`; local
+  mode fetches nothing). git older than 2.42 is "too old", nothing judged. A confirmed conflict
+  leaves the items for `Conflicting` with `branch`, `head`, `base_tip` and `files` (the first 10);
+  a forge flag git finds clean is an item again; what git could not judge (absent head, time) stays as
+  before and is named in the record's `conflict_check`, also printed by `agentbus merge-queue`.
+  `mergequeue.ConflictOwner` (the board's claim or request branch, else a `<role>/` prefix that is a
+  registered agent, else master) names the owner the hand-off goes to (build B).
 - **The context alert escalates (context-escalation A, spec 2026-11-15-context-escalation-design.md §2, §3.1-3.3,
   §3.5, §5).** The alert's directive keeps its time (`FencedCmdOnceAt`, `context:<agent>:at`). An alerted agent
   with no hand-off standing (`bus.Handoff.VoidFor` against `{p}:agents`: same pid and start, same proved
@@ -2364,7 +2530,22 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   A value that is not an ISO 639-1 code shows as `invalid` in `agentbus config`, warned
   `master writes English`, and resolves to `en`. A change reaches
   master at its next boot.
+- **`agentbus mem person` (person-memory step 3).** The person's memory on this host, no project:
+  `remember` (reads the quoted entry from the broker `bus.Connect` reaches, then the project's
+  history archive), `recall [--json]`, `show`, `list`, `check` (exit 1 on a finding), `forget <id or
+  topic>` and `purge [--yes]`. `forget` and `purge` are the person's: `agentcaller.Refuse` turns down
+  `AGENT_BUS_AGENT` and an agent's process tree. `purge` names the commits that go and wants a typed
+  `yes`. Forgetting an observation also clears any `supersedes` that pointed at it, in the same commit;
+  a topic that does not parse can still be forgotten. The store's lock waits only as long as the
+  caller's context (`personmem.Store.lock`), and `.gitignore` (`.lock`, `*.tmp`) goes in with the first
+  commit.
 - **`typed=yes` marks what the person typed** (person-memory step 1, spec `2026-11-21-person-memory-design` §4.3.1): busmon's directives and broadcasts (`Bus.TypedCmd`, `TypedNotify`) and an ask's answer, which also carries `said`, the chosen label or the free text alone. `human=yes` alone means "written in the person's name" (resume-all's summary, busmon's close, the suspend's resume directive, the idea move line, a person's gate close, `PersonNotice`) and is never a source for the person's memory. The subscribe JSON says `"typed": true`, additively within v1. Entries written before this carry `human=yes` only.
+- **`person.name` (env `AGENT_BUS_PERSON_NAME`, default empty, group Identity beside `person.language`)**
+  is the person's own name, a bus name. busmon writes as `--as`, then `AGENT_BUS_HUMAN` / `identity.as`,
+  then `person.name`, and only then `pilot` (busmon-cli-flags item 3, the person's option A; `pilot`
+  also names the lease). An invalid `person.name` is skipped, never a refusal to start. The settings
+  page shows it as "Your name"; `identity.as` became "Your name on the bus". busmon is its
+  only reader.
 - **A plan grouped by chantier (plan-chantier).** `docs/plans/<name>.json` may list `groups` once (`{id, title}`, at
   most 12, the id a `bus.ValidName`, the title one line of 1 to 40 characters) and give a task `group`: each named
   group is listed, and a listed group with no task is refused (a typo would hide it). busmon's Plan board then
@@ -2395,12 +2576,26 @@ change adds its own fragment there, never an edit here; the newest notes are in 
     blocked. `‖` marks a task waiting on another.
   - **The strip:** the selected task's detail is a strip under a rule at the bottom (`planStrip`).
     It shows at every tier but the narrow one: in the tab through `listState.SetBottom`, and in the
-    drawer through `pageRows`.
-  - **Sizing:** each frame shrinks to its content.
-    - The tab's free height goes to Activity under it, shown but not focusable (`fitPlanTab`, the
-      layout's `Below`).
+    drawer through `pageRows`. Its last line holds the keys, said once (`planStripKeys`): the tab's
+    frame has no footer then, and with a fold selected the strip keeps its rule and its keys.
+  - **Sizing:**
+    - The tab takes the lower zone's full height (plan-tab-r3): no Activity under it. What arrives
+      in Activity meanwhile is counted on its tab, `1 Activity · 3 new` (`tabNotes`, from the feed's
+      `seq` when Activity was last drawn, `activitySeen`: never while the idle view or a page
+      covers it, `activityOnScreen`); a too narrow bar drops the note first.
+      One blank row sits between the tab bar and the header line.
     - The drawer's free height goes to the active tab under it (`fitDrawer`, the layout's
       `Drawer`), but not when that tab is the Plan.
+  - **Releases column (plan-tab-r3 item 5):** from 130 columns the Plan tab has a column on its
+    right (`withReleases`, the layout's `Side`, a quarter of the zone between 32 and 44 cells,
+    after the Plan in the Tab order); `V` shows it below 130 and hides it from 130. Its rows: next
+    with the decided ideas, the loaded plan highlighted, then the release tags newest first with
+    their date and their plan's planned task count (a plan file holds no completion, so never
+    "done"). Enter opens a release's plan read only (`ovRelease`). The source is the project's
+    checkout on this machine (`projectCheckout`): `git for-each-ref` on `vX.Y.Z` tags and
+    `docs/plans/*.json` decoded leniently, read every 5 minutes at the requests' cadence
+    (`readReleasesDue`). A tag `vX.Y.0` closes plan `vX.Y`; a patch closes none. A busmon with no
+    checkout here lists next and the current plan only.
   - **Lists:** a `ListItem` with `Wide` is drawn from the gutter. The tab removes a task row's mark
     with `dropCells` (two cells), because `FitLine` can merge the mark with a blank glyph.
 - **The plan's writes are master's (broker-hardening step 4, ACL answer b).**
@@ -2428,6 +2623,20 @@ change adds its own fragment there, never an edit here; the newest notes are in 
     config.toml's notify.*), the palette's follow, attach and the Projects page's delete. `S`,
     its y/n and navigation still work. It lifts as soon as dispatch runs.
   - **`o` alone still starts nothing.**
+- **`agentbus update` removes the old release trees nothing needs** (quiet-update-auto spec §5, the first
+  build step). After a successful update, right after the old snapshots, each
+  `${XDG_DATA_HOME:-~/.local/share}/agentbus/src/vX.Y.Z` that its clone lists as a worktree is removed
+  with `git worktree remove` (never `--force`) unless it is the installed version, a kept snapshot names
+  it (a rollback needs it), a holder build of it is still on disk (a unit or a binary copy), or it has
+  changes (yours: kept and named). The old holders that neither run nor answer are collected first, so a
+  forgotten one does not pin its tree. An unreadable fact keeps every tree, a snapshots directory or manifest that cannot be read or decoded included (an older format's snapshot still pins its trees: its own binary restores it). Nothing else under `src` is
+  touched. `agentbus update --list` shows each tree and why it is kept.
+- **The automatic update's settings** (quiet-update-auto §6, §7, the second build step; the person's answers):
+  `updates.auto` (`notify` by default, or `install`), `updates.window` (`03:00-05:00`, local time, may
+  cross midnight) and `updates.max_wait` (7 days), the host's, no env variable. `auto` and `max_wait` are
+  set in `config.toml` alone (`agentbus config set` refuses them, busmon shows them); the window is also
+  editable in busmon's Shift+C, as the person. **Nothing reads them yet:** the updater and
+  `agentbus update --auto` come in the next steps, and busmon's help and the registry say so.
 - **A reset is written with its day (quota settings step 1, 2026-11-16).** Every reset and time to come is written
   by `quota.ResetLabel`: `today 13:59`, `tomorrow 13:59`, `Wed 18 Nov 13:59` (the year only when it is not this
   one), in the dispatcher's quota messages (master's warning, an agent's, the drain's announcement), busmon's
@@ -2508,6 +2717,12 @@ change adds its own fragment there, never an edit here; the newest notes are in 
 - **busmon no longer depends on tcell** (`remove-tcell`): the theme keeps its colours in its own
   `Color`/`Style` (`cmd/busmon/color.go`, tcell's semantics); the goldens are unchanged. `go.mod`
   drops `gdamore/tcell`, `gdamore/encoding` and `golang.org/x/text`.
+- **`report --needs answer|read` (triage-dedupe step 1).** A report says it needs the person with the
+  field `needs` (`bus.NeedsAnswer`, `bus.NeedsRead`, `Bus.ReportNeeds`); each `--to` notice carries it too
+  (`Bus.ReportNotice`), so `subscribe`'s JSON shows `"needs"` (additive in v1) and `agentbus history` prints
+  `report (needs answer)`. Any other value is refused before anything is written, and a value a hand
+  write put on an entry reads as none. Nothing in busmon reads it yet: step 2 makes a report a triage
+  item only with `needs`.
 - **A request nobody can accept can still be closed.** A tracked request whose body cmd retention
   removed (`availability: missing`), or that expired before anyone accepted it, refuses `accept`,
   and `done` needed an accept, so it stayed open forever (concierge-memory-opinion, 98 h). Its
@@ -2596,6 +2811,33 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   (`AGENT_BUS_AGENT`) or under a registered agent; the `agentbus service restart` command itself still accepts every
   caller (the sentinel's repair). Refused too: a service on another host (`restart it on <host>`), one not installed
   here, a run already going, and the Redis card (setup's job). Holders stay read-only.
+- **`agentbus deliver --dry-run` prints the change's size class** (single-approval step 1, spec
+  2026-11-21-single-approval-design §3.2): from `git diff --no-renames --numstat -z` against the
+  merge-base with the base, `size: small: N lines, M files`, `small (docs only)` (every path
+  `docs/**` or `*.md`; within the same limits, the person's answer to §6 Q2), or `not small (<reason>)`: over the project's `small_max_lines` or `small_max_files` (150, 5), a binary
+  or unreadable row, or a never-small path (`bus/**`, setup, broker and ACL files, secrets, CI,
+  `skills/**`, and the gate itself: `deliver.go`, the classifier `deliversmall.go`, the rule `deliversingle.go`, its glob matcher
+  in `filepick/`, `mergequeue/**`, `config/**`). The single-approval rule reads it
+  (`single-approval-2.md`).
+- **One approval for a small change, per project** (single-approval step 2, spec
+  2026-11-21-single-approval-design §3.1, §4; the person's §6 answers).
+  - **The settings**, in `config.toml`'s `[project.<name>.delivery]` (then `[delivery]`, then the
+    default; never an env variable): `single_approval` (`off`, or `small`), `small_max_lines` (150),
+    `small_max_files` (5) and `same_provider_ok` (`off`, `docs`, `small`) are the person's:
+    `agentbus config set` refuses them. `same_provider_ok` is read from the project's table only (a
+    `[delivery]` line is ignored with a warning). `never_small` (globs added to deliver's defaults) only
+    narrows the gate, so agents may set it.
+  - **With `single_approval = "small"`,** `deliver` accepts one current approval on the head when:
+    - no reviewer's latest verdict on the subject is a reject (`reject` or `changes`), on any head:
+      an objection is answered by the one who raised it (§6 Q8);
+    - the change is small (`size:` in `--dry-run`);
+    - the approver is of another provider than the author (an empty provider is never "another"), or
+      of the same one and the change is in `same_provider_ok`'s class: `docs` (every path `docs/**`
+      or `*.md`) or `small`.
+  - **The PR body and the bus** carry `single approval (small: N lines, M files; approved by R)`, or
+    `single approval, same provider (small docs: …)`; `--dry-run` prints `approval: …`.
+  - **Refusals** say which rule failed. Above the limits, two approvals or the person's yes with
+    `--single-approval "<the person's yes, ask <id>>"`, as before. With two approvals nothing is read.
 - **A stuck screen rings the desktop once per episode** (`dispatch.stuck_after`,
   `AGENT_BUS_STUCK_AFTER` in whole seconds; default 3 minutes, `0` off). A screen counts as
   stuck when it is settled, its client's signature reads it as neither ready, nor busy, nor a
@@ -2607,6 +2849,34 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   once, one ring each. The observation gains `screen_since`, the time of the first reading of
   the current screen; no screen text is written (agent-screen-blocked §3).
 - **The Tokens page (U) reads its 7-day column per row** (tokens-layout): each project's sparkline is scaled to its own busiest day, so its shape shows, while the bar beside it compares projects; the right-hand number is the seven days' in+out (`7d total`), and the in/out columns are today's. The sparkline is 14 cells of daily data: `{p}:tokens` keeps one row per day, so a 6-hour resolution would need a bus change, which waits for the person. Bar rows are one line with a blank line between them, and an account window's name (`7d-fable`) is shown in full.
+- **For you holds one item per target (triage-dedupe step 2, `foldLines` in `cmd/busmon/tea_foryou.go`).**
+  A merge item is keyed by its PR (`merge:pr:<n>`, else `merge:branch:<b>`), so a rebase keeps it; its
+  page still opens by head (`attentionItem.Head`). A line naming exactly one live target (`#<n>`,
+  `PR <n>`, a merge item's branch, an ask's id) attaches to that item (its mark, and "needs your answer"
+  or "to read" when the line is a `--needs` report); a waiting agent's own newest report folds into its
+  wait row. A report is an item only with `--needs`: naming no single target, its own `report:<id>`
+  (rank `rankReport`, verb answer or read), replaced by the same sender's newer one naming the same
+  targets; `answer` stays until the person writes to its sender, `read` until it is read. A plain
+  report is Activity only. The header's unread badge counts Activity's unread marks
+  (`activityUnread`), apart from For you's items.
+- **An item's page ends with its Context (triage-dedupe step 3, spec §5).** The page of a For you
+  item (a merge, an ask, a gate's thread, a waiting agent, a `--needs` report) lists, under its own
+  fields, the messages attached to it: a report, directive or notice naming it (#<n>, PR <n>, its
+  branch, the ask's id), a
+  waiting agent's newest report, or a reply on its thread (its ref is the ask, the gate's challenge
+  or the report). Newest first, at most 3, each "<n>  <sender>  <age>  <headline>"; a `--needs`
+  report folded into the item comes first and says "needs your answer" or "for you to read"; more
+  are counted ("n older in Activity"). `1`-`3` open one in full, and a click does; on an ask's page
+  the digits choose an option, so only a click opens them. A page with nothing attached has no
+  section. An agent page that is no waiting item's shows none. A page opened from its item keeps it, so
+  a `--needs read` report read by opening it still shows its replies.
+- **`T` opens a summary of the actions (triage-dedupe step 4, spec §4).** "Triage: N actions", what the
+  walk did (answered, sent, read), one line per item in For you's order (as its row: kind, who, text,
+  age), then the next plan task. ↑↓ choose, Enter opens the item's page above the summary, the walk at
+  that item: `n`/`p` move through the items, a terminal act moves on by itself. Esc on an item's page
+  returns to the summary; Esc on the summary ends triage. After the last item, or when the item on
+  screen goes (its ask answered elsewhere), the walk returns to the summary, which replaces the end page
+  (no skipped count: what still waits is listed). Enter on the plan line opens that task.
 - **A project folder without Git starts without missions (up-git-repo, 2026-11-16).** A project needs no forge and no
   repository (the person's answer). Only the missions service (the conductor) needs Git, and it used to wait for
   one out of sight (`no Git repository in <dir>: run git init there`, seen only in its state). `agentbus up` (and
@@ -2689,3 +2959,15 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   they are started again. The health check `screen-unknown` (For you, `agentbus attach
   <agent>`) names each agent declared idle whose screen the dispatcher has read `unknown` for 10 minutes
   (`health.ScreenUnknownAfter`), among the clients with a ready signature only: such an agent cannot be woken.
+- **`board.wip_limit`: the work-in-progress limit's setting** (wip-limit r2 §3.3; the person's answers):
+  requests an agent may hold accepted when it starts a new one, default 2, 0 no limit; per project
+  (`[project.<name>.board]` over `[board]`), no env variable. **The person's alone, from busmon's
+  Shift+C or `config.toml`:** a new `PersonEdit` flag makes `agentbus config set` and `unset` refuse it
+  ("set it in busmon (Shift+C) or config.toml"); busmon's settings page writes through
+  `config.SetAsPerson` / `UnsetAsPerson`, which no other package may call (a test scans for them).
+  `PersonOnly` keys (`backup.after_*`) stay read-only in busmon. **Enforced by `agentbus request accept`:** a first
+  accept is refused while the agent holds that many requests `accepted` (naming them); a resume, a
+  `review` or `blocked` one, and the person's high priority never count against it. `agentbus request
+  review <task> [--branch <b>] [<note>]` marks a step in review. `request send` to an agent at its
+  limit is queued with one line on stderr naming what it holds and the agents under their limit. The
+  row's detail text in Shift+C comes in step 3.

@@ -6,6 +6,25 @@ release exists.
 
 ## Unreleased
 
+## v0.34.0 — the broker's users can be switched on, one approval for a small change, a triage walk, conflicts go back to their owner, and a limit on work in flight
+
+- Nothing turns on by itself. `./setup.sh acl on|off` (with rotation, status and a `broker.rdb`
+  snapshot in backups) is the person's act and `broker.acl` stays `off`; `single_approval` defaults to
+  `off`; `board.wip_limit` (default 2, the person's alone) limits what an agent holds accepted.
+- `deliver --dry-run` prints a change's size class; with `single_approval = "small"` one approval
+  passes a small change from another provider (or a docs-only one, per `same_provider_ok`).
+- Triage: `report --needs answer|read`, one For you item per target, a Context on each item's page, and
+  `T` opens a summary of the walk. A conflicting approved PR goes back to its owner, then to master
+  past `conflict.max_handoffs` or `conflict.escalate_after`.
+- busmon: the Plan tab's Releases column, the Memory page (F7, add, forget, edit), a project badge,
+  `person.name`, `--url`; the Board's alerts name their starting point and a stranded pop tells master.
+  `agentbus --help` in gh's layout; `dispatch.background_ignore`; `agentbus mem person`; `update` prunes
+  old release trees.
+- Not in it: the automatic update (`updates.auto`, `updates.window`, `updates.max_wait` exist and nothing
+  reads them), and #760, busmon's quit confirmation, still open.
+
+[Notes](docs/releases/v0.34.0.md)
+
 ## v0.33.0 — busmon for several projects, ideas triage, broker hardening (off by default), and the first steps of person memory
 
 - Nothing in it changes the live broker. Durability (`appendfsync everysec`, the RDB schedule) is
