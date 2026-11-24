@@ -42,12 +42,15 @@ const (
 	EventHolderDrained   = "holder-drained"
 	EventHolderGC        = "holder-gc"
 	EventHostOp          = "host-op" // a relayed host operation: accepted, then its outcome (§4.2)
+	// EventRequestMerged: a review request's branch merged; the dispatcher
+	// closed it or sent its step back (board-drift §3.3), no reply written.
+	EventRequestMerged = "request-merged"
 )
 
 var eventKinds = map[string]bool{
 	EventWakeTyped: true, EventWakeRefused: true, EventWakeNotLanded: true, EventBlocked: true, EventUnblocked: true,
 	EventDraftWaiting: true, EventBackgroundSkip: true, EventAttach: true, EventDetach: true, EventRelaunch: true,
-	EventHolderStarted: true, EventHolderRestarted: true, EventHolderDraining: true, EventHolderDrained: true, EventHolderGC: true, EventHostOp: true,
+	EventHolderStarted: true, EventHolderRestarted: true, EventHolderDraining: true, EventHolderDrained: true, EventHolderGC: true, EventHostOp: true, EventRequestMerged: true,
 }
 
 // eventsMaxLen caps the stream (XADD MAXLEN ~).

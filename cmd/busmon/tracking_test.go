@@ -127,6 +127,9 @@ func TestNextActionStatesRecordedFactsOnly(t *testing.T) {
 		{"accepted", request{State: "accepted", Target: "coder", Accepted: now.Add(-8 * time.Minute)}, "accepted 8m ago"},
 		{"blocked", request{State: "blocked", Target: "coder", BlockedReason: "waiting on an API key"}, "waiting on an API key"},
 		{"done", request{State: "done", Responded: now.Add(-time.Hour), ResponseID: "9-0"}, "answered 1h ago"},
+		// board-drift §3.3: closed by its branch's merge, with no reply.
+		{"closed on merge", request{State: "done", Responded: now.Add(-2 * time.Hour), MergedHead: "1234567890abcdef1234567890abcdef12345678", MergedBase: "dev"},
+			"closed on merge 1234567 into dev 2h ago"},
 	}
 	for _, tc := range cases {
 		got, _ := nextAction(tc.r, now)

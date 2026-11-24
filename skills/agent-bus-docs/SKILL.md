@@ -65,7 +65,8 @@ merges. You never merge, never push `main`, never touch code outside the docs.
 Accept it when you start (`agentbus request accept <task>`). Once the PR is challenged, mark it
 `agentbus request review <task> --branch <b>`: it then does not count against the project's
 work-in-progress limit (`board.wip_limit`). Accept it again for a reject, and `request done` when
-it is delivered.
+it is delivered. Put a delivered branch in review from its checkout; its merge closes it
+("closed on merge", board-drift), or with `--more` sends it back for the next step.
 
 ## Shared memory
 

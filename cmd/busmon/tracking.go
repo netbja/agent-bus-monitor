@@ -43,6 +43,9 @@ type request struct {
 	DuplicatePossible bool
 	BlockedReason     string
 	ResponseID        string
+	// MergedHead and MergedBase: the dispatcher closed it, its branch's head
+	// delivered into the base (board-drift §3.3), with no reply.
+	MergedHead, MergedBase string
 
 	Priority   string    // high | low | "" normal (request-priority: set only by the person)
 	PriorityBy string    // who set it
@@ -78,6 +81,9 @@ func boardRequests(m map[string]bus.BoardEntry) []request {
 			r.BlockedReason, r.ResponseID = q.BlockedReason, q.ResponseID
 			r.Priority, r.PriorityBy, r.PriorityAt = q.Priority, q.PriorityBy, msTime(q.PriorityAt)
 			r.ClosedUnaccepted = q.ClosedUnaccepted
+			if m := q.ClosedOnMerge; m != nil {
+				r.MergedHead, r.MergedBase = m.Head, m.Base
+			}
 		}
 		out = append(out, r)
 	}
@@ -174,6 +180,9 @@ func nextAction(r request, now time.Time) (text, tone string) {
 	case "done":
 		if r.ClosedUnaccepted != "" {
 			return fmt.Sprintf("closed unaccepted: %s; nothing delivered (%s)", r.ClosedUnaccepted, r.ResponseID), "yellow"
+		}
+		if r.MergedHead != "" { // where a reply would be (board-drift §3.3)
+			return fmt.Sprintf("closed on merge %s into %s %s ago", short7(r.MergedHead), r.MergedBase, humanAge(now.Sub(r.Responded))), "green"
 		}
 		if r.Responded.IsZero() {
 			return "marked done, but no response entry was recorded", "yellow"

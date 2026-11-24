@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/forge"
 	"io"
 	"os"
 	"regexp"
@@ -75,12 +76,31 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		return b.AcceptRequestLimit(ctx, args[1], self, wipLimit(b.Project()))
 	case "review":
 		args, branch := extractFlag(args, "--branch")
+		args, commit := extractFlag(args, "--commit")
+		args, more := extractBool(args, "--more")
+		if commit != "" && !commitRE.MatchString(commit) {
+			return fmt.Errorf("request review: --commit wants 7 to 40 lowercase hex digits, got %q", commit)
+		}
 		if len(args) < 2 {
-			return fmt.Errorf("usage: request review <task> [--branch <b>] [<note>]")
+			return fmt.Errorf("usage: request review <task> [--branch <b>] [--commit <sha>] [--more] [<note>]")
 		}
 		// A step or a PR waits on its reviewers: not in flight (wip-limit
-		// §3.2); request accept resumes it. The bus checks the branch.
-		return b.ReviewRequest(ctx, args[1], self, branch, strings.Join(args[2:], " "))
+		// §3.2); request accept resumes it. The bus checks the branch. The
+		// head and the base tip read here let its merge close it
+		// (board-drift §3.2); --more: a step that is not the last (§3.4).
+		o := bus.ReviewOpts{Branch: branch, Note: strings.Join(args[2:], " "), More: more}
+		if dir, err := os.Getwd(); err == nil {
+			base, _, berr := forge.ProjectDeliveryBase(os.Getenv, b.Project())
+			if berr != nil {
+				base = "" // no base anybody chose: nothing recorded, nothing refused
+			}
+			head, rb, err := reviewFacts(reviewGitIn(dir), config.Machine(os.Getenv).String("delivery.forge"), base, branch, commit)
+			if err != nil {
+				return fmt.Errorf("request review: %w", err)
+			}
+			o.Commit, o.ReviewBase = head, rb
+		}
+		return b.ReviewRequestOpts(ctx, args[1], self, o)
 	case "block":
 		if len(args) < 3 {
 			return fmt.Errorf("usage: request block <task> <reason>")

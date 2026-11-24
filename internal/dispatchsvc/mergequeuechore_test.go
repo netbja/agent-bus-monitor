@@ -43,6 +43,9 @@ func mqChore(t *testing.T, origin string) (*mergeQueueChore, *bus.Bus) {
 		localTips: func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
 			return []mergequeue.Tip{{Branch: "feat/request-priority", Head: mqHead}}, "1111111111111111111111111111111111111111", nil
 		},
+		localBranches: func(context.Context, string, []string) ([]mergequeue.Tip, error) {
+			return []mergequeue.Tip{{Branch: "feat/request-priority", Head: mqHead}}, nil
+		},
 		fetchBase: func(context.Context, string, []string, string) error { return nil },
 		inBase: func(context.Context, string, []string, string, []string) (map[string]bool, error) {
 			return map[string]bool{mqHead: false}, nil
