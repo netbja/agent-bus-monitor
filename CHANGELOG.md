@@ -20,9 +20,12 @@ release exists.
 - busmon: the Plan tab's Releases column, the Memory page (F7, add, forget, edit), a project badge,
   `person.name`, `--url`; the Board's alerts name their starting point and a stranded pop tells master.
   `agentbus --help` in gh's layout; `dispatch.background_ignore`; `agentbus mem person`; `update` prunes
-  old release trees.
+  old release trees. `q` asks before busmon quits (`display.confirm_quit`).
+- A review request closes when its branch merges (`request review --branch … [--more]`).
+- Roles start in Claude Code's auto mode (security and infra stay manual), so a worker can stop on a
+  prompt; reviewer-codex runs on Luna with Codex's automatic review.
 - Not in it: the automatic update (`updates.auto`, `updates.window`, `updates.max_wait` exist and nothing
-  reads them), and #760, busmon's quit confirmation, still open.
+  reads them), and #761, each setting saying when a change applies, still open.
 
 [Notes](docs/releases/v0.34.0.md)
 
