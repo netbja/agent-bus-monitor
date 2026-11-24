@@ -34,10 +34,20 @@ func LocalTips(ctx context.Context, dir string, env []string, base string) (tips
 	return splitTips(string(out), "refs/heads/", base)
 }
 
-// splitTips reads "<sha>\t<prefix><branch>" lines.
-func splitTips(out, prefix, base string) ([]Tip, string, error) {
+// LocalBranches are every local branch and its tip, with no base required:
+// a checkout branched from origin/<base> may have no local <base>
+// (board-drift §3.2's local refs, reviewer-codex).
+func LocalBranches(ctx context.Context, dir string, env []string) ([]Tip, error) {
+	out, err := run(ctx, dir, env, "git", "for-each-ref", "--format=%(objectname)\t%(refname)", "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	return parseTips(string(out), "refs/heads/"), nil
+}
+
+// parseTips reads "<sha>\t<prefix><branch>" lines.
+func parseTips(out, prefix string) []Tip {
 	var tips []Tip
-	baseTip := ""
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		sha, ref, ok := strings.Cut(strings.TrimSpace(line), "\t")
 		if !ok {
@@ -47,11 +57,21 @@ func splitTips(out, prefix, base string) ([]Tip, string, error) {
 		if !ok || !bus.ValidHead(sha) {
 			continue
 		}
-		if branch == base {
-			baseTip = sha
+		tips = append(tips, Tip{Branch: cleanText(branch), Head: sha})
+	}
+	return tips
+}
+
+// splitTips reads the lines, the base apart; its tip is required.
+func splitTips(out, prefix, base string) ([]Tip, string, error) {
+	var tips []Tip
+	baseTip := ""
+	for _, t := range parseTips(out, prefix) {
+		if t.Branch == base {
+			baseTip = t.Head
 			continue
 		}
-		tips = append(tips, Tip{Branch: cleanText(branch), Head: sha})
+		tips = append(tips, t)
 	}
 	if baseTip == "" {
 		return nil, "", fmt.Errorf("no branch %s", base)

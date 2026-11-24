@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/mergequeue"
 )
 
@@ -76,6 +77,84 @@ func TestCloseOnMergeRealGit(t *testing.T) {
 		}
 		if want == "done" && (r.ClosedOnMerge == nil || r.ClosedOnMerge.Head != g("rev-parse", "feat/"+task) || r.ClosedOnMerge.Base != "main") {
 			t.Errorf("%s: closed %+v", task, r.ClosedOnMerge)
+		}
+	}
+}
+
+// reviewer-codex: with a remote, a checkout branched from origin/dev may
+// have no local dev. A feature branch squash-merged and deleted on origin is
+// then judged from the local refs all the same: its local tip when it has
+// one (the reviewed commit), else its recorded commit.
+func TestCloseOnMergeNoLocalBase(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid", "LC_ALL=C"}
+	origin, dir := t.TempDir(), t.TempDir()
+	gitAt := func(at string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir, cmd.Env = at, env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	g := func(args ...string) string { t.Helper(); return gitAt(dir, args...) }
+	commitFile := func(name string) string {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		g("add", name)
+		g("commit", "-q", "-m", name)
+		return g("rev-parse", "HEAD")
+	}
+	gitAt(origin, "init", "-q", "--bare", "-b", "dev")
+	g("init", "-q", "-b", "dev")
+	g("remote", "add", "origin", origin)
+	commitFile("base")
+	g("push", "-q", "origin", "dev")
+	reviewBase := g("rev-parse", "dev")
+	heads := map[string]string{}
+	for _, br := range []string{"kept", "gone"} {
+		g("switch", "-q", "-c", "feat/"+br, "dev")
+		heads[br] = commitFile(br)
+		g("switch", "-q", "dev")
+		g("merge", "-q", "--squash", "feat/"+br)
+		g("commit", "-q", "-m", "squash "+br)
+	}
+	g("push", "-q", "origin", "dev")
+	g("switch", "-q", "-c", "work") // no local dev from here on
+	g("branch", "-D", "dev", "feat/gone")
+
+	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
+	ctx := context.Background()
+	reviewed(t, b, "kept", bus.ReviewOpts{Branch: "feat/kept", Commit: heads["kept"], ReviewBase: reviewBase})
+	reviewed(t, b, "gone", bus.ReviewOpts{Branch: "feat/gone", Commit: heads["gone"], ReviewBase: reviewBase})
+	c.dir, c.scratch = dir, t.TempDir()
+	c.environ = func() []string { return env }
+	baseKey, _ := config.Lookup("delivery.base")
+	c.getenv = func(k string) string {
+		if k == baseKey.Env {
+			return "dev"
+		}
+		return ""
+	}
+	c.github = func(context.Context, string, []string, bool) ([]mergequeue.PR, error) { return nil, nil }
+	c.remoteTips, c.fetchBase, c.inBase = mergequeue.RemoteTips, mergequeue.FetchBase, mergequeue.InBase
+	c.localTips, c.localBranches = mergequeue.LocalTips, mergequeue.LocalBranches
+	c.delivered = mergequeue.NewDelivery().Delivered
+	if err := c.pass(ctx, "mq"); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := b.MergeQueue(ctx); rec.Reason != "" {
+		t.Fatalf("the pass failed: %+v", rec)
+	}
+	for _, task := range []string{"kept", "gone"} {
+		if s, r := stateOf(t, b, task); s != "done" || r.ClosedOnMerge == nil || r.ClosedOnMerge.Head != heads[task] {
+			t.Errorf("%s: %s %+v", task, s, r.ClosedOnMerge)
 		}
 	}
 }

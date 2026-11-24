@@ -54,6 +54,9 @@ type mergeQueueChore struct {
 	localTips  func(ctx context.Context, dir string, env []string, base string) ([]mergequeue.Tip, string, error)
 	fetchBase  func(ctx context.Context, dir string, env []string, base string) error
 	inBase     func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
+	// localBranches are the local refs, no base required: close on merge's
+	// branch gone from origin (board-drift §3.2).
+	localBranches func(ctx context.Context, dir string, env []string) ([]mergequeue.Tip, error)
 	// master-idle §3.1: the git test of delivery (a mergequeue.Delivery,
 	// kept across passes for its cache) and the plan's done subjects.
 	delivered func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
@@ -103,7 +106,7 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 			_, err := mergequeue.LookIn(env, "gh")
 			return err == nil
 		},
-		github: mergequeue.ReadGitHub, readBase: mergequeue.ReadBaseRollup, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips,
+		github: mergequeue.ReadGitHub, readBase: mergequeue.ReadBaseRollup, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips, localBranches: mergequeue.LocalBranches,
 		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase,
 		delivered: delivery.Delivered,
 		done: func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error) {

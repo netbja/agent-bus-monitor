@@ -2,6 +2,7 @@ package dispatchsvc
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	"github.com/netbja/agent-bus-monitor/mergequeue"
@@ -21,6 +22,9 @@ type mergeClose struct {
 	task, branch, head string
 	reviewN            int
 }
+
+// errNoLocalReader: no reader of the local refs, so they are unread.
+var errNoLocalReader = errors.New("no reader of the local refs")
 
 // mergeClosePass is what the pass closes, and into which base.
 type mergeClosePass struct {
@@ -48,9 +52,13 @@ func (c *mergeQueueChore) closeOnMerge(ctx context.Context, env []string, tips [
 	local := func(branch string) (string, bool) {
 		if !localRead {
 			localRead = true
-			cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
-			ts, _, err := c.localTips(cctx, c.dir, env, base)
-			cancel()
+			var ts []mergequeue.Tip
+			err := errNoLocalReader
+			if c.localBranches != nil {
+				cctx, cancel := context.WithTimeout(ctx, mergeQueueCall)
+				ts, err = c.localBranches(cctx, c.dir, env)
+				cancel()
+			}
 			if err == nil {
 				localOf = map[string]string{}
 				for _, t := range ts {

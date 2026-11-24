@@ -150,8 +150,8 @@ func TestMergeQueueChoreCloseOnMergeLocalBeforeCommit(t *testing.T) {
 	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
 	reviewed(t, b, "moved", bus.ReviewOpts{Branch: "feat/moved", Commit: h1, ReviewBase: cmReviewBase})
 	reviewed(t, b, "deleted", bus.ReviewOpts{Branch: "feat/deleted", Commit: h1, ReviewBase: cmReviewBase})
-	c.localTips = func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
-		return []mergequeue.Tip{{Branch: "feat/moved", Head: h2}}, mqBaseTip, nil
+	c.localBranches = func(context.Context, string, []string) ([]mergequeue.Tip, error) {
+		return []mergequeue.Tip{{Branch: "feat/moved", Head: h2}}, nil // no local base: not needed
 	}
 	c.delivered = func(context.Context, string, []string, string, []string) (map[string]bool, error) {
 		return map[string]bool{h1: true}, nil
@@ -166,8 +166,8 @@ func TestMergeQueueChoreCloseOnMergeLocalBeforeCommit(t *testing.T) {
 		t.Fatalf("a branch gone everywhere, its commit merged: %s", s)
 	}
 	reviewed(t, b, "unread", bus.ReviewOpts{Branch: "feat/unread", Commit: h1, ReviewBase: cmReviewBase})
-	c.localTips = func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
-		return nil, "", errors.New("git: busy")
+	c.localBranches = func(context.Context, string, []string) ([]mergequeue.Tip, error) {
+		return nil, errors.New("git: busy")
 	}
 	if err := c.pass(ctx, "mq"); err != nil {
 		t.Fatal(err)
