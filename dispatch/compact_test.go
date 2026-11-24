@@ -245,3 +245,43 @@ func TestAutoCompactNotLanded(t *testing.T) {
 		t.Fatal("master told of a /compact that did not land")
 	}
 }
+
+// The pane changes between the judgement and the typing (foureyes): the
+// re-inspection right before /compact aborts, nothing is typed, the
+// reservation is deleted and the next pass judges again.
+func TestAutoCompactReinspectAborts(t *testing.T) {
+	for name, change := range map[string]func(*Inspection){
+		"focused":   func(in *Inspection) { in.Focused = true },
+		"busy":      func(in *Inspection) { in.Busy = true },
+		"not ready": func(in *Inspection) { in.Ready = false },
+		"blocked":   func(in *Inspection) { in.State = "blocked" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newCompactWorld(t, func(_ string, n int) Inspection {
+				in := readyIn()
+				if n == 2 { // the second read of the first judging pass: just before typing
+					change(&in)
+				}
+				return in
+			})
+			var log strings.Builder
+			w.l.cfg.Log = &log
+			w.pass(92)
+			w.ageHold(11 * time.Minute)
+			w.pass(92)
+			if w.compacts() != 0 || !strings.Contains(log.String(), "compact-aborted") {
+				t.Fatalf("compacts %d, log %q", w.compacts(), log.String())
+			}
+			if m, _ := w.b.QuotaMarks(w.ctx); m[bus.CompactMark("coder")] != "" {
+				t.Fatalf("the reservation was kept: %q", m[bus.CompactMark("coder")])
+			}
+			if w.count("master", "auto-compact", false) != 0 {
+				t.Fatal("master told of an aborted /compact")
+			}
+			w.pass(92) // ready again: judged again and compacted
+			if w.compacts() != 1 {
+				t.Fatalf("next pass: compacts %d", w.compacts())
+			}
+		})
+	}
+}
