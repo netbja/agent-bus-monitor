@@ -65,6 +65,10 @@ type deliverDeps struct {
 	// Trace writes a delivery with one approval (--single-approval) to the
 	// bus, where the person reads it. nil = none.
 	Trace func(ctx context.Context, msg string) error
+	// Audit writes the delivery's audit lines (audit step 2): push after the
+	// push, deliver once delivered, deliver refused when the approvals stop
+	// it. nil = none.
+	Audit func(bus.AuditEntry)
 	// Policy reads the project's single-approval settings (single-approval
 	// §3.1), only when fewer than two reviewers approve the head. nil = off.
 	Policy func() (smallPolicy, error)
@@ -129,6 +133,7 @@ func realDeliverDeps(b *bus.Bus, self, dir string) deliverDeps {
 			return err
 		},
 		Policy: func() (smallPolicy, error) { return projectSmallPolicy(os.Getenv, b.Project()) },
+		Audit:  func(e bus.AuditEntry) { b.AuditAfter(context.Background(), e) },
 	}
 	if self != "master" {
 		// The plan's writes are master's (ACL answer b): another deliverer
@@ -227,8 +232,17 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		return 1
 	}
 	o.branch = args[0]
+	head8 := "" // the head's first 8, once read: what the audit lines name
+	audit := func(action, target, outcome, detail string) {
+		if d.Audit != nil {
+			d.Audit(bus.AuditEntry{Action: action, Actor: self, Target: target, Outcome: outcome, Detail: detail})
+		}
+	}
 	fail := func(code int, format string, a ...any) int {
 		fmt.Fprintf(errw, "deliver: "+format+"\n", a...)
+		if code == 3 { // the approvals refused it: nothing delivered
+			audit("deliver", o.branch, bus.AuditRefused, o.branch+" head "+head8+": not approved")
+		}
 		return code
 	}
 	if !config.ValidBranchName(o.branch) {
@@ -275,6 +289,9 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// 1. The head, resolved once: every later step names H.
 	h, err := git("rev-parse", "--verify", "--quiet", "refs/heads/"+o.branch+"^{commit}")
 	h = strings.TrimSpace(h)
+	if len(h) >= 8 {
+		head8 = h[:8]
+	}
 	if err != nil || !bus.ValidHead(h) {
 		return fail(1, "no local branch %s", o.branch)
 	}
@@ -490,6 +507,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	if f.Kind == forge.Local {
 		code := link(0)
 		cmd := fmt.Sprintf("git switch %s && git merge --no-ff %s", o.base, h)
+		audit("deliver", o.branch, bus.AuditOK, o.branch+" head "+head8+" into "+o.base+", local: the person merges")
 		fmt.Fprintf(out, "delivered %s@%s (local): the person merges with\n  %s\n", o.branch, h, cmd)
 		tell(fmt.Sprintf("delivered %s@%s (local mode): the person merges with `%s`", o.branch, h, cmd))
 		return code
@@ -497,8 +515,10 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 
 	// Push the checked commit, no upstream.
 	if msg, err := git("push", "origin", h+":refs/heads/"+o.branch); err != nil {
+		audit("push", o.branch, bus.AuditFailed, "head "+head8+" to origin")
 		return fail(1, "push refused: %s", strings.TrimSpace(msg))
 	}
+	audit("push", o.branch, bus.AuditOK, "head "+head8+" to origin")
 
 	prN, prURL := 0, ""
 	switch f.Kind {
@@ -508,6 +528,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 		prN, prURL = deliverGitLab(ctx, d, o, title, body, errw)
 	}
 	if prN > 0 {
+		audit("deliver", "pr "+strconv.Itoa(prN), bus.AuditOK, o.branch+" head "+head8+" into "+o.base)
 		code := link(prN)
 		fmt.Fprintf(out, "delivered %s: %s\n", o.branch, prURL)
 		tell(fmt.Sprintf("delivered %s@%s: %s", o.branch, h, prURL))
@@ -516,6 +537,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// None: a remote with no forge adapter (master-idle §3.1): pushed, no
 	// request page; the person merges the branch.
 	if f.Kind == forge.None {
+		audit("deliver", o.branch, bus.AuditOK, o.branch+" head "+head8+" into "+o.base+", no forge: the person merges")
 		code := link(0)
 		fmt.Fprintf(out, "pushed %s@%s (no forge): the person merges it into %s\n", o.branch, h, o.base)
 		tell(fmt.Sprintf("pushed %s@%s (no forge): the person merges it into %s", o.branch, h, o.base))

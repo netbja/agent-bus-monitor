@@ -131,8 +131,9 @@ func (b *Bus) Audit(ctx context.Context, e AuditEntry) (string, error) {
 // (a trail never fails the act it records). The CLI's stderr by default.
 var AuditWarn = func(err error) { fmt.Fprintln(os.Stderr, "warning: audit:", err) }
 
-// auditAfter writes e after its act, best effort: a failure goes to AuditWarn.
-func (b *Bus) auditAfter(ctx context.Context, e AuditEntry) {
+// AuditAfter writes e after its act, best effort: a failure goes to
+// AuditWarn (the CLI's acts call it, audit step 2).
+func (b *Bus) AuditAfter(ctx context.Context, e AuditEntry) {
 	if _, err := b.Audit(ctx, e); err != nil {
 		AuditWarn(fmt.Errorf("%s by %s: %w", e.Action, e.Actor, err))
 	}

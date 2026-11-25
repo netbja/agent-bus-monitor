@@ -604,7 +604,7 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 	if v.Head != "" {
 		detail += ", head " + v.Head[:8]
 	}
-	b.auditAfter(ctx, AuditEntry{Action: v.Decision, Actor: v.Reviewer, Target: v.Subject, Ref: id, Outcome: AuditOK, Detail: detail})
+	b.AuditAfter(ctx, AuditEntry{Action: v.Decision, Actor: v.Reviewer, Target: v.Subject, Ref: id, Outcome: AuditOK, Detail: detail})
 	return id, nil
 }
 

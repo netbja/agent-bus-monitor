@@ -95,9 +95,9 @@ func (b *Bus) Suspend(ctx context.Context, s SuspendSpec) (PauseRecord, string, 
 	}
 	code, _ := res[0].(int64)
 	if code == 1 { // the audit line (audit step 2): the suspend begun (1), or refused, one already in place (0)
-		b.auditAfter(ctx, AuditEntry{Action: "suspend", Actor: s.By, Target: b.project, Outcome: AuditOK, Detail: "the project paused, its services to stop"})
+		b.AuditAfter(ctx, AuditEntry{Action: "suspend", Actor: s.By, Target: b.project, Outcome: AuditOK, Detail: "the project paused, its services to stop"})
 	} else {
-		b.auditAfter(ctx, AuditEntry{Action: "suspend", Actor: s.By, Target: b.project, Outcome: AuditRefused, Detail: "a suspend is already in place"})
+		b.AuditAfter(ctx, AuditEntry{Action: "suspend", Actor: s.By, Target: b.project, Outcome: AuditRefused, Detail: "a suspend is already in place"})
 	}
 	return p, raw, code == 0, nil
 }
@@ -178,7 +178,7 @@ func (b *Bus) unsuspend(ctx context.Context, raw, by string, text func(PauseReco
 	case -2:
 		return false, "", ErrNotSuspended
 	}
-	b.auditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "the suspend ended"})
+	b.AuditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "the suspend ended"})
 	if code == 1 {
 		return true, "", nil
 	}

@@ -71,10 +71,10 @@ func (b *Bus) SetPause(ctx context.Context, by, notify, reason string, until tim
 		return PauseRecord{}, err
 	}
 	if n == 0 { // the audit line (audit step 2): refused, fixed parts only
-		b.auditAfter(ctx, AuditEntry{Action: "pause", Actor: by, Target: b.project, Outcome: AuditRefused, Detail: "the project is suspended"})
+		b.AuditAfter(ctx, AuditEntry{Action: "pause", Actor: by, Target: b.project, Outcome: AuditRefused, Detail: "the project is suspended"})
 		return PauseRecord{}, ErrSuspended
 	}
-	b.auditAfter(ctx, AuditEntry{Action: "pause", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "until " + until.UTC().Format(time.RFC3339)})
+	b.AuditAfter(ctx, AuditEntry{Action: "pause", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "until " + until.UTC().Format(time.RFC3339)})
 	return p, nil
 }
 
@@ -129,10 +129,10 @@ func (b *Bus) Resume(ctx context.Context, by, message string) (bool, error) {
 	case 0:
 		return false, nil
 	case 2:
-		b.auditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditRefused, Detail: "the project is suspended"})
+		b.AuditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditRefused, Detail: "the project is suspended"})
 		return false, ErrSuspended
 	}
-	b.auditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "the pause lifted"})
+	b.AuditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "the pause lifted"})
 	v, _ := res[1].(string)
 	var p PauseRecord
 	_ = json.Unmarshal([]byte(v), &p)
