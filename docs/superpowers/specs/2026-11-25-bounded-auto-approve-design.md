@@ -1,6 +1,6 @@
 # Bounded auto-approve (bounded-auto)
 
-Status: IDEA spec r4, for review (subject `bounded-auto-spec`). Not built. Base: origin/dev
+Status: IDEA spec r5, for review (subject `bounded-auto-spec`). Not built. Base: origin/dev
 `af527c19`. Author: architect, from master's directive (cmd `1795559518593-0`, task
 `specs-from-person-docs`). This is idea 2 of 4 from the person's note "ideas borrowed from
 PiBot", item 3 there. The note's reference is PiBot `packages/policy/src/core/yolo.ts`
@@ -23,6 +23,10 @@ exception. A separate relaxation, outside the policy and only on the person's ex
 is offered in §3.1 and Q1. It is bound to the role, the profile's exact effective settings and an
 expiry, and it claims no rule enforcement. The §1 mode list no longer contradicts the Claude
 modes that hold.
+r5: foureyes's reject of r4 (verdict `1795575456538-0`). A relaxed role is exactly one whose
+rules do not hold, so it can rewrite its own entry in `config.toml`. §3.1 now says so, and
+`roles doctor` shows it. The fingerprint covers the merged rules. Codex's own forbidden rules
+are named as a later route (§3.2).
 
 ## 1. Today's auto-approve switches
 
@@ -102,16 +106,31 @@ If the person wants one of those roles to keep running, that is a relaxation of 
 the spec names it as one. It complies with nothing above. It runs only if the person decides it
 (Q1), and then it is bounded:
 
-- **One entry per role and profile,** written only by the person (`agentbus policy relax
+- **One entry per role and profile,** written by the person (`agentbus policy relax
   <role> --days <n>`, refused from an agent's process tree by `agentcaller.Refuse`). It is stored
-  in `config.toml`, which no role may edit.
+  in `config.toml`. A role is kept from editing that file only by a Claude Code deny
+  (`Edit(~/.config/agentbus/config.toml)`, `roles.toml:161`, whose comment says a shell can still
+  write it) and by `config set`'s PersonOnly refusal (`config/write.go:72`).
 - **Bound to the exact effective profile:** the entry holds a fingerprint of its client, model,
-  sandbox, approval, reviewer, network and other options, and of the role's tool rules. Any
-  change to them voids the entry, and the launch is refused again until the person renews it.
+  sandbox, approval, reviewer, network and other options, and of the role's **merged** tool
+  rules: the shared denies, the danger list and the role's own rules. Any change voids the entry,
+  and the launch is refused until the person renews it. So an agentbus update that changes the
+  shared rules voids every relaxation, and the person looks at each one again. That is intended.
 - **It expires:** at most 30 days, with no default. Afterwards the launch is refused again.
-- **It claims no enforcement.** `roles doctor`, busmon and the launch line show the role as
-  `rules not held`, with the denies it loses, the danger acts it can run unprompted, and the
-  expiry date.
+- **It claims no enforcement, not even of itself.** The relaxed role is one whose rules do not
+  hold. As the same OS user, it can write `config.toml` and change its own entry, expiry and
+  fingerprint included. The expiry and the fingerprint bind the person's honest configuration,
+  not the relaxed agent. `roles doctor`, busmon and the launch line show the role as `rules not
+  held`, with the denies it loses, the danger acts it can run unprompted, the expiry date, and
+  this line: "the relaxed agent could extend this itself".
+
+### 3.2 A later route for Codex (not in this build)
+
+Codex enforces per-command rules of its own: `prefix_rule` entries with `decision = "forbidden"`
+in the rules files under `CODEX_HOME`. A launch could write them into a per-launch `CODEX_HOME`,
+as it writes `--settings` for Claude. They match commands, not file reads, so `Read(**/.env)`
+would still not hold. They could make the danger asks and the `Bash(...)` denies hold for
+`codex-review` without breaking rule 4. That is a later spec.
 
 - **Two reviews are a review gate, not the person's approval.** `agentbus deliver` stops offering
   `single_approval` and `same_provider_ok` for a PR whose base is the default branch. Such a PR
@@ -139,7 +158,8 @@ the spec names it as one. It complies with nothing above. It runs only if the pe
 - With §3.1 built: a relaxation for reviewer-codex lets that role launch on `codex-review`. It
   does not cover another role on the same profile. A changed sandbox, network, reviewer or tool
   rule voids it. It ends at its expiry. `agentbus policy relax` refuses from an agent's process
-  tree and refuses more than 30 days.
+  tree and refuses more than 30 days. A change to the shared denies voids every relaxation. `roles doctor` shows a relaxed
+  role as `rules not held`, with the line "the relaxed agent could extend this itself".
 - `agentbus deliver` with `single_approval` on: a PR whose base is the default branch needs both
   reviews.
 - No launch writes outside its generated settings file. The test fakes `$HOME` and checks the
