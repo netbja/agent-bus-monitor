@@ -101,9 +101,11 @@ one writer:
   and in For you. That holds today; a test pins it.
 - **Who may run the script.** `agentbus answer` and busmon are its callers. Step 1 refuses
   `answer` under a client and under `AGENT_BUS_AGENT`, **before** the script runs, so the ask's
-  state never moves. With ACL 4b, the script also writes the `{p}:typed` record and lists that key
-  among its `KEYS`. Redis checks a script's declared keys against the user before running it, so the
-  `agent` user's call is refused before any change, whoever wrote the command line.
+  state never moves. With ACL 4b, the script also writes the `{p}:typed` record, **as its first write,
+  before any read-modify of the ask**. Redis checks the user's key permissions on each command a
+  script runs, and a script stops at the first error with nothing after it run (earlier writes
+  are not rolled back, hence the order). So the `agent` user's call fails at that first write and
+  the ask is unchanged, whoever wrote the command line.
 - **A gate** closes on a verdict (the reviewer's) or `gate close`, never on a reply. Neither reads
   `typed`. Nothing here changes them.
 
