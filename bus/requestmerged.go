@@ -3,7 +3,6 @@ package bus
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/redis/go-redis/v9"
@@ -24,9 +23,10 @@ const (
 )
 
 // requestMergedScript: KEYS lease, board, events, audit. ARGV token, task,
-// branch, head, base, events maxlen, the review's number the pass read, the
-// audit retention (ms). The merge's audit line (audit step 2, master's
-// answer: merge is recorded here) goes in the same step, fixed parts only.
+// branch, head, base, events maxlen, the review's number the pass read, then
+// two fencedAudit blocks: the line if it closes (8-19), if it steps (20-31).
+// The merge's audit line (audit step 2, master's answer: merge is recorded
+// here) goes in the same step, its fields checked in Go.
 var requestMergedScript = redis.NewScript(auditLua + `
 if redis.call('GET',KEYS[1])~=ARGV[1] then return 'not-holder' end
 local raw=redis.call('HGET',KEYS[2],ARGV[2]);if not raw then return '' end
@@ -50,7 +50,7 @@ end
 e.updated=math.floor(now/1000)
 redis.call('HSET',KEYS[2],ARGV[2],cjson.encode(e))
 redis.call('XADD',KEYS[3],'MAXLEN','~',ARGV[6],'*','kind','request-merged','agent',r.target or '','term','','by','dispatch','detail',ARGV[2]..' '..ARGV[3]..' '..ARGV[4])
-audit_try(KEYS[4],ARGV[8],{'merge','dispatch','','',ARGV[3],'','ok','head '..string.sub(ARGV[4],1,8)..' into '..ARGV[5]..', request '..ARGV[2]..' '..out})
+if out=='closed' then audit_fenced(KEYS[4],8,'') else audit_fenced(KEYS[4],20,'') end
 return out`)
 
 // FencedRequestMerged closes task on its branch's merge, fenced by the
@@ -60,8 +60,13 @@ func (b *Bus) FencedRequestMerged(ctx context.Context, token, task, branch, head
 	if !ValidName(task) || !config.ValidBranchName(branch) || !ValidHead(head) || !config.ValidBranchName(base) {
 		return "", fmt.Errorf("request merged: invalid task, branch, head or base")
 	}
-	v, err := requestMergedScript.Run(ctx, b.r, []string{DispatchKey(b.project), BoardKey(b.project), EventsKey(b.project), AuditKey(b.project)},
-		token, task, branch, head, base, eventsMaxLen, reviewN, AuditRetention(os.Getenv).Milliseconds()).Text()
+	line := func(out string) []any {
+		return fencedAudit(AuditEntry{Action: "merge", Actor: "dispatch", Target: branch, Outcome: AuditOK,
+			Detail: "head " + head[:8] + " into " + base + ", request " + task + " " + out})
+	}
+	args := append([]any{token, task, branch, head, base, eventsMaxLen, reviewN}, line(MergedClosed)...)
+	args = append(args, line(MergedStep)...)
+	v, err := requestMergedScript.Run(ctx, b.r, []string{DispatchKey(b.project), BoardKey(b.project), EventsKey(b.project), AuditKey(b.project)}, args...).Text()
 	if err == redis.Nil {
 		return MergedNone, nil
 	}

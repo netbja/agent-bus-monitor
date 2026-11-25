@@ -174,6 +174,16 @@ end
 local function audit_try(key, keep, f)
   pcall(audit_append, key, keep, f)
 end
+-- audit_fenced writes the line of the ARGV block from i that fencedAudit
+-- built and checked in Go: ARGV[i] '1' a line ('0' none), then the
+-- retention and the fields; the detail is ARGV[i+9], or ARGV[i+9] .. n ..
+-- ARGV[i+10] when ARGV[i+11] is '1' (n: the count the script computed).
+local function audit_fenced(key, i, n)
+  if ARGV[i] ~= '1' then return end
+  local d = ARGV[i + 9]
+  if ARGV[i + 11] == '1' then d = d .. n .. ARGV[i + 10] end
+  audit_try(key, ARGV[i + 1], {ARGV[i + 2], ARGV[i + 3], ARGV[i + 4], ARGV[i + 5], ARGV[i + 6], ARGV[i + 7], ARGV[i + 8], d})
+end
 `
 
 // auditAppend is audit_append alone: KEYS[1] the stream, ARGV[1] the
@@ -197,6 +207,41 @@ func auditArgs(e AuditEntry, retention time.Duration) ([]any, error) {
 		args = append(args, f)
 	}
 	return args, nil
+}
+
+// AuditCountMark marks, in a fenced line's detail, where the script puts the
+// count it computes (a hand-off's number): the only part not built in Go.
+const AuditCountMark = "{n}"
+
+// fencedAuditArgs is the length of a fencedAudit block.
+const fencedAuditArgs = 12
+
+// fencedAudit is e as a fenced script's ARGV block (audit_fenced): e checked
+// and redacted in Go by auditArgs, step 1's one path (foureyes), with 999
+// standing for the count; the detail split at AuditCountMark. A refused e
+// gives a block that writes no line, said on AuditWarn: the act is never
+// refused for its line. A detail redacted whole takes no count.
+func fencedAudit(e AuditEntry) []any {
+	pre, post, mark := strings.Cut(e.Detail, AuditCountMark)
+	probe := e
+	if mark {
+		probe.Detail = pre + "999" + post
+	}
+	args, err := auditArgs(probe, AuditRetention(os.Getenv))
+	if err != nil {
+		AuditWarn(fmt.Errorf("%s by %s: %w", e.Action, e.Actor, err))
+		out := make([]any, fencedAuditArgs)
+		out[0] = "0"
+		for i := 1; i < len(out); i++ {
+			out[i] = ""
+		}
+		return out
+	}
+	out := append([]any{"1"}, args[:8]...) // the flag, the retention, action ... outcome
+	if detail, _ := args[8].(string); detail == health.Redacted || !mark {
+		return append(out, detail, "", "0")
+	}
+	return append(out, pre, post, "1")
 }
 
 // AuditWith is Audit with retention: e checked (an entry §2 does not allow

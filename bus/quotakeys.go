@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -110,8 +109,7 @@ func QuotaPauseReason(provider string) string { return "quota " + provider }
 // fencedQuotaPause: -1 not the holder; 0 another pause is in place (a person's
 // or master's, or another provider's): never replaced; 1 written. A new pause
 // (none before) writes its audit line to KEYS[3] in the same step (audit step
-// 2): ARGV[5] the retention (ms), ARGV[6] the provider, ARGV[7] the detail;
-// a refresh of the same pause writes none.
+// 2): ARGV[5..16] its fencedAudit block; a refresh of the same pause writes none.
 var fencedQuotaPause = redis.NewScript(auditLua + `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 local v = redis.call('GET', KEYS[2])
@@ -122,9 +120,7 @@ end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 redis.call('SET', KEYS[2], cjson.encode({['until']=tonumber(ARGV[3]), reason=ARGV[2], by='dispatch', notify=ARGV[4], at=now}))
-if not v then
-  audit_try(KEYS[3], ARGV[5], {'quota-pause', 'dispatch', '', '', ARGV[6], '', 'ok', ARGV[7]})
-end
+if not v then audit_fenced(KEYS[3], 5, '') end
 return 1`)
 
 // FencedQuotaPause pauses the project for a provider's quota until untilMS,
@@ -137,9 +133,9 @@ func (b *Bus) FencedQuotaPause(ctx context.Context, token, provider, notify stri
 		return false, fmt.Errorf("invalid provider %q", provider)
 	}
 	detail := "paused until " + time.UnixMilli(untilMS).UTC().Format(time.RFC3339) + ", " + notify + " told" // fixed parts only
-	n, err := fencedQuotaPause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), AuditKey(b.project)},
-		token, QuotaPauseReason(provider), strconv.FormatInt(untilMS, 10), notify,
-		AuditRetention(os.Getenv).Milliseconds(), provider, detail).Int()
+	args := append([]any{token, QuotaPauseReason(provider), strconv.FormatInt(untilMS, 10), notify},
+		fencedAudit(AuditEntry{Action: "quota-pause", Actor: "dispatch", Target: provider, Outcome: AuditOK, Detail: detail})...)
+	n, err := fencedQuotaPause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), AuditKey(b.project)}, args...).Int()
 	if err != nil {
 		return false, err
 	}
@@ -205,7 +201,7 @@ func (b *Bus) FencedQuotaUnpauseWhy(ctx context.Context, token, provider, from, 
 // fencedQuotaRepause: -1 not the holder; 0 the pause is no longer exactly
 // ARGV[2]; 1 replaced by the record in ARGV[3] (no resume directive: the
 // project stays paused), its audit line written to KEYS[3] in the same step
-// (ARGV[4] the retention, ARGV[5] the new provider, ARGV[6] the detail).
+// (ARGV[4..15] its fencedAudit block).
 var fencedQuotaRepause = redis.NewScript(auditLua + `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 if redis.call('GET', KEYS[2]) ~= ARGV[2] then return 0 end
@@ -213,7 +209,7 @@ local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local p = cjson.decode(ARGV[3])
 redis.call('SET', KEYS[2], cjson.encode({['until']=p['until'], reason=p['reason'], by='dispatch', notify=p['notify'], at=now}))
-audit_try(KEYS[3], ARGV[4], {'quota-pause', 'dispatch', '', '', ARGV[5], '', 'ok', ARGV[6]})
+audit_fenced(KEYS[3], 4, '')
 return 1`)
 
 // FencedQuotaRepause (v0.15 §8) replaces the dispatcher's quota pause for
@@ -241,8 +237,9 @@ func (b *Bus) FencedQuotaRepause(ctx context.Context, token, from, to string, un
 		return false, fmt.Errorf("invalid provider %q", to)
 	}
 	detail := "paused until " + time.UnixMilli(untilMS).UTC().Format(time.RFC3339) + ", replacing " + from + "'s pause" // fixed parts only
-	n, err := fencedQuotaRepause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), AuditKey(b.project)}, token, raw, string(next),
-		AuditRetention(os.Getenv).Milliseconds(), to, detail).Int()
+	args := append([]any{token, raw, string(next)},
+		fencedAudit(AuditEntry{Action: "quota-pause", Actor: "dispatch", Target: to, Outcome: AuditOK, Detail: detail})...)
+	n, err := fencedQuotaRepause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), AuditKey(b.project)}, args...).Int()
 	if err != nil {
 		return false, err
 	}
