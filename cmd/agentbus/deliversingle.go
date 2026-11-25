@@ -65,7 +65,7 @@ func oneApproval(vs []bus.Verdict, subject, h string, c smallClass, p smallPolic
 				at, r, subject, v.Head, twoOrYes)
 		}
 	}
-	approvers := currentApprovers(vs, h)
+	approvers := bus.CurrentApprovers(vs, h)
 	if len(approvers) == 0 {
 		return "", at + " has no current independent approval." + twoOrYes
 	}

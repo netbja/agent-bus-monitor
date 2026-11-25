@@ -151,3 +151,31 @@ func TestMergeQueueGoldens(t *testing.T) {
 		})
 	}
 }
+
+// One current approver is "1 approval" on the row and the page
+// (single-approval §4.5): the spec's example, A's approve of H stale (A
+// approved H2 since) and B's current, holds two Approvals and one approver.
+// Two current approvers, or a record written before Approvers, show none.
+func TestMergeOneApproval(t *testing.T) {
+	rec := mqRecord(shellNow)
+	rec.Items[0].Approvers = []string{"foureyes"}
+	page := func(rec bus.MergeQueueRecord) string {
+		_, lines, _, _ := mergePage(rec, mqH, 140)
+		return plainLines(lines)
+	}
+	if got := mergeItems(snapshot{mergeQ: rec, mergeQRead: true}); got[0].Text != "merge PR 309: request priority (1 approval)" {
+		t.Fatalf("row %q", got[0].Text)
+	}
+	if p := page(rec); !strings.Contains(p, "Approvals:") || !strings.Contains(p, "1 approval (the current approver: foureyes)") {
+		t.Fatalf("page:\n%s", p)
+	}
+	for name, approvers := range map[string][]string{"two": {"foureyes", "reviewer-codex"}, "an older record": nil} {
+		rec.Items[0].Approvers = approvers
+		if got := mergeItems(snapshot{mergeQ: rec, mergeQRead: true}); strings.Contains(got[0].Text, "approval") {
+			t.Fatalf("%s: row %q", name, got[0].Text)
+		}
+		if p := page(rec); strings.Contains(p, "1 approval") {
+			t.Fatalf("%s: page:\n%s", name, p)
+		}
+	}
+}

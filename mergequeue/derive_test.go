@@ -53,6 +53,9 @@ func TestDeriveForge(t *testing.T) {
 		it.Approvals[0].Reviewer != "foureyes" || it.Approvals[1].Reviewer != "reviewer-codex" {
 		t.Fatalf("subjects %v approvals %+v", it.Subjects, it.Approvals)
 	}
+	if !reflect.DeepEqual(it.Approvers, []string{"foureyes", "reviewer-codex"}) {
+		t.Fatalf("approvers %v", it.Approvers)
+	}
 	if got.Unapproved != 2 { // #2 (newer push onto a rejected head) and #4 (no review); the draft is not counted
 		t.Fatalf("unapproved %d", got.Unapproved)
 	}
@@ -75,6 +78,27 @@ func TestDeriveNoHeadMatchesNothing(t *testing.T) {
 	})
 	if len(got.Items) != 0 {
 		t.Fatalf("%+v", got.Items)
+	}
+}
+
+// Approvers are the head's current approvers (single-approval §4.5's
+// example): A approves H, then H2; B approves H. Approvals keeps both of
+// H's approves, Approvers B alone; two subjects on one head count a
+// reviewer once.
+func TestDeriveCurrentApprovers(t *testing.T) {
+	got := Derive(Input{
+		Verdicts: []bus.Verdict{v("1-0", "s", "a", "approve", hA), v("2-0", "s", "a", "approve", hB), v("3-0", "s", "b", "approve", hA)},
+		PRs:      []PR{{Number: 7, Branch: "feat/s", Head: hA}},
+	})
+	if len(got.Items) != 1 || len(got.Items[0].Approvals) != 2 || !reflect.DeepEqual(got.Items[0].Approvers, []string{"b"}) {
+		t.Fatalf("%+v", got.Items)
+	}
+	two := Derive(Input{
+		Verdicts: []bus.Verdict{v("1-0", "s", "b", "approve", hA), v("2-0", "pr-s", "b", "approve", hA), v("3-0", "pr-s", "c", "approve", hA)},
+		PRs:      []PR{{Number: 8, Branch: "feat/s", Head: hA}},
+	})
+	if len(two.Items) != 1 || !reflect.DeepEqual(two.Items[0].Approvers, []string{"b", "c"}) {
+		t.Fatalf("%+v", two.Items)
 	}
 }
 
