@@ -1,6 +1,6 @@
 # Sandboxed agent launch (sandboxed-launch)
 
-Status: IDEA spec r1, for review (subject `sandboxed-launch-spec`). Not built. Base: origin/dev
+Status: IDEA spec r2, for review (subject `sandboxed-launch-spec`). Not built. Base: origin/dev
 `af527c19`. Author: architect, from master's directive (cmd `1795559518593-0`, task
 `specs-from-person-docs`). This is idea 3 of 4 from the person's note "ideas borrowed from
 PiBot", item 1 there. The note's references are PiBot
@@ -8,6 +8,10 @@ PiBot", item 1 there. The note's references are PiBot
 `packages/execution/src/sandbox/` (Apache-2.0), used for the idea only. **New dependency, named by
 the note:** `@anthropic-ai/sandbox-runtime` (`srt`), or bubblewrap directly on Linux (§5 Q1).
 The questions for the person are last (§5).
+r2: reviewer-codex's reject of r1 (verdict `1795575649339-0`). A default of `off` gathers no
+evidence, so the trial is an explicit cohort of roles the person names (§4, Q4). A violation
+report is parsed into fixed fields, and its raw line is never stored. A per-agent bound sits
+above the per-target throttle (§2).
 
 ## 1. Today
 
@@ -49,13 +53,23 @@ read-only.
 credential helper that the base refuses. So deliver gets a second fixed base, `deliver`, which
 adds only the forge's git host and the one credential path the forge setting names (§5 Q2).
 
-**Violations reach the bus as hints.** `srt` reports a denied write or connection. agentbus
-forwards each one to `{p}:events` as `sandbox-denied` (agent, line, time). That is a new kind in
-`AppendEvent`'s closed list (`bus/events.go:28`). It is rate-limited to
-one per minute per agent and path or host. busmon shows it on the agent's row. srt's own source
-says its Linux reports are read from the untrusted process's memory and "must never gate a policy
-decision". So an event is a hint for the person, never an input to any judgement: not the
-dispatcher's, not `PopDone`'s, not sentinel's.
+**Violations reach the bus as hints.** `srt` reports a denied write or connection. srt's own
+source says its Linux reports are read from the untrusted process's memory and "must never gate a
+policy decision". So an event is a hint for the person, never an input to any judgement: not the
+dispatcher's, not `PopDone`'s, not sentinel's. A report's text is controlled by the confined
+process, so:
+
+- **Parsed, not copied.** The holder parses each report into fixed fields and drops the raw
+  line. The fields are `op` (`read`, `write` or `connect`) and `target`. For a connection,
+  `target` is the host and port only, with no scheme, user info, path or query. For a file, it is
+  the path. Any report that does not parse is counted, never stored.
+- **Redacted as a whole.** If `health.Sensitive` matches `target`, it is stored as `[redacted]`.
+  A path longer than 200 runes is cut to its first three components and `…`.
+- **Bounded per agent.** At most one event per minute for each agent and target, and at most 20
+  per hour for each agent in all. Past that, one `sandbox-denied` event per hour says how many
+  were dropped. Varying the target cannot flood the stream.
+- Written to `{p}:events` as `sandbox-denied` (`agent`, `op`, `target`, time). That is a new
+  kind in `AppendEvent`'s closed list (`bus/events.go:28`). busmon shows it on the agent's row.
 
 ## 3. What must be proven first: a spike, before any build
 
@@ -79,16 +93,21 @@ macOS. It writes no product code.** Its report decides whether step 1 happens:
    or a descriptor? Or is a small wrapper on srt's library API needed, which is more Node code?
 
 If any of 1, 2 or 4 fails for a client, that client launches unsandboxed and shows `sandbox off`
-in `roles doctor` and busmon (§5 Q3).
+in `roles doctor` and busmon (§5 Q3). A role in the cohort keeps that state.
 
 ## 4. Build steps (after the spike), tests, and what this does not do
 
 1. `rolecfg`: the base, the allowance table, narrowing by intersection, and the per-launch srt
-   settings file. A `sandbox.mode` setting (`off`, `on`), PersonOnly, default `off`.
+   settings file. A `sandbox.roles` setting, PersonOnly, empty by default: the roles that launch
+   sandboxed (the cohort, Q4). `all` is accepted once the person decides so.
 2. The holder launches through `srt`, and identity follows the client's pid.
 3. `sandbox-denied` events, and busmon's mark on the agent's row.
 
-**Tests:** a role entry naming a path or host outside the base is refused at launch. The settings
+**Tests:** a role entry naming a path or host outside the base is refused at launch. Violation
+reports: a denied URL `https://user:tok@host/p?token=…` is stored as `connect host:443`. A path
+that `health.Sensitive` matches is stored as `[redacted]`. A line that does not parse is not
+stored. 100 reports with distinct targets in an hour store 20 events and one "dropped 80"
+event. The settings
 file for each team role is checked against a golden file. Under a fake `srt`, the launch argv
 wraps the client and the identity record names the client's pid. A `sandbox-denied` event never
 changes a `PopDone` or stall judgement (a test feeds one and compares). A disposable-host
@@ -113,9 +132,10 @@ policy decision rests on a violation report. The person's own shell stays unconf
 
 **Q3. A client that fails the spike.**
 - **(A) recommended: it runs unsandboxed,** shown as `sandbox off`, until a fix.
-- (B) it is refused while `sandbox.mode = on`.
+- (B) a role in `sandbox.roles` on that client is refused.
 
-**Q4. The default once built.**
-- **(A) recommended: `off`, then `on` after a week of `sandbox-denied` events without a false
-  refusal.**
-- (B) `on` at once.
+**Q4. How it goes live.**
+- **(A) recommended: a named cohort first.** You list a few roles in `sandbox.roles` (for example
+  architect and a reviewer). Each one runs sandboxed for a week. You read its `sandbox-denied`
+  events for false refusals, then widen the list, or set `all`.
+- (B) every role at once.
