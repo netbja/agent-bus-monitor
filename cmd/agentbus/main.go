@@ -316,7 +316,7 @@ func main() {
 			return termProcs(ctx, project, term)
 		}, Start: dispatch.ProcStart, Boot: lifecycle.HostBootID, Env: os.Getenv}, rest, os.Stdout, os.Stderr))
 	case "mission":
-		os.Exit(runMission(ctx, b, self, os.Getenv, rest, os.Stdout, os.Stderr))
+		os.Exit(auditForce(ctx, b, self, cmd, rest, runMission(ctx, b, self, os.Getenv, rest, os.Stdout, os.Stderr)))
 	case "reload":
 		os.Exit(runReload(ctx, b, realReloadDeps(os.Environ(), project, os.Stdout, os.Stderr), self, rest, os.Stdout, os.Stderr))
 	case "background":
@@ -649,7 +649,7 @@ func main() {
 		os.Exit(runIdea(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
 
 	case "swap":
-		os.Exit(runSwap(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
+		os.Exit(auditForce(ctx, b, self, cmd, rest, runSwap(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr)))
 
 	case "health":
 		os.Exit(runHealth(ctx, b, self, rest, os.Stdout, os.Stderr))
@@ -667,8 +667,12 @@ func main() {
 		}
 		os.Exit(runPop(ctx, h, project, rest, os.Stdout, os.Stderr))
 
-	case "retire":
-		os.Exit(runRetire(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr))
+	case "retire": // its audit line from its exit (audit step 2)
+		code := runRetire(ctx, b, realSwapDeps(os.Environ(), project), self, rest, os.Stdout, os.Stderr)
+		if len(rest) > 0 && bus.ValidName(rest[0]) {
+			code = auditExit(ctx, b, bus.AuditEntry{Action: "retire", Actor: self, Target: rest[0]}, "the pop ended", code)
+		}
+		os.Exit(code)
 
 	case "swaps":
 		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
@@ -702,11 +706,11 @@ func main() {
 			os.Exit(runAgentsWait(ctx, b.Agents, time.Sleep, rest[1:], os.Stdout, os.Stderr))
 		}
 		if len(rest) > 0 && rest[0] == "forget" {
-			os.Exit(runAgentsForget(ctx, forgetDeps{Agents: b.Agents, Armed: func(ctx context.Context, a string) (bool, error) {
+			os.Exit(auditForce(ctx, b, self, cmd, rest, runAgentsForget(ctx, forgetDeps{Agents: b.Agents, Armed: func(ctx context.Context, a string) (bool, error) {
 				m, err := b.ArmedAgents(ctx)
 				_, ok := m[a]
 				return ok, err
-			}, Forget: b.ForgetAgent, Now: time.Now}, rest[1:], os.Stdout, os.Stderr))
+			}, Forget: b.ForgetAgent, Now: time.Now}, rest[1:], os.Stdout, os.Stderr)))
 		}
 		names, asJSON := extractBool(rest, "--json")
 		all, err := b.Agents(ctx)
@@ -867,6 +871,10 @@ func main() {
 		}
 		msg := "shutdown: all work complete — set status done, post a final report, and do NOT re-arm subscribe; master closes your pane"
 		n := broadcastShutdown(ctx, b, self, agents, msg, os.Stderr)
+		if force { // the audit line (audit step 2): the blockers overridden
+			b.AuditAfter(ctx, bus.AuditEntry{Action: "force", Actor: self, Target: b.Project(), Outcome: bus.AuditOK,
+				Detail: fmt.Sprintf("shutdown --force, %d agent(s) told", n)})
+		}
 		fmt.Printf("shutdown broadcast to %d agent(s)\n", n)
 
 	case "refresh":
