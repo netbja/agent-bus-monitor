@@ -695,11 +695,12 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus suspend --reason \"OS updates\"", "agentbus suspend --project agent-bus-monitor --dry-run", "agentbus suspend --status"},
 	},
 	{
-		Name: "update", NoProject: true, Usage: []string{"[--project <p>] update [--check] [--yes]", "update --rollback [<id>] [--yes]", "update --list"},
+		Name: "update", NoProject: true, Usage: []string{"[--project <p>] update [--check] [--yes]", "update --auto [--check]", "update --rollback [<id>] [--yes]", "update --list"},
 		Brief:   "install the latest release",
 		Summary: "install the latest release from your clone's origin/main: built in its own tree, a snapshot first, --project's dispatch and missions restarted, the others listed; --rollback restores a snapshot (the person only)",
 		Flags: []cli.Flag{{Long: "check", Help: "show the plan and change nothing (an agent may run it)"},
 			{Long: "yes", Help: "answer the question yes (the person's flag: an agent is refused with or without it)"},
+			{Long: "auto", Help: "the updater's pass: with --check, the release, why it would not install it, and each project quiet or in work (read-only); installs nothing yet (quiet-update step 4b)"},
 			{Long: "rollback", Arg: "[<id>]", Help: "restore a snapshot, the last one by default, by the binary that took it"},
 			{Long: "list", Help: "the snapshots and how each update ended"},
 			{Long: "restore", Arg: "<id>", Help: "what --rollback runs with the snapshot's own binary; use --rollback"}},
