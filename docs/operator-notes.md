@@ -530,12 +530,12 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   first upcoming) side by side, else stacked, else one line each; the block drifts one cell a minute
   (`idleDrift`, a diagonal bounce), the strip up to 4 cells.
 - **master runs in Claude Code's auto mode** (`claude-sonnet-auto`, the person, 2026-11-08: they
-  switched it by hand at every start); every other role keeps its profile (`bypassPermissions` for
-  the workers). Checked against Claude Code's permission-modes page before the change: in auto mode
+  switched it by hand at every start); since roles-auto-mode (2026-11-24) every Claude Code role
+  but security and infra starts in auto too. Checked against Claude Code's permission-modes page before the change: in auto mode
   an explicit ask rule still prompts (master's `agent-spawn deploy` and `infra`, the person's
   approval) and deny rules block in every mode; broad allow rules are dropped on entering it, and
   master's are narrow. rolecfg refuses ask rules only with `bypassPermissions`, where nothing prompts.
-  `TestMasterStartsInAutoMode` holds master alone in auto, its ask rules kept.
+  `TestClaudeRolesStartInAutoMode` holds the list, master's ask rules kept.
 - **A restored pane recovers by itself** (spec `docs/superpowers/specs/2026-11-08-codex-identity-recovery.md`).
   A new process fails `identityOK` until it proves its pid through the bus; Claude Code's
   `SessionStart` hook (`roles turn end`) does it at once, and Codex's launch now carries the same
@@ -1739,6 +1739,23 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   request's own times: Requested, Accepted, Responded, and In review (since its last change, while in
   review). From 100 columns the alert column is 34 wide, so the starting point is never cut. "since
   report" (a newer `reported_at`) comes with step 3's `report --task`.
+- **A review request closes when its branch merges (board-drift step 2, spec §3).** `request review
+  <task> --branch <b> [--commit <sha>] [--more]`, run in the branch's checkout, records the head
+  (`--commit`, else the branch's tip) and `review_base`, the base tip it read (`origin/<base>` after a
+  fetch; the local `<base>` in local mode). It refuses a head already in that base ("nothing to
+  review"); a failed fetch records no base, and the request is then never closed on merge. Each pass,
+  the merge queue judges the review requests that have a branch and a `review_base` with its
+  `Delivered` test, on the head that was reviewed: the recorded commit, judged only when the branch's
+  tip (remote, else local) is that commit or is gone (deleted after the merge); a tip that differs is
+  not judged (origin's old tip after a squash merge, the branch reused for the next step, or work pushed
+  with no new review); with no commit recorded, the tip. A head already in its `review_base` is never
+  judged; local refs that cannot be read judge nothing. Each review counts (`review_n`): the write applies only to
+  the review the pass read, so one put in review again meanwhile is left. `request done` on a request
+  closed on merge answers as on any done request: no error, no reply. A delivered one is closed by
+  the fenced `FencedRequestMerged`: done, `closed_on_merge {head, base}`, no reply, so nobody is woken
+  (Q3); busmon's request detail says "closed on merge <head> into <base>". With `--more` the request
+  goes back to `accepted` instead, the head added to `merged_steps`, and the last step (no `--more`)
+  closes it. An `accepted` request is never closed on merge. One `request-merged` event either way.
 - **A closed pop that owns open requests is no longer silent (board-drift step 1, spec §6).** The
   dispatcher keeps such a pop (its board tasks still owe work), as before, but now tells master once per
   episode, woken: "<role> has no terminal and owns open requests: <task (state)>, …. Bring it back:
@@ -1925,6 +1942,10 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   line says `last project opened: <p> (no -p) · M to switch` once. A switch from the Projects page
   re-executes busmon with `--project`, so it gets the badge and no notice. Only main sets
   `shellConfig.badge`: tests and goldens start without it. Part 2 (a per-project accent colour) follows.
+- **`q` asks before busmon quits (busmon-quit-confirm).** A popup, "Quit busmon?": `y` quits; `n`,
+  Enter or Esc stay; any other key leaves it open, and a click does nothing. Ctrl-C still quits at once,
+  popup or not, and so does a typed `/quit` in the palette. The setting `display.confirm_quit` (Display
+  group, Shift+C "Ask before q quits", default on) turns it off: `q` then quits at once.
 - **A report names its addressees, and a reply goes to its sender (busmon-reply-target).**
   `agentbus report --to <name>` now records the addressees on the report entry itself (field `to`,
   additive; older reports have none), so busmon's page shows the addressee (the person, or an agent), not "broadcast". In
@@ -2744,6 +2765,17 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   the role's own profile (`rolecfg.ResumeProfile`, which the holder applies to every resume start): the recorded profile is a broker key and still never picks what runs, and
   up says so. A recorded profile of another client is still refused (its session is not this
   client's), as is one roles.toml no longer defines.
+- **Every Claude Code role starts in auto mode but security and infra** (roles-auto-mode, the person
+  2026-11-24): coder, coder2, foureyes, architect (and `claude-fable`), sentinel, deploy and docs move
+  from `bypassPermissions` or `acceptEdits` to `auto`; security and infra stay `manual`, master was
+  already `auto`. Ask rules still prompt and deny rules still block; Claude Code's classifier decides
+  the rest, and after 3 blocks in a row (20 in a session) it asks in the pane, which prompt-notify
+  rings: a worker can now stop on a prompt where bypass never stopped. Workspace trust is still not
+  pre-accepted (Claude Code has no flag or setting for it; first-run-trust option (b) stands), and
+  Codex ignores a `-c projects."<dir>".trust_level` override (tried on codex 0.169). reviewer-codex
+  runs on `gpt-6-luna`, read-only, with `reviewer = "auto_review"` (Codex's `approvals_reviewer`: its
+  automatic review answers escalations, the person no longer does; announced as elevated at launch),
+  and every Codex agent's status line shows the tokens used (`tui.status_line`).
 - **The run, counted (run-budget §2 and §5, step 1).** `{p}:run` (a hash, runtime kind) is written only by the
   merge-queue pass, after its own write, through `bus.FencedRunPass` (fenced, Redis `TIME`): `started_at`,
   `paused_ms`, `seen_at`, `deliveries`, `state` (`running`; draining and stopped come with step 2), `since`, `why`,
