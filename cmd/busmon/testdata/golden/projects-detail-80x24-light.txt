@@ -1,6 +1,8 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  Project paused · /resume                                                    │
 │  ● answer master    review lot 1? (2 questions)                            4m│
 │  ♙ answer foureyes  need a decision on the width rule                      6m│
 │  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m│
@@ -15,10 +17,8 @@
 │ state       paused                                                           ▲
 │ agents      1 live of 5 recorded (heard from within 1d)                      ┃
 │ keys        800                                                              ┃
-│ streams     —                                                                ┃
-│ last        2h ago                                                           ┃
-│ leases      none held                                                        │
-│ pause       paused by charlie (10m ago)                                      │
-│ services    — (this machine, vdr)                                            ▼
+│ streams     —                                                                │
+│ last        2h ago                                                           │
+│ leases      none held                                                        ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   esc q close   F5 health            

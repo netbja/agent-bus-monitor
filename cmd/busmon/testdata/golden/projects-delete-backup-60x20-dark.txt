@@ -1,8 +1,8 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
- ╭─ Delete project 'old' ─────────────────────────────────╮ 
-╭│ 12 keys · 2 agents (0 live) · last activity 40d ago ·  │╮
-││ services: dispatch ○ here · holder: —                  ││
+ ╭─ Delete project 'old' ─────────────────────────────────╮…
+ │ 12 keys · 2 agents (0 live) · last activity 40d ago ·  │ 
+╭│ services: dispatch ○ here · holder: —                  │╮
 ││ This is a DEL, not a reset: streams, consumer groups,  ││
 ││ agents/usage/budget/verdicts, pilot and gate leases    ││
 ││ all go. The template and the worktrees stay.           ││

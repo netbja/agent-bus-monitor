@@ -1,5 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 62 d…─╮
 │  focus: keys · ← or tab: the tabs                        ▲
@@ -8,13 +9,12 @@
 │  Display  how busmon looks; theme, icons and fade apply… ┃
 │                                                          ┃
 │      Fade and slide                  ● on                ┃
-│    • Theme                           ‹ dark ›            ┃
+│    • Theme                           ‹ dark ›            │
 │  ▶ • Icons                           ‹ nerd ›            │
 │     off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font               │
 │      Sparklines                      ‹ auto ›            │
 │      @ inserts paths as              ‹ absolute ›        │
 │      Date format                     ‹ relative ›        │
-│      Work layout                     ‹ auto ›            │
-│      Activity auto-scroll            ● on                ▼
+│      Work layout                     ‹ auto ›            ▼
 ╰──────────────────────────────────────────────────────────╯
  ↑↓ j k move   ←→ panel   tab focus   enter edit            

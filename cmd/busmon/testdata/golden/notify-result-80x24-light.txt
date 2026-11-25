@@ -1,6 +1,8 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  Project paused · /resume                                                    │
 │  ● answer master    review lot 1? (2 questions)                            4m│
 │  ♙ answer foureyes  need a decision on the width rule                      6m│
 │  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m│
@@ -12,13 +14,11 @@
 │  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Set up ntfy · step 4/4 ────────────────────────────────────────── esc back ─╮
-│                                                                              │
-│                                                                              │
-│    its name                    phone                                         │
-│  delivered: check your phone                                                 │
+│                                                                              ▲
+│                                                                              ┃
+│    its name                    phone                                         ┃
+│  delivered: check your phone                                                 ┃
 │  t test again · e edit · enter closes                                        │
-│                                                                              │
-│  messages say what waits, never an agent's words (notify.detail = summary)   │
-│                                                                              │
+│                                                                              ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  enter next   esc back   ↑↓ choose   tab field   y copy topic   F1 help         

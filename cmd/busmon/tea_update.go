@@ -277,6 +277,12 @@ func (m *Model) open(p PanelID) tea.Cmd {
 		}
 		m.expand(p, key)
 	case PanelForYou:
+		switch key { // the pause row: /resume, or S on a paused project reached stopped (pausebanner.go)
+		case forYouResumeKey:
+			return m.resumeRow()
+		case forYouStartKey:
+			return m.askServiceStart()
+		}
 		if task, ok := strings.CutPrefix(key, planNextPrefix); ok { // the plan pointer (home-inbox-drawer §3.3)
 			return m.push(page{kind: ovPlanTask, key: task})
 		}

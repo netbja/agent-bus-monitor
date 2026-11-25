@@ -1,22 +1,22 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
-│  ● answer master    review lot 1? (2 questions)                            4m│
-│  ♙╭─ Welcome to busmon ──────────────────────────────────────────── 1/5 ─╮ 6m│
-│  ♙│                                                                      │ 1m│
-│  ◆│ busmon shows what your agents are doing and what waits for you. A    │   │
-╰───│ few short pages; esc skips, and F1 then t brings them back.          │───╯
-╭─ A│                                                                      │ …─╮
-│▶ ♙│   For you     what needs you: questions, waits, merges               │le ▲
-│  ♙│   Agents      each agent, its state and how fresh it is              │   ┃
-│  ▲│   1 Activity  everything said on the bus, live                       │   ▼
-╰───│   2 Board     who owns which task                                    │───╯
-╭─  │   3 Work      who owes what: you, the team, what comes next, ideas   │l…─╮
-│   │   4 Plan      the plan's roadmap: now, next, later                   │   ▲
-│   │                                                                      │   │
-│   │ tab moves the focus between panels; 1-4 pick one of the tabs.        │   │
-│  ○│                                                                      │   ┃
-│  ●│ ● ○ ○ ○ ○   enter next · ← back · esc skip                           │   ┃
+│  P╭─ Welcome to busmon ──────────────────────────────────────────── 1/5 ─╮   │
+│  ●│                                                                      │ 4m│
+│  ♙│ busmon shows what your agents are doing and what waits for you. A    │ 6m│
+│  ♙│ few short pages; esc skips, and F1 then t brings them back.          │ 1m│
+│  ◆│                                                                      │   │
+╰───│   For you     what needs you: questions, waits, merges               │───╯
+╭─ A│   Agents      each agent, its state and how fresh it is              │ …─╮
+│▶ ♙│   1 Activity  everything said on the bus, live                       │le ▲
+│  ♙│   2 Board     who owns which task                                    │   ┃
+│  ▲│   3 Work      who owes what: you, the team, what comes next, ideas   │   ▼
+╰───│   4 Plan      the plan's roadmap: now, next, later                   │───╯
+╭─  │                                                                      │l…─╮
+│   │ tab moves the focus between panels; 1-4 pick one of the tabs.        │   ▲
+│  ○│                                                                      │   │
+│  ●│ ● ○ ○ ○ ○   enter next · ← back · esc skip                           │   │
 │  ●╰──────────────────────────────────────────────────────────────────────╯2 …┃
 │    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯

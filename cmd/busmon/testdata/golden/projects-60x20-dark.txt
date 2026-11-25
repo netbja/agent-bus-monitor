@@ -1,5 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Projects · 5 · read just now ──────────────── esc back ─╮
 │ services and holders: this machine (vdr); — means not h… │
@@ -14,7 +15,6 @@
 │   ? for you · ? at work · 0/2 agents · 40d ago · dispat… │
 │   newone  template                                       │
 │   a template only: no key on the broker                  │
-│                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯
  ↑↓ j k move   enter detail   Z sleep   x stop   F1 help    

@@ -40,7 +40,11 @@ func (m Model) grid() *grid {
 		drawLine(g, 0, l.Header.Y+i, m.width, header[i], false)
 	}
 	if b := l.Banner; b.H > 0 {
-		drawLine(g, b.X, b.Y, b.W, m.bannerLine(b.W), false)
+		line := m.bannerLine(b.W)
+		if m.snap.pause != nil {
+			line = m.pauseBannerLine(b.W)
+		}
+		drawLine(g, b.X, b.Y, b.W, line, false)
 	}
 	if l.Tabs.H > 0 && l.Active != PanelRequests { // the Requests view has its own title, not the tabs
 		drawLine(g, 0, l.Tabs.Y, m.width, tabBarNotes(narrowPanels, m.tabOf(l.Active), m.width, true, m.tabNotes()), false)
@@ -235,9 +239,14 @@ func (m *Model) fillLists() {
 	// the medium tier, unfocused, four and "+N more"; then the plan pointer.
 	fy := &m.lists.forYou
 	items := forYouPanelItems(m.forYou)
+	pauseRow, paused := m.forYouPauseRow()
+	shown := forYouMediumRows
+	if paused { // the pause row is one of the four
+		shown--
+	}
 	more := 0
-	if l.Tier == TierMedium && m.ui.focus != PanelForYou && len(items) > forYouMediumRows {
-		more, items = len(items)-forYouMediumRows, items[:forYouMediumRows]
+	if l.Tier == TierMedium && m.ui.focus != PanelForYou && len(items) > shown {
+		more, items = len(items)-shown, items[:shown]
 	}
 	rows := make([]ListItem, 0, len(items)+1)
 	for _, it := range items {
@@ -252,6 +261,9 @@ func (m *Model) fillLists() {
 		}
 	} else if p, ok := planPointer(s); ok { // below the decisions, muted, never counted (§3.3)
 		rows = append(rows, ListItem{Key: p.key, Line: p.line, Selectable: true})
+	}
+	if paused { // the project paused: For you's first line (pausebanner.go)
+		rows = append([]ListItem{pauseRow}, rows...)
 	}
 	fy.SetItems(rows)
 	fy.SetFrame(Line{{Text: "For you", Role: RoleText}}, Line{{Text: forYouLabel(m.work.strip(0)), Role: RoleMuted}})

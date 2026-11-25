@@ -536,6 +536,10 @@ func (m *Model) counts() shellCounts {
 		extra = 1
 		w = max(w, p.line.Width())
 	}
+	if r, ok := m.forYouPauseRow(); ok { // the pause row: one of the items' rows, the medium cap's included (pausebanner.go)
+		fy++
+		w = max(w, r.Line.Width())
+	}
 	return shellCounts{ForYou: fy, ForYouExtra: extra, Agents: len(names), ForYouWidth: w + listGutter + 2, Composing: m.ui.line != lineNone}
 }
 
@@ -558,7 +562,7 @@ func (m *Model) refresh() {
 	m.work = workOf(m.workInput())
 	c := m.counts()
 	m.ro.set(m.readOnly())
-	if m.stoppedBanner() {
+	if m.bannerShown() { // the pause banner, else the stopped project's (pausebanner.go)
 		m.layout = withBanner(shellLayoutFor(m.width, m.height-1, c, m.ui.view, m.ui.tab))
 	} else {
 		m.layout = shellLayoutFor(m.width, m.height, c, m.ui.view, m.ui.tab)

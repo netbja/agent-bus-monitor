@@ -1,5 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Activity  auto-scroll on ───── 7 events · filter: none ─╮
 │    14:50 ♙ Charl… directive → coder review lot 1         ▲
@@ -10,8 +11,7 @@
 │                             │ · adapter in d0a72be ;     ┃
 │                             │   tests green              ┃
 │                             │   func veryLongFunctionName┃
-│                             │ → ForTheGolden(argumentOne ┃
-│                             ↵ full text · 4 more lines   ┃
+│                             ↵ full text · 5 more lines   ┃
 │  ○ 14:52 master   directive → charlie please look at the…┃
 │  ● 14:56 dispatch notify    project paused until 16:56   ┃
 │  ● 15:00 master   ask       asks · review lot 1? (2 ques…┃

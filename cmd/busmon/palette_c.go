@@ -117,6 +117,11 @@ func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
 	}
 	m.leaveLine(false)
 	m.closeReader()
+	if c.Name == "resume" { // asked as Z asks: what comes back (busmon-suspended-banner)
+		title, body := m.resumeQuestion()
+		m.askSleep(&sleepAsk{verb: c.Name, args: argv}, title, "Resume", body, "agentbus "+strings.Join(argv, " "))
+		return nil
+	}
 	m.askSleep(&sleepAsk{verb: c.Name, args: argv}, "Run agentbus "+c.Name+"?", "Run", "agentbus "+strings.Join(argv, " "))
 	return nil
 }

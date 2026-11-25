@@ -1,6 +1,8 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  Project paused · /resume                                                    │
 │  ● answer master    review lot 1? (2 questions)                            4m│
 │  ♙ answer foureyes  need a decision on the width rule                      6m│
 │  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m│
@@ -12,13 +14,11 @@
 │  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 62 default ──── esc back ─╮
-│  focus: keys · ← or tab: the tabs                                            ▲
-│  Display   Attention   Identity   Notifications   Services   Backup  …       ┃
-│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
-│  Display  how busmon looks; theme, icons and fade apply at once              │
-│                                                                              │
+│  Display  how busmon looks; theme, icons and fade apply at once              ▲
+│                                                                              ┃
 │      Fade and slide                  ● on                                    │
 │    • Theme                           ‹ dark ›                                │
-│  ▶ • Icons                           ‹ nerd ›                                ▼
+│  ▶ • Icons                           ‹ nerd ›                                │
+│     off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font                                   ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k move   ←→ panel   tab focus   enter edit   d reset   D reset group      
