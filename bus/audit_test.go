@@ -326,3 +326,20 @@ func TestAuditVerifyAcrossARetentionTrim(t *testing.T) {
 		t.Fatalf("a middle deletion: %+v", c)
 	}
 }
+
+// AuditLast is busmon's read (audit spec §4: the last 200 entries): the
+// newest count, newest first.
+func TestAuditLast(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, AuditKey(b.project)) })
+	for _, a := range []string{"merge", "push", "deliver"} {
+		if _, err := b.Audit(ctx, auditOK(a)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := b.AuditLast(ctx, 2)
+	if err != nil || len(got) != 2 || got[0].Action != "deliver" || got[1].Action != "push" || got[0].ID == "" {
+		t.Fatalf("last 2: %+v %v", got, err)
+	}
+}

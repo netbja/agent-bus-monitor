@@ -66,6 +66,7 @@ const (
 	ovMemory        // the Memory page (F7): the person's facts on this host (memory_page.go)
 	ovMemoryTopic   // one topic of the Memory page, its key the topic
 	ovRelease       // a release of the Plan tab's Releases column: its plan, read only (plan-tab-r3 item 5)
+	ovAudit         // the Audit list (a on History): the last audit entries, read only (audit spec §4)
 )
 
 // pendingRemoval is a d that waits for its y: the next key confirms or drops it.

@@ -280,6 +280,20 @@ func (b *Bus) AuditEntries(ctx context.Context, since int64) ([]AuditEntry, erro
 	return out, nil
 }
 
+// AuditLast are the newest count entries, newest first (busmon's Audit
+// list, spec §4).
+func (b *Bus) AuditLast(ctx context.Context, count int64) ([]AuditEntry, error) {
+	ms, err := b.r.XRevRangeN(ctx, AuditKey(b.project), "+", "-", count).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AuditEntry, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, auditOf(m))
+	}
+	return out, nil
+}
+
 // AuditCheck is AuditVerify's answer. Inconclusive: the head kept moving
 // past the check (appends trimming by age): neither whole nor broken.
 type AuditCheck struct {

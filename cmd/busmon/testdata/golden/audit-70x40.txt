@@ -1,0 +1,40 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2            15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62%   
+ 1 For you   2 Agents   3 Activity   4 Board   5 Work   6 Plan        
+╭─ Audit · 3 entries ───────────────────────────────────── esc back ─╮
+│ ▶ 11-25 18:40  merge        dispatch          ok       coder2/aud… │
+│   11-25 18:31  answer       charlie (person)  ok       ask a1      │
+│   11-25 17:05  approve      foureyes          ok       audit-step… │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+│                                                                    │
+╰────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   f filter   esc q close   
