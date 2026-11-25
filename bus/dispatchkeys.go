@@ -276,6 +276,20 @@ func (b *Bus) FencedCmd(ctx context.Context, token, from, target, typ, command s
 		"from", from, "target", target, "type", typ, "ref", "", "command", command, "text_complete", "yes")
 }
 
+// FencedEscalation is FencedCmd's escalation with the additive field agent,
+// the agent it is about (self-improving loop §3.1): friction reads that
+// field, never the text.
+func (b *Bus) FencedEscalation(ctx context.Context, token, from, target, agent, command string) (string, error) {
+	if err := ValidateText(command, CmdMaxRunes); err != nil {
+		return "", err
+	}
+	if !ValidName(target) || !ValidName(agent) {
+		return "", fmt.Errorf("invalid target %q or agent %q", target, agent)
+	}
+	return b.fencedAdd(ctx, token, "cmd",
+		"from", from, "target", target, "type", CmdEscalation, "ref", "", "command", command, "text_complete", "yes", "agent", agent)
+}
+
 // FencedNotify is Bus.Notify written only while token holds the dispatch lease.
 // Unlike Bus.Notify it bounds the message (UTF-8, CmdMaxRunes) before the script.
 func (b *Bus) FencedNotify(ctx context.Context, token, from, message string) (string, error) {

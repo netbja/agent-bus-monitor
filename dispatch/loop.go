@@ -873,7 +873,7 @@ func (l *loop) escalate(ctx context.Context, s *step, d Decision) error {
 		if strings.HasPrefix(d.Reason, "agent blocked") && s.snap != nil && s.snap.Pane != "" {
 			note += ": its client is asking something in its tab (pane " + s.snap.Pane + "), answer it there"
 		}
-	} else if _, err := l.b.FencedCmd(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, bus.CmdEscalation, body); err != nil {
+	} else if _, err := l.b.FencedEscalation(ctx, l.token, dispatchFrom, l.cfg.EscalateTo, s.agent, body); err != nil {
 		return err
 	}
 	if _, err := notify(ctx, l.token, dispatchFrom, note); err != nil {

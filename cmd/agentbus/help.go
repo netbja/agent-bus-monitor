@@ -152,7 +152,7 @@ var helpSections = []cli.Section{
 	{Title: "AGENT COMMANDS", Names: []string{"status", "report", "reports", "background", "handoff", "checkback"}},
 	{Title: "MESSAGE COMMANDS", Names: []string{"cmd", "reply", "notify", "thread", "ask", "asks", "answer", "listen", "subscribe", "history"}},
 	{Title: "REVIEW COMMANDS", Names: []string{"challenge", "verdict", "verdicts", "gate"}},
-	{Title: "WORK COMMANDS", Names: []string{"board", "request", "plan", "idea", "merge-queue", "deliver", "ci", "run"}},
+	{Title: "WORK COMMANDS", Names: []string{"board", "request", "retro", "plan", "idea", "merge-queue", "deliver", "ci", "run"}},
 	{Title: "TERMINAL COMMANDS", Names: []string{"agents", "pop", "retire", "reload", "swap", "swaps", "pane", "bind", "screen", "attach", "self-repair", "pilot"}},
 	{Title: "PROJECT COMMANDS", Names: []string{"up", "start", "down", "pause", "resume", "suspend", "shutdown", "projects", "service", "holder", "dispatch", "missions", "mission"}},
 	{Title: "USAGE COMMANDS", Names: []string{"usage", "budget", "tokens", "quota", "models", "refresh", "limits"}},

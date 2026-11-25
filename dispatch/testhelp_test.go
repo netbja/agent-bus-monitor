@@ -253,13 +253,17 @@ func entries(t *testing.T, r *redis.Client, b *bus.Bus, kind string) []redis.XMe
 	return msgs
 }
 
-// escalations counts escalation cmds about agent (body prefix "<agent>:").
+// escalations counts escalation cmds about agent (body prefix "<agent>:"),
+// each naming it in its field agent.
 func escalations(t *testing.T, r *redis.Client, b *bus.Bus, agent string) []redis.XMessage {
 	t.Helper()
 	var out []redis.XMessage
 	for _, m := range entries(t, r, b, "cmd") {
 		c, _ := m.Values["command"].(string)
 		if m.Values["type"] == bus.CmdEscalation && strings.HasPrefix(c, agent+":") {
+			if m.Values["agent"] != agent { // retro friction reads the field, never the text
+				t.Errorf("escalation %s about %s: field agent = %v", m.ID, agent, m.Values["agent"])
+			}
 			out = append(out, m)
 		}
 	}

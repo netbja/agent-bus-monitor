@@ -30,6 +30,7 @@ REVIEW COMMANDS
 WORK COMMANDS
   board:          the shared task board
   request:        tracked requests
+  retro:          a task's retrospective
   plan:           the batch's plan
   idea:           the project's ideas
   merge-queue:    what waits for merge
