@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -279,8 +280,49 @@ func (u *updater) stage(ctx context.Context) error {
 	return nil
 }
 
-func (u *updater) manifestRoles() (*rolecfg.Manifest, error) {
-	return rolecfg.Load(filepath.Join(u.tree, "roles.toml"))
+// skillPlan is the tree's role skill directories and links in env
+// (update-old-binary): asked of the release's own agentbus, built in u.tmp,
+// which knows its roles.toml (roles skill-plan --json, read leniently), so
+// a key added by the release never stops the update. A new binary without
+// that command (an older release) leaves this one to read the tree itself.
+func (u *updater) skillPlan(ctx context.Context, env []string) (rolecfg.SkillPlan, error) {
+	manifest := filepath.Join(u.tree, "roles.toml")
+	out, err := u.d.R.Run(ctx, setup.Cmd{Name: filepath.Join(u.tmp, "agentbus"), Args: []string{"roles", "skill-plan", "--json"},
+		Env: append(append([]string{}, env...), "ROLES_TOML="+manifest), Stdout: true})
+	if err == nil {
+		p, err := decodeSkillPlan(out)
+		if err != nil {
+			return rolecfg.SkillPlan{}, fmt.Errorf("the new agentbus's skill plan: %w", err)
+		}
+		return p, nil
+	}
+	m, lerr := rolecfg.Load(manifest)
+	if lerr != nil {
+		return rolecfg.SkillPlan{}, fmt.Errorf("%s: %w (the new agentbus could not read it either: %v)", manifest, lerr, err)
+	}
+	return rolecfg.PlanSkills(m, env)
+}
+
+// decodeSkillPlan reads roles skill-plan --json: an object whose dirs is an
+// array and whose links is an array (or null with links_error set); a field
+// added later is ignored. A null, an empty object or a missing field is an
+// error, never read as no skills (reviewer-codex).
+func decodeSkillPlan(b []byte) (rolecfg.SkillPlan, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil || raw == nil {
+		return rolecfg.SkillPlan{}, fmt.Errorf("not a JSON object: %q", b)
+	}
+	var p rolecfg.SkillPlan
+	if err := json.Unmarshal(b, &p); err != nil {
+		return rolecfg.SkillPlan{}, err
+	}
+	if d, ok := raw["dirs"]; !ok || string(d) == "null" {
+		return rolecfg.SkillPlan{}, errors.New("no dirs")
+	}
+	if l, ok := raw["links"]; !ok || (string(l) == "null" && p.LinksError == "") {
+		return rolecfg.SkillPlan{}, errors.New("no links and no links_error")
+	}
+	return p, nil
 }
 
 // snapshot is §3.4 step 4: what the rollback needs, read now, written before
@@ -308,13 +350,11 @@ func (u *updater) snapshot(ctx context.Context) error {
 			m.Skills.Head = h
 		}
 	}
-	roles, err := u.manifestRoles()
+	plan, err := u.skillPlan(ctx, d.env())
 	if err != nil {
 		return err
 	}
-	if m.SkillDirs, err = rolecfg.SkillDirs(roles, d.env()); err != nil {
-		return err
-	}
+	m.SkillDirs = plan.Dirs
 	m.SkillLinks = linksIn(m.SkillDirs)
 	u.m = m
 	return WriteSnapshot(u.dir, m)
@@ -394,15 +434,14 @@ func (u *updater) checkSkills(ctx context.Context) error {
 			return fmt.Errorf("the external skills in %s are not at %s", home, setup.SkillsRef(d.Getenv))
 		}
 	}
-	roles, err := u.manifestRoles()
+	plan, err := u.skillPlan(ctx, d.env("AGENTBUS_REPO="+u.tree))
 	if err != nil {
 		return err
 	}
-	links, err := rolecfg.SkillLinks(roles, d.env("AGENTBUS_REPO="+u.tree))
-	if err != nil {
-		return err
+	if plan.LinksError != "" {
+		return errors.New(plan.LinksError)
 	}
-	for _, l := range links {
+	for _, l := range plan.Links {
 		r, err := filepath.EvalSymlinks(l.Link)
 		src, serr := filepath.EvalSymlinks(l.Source)
 		if err != nil || serr != nil || r != src { // both resolved: a data dir behind a symlink is the same place

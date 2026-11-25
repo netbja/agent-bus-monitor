@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 )
 
 // rolesFixture writes a schema-2 manifest with a boot and a pop role and
@@ -197,5 +199,56 @@ func TestRolesTemplateTeam(t *testing.T) {
 	code, out, errOut = roles(env, "template", "demo", "/work", "/repo/scripts", "/repo", "0", "0", "charlie", "--roles", "master,ghost")
 	if code == 0 || out != "" || !strings.Contains(errOut, "ghost is not a boot role") {
 		t.Fatalf("an invalid team = %d %q %q", code, out, errOut)
+	}
+}
+
+// roles skill-plan --json prints the manifest's skill directories and links,
+// the plan agentbus update asks the release's own binary for
+// (update-old-binary); links that cannot be planned yet are named, the
+// directories still printed.
+func TestRolesSkillPlan(t *testing.T) {
+	_, env := rolesFixture(t)
+	home := t.TempDir()
+	env = append(env, "HOME="+home)
+	repo := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "AGENTBUS_REPO="); ok {
+			repo = v
+		}
+	}
+	code, out, errOut := roles(env, "skill-plan", "--json")
+	if code != 0 {
+		t.Fatalf("skill-plan = %d %q", code, errOut)
+	}
+	var p rolecfg.SkillPlan
+	if err := json.Unmarshal([]byte(out), &p); err != nil {
+		t.Fatalf("%v: %q", err, out)
+	}
+	if len(p.Dirs) != 1 || !strings.HasPrefix(p.Dirs[0], home) || p.LinksError == "" || len(p.Links) != 0 {
+		t.Fatalf("no skills on disk: %+v", p)
+	}
+	for _, s := range []string{"a", "b"} {
+		if err := os.MkdirAll(filepath.Join(repo, "skills", s), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "skills", s, "SKILL.md"), []byte("# "+s+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, out, _ = roles(env, "skill-plan", "--json")
+	p = rolecfg.SkillPlan{}
+	if err := json.Unmarshal([]byte(out), &p); err != nil || p.LinksError != "" || len(p.Links) != 2 ||
+		p.Links[0].Source != filepath.Join(repo, "skills", "a") || filepath.Dir(p.Links[0].Link) != p.Dirs[0] {
+		t.Fatalf("plan %+v %v", p, err)
+	}
+	empty := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(empty, []byte("schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m1\"\n[roles]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, errOut := roles(append(env, "ROLES_TOML="+empty), "skill-plan", "--json"); strings.TrimSpace(out) != `{"dirs":[],"links":[]}` {
+		t.Errorf("no roles: %q %q", out, errOut)
+	}
+	if code, _, errOut := roles(env, "skill-plan"); code != 1 || !strings.Contains(errOut, "--json") {
+		t.Errorf("without --json = %d %q", code, errOut)
 	}
 }

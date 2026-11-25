@@ -3,6 +3,7 @@ package update
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/setup"
 )
 
@@ -116,8 +118,13 @@ type fakeRun struct {
 	restore   func(c setup.Cmd) error // a snapshot's agentbus update --restore
 	moveClone bool                    // setup's skills clone checkout really moves it
 	onRestart func()
-	downOnce  string // "<project> <kind>": inactive after its first restart (crashed), up after the next
-	down      map[string]bool
+	// noSkillPlan: the new agentbus has no roles skill-plan (a tree older
+	// than the update's reading of it), so the running one parses the tree.
+	noSkillPlan bool
+	// linksError: the new binary's plan says its links cannot be planned.
+	linksError string
+	downOnce   string // "<project> <kind>": inactive after its first restart (crashed), up after the next
+	down       map[string]bool
 }
 
 // running is what the real Running reads: the active units only, each with
@@ -164,6 +171,17 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 			return nil, r.restore(c)
 		}
 		return nil, nil
+	case key == "agentbus roles skill-plan --json" && c.Name != filepath.Join(r.f.bin, "agentbus"):
+		// The new agentbus, built from the tree: it knows the tree's roles.toml,
+		// so a key this (running) binary does not know is read as the tree's
+		// own; drawn here as the same manifest without that key.
+		if r.noSkillPlan {
+			return []byte("agent roles: expected action\n"), errors.New("exit 1")
+		}
+		if r.linksError != "" {
+			return []byte(`{"dirs": ["` + filepath.Join(r.f.home, ".agents", "skills") + `"], "links": null, "links_error": "` + r.linksError + `"}`), nil
+		}
+		return r.skillPlan(c.Env), nil
 	case key == "agentbus version" && r.version != "":
 		return []byte("agentbus protocol v1\nagentbus version " + r.version + "\n"), nil
 	case key == "agentbus version" || key == "busmon --version":
@@ -209,6 +227,36 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 	}
 	r.t.Fatalf("unexpected command: %s %v", c.Name, c.Args)
 	return nil, nil
+}
+
+// newRolesKey is a roles.toml key only the release's own binary knows.
+const newRolesKey = "future_option = \"x\"\n"
+
+// skillPlan answers roles skill-plan --json as the new binary does, from the
+// ROLES_TOML in env with the release's new key dropped.
+func (r *fakeRun) skillPlan(env []string) []byte {
+	var path string
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "ROLES_TOML="); ok {
+			path = v
+		}
+	}
+	body := strings.Replace(read(r.t, path), newRolesKey, "", 1)
+	known := filepath.Join(r.t.TempDir(), "roles.toml")
+	writeFile(r.t, known, body, 0o644)
+	m, err := rolecfg.Load(known)
+	if err != nil {
+		r.t.Fatalf("the new binary's manifest: %v", err)
+	}
+	p, err := rolecfg.PlanSkills(m, env)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return b
 }
 
 func read(t *testing.T, p string) string {
@@ -744,4 +792,152 @@ func (f *flow) depsHeld() Deps {
 		return f.env[k]
 	}
 	return d
+}
+
+// newRolesRelease tags v0.3.0 upstream with a roles.toml key the running
+// binary (this package's rolecfg) does not know.
+func newRolesRelease(t *testing.T, f *flow) {
+	t.Helper()
+	body := strings.Replace(rolesToml, "model = \"test\"\n", "model = \"test\"\n[profiles.main.options]\n"+newRolesKey, 1)
+	if _, err := rolecfg.Load(writeTemp(t, body)); err == nil || !strings.Contains(err.Error(), "unknown fields") {
+		t.Fatalf("the release's key is known to this binary: %v", err)
+	}
+	writeFile(t, filepath.Join(f.up, "roles.toml"), body, 0o644)
+	writeFile(t, filepath.Join(f.up, "docs", "releases", "v0.3.0.md"), "notes\n", 0o644)
+	sh(t, f.up, "add", ".")
+	sh(t, f.up, "commit", "-qm", "three")
+	sh(t, f.up, "tag", "v0.3.0")
+}
+
+func writeTemp(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "roles.toml")
+	writeFile(t, p, body, 0o644)
+	return p
+}
+
+// update-old-binary: a release whose roles.toml carries a key the running
+// binary does not know still updates. The tree's roles are read by the new
+// binary (roles skill-plan --json), never parsed by the running one: the
+// snapshot, the skills applied and checked, the services green.
+func TestUpdateReleaseWithANewRolesKey(t *testing.T) {
+	f := newFlow(t)
+	newRolesRelease(t, f)
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 0 {
+		t.Fatalf("exit %d\n%s\n%s", code, f.out.String(), f.errw.String())
+	}
+	tree := filepath.Join(f.home, ".local", "share", "agentbus", "src", "v0.3.0")
+	if read(t, filepath.Join(f.bin, "agentbus")) != "new agentbus" {
+		t.Fatal("binaries not installed")
+	}
+	if r, _ := filepath.EvalSymlinks(filepath.Join(f.home, ".agents", "skills", "review")); r != filepath.Join(tree, "skills", "review") {
+		t.Fatalf("skill links to %s", r)
+	}
+	if strings.Join(f.r.restarted, ",") != "a dispatch,a missions" {
+		t.Fatalf("restarted %v", f.r.restarted)
+	}
+	h := History(Dir(f.env["XDG_STATE_HOME"]))
+	if len(h) != 1 || !h[0].OK || h[0].To != "v0.3.0" {
+		t.Fatalf("history %+v", h)
+	}
+	m, err := ReadManifest(filepath.Join(Dir(f.env["XDG_STATE_HOME"]), h[0].Snapshot))
+	if err != nil || len(m.SkillDirs) != 1 || m.SkillDirs[0] != filepath.Join(f.home, ".agents", "skills") {
+		t.Fatalf("snapshot skill dirs %+v %v", m.SkillDirs, err)
+	}
+	asked := 0
+	for _, k := range f.r.ran {
+		if k == "agentbus roles skill-plan --json" {
+			asked++
+		}
+	}
+	if asked != 2 { // the snapshot and the check
+		t.Errorf("the new binary was asked %d times: %v", asked, f.r.ran)
+	}
+}
+
+// A new agentbus without roles skill-plan (an older release): the running
+// binary reads the tree itself, as before.
+func TestUpdateNewBinaryWithoutSkillPlan(t *testing.T) {
+	f := newFlow(t)
+	f.r.noSkillPlan = true
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code != 0 {
+		t.Fatalf("exit %d\n%s\n%s", code, f.out.String(), f.errw.String())
+	}
+	h := History(Dir(f.env["XDG_STATE_HOME"]))
+	if len(h) != 1 || !h[0].OK {
+		t.Fatalf("history %+v", h)
+	}
+}
+
+// Neither can read it: the new binary has no skill-plan and the running one
+// does not know a key: refused before anything changed, named.
+func TestUpdateUnreadableRolesRefused(t *testing.T) {
+	f := newFlow(t)
+	newRolesRelease(t, f)
+	f.r.noSkillPlan = true
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code == 0 {
+		t.Fatal("an unreadable roles.toml updated")
+	}
+	if read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" {
+		t.Fatal("binaries changed")
+	}
+	if !strings.Contains(f.errw.String()+f.out.String(), "unknown fields") {
+		t.Errorf("the reason is not named:\n%s\n%s", f.out.String(), f.errw.String())
+	}
+}
+
+// The new binary's plan must carry its fields: a null, an empty object or a
+// plan without links (and no links_error) is refused, never read as no
+// skills; an extra field is ignored.
+func TestSkillPlanDecode(t *testing.T) {
+	for _, bad := range []string{"null", "{}", `{"dirs": ["/d"]}`, `{"links": []}`, `{"dirs": null, "links": []}`, "[]", "x"} {
+		if _, err := decodeSkillPlan([]byte(bad)); err == nil {
+			t.Errorf("%s: accepted", bad)
+		}
+	}
+	p, err := decodeSkillPlan([]byte(`{"dirs": ["/d"], "links": [{"link": "/d/a", "source": "/s/a"}], "later": 1}`))
+	if err != nil || len(p.Dirs) != 1 || len(p.Links) != 1 || p.Links[0].Source != "/s/a" {
+		t.Errorf("a full plan: %+v %v", p, err)
+	}
+	if p, err := decodeSkillPlan([]byte(`{"dirs": [], "links": []}`)); err != nil || p.Dirs == nil {
+		t.Errorf("an empty plan with both fields: %+v %v", p, err)
+	}
+	if p, err := decodeSkillPlan([]byte(`{"dirs": ["/d"], "links": null, "links_error": "skill x not found"}`)); err != nil || p.LinksError == "" {
+		t.Errorf("links not planned yet: %+v %v", p, err)
+	}
+}
+
+// Links the release cannot plan (a skill no root holds) fail the skills
+// check, rolled back, the reason named: from the new binary's links_error,
+// and from the running binary's own reading when the new one cannot answer
+// (foureyes).
+func TestUpdateUnplannableLinksRollBack(t *testing.T) {
+	f := newFlow(t)
+	f.r.linksError = "skill not found in repo or Pocock collection: ghost"
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code == 0 {
+		t.Fatal("unplannable links passed the skills check")
+	}
+	if !strings.Contains(f.errw.String()+f.out.String(), "ghost") {
+		t.Errorf("the reason is not named:\n%s\n%s", f.out.String(), f.errw.String())
+	}
+	if read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" {
+		t.Fatal("not rolled back")
+	}
+
+	g := newFlow(t)
+	g.r.noSkillPlan = true
+	writeFile(t, filepath.Join(g.up, "roles.toml"), strings.Replace(rolesToml, `skills = ["review"]`, `skills = ["review", "ghost"]`, 1), 0o644)
+	writeFile(t, filepath.Join(g.up, "docs", "releases", "v0.3.0.md"), "notes\n", 0o644)
+	sh(t, g.up, "add", ".")
+	sh(t, g.up, "commit", "-qm", "ghost")
+	sh(t, g.up, "tag", "v0.3.0")
+	if code := Run(context.Background(), g.deps(false), Options{Project: "a", Yes: true}); code == 0 {
+		t.Fatal("the fallback passed unplannable links")
+	}
+	if !strings.Contains(g.errw.String()+g.out.String(), "ghost") {
+		t.Errorf("the fallback's reason is not named:\n%s\n%s", g.out.String(), g.errw.String())
+	}
+	if read(t, filepath.Join(g.bin, "agentbus")) != "old agentbus" {
+		t.Fatal("the fallback did not roll back")
+	}
 }

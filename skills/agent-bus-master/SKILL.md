@@ -881,8 +881,10 @@ person decides each one. Until `agentbus promote` exists (the spec's step 4), by
    team's checkout), with a disposable Redis started for it:
    `go build ./... && go vet ./... && GOOS=darwin go build ./...`;
    `AGENTBUS_TEST_REDIS_URL=<disposable> go test ./... -count=1`;
-   `AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<disposable> go test ./cmd/agentbus -run '^TestReleaseEndToEnd$' -count=1 -v`,
-   whose output must hold `--- PASS: TestReleaseEndToEnd` (a SKIP or no line fails it);
+   `AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<disposable> go test ./cmd/agentbus -run '^TestRelease(EndToEnd|UpdateFromPrevious)$' -count=1 -v`,
+   whose output must hold both `--- PASS: TestReleaseEndToEnd` and `--- PASS: TestReleaseUpdateFromPrevious`
+   (a SKIP or a missing line fails it; the second proves an update from the previous release still reads
+   this tree's `roles.toml`);
    `go run ./cmd/agentbus mem check`.
 2. **A failure is yours, never the person's:** nothing is pushed and no ask is opened. Fix `dev`
    (a task to an implementer, a PR into `dev`), then check the new head.

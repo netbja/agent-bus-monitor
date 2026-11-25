@@ -139,6 +139,15 @@ func roles1(args, env []string, stdout, stderr io.Writer) error {
 			return rolecfg.InstallSkillsMissingOK(m, env, stdout, stderr)
 		}
 		return rolecfg.InstallSkills(m, env, stdout)
+	case "skill-plan": // read only: what agentbus update asks the release's own binary (update-old-binary)
+		if len(rest) != 1 || rest[0] != "--json" {
+			return errors.New("usage: skill-plan --json")
+		}
+		p, err := rolecfg.PlanSkills(m, env)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(p)
 	case "validate":
 		for _, tier := range []string{"boot", "pop"} {
 			for _, role := range m.RolesByTier(tier) {

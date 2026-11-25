@@ -25,7 +25,11 @@ package main
 // The gate's command (it fails, never skips, without a broker):
 //
 //	AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<isolated disposable broker> \
-//	  go test ./cmd/agentbus -run '^TestReleaseEndToEnd$' -count=1 -v
+//	  go test ./cmd/agentbus -run '^TestRelease(EndToEnd|UpdateFromPrevious)$' -count=1 -v
+//
+// Its output must hold a PASS line for both tests (TestReleaseUpdateFromPrevious,
+// e2e_update_test.go: an update from the previous release still reads this
+// tree's roles.toml).
 //
 // The turn hooks run as the fake client's children, as Claude Code runs
 // them, so the bus proves them by their ancestors; the test sees coder
