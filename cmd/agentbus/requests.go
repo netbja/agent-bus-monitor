@@ -125,23 +125,23 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		if _, err := fmt.Fprintln(out, id); err != nil {
 			return err
 		}
-		return retroDueLine(ctx, b, args[1], out)
+		return retroDueLine(ctx, b.RetroDue, args[1], out, os.Stderr)
 	default:
 		return fmt.Errorf("request: want send|accept|review|block|done|priority|next or [--json]")
 	}
 }
 
 // retroDueLine runs the friction check after a done (self-improving loop
-// §3.2): with friction it sends retro-<task> to the owner and says so in one
-// line. The done itself is already recorded: a failed check is told, never
-// turned into the done's failure.
-func retroDueLine(ctx context.Context, b *bus.Bus, task string, out io.Writer) error {
-	r, err := b.RetroDue(ctx, task)
+// §3.2): when it sends a retro it says so in one line. The done itself is
+// already recorded: a failed check is told on errOut, never turned into the
+// done's failure.
+func retroDueLine(ctx context.Context, due func(context.Context, string) (bus.Retro, error), task string, out, errOut io.Writer) error {
+	r, err := due(ctx, task)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "retro check of %s failed: %v\n", task, err)
+		fmt.Fprintf(errOut, "retro check of %s failed: %v\n", task, err)
 		return nil
 	}
-	if r.Task == "" {
+	if !r.Sent {
 		return nil
 	}
 	_, err = fmt.Fprintf(out, "retro due: %s (%s)\n", r.Task, bus.FrictionSummary(r.Signals))

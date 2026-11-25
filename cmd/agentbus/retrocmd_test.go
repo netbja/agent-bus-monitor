@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,9 @@ func TestRetroEvidenceAndNone(t *testing.T) {
 	if err := runRetro(ctx, retroDeps{Bus: b, Getenv: emptyEnv}, []string{"none", "rough", "x"}, &bytes.Buffer{}); err == nil {
 		t.Error("none without an agent: no error")
 	}
+	if err := runRetro(ctx, d, []string{"none", "green", "x"}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "has no retro") {
+		t.Errorf("none of a task without retro: %v", err)
+	}
 }
 
 func TestRetroUsage(t *testing.T) {
@@ -166,5 +170,33 @@ func TestRetroUsage(t *testing.T) {
 		if err := runRetro(context.Background(), d, args, &bytes.Buffer{}); err == nil {
 			t.Errorf("%q: no error", args)
 		}
+	}
+}
+
+// A failed friction check after done is told on stderr, never the done's
+// failure; a retro not sent by this done is not reported.
+func TestRetroDueLine(t *testing.T) {
+	ctx := context.Background()
+	var out, errOut bytes.Buffer
+	fail := func(context.Context, string) (bus.Retro, error) { return bus.Retro{}, errors.New("broker gone") }
+	if err := retroDueLine(ctx, fail, "x", &out, &errOut); err != nil {
+		t.Errorf("failed check failed the done: %v", err)
+	}
+	if out.Len() != 0 || errOut.String() != "retro check of x failed: broker gone\n" {
+		t.Errorf("out %q err %q", out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	existing := func(context.Context, string) (bus.Retro, error) {
+		return bus.Retro{Task: "retro-x", Signals: []bus.FrictionSignal{{Kind: "reject", ID: "1-0"}}, To: "coder"}, nil
+	}
+	if err := retroDueLine(ctx, existing, "x", &out, &errOut); err != nil || out.Len() != 0 || errOut.Len() != 0 {
+		t.Errorf("not sent: %v %q %q", err, out.String(), errOut.String())
+	}
+	sent := func(context.Context, string) (bus.Retro, error) {
+		return bus.Retro{Task: "retro-x-2", Signals: []bus.FrictionSignal{{Kind: "reject", ID: "1-0"}}, To: "coder", Sent: true}, nil
+	}
+	if err := retroDueLine(ctx, sent, "x", &out, &errOut); err != nil || out.String() != "retro due: retro-x-2 (1 reject)\n" {
+		t.Errorf("sent: %v %q", err, out.String())
 	}
 }

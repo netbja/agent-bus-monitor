@@ -20,6 +20,7 @@ type retroBus interface {
 	SignalText(ctx context.Context, s bus.FrictionSignal) (string, error)
 	RetroOwner(ctx context.Context, task string) (string, error)
 	RetroRequest(ctx context.Context, task, to string) (bus.Retro, error)
+	FindRetro(ctx context.Context, task string) (name, owner string, err error)
 	Agents(ctx context.Context) (map[string]bus.AgentSnapshot, error)
 	AcceptRequest(ctx context.Context, task, agent string) error
 	CompleteRequest(ctx context.Context, task, agent, body string) (string, error)
@@ -85,7 +86,13 @@ func runRetro(ctx context.Context, d retroDeps, args []string, stdout io.Writer)
 		if d.Self == "" {
 			return errors.New("retro none: run it as the retro's owner (AGENT_BUS_AGENT)")
 		}
-		name := bus.RetroTaskName(task)
+		name, _, err := d.Bus.FindRetro(ctx, task)
+		if err != nil {
+			return err
+		}
+		if name == "" {
+			return fmt.Errorf("retro none: %s has no retro", task)
+		}
 		if err := d.Bus.AcceptRequest(ctx, name, d.Self); err != nil {
 			return err
 		}

@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -267,9 +268,6 @@ func TestRetroTaskName(t *testing.T) {
 	if RetroTaskName(x) != rx {
 		t.Error("not stable")
 	}
-	if !IsRetroTask("retro-x") || IsRetroTask("retrox") {
-		t.Error("IsRetroTask")
-	}
 }
 
 // Two long tasks with the same first characters each get their own retro,
@@ -292,26 +290,75 @@ func TestRetroDueLongTasks(t *testing.T) {
 	}
 }
 
-// A retro name already on the board for another task is refused, never
-// taken as this task's retro: an entry not sent by agentbus, or agentbus's
-// retro of another task.
-func TestRetroDueRefusesAnotherTasksRetro(t *testing.T) {
-	cases := []struct{ from, body string }{
-		{"master", retroBodyPrefix("rough") + "1 reject). a look-alike"},
-		{SystemSender, retroBodyPrefix("other") + "1 reject). another task's retro"},
+// A retro is known by retro_of, never by its name: a real task named
+// retro-<x> gets its own retro, and the retro of x, its name taken by that
+// task, takes the next free name; done never points at the other task.
+func TestRetroNameTakenByARealTask(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	k := frictionKit{t, b}
+	startTask(t, b, "retro-build", "coder") // a real task, not a retro
+	k.reject("coder")
+	doneTask(t, b, "retro-build", "coder")
+	d, err := b.RetroDue(ctx, "retro-build")
+	if err != nil || !d.Sent || d.Task != "retro-retro-build" {
+		t.Fatalf("real retro-* task: %+v %v", d, err)
 	}
-	for _, c := range cases {
-		b := dialTest(t)
-		ctx := context.Background()
-		if _, err := b.Request(ctx, RetroTaskName("rough"), c.from, "coder", "", c.body, 0); err != nil {
-			t.Fatal(err)
+
+	startTask(t, b, "build", "coder2")
+	k.reject("coder2")
+	doneTask(t, b, "build", "coder2")
+	d, err = b.RetroDue(ctx, "build")
+	if err != nil || !d.Sent || d.Task != "retro-build-2" || d.To != "coder2" {
+		t.Fatalf("build: %+v %v", d, err)
+	}
+	board, _ := b.Board(ctx)
+	if r := board["retro-build-2"].Request; r == nil || r.RetroOf != "build" || r.From != SystemSender {
+		t.Errorf("retro-build-2 %+v", r)
+	}
+	if r := board["retro-build"].Request; r.RetroOf != "" || r.Target != "coder" {
+		t.Errorf("the real task changed: %+v", r)
+	}
+	if name, owner, err := b.FindRetro(ctx, "build"); err != nil || name != "retro-build-2" || owner != "coder2" {
+		t.Errorf("FindRetro: %q %q %v", name, owner, err)
+	}
+	again, err := b.RetroDue(ctx, "build")
+	if err != nil || again.Sent || again.Task != "retro-build-2" {
+		t.Errorf("repeated done: %+v %v", again, err)
+	}
+	if name, _, _ := b.FindRetro(ctx, "nosuch"); name != "" {
+		t.Errorf("FindRetro of a task without retro: %q", name)
+	}
+}
+
+// The free names stay valid and distinct, for a long task too.
+func TestRetroNames(t *testing.T) {
+	for _, task := range []string{"build", "a2345678901234567890123456", "aaaaaaaaaaaaaaaaaaaaaaaaaax"} {
+		seen := map[string]bool{}
+		for _, n := range retroNames(task) {
+			if !ValidName(n) || seen[n] {
+				t.Errorf("%s: %q", task, n)
+			}
+			seen[n] = true
 		}
-		startTask(t, b, "rough", "coder")
-		frictionKit{t, b}.reject("coder")
-		doneTask(t, b, "rough", "coder")
-		if d, err := b.RetroDue(ctx, "rough"); err == nil {
-			t.Errorf("from %s: another entry taken as the retro: %+v", c.from, d)
+		if len(seen) != 9 {
+			t.Errorf("%s: %d names", task, len(seen))
 		}
+	}
+}
+
+// Request refuses an existing task with ErrTaskExists, its message naming
+// the existing request.
+func TestRequestTaskExists(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	id, err := b.Request(ctx, "dup", "master", "coder", "", "x", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.Request(ctx, "dup", "master", "coder", "", "x", 0)
+	if !errors.Is(err, ErrTaskExists) || !strings.Contains(err.Error(), id) {
+		t.Errorf("%v", err)
 	}
 }
 
