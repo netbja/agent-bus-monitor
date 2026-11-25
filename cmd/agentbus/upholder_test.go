@@ -422,3 +422,53 @@ func TestWaitHolderHasOneDeadline(t *testing.T) {
 		t.Fatalf("ready at the second probe: %d probes", probes)
 	}
 }
+
+// Cap A (agent-resource-limits §3, §8): the holder unit up writes carries the
+// machine's limits.holder_* keys from config.toml, "off" passed on as no
+// limit, an unset key as its default (the person's Q1: 70 %, 60 %, 4G).
+func TestUpHolderGetsTheMachineMemoryCap(t *testing.T) {
+	for _, c := range []struct {
+		file string
+		want service.HolderLimits
+	}{
+		{"", service.HolderLimits{MemoryMax: "70%", MemoryHigh: "60%", SwapMax: "4G"}},
+		{"[limits]\nholder_memory_max = \"16G\"\nholder_memory_high = \"off\"\n", service.HolderLimits{MemoryMax: "16G", SwapMax: "4G"}},
+		{"[limits]\nholder_memory_max = \"off\"\nholder_memory_high = \"off\"\nholder_swap_max = \"off\"\n", service.HolderLimits{}},
+	} {
+		_, _, _, _, deps := upFixture(t)
+		u := withServices(t, &deps)
+		exe := filepath.Join(t.TempDir(), "agentbus")
+		if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		deps.Exe = func() (string, error) { return exe, nil }
+		cfg := t.TempDir()
+		if c.file != "" {
+			if err := os.MkdirAll(filepath.Join(cfg, "agentbus"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(cfg, "agentbus", "config.toml"), []byte(c.file), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		env0 := deps.Env
+		deps.Env = func(k string) string {
+			if k == "XDG_CONFIG_HOME" {
+				return cfg
+			}
+			return env0(k)
+		}
+		hm := &fakeHolderManager{fakeManager: u.m, holders: map[string]service.HolderSpec{}, active: map[string]bool{}}
+		raw := "v9.9.9"
+		deps.HolderBuild = func() string { return raw }
+		deps.HolderAnswers = func(string, string) bool { return true }
+		deps.Sleep = func(time.Duration) {}
+		var out bytes.Buffer
+		if err := startHolder(deps, hm, "demo", "/work/demo", &out); err != nil {
+			t.Fatal(err)
+		}
+		if got := hm.holders[service.BuildKey(raw)].Limits; got != c.want {
+			t.Errorf("config %q: limits %+v, want %+v", c.file, got, c.want)
+		}
+	}
+}

@@ -89,10 +89,11 @@ enforced). So A and B are the protection. C adds precision.
 
 ## 3. Cap A: the holder unit
 
-`systemdHolderUnit` writes three more lines in `[Service]`:
+`systemdHolderUnit` writes four more lines in `[Service]`:
 
 ```
 OOMPolicy=continue
+MemoryHigh=<limits.holder_memory_high>    # default 60%  (the person's answer to Q1)
 MemoryMax=<limits.holder_memory_max>      # default 70%  (systemd: % of physical RAM)
 MemorySwapMax=<limits.holder_swap_max>    # default 4G
 ```
@@ -101,12 +102,20 @@ MemorySwapMax=<limits.holder_swap_max>    # default 4G
   The killed process's parent (say, a client's shell tool) sees `signal: killed`.
 - **`MemorySwapMax` matters as much as `MemoryMax`.** Without it, a runaway fills swap first and
   the host thrashes before the kill (32 GB on 2026-11-25).
-- **No `MemoryHigh`:** it throttles every pane of the holder, not only the runaway. The early
-  warning is §3.1's notice.
+- **`MemoryHigh` at 60 %, the person's choice (Q1).** r2 proposed none, because it throttles
+  every pane of the holder, not only the runaway. The person chose a soft throttle below the hard
+  cap: past it, the kernel reclaims and slows the whole holder before anything is killed. busmon's
+  warning when the holder crosses it is §3.1's notice (step 3). `off` writes no line.
 - **No CPU cap on the unit:** CPU starvation kills nothing. C's time cap and §5 cover it.
 - **An upgrade, not a restart.** Units are never restarted to upgrade (herdr-exit spec 4.4a). The
   next build's `agentbus up` writes a new unit with these lines, and the old build drains as it
   does today.
+- **The limits apply live.** `agentbus up` rewrites the current build's unit at each run when its
+  text changed, then `daemon-reload`. A reload applies `MemoryHigh`, `MemoryMax` and
+  `MemorySwapMax` to the running holder at once, with no restart (checked on a throwaway unit:
+  `memory.max` changed, same PID). So a limit the person lowers takes effect at their next `up`,
+  and one below the holder's current use makes the kernel reclaim or kill at once. The keys' help
+  says so.
 - **launchd** has no equivalent. macOS: §6 and §11 Q3.
 - **The supervised holder** (no service manager) has no cgroup. It gets nothing from A or B, only
   C's fallback and §5. Its `holder` health detail says so.
@@ -292,8 +301,9 @@ RAM differs per host. Sizes use systemd's syntax: `8G`, or `70%` of physical RAM
 
 | Key | Default | Read by | When |
 |---|---|---|---|
-| `limits.holder_memory_max` | `70%` | `agentbus up` (unit text) | when a unit is written |
-| `limits.holder_swap_max` | `4G` | `agentbus up` (unit text) | when a unit is written |
+| `limits.holder_memory_max` | `70%` | `agentbus up` (unit text) | when a unit is written; live at the reload |
+| `limits.holder_memory_high` | `60%` | `agentbus up` (unit text) | same |
+| `limits.holder_swap_max` | `4G` | `agentbus up` (unit text) | same |
 | `limits.agent_memory_max` | `30%` | holder | each launch; live, at most once a minute |
 | `limits.agent_swap_max` | `2G` | holder | same |
 | `limits.warn_at` | `0.8` | dispatch, health, busmon | each pass |
@@ -347,6 +357,10 @@ no downside to switch off.
 - (b) `85%`, swap `8G`: more room for agents, less for everything else.
 - (c) No memory cap, only `OOMPolicy=continue`: the panes survive, but the host still thrashes
   before the kill.
+
+**The person's answer (2026-11-25, through master):** (a), plus `MemoryHigh` near 60 % as a soft
+throttle, busmon warning when the holder crosses it; the values configurable; the broker and the
+desktop stay outside the cap. Built in step 1 (§3).
 
 **Q2. Does each agent get its own cap (cap B, step 4)?**
 - **(a) Yes: `30%` of RAM and `2G` of swap per agent (recommended).** About 18 GB here. A normal

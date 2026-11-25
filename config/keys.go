@@ -557,6 +557,18 @@ var Keys = append([]*Key{
 	// person typed an agent is left alone. Read when the holder starts.
 	{Name: "holder.scrollback", Env: "AGENT_BUS_HOLDER_SCROLLBACK", Kind: Int, Default: 5000, ReadBy: "agentbus holder",
 		env: envPositiveInt, file: filePositiveInt},
+	// Cap A, the holder unit's memory (spec
+	// 2026-11-25-agent-resource-limits-design.md §3, §8; the person's Q1):
+	// systemd's syntax, "off" for no limit. The person's alone and per host
+	// (RAM differs), written into the unit by agentbus up, whose reload
+	// applies it to the running holder at once: below its current use, the
+	// kernel reclaims or kills then.
+	{Name: "limits.holder_memory_max", Kind: String, Default: "70%", ReadBy: "agentbus up (the holder unit's MemoryMax; the running holder's at once)", MachineOnly: true, PersonOnly: true,
+		file: fileMemoryLimit},
+	{Name: "limits.holder_memory_high", Kind: String, Default: "60%", ReadBy: "agentbus up (the holder unit's MemoryHigh, a soft throttle; the running holder's at once)", MachineOnly: true, PersonOnly: true,
+		file: fileMemoryLimit},
+	{Name: "limits.holder_swap_max", Kind: String, Default: "4G", ReadBy: "agentbus up (the holder unit's MemorySwapMax; the running holder's at once)", MachineOnly: true, PersonOnly: true,
+		file: fileMemoryLimit},
 	{Name: "dispatch.submit_wait", Env: "AGENT_BUS_SUBMIT_WAIT", Kind: Duration, Default: 2 * time.Second, ReadBy: "agentbus holder",
 		env: envBoundedDuration(time.Minute), file: fileBoundedDuration(time.Minute)},
 	{Name: "dispatch.person_quiet", Env: "AGENT_BUS_PERSON_QUIET", Kind: Duration, Default: 3 * time.Second, ReadBy: "agentbus holder",
@@ -1099,6 +1111,36 @@ func envRunawayInt(raw string) (any, envResult) {
 		return n, envUse
 	}
 	return nil, envInvalid
+}
+
+// fileMemoryLimit is a systemd memory limit (agent-resource-limits §8):
+// "off", a whole percentage of RAM from 1 to 100 ("70%"), or a size above 0,
+// in bytes or with a K, M, G or T suffix ("4G", "1.5G"). Nothing else, so the
+// value is one unit-file word.
+func fileMemoryLimit(v any) (any, string) {
+	const want = "want a size such as \"4G\", a percentage of RAM such as \"70%\", or \"off\""
+	s, ok := v.(string)
+	if !ok {
+		return nil, want
+	}
+	if s == "off" {
+		return s, ""
+	}
+	if pct, isPct := strings.CutSuffix(s, "%"); isPct {
+		if n, err := strconv.Atoi(pct); err == nil && n >= 1 && n <= 100 && strconv.Itoa(n) == pct {
+			return s, ""
+		}
+		return nil, want
+	}
+	num := strings.TrimRight(s, "KMGT")
+	if len(s)-len(num) > 1 || num == "" || strings.Trim(num, "0123456789.") != "" || strings.Count(num, ".") > 1 ||
+		num[0] == '.' || num[len(num)-1] == '.' {
+		return nil, want
+	}
+	if f, err := strconv.ParseFloat(num, 64); err != nil || f <= 0 {
+		return nil, want
+	}
+	return s, ""
 }
 
 func fileBool(v any) (any, string) {

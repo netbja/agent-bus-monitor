@@ -1,0 +1,45 @@
+package config
+
+import (
+	"strings"
+	"testing"
+)
+
+// Cap A's keys (agent-resource-limits §3, §8; the person's Q1: 70 %, 4G of
+// swap, a MemoryHigh soft throttle near 60 %): the person's alone, per host,
+// from config.toml only, in systemd's syntax or "off".
+func TestHolderLimitKeys(t *testing.T) {
+	for name, def := range map[string]string{
+		"limits.holder_memory_max":  "70%",
+		"limits.holder_memory_high": "60%",
+		"limits.holder_swap_max":    "4G",
+	} {
+		k, ok := Lookup(name)
+		if !ok {
+			t.Fatalf("%s not registered", name)
+		}
+		if k.Env != "" || !k.MachineOnly || !k.PersonOnly || k.Kind != String || k.Default != def ||
+			k.Group() != GroupServices || k.Applies() != AppliesRun {
+			t.Errorf("%s row %+v (group %q, applies %v)", name, k, k.Group(), k.Applies())
+		}
+		p := writeFile(t, "config.toml", "[limits]\n")
+		if err := Set(p, name, "50%"); err == nil || !strings.Contains(err.Error(), "edit config.toml yourself") {
+			t.Errorf("Set %s: %v", name, err)
+		}
+		for _, good := range []string{"off", "70%", "100%", "1%", "4G", "512M", "2T", "1048576", "1.5G"} {
+			if v, why := k.file(good); why != "" || v != good {
+				t.Errorf("%s = %q refused: %q", name, good, why)
+			}
+		}
+		for _, bad := range []any{"", "0", "0G", "0.0G", "0%", "101%", "070%", "70%%", "-1G", "4GB", "4GG", "G", ".5G", "4.", "1..5G", "4 G", "4\tG", "x", "4G\nExecStart=/bin/sh", "infinity", int64(4)} {
+			if _, why := k.file(bad); why == "" {
+				t.Errorf("%s = %#v taken", name, bad)
+			}
+		}
+	}
+	p := writeFile(t, "config.toml", "[limits]\nholder_memory_max = \"16G\"\nholder_memory_high = \"off\"\nholder_swap_max = \"1G\"\n")
+	r := Resolver{Getenv: env(map[string]string{}), Files: []*File{Load(p, "config.toml")}}
+	if r.String("limits.holder_memory_max") != "16G" || r.String("limits.holder_memory_high") != "off" || r.String("limits.holder_swap_max") != "1G" {
+		t.Fatalf("resolved %q %q %q", r.String("limits.holder_memory_max"), r.String("limits.holder_memory_high"), r.String("limits.holder_swap_max"))
+	}
+}
