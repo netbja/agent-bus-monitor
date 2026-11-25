@@ -1,0 +1,196 @@
+# Bounded auto-approve (bounded-auto)
+
+Status: IDEA spec r5, for review (subject `bounded-auto-spec`). Not built. Base: origin/dev
+`af527c19`. Author: architect, from master's directive (cmd `1795559518593-0`, task
+`specs-from-person-docs`). This is idea 2 of 4 from the person's note "ideas borrowed from
+PiBot", item 3 there. The note's reference is PiBot `packages/policy/src/core/yolo.ts`
+(Apache-2.0), used for the idea only; no code is translated. No new dependency. The questions
+for the person are last (§5).
+r2: reviewer-codex's reject of r1 (verdict `1795575214730-0`). The launch now refuses a profile
+whose mode cannot keep the danger-class asks, not only one that would lose denies, even for a role
+with no deny rule (§3). The guarantee is narrowed to what is enforced: the person approves a danger
+act at the client's prompt, and two reviews on `deliver` are a review gate, not that approval
+(§2, §3). `elevated` is cited for what it names; Claude `auto` is not in it (§1).
+r3: reviewer-codex's reject of r2 (verdict `1795575323186-0`). A prompting mode is a sandbox
+boundary, not the enforcement of agentbus's rules. Inside its sandbox Codex runs a command
+without asking, a deny-matched read included, and `auto_review` approves an escalation without
+the person. So rules are held only where agentbus writes rules the client enforces, which is
+Claude Code today. Every other profile is refused unless the person accepts it by name. Three
+team roles are concerned, so this is the person's Q1 (§3, §4, §5).
+r4: reviewer-codex's reject of r3 (verdict `1795575397471-0`). r3's exception was an open-ended
+grant by profile name, which is the persistent grant rule 4 forbids. The policy now has no
+exception. A separate relaxation, outside the policy and only on the person's explicit decision,
+is offered in §3.1 and Q1. It is bound to the role, the profile's exact effective settings and an
+expiry, and it claims no rule enforcement. The §1 mode list no longer contradicts the Claude
+modes that hold.
+r5: foureyes's reject of r4 (verdict `1795575456538-0`). A relaxed role is exactly one whose
+rules do not hold, so it can rewrite its own entry in `config.toml`. §3.1 now says so, and
+`roles doctor` shows it. The fingerprint covers the merged rules. Codex's own forbidden rules
+are named as a later route (§3.2).
+
+## 1. Today's auto-approve switches
+
+| Switch | Where | Scope |
+|---|---|---|
+| A client's own auto mode: Claude `auto`, `bypassPermissions` or `dontAsk`, Codex `approval=never`, Kimi `yolo` or `auto`, Grok `bypassPermissions`, agy `skip` or `auto` | the profile in `roles.toml`. `elevated` (`rolecfg/launch.go:1018`) names all of them except Claude `auto`, plus Claude allow rules and Codex's full-access sandbox | one role's session |
+| The role's tool rules (`allow`, `ask`, `deny`) | `roles.toml [tool_rules]` and per role; written per launch with `--settings` (`rolecfg/launch.go:696`) | one role's session |
+| One approval for a small change | `delivery.single_approval`, `delivery.same_provider_ok`, both PersonOnly (`config/keys.go:674`) | one PR |
+| Automatic update | `updates.auto`, PersonOnly | the machine |
+
+Every Claude Code role but security and infra now runs in `auto` (#764). The shared denies
+"apply to every role, whatever its permission mode" (`roles.toml`, header). That holds for
+Claude Code. Nothing checks it for the other clients.
+
+## 2. The idea: four rules every auto-approve obeys
+
+1. **One scope.** An auto-approve names what it covers: one role's session, one task or one
+   PR. Never a whole project, never every project.
+2. **`ask` may become `allow`; `deny` never does.** A deny rule holds under every auto mode.
+3. **Never the danger class.** A fixed list, written in the code and not in a setting:
+   - force push (`git push --force`, `-f`, `--force-with-lease`);
+   - deleting a branch, local or remote (`git branch -D`, `git push --delete`, `git push <r> :<b>`);
+   - a merge or push to the default branch, or to `main` (master's promotion stays the person's
+     yes, decision 2026-11-16);
+   - reinstalling the binaries (`./setup.sh`, `go install` into the installed path);
+   - spending: any command the person marks as paying.
+
+   Each one is an `ask` in every role, whatever its mode. **The person approves a danger act
+   at the client's prompt in the agent's pane** (prompt-notify rings). That is the one
+   approval this spec relies on. The person may add entries (`policy.danger_extra`,
+   PersonOnly, additions only). No setting removes one.
+
+   **What is enforced, and what is not.** The prompt holds only where the client honours an
+   ask rule in its mode, which the launch checks (§3). Even then, an ask rule matches the
+   command's text, so a command that is spelled differently, or run inside a script or a test,
+   is not caught. That is defence in depth, not a boundary. The only boundaries outside the
+   client are these:
+   - a push or merge to `main`: the forge's branch protection, which the person sets (Q4), and
+     master's promotion on the person's yes, an ask answered `typed=yes`;
+   - everything else on the list (a force push to a work branch, a branch delete, a reinstall,
+     spending): the client's prompt only.
+   This spec claims no more than that.
+4. **Never persistent.** An auto-approve is never written where it outlives its scope. agentbus
+   writes rules only into the launch's own `--settings`, never into `~/.claude/settings.json`,
+   `~/.codex/config.toml`, or a project's `.claude/settings.local.json`.
+
+## 3. What the build does
+
+- **The danger class in the shared rules.** The launch adds the §2.3 list to every role's
+  `ask` rules. The source is one Go table (`rolecfg`), so `roles.toml` cannot drop it. An
+  explicit ask rule still prompts in Claude's `auto` mode (`roles.toml`, header), and prompt-notify
+  rings the person. These are text matches: defence in depth (§2.3).
+- **The danger asks and the denies must hold, or the launch is refused.** One Go table,
+  `rulesHold(profile)`, judges the effective profile and not only its mode name. Rules hold only
+  where agentbus writes them and the client enforces them per command, which is Claude Code in
+  `manual`, `acceptEdits` or `auto` (an explicit ask still prompts and a deny blocks, as the
+  `roles.toml` header documents). Claude `dontAsk` holds too, because an ask becomes a refusal,
+  which is stricter. Everything else does not hold:
+  - a client for which agentbus writes no per-command rules: Codex, Kimi and Grok. agy keeps only
+    the denies `agyDeny` can translate (`rolecfg/agy.go:62`), so it does not hold either.
+    Whatever their mode, a sandbox is not a rule. Inside it a command runs without asking, a
+    deny-matched read of `.env` included. A sandbox that allows writes or the network lets a
+    danger act run inside it;
+  - an escalation approved by anyone but the person: Codex `reviewer=auto_review`;
+  - Claude `bypassPermissions`, and every non-Claude mode on the §1 list (`approval=never`,
+    `yolo`, `skip`, …). Claude `auto` and `dontAsk` from that list hold, as above. Any client or
+    mode the table does not know does not hold either.
+
+  A profile that does not hold is **refused at launch, for every role**, because the danger asks
+  are mandatory. The policy has no exception. **Today this concerns three roles:** reviewer-codex
+  (`codex-review`: a read-only sandbox, but `reviewer = "auto_review"`), ui-kimi (`kimi`) and
+  ui-grok (`grok`).
+
+### 3.1 A separate relaxation, not part of the policy (Q1)
+
+If the person wants one of those roles to keep running, that is a relaxation of this policy, and
+the spec names it as one. It complies with nothing above. It runs only if the person decides it
+(Q1), and then it is bounded:
+
+- **One entry per role and profile,** written by the person (`agentbus policy relax
+  <role> --days <n>`, refused from an agent's process tree by `agentcaller.Refuse`). It is stored
+  in `config.toml`. A role is kept from editing that file only by a Claude Code deny
+  (`Edit(~/.config/agentbus/config.toml)`, `roles.toml:161`, whose comment says a shell can still
+  write it) and by `config set`'s PersonOnly refusal (`config/write.go:72`).
+- **Bound to the exact effective profile:** the entry holds a fingerprint of its client, model,
+  sandbox, approval, reviewer, network and other options, and of the role's **merged** tool
+  rules: the shared denies, the danger list and the role's own rules. Any change voids the entry,
+  and the launch is refused until the person renews it. So an agentbus update that changes the
+  shared rules voids every relaxation, and the person looks at each one again. That is intended.
+- **It expires:** at most 30 days, with no default. Afterwards the launch is refused again.
+- **It claims no enforcement, not even of itself.** The relaxed role is one whose rules do not
+  hold. As the same OS user, it can write `config.toml` and change its own entry, expiry and
+  fingerprint included. The expiry and the fingerprint bind the person's honest configuration,
+  not the relaxed agent. `roles doctor`, busmon and the launch line show the role as `rules not
+  held`, with the denies it loses, the danger acts it can run unprompted, the expiry date, and
+  this line: "the relaxed agent could extend this itself".
+
+### 3.2 A later route for Codex (not in this build)
+
+Codex enforces per-command rules of its own: `prefix_rule` entries with `decision = "forbidden"`
+in the rules files under `CODEX_HOME`. A launch could write them into a per-launch `CODEX_HOME`,
+as it writes `--settings` for Claude. They match commands, not file reads, so `Read(**/.env)`
+would still not hold. They could make the danger asks and the `Bash(...)` denies hold for
+`codex-review` without breaking rule 4. That is a later spec.
+
+- **Two reviews are a review gate, not the person's approval.** `agentbus deliver` stops offering
+  `single_approval` and `same_provider_ok` for a PR whose base is the default branch. Such a PR
+  then needs both reviews, which is a check on the code. The person's approval of the act stays
+  the prompt, or master's promotion ask.
+- **Persistent grants are shown, not removed.** A person who clicks "don't ask again" in a
+  pane makes the client write an allow into its own settings file. agentbus never edits those
+  files. `roles doctor` lists the allows it finds there, so the person can decide (Q3).
+
+## 4. Tests
+
+- `rolecfg`: every launched role's `--settings` carries the whole danger list as `ask`, also
+  when `roles.toml` lists an `allow` that covers one of them (the ask wins). That allow is dropped, and
+  `roles doctor` says so.
+- A Codex profile with `approval=never` is refused at launch on a role with deny rules, and also
+  on a role with none (the danger asks). So is each mode on the "does not hold" list, and any
+  client or mode the table does not know.
+- **A sandbox is not a rule:** a Codex `on-request` profile with a read-only sandbox, on a role
+  whose denies include `Read(**/.env)`, is refused. The reason names the in-sandbox read the
+  deny would not stop. A `workspace-write` or network-enabled Codex profile is refused, the
+  reason naming a danger act (`git push --force`) that could run inside its sandbox.
+- **Auto review is not the person:** `on-request` with `reviewer=auto_review` is refused, its
+  reason `auto review`.
+- The Claude profiles in `roles.toml` today launch. `codex-review`, `kimi` and `grok` are refused.
+- With §3.1 built: a relaxation for reviewer-codex lets that role launch on `codex-review`. It
+  does not cover another role on the same profile. A changed sandbox, network, reviewer or tool
+  rule voids it. It ends at its expiry. `agentbus policy relax` refuses from an agent's process
+  tree and refuses more than 30 days. A change to the shared denies voids every relaxation. `roles doctor` shows a relaxed
+  role as `rules not held`, with the line "the relaxed agent could extend this itself".
+- `agentbus deliver` with `single_approval` on: a PR whose base is the default branch needs both
+  reviews.
+- No launch writes outside its generated settings file. The test fakes `$HOME` and checks the
+  client config files are unchanged.
+- `policy.danger_extra` adds an entry. A setting that tries to remove a fixed entry fails
+  validation.
+
+**Not doing:** no new approval UI, no classifier of our own, no change to Claude Code's own auto
+mode, and no grant that crosses machines (that is idea 4, remote approvals).
+
+## 5. Questions for the person
+
+**Q1. Profiles whose rules do not hold** (today reviewer-codex, ui-kimi and ui-grok). This is
+a relaxation of the policy, not part of it.
+- **(A) recommended: build §3.1, bounded relaxations.** Your choice per role, bound to its exact
+  settings, expiring within 30 days, shown as `rules not held`. You would likely relax
+  reviewer-codex, so the second reviewer stays.
+- (B) no relaxation: those roles stop launching, and reviews run only on Claude.
+- (C) change their profiles instead. For example, drop `reviewer = "auto_review"` from
+  `codex-review`. It still does not hold its denies, so it still needs (A).
+
+**Q2. The danger list.**
+- **(A) recommended: fixed in code, with your additions** (`policy.danger_extra`).
+- (B) fixed in code, with no additions.
+
+**Q3. Allows the clients saved from "don't ask again".**
+- **(A) recommended: list them in `roles doctor`,** and leave the files alone.
+- (B) refuse to launch a role while one of them covers a danger-class command.
+
+**Q4. Branch protection on `main` at the forge** (the only boundary outside the clients for a push
+to `main`).
+- **(A) recommended: you turn it on** (a PR required, no force push, no delete). `roles doctor`
+  says when the forge reports it off.
+- (B) leave it off, and rely on the prompt and master's promotion ask.
