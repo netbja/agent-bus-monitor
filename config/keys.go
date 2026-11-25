@@ -604,6 +604,18 @@ var Keys = append([]*Key{
 	{Name: "history.keep_days", Env: "AGENT_BUS_HISTORY_DAYS", Kind: Int, Default: 90, ReadBy: "dispatch",
 		env: envNonNegativeInt, file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 for no archive")},
 	{Name: "history.max_mb", Env: "AGENT_BUS_HISTORY_MAX_MB", Kind: Int, Default: 256, ReadBy: "dispatch", env: envPositiveInt, file: filePositiveInt},
+	// The audit trail's age (audit spec §3, the person's Q1: 90 days): every
+	// append trims entries older than this. The person's alone: an agent
+	// must not shorten the trail it is in.
+	{Name: "audit.retention", Kind: Duration, Default: 90 * 24 * time.Hour, ReadBy: "the audit writers (agentbus, dispatch)", MachineOnly: true, PersonOnly: true,
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok {
+				if d, ok := parseAge(s); ok {
+					return d, ""
+				}
+			}
+			return nil, "want days such as \"90d\", or a duration such as \"36h\", above 0 and at most 365d"
+		}},
 	// The reload policy (lifecycle part C, auto-reload): on, propose or off.
 	// AGENT_BUS_RELOAD's rule is today's: propose and off are themselves, any
 	// other set value reads on. agentbus reload puts the project's env file

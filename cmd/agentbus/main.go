@@ -672,6 +672,8 @@ func main() {
 
 	case "swaps":
 		os.Exit(runSwaps(ctx, b, rest, os.Stdout, os.Stderr))
+	case "audit": // the audit trail (audit spec §4): read-only
+		os.Exit(runAudit(ctx, b, rest, time.Now, os.Stdout, os.Stderr))
 
 	case "self-repair":
 		os.Exit(runSelfRepair(ctx, selfRepairCmdDeps{Self: self, Ancestors: func() []dispatch.ProcID { return dispatch.Ancestors(os.Getpid()) },

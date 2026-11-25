@@ -65,7 +65,7 @@ var applies = map[string]Applies{
 	"quota.claude.probe": AppliesService, "dispatch.tokens": AppliesService, "dispatch.auto_clear": AppliesService,
 	"dispatch.pop_retire": AppliesService, "dispatch.pop_retire_after": AppliesService, "dev": AppliesService,
 	"dispatch.self_repair": AppliesService, "dispatch.self_repair_every": AppliesService, "dispatch.self_repair_per_day": AppliesService,
-	"history.keep_days": AppliesService, "history.max_mb": AppliesService,
+	"history.keep_days": AppliesService, "history.max_mb": AppliesService, "audit.retention": AppliesLive, // read at each append
 	"health.runaway.silent_after": AppliesService, "health.runaway.context_growth": AppliesService,
 	"health.runaway.growth_span": AppliesService, "health.runaway.screen_repeats": AppliesService,
 	// the holder at its start; missions reads the base at its start; a broker
