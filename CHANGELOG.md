@@ -26,8 +26,12 @@ release exists.
 - A review request closes when its branch merges (`request review --branch … [--more]`).
 - Roles start in Claude Code's auto mode (security and infra stay manual), so a worker can stop on a
   prompt; reviewer-codex runs on Luna with Codex's automatic review.
+- `dispatch.auto_compact` (on by default, the person's): the dispatcher types `/compact` into a Claude Code
+  agent's pane that stayed at 90 % context for 10 minutes with no hand-off. Restart the holder with the
+  dispatcher.
 - Not in it: the automatic update (`updates.auto`, `updates.window`, `updates.max_wait` exist and nothing
-  reads them), and #769, `/compact` when no hand-off comes, and #773, a spec, which are open.
+  reads them); the specs (retro, audit, bounded auto-approve, sandboxed launch, remote approvals) are
+  not built.
 
 [Notes](docs/releases/v0.34.0.md)
 

@@ -1667,6 +1667,21 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   refused unless every client the project's roles run on (own and fallback profiles) records it `free`, naming
   each other client and its free keys. Today only F12 is recorded free, for Claude Code, Grok and Codex (codex-cli 0.169.0, its
   `f12-at-input` probe, 2026-11-16): with a Kimi or agy role, attach to it still needs `--prefix`.
+- **Auto-compact: `/compact` when no hand-off comes (the person's answer A).** An agent whose context
+  fill stayed at `dispatch.context_urgent` (90 %) for 10 minutes with no hand-off declared gets the
+  fixed line `/compact` typed into its pane by the dispatcher, once per context episode, Claude Code
+  only. The pane guards are the auto-clear's: its verified process, ready and idle, not focused,
+  not blocked, no wake being typed, no swap, its provider not held. The order is the clear's: the
+  `compact:<agent>` mark is reserved first, the pane inspected again, then the line typed; master
+  gets one wake=no notice: owed in `compact-typed:<agent>` once the line is typed, delivered
+  (`compact-notice:<agent>`) on a later pass if master was being swapped, even after the fill fell; while it is owed, no
+  other `/compact` is typed.
+  The hold's start is `compact-since:<agent>` (`<session>|<Redis ms>`); a reading below urgent
+  restarts it, and the episode's end (a reading below the alert) deletes it and `compact:<agent>`. A `/compact` left unsent in the input tells the person,
+  and nothing is typed again in that episode. `dispatch.auto_compact` (on by default) is the
+  person's: busmon or config.toml, no env variable, read again each minute. The holder's submit
+  frame takes kind `compact`; an older holder refuses it (bad frame) and types nothing, so
+  restart the holder with the dispatcher. A declared hand-off stays the auto-clear's.
 - **`dispatch.background_ignore`: the clients' own helpers are never background work**
   (background-ignore-helpers). A process named in the list (default `codebase-memory` and
   `codex-code-mode`, the clients' own helpers; config.toml only) never holds a hand-off's `/clear`, a
