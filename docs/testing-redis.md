@@ -9,8 +9,15 @@ the tests rather than silently skipping them.
 Example with an independently started, isolated Unix-socket Redis:
 
 ```sh
-AGENTBUS_TEST_REDIS_URL=unix:///tmp/agentbus-test/redis.sock go test ./... -count=1
+AGENTBUS_TEST_REDIS_URL=unix:///tmp/agentbus-test/redis.sock agentbus run --cap -- go test ./... -count=1 -timeout 25m
 ```
+
+The suite runs under `agentbus run --cap` (agent-resource-limits §6): 8G and 30 minutes by
+default (`limits.command_memory`, `limits.command_time`), the whole run killed at either, never a
+neighbour pane. `-timeout 25m` keeps Go's own deadline under the cap, so a hung test names itself
+before the cap fires. A mutant run narrows both: `--mem 4G --time 5m`. Under a holder the memory
+cap is `RLIMIT_AS`, which `-race` exceeds: a race run needs `--mem off`, allowed only where the
+person set `limits.command_memory = "off"`.
 
 The dedicated setting overrides ambient `REDIS_URL` for tests and their child
 processes. It is an operator assertion of isolation, not detection of production:

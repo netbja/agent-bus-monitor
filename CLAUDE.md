@@ -44,12 +44,17 @@ go build -o busmon  ./cmd/busmon      # build the TUI dashboard
 go build -o agentbus ./cmd/agentbus   # build the CLI client
 go install ./...                      # install both to $GOBIN
 go build ./... && go vet ./...        # compile + vet everything
-go test ./... -count=1                # unit tests; Redis integration cases skip without explicit opt-in
+agentbus run --cap -- go test ./... -count=1 -timeout 25m   # unit tests, capped; Redis cases skip without opt-in
 go run ./cmd/agentbus mem check       # shared-memory structure, links, index copy in AGENTS.md
-AGENTBUS_TEST_REDIS_URL=unix:///tmp/agentbus-test/redis.sock go test ./... -count=1 # isolated Redis only
+AGENTBUS_TEST_REDIS_URL=unix:///tmp/agentbus-test/redis.sock agentbus run --cap -- go test ./... -count=1 -timeout 25m # isolated Redis only
 ```
 
 Both binaries (`busmon`, `agentbus`) are gitignored build artifacts.
+
+Every `go test` runs through `agentbus run --cap` with its own `-timeout`: a memory and a time cap
+(the person's `limits.command_*`, 8G and 30m by default), the command killed alone at either
+(agent-resource-limits §6). A mutant run narrows them: `agentbus run --cap --mem 4G --time 5m -- ...`.
+`TestSkillGoTestLinesAreCapped` holds this file, the skills and `docs/testing-redis.md` to it.
 
 Tests must never use the production broker. `AGENTBUS_TEST_REDIS_URL` must point
 to an independently started, isolated disposable Redis instance; ambient

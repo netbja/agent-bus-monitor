@@ -254,6 +254,24 @@ and both reviewers approved that head;
 a verdict without `--head` still counts for the roll-up, never for a delivery. A new commit means
 a new verdict on its SHA. Only master and docs deliver (`delivers = true`); you never push.
 
+## Running tests — always under `agentbus run --cap`
+
+Every test or mutant run you start goes through `agentbus run --cap`, with Go's own `-timeout`
+below its cap. A runaway suite once took 56 GB and stopped every agent's terminal with it.
+
+```sh
+AGENTBUS_TEST_REDIS_URL=<disposable> agentbus run --cap -- go test ./... -count=1 -timeout 25m
+agentbus run --cap --mem 4G --time 5m -- go test ./<pkg> -run <Test> -count=1 -timeout 4m   # a mutant
+```
+
+- `agentbus run --cap` comes first on the line (no `-p` before it); every word after `--` is the
+  command's own. The defaults are the person's (`limits.command_memory` 8G, `limits.command_time`
+  30m); `--mem`, `--time` and `--cpu` only narrow them, and a larger value is refused.
+- Killed at a cap: exit 137 and one line, `killed at time cap 30m0s`, or `killed by signal 9 (memory cap
+  not proven)`. Under a holder the memory cap is `RLIMIT_AS`: an allocation fails instead, and a note
+  says so. A mutant that loops or eats memory is killed this way: count it as killed.
+- `-race` exceeds `RLIMIT_AS`: ask the person, who alone can set `limits.command_memory = "off"`.
+
 ## Shared working tree — one checkout, several agents
 The team usually shares ONE physical checkout. Read-only git (`log`, `diff`, `show`,
 `status`) is always safe; anything that moves HEAD or rewrites the tree is a coordination
