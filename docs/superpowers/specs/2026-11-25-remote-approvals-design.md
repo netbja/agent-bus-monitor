@@ -1,6 +1,6 @@
 # Remote approvals from a paired phone (remote-approvals)
 
-Status: IDEA spec r2, for review (subject `remote-approvals-spec`). Not built, and **later**: the
+Status: IDEA spec r3, for review (subject `remote-approvals-spec`). Not built, and **later**: the
 note places it after a read-only `agentbus web`, which does not exist yet. Base: origin/dev
 `af527c19`. Author: architect, from master's directive (cmd `1795559518593-0`, task
 `specs-from-person-docs`). This is idea 4 of 4 from the person's note "ideas borrowed from PiBot",
@@ -15,6 +15,8 @@ Also reviewer-codex's reject of r1 (verdict `dn4478ybr8t7`). Checking, spending 
 answering are one script, so nothing changes between them and nothing is spent unapplied. Grants
 and approvals are scoped to one project and signed over a fixed binding. Noise gets its own X25519
 keys, bound to the signing keys at pairing.
+r3: reviewer-codex's reject of r2 (verdict `dn449ev49sz9`). The script checks the grant's expiry
+too, and compares the stored approval with the signed values, never the stored ones alone.
 
 ## 1. Today
 
@@ -73,7 +75,10 @@ order, each length-prefixed. The verifier checks the grant and this signature, t
 Lua script that checks and writes together**:
 
 - the grant's revision is still `{p}:phone`'s copy (the verifier checked the file's before);
-- the nonce is pending, and the deadline has not passed by Redis `TIME`;
+- the nonce is pending, and its stored record (project, device, ask, question, option,
+  definition hash, deadline) equals the values the phone signed, which the verifier passes in;
+- by Redis `TIME`, neither the signed deadline nor the grant's `expires_at`, also passed in, has
+  passed. A pending approval's deadline is also never set past the grant's expiry;
 - the ask is open, **not replaced**, and its definition hash still matches. `askAnswer` today
   follows a replaced ask to its replacement when the question was carried
   (`bus/asks.go:311-316`). A phone answer refuses instead of following;
@@ -133,8 +138,8 @@ signature is refused. A grant with `expires_at` more than 24 h after `issued_at`
 signed. An approval older than 120 s, a replayed one, one whose ask changed since, and one for
 another option, another project, or with a grant lacking `answer`, are each refused. A read with a
 grant lacking `read` is refused. A grant or approval signed for project A is refused on project B.
-Races, each against the real script: the ask replaced, a revocation, and the deadline passing,
-each between the verifier's checks and the script, refuse and spend nothing. Two concurrent
+Races, each against the real script: the ask replaced, a revocation, the approval's deadline
+passing, and the grant's expiry passing (tested apart from the deadline), each between the verifier's checks and the script, refuse and spend nothing. A stored approval whose record differs from the signed values in any field is refused. Two concurrent
 submissions of one approval write one reply; a retry after it returns the same reply id. A
 Noise session whose remote static key is not the grant's `device_transport` is refused.
 An approval for an ask replaced since, even with the question carried, is refused by the answer
