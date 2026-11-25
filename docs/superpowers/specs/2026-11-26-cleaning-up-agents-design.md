@@ -12,7 +12,8 @@ Status: spec r5, for review (subject `cleaning-up-agents`). Not built. Base: ori
   second ask (§12.2).
 - r4: both reviewers' rejects of r3: a running owner relaunched on the **same session** is the
   same owner, flagged, never closed; only a fresh session is gone (§8.1, §12.1); Q10 confirms it.
-- r5: reviewer-codex's r4 reject: board-drift's close of a `review` request is the owner's own
+- r5: reviewer-codex: §8.1 and Q10 narrowed to undeclared links; a review declared by the owner
+  closes. reviewer-codex's r4 reject: board-drift's close of a `review` request is the owner's own
   declaration and stays; the running-owner rule covers undeclared links (§8.2, §8.3).
   foureyes' r3 reject: the stop re-checks no accepted request and nothing actionable, and drops
   the intent otherwise (§4.3); no wake while an intent stands; nits (§3.1 hardened git, §8.4
@@ -282,7 +283,10 @@ A request's owner is **gone** when the process that accepted it no longer holds 
   as docs' was ("pre-session": it did not know the request). A relaunch that **resumed** the session
   recorded in `accepted_by` (`pop --resume`, self-repair, a holder drain, a hand-off relaunch) is the
   **same owner**: it carries the conversation that accepted the request and may be on a later step,
-  so it is never auto-closed; §8.4 flags it (both reviewers' r3 rejects; the person's Q10, §12.2).
+  so the pass never closes its request on a link it did not declare (an `accepted` request, or a
+  `delivery` link alone); §8.4 flags it (both reviewers' r3 rejects; the person's Q10, §12.2). A
+  request it put in `review` itself, with its branch and no `--more`, still closes on merge: that is
+  its own declaration (§8.3's exception).
   `request
   accept` now records `request.accepted_by = {pid, pid_start, session}` from the caller's snapshot
   when that snapshot is **verified** (`pid` set); from an unverified one it records nothing (foureyes'
@@ -500,8 +504,10 @@ session, which is docs' case; a resume is excluded. Q10 (§12.2) asks the person
 
 **Q10. Un agent relancé sur la même session (reprise) : est-il encore le propriétaire ?**
 - **(A) recommandé :** oui. Une reprise (`pop --resume`, self-repair, drain) garde la conversation et
-  peut être sur une étape suivante : sa requête est signalée à master, jamais fermée. Seul un
-  redémarrage sur une session neuve (le cas docs de #794) compte comme parti. Précise votre Q3.
+  peut être sur une étape suivante : sa requête acceptée est signalée à master, jamais fermée
+  d'office. Une requête qu'il a lui-même passée en review avec sa branche, sans `--more`, se ferme
+  toujours à la fusion (sa propre déclaration, board-drift). Seul un redémarrage sur une session
+  neuve (le cas docs de #794) compte comme parti. Précise votre Q3.
 - **(B)** Non, comme dans votre Q3 : toute relance compte comme partie, et la requête est fermée si
   sa PR, liée avec certitude, a fusionné. Les deux relecteurs le refusent (fermeture d'un agent qui
   travaille).
