@@ -93,6 +93,9 @@ func runUpdate(ctx context.Context, args []string, project, host string, out, er
 		return 1
 	}
 	d := realUpdateDeps(host, out, errw)
+	d.Acted = func(a update.Act) { // its audit line on each project it touched (audit step 2b)
+		auditHostConnect(ctx, host, bus.AuditEntry{Action: "update", Actor: personActor(os.Getenv), Target: a.To, Outcome: a.Outcome, Detail: a.Detail}, a.Projects)
+	}
 	switch {
 	case a.list:
 		return update.List(d)

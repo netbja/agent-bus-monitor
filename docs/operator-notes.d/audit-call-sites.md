@@ -9,5 +9,10 @@
   `retire`, and `force` for `agents forget`, `swap`, `mission load` and `shutdown` with `--force`. Each
   line is written after its act, best effort: one that cannot be written is said on stderr and never
   fails the act. Fixed parts only: a message, a reason or an answer's text never enters the trail.
-  Not yet (step 2b): `update`, `reinstall`, `restore --force`, `suspend --force`; `retro-apply` comes
-  with the retro build.
+  Host-level acts (step 2b), the person their actor (identity.as, else `person`): `update` (`agentbus
+  update`: installed, rolled back, not confirmed; the target the new tag) and `reinstall` (setup's
+  install over an existing install, not in a dry run), each on the bus of every project with a running
+  service on this host (`update` also on `--project`'s); `force` for `restore --force` (each project whose
+  keys it was asked to replace: replaced, not confirmed, or failed; written after the restore, so the
+  restored trail keeps it) and `suspend --force` (each project, the busy agents counted). Not written:
+  `agentbus update --rollback` and `--restore`. `retro-apply` comes with the retro build.

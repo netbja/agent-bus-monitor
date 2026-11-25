@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,6 +53,33 @@ type Deps struct {
 	// current the new build's key (service.GCHolders, GCHolderBinaries), before
 	// the trees are judged. nil: none.
 	HolderGC func(ctx context.Context, current string) error
+	// Acted, when set, is told once how an update Run was asked to install
+	// ended (audit step 2b: agentbus writes its update line); --check, up to
+	// date and a refusal before the plan are no act.
+	Acted func(Act)
+}
+
+// Act is an update's end, for the audit trail: the versions, the projects
+// whose services run on this host (they run the replaced binaries; the one
+// named first), and the outcome, bus.Audit's words, with a detail of fixed
+// parts.
+type Act struct {
+	From, To, Outcome, Detail string
+	Projects                  []string
+}
+
+// actProjects are o's project and those of the running services, sorted,
+// each once.
+func actProjects(project string, running []Service) []string {
+	var out []string
+	if project != "" {
+		out = append(out, project)
+	}
+	for _, s := range running {
+		out = append(out, s.Project)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func (d Deps) updates() string { return Dir(setup.StateDir(d.Getenv)) }
@@ -110,6 +138,12 @@ func Run(ctx context.Context, d Deps, o Options) int {
 			others = append(others, s)
 		}
 	}
+	acted := func(outcome, detail string) {
+		if d.Acted != nil {
+			d.Acted(Act{From: d.Version, To: rel.Tag, Outcome: outcome, Detail: d.Version + " -> " + rel.Tag + ", " + detail,
+				Projects: actProjects(o.Project, running)})
+		}
+	}
 	tree := d.treeFor(rel.Tag)
 	id := NewID(d.Now(), d.Version, rel.Tag)
 	changed := skillsChanged(ctx, rel)
@@ -120,22 +154,26 @@ func Run(ctx context.Context, d Deps, o Options) int {
 	if !o.Yes {
 		if d.TTY == nil {
 			fmt.Fprintln(d.Err, "agentbus update: no terminal to ask on: run it in a terminal, or with --yes")
+			acted("refused", "not confirmed")
 			return 1
 		}
 		ok, err := setup.Ask(setup.NewOutput(d.Out, d.Err, false), &setup.Prompter{TTY: d.TTY}, "Install "+rel.Tag+"?", false)
 		if err != nil || !ok {
 			d.say("nothing installed")
+			acted("refused", "not confirmed")
 			return 1
 		}
 	}
 	u := &updater{d: d, rel: rel, tree: tree, id: id, dir: filepath.Join(updates, id), mine: mine}
 	if err := u.stage(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+" (nothing outside "+tree+" changed)")
+		acted("failed", "not staged")
 		return 1
 	}
 	defer os.RemoveAll(u.tmp)
 	if err := u.snapshot(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: snapshot: "+err.Error()+" (nothing changed)")
+		acted("failed", "no snapshot")
 		return 1
 	}
 	if err := u.apply(ctx); err != nil {
@@ -149,9 +187,11 @@ func Run(ctx context.Context, d Deps, o Options) int {
 			for _, c := range manualCommands(u.dir, u.m) {
 				fmt.Fprintln(d.Err, "  "+c)
 			}
+			acted("failed", "the rollback failed, snapshot "+id)
 			return 1
 		}
 		d.say("rolled back to %s", d.Version)
+		acted("failed", "rolled back")
 		return 1
 	}
 	if err := AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: true, Snapshot: id}); err != nil {
@@ -162,12 +202,15 @@ func Run(ctx context.Context, d Deps, o Options) int {
 			for _, c := range manualCommands(u.dir, u.m) {
 				fmt.Fprintln(d.Err, "  "+c)
 			}
+			acted("failed", "the rollback failed, snapshot "+id)
 			return 1
 		}
 		d.say("rolled back to %s; the next agentbus update names snapshot %s as unfinished until its history can be written", d.Version, id)
+		acted("failed", "rolled back")
 		return 1
 	}
 	d.say("agentbus %s -> %s: installed; snapshot %s (agentbus update --rollback undoes it)", d.Version, rel.Tag, id)
+	acted("ok", "installed, snapshot "+id)
 	if len(changed) > 0 {
 		c := strings.Join(changed, " ")
 		d.say("skills changed: %s  (agents to tell: agentbus roles skill-users %s)", c, c)

@@ -115,6 +115,7 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 	}
 	defer os.RemoveAll(tmp)
 	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Tmp: tmp, Getenv: getenv, Now: time.Now, Setenv: os.Setenv}
+	had := isFile(filepath.Join(opt.BinDir, "agentbus")) // a reinstall: its audit line (audit step 2b)
 	o.Step("2/4 Building and installing agentbus & busmon")
 	in.Rev = in.RepoRev(ctx)
 	if !opt.DryRun {
@@ -144,7 +145,11 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 	in.Identity(ctx, prompt)
 	in.RestartStale(ctx, prompt) // after the broker step: service stale reads it (P2-13)
 	in.Models(ctx)
-	return o.Summary(opt, missing, in.Rev)
+	code := o.Summary(opt, missing, in.Rev)
+	if e, ok := reinstallAct(had, opt.DryRun, code, in.Rev, personActor(getenv)); ok {
+		auditHostProjects(ctx, "", e)
+	}
+	return code
 }
 
 // goModVersion is go.mod's go line, as setup.sh reads it.
