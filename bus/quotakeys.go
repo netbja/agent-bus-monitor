@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -106,8 +108,11 @@ func (b *Bus) FencedQuotaDel(ctx context.Context, token string, fields ...string
 func QuotaPauseReason(provider string) string { return "quota " + provider }
 
 // fencedQuotaPause: -1 not the holder; 0 another pause is in place (a person's
-// or master's, or another provider's): never replaced; 1 written.
-var fencedQuotaPause = redis.NewScript(`
+// or master's, or another provider's): never replaced; 1 written. A new pause
+// (none before) writes its audit line to KEYS[3] in the same step (audit step
+// 2): ARGV[5] the retention (ms), ARGV[6] the provider, ARGV[7] the detail;
+// a refresh of the same pause writes none.
+var fencedQuotaPause = redis.NewScript(auditLua + `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 local v = redis.call('GET', KEYS[2])
 if v then
@@ -117,6 +122,9 @@ end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 redis.call('SET', KEYS[2], cjson.encode({['until']=tonumber(ARGV[3]), reason=ARGV[2], by='dispatch', notify=ARGV[4], at=now}))
+if not v then
+  audit_append(KEYS[3], ARGV[5], {'quota-pause', 'dispatch', '', '', ARGV[6], '', 'ok', ARGV[7]})
+end
 return 1`)
 
 // FencedQuotaPause pauses the project for a provider's quota until untilMS,
@@ -125,8 +133,13 @@ func (b *Bus) FencedQuotaPause(ctx context.Context, token, provider, notify stri
 	if !ValidName(notify) {
 		return false, fmt.Errorf("invalid notify %q", notify)
 	}
-	n, err := fencedQuotaPause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project)},
-		token, QuotaPauseReason(provider), strconv.FormatInt(untilMS, 10), notify).Int()
+	if !ValidName(provider) {
+		return false, fmt.Errorf("invalid provider %q", provider)
+	}
+	detail := "paused until " + time.UnixMilli(untilMS).UTC().Format(time.RFC3339) + ", " + notify + " told" // fixed parts only
+	n, err := fencedQuotaPause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), AuditKey(b.project)},
+		token, QuotaPauseReason(provider), strconv.FormatInt(untilMS, 10), notify,
+		AuditRetention(os.Getenv).Milliseconds(), provider, detail).Int()
 	if err != nil {
 		return false, err
 	}
@@ -191,14 +204,16 @@ func (b *Bus) FencedQuotaUnpauseWhy(ctx context.Context, token, provider, from, 
 
 // fencedQuotaRepause: -1 not the holder; 0 the pause is no longer exactly
 // ARGV[2]; 1 replaced by the record in ARGV[3] (no resume directive: the
-// project stays paused).
-var fencedQuotaRepause = redis.NewScript(`
+// project stays paused), its audit line written to KEYS[3] in the same step
+// (ARGV[4] the retention, ARGV[5] the new provider, ARGV[6] the detail).
+var fencedQuotaRepause = redis.NewScript(auditLua + `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return -1 end
 if redis.call('GET', KEYS[2]) ~= ARGV[2] then return 0 end
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local p = cjson.decode(ARGV[3])
 redis.call('SET', KEYS[2], cjson.encode({['until']=p['until'], reason=p['reason'], by='dispatch', notify=p['notify'], at=now}))
+audit_append(KEYS[3], ARGV[4], {'quota-pause', 'dispatch', '', '', ARGV[5], '', 'ok', ARGV[6]})
 return 1`)
 
 // FencedQuotaRepause (v0.15 §8) replaces the dispatcher's quota pause for
@@ -222,7 +237,12 @@ func (b *Bus) FencedQuotaRepause(ctx context.Context, token, from, to string, un
 	if err != nil {
 		return false, err
 	}
-	n, err := fencedQuotaRepause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project)}, token, raw, string(next)).Int()
+	if !ValidName(to) {
+		return false, fmt.Errorf("invalid provider %q", to)
+	}
+	detail := "paused until " + time.UnixMilli(untilMS).UTC().Format(time.RFC3339) + ", replacing " + from + "'s pause" // fixed parts only
+	n, err := fencedQuotaRepause.Run(ctx, b.r, []string{DispatchKey(b.project), PauseKey(b.project), AuditKey(b.project)}, token, raw, string(next),
+		AuditRetention(os.Getenv).Milliseconds(), to, detail).Int()
 	if err != nil {
 		return false, err
 	}
