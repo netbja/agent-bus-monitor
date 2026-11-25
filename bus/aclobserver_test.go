@@ -13,7 +13,7 @@ func TestACLObserverRules(t *testing.T) {
 	if !slices.Contains(ACLRoles, ACLObserver) {
 		t.Fatalf("ACLRoles %v lack the observer", ACLRoles)
 	}
-	want := []string{"-@all", "+@read", "+@connection", "-@dangerous", "%R~*"}
+	want := []string{"-@all", "+@read", "+@connection", "-@dangerous", "+time", "%R~*"}
 	if got := ACLRules(ACLObserver); !slices.Equal(got, want) {
 		t.Fatalf("observer rules %v, want %v", got, want)
 	}
