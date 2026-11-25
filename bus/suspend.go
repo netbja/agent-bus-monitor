@@ -94,6 +94,11 @@ func (b *Bus) Suspend(ctx context.Context, s SuspendSpec) (PauseRecord, string, 
 		return PauseRecord{}, raw, false, fmt.Errorf("%s: %w", PauseKey(b.project), err)
 	}
 	code, _ := res[0].(int64)
+	if code == 1 { // the audit line (audit step 2): the suspend begun (1), or refused, one already in place (0)
+		b.auditAfter(ctx, AuditEntry{Action: "suspend", Actor: s.By, Target: b.project, Outcome: AuditOK, Detail: "the project paused, its services to stop"})
+	} else {
+		b.auditAfter(ctx, AuditEntry{Action: "suspend", Actor: s.By, Target: b.project, Outcome: AuditRefused, Detail: "a suspend is already in place"})
+	}
 	return p, raw, code == 0, nil
 }
 
@@ -172,7 +177,9 @@ func (b *Bus) unsuspend(ctx context.Context, raw, by string, text func(PauseReco
 		return false, "", ErrPauseChanged
 	case -2:
 		return false, "", ErrNotSuspended
-	case 1:
+	}
+	b.auditAfter(ctx, AuditEntry{Action: "resume", Actor: by, Target: b.project, Outcome: AuditOK, Detail: "the suspend ended"})
+	if code == 1 {
 		return true, "", nil
 	}
 	id, _ := res[1].(string)
