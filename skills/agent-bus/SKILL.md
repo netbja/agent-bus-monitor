@@ -184,10 +184,11 @@ report it to master with `--needs answer`. Never leave it inside a status report
 agentbus report <self> --to master --needs answer "<the question>. A (recommended): … B: …"
 ```
 
-- **One question per report**, so each is its own item in For you and triage.
+- **One question per report**, so master can turn each into its own ask.
 - **The options are in the text**, two to four, each with its consequence, one marked recommended.
-- master turns it into an `agentbus ask` for the person. A decision buried in a status report is not
-  read as a question, and reaches neither For you nor triage (it did once, on #787).
+- The report hands the question to master; master's `agentbus ask` is what puts it in front of the
+  person, in For you and triage. A decision buried in a status report is not read as a question, so no
+  ask follows and it never reaches the person (it did not, once, on #787).
 
 ## Language on the bus
 
