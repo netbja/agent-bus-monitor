@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
@@ -370,17 +371,12 @@ func planStripKeys(forYou string, width int) Line {
 	return FitLine(l, width)
 }
 
-// planBar is a bar of cells: full blocks, one partial eighth, then the dim
-// ░ track (the person's mock-up), the filled part in role.
+// planBar is a bar of cells (finedraw.Blocks): full blocks, one partial
+// eighth, then the dim ░ track (the person's mock-up), the filled part in
+// role.
 func planBar(pct float64, cells int, role Role) Line {
-	eighths := clamp(int(pct*float64(cells)*8/100+0.5), 0, cells*8)
-	full, part := eighths/8, eighths%8
-	partial := []string{"", GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7}[part]
-	empty := cells - full
-	if partial != "" {
-		empty--
-	}
-	return Line{{Text: strings.Repeat(GlyphBarFull, full) + partial, Role: role}, {Text: strings.Repeat(GlyphBarEmpty, max(0, empty)), Role: RoleDim}}
+	b := finedraw.Blocks(pct, cells)
+	return Line{{Text: b[0].Text, Role: role}, {Text: b[1].Text, Role: RoleDim}}
 }
 
 // planTasks is "1 task" or "N tasks".

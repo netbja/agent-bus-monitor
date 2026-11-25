@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 // The progress line (progress-line §3): under a task in hand, when it
@@ -86,8 +87,8 @@ func progressLine(r request, p pace, now time.Time) (Line, bool) {
 	used := max(now.Sub(r.Accepted), 0)
 	end := resetClock(r.Accepted.Add(p.usual), now)
 	bar := func(fill int, role Role) Line {
-		return Line{{Text: "  ", Role: RoleDim}, {Text: strings.Repeat(GlyphThinBar, fill), Role: role},
-			{Text: strings.Repeat(GlyphThinBar, progressBarW-fill), Role: RoleMuted}, {Text: "  ", Role: RoleDim}}
+		r := finedraw.Rule(fill, progressBarW)
+		return Line{{Text: "  ", Role: RoleDim}, {Text: r[0].Text, Role: role}, {Text: r[1].Text, Role: RoleMuted}, {Text: "  ", Role: RoleDim}}
 	}
 	switch {
 	case p.n < paceSure: // thin: no share, the end an estimate

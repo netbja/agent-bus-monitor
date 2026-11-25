@@ -2,10 +2,10 @@ package main
 
 import (
 	"math"
-	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 // The account gauges (spec docs/superpowers/specs/2026-10-29-busmon-bars-design.md):
@@ -23,77 +23,38 @@ const thinTrackFade = 30
 // barLift is how far a sliding bar's leading cell goes towards the text colour.
 const barLift = 60
 
-var eighthGlyphs = [8]string{"", GlyphEighth1, GlyphEighth2, GlyphEighth3, GlyphEighth4, GlyphEighth5, GlyphEighth6, GlyphEighth7}
-
-// eighths is pct of cells×8 steps: a non-zero value never reads empty and a
-// value under 100 never reads full (a full bar means the window is spent).
-func eighths(pct float64, cells int) int {
-	steps := cells * 8
-	e := clamp(int(math.Round(pct*float64(steps)/100)), 0, steps)
-	if pct > 0 && e == 0 {
-		e = 1
-	}
-	if pct < 100 && e == steps {
-		e = steps - 1
-	}
-	return e
-}
-
-// gaugeSegs is a bar of cells at pct in role: eighths on a track in true
-// colour, the leading cell tinted when lead (the bar is sliding); today's
-// whole steps otherwise.
+// gaugeSegs is a bar of cells at pct in role (finedraw.Bar): eighths on a
+// track in true colour, the leading cell tinted when lead (the bar is
+// sliding); today's whole steps otherwise.
 func gaugeSegs(pct float64, cells int, role Role, lead bool) Line {
-	if !th.Animated() {
-		n := clamp(int(pct*float64(cells)/100+0.5), 0, cells)
-		return Line{{Text: strings.Repeat(GlyphGauge, n), Role: role}, {Text: strings.Repeat(GlyphBarEmpty, cells-n), Role: RoleDim}}
-	}
-	e := eighths(pct, cells)
-	full, part := e/8, e%8
 	var l Line
-	switch {
-	case part > 0:
-		l = append(l, Seg{Text: strings.Repeat(GlyphBarFull, full), Role: role},
-			Seg{Text: eighthGlyphs[part], Role: role, Track: true})
-	case full > 0:
-		l = append(l, Seg{Text: strings.Repeat(GlyphBarFull, full-1), Role: role},
-			Seg{Text: GlyphBarFull, Role: role})
+	for _, s := range finedraw.Bar(pct, cells, th.Animated()) {
+		seg := Seg{Text: s.Text, Role: role}
+		switch s.Part {
+		case finedraw.PartEdge:
+			seg.Track = true
+		case finedraw.PartTrack:
+			seg.Role, seg.Track = RoleDim, true
+		case finedraw.PartEmpty:
+			seg.Role = RoleDim
+		}
+		if lead && s.Lead {
+			seg.Lift = barLift
+		}
+		l = append(l, seg)
 	}
-	if lead && len(l) > 0 {
-		l[len(l)-1].Lift = barLift
-	}
-	used := full
-	if part > 0 {
-		used++
-	}
-	return append(l, Seg{Text: strings.Repeat(" ", cells-used), Role: RoleDim, Track: true})
+	return l
 }
 
-// thinGauge is the header's account gauge (usage-bars, the person's A4): one
-// GlyphThinBar per cell, the filled ones in role, the rest the track (the
-// line colour in true colour; a light ─ without it, so filled and empty
-// differ without colour), and a pace mark at pace % of the cells (the share
+// thinGauge is the header's account gauge (usage-bars, the person's A4,
+// finedraw.ThinCells): the filled cells in role, the rest the track (the
+// fill's colour faded in true colour; a light ─ in the dim role without it,
+// so filled and empty differ without colour), and the pace mark (the share
 // of the window gone; < 0 none): │ in the text colour on the track, ╋ in the
-// fill's role inside the fill, so the mark never hides a filled cell. Whole
-// cells: a non-zero value fills one, a value under 100 never fills all. lead
-// lifts the leading filled cell (the bar is sliding).
+// fill's role inside the fill. lead lifts the leading filled cell (the bar
+// is sliding).
 func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
-	filled := clamp(int(math.Round(pct*float64(cells)/100)), 0, cells)
-	if pct > 0 && filled == 0 {
-		filled = 1
-	}
-	if pct < 100 && filled == cells {
-		filled = cells - 1
-	}
-	mark := -1
-	if pace >= 0 {
-		mark = clamp(int(math.Round(pace*float64(cells)/100)), 0, cells-1)
-	}
-	// The track is the bar's own colour faded towards the background
-	// (usage-cards); without true colour, a light line in the dim role.
-	track, trackRole, trackFade := GlyphThinBar, role, thinTrackFade
-	if !th.Animated() {
-		track, trackRole, trackFade = glyphHorizontal, RoleDim, 0
-	}
+	fine := th.Animated()
 	var l Line
 	add := func(s Seg) {
 		if n := len(l); n > 0 && l[n-1].Role == s.Role && l[n-1].Lift == s.Lift && l[n-1].Fade == s.Fade {
@@ -102,22 +63,22 @@ func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
 		}
 		l = append(l, s)
 	}
-	for i := 0; i < cells; i++ {
-		switch {
-		case i == mark && i >= filled:
-			add(Seg{Text: glyphVertical, Role: RoleText})
-		case i < filled:
-			s := Seg{Text: GlyphThinBar, Role: role}
-			if i == mark {
-				s.Text = GlyphThinMark
+	for _, c := range finedraw.ThinCells(pct, pace, cells, fine) {
+		s := Seg{Text: c.Text, Role: role}
+		switch c.Part {
+		case finedraw.PartPace:
+			s.Role = RoleText
+		case finedraw.PartEmpty: // the track: the bar's own colour faded (usage-cards), or dim
+			if fine {
+				s.Fade = thinTrackFade
+			} else {
+				s.Role = RoleDim
 			}
-			if lead && i == filled-1 {
-				s.Lift = barLift
-			}
-			add(s)
-		default:
-			add(Seg{Text: track, Role: trackRole, Fade: trackFade})
 		}
+		if lead && c.Lead {
+			s.Lift = barLift
+		}
+		add(s)
 	}
 	return l
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 type Role int
@@ -333,36 +335,36 @@ const (
 	GlyphOpenHere  = "◂" // projects (M): the project busmon has open
 	GlyphDash      = "—"
 	GlyphWarn      = "⚠" // the Board's alert column (views-redesign §3); text presentation, one cell
-	GlyphBarFull   = "█"
-	GlyphBarEmpty  = "░"
-	GlyphGauge     = "▇"
+	GlyphBarFull   = finedraw.Full
+	GlyphBarEmpty  = finedraw.Empty
+	GlyphGauge     = finedraw.Gauge
 	// The lower blocks of a sparkline or a bar chart (the U page), with
 	// GlyphGauge and GlyphBarFull its two highest steps.
-	GlyphSpark1 = "▁"
-	GlyphSpark2 = "▂"
-	GlyphSpark3 = "▃"
-	GlyphSpark4 = "▄"
-	GlyphSpark5 = "▅"
-	GlyphSpark6 = "▆"
+	GlyphSpark1 = finedraw.Spark1
+	GlyphSpark2 = finedraw.Spark2
+	GlyphSpark3 = finedraw.Spark3
+	GlyphSpark4 = finedraw.Spark4
+	GlyphSpark5 = finedraw.Spark5
+	GlyphSpark6 = finedraw.Spark6
 	// The upper half block: with GlyphSpark4 (the lower half) and GlyphBarFull
 	// it draws About's two-row wordmark (about-design).
 	GlyphUpperHalf = "▀"
 	// A gauge's partial cell in true colour, one to seven eighths filled from
 	// the left (busmon-bars); GlyphBarFull is the whole cell.
-	GlyphEighth1 = "▏"
-	GlyphEighth2 = "▎"
-	GlyphEighth3 = "▍"
-	GlyphEighth4 = "▌"
-	GlyphEighth5 = "▋"
-	GlyphEighth6 = "▊"
-	GlyphEighth7 = "▉"
+	GlyphEighth1 = finedraw.Eighth1
+	GlyphEighth2 = finedraw.Eighth2
+	GlyphEighth3 = finedraw.Eighth3
+	GlyphEighth4 = finedraw.Eighth4
+	GlyphEighth5 = finedraw.Eighth5
+	GlyphEighth6 = finedraw.Eighth6
+	GlyphEighth7 = finedraw.Eighth7
 	// The header's thin account gauge (usage-bars): a heavy line, filled in
 	// the level colour on itself in the track colour; ─ is its track without
 	// colour.
-	GlyphThinBar = "━"
+	GlyphThinBar = finedraw.Thin
 	// The pace mark where it falls inside the fill: the line crossed, so the
 	// cell still reads filled without colour (foureyes on usage-bars).
-	GlyphThinMark = "╋"
+	GlyphThinMark = finedraw.ThinMark
 	// The updated column's freshness gauge: the same two dots as working/idle.
 	GlyphDotFull  = GlyphWorking
 	GlyphDotEmpty = GlyphIdle

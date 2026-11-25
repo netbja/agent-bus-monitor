@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 // settingsEnv is a config directory with config.toml and busmon.toml, and an
@@ -923,7 +924,7 @@ func TestSettingsPageGraphs(t *testing.T) {
 		t.Fatalf("graphs: %q %q %q", configText(t, getenv), m.cfg.settings.Graphs, m.ui.flash)
 	}
 	page := linesText(tokensPage(iconsOff, m.cfg.settings.Graphs, tokFixtureState(shellNow), nil, nil, nil, "agent-bus-monitor", shellNow, 120, false, barView{}, true))
-	if !strings.ContainsRune(page, brailleBlank) && !strings.ContainsAny(page, "⡀⣀⡄⡆⡇⢀⢠⢰⢸⣿") {
+	if !strings.ContainsRune(page, finedraw.BrailleBlank) && !strings.ContainsAny(page, "⡀⣀⡄⡆⡇⢀⢠⢰⢸⣿") {
 		t.Fatalf("no braille on the Tokens page:\n%s", page)
 	}
 }

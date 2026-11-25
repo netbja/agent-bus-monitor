@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
 
@@ -115,7 +116,7 @@ func TestTokensPagePendingUnknownZero(t *testing.T) {
 // Bars compare across projects (scaled to the largest day of all); the
 // hour sparkline keeps the hour's last sample, a space for an hour without.
 func TestTokensSparkSteps(t *testing.T) {
-	if got := sparkLine([]float64{0, 100, 1}, 100, graphsBlock); got != " "+GlyphBarFull+GlyphSpark1 {
+	if got := finedraw.Spark([]float64{0, 100, 1}, 100, graphsBlock); got != " "+GlyphBarFull+GlyphSpark1 {
 		t.Errorf("spark steps: %q", got)
 	}
 }
