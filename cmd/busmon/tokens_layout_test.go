@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
 
@@ -19,18 +20,18 @@ import (
 func TestSparkWide(t *testing.T) {
 	week := []float64{1, 2, 3, 4, 5, 6, 7}
 	for _, style := range []string{graphsBlock, graphsASCII, graphsBraille} {
-		got := sparkWide(week, 7, tokSparkCells, style)
+		got := finedraw.SparkWide(week, 7, tokSparkCells, style)
 		if Width(got) != tokSparkCells {
 			t.Errorf("%s: %d cells, want %d: %q", style, Width(got), tokSparkCells, got)
 		}
 	}
-	if got, want := sparkWide(week, 7, 14, graphsBlock), sparkLine([]float64{1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7}, 7, graphsBlock); got != want {
+	if got, want := finedraw.SparkWide(week, 7, 14, graphsBlock), finedraw.Spark([]float64{1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7}, 7, graphsBlock); got != want {
 		t.Errorf("block: each day two cells: %q, want %q", got, want)
 	}
-	if got, want := sparkWide(week, 7, 14, graphsBraille), string([]rune(sparkLine(repeatEach(week, 4), 7, graphsBraille))[:14]); got != want {
+	if got, want := finedraw.SparkWide(week, 7, 14, graphsBraille), string([]rune(finedraw.Spark(repeatEach(week, 4), 7, graphsBraille))[:14]); got != want {
 		t.Errorf("braille: each day four points: %q, want %q", got, want)
 	}
-	if got := sparkWide(nil, 0, 14, graphsBlock); got != strings.Repeat(" ", 14) {
+	if got := finedraw.SparkWide(nil, 0, 14, graphsBlock); got != strings.Repeat(" ", 14) {
 		t.Errorf("no values: %q", got)
 	}
 }

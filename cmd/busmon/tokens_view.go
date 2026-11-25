@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/tokens"
 )
@@ -226,7 +227,7 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 				rowMax = max(rowMax, v.In+v.Write+v.Out)
 				week = append(week, float64(v.In+v.Write+v.Out))
 			}
-			b.seg(RoleOK, sparkWide(week, float64(rowMax), spark, graphs)) // scaled per row: its own shape, the bar compares
+			b.seg(RoleOK, finedraw.SparkWide(week, float64(rowMax), spark, graphs)) // scaled per row: its own shape, the bar compares
 			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+textfmt.TokCount(total)))
 		}
 		if len(none) > 0 {

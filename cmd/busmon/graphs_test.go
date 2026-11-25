@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 // braille-sparklines §4: a braille cell is U+2800 plus the dots of its two
@@ -20,8 +21,8 @@ func TestBrailleCell(t *testing.T) {
 		{0, 1, '⢀'}, {0, 2, '⢠'}, {0, 3, '⢰'}, {0, 4, '⢸'},
 		{4, 4, '⣿'}, {3, 1, '⣆'}, {4, 2, '⣧'},
 	} {
-		if got := brailleCell(c.left, c.right); got != c.want {
-			t.Errorf("brailleCell(%d, %d) = %U, want %U", c.left, c.right, got, c.want)
+		if got := finedraw.BrailleCell(c.left, c.right); got != c.want {
+			t.Errorf("finedraw.BrailleCell(%d, %d) = %U, want %U", c.left, c.right, got, c.want)
 		}
 	}
 }
@@ -30,7 +31,7 @@ func TestBrailleCell(t *testing.T) {
 func TestBrailleCellRoundTrip(t *testing.T) {
 	for l := 0; l <= 4; l++ {
 		for r := 0; r <= 4; r++ {
-			if gl, gr := brailleLevels(brailleCell(l, r)); gl != l || gr != r {
+			if gl, gr := finedraw.BrailleLevels(finedraw.BrailleCell(l, r)); gl != l || gr != r {
 				t.Errorf("(%d, %d) reads back as (%d, %d)", l, r, gl, gr)
 			}
 		}
@@ -49,8 +50,8 @@ func TestSparkLevel(t *testing.T) {
 		{1e-9, 100, 4, 1}, {1e-9, 100, 8, 1}, {1, 5_100_000, 4, 1},
 		{50, 100, 8, 5}, {100, 100, 8, 8}, {100, 100, 4, 4}, {99.9, 100, 4, 4},
 	} {
-		if got := sparkLevel(c.v, c.max, c.n); got != c.want {
-			t.Errorf("sparkLevel(%v, %v, %d) = %d, want %d", c.v, c.max, c.n, got, c.want)
+		if got := finedraw.Level(c.v, c.max, c.n); got != c.want {
+			t.Errorf("finedraw.Level(%v, %v, %d) = %d, want %d", c.v, c.max, c.n, got, c.want)
 		}
 	}
 }
@@ -74,22 +75,22 @@ func TestSparkLineStyles(t *testing.T) {
 		{graphsASCII, " .+_#:*", "_  .__-"},
 		{graphsBraille, "⢀⣆⣧⡇   ", "⡀⢀⣀⡄   "},
 	} {
-		if got := sparkLine(abm, 5.1e6, c.style); got != c.abm {
+		if got := finedraw.Spark(abm, 5.1e6, c.style); got != c.abm {
 			t.Errorf("%s abm = %q, want %q", c.style, got, c.abm)
 		}
-		if got := sparkLine(mine, 5.1e6, c.style); got != c.mine {
+		if got := finedraw.Spark(mine, 5.1e6, c.style); got != c.mine {
 			t.Errorf("%s mine = %q, want %q", c.style, got, c.mine)
 		}
-		if w := Width(sparkLine(abm, 5.1e6, c.style)); w != 7 {
+		if w := Width(finedraw.Spark(abm, 5.1e6, c.style)); w != 7 {
 			t.Errorf("%s: width %d, want 7", c.style, w)
 		}
 	}
 	// An odd count leaves the last right column empty; a tiny day lights the bottom dot.
-	if got := sparkLine([]float64{0, 0, 1}, 1e9, graphsBraille); got != "⠀⡀ " {
+	if got := finedraw.Spark([]float64{0, 0, 1}, 1e9, graphsBraille); got != "⠀⡀ " {
 		t.Errorf("odd count = %q", got)
 	}
 	// An empty week is blanks; braille cells that hold nothing are U+2800.
-	if got := sparkLine(make([]float64, 7), 0, graphsBraille); got != "⠀⠀⠀⠀   " {
+	if got := finedraw.Spark(make([]float64, 7), 0, graphsBraille); got != "⠀⠀⠀⠀   " {
 		t.Errorf("empty braille week = %q", got)
 	}
 }
@@ -98,8 +99,8 @@ func TestSparkLineStyles(t *testing.T) {
 func TestBrailleWidth(t *testing.T) {
 	for l := 0; l <= 4; l++ {
 		for r := 0; r <= 4; r++ {
-			if w := Width(string(brailleCell(l, r))); w != 1 {
-				t.Errorf("%U: width %d", brailleCell(l, r), w)
+			if w := Width(string(finedraw.BrailleCell(l, r))); w != 1 {
+				t.Errorf("%U: width %d", finedraw.BrailleCell(l, r), w)
 			}
 		}
 	}
