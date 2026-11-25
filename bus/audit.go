@@ -33,8 +33,9 @@ import (
 // AuditKey is project's audit stream.
 func AuditKey(project string) string { return project + ":audit" }
 
-// AuditActions are §2's acts, the only actions taken.
-var AuditActions = []string{"approve", "answer", "merge", "push", "deliver", "force", "ci-handoff", "update", "reinstall",
+// AuditActions are §2's acts, the only actions taken; reject joined approve
+// at step 2 (master's answer: a verdict either way).
+var AuditActions = []string{"approve", "reject", "answer", "merge", "push", "deliver", "force", "ci-handoff", "update", "reinstall",
 	"quota-pause", "pause", "resume", "suspend", "retire", "retro-apply"}
 
 // The outcomes of an act.
@@ -126,36 +127,76 @@ func (b *Bus) Audit(ctx context.Context, e AuditEntry) (string, error) {
 	return b.AuditWith(ctx, e, AuditRetention(os.Getenv))
 }
 
-// auditAppend reads the last entry's hash, chains e onto it and appends it,
-// trimming by age (MINID at Redis TIME minus ARGV[1] ms), in one script: two
-// writers never chain onto the same entry. ARGV[2..9] are e's fields after
-// At, in auditFields' order.
-var auditAppend = redis.NewScript(`
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local prev = ''
-local last = redis.call('XREVRANGE', KEYS[1], '+', '-', 'COUNT', 1)
-if #last > 0 then
-  local f = last[1][2]
-  for i = 1, #f, 2 do
-    if f[i] == 'hash' then prev = f[i + 1] end
-  end
-end
-local canon = prev .. '\n' .. tostring(now)
-for i = 2, 9 do canon = canon .. '\n' .. ARGV[i] end
-local hash = redis.sha1hex(canon)
-local minid = tostring(now - tonumber(ARGV[1])) .. '-0'
-return redis.call('XADD', KEYS[1], 'MINID', minid, '*', 'at', tostring(now),
-  'action', ARGV[2], 'actor', ARGV[3], 'human', ARGV[4], 'typed', ARGV[5], 'target', ARGV[6],
-  'ref', ARGV[7], 'outcome', ARGV[8], 'detail', ARGV[9], 'prev', prev, 'hash', hash)`)
+// AuditWarn is told an audit line an act could not write: the act stands
+// (a trail never fails the act it records). The CLI's stderr by default.
+var AuditWarn = func(err error) { fmt.Fprintln(os.Stderr, "warning: audit:", err) }
 
-// AuditWith is Audit with retention: e checked (an entry §2 does not allow
-// is refused, nothing written), its free fields each replaced whole by
-// [redacted] on a credential shape (§3: never a span; the line is still
-// written), then appended and chained.
-func (b *Bus) AuditWith(ctx context.Context, e AuditEntry, retention time.Duration) (string, error) {
+// AuditAfter writes e after its act, best effort: a failure goes to
+// AuditWarn (the CLI's acts call it, audit step 2).
+func (b *Bus) AuditAfter(ctx context.Context, e AuditEntry) {
+	if _, err := b.Audit(ctx, e); err != nil {
+		AuditWarn(fmt.Errorf("%s by %s: %w", e.Action, e.Actor, err))
+	}
+}
+
+// auditLua defines audit_append(key, keep, f), and audit_try, the same
+// for a fenced script (an error never interrupts its act): it reads the last entry's
+// hash, chains the entry of fields f (auditFields' order after At: action,
+// actor, human, typed, target, ref, outcome, detail) onto it and appends it,
+// trimming by age (MINID at Redis TIME minus keep ms). A script that
+// includes it appends in the same step as its own act (audit step 2: the
+// dispatcher's acts, fenced with them); two writers never chain onto the
+// same entry.
+const auditLua = `
+local function audit_append(key, keep, f)
+  local t = redis.call('TIME')
+  local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+  local prev = ''
+  local last = redis.call('XREVRANGE', key, '+', '-', 'COUNT', 1)
+  if #last > 0 then
+    local lf = last[1][2]
+    for i = 1, #lf, 2 do
+      if lf[i] == 'hash' then prev = lf[i + 1] end
+    end
+  end
+  local canon = prev .. '\n' .. tostring(now)
+  for i = 1, 8 do canon = canon .. '\n' .. f[i] end
+  local hash = redis.sha1hex(canon)
+  local minid = tostring(now - tonumber(keep)) .. '-0'
+  return redis.call('XADD', key, 'MINID', minid, '*', 'at', tostring(now),
+    'action', f[1], 'actor', f[2], 'human', f[3], 'typed', f[4], 'target', f[5],
+    'ref', f[6], 'outcome', f[7], 'detail', f[8], 'prev', prev, 'hash', hash)
+end
+-- audit_try is audit_append for a fenced script, after its act's writes: a
+-- Lua error does not roll back what was written before it, so an audit
+-- error must never interrupt the act (reviewer-codex): the line is lost,
+-- the act stands and records its progress.
+local function audit_try(key, keep, f)
+  pcall(audit_append, key, keep, f)
+end
+-- audit_fenced writes the line of the ARGV block from i that fencedAudit
+-- built and checked in Go: ARGV[i] '1' a line ('0' none), then the
+-- retention and the fields; the detail is ARGV[i+9], or ARGV[i+9] .. n ..
+-- ARGV[i+10] when ARGV[i+11] is '1' (n: the count the script computed).
+local function audit_fenced(key, i, n)
+  if ARGV[i] ~= '1' then return end
+  local d = ARGV[i + 9]
+  if ARGV[i + 11] == '1' then d = d .. n .. ARGV[i + 10] end
+  audit_try(key, ARGV[i + 1], {ARGV[i + 2], ARGV[i + 3], ARGV[i + 4], ARGV[i + 5], ARGV[i + 6], ARGV[i + 7], ARGV[i + 8], d})
+end
+`
+
+// auditAppend is audit_append alone: KEYS[1] the stream, ARGV[1] the
+// retention in ms, ARGV[2..9] the fields.
+var auditAppend = redis.NewScript(auditLua + `
+return audit_append(KEYS[1], ARGV[1], {ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7], ARGV[8], ARGV[9]})`)
+
+// auditArgs are e's retention and fields as audit_append takes them: e
+// checked (an entry §2 does not allow is refused) and its free fields each
+// replaced whole by [redacted] on a credential shape (§3).
+func auditArgs(e AuditEntry, retention time.Duration) ([]any, error) {
 	if err := e.valid(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if retention <= 0 {
 		retention = DefaultAuditRetention
@@ -164,6 +205,53 @@ func (b *Bus) AuditWith(ctx context.Context, e AuditEntry, retention time.Durati
 	args := []any{retention.Milliseconds()}
 	for _, f := range auditFields(e)[1:] {
 		args = append(args, f)
+	}
+	return args, nil
+}
+
+// AuditCountMark marks, in a fenced line's detail, where the script puts the
+// count it computes (a hand-off's number): the only part not built in Go.
+const AuditCountMark = "{n}"
+
+// fencedAuditArgs is the length of a fencedAudit block.
+const fencedAuditArgs = 12
+
+// fencedAudit is e as a fenced script's ARGV block (audit_fenced): e checked
+// and redacted in Go by auditArgs, step 1's one path (foureyes), with 999
+// standing for the count; the detail split at AuditCountMark. A refused e
+// gives a block that writes no line, said on AuditWarn: the act is never
+// refused for its line. A detail redacted whole takes no count.
+func fencedAudit(e AuditEntry) []any {
+	pre, post, mark := strings.Cut(e.Detail, AuditCountMark)
+	probe := e
+	if mark {
+		probe.Detail = pre + "999" + post
+	}
+	args, err := auditArgs(probe, AuditRetention(os.Getenv))
+	if err != nil {
+		AuditWarn(fmt.Errorf("%s by %s: %w", e.Action, e.Actor, err))
+		out := make([]any, fencedAuditArgs)
+		out[0] = "0"
+		for i := 1; i < len(out); i++ {
+			out[i] = ""
+		}
+		return out
+	}
+	out := append([]any{"1"}, args[:8]...) // the flag, the retention, action ... outcome
+	if detail, _ := args[8].(string); detail == health.Redacted || !mark {
+		return append(out, detail, "", "0")
+	}
+	return append(out, pre, post, "1")
+}
+
+// AuditWith is Audit with retention: e checked (an entry §2 does not allow
+// is refused, nothing written), its free fields each replaced whole by
+// [redacted] on a credential shape (§3: never a span; the line is still
+// written), then appended and chained.
+func (b *Bus) AuditWith(ctx context.Context, e AuditEntry, retention time.Duration) (string, error) {
+	args, err := auditArgs(e, retention)
+	if err != nil {
+		return "", err
 	}
 	return auditAppend.Run(ctx, b.r, []string{AuditKey(b.project)}, args...).Text()
 }

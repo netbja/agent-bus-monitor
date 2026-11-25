@@ -53,8 +53,12 @@ type CIStep struct {
 //
 // KEYS: dispatch lease, {p}:ci, cmd, notify, swap:<owner>, swap:<master>.
 // ARGV: token, field, digest, cap, owner, master, owner-is-master, maxlen,
-// episode, handoff pre/post, copy pre/post, stop master, stop notice.
-var ciStepScript = redis.NewScript(`
+// episode, handoff pre/post, copy pre/post, stop master, stop notice, then
+// two fencedAudit blocks: the hand-off's (16-27) and the stop's (28-39).
+// KEYS[7] is {p}:audit: the owner's hand-off and the stop each write their
+// audit line there, in the same step (audit step 2); the script puts in
+// only the count.
+var ciStepScript = redis.NewScript(auditLua + `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 'not-holder' end
 local t = redis.call('TYPE', KEYS[2]).ok
 if t ~= 'hash' and t ~= 'none' then return 'bad-type' end
@@ -101,6 +105,7 @@ for _, p in ipairs(missing) do
   if p == 'o' then
     redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[8], '*', 'from', 'dispatch', 'target', ARGV[5], 'type', 'directive', 'ref', '',
       'command', ARGV[10] .. ord .. ARGV[11], 'text_complete', 'yes', 'episode', ARGV[9])
+    audit_fenced(KEYS[7], 16, ord)
   elseif p == 'm' and stopped == '1' then
     redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[8], '*', 'from', 'dispatch', 'target', ARGV[6], 'type', 'directive', 'ref', '',
       'command', ARGV[14], 'text_complete', 'yes', 'episode', ARGV[9], 'wake', 'no')
@@ -109,6 +114,7 @@ for _, p in ipairs(missing) do
       'command', ARGV[12] .. ord .. ARGV[13], 'text_complete', 'yes', 'episode', ARGV[9], 'wake', 'no')
   else
     redis.call('XADD', KEYS[4], 'MAXLEN', '~', ARGV[8], '*', 'from', 'dispatch', 'message', ARGV[15], 'for', 'person')
+    audit_fenced(KEYS[7], 28, tostring(count))
   end
   done = done .. p
   redis.call('HSET', KEYS[2], ARGV[2], val())
@@ -136,11 +142,16 @@ func (b *Bus) FencedCIStep(ctx context.Context, token string, s CIStep) (string,
 		ownerIsMaster = "1"
 	}
 	field := "pr:" + strconv.Itoa(s.PR)
+	args := []any{token, field, s.Digest, s.Cap, s.Owner, s.Master, ownerIsMaster, streamMaxLen, "ci:" + field + "=" + s.Digest,
+		s.Handoff[0], s.Handoff[1], s.MasterCopy[0], s.MasterCopy[1], s.StopMaster, s.StopNotice}
+	pr := "pr " + strconv.Itoa(s.PR)
+	args = append(args, fencedAudit(AuditEntry{Action: "ci-handoff", Actor: "dispatch", Target: pr, Outcome: AuditOK,
+		Detail: "hand-off " + AuditCountMark + " of " + strconv.Itoa(s.Cap) + " to " + s.Owner + ", head " + s.Digest[:8]})...)
+	args = append(args, fencedAudit(AuditEntry{Action: "ci-handoff", Actor: "dispatch", Target: pr, Outcome: AuditRefused,
+		Detail: "stopped after " + AuditCountMark + " hand-offs, head " + s.Digest[:8]})...)
 	v, err := ciStepScript.Run(ctx, b.r,
 		[]string{DispatchKey(b.project), CIKey(b.project), StreamKey(b.project, "cmd"), StreamKey(b.project, "notify"),
-			SwapKey(b.project, s.Owner), SwapKey(b.project, s.Master)},
-		token, field, s.Digest, s.Cap, s.Owner, s.Master, ownerIsMaster, streamMaxLen, "ci:"+field+"="+s.Digest,
-		s.Handoff[0], s.Handoff[1], s.MasterCopy[0], s.MasterCopy[1], s.StopMaster, s.StopNotice).Text()
+			SwapKey(b.project, s.Owner), SwapKey(b.project, s.Master), AuditKey(b.project)}, args...).Text()
 	if err != nil {
 		return "", err
 	}
