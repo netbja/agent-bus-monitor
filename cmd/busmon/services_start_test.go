@@ -31,8 +31,8 @@ func startWorld(t *testing.T, env map[string]string, dispatch string) *restartWo
 func TestServiceStartAsksThenRuns(t *testing.T) {
 	w := startWorld(t, nil, "down")
 	w.press(t, 'S')
-	if want := "Start the services of demo (dispatch, missions; the agents stay down)? agentbus --project demo service start. y / n"; w.m.ui.flash != want {
-		t.Fatalf("question %q", w.m.ui.flash)
+	if want := "Start the services of demo? dispatch, missions; the agents stay down agentbus --project demo service start"; dialogText(w.m) != want {
+		t.Fatalf("question %q", dialogText(w.m))
 	}
 	if len(w.runs) != 0 {
 		t.Fatal("ran before y")

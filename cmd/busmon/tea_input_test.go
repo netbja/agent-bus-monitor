@@ -198,7 +198,8 @@ func TestShellPausePopupOnAnAnswer(t *testing.T) {
 }
 
 // d then y forgets an agent that is not live (in a command, then it leaves
-// the panel); any other key keeps it; a live agent is refused at once.
+// the panel); n keeps it; a live agent is refused at once. The question is
+// the confirm dialog (busmon-confirm-dialog).
 func TestShellRemoveAgent(t *testing.T) {
 	pinLocal(t)
 	fw := &fakeWriter{}
@@ -206,8 +207,8 @@ func TestShellRemoveAgent(t *testing.T) {
 	m.ui.agentsTouched = true
 	m.lists.agents.Select("architect")
 	m = keys(t, m, 'd')
-	if m.ui.confirm == nil || !strings.Contains(m.ui.flash, "forget agent architect") {
-		t.Fatalf("d: %q", m.ui.flash)
+	if m.ui.dialog == nil || !strings.Contains(m.grid().plain(), "Forget agent architect?") || !strings.Contains(m.grid().plain(), "[ Forget ]") {
+		t.Fatalf("d: no dialog:\n%s", m.grid().plain())
 	}
 	if m = keys(t, m, 'n'); m.ui.flash != "not removed" || len(fw.sent) != 0 {
 		t.Fatalf("n: %q, sent %q", m.ui.flash, fw.sent)
@@ -218,7 +219,7 @@ func TestShellRemoveAgent(t *testing.T) {
 		t.Fatalf("y: sent %q, still listed %v", fw.sent, m.lists.agents.index("architect") >= 0)
 	}
 	m.lists.agents.Select("docs") // armed: listening on the bus
-	if m = keys(t, m, 'd'); m.ui.confirm != nil || !strings.Contains(m.ui.flash, "is listening") {
+	if m = keys(t, m, 'd'); m.ui.dialog != nil || !strings.Contains(m.ui.flash, "is listening") {
 		t.Fatalf("a live agent: %q", m.ui.flash)
 	}
 }

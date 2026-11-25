@@ -404,7 +404,7 @@ var (
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
 		{Keys: "1-3", Hint: "context", Help: "an item's page (For you): open its n-th Context line, a message attached to it, in full (a click too; on a question's page, where the digits choose an option, a click)", Act: ActContext, OnPage: true, match: runeIs('1', '2', '3')},
 		{Keys: "d", Hint: "done", Help: "the plan (p): show or fold the done tasks", Act: ActShowDone, OnPage: true, match: runeIs('d')},
-		{Keys: "X", Hint: "restart", Help: "Services (F3): restart the selected service (dispatch, missions) with agentbus service restart, after y; the person's act, never an agent's; holders and Redis are not restarted here", Act: ActServiceRestart, OnPage: true, match: runeIs('X')},
+		{Keys: "X", Hint: "restart", Help: "Services (F3): restart the selected service (dispatch, missions) with agentbus service restart, after you confirm; the person's act, never an agent's; holders and Redis are not restarted here", Act: ActServiceRestart, OnPage: true, match: runeIs('X')},
 		{Keys: "l", Help: "Services (F3): the selected service's log (enter too; " + arrows + " choose the card, " + GlyphArrowL + GlyphArrowR + " too when side by side)", Act: ActServiceLog, OnPage: true, match: runeIs('l')},
 		{Keys: "esc q", Hint: "close", Act: ActClose, match: either(keyIs(keyEscape), runeIs('q'))},
 		// After close: on a narrow footer the way out stays (message-reply-key).

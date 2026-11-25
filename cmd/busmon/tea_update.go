@@ -53,25 +53,16 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	var cmd tea.Cmd
 	switch {
+	case m.ui.dialog != nil: // a yes/no question: above everything it was opened over
+		cmd = m.dialogKey(k)
 	case m.ui.pausePopup != nil:
 		cmd = m.pauseKey(k)
 	case m.ui.tour != nil:
 		cmd = m.tourKey(k)
-	case m.ui.summary:
-		cmd = m.summaryKey(k)
-		if !m.ui.summary && !m.ui.sending {
-			m.ui.summarySent = false
-		}
 	case m.ui.reminder != nil:
 		cmd = m.reminderKey(k)
 	case m.ui.askChoose != nil:
 		cmd = m.chooseKey(k)
-	case m.ui.confirm != nil:
-		cmd = m.confirmKey(k)
-	case m.ui.sleepAsk != nil:
-		cmd = m.sleepConfirm(k)
-	case m.ui.quitAsk:
-		cmd = m.quitKey(k)
 	case m.ui.del != nil:
 		cmd = m.deleteKey(k)
 	default:
@@ -624,7 +615,7 @@ func (m *Model) wheel(ms tea.Mouse) {
 	if m.ui.pausePopup == nil && m.atWheel(ms.X, ms.Y, delta) {
 		return // the @ popup's list
 	}
-	if m.ui.compose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.quitAsk {
+	if m.ui.compose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.dialog != nil {
 		return // a window or a dialog is over the screen
 	}
 	if m.rd.open() && m.readerRect().contains(ms.X, ms.Y) {
@@ -653,10 +644,12 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		return nil
 	}
 	switch {
+	case m.ui.dialog != nil: // modal: its buttons, else outside is no
+		cmd := m.dialogClick(ms.X, ms.Y)
+		m.refresh()
+		return cmd
 	case m.ui.pausePopup != nil: // modal: a click is the popup's
 		return m.pauseClick(ms.X, ms.Y)
-	case m.ui.quitAsk: // modal: only its keys answer it
-		return nil
 	case m.ui.tour != nil: // modal too
 		cmd := m.tourClick(ms.X, ms.Y)
 		m.refresh()
@@ -665,8 +658,6 @@ func (m *Model) click(ms tea.Mouse) tea.Cmd {
 		cmd := m.reminderClick(ms.X, ms.Y)
 		m.refresh()
 		return cmd
-	case m.ui.summary:
-		return nil
 	case m.ui.compose != nil:
 		c := m.ui.compose
 		if c.at != nil && m.atClick(ms.X, ms.Y) {

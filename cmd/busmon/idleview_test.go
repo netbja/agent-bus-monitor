@@ -101,7 +101,7 @@ func TestIdleViewWaitsForModals(t *testing.T) {
 		"chooser":  func(m *Model) { m.ui.askChoose = &askChoice{} },
 		"pause":    func(m *Model) { m.ui.pausePopup = &pauseDialog{} },
 		"reminder": func(m *Model) { m.ui.reminder = &reminderDialog{} },
-		"summary":  func(m *Model) { m.ui.summary = true },
+		"summary":  func(m *Model) { m.askSummary() },
 		"tour":     func(m *Model) { m.ui.tour = &tourState{} },
 		"walk":     func(m *Model) { m.ui.walk = &walk{} },
 	} {

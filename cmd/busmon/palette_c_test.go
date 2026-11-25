@@ -101,8 +101,8 @@ func TestPaletteClassCArgv(t *testing.T) {
 			w.m.snap.pause = &bus.PauseRecord{By: "charlie", At: time.Now().UnixMilli()}
 		}
 		w.run(t, line)
-		if w.m.ui.sleepAsk == nil || !strings.Contains(w.m.ui.flash, "agentbus "+want) || !strings.Contains(w.m.ui.flash, "y / n") {
-			t.Errorf("%s: no confirmation naming the argv: flash %q", line, w.m.ui.flash)
+		if w.m.ui.sleepAsk == nil || !strings.Contains(dialogText(w.m), "agentbus "+want) {
+			t.Errorf("%s: no confirmation naming the argv: dialog %q", line, dialogText(w.m))
 			continue
 		}
 		if len(w.runs) != 0 {

@@ -94,8 +94,6 @@ func (m Model) grid() *grid {
 	switch {
 	case m.ui.reminder != nil:
 		m.drawReminder(g)
-	case m.ui.summary:
-		m.drawSummary(g)
 	}
 	if m.ui.tour != nil {
 		m.drawTour(g)
@@ -106,8 +104,8 @@ func (m Model) grid() *grid {
 	if d := m.ui.pausePopup; d != nil {
 		drawPausePopup(g, m.pauseDialogRect(), d.rec, d.sel, m.now)
 	}
-	if m.ui.quitAsk {
-		drawQuitPopup(g, quitRect(m.width, m.height))
+	if m.ui.dialog != nil { // last: it dims everything under it
+		drawConfirmDialog(g, m.ui.dialog, m.width, m.height)
 	}
 	return g
 }

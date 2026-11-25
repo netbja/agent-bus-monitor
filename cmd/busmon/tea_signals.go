@@ -353,7 +353,7 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 	switch r.Kind {
 	case "summary":
 		if p.recap.SummaryDisabled == "" {
-			m.ui.summary = true
+			m.askSummary()
 		}
 	case "ask":
 		return m.pushAskOf(r.Agent)

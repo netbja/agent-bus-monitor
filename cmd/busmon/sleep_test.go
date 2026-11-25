@@ -73,7 +73,7 @@ func suspendedPause() *bus.PauseRecord {
 func TestSleepKeySuspends(t *testing.T) {
 	w := newSleepWorld(t, nil)
 	w.press(t, 'Z')
-	if f := w.m.ui.flash; !strings.Contains(f, "Suspend agent-bus-monitor?") || !strings.Contains(f, "7m") || !strings.Contains(f, "y / n") {
+	if f := dialogText(w.m); !strings.Contains(f, "Suspend agent-bus-monitor?") || !strings.Contains(f, "7m") {
 		t.Fatalf("confirmation = %q", f)
 	}
 	w.press(t, 'y')
@@ -91,7 +91,7 @@ func TestSleepKeySuspends(t *testing.T) {
 func TestSleepKeyResumes(t *testing.T) {
 	w := newSleepWorld(t, suspendedPause())
 	w.press(t, 'Z')
-	if f := w.m.ui.flash; !strings.Contains(f, "Resume agent-bus-monitor?") || !strings.Contains(f, "y / n") {
+	if f := dialogText(w.m); !strings.Contains(f, "Resume agent-bus-monitor?") {
 		t.Fatalf("confirmation = %q", f)
 	}
 	w.press(t, 'n')

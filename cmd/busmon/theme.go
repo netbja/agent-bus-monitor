@@ -246,6 +246,20 @@ var (
 	tabOffLight = getColor("#E3E6EA")
 )
 
+// Surface is style on a dialog's background, a raised shade of the
+// screen's (busmon-confirm-dialog): the tab background in true colour; the
+// 16-colour and no-colour palettes keep the style (the dialog's cells are
+// still all its own, so nothing behind shows through).
+func (t *Theme) Surface(style Style) Style {
+	switch t.palette {
+	case PaletteDark:
+		return style.Background(tabOffDark)
+	case PaletteLight:
+		return style.Background(tabOffLight)
+	}
+	return style
+}
+
 // TabOff is an inactive tab: muted text on the tab background. Without true
 // colour it is plain muted text.
 func (t *Theme) TabOff() Style {
@@ -284,6 +298,9 @@ func (t *Theme) termStyle(c cellStyle) Style {
 	}
 	if c.Off { // an inactive tab replaces the style whole
 		style = t.TabOff()
+	}
+	if c.Surface { // a dialog's fill: its text on a raised background
+		style = t.Surface(style)
 	}
 	if c.QR { // a camera reads dark on light only: black on white whatever the theme; NO_COLOR reverses the terminal's own
 		if t.palette == PaletteNone {

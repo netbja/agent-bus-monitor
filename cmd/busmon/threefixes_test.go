@@ -28,8 +28,8 @@ func TestPaletteResumeOnlyWhenPaused(t *testing.T) {
 		w := newPalCWorld(t, "charlie")
 		set(w)
 		w.run(t, "/resume")
-		if w.m.ui.sleepAsk == nil || !strings.Contains(w.m.ui.flash, "resume --yes? y / n") {
-			t.Errorf("%s: no confirmation: flash %q", name, w.m.ui.flash)
+		if w.m.ui.sleepAsk == nil || !strings.Contains(dialogText(w.m), "resume --yes") {
+			t.Errorf("%s: no confirmation: dialog %q", name, dialogText(w.m))
 		}
 	}
 }
