@@ -1,6 +1,6 @@
 # The person's name is reserved (person-name-spoof)
 
-Status: spec r2, for review (subject `person-name-spec`). Not built. Base: origin/dev `04c1755f`.
+Status: spec r3, for review (subject `person-name-spec`). Not built. Base: origin/dev `04c1755f`.
 Author: architect, from master's directive (task `person-name-spoof`, cmd `1795607502697-0`),
 on the person's question of 2026-11-25. No new dependency. The questions for the person are last
 (§8).
@@ -9,6 +9,9 @@ and its list, and a step 0 records claude-ao's real process tree. The reserved n
 file, never lowered by the environment. The collateral on the person's own acts is stated.
 reviewer-codex's reject of r1 (verdict on `dn49s358y5mp`): a badge cannot keep an ask open. §4.1
 says which writes may advance an ask or a gate, and where that is enforced before the transition.
+r3: reviewer-codex's reject of r2 (verdict on `dn4ammci9lvi`): the binding is written first with a
+nonce and a hash of the entry's fields, so it needs no entry id. foureyes's approve of r2: `comm`
+is defence in depth.
 
 ## 1. What happened
 
@@ -101,8 +104,8 @@ one writer:
   and in For you. That holds today; a test pins it.
 - **Who may run the script.** `agentbus answer` and busmon are its callers. Step 1 refuses
   `answer` under a client and under `AGENT_BUS_AGENT`, **before** the script runs, so the ask's
-  state never moves. With ACL 4b, the script also writes the `{p}:typed` record, **as its first write,
-  before any read-modify of the ask**. Redis checks the user's key permissions on each command a
+  state never moves. With ACL 4b, the script also writes the `{p}:typed` record (§5), **as its first
+  write, before any read-modify of the ask**; it needs no reply id. Redis checks the user's key permissions on each command a
   script runs, and a script stops at the first error with nothing after it run (earlier writes
   are not rolled back, hence the order). So the `agent` user's call fails at that first write and
   the ask is unchanged, whoever wrote the command line.
@@ -125,11 +128,16 @@ It changes nothing for an entry's fields: XADD cannot restrict a field's value.
   agent a process with a known agent client among its ancestors, registered or not (§7, step 1,
   for its source and list). claude-ao then connects
   as `agent`, not `busmon`, and `Refuse` stops it from the person's acts.
-- **A binding only busmon can write.** busmon writes, in the same script as each typed entry or
-  answer, one record in a new stream, `{p}:typed`: the target stream, the entry id and a hash of its
-  fields. Only the `busmon` and `admin` users may write `{p}:typed`. A reader counts `typed=yes` as
-  the person's word only if `{p}:typed` holds the matching record. With ACL on, an agent cannot
-  forge one.
+- **A binding only busmon can write, written first, needing no entry id.** In the same script as
+  each typed entry or answer, busmon's **first** write is one record in a new stream,
+  `{p}:typed`: a nonce the script makes (Redis `TIME` and an `INCR`), the target stream, and a hash
+  of the fields the entry is about to carry (`from`, `target`, `type`, `ref`, the question id,
+  `said` or the text). The entry's id is not known yet, and is not needed: the entry then carries
+  `typed_nonce=<nonce>`. A reader counts `typed=yes` as the person's word only if `{p}:typed`
+  holds that nonce, for that stream, with the hash of the entry's own fields. A copied nonce on
+  other text fails the hash; on the same text it adds nothing. Only the `busmon` and `admin`
+  users may write `{p}:typed`, so with ACL on the `agent` user's script fails at that first write,
+  before the entry or the ask changes.
 
 **What ACL still does not do.** The users' passwords are files of the person's user. A process
 that reads busmon's password can connect as busmon. ACL binds honest software. It is a boundary
@@ -162,7 +170,9 @@ A helper like claude-ao never needs the person's name:
      version (this host's Claude Code: `comm` is `claude`, its executable `2.1.331`); on macOS
      `proc_pidpath`'s basename. The names are Go data, one list per client: `claude`, `codex`,
      `kimi`, `grok`, `agy`, and the desktop app's chain as step 0 records it. Not
-     `agentstate`'s client profiles: those name login-profile files, not processes; `senderIdentity`
+     `agentstate`'s client profiles: those name login-profile files, not processes. **Defence in
+     depth:** `comm` is 15 characters at most and a process can set its own (`prctl`), so a
+     process that renames itself passes. The rule stops the accident, not a writer; `senderIdentity`
      refuses the person's name from under a client, and `answer` refuses from under one too;
    - `AGENT_BUS_AGENT` set to a reserved name is refused for every write, anywhere;
    - `subscribe`'s `person` field, and busmon's `unverified person` badge, with For you excluding
@@ -195,8 +205,10 @@ refused with "run it in your own terminal". `answer` under a fake
 `claude` ancestor is refused. `subscribe` marks a CLI entry from the person `unverified`, a busmon
 typed entry `typed`, and an agent's entry without the field. busmon shows the badge and leaves the
 entry out of For you. A `human=yes` resume summary is `unverified`. With step 3, against a
-disposable broker with ACL on: the `agent` user's `XADD` to `{p}:typed` fails, and a `typed=yes` entry
-with no binding record reads `unverified`.
+disposable broker with ACL on: the `agent` user's answer fails at its first write, with no reply
+entry, no `{p}:typed` record and the ask unchanged; busmon's answer writes the record and the reply,
+and the reader verifies the actual reply by its `typed_nonce` and hash; a `typed=yes` entry with no
+nonce, an unknown nonce, or a known nonce on changed text reads `unverified`.
 
 **Not doing:** no signature on entries, no change to how the person types in busmon, no refusal of
 raw writes (none is possible without ACL).
