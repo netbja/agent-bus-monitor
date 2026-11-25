@@ -192,38 +192,66 @@ func (b *Bus) AuditEntries(ctx context.Context, since int64) ([]AuditEntry, erro
 	return out, nil
 }
 
-// AuditCheck is AuditVerify's answer.
+// AuditCheck is AuditVerify's answer. Inconclusive: the head kept moving
+// past the check (appends trimming by age): neither whole nor broken.
 type AuditCheck struct {
-	OK       bool   `json:"ok"`
-	Entries  int    `json:"entries"`
-	First    string `json:"first,omitempty"`
-	Last     string `json:"last,omitempty"`
-	BrokenAt string `json:"broken_at,omitempty"`
-	Reason   string `json:"reason,omitempty"`
+	OK           bool   `json:"ok"`
+	Inconclusive bool   `json:"inconclusive,omitempty"`
+	Entries      int    `json:"entries"`
+	First        string `json:"first,omitempty"`
+	Last         string `json:"last,omitempty"`
+	BrokenAt     string `json:"broken_at,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 }
+
+// auditVerifyPage is verify's page; auditBetweenPages, a test's hook.
+var (
+	auditVerifyPage   int64 = 500
+	auditBetweenPages func()
+)
+
+// auditVerifyTries bounds the restarts when the head moves past the check.
+const auditVerifyTries = 3
 
 // AuditVerify checks the chain, oldest first: each entry's hash is its
 // fields', and each follows the previous entry. The first entry's own
 // previous is not checked (the retention trims the head). A cut of the tail
-// is not detected (§6 Q3 B).
+// is not detected (§6 Q3 B). The stream is live: an append's trim that
+// passes the check's cursor between pages (reviewer-codex) starts the check
+// again from the new head; one still moving after auditVerifyTries is
+// inconclusive, never a break.
 func (b *Bus) AuditVerify(ctx context.Context) (AuditCheck, error) {
-	var c AuditCheck
+	for range auditVerifyTries {
+		c, moved, err := b.auditVerifyOnce(ctx)
+		if err != nil || !moved {
+			return c, err
+		}
+	}
+	return AuditCheck{Inconclusive: true, Reason: "the head moved past the check at every try (appends trimming by age): run it again"}, nil
+}
+
+// auditVerifyOnce is one pass; moved: the head was trimmed past its cursor.
+func (b *Bus) auditVerifyOnce(ctx context.Context) (c AuditCheck, moved bool, err error) {
 	prev, start := "", "-"
 	for {
-		ms, err := b.r.XRangeN(ctx, AuditKey(b.project), start, "+", 500).Result()
+		ms, err := b.r.XRangeN(ctx, AuditKey(b.project), start, "+", auditVerifyPage).Result()
 		if err != nil {
-			return c, err
+			return c, false, err
 		}
 		for _, m := range ms {
 			e := auditOf(m)
 			switch {
 			case e.Hash != AuditHash(e):
 				c.BrokenAt, c.Reason = e.ID, "its hash does not match its fields: edited, or not written by the audit writer"
+				return c, false, nil
 			case c.Entries > 0 && e.Prev != prev:
+				// The entry read last trimmed with everything before it: the
+				// retention passed the cursor, not a deletion.
+				if trimmed, err := b.auditTrimmedPast(ctx, c.Last); err != nil || trimmed {
+					return c, trimmed, err
+				}
 				c.BrokenAt, c.Reason = e.ID, "it does not follow the previous entry: one before it was deleted, or it was inserted"
-			}
-			if c.BrokenAt != "" {
-				return c, nil
+				return c, false, nil
 			}
 			if c.Entries == 0 {
 				c.First = e.ID
@@ -231,10 +259,23 @@ func (b *Bus) AuditVerify(ctx context.Context) (AuditCheck, error) {
 			c.Entries++
 			c.Last, prev = e.ID, e.Hash
 		}
-		if len(ms) < 500 {
+		if int64(len(ms)) < auditVerifyPage {
 			c.OK = true
-			return c, nil
+			return c, false, nil
 		}
 		start = "(" + ms[len(ms)-1].ID
+		if auditBetweenPages != nil {
+			auditBetweenPages()
+		}
 	}
+}
+
+// auditTrimmedPast: the stream now starts after id (or is empty): the head
+// was trimmed past it.
+func (b *Bus) auditTrimmedPast(ctx context.Context, id string) (bool, error) {
+	first, err := b.r.XRangeN(ctx, AuditKey(b.project), "-", "+", 1).Result()
+	if err != nil {
+		return false, err
+	}
+	return len(first) == 0 || idLess(id, first[0].ID), nil
 }
