@@ -52,9 +52,11 @@ func PlanSkills(m *Manifest, env []string) (SkillPlan, error) {
 	if err != nil {
 		return SkillPlan{}, err
 	}
-	p := SkillPlan{Dirs: dirs}
+	p := SkillPlan{Dirs: append([]string{}, dirs...)} // [] not null: agentbus update refuses a missing field
 	if p.Links, err = SkillLinks(m, env); err != nil {
 		p.Links, p.LinksError = nil, err.Error()
+	} else if p.Links == nil {
+		p.Links = []SkillLink{}
 	}
 	return p, nil
 }

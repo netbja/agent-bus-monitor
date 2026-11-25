@@ -121,8 +121,10 @@ type fakeRun struct {
 	// noSkillPlan: the new agentbus has no roles skill-plan (a tree older
 	// than the update's reading of it), so the running one parses the tree.
 	noSkillPlan bool
-	downOnce    string // "<project> <kind>": inactive after its first restart (crashed), up after the next
-	down        map[string]bool
+	// linksError: the new binary's plan says its links cannot be planned.
+	linksError string
+	downOnce   string // "<project> <kind>": inactive after its first restart (crashed), up after the next
+	down       map[string]bool
 }
 
 // running is what the real Running reads: the active units only, each with
@@ -175,6 +177,9 @@ func (r *fakeRun) Run(_ context.Context, c setup.Cmd) ([]byte, error) {
 		// own; drawn here as the same manifest without that key.
 		if r.noSkillPlan {
 			return []byte("agent roles: expected action\n"), errors.New("exit 1")
+		}
+		if r.linksError != "" {
+			return []byte(`{"dirs": ["` + filepath.Join(r.f.home, ".agents", "skills") + `"], "links": null, "links_error": "` + r.linksError + `"}`), nil
 		}
 		return r.skillPlan(c.Env), nil
 	case key == "agentbus version" && r.version != "":
@@ -878,5 +883,61 @@ func TestUpdateUnreadableRolesRefused(t *testing.T) {
 	}
 	if !strings.Contains(f.errw.String()+f.out.String(), "unknown fields") {
 		t.Errorf("the reason is not named:\n%s\n%s", f.out.String(), f.errw.String())
+	}
+}
+
+// The new binary's plan must carry its fields: a null, an empty object or a
+// plan without links (and no links_error) is refused, never read as no
+// skills; an extra field is ignored.
+func TestSkillPlanDecode(t *testing.T) {
+	for _, bad := range []string{"null", "{}", `{"dirs": ["/d"]}`, `{"links": []}`, `{"dirs": null, "links": []}`, "[]", "x"} {
+		if _, err := decodeSkillPlan([]byte(bad)); err == nil {
+			t.Errorf("%s: accepted", bad)
+		}
+	}
+	p, err := decodeSkillPlan([]byte(`{"dirs": ["/d"], "links": [{"link": "/d/a", "source": "/s/a"}], "later": 1}`))
+	if err != nil || len(p.Dirs) != 1 || len(p.Links) != 1 || p.Links[0].Source != "/s/a" {
+		t.Errorf("a full plan: %+v %v", p, err)
+	}
+	if p, err := decodeSkillPlan([]byte(`{"dirs": [], "links": []}`)); err != nil || p.Dirs == nil {
+		t.Errorf("an empty plan with both fields: %+v %v", p, err)
+	}
+	if p, err := decodeSkillPlan([]byte(`{"dirs": ["/d"], "links": null, "links_error": "skill x not found"}`)); err != nil || p.LinksError == "" {
+		t.Errorf("links not planned yet: %+v %v", p, err)
+	}
+}
+
+// Links the release cannot plan (a skill no root holds) fail the skills
+// check, rolled back, the reason named: from the new binary's links_error,
+// and from the running binary's own reading when the new one cannot answer
+// (foureyes).
+func TestUpdateUnplannableLinksRollBack(t *testing.T) {
+	f := newFlow(t)
+	f.r.linksError = "skill not found in repo or Pocock collection: ghost"
+	if code := Run(context.Background(), f.deps(false), Options{Project: "a", Yes: true}); code == 0 {
+		t.Fatal("unplannable links passed the skills check")
+	}
+	if !strings.Contains(f.errw.String()+f.out.String(), "ghost") {
+		t.Errorf("the reason is not named:\n%s\n%s", f.out.String(), f.errw.String())
+	}
+	if read(t, filepath.Join(f.bin, "agentbus")) != "old agentbus" {
+		t.Fatal("not rolled back")
+	}
+
+	g := newFlow(t)
+	g.r.noSkillPlan = true
+	writeFile(t, filepath.Join(g.up, "roles.toml"), strings.Replace(rolesToml, `skills = ["review"]`, `skills = ["review", "ghost"]`, 1), 0o644)
+	writeFile(t, filepath.Join(g.up, "docs", "releases", "v0.3.0.md"), "notes\n", 0o644)
+	sh(t, g.up, "add", ".")
+	sh(t, g.up, "commit", "-qm", "ghost")
+	sh(t, g.up, "tag", "v0.3.0")
+	if code := Run(context.Background(), g.deps(false), Options{Project: "a", Yes: true}); code == 0 {
+		t.Fatal("the fallback passed unplannable links")
+	}
+	if !strings.Contains(g.errw.String()+g.out.String(), "ghost") {
+		t.Errorf("the fallback's reason is not named:\n%s\n%s", g.out.String(), g.errw.String())
+	}
+	if read(t, filepath.Join(g.bin, "agentbus")) != "old agentbus" {
+		t.Fatal("the fallback did not roll back")
 	}
 }

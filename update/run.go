@@ -290,8 +290,8 @@ func (u *updater) skillPlan(ctx context.Context, env []string) (rolecfg.SkillPla
 	out, err := u.d.R.Run(ctx, setup.Cmd{Name: filepath.Join(u.tmp, "agentbus"), Args: []string{"roles", "skill-plan", "--json"},
 		Env: append(append([]string{}, env...), "ROLES_TOML="+manifest), Stdout: true})
 	if err == nil {
-		var p rolecfg.SkillPlan
-		if err := json.Unmarshal(out, &p); err != nil {
+		p, err := decodeSkillPlan(out)
+		if err != nil {
 			return rolecfg.SkillPlan{}, fmt.Errorf("the new agentbus's skill plan: %w", err)
 		}
 		return p, nil
@@ -301,6 +301,28 @@ func (u *updater) skillPlan(ctx context.Context, env []string) (rolecfg.SkillPla
 		return rolecfg.SkillPlan{}, fmt.Errorf("%s: %w (the new agentbus could not read it either: %v)", manifest, lerr, err)
 	}
 	return rolecfg.PlanSkills(m, env)
+}
+
+// decodeSkillPlan reads roles skill-plan --json: an object whose dirs is an
+// array and whose links is an array (or null with links_error set); a field
+// added later is ignored. A null, an empty object or a missing field is an
+// error, never read as no skills (reviewer-codex).
+func decodeSkillPlan(b []byte) (rolecfg.SkillPlan, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil || raw == nil {
+		return rolecfg.SkillPlan{}, fmt.Errorf("not a JSON object: %q", b)
+	}
+	var p rolecfg.SkillPlan
+	if err := json.Unmarshal(b, &p); err != nil {
+		return rolecfg.SkillPlan{}, err
+	}
+	if d, ok := raw["dirs"]; !ok || string(d) == "null" {
+		return rolecfg.SkillPlan{}, errors.New("no dirs")
+	}
+	if l, ok := raw["links"]; !ok || (string(l) == "null" && p.LinksError == "") {
+		return rolecfg.SkillPlan{}, errors.New("no links and no links_error")
+	}
+	return p, nil
 }
 
 // snapshot is §3.4 step 4: what the rollback needs, read now, written before

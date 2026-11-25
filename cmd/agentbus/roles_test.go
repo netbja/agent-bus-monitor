@@ -241,6 +241,13 @@ func TestRolesSkillPlan(t *testing.T) {
 		p.Links[0].Source != filepath.Join(repo, "skills", "a") || filepath.Dir(p.Links[0].Link) != p.Dirs[0] {
 		t.Fatalf("plan %+v %v", p, err)
 	}
+	empty := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(empty, []byte("schema_version = 2\n[defaults]\nprofile = \"main\"\n[profiles.main]\nclient = \"codex\"\nprovider = \"openai\"\nmodel = \"m1\"\n[roles]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, errOut := roles(append(env, "ROLES_TOML="+empty), "skill-plan", "--json"); strings.TrimSpace(out) != `{"dirs":[],"links":[]}` {
+		t.Errorf("no roles: %q %q", out, errOut)
+	}
 	if code, _, errOut := roles(env, "skill-plan"); code != 1 || !strings.Contains(errOut, "--json") {
 		t.Errorf("without --json = %d %q", code, errOut)
 	}
