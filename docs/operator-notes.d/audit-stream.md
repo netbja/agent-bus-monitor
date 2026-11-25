@@ -7,7 +7,8 @@
   written. Each entry carries the previous entry's hash (SHA-1, computed in the append script, so
   concurrent writers chain in order); `agentbus audit verify` checks the chain (exit 3, naming the
   entry that no longer follows) and says what it cannot see: a cut of the tail, and the head the
-  retention trims. Every append trims by age, `MINID` at Redis `TIME` minus `audit.retention`
+  retention trims. The stream is live: an append's trim that passes the check's cursor starts it
+  again from the new head, and a head that keeps moving makes it inconclusive (exit 1), never a break. Every append trims by age, `MINID` at Redis `TIME` minus `audit.retention`
   (90 days; the person's alone, config.toml: an agent must not shorten the trail). The stream
   survives `busmon --reset`, is a record kind (backups keep it), `--delete` removes it. A trail, not
   a proof: any user allowed to append may trim with `XADD … MAXLEN 0` (the ACL suite asserts it).

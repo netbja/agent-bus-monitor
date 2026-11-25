@@ -255,3 +255,58 @@ func TestAuditEntriesSince(t *testing.T) {
 		t.Fatalf("since %+v", recent)
 	}
 }
+
+// reviewer-codex: verify pages a live stream; an append's retention trim
+// that passes its cursor between two pages is ordinary, not a break: the
+// check starts again from the new head (and says inconclusive if the head
+// keeps moving). A real deletion in the middle is still named.
+func TestAuditVerifyAcrossARetentionTrim(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	t.Cleanup(func() { b.r.Del(ctx, AuditKey(b.project)) })
+	var ids []string
+	for range 6 {
+		id, err := b.Audit(ctx, auditOK("merge"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	page, hook := auditVerifyPage, auditBetweenPages
+	t.Cleanup(func() { auditVerifyPage, auditBetweenPages = page, hook })
+	auditVerifyPage = 2
+	trims := 0
+	auditBetweenPages = func() { // the head trimmed past the cursor, once
+		if trims++; trims == 1 {
+			b.r.XTrimMinID(ctx, AuditKey(b.project), ids[3])
+		}
+	}
+	c, err := b.AuditVerify(ctx)
+	if err != nil || !c.OK || c.Inconclusive || c.First != ids[3] || c.Entries != 3 {
+		t.Fatalf("a trim between pages: %+v %v", c, err)
+	}
+	// A head that keeps moving: inconclusive, never a break.
+	auditBetweenPages = func() { // three appends, then the head trimmed to the last three: past any cursor
+		for range 3 {
+			if _, err := b.Audit(ctx, auditOK("merge")); err != nil {
+				t.Error(err)
+			}
+		}
+		b.r.XTrimMaxLen(ctx, AuditKey(b.project), 3)
+	}
+	if c, _ := b.AuditVerify(ctx); c.OK || !c.Inconclusive || c.BrokenAt != "" {
+		t.Fatalf("a moving head: %+v", c)
+	}
+	// A middle deletion between pages is still a break.
+	auditBetweenPages = nil
+	b.r.Del(ctx, AuditKey(b.project))
+	ids = ids[:0]
+	for range 6 {
+		id, _ := b.Audit(ctx, auditOK("merge"))
+		ids = append(ids, id)
+	}
+	b.r.XDel(ctx, AuditKey(b.project), ids[2])
+	if c, _ := b.AuditVerify(ctx); c.OK || c.Inconclusive || c.BrokenAt != ids[3] {
+		t.Fatalf("a middle deletion: %+v", c)
+	}
+}

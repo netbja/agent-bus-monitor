@@ -100,6 +100,10 @@ func auditVerify(ctx context.Context, b *bus.Bus, out, errw io.Writer) int {
 		return 1
 	}
 	const limits = "Not seen: a cut of the tail is not detected, and the oldest entries the retention trims cannot be told from a cut of the head. A trail, not a proof."
+	if c.Inconclusive { // the head kept moving past the check: neither whole nor broken
+		fmt.Fprintf(out, "check inconclusive: %s\n%s\n", c.Reason, limits)
+		return 1
+	}
 	if !c.OK {
 		fmt.Fprintf(out, "chain broken at %s: %s (%d entries whole before it)\n%s\n", c.BrokenAt, c.Reason, c.Entries, limits)
 		return 3
