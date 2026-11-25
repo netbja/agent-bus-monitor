@@ -21,11 +21,13 @@ release exists.
   `person.name`, `--url`; the Board's alerts name their starting point and a stranded pop tells master.
   `agentbus --help` in gh's layout; `dispatch.background_ignore`; `agentbus mem person`; `update` prunes
   old release trees. `q` asks before busmon quits (`display.confirm_quit`).
+- Each setting says when a change applies (`live`, `at the next run`, or a restart of busmon, a service
+  or an agent): `agentbus config`'s `applies` column and busmon's Shift+C detail.
 - A review request closes when its branch merges (`request review --branch … [--more]`).
 - Roles start in Claude Code's auto mode (security and infra stay manual), so a worker can stop on a
   prompt; reviewer-codex runs on Luna with Codex's automatic review.
 - Not in it: the automatic update (`updates.auto`, `updates.window`, `updates.max_wait` exist and nothing
-  reads them), and #761, each setting saying when a change applies, still open.
+  reads them), and #769, `/compact` when no hand-off comes, and #773, a spec, which are open.
 
 [Notes](docs/releases/v0.34.0.md)
 
