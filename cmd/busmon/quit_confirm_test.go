@@ -32,18 +32,18 @@ func TestQuitAsksFirst(t *testing.T) {
 		m := shellWith(t, 140, 40, shellConfig{}, false)
 		m.cfg.settings.ConfirmQuit = true
 		m, cmd := pressQuit(t, m, kq)
-		if isQuit(cmd) || !m.ui.quitAsk || !strings.Contains(m.grid().plain(), "Quit busmon?") {
+		if isQuit(cmd) || m.ui.dialog == nil || !strings.Contains(m.grid().plain(), "Quit busmon?") {
 			t.Fatalf("%s: q quit at once, or no popup:\n%s", name, m.grid().plain())
 		}
 		if !m.busyForModal() {
 			t.Fatalf("%s: the popup does not hold the modals", name)
 		}
 		m, _ = pressQuit(t, m, tea.Key{Code: 'j', Text: "j"}) // another key: the popup stays, nothing moves
-		if !m.ui.quitAsk {
+		if m.ui.dialog == nil {
 			t.Fatalf("%s: another key closed the popup", name)
 		}
 		m, cmd = pressQuit(t, m, answer)
-		if isQuit(cmd) || m.ui.quitAsk || strings.Contains(m.grid().plain(), "Quit busmon?") {
+		if isQuit(cmd) || m.ui.dialog != nil || strings.Contains(m.grid().plain(), "Quit busmon?") {
 			t.Fatalf("%s: did not stay", name)
 		}
 	}
@@ -86,19 +86,5 @@ func TestQuitConfirmSetting(t *testing.T) {
 	mm.cfg.settings.ConfirmQuit = true
 	if w := mm.applySettings("display.confirm_quit"); w != "applied and saved" || mm.cfg.settings.ConfirmQuit {
 		t.Fatalf("apply: %q %v", w, mm.cfg.settings.ConfirmQuit)
-	}
-}
-
-// The popup at the usual widths.
-func TestQuitPopupGoldens(t *testing.T) {
-	withPalette(t, "dark", false, 1<<24)
-	for _, c := range []struct {
-		name string
-		w, h int
-	}{{"quit-popup-140x40.txt", 140, 40}, {"quit-popup-80x24.txt", 80, 24}} {
-		m := shellWith(t, c.w, c.h, shellConfig{}, false)
-		m.cfg.settings.ConfirmQuit = true
-		m, _ = pressQuit(t, m, kq)
-		checkGolden(t, c.name, m.grid().plain())
 	}
 }

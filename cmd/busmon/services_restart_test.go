@@ -58,9 +58,9 @@ func (w *restartWorld) press(t *testing.T, ks ...any) {
 func TestServiceRestartAsksThenRuns(t *testing.T) {
 	w := newRestartWorld(t, nil, "")
 	w.press(t, 'X')
-	want := "Restart dispatch of demo? agentbus --project demo service restart dispatch. y / n"
-	if w.m.ui.flash != want || w.m.ui.sleepAsk == nil {
-		t.Fatalf("question %q", w.m.ui.flash)
+	want := "Restart dispatch of demo? agentbus --project demo service restart dispatch"
+	if dialogText(w.m) != want || w.m.ui.sleepAsk == nil {
+		t.Fatalf("question %q", dialogText(w.m))
 	}
 	if len(w.runs) != 0 {
 		t.Fatal("ran before y")

@@ -176,8 +176,7 @@ func (m *Model) askRemove() {
 			m.ui.flash, m.ui.flashErr = key+" "+why+": not removed", true
 			return
 		}
-		m.ui.confirm = &pendingRemoval{key: "agent:" + key, label: key}
-		m.ui.flash, m.ui.flashErr = "forget agent "+key+" (state, usage, queue)? y confirms, any other key cancels", true
+		m.askRemoval(&pendingRemoval{key: "agent:" + key, label: key}, "Forget agent "+key+"?", "its state, usage and queue go", "Forget")
 	case m.ui.focus == PanelRequests && reqRowKey(key):
 		ths := m.reqThreadsOf(key)
 		var closable []reqThread
@@ -193,13 +192,11 @@ func (m *Model) askRemove() {
 			return
 		}
 		t := closable[0]
-		m.ui.confirm = &pendingRemoval{key: key, label: t.Target, threads: closable}
-		if len(closable) == 1 {
-			m.ui.flash = fmt.Sprintf("close the %s to %s (history kept)? y confirms, any other key cancels", t.Kind, t.Target)
-		} else {
-			m.ui.flash = fmt.Sprintf("close %d threads %s%s%s (history kept)? y closes %d, any other key cancels", len(closable), t.From, GlyphArrowR, t.Target, len(closable))
+		title := fmt.Sprintf("Close the %s to %s?", t.Kind, t.Target)
+		if len(closable) > 1 {
+			title = fmt.Sprintf("Close %d threads %s%s%s?", len(closable), t.From, GlyphArrowR, t.Target)
 		}
-		m.ui.flashErr = true
+		m.askRemoval(&pendingRemoval{key: key, label: t.Target, threads: closable}, title, "their history is kept", "Close")
 	case strings.HasPrefix(key, "req:"):
 		m.ui.flash, m.ui.flashErr = "a tracked request is closed by its owner (agentbus request done or block)", true
 	}
@@ -213,14 +210,20 @@ type removeMsg struct {
 	err error
 }
 
-// confirmKey answers the removal's question: y removes, any other key keeps.
-func (m *Model) confirmKey(k Key) tea.Cmd {
-	c := m.ui.confirm
-	m.ui.confirm = nil
-	if k.Code != keyRune || k.Rune != 'y' {
-		m.ui.flash, m.ui.flashErr = "not removed", false
-		return nil
-	}
+// askRemoval asks before a removal (the confirm dialog, busmon-confirm-dialog):
+// yes removes c, Keep keeps it.
+func (m *Model) askRemoval(c *pendingRemoval, title, detail, yes string) {
+	m.openConfirm(&confirmDialog{Title: title, Body: []string{detail}, Yes: yes, No: "Keep",
+		OnYes: func(m *Model) tea.Cmd { return m.removePending(c) },
+		OnNo: func(m *Model) tea.Cmd {
+			m.ui.flash, m.ui.flashErr = "not removed", false
+			return nil
+		}})
+}
+
+// removePending removes c, in a command: the agent forgotten, or each
+// thread closed by a reply from the person.
+func (m *Model) removePending(c *pendingRemoval) tea.Cmd {
 	w, ctx, self := m.cfg.w, m.cfg.ctx, m.cfg.self
 	if w == nil {
 		return nil
@@ -306,11 +309,11 @@ type reminderDialog struct {
 // automatic recap waits for it to end.
 func (m *Model) busyForModal() bool {
 	return m.ui.compose != nil || m.rd.open() || m.ui.line != lineNone || strings.TrimSpace(m.ui.msgDraft) != "" ||
-		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.summary || m.ui.tour != nil ||
+		m.ui.askChoose != nil || m.ui.pausePopup != nil || m.ui.reminder != nil || m.ui.tour != nil ||
 		m.ui.walk != nil || // the walk's gap between two pages (busmon-queue-triage §4.5)
 		m.ui.idle || // the idle view: a due modal waits until it is left (foureyes)
 		m.ui.del != nil || // the Projects page's delete confirmation
-		m.ui.quitAsk // q's popup
+		m.ui.dialog != nil // a yes/no question (busmon-confirm-dialog)
 }
 
 // maybeReminder opens the reminder when decisions are due (PopupAfter) and
@@ -521,38 +524,20 @@ func (m Model) drawReminder(g *grid) {
 	}
 }
 
-// summaryRect is the summary confirmation's place.
-func (m *Model) summaryRect() Rect {
-	w := min(72, m.width-2)
-	return Rect{(m.width - w) / 2, max(m.layout.Header.H, (m.height-5)/2), w, 5}
-}
-
-func (m Model) drawSummary(g *grid) {
-	r := m.summaryRect()
-	for y := r.Y; y < r.Y+r.H; y++ {
-		drawLine(g, r.X, y, r.W, nil, false)
-	}
-	drawFrame(g, r.X, r.Y, r.W, r.H, Frame{Title: Line{{Text: "Send summary request?", Role: RoleAttention}}, Focused: true, Hue: RoleAttention})
-	drawLine(g, r.X+2, r.Y+1, r.W-4, Line{{Text: "This sends a message to " + Preview(m.recapTarget()) + " and uses its tokens.", Role: RoleText}}, false)
-	drawLine(g, r.X+2, r.Y+3, r.W-4, Line{{Text: "y confirm " + GlyphNone + " n or esc cancel", Role: RoleMuted}}, false)
-}
-
-// summaryKey: y sends the summary request through the send path, n or Esc
-// returns to the recap.
-func (m *Model) summaryKey(k Key) tea.Cmd {
-	switch {
-	case k.Code == keyEscape || k.Code == keyRune && (k.Rune == 'n' || k.Rune == 'N'):
-		m.ui.summary = false
-	case k.Code == keyRune && (k.Rune == 'y' || k.Rune == 'Y'):
-		m.ui.summary = false
-		since := "the most recent available history"
-		if !m.cfg.priorVisit.IsZero() {
-			since = m.cfg.priorVisit.Local().Format(time.RFC3339)
-		}
-		body := "Summarise where the project stands for me: what was done since " + since +
-			", what is in progress, what you expect from me. Answer on the bus with agentbus reply."
-		m.ui.summarySent = true
-		return m.send(m.recapTarget(), body, true, false)
-	}
-	return nil
+// askSummary asks before the recap's summary request (the confirm dialog,
+// busmon-confirm-dialog): Send writes it through the send path, its success
+// closing the recap; Cancel returns to the recap.
+func (m *Model) askSummary() {
+	m.openConfirm(&confirmDialog{Title: "Send summary request?", Yes: "Send", No: "Cancel",
+		Body: []string{"This sends a message to " + Preview(m.recapTarget()) + " and uses its tokens."},
+		OnYes: func(m *Model) tea.Cmd {
+			since := "the most recent available history"
+			if !m.cfg.priorVisit.IsZero() {
+				since = m.cfg.priorVisit.Local().Format(time.RFC3339)
+			}
+			body := "Summarise where the project stands for me: what was done since " + since +
+				", what is in progress, what you expect from me. Answer on the bus with agentbus reply."
+			m.ui.summarySent = true
+			return m.send(m.recapTarget(), body, true, false)
+		}})
 }

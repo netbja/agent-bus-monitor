@@ -1,0 +1,20 @@
+ agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
+ paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ 1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
+╭─ For you ───────────────────────────────────── 4 decide ─╮
+│  ● answer master    review lot 1? (2 questions)        4m│
+│  ♙ answer foureyes  need a decision on the width rule  6m│
+│  ♙ answer sentin╭──────────────────────╮ an answer in… 1m│
+│  ◆ review coder │                      │b1               │
+│                 │     Quit busmon?     │                 │
+│                 │                      │                 │
+│                 │  [ Quit ]  [ Stay ]  │                 │
+│                 │     y / n · esc      │                 │
+│                 │                      │                 │
+│                 ╰──────────────────────╯                 │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+ T triage   p P plan   tab focus   F1 help   F5 health      

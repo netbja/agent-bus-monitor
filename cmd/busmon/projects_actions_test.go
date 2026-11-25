@@ -100,7 +100,7 @@ func TestProjectsSleepWake(t *testing.T) {
 	w := newAdminWorld(t)
 	w.selectRow(t, "trading")
 	w.pressAdmin(t, 'Z')
-	if f := w.m.ui.flash; !strings.Contains(f, "Suspend trading?") || !strings.Contains(f, "y / n") {
+	if f := dialogText(w.m); !strings.Contains(f, "Suspend trading?") {
 		t.Fatalf("confirmation %q", f)
 	}
 	w.pressAdmin(t, 'y')
@@ -117,8 +117,8 @@ func TestProjectsSleepWake(t *testing.T) {
 	}
 	w.selectRow(t, "demo")
 	w.pressAdmin(t, 'Z')
-	if !strings.Contains(w.m.ui.flash, "Resume demo?") {
-		t.Fatalf("resume confirmation %q", w.m.ui.flash)
+	if !strings.Contains(dialogText(w.m), "Resume demo?") {
+		t.Fatalf("resume confirmation %q", dialogText(w.m))
 	}
 	w.pressAdmin(t, 'n')
 	if len(w.runs) != 1 {
@@ -160,8 +160,8 @@ func TestProjectsStopAndBackup(t *testing.T) {
 	}
 	w.selectRow(t, "agent-bus-monitor")
 	w.pressAdmin(t, 'x')
-	if !strings.Contains(w.m.ui.flash, "Stop the services of agent-bus-monitor here?") {
-		t.Fatalf("x confirmation %q", w.m.ui.flash)
+	if !strings.Contains(dialogText(w.m), "Stop the services of agent-bus-monitor here?") {
+		t.Fatalf("x confirmation %q", dialogText(w.m))
 	}
 	w.pressAdmin(t, 'y')
 	if len(w.runs) != 1 || strings.Join(w.runs[0], " ") != "down agent-bus-monitor" {

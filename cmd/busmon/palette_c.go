@@ -92,7 +92,7 @@ func classCRows() []palCmd {
 	}
 }
 
-// palAgentbus asks for y with the exact argv; y runs it (sleepConfirm).
+// palAgentbus asks in the confirm dialog, the exact argv shown; Run runs it (runSleepAsk).
 // A refusal (no identity.as, a run already going) keeps the line.
 func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
 	if r := m.ui.sleepRun; r != nil {
@@ -117,7 +117,6 @@ func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
 	}
 	m.leaveLine(false)
 	m.closeReader()
-	m.ui.sleepAsk = &sleepAsk{verb: c.Name, args: argv}
-	m.ui.flash, m.ui.flashErr = "Run agentbus "+strings.Join(argv, " ")+"? y / n", true
+	m.askSleep(&sleepAsk{verb: c.Name, args: argv}, "Run agentbus "+c.Name+"?", "Run", "agentbus "+strings.Join(argv, " "))
 	return nil
 }

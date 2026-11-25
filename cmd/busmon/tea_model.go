@@ -150,16 +150,14 @@ type uiState struct {
 	sending        bool              // a send is in flight
 	pauseAck       string            // the send the person chose to make despite the pause
 	pausePopup     *pauseDialog      // the pause popup, when open
-	confirm        *pendingRemoval   // a d waiting for its y
 	palSel         int               // the palette's chosen row (a leading / in the line)
 	palMoved       bool              // ↑↓ moved it since the last edit: Enter runs that row
 	palHidden      bool              // Esc hid the list; the next edit shows it again
 	sleepAsk       *sleepAsk         // a Z waiting for its y
-	quitAsk        bool              // q's popup: y quits (busmon-quit-confirm)
+	dialog         *confirmDialog    // an open yes/no question (busmon-confirm-dialog)
 	sleepRun       *sleepRun         // agentbus suspend or resume running
 	sleepSeq       int               // the last run's id
 	reminder       *reminderDialog   // the reminder, when open
-	summary        bool              // the recap's summary confirmation is open
 	summarySent    bool              // the summary request is in flight: its success closes the recap
 	tour           *tourState        // the first-launch tour, when open (tour.go)
 	pastedImages   map[string]string // an image pasted in compose: its hash -> the file saved (never saved twice)

@@ -974,8 +974,8 @@ func (m *Model) projectAction(act Action, r adminRow) tea.Cmd {
 			m.ui.flash, m.ui.flashErr = "no active service of "+r.name+" on this machine: nothing to stop", true
 			return nil
 		}
-		m.ui.sleepAsk = &sleepAsk{project: r.name, verb: "down", args: []string{"down", r.name}}
-		m.ui.flash, m.ui.flashErr = "Stop the services of "+r.name+" here? agentbus down: nothing is deleted. y / n", true
+		m.askSleep(&sleepAsk{project: r.name, verb: "down", args: []string{"down", r.name}}, "Stop the services of "+r.name+" here?", "Stop",
+			"agentbus down: nothing is deleted.")
 		return nil
 	case ActBackupNow:
 		return m.startRunFor(r.name, "backup", []string{"backup", "--project", r.name})

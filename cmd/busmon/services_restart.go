@@ -45,8 +45,7 @@ func (m *Model) askServiceRestart(p *page) tea.Cmd {
 		return refuse(r.verb + " already running (see " + r.log + ")")
 	}
 	args := []string{"--project", m.cfg.project, "service", "restart", kind}
-	m.ui.sleepAsk = &sleepAsk{verb: svcRestartVerb + kind, args: args}
-	m.ui.flash, m.ui.flashErr = "Restart "+kind+" of "+m.cfg.project+"? agentbus "+strings.Join(args, " ")+". y / n", true
+	m.askSleep(&sleepAsk{verb: svcRestartVerb + kind, args: args}, "Restart "+kind+" of "+m.cfg.project+"?", "Restart", "agentbus "+strings.Join(args, " "))
 	return nil
 }
 
@@ -72,8 +71,8 @@ func (m *Model) askServiceStart() tea.Cmd {
 	if r := m.ui.sleepRun; r != nil {
 		return refuse(r.verb + " already running (see " + r.log + ")")
 	}
-	m.ui.sleepAsk = &sleepAsk{verb: "start services", args: args}
-	m.ui.flash, m.ui.flashErr = "Start the services of "+m.cfg.project+" (dispatch, missions; the agents stay down)? agentbus "+strings.Join(args, " ")+". y / n", true
+	m.askSleep(&sleepAsk{verb: "start services", args: args}, "Start the services of "+m.cfg.project+"?", "Start",
+		"dispatch, missions; the agents stay down", "agentbus "+strings.Join(args, " "))
 	return nil
 }
 

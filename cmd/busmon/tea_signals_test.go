@@ -186,10 +186,10 @@ func TestShellRecapSummaryConfirmation(t *testing.T) {
 	if p := m.rd.top(); p == nil || p.kind != ovRecap {
 		t.Fatal("the built recap did not open")
 	}
-	if m = keys(t, m, kEnter); !m.ui.summary || !strings.Contains(m.grid().plain(), "Send summary request?") {
+	if m = keys(t, m, kEnter); m.ui.dialog == nil || !strings.Contains(m.grid().plain(), "Send summary request?") {
 		t.Fatal("Enter on the summary row did not ask")
 	}
-	if m = keys(t, m, 'n'); m.ui.summary || m.rd.top().kind != ovRecap || len(fw.sent) != 0 {
+	if m = keys(t, m, 'n'); m.ui.dialog != nil || m.rd.top().kind != ovRecap || len(fw.sent) != 0 {
 		t.Fatal("n did not return to the recap")
 	}
 	m, cmd := pressCmd(t, keys(t, m, kEnter), 'y')

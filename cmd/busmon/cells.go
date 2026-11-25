@@ -253,6 +253,7 @@ type cellStyle struct {
 	Soft     bool // Seg.Soft
 	Border   bool // a frame line: Theme.FrameBorder(Role, Focused)
 	Focused  bool
+	Surface  bool // a dialog's solid fill: Theme.Surface (busmon-confirm-dialog)
 }
 
 // borderCell is the style of a frame line in hue, focused or not.

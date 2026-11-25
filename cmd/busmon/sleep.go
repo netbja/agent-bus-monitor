@@ -98,25 +98,37 @@ func (m *Model) sleepKeyFor(project string, resume bool) tea.Cmd {
 	}
 }
 
-// gotSleepAsk shows the question; y runs it, any other key cancels.
+// gotSleepAsk asks the question in the confirm dialog.
 func (m *Model) gotSleepAsk(msg sleepAskMsg) {
 	p := cmp.Or(msg.project, m.cfg.project)
-	m.ui.sleepAsk = &sleepAsk{resume: msg.resume, project: msg.project}
+	a := &sleepAsk{resume: msg.resume, project: msg.project}
 	if msg.resume {
-		m.ui.flash = "Resume " + p + "? Services, missing agents, then the pause lifted. y / n"
-	} else {
-		m.ui.flash = "Suspend " + p + "? The project is paused now, running turns may end (up to " + compactDur(msg.wait) +
-			"), then its services stop. y / n"
+		m.askSleep(a, "Resume "+p+"?", "Resume", "Services, missing agents, then the pause lifted.")
+		return
 	}
-	m.ui.flashErr = true
+	m.askSleep(a, "Suspend "+p+"?", "Suspend", "The project is paused now, running turns may end (up to "+compactDur(msg.wait)+"),",
+		"then its services stop.")
 }
 
-// sleepConfirm answers the question: y starts the run, any other key not.
-func (m *Model) sleepConfirm(k Key) tea.Cmd {
+// askSleep asks before a run (the confirm dialog, busmon-confirm-dialog):
+// a stands in m.ui.sleepAsk while it is open; yes starts the run, Cancel
+// does nothing.
+func (m *Model) askSleep(a *sleepAsk, title, yes string, body ...string) {
+	m.ui.sleepAsk = a
+	m.openConfirm(&confirmDialog{Title: title, Body: body, Yes: yes, No: "Cancel",
+		OnYes: func(m *Model) tea.Cmd { return m.runSleepAsk() },
+		OnNo: func(m *Model) tea.Cmd {
+			m.ui.sleepAsk = nil
+			m.ui.flash, m.ui.flashErr = "nothing done", false
+			return nil
+		}})
+}
+
+// runSleepAsk starts the run the open question named.
+func (m *Model) runSleepAsk() tea.Cmd {
 	a := m.ui.sleepAsk
 	m.ui.sleepAsk = nil
-	if k.Code != keyRune || k.Rune != 'y' {
-		m.ui.flash, m.ui.flashErr = "nothing done", false
+	if a == nil {
 		return nil
 	}
 	m.ui.flash, m.ui.flashErr = "", false
