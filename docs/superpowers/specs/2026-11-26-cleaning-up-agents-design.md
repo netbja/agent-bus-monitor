@@ -1,6 +1,6 @@
 # Cleaning up agents (cleaning-up-agents)
 
-Status: spec r4, for review (subject `cleaning-up-agents`). Not built. Base: origin/dev `49926f09`.
+Status: spec r5, for review (subject `cleaning-up-agents`). Not built. Base: origin/dev `49926f09`.
 - r2: master's addition (cmd `1795648805663-0`): a lifecycle with a deliberate **parked** state,
   auto-park, wake on demand, orphan requests blocked when not closed, parking at a holder switch.
 - r3: the person's answers to ask `1795649139554-0` (Q1-Q6, typed, §12.1), and foureyes' reject of
@@ -12,6 +12,9 @@ Status: spec r4, for review (subject `cleaning-up-agents`). Not built. Base: ori
   second ask (§12.2).
 - r4: both reviewers' rejects of r3: a running owner relaunched on the **same session** is the
   same owner, flagged, never closed; only a fresh session is gone (§8.1, §12.1); Q10 confirms it.
+- r5: foureyes' r3 reject: the stop re-checks no accepted request and nothing actionable, and drops
+  the intent otherwise (§4.3); no wake while an intent stands; nits (§3.1 hardened git, §8.4
+  required-role grace, §4.3 names the 2026-11-13 extension).
 
 Author: architect, from master's directives (cmd `1795648670814-0` and `1795648805663-0`, task
 `cleaning-up-agents-spec`). No new dependency.
@@ -113,7 +116,8 @@ An agent **owes** something when any of these holds:
 
 Items 1 to 4 are read from Redis by every reader. Item 5 needs git, so only the dispatcher's
 merge-queue pass reads it: it already reads `LocalTips` and `RemoteTips` (`mergequeue/git.go`), and
-adds `git stash list` (git plumbing only; no hook, no repository code). The pass writes its finding,
+adds `git stash list`, run like `LocalTips` with the merge queue's hardened git environment, so no
+hook and no config-driven command runs (foureyes' nit). The pass writes its finding,
 fenced, to a new hash `{p}:losable` → `<role>` = `{branches, stashes, at}`. A reader takes it when
 less than 15 minutes old; older or absent, item 5 reads as **unknown**.
 
@@ -152,11 +156,27 @@ registration is still that process. The agent declares `idle "parked"` and ends 
 
 ### 4.3 The stop
 
+While a park intent stands, the dispatcher **types no wake line** to that agent (its presence is
+still running, but it is leaving); an obligation that lands meanwhile is judged at the stop.
+
 The dispatcher's pass sees a park intent whose registration is still that process, idle, no turn
-running, no wake being typed (the conditions `popEnd` already waits on). It closes the terminal, the
-same act as a pop's end, waits for the process to be gone, then marks the record `parked = true`
-(fenced, lease `DispatchKey`). The registration and the consumer group stay. An intent whose process
-died before the close is marked parked all the same: its checks passed before.
+running, no wake being typed (the conditions `popEnd` already waits on). Before it closes anything,
+one fenced script, `ParkStop`, **re-checks §4.2 checks 1 and 2** (no request targeted at it is
+`accepted`; nothing actionable pending or unread in its group) against Redis as they are now
+(foureyes' r3 reject: a request accepted between `ParkIntent` and the stop would otherwise be parked
+with nobody to hold it):
+- **both hold**: it marks the intent `stopping` and the dispatcher closes the terminal, the same
+  act as a pop's end (the 2026-11-13 decision's `End`, extended here to a parked boot role; its
+  decision note is updated with the build), waits for the process to be gone, then marks the record
+  `parked = true` (fenced, lease `DispatchKey`). The registration and the consumer group stay;
+- **either fails**: it **drops the intent**, closes nothing, and the agent is woken as usual for what
+  waits (it is running). The agent is told in one directive (`FencedCmdOnce`, mark
+  `park-dropped:<role>`, episode = the intent's `at`): "park dropped: `<what came in>`; handle it,
+  then park again."
+
+An intent whose process **died** before the stop is judged by the same re-check: both hold, it is
+marked parked (its own checks passed at `ParkIntent`); either fails, the intent is dropped and the
+agent is **lost** (§3), not parked, so §6 and §8 see it.
 
 ### 4.4 Auto-park after an idle period
 
@@ -324,7 +344,10 @@ of §6.2 or §8.4 names it, so master is told either way (Q1).
 
 - An open request (`accepted` or `review`) of a **lost** owner with no link that holds is
   **blocked**, never closed by guess: a fenced `FencedRequestOrphaned` sets `state = blocked`,
-  `blocked_reason = "owner lost: <reason>"`, checking the same registration as §8.3. It writes **no**
+  `blocked_reason = "owner lost: <reason>"`, checking the same registration as §8.3. A **required**
+  role is given a grace while self-repair's relaunch of it is pending (its intent stands, or its
+  budget is not spent and `dispatch.self_repair` is on), so the minute a relaunch takes blocks
+  nothing (foureyes' nit). It writes **no**
   `blocked` cmd entry (the request's own block does, `bus/requests.go:425`): master hears of it in
   §6.2's notice or `popStranded`'s. The owner's `request accept` resumes it, as from any block.
 - A request whose owner is parked, or runs on the accepting session, and whose link merged, or which has only
@@ -399,7 +422,9 @@ One PR each, from `origin/dev`, in this order.
   disposable repository, no report, no session); `ParkIntent` refused when a request became accepted
   in between.
 - §4.3/§5, against the test broker (`AGENTBUS_TEST_REDIS_URL` only) and a fake holder: the stop
-  closes only that process's terminal; an obligation relaunches a parked agent once, never while
+  closes only that process's terminal; a request accepted, or an entry arrived, between
+  `ParkIntent` and the stop drops the intent and closes nothing; a process that died with a failed
+  re-check is lost, not parked; no wake line is typed while an intent stands; an obligation relaunches a parked agent once, never while
   paused or held; a failed proof keeps the record and tells master once.
 - §6: a build that no longer answers reports its agents with their presence; a planned switch with
   all parked wakes nobody; master lost notifies the person once.
