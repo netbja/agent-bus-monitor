@@ -35,7 +35,12 @@ func (a Applies) String() string {
 }
 
 // Applies is when a change of k takes effect.
-func (k *Key) Applies() Applies { return applies[k.Name] }
+func (k *Key) Applies() Applies {
+	if _, _, ok := ParseQuotaProviderKey(k.Name); ok { // read with the thresholds, each pass
+		return AppliesLive
+	}
+	return applies[k.Name]
+}
 
 // applies is each key's, from its read sites; TestEveryKeySaysWhenItApplies
 // fails on a key without. Live in busmon: the keys busmon's applySetting

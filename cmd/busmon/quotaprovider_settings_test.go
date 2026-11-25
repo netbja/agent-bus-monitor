@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -42,5 +44,33 @@ func TestSettingsPageWritesAProviderQuota(t *testing.T) {
 	}
 	if m.ui.flash != "saved: applies live" {
 		t.Fatalf("flash %q", m.ui.flash)
+	}
+}
+
+// master's directive: a provider config.toml sets a threshold for, off the
+// five, has its rows on the page too; one without a usage reader (none in
+// quota.toml or built in) says so in its label, its threshold kept, inert.
+func TestSettingsPageShowsAnyQuotaProvider(t *testing.T) {
+	getenv := settingsEnv(t, "[quota.deepseek]\nhold = 80\n\n[quota.mistral]\nwarn = 60\n", "", nil)
+	quotaToml := filepath.Join(getenv("XDG_CONFIG_HOME"), "agentbus", "quota.toml")
+	if err := os.WriteFile(quotaToml, []byte("[providers.mistral]\nkind = \"unlimited\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var themed string
+	m := press(t, settingsShell(t, getenv, &themed), 'C')
+	groups := m.rd.top().set.groups
+	for _, k := range []string{"quota.deepseek.warn", "quota.deepseek.drain", "quota.deepseek.hold", "quota.mistral.warn"} {
+		if r := settingRowOf(t, groups, k); !r.Editable {
+			t.Fatalf("%s: %+v", k, r)
+		}
+	}
+	if r := settingRowOf(t, groups, "quota.deepseek.hold"); !strings.Contains(r.Label, "deepseek") || !strings.Contains(r.Label, "no usage reader") {
+		t.Fatalf("deepseek label %q", r.Label)
+	}
+	if r := settingRowOf(t, groups, "quota.mistral.warn"); strings.Contains(r.Label, "no usage reader") {
+		t.Fatalf("mistral has a reader in quota.toml: label %q", r.Label)
+	}
+	if h := settingHelp(settingRowOf(t, groups, "quota.deepseek.hold")); !strings.Contains(h, "[project.<name>.quota.deepseek]") {
+		t.Fatalf("help %q", h)
 	}
 }

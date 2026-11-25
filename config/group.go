@@ -46,4 +46,9 @@ var groups = map[string]Group{
 }
 
 // Group is k's group on the settings page; "" for a key not placed yet.
-func (k *Key) Group() Group { return groups[k.Name] }
+func (k *Key) Group() Group {
+	if _, _, ok := ParseQuotaProviderKey(k.Name); ok { // quota.<provider>.<level>, any provider
+		return GroupServices
+	}
+	return groups[k.Name]
+}
