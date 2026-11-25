@@ -1,6 +1,6 @@
 # A retrospective after a task with friction (retro)
 
-Status: spec r3, for review (subject `retro-spec`). Not built. Base: origin/dev `af527c19`.
+Status: spec r4, for review (subject `retro-spec`). Not built. Base: origin/dev `af527c19`.
 r2: foureyes's two notes on r1 (report `1795560028942-0`): `agentbus answer` refuses through
 `agentcaller.Refuse`, because the approval rests on it (§5, build step 2); busmon starts a retro
 from the palette, since `R` is the recap key (§3.3).
@@ -10,6 +10,11 @@ question by a new `qid` field on the answer's reply, cross-checked with the ask'
 skill's file may be absent, and is checked absent again at apply (§4, §6). Every retro whose
 ask is fully answered goes to docs, which writes the record of all outcomes, approved or not
 (§6).
+r4: foureyes's reject of r3 (verdict `1795574372600-0`). An ask author holds one open ask at a
+time (`askCreate`, `bus/asks.go:276`), so a retro ask in master's name would fail while master
+has an ask open, and would block master's own asks while it waits. Retro asks now have their own
+author, `retro`, with the answers sent to master. One is open at a time and the rest queue (§4).
+A withdrawn retro ask routes like a closed one (§6). `said=yes` may be typed free text (§5).
 Author: architect, from master's directive (cmd `1795559518593-0`, task `specs-from-person-docs`),
 which hands on the person's note "Directive for archi: self-improving loop for agents".
 Reference design: `codeursenior/product-engineer-kit`, skill `pek-auto-improve` (MIT). Its rules
@@ -126,8 +131,19 @@ The agent writes the retro in this order, the reference design's rules:
 - the project's daily cap (§7).
 
 It stores the retro in `{p}:retros` and records the git blob id of each target file, or
-`absent` for a new skill. Then it opens one ask in master's name, so master is woken by the
-answer, and records the ask's id in the retro. The ask is never replaced. The ask has one
+`absent` for a new skill. Then it opens the retro's ask and records the ask's id in the
+retro. The ask is never replaced.
+
+- **The ask's author is `retro`,** a reserved sender like `agentbus` (`SystemSender`,
+  `bus/asks.go:46`). It is never an agent's name, and `agentbus ask` refuses it as the agent
+  does today for `agentbus` (`cmd/agentbus/askcmd.go:40`). The answer script gets one rule,
+  next to its `SystemSender` rule (`bus/asks.go:504`): a `retro` ask's reply goes to master and
+  wakes master. Master's own ask slot (`open:master`) is never used, so a retro never blocks
+  master's merge asks, and master's open ask never blocks a retro.
+- **One retro ask is open at a time,** because `open:retro` is one slot. When the slot is taken,
+  `propose` stores the retro as `queued` and says so. The retro's request still closes, and the
+  pop may end, because its work is filed. The person sees the queue in For you through the open
+  ask's title, `retro 1 of N`. The ask has one
 question per proposal, with question id `p<n>`, and three options: `yes`, `no` and `later`. The ask's text is the root cause
 and the table. Then the agent runs `request done retro-<task>`.
 
@@ -141,6 +157,8 @@ and the table. Then the agent runs `request done retro-<task>`.
   `ref` = the retro's recorded ask id, `qid=p<n>`, and `said=yes`. While the ask's record is
   kept (`<id>|a|p<n>` in `{p}:asks`, seven days after it closes), its choice must also be `yes`.
   After that, the reply entry is the record: it stays in the stream or in the history archive.
+  Then `said=yes` cannot tell the option `yes` from free text typed as `yes`. Both are the
+  person's own typed word, so both count.
 - **A `yes` from master or any agent is not an approval.** A directive, a report and a
   `human=yes` text that agentbus composes are not approvals either.
 - `no` rejects the proposal, and the rejection is stored (§6). `later` is a final answer
@@ -164,8 +182,11 @@ for refusing. Every later step calls it. No step reads the approval any other wa
 
 ## 6. Apply, record, and the rejected list
 
-Master is woken by each answer. When the ask closes, because every question is answered,
-master sends `retro-apply-<task>` to docs, whatever the answers are. Every outcome needs its
+Master is woken by each answer. The ask closes when every question is answered, or when
+master withdraws it (`agentbus retro withdraw <task>`, the `retro` author's `Withdraw`), for
+example when a retro is no longer wanted. Either way, master runs `agentbus retro route <task>`.
+It sends `retro-apply-<task>` to docs, whatever the answers, and opens the next queued retro's
+ask. Questions left unanswered are recorded as `unanswered`. Every outcome needs its
 record (below). docs is the role that edits these files and delivers. It may also
 be the only role still running, because the author was a pop that has since ended.
 
@@ -221,7 +242,8 @@ cannot.
    escalations, and `agentbus retro request/evidence/none`.
 2. Bus and CLI: `{p}:retros`, `retro propose` (with its checks), the ask, `RetroApproved`,
    `retro show/rejected/close`, and the settings in `config/keys.go`. `agentbus answer` refuses
-   through `agentcaller.Refuse`, and the answer's reply entry gains `qid` (§5). The security
+   through `agentcaller.Refuse`, and the answer's reply entry gains `qid` (§5). The `retro` ask
+   author, its reply rule and the queue, `retro route` and `retro withdraw` (§4, §6). The security
    role reviews this step.
 3. Skills: the agent-bus skill's retro section (the §4 rules). The master skill's routing
    (§6). The docs skill's apply steps. busmon's palette `/retro`.
@@ -242,7 +264,11 @@ cannot.
 - `retro propose` accepts an absent `skills/<name>/SKILL.md` for a `new skill` row and refuses
   one that exists. `retro show` reports a conflict when it appeared since.
 - An ask answered `no`, `no` still leads to `retro-apply-<task>`, and the record lists both
-  outcomes.
+  outcomes. A withdrawn retro ask routes too, its questions `unanswered`.
+- **The ask slot:** `retro propose` succeeds while master has an ask open, and master can open
+  an ask while a retro ask is open. A second `propose` while a retro ask is open stores
+  `queued`. `retro route` opens the next queued ask. The answer to a `retro` ask wakes master.
+  `agentbus ask` refuses the author `retro`.
 - `retro propose` refuses each of: four rows, a missing evidence id, a file outside the
   destinations, a sensitive field, a repeated rejected row, and a fifth retro on a capped day.
 - `retro request` and `answer` refuse from an agent's process tree, even with `AGENT_BUS_AGENT`
