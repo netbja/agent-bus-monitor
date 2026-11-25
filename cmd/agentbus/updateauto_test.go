@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -78,4 +80,38 @@ func TestActiveHolderProjects(t *testing.T) {
 type lenientHolders struct {
 	service.Manager
 	service.HolderManager
+}
+
+// updatesAuto is the person's yes given ahead (quiet-update-auto §2): install
+// only when config.toml says install; notify by default, for any other value,
+// and never from the environment (foureyes on 4a).
+func TestUpdatesAutoReadsConfigOnly(t *testing.T) {
+	for body, want := range map[string]string{
+		"":                                   "notify",
+		"[updates]\nauto = \"install\"\n":    "install",
+		"[updates]\nauto = \"notify\"\n":     "notify",
+		"[updates]\nauto = \"yes please\"\n": "notify",
+	} {
+		dir := t.TempDir()
+		if body != "" {
+			if err := os.MkdirAll(filepath.Join(dir, "agentbus"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "agentbus", "config.toml"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		getenv := func(k string) string {
+			switch k {
+			case "XDG_CONFIG_HOME":
+				return dir
+			case "AGENT_BUS_UPDATES_AUTO", "UPDATES_AUTO":
+				return "install" // no env variable is read
+			}
+			return ""
+		}
+		if got := updatesAuto(getenv); got != want {
+			t.Errorf("%q: %q, want %q", body, got, want)
+		}
+	}
 }
