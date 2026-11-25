@@ -2,21 +2,25 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
-// barRoles are the roles of the full cells of the bar on line i, in order.
+// barRoles are the roles of the filled cells of the bar on line i, in order.
 func barRoles(v planBoardView, i int) []Role {
 	var cells []Role
 	for _, s := range v.lines[i] {
-		for range strings.Count(s.Text, GlyphBarFull) {
-			cells = append(cells, s.Role)
+		for _, c := range s.Text { // the fill: ━ and the leading edge's eighth
+			if g := string(c); g == finedraw.Thin || slices.Contains(finedraw.Eighths[1:], g) {
+				cells = append(cells, s.Role)
+			}
 		}
 	}
 	return cells
@@ -34,7 +38,9 @@ func wordRole(v planBoardView, i int, word string) Role {
 
 // views-redesign §4.2: a group's bar and state word are in its state's
 // colour: orange waits for the person, red blocked, green every open task
-// approved, blue in progress (or in review), the text colour not started.
+// approved, blue in progress (or in review, or tasks done: 2 of 3 is in
+// progress, plan-progress-bars), the text colour not started; the bar's fill
+// green done, none not started (plan-progress-bars).
 func TestPlanGroupStateColour(t *testing.T) {
 	approved := func(id string) plan.Row {
 		r := inGroup(boardRow(id, plan.InReview, "coder"), "g")
@@ -46,13 +52,15 @@ func TestPlanGroupStateColour(t *testing.T) {
 		rows []plan.Row
 		word string
 		role Role
+		bar  Role // the fill's colour, -1 none
 	}{
-		{"waits", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("w", plan.Waiting, plan.Person), "g"), inGroup(boardRow("b", plan.Blocked, "coder"), "g")}, "waits for you", RoleAttention},
-		{"blocked", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("b", plan.Blocked, "coder"), "g"), inGroup(boardRow("i", plan.InProgress, "coder"), "g")}, "blocked", RoleError},
-		{"approved", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), approved("x"), approved("y")}, "approved", RoleOK},
-		{"in progress", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), approved("x"), inGroup(boardRow("u", plan.Upcoming, "coder"), "g")}, "in progress", RoleAccent},
-		{"in review", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("r", plan.InReview, "coder"), "g")}, "in progress", RoleAccent},
-		{"not started", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("u", plan.Upcoming, "coder"), "g")}, "not started", RoleText},
+		{"waits", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("w", plan.Waiting, plan.Person), "g"), inGroup(boardRow("b", plan.Blocked, "coder"), "g")}, "waits for you", RoleAttention, RoleAttention},
+		{"blocked", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("b", plan.Blocked, "coder"), "g"), inGroup(boardRow("i", plan.InProgress, "coder"), "g")}, "blocked", RoleError, RoleError},
+		{"approved", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), approved("x"), approved("y")}, "approved", RoleOK, RoleOK},
+		{"in progress", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), approved("x"), inGroup(boardRow("u", plan.Upcoming, "coder"), "g")}, "in progress", RoleAccent, RoleAccent},
+		{"in review", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("r", plan.InReview, "coder"), "g")}, "in progress", RoleAccent, RoleAccent},
+		{"2 of 3 done", []plan.Row{inGroup(boardRow("a", plan.Done, "coder"), "g"), inGroup(boardRow("b", plan.Done, "coder"), "g"), inGroup(boardRow("u", plan.Upcoming, "coder"), "g")}, "in progress", RoleAccent, RoleAccent},
+		{"not started", []plan.Row{inGroup(boardRow("u", plan.Upcoming, "coder"), "g"), inGroup(boardRow("v", plan.Upcoming, "coder"), "g")}, "not started", RoleText, -1},
 	} {
 		p := boardPlan(c.rows...)
 		p.file.Groups = []plan.Group{{ID: "g", Title: "G"}}
@@ -64,8 +72,8 @@ func TestPlanGroupStateColour(t *testing.T) {
 		if got := wordRole(v, gi, c.word); got != c.role {
 			t.Errorf("%s: word %q role %v, want %v: %q", c.name, c.word, got, c.role, v.lines[gi].text())
 		}
-		if cells := barRoles(v, gi); len(cells) == 0 || cells[0] != c.role {
-			t.Errorf("%s: bar %v, want %v", c.name, cells, c.role)
+		if cells := barRoles(v, gi); (c.bar < 0 && len(cells) > 0) || (c.bar >= 0 && (len(cells) == 0 || cells[0] != c.bar)) {
+			t.Errorf("%s: bar %v, want %v", c.name, cells, c.bar)
 		}
 	}
 }
@@ -107,7 +115,7 @@ func TestPlanHeaderLine(t *testing.T) {
 	p.file.Plan = "v0.31"
 	v := planBoard(p, 0, false, shellNow, 100, TierWide, false, nil)
 	head := strings.TrimRight(v.lines[0].text(), " ")
-	if !strings.HasPrefix(head, "v0.31  "+GlyphBarFull) || !strings.Contains(head, GlyphBarEmpty) || !strings.HasSuffix(head, "1/4   3 left "+GlyphNone+" 2 for you") || Width(head) > 100 {
+	if !strings.HasPrefix(head, "v0.31  "+finedraw.Thin) || !strings.Contains(head, finedraw.Line) || !strings.HasSuffix(head, "1/4   3 left "+GlyphNone+" 2 for you") || Width(head) > 100 {
 		t.Fatalf("header %q", head)
 	}
 	if strings.Trim(v.lines[1].text(), glyphHorizontal) != "" {
@@ -415,7 +423,7 @@ func TestPlanHeaderAtEveryWidth(t *testing.T) {
 		tier Tier
 	}{{140, TierWide}, {80, TierMedium}, {60, TierNarrow}, {40, TierNarrow}} {
 		h := planHeader(p, shellNow, c.w, c.tier).text()
-		if !strings.Contains(h, GlyphBarEmpty) || !strings.Contains(h, "1/2") || Width(h) > c.w {
+		if !strings.Contains(h, finedraw.Line) || !strings.Contains(h, "1/2") || Width(h) > c.w {
 			t.Errorf("%d: %q", c.w, h)
 		}
 	}
@@ -426,7 +434,7 @@ func TestPlanHeaderAtEveryWidth(t *testing.T) {
 		tier Tier
 	}{{140, TierWide}, {80, TierMedium}, {60, TierNarrow}, {45, TierNarrow}} {
 		h := planHeader(p, shellNow, c.w, c.tier).text()
-		if !strings.Contains(h, "stale") || !strings.Contains(h, "read failed") || !strings.Contains(h, "1/2?") || !strings.Contains(h, GlyphBarEmpty) || Width(h) > c.w || strings.Contains(h, GlyphEllipsis) {
+		if !strings.Contains(h, "stale") || !strings.Contains(h, "read failed") || !strings.Contains(h, "1/2?") || !strings.Contains(h, finedraw.Line) || Width(h) > c.w || strings.Contains(h, GlyphEllipsis) {
 			t.Errorf("stale and partial at %d: %q", c.w, h)
 		}
 	}
@@ -453,7 +461,7 @@ func TestPlanHeaderLongName(t *testing.T) {
 	p.rec.LoadedAt = shellNow.Add(-plan.StaleAfter - time.Hour).UnixMilli()
 	for _, w := range []int{40, 45, 60} {
 		h := strings.TrimRight(planHeader(p, shellNow, w, TierNarrow).text(), " ")
-		if !strings.HasSuffix(h, "1/2?   stale "+GlyphNone+" read failed") || !strings.Contains(h, GlyphBarEmpty) || Width(h) > w {
+		if !strings.HasSuffix(h, "1/2?   stale "+GlyphNone+" read failed") || !strings.Contains(h, finedraw.Line) || Width(h) > w {
 			t.Errorf("%d: %q", w, h)
 		}
 	}

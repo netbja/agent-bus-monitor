@@ -78,7 +78,7 @@ func TestPlanBoardGroups(t *testing.T) {
 	if !strings.Contains(herdr, "1/5") || !strings.Contains(herdr, "waits for you") {
 		t.Fatalf("herdr header %q", herdr)
 	}
-	if !strings.Contains(self, "1/2") || !strings.Contains(self, "not started") {
+	if !strings.Contains(self, "1/2") || !strings.Contains(self, "in progress") { // 1 of 2 done (plan-progress-bars)
 		t.Fatalf("self-repair header %q", self)
 	}
 	if !strings.Contains(other, "0/1") {
