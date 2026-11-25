@@ -183,8 +183,8 @@ type Retro struct {
 
 // RetroDue runs after a task's done (§3.2): with no friction, or for a retro
 // itself, nothing; otherwise one tracked request, from agentbus to the
-// task's owner, listing the signals. A retro already there (a repeated
-// done) is not sent again.
+// task's owner, listing the signals. A retro already there, open or closed
+// (a repeated done), is not sent again.
 func (b *Bus) RetroDue(ctx context.Context, task string) (Retro, error) {
 	e, err := b.boardRequest(ctx, task)
 	if err != nil || e.Request.RetroOf != "" {
@@ -194,7 +194,7 @@ func (b *Bus) RetroDue(ctx context.Context, task string) (Retro, error) {
 	if err != nil || len(sigs) == 0 {
 		return Retro{}, err
 	}
-	return b.sendRetro(ctx, task, e.Request.Target, sigs)
+	return b.sendRetro(ctx, task, e.Request.Target, sigs, false)
 }
 
 // RetroRequest is the person's retro of task (§3.3): its friction plus the
@@ -212,7 +212,7 @@ func (b *Bus) RetroRequest(ctx context.Context, task, to string) (Retro, error) 
 		return Retro{}, err
 	}
 	sigs = append(sigs, FrictionSignal{Kind: FrictionPerson, ID: "-"})
-	return b.sendRetro(ctx, task, to, sigs)
+	return b.sendRetro(ctx, task, to, sigs, true)
 }
 
 // boardRequest is task's board entry, which must be a tracked request.
@@ -242,23 +242,32 @@ func (b *Bus) RetroOwner(ctx context.Context, task string) (string, error) {
 
 // FindRetro is the board name of task's open retro and its owner, "" when
 // it has none: the entry not done whose request has retro_of = task (only
-// sendRetro sets it). A closed retro never blocks a new one.
+// sendRetro sets it).
 func (b *Bus) FindRetro(ctx context.Context, task string) (name, owner string, err error) {
+	return b.findRetro(ctx, task, true)
+}
+
+// findRetro is FindRetro; with openOnly false a closed retro is found too.
+func (b *Bus) findRetro(ctx context.Context, task string, openOnly bool) (name, owner string, err error) {
 	all, err := b.r.HGetAll(ctx, BoardKey(b.project)).Result()
 	if err != nil {
 		return "", "", err
 	}
 	for n, raw := range all {
 		var e BoardEntry
-		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task && e.State != "done" {
+		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task && (!openOnly || e.State != "done") {
 			return n, e.Request.Target, nil
 		}
 	}
 	return "", "", nil
 }
 
-func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSignal) (Retro, error) {
-	if name, owner, err := b.FindRetro(ctx, task); err != nil {
+// sendRetro sends task's retro unless one is there: any retro, closed ones
+// included, for done's automatic retro (a repeated done never sends a
+// second); only an open one for the person's request (openOnly), which a
+// closed retro never swallows.
+func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSignal, openOnly bool) (Retro, error) {
+	if name, owner, err := b.findRetro(ctx, task, openOnly); err != nil {
 		return Retro{}, err
 	} else if name != "" {
 		return Retro{Task: name, Signals: sigs, To: owner}, nil

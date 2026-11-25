@@ -478,6 +478,12 @@ func TestRetroAfterClosedRetro(t *testing.T) {
 	if _, err := b.CompleteRequest(ctx, first.Task, "coder", "no lasting lesson: x"); err != nil {
 		t.Fatal(err)
 	}
+	if rep, err := b.RetroDue(ctx, "x"); err != nil || rep.Sent || rep.Task != first.Task {
+		t.Errorf("a repeated done after the close: %+v %v", rep, err)
+	}
+	if n := countTasks(t, b, "retro-"); n != 1 {
+		t.Fatalf("%d retros after a repeated done, want 1", n)
+	}
 	second, err := b.RetroRequest(ctx, "x", "coder")
 	if err != nil || !second.Sent || second.Task == first.Task {
 		t.Fatalf("after the close: %+v %v", second, err)
