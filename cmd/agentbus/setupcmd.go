@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/setup"
 	"github.com/redis/go-redis/v9"
 )
@@ -61,7 +62,8 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 	}
 	switch opt.Sub {
 	case "install":
-		return runInstall(context.Background(), r, o, opt, repo, getenv)
+		ctx := context.Background()
+		return runInstall(ctx, r, o, opt, repo, getenv, func(e bus.AuditEntry) { auditHostProjects(ctx, "", e) })
 	case "status":
 		in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Getenv: getenv}
 		return in.Status(context.Background())
@@ -101,8 +103,10 @@ func runSetup(args []string, getenv func(string) string, r setup.Runner, stdout,
 	return in.Update(context.Background())
 }
 
-// runInstall is setup.sh install's steps, in its order.
-func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.Options, repo string, getenv func(string) string) int {
+// runInstall is setup.sh install's steps, in its order. Over an existing
+// install, once the binaries' step begins, every exit is recorded by audit
+// (reinstallAct: audit step 2b), a failed build of the second binary too.
+func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.Options, repo string, getenv func(string) string, audit func(bus.AuditEntry)) (code int) {
 	missing, docker := setup.Preflight(ctx, r, o, opt, goModVersion(repo), runtime.GOOS, runtime.GOARCH, brokerrt.Of(getenv))
 	if missing > 0 && !opt.DryRun {
 		o.Fatal(itoa(missing) + " required tool(s) missing; install them and re-run.")
@@ -116,6 +120,11 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 	defer os.RemoveAll(tmp)
 	in := &setup.Installer{R: r, O: o, Opt: opt, Repo: repo, Tmp: tmp, Getenv: getenv, Now: time.Now, Setenv: os.Setenv}
 	had := isFile(filepath.Join(opt.BinDir, "agentbus")) // a reinstall: its audit line (audit step 2b)
+	defer func() {
+		if e, ok := reinstallAct(had, opt.DryRun, code, in.Rev, personActor(getenv)); ok && audit != nil {
+			audit(e)
+		}
+	}()
 	o.Step("2/4 Building and installing agentbus & busmon")
 	in.Rev = in.RepoRev(ctx)
 	if !opt.DryRun {
@@ -145,11 +154,7 @@ func runInstall(ctx context.Context, r setup.Runner, o *setup.Output, opt setup.
 	in.Identity(ctx, prompt)
 	in.RestartStale(ctx, prompt) // after the broker step: service stale reads it (P2-13)
 	in.Models(ctx)
-	code := o.Summary(opt, missing, in.Rev)
-	if e, ok := reinstallAct(had, opt.DryRun, code, in.Rev, personActor(getenv)); ok {
-		auditHostProjects(ctx, "", e)
-	}
-	return code
+	return o.Summary(opt, missing, in.Rev)
 }
 
 // goModVersion is go.mod's go line, as setup.sh reads it.
