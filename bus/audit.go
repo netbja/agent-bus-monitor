@@ -126,36 +126,46 @@ func (b *Bus) Audit(ctx context.Context, e AuditEntry) (string, error) {
 	return b.AuditWith(ctx, e, AuditRetention(os.Getenv))
 }
 
-// auditAppend reads the last entry's hash, chains e onto it and appends it,
-// trimming by age (MINID at Redis TIME minus ARGV[1] ms), in one script: two
-// writers never chain onto the same entry. ARGV[2..9] are e's fields after
-// At, in auditFields' order.
-var auditAppend = redis.NewScript(`
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local prev = ''
-local last = redis.call('XREVRANGE', KEYS[1], '+', '-', 'COUNT', 1)
-if #last > 0 then
-  local f = last[1][2]
-  for i = 1, #f, 2 do
-    if f[i] == 'hash' then prev = f[i + 1] end
+// auditLua defines audit_append(key, keep, f): it reads the last entry's
+// hash, chains the entry of fields f (auditFields' order after At: action,
+// actor, human, typed, target, ref, outcome, detail) onto it and appends it,
+// trimming by age (MINID at Redis TIME minus keep ms). A script that
+// includes it appends in the same step as its own act (audit step 2: the
+// dispatcher's acts, fenced with them); two writers never chain onto the
+// same entry.
+const auditLua = `
+local function audit_append(key, keep, f)
+  local t = redis.call('TIME')
+  local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+  local prev = ''
+  local last = redis.call('XREVRANGE', key, '+', '-', 'COUNT', 1)
+  if #last > 0 then
+    local lf = last[1][2]
+    for i = 1, #lf, 2 do
+      if lf[i] == 'hash' then prev = lf[i + 1] end
+    end
   end
+  local canon = prev .. '\n' .. tostring(now)
+  for i = 1, 8 do canon = canon .. '\n' .. f[i] end
+  local hash = redis.sha1hex(canon)
+  local minid = tostring(now - tonumber(keep)) .. '-0'
+  return redis.call('XADD', key, 'MINID', minid, '*', 'at', tostring(now),
+    'action', f[1], 'actor', f[2], 'human', f[3], 'typed', f[4], 'target', f[5],
+    'ref', f[6], 'outcome', f[7], 'detail', f[8], 'prev', prev, 'hash', hash)
 end
-local canon = prev .. '\n' .. tostring(now)
-for i = 2, 9 do canon = canon .. '\n' .. ARGV[i] end
-local hash = redis.sha1hex(canon)
-local minid = tostring(now - tonumber(ARGV[1])) .. '-0'
-return redis.call('XADD', KEYS[1], 'MINID', minid, '*', 'at', tostring(now),
-  'action', ARGV[2], 'actor', ARGV[3], 'human', ARGV[4], 'typed', ARGV[5], 'target', ARGV[6],
-  'ref', ARGV[7], 'outcome', ARGV[8], 'detail', ARGV[9], 'prev', prev, 'hash', hash)`)
+`
 
-// AuditWith is Audit with retention: e checked (an entry §2 does not allow
-// is refused, nothing written), its free fields each replaced whole by
-// [redacted] on a credential shape (§3: never a span; the line is still
-// written), then appended and chained.
-func (b *Bus) AuditWith(ctx context.Context, e AuditEntry, retention time.Duration) (string, error) {
+// auditAppend is audit_append alone: KEYS[1] the stream, ARGV[1] the
+// retention in ms, ARGV[2..9] the fields.
+var auditAppend = redis.NewScript(auditLua + `
+return audit_append(KEYS[1], ARGV[1], {ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7], ARGV[8], ARGV[9]})`)
+
+// auditArgs are e's retention and fields as audit_append takes them: e
+// checked (an entry §2 does not allow is refused) and its free fields each
+// replaced whole by [redacted] on a credential shape (§3).
+func auditArgs(e AuditEntry, retention time.Duration) ([]any, error) {
 	if err := e.valid(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if retention <= 0 {
 		retention = DefaultAuditRetention
@@ -164,6 +174,18 @@ func (b *Bus) AuditWith(ctx context.Context, e AuditEntry, retention time.Durati
 	args := []any{retention.Milliseconds()}
 	for _, f := range auditFields(e)[1:] {
 		args = append(args, f)
+	}
+	return args, nil
+}
+
+// AuditWith is Audit with retention: e checked (an entry §2 does not allow
+// is refused, nothing written), its free fields each replaced whole by
+// [redacted] on a credential shape (§3: never a span; the line is still
+// written), then appended and chained.
+func (b *Bus) AuditWith(ctx context.Context, e AuditEntry, retention time.Duration) (string, error) {
+	args, err := auditArgs(e, retention)
+	if err != nil {
+		return "", err
 	}
 	return auditAppend.Run(ctx, b.r, []string{AuditKey(b.project)}, args...).Text()
 }
