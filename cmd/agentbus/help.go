@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/netbja/agent-bus-monitor/buildinfo"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/cli"
 )
 
@@ -98,6 +100,20 @@ func globalFlag(a string) (cli.Flag, bool) {
 // and for which command ("" for the index): help [cmd], --help, -h, or
 // <cmd> --help|-h right after the command. Anywhere else --help is a word of
 // a message.
+// versionAlias reads --version and -v, as the first word, as the command
+// version; other command lines are returned unchanged.
+func versionAlias(args []string) []string {
+	if len(args) >= 1 && (args[0] == "--version" || args[0] == "-v") {
+		return append([]string{"version"}, args[1:]...)
+	}
+	return args
+}
+
+// printVersion is agentbus version's output: the protocol, then the build.
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
+}
+
 func helpRequest(args []string) (string, bool) {
 	isHelp := func(s string) bool { return s == "help" || s == "--help" || s == "-h" }
 	switch {
