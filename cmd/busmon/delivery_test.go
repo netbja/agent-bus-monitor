@@ -70,6 +70,10 @@ func (d *deliveryReads) VerdictsSince(_ context.Context, ms int64, _ int64) ([]b
 	d.since = append(d.since, ms)
 	return d.vs, nil
 }
+func (d *deliveryReads) VerdictsAfter(context.Context, string, int64) ([]bus.Verdict, error) {
+	d.n("VerdictsAfter")
+	return nil, nil
+}
 func (d *deliveryReads) Recent(context.Context, []string, int) ([]bus.Event, map[string]string, error) {
 	d.n("Recent")
 	return d.reports, nil, nil
@@ -163,7 +167,7 @@ func TestProjectDeliveryRows(t *testing.T) {
 			t.Errorf("%s: %+v (help %q)", key, r, settingHelp(r))
 		}
 	}
-	if h := settingHelp(demo["delivery.same_provider_ok"]); strings.Contains(h, "no effect") {
+	if h := settingHelp(demo["delivery.same_provider_ok"]); strings.Contains(h, "no effect") || strings.Contains(h, "[delivery]") {
 		t.Errorf("single_approval is small, yet %q", h)
 	}
 	quiet := rows("quiet")
@@ -195,4 +199,61 @@ func TestSettingsDeliveryWarning(t *testing.T) {
 		return
 	}
 	t.Fatal("no Services group")
+}
+
+// pagedLedger serves a ledger a page at a time, by id.
+type pagedLedger struct {
+	vs    []bus.Verdict
+	pages int
+}
+
+func (l *pagedLedger) from(i int, count int64) []bus.Verdict {
+	l.pages++
+	return l.vs[i:min(len(l.vs), i+int(count))]
+}
+func (l *pagedLedger) VerdictsSince(_ context.Context, _ int64, count int64) ([]bus.Verdict, error) {
+	return l.from(0, count), nil
+}
+func (l *pagedLedger) VerdictsAfter(_ context.Context, after string, count int64) ([]bus.Verdict, error) {
+	for i, v := range l.vs {
+		if v.ID == after {
+			return l.from(i+1, count), nil
+		}
+	}
+	return nil, nil
+}
+
+// reviewer-codex: a verdict of another provider past the first page hides
+// the warning; the read stops at the page that holds one; self-authored
+// verdicts never stop it.
+func TestWindowWarningPages(t *testing.T) {
+	v := func(id, reviewer, rp string) bus.Verdict {
+		return bus.Verdict{ID: id, Author: "coder", Reviewer: reviewer, AuthorProvider: "anthropic", ReviewerProvider: rp}
+	}
+	self := bus.Verdict{ID: "3-0", Author: "coder", Reviewer: "coder", AuthorProvider: "anthropic", ReviewerProvider: "anthropic"}
+	l := &pagedLedger{vs: []bus.Verdict{v("1-0", "foureyes", "anthropic"), v("2-0", "foureyes", "anthropic"), self, {ID: "4-0", Author: "coder", Reviewer: "coder"},
+		v("5-0", "reviewer-codex", "openai"), v("6-0", "foureyes", "anthropic"), v("7-0", "foureyes", "anthropic")}}
+	if w, err := windowWarning(context.Background(), l, 0, 2, "off"); err != nil || w != "" || l.pages != 3 {
+		t.Fatalf("warning %q, %v, %d pages", w, err, l.pages)
+	}
+	l = &pagedLedger{vs: l.vs[:4]}
+	if w, _ := windowWarning(context.Background(), l, 0, 2, "off"); !strings.Contains(w, "needs delivery.same_provider_ok") || l.pages != 3 {
+		t.Fatalf("same provider only: %q, %d pages", w, l.pages)
+	}
+}
+
+// foureyes' gaps: a self verdict beside a same-provider one still warns; the
+// newest trace of a head is kept.
+func TestDeliveryGaps(t *testing.T) {
+	same := bus.Verdict{Author: "coder", Reviewer: "foureyes", AuthorProvider: "anthropic", ReviewerProvider: "anthropic"}
+	self := bus.Verdict{Author: "coder", Reviewer: "coder", AuthorProvider: "anthropic", ReviewerProvider: "openai"}
+	if w := providerWarning([]bus.Verdict{self, same}, "off"); w == "" {
+		t.Error("a self verdict of another provider hid the warning")
+	}
+	h := strings.Repeat("e", 40)
+	got := oneApprovalTraces([]bus.Event{{Kind: "report", Agent: "master", Message: "s@" + h + " delivered on one approval: old"},
+		{Kind: "report", Agent: "master", Message: "s@" + h + " delivered on one approval: new"}})
+	if got[h] != "new" {
+		t.Errorf("trace %q, want the newest", got[h])
+	}
 }
