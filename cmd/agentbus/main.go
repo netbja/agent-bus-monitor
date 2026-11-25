@@ -83,7 +83,7 @@ func main() {
 	bus.SetConnectEntry(connectEntryOf(args), agentcaller.AncestorOrNone)
 	// An observer (roles.toml kind = "observer") reads only: its writes are
 	// refused here, before any command runs (observer-role).
-	if code, refused := observerGuard(args); refused {
+	if code, refused := observerGuard(args, agentcaller.AncestorOrNone); refused {
 		os.Exit(code)
 	}
 	// Inside an agent's terminal, the host commands go through the
