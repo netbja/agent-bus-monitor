@@ -133,6 +133,17 @@ func TestVerdictsAfterReadsIncrementally(t *testing.T) {
 	if err != nil || len(none) != 0 {
 		t.Fatalf("nothing new: %+v %v", none, err)
 	}
+	// The providers are read too (single-approval step 3b: busmon's 7-day
+	// provider warning reads the ledger with it).
+	id, err := b.AppendVerdict(ctx, Verdict{Subject: "d", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve",
+		Message: "ok", AuthorProvider: "anthropic", ReviewerProvider: "openai"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prov, err := b.VerdictsAfter(ctx, ids[2], 2)
+	if err != nil || len(prov) != 1 || prov[0].ID != id || prov[0].AuthorProvider != "anthropic" || prov[0].ReviewerProvider != "openai" {
+		t.Fatalf("providers: %+v %v", prov, err)
+	}
 }
 
 // plan link --ref (forge-delivery): a ref fact beside the PR, the newer link
