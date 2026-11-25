@@ -389,6 +389,11 @@ the person only when it says it needs them:
 - no `--needs` for everything else: a status, a "still waiting" list, "nothing new". It stays in
   Activity, unread, and marks the items it names.
 
+**Read an agent's report in full before you answer with a summary**, and turn any choice it leaves
+for the person into an `agentbus ask` the same turn, whatever the report's own wording: an agent's
+`--needs answer` report is that choice, one question each, its options in the text with one
+recommended. A summary of a report that hides its question is how one never reached the person.
+
 Use `--needs` only for a new ask. To ask about a PR already in the merge queue, name it (`#694`):
 the question lands on its merge item instead of a row of its own.
 
