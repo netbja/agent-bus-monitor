@@ -17,13 +17,15 @@ import (
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/quota"
+	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
 // runQuota prints every configured reader's reading, read now, without the
 // bus: "how much is left" for the operator and for agents.
-func runQuota(args []string, out, errw io.Writer) int {
+func runQuota(project string, args []string, out, errw io.Writer) int {
 	_, asJSON := extractBool(args, "--json")
 	cfg, err := quota.LoadConfig(quota.ConfigPath(), exec.LookPath)
 	if err != nil {
@@ -42,30 +44,68 @@ func runQuota(args []string, out, errw io.Writer) int {
 		fmt.Fprintln(out, "no quota reader configured (none of claude, codex, grok on PATH; see "+quota.ConfigPath()+")")
 		return 0
 	}
-	now := time.Now()
-	format := config.Machine(os.Getenv).String("display.date_format")
+	th, err := dispatchsvc.QuotaThresholds(os.Getenv, project, quotaEnvFile(project))()
+	if err != nil {
+		fmt.Fprintf(errw, "quota thresholds: %v (the defaults shown)\n", err)
+		th = dispatch.QuotaThresholds{Warn: 85, Drain: 85, Hold: 95}
+	}
+	printQuota(out, rs, time.Now(), config.Machine(os.Getenv).String("display.date_format"), th)
+	return 0
+}
+
+// quotaEnvFile is project's service env file, "" without a project.
+func quotaEnvFile(project string) string {
+	if !bus.ValidName(project) {
+		return ""
+	}
+	paths, err := service.PathsFrom(os.Getenv)
+	if err != nil {
+		return ""
+	}
+	return paths.EnvFile(project)
+}
+
+// printQuota is agentbus quota's table: each reading's windows, with the
+// thresholds that apply to its provider and where they come from
+// (quota-per-provider).
+func printQuota(out io.Writer, rs []quota.Reading, now time.Time, format string, th dispatch.QuotaThresholds) {
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "PROVIDER\tWINDOW\tUSED\tRESETS\tOBSERVED\tSOURCE")
+	fmt.Fprintln(tw, "PROVIDER\tWINDOW\tUSED\tRESETS\tOBSERVED\tSOURCE\tWARN/DRAIN/HOLD")
 	for _, r := range rs {
+		lv := quotaThresholdCell(th, r.Provider)
 		switch {
 		case r.Unlimited:
-			fmt.Fprintf(tw, "%s\t-\tunlimited\t-\t-\t%s\n", r.Provider, r.Source)
+			fmt.Fprintf(tw, "%s\t-\tunlimited\t-\t-\t%s\t%s\n", r.Provider, r.Source, lv)
 			continue
 		case r.Unknown:
 			observed := "-"
 			if r.AvailableAt > 0 { // no window, but the provider answered: not stopped
 				observed = "served " + roundDur(now.Sub(time.UnixMilli(r.AvailableAt))) + " ago"
 			}
-			fmt.Fprintf(tw, "%s\t?\tunknown\t-\t%s\t%s (%s)\n", r.Provider, observed, r.Source, r.Note)
+			fmt.Fprintf(tw, "%s\t?\tunknown\t-\t%s\t%s (%s)\t%s\n", r.Provider, observed, r.Source, r.Note, lv)
 			continue
 		}
 		for _, w := range r.Windows {
-			fmt.Fprintf(tw, "%s\t%s\t%.0f%%\t%s\t%s ago\t%s\n", r.Provider, w.Name, w.UsedPct, quotaResets(w, now, format),
-				roundDur(now.Sub(time.UnixMilli(r.ObservedAt))), r.Source)
+			fmt.Fprintf(tw, "%s\t%s\t%.0f%%\t%s\t%s ago\t%s\t%s\n", r.Provider, w.Name, w.UsedPct, quotaResets(w, now, format),
+				roundDur(now.Sub(time.UnixMilli(r.ObservedAt))), r.Source, lv)
 		}
 	}
 	tw.Flush()
-	return 0
+}
+
+// quotaThresholdCell is provider p's thresholds in force and their source.
+func quotaThresholdCell(th dispatch.QuotaThresholds, p string) string {
+	lv, from := th.For(p)
+	src := "default"
+	switch {
+	case from == dispatch.QuotaFromProvider:
+		src = "quota." + p
+	case from == dispatch.QuotaFromOrder && th.Providers[p] != (dispatch.QuotaLevels{}):
+		src = "quota." + p + ": order broken, default"
+	case from == dispatch.QuotaFromOrder:
+		src = "dispatch.quota_*: order broken, default"
+	}
+	return fmt.Sprintf("%g/%g/%g (%s)", lv.Warn, lv.Drain, lv.Hold, src)
 }
 
 // quotaResets is a window's RESETS cell: how long, and the reset dated in

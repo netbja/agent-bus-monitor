@@ -41,10 +41,74 @@ type QuotaConfig struct {
 	Thresholds func() (QuotaThresholds, error)
 }
 
-// QuotaThresholds are the project's quota thresholds, as read.
+// QuotaThresholds are the project's quota thresholds, as read: the
+// defaults, and a provider's own values (quota-per-provider, the person
+// 2026-11-25), each 0 when unset.
 type QuotaThresholds struct {
 	Warn, Drain, Hold float64
 	MaxAge            time.Duration
+	// DrainSet: a file set the drain; unset, the drain follows the warning in
+	// force, the provider's own included.
+	DrainSet  bool
+	Providers map[string]QuotaLevels
+}
+
+// QuotaLevels are one provider's thresholds; 0 is the default's.
+type QuotaLevels struct{ Warn, Drain, Hold float64 }
+
+// The sources For names: the defaults, a provider's own value, or the
+// defaults because the order resolved was broken.
+const (
+	QuotaFromDefault  = ""
+	QuotaFromProvider = "provider"
+	QuotaFromOrder    = "order"
+)
+
+// ordered: warn <= drain <= hold, above 0.
+func (l QuotaLevels) ordered() bool { return l.Warn > 0 && l.Warn <= l.Drain && l.Drain <= l.Hold }
+
+// defaults are the thresholds in force for a provider with no value of its
+// own: the registry's when their order is broken.
+func (th QuotaThresholds) defaults() (QuotaLevels, bool) {
+	d := QuotaLevels{th.Warn, th.Drain, th.Hold}
+	if !d.ordered() {
+		return QuotaLevels{defaultWarnPct, defaultDrainPct, defaultHoldPct}, false
+	}
+	return d, true
+}
+
+// For is provider p's thresholds in force and where they come from: its own
+// values over the defaults; an unset drain follows the warning in force
+// unless a file set it, then it is raised to that warning at least. A broken
+// order uses the defaults, for that provider alone.
+func (th QuotaThresholds) For(p string) (QuotaLevels, string) {
+	d, ok := th.defaults()
+	if !ok {
+		return d, QuotaFromOrder
+	}
+	own := th.Providers[p]
+	if own == (QuotaLevels{}) {
+		return d, QuotaFromDefault
+	}
+	l := d
+	if own.Warn > 0 {
+		l.Warn = own.Warn
+	}
+	if own.Hold > 0 {
+		l.Hold = own.Hold
+	}
+	switch {
+	case own.Drain > 0:
+		l.Drain = own.Drain
+	case th.DrainSet:
+		l.Drain = max(d.Drain, l.Warn)
+	default:
+		l.Drain = l.Warn
+	}
+	if !l.ordered() {
+		return d, QuotaFromOrder
+	}
+	return l, QuotaFromProvider
 }
 
 // The thresholds a broken order falls back to (the registry's defaults).
@@ -128,12 +192,27 @@ func (l *loop) refreshThresholds(q QuotaConfig) {
 	if th.MaxAge <= 0 {
 		th.MaxAge = defaultMaxAge
 	}
-	if !(th.Warn > 0 && th.Warn <= th.Drain && th.Drain <= th.Hold) {
+	if !(QuotaLevels{th.Warn, th.Drain, th.Hold}).ordered() {
 		l.logOnce("quota-order", map[string]any{"action": "quota-order", "warn": th.Warn, "drain": th.Drain, "hold": th.Hold,
 			"reason": "want warn <= drain <= hold: the defaults are used for all three"})
 		th.Warn, th.Drain, th.Hold = defaultWarnPct, defaultDrainPct, defaultHoldPct
 	} else {
 		l.forget("quota-order") // a later broken order is a new episode, logged again
+	}
+	ps := make([]string, 0, len(th.Providers))
+	for p := range th.Providers {
+		ps = append(ps, p)
+	}
+	sort.Strings(ps)
+	for _, p := range ps { // a provider's broken order: its own episode, logged once
+		key := "quota-order:" + p
+		if _, from := th.For(p); from == QuotaFromOrder {
+			own := th.Providers[p]
+			l.logOnce(key, map[string]any{"action": "quota-order", "provider": p, "warn": own.Warn, "drain": own.Drain, "hold": own.Hold,
+				"reason": "want warn <= drain <= hold once resolved: " + p + " uses the defaults"})
+		} else {
+			l.forget(key)
+		}
 	}
 	l.quota.th = th
 }
@@ -216,8 +295,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 	for p := range used {
 		r := l.quota.readings[p]
 		usable := r.Usable(now, th.MaxAge)
+		lv, _ := th.For(p) // the provider's own thresholds, else the defaults
 		for _, w := range usable {
-			if w.UsedPct < th.Warn {
+			if w.UsedPct < lv.Warn {
 				continue
 			}
 			if work == nil {
@@ -226,7 +306,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 			if err := l.quotaWarnAgents(ctx, p, w, snaps, work, marks); err != nil {
 				return err
 			}
-			if p == coord && w.UsedPct >= th.Drain { // start nothing new above (§2.1)
+			if p == coord && w.UsedPct >= lv.Drain { // start nothing new above (§2.1)
 				if err := l.quotaDrainRun(ctx, p, w); err != nil {
 					return err
 				}
@@ -254,9 +334,9 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 		// reading of it does not end the hold because another window is low:
 		// within a window, use only grows until its reset.
 		heldWin, heldKnown := windowAt(r, recorded)
-		heldOpen := heldKnown && !windowClear(usable, heldWin.Name, th.Hold)
+		heldOpen := heldKnown && !windowClear(usable, heldWin.Name, lv.Hold)
 		switch {
-		case ok && tight.UsedPct >= th.Hold:
+		case ok && tight.UsedPct >= lv.Hold:
 			if quota.SameReset(recorded, tight.ResetsAt) {
 				tight.ResetsAt = recorded // the same window: its episode keeps the stored reset
 			} else {
@@ -305,7 +385,7 @@ func (l *loop) quotaPass(ctx context.Context, snaps map[string]bus.AgentSnapshot
 				l.quota.held[p] = true
 			}
 		}
-		if !l.quota.held[p] && warnClear(usable, th.Drain) { // a drained run runs again under the drain (§2.1)
+		if !l.quota.held[p] && warnClear(usable, lv.Drain) { // a drained run runs again under the drain (§2.1)
 			// the provider clear again: a run drained for its quota runs (§4)
 			if _, err := l.b.FencedRunQuotaRelease(ctx, l.token, p); err != nil {
 				return err

@@ -188,6 +188,9 @@ agentbus -p myapp merge-queue             # ce qui attend votre fusion
   finir leur étape ;
 - à `dispatch.quota_hold` (95 %), les agents de ce fournisseur sont retenus jusqu'à la
   réinitialisation de la fenêtre ;
+- un fournisseur peut avoir ses propres seuils, `[quota.<fournisseur>]` `warn`, `drain`, `hold` dans
+  config.toml ou le Shift+C de busmon (0 = le seuil par défaut ci-dessus) ; un fournisseur à son seuil
+  de retenue ne retient jamais les autres, et `agentbus -p myapp quota` montre les seuils de chaque ligne ;
 - `agentbus swap <role> --profile <fallback>` fait passer un rôle sur un autre profil, et `--back` le
   ramène.
 
