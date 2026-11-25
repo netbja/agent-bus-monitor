@@ -6,6 +6,6 @@
   by a reviewer of another provider (both providers known and different, deliver's own rule), a line
   under the delivery rows and on each merge item's page says so: `... one approval needs
   delivery.same_provider_ok (now off)`, or, with `docs` or `small`, the same fact as information.
-  busmon reads that ledger at most once a minute (`bus.VerdictsSince`). A merge item's page also shows
+  busmon reads that ledger at most once a minute, a page at a time over the whole window (`bus.VerdictsSince`). A merge item's page also shows
   deliver's `delivered on one approval` trace for its head, taken only from a report by master or
   docs (the deliverers).
