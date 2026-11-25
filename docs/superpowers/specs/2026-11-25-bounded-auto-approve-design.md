@@ -1,6 +1,6 @@
 # Bounded auto-approve (bounded-auto)
 
-Status: IDEA spec r3, for review (subject `bounded-auto-spec`). Not built. Base: origin/dev
+Status: IDEA spec r4, for review (subject `bounded-auto-spec`). Not built. Base: origin/dev
 `af527c19`. Author: architect, from master's directive (cmd `1795559518593-0`, task
 `specs-from-person-docs`). This is idea 2 of 4 from the person's note "ideas borrowed from
 PiBot", item 3 there. The note's reference is PiBot `packages/policy/src/core/yolo.ts`
@@ -17,6 +17,12 @@ without asking, a deny-matched read included, and `auto_review` approves an esca
 the person. So rules are held only where agentbus writes rules the client enforces, which is
 Claude Code today. Every other profile is refused unless the person accepts it by name. Three
 team roles are concerned, so this is the person's Q1 (§3, §4, §5).
+r4: reviewer-codex's reject of r3 (verdict `1795575397471-0`). r3's exception was an open-ended
+grant by profile name, which is the persistent grant rule 4 forbids. The policy now has no
+exception. A separate relaxation, outside the policy and only on the person's explicit decision,
+is offered in §3.1 and Q1. It is bound to the role, the profile's exact effective settings and an
+expiry, and it claims no rule enforcement. The §1 mode list no longer contradicts the Claude
+modes that hold.
 
 ## 1. Today's auto-approve switches
 
@@ -81,16 +87,32 @@ Claude Code. Nothing checks it for the other clients.
     deny-matched read of `.env` included. A sandbox that allows writes or the network lets a
     danger act run inside it;
   - an escalation approved by anyone but the person: Codex `reviewer=auto_review`;
-  - every mode on the §1 list (`bypassPermissions`, `approval=never`, `yolo`, `skip`, …), and any
-    client or mode the table does not know.
+  - Claude `bypassPermissions`, and every non-Claude mode on the §1 list (`approval=never`,
+    `yolo`, `skip`, …). Claude `auto` and `dontAsk` from that list hold, as above. Any client or
+    mode the table does not know does not hold either.
 
   A profile that does not hold is **refused at launch, for every role**, because the danger asks
-  are mandatory. The one exception is the person's own: a profile named in
-  `policy.rules_not_held_ok` (PersonOnly, in `config.toml`, which no role may edit) launches.
-  `roles doctor` and busmon then show it as `rules not held`, with the denies it loses and
-  the reason (sandbox only, auto review, mode). **Today this concerns three roles:**
-  reviewer-codex (`codex-review`: a read-only sandbox, but `reviewer = "auto_review"`), ui-kimi
-  (`kimi`) and ui-grok (`grok`). Without the person's listing they stop launching (Q1).
+  are mandatory. The policy has no exception. **Today this concerns three roles:** reviewer-codex
+  (`codex-review`: a read-only sandbox, but `reviewer = "auto_review"`), ui-kimi (`kimi`) and
+  ui-grok (`grok`).
+
+### 3.1 A separate relaxation, not part of the policy (Q1)
+
+If the person wants one of those roles to keep running, that is a relaxation of this policy, and
+the spec names it as one. It complies with nothing above. It runs only if the person decides it
+(Q1), and then it is bounded:
+
+- **One entry per role and profile,** written only by the person (`agentbus policy relax
+  <role> --days <n>`, refused from an agent's process tree by `agentcaller.Refuse`). It is stored
+  in `config.toml`, which no role may edit.
+- **Bound to the exact effective profile:** the entry holds a fingerprint of its client, model,
+  sandbox, approval, reviewer, network and other options, and of the role's tool rules. Any
+  change to them voids the entry, and the launch is refused again until the person renews it.
+- **It expires:** at most 30 days, with no default. Afterwards the launch is refused again.
+- **It claims no enforcement.** `roles doctor`, busmon and the launch line show the role as
+  `rules not held`, with the denies it loses, the danger acts it can run unprompted, and the
+  expiry date.
+
 - **Two reviews are a review gate, not the person's approval.** `agentbus deliver` stops offering
   `single_approval` and `same_provider_ok` for a PR whose base is the default branch. Such a PR
   then needs both reviews, which is a check on the code. The person's approval of the act stays
@@ -113,10 +135,11 @@ Claude Code. Nothing checks it for the other clients.
   reason naming a danger act (`git push --force`) that could run inside its sandbox.
 - **Auto review is not the person:** `on-request` with `reviewer=auto_review` is refused, its
   reason `auto review`.
-- `policy.rules_not_held_ok = ["codex-review"]` lets that profile launch. `roles doctor` then
-  lists its lost denies and the reason. A role cannot set the key.
-- The Claude profiles in `roles.toml` today launch; `codex-review`, `kimi` and `grok` launch only
-  when listed.
+- The Claude profiles in `roles.toml` today launch. `codex-review`, `kimi` and `grok` are refused.
+- With §3.1 built: a relaxation for reviewer-codex lets that role launch on `codex-review`. It
+  does not cover another role on the same profile. A changed sandbox, network, reviewer or tool
+  rule voids it. It ends at its expiry. `agentbus policy relax` refuses from an agent's process
+  tree and refuses more than 30 days.
 - `agentbus deliver` with `single_approval` on: a PR whose base is the default branch needs both
   reviews.
 - No launch writes outside its generated settings file. The test fakes `$HOME` and checks the
@@ -129,12 +152,14 @@ mode, and no grant that crosses machines (that is idea 4, remote approvals).
 
 ## 5. Questions for the person
 
-**Q1. Profiles whose rules do not hold** (today reviewer-codex, ui-kimi and ui-grok).
-- **(A) recommended: refused unless you list them** in `policy.rules_not_held_ok`. Each one you
-  list is shown as `rules not held`, with what it loses. You would likely list `codex-review`, so
-  the second reviewer stays.
-- (B) refused, with no exception. Reviews then run only on Claude.
-- (C) launched, with a warning in `roles doctor` and busmon.
+**Q1. Profiles whose rules do not hold** (today reviewer-codex, ui-kimi and ui-grok). This is
+a relaxation of the policy, not part of it.
+- **(A) recommended: build §3.1, bounded relaxations.** Your choice per role, bound to its exact
+  settings, expiring within 30 days, shown as `rules not held`. You would likely relax
+  reviewer-codex, so the second reviewer stays.
+- (B) no relaxation: those roles stop launching, and reviews run only on Claude.
+- (C) change their profiles instead. For example, drop `reviewer = "auto_review"` from
+  `codex-review`. It still does not hold its denies, so it still needs (A).
 
 **Q2. The danger list.**
 - **(A) recommended: fixed in code, with your additions** (`policy.danger_extra`).
