@@ -210,6 +210,9 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 			add("wake:"+Preview(st), RoleMuted, 11, 0)
 		}
 	}
+	if f, ok := wipFlag(a); ok { // wip-limit §3.5: beside the state, at the limit in attention
+		fs = append(fs, f)
+	}
 	if pilot {
 		add("pilot", RoleAccent, 8, 0)
 	}

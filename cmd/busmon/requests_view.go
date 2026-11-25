@@ -129,6 +129,7 @@ type reqInput struct {
 	questions int                          // open questions for the person (they stay in For you)
 	asks      []reqAsk                     // the open asks, one row each in owed by you
 	plans     map[string]planLink          // board task -> the plan task naming it (progress-line §2.2)
+	waits     map[string]string            // board task -> its waits: tag, its target at its wip limit (wip-limit §3.5)
 	self      string
 	now       time.Time
 }
@@ -147,7 +148,8 @@ type reqView struct {
 	questions int
 	asks      []reqAsk
 	plans     map[string]planLink
-	paces     map[string]pace // each owner's usual task length (progress-line §3.2)
+	waits     map[string]string // board task -> its waits: tag (wip-limit §3.5)
+	paces     map[string]pace   // each owner's usual task length (progress-line §3.2)
 	self      string
 }
 
@@ -219,7 +221,7 @@ func reportSubject(msg string) (subject, id string, ok bool) {
 
 // requestGroups computes the view.
 func requestGroups(in reqInput) reqView {
-	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, plans: in.plans, paces: ownerPaces(in.reqs), self: in.self}
+	v := reqView{groups: map[reqSection][]reqGroup{}, questions: in.questions, asks: in.asks, plans: in.plans, waits: in.waits, paces: ownerPaces(in.reqs), self: in.self}
 	horizon := in.now.Add(-reqFoldAfter)
 	known := map[string]bool{}
 	var threads []reqThread

@@ -256,6 +256,8 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row(k, text(Preview(t)), S(RoleText, " "), S(boardStateRole(e.State), Preview(e.State)), text(" "+GlyphNone+" "+Preview(branch)))
 	}
 
+	inFlightRows(a, now, row)
+
 	b.fields(&f, mdWidth)
 	b.text("\n").seg(RoleAccent, "Recent activity").seg(RoleMuted, " (in the retained window)").text("\n")
 	var mine []feedLine

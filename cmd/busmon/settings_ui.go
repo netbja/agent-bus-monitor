@@ -210,7 +210,17 @@ func (m *Model) applySettings(key string) string {
 		return "icons applied and saved"
 	case "board.no_accept_after", "board.no_reply_after": // views-redesign §3: the next frame's alerts use them
 		cur.NoAcceptAfter, cur.NoReplyAfter = ns.NoAcceptAfter, ns.NoReplyAfter
+		stampWip(m.snap.agents, m.snap.requests, cur.WipLimit, cur.NoReplyAfter)
+		m.gen++ // the rows are drawn again from the stamped agents
 		return "applied and saved"
+	case "board.wip_limit": // wip-limit §3.5: the bus reads it at each first accept; busmon's rows at once
+		cur.WipLimit = projectWipLimit(m.settingsGetenv(), m.cfg.project)
+		stampWip(m.snap.agents, m.snap.requests, cur.WipLimit, cur.NoReplyAfter)
+		m.gen++ // the rows are drawn again from the stamped agents
+		if cur.WipLimit <= 0 {
+			return "no wip limit: applies at each agent's next accept"
+		}
+		return fmt.Sprintf("wip limit %d: applies at each agent's next accept", cur.WipLimit)
 	case "display.idle_view_after": // idle view §2: counted from the next poll on
 		cur.IdleView = ns.IdleView
 		return "applied and saved"

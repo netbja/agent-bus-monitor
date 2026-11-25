@@ -194,6 +194,12 @@ func requestRows(v reqView, open reqOpen, now time.Time, width int) []ListItem {
 			if pl, ok := v.plans[th.Request.Task]; ok {
 				note = Line{S(RoleMuted, "plan #"+Preview(pl.id)+" "+plan.Label(pl.state))}
 			}
+			if w := v.waits[th.Request.Task]; w != "" {
+				if len(note) > 0 {
+					note = append(note, S(RoleMuted, " "+GlyphNone+" "))
+				}
+				note = append(note, S(RoleMuted, w))
+			}
 		}
 		return ListItem{Key: threadKey(th), Selectable: true, Line: fit(c.rowNote(sym, mark, th.From, th.Target, v.self, th.Kind, Preview(subject), note, th.At, now))}
 	}
@@ -342,7 +348,12 @@ func (m *Model) requestInput() reqInput { return requestInputOf(m.snap, m.cfg.se
 // requestInputOf is the Requests view's input from a poll's snapshot.
 func requestInputOf(s snapshot, self string, now time.Time) reqInput {
 	in := reqInput{cmds: s.cmdHistory, reqs: s.requests, questions: openQuestionCount(s.asks), asks: reqAsks(s.asks), plans: planLinks(s.planState), self: self, now: now,
-		gates: map[string]map[string]string{}, delivery: map[string]reqDelivery{}, held: map[string]bool{}}
+		gates: map[string]map[string]string{}, delivery: map[string]reqDelivery{}, held: map[string]bool{}, waits: map[string]string{}}
+	for _, r := range s.requests {
+		if w := waitsTag(r, s.agents); w != "" {
+			in.waits[r.Task] = w
+		}
+	}
 	for n, a := range s.agents {
 		if len(a.gates) > 0 {
 			in.gates[n] = a.gates

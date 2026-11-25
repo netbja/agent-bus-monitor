@@ -22,7 +22,7 @@ func TestSettingsSayWhenAChangeApplies(t *testing.T) {
 	}
 	m := &Model{cfg: shellConfig{getenv: getenv}}
 	for key, want := range map[string]string{"dispatch.self_repair": "saved: applies on service restart",
-		"dispatch.quota_warn": "saved: applies live", "board.wip_limit": "saved: applies at the next run",
+		"dispatch.quota_warn": "saved: applies live", "board.wip_limit": "wip limit 2: applies at each agent's next accept", // its own flash (wip-limit §3.5)
 		"display.limit": "saved: next start of busmon", "person.language": "saved: applies on agent restart",
 		"sentinel.reload": "saved: applies live"} {
 		if got := m.applySettings(key); got != want {
