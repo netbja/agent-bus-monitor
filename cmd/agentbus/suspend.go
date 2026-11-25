@@ -285,7 +285,7 @@ func suspendStatus(ctx context.Context, projects []string, d suspendDeps, out, e
 
 // suspendProject runs §4.1 for one project; 0 suspended, 1 refused or
 // cancelled.
-func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDeps, out, errw io.Writer) int {
+func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDeps, out, errw io.Writer) (code int) {
 	say := func(format string, a ...any) { fmt.Fprintf(out, p+": "+format+"\n", a...) }
 	fail := func(format string, a ...any) int { fmt.Fprintf(errw, p+": "+format+"\n", a...); return 1 }
 	unlock, err := d.Lock(p)
@@ -372,6 +372,11 @@ func suspendProject(ctx context.Context, p string, o suspendOptions, d suspendDe
 		}
 	}
 	busy, reason := suspendWait(ctx, p, b, mgr, o, d, out)
+	if o.force { // the audit line (audit step 2b), from the act's end; a cancel's reason is never in it
+		forced := bus.AuditEntry{Action: "force", Actor: o.by, Target: p}
+		detail := fmt.Sprintf("suspend --force, %d agent(s) still busy", len(busy))
+		defer func() { auditExit(ctx, b, forced, detail, code) }()
+	}
 	if reason != "" || (len(busy) > 0 && !o.force) {
 		if reason == "" {
 			var names []string
