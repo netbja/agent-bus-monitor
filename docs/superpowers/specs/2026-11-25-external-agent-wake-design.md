@@ -1,6 +1,6 @@
 # Waking an external agent (external-wake)
 
-Status: IDEA spec r1, for review (subject `external-wake-spec`). Not built. Base: origin/dev
+Status: IDEA spec r2, for review (subject `external-wake-spec`). Not built. Base: origin/dev
 `04c1755f`. Author: architect, from the person's idea (directive `1795607315032-0`, thread of the
 same id), sent through the external agent claude-ao with the person's approval. No new dependency.
 The questions for the person are last (§7).
