@@ -1,6 +1,6 @@
 # Cleaning up agents (cleaning-up-agents)
 
-Status: spec r3, for review (subject `cleaning-up-agents`). Not built. Base: origin/dev `49926f09`.
+Status: spec r4, for review (subject `cleaning-up-agents`). Not built. Base: origin/dev `49926f09`.
 - r2: master's addition (cmd `1795648805663-0`): a lifecycle with a deliberate **parked** state,
   auto-park, wake on demand, orphan requests blocked when not closed, parking at a holder switch.
 - r3: the person's answers to ask `1795649139554-0` (Q1-Q6, typed, §12.1), and foureyes' reject of
@@ -10,6 +10,8 @@ Status: spec r3, for review (subject `cleaning-up-agents`). Not built. Base: ori
   with the role, and only actionable, non-stale messages (§3.1). A close is reversible (§8.5).
   Master is woken for an **unplanned** holder loss only (§6.2). What r2 alone raised goes to a
   second ask (§12.2).
+- r4: both reviewers' rejects of r3: a running owner relaunched on the **same session** is the
+  same owner, flagged, never closed; only a fresh session is gone (§8.1, §12.1); Q10 confirms it.
 
 Author: architect, from master's directives (cmd `1795648670814-0` and `1795648805663-0`, task
 `cleaning-up-agents-spec`). No new dependency.
@@ -254,7 +256,12 @@ that build. Master moves by `holder drain`, run by the person, as today. Subject
 
 A request's owner is **gone** when the process that accepted it no longer holds it (Q3):
 - the owner is **lost** or **stopped** (§3); or
-- it runs as **another process** than the one that accepted it (a relaunch, a resume). `request
+- it runs as **another process on another session** than the one that accepted it: a fresh start,
+  as docs' was ("pre-session": it did not know the request). A relaunch that **resumed** the session
+  recorded in `accepted_by` (`pop --resume`, self-repair, a holder drain, a hand-off relaunch) is the
+  **same owner**: it carries the conversation that accepted the request and may be on a later step,
+  so it is never auto-closed; §8.4 flags it (both reviewers' r3 rejects; the person's Q10, §12.2).
+  `request
   accept` now records `request.accepted_by = {pid, pid_start, session}` from the caller's snapshot
   when that snapshot is **verified** (`pid` set); from an unverified one it records nothing (foureyes'
   nit). A resume from `review` or `blocked` records it again. A request with no `accepted_by` (older,
@@ -293,15 +300,17 @@ later step. Four things bound it: the `delivery` link is recorded only on an **e
 step subjects (`<task>-1`, `retro-build-1`) never match; `review --more` keeps a step's request open;
 when `deliver` records onto a request in `accepted` (not `review`), it prints "recorded on request
 `<task>`: its merge closes it once its owner is gone; if more steps follow, run agentbus request
-review `<task>` --more"; and a close is reversible (§8.5) and always told to master. The case left —
-a step delivered under the task's own subject, with no `--more`, by an owner relaunched since — is
-closed, as the person decided for a relaunch (Q3), and master can reopen it in one command.
+review `<task>` --more"; and a close is reversible (§8.5) and always told to master. A **running**
+owner on the accepting session (same process, or resumed) is never auto-closed, whatever the link:
+its request is flagged (§8.4). Only an owner lost, stopped, or restarted on a fresh session (which
+cannot be on a later step of work it does not remember) has its request closed.
 
 ### 8.3 Closed when merged
 
 The merge-queue pass adds to close on merge's candidates the `accepted` and `review` requests whose
-owner is **gone** (§8.1), with a link of §8.2 that holds. A request whose owner is the same running
-process, or is parked, is never closed: it is flagged (§8.4). For `review` requests the existing rule
+owner is **gone** (§8.1), with a link of §8.2 that holds. A request whose owner runs on the
+accepting session (the same process, or a resume of it), or is parked, is never closed: it is
+flagged (§8.4). The script re-checks the registration's `ident_session` as well as its `pid`. For `review` requests the existing rule
 is unchanged and also takes the `delivery` link.
 
 `FencedRequestMerged` gets more checks, still one Lua call: the request's state is still the one
@@ -318,7 +327,7 @@ of §6.2 or §8.4 names it, so master is told either way (Q1).
   `blocked_reason = "owner lost: <reason>"`, checking the same registration as §8.3. It writes **no**
   `blocked` cmd entry (the request's own block does, `bus/requests.go:425`): master hears of it in
   §6.2's notice or `popStranded`'s. The owner's `request accept` resumes it, as from any block.
-- A request whose owner is parked, or runs (same process), and whose link merged, or which has only
+- A request whose owner is parked, or runs on the accepting session, and whose link merged, or which has only
   a name match (a verdict subject equal to the task, not recorded by `deliver`), is **flagged**: one
   directive to master per request, `FencedCmdOnce`, mark `merged-open:<task>`: "`<task>` (`<state>`,
   `<owner>` `<presence>`): its PR #`<n>` merged; close it (agentbus request done …) or say why it
@@ -398,7 +407,8 @@ One PR each, from `origin/dev`, in this order.
   subject and the approve's author; a merged PR with the recorded head closes a gone owner's request
   (`via = delivery`); a squash-merged PR closes it; the same request with its owner running or parked
   is flagged, not closed; a step subject records nothing, so a relaunched owner (new pid, same
-  session) working on step 2 keeps its request open; `deliver` onto an `accepted` request prints the
+  session) whose step-1 PR merged under a recorded link is flagged, not closed; a fresh session's
+  owner has it closed; `deliver` onto an `accepted` request prints the
   `--more` hint; an unverified accept records no `accepted_by`; `review_more` never closes; no link blocks
   it with no cmd entry; a respawn between read and write writes nothing; a lost lease is
   `NOTHOLDER`; `reopen` restores the state and refuses a plain `done`.
@@ -427,9 +437,13 @@ One PR each, from `origin/dev`, in this order.
 foureyes' reject of r1 (`dn4oi37vwmn6`): a running, relaunched owner's request closed by a name
 match. Answered in §8.2: the pass closes only on a link recorded on the request at delivery, on an
 exact subject; a name match is flagged; a multi-step build is guarded by step subjects, `--more`,
-`deliver`'s hint, and reopen. foureyes' alternative, "a relaunch is the same owner" (lineage), is
-**not** taken: the person's typed Q3 answer counts a relaunch or a resume as gone. Its nits are taken
-(§8.1, §9, §10, §11 tests).
+`deliver`'s hint, and reopen. Its nits are taken (§8.1, §9, §10, §11 tests).
+
+Both reviewers' rejects of r3 (foureyes `dn4oi37vwmn6` on r1, reviewer-codex on `995e066a`): a
+running owner relaunched on the same session could still be closed. r4 takes the lineage rule
+(§8.1): a resumed session is the same owner, flagged, never closed; a fresh session is gone. This
+narrows the person's Q3 ("a relaunch or resume counts as gone") to a relaunch on a **fresh**
+session, which is docs' case; a resume is excluded. Q10 (§12.2) asks the person to confirm.
 
 ### 12.2 Second ask (what r2 raised)
 
@@ -447,3 +461,11 @@ exact subject; a name match is flagged; a multi-step build is guarded by step su
 - **(A) recommandé :** chaque agent (sauf master) sur l'ancien holder reçoit l'ordre de se parquer et
   reprend sur le nouveau à la demande ; l'ancien holder se vide seul.
 - **(B)** Rien de changé : vous lancez `holder drain`.
+
+**Q10. Un agent relancé sur la même session (reprise) : est-il encore le propriétaire ?**
+- **(A) recommandé :** oui. Une reprise (`pop --resume`, self-repair, drain) garde la conversation et
+  peut être sur une étape suivante : sa requête est signalée à master, jamais fermée. Seul un
+  redémarrage sur une session neuve (le cas docs de #794) compte comme parti. Précise votre Q3.
+- **(B)** Non, comme dans votre Q3 : toute relance compte comme partie, et la requête est fermée si
+  sa PR, liée avec certitude, a fusionné. Les deux relecteurs le refusent (fermeture d'un agent qui
+  travaille).
