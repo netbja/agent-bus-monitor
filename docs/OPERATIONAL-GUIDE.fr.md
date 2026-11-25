@@ -180,6 +180,7 @@ agentbus -p myapp service logs dispatch -n 100
 agentbus -p myapp health                  # santé mesurée et ses notes
 agentbus quota                            # les fenêtres d'usage de chaque fournisseur
 agentbus -p myapp merge-queue             # ce qui attend votre fusion
+agentbus -p myapp audit                   # qui a approuvé, fusionné... (vide avant l'étape 2)
 ```
 
 **Quotas.** Le dispatcher lit les fenêtres d'usage localement :

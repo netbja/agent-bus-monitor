@@ -530,6 +530,18 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo swaps"},
 	},
 	{
+		Name: "audit", Usage: []string{"audit [--action <a>] [--actor <name>] [--since <d>] [--json]", "audit export --since <d>", "audit verify"},
+		Brief:   "the audit trail",
+		Summary: "who approved, merged, pushed or forced what, and when (kept 90 days, survives a reset); export writes JSON Lines; verify checks the hash chain (exit 3 broken; a cut of the tail is not detected)",
+		Flags: []cli.Flag{
+			{Long: "action", Short: 'a', Arg: "<a>", Help: "only this action (approve, merge, push, force...)"},
+			{Long: "actor", Arg: "<name>", Help: "only this actor"},
+			{Long: "since", Arg: "<d>", Help: "from this age or date: 7d, 2026-11-01 (export: required)"},
+			fJSON,
+		},
+		Examples: []string{"agentbus -p demo audit --action force", "agentbus -p demo audit export --since 30d > audit.jsonl", "agentbus -p demo audit verify"},
+	},
+	{
 		Name: "self-repair", Usage: []string{"self-repair reset <agent> [--as <person>]"},
 		Brief:    "clear a crash loop",
 		Summary:  "clear an agent's self-repair crash loop and restart its budget (master, or a person with --as)",

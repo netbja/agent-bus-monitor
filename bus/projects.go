@@ -25,6 +25,7 @@ var projectKinds = map[string]bool{
 	"board": true, "dispatch": true, "conductor": true, "missionops": true, "services": true, "pause": true, "quota": true, "asks": true, "ideas": true,
 	"resume": true,
 	"events": true,
+	"audit":  true,
 }
 
 // activityKinds are the streams whose newest entry dates a project.

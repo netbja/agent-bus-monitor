@@ -175,6 +175,7 @@ agentbus -p myapp service logs dispatch -n 100
 agentbus -p myapp health                  # measured health and its notes
 agentbus quota                            # every provider's usage windows
 agentbus -p myapp merge-queue             # what waits for your merge
+agentbus -p myapp audit                   # who approved, merged... (empty until audit step 2)
 ```
 
 **Quotas.** The dispatcher reads usage windows locally:

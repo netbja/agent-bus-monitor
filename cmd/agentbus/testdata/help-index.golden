@@ -26,6 +26,7 @@ REVIEW COMMANDS
   verdict:        record a 4-eyes verdict
   verdicts:       show 4-eyes verdicts
   gate:           list or close open gates
+  audit:          the audit trail
 
 WORK COMMANDS
   board:          the shared task board

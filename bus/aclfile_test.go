@@ -119,4 +119,17 @@ func TestACLFileOnADisposableRedis(t *testing.T) {
 	if err := as(ACLPing, pw[ACLPing]).Get(ctx, "p:pilot").Err(); err == nil {
 		t.Error("ping may GET")
 	}
+	// The audit trail is no proof (audit spec §3, the person's Q3 B): an agent
+	// that may append to {p}:audit may also trim it with XADD's MAXLEN. Asserted,
+	// so the stated limit stays true; a trusted writer (Q3 C) would refuse it.
+	agent := as(ACLAgent, pw[ACLAgent])
+	if err := agent.XAdd(ctx, &redis.XAddArgs{Stream: AuditKey("p"), Values: []string{"action", "merge"}}).Err(); err != nil {
+		t.Fatalf("agent may not append to the audit trail: %v", err)
+	}
+	if err := agent.Do(ctx, "XADD", AuditKey("p"), "MAXLEN", "0", "*", "x", "y").Err(); err != nil {
+		t.Errorf("agent's XADD MAXLEN 0 on the audit trail refused: the spec's stated limit (a trail, not a proof) is no longer true: %v", err)
+	}
+	if n, _ := agent.XLen(ctx, AuditKey("p")).Result(); n != 0 {
+		t.Errorf("after the agent's XADD MAXLEN 0 the trail holds %d entries, want 0 (the limit the spec states)", n)
+	}
 }
