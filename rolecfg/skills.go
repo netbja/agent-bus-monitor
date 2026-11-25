@@ -27,7 +27,37 @@ func InstallSkillsMissingOK(m *Manifest, env []string, stdout, stderr io.Writer)
 }
 
 // SkillLink is one role skill's link and the directory it must resolve to.
-type SkillLink struct{ Link, Source string }
+type SkillLink struct {
+	Link   string `json:"link"`
+	Source string `json:"source"`
+}
+
+// SkillPlan is a manifest's skill directories and links (SkillDirs,
+// SkillLinks), as agentbus roles skill-plan --json prints it: agentbus
+// update asks the release's own binary for it, so a roles.toml key the
+// running binary does not know never stops an update (update-old-binary).
+// Read leniently: a field added later is ignored.
+type SkillPlan struct {
+	Dirs  []string    `json:"dirs"`
+	Links []SkillLink `json:"links"`
+	// LinksError says why the links could not be planned (a skill no root
+	// holds yet, before the skills are linked): the directories still are.
+	LinksError string `json:"links_error,omitempty"`
+}
+
+// PlanSkills is m's SkillPlan in env: an error only when the directories
+// cannot be read; links that cannot be planned are named in LinksError.
+func PlanSkills(m *Manifest, env []string) (SkillPlan, error) {
+	dirs, err := SkillDirs(m, env)
+	if err != nil {
+		return SkillPlan{}, err
+	}
+	p := SkillPlan{Dirs: dirs}
+	if p.Links, err = SkillLinks(m, env); err != nil {
+		p.Links, p.LinksError = nil, err.Error()
+	}
+	return p, nil
+}
 
 // SkillLinks is the plan InstallSkills writes: each role skill's link, in each
 // client's destination, with its source (the repository's skills, else the
