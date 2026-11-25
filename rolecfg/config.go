@@ -64,6 +64,7 @@ type Manifest struct {
 	manifestPath    string
 	roleOrder       []string
 	profileOrder    []string
+	observers       []string // kind = "observer" roles, out of roleOrder and Roles (observer.go)
 }
 
 // Profile is the resolved, client-ready configuration for one role.
@@ -141,6 +142,9 @@ func Load(path string) (*Manifest, error) {
 	// any decoded names not already represented, preserving TOML order where
 	// the decoder supplies it and sorting only the otherwise unordered tail.
 	appendMissingSorted(&m.roleOrder, roles)
+	if err := m.splitObservers(); err != nil {
+		return nil, err
+	}
 
 	for _, role := range m.roleOrder {
 		if !namePattern.MatchString(role) {
@@ -452,6 +456,9 @@ func (m *Manifest) checkFallbacks(role string) error {
 
 func (m *Manifest) resolve(role, override string) (Profile, error) {
 	infoRaw, exists := m.Roles[role]
+	if !exists && m.IsObserver(role) {
+		return Profile{}, fmt.Errorf("role %s is an observer: agentbus never launches it", role)
+	}
 	if !exists {
 		return Profile{}, fmt.Errorf("unknown role: %s", role)
 	}

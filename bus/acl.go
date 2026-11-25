@@ -26,10 +26,11 @@ const (
 	ACLAgent      = "agent"      // every other agent's CLI
 	ACLBusmon     = "busmon"     // busmon and the person's own CLI outside agents
 	ACLPing       = "ping"       // the compose healthcheck
+	ACLObserver   = "observer"   // an observer role's session (observer-role): reads only
 )
 
 // ACLRoles is every user, in the spec's order.
-var ACLRoles = []string{ACLAdmin, ACLMaster, ACLDispatcher, ACLAgent, ACLBusmon, ACLPing}
+var ACLRoles = []string{ACLAdmin, ACLMaster, ACLDispatcher, ACLAgent, ACLBusmon, ACLPing, ACLObserver}
 
 // aclMasterOnly are the kinds only master writes (spec §5 Q4, the person's
 // answer: as proposed).
@@ -67,6 +68,12 @@ func ACLRules(role string) []string {
 		return append(data, "+info", "+config|get", "+memory|usage", "~*")
 	case ACLPing:
 		return []string{"-@all", "+ping"}
+	case ACLObserver:
+		// observer-role (the person, 2026-11-25): every key read, nothing
+		// written, no script; -@dangerous after the grants takes KEYS and the
+		// connection's admin subcommands back; TIME (not in @read) for the
+		// reads that date what they read: board, request, health (foureyes).
+		return []string{"-@all", "+@read", "+@connection", "-@dangerous", "+time", "%R~*"}
 	}
 	return nil
 }
@@ -235,6 +242,31 @@ var connectEntry struct {
 	sync.Mutex
 	entry    ACLEntry
 	ancestor func(context.Context) (string, error)
+	observer func(string) bool // the launcher's manifest's observers (SetObservers); nil none known
+}
+
+// SetObservers is main's statement of which identities its manifest
+// declares observers (rolecfg, kind = "observer"): such an identity connects
+// as the observer user (observer-role). bus cannot read the manifest itself.
+func SetObservers(isObserver func(identity string) bool) {
+	connectEntry.Lock()
+	defer connectEntry.Unlock()
+	connectEntry.observer = isObserver
+}
+
+// aclUserOf is ACLUserFor narrowed for an observer: an identity isObserver
+// names, or a process under a registered observer whatever identity it
+// claims (reviewer-codex), logs in as observer whatever its entry would give
+// it (the least rights); the admin entry stays refused to any of them.
+func aclUserOf(entry ACLEntry, identity, ancestor string, isObserver func(string) bool) (string, error) {
+	user, err := ACLUserFor(entry, identity, ancestor)
+	if err != nil || isObserver == nil {
+		return user, err
+	}
+	if identity != "" && isObserver(identity) || ancestor != "" && isObserver(ancestor) {
+		return ACLObserver, nil
+	}
+	return user, nil
 }
 
 // SetConnectEntry is main's statement of how this process came to the
@@ -262,9 +294,12 @@ func connectUser(ctx context.Context, getenv func(string) string) (string, error
 		return "", nil
 	}
 	connectEntry.Lock()
-	entry, ancestorOf := connectEntry.entry, connectEntry.ancestor
+	entry, ancestorOf, isObserver := connectEntry.entry, connectEntry.ancestor, connectEntry.observer
 	connectEntry.Unlock()
 	if ctx.Value(resolvingAncestry{}) != nil {
+		if id := getenv("AGENT_BUS_AGENT"); id != "" && isObserver != nil && isObserver(id) {
+			return ACLObserver, nil // an observer's ancestry read reads only, like the rest of it
+		}
 		return ACLAgent, nil // the ancestry's own read of the agents: never asks again
 	}
 	ancestor := ""
@@ -278,5 +313,5 @@ func connectUser(ctx context.Context, getenv func(string) string) (string, error
 		}
 		ancestor = a
 	}
-	return ACLUserFor(entry, getenv("AGENT_BUS_AGENT"), ancestor)
+	return aclUserOf(entry, getenv("AGENT_BUS_AGENT"), ancestor, isObserver)
 }
