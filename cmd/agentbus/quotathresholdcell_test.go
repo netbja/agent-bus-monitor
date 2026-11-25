@@ -47,3 +47,17 @@ func TestQuotaShowsTheThresholdsPerRow(t *testing.T) {
 		}
 	}
 }
+
+// reviewer-codex: with the defaults' order broken, agentbus quota shows what
+// the dispatcher enforces: a provider's own values over the registry's
+// defaults, and the registry's for the others, saying why.
+func TestQuotaShowsAProviderOverBrokenDefaults(t *testing.T) {
+	th := dispatch.QuotaThresholds{Warn: 90, Drain: 80, Hold: 95, DrainSet: true,
+		Providers: map[string]dispatch.QuotaLevels{"openai": {Warn: 60, Drain: 70, Hold: 80}}}
+	if got := quotaThresholdCell(th, "openai"); got != "60/70/80 (quota.openai)" {
+		t.Fatalf("openai %q", got)
+	}
+	if got := quotaThresholdCell(th, "anthropic"); got != "85/85/95 (dispatch.quota_*: order broken, default)" {
+		t.Fatalf("anthropic %q", got)
+	}
+}
