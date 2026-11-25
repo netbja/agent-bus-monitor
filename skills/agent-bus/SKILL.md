@@ -268,8 +268,9 @@ agentbus run --cap --mem 4G --time 5m -- go test ./<pkg> -run <Test> -count=1 -t
   command's own. The defaults are the person's (`limits.command_memory` 8G, `limits.command_time`
   30m); `--mem`, `--time` and `--cpu` only narrow them, and a larger value is refused.
 - Killed at a cap: exit 137 and one line, `killed at time cap 30m0s`, or `killed by signal 9 (memory cap
-  not proven)`. Under a holder the memory cap is `RLIMIT_AS`: an allocation fails instead, and a note
-  says so. A mutant that loops or eats memory is killed this way: count it as killed.
+  not proven)`. Under a holder the memory cap is `RLIMIT_AS`: an allocation fails instead of a kill,
+  with the command's own status and no line. A mutant that loops or eats memory is killed this way:
+  count it as killed.
 - `-race` exceeds `RLIMIT_AS`: ask the person, who alone can set `limits.command_memory = "off"`.
 
 ## Shared working tree — one checkout, several agents
