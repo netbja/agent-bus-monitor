@@ -230,7 +230,7 @@ func TestConfigProjectInvalidAndBusmonOnly(t *testing.T) {
 			t.Fatalf("exit %d or the value echoed:\n%s", code, out)
 		}
 		if args == nil {
-			if row := strings.Join(rowOf(t, out, "display.theme"), " "); row != "display.theme auto default - busmon" {
+			if row := strings.Join(rowOf(t, out, "display.theme"), " "); row != "display.theme auto default - busmon live" {
 				t.Errorf("busmon-only row = %q", row)
 			}
 			if strings.Contains(out, "env file AGENT_BUS_BUSMON_THEME") {
@@ -393,6 +393,41 @@ func TestConfigGet(t *testing.T) {
 		out.Reset()
 		if code := runConfig(args, "", getenv, &out, &errw); code != 2 || out.Len() != 0 {
 			t.Errorf("%v: %d %q", args, code, out.String())
+		}
+	}
+}
+
+// Each row says when a change applies (settings-read-when), last, in the
+// table and the JSON, with and without --project.
+func TestConfigSaysWhenAChangeApplies(t *testing.T) {
+	f := newConfigFixture(t)
+	f.write(t, "services/demo.env", "XDG_CONFIG_HOME=\""+f.xdg+"\"\n")
+	for _, project := range []string{"", "demo"} {
+		out, errw, code := f.run(t, project)
+		if code != 0 {
+			t.Fatalf("%q: exit %d: %s", project, code, errw)
+		}
+		if head := strings.Fields(strings.SplitN(out, "\n", 2)[0]); head[len(head)-1] != "applies" {
+			t.Errorf("%q: header %v does not end with applies", project, head)
+		}
+		for key, want := range map[string]string{"dispatch.self_repair": "on service restart", "board.wip_limit": "at the next run",
+			"dispatch.quota_warn": "live", "display.limit": "on busmon restart", "person.language": "on agent restart"} {
+			if row := strings.Join(rowOf(t, out, key), " "); !strings.HasSuffix(row, " "+want) {
+				t.Errorf("%q: %s row %q does not end with %q", project, key, row, want)
+			}
+		}
+	}
+	out, _, _ := f.run(t, "", "--json")
+	var doc configDoc
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range doc.Rows {
+		if r.Applies == "" {
+			t.Errorf("%s: no applies in the JSON", r.Key)
+		}
+		if r.Key == "dispatch.quota_warn" && r.Applies != "live" {
+			t.Errorf("quota_warn applies %q", r.Applies)
 		}
 	}
 }

@@ -30,6 +30,7 @@ type configRow struct {
 	Source   string     `json:"source"`
 	Line     int        `json:"line,omitempty"`
 	ReadBy   string     `json:"read_by"`
+	Applies  string     `json:"applies"` // when a change takes effect (settings-read-when)
 	Flag     string     `json:"flag,omitempty"`
 	Invalid  bool       `json:"invalid,omitempty"`
 	Services *configSvc `json:"services,omitempty"`
@@ -168,7 +169,7 @@ func buildConfigDoc(project string, getenv func(string) string) (configDoc, erro
 	legacyUsed := 0
 	for _, k := range config.Keys {
 		r := shell.Get(k.Name)
-		row := configRow{Key: k.Name, Value: config.Format(r.Value), Source: r.Source, Line: r.Line, ReadBy: k.ReadBy, Flag: k.Flag, Invalid: r.Invalid}
+		row := configRow{Key: k.Name, Value: config.Format(r.Value), Source: r.Source, Line: r.Line, ReadBy: k.ReadBy, Applies: k.Applies().String(), Flag: k.Flag, Invalid: r.Invalid}
 		if r.Invalid {
 			row.Value = "invalid"
 			doc.Warnings = append(doc.Warnings, fmt.Sprintf("%s: %s; %s", r.Source, cmp.Or(r.Why, "invalid"), k.Invalid))
@@ -339,9 +340,9 @@ func connectionFacts(getenv func(string) string) []string {
 func printConfigDoc(out io.Writer, doc configDoc) {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	if doc.Project != nil {
-		fmt.Fprintln(tw, "key\tvalue\tsource\tservices see\t\tread by")
+		fmt.Fprintln(tw, "key\tvalue\tsource\tservices see\t\tread by\tapplies")
 	} else {
-		fmt.Fprintln(tw, "key\tvalue\tsource\tread by")
+		fmt.Fprintln(tw, "key\tvalue\tsource\tread by\tapplies")
 	}
 	for _, r := range doc.Rows {
 		if r.Services != nil {
@@ -349,14 +350,14 @@ func printConfigDoc(out io.Writer, doc configDoc) {
 			if r.Services.Differs {
 				mark = " *"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s%s\t%s\n", r.Key, r.Value, r.Source, r.Services.Value, r.Services.Source, mark, r.ReadBy)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s%s\t%s\t%s\n", r.Key, r.Value, r.Source, r.Services.Value, r.Services.Source, mark, r.ReadBy, r.Applies)
 			continue
 		}
 		if doc.Project != nil {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t-\t\t%s\n", r.Key, r.Value, r.Source, r.ReadBy)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t-\t\t%s\t%s\n", r.Key, r.Value, r.Source, r.ReadBy, r.Applies)
 			continue
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.Key, r.Value, r.Source, r.ReadBy)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Key, r.Value, r.Source, r.ReadBy, r.Applies)
 	}
 	tw.Flush()
 	fmt.Fprintln(out)

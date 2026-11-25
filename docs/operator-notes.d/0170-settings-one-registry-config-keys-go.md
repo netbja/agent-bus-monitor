@@ -28,7 +28,7 @@
   to an ellipsis); a value as a control (`settingControl`: `● on` ok / `○ off` muted, a choice `‹ v ›`, the rest plain, in one
   column after the group's longest label and a 3-cell gutter, settings-focus: `settingsLabelCol`, `settingsGutter`; elsewhere
   muted, refused the attention colour), `•` (`GlyphSet`) before a `Set` key; the selected key's detail
-  zone (`settingsDetail`: label, file key, `from` source, default, read by; `settingHelp`). The focus (settings-focus,
+  zone (`settingsDetail`: label, file key, `from` source, default, read by, when a change applies; `settingHelp`). The focus (settings-focus,
   `settingsPage.keys`) is on the groups or the keys, the focused side lit (the group in the accent, the key's `▶` in the
   accent, the narrow tab a full pill) and the other muted (the tab dimmed by `frameFade`): wide, `↑↓` choose the group (its
   keys follow, the selection back to the first), `→` or Enter go to its keys, `←` back; narrow (the tab bar), `←→` step the
