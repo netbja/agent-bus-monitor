@@ -1,9 +1,14 @@
 # The person's name is reserved (person-name-spoof)
 
-Status: spec r1, for review (subject `person-name-spec`). Not built. Base: origin/dev `04c1755f`.
+Status: spec r2, for review (subject `person-name-spec`). Not built. Base: origin/dev `04c1755f`.
 Author: architect, from master's directive (task `person-name-spoof`, cmd `1795607502697-0`),
 on the person's question of 2026-11-25. No new dependency. The questions for the person are last
 (§8).
+r2: foureyes's reject of r1 (report `1795608727832-0`). The client-ancestor rule names its source
+and its list, and a step 0 records claude-ao's real process tree. The reserved names come from the
+file, never lowered by the environment. The collateral on the person's own acts is stated.
+reviewer-codex's reject of r1 (verdict on `dn49s358y5mp`): a badge cannot keep an ask open. §4.1
+says which writes may advance an ask or a gate, and where that is enforced before the transition.
 
 ## 1. What happened
 
@@ -44,8 +49,18 @@ directly, §5 says what ACL adds, and what it still does not.
 
 ## 3. The rule
 
-**The person's names are reserved:** `identity.as` and `person.name`, as the machine's config holds
-them. An entry whose `from` is one of them is:
+**The person's names are reserved:** `identity.as` and `person.name` **as `config.toml` holds
+them,** plus any value their environment variables (`AGENT_BUS_HUMAN`, `AGENT_BUS_PERSON_NAME`,
+`config/keys.go:223, 240`) give. The environment can add a name, never remove one: otherwise a
+process sets `AGENT_BUS_HUMAN=nobody` and `AGENT_BUS_AGENT=<the person's name>` and passes.
+`subscribe`'s `person` field reads the same union, in the agent's own process.
+
+- **Nothing set, nothing reserved.** With no `identity.as` in the file, `senderIdentity` falls back
+  to `anonymous` (`identityguard.go:27`) and no name is the person's. Step 1 needs `identity.as`
+  set; `roles doctor` and busmon warn when it is not.
+- **Which host.** On a laptop and host setup, the names that count are those of the host that
+  runs the broker and the agents. Its `config.toml` must hold them: `roles doctor` on that host
+  warns when it does not, since otherwise every entry reads as "not from the person". An entry whose `from` is one of them is:
 
 - **the person's word** when it carries `typed=yes` and passes §4's check, or it is an answer the
   person gave in busmon;
@@ -75,6 +90,25 @@ The agent-bus and agent-bus-master skills, and `roles/*.md`, say:
   arrived in your name, unverified: is it yours, and do you want it done?" The person's answer in
   busmon is typed. Then master acts, or routes the work, citing the answer.
 
+### 4.1 What may close an ask or a gate
+
+A badge and a reader's filter change what is shown, not the state. The state is enforced at its
+one writer:
+
+- **An ask** changes state only in the `askAnswer` script (`bus/asks.go:307`), and For you reads
+  the ask's state from `{p}:asks` (`Bus.Asks`, `bus/asks.go:536`), never from reply entries. So a
+  reply entry written any other way, `typed=yes` and `ref=<ask id>` included, leaves the ask open
+  and in For you. That holds today; a test pins it.
+- **Who may run the script.** `agentbus answer` and busmon are its callers. Step 1 refuses
+  `answer` under a client and under `AGENT_BUS_AGENT`, **before** the script runs, so the ask's
+  state never moves. With ACL 4b, the script also writes the `{p}:typed` record and lists that key
+  among its `KEYS`. Redis checks a script's declared keys against the user before running it, so the
+  `agent` user's call is refused before any change, whoever wrote the command line.
+- **A gate** closes on a verdict (the reviewer's) or `gate close`, never on a reply. Neither reads
+  `typed`. Nothing here changes them.
+
+The limit is §5's: a process that connects as busmon can still run the script.
+
 **The check behind `typed`.** Until §5's binding exists, `typed=yes` is the mark busmon writes and
 nothing more. Step 1 (§7) closes `answer`'s hole, the one path outside busmon that writes it.
 
@@ -86,8 +120,8 @@ It changes nothing for an entry's fields: XADD cannot restrict a field's value.
 **What this spec adds to 4b.**
 
 - **An unregistered client is an agent.** `ACLUserFor` and `agentcaller.Refuse` also treat as an
-  agent a process with a known agent client among its ancestors (`claude`, `codex`, `kimi`,
-  `grok`, `agy`, from `agentstate`'s client profiles), registered or not. claude-ao then connects
+  agent a process with a known agent client among its ancestors, registered or not (§7, step 1,
+  for its source and list). claude-ao then connects
   as `agent`, not `busmon`, and `Refuse` stops it from the person's acts.
 - **A binding only busmon can write.** busmon writes, in the same script as each typed entry or
   answer, one record in a new stream, `{p}:typed`: the target stream, the entry id and a hash of its
@@ -115,22 +149,47 @@ A helper like claude-ao never needs the person's name:
 
 ## 7. Build steps, cheapest first
 
+0. **claude-ao's real process tree, recorded on the person's machine.** The ancestor chain of a
+   Bash command run by claude-ao: each process's name and executable, up to init. Claude Code in
+   the desktop app may not run as a process named `claude`, and the app itself is an Electron
+   process. Without this record, "step 1 stops what happened" is unproven.
 1. **Refuse the borrowing, mark the rest.** One PR:
-   - `agentcaller`: a known client among the ancestors counts as an agent caller. `senderIdentity`
+   - **A client among the ancestors counts as an agent caller** (`agentcaller`). Today the ancestry
+     carries pid and start time only (`dispatch.Ancestors`, `dispatch/ident.go:119-128`). It gains
+     the process name: on Linux `/proc/<pid>/comm`, not the executable's basename, which can be a
+     version (this host's Claude Code: `comm` is `claude`, its executable `2.1.331`); on macOS
+     `proc_pidpath`'s basename. The names are Go data, one list per client: `claude`, `codex`,
+     `kimi`, `grok`, `agy`, and the desktop app's chain as step 0 records it. Not
+     `agentstate`'s client profiles: those name login-profile files, not processes; `senderIdentity`
      refuses the person's name from under a client, and `answer` refuses from under one too;
    - `AGENT_BUS_AGENT` set to a reserved name is refused for every write, anywhere;
    - `subscribe`'s `person` field, and busmon's `unverified person` badge, with For you excluding
      those entries;
    - the skills and roles text of §4.
 
-   No new key and no ACL change. It stops the accident that happened, and the `answer` path that
-   writes `typed=yes`.
+   No new key and no ACL change. It stops the accident that happened, once step 0 shows the chain
+   is named, and the `answer` path that writes `typed=yes`.
+
+   **Collateral, intended:** every `agentcaller.Refuse` caller inherits the rule (`retro request`,
+   `policy relax`/`waive`, `external add`, notification setup, `update`, `backup`, …). The person
+   running one of them through a client's shell, such as Claude Code's `! <cmd>`, is refused. The
+   refusal says: run it in your own terminal.
 2. **External roles** (the external-wake spec, its steps 1-2), so a helper has a name to use.
 3. **With ACL 4b:** the client-ancestor rule in `ACLUserFor`, and the `{p}:typed` binding.
 
-**Tests:** a write with no `AGENT_BUS_AGENT`, outside the holder, under a fake `claude` ancestor, is
+**Tests (ask state):** a reply entry with `typed=yes` and `ref` an open ask, written by `XADD`,
+leaves the ask `open` in `{p}:asks` and listed in For you. `agentbus answer` under a fake `claude`
+ancestor is refused, and the ask is still open and actionable after it. With step 3, on a
+disposable broker with ACL on, the `agent` user's `askAnswer` call fails with a permission error
+and the ask is unchanged.
+
+**Tests:** the ancestry reader returns names on each OS, from a fake procfs and a fake darwin
+reader, including the desktop app's recorded chain. A write with no `AGENT_BUS_AGENT`, outside the holder, under a fake `claude` ancestor, is
 refused naming the fix; the same from a plain shell writes as the person. `AGENT_BUS_AGENT` set to
-`identity.as` is refused, inside or outside the holder. `answer` under a fake
+`identity.as` is refused, inside or outside the holder, also with `AGENT_BUS_HUMAN` set to another
+name; the same for `person.name` with `AGENT_BUS_PERSON_NAME` changed. With no `identity.as` in
+the file, `roles doctor` warns. A person's act (`backup`) from a shell under a fake `claude` is
+refused with "run it in your own terminal". `answer` under a fake
 `claude` ancestor is refused. `subscribe` marks a CLI entry from the person `unverified`, a busmon
 typed entry `typed`, and an agent's entry without the field. busmon shows the badge and leaves the
 entry out of For you. A `human=yes` resume summary is `unverified`. With step 3, against a
