@@ -350,6 +350,11 @@ func (r *HostRuntime) Clear(ctx context.Context, pane string) error {
 	return r.Host.Submit(ctx, termhost.TermID(pane), termhost.ClearLine())
 }
 
+// Compact submits /compact (termhost.CompactLine).
+func (r *HostRuntime) Compact(ctx context.Context, pane string) error {
+	return r.Host.Submit(ctx, termhost.TermID(pane), termhost.CompactLine())
+}
+
 // Ping reports whether the host answers.
 func (r *HostRuntime) Ping(ctx context.Context) error { return r.Host.Ping(ctx) }
 

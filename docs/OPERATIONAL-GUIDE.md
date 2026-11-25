@@ -20,7 +20,7 @@ In the examples the project is `myapp`. `-p myapp` is short for `--project myapp
   bus.
 - **What they never do:**
   - nothing types into an agent's terminal except the dispatcher's one-line wake (and `/clear` after a
-    declared hand-off);
+    declared hand-off, `/compact` when none comes);
   - the dispatcher never runs repository code.
 - **You** watch in `busmon`, answer in busmon, and step into an agent's terminal with `t` (busmon) or
   `agentbus attach`.
@@ -232,6 +232,9 @@ until then, and `agentbus -p myapp resume` ends it early.
     declares it (`agentbus handoff`).
   - The dispatcher then types `/clear` (`dispatch.auto_clear`, on by default), and the agent
     resumes from its report.
+  - No hand-off 10 minutes after the fill reached `dispatch.context_urgent` (90 %): the dispatcher
+    types `/compact` into the idle pane, once, and tells master (`dispatch.auto_compact`, on by
+    default, yours to turn off in busmon's settings).
 - **Reload after a client update.** `agentbus -p myapp reload <role>` restarts an idle agent on its
   role, resuming its session; `--fresh` starts a new one. sentinel proposes or does it, following
   `--reload on|propose|off`.

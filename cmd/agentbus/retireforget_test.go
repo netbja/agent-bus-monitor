@@ -42,6 +42,7 @@ func (p *popRT) Inspect(context.Context, string) dispatch.Inspection {
 }
 func (*popRT) Prompt(context.Context, string, termhost.Line) (bool, error) { return false, nil }
 func (*popRT) Clear(context.Context, string) error                         { return nil }
+func (*popRT) Compact(context.Context, string) error                       { return nil }
 
 // newPopWorld is the swap world plus a pop, security, idle on pane p-sec,
 // whose close ends its process; afterClose runs once the pane is closed.

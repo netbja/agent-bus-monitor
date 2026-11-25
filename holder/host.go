@@ -277,6 +277,9 @@ func (h *Host) Submit(ctx context.Context, id termhost.TermID, line termhost.Lin
 		return err
 	}
 	f := Submit{Kind: "clear", Term: term}
+	if line.Kind() == termhost.KindCompact {
+		f.Kind = "compact"
+	}
 	if line.Kind() == termhost.KindWake {
 		r, err := h.call(ctx, key, List{})
 		if err != nil {

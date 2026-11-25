@@ -63,6 +63,12 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 			if err := loadMarks(); err != nil {
 				return err
 			}
+			if _, err := l.compactNotice(ctx, a, marks); err != nil { // owed past the episode's end
+				if errors.Is(err, bus.ErrNotHolder) {
+					return err
+				}
+				l.logError(a, "auto-compact notice", err)
+			}
 			if err := l.compactedNotice(ctx, a, f, marks, esc); err != nil {
 				if errors.Is(err, bus.ErrNotHolder) {
 					return err
@@ -101,6 +107,12 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 				return err
 			}
 			l.logError(a, "context escalation", err)
+		}
+		if err := esc.compact(ctx, a, f, marks); err != nil {
+			if errors.Is(err, bus.ErrNotHolder) {
+				return err
+			}
+			l.logError(a, "auto-compact", err)
 		}
 	}
 	return nil

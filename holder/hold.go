@@ -15,7 +15,7 @@ const holdMax = 1 << 20
 // the input empty (step 5d).
 type holdState struct {
 	holding  bool
-	holdKind string // "wake" or "clear"
+	holdKind string // "wake", "clear" or "compact"
 	held     []byte
 	holdMax  int // the bound (holdMax; a test sets it small)
 	refused  int // bytes refused since the hold began: never delivered

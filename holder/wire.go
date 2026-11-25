@@ -164,7 +164,7 @@ type Discard struct{}
 
 // HoldNotice is the holder's word to each typing viewer (and to one that
 // attaches) while its bytes are held after a line that did not land: the
-// kind of line that may be left in the input ("wake" or "clear") and how
+// kind of line that may be left in the input ("wake", "clear" or "compact") and how
 // many bytes are held; Active false when the hold ended; Refused the bytes
 // refused once the queue was full (never delivered; a client stops sending
 // while it is non-zero). The attach draws it as its one line (`a /clear may
@@ -428,8 +428,8 @@ func validate(v any) error {
 		}
 		return validSize(f.Cols, f.Rows)
 	case HoldNotice:
-		if f.Kind != "wake" && f.Kind != "clear" || f.Held < 0 || f.Refused < 0 {
-			return errors.New("holder: a hold notice of kind wake or clear, held and refused >= 0")
+		if f.Kind != "wake" && f.Kind != "clear" && f.Kind != "compact" || f.Held < 0 || f.Refused < 0 {
+			return errors.New("holder: a hold notice of kind wake, clear or compact, held and refused >= 0")
 		}
 	case Resize:
 		if f.Cols == 0 && f.Rows == 0 {
@@ -448,9 +448,9 @@ func validate(v any) error {
 			if f.Count < 1 || f.Count > 999 {
 				return fmt.Errorf("holder: a wake's count %d (1-999)", f.Count)
 			}
-		case "clear":
+		case "clear", "compact":
 			if f.Nonce != "" || f.Count != 0 {
-				return errors.New("holder: a clear carries no nonce and no count")
+				return fmt.Errorf("holder: a %s carries no nonce and no count", f.Kind)
 			}
 		default:
 			return fmt.Errorf("holder: unknown submit kind %q", f.Kind)

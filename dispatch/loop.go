@@ -404,6 +404,7 @@ type loop struct {
 	obsFresh   bool                         // not yet judged by promptNotices
 	probes     map[string]probeResult       // the last client probe per agent (a once-a-minute throttle)
 	cleared    map[string]bool              // agents /clear was typed into this pass (clear.go)
+	compactWhy map[string]string            // each agent's last auto-compact reason, logged on change (compact.go)
 
 	episodes  map[string]agentstate.Episode    // each agent's blocked episode, on a host (hostevents.go)
 	bgSkips   map[string]string                // the last background skip per agent and action

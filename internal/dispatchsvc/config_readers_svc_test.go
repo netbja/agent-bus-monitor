@@ -4,11 +4,13 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/health"
 	"github.com/netbja/agent-bus-monitor/internal/cmdtest"
@@ -63,6 +65,32 @@ func TestServiceReadersReadConfigTOML(t *testing.T) {
 	// A value the rule does not take is skipped: the file's false still applies.
 	if serviceClear(cmdtest.WithConfig(t, "[dispatch]\nauto_clear = false\n", map[string]string{"AGENT_BUS_AUTO_CLEAR": "true"}), noLook, nil).On {
 		t.Error("AGENT_BUS_AUTO_CLEAR=true overrode auto_clear = false; it must be skipped")
+	}
+	// auto-compact (the person's answer A): on with no file, off by the
+	// file's false, read again at each judgement (a change applies within
+	// the minute, no restart), and no env turns it on or off: the person's.
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfgFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	live := serviceContext(func(k string) string {
+		if k == "XDG_CONFIG_HOME" {
+			return dir
+		}
+		return ""
+	}, noLook, nil)
+	if live.Compact == nil || !live.Compact() {
+		t.Error("auto-compact is off with no setting; the default is on")
+	}
+	if err := os.WriteFile(cfgFile, []byte("[dispatch]\nauto_compact = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if live.Compact() {
+		t.Error("auto_compact = false written after the start did not apply at the next judgement")
+	}
+	if k, ok := config.Lookup("dispatch.auto_compact"); !ok || k.Env != "" || !k.PersonEdit || !k.MachineOnly || k.Default != true {
+		t.Errorf("dispatch.auto_compact: %+v, want the person's (PersonEdit, MachineOnly, no env), on by default", k)
 	}
 	// quota off in the file.
 	if q := serviceQuota(cmdtest.WithConfig(t, "[dispatch]\nquota = false\n", nil), io.Discard); q.Read != nil {
