@@ -636,6 +636,7 @@ func (m *Model) buildPage() bool {
 		if r := m.ui.sleepRun; r != nil && r.verb == "backup" {
 			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
 		}
+		p.set.deliveryWarning = s.delivery.Warning // single-approval step 3b
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovProjects:
 		if p.proj == nil {

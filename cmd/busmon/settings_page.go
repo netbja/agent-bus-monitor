@@ -46,6 +46,9 @@ type settingRow struct {
 	Applies    string // when a change applies (settings-read-when)
 	Kind       config.Kind
 	List       bool
+	// Note, when set, is the row's help, said instead of its kind's or its
+	// key's (single-approval's per-project rows).
+	Note string
 	// Choices are the values ←→ picks among when they depend on the
 	// settings (dispatch.self_repair's shadow, in development mode only);
 	// nil = settingChoices.
@@ -71,6 +74,8 @@ var settingLabels = map[string]string{
 	"projects.delete_files": "Delete also its template and worktrees", "projects.delete_backups": "Delete also its backups",
 	"board.wip_limit":      "Requests per agent at once (wip limit)",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
+	"delivery.single_approval": "One approval for a small change", "delivery.small_max_lines": "Small: lines at most",
+	"delivery.small_max_files": "Small: files at most", "delivery.never_small": "Never small (globs added)", "delivery.same_provider_ok": "One approval of the author's provider",
 }
 
 // settingOnPage: the Backup group shows only its person-only keys, read-only
@@ -91,7 +96,10 @@ func settingOnPage(k *config.Key) bool {
 // self-repair's (the person: the mode, the budgets and the login option).
 var servicesOnPage = map[string]bool{"sentinel.reload": true, "dispatch.self_repair": true, "dispatch.self_repair_every": true,
 	"dispatch.self_repair_per_day": true, "services.start_at_login": true, "dev": true,
-	"board.wip_limit": true} // the person's alone, set here (wip-limit r2 §3.3)
+	"board.wip_limit": true, // the person's alone, set here (wip-limit r2 §3.3)
+	// single-approval's, per project, shown read-only (step 3b: projectDeliveryRows)
+	"delivery.single_approval": true, "delivery.small_max_lines": true, "delivery.small_max_files": true,
+	"delivery.never_small": true, "delivery.same_provider_ok": true}
 
 // settingFlags are the flags above a key's env: busmon's own, read-only here.
 var settingFlags = map[string]string{"display.theme": "busmon --theme", "display.limit": "busmon --limit", "identity.as": "busmon --as"}
