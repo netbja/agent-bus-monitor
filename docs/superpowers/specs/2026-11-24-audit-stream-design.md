@@ -1,11 +1,16 @@
 # An append-only audit stream (audit)
 
-Status: IDEA spec r2, for review (subject `audit-spec`). Not built. Base: origin/dev `af527c19`.
+Status: IDEA spec r3, for review (subject `audit-spec`). Not built. Base: origin/dev `af527c19`.
 r2: reviewer-codex's reject of r1 (verdict `1795574727848-0`). `XADD` takes `MAXLEN` and `MINID`,
 so any user allowed to append can also trim. An ACL that grants `XADD` cannot make the stream
 append-only. r2 says the stream is a best-effort trail, with or without the ACL. A real boundary
 needs one trusted writer, which is Q3's option C. `detail` is built from fixed fields, and
 `health.Sensitive` is a best-effort net (§2, §3, §6).
+r3: foureyes's reject of r2 (verdict `1795575010073-0`). The ACL table has no per-command grant
+for one kind (`aclWrites` gives every data role all its commands on every kind), so the "admin
+only trims" sentence is dropped. The bookkeeping is named: `keyKinds`, survives reset, and Q3 C's
+ACL. Where the audit line is written (fenced or after the act) and how the retention test sets
+its time are stated (§2, §3, §5).
 Author: architect, from master's directive (cmd `1795559518593-0`, task `specs-from-person-docs`),
 idea 1 of 4 from the person's note "ideas borrowed from PiBot". The note's reference is PiBot
 `packages/storage/src/permissions/audit.ts` (Apache-2.0). It is used for the idea only. No code
@@ -39,9 +44,9 @@ One stream per project, **`{p}:audit`**. It follows the `{p}:<kind>` naming, not
 (the dispatcher's CI step), `update` and `reinstall` (`agentbus update`, setup), `quota-pause`,
 `pause`, `resume`, `suspend`, `retire`, and `retro-apply` (the retro spec, if it is built).
 
-Each act's existing code path calls `bus.Audit` once, after the act, with its outcome. A call
-the dispatcher makes goes into its existing fenced script, so it stays fenced and the audit
-line is written in the same step. No new process watches the bus.
+An act that a person or an agent runs from the CLI calls `bus.Audit` once, after the act, with
+its outcome. An act of the dispatcher (the CI hand-off, a quota pause) writes its audit line
+inside its existing fenced script, in the same step as the act, so it is fenced too. No new process watches the bus.
 
 ## 3. The rules
 
@@ -59,10 +64,13 @@ line is written in the same step. No new process watches the bus.
   project. Backups include it.
 - **A trail, not a proof, with or without the broker ACL.** `XADD` itself trims: `MAXLEN 0` or
   a recent `MINID` on an append erases the history. So a user allowed to append can erase,
-  whatever the ACL denies besides. In the ACL table (`bus/acl.go`), `XTRIM`, `XDEL` and `DEL` on
-  `audit` go to `admin` only. That stops a careless trim, not a deliberate one. The spec claims
-  no more than that, as the person-memory spec does for `human=yes`. Making the stream
-  append-only against agents needs one trusted writer (§6 Q3, option C).
+  whatever the ACL denies besides. The spec claims no more than that, as the person-memory spec
+  does for `human=yes`. Making the stream append-only against agents needs one trusted writer
+  (§6 Q3, option C).
+- **Bookkeeping.** `audit` is added to `keyKinds` (`bus/keykinds.go:39`) like every kind. With
+  options A and B it is an ordinary data kind in the ACL table, writable by every data role.
+  It is listed as surviving in `TestEveryProjectKindIsResetOrSurvives`. With option C,
+  `audit` goes into `aclDispatcherOnly` (`bus/acl.go`), and `audit:in` is an ordinary data kind.
 
 ## 4. Reading it
 
@@ -80,8 +88,10 @@ line is written in the same step. No new process watches the bus.
 
 - An unknown action is refused, and nothing is written.
 - A token-shaped value in `detail` is stored as exactly `[redacted]`, and so is the whole field.
-- `MINID` trimming drops an entry older than the retention and keeps a newer one. The test
-  injects the time the trim reads.
+- `MINID` trimming drops an entry older than the retention and keeps a newer one. The trim
+  reads Redis `TIME`, so the test sets no clock. It writes two entries directly, with explicit
+  ids 91 and 89 days before the server's `TIME`, then calls `bus.Audit`, and finds only the 89-day
+  entry and the new one.
 - `busmon --reset`'s kinds leave `{p}:audit` whole.
 - **Adversarial, under the ACL test harness:** an `agent` user's `XADD … MAXLEN 0` on
   `{p}:audit` is recorded as what it is. With option A or B it succeeds, and the test asserts
@@ -89,6 +99,8 @@ line is written in the same step. No new process watches the bus.
 - `detail` call sites pass only fixed parts: a test feeds a token-shaped commit message to a
   call site and finds it absent from the entry.
 - A fenced call without the lease writes neither the act nor the audit line.
+- With option C: an `agent` user's `XADD`, `XTRIM`, `XDEL` and `DEL` on `{p}:audit` are refused,
+  and its `XADD` on `{p}:audit:in` passes.
 - One test per call site checks that the act writes exactly one line, and that a refused act
   writes `outcome=refused`.
 
