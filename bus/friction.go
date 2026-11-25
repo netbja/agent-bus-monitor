@@ -2,6 +2,8 @@ package bus
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,13 +25,27 @@ const (
 
 var frictionOrder = []string{FrictionReject, FrictionCI, FrictionStall, FrictionPerson}
 
-// FrictionSignal is one signal: its kind and the bus id that holds it.
+// The streams a signal is read from: ids are unique only within a stream.
+const (
+	SignalVerdicts = "verdicts"
+	SignalCmd      = "cmd"
+	SignalEvents   = "events"
+)
+
+// FrictionSignal is one signal: its kind, the id that holds it and that id's
+// stream ("" for the person's signal).
 type FrictionSignal struct {
-	Kind string `json:"kind"`
-	ID   string `json:"id"`
+	Kind   string `json:"kind"`
+	ID     string `json:"id"`
+	Stream string `json:"stream,omitempty"`
 }
 
-func (s FrictionSignal) String() string { return s.Kind + " " + s.ID }
+func (s FrictionSignal) String() string {
+	if s.Stream == "" {
+		return s.Kind + " " + s.ID
+	}
+	return s.Kind + " " + s.ID + " (" + s.Stream + ")"
+}
 
 // TaskFriction is task's friction: the signals of its owner (the request's
 // target) inside the request's life, from its accept to its done (to now
@@ -70,7 +86,7 @@ func (b *Bus) TaskFriction(ctx context.Context, task string) ([]FrictionSignal, 
 	for _, m := range verdicts {
 		v := toStringMap(m.Values)
 		if v["decision"] == "reject" && v["author"] == owner {
-			out = append(out, FrictionSignal{FrictionReject, m.ID})
+			out = append(out, FrictionSignal{FrictionReject, m.ID, SignalVerdicts})
 		}
 	}
 	cmds, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), from, to).Result()
@@ -81,9 +97,9 @@ func (b *Bus) TaskFriction(ctx context.Context, task string) ([]FrictionSignal, 
 		v := toStringMap(m.Values)
 		switch {
 		case isCIHandoff(v) && v["target"] == owner:
-			out = append(out, FrictionSignal{FrictionCI, m.ID})
+			out = append(out, FrictionSignal{FrictionCI, m.ID, SignalCmd})
 		case v["type"] == CmdEscalation && v["agent"] == owner:
-			out = append(out, FrictionSignal{FrictionStall, m.ID})
+			out = append(out, FrictionSignal{FrictionStall, m.ID, SignalCmd})
 		}
 	}
 	events, err := b.r.XRange(ctx, EventsKey(b.project), from, to).Result()
@@ -93,7 +109,7 @@ func (b *Bus) TaskFriction(ctx context.Context, task string) ([]FrictionSignal, 
 	for _, m := range events {
 		v := toStringMap(m.Values)
 		if (v["kind"] == EventBlocked || v["kind"] == EventWakeNotLanded) && v["agent"] == owner {
-			out = append(out, FrictionSignal{FrictionStall, m.ID})
+			out = append(out, FrictionSignal{FrictionStall, m.ID, SignalEvents})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return idLess(out[i].ID, out[j].ID) })
@@ -129,21 +145,25 @@ const RetroPrefix = "retro-"
 // IsRetroTask: task is a retro, whose own done never fires a retro (§3.2).
 func IsRetroTask(task string) bool { return strings.HasPrefix(task, RetroPrefix) }
 
-// RetroTaskName is retro-<task>, cut to a valid name (32 characters) for a
-// long task, never ending on a separator.
+// RetroTaskName is retro-<task>. For a task too long for a valid name (32
+// characters) it is retro-<the task's first 17 characters>-<8 hex of the
+// task's sha256>, so two long tasks never share a retro.
 func RetroTaskName(task string) string {
 	name := RetroPrefix + task
-	if len(name) > 32 {
-		name = strings.TrimRight(name[:32], "-_")
+	if len(name) <= 32 {
+		return name
 	}
-	return name
+	sum := sha256.Sum256([]byte(task))
+	return RetroPrefix + strings.TrimRight(task[:17], "-_") + "-" + hex.EncodeToString(sum[:4])
 }
 
 // Retro is what RetroDue found: the retro's task ("" when none is due), the
-// signals, and whether this call sent its request (false when it existed).
+// signals, its owner (To), and whether this call sent its request (false
+// when it existed).
 type Retro struct {
 	Task    string
 	Signals []FrictionSignal
+	To      string
 	Sent    bool
 }
 
@@ -199,16 +219,21 @@ func (b *Bus) RetroOwner(ctx context.Context, task string) (string, error) {
 
 func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSignal) (Retro, error) {
 	name := RetroTaskName(task)
-	out := Retro{Task: name, Signals: sigs}
+	out := Retro{Task: name, Signals: sigs, To: to}
 	var lines []string
 	for _, s := range sigs {
 		lines = append(lines, "- "+s.String())
 	}
-	body := fmt.Sprintf("retro due for %s (%s). Read its history with: agentbus retro evidence %s\n"+
+	body := fmt.Sprintf(retroBodyPrefix(task)+"%s). Read its history with: agentbus retro evidence %s\n"+
 		"Then file at most three proposals, or close it with: agentbus retro none %s \"<root cause>\"\nSignals:\n%s",
-		task, FrictionSummary(sigs), task, task, strings.Join(lines, "\n"))
+		FrictionSummary(sigs), task, task, strings.Join(lines, "\n"))
 	_, err := b.RequestBy(ctx, name, SystemSender, to, "", body, 0, false)
 	if err != nil && strings.Contains(err.Error(), "board task already exists") {
+		owner, err := b.retroOf(ctx, name, task)
+		if err != nil {
+			return Retro{}, err
+		}
+		out.To = owner
 		return out, nil
 	}
 	if err != nil {
@@ -218,19 +243,48 @@ func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSig
 	return out, nil
 }
 
+// retroOf checks that the board's name entry is task's retro, and returns
+// its owner: a request from agentbus whose body, while the stream keeps it,
+// names task. Anything else under that name is refused, never taken as the
+// retro.
+func (b *Bus) retroOf(ctx context.Context, name, task string) (string, error) {
+	raw, err := b.r.HGet(ctx, BoardKey(b.project), name).Result()
+	if err != nil {
+		return "", err
+	}
+	var e BoardEntry
+	if json.Unmarshal([]byte(raw), &e) != nil || e.Request == nil || e.Request.From != SystemSender {
+		return "", fmt.Errorf("retro: board task %s exists and is not a retro", name)
+	}
+	msgs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), e.Request.ID, e.Request.ID).Result()
+	if err != nil {
+		return "", err
+	}
+	if len(msgs) == 1 {
+		body, _ := msgs[0].Values["command"].(string)
+		if !strings.HasPrefix(body, retroBodyPrefix(task)) {
+			return "", fmt.Errorf("retro: board task %s is the retro of another task", name)
+		}
+	}
+	return e.Request.Target, nil
+}
+
+func retroBodyPrefix(task string) string { return "retro due for " + task + " (" }
+
 // SignalText is what a signal's entry says, for retro evidence: a reject's
 // review message, a CI hand-off's or an escalation's text, an event's kind
-// and detail. "" for the person's signal; an error when the entry is gone
-// from its capped stream.
+// and detail, read from the signal's own stream only (ids repeat across
+// streams). "" for the person's signal; an error when the entry is gone from
+// its capped stream.
 func (b *Bus) SignalText(ctx context.Context, s FrictionSignal) (string, error) {
 	var keys []string
-	switch s.Kind {
-	case FrictionReject:
+	switch s.Stream {
+	case SignalVerdicts:
 		keys = []string{VerdictsKey(b.project)}
-	case FrictionCI:
+	case SignalCmd:
 		keys = []string{StreamKey(b.project, "cmd")}
-	case FrictionStall:
-		keys = []string{EventsKey(b.project), StreamKey(b.project, "cmd")}
+	case SignalEvents:
+		keys = []string{EventsKey(b.project)}
 	default:
 		return "", nil
 	}

@@ -96,7 +96,7 @@ func TestRetroRequestRoutes(t *testing.T) {
 	if err := runRetro(ctx, d, []string{"request", "rough"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "retro retro-rough already open for master (1 reject, 1 person)\n" {
+	if got := out.String(); got != "retro retro-rough already open for coder (1 reject, 1 person)\n" {
 		t.Errorf("printed %q", got)
 	}
 
