@@ -180,11 +180,22 @@ func AppendHistory(updates string, h HistoryLine) error {
 	return f.Close()
 }
 
-// History reads <updates>/history; a missing file is empty.
+// History reads <updates>/history; a missing or unreadable file is empty.
 func History(updates string) []HistoryLine {
+	hs, _ := ReadHistory(updates)
+	return hs
+}
+
+// ReadHistory is History that says when the file cannot be read: only a
+// missing file is empty (an automatic pass then fails closed, reviewer-codex
+// on quiet-update 4a).
+func ReadHistory(updates string) ([]HistoryLine, error) {
 	f, err := os.Open(filepath.Join(updates, "history"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer f.Close()
 	var out []HistoryLine
@@ -212,7 +223,7 @@ func History(updates string) []HistoryLine {
 		}
 		out = append(out, h)
 	}
-	return out
+	return out, sc.Err()
 }
 
 // Interrupted is the last snapshot when no history line names it: an update

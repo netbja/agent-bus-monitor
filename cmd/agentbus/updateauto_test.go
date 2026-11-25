@@ -65,4 +65,17 @@ func TestActiveHolderProjects(t *testing.T) {
 	if _, err := activeHolderProjects(serviceCmdDeps{Manager: hm}); err == nil {
 		t.Error("an unreadable holder state passed")
 	}
+	hm.activeErr, hm.strictErr = nil, errors.New("holder record x cannot be read")
+	if _, err := activeHolderProjects(serviceCmdDeps{Manager: hm}); err == nil {
+		t.Error("an unreadable holder record passed (reviewer-codex on 4a)")
+	}
+	if _, err := activeHolderProjects(serviceCmdDeps{Manager: lenientHolders{hm, hm}}); err == nil {
+		t.Error("a manager with no strict listing passed")
+	}
+}
+
+// lenientHolders is a holder manager without HolderUnitsStrict.
+type lenientHolders struct {
+	service.Manager
+	service.HolderManager
 }

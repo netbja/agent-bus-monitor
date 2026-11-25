@@ -224,13 +224,18 @@ func holderGC(d serviceCmdDeps, current string) error {
 // activeHolderProjects are the projects with an active holder of any build
 // (quiet-update-auto §4.3 step 4): every holder unit, or under
 // services.manager = none every supervised holder, judged by the manager. A
-// manager that cannot say is an error: the pass is deferred.
+// record it cannot read, or a manager that cannot list strictly or say
+// whether one runs, is an error: the pass is deferred (reviewer-codex on 4a).
 func activeHolderProjects(d serviceCmdDeps) ([]string, error) {
 	hm, ok := d.Manager.(service.HolderManager)
 	if !ok {
 		return nil, nil // no holders on this manager
 	}
-	units, err := hm.HolderUnits("")
+	sl, ok := d.Manager.(service.StrictHolderLister)
+	if !ok {
+		return nil, errors.New("this service manager cannot list its holders strictly")
+	}
+	units, err := sl.HolderUnitsStrict("")
 	if err != nil {
 		return nil, err
 	}

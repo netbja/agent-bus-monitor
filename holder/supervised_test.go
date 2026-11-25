@@ -451,3 +451,38 @@ func TestProcStartOfAZombieIsGone(t *testing.T) {
 		t.Fatalf("a zombie read as %v, want errNoProcess", err)
 	}
 }
+
+// HolderUnitsStrict fails on a record it cannot read or that disagrees with
+// its place; HolderUnits leaves it out (reviewer-codex on quiet-update 4a).
+func TestSupervisedHolderUnitsStrict(t *testing.T) {
+	f := newSupervised(t)
+	key := f.install(t, "demo", "v1.0.0")
+	if units, err := f.m.HolderUnitsStrict(""); err != nil || len(units) != 1 {
+		t.Fatalf("a good record: %+v %v", units, err)
+	}
+	path, err := f.m.recordPath("demo", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := filepath.Join(filepath.Dir(path), "holder-"+service.BuildKey("v2.0.0")+".pid")
+	for body, why := range map[string]string{"{garbage": "cannot be read", string(mustRead(t, path)): "disagrees with its place"} { // unreadable; another key's record under this name
+		if err := os.WriteFile(bad, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if units, err := f.m.HolderUnitsStrict(""); err == nil || !strings.Contains(err.Error(), why) {
+			t.Errorf("%q: strict %+v %v, want %q", body, units, err, why)
+		}
+		if units, err := f.m.HolderUnits(""); err != nil || len(units) != 1 {
+			t.Errorf("%q: lenient %+v %v", body, units, err)
+		}
+	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}

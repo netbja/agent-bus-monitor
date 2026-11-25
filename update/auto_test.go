@@ -118,24 +118,24 @@ func TestSkip(t *testing.T) {
 		t.Fatal(err)
 	}
 	rel := Release{Tag: "v0.2.0", GitDir: dir}
-	if why := Skip(context.Background(), updates, rel); why != "" {
-		t.Fatalf("a plain release skipped: %s", why)
+	if why, err := Skip(context.Background(), updates, rel); why != "" || err != nil {
+		t.Fatalf("a plain release skipped: %s %v", why, err)
 	}
 	for _, h := range []HistoryLine{{Kind: "update", To: "v0.2.0", OK: false}} {
 		if err := AppendHistory(updates, h); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if why := Skip(context.Background(), updates, rel); why != "" {
-		t.Fatalf("a manual failure skipped it: %s", why)
+	if why, err := Skip(context.Background(), updates, rel); why != "" || err != nil {
+		t.Fatalf("a manual failure skipped it: %s %v", why, err)
 	}
 	AppendHistory(updates, HistoryLine{Kind: HistoryAuto, To: "v0.2.0", OK: false})
-	if why := Skip(context.Background(), updates, rel); !strings.Contains(why, "failed: it is not retried") {
+	if why, _ := Skip(context.Background(), updates, rel); !strings.Contains(why, "failed: it is not retried") {
 		t.Fatalf("a failed automatic install: %q", why)
 	}
 	AppendHistory(updates, HistoryLine{Kind: HistoryAuto, To: "v0.2.0", OK: true})
-	if why := Skip(context.Background(), updates, rel); why != "" {
-		t.Fatalf("after a success: %q", why)
+	if why, err := Skip(context.Background(), updates, rel); why != "" || err != nil {
+		t.Fatalf("after a success: %q %v", why, err)
 	}
 
 	// A release that declares a migration.
@@ -149,8 +149,21 @@ func TestSkip(t *testing.T) {
 	sh(t, w.up, "commit", "-qm", "three")
 	sh(t, w.up, "tag", "v0.3.0")
 	sh(t, w.clone, "fetch", "-q", "--tags", "origin")
-	if why := Skip(context.Background(), t.TempDir(), Release{Tag: "v0.3.0", GitDir: dir}); !strings.Contains(why, "needs a broker migration") {
-		t.Fatalf("a .migrate release: %q", why)
+	if why, err := Skip(context.Background(), t.TempDir(), Release{Tag: "v0.3.0", GitDir: dir}); !strings.Contains(why, "needs a broker migration") || err != nil {
+		t.Fatalf("a .migrate release: %q %v", why, err)
+	}
+
+	// Fail closed (reviewer-codex on 4a): a tag that cannot be read, or a
+	// history that cannot be read, is an error, never "no reason".
+	if why, err := Skip(context.Background(), t.TempDir(), Release{Tag: "v9.9.9", GitDir: dir}); err == nil {
+		t.Fatalf("an unreadable tag passed: %q", why)
+	}
+	bad := t.TempDir()
+	if err := os.Mkdir(filepath.Join(bad, "history"), 0o700); err != nil { // opens, never reads
+		t.Fatal(err)
+	}
+	if why, err := Skip(context.Background(), bad, rel); err == nil {
+		t.Fatalf("an unreadable history passed: %q", why)
 	}
 }
 
@@ -206,6 +219,18 @@ func TestCheckPass(t *testing.T) {
 	if code := CheckPass(context.Background(), d); code != 1 || !strings.Contains(f.errw.String(), "a pass would be deferred") {
 		t.Fatalf("unreadable: %d %s", code, f.errw.String())
 	}
+	// A history that cannot be read defers the pass.
+	d.Judge = func(context.Context, string) (Judged, error) { return Judged{Now: autoNow}, nil }
+	hist := filepath.Join(d.updates(), "history")
+	os.Remove(hist)
+	if err := os.Mkdir(hist, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f.errw.Reset()
+	if code := CheckPass(context.Background(), d); code != 1 || !strings.Contains(f.errw.String(), "history cannot be read") {
+		t.Fatalf("unreadable history: %d %s", code, f.errw.String())
+	}
+	os.Remove(hist)
 	// Up to date.
 	d.Version = "v0.2.0"
 	f.out.Reset()

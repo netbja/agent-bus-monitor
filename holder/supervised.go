@@ -307,6 +307,16 @@ func (m Supervised) RemoveHolder(project, key string) error {
 // record that cannot be read, or whose values disagree with its place, is
 // left out.
 func (m Supervised) HolderUnits(project string) ([]service.HolderUnit, error) {
+	return m.holderUnits(project, false)
+}
+
+// HolderUnitsStrict is HolderUnits that fails on a record it cannot read, or
+// whose values disagree with its place (service.StrictHolderLister).
+func (m Supervised) HolderUnitsStrict(project string) ([]service.HolderUnit, error) {
+	return m.holderUnits(project, true)
+}
+
+func (m Supervised) holderUnits(project string, strict bool) ([]service.HolderUnit, error) {
 	var projects []string
 	if project != "" {
 		projects = []string{project}
@@ -338,6 +348,12 @@ func (m Supervised) HolderUnits(project string) ([]service.HolderUnit, error) {
 		for _, name := range names {
 			r, err := readSupervisedRecord(name)
 			if err != nil || r.Project != p || filepath.Base(name) != "holder-"+r.Key+".pid" || !service.ValidBuildKey(r.Key) {
+				if strict && err != nil {
+					return nil, fmt.Errorf("holder record %s cannot be read: %w", name, err)
+				}
+				if strict {
+					return nil, fmt.Errorf("holder record %s disagrees with its place (project %s, build %s)", name, r.Project, r.Key)
+				}
 				continue
 			}
 			out = append(out, service.HolderUnit{Project: r.Project, Key: r.Key, Raw: r.Raw})

@@ -22,6 +22,14 @@ type fakeHolderManager struct {
 	active    map[string]bool
 	failStop  map[string]bool // StopHolder fails for these keys
 	activeErr error           // HolderActive fails with it
+	strictErr error           // HolderUnitsStrict fails with it
+}
+
+func (f *fakeHolderManager) HolderUnitsStrict(project string) ([]service.HolderUnit, error) {
+	if f.strictErr != nil {
+		return nil, f.strictErr
+	}
+	return f.HolderUnits(project)
 }
 
 func (f *fakeHolderManager) InstallHolder(s service.HolderSpec) (bool, error) {

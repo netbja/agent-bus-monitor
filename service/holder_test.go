@@ -577,3 +577,37 @@ func TestGCHolderBinaries(t *testing.T) {
 		}
 	}
 }
+
+// HolderUnitsStrict (quiet-update-auto §4.3 step 4, reviewer-codex on 4a):
+// a holder unit file it cannot read as a record, or whose name disagrees
+// with its record, fails the listing; HolderUnits leaves both out.
+func TestHolderUnitsStrict(t *testing.T) {
+	p := holderPaths(t)
+	m := Systemd{Run: fakeSystemd(nil).run, Paths: p}
+	dir := filepath.Join(p.ConfigHome, "systemd", "user")
+	os.MkdirAll(dir, 0o755)
+	key := BuildKey("v1+aaa")
+	good := "[Unit]\nX-Agentbus-Project=demo\nX-Agentbus-Build=" + key + "\n"
+	os.WriteFile(filepath.Join(dir, HolderUnitName("demo", key)), []byte(good), 0o644)
+	if units, err := m.HolderUnitsStrict(""); err != nil || len(units) != 1 {
+		t.Fatalf("a good unit: %+v %v", units, err)
+	}
+	other := BuildKey("v2+bbb")
+	for name, body := range map[string]string{
+		HolderUnitName("demo", other):       "[Unit]\nno record\n",                                               // unreadable as a record
+		HolderUnitName("demo", other) + "x": "",                                                                  // not a .service: ignored by both
+		HolderUnitName("alpha", other):      "[Unit]\nX-Agentbus-Project=demo\nX-Agentbus-Build=" + other + "\n", // name and record disagree
+	} {
+		path := filepath.Join(dir, name)
+		os.WriteFile(path, []byte(body), 0o644)
+		units, err := m.HolderUnitsStrict("")
+		ignored := !strings.HasSuffix(name, ".service")
+		if ignored && (err != nil || len(units) != 1) || !ignored && err == nil {
+			t.Errorf("%s: strict %+v %v", name, units, err)
+		}
+		if units, err := m.HolderUnits(""); err != nil || len(units) != 1 {
+			t.Errorf("%s: lenient %+v %v", name, units, err)
+		}
+		os.Remove(path)
+	}
+}

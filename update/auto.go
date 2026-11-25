@@ -166,21 +166,30 @@ const HistoryAuto = "auto"
 // Skip is why a pass must not install rel (§4.3 step 3), "" none: the tag
 // carries docs/releases/<tag>.migrate (a broker migration, the person's
 // update), or its last automatic install failed (never retried; a manual
-// update of it still runs).
-func Skip(ctx context.Context, updates string, rel Release) string {
-	if _, err := git(ctx, "--git-dir", rel.GitDir, "cat-file", "-e", rel.Tag+":docs/releases/"+rel.Tag+".migrate"); err == nil {
-		return rel.Tag + " needs a broker migration: update it by hand (./setup.sh, with its notes)"
+// update of it still runs). A tag or a history that cannot be read is an
+// error: the guard is unknown, so the pass is deferred (reviewer-codex).
+func Skip(ctx context.Context, updates string, rel Release) (string, error) {
+	migrate := "docs/releases/" + rel.Tag + ".migrate"
+	out, err := git(ctx, "--git-dir", rel.GitDir, "ls-tree", "--name-only", rel.Tag+"^{commit}", "--", migrate)
+	if err != nil { // the tag itself cannot be read; a missing path is an empty answer
+		return "", fmt.Errorf("whether %s needs a migration cannot be read: %w", rel.Tag, err)
 	}
-	hs := History(updates)
+	if out == migrate {
+		return rel.Tag + " needs a broker migration: update it by hand (./setup.sh, with its notes)", nil
+	}
+	hs, err := ReadHistory(updates)
+	if err != nil {
+		return "", fmt.Errorf("the update history cannot be read: %w", err)
+	}
 	for i := len(hs) - 1; i >= 0; i-- {
 		if h := hs[i]; h.Kind == HistoryAuto && h.To == rel.Tag {
 			if !h.OK {
-				return "the automatic install of " + rel.Tag + " failed: it is not retried (agentbus update installs it by hand)"
+				return "the automatic install of " + rel.Tag + " failed: it is not retried (agentbus update installs it by hand)", nil
 			}
 			break
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // CheckPass is agentbus update --auto --check (§4.2 step 4, §4.3 steps 2-4):
@@ -214,7 +223,12 @@ func CheckPass(ctx context.Context, d Deps) int {
 	st.waitingFor(rel.Tag, now)
 	save()
 	d.say("release %s waiting since %s", rel.Tag, st.Waiting.Since.Format(time.RFC3339))
-	if why := Skip(ctx, updates, rel); why != "" {
+	why, err := Skip(ctx, updates, rel)
+	if err != nil {
+		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": a pass would be deferred")
+		return 1
+	}
+	if why != "" {
 		d.say("not installed automatically: %s", why)
 		return 0
 	}

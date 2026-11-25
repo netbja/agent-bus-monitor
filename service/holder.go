@@ -47,6 +47,14 @@ type HolderSpec struct {
 // HolderUnit is an installed holder unit, as its recorded values say.
 type HolderUnit struct{ Project, Key, Raw string }
 
+// StrictHolderLister lists holder units like HolderUnits, but fails on a
+// record it cannot read or whose name disagrees with it, instead of leaving it
+// out: a reader that must see every holder (the automatic update's quiet
+// test, quiet-update-auto §4.3 step 4) fails closed with it.
+type StrictHolderLister interface {
+	HolderUnitsStrict(project string) ([]HolderUnit, error)
+}
+
 // HolderManager is the service manager's side of the holder's units.
 type HolderManager interface {
 	// InstallHolder writes the unit of s's (project, build); it refuses a key
@@ -415,7 +423,13 @@ func (m Systemd) RemoveHolder(project, key string) error {
 }
 
 func (m Systemd) HolderUnits(project string) ([]HolderUnit, error) {
-	return holderUnits(m.dir(), ".service", project, readSystemdRecord)
+	return holderUnits(m.dir(), ".service", project, readSystemdRecord, false)
+}
+
+// HolderUnitsStrict is HolderUnits that fails on a holder unit file it
+// cannot judge (StrictHolderLister).
+func (m Systemd) HolderUnitsStrict(project string) ([]HolderUnit, error) {
+	return holderUnits(m.dir(), ".service", project, readSystemdRecord, true)
 }
 
 // readSystemdRecord reads the X-Agentbus-* values of a unit's [Unit] section.
@@ -453,7 +467,7 @@ func readSystemdRecord(path string) (HolderUnit, bool) {
 // holderUnits reads every unit file of dir with suffix and keeps the ones
 // whose recorded project is project ("" every one) and whose file name is
 // the one its recorded values give.
-func holderUnits(dir, suffix, project string, read func(string) (HolderUnit, bool)) ([]HolderUnit, error) {
+func holderUnits(dir, suffix, project string, read func(string) (HolderUnit, bool), strict bool) ([]HolderUnit, error) {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -468,13 +482,19 @@ func holderUnits(dir, suffix, project string, read func(string) (HolderUnit, boo
 		}
 		u, ok := read(filepath.Join(dir, e.Name()))
 		if !ok || !ValidBuildKey(u.Key) || !validProject(u.Project) { // a record is trusted only as a key and a project: never "..", "/" (foureyes)
-			continue
-		}
-		if project != "" && u.Project != project {
+			if strict {
+				return nil, fmt.Errorf("holder unit %s cannot be read as a holder's record", filepath.Join(dir, e.Name()))
+			}
 			continue
 		}
 		if e.Name() != HolderUnitName(u.Project, u.Key) && e.Name() != HolderLabel(u.Project, u.Key)+".plist" {
+			if strict {
+				return nil, fmt.Errorf("holder unit %s disagrees with its record (project %s, build %s)", filepath.Join(dir, e.Name()), u.Project, u.Key)
+			}
 			continue // a file whose name disagrees with its record: not ours to judge
+		}
+		if project != "" && u.Project != project {
+			continue
 		}
 		out = append(out, u)
 	}
@@ -584,7 +604,13 @@ func (m Launchd) RemoveHolder(project, key string) error {
 }
 
 func (m Launchd) HolderUnits(project string) ([]HolderUnit, error) {
-	return holderUnits(m.dir(), ".plist", project, readPlistRecord)
+	return holderUnits(m.dir(), ".plist", project, readPlistRecord, false)
+}
+
+// HolderUnitsStrict is HolderUnits that fails on a holder plist it cannot
+// judge (StrictHolderLister).
+func (m Launchd) HolderUnitsStrict(project string) ([]HolderUnit, error) {
+	return holderUnits(m.dir(), ".plist", project, readPlistRecord, true)
 }
 
 // readPlistRecord reads the XAgentbus* keys agentbus wrote, one per line.
