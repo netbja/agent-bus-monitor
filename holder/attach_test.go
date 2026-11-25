@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
+
 	"github.com/netbja/agent-bus-monitor/screen"
 )
 
@@ -153,27 +155,57 @@ func TestHolderAttachFilters(t *testing.T) {
 
 // An observer (spec 4.6): never types, never resizes, never counts as a
 // person at the terminal. The most recently active viewer sets the size.
+// No fixed delay (holder-observer-flake): the observer's frames are read in
+// order, so once its Detach is handled its typing and its resize were too;
+// the program reports each size by polling its terminal, never through a
+// signal it could miss; and the screen is checked for the observer's
+// effects only once the viewer's own sizes are on it, the program's later
+// output. The PTY's own size is read too: a size that lasted less than one
+// of the program's polls is caught there.
 func TestHolderObserver(t *testing.T) {
-	_, sock := newTestHolder(t)
+	s, sock := newTestHolder(t)
 	cl := dial(t, sock)
-	x := startRole(t, cl, "winch")
+	x := startRole(t, cl, "sizer")
 	waitScreen(t, cl, x.ID, "w")
+	rows0, cols0 := ptySize(t, s, x.ID)
 	ob := attached(t, sock, Attach{Term: x.ID, Observe: true, Cols: 70, Rows: 20})
 	readUntil(t, ob, "w")
-	send(t, ob, FrameData, []byte("zzz\r"))
-	control(t, ob, Resize{Cols: 50, Rows: 10})
-	time.Sleep(300 * time.Millisecond)
-	if a := activityOf(t, cl, x.ID); a.Viewers != 1 || a.FocusedViewers != 0 || a.Draft || a.ViewerTypedAt != 0 {
+	if a := activityOf(t, cl, x.ID); a.Viewers != 1 || a.FocusedViewers != 0 {
 		t.Fatalf("an observer at the terminal: %+v", a)
 	}
-	if r, _ := cl.Call(ScreenReq{Term: x.ID}); strings.Contains(strings.Join(r.Screen.Lines, "\n"), "zzz") || strings.Contains(strings.Join(r.Screen.Lines, "\n"), "10 50") ||
-		strings.Contains(strings.Join(r.Screen.Lines, "\n"), "20 70") {
-		t.Fatalf("the observer typed or resized:\n%s", strings.Join(r.Screen.Lines, "\n"))
+	send(t, ob, FrameData, []byte("zzz\r"))
+	control(t, ob, Resize{Cols: 50, Rows: 10})
+	control(t, ob, Detach{})
+	eventually(t, "the observer's detach handled", func() bool { return activityOf(t, cl, x.ID).Viewers == 0 })
+	if a := activityOf(t, cl, x.ID); a.Draft || a.ViewerTypedAt != 0 {
+		t.Fatalf("the observer typed: %+v", a)
+	}
+	if rows, cols := ptySize(t, s, x.ID); rows != rows0 || cols != cols0 {
+		t.Fatalf("the observer resized the terminal: %dx%d, was %dx%d", cols, rows, cols0, rows0)
 	}
 	v := attached(t, sock, Attach{Term: x.ID, Cols: 90, Rows: 30})
 	waitScreen(t, cl, x.ID, "30 90") // the viewer's attach sets the size
 	control(t, v, Resize{Cols: 91, Rows: 31})
-	waitScreen(t, cl, x.ID, "31 91")
+	text := waitScreen(t, cl, x.ID, "31 91")
+	for _, never := range []string{"zzz", "10 50", "20 70"} {
+		if strings.Contains(text, never) {
+			t.Fatalf("the observer typed or resized (%q):\n%s", never, text)
+		}
+	}
+}
+
+// ptySize is the terminal's PTY size as the kernel holds it: rows, cols.
+func ptySize(t *testing.T, s *Server, id string) (int, int) {
+	t.Helper()
+	term, ok := s.term(id)
+	if !ok {
+		t.Fatalf("no terminal %s", id)
+	}
+	rows, cols, err := pty.Getsize(term.pty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows, cols
 }
 
 // The stream ends with the program.
