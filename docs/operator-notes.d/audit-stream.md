@@ -13,4 +13,4 @@
   survives `busmon --reset`, is a record kind (backups keep it), `--delete` removes it. A trail, not
   a proof: any user allowed to append may trim with `XADD … MAXLEN 0` (the ACL suite asserts it).
   `agentbus audit [--action] [--actor] [--since] [--json]`, `audit export --since <d>` (JSON Lines,
-  oldest first). Nothing writes to it yet: the call sites are step 2, busmon's list step 3.
+  oldest first). The writers are step 2 (fragment audit-call-sites), busmon's list step 3.
