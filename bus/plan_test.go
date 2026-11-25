@@ -144,10 +144,18 @@ func TestVerdictsAfterReadsIncrementally(t *testing.T) {
 	if err != nil || len(prov) != 1 || prov[0].ID != id || prov[0].AuthorProvider != "anthropic" || prov[0].ReviewerProvider != "openai" {
 		t.Fatalf("providers: %+v %v", prov, err)
 	}
-	// VerdictsSince reads by time: from the entry's own millisecond on.
+	// VerdictsSince reads by time: from the entry's own millisecond on. c may
+	// share d's millisecond (foureyes: flaky when it did), so the read ends
+	// with d and holds nothing older than ms.
 	ms, _ := splitID(id)
-	if got, err := b.VerdictsSince(ctx, ms, 10); err != nil || len(got) != 1 || got[0].ID != id || got[0].ReviewerProvider != "openai" {
+	got, err := b.VerdictsSince(ctx, ms, 10)
+	if err != nil || len(got) == 0 || got[len(got)-1].ID != id || got[len(got)-1].ReviewerProvider != "openai" {
 		t.Fatalf("since %d: %+v %v", ms, got, err)
+	}
+	for _, v := range got {
+		if v.TS < ms {
+			t.Fatalf("since %d read %s, older", ms, v.ID)
+		}
 	}
 	if got, err := b.VerdictsSince(ctx, ms+1, 10); err != nil || len(got) != 0 {
 		t.Fatalf("since %d: %+v %v", ms+1, got, err)
