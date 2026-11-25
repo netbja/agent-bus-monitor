@@ -162,7 +162,7 @@ func TestAutoCompactTypesOnceAfterTheHold(t *testing.T) {
 	}
 	w.pass(30) // the episode ends: its marks go, the next rise may compact again
 	marks, _ := w.b.QuotaMarks(w.ctx)
-	for _, k := range []string{bus.CompactSinceMark("coder"), bus.CompactMark("coder"), bus.CompactNoticeMark("coder")} {
+	for _, k := range []string{bus.CompactSinceMark("coder"), bus.CompactMark("coder"), bus.CompactTypedMark("coder")} {
 		if _, ok := marks[k]; ok {
 			t.Errorf("%s outlived the episode", k)
 		}
@@ -281,6 +281,42 @@ func TestAutoCompactReinspectAborts(t *testing.T) {
 			w.pass(92) // ready again: judged again and compacted
 			if w.compacts() != 1 {
 				t.Fatalf("next pass: compacts %d", w.compacts())
+			}
+		})
+	}
+}
+
+// reviewer-codex: a notice that fails after the /compact was typed is not
+// lost. master being swapped refuses it; once the swap ends, the next pass
+// delivers it, without a second /compact, whether the fill is still urgent or
+// has already fallen below the alert (the episode's end keeps it).
+func TestAutoCompactNoticeRetried(t *testing.T) {
+	for name, after := range map[string]float64{"still urgent": 94, "episode ended": 30} {
+		t.Run(name, func(t *testing.T) {
+			w := newCompactWorld(t, alwaysReady)
+			w.pass(92)
+			w.ageHold(compactAfter)
+			if err := w.b.BeginSwap(w.ctx, "master", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+				t.Fatal(err)
+			}
+			w.pass(93)
+			if w.compacts() != 1 {
+				t.Fatalf("%d /compact typed, want 1", w.compacts())
+			}
+			if n := w.count("master", "auto-compact:", false); n != 0 {
+				t.Fatalf("%d notices sent during master's swap", n)
+			}
+			w.pass(after) // still swapping: nothing yet, nothing lost
+			if err := w.b.EndSwap(w.ctx, "master"); err != nil {
+				t.Fatal(err)
+			}
+			w.pass(after)
+			w.pass(after)
+			if n := w.count("master", "auto-compact: coder at 93% for 10 min", false); n != 1 {
+				t.Fatalf("%d notices to master after the swap, want 1", n)
+			}
+			if w.compacts() != 1 {
+				t.Fatalf("%d /compact typed, want 1", w.compacts())
 			}
 		})
 	}

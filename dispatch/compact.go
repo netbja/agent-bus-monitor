@@ -120,6 +120,9 @@ func compactSince(marks map[string]string, agent, session string) int64 {
 func (e *escalation) compact(ctx context.Context, a string, f bus.ContextFill, marks map[string]string) error {
 	l := e.l
 	c := l.cfg.Context
+	if err := l.compactNotice(ctx, a, marks); err != nil { // a notice still owed goes first
+		return err
+	}
 	if c.Compact == nil || e.urgent <= 0 {
 		return nil
 	}
@@ -188,13 +191,43 @@ func (e *escalation) compact(ctx context.Context, a string, f bus.ContextFill, m
 	if to == a || !bus.ValidName(to) {
 		return nil
 	}
-	mins := (f.At - since) / 60000
-	note := fmt.Sprintf("auto-compact: %s at %.0f%% for %d min with no hand-off declared; /compact typed into its idle pane. It keeps working from a summary of its context: check its current step before sending it more.", a, f.Pct, mins)
-	_, err = l.b.FencedCmdOnce(ctx, l.token, bus.CompactNoticeMark(a), f.Session, dispatchFrom, to, bus.CmdDirective, note, true)
-	if errors.Is(err, bus.ErrSwapInProgress) {
+	// The notice is owed from here: recorded first, so a refusal (master
+	// being swapped) or an error leaves it for a later pass, never a second
+	// /compact (reviewer-codex).
+	typed := fmt.Sprintf("%s|%d|%s|%d", f.Session, f.At, strconv.FormatFloat(f.Pct, 'f', -1, 64), (f.At-since)/60000)
+	if err := l.b.FencedQuotaSet(ctx, l.token, bus.CompactTypedMark(a), typed); err != nil {
+		return err
+	}
+	return l.compactNotice(ctx, a, map[string]string{bus.CompactTypedMark(a): typed})
+}
+
+// compactNotice delivers the wake=no notice of a typed /compact that marks
+// still owe (CompactTypedMark), once per typing, and then forgets the debt.
+// master being swapped refuses it with nothing written: a later pass retries.
+func (l *loop) compactNotice(ctx context.Context, a string, marks map[string]string) error {
+	v, ok := marks[bus.CompactTypedMark(a)]
+	if !ok {
 		return nil
 	}
-	return err
+	to := l.cfg.EscalateTo
+	parts := strings.Split(v, "|")
+	if to == a || !bus.ValidName(to) || len(parts) != 4 {
+		return l.b.FencedQuotaDel(ctx, l.token, bus.CompactTypedMark(a))
+	}
+	pct, _ := strconv.ParseFloat(parts[2], 64)
+	mins, _ := strconv.ParseInt(parts[3], 10, 64)
+	episode := parts[0] + "|" + parts[1]
+	if marks[bus.CompactNoticeMark(a)] != episode {
+		note := fmt.Sprintf("auto-compact: %s at %.0f%% for %d min with no hand-off declared; /compact typed into its idle pane. It keeps working from a summary of its context: check its current step before sending it more.", a, pct, mins)
+		_, err := l.b.FencedCmdOnce(ctx, l.token, bus.CompactNoticeMark(a), episode, dispatchFrom, to, bus.CmdDirective, note, true)
+		if errors.Is(err, bus.ErrSwapInProgress) {
+			return nil // owed still: the next pass retries
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return l.b.FencedQuotaDel(ctx, l.token, bus.CompactTypedMark(a))
 }
 
 // deferCompact logs why an agent was not compacted, once per change of
