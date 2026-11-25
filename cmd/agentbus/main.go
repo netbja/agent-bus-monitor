@@ -82,6 +82,11 @@ func main() {
 	// The broker user, while broker.acl is on (step 4b): by command, identity
 	// and ancestry; nothing changes while it is off.
 	bus.SetConnectEntry(connectEntryOf(args), agentcaller.AncestorOrNone)
+	// An observer (roles.toml kind = "observer") reads only: its writes are
+	// refused here, before any command runs (observer-role).
+	if code, refused := observerGuard(args); refused {
+		os.Exit(code)
+	}
 	// Inside an agent's terminal, the host commands go through the
 	// dispatcher (herdr exit §4.2): the holder refuses them from there.
 	if code, ok := relayFromTerminal(context.Background(), args, host, project, os.Getenv, os.Stdout, os.Stderr); ok {

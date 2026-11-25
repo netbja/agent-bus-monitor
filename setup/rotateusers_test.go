@@ -117,7 +117,11 @@ func TestRotateUsers(t *testing.T) {
 	// reviewer-codex: users.acl follows each user (spec §3 step 4: SETUSER,
 	// then ACL SAVE), so an interruption leaves no rotated file the saved
 	// file does not hold.
-	if want := []int{1, 2, 3, 4, 5, 6}[:len(bus.ACLRoles)]; !slices.Equal(b.saves, want) {
+	want := make([]int, len(bus.ACLRoles)) // 1, 2, ... one save per user
+	for i := range want {
+		want[i] = i + 1
+	}
+	if !slices.Equal(b.saves, want) {
 		t.Errorf("saves after %v changes, want one per user %v", b.saves, want)
 	}
 }

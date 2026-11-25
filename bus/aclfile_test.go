@@ -119,4 +119,31 @@ func TestACLFileOnADisposableRedis(t *testing.T) {
 	if err := as(ACLPing, pw[ACLPing]).Get(ctx, "p:pilot").Err(); err == nil {
 		t.Error("ping may GET")
 	}
+	// observer-role: reads every key, writes none, runs no script.
+	obs := as(ACLObserver, pw[ACLObserver])
+	if err := as(ACLMaster, pw[ACLMaster]).XAdd(ctx, &redis.XAddArgs{Stream: "p:status", Values: []string{"from", "coder"}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := obs.XLen(ctx, "p:status").Result(); err != nil || n != 1 {
+		t.Errorf("observer may not read a stream: %d %v", n, err)
+	}
+	if err := obs.Get(ctx, "p:pilot").Err(); err != nil {
+		t.Errorf("observer may not GET: %v", err)
+	}
+	if err := obs.HGetAll(ctx, "p:board").Err(); err != nil {
+		t.Errorf("observer may not HGETALL: %v", err)
+	}
+	for name, err := range map[string]error{
+		"XADD":   obs.XAdd(ctx, &redis.XAddArgs{Stream: "p:cmd", Values: []string{"from", "observer"}}).Err(),
+		"SET":    obs.Set(ctx, "p:board", "x", 0).Err(),
+		"HSET":   obs.HSet(ctx, "p:board", "t", "x").Err(),
+		"DEL":    obs.Del(ctx, "p:status").Err(),
+		"EVAL":   obs.Eval(ctx, "return 1", nil).Err(),
+		"XGROUP": obs.XGroupCreateMkStream(ctx, "p:cmd", "g", "0").Err(),
+		"KEYS":   obs.Keys(ctx, "*").Err(),
+	} {
+		if err == nil {
+			t.Errorf("observer may %s", name)
+		}
+	}
 }
