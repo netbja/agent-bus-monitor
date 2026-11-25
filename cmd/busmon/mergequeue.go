@@ -75,6 +75,9 @@ func mergeItems(s snapshot) []attentionItem {
 				text += ": " + it.Title
 			}
 		}
+		if oneApproval(it) {
+			text += " (1 approval)"
+		}
 		if why != "" {
 			text += " (as of " + time.UnixMilli(rec.ItemsAt).Local().Format("15:04") + ": " + why + ")"
 		}
@@ -82,6 +85,14 @@ func mergeItems(s snapshot) []attentionItem {
 			At: time.UnixMilli(it.ApprovedAt), Head: it.Head, Branch: it.Branch})
 	}
 	return out
+}
+
+// oneApproval: the item's head has one current approver (single-approval
+// §4.5), delivered on one approval; never read from len(Approvals), which
+// counts a reviewer's stale and repeated approves too. A record written
+// before Approvers says nothing.
+func oneApproval(it bus.MergeItem) bool {
+	return len(it.Approvers) == 1
 }
 
 // mergeKey is a merge item's For you key (triage-dedupe §2): its PR's
@@ -121,6 +132,9 @@ func mergePage(rec bus.MergeQueueRecord, head string, width int) (title string, 
 		checks = append(checks, a.Reviewer+": "+a.Message)
 	}
 	f.add("Approved by", S(RoleOK, Preview(strings.Join(who, ", "))))
+	if oneApproval(*it) {
+		f.add("Approvals", S(RoleAccent, "1 approval"), S(RoleMuted, " (the current approver: "+Preview(it.Approvers[0])+")"))
+	}
 	f.add("Subject", S(RoleText, Preview(strings.Join(it.Subjects, ", "))))
 	src := rec.Source
 	if rec.ItemsAt > 0 {
