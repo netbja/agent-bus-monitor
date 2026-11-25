@@ -94,6 +94,8 @@ type page struct {
 	histKey    histKey     // ovHistory: what histRows were built for
 	histRows   []Line      // ovHistory: the rows built, none marked (markHistRow)
 	histTitle  string
+	audit      *auditView  // ovAudit: the read and the filter (sel: the selected row)
+	aitems     []auditItem // ovAudit: its selectable rows
 
 	set *settingsPage // ovSettings: its rows and the change in progress (sel: the selected row)
 	ns  *notifySetup  // ovNotifySetup: its step, fields and outcome
@@ -628,6 +630,8 @@ func (m *Model) buildPage() bool {
 		}
 		p.sel = clamp(p.sel, 0, max(0, len(p.hrows)-1))
 		p.title, p.body = p.histTitle, markHistRow(p.histRows, p.hrows, p.sel)
+	case ovAudit:
+		m.buildAudit(p, width)
 	case ovSettings:
 		p.set.running = ""
 		if r := m.ui.sleepRun; r != nil && r.verb == "backup" {
@@ -952,11 +956,18 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 			return nil
 		case act == ActOlder:
 			return m.historyOlder(p)
+		case act == ActAudit:
+			return m.openAudit()
 		case k.Code == keyEnter:
 			return m.openHistoryEntry(p)
 		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
 			m.moveSel(p, act, m.readerRows(), histLines(p))
 			return nil
+		}
+	}
+	if p.kind == ovAudit {
+		if cmd, done := m.auditKey(p, act, k); done {
+			return cmd
 		}
 	}
 	if cmd, done := m.memoryKey(p, act, k); done {
@@ -1304,6 +1315,8 @@ func (m *Model) readerClick(x, y int) tea.Cmd {
 				m.refresh()
 			}
 		}
+	case ovAudit:
+		m.auditClick(p, line)
 	}
 	return nil
 }
@@ -1516,6 +1529,10 @@ func (m Model) pageOffers(act Action) bool {
 		return (p.kind == ovIdeas || p.kind == ovIdea) && p.ideas.pick == nil
 	case ActOlder:
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
+	case ActAudit:
+		return p.kind == ovHistory
+	case ActAuditFilter:
+		return p.kind == ovAudit && p.audit != nil && p.audit.loaded
 	case ActFilter:
 		return p.kind == ovHistory || p.kind == ovServiceLog
 	case ActContext:

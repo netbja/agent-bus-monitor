@@ -368,6 +368,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.gotThread(msg)
 	case historyMsg:
 		m.gotHistory(msg)
+	case auditMsg:
+		m.gotAudit(msg)
 	case servicesMsg:
 		return m.gotServices(msg)
 	case svcTickMsg:

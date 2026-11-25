@@ -138,6 +138,8 @@ const (
 	ActIdeas          // open the Ideas page (F6)
 	ActMemory         // open the Memory page (F7): the person's facts (person-memory §4.4)
 	ActIdeaFilter     // Ideas (F6): tab, the next state shown
+	ActAudit          // History: a, the Audit list
+	ActAuditFilter    // Audit: tab, the next action shown
 	ActIdeaAdd        // Ideas (F6): a, add an idea (its title on the line)
 	ActIdeaState      // Ideas (F6) or an idea's page: s, the state picker (←→ choose, enter sets it)
 	ActIdeaSet        // Ideas (F6) or an idea's page: y decided, l later, d doing, x dropped, at once (ideas-triage)
@@ -393,6 +395,9 @@ var (
 		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread; on an agent's page: attach to its terminal", Act: ActTour, match: runeIs('t')},
 		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words; a service log (F3, enter): its lines holding a word (esc clears it)", Act: ActFilter, OnPage: true, match: runeIs('f')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
+		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
+		{Keys: "a", Hint: "audit", Help: "History (H): the Audit list, the project's last 200 audit entries (who approved, merged, pushed or forced what), read only; tab shows one action, then the next, then all; enter opens an entry in place, its ref first", Act: ActAudit, OnPage: true, match: runeIs('a')},
+		{Keys: "tab", Hint: "action", Help: "Audit (H, a): show one action, then the next, then all", Act: ActAuditFilter, OnPage: true, match: keyIs(keyTab)},
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command); a service log: show or fold the routine none decisions", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "remember", Help: "Memory (F7) or a topic's page: remember your own words, in the compose window: its first line topic type importance (keep-both or supersedes=<id> for a second decision), the rest your words", Act: ActMemoryAdd, OnPage: true, match: runeIs('a')},
@@ -400,7 +405,6 @@ var (
 		{Keys: "x", Hint: "forget", Help: "a topic's page (F7, enter): forget the selected observation, after y (git history keeps it until agentbus mem person purge)", Act: ActMemoryForget, OnPage: true, match: runeIs('x')},
 		{Keys: "s", Hint: "state", Help: "Ideas (F6) or an idea's page: the state picker under the idea (" + GlyphArrowL + GlyphArrowR + " choose, enter sets it as you, esc cancels)", Act: ActIdeaState, OnPage: true, match: runeIs('s')},
 		{Keys: "tab", Hint: "filter", Help: "Ideas (F6): show one state, then the next, then all", Act: ActIdeaFilter, OnPage: true, match: keyIs(keyTab)},
-		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
 		{Keys: "r", Hint: "replay", Help: "About (A): play the packet's run again", Act: ActReplay, OnPage: true, match: runeIs('r')},
 		{Keys: "1-3", Hint: "context", Help: "an item's page (For you): open its n-th Context line, a message attached to it, in full (a click too; on a question's page, where the digits choose an option, a click)", Act: ActContext, OnPage: true, match: runeIs('1', '2', '3')},
 		{Keys: "d", Hint: "done", Help: "the plan (p): show or fold the done tasks", Act: ActShowDone, OnPage: true, match: runeIs('d')},
