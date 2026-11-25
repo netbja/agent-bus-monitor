@@ -123,7 +123,7 @@ func TestSystemdHolderUnitMemoryCap(t *testing.T) {
 	// A limit is one systemd value: a line break or a space in it would add a
 	// directive of its own, so InstallHolder refuses it.
 	m := Systemd{Run: (&fakeRun{}).run, Paths: p}
-	for _, bad := range []HolderLimits{{MemoryMax: "4G\nExecStartPre=/bin/sh"}, {MemoryHigh: "1 G"}, {SwapMax: "4G\r"}} {
+	for _, bad := range []HolderLimits{{MemoryMax: "4G\nExecStartPre=/bin/sh"}, {MemoryHigh: "1 G"}, {SwapMax: "4G\r"}, {MemoryMax: "4\tG"}} {
 		if _, err := m.InstallHolder(spec(bad)); err == nil || !strings.Contains(err.Error(), "memory limit") {
 			t.Errorf("%+v installed: %v", bad, err)
 		}

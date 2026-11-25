@@ -549,12 +549,14 @@ var Keys = append([]*Key{
 	// Cap A, the holder unit's memory (spec
 	// 2026-11-25-agent-resource-limits-design.md §3, §8; the person's Q1):
 	// systemd's syntax, "off" for no limit. The person's alone and per host
-	// (RAM differs), written into the unit by agentbus up.
-	{Name: "limits.holder_memory_max", Kind: String, Default: "70%", ReadBy: "agentbus up (the holder unit's MemoryMax)", MachineOnly: true, PersonOnly: true,
+	// (RAM differs), written into the unit by agentbus up, whose reload
+	// applies it to the running holder at once: below its current use, the
+	// kernel reclaims or kills then.
+	{Name: "limits.holder_memory_max", Kind: String, Default: "70%", ReadBy: "agentbus up (the holder unit's MemoryMax; the running holder's at once)", MachineOnly: true, PersonOnly: true,
 		file: fileMemoryLimit},
-	{Name: "limits.holder_memory_high", Kind: String, Default: "60%", ReadBy: "agentbus up (the holder unit's MemoryHigh: a soft throttle)", MachineOnly: true, PersonOnly: true,
+	{Name: "limits.holder_memory_high", Kind: String, Default: "60%", ReadBy: "agentbus up (the holder unit's MemoryHigh, a soft throttle; the running holder's at once)", MachineOnly: true, PersonOnly: true,
 		file: fileMemoryLimit},
-	{Name: "limits.holder_swap_max", Kind: String, Default: "4G", ReadBy: "agentbus up (the holder unit's MemorySwapMax)", MachineOnly: true, PersonOnly: true,
+	{Name: "limits.holder_swap_max", Kind: String, Default: "4G", ReadBy: "agentbus up (the holder unit's MemorySwapMax; the running holder's at once)", MachineOnly: true, PersonOnly: true,
 		file: fileMemoryLimit},
 	{Name: "dispatch.submit_wait", Env: "AGENT_BUS_SUBMIT_WAIT", Kind: Duration, Default: 2 * time.Second, ReadBy: "agentbus holder",
 		env: envBoundedDuration(time.Minute), file: fileBoundedDuration(time.Minute)},

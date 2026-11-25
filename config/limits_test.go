@@ -31,7 +31,7 @@ func TestHolderLimitKeys(t *testing.T) {
 				t.Errorf("%s = %q refused: %q", name, good, why)
 			}
 		}
-		for _, bad := range []any{"", "0%", "101%", "70%%", "-1G", "4GB", "G", "4 G", "x", "4G\nExecStart=/bin/sh", "infinity", int64(4)} {
+		for _, bad := range []any{"", "0", "0G", "0.0G", "0%", "101%", "070%", "70%%", "-1G", "4GB", "4GG", "G", ".5G", "4.", "1..5G", "4 G", "4\tG", "x", "4G\nExecStart=/bin/sh", "infinity", int64(4)} {
 			if _, why := k.file(bad); why == "" {
 				t.Errorf("%s = %#v taken", name, bad)
 			}
