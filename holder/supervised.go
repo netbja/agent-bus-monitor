@@ -307,6 +307,16 @@ func (m Supervised) RemoveHolder(project, key string) error {
 // record that cannot be read, or whose values disagree with its place, is
 // left out.
 func (m Supervised) HolderUnits(project string) ([]service.HolderUnit, error) {
+	return m.holderUnits(project, false)
+}
+
+// HolderUnitsStrict is HolderUnits that fails on a record it cannot read, or
+// whose values disagree with its place (service.StrictHolderLister).
+func (m Supervised) HolderUnitsStrict(project string) ([]service.HolderUnit, error) {
+	return m.holderUnits(project, true)
+}
+
+func (m Supervised) holderUnits(project string, strict bool) ([]service.HolderUnit, error) {
 	var projects []string
 	if project != "" {
 		projects = []string{project}
@@ -331,13 +341,19 @@ func (m Supervised) HolderUnits(project string) ([]service.HolderUnit, error) {
 		if err != nil {
 			return nil, err
 		}
-		names, err := filepath.Glob(filepath.Join(dir, "holder-*.pid"))
+		names, err := supervisedRecordNames(dir, strict)
 		if err != nil {
 			return nil, err
 		}
 		for _, name := range names {
 			r, err := readSupervisedRecord(name)
 			if err != nil || r.Project != p || filepath.Base(name) != "holder-"+r.Key+".pid" || !service.ValidBuildKey(r.Key) {
+				if strict && err != nil {
+					return nil, fmt.Errorf("holder record %s cannot be read: %w", name, err)
+				}
+				if strict {
+					return nil, fmt.Errorf("holder record %s disagrees with its place (project %s, build %s)", name, r.Project, r.Key)
+				}
 				continue
 			}
 			out = append(out, service.HolderUnit{Project: r.Project, Key: r.Key, Raw: r.Raw})
@@ -346,6 +362,30 @@ func (m Supervised) HolderUnits(project string) ([]service.HolderUnit, error) {
 	slices.SortFunc(out, func(a, b service.HolderUnit) int {
 		return strings.Compare(a.Project+"\x00"+a.Key, b.Project+"\x00"+b.Key)
 	})
+	return out, nil
+}
+
+// supervisedRecordNames are dir's holder-*.pid files. Lenient, a directory
+// that cannot be read has none (filepath.Glob ignores the error); strict,
+// only a directory that does not exist has none, any other read error is
+// returned (reviewer-codex on quiet-update 4a r2).
+func supervisedRecordNames(dir string, strict bool) ([]string, error) {
+	if !strict {
+		return filepath.Glob(filepath.Join(dir, "holder-*.pid"))
+	}
+	ents, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("holder records in %s cannot be listed: %w", dir, err)
+	}
+	var out []string
+	for _, e := range ents {
+		if n := e.Name(); strings.HasPrefix(n, "holder-") && strings.HasSuffix(n, ".pid") {
+			out = append(out, filepath.Join(dir, n))
+		}
+	}
 	return out, nil
 }
 

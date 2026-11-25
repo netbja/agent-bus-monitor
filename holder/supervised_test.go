@@ -451,3 +451,73 @@ func TestProcStartOfAZombieIsGone(t *testing.T) {
 		t.Fatalf("a zombie read as %v, want errNoProcess", err)
 	}
 }
+
+// HolderUnitsStrict fails on a record it cannot read or that disagrees with
+// its place; HolderUnits leaves it out (reviewer-codex on quiet-update 4a).
+func TestSupervisedHolderUnitsStrict(t *testing.T) {
+	f := newSupervised(t)
+	key := f.install(t, "demo", "v1.0.0")
+	if units, err := f.m.HolderUnitsStrict(""); err != nil || len(units) != 1 {
+		t.Fatalf("a good record: %+v %v", units, err)
+	}
+	path, err := f.m.recordPath("demo", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := filepath.Join(filepath.Dir(path), "holder-"+service.BuildKey("v2.0.0")+".pid")
+	for body, why := range map[string]string{"{garbage": "cannot be read", string(mustRead(t, path)): "disagrees with its place"} { // unreadable; another key's record under this name
+		if err := os.WriteFile(bad, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if units, err := f.m.HolderUnitsStrict(""); err == nil || !strings.Contains(err.Error(), why) {
+			t.Errorf("%q: strict %+v %v, want %q", body, units, err, why)
+		}
+		if units, err := f.m.HolderUnits(""); err != nil || len(units) != 1 {
+			t.Errorf("%q: lenient %+v %v", body, units, err)
+		}
+	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// Strict, a directory of records that cannot be listed is an error, not "no
+// holder" (filepath.Glob hides it; reviewer-codex on 4a r2), and one that
+// does not exist holds none (RunAgentbusDir creates the run root). ProjectDir already
+// refuses a project directory with another mode, in both listings, so the
+// listing itself is tested on a directory it cannot read.
+func TestSupervisedHolderUnitsStrictDirectories(t *testing.T) {
+	f := newSupervised(t)
+	if units, err := f.m.HolderUnitsStrict(""); err != nil || len(units) != 0 {
+		t.Fatalf("nothing started yet: %+v %v", units, err)
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 0000 directory")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "holder-k.pid"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if names, err := supervisedRecordNames(dir, true); err != nil || len(names) != 1 {
+		t.Fatalf("readable: %v %v", names, err)
+	}
+	if err := os.Chmod(dir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	if names, err := supervisedRecordNames(dir, true); err == nil || !strings.Contains(err.Error(), "cannot be listed") {
+		t.Errorf("strict, unreadable: %v %v", names, err)
+	}
+	if names, err := supervisedRecordNames(dir, false); err != nil || len(names) != 0 {
+		t.Errorf("lenient, unchanged (Glob): %v %v", names, err)
+	}
+	if names, err := supervisedRecordNames(filepath.Join(t.TempDir(), "absent"), true); err != nil || len(names) != 0 {
+		t.Errorf("strict, absent: %v %v", names, err)
+	}
+}

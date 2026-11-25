@@ -43,6 +43,15 @@ type Deps struct {
 	// Running are this host's active dispatch and missions units, each with
 	// the build it recorded.
 	Running func(ctx context.Context) ([]Service, error)
+	// Holders are the projects with an active holder of any build on this
+	// host (quiet-update-auto §4.3 step 4); Judge reads a project's agents
+	// and missions on its broker, at its Redis TIME. Either failing defers
+	// an automatic pass (it fails closed).
+	Holders func(ctx context.Context) ([]string, error)
+	Judge   func(ctx context.Context, project string) (Judged, error)
+	// AutoSetting is updates.auto from config.toml, read at the start of a
+	// pass: "install" is the person's yes given ahead (§2).
+	AutoSetting func() string
 	// Settle is how long a restarted service has to record its build (60 s).
 	Settle time.Duration
 	// HolderKeys are the holder builds on disk, every project's: a unit's or
