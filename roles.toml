@@ -393,8 +393,9 @@ deny = ["Bash(agentbus deliver *)"]
 # An observer (observer-role, the person 2026-11-25): a session agentbus does not
 # launch, such as claude-ao (the Orchestrator), read-only on the bus. No profile,
 # no terminal, never popped. Its session sets AGENT_BUS_AGENT=observer: the CLI
-# then allows only reads (status, board, request list, reports, history,
-# verdicts, agents...) and refuses every write; with broker.acl on, its Redis
-# user has read commands only. It never writes as the person.
+# then allows only reads (agents, board, request list, reports, thread, history,
+# verdicts, asks, health...) and refuses every write, status included; with
+# broker.acl on, its Redis user has read commands only. It never writes as the
+# person.
 [roles.observer]
 kind = "observer"

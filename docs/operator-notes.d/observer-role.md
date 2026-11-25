@@ -10,8 +10,8 @@
   identity it claims (its ancestry is read only for a write, only when the manifest declares an observer) (`cmd`, `report`, `status`, `request send/accept`,
   `deliver`, `verdict`, `pop`, `retire`, `config set`, `subscribe`...). With `broker.acl` off that
   refusal is a convention: a process can still write Redis directly. With it on, the identity
-  connects as the new `observer` ACL user (as does any process under a registered observer) (`-@all +@read +@connection -@dangerous %R~*`: every key
-  read, nothing written, no script), under any ancestry; an install with ACL on gets that user's
+  connects as the new `observer` ACL user (as does any process under a registered observer) (`-@all +@read +@connection -@dangerous +time %R~*`: every
+  key read, nothing written, no script; TIME for the reads that date what they read), under any ancestry; an install with ACL on gets that user's
   password at the next `./setup.sh acl off` then `on`; until then
   `rotate-redis-password` refuses, naming its missing password file. A manifest that cannot be read limits nobody (as before).
   kind is the mechanism the external-wake spec's `kind = "external"` joins later.

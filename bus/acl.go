@@ -71,8 +71,9 @@ func ACLRules(role string) []string {
 	case ACLObserver:
 		// observer-role (the person, 2026-11-25): every key read, nothing
 		// written, no script; -@dangerous after the grants takes KEYS and the
-		// connection's admin subcommands back.
-		return []string{"-@all", "+@read", "+@connection", "-@dangerous", "%R~*"}
+		// connection's admin subcommands back; TIME (not in @read) for the
+		// reads that date what they read: board, request, health (foureyes).
+		return []string{"-@all", "+@read", "+@connection", "-@dangerous", "+time", "%R~*"}
 	}
 	return nil
 }
