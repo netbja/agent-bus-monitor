@@ -1,16 +1,21 @@
 # Finer rendering in busmon (tui-rendering)
 
-Status: spec r1, for review (subject `tui-rendering-spec`). Not built. Base: origin/dev `04c1755f`.
+Status: spec r2, for review (subject `tui-rendering-spec`). Not built. Base: origin/dev `04c1755f`.
 Author: architect, from the person's request relayed by master (task `tui-rendering-spec`, cmd
 `1795608801015-0`). **No new dependency:** everything below uses what `go.mod` already holds
-(bubbletea v2, lipgloss v2, `charmbracelet/colorprofile`, `go-colorful` indirect). No image and no
+(bubbletea v2, lipgloss v2, `charmbracelet/colorprofile`). The ramp is a plain RGB blend, so
+`go-colorful` stays an indirect module and `go.mod` does not change. No image and no
 graphics protocol. The questions for the person are last (§7).
+r2: reviewer-codex's reject of r1 (verdict on `dn4a9v4m5w13`): the timeline has a glyph per state
+without colour, and `display.rendering` and `display.graphs` have a precedence. foureyes's approve
+of r1 (report `1795609713413-0`): the drawing code's seam is named, the ramp needs no new direct
+module, the 256-colour row says what changes, and the golden matrix is bounded.
 
 ## 1. What busmon draws today
 
 One theme (`cmd/busmon/theme.go`) gives every colour; the glyphs are constants there
 (`theme.go:319-395`). Colour depth comes from `colorprofile.Detect` (`main.go:936`). **Any depth
-below truecolor, 256 included, falls to the 16-colour palette** (`ResolveTheme`, `theme.go:96`),
+below truecolor, 256 included, falls to the 16-colour palette** (`ResolveTheme`, `theme.go:98`),
 and the finer effects (eighth cells, fades, track backgrounds) exist only in truecolor
 (`Theme.Animated`, `theme.go:198`).
 
@@ -22,7 +27,7 @@ and the finer effects (eighth cells, fades, track backgrounds) exist only in tru
 | V4 | Account cards' window gauges | Tokens | thin gauge with pace mark | `account_cards.go:65` |
 | V5 | Header quota gauges | header, wide tier | thin ━ on a faded ━ (truecolor) or ─, pace mark │/╋, 500 ms slide; 5 or 10 cells; green < 80 %, attention, error ≥ 95 % | `bars.go:79` `thinGauge`, `quota.go:79`, `header.go:347` |
 | V6 | Progress line | Work list, Requests, Plan | 10 × ━, whole cells only, "~N%", "ends ~HH:MM", capped 95 % | `progress.go:77` `progressLine` |
-| V7 | Plan bars | Plan | ━ summary bar; █/░ group bars; one eighth-cell bar | `planboard.go:236`, `plan_r2.go:258, 375` |
+| V7 | Plan bars | Plan | ━ summary bar; █/░ group bars; one eighth-cell bar | `planboard.go:244`, `plan_r2.go:258, 375` |
 | V8 | Context fill | Agents (wide), agent detail | text only: tokens and "N%", attention colour from the alert threshold | `agents.go:445` `ctxCell`, `detail_agent.go:215` |
 | V9 | Loading skeleton | Tokens | 24 × ░ with a fade | `tokens_view.go:95` |
 | V10 | Idle screensaver, About | idle, About | ━ threads | `idleview_draw.go:418`, `about.go:333` |
@@ -40,7 +45,13 @@ picks braille), `display.icons`, `display.theme`. Golden tests run at 60x20, 80x
 ## 2. One drawing package
 
 **`internal/finedraw`**, the only code that turns a value into cells. The views call it; none draws
-its own glyphs. It absorbs what exists, so nothing is drawn twice: `gaugeSegs` and `thinGauge`
+its own glyphs.
+
+**The seam.** busmon's `Line`, `Seg`, `Role` and `Theme` live in package `main` (`cmd/busmon`), and
+so does the slide animation's state (`bars.thin`'s per-bar key). `finedraw` cannot import them. So it
+returns its own cells: a text and, per cell, either a level (an index the caller maps to a role) or
+an RGB colour (for a ramp). busmon maps them to `Seg` and `Role`, and keeps the animation: it asks
+`finedraw` for the frame's value and draws what comes back. It absorbs what exists, so nothing is drawn twice: `gaugeSegs` and `thinGauge`
 (`bars.go`), the braille and block sparklines (`graphs.go`), `planBar` (`plan_r2.go:375`) and the
 progress bar of `progressLine`.
 
@@ -53,7 +64,11 @@ progress bar of `progressLine`.
   so 2 rows give 8 levels. One row stays available.
 - **`Strip(segments, width, colours)`**: a timeline. A terminal cell takes one foreground and one
   background colour, so a cell carries at most two states: ▌ in the first state's colour on the
-  second's background. 20 cells hold 40 samples.
+  second's background. 20 cells hold 40 samples. **Without colour** (`NO_COLOR`, or a palette
+  with none), two colours in one cell cannot be told apart, so the strip falls to one state per
+  cell, the more severe of the cell's two (blocked, then waiting, then working, then idle), each
+  with its own glyph: working █, blocked ▲, waiting ◆, idle ·, unknown a blank. In basic, the
+  same glyphs are used with their role colours.
 - **`Ramp`**: a gradient, computed in RGB (green to amber to red for usage; a single hue from dim to
   strong for volumes). In truecolor it is drawn as is. In 256 colours, colorprofile's own
   downsampling maps it to the nearest colour. In 16 colours it is the three roles busmon uses
@@ -72,13 +87,16 @@ A new setting on the Shift+C page, **`display.rendering`**: `auto`, `fine` or `b
 | bars and gauges | █ + eighths, gradient | ▇ and ░, role colours (today's non-truecolor look) | `#` and `-` |
 | sparklines | braille, 1 or 2 rows | block steps ▁…█, 1 row | `_.-:=+*#` (today's ascii) |
 | timeline strip | ▌ half cells, 2 states per cell | █, 1 state per cell | one letter per cell: `w`, `b`, `.` |
-| colour | as deep as the terminal: truecolor, 256 via downsampling, then 16 roles | 16 roles | as the terminal |
+| colour | the ramps as deep as the terminal (truecolor; 256 via colorprofile's downsampling); the theme's roles unchanged, so 16 on a 256-colour terminal as today | 16 roles | as the terminal |
 
 `auto` is `fine` when the locale is UTF-8, and `basic` otherwise (§7 Q1). Fonts cannot be
 detected from Go: a person whose font lacks braille sets `basic`.
 
 **`display.graphs` is folded in** (§7 Q4): `block` becomes `basic`, `braille` becomes `fine`, and
-`ascii` stays what a non-UTF-8 locale forces. The old key keeps working for one release, mapped,
+`ascii` stays what a non-UTF-8 locale forces. **Precedence,** by each key's source as the config
+registry reports it: an explicitly set `display.rendering` wins; else an explicitly set
+`display.graphs`, mapped; else `auto`. A non-UTF-8 locale forces the ascii column whatever is set.
+The settings page shows the one that decided. The old key keeps working for one release, mapped,
 and its help text on the settings page says so.
 
 **Octants and sextants** (U+1CD00, U+1FB00) are left out of the first build (§7 Q2): few fonts
@@ -140,8 +158,13 @@ Each step is one PR into `dev`, with both reviews.
 
 ## 6. Tests, and what this does not do
 
-**Tests:** goldens for every screen at 60x20, 80x24, 80x25, 140x40 and 140x60, in fine and basic,
-dark, light, 16 colours and `NO_COLOR`. `finedraw` unit tests: `Bar` at 0, at one eighth, at the
+**Tests:** goldens, bounded. Every screen keeps its existing goldens (dark and light, the four
+existing sizes) in fine, and gains 80x25. The full matrix (fine and basic, dark, light, 16 colours
+and `NO_COLOR`, at 80x25 and 140x40) is for the screens whose visuals change: Agents, Tokens,
+Work, the header and the agent detail. `Strip` under `NO_COLOR`: a cell holding working and
+blocked shows ▲, adjacent cells of different states show different glyphs, and every state has
+its glyph. Precedence: `display.graphs = braille` alone gives fine; with `display.rendering =
+basic` also set, basic; neither set, auto. `finedraw` unit tests: `Bar` at 0, at one eighth, at the
 maximum and past it; `Spark` with 1 and 2 rows, an empty and a flat series; `Strip` with two states
 in one cell; `Ramp` at each depth gives the expected colour or role. Width tests for every glyph
 used. Step 1's PR changes no golden file.
