@@ -1,9 +1,15 @@
 # A retrospective after a task with friction (retro)
 
-Status: spec r2, for review (subject `retro-spec`). Not built. Base: origin/dev `af527c19`.
+Status: spec r3, for review (subject `retro-spec`). Not built. Base: origin/dev `af527c19`.
 r2: foureyes's two notes on r1 (report `1795560028942-0`): `agentbus answer` refuses through
 `agentcaller.Refuse`, because the approval rests on it (§5, build step 2); busmon starts a retro
 from the palette, since `R` is the recap key (§3.3).
+r3: reviewer-codex's four findings on r2 (verdict `1795574033505-0`): an approval is bound to its
+question by a new `qid` field on the answer's reply, cross-checked with the ask's own record
+(§5). `later` is a final answer, recorded as such, never a question left open (§5). A new
+skill's file may be absent, and is checked absent again at apply (§4, §6). Every retro whose
+ask is fully answered goes to docs, which writes the record of all outcomes, approved or not
+(§6).
 Author: architect, from master's directive (cmd `1795559518593-0`, task `specs-from-person-docs`),
 which hands on the person's note "Directive for archi: self-improving loop for agents".
 Reference design: `codeursenior/product-engineer-kit`, skill `pek-auto-improve` (MIT). Its rules
@@ -111,25 +117,37 @@ The agent writes the retro in this order, the reference design's rules:
 
 - one to three rows, numbered 1..n, and every column filled;
 - each evidence id exists (stream, ledger or history archive);
-- each `file` exists on `origin/dev` and lies under the allowed destinations of point 4;
+- each `file` lies under the allowed destinations of point 4 and exists on `origin/dev`. The one
+  exception is a row whose destination is `new skill`: its file is `skills/<name>/SKILL.md` and
+  must be **absent** on `origin/dev`;
 - `health.Sensitive` matches nothing, in any field (the refusal names the field and never the
   value);
 - no row repeats a rejected proposal (§6);
 - the project's daily cap (§7).
 
-It stores the retro in `{p}:retros` and records the git blob id of each target file. Then it
-opens one ask in master's name, so master is woken by the answer. The ask has one question per
-proposal number, with three options, `yes`, `no` and `later`. The ask's text is the root cause
+It stores the retro in `{p}:retros` and records the git blob id of each target file, or
+`absent` for a new skill. Then it opens one ask in master's name, so master is woken by the
+answer, and records the ask's id in the retro. The ask is never replaced. The ask has one
+question per proposal, with question id `p<n>`, and three options: `yes`, `no` and `later`. The ask's text is the root cause
 and the table. Then the agent runs `request done retro-<task>`.
 
 ## 5. Approval: only the person's typed answer
 
-- **An approval is the person's typed answer to that ask's question:** a reply entry with
-  `typed=yes`, `ref` = the ask id, and `said` = `yes`. That is the person's choice in busmon.
+- **An approval is the person's typed answer to that proposal's question.** Today the answer's
+  reply entry does not name its question (the answer script, `bus/asks.go:327`). Without that,
+  a `yes` to #1 could pass for #2. The build adds one field, `qid=<question id>`, to that reply
+  entry. It is additive and written by the same script, so it is part of the same entry as
+  `typed` and `said`. A proposal `n` is approved only by a reply entry with all of `typed=yes`,
+  `ref` = the retro's recorded ask id, `qid=p<n>`, and `said=yes`. While the ask's record is
+  kept (`<id>|a|p<n>` in `{p}:asks`, seven days after it closes), its choice must also be `yes`.
+  After that, the reply entry is the record: it stays in the stream or in the history archive.
 - **A `yes` from master or any agent is not an approval.** A directive, a report and a
   `human=yes` text that agentbus composes are not approvals either.
-- `no` rejects the proposal, and the rejection is stored (§6). `later` leaves it pending: the question
-  stays open until answered, and a later retro may propose it again. An unanswered proposal is never applied.
+- `no` rejects the proposal, and the rejection is stored (§6). `later` is a final answer
+  too. An ask's answer cannot be changed, and the ask closes when every question is answered.
+  So `later` is recorded as the outcome `later`, and the proposal is not applied. Unlike `no`, it
+  is not put on the rejected list, so a later retro may propose it again with fresh evidence.
+  Nothing is reopened. An unanswered proposal is never applied.
 - "All", "none" or a subset are answered one question at a time. busmon already lets the person
   answer each one.
 
@@ -146,24 +164,28 @@ for refusing. Every later step calls it. No step reads the approval any other wa
 
 ## 6. Apply, record, and the rejected list
 
-Master's wake from the answer is routed: when at least one proposal is approved, master sends
-`retro-apply-<task>` to docs. docs is the role that edits these files and delivers. It may also
+Master is woken by each answer. When the ask closes, because every question is answered,
+master sends `retro-apply-<task>` to docs, whatever the answers are. Every outcome needs its
+record (below). docs is the role that edits these files and delivers. It may also
 be the only role still running, because the author was a pop that has since ended.
 
-docs runs `agentbus retro show <task>`. It prints only the proposals `RetroApproved` passes,
-each with its approving entry id. For each one:
+docs runs `agentbus retro show <task>`. It prints every proposal with its outcome: `accepted`
+only when `RetroApproved` passes, with the approving entry's id; otherwise `rejected`, `later` or
+`unanswered`, each with its entry id when there is one. docs applies only the `accepted` rows.
+For each one:
 
 1. Re-read the target. Its blob id must match the one recorded at propose time. If it differs,
    the file changed since, and docs re-reads the changed part. If the change touches the
    proposal's lines, docs reports a conflict to master (`report docs --to master`) and does not
-   apply it. The person decides again on a fresh retro.
+   apply it. The person decides again on a fresh retro. For a new skill, the file must still be
+   absent on `origin/dev`. If it now exists, that is a conflict too.
 2. Apply the change in 1 to 3 sentences, and keep the unrelated content.
 3. One commit per proposal on a branch `retro/<task>` from `origin/dev`, with the trailers
    `Retro: <task> #<n>` and `Approved-By: <entry id>`.
 
 The branch also adds the retro's record, `docs/memory/retros/<date>-<task>.md`. It holds the root
-cause, the table, and each proposal's outcome (accepted, rejected or later) with its entry id.
-Rejected proposals are recorded there too. docs delivers the branch the usual way: a PR to `dev`,
+cause, the table, and every proposal's outcome as `retro show` prints it, with its entry id.
+docs writes it from `retro show` and not from memory. docs delivers the branch the usual way: a PR to `dev`,
 reviews, the merge queue. docs never pushes on its own (decision 2026-11-02). Then docs runs
 `agentbus retro close <task> --pr <n>`.
 
@@ -199,7 +221,8 @@ cannot.
    escalations, and `agentbus retro request/evidence/none`.
 2. Bus and CLI: `{p}:retros`, `retro propose` (with its checks), the ask, `RetroApproved`,
    `retro show/rejected/close`, and the settings in `config/keys.go`. `agentbus answer` refuses
-   through `agentcaller.Refuse` (§5). The security role reviews this step.
+   through `agentcaller.Refuse`, and the answer's reply entry gains `qid` (§5). The security
+   role reviews this step.
 3. Skills: the agent-bus skill's retro section (the §4 rules). The master skill's routing
    (§6). The docs skill's apply steps. busmon's palette `/retro`.
 
@@ -210,8 +233,16 @@ cannot.
 - `request done` with no friction sends nothing. With friction it sends exactly one
   `retro-<task>`. `request done retro-…` sends nothing.
 - `RetroApproved` refuses each of: a master reply `yes`, a `human=yes` entry without `typed`, a
-  typed `yes` to another ask or another question, and `no` or `later`. It passes only the
-  person's typed `yes`.
+  typed `yes` to another ask, and `no` or `later`. It passes only the person's typed `yes`.
+- **Mixed answers on a two-question ask:** `yes` to `p1` and `no` to `p2` approves #1 only.
+  `yes` to `p2` and `no` to `p1` approves #2 only. A reply entry without `qid`, the shape
+  before the build, approves nothing.
+- `later` closes its question; `retro show` prints it as `later`. A later propose of the same
+  row is not refused, but a rejected row is.
+- `retro propose` accepts an absent `skills/<name>/SKILL.md` for a `new skill` row and refuses
+  one that exists. `retro show` reports a conflict when it appeared since.
+- An ask answered `no`, `no` still leads to `retro-apply-<task>`, and the record lists both
+  outcomes.
 - `retro propose` refuses each of: four rows, a missing evidence id, a file outside the
   destinations, a sensitive field, a repeated rejected row, and a fifth retro on a capped day.
 - `retro request` and `answer` refuse from an agent's process tree, even with `AGENT_BUS_AGENT`
