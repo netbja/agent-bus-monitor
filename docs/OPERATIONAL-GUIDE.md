@@ -181,6 +181,9 @@ agentbus -p myapp merge-queue             # what waits for your merge
 
 - near the limit (`dispatch.quota_warn`, 85 %) the agents holding work are told to finish their step;
 - at `dispatch.quota_hold` (95 %) that provider's agents are held until the window resets;
+- a provider may have its own thresholds, `[quota.<provider>]` `warn`, `drain`, `hold` in config.toml or
+  busmon's Shift+C (any provider id; 0 = the default above; without a usage reader they do nothing); one provider at its hold never holds the others, and
+  `agentbus -p myapp quota` shows which thresholds apply to each row;
 - `agentbus swap <role> --profile <fallback>` moves a role to another profile, and `--back` returns it.
 
 **Pause.** `agentbus -p myapp pause --for 2h` (or `--until 18:00`, `--until-reset`) wakes nobody

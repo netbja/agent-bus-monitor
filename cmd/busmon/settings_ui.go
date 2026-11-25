@@ -1090,6 +1090,9 @@ func settingHelp(r settingRow) string {
 	if r.PersonOnly {
 		return "your own setting: edit config.toml yourself"
 	}
+	if h := quotaSettingHelp(r.Key); h != "" { // quota-per-provider, any provider
+		return h
+	}
 	if h, ok := settingHelps[r.Key]; ok {
 		return h
 	}

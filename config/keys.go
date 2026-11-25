@@ -112,7 +112,7 @@ type Key struct {
 	file func(v any) (any, string)         // a decoded file value: the setting, or why not
 }
 
-var Keys = []*Key{
+var Keys = append([]*Key{
 	{Name: "waiting.popup_after", Kind: Duration, Default: 5 * time.Minute, ReadBy: "busmon", Legacy: true, file: fileDuration(true)},
 	{Name: "waiting.snooze", Kind: Duration, Default: 15 * time.Minute, ReadBy: "busmon", Legacy: true, file: fileDuration(false)},
 	{Name: "waiting.bell", Kind: Bool, Default: true, ReadBy: "busmon", Legacy: true, file: fileBool},
@@ -875,7 +875,7 @@ var Keys = []*Key{
 			}
 			return nil, "want days such as \"7d\", or a duration such as \"36h\", above 0 and at most 365d"
 		}},
-}
+}, quotaProviderKeys()...) // quota.<provider>.warn|drain|hold, quotaprovider.go
 
 // fileTeam is start.team's rule: "" or role[:profile] items, comma-separated,
 // each a name, no role twice.
@@ -931,7 +931,7 @@ func Lookup(name string) (*Key, bool) {
 			return k, true
 		}
 	}
-	return nil, false
+	return lookupQuotaProvider(name) // quota.<provider>.<level>, any provider id
 }
 
 // validName is bus.ValidName's rule, repeated because bus reads its caps from

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/dispatch"
 )
 
 // Quota settings step 2 (§2.2): the dispatch service reads its project's
@@ -112,5 +113,71 @@ func TestQuotaThresholdsMissingConfigKeepsTheLast(t *testing.T) {
 	}
 	if th, err := read(); err == nil {
 		t.Fatalf("config.toml removed read as %+v, not an error", th)
+	}
+}
+
+// quota-per-provider: each provider's own warn, drain and hold read with the
+// defaults, the project's table first, then the machine's; 0 or unset is no
+// value of its own. Whether a file set the drain is kept (DrainSet), so a
+// provider's warning raises an unset drain with it.
+func TestQuotaThresholdsPerProvider(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(k string) string {
+		if k == "XDG_CONFIG_HOME" || k == "HOME" {
+			return dir
+		}
+		return ""
+	}
+	read := quotaThresholds(getenv, "demo", filepath.Join(dir, "demo.env"))
+	if th, err := read(); err != nil || len(th.Providers) != 0 || th.DrainSet {
+		t.Fatalf("nothing set: %+v %v", th, err)
+	}
+	text := "[quota.openai]\nhold = 80\nwarn = 70\n\n[quota.xai]\nwarn = 0\n\n[project.demo.quota.openai]\nhold = 75\n\n" +
+		"[project.demo.dispatch]\nquota_drain = 88\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	th, err := read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (dispatch.QuotaLevels{Warn: 70, Hold: 75}); th.Providers["openai"] != want || len(th.Providers) != 1 {
+		t.Fatalf("providers %+v, want only openai %+v", th.Providers, want)
+	}
+	if !th.DrainSet || th.Drain != 88 {
+		t.Fatalf("the project's drain: %+v", th)
+	}
+}
+
+// master's directive: a provider off the five (no built-in reader) is read
+// too, from the machine's table or the project's; the dispatcher judges it
+// only if a reading for it ever comes.
+func TestQuotaThresholdsAnyProvider(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "agentbus", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(k string) string {
+		if k == "XDG_CONFIG_HOME" || k == "HOME" {
+			return dir
+		}
+		return ""
+	}
+	text := "[quota.deepseek]\nhold = 80\n\n[project.demo.quota.mistral]\nwarn = 60\n\n[project.other.quota.groq]\nwarn = 50\n"
+	if err := os.WriteFile(cfg, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	th, err := quotaThresholds(getenv, "demo", filepath.Join(dir, "demo.env"))()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]dispatch.QuotaLevels{"deepseek": {Hold: 80}, "mistral": {Warn: 60}}
+	if len(th.Providers) != len(want) || th.Providers["deepseek"] != want["deepseek"] || th.Providers["mistral"] != want["mistral"] {
+		t.Fatalf("providers %+v, want %+v (another project's groq not read)", th.Providers, want)
 	}
 }
