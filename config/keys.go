@@ -832,15 +832,6 @@ var Keys = append([]*Key{
 		file: fileEnvNames},
 	{Name: "backup.after_timeout", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus backup, dispatch", MachineOnly: true, PersonOnly: true,
 		file: fileDuration(false)},
-	// Cap C, one command run by agentbus run --cap (spec
-	// 2026-11-25-agent-resource-limits-design.md §6, §8; the person's Q4):
-	// the defaults a flag may only narrow. The person's alone and per host.
-	{Name: "limits.command_memory", Kind: String, Default: "8G", ReadBy: "agentbus run --cap", MachineOnly: true, PersonOnly: true,
-		file: fileSizeOrOff},
-	{Name: "limits.command_time", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus run --cap (0: no time cap)", MachineOnly: true, PersonOnly: true,
-		file: fileDuration(true)},
-	{Name: "limits.command_cpu", Kind: Int, Default: 0, ReadBy: "agentbus run --cap (a CPU percentage, 0: no CPU cap; only where systemd-run runs the command)", MachineOnly: true, PersonOnly: true,
-		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole percentage, 0 for no CPU cap")},
 	// Notifications (spec 2026-11-03-notifications-design.md): the host's,
 	// config.toml only, none a secret (the targets' URLs are in notify.toml).
 	{Name: "notify.on", Kind: Bool, Default: false, ReadBy: "dispatch", MachineOnly: true, file: fileBool},
@@ -907,6 +898,15 @@ var Keys = append([]*Key{
 			}
 			return nil, "want days such as \"7d\", or a duration such as \"36h\", above 0 and at most 365d"
 		}},
+	// Cap C, one command run by agentbus run --cap (spec
+	// 2026-11-25-agent-resource-limits-design.md §6, §8; the person's Q4):
+	// the defaults a flag may only narrow. The person's alone and per host.
+	{Name: "limits.command_memory", Kind: String, Default: "8G", ReadBy: "agentbus run --cap", MachineOnly: true, PersonOnly: true,
+		file: fileSizeOrOff},
+	{Name: "limits.command_time", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus run --cap (0: no time cap)", MachineOnly: true, PersonOnly: true,
+		file: fileDuration(true)},
+	{Name: "limits.command_cpu", Kind: Int, Default: 0, ReadBy: "agentbus run --cap (a CPU percentage, 0: no CPU cap; only where systemd-run runs the command)", MachineOnly: true, PersonOnly: true,
+		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole percentage, 0 for no CPU cap")},
 }, quotaProviderKeys()...) // quota.<provider>.warn|drain|hold, quotaprovider.go
 
 // fileTeam is start.team's rule: "" or role[:profile] items, comma-separated,
