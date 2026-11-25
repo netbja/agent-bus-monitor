@@ -71,7 +71,7 @@ func runRetro(ctx context.Context, d retroDeps, args []string, stdout io.Writer)
 		if !r.Sent {
 			state = "already open for"
 		}
-		_, err = fmt.Fprintf(stdout, "retro %s %s %s (%s)\n", r.Task, state, to, bus.FrictionSummary(r.Signals))
+		_, err = fmt.Fprintf(stdout, "retro %s %s %s (%s)\n", r.Task, state, r.To, bus.FrictionSummary(r.Signals))
 		return err
 	case "evidence":
 		if len(args) != 2 {
@@ -133,7 +133,7 @@ func retroEvidence(ctx context.Context, b retroBus, task string, out io.Writer) 
 		if err != nil {
 			text = "(" + err.Error() + ")"
 		}
-		fmt.Fprintf(out, "  %s %s: %s\n", s.Kind, s.ID, text)
+		fmt.Fprintf(out, "  %s: %s\n", s, text)
 	}
 	return nil
 }

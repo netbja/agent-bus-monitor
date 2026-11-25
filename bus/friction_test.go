@@ -79,15 +79,15 @@ func (k frictionKit) escalation(agent string) string {
 // every writes one of each signal for agent and returns them in kind order.
 func (k frictionKit) every(agent string) []FrictionSignal {
 	var out []FrictionSignal
-	out = append(out, FrictionSignal{Kind: FrictionReject, ID: k.reject(agent)})
+	out = append(out, FrictionSignal{FrictionReject, k.reject(agent), SignalVerdicts})
 	tick()
-	out = append(out, FrictionSignal{Kind: FrictionCI, ID: k.ci(agent)})
+	out = append(out, FrictionSignal{FrictionCI, k.ci(agent), SignalCmd})
 	tick()
-	out = append(out, FrictionSignal{Kind: FrictionStall, ID: k.event(EventBlocked, agent)})
+	out = append(out, FrictionSignal{FrictionStall, k.event(EventBlocked, agent), SignalEvents})
 	tick()
-	out = append(out, FrictionSignal{Kind: FrictionStall, ID: k.event(EventWakeNotLanded, agent)})
+	out = append(out, FrictionSignal{FrictionStall, k.event(EventWakeNotLanded, agent), SignalEvents})
 	tick()
-	out = append(out, FrictionSignal{Kind: FrictionStall, ID: k.escalation(agent)})
+	out = append(out, FrictionSignal{FrictionStall, k.escalation(agent), SignalCmd})
 	tick()
 	return out
 }
@@ -172,7 +172,7 @@ func TestTaskFrictionOpenTask(t *testing.T) {
 	startTask(t, b, "open", "coder")
 	id := frictionKit{t, b}.reject("coder")
 	got, err := b.TaskFriction(context.Background(), "open")
-	if err != nil || !reflect.DeepEqual(got, []FrictionSignal{{FrictionReject, id}}) {
+	if err != nil || !reflect.DeepEqual(got, []FrictionSignal{{FrictionReject, id, SignalVerdicts}}) {
 		t.Errorf("open task: %v %v", got, err)
 	}
 }
@@ -250,19 +250,138 @@ func countTasks(t *testing.T, b *Bus, prefix string) int {
 	return n
 }
 
-// The retro's name is retro-<task>, cut to a valid name for a long task.
+// The retro's name is retro-<task>; a long task keeps a prefix and gains a
+// hash of the whole name, so two long tasks never share a retro.
 func TestRetroTaskName(t *testing.T) {
 	if got := RetroTaskName("parser"); got != "retro-parser" {
 		t.Errorf("%q", got)
 	}
-	long := "a234567890123456789012345678901-" // 32, ValidName
-	got := RetroTaskName(long)
-	if !ValidName(got) || !strings.HasPrefix(got, "retro-a2345") || strings.HasSuffix(got, "-") {
-		t.Errorf("long: %q", got)
+	if got := RetroTaskName("a2345678901234567890123456"); got != "retro-a2345678901234567890123456" {
+		t.Errorf("26 characters fit: %q", got)
+	}
+	x, y := "aaaaaaaaaaaaaaaaaaaaaaaaaax", "aaaaaaaaaaaaaaaaaaaaaaaaaay"
+	rx, ry := RetroTaskName(x), RetroTaskName(y)
+	if rx == ry || !ValidName(rx) || !ValidName(ry) || !strings.HasPrefix(rx, "retro-aaaa") {
+		t.Errorf("long: %q %q", rx, ry)
+	}
+	if RetroTaskName(x) != rx {
+		t.Error("not stable")
 	}
 	if !IsRetroTask("retro-x") || IsRetroTask("retrox") {
 		t.Error("IsRetroTask")
 	}
+}
+
+// Two long tasks with the same first characters each get their own retro,
+// and retro none of one never closes the other's.
+func TestRetroDueLongTasks(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	x, y := "aaaaaaaaaaaaaaaaaaaaaaaaaax", "aaaaaaaaaaaaaaaaaaaaaaaaaay"
+	for _, task := range []string{x, y} {
+		startTask(t, b, task, "coder")
+		frictionKit{t, b}.reject("coder")
+		doneTask(t, b, task, "coder")
+		d, err := b.RetroDue(ctx, task)
+		if err != nil || !d.Sent || d.Task != RetroTaskName(task) {
+			t.Fatalf("%s: %+v %v", task, d, err)
+		}
+	}
+	if n := countTasks(t, b, "retro-"); n != 2 {
+		t.Errorf("%d retros, want 2", n)
+	}
+}
+
+// A retro name already on the board for another task is refused, never
+// taken as this task's retro: an entry not sent by agentbus, or agentbus's
+// retro of another task.
+func TestRetroDueRefusesAnotherTasksRetro(t *testing.T) {
+	cases := []struct{ from, body string }{
+		{"master", retroBodyPrefix("rough") + "1 reject). a look-alike"},
+		{SystemSender, retroBodyPrefix("other") + "1 reject). another task's retro"},
+	}
+	for _, c := range cases {
+		b := dialTest(t)
+		ctx := context.Background()
+		if _, err := b.Request(ctx, RetroTaskName("rough"), c.from, "coder", "", c.body, 0); err != nil {
+			t.Fatal(err)
+		}
+		startTask(t, b, "rough", "coder")
+		frictionKit{t, b}.reject("coder")
+		doneTask(t, b, "rough", "coder")
+		if d, err := b.RetroDue(ctx, "rough"); err == nil {
+			t.Errorf("from %s: another entry taken as the retro: %+v", c.from, d)
+		}
+	}
+}
+
+// A stall from the events stream and one from the cmd stream may share an
+// id: each signal names its stream and its text is read from that one.
+func TestSignalTextSameIDTwoStreams(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	if ok, err := b.AcquireDispatch(ctx, "tok", time.Minute); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	startTask(t, b, "same", "coder")
+	id := "9999999999999-0"
+	if _, err := b.r.XAdd(ctx, &redis.XAddArgs{Stream: EventsKey(b.project), ID: id,
+		Values: []any{"kind", EventBlocked, "agent", "coder2", "detail", "other agent"}}).Result(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.r.XAdd(ctx, &redis.XAddArgs{Stream: StreamKey(b.project, "cmd"), ID: id,
+		Values: []any{"from", "dispatch", "target", "master", "type", CmdEscalation, "ref", "", "command", "coder: unread", "agent", "coder"}}).Result(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := b.SignalText(ctx, FrictionSignal{Kind: FrictionStall, ID: id, Stream: SignalCmd})
+	if err != nil || got != "coder: unread" {
+		t.Errorf("cmd stall: %q %v", got, err)
+	}
+	got, err = b.SignalText(ctx, FrictionSignal{Kind: FrictionStall, ID: id, Stream: SignalEvents})
+	if err != nil || got != "blocked other agent" {
+		t.Errorf("events stall: %q %v", got, err)
+	}
+}
+
+func TestSignalText(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	k := frictionKit{t, b}
+	cases := []struct {
+		s    FrictionSignal
+		want string
+	}{
+		{FrictionSignal{FrictionReject, k.reject("coder"), SignalVerdicts}, "foureyes rejected coder's s: no"},
+		{FrictionSignal{FrictionCI, k.ci("coder"), SignalCmd}, "CI failed on PR #9 (hand-off 1)"},
+		{FrictionSignal{FrictionStall, k.event(EventBlocked, "coder"), SignalEvents}, "blocked"},
+		{FrictionSignal{FrictionStall, k.escalation("coder"), SignalCmd}, "coder: unread; 1 waiting"},
+		{FrictionSignal{FrictionPerson, "-", ""}, ""},
+	}
+	for _, c := range cases {
+		got, err := b.SignalText(ctx, c.s)
+		if err != nil || got != c.want {
+			t.Errorf("%v: %q %v, want %q", c.s, got, err, c.want)
+		}
+	}
+	if _, err := b.SignalText(ctx, FrictionSignal{FrictionCI, "1-0", SignalCmd}); err == nil {
+		t.Error("a trimmed entry: no error")
+	}
+}
+
+// When master owns the task, the CI loop's wake=no copy to master is not a
+// second hand-off.
+func TestTaskFrictionMasterOwnsCICopy(t *testing.T) {
+	b := dialTest(t)
+	startTask(t, b, "mtask", "master")
+	id := frictionKit{t, b}.ci("master")
+	got, err := b.TaskFriction(context.Background(), "mtask")
+	if err != nil || !reflect.DeepEqual(got, []FrictionSignal{{FrictionCI, id, SignalCmd}}) {
+		t.Errorf("master's task: %v %v", got, err)
+	}
+}
+
+func xadd(b *Bus, kind string, kv ...any) *redis.XAddArgs {
+	return &redis.XAddArgs{Stream: StreamKey(b.project, kind), Values: kv}
 }
 
 // An escalation names its agent in an additive field.
@@ -287,47 +406,5 @@ func TestFencedEscalationAgentField(t *testing.T) {
 	}
 	if _, err := b.FencedEscalation(ctx, "tok", "dispatch", "master", "Bad Agent", "x"); err == nil {
 		t.Error("invalid agent accepted")
-	}
-}
-
-func xadd(b *Bus, kind string, kv ...any) *redis.XAddArgs {
-	return &redis.XAddArgs{Stream: StreamKey(b.project, kind), Values: kv}
-}
-
-// Evidence reads each signal's own entry.
-func TestSignalText(t *testing.T) {
-	b := dialTest(t)
-	ctx := context.Background()
-	k := frictionKit{t, b}
-	cases := []struct {
-		s    FrictionSignal
-		want string
-	}{
-		{FrictionSignal{FrictionReject, k.reject("coder")}, "foureyes rejected coder's s: no"},
-		{FrictionSignal{FrictionCI, k.ci("coder")}, "CI failed on PR #9 (hand-off 1)"},
-		{FrictionSignal{FrictionStall, k.event(EventBlocked, "coder")}, "blocked"},
-		{FrictionSignal{FrictionStall, k.escalation("coder")}, "coder: unread; 1 waiting"},
-		{FrictionSignal{FrictionPerson, "-"}, ""},
-	}
-	for _, c := range cases {
-		got, err := b.SignalText(ctx, c.s)
-		if err != nil || got != c.want {
-			t.Errorf("%v: %q %v, want %q", c.s, got, err, c.want)
-		}
-	}
-	if _, err := b.SignalText(ctx, FrictionSignal{FrictionCI, "1-0"}); err == nil {
-		t.Error("a trimmed entry: no error")
-	}
-}
-
-// When master owns the task, the CI loop's wake=no copy to master is not a
-// second hand-off.
-func TestTaskFrictionMasterOwnsCICopy(t *testing.T) {
-	b := dialTest(t)
-	startTask(t, b, "mtask", "master")
-	id := frictionKit{t, b}.ci("master")
-	got, err := b.TaskFriction(context.Background(), "mtask")
-	if err != nil || !reflect.DeepEqual(got, []FrictionSignal{{FrictionCI, id}}) {
-		t.Errorf("master's task: %v %v", got, err)
 	}
 }
