@@ -96,10 +96,6 @@ func globalFlag(a string) (cli.Flag, bool) {
 	return cli.Flag{}, false
 }
 
-// helpRequest reports whether args (the global flags removed) ask for help,
-// and for which command ("" for the index): help [cmd], --help, -h, or
-// <cmd> --help|-h right after the command. Anywhere else --help is a word of
-// a message.
 // versionAlias reads --version and -v, as the first word, as the command
 // version; other command lines are returned unchanged.
 func versionAlias(args []string) []string {
@@ -114,6 +110,10 @@ func printVersion(w io.Writer) {
 	fmt.Fprintf(w, "agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
 }
 
+// helpRequest reports whether args (the global flags removed) ask for help,
+// and for which command ("" for the index): help [cmd], --help, -h, or
+// <cmd> --help|-h right after the command. Anywhere else --help is a word of
+// a message.
 func helpRequest(args []string) (string, bool) {
 	isHelp := func(s string) bool { return s == "help" || s == "--help" || s == "-h" }
 	switch {
