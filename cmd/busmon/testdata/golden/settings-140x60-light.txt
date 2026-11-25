@@ -13,7 +13,7 @@
 │                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    │
 │                                                      ││  ○ ui-kimi   paused    9m      —        —         for you             charlie: y…│
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 62 default ──────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 63 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │                   │ focus: keys · ← or tab: the groups ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       │
 │    Attention      │                                                                                                                      │
@@ -21,7 +21,8 @@
 │    Notifications  │   • Theme                           ‹ dark ›                                                                         │
 │    Services       │ ▶ • Icons                           ‹ nerd ›                                                                         │
 │    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         │
-│    Projects       │     Sparklines                      ‹ auto ›                                                                         │
+│    Projects       │     Sparklines (old)                ‹ auto ›                                                                         │
+│                   │     Rendering                       ‹ auto ›                                                                         │
 │                   │     @ inserts paths as              ‹ absolute ›                                                                     │
 │                   │     Date format                     ‹ relative ›                                                                     │
 │                   │     Work layout                     ‹ auto ›                                                                         │
@@ -38,7 +39,6 @@
 │                   │ Icons · display.icons · from config.toml (default: off) · read by busmon · applies live                              │
 │                   │ off: none · nerd: a lettered box per provider · agent-font: the maker's logo                                         │
 │                   │                                                                                                                      │
-│                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │
 │                                                                                                                                          │

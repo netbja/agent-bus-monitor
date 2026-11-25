@@ -375,7 +375,7 @@ func planStripKeys(forYou string, width int) Line {
 // eighth, then the dim ░ track (the person's mock-up), the filled part in
 // role.
 func planBar(pct float64, cells int, role Role) Line {
-	b := finedraw.Blocks(pct, cells)
+	b := finedraw.Blocks(pct, cells, drawCaps().Mode) // ascii in a locale without UTF-8
 	return Line{{Text: b[0].Text, Role: role}, {Text: b[1].Text, Role: RoleDim}}
 }
 

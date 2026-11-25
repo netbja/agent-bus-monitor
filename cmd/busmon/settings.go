@@ -7,6 +7,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 type busmonSettings struct {
@@ -26,12 +27,13 @@ type busmonSettings struct {
 	// board.no_accept_after and no_reply_after: the Board's alerts on a late
 	// tracked request (views-redesign §3; 0 = off)
 	NoAcceptAfter, NoReplyAfter time.Duration
-	Icons                       string // display.icons: off, nerd or agent-font (busmon-icons)
-	Graphs                      string // display.graphs resolved: block, braille or ascii; "" draws blocks (braille-sparklines)
-	AtPath                      string // compose.at_path: absolute or relative (compose-at-file §5)
-	WorkLayout                  string // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
-	DateFormat                  string // display.date_format: relative, iso or clock12 (quota settings §2.3)
-	NoFollow                    bool   // display.follow off: Activity never scrolls by itself (palette spec §8.3); the zero value is the default, on
+	Icons                       string        // display.icons: off, nerd or agent-font (busmon-icons)
+	Rendering                   finedraw.Mode // display.rendering resolved (display.graphs mapped; tui-rendering §3)
+	RenderingBy                 string        // what decided it (finedraw.By*), for the settings page
+	AtPath                      string        // compose.at_path: absolute or relative (compose-at-file §5)
+	WorkLayout                  string        // display.work_layout: auto, list or kanban (requests-plan-redesign Q1)
+	DateFormat                  string        // display.date_format: relative, iso or clock12 (quota settings §2.3)
+	NoFollow                    bool          // display.follow off: Activity never scrolls by itself (palette spec §8.3); the zero value is the default, on
 	// projects.delete_files and delete_backups: what a delete also removes
 	// from disk (projects-admin §5.5)
 	DeleteFiles, DeleteBackups bool
@@ -64,7 +66,6 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		IdleView:      r.Duration("display.idle_view_after"),
 		NoAcceptAfter: r.Duration("board.no_accept_after"), NoReplyAfter: r.Duration("board.no_reply_after"),
 		Icons:       r.String("display.icons"),
-		Graphs:      graphsStyle(r.String("display.graphs"), getenv),
 		AtPath:      r.String("compose.at_path"),
 		WorkLayout:  r.String("display.work_layout"),
 		DateFormat:  r.String("display.date_format"),
@@ -73,6 +74,7 @@ func loadBusmonSettings(getenv func(string) string, flags settingsFlags) busmonS
 		DeleteFiles: r.Bool("projects.delete_files"), DeleteBackups: r.Bool("projects.delete_backups"),
 		Dev: r.Bool("dev"),
 	}
+	s.Rendering, s.RenderingBy = resolveRendering(r, getenv)
 	raw := func(name string) string { k, _ := config.Lookup(name); return getenv(k.Env) }
 	if t := r.Get("display.theme"); t.Invalid {
 		s.Theme = raw("display.theme")

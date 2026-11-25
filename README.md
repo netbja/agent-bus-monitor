@@ -254,7 +254,8 @@ Display settings, edited from `C` or in `config.toml`:
 | Setting | Values (default first) |
 |---|---|
 | `display.theme` | `auto`, `dark`, `light` |
-| `display.graphs` | `auto`, `block`, `braille`, `ascii` |
+| `display.rendering` | `auto`, `fine`, `basic` |
+| `display.graphs` | `auto`, `block`, `braille`, `ascii` (replaced by `display.rendering`, mapped this release) |
 | `display.icons` | `off`, `nerd`, `agent-font` |
 | `display.date_format` | `relative`, `iso`, `clock12` |
 | `display.work_layout` | `auto`, `list`, `kanban` |

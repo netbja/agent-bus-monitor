@@ -30,9 +30,9 @@
 │   Limit reached: it resets today 15:44.                                      ┃
 │ Projects                 in+out  7 days                    7d total          ┃
 │                                  10-20 to 10-26                              ┃
-│   agent-bus-monitor       ~1.8M        ▃▃  ██▆▆  ████████     ~5.1M          ┃
+│   agent-bus-monitor       ~1.8M  ⠀⠀⠀⠀⠀⠀⣤⣤⠀⠀⣿⣿⣶⣶  ████████     ~5.1M          ┃
 │                                                                              ┃
-│   blog                        0    ██            ▎             170k          ┃
+│   blog                        0  ⠀⠀⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  ▎             170k          ┃
 │   wiki  no data (no dispatch service counting tokens)                        ┃
 │ Agents, agent-bus-monitor           in      out                              ┃
 │   foureyes         anthropic      1.2M     206k  ████████                    ┃

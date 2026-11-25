@@ -22,8 +22,9 @@ import (
 var updateGoldens = flag.Bool("update", false, "rewrite testdata/golden/*")
 
 // goldenSizes: the narrow, medium and wide tiers (busmon Charm spec, step b),
-// and a tall wide screen where every agent row, so every flag, is on screen.
-var goldenSizes = [][2]int{{60, 20}, {80, 24}, {140, 40}, {140, 60}}
+// a tall wide screen where every agent row, so every flag, is on screen, and
+// the classic 80x25 terminal (tui-rendering §4).
+var goldenSizes = [][2]int{{60, 20}, {80, 24}, {80, 25}, {140, 40}, {140, 60}}
 
 // withPalette runs f with the theme of that palette and restores it.
 func withPalette(t testing.TB, name string, noColor bool, colors int) {

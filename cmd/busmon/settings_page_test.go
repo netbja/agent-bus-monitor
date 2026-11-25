@@ -106,6 +106,7 @@ func TestSettingsRows(t *testing.T) {
 // directory of getenv, its theme applied by a stub that records the name.
 func settingsShell(t *testing.T, getenv func(string) string, themed *string) Model {
 	t.Helper()
+	withRendering(t, renderMode) // a change applied here is the test's own
 	return shellWith(t, 120, 40, shellConfig{getenv: getenv, retheme: func(name string) (*Theme, error) {
 		*themed = name
 		return th, nil
@@ -920,10 +921,10 @@ func TestSettingsPageGraphs(t *testing.T) {
 	m = press(t, m, tea.Key{Code: tea.KeyEnter})
 	m = press(t, m, tea.Key{Code: tea.KeyRight})
 	m = press(t, m, tea.Key{Code: tea.KeyEnter})
-	if !strings.Contains(configText(t, getenv), "graphs = \"braille\"") || m.cfg.settings.Graphs != graphsBraille || m.ui.flash != "graphs applied and saved" {
-		t.Fatalf("graphs: %q %q %q", configText(t, getenv), m.cfg.settings.Graphs, m.ui.flash)
+	if !strings.Contains(configText(t, getenv), "graphs = \"braille\"") || m.cfg.settings.Rendering != finedraw.ModeFine || renderMode != finedraw.ModeFine || m.ui.flash != "graphs applied and saved" {
+		t.Fatalf("graphs: %q %v %q", configText(t, getenv), m.cfg.settings.Rendering, m.ui.flash)
 	}
-	page := linesText(tokensPage(iconsOff, m.cfg.settings.Graphs, tokFixtureState(shellNow), nil, nil, nil, "agent-bus-monitor", shellNow, 120, false, barView{}, true))
+	page := linesText(tokensPage(iconsOff, drawCaps().SparkStyle(), tokFixtureState(shellNow), nil, nil, nil, "agent-bus-monitor", shellNow, 120, false, barView{}, true))
 	if !strings.ContainsRune(page, finedraw.BrailleBlank) && !strings.ContainsAny(page, "⡀⣀⡄⡆⡇⢀⢠⢰⢸⣿") {
 		t.Fatalf("no braille on the Tokens page:\n%s", page)
 	}
@@ -938,7 +939,7 @@ func TestSettingsPageGraphsUnknown(t *testing.T) {
 	if body := tokLinesText(m.rd.top().body); !strings.Contains(body, "display.graphs · from config.toml line 2 refused (default: auto)") {
 		t.Fatalf("no warning for display.graphs = dots:\n%s", body)
 	}
-	if got := loadBusmonSettings(getenv, settingsFlags{}).Graphs; got != graphsBlock {
-		t.Fatalf("dots resolved to %q, want auto's block", got)
+	if got := loadBusmonSettings(getenv, settingsFlags{}); got.Rendering != finedraw.ModeFine || got.RenderingBy != finedraw.ByAuto {
+		t.Fatalf("dots resolved to %v by %q, want auto's fine", got.Rendering, got.RenderingBy)
 	}
 }

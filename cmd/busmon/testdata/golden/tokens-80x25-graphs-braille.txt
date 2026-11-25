@@ -1,0 +1,25 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  ● answer master    review lot 1? (2 questions)                            4m│
+│  ♙ answer foureyes  need a decision on the width rule                      6m│
+│  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m│
+│  ◆ review coder     by charlie  look at b1                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────── esc back ─╮
+│ Accounts                                                                     ▲
+│   CLAUDE                                                          5h · 62%   ┃
+│   5h  ━━━━━━━━━━━━━━━━━━━━━━│━━━━━━━━━━━━━   62% · resets today 17:04        ┃
+│   7d  ━━━━━━━━━━━━━━━━━━━━━│━━━━━━━━━━━━━━   41% · resets Thu 29 Oct 15:04   │
+│   At this pace the limit comes around today 16:54, before its reset, today   │
+│   17:04.                                                                     │
+│   ────────────────────────────────────────────────────────────────────────   │
+│   GROK                                              held until today 15:44   │
+│   5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━  100% · resets today 15:44   ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health    

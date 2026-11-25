@@ -35,6 +35,7 @@ func TestSettingsSayWhenAChangeApplies(t *testing.T) {
 // reads that the registry calls live is one busmon applies at once: the
 // registry cannot drift from busmon's own switch.
 func TestBusmonAppliesAgreeWithTheRegistry(t *testing.T) {
+	withRendering(t, renderMode) // display.rendering applied here (no locale: ascii) is this test's own
 	m := &Model{cfg: shellConfig{getenv: settingsEnv(t, "", "", nil)}}
 	for _, k := range config.Keys {
 		if k.Name == "display.theme" || k.Name == "display.follow" { // applied at once with a terminal and its Activity list; m has neither

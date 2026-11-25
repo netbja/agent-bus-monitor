@@ -23,12 +23,13 @@ const thinTrackFade = 30
 // barLift is how far a sliding bar's leading cell goes towards the text colour.
 const barLift = 60
 
-// gaugeSegs is a bar of cells at pct in role (finedraw.Bar): eighths on a
-// track in true colour, the leading cell tinted when lead (the bar is
-// sliding); today's whole steps otherwise.
+// gaugeSegs is a bar of cells at pct in role (finedraw.Bar, by the
+// rendering's bar mode): eighths on a track in fine from 256 colours up,
+// the leading cell tinted when lead (the bar is sliding); whole steps in
+// basic, # and - in ascii.
 func gaugeSegs(pct float64, cells int, role Role, lead bool) Line {
 	var l Line
-	for _, s := range finedraw.Bar(pct, cells, th.Animated()) {
+	for _, s := range finedraw.Bar(pct, cells, drawCaps().BarMode()) {
 		seg := Seg{Text: s.Text, Role: role}
 		switch s.Part {
 		case finedraw.PartEdge:
@@ -47,14 +48,15 @@ func gaugeSegs(pct float64, cells int, role Role, lead bool) Line {
 }
 
 // thinGauge is the header's account gauge (usage-bars, the person's A4,
-// finedraw.ThinCells): the filled cells in role, the rest the track (the
-// fill's colour faded in true colour; a light ─ in the dim role without it,
-// so filled and empty differ without colour), and the pace mark (the share
+// finedraw.ThinCells): the filled cells in role, the rest the track (in
+// fine, ━ in the fill's colour faded in true colour, in the dim role at 256;
+// a light ─ in the dim role in basic, so filled and empty differ without
+// colour; - in ascii), and the pace mark (the share
 // of the window gone; < 0 none): │ in the text colour on the track, ╋ in the
 // fill's role inside the fill. lead lifts the leading filled cell (the bar
 // is sliding).
 func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
-	fine := th.Animated()
+	mode := drawCaps().BarMode()
 	var l Line
 	add := func(s Seg) {
 		if n := len(l); n > 0 && l[n-1].Role == s.Role && l[n-1].Lift == s.Lift && l[n-1].Fade == s.Fade {
@@ -63,13 +65,13 @@ func thinGauge(pct, pace float64, cells int, role Role, lead bool) Line {
 		}
 		l = append(l, s)
 	}
-	for _, c := range finedraw.ThinCells(pct, pace, cells, fine) {
+	for _, c := range finedraw.ThinCells(pct, pace, cells, mode) {
 		s := Seg{Text: c.Text, Role: role}
 		switch c.Part {
 		case finedraw.PartPace:
 			s.Role = RoleText
 		case finedraw.PartEmpty: // the track: the bar's own colour faded (usage-cards), or dim
-			if fine {
+			if mode == finedraw.ModeFine && th.Animated() {
 				s.Fade = thinTrackFade
 			} else {
 				s.Role = RoleDim
