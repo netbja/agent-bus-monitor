@@ -52,6 +52,10 @@ type settingsPage struct {
 	backupAsk bool   // Back up now waits for its y
 	running   string // the backup running, as Back up now's line says it ("" = none)
 	want      string // a key to select once the rows are read (/set <key>), then ""
+
+	// deliveryWarning is single-approval's 7-day provider warning (§4.8),
+	// from the snapshot: a line under a selected delivery row.
+	deliveryWarning string
 }
 
 // selectable is how many lines the selected group can select: its keys, then
@@ -127,13 +131,14 @@ func (m *Model) settingsCmd(write func() error, keys ...string) tea.Cmd {
 	if p := m.settingsPageOpen(); p != nil && len(keys) > 0 {
 		p.set.busy = true
 	}
-	getenv, flags := m.settingsGetenv(), m.cfg.flags
+	getenv, flags, project := m.settingsGetenv(), m.cfg.flags, m.cfg.project
 	return func() tea.Msg {
 		err := write()
 		host, _ := os.Hostname()
 		f := readBackupFacts(getenv, host)
 		lines, refs := notifyTargets(getenv)
-		return settingsMsg{groups: settingsGroups(getenv, flags, settingsPageGroups), targets: lines, refs: refs, backup: &f, keys: keys, err: err}
+		groups := projectDeliveryRows(settingsGroups(getenv, flags, settingsPageGroups), getenv, project) // single-approval step 3b
+		return settingsMsg{groups: groups, targets: lines, refs: refs, backup: &f, keys: keys, err: err}
 	}
 }
 
@@ -912,6 +917,9 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 		if h := settingHelp(r); h != "" {
 			note(h, RoleMuted)
 		}
+		if s.deliveryWarning != "" && strings.HasPrefix(r.Key, "delivery.") {
+			note(s.deliveryWarning, RoleAttention)
+		}
 		switch {
 		case s.err != "":
 			note(s.err, RoleAttention)
@@ -1097,6 +1105,9 @@ var settingHelps = map[string]string{
 
 // settingHelp is r's help line: its own, else what its kind takes.
 func settingHelp(r settingRow) string {
+	if r.Note != "" {
+		return r.Note
+	}
 	if r.PersonOnly {
 		return "your own setting: edit config.toml yourself"
 	}

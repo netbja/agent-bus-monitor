@@ -174,3 +174,49 @@ func deliveryLines(d deliveryFacts, head string) []Line {
 	}
 	return out
 }
+
+// deliveryHelps are the delivery rows' help, before where they are set.
+var deliveryHelps = map[string]string{
+	"delivery.single_approval":  "small: a change deliver calls small needs one approval, by a reviewer of another provider; off: two",
+	"delivery.small_max_lines":  "a small change's added + deleted lines over the merge-base diff, at most",
+	"delivery.small_max_files":  "a small change's changed paths, at most (a rename counts two)",
+	"delivery.never_small":      "path globs added to deliver's never-small list (bus/**, setup/**, the gate itself...); it only narrows",
+	"delivery.same_provider_ok": "which small change one approval by a reviewer of the author's provider delivers: docs (docs-only), small (any), off (none)",
+}
+
+// projectDeliveryRows resolves the delivery rows of groups for project, as
+// deliver reads them (config.ProjectValue: [project.<p>.delivery], then
+// [delivery] but for same_provider_ok, then the default): read-only (no page
+// writes a project's table), never in D's reset, their help naming where
+// they are set. Without a project the rows are left as resolved.
+func projectDeliveryRows(groups []settingGroup, getenv func(string) string, project string) []settingGroup {
+	if project == "" {
+		return groups
+	}
+	f := config.Load(config.Path(getenv), "config.toml")
+	singleOff := config.ProjectValue(f, nil, project, "delivery.single_approval").Value == "off"
+	for gi := range groups {
+		for ri := range groups[gi].Rows {
+			r := &groups[gi].Rows[ri]
+			help, ok := deliveryHelps[r.Key]
+			if !ok {
+				continue
+			}
+			res := config.ProjectValue(f, nil, project, r.Key)
+			r.Value, r.Source, r.From, r.Set = settingValue(res.Key, res.Value), res.Source, fromDefault, false
+			if res.Source != "default" {
+				r.From, r.Set = fromFile, config.Format(res.Value) != config.Format(res.Key.Default)
+			}
+			r.Editable, r.PersonOnly, r.InFile, r.FileHeld = false, true, false, false
+			where := "[project." + project + ".delivery] in config.toml"
+			if r.Key != "delivery.same_provider_ok" {
+				where += ", else [delivery]"
+			}
+			r.Note = help + "; per project: " + where + ", yours to edit"
+			if r.Key == "delivery.same_provider_ok" && singleOff {
+				r.Note += "; no effect: delivery.single_approval is off"
+			}
+		}
+	}
+	return groups
+}

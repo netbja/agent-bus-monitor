@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 )
 
 // single-approval §4.8: over the 7 days' independent verdicts, none of a
@@ -129,4 +130,69 @@ func TestMergePageDeliveryLines(t *testing.T) {
 	if text := plainLines(m.rd.top().body); strings.Contains(text, "one approval") {
 		t.Fatalf("lines without facts:\n%s", text)
 	}
+}
+
+// Shift+C's delivery rows are the project's values (§3.1: [project.<p>]
+// first, then the machine's, same_provider_ok the project's only), all
+// read-only; same_provider_ok says "no effect" while single_approval is off;
+// another project's table never shows.
+func TestProjectDeliveryRows(t *testing.T) {
+	cfg := "[delivery]\nsmall_max_lines = 200\nsame_provider_ok = \"small\"\n\n[project.demo.delivery]\nsingle_approval = \"small\"\nsame_provider_ok = \"docs\"\n\n[project.other.delivery]\nsmall_max_files = 9\n"
+	getenv := settingsEnv(t, cfg, "", nil)
+	rows := func(project string) map[string]settingRow {
+		out := map[string]settingRow{}
+		for _, g := range projectDeliveryRows(settingsGroups(getenv, settingsFlags{}, []config.Group{config.GroupServices}), getenv, project) {
+			for _, r := range g.Rows {
+				if strings.HasPrefix(r.Key, "delivery.") {
+					out[r.Key] = r
+				}
+			}
+		}
+		return out
+	}
+	demo := rows("demo")
+	for key, want := range map[string]struct{ value, source string }{
+		"delivery.single_approval":  {"small", "config.toml [project.demo]"},
+		"delivery.small_max_lines":  {"200", "config.toml"},
+		"delivery.small_max_files":  {"5", "default"},
+		"delivery.never_small":      {"none", "default"},
+		"delivery.same_provider_ok": {"docs", "config.toml [project.demo]"},
+	} {
+		r, ok := demo[key]
+		if !ok || r.Value != want.value || r.Source != want.source || r.Editable || !strings.Contains(settingHelp(r), "[project.demo.delivery]") {
+			t.Errorf("%s: %+v (help %q)", key, r, settingHelp(r))
+		}
+	}
+	if h := settingHelp(demo["delivery.same_provider_ok"]); strings.Contains(h, "no effect") {
+		t.Errorf("single_approval is small, yet %q", h)
+	}
+	quiet := rows("quiet")
+	if r := quiet["delivery.same_provider_ok"]; r.Value != "off" || !strings.Contains(settingHelp(r), "no effect: delivery.single_approval is off") {
+		t.Errorf("quiet same_provider_ok: %+v %q", r, settingHelp(r))
+	}
+	if r := quiet["delivery.small_max_files"]; r.Value != "5" {
+		t.Errorf("another project's value leaked: %+v", r)
+	}
+}
+
+// The provider warning is a line under a selected delivery row of Shift+C
+// (§4.8), and under no other row.
+func TestSettingsDeliveryWarning(t *testing.T) {
+	getenv := settingsEnv(t, "", "", map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
+	set := &settingsPage{groups: projectDeliveryRows(settingsGroups(getenv, settingsFlags{}, settingsPageGroups), getenv, "demo"), loaded: true, keys: true,
+		deliveryWarning: "no reviewer of another provider in 7 days: one approval needs delivery.same_provider_ok (now off)"}
+	for gi, g := range set.groups {
+		if g.Group != config.GroupServices {
+			continue
+		}
+		set.group = gi
+		for ri, r := range g.Rows {
+			text := plainLines(settingsBody(set, ri, 160))
+			if got := strings.Contains(text, "no reviewer of another provider in 7 days"); got != strings.HasPrefix(r.Key, "delivery.") {
+				t.Errorf("%s: warning shown %v:\n%s", r.Key, got, text)
+			}
+		}
+		return
+	}
+	t.Fatal("no Services group")
 }
