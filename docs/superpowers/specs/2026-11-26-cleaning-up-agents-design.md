@@ -12,7 +12,9 @@ Status: spec r5, for review (subject `cleaning-up-agents`). Not built. Base: ori
   second ask (§12.2).
 - r4: both reviewers' rejects of r3: a running owner relaunched on the **same session** is the
   same owner, flagged, never closed; only a fresh session is gone (§8.1, §12.1); Q10 confirms it.
-- r5: foureyes' r3 reject: the stop re-checks no accepted request and nothing actionable, and drops
+- r5: reviewer-codex's r4 reject: board-drift's close of a `review` request is the owner's own
+  declaration and stays; the running-owner rule covers undeclared links (§8.2, §8.3).
+  foureyes' r3 reject: the stop re-checks no accepted request and nothing actionable, and drops
   the intent otherwise (§4.3); no wake while an intent stands; nits (§3.1 hardened git, §8.4
   required-role grace, §4.3 names the 2026-11-13 extension).
 
@@ -321,7 +323,8 @@ step subjects (`<task>-1`, `retro-build-1`) never match; `review --more` keeps a
 when `deliver` records onto a request in `accepted` (not `review`), it prints "recorded on request
 `<task>`: its merge closes it once its owner is gone; if more steps follow, run agentbus request
 review `<task>` --more"; and a close is reversible (§8.5) and always told to master. A **running**
-owner on the accepting session (same process, or resumed) is never auto-closed, whatever the link:
+owner on the accepting session (same process, or resumed) is never auto-closed by a link it did
+not declare itself (the `delivery` link, a name match):
 its request is flagged (§8.4). Only an owner lost, stopped, or restarted on a fresh session (which
 cannot be on a later step of work it does not remember) has its request closed.
 
@@ -330,8 +333,14 @@ cannot be on a later step of work it does not remember) has its request closed.
 The merge-queue pass adds to close on merge's candidates the `accepted` and `review` requests whose
 owner is **gone** (§8.1), with a link of §8.2 that holds. A request whose owner runs on the
 accepting session (the same process, or a resume of it), or is parked, is never closed: it is
-flagged (§8.4). The script re-checks the registration's `ident_session` as well as its `pid`. For `review` requests the existing rule
-is unchanged and also takes the `delivery` link.
+flagged (§8.4). The script re-checks the registration's `ident_session` as well as its `pid`.
+
+**One exception, the owner's own declaration** (reviewer-codex, r4). Board-drift's close on merge
+(built in #763) is unchanged: a request the owner itself put in `review` with its branch, without
+`--more`, closes when that branch merges, whoever runs. That is not a link the pass infers: the owner
+declared that this branch ends the request, and `--more` declares that it does not (board-drift
+§3.4, the person's board-drift Q1). The running-owner rule above covers what the owner did not
+declare: an `accepted` request, or a `review` request linked only by `delivery`.
 
 `FencedRequestMerged` gets more checks, still one Lua call: the request's state is still the one
 read; for a gone owner, its registration in `{p}:agents` is still the one read (`pid`, `pid_start`,
@@ -434,7 +443,9 @@ One PR each, from `origin/dev`, in this order.
   is flagged, not closed; a step subject records nothing, so a relaunched owner (new pid, same
   session) whose step-1 PR merged under a recorded link is flagged, not closed; a fresh session's
   owner has it closed; `deliver` onto an `accepted` request prints the
-  `--more` hint; an unverified accept records no `accepted_by`; `review_more` never closes; no link blocks
+  `--more` hint; an unverified accept records no `accepted_by`; a `review` request with its branch
+  and no `--more` still closes on merge with its owner on the accepting session (its own declaration),
+  while the same owner's `accepted` request with a merged `delivery` link is flagged; `review_more` never closes; no link blocks
   it with no cmd entry; a respawn between read and write writes nothing; a lost lease is
   `NOTHOLDER`; `reopen` restores the state and refuses a plain `done`.
 - §9: a stopped optional boot role is ended; a required one, master, a parked one, one with a stash,
