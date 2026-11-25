@@ -161,6 +161,16 @@ func (r recordingFull) VerdictsAfter(ctx context.Context, after string, count in
 	v, err := r.p.VerdictsAfter(ctx, after, count)
 	return rec1(r.recordingReader, v, err)
 }
+func (r recordingFull) VerdictsSince(ctx context.Context, ms int64, count int64) ([]bus.Verdict, error) {
+	vr, ok := r.b.(interface {
+		VerdictsSince(context.Context, int64, int64) ([]bus.Verdict, error)
+	})
+	if !ok {
+		return nil, nil
+	}
+	v, err := vr.VerdictsSince(ctx, ms, count)
+	return rec1(r.recordingReader, v, err)
+}
 func (r recordingFull) ReadMissionHash(ctx context.Context, key string) (map[string]string, error) {
 	v, err := r.p.ReadMissionHash(ctx, key)
 	return rec1(r.recordingReader, v, err)

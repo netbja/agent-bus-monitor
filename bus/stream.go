@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -654,6 +655,13 @@ func (b *Bus) VerdictsAfter(ctx context.Context, after string, count int64) ([]V
 			AuthorProvider: f["author_provider"], ReviewerProvider: f["reviewer_provider"]})
 	}
 	return out, nil
+}
+
+// VerdictsSince returns at most count ledger entries written from ms (Unix
+// ms) on, oldest first, providers included: a read by time (busmon's 7-day
+// provider warning, single-approval §4.8).
+func (b *Bus) VerdictsSince(ctx context.Context, ms int64, count int64) ([]Verdict, error) {
+	return b.VerdictsAfter(ctx, strconv.FormatInt(ms-1, 10)+"-"+strconv.FormatUint(math.MaxUint64, 10), count)
 }
 
 // Thread returns every {project}:cmd entry belonging to thread threadID,
