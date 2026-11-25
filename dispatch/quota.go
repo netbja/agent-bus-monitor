@@ -68,26 +68,29 @@ const (
 func (l QuotaLevels) ordered() bool { return l.Warn > 0 && l.Warn <= l.Drain && l.Drain <= l.Hold }
 
 // defaults are the thresholds in force for a provider with no value of its
-// own: the registry's when their order is broken.
-func (th QuotaThresholds) defaults() (QuotaLevels, bool) {
-	d := QuotaLevels{th.Warn, th.Drain, th.Hold}
+// own, and whether a file set the drain: the registry's, drain unset, when
+// their order is broken (what refreshThresholds keeps, so the dispatcher and
+// agentbus quota resolve alike, reviewer-codex).
+func (th QuotaThresholds) defaults() (d QuotaLevels, drainSet, ok bool) {
+	d = QuotaLevels{th.Warn, th.Drain, th.Hold}
 	if !d.ordered() {
-		return QuotaLevels{defaultWarnPct, defaultDrainPct, defaultHoldPct}, false
+		return QuotaLevels{defaultWarnPct, defaultDrainPct, defaultHoldPct}, false, false
 	}
-	return d, true
+	return d, th.DrainSet, true
 }
 
 // For is provider p's thresholds in force and where they come from: its own
 // values over the defaults; an unset drain follows the warning in force
 // unless a file set it, then it is raised to that warning at least. A broken
-// order uses the defaults, for that provider alone.
+// order uses the defaults, for that provider alone; broken defaults are the
+// registry's, a provider's own values still over them.
 func (th QuotaThresholds) For(p string) (QuotaLevels, string) {
-	d, ok := th.defaults()
-	if !ok {
-		return d, QuotaFromOrder
-	}
+	d, drainSet, ok := th.defaults()
 	own := th.Providers[p]
 	if own == (QuotaLevels{}) {
+		if !ok {
+			return d, QuotaFromOrder
+		}
 		return d, QuotaFromDefault
 	}
 	l := d
@@ -100,7 +103,7 @@ func (th QuotaThresholds) For(p string) (QuotaLevels, string) {
 	switch {
 	case own.Drain > 0:
 		l.Drain = own.Drain
-	case th.DrainSet:
+	case drainSet:
 		l.Drain = max(d.Drain, l.Warn)
 	default:
 		l.Drain = l.Warn
@@ -195,7 +198,7 @@ func (l *loop) refreshThresholds(q QuotaConfig) {
 	if !(QuotaLevels{th.Warn, th.Drain, th.Hold}).ordered() {
 		l.logOnce("quota-order", map[string]any{"action": "quota-order", "warn": th.Warn, "drain": th.Drain, "hold": th.Hold,
 			"reason": "want warn <= drain <= hold: the defaults are used for all three"})
-		th.Warn, th.Drain, th.Hold = defaultWarnPct, defaultDrainPct, defaultHoldPct
+		th.Warn, th.Drain, th.Hold, th.DrainSet = defaultWarnPct, defaultDrainPct, defaultHoldPct, false // as For reads broken defaults
 	} else {
 		l.forget("quota-order") // a later broken order is a new episode, logged again
 	}

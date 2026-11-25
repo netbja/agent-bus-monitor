@@ -35,6 +35,10 @@ func TestQuotaThresholdsFor(t *testing.T) {
 		{"hold under the warn: the defaults", base, QuotaLevels{Hold: 80}, QuotaLevels{85, 85, 95}, "order"},
 		{"drain over the hold: the defaults", base, QuotaLevels{Drain: 97}, QuotaLevels{85, 85, 95}, "order"},
 		{"the defaults' own order broken", QuotaThresholds{Warn: 90, Drain: 80, Hold: 95}, QuotaLevels{}, QuotaLevels{85, 85, 95}, "order"},
+		// reviewer-codex: broken defaults are replaced by the registry's, and a
+		// provider's own values still apply over those, as the dispatcher does.
+		{"broken defaults, a provider's own set", QuotaThresholds{Warn: 90, Drain: 80, Hold: 95, DrainSet: true}, QuotaLevels{60, 70, 80}, QuotaLevels{60, 70, 80}, "provider"},
+		{"broken defaults, a provider's warn: the drain follows it", QuotaThresholds{Warn: 90, Drain: 80, Hold: 95, DrainSet: true}, QuotaLevels{Warn: 60}, QuotaLevels{60, 60, 95}, "provider"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -176,4 +180,30 @@ func TestRunQuotaProviderHoldReleases(t *testing.T) {
 	r.Windows[0].ResetsAt = f.read(context.Background())[1].Windows[0].ResetsAt // the same window, lower
 	f.set(reading("anthropic", 10), r)
 	waitFor(t, 3*time.Second, "openai released at 96 under its own 98", func() bool { return !held() })
+}
+
+// reviewer-codex: the dispatcher enforces what agentbus quota shows. With
+// the defaults' order broken (90/80/95), openai's own 60/70/80 still holds
+// it at 85, and For on the thresholds as read agrees.
+func TestRunQuotaProviderOverBrokenDefaults(t *testing.T) {
+	b, _ := dialRun(t)
+	cleanupQuota(t, b)
+	registerAs(t, b, "master", "p-master", "anthropic")
+	registerAs(t, b, "coder", "p-coder", "openai")
+	f := &fakeQuota{}
+	f.set(reading("anthropic", 10), reading("openai", 85))
+	raw := QuotaThresholds{Warn: 90, Drain: 80, Hold: 95, DrainSet: true, MaxAge: 30 * time.Minute,
+		Providers: map[string]QuotaLevels{"openai": {Warn: 60, Drain: 70, Hold: 80}}}
+	if lv, from := raw.For("openai"); lv != (QuotaLevels{60, 70, 80}) || from != QuotaFromProvider {
+		t.Fatalf("For on the thresholds as read: %+v %q", lv, from)
+	}
+	th := &fakeThresholds{}
+	th.set(raw, nil)
+	cfg := quotaConfig(f)
+	cfg.Quota.Thresholds = th.read
+	start(t, b, newFakeRT(alwaysReady), cfg)
+	waitFor(t, 3*time.Second, "openai held at its own 80", func() bool {
+		m, _ := b.QuotaMarks(context.Background())
+		return m["hold:openai"] != ""
+	})
 }
