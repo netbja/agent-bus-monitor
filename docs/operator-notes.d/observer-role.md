@@ -1,9 +1,11 @@
 - **The observer role (the person, 2026-11-25).** A session agentbus does not launch, such as claude-ao
   (the Orchestrator), declared in roles.toml as `[roles.<name>] kind = "observer"`, with no other key:
   no profile, terminal or tool rules; start, pop, relaunch and self-repair never see it (it is kept
-  out of the launch order), and `Resolve` refuses it. This repository declares `[roles.observer]`.
-  The person sets `AGENT_BUS_AGENT=<its name>` in that session (and `ROLES_TOML` when the session
-  runs outside the repository): its entries carry its own name, never the person's. The CLI then
+  out of the launch order), and `Resolve` refuses it. **Not declared in this repository's roles.toml yet:** the previous
+  release's `agentbus update` reads the new roles.toml with its own loader, which refuses the kind, so
+  the repository declares `[roles.observer]` one release after update-old-binary ships (a test pins
+  it). Until then the person adds `[roles.observer] kind = "observer"` to their own manifest and sets
+  `ROLES_TOML` to it, with `AGENT_BUS_AGENT=observer`, in that session: its entries carry its own name, never the person's. The CLI then
   allows only reads (agents, board, request, reports, thread, history, verdicts, asks, swaps,
   health, quota, usage, budget, tokens, models, merge-queue, audit, version, limits, help) and
   refuses every other command before the bus, also to a process under a registered observer whatever

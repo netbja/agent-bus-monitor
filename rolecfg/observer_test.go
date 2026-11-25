@@ -13,8 +13,8 @@ import (
 // in roles.toml: no profile nor any launch field; it is kept out of the
 // launch order (RoleNames, tiers, Resolve), so start, pop, relaunch and
 // self-repair never see it, and named by Observers and IsObserver.
-func TestObserverRoleInTheRepositoryManifest(t *testing.T) {
-	m, err := Load(repoPath(t, "roles.toml"))
+func TestObserverRoleOutOfTheLaunchOrder(t *testing.T) {
+	m, err := loadManifestText(t, observerBase+"[roles.observer]\nkind = \"observer\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +29,21 @@ func TestObserverRoleInTheRepositoryManifest(t *testing.T) {
 	}
 	if m.IsObserver("coder") || m.IsObserver("nobody") {
 		t.Fatal("a launched or unknown role is an observer")
+	}
+}
+
+// The person's choice (a) on foureyes' reject: the previous release's
+// update parses this release's roles.toml with its own loader, which refuses
+// kind = "observer". So the repository's manifest declares no observer until
+// the release after the one that carries update-old-binary: the person adds
+// it to their own manifest (ROLES_TOML) meanwhile.
+func TestRepositoryManifestDeclaresNoObserverYet(t *testing.T) {
+	m, err := Load(repoPath(t, "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obs := m.Observers(); len(obs) != 0 {
+		t.Fatalf("the repository's roles.toml declares %v: the previous release's update cannot read it (one release after update-old-binary)", obs)
 	}
 }
 

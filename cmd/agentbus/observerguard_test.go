@@ -58,10 +58,19 @@ func TestObserverGuard(t *testing.T) {
 }
 
 // The guard main runs: the environment's identity, the manifest ROLES_TOML
-// names (here the repository's, which declares observer).
+// names (the repository's with an observer added, as the person's own
+// manifest declares it until the repository's can: option a).
 func TestObserverGuardFromTheEnvironment(t *testing.T) {
 	wd, _ := os.Getwd()
-	t.Setenv("ROLES_TOML", filepath.Join(wd, "..", "..", "roles.toml"))
+	repo, err := os.ReadFile(filepath.Join(wd, "..", "..", "roles.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(t.TempDir(), "roles.toml")
+	if err := os.WriteFile(manifest, append(repo, "\n[roles.observer]\nkind = \"observer\"\n"...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ROLES_TOML", manifest)
 	t.Cleanup(func() { bus.SetObservers(nil) })
 	t.Setenv("AGENT_BUS_AGENT", "observer")
 	if code, refused := observerGuard([]string{"cmd", "coder", "x"}, noAncestorOf); !refused || code != 2 {
