@@ -42,7 +42,13 @@ type HolderSpec struct {
 	Project, Raw     string
 	EnvFile, WorkDir string // both absolute
 	Paths            Paths
+	Limits           HolderLimits
 }
+
+// HolderLimits are cap A, the whole holder unit's memory (agent-resource-limits
+// §3): systemd's values ("70%", "4G"), each "" for no limit. launchd has no
+// equivalent and writes none.
+type HolderLimits struct{ MemoryMax, MemoryHigh, SwapMax string }
 
 // HolderUnit is an installed holder unit, as its recorded values say.
 type HolderUnit struct{ Project, Key, Raw string }
@@ -116,6 +122,11 @@ func checkHolderSpec(s HolderSpec) error {
 	for name, path := range map[string]string{"environment file": s.EnvFile, "working directory": s.WorkDir} {
 		if !filepath.IsAbs(path) || strings.ContainsAny(path, "\n\r") {
 			return fmt.Errorf("the holder's %s must be an absolute path, not %q", name, path)
+		}
+	}
+	for name, v := range map[string]string{"MemoryMax": s.Limits.MemoryMax, "MemoryHigh": s.Limits.MemoryHigh, "MemorySwapMax": s.Limits.SwapMax} {
+		if strings.ContainsAny(v, " \t\n\r") {
+			return fmt.Errorf("invalid %s memory limit %q", name, v)
 		}
 	}
 	if _, err := os.Stat(holderBin(s.Paths, BuildKey(s.Raw))); err != nil {
@@ -366,6 +377,16 @@ func systemdHolderUnit(s HolderSpec) string {
 	fmt.Fprintf(&b, "[Service]\nType=simple\nExecStart=%s\n", strings.Join(words, " "))
 	fmt.Fprintf(&b, "WorkingDirectory=%s\n", pct.Replace(s.WorkDir))
 	fmt.Fprintf(&b, "Restart=on-failure\nRestartSec=%d\nKillMode=control-group\n", holderRestartSec)
+	// Cap A (agent-resource-limits §3): an OOM kill inside the unit leaves the
+	// unit running (systemd's default, stop, took every agent with it on
+	// 2026-11-25). The limits are written as is: systemd expands no specifier
+	// in a memory limit, so "70%" is a percentage of RAM and "70%%" invalid.
+	b.WriteString("OOMPolicy=continue\n")
+	for _, l := range [...]struct{ name, v string }{{"MemoryHigh", s.Limits.MemoryHigh}, {"MemoryMax", s.Limits.MemoryMax}, {"MemorySwapMax", s.Limits.SwapMax}} {
+		if l.v != "" {
+			fmt.Fprintf(&b, "%s=%s\n", l.name, l.v)
+		}
+	}
 	return b.String()
 }
 

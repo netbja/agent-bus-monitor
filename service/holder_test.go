@@ -80,6 +80,56 @@ func TestSystemdHolderUnit(t *testing.T) {
 	}
 }
 
+// Cap A (agent-resource-limits §3; the person's Q1): an OOM kill inside the
+// unit never stops it (OOMPolicy=continue, always written), and the unit's
+// memory is capped by the limits it is given, each line left out when its
+// limit is "" (the key's "off"). A percentage is written as is: systemd reads
+// no specifier in a memory limit, and "70%%" is refused as invalid.
+func TestSystemdHolderUnitMemoryCap(t *testing.T) {
+	p := holderPaths(t)
+	raw := "v1.2.3"
+	if _, err := InstallHolderBinary(p, raw, fakeExe(t, "A")); err != nil {
+		t.Fatal(err)
+	}
+	spec := func(l HolderLimits) HolderSpec {
+		return HolderSpec{Project: "demo", Raw: raw, Paths: p, EnvFile: "/cfg/demo.env", WorkDir: "/work", Limits: l}
+	}
+	for _, c := range []struct {
+		limits    HolderLimits
+		want, not []string
+	}{
+		{HolderLimits{MemoryMax: "70%", MemoryHigh: "60%", SwapMax: "4G"},
+			[]string{"OOMPolicy=continue\nMemoryHigh=60%\nMemoryMax=70%\nMemorySwapMax=4G\n"}, []string{"%%"}},
+		{HolderLimits{MemoryMax: "16G", SwapMax: "512M"},
+			[]string{"OOMPolicy=continue\nMemoryMax=16G\nMemorySwapMax=512M\n"}, []string{"MemoryHigh="}},
+		{HolderLimits{},
+			[]string{"KillMode=control-group\nOOMPolicy=continue\n"}, []string{"MemoryMax=", "MemoryHigh=", "MemorySwapMax="}},
+	} {
+		u := systemdHolderUnit(spec(c.limits))
+		if !strings.Contains(u, "[Service]\n") || strings.Index(u, "OOMPolicy=") < strings.Index(u, "[Service]") {
+			t.Errorf("%+v: OOMPolicy not in [Service]:\n%s", c.limits, u)
+		}
+		for _, w := range c.want {
+			if !strings.Contains(u, w) {
+				t.Errorf("%+v: unit lacks %q:\n%s", c.limits, w, u)
+			}
+		}
+		for _, n := range c.not {
+			if strings.Contains(u, n) {
+				t.Errorf("%+v: unit has %q:\n%s", c.limits, n, u)
+			}
+		}
+	}
+	// A limit is one systemd value: a line break or a space in it would add a
+	// directive of its own, so InstallHolder refuses it.
+	m := Systemd{Run: (&fakeRun{}).run, Paths: p}
+	for _, bad := range []HolderLimits{{MemoryMax: "4G\nExecStartPre=/bin/sh"}, {MemoryHigh: "1 G"}, {SwapMax: "4G\r"}} {
+		if _, err := m.InstallHolder(spec(bad)); err == nil || !strings.Contains(err.Error(), "memory limit") {
+			t.Errorf("%+v installed: %v", bad, err)
+		}
+	}
+}
+
 // launchd: one job per build, label com.agentbus.holder.<project>.<key>,
 // KeepAlive on failure only, ThrottleInterval 10, the three values recorded.
 func TestLaunchdHolderJob(t *testing.T) {

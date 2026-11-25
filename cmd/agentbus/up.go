@@ -23,6 +23,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/rolecfg"
@@ -626,6 +627,19 @@ func expandWorkDir(d upDeps, dir string) string {
 	return os.ExpandEnv(strings.Replace(dir, "~", d.Env("HOME"), 1))
 }
 
+// holderLimits is cap A from the machine's config.toml (agent-resource-limits
+// §3, §8): the person's limits.holder_* keys, "off" as no limit.
+func holderLimits(getenv func(string) string) service.HolderLimits {
+	r := config.Machine(getenv)
+	v := func(name string) string {
+		if s := r.String(name); s != "off" {
+			return s
+		}
+		return ""
+	}
+	return service.HolderLimits{MemoryMax: v("limits.holder_memory_max"), MemoryHigh: v("limits.holder_memory_high"), SwapMax: v("limits.holder_swap_max")}
+}
+
 // startHolder installs this build's holder (spec 4.4a): its binary copy, its
 // unit with the project's env file and working directory, then starts it and
 // gcs the project's older builds that no longer run. It never stops or
@@ -651,7 +665,7 @@ func startHolder(d upDeps, m service.Manager, project, workdir string, stdout io
 		return err
 	}
 	if _, err := hm.InstallHolder(service.HolderSpec{Project: project, Raw: raw, Paths: d.Paths,
-		EnvFile: d.Paths.EnvFile(project), WorkDir: expandWorkDir(d, workdir)}); err != nil {
+		EnvFile: d.Paths.EnvFile(project), WorkDir: expandWorkDir(d, workdir), Limits: holderLimits(d.Env)}); err != nil {
 		return err
 	}
 	key := service.BuildKey(raw)
