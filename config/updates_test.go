@@ -31,9 +31,10 @@ func TestUpdatesKeys(t *testing.T) {
 			k.PersonOnly != c.personOnly || k.PersonEdit != c.person || k.Group() != GroupAttention {
 			t.Errorf("%s: %+v", c.name, k)
 		}
-		// Nothing reads them before quiet-update step 3: ReadBy says so
-		// (foureyes on wip-limit-2a).
-		if !strings.Contains(k.ReadBy, "quiet-update step 3") {
+		// ReadBy names the step that reads each (foureyes on wip-limit-2a):
+		// updates.auto read by update --auto from step 4a, the others not yet.
+		if want := map[string]string{"updates.auto": "agentbus update --auto"}[c.name]; want == "" && !strings.Contains(k.ReadBy, "quiet-update step 4") ||
+			want != "" && !strings.HasPrefix(k.ReadBy, want) {
 			t.Errorf("%s: ReadBy %q", c.name, k.ReadBy)
 		}
 		path := filepath.Join(t.TempDir(), "config.toml")

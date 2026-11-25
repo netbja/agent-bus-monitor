@@ -275,7 +275,7 @@ var Keys = append([]*Key{
 	// window from busmon's Shift+C as well (Q2). No env variable.
 	{Name: "updates.auto", Kind: String, Default: "notify", ReadBy: "agentbus update --auto (says whether it would install; installs from quiet-update step 4b), busmon (shown)", MachineOnly: true, PersonOnly: true,
 		file: fileOneOf("notify", "install")},
-	{Name: "updates.window", Kind: String, Default: "03:00-05:00", ReadBy: "busmon (shown; the updater reads it from quiet-update step 3)", MachineOnly: true, PersonEdit: true,
+	{Name: "updates.window", Kind: String, Default: "03:00-05:00", ReadBy: "busmon (shown; the updater reads it from quiet-update step 4d)", MachineOnly: true, PersonEdit: true,
 		file: func(v any) (any, string) {
 			if s, ok := v.(string); ok {
 				if _, _, ok := ParseWindow(s); ok {
@@ -284,7 +284,7 @@ var Keys = append([]*Key{
 			}
 			return nil, "want a local time window HH:MM-HH:MM, such as \"03:00-05:00\" (it may cross midnight)"
 		}},
-	{Name: "updates.max_wait", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "busmon (shown; agentbus update --auto reads it from quiet-update step 3)", MachineOnly: true, PersonOnly: true,
+	{Name: "updates.max_wait", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "busmon (shown; agentbus update --auto reads it from quiet-update step 4c)", MachineOnly: true, PersonOnly: true,
 		file: func(v any) (any, string) {
 			if s, ok := v.(string); ok {
 				if d, ok := parseAge(s); ok {
