@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,22 +37,22 @@ func TestObserverGuard(t *testing.T) {
 		{"handoff"}, {"checkback", "1h"}, {"background", "x"},
 	}
 	for _, args := range allowed {
-		if why := observerRefusal(args, "observer", isObs); why != "" {
+		if why := observerRefusal(args, "observer", noAncestor, isObs); why != "" {
 			t.Errorf("%v refused to an observer: %s", args, why)
 		}
 	}
 	for _, args := range refused {
-		why := observerRefusal(args, "observer", isObs)
+		why := observerRefusal(args, "observer", noAncestor, isObs)
 		if why == "" || !strings.Contains(why, "observer") || !strings.Contains(why, "reads only") {
 			t.Errorf("%v allowed to an observer (%q)", args, why)
 		}
 	}
 	for _, id := range []string{"coder", "master", ""} {
-		if why := observerRefusal([]string{"cmd", "coder", "x"}, id, isObs); why != "" {
+		if why := observerRefusal([]string{"cmd", "coder", "x"}, id, noAncestor, isObs); why != "" {
 			t.Errorf("%q refused: %s", id, why)
 		}
 	}
-	if why := observerRefusal([]string{"cmd", "coder", "x"}, "observer", nil); why != "" {
+	if why := observerRefusal([]string{"cmd", "coder", "x"}, "observer", noAncestor, nil); why != "" {
 		t.Errorf("no manifest known, refused: %s", why)
 	}
 }
@@ -63,14 +64,54 @@ func TestObserverGuardFromTheEnvironment(t *testing.T) {
 	t.Setenv("ROLES_TOML", filepath.Join(wd, "..", "..", "roles.toml"))
 	t.Cleanup(func() { bus.SetObservers(nil) })
 	t.Setenv("AGENT_BUS_AGENT", "observer")
-	if code, refused := observerGuard([]string{"cmd", "coder", "x"}); !refused || code != 2 {
+	if code, refused := observerGuard([]string{"cmd", "coder", "x"}, noAncestorOf); !refused || code != 2 {
 		t.Fatalf("an observer's cmd: %d %v", code, refused)
 	}
-	if _, refused := observerGuard([]string{"board"}); refused {
+	if _, refused := observerGuard([]string{"board"}, noAncestorOf); refused {
 		t.Fatal("an observer's board refused")
 	}
 	t.Setenv("AGENT_BUS_AGENT", "coder")
-	if _, refused := observerGuard([]string{"cmd", "coder", "x"}); refused {
+	if _, refused := observerGuard([]string{"cmd", "coder", "x"}, noAncestorOf); refused {
 		t.Fatal("coder's cmd refused")
 	}
+	// reviewer-codex: no identity, or another's, under a registered observer.
+	underObserver := func(context.Context) (string, error) { return "observer", nil }
+	for _, id := range []string{"", "coder"} {
+		t.Setenv("AGENT_BUS_AGENT", id)
+		if code, refused := observerGuard([]string{"cmd", "coder", "x"}, underObserver); !refused || code != 2 {
+			t.Errorf("identity %q under the observer: %d %v", id, code, refused)
+		}
+		if _, refused := observerGuard([]string{"board"}, underObserver); refused {
+			t.Errorf("identity %q under the observer: a read refused", id)
+		}
+	}
 }
+
+func noAncestor() string { return "" }
+
+// reviewer-codex: a process under a registered observer is limited whatever
+// its own identity (none, or another's); its ancestry is read only for a
+// write, never for a read.
+func TestObserverGuardByAncestry(t *testing.T) {
+	isObs := func(n string) bool { return n == "observer" }
+	calls := 0
+	underObserver := func() string { calls++; return "observer" }
+	for _, id := range []string{"", "coder", "master"} {
+		why := observerRefusal([]string{"cmd", "coder", "x"}, id, underObserver, isObs)
+		if !strings.Contains(why, "observer") || !strings.Contains(why, "reads only") {
+			t.Errorf("identity %q under an observer: %q", id, why)
+		}
+	}
+	calls = 0
+	if why := observerRefusal([]string{"board"}, "", underObserver, isObs); why != "" || calls != 0 {
+		t.Fatalf("a read under an observer: %q, ancestry read %d times", why, calls)
+	}
+	if why := observerRefusal([]string{"cmd", "coder", "x"}, "", func() string { return "coder" }, isObs); why != "" {
+		t.Fatalf("under coder: %q", why)
+	}
+	if why := observerRefusal([]string{"cmd", "coder", "x"}, "", underObserver, func(string) bool { return false }); why != "" {
+		t.Fatalf("no observer in the manifest: %q", why)
+	}
+}
+
+func noAncestorOf(context.Context) (string, error) { return "", nil }

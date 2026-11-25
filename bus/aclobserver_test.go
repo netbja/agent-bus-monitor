@@ -36,6 +36,13 @@ func TestACLObserverUser(t *testing.T) {
 		{ACLEntryBusmon, "observer", "", ACLObserver, false},
 		{ACLEntryService, "observer", "", ACLObserver, false},
 		{ACLEntryAdmin, "observer", "", "", true},
+		// reviewer-codex: under a registered observer, whatever the identity says
+		{ACLEntryCLI, "", "observer", ACLObserver, false},
+		{ACLEntryCLI, "coder", "observer", ACLObserver, false},
+		{ACLEntryCLI, "master", "observer", ACLObserver, false},
+		{ACLEntryBusmon, "", "observer", ACLObserver, false},
+		{ACLEntryService, "", "observer", ACLObserver, false},
+		{ACLEntryAdmin, "", "observer", "", true},
 		{ACLEntryCLI, "coder", "", ACLAgent, false}, // a launched role: unchanged
 		{ACLEntryCLI, "", "", ACLBusmon, false},     // the person: unchanged
 	} {
@@ -67,6 +74,16 @@ func TestConnectUserObserver(t *testing.T) {
 	if err != nil || u != ACLObserver || inner != ACLObserver {
 		t.Fatalf("user %q, inner %q, err %v", u, inner, err)
 	}
+	// reviewer-codex: no identity, or another's, under a registered observer.
+	SetConnectEntry(ACLEntryCLI, func(context.Context) (string, error) { return "observer", nil })
+	for _, id := range []string{"", "coder", "master"} {
+		t.Setenv("AGENT_BUS_AGENT", id)
+		if u, err := connectUser(context.Background(), os.Getenv); err != nil || u != ACLObserver {
+			t.Errorf("identity %q under the observer: %q %v", id, u, err)
+		}
+	}
+	t.Setenv("AGENT_BUS_AGENT", "observer")
+	SetConnectEntry(ACLEntryCLI, nil)
 	SetObservers(nil) // no manifest known: the identity is an agent, as before
 	if u, _ := connectUser(context.Background(), os.Getenv); u != ACLAgent {
 		t.Fatalf("without observers: %q", u)

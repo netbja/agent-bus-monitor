@@ -254,14 +254,18 @@ func SetObservers(isObserver func(identity string) bool) {
 }
 
 // aclUserOf is ACLUserFor narrowed for an observer: an identity isObserver
-// names logs in as observer whatever its entry or ancestry would give it
-// (the least rights); the admin entry stays refused to any identity.
+// names, or a process under a registered observer whatever identity it
+// claims (reviewer-codex), logs in as observer whatever its entry would give
+// it (the least rights); the admin entry stays refused to any of them.
 func aclUserOf(entry ACLEntry, identity, ancestor string, isObserver func(string) bool) (string, error) {
 	user, err := ACLUserFor(entry, identity, ancestor)
-	if err != nil || identity == "" || isObserver == nil || !isObserver(identity) {
+	if err != nil || isObserver == nil {
 		return user, err
 	}
-	return ACLObserver, nil
+	if identity != "" && isObserver(identity) || ancestor != "" && isObserver(ancestor) {
+		return ACLObserver, nil
+	}
+	return user, nil
 }
 
 // SetConnectEntry is main's statement of how this process came to the

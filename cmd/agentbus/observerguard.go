@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -56,26 +57,39 @@ func observerRead(cmd string, rest []string) bool {
 	return false
 }
 
-// observerRefusal is why args are refused to identity, "" allowed: only an
-// identity isObserver names is limited, and nil (no manifest known) limits
-// nobody.
-func observerRefusal(args []string, identity string, isObserver func(string) bool) string {
-	if identity == "" || isObserver == nil || !isObserver(identity) || len(args) == 0 || observerRead(args[0], args[1:]) {
+// observerRefusal is why args are refused, "" allowed: to identity when
+// isObserver names it, or to any identity under a registered observer
+// (ancestor, read only for a command that is not a read: reviewer-codex);
+// nil isObserver (no manifest known) limits nobody.
+func observerRefusal(args []string, identity string, ancestor func() string, isObserver func(string) bool) string {
+	if isObserver == nil || len(args) == 0 || observerRead(args[0], args[1:]) {
 		return ""
 	}
-	return fmt.Sprintf("%s is an observer (roles.toml kind = \"observer\"): it reads only (%s); %q writes or acts on the bus, refused", identity, observerReads, args[0])
+	who := ""
+	switch {
+	case identity != "" && isObserver(identity):
+		who = identity + " is an observer"
+	default:
+		if a := ancestor(); a != "" && isObserver(a) {
+			who = "this process runs under the observer " + a
+		}
+	}
+	if who == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s (roles.toml kind = \"observer\"): it reads only (%s); %q writes or acts on the bus, refused", who, observerReads, args[0])
 }
 
 // launcherObservers are the observers of the manifest the launcher uses
-// (ROLES_TOML, else the repository's), nil when it cannot be read: then no
-// identity is limited, as before the observer role existed.
+// (ROLES_TOML, else the repository's), nil when it declares none or cannot
+// be read: then nobody is limited, as before the observer role existed.
 func launcherObservers() func(string) bool {
 	path, err := manifestPath(os.Environ())
 	if err != nil {
 		return nil
 	}
 	m, err := rolecfg.Load(path)
-	if err != nil {
+	if err != nil || len(m.Observers()) == 0 {
 		return nil
 	}
 	return m.IsObserver
@@ -83,14 +97,16 @@ func launcherObservers() func(string) bool {
 
 // observerGuard refuses an observer's write before the bus, and tells Connect
 // which identities are observers (their Redis user, while broker.acl is on).
-func observerGuard(args []string) (int, bool) {
-	identity := os.Getenv("AGENT_BUS_AGENT")
-	if identity == "" {
-		return 0, false
-	}
+// The ancestry is read only when the manifest declares an observer and the
+// command writes; one that cannot be read limits nobody (stated).
+func observerGuard(args []string, ancestorOf func(context.Context) (string, error)) (int, bool) {
 	isObserver := launcherObservers()
 	bus.SetObservers(isObserver)
-	if why := observerRefusal(args, identity, isObserver); why != "" {
+	ancestor := func() string {
+		a, _ := ancestorOf(context.Background())
+		return a
+	}
+	if why := observerRefusal(args, os.Getenv("AGENT_BUS_AGENT"), ancestor, isObserver); why != "" {
 		fmt.Fprintln(os.Stderr, "error: "+why)
 		return 2, true
 	}
