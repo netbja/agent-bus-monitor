@@ -511,6 +511,9 @@ func (m *Model) buildPage() bool {
 		}
 	case ovMerge:
 		p.title, p.body, p.plain, p.threadPlain = mergePage(s.mergeQ, p.key, width)
+		if slices.ContainsFunc(s.mergeQ.Items, func(it bus.MergeItem) bool { return it.Head == p.key }) {
+			p.body = append(p.body, deliveryLines(s.delivery, p.key)...) // single-approval step 3b
+		}
 		p.plainWhat, p.threadWhat = "link", "checks"
 	case ovRequest:
 		task := strings.TrimPrefix(p.key, "req:")

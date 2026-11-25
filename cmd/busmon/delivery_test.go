@@ -103,3 +103,30 @@ func TestReadDelivery(t *testing.T) {
 		t.Fatalf("a minute on and a new head: %v, reports read %d times", r.since, r.calls["Recent"])
 	}
 }
+
+// A merge item's page ends with deliver's one-approval trace for its head
+// and the provider warning; with neither, nothing is added.
+func TestMergePageDeliveryLines(t *testing.T) {
+	m := fixtureShell(t, 140, 40)
+	snap := m.snap
+	snap.mergeQ, snap.mergeQRead = mqRecord(shellNow), true
+	snap.delivery = deliveryFacts{Warning: "no reviewer of another provider in 7 days: one approval needs delivery.same_provider_ok (now off)",
+		Traces: map[string]string{mqH: "single approval (small: 4 lines, 1 files; approved by foureyes) (pr 309)"}}
+	m.snap = snap
+	m.refresh()
+	m.push(page{kind: ovMerge, key: mqH})
+	text := plainLines(m.rd.top().body)
+	for _, want := range []string{"Delivered on one approval: single approval (small: 4 lines, 1 files; approved by foureyes) (pr 309)",
+		"no reviewer of another provider in 7 days: one approval needs delivery.same_provider_ok (now off)"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("page lacks %q:\n%s", want, text)
+		}
+	}
+	snap.delivery = deliveryFacts{}
+	m.snap = snap
+	m.closeReader()
+	m.push(page{kind: ovMerge, key: mqH})
+	if text := plainLines(m.rd.top().body); strings.Contains(text, "one approval") {
+		t.Fatalf("lines without facts:\n%s", text)
+	}
+}

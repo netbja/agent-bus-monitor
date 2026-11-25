@@ -158,3 +158,19 @@ func localSameProviderOf(project string, getenv func(string) string) func() stri
 		return "off"
 	}
 }
+
+// deliveryLines end a merge item's page (§4.5, §4.8): deliver's
+// one-approval trace for head, and the provider warning; none without them.
+func deliveryLines(d deliveryFacts, head string) []Line {
+	var out []Line
+	if l, ok := d.Traces[head]; ok {
+		out = append(out, Line{S(RoleMuted, "Delivered on one approval: "), S(RoleText, Preview(l))})
+	}
+	if d.Warning != "" {
+		out = append(out, Line{S(RoleAttention, Preview(d.Warning))})
+	}
+	if len(out) > 0 {
+		out = append([]Line{{}}, out...)
+	}
+	return out
+}
