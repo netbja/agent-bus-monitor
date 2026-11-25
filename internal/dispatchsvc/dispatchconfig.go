@@ -189,10 +189,27 @@ func quotaThresholds(getenv func(string) string, project, envFile string) func()
 		if d := get("dispatch.quota_drain"); d.Source == "default" {
 			th.Drain = th.Warn
 		} else {
-			th.Drain = d.Value.(float64)
+			th.Drain, th.DrainSet = d.Value.(float64), true
+		}
+		// quota-per-provider: a provider's own values, 0 none (the default's).
+		for _, p := range config.QuotaProviders {
+			lv := dispatch.QuotaLevels{Warn: get(config.QuotaProviderKey(p, "warn")).Value.(float64),
+				Drain: get(config.QuotaProviderKey(p, "drain")).Value.(float64), Hold: get(config.QuotaProviderKey(p, "hold")).Value.(float64)}
+			if lv != (dispatch.QuotaLevels{}) {
+				if th.Providers == nil {
+					th.Providers = map[string]dispatch.QuotaLevels{}
+				}
+				th.Providers[p] = lv
+			}
 		}
 		return th, nil
 	}
+}
+
+// QuotaThresholds is quotaThresholds, for agentbus quota: the thresholds
+// the project's dispatcher reads, from the same files.
+func QuotaThresholds(getenv func(string) string, project, envFile string) func() (dispatch.QuotaThresholds, error) {
+	return quotaThresholds(getenv, project, envFile)
 }
 
 // serviceContext is the dispatch service's context pass (context-alert): each

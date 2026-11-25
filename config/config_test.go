@@ -32,6 +32,9 @@ func TestRegistryRows(t *testing.T) {
 		"health.disk_warn_pct", "health.disk_warn_gib", "health.disk_fail_pct", "health.disk_fail_gib",
 		"health.runaway.silent_after", "health.runaway.context_growth", "health.runaway.growth_span",
 		"health.runaway.screen_repeats", "models.source_max_age",
+		"quota.anthropic.warn", "quota.anthropic.drain", "quota.anthropic.hold", "quota.google.warn", "quota.google.drain", "quota.google.hold",
+		"quota.moonshot.warn", "quota.moonshot.drain", "quota.moonshot.hold", "quota.openai.warn", "quota.openai.drain", "quota.openai.hold",
+		"quota.xai.warn", "quota.xai.drain", "quota.xai.hold",
 	}
 	if len(Keys) != len(want) {
 		t.Fatalf("registry has %d rows, want %d", len(Keys), len(want))
