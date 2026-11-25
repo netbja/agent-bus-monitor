@@ -27,15 +27,13 @@ const providerWindow = 7 * 24 * 60 * 60 * 1000 // ms
 func providerWarning(vs []bus.Verdict, value string) string {
 	n := 0
 	for _, v := range vs {
-		if v.Reviewer == v.Author {
-			continue
+		if v.Reviewer != v.Author {
+			n++
 		}
-		if v.ReviewerProvider != "" && v.AuthorProvider != "" && v.ReviewerProvider != v.AuthorProvider {
-			return ""
-		}
-		n++
 	}
 	switch {
+	case otherProvider(vs):
+		return ""
 	case n == 0:
 		return ""
 	case value == "" || value == "off":
@@ -77,11 +75,11 @@ func oneApprovalTraces(evs []bus.Event) map[string]string {
 // deliveryEvery is how often the 7 days' ledger is read again.
 const deliveryEvery = time.Minute
 
-// deliveryVerdictsMax bounds the ledger read; deliveryReportScan, the
-// reports scanned for a new merge item's trace.
+// deliveryVerdictsPage is a page of the ledger read; deliveryReportScan,
+// the reports scanned for a new merge item's trace.
 const (
-	deliveryVerdictsMax = 5000
-	deliveryReportScan  = 300
+	deliveryVerdictsPage = 2000
+	deliveryReportScan   = 300
 )
 
 // deliveryFacts are what readDelivery read: the warning (§4.8; "" none),
@@ -94,9 +92,40 @@ type deliveryFacts struct {
 	looked  map[string]bool // the heads whose trace was looked for
 }
 
-// verdictsSinceReader is the ledger's read by time (the bus has it).
+// verdictsSinceReader is the ledger's read by time, then by page (the bus
+// has both).
 type verdictsSinceReader interface {
 	VerdictsSince(ctx context.Context, ms int64, count int64) ([]bus.Verdict, error)
+	VerdictsAfter(ctx context.Context, after string, count int64) ([]bus.Verdict, error)
+}
+
+// otherProvider: an independent verdict in vs is by a reviewer of another
+// provider than its author's, both known (deliver's rule).
+func otherProvider(vs []bus.Verdict) bool {
+	for _, v := range vs {
+		if v.Reviewer != v.Author && v.ReviewerProvider != "" && v.AuthorProvider != "" && v.ReviewerProvider != v.AuthorProvider {
+			return true
+		}
+	}
+	return false
+}
+
+// windowWarning is providerWarning over the whole ledger from ms on, read a
+// page at a time (reviewer-codex: a capped prefix is not the window): it
+// stops at the first page holding a verdict of another provider, which
+// hides the warning whatever follows.
+func windowWarning(ctx context.Context, r verdictsSinceReader, ms int64, page int64, value string) (string, error) {
+	vs, err := r.VerdictsSince(ctx, ms, page)
+	all := vs
+	for err == nil && int64(len(vs)) == page && !otherProvider(vs) {
+		if vs, err = r.VerdictsAfter(ctx, vs[len(vs)-1].ID, page); err == nil {
+			all = append(all, vs...)
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return providerWarning(all, value), nil
 }
 
 // readDelivery refreshes st.delivery on the requests' cadence: the ledger
@@ -118,8 +147,8 @@ func readDelivery(ctx context.Context, b busReader, st *shared, now time.Time) {
 	}
 	st.mu.Unlock()
 	if vr, ok := b.(verdictsSinceReader); ok && now.Sub(f.at) >= deliveryEvery {
-		if vs, err := vr.VerdictsSince(ctx, now.UnixMilli()-providerWindow, deliveryVerdictsMax); err == nil {
-			f.Warning, f.at = providerWarning(vs, value), now
+		if w, err := windowWarning(ctx, vr, now.UnixMilli()-providerWindow, deliveryVerdictsPage, value); err == nil {
+			f.Warning, f.at = w, now
 		}
 	}
 	if len(fresh) > 0 {
