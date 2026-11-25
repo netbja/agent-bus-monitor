@@ -36,6 +36,10 @@ func runRun(ctx context.Context, b *bus.Bus, args []string, getenv func(string) 
 		fmt.Fprintln(out, "run reset: the run's pause lifted, if it had stopped; the next merge-queue pass starts a new run (its baseline: the heads already delivered)")
 		return 0
 	}
+	if len(args) > 0 && args[0] == "--cap" {
+		fmt.Fprintln(errw, "run --cap comes first on the line, with no global flag before it: agentbus run --cap [--mem <size>] [--time <dur>] [--cpu <pct>] -- <command...>")
+		return 2
+	}
 	fmt.Fprintln(errw, "usage: run | run reset")
 	return 2
 }

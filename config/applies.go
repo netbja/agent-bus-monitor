@@ -91,7 +91,7 @@ var applies = map[string]Applies{
 	// each writer, at each write
 	"bus.report_max": AppliesLive, "bus.report_full_max": AppliesLive, "bus.verdict_max": AppliesLive,
 	// commands, at each run
-	"services.manager": AppliesRun, "attach.prefix": AppliesRun, "services.start_at_login": AppliesRun, "start.team": AppliesRun,
+	"services.manager": AppliesRun, "limits.command_memory": AppliesRun, "limits.command_time": AppliesRun, "limits.command_cpu": AppliesRun, "attach.prefix": AppliesRun, "services.start_at_login": AppliesRun, "start.team": AppliesRun,
 	"sentinel.reload": AppliesLive, "suspend.wait": AppliesRun, "suspend.auto_resume": AppliesRun, "board.wip_limit": AppliesRun,
 	"delivery.single_approval": AppliesRun, "delivery.small_max_lines": AppliesRun, "delivery.small_max_files": AppliesRun,
 	"delivery.never_small": AppliesRun, "delivery.same_provider_ok": AppliesRun, "broker.image": AppliesRun,

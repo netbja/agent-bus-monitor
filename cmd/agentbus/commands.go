@@ -98,10 +98,10 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo cmd coder \"run the suite\"", "agentbus -p demo cmd -r 1792537337865-0 coder \"and the vet\""},
 	},
 	{
-		Name: "run", Usage: []string{"run", "run reset"},
-		Brief:    "the run budget",
-		Summary:  "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run",
-		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset"},
+		Name: "run", Usage: []string{"run", "run reset", "run --cap [--mem <size>] [--time <dur>] [--cpu <pct>] -- <command...>"},
+		Brief:    "the run budget; run --cap: a command under caps",
+		Summary:  "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run. run --cap (no project, first on the line) runs a command in its own process group under a memory and a time cap, limits.command_memory and limits.command_time by default; a flag only narrows them; killed at a cap: exit 137 and the reason",
+		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset", "agentbus run --cap -- go test ./... -count=1 -timeout 25m", "agentbus run --cap --mem 4G --time 5m -- sh mutant.sh"},
 	},
 	{
 		Name: "ci", Usage: []string{"ci reset <pr>"},

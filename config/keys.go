@@ -557,6 +557,15 @@ var Keys = append([]*Key{
 	// person typed an agent is left alone. Read when the holder starts.
 	{Name: "holder.scrollback", Env: "AGENT_BUS_HOLDER_SCROLLBACK", Kind: Int, Default: 5000, ReadBy: "agentbus holder",
 		env: envPositiveInt, file: filePositiveInt},
+	// Cap C, one command run by agentbus run --cap (spec
+	// 2026-11-25-agent-resource-limits-design.md §6, §8; the person's Q4):
+	// the defaults a flag may only narrow. The person's alone and per host.
+	{Name: "limits.command_memory", Kind: String, Default: "8G", ReadBy: "agentbus run --cap", MachineOnly: true, PersonOnly: true,
+		file: fileSizeOrOff},
+	{Name: "limits.command_time", Kind: Duration, Default: 30 * time.Minute, ReadBy: "agentbus run --cap (0: no time cap)", MachineOnly: true, PersonOnly: true,
+		file: fileDuration(true)},
+	{Name: "limits.command_cpu", Kind: Int, Default: 0, ReadBy: "agentbus run --cap (a CPU percentage, 0: no CPU cap; only where systemd-run runs the command)", MachineOnly: true, PersonOnly: true,
+		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole percentage, 0 for no CPU cap")},
 	{Name: "dispatch.submit_wait", Env: "AGENT_BUS_SUBMIT_WAIT", Kind: Duration, Default: 2 * time.Second, ReadBy: "agentbus holder",
 		env: envBoundedDuration(time.Minute), file: fileBoundedDuration(time.Minute)},
 	{Name: "dispatch.person_quiet", Env: "AGENT_BUS_PERSON_QUIET", Kind: Duration, Default: 3 * time.Second, ReadBy: "agentbus holder",
