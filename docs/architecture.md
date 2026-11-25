@@ -174,7 +174,7 @@ herdr — the identity the dispatcher checks before typing into a pane — or by
 host it runs on, so a reader on another host (busmon through a tunnel) knows the pid is not one
 of its own. cmd `type` gains
 `escalation` (dispatcher → `--escalate-to`, default `master`; for the services, `agentbus up
---escalate-to` records it as `AGENT_BUS_ESCALATE_TO` in the project's env file), `blocked` (written by `request
+--escalate-to` records it as `AGENT_BUS_ESCALATE_TO` in the project's env file; its additive field `agent` names the agent it is about, which a retro's friction reads), `blocked` (written by `request
 block` to the requester, only on a transition or a new reason) and `complete` (conductor → the
 escalation target, once per change revision whose missions are all integrated).
 

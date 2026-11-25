@@ -315,6 +315,16 @@ var commands = []cli.Command{
 			"agentbus -p demo request priority parser high --as charlie", "agentbus -p demo request next"},
 	},
 	{
+		Name: "retro", Usage: []string{
+			"retro request <task>",
+			"retro evidence <task>",
+			"retro none <task> <root cause...>",
+		},
+		Brief:    "a task's retrospective",
+		Summary:  "request: the person asks for a retro of a task (refused from an agent); evidence: the task's thread and friction signals (rejects, CI hand-offs, stalls), bus ids only; none: close retro-<task> with no lasting lesson and its root cause. request done sends retro-<task> by itself when the task had friction",
+		Examples: []string{"agentbus -p demo retro evidence parser", "agentbus -p demo retro none parser \"a flaky test, not a rule\""},
+	},
+	{
 		Name: "shutdown", Usage: []string{"shutdown [--force]"},
 		Brief:    "end the team's work",
 		Summary:  "tell every agent the work is over (refused while work is in flight)",
