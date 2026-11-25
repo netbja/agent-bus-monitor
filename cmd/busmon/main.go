@@ -671,6 +671,12 @@ type shared struct {
 	releasesOf func(context.Context) (releaseData, error)
 	releases   releaseData
 	releasesAt time.Time // the last read attempt
+
+	// delivery is single-approval's facts (step 3b): the 7-day provider
+	// warning and deliver's one-approval traces, read by readDelivery;
+	// sameProviderOf reads the project's delivery.same_provider_ok.
+	delivery       deliveryFacts
+	sameProviderOf func() string
 }
 
 func main() {
