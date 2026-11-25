@@ -455,3 +455,43 @@ func TestFencedEscalationAgentField(t *testing.T) {
 		t.Error("invalid agent accepted")
 	}
 }
+
+// A closed retro does not block a new one: after retro x is done, the
+// person's retro request sends a second retro (the next free name) with the
+// person's signal; a retro still open is not sent again.
+func TestRetroAfterClosedRetro(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	startTask(t, b, "x", "coder")
+	frictionKit{t, b}.reject("coder")
+	doneTask(t, b, "x", "coder")
+	first, err := b.RetroDue(ctx, "x")
+	if err != nil || !first.Sent {
+		t.Fatalf("first: %+v %v", first, err)
+	}
+	if again, err := b.RetroRequest(ctx, "x", "coder"); err != nil || again.Sent || again.Task != first.Task {
+		t.Errorf("while open: %+v %v", again, err)
+	}
+	if err := b.AcceptRequest(ctx, first.Task, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.CompleteRequest(ctx, first.Task, "coder", "no lasting lesson: x"); err != nil {
+		t.Fatal(err)
+	}
+	second, err := b.RetroRequest(ctx, "x", "coder")
+	if err != nil || !second.Sent || second.Task == first.Task {
+		t.Fatalf("after the close: %+v %v", second, err)
+	}
+	board, _ := b.Board(ctx)
+	r := board[second.Task].Request
+	if r == nil || r.RetroOf != "x" {
+		t.Fatalf("second retro %+v", r)
+	}
+	msgs, _ := b.r.XRange(ctx, StreamKey(b.project, "cmd"), r.ID, r.ID).Result()
+	if body, _ := msgs[0].Values["command"].(string); !strings.Contains(body, "person -") {
+		t.Errorf("no person signal in:\n%s", body)
+	}
+	if name, _, _ := b.FindRetro(ctx, "x"); name != second.Task {
+		t.Errorf("FindRetro: %q, want the open %q", name, second.Task)
+	}
+}

@@ -240,8 +240,9 @@ func (b *Bus) RetroOwner(ctx context.Context, task string) (string, error) {
 	return e.Request.Target, nil
 }
 
-// FindRetro is the board name of task's retro and its owner, "" when it has
-// none: the entry whose request has retro_of = task (only sendRetro sets it).
+// FindRetro is the board name of task's open retro and its owner, "" when
+// it has none: the entry not done whose request has retro_of = task (only
+// sendRetro sets it). A closed retro never blocks a new one.
 func (b *Bus) FindRetro(ctx context.Context, task string) (name, owner string, err error) {
 	all, err := b.r.HGetAll(ctx, BoardKey(b.project)).Result()
 	if err != nil {
@@ -249,7 +250,7 @@ func (b *Bus) FindRetro(ctx context.Context, task string) (name, owner string, e
 	}
 	for n, raw := range all {
 		var e BoardEntry
-		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task {
+		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task && e.State != "done" {
 			return n, e.Request.Target, nil
 		}
 	}
