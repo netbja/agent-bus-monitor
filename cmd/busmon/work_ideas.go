@@ -33,6 +33,7 @@ func localNotesOf(project string, getenv func(string) string) func() ([]memory.Q
 // a checkout here).
 func wireLocalReaders(st *shared, project string, getenv func(string) string) {
 	st.trustOf, st.notesOf, st.releasesOf = localTrustOf(project, getenv), localNotesOf(project, getenv), localReleasesOf(project, getenv)
+	st.sameProviderOf = localSameProviderOf(project, getenv) // single-approval step 3b
 }
 
 // readIdeas refreshes the shared ideas and idea notes at the requests'
