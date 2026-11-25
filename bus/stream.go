@@ -650,7 +650,8 @@ func (b *Bus) VerdictsAfter(ctx context.Context, after string, count int64) ([]V
 		f := toStringMap(m.Values)
 		ms, _ := splitID(m.ID)
 		out = append(out, Verdict{ID: m.ID, Subject: f["subject"], Author: f["author"], Reviewer: f["reviewer"],
-			Decision: f["decision"], Message: f["message"], Ref: f["ref"], TS: ms, Head: f["head"]})
+			Decision: f["decision"], Message: f["message"], Ref: f["ref"], TS: ms, Head: f["head"],
+			AuthorProvider: f["author_provider"], ReviewerProvider: f["reviewer_provider"]})
 	}
 	return out, nil
 }
