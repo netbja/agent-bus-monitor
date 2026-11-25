@@ -64,8 +64,9 @@ the kernel OOM-kills a process **inside that cgroup**. The kernel chooses it by 
 (`oom_badness`: mostly resident memory and swap, plus `oom_score_adj`). That usually means the
 largest process, but it is not guaranteed. Nothing outside the cgroup is touched.
 
-- `agentbus run` sets its command's `oom_score_adj` to `+500`. A process may raise its own
-  value, or its child's, without privilege. So when cap A or B is hit, the capped command is the
+- `agentbus run` sets its own `oom_score_adj` to `+500` before it starts the command, which
+  inherits the value. Raising your own value needs no privilege. Go cannot run code between fork
+  and exec, so the value is set on `agentbus run` itself, not on the child. So when cap A or B is hit, the capped command is the
   preferred victim, ahead of a client or the holder.
 - What the kernel tells us is the `oom_kill` count in each cgroup's `memory.events`, not the
   victim's pid. So attribution names the cgroup, which identifies the terminal (B) or the command
