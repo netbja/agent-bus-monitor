@@ -63,7 +63,7 @@ func (l *loop) contextAlerts(ctx context.Context) error {
 			if err := loadMarks(); err != nil {
 				return err
 			}
-			if err := l.compactNotice(ctx, a, marks); err != nil { // owed past the episode's end
+			if _, err := l.compactNotice(ctx, a, marks); err != nil { // owed past the episode's end
 				if errors.Is(err, bus.ErrNotHolder) {
 					return err
 				}

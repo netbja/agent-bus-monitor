@@ -5,7 +5,8 @@
   not blocked, no wake being typed, no swap, its provider not held. The order is the clear's: the
   `compact:<agent>` mark is reserved first, the pane inspected again, then the line typed; master
   gets one wake=no notice: owed in `compact-typed:<agent>` once the line is typed, delivered
-  (`compact-notice:<agent>`) on a later pass if master was being swapped, even after the fill fell.
+  (`compact-notice:<agent>`) on a later pass if master was being swapped, even after the fill fell; while it is owed, no
+  other `/compact` is typed.
   The hold's start is `compact-since:<agent>` (`<session>|<Redis ms>`); a reading below urgent
   restarts it, and the episode's end (a reading below the alert) deletes it and `compact:<agent>`. A `/compact` left unsent in the input tells the person,
   and nothing is typed again in that episode. `dispatch.auto_compact` (on by default) is the

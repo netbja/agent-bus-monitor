@@ -120,7 +120,8 @@ func compactSince(marks map[string]string, agent, session string) int64 {
 func (e *escalation) compact(ctx context.Context, a string, f bus.ContextFill, marks map[string]string) error {
 	l := e.l
 	c := l.cfg.Context
-	if err := l.compactNotice(ctx, a, marks); err != nil { // a notice still owed goes first
+	owed, err := l.compactNotice(ctx, a, marks) // a notice still owed goes first
+	if err != nil {
 		return err
 	}
 	if c.Compact == nil || e.urgent <= 0 {
@@ -135,6 +136,10 @@ func (e *escalation) compact(ctx context.Context, a string, f bus.ContextFill, m
 		return nil
 	case since == 0: // first seen at the urgent fill in this session: the hold starts now
 		return l.b.FencedQuotaSet(ctx, l.token, bus.CompactSinceMark(a), f.Session+"|"+strconv.FormatInt(f.At, 10))
+	}
+	if owed { // one debt at a time: a second /compact would overwrite it (reviewer-codex)
+		l.deferCompact(a, "the notice of its last /compact is still owed to "+l.cfg.EscalateTo)
+		return nil
 	}
 	if !c.Compact() {
 		l.deferCompact(a, "auto-compact is off")
@@ -198,21 +203,23 @@ func (e *escalation) compact(ctx context.Context, a string, f bus.ContextFill, m
 	if err := l.b.FencedQuotaSet(ctx, l.token, bus.CompactTypedMark(a), typed); err != nil {
 		return err
 	}
-	return l.compactNotice(ctx, a, map[string]string{bus.CompactTypedMark(a): typed})
+	_, err = l.compactNotice(ctx, a, map[string]string{bus.CompactTypedMark(a): typed})
+	return err
 }
 
 // compactNotice delivers the wake=no notice of a typed /compact that marks
 // still owe (CompactTypedMark), once per typing, and then forgets the debt.
-// master being swapped refuses it with nothing written: a later pass retries.
-func (l *loop) compactNotice(ctx context.Context, a string, marks map[string]string) error {
+// master being swapped refuses it with nothing written: a later pass retries,
+// and owed is true until then (no other /compact meanwhile).
+func (l *loop) compactNotice(ctx context.Context, a string, marks map[string]string) (owed bool, err error) {
 	v, ok := marks[bus.CompactTypedMark(a)]
 	if !ok {
-		return nil
+		return false, nil
 	}
 	to := l.cfg.EscalateTo
 	parts := strings.Split(v, "|")
 	if to == a || !bus.ValidName(to) || len(parts) != 4 {
-		return l.b.FencedQuotaDel(ctx, l.token, bus.CompactTypedMark(a))
+		return false, l.b.FencedQuotaDel(ctx, l.token, bus.CompactTypedMark(a))
 	}
 	pct, _ := strconv.ParseFloat(parts[2], 64)
 	mins, _ := strconv.ParseInt(parts[3], 10, 64)
@@ -221,13 +228,13 @@ func (l *loop) compactNotice(ctx context.Context, a string, marks map[string]str
 		note := fmt.Sprintf("auto-compact: %s at %.0f%% for %d min with no hand-off declared; /compact typed into its idle pane. It keeps working from a summary of its context: check its current step before sending it more.", a, pct, mins)
 		_, err := l.b.FencedCmdOnce(ctx, l.token, bus.CompactNoticeMark(a), episode, dispatchFrom, to, bus.CmdDirective, note, true)
 		if errors.Is(err, bus.ErrSwapInProgress) {
-			return nil // owed still: the next pass retries
+			return true, nil // owed still: the next pass retries
 		}
 		if err != nil {
-			return err
+			return true, err
 		}
 	}
-	return l.b.FencedQuotaDel(ctx, l.token, bus.CompactTypedMark(a))
+	return false, l.b.FencedQuotaDel(ctx, l.token, bus.CompactTypedMark(a))
 }
 
 // deferCompact logs why an agent was not compacted, once per change of

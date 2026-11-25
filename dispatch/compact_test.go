@@ -321,3 +321,38 @@ func TestAutoCompactNoticeRetried(t *testing.T) {
 		})
 	}
 }
+
+// reviewer-codex: a notice still owed holds the next /compact back, so a
+// second typing never overwrites it. master swapped through two holds: the
+// second /compact waits for the first notice; once master is back, both
+// notices arrive, each once, and /compact is typed twice in all.
+func TestAutoCompactOwedNoticeHoldsTheNext(t *testing.T) {
+	w := newCompactWorld(t, alwaysReady)
+	w.pass(92)
+	w.ageHold(compactAfter)
+	if err := w.b.BeginSwap(w.ctx, "master", bus.SwapIntent{ToProfile: "opus", By: "master"}); err != nil {
+		t.Fatal(err)
+	}
+	w.pass(93)
+	w.pass(30) // the episode ends, the notice still owed
+	w.pass(92)
+	w.ageHold(compactAfter)
+	w.pass(95)
+	if w.compacts() != 1 {
+		t.Fatalf("%d /compact typed while a notice was owed, want 1", w.compacts())
+	}
+	if err := w.b.EndSwap(w.ctx, "master"); err != nil {
+		t.Fatal(err)
+	}
+	w.pass(95)
+	w.pass(96)
+	if n := w.count("master", "auto-compact: coder at 93% for 10 min", false); n != 1 {
+		t.Fatalf("%d notices of the first /compact, want 1", n)
+	}
+	if w.compacts() != 2 {
+		t.Fatalf("%d /compact typed after master came back, want 2", w.compacts())
+	}
+	if n := w.count("master", "auto-compact: coder at 9", false); n != 2 {
+		t.Fatalf("%d notices in all, want 2", n)
+	}
+}
