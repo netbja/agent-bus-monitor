@@ -49,7 +49,7 @@ func (k *Key) Applies() Applies {
 var applies = map[string]Applies{
 	// busmon, applied at once by Shift+C (cmd/busmon applySetting)
 	"waiting.popup_after": AppliesLive, "waiting.snooze": AppliesLive, "waiting.bell": AppliesLive, "waiting.fade": AppliesLive,
-	"recap.auto_after": AppliesLive, "display.theme": AppliesLive, "display.icons": AppliesLive, "display.graphs": AppliesLive,
+	"recap.auto_after": AppliesLive, "display.theme": AppliesLive, "display.icons": AppliesLive, "display.graphs": AppliesLive, "display.rendering": AppliesLive,
 	"compose.at_path": AppliesLive, "display.date_format": AppliesLive, "display.work_layout": AppliesLive, "display.follow": AppliesLive,
 	"display.idle_view_after": AppliesLive, "display.confirm_quit": AppliesLive, "board.no_accept_after": AppliesLive, "board.no_reply_after": AppliesLive,
 	"projects.delete_files": AppliesLive, "projects.delete_backups": AppliesLive,

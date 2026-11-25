@@ -12,7 +12,7 @@
 │                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…│
 │                                                      ││  ○ ui-grok   quota     3m      —        —         swapping · update   reviewed   ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 67 default ──────────────────────────────────────────────────────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 1 refused · 68 default ──────────────────────────────────────────────────────────────── esc back ─╮
 │                   │ focus: keys · ← or tab: the groups ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ▲
 │  › Display        │ Display  how busmon looks; theme, icons and fade apply at once                                                       ┃
 │    Attention      │                                                                                                                      ┃
@@ -20,7 +20,8 @@
 │    Notifications  │   • Theme                           ‹ dark ›                                                                         ┃
 │    Services       │ ▶ • Icons                           ‹ nerd ›                                                                         ┃
 │    Backup         │    off · nerd 󰬈 󰬖 󰬒 󰬟 󰬎 · agent-font         (what your terminal draws is what you get)                         ┃
-│    Projects       │     Sparklines                      ‹ auto ›                                                                         ┃
+│    Projects       │     Sparklines (old)                ‹ auto ›                                                                         ┃
+│                   │     Rendering                       ‹ auto ›                                                                         ┃
 │                   │     @ inserts paths as              ‹ absolute ›                                                                     ┃
 │                   │     Date format                     ‹ relative ›                                                                     ┃
 │                   │     Work layout                     ‹ auto ›                                                                         ┃
@@ -32,9 +33,8 @@
 │                   │     Board: no acceptance after      30m                                                                              ┃
 │                   │     Board: no reply after           2h                                                                               ┃
 │                   │     Attach prefix key               f12                                                                              ┃
-│                   │                                                                                                                      ┃
-│                   │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────  ┃
-│                   │ Icons · display.icons · from config.toml (default: off) · read by busmon · applies live                              │
-│                   │ off: none · nerd: a lettered box per provider · agent-font: the maker's logo                                         ▼
+│                   │                                                                                                                      │
+│                   │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────  │
+│                   │ Icons · display.icons · from config.toml (default: off) · read by busmon · applies live                              ▼
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k move   ←→ panel   tab focus   enter edit   d reset   D reset group   esc q back                                                     

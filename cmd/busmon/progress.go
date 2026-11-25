@@ -87,7 +87,7 @@ func progressLine(r request, p pace, now time.Time) (Line, bool) {
 	used := max(now.Sub(r.Accepted), 0)
 	end := resetClock(r.Accepted.Add(p.usual), now)
 	bar := func(fill int, role Role) Line {
-		r := finedraw.Rule(fill, progressBarW)
+		r := finedraw.Rule(fill, progressBarW, drawCaps().Mode)
 		return Line{{Text: "  ", Role: RoleDim}, {Text: r[0].Text, Role: role}, {Text: r[1].Text, Role: RoleMuted}, {Text: "  ", Role: RoleDim}}
 	}
 	switch {

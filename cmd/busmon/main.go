@@ -829,6 +829,7 @@ func main() {
 		os.Exit(2)
 	}
 	th = t
+	renderMode = settings.Rendering // tui-rendering §3 (graphs.go)
 
 	// Everything the background goroutines publish to the shell. Empty until
 	// the first tick: an unknown budget stays blank rather than implying 0%

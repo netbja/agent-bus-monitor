@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 // settingsDir is a config home holding the given config.toml and busmon.toml
@@ -127,24 +129,25 @@ func TestBusmonSettingsIcons(t *testing.T) {
 	}
 }
 
-// braille-sparklines §2: display.graphs is resolved at load, auto through the
-// locale; an unknown value is the registry's note, then auto.
+// braille-sparklines §2, folded into display.rendering (tui-rendering §3):
+// display.graphs is mapped at load when display.rendering is not set; a
+// locale without UTF-8 draws ascii whatever is set; an unknown value is the
+// registry's note, then auto.
 func TestBusmonSettingsGraphs(t *testing.T) {
 	utf := map[string]string{"LANG": "fr_FR.UTF-8"}
-	if got := loadBusmonSettings(settingsDir(t, "", "", utf), settingsFlags{}); got.Graphs != graphsBlock {
-		t.Fatalf("default graphs on UTF-8 %q", got.Graphs)
+	check := func(name string, got busmonSettings, mode finedraw.Mode, by string) {
+		t.Helper()
+		if got.Rendering != mode || got.RenderingBy != by {
+			t.Errorf("%s: %v by %q, want %v by %q", name, got.Rendering, got.RenderingBy, mode, by)
+		}
 	}
-	if got := loadBusmonSettings(settingsDir(t, "", "", map[string]string{"LANG": "C"}), settingsFlags{}); got.Graphs != graphsASCII {
-		t.Fatalf("default graphs on C %q", got.Graphs)
-	}
-	if got := loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"braille\"\n", "", map[string]string{"LANG": "C"}), settingsFlags{}); got.Graphs != graphsBraille {
-		t.Fatalf("file graphs %q", got.Graphs)
-	}
-	if got := loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"braille\"\n", "", map[string]string{"AGENT_BUS_BUSMON_GRAPHS": "ascii", "LANG": "fr_FR.UTF-8"}), settingsFlags{}); got.Graphs != graphsASCII {
-		t.Fatalf("env graphs %q", got.Graphs)
-	}
+	check("default on UTF-8", loadBusmonSettings(settingsDir(t, "", "", utf), settingsFlags{}), finedraw.ModeFine, finedraw.ByAuto)
+	check("default on C", loadBusmonSettings(settingsDir(t, "", "", map[string]string{"LANG": "C"}), settingsFlags{}), finedraw.ModeASCII, finedraw.ByLocale)
+	check("file braille on C", loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"braille\"\n", "", map[string]string{"LANG": "C"}), settingsFlags{}), finedraw.ModeASCII, finedraw.ByLocale)
+	check("env ascii over file braille", loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"braille\"\n", "", map[string]string{"AGENT_BUS_BUSMON_GRAPHS": "ascii", "LANG": "fr_FR.UTF-8"}), settingsFlags{}), finedraw.ModeASCII, finedraw.ByGraphs)
 	got := loadBusmonSettings(settingsDir(t, "[display]\ngraphs = \"dots\"\n", "", utf), settingsFlags{})
-	if got.Graphs != graphsBlock || !strings.Contains(got.Note, "display.graphs:") {
-		t.Fatalf("unknown file graphs %q, note %q", got.Graphs, got.Note)
+	check("unknown file graphs", got, finedraw.ModeFine, finedraw.ByAuto)
+	if !strings.Contains(got.Note, "display.graphs:") {
+		t.Fatalf("unknown file graphs: note %q", got.Note)
 	}
 }

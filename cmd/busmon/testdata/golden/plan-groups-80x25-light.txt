@@ -1,0 +1,25 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
+╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  Project paused · /resume                                                    │
+│  ● answer master    review lot 1? (2 questions)                            4m│
+│  ♙ answer foureyes  need a decision on the width rule                      6m│
+│  ◆ review coder     by charlie  look at b1                                   │
+│  Next for you: title h2                                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ✓ architect done     40m  —   escalating  spec merged                       ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Plan ─────────────────────────────────────────────────── y copy · esc back ─╮
+│ v0.29  █████████████▍░░░░░░░░░░░░░░░░░░░░░░░░░░  3/9   6 left · 1 for you    ▲
+│ ──────────────────────────────────────────────────────────────────────────── ┃
+│ ▼ Leave herdr          ██░░░░░░░░░░    1/5  waits for you                    │
+│ ▶ ● title h1  coder   in progress                                            │
+│ ──────────────────────────────────────────────────────────────────────────── │
+│ h1 · in progress · coder                                                     │
+│ for you: nothing        enter: task page   + - priority   d done             ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   d done   esc q close   F5 health   

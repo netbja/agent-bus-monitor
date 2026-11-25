@@ -641,6 +641,7 @@ func (m *Model) buildPage() bool {
 			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
 		}
 		p.set.deliveryWarning = s.delivery.Warning // single-approval step 3b
+		p.set.drawn = renderingNote(m.cfg.settings)
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovProjects:
 		if p.proj == nil {
@@ -660,7 +661,7 @@ func (m *Model) buildPage() bool {
 		if m.layout.Tier == TierNarrow { // the icon columns exist at 80 cells and wider (busmon-icons §4)
 			icons = iconsOff
 		}
-		p.body = tokensPage(icons, m.cfg.settings.Graphs, s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
+		p.body = tokensPage(icons, drawCaps().SparkStyle(), s.tok, s.budgets, s.holds, s.agents, m.cfg.project, now, width, m.tokensSkeleton(), m.barView(), p.health.all)
 	case ovPlanTask:
 		p.title, p.body, p.plain = planTaskDetail(s.planState, p.key, now)
 	case ovServiceLog: // read once by serviceLogCmd; a and f redraw (services-restart-buttons §4)

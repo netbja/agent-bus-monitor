@@ -466,9 +466,14 @@ CLI or the screen, no mission runner, `os/exec` only in the listed files, only t
   provider (no two alike, none an alert role's colour nor the text roles' gray/silver/teal, openai the
   terminal's own foreground), no-colour none; an unknown provider keeps today's colour): the provider label
   of a header gauge (the fill keeps its level roles: `RoleGauge`'s deep green (usage-green: `#39C69E` dark, `#0B7D60` light, ANSI green), amber from 80 %, red from 95 %, usage-cards; the thin track is the fill faded; when a gauge's two windows do not fit, every provider keeps only its busiest, `quotaSegOf`), the model lines of an agent's page, and the U page's
-  account windows and per-agent provider column. Sparklines (braille-sparklines, spec
-  `docs/superpowers/specs/2026-11-18-braille-sparklines-design.md`): `display.graphs` = `auto` | `block` | `braille` |
-  `ascii`, resolved once by `graphsStyle` (`graphs.go`; `auto` reads the locale through `config.Locale`), drawn by
+  account windows and per-agent provider column. Rendering (tui-rendering, spec
+  `docs/superpowers/specs/2026-11-25-busmon-fine-rendering-design.md`): `display.rendering` = `auto` | `fine` |
+  `basic` (`auto` is fine), with `display.graphs` (`block` basic, `braille` fine, `ascii` ascii) mapped onto it for
+  one release when `display.rendering` is not set; a locale without UTF-8 forces ascii (`#`/`-`, `=`/`|`) whatever is
+  set. `resolveRendering` (`graphs.go`, the locale through `config.Locale`) resolves it at start and on a change;
+  `finedraw.Caps` (the mode and the theme's colour depth) decides each visual: bars and gauges draw eighths on a
+  track in fine from 256 colours up (16 colours and none fall to basic's whole cells), sparklines braille in fine,
+  blocks in basic, ascii in ascii; `finedraw.Ramp` is RGB from 256 colours up, a band of role colours in 16. Sparklines are drawn by
   `sparkLine` on the U page's 7-day column only, through `sparkWide` (tokens-layout: 14 cells, each day repeated to fill them, 28 braille points, scaled per row, the period on the line under the header); the gauges keep their blocks. Icons (busmon-icons, spec
   `docs/superpowers/specs/2026-11-02-busmon-icons-design.md`): `display.icons` = `off` (default, today's screen byte for
   byte, `TestIconsOffIsToday`) | `nerd` (a lettered box per provider) | `agent-font` (the maker's logo, by client then
