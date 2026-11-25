@@ -139,11 +139,9 @@ func FrictionSummary(sigs []FrictionSignal) string {
 	return strings.Join(parts, ", ")
 }
 
-// RetroPrefix starts every retro's task name.
+// RetroPrefix starts a retro's task name. A retro is known by its board
+// entry's retro_of, never by this prefix: a real task may start with it.
 const RetroPrefix = "retro-"
-
-// IsRetroTask: task is a retro, whose own done never fires a retro (§3.2).
-func IsRetroTask(task string) bool { return strings.HasPrefix(task, RetroPrefix) }
 
 // RetroTaskName is retro-<task>. For a task too long for a valid name (32
 // characters) it is retro-<the task's first 17 characters>-<8 hex of the
@@ -154,7 +152,23 @@ func RetroTaskName(task string) string {
 		return name
 	}
 	sum := sha256.Sum256([]byte(task))
-	return RetroPrefix + strings.TrimRight(task[:17], "-_") + "-" + hex.EncodeToString(sum[:4])
+	return RetroPrefix + task[:17] + "-" + hex.EncodeToString(sum[:4])
+}
+
+// retroNames are the names a retro of task may take, in order: its
+// RetroTaskName, then, when another task holds that, the same with -2..-9
+// (cut to stay a valid name).
+func retroNames(task string) []string {
+	base := RetroTaskName(task)
+	out := []string{base}
+	for i := 2; i <= 9; i++ {
+		n := base
+		if len(n) > 30 {
+			n = n[:30]
+		}
+		out = append(out, n+"-"+strconv.Itoa(i))
+	}
+	return out
 }
 
 // Retro is what RetroDue found: the retro's task ("" when none is due), the
@@ -168,29 +182,30 @@ type Retro struct {
 }
 
 // RetroDue runs after a task's done (§3.2): with no friction, or for a retro
-// itself, nothing; otherwise one tracked request retro-<task>, from agentbus
-// to the task's owner, listing the signals. A request already there (a
-// repeated done) is not sent again.
+// itself, nothing; otherwise one tracked request, from agentbus to the
+// task's owner, listing the signals. A retro already there (a repeated
+// done) is not sent again.
 func (b *Bus) RetroDue(ctx context.Context, task string) (Retro, error) {
-	if IsRetroTask(task) {
-		return Retro{}, nil
+	e, err := b.boardRequest(ctx, task)
+	if err != nil || e.Request.RetroOf != "" {
+		return Retro{}, err
 	}
 	sigs, err := b.TaskFriction(ctx, task)
 	if err != nil || len(sigs) == 0 {
 		return Retro{}, err
 	}
-	owner, err := b.taskOwner(ctx, task)
-	if err != nil {
-		return Retro{}, err
-	}
-	return b.sendRetro(ctx, task, owner, sigs)
+	return b.sendRetro(ctx, task, e.Request.Target, sigs)
 }
 
 // RetroRequest is the person's retro of task (§3.3): its friction plus the
 // person's own signal, sent to to (the owner, or master for an ended pop).
 func (b *Bus) RetroRequest(ctx context.Context, task, to string) (Retro, error) {
-	if IsRetroTask(task) {
-		return Retro{}, fmt.Errorf("retro: %s is itself a retro", task)
+	e, err := b.boardRequest(ctx, task)
+	if err != nil {
+		return Retro{}, err
+	}
+	if e.Request.RetroOf != "" {
+		return Retro{}, fmt.Errorf("retro: %s is itself the retro of %s", task, e.Request.RetroOf)
 	}
 	sigs, err := b.TaskFriction(ctx, task)
 	if err != nil {
@@ -200,76 +215,72 @@ func (b *Bus) RetroRequest(ctx context.Context, task, to string) (Retro, error) 
 	return b.sendRetro(ctx, task, to, sigs)
 }
 
-func (b *Bus) taskOwner(ctx context.Context, task string) (string, error) {
-	raw, err := b.r.HGet(ctx, BoardKey(b.project), task).Result()
-	if err != nil {
-		return "", err
-	}
+// boardRequest is task's board entry, which must be a tracked request.
+func (b *Bus) boardRequest(ctx context.Context, task string) (BoardEntry, error) {
 	var e BoardEntry
-	if err := json.Unmarshal([]byte(raw), &e); err != nil || e.Request == nil {
-		return "", fmt.Errorf("retro: task %q is not a tracked request", task)
+	raw, err := b.r.HGet(ctx, BoardKey(b.project), task).Result()
+	if errors.Is(err, redis.Nil) {
+		return e, fmt.Errorf("retro: unknown task %q", task)
 	}
-	return e.Request.Target, nil
+	if err != nil {
+		return e, err
+	}
+	if err := json.Unmarshal([]byte(raw), &e); err != nil || e.Request == nil {
+		return BoardEntry{}, fmt.Errorf("retro: task %q is not a tracked request", task)
+	}
+	return e, nil
 }
 
 // RetroOwner is the task's owner: the target of its tracked request.
 func (b *Bus) RetroOwner(ctx context.Context, task string) (string, error) {
-	return b.taskOwner(ctx, task)
-}
-
-func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSignal) (Retro, error) {
-	name := RetroTaskName(task)
-	out := Retro{Task: name, Signals: sigs, To: to}
-	var lines []string
-	for _, s := range sigs {
-		lines = append(lines, "- "+s.String())
-	}
-	body := fmt.Sprintf(retroBodyPrefix(task)+"%s). Read its history with: agentbus retro evidence %s\n"+
-		"Then file at most three proposals, or close it with: agentbus retro none %s \"<root cause>\"\nSignals:\n%s",
-		FrictionSummary(sigs), task, task, strings.Join(lines, "\n"))
-	_, err := b.RequestBy(ctx, name, SystemSender, to, "", body, 0, false)
-	if err != nil && strings.Contains(err.Error(), "board task already exists") {
-		owner, err := b.retroOf(ctx, name, task)
-		if err != nil {
-			return Retro{}, err
-		}
-		out.To = owner
-		return out, nil
-	}
-	if err != nil {
-		return Retro{}, err
-	}
-	out.Sent = true
-	return out, nil
-}
-
-// retroOf checks that the board's name entry is task's retro, and returns
-// its owner: a request from agentbus whose body, while the stream keeps it,
-// names task. Anything else under that name is refused, never taken as the
-// retro.
-func (b *Bus) retroOf(ctx context.Context, name, task string) (string, error) {
-	raw, err := b.r.HGet(ctx, BoardKey(b.project), name).Result()
+	e, err := b.boardRequest(ctx, task)
 	if err != nil {
 		return "", err
-	}
-	var e BoardEntry
-	if json.Unmarshal([]byte(raw), &e) != nil || e.Request == nil || e.Request.From != SystemSender {
-		return "", fmt.Errorf("retro: board task %s exists and is not a retro", name)
-	}
-	msgs, err := b.r.XRange(ctx, StreamKey(b.project, "cmd"), e.Request.ID, e.Request.ID).Result()
-	if err != nil {
-		return "", err
-	}
-	if len(msgs) == 1 {
-		body, _ := msgs[0].Values["command"].(string)
-		if !strings.HasPrefix(body, retroBodyPrefix(task)) {
-			return "", fmt.Errorf("retro: board task %s is the retro of another task", name)
-		}
 	}
 	return e.Request.Target, nil
 }
 
-func retroBodyPrefix(task string) string { return "retro due for " + task + " (" }
+// FindRetro is the board name of task's retro and its owner, "" when it has
+// none: the entry whose request has retro_of = task (only sendRetro sets it).
+func (b *Bus) FindRetro(ctx context.Context, task string) (name, owner string, err error) {
+	all, err := b.r.HGetAll(ctx, BoardKey(b.project)).Result()
+	if err != nil {
+		return "", "", err
+	}
+	for n, raw := range all {
+		var e BoardEntry
+		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task {
+			return n, e.Request.Target, nil
+		}
+	}
+	return "", "", nil
+}
+
+func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSignal) (Retro, error) {
+	if name, owner, err := b.FindRetro(ctx, task); err != nil {
+		return Retro{}, err
+	} else if name != "" {
+		return Retro{Task: name, Signals: sigs, To: owner}, nil
+	}
+	var lines []string
+	for _, s := range sigs {
+		lines = append(lines, "- "+s.String())
+	}
+	body := fmt.Sprintf("retro due for %s (%s). Read its history with: agentbus retro evidence %s\n"+
+		"Then file at most three proposals, or close it with: agentbus retro none %s \"<root cause>\"\nSignals:\n%s",
+		task, FrictionSummary(sigs), task, task, strings.Join(lines, "\n"))
+	for _, name := range retroNames(task) {
+		_, err := b.requestBy(ctx, name, SystemSender, to, "", body, 0, false, task)
+		if errors.Is(err, ErrTaskExists) { // another task holds the name: take the next
+			continue
+		}
+		if err != nil {
+			return Retro{}, err
+		}
+		return Retro{Task: name, Signals: sigs, To: to, Sent: true}, nil
+	}
+	return Retro{}, fmt.Errorf("retro: no free name for the retro of %s (%s taken)", task, strings.Join(retroNames(task), ", "))
+}
 
 // SignalText is what a signal's entry says, for retro evidence: a reject's
 // review message, a CI hand-off's or an escalation's text, an event's kind

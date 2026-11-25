@@ -6,5 +6,6 @@
   evidence <task>` and, with no lasting lesson, closes it with `agentbus retro none <task> "<root cause>"`
   (proposals come in the next step). `agentbus retro request <task>` is the person's own trigger, refused
   from an agent's process tree; it goes to master when the owner is no longer registered. Escalations now
-  carry an additive `agent` field: friction reads it, never the text. A retro's name is cut to 32
-  characters for a long task.
+  carry an additive `agent` field: friction reads it, never the text. A retro is known by its request's `retro_of`, never by its name: a real task may be called
+  `retro-*`. Its name is `retro-<task>` (a long task: 17 characters and a hash), `-2`..`-9` when another task
+  holds that name.
