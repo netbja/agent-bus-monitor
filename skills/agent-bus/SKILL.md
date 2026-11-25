@@ -177,6 +177,18 @@ question tool of its own. The format is the one the Superpowers plugin uses for 
               {"label": "#702 first", "description": "Unblocks the release, #701 rebases"}]}]}
 ```
 
+**When you need a decision you cannot make yourself** (a choice between ways out, a design option),
+report it to master with `--needs answer`. Never leave it inside a status report or a `notify`:
+
+```bash
+agentbus report <self> --to master --needs answer "<the question>. A (recommended): … B: …"
+```
+
+- **One question per report**, so each is its own item in For you and triage.
+- **The options are in the text**, two to four, each with its consequence, one marked recommended.
+- master turns it into an `agentbus ask` for the person. A decision buried in a status report is not
+  read as a question, and reaches neither For you nor triage (it did once, on #787).
+
 ## Language on the bus
 
 Write in English: reports, replies, challenges, verdicts, status messages, commits and PRs. This
