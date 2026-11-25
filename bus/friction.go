@@ -244,34 +244,25 @@ func (b *Bus) RetroOwner(ctx context.Context, task string) (string, error) {
 // it has none: the entry not done whose request has retro_of = task (only
 // sendRetro sets it).
 func (b *Bus) FindRetro(ctx context.Context, task string) (name, owner string, err error) {
-	return b.findRetro(ctx, task, true)
-}
-
-// findRetro is FindRetro; with openOnly false a closed retro is found too.
-func (b *Bus) findRetro(ctx context.Context, task string, openOnly bool) (name, owner string, err error) {
 	all, err := b.r.HGetAll(ctx, BoardKey(b.project)).Result()
 	if err != nil {
 		return "", "", err
 	}
 	for n, raw := range all {
 		var e BoardEntry
-		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task && (!openOnly || e.State != "done") {
+		if json.Unmarshal([]byte(raw), &e) == nil && e.Request != nil && e.Request.RetroOf == task && e.State != "done" {
 			return n, e.Request.Target, nil
 		}
 	}
 	return "", "", nil
 }
 
-// sendRetro sends task's retro unless one is there: any retro, closed ones
-// included, for done's automatic retro (a repeated done never sends a
+// sendRetro sends task's retro unless one is there (the publish script
+// checks, so concurrent sends make one): any retro, closed ones included,
+// for done's automatic retro (a repeated done never sends a
 // second); only an open one for the person's request (openOnly), which a
 // closed retro never swallows.
 func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSignal, openOnly bool) (Retro, error) {
-	if name, owner, err := b.findRetro(ctx, task, openOnly); err != nil {
-		return Retro{}, err
-	} else if name != "" {
-		return Retro{Task: name, Signals: sigs, To: owner}, nil
-	}
 	var lines []string
 	for _, s := range sigs {
 		lines = append(lines, "- "+s.String())
@@ -280,7 +271,11 @@ func (b *Bus) sendRetro(ctx context.Context, task, to string, sigs []FrictionSig
 		"Then file at most three proposals, or close it with: agentbus retro none %s \"<root cause>\"\nSignals:\n%s",
 		task, FrictionSummary(sigs), task, task, strings.Join(lines, "\n"))
 	for _, name := range retroNames(task) {
-		_, err := b.requestBy(ctx, name, SystemSender, to, "", body, 0, false, task)
+		_, err := b.requestBy(ctx, name, SystemSender, to, "", body, 0, false, task, openOnly)
+		var ex retroExists
+		if errors.As(err, &ex) { // checked in the write's own script: one retro, however many send
+			return Retro{Task: ex.name, Signals: sigs, To: ex.owner}, nil
+		}
 		if errors.Is(err, ErrTaskExists) { // another task holds the name: take the next
 			continue
 		}

@@ -88,12 +88,20 @@ func (b *Bus) Request(ctx context.Context, task, from, target, ref, body string,
 // with no AGENT_BUS_AGENT, as deliver recognises them: defence in depth, not
 // a boundary), which a draining run does not refuse.
 func (b *Bus) RequestBy(ctx context.Context, task, from, target, ref, body string, ttl time.Duration, person bool) (string, error) {
-	return b.requestBy(ctx, task, from, target, ref, body, ttl, person, "")
+	return b.requestBy(ctx, task, from, target, ref, body, ttl, person, "", false)
 }
 
+// retroExists: the publish script found a retro of the same task (an open
+// one, or any with openOnly false); nothing was written.
+type retroExists struct{ name, owner string }
+
+func (e retroExists) Error() string { return "a retro exists: " + e.name + " for " + e.owner }
+
 // requestBy is RequestBy; retroOf, when not "", marks the request as that
-// task's retro (RequestInfo.RetroOf).
-func (b *Bus) requestBy(ctx context.Context, task, from, target, ref, body string, ttl time.Duration, person bool, retroOf string) (string, error) {
+// task's retro (RequestInfo.RetroOf), and the same script refuses it when the
+// board holds a retro of that task already (open ones only with openOnly):
+// the check and the write are one, so concurrent sends make one retro.
+func (b *Bus) requestBy(ctx context.Context, task, from, target, ref, body string, ttl time.Duration, person bool, retroOf string, openOnly bool) (string, error) {
 	if !ValidName(task) || !ValidName(from) || !ValidName(target) {
 		return "", fmt.Errorf("invalid task, sender or target")
 	}
@@ -120,9 +128,15 @@ func (b *Bus) requestBy(ctx context.Context, task, from, target, ref, body strin
 		return "", err
 	}
 	id, err := publishRequest.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd"), SwapKey(b.project, target)},
-		task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen, prio, by, retroOf).Text()
+		task, from, target, ref, body, ttl.Milliseconds(), streamMaxLen, prio, by, retroOf, openOnly).Text()
 	if err != nil && strings.Contains(err.Error(), "RUNDRAINING") {
 		return "", ErrRunDraining
+	}
+	if err != nil && strings.HasPrefix(err.Error(), "RETROEXISTS ") {
+		f := strings.Fields(err.Error())
+		if len(f) == 3 {
+			return "", retroExists{name: f[1], owner: f[2]}
+		}
 	}
 	if err != nil && strings.HasPrefix(err.Error(), ErrTaskExists.Error()+":") {
 		return "", taskExists{msg: err.Error()}
@@ -196,9 +210,19 @@ func (b *Bus) planPriorityOf(ctx context.Context, task string) (level, by string
 
 // publishRequest records a request: KEYS board, cmd, the target's swap;
 // ARGV task, from, target, ref, body, ttl ms, maxlen, then the priority and
-// who set it (planPriorityOf, read by the caller), the task a retro is of.
+// who set it (planPriorityOf, read by the caller), the task a retro is of
+// and whether only an open retro of it refuses this one ('1').
 var publishRequest = redis.NewScript(`
 if redis.call('EXISTS',KEYS[3])==1 then return redis.error_reply('SWAPPING') end
+if ARGV[10]~='' then
+ local all=redis.call('HGETALL',KEYS[1])
+ for i=1,#all,2 do
+  local ok,o=pcall(cjson.decode,all[i+1])
+  if ok and type(o)=='table' and type(o.request)=='table' and o.request.retro_of==ARGV[10] and (ARGV[11]~='1' or o.state~='done') then
+   return redis.error_reply('RETROEXISTS '..all[i]..' '..tostring(o.request.target))
+  end
+ end
+end
 local raw=redis.call('HGET',KEYS[1],ARGV[1])
 if raw then
  local e=cjson.decode(raw)
