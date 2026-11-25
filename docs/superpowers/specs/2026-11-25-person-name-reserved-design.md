@@ -1,6 +1,6 @@
 # The person's name is reserved (person-name-spoof)
 
-Status: spec r3, for review (subject `person-name-spec`). Not built. Base: origin/dev `04c1755f`.
+Status: spec r4, for review (subject `person-name-spec`). Not built. Base: origin/dev `04c1755f`.
 Author: architect, from master's directive (task `person-name-spoof`, cmd `1795607502697-0`),
 on the person's question of 2026-11-25. No new dependency. The questions for the person are last
 (§8).
@@ -12,6 +12,9 @@ says which writes may advance an ask or a gate, and where that is enforced befor
 r3: reviewer-codex's reject of r2 (verdict on `dn4ammci9lvi`): the binding is written first with a
 nonce and a hash of the entry's fields, so it needs no entry id. foureyes's approve of r2: `comm`
 is defence in depth.
+r4: reviewer-codex's reject of r3 (verdict on `dn4ao8zddx4t`): a copied nonce at a new entry id
+would verify again. The binding now ends on the entry's actual id, and the nonce is the protected
+record's own id, so the first write is that record.
 
 ## 1. What happened
 
@@ -128,16 +131,22 @@ It changes nothing for an entry's fields: XADD cannot restrict a field's value.
   agent a process with a known agent client among its ancestors, registered or not (§7, step 1,
   for its source and list). claude-ao then connects
   as `agent`, not `busmon`, and `Refuse` stops it from the person's acts.
-- **A binding only busmon can write, written first, needing no entry id.** In the same script as
-  each typed entry or answer, busmon's **first** write is one record in a new stream,
-  `{p}:typed`: a nonce the script makes (Redis `TIME` and an `INCR`), the target stream, and a hash
-  of the fields the entry is about to carry (`from`, `target`, `type`, `ref`, the question id,
-  `said` or the text). The entry's id is not known yet, and is not needed: the entry then carries
-  `typed_nonce=<nonce>`. A reader counts `typed=yes` as the person's word only if `{p}:typed`
-  holds that nonce, for that stream, with the hash of the entry's own fields. A copied nonce on
-  other text fails the hash; on the same text it adds nothing. Only the `busmon` and `admin`
-  users may write `{p}:typed`, so with ACL on the `agent` user's script fails at that first write,
-  before the entry or the ask changes.
+- **A binding only busmon can write, written first, ending on the entry's id.** In the same
+  script as each typed entry or answer, in this order:
+  1. **first write:** `XADD {p}:typed *` with the target stream and a hash of the fields the entry
+     is about to carry (`from`, `target`, `type`, `ref`, the question id, `said` or the text). Its
+     id `N` is the nonce: no `INCR`, nothing written before it;
+  2. the entry itself, with `typed_nonce=N`, which gets its id `E`, and the ask's change for an
+     answer;
+  3. `HSET {p}:typed:bound N E`.
+
+  A reader counts `typed=yes` as the person's word only if record `N` exists, names the entry's
+  stream, holds the hash of the entry's own fields, **and** `{p}:typed:bound` maps `N` to the
+  entry's own id. A copy of the entry, same text and same nonce, at a new id fails the last check,
+  so it never verifies and never triggers the instruction again. Only the `busmon` and `admin`
+  users may write `{p}:typed` and `{p}:typed:bound`, so with ACL on the `agent` user's script fails
+  at step 1, before the entry or the ask changes. The script is atomic, so steps 1-3 land
+  together.
 
 **What ACL still does not do.** The users' passwords are files of the person's user. A process
 that reads busmon's password can connect as busmon. ACL binds honest software. It is a boundary
@@ -208,7 +217,8 @@ entry out of For you. A `human=yes` resume summary is `unverified`. With step 3,
 disposable broker with ACL on: the `agent` user's answer fails at its first write, with no reply
 entry, no `{p}:typed` record and the ask unchanged; busmon's answer writes the record and the reply,
 and the reader verifies the actual reply by its `typed_nonce` and hash; a `typed=yes` entry with no
-nonce, an unknown nonce, or a known nonce on changed text reads `unverified`.
+nonce, an unknown nonce, a known nonce on changed text, or an exact copy of a verified entry
+(same fields, same nonce) at a new id reads `unverified`.
 
 **Not doing:** no signature on entries, no change to how the person types in busmon, no refusal of
 raw writes (none is possible without ACL).
