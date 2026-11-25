@@ -52,6 +52,15 @@ type Deps struct {
 	// current the new build's key (service.GCHolders, GCHolderBinaries), before
 	// the trees are judged. nil: none.
 	HolderGC func(ctx context.Context, current string) error
+	// Holders are the projects with an active holder of any build on this
+	// host (quiet-update-auto §4.3 step 4); Judge reads a project's agents
+	// and missions on its broker, at its Redis TIME. Either failing defers
+	// an automatic pass (it fails closed).
+	Holders func(ctx context.Context) ([]string, error)
+	Judge   func(ctx context.Context, project string) (Judged, error)
+	// AutoSetting is updates.auto from config.toml, read at the start of a
+	// pass: "install" is the person's yes given ahead (§2).
+	AutoSetting func() string
 }
 
 func (d Deps) updates() string { return Dir(setup.StateDir(d.Getenv)) }

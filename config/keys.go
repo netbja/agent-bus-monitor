@@ -273,7 +273,7 @@ var Keys = append([]*Key{
 	// release is still waiting. The host's (the updater belongs to no
 	// project), the person's: auto and max_wait in config.toml alone, the
 	// window from busmon's Shift+C as well (Q2). No env variable.
-	{Name: "updates.auto", Kind: String, Default: "notify", ReadBy: "busmon (shown; agentbus update --auto reads it from quiet-update step 3)", MachineOnly: true, PersonOnly: true,
+	{Name: "updates.auto", Kind: String, Default: "notify", ReadBy: "agentbus update --auto (says whether it would install; installs from quiet-update step 4b), busmon (shown)", MachineOnly: true, PersonOnly: true,
 		file: fileOneOf("notify", "install")},
 	{Name: "updates.window", Kind: String, Default: "03:00-05:00", ReadBy: "busmon (shown; the updater reads it from quiet-update step 3)", MachineOnly: true, PersonEdit: true,
 		file: func(v any) (any, string) {

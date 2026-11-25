@@ -26,6 +26,11 @@ func TestUpdateArgs(t *testing.T) {
 		{[]string{"--list", "--yes"}, updateArgs{}, true},
 		{[]string{"extra"}, updateArgs{}, true},
 		{[]string{"--rollback", "../x"}, updateArgs{}, true},
+		{[]string{"--auto"}, updateArgs{auto: true}, false},
+		{[]string{"--auto", "--check"}, updateArgs{auto: true, check: true}, false},
+		{[]string{"--auto", "--yes"}, updateArgs{}, true}, // the setting is its yes (quiet-update-auto §4.3)
+		{[]string{"--auto", "--list"}, updateArgs{}, true},
+		{[]string{"--auto", "--rollback"}, updateArgs{}, true},
 	} {
 		got, err := parseUpdateArgs(c.args)
 		if (err != nil) != c.bad || (!c.bad && got != c.want) {
@@ -49,7 +54,7 @@ func TestUpdateRefusesAnAgent(t *testing.T) {
 	noAncestor := func(context.Context) (string, error) { return "", nil }
 	ancestor := func(context.Context) (string, error) { return "coder", nil }
 	unreadable := func(context.Context) (string, error) { return "", errors.New("no /proc") }
-	for _, a := range []updateArgs{{}, {yes: true}, {rollback: true}, {restore: true, id: "x"}} {
+	for _, a := range []updateArgs{{}, {yes: true}, {rollback: true}, {restore: true, id: "x"}, {auto: true}} {
 		if why := updateRefusal(ctx, a, agentEnv, noAncestor); !strings.Contains(why, "updating agentbus") {
 			t.Errorf("%+v under AGENT_BUS_AGENT: %q", a, why)
 		}
@@ -63,7 +68,7 @@ func TestUpdateRefusesAnAgent(t *testing.T) {
 			t.Errorf("%+v by the person: %q", a, why)
 		}
 	}
-	for _, a := range []updateArgs{{check: true}, {list: true}} {
+	for _, a := range []updateArgs{{check: true}, {list: true}, {auto: true, check: true}} {
 		if why := updateRefusal(ctx, a, agentEnv, ancestor); why != "" {
 			t.Errorf("%+v is read-only: %q", a, why)
 		}

@@ -8,12 +8,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
+	"github.com/netbja/agent-bus-monitor/mission"
 	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
 	"github.com/netbja/agent-bus-monitor/update"
@@ -26,10 +29,11 @@ import (
 
 type updateArgs struct {
 	check, yes, list, rollback, restore bool
+	auto                                bool // the updater's pass (quiet-update-auto §4.3)
 	id                                  string
 }
 
-var errUpdateUsage = errors.New("usage: agentbus [--project <p>] update [--check] [--yes] | update --rollback [<id>] [--yes] | update --list")
+var errUpdateUsage = errors.New("usage: agentbus [--project <p>] update [--check] [--yes] | update --auto [--check] | update --rollback [<id>] [--yes] | update --list")
 
 func parseUpdateArgs(args []string) (updateArgs, error) {
 	var a updateArgs
@@ -37,6 +41,8 @@ func parseUpdateArgs(args []string) (updateArgs, error) {
 		switch args[i] {
 		case "--check":
 			a.check = true
+		case "--auto":
+			a.auto = true
 		case "--yes", "-y":
 			a.yes = true
 		case "--list":
@@ -63,6 +69,7 @@ func parseUpdateArgs(args []string) (updateArgs, error) {
 	}
 	switch {
 	case modes > 1, a.list && a.yes, a.restore && (a.id == "" || a.yes),
+		a.auto && (a.yes || a.list || a.rollback || a.restore), // --auto never asks; the setting is its yes
 		a.id != "" && (a.id != filepath.Base(a.id) || a.id == "." || a.id == ".."):
 		return updateArgs{}, errUpdateUsage
 	}
@@ -100,6 +107,12 @@ func runUpdate(ctx context.Context, args []string, project, host string, out, er
 		return update.Restore(ctx, d, a.id)
 	case a.rollback:
 		return update.RollbackTo(ctx, d, a.id, a.yes)
+	case a.auto:
+		code := update.CheckPass(ctx, d)
+		if !a.check && d.AutoSetting() == "install" {
+			fmt.Fprintln(out, "the automatic install is not built yet (quiet-update step 4b): nothing installed")
+		}
+		return code
 	}
 	return update.Run(ctx, d, update.Options{Project: project, Check: a.check, Yes: a.yes})
 }
@@ -112,6 +125,9 @@ func realUpdateDeps(host string, out, errw io.Writer) update.Deps {
 	sd := realServiceCmdDeps(host)
 	d.HolderKeys = func(context.Context) (map[string]bool, error) { return holderKeys(sd) }
 	d.HolderGC = func(_ context.Context, current string) error { return holderGC(sd, current) }
+	d.Holders = func(context.Context) ([]string, error) { return activeHolderProjects(sd) }
+	d.Judge = func(ctx context.Context, p string) (update.Judged, error) { return judgeProject(ctx, sd, p) }
+	d.AutoSetting = func() string { return updatesAuto(os.Getenv) }
 	if tty := setup.OpenTTY(); tty != nil {
 		d.TTY = tty
 	}
@@ -203,4 +219,80 @@ func holderGC(d serviceCmdDeps, current string) error {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// activeHolderProjects are the projects with an active holder of any build
+// (quiet-update-auto §4.3 step 4): every holder unit, or under
+// services.manager = none every supervised holder, judged by the manager. A
+// manager that cannot say is an error: the pass is deferred.
+func activeHolderProjects(d serviceCmdDeps) ([]string, error) {
+	hm, ok := d.Manager.(service.HolderManager)
+	if !ok {
+		return nil, nil // no holders on this manager
+	}
+	units, err := hm.HolderUnits("")
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, u := range units {
+		active, err := hm.HolderActive(u.Project, u.Key)
+		if err != nil {
+			return nil, fmt.Errorf("holder %s of %s: %w", u.Key, u.Project, err)
+		}
+		if active && !slices.Contains(out, u.Project) {
+			out = append(out, u.Project)
+		}
+	}
+	return out, nil
+}
+
+// judgeProject reads project's agents and its conductor's missions, at its
+// broker's TIME, without a token (quiet-update-auto §4.3 step 4).
+func judgeProject(ctx context.Context, d serviceCmdDeps, project string) (update.Judged, error) {
+	b, err := d.Bus(project)
+	if err != nil {
+		return update.Judged{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	now, err := b.ServerTime(ctx)
+	if err != nil {
+		return update.Judged{}, err
+	}
+	agents, err := b.Agents(ctx)
+	if err != nil {
+		return update.Judged{}, err
+	}
+	j := update.Judged{Now: now}
+	for name, a := range agents {
+		f := update.AgentFact{Name: name, State: a.State}
+		if a.TS > 0 {
+			f.Changed = time.UnixMilli(a.TS)
+		}
+		j.Agents = append(j.Agents, f)
+	}
+	s := mission.Store{B: b}
+	changes, err := s.Changes(ctx)
+	if err != nil {
+		return update.Judged{}, err
+	}
+	for _, c := range changes {
+		ms, err := s.Missions(ctx, c)
+		if err != nil {
+			return update.Judged{}, err
+		}
+		for id, m := range ms {
+			j.Missions = append(j.Missions, update.MissionFact{Change: c, ID: id, State: string(m.State)})
+		}
+	}
+	return j, nil
+}
+
+// updatesAuto is updates.auto from config.toml (no env variable): notify,
+// unless the person wrote install.
+func updatesAuto(getenv func(string) string) string {
+	f := config.Load(config.Path(getenv), "config.toml")
+	r := config.Resolver{Getenv: getenv, Files: []*config.File{f}}
+	return r.String("updates.auto")
 }

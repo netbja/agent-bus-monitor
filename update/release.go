@@ -40,10 +40,14 @@ var (
 	describes = regexp.MustCompile(`^(v[0-9]+\.[0-9]+\.[0-9]+)-[0-9]+-g([0-9a-f]{4,40})$`)
 )
 
-// git runs git, never prompting; the error carries its stderr.
+// git runs git, never prompting (nor ssh, unless the person set its command);
+// the error carries its stderr.
 func git(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	if os.Getenv("GIT_SSH_COMMAND") == "" { // a service has no terminal: ssh never asks either (quiet-update-auto §4.3 step 2)
+		cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	}
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
