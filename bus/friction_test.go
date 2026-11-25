@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -499,5 +500,45 @@ func TestRetroAfterClosedRetro(t *testing.T) {
 	}
 	if name, _, _ := b.FindRetro(ctx, "x"); name != second.Task {
 		t.Errorf("FindRetro: %q, want the open %q", name, second.Task)
+	}
+}
+
+// Concurrent sends of one task's retro make exactly one: the check for an
+// existing retro and the write are one script.
+func TestRetroConcurrentSends(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	startTask(t, b, "race", "coder")
+	frictionKit{t, b}.reject("coder")
+	doneTask(t, b, "race", "coder")
+	const n = 8
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sent := 0
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(person bool) {
+			defer wg.Done()
+			var r Retro
+			var err error
+			if person {
+				r, err = b.RetroRequest(ctx, "race", "coder")
+			} else {
+				r, err = b.RetroDue(ctx, "race")
+			}
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if r.Sent {
+				mu.Lock()
+				sent++
+				mu.Unlock()
+			}
+		}(i%2 == 0)
+	}
+	wg.Wait()
+	if sent != 1 || countTasks(t, b, "retro-") != 1 {
+		t.Errorf("%d sent, %d retros, want 1 and 1", sent, countTasks(t, b, "retro-"))
 	}
 }
