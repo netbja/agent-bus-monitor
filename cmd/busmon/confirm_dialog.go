@@ -69,20 +69,24 @@ func (m *Model) dialogKey(k Key) tea.Cmd {
 	return nil
 }
 
-// dialogClick answers the open dialog from a click: a button activates, the
-// box off the buttons does nothing, outside the box is no.
+// dialogClick answers the open dialog from a click: outside the box (or no
+// box drawn) is no, checked first; a drawn button activates; the box off the
+// buttons does nothing (reviewer-codex: a hit box is what is drawn).
 func (m *Model) dialogClick(x, y int) tea.Cmd {
-	box, yes, no := m.ui.dialog.layout(m.width, m.height)
+	box, yes, no, shown := m.ui.dialog.layout(m.width, m.height)
 	switch {
-	case yes.contains(x, y):
-		return m.answerDialog(true)
-	case no.contains(x, y):
+	case !dialogDrawn(box) || !box.contains(x, y):
 		return m.answerDialog(false)
-	case box.contains(x, y):
-		return nil
+	case shown && yes.contains(x, y):
+		return m.answerDialog(true)
+	case shown && no.contains(x, y):
+		return m.answerDialog(false)
 	}
-	return m.answerDialog(false)
+	return nil
 }
+
+// dialogDrawn: the box is big enough to be drawn at all.
+func dialogDrawn(box Rect) bool { return box.W >= 12 && box.H >= 5 }
 
 // buttonText is a button as drawn: "[ Word ]".
 func buttonText(word string) string { return "[ " + word + " ]" }
@@ -90,8 +94,9 @@ func buttonText(word string) string { return "[ " + word + " ]" }
 const dialogHint = "y / n " + GlyphNone + " esc"
 
 // layout places the box (centred, padding of two cells across and one down)
-// and its two buttons on one line, Yes first.
-func (d *confirmDialog) layout(w, h int) (box, yes, no Rect) {
+// and its two buttons on one line, Yes first; shown: the box is drawn and
+// both buttons lie inside its interior (else neither is drawn nor clicked).
+func (d *confirmDialog) layout(w, h int) (box, yes, no Rect, shown bool) {
 	yw, nw := Width(buttonText(d.Yes)), Width(buttonText(d.No))
 	inner := max(Width(d.Title), yw+2+nw, Width(dialogHint))
 	for _, l := range d.Body {
@@ -102,13 +107,18 @@ func (d *confirmDialog) layout(w, h int) (box, yes, no Rect) {
 	box = Rect{(w - bw) / 2, max(0, (h-bh)/2), bw, bh}
 	row := box.Y + 4 + len(d.Body) // border, padding, title, body, a blank line
 	x := box.X + (box.W-(yw+2+nw))/2
-	return box, Rect{x, row, yw, 1}, Rect{x + yw + 2, row, nw, 1}
+	yes, no = Rect{x, row, yw, 1}, Rect{x + yw + 2, row, nw, 1}
+	inside := func(r Rect) bool { return r.X > box.X && r.X+r.W < box.X+box.W && r.Y > box.Y && r.Y < box.Y+box.H-1 }
+	if !dialogDrawn(box) || !inside(yes) || !inside(no) {
+		return box, Rect{}, Rect{}, false
+	}
+	return box, yes, no, true
 }
 
 // drawConfirmDialog draws d over g: the screen behind dimmed, the box filled.
 func drawConfirmDialog(g *grid, d *confirmDialog, w, h int) {
-	box, yes, no := d.layout(w, h)
-	if box.W < 12 || box.H < 5 {
+	box, yes, no, shown := d.layout(w, h)
+	if !dialogDrawn(box) {
 		return
 	}
 	for y := 0; y < g.h; y++ { // dim what is behind
@@ -147,11 +157,11 @@ func drawConfirmDialog(g *grid, d *confirmDialog, w, h int) {
 		}
 		drawLine(g, r.X, r.Y, r.W, Line{seg}, false)
 	}
-	if yes.Y < box.Y+box.H-1 {
+	if shown {
 		button(yes, d.Yes, d.focusYes)
 		button(no, d.No, !d.focusYes)
+		centred(yes.Y+1, Line{{Text: dialogHint, Role: RoleMuted}})
 	}
-	centred(yes.Y+1, Line{{Text: dialogHint, Role: RoleMuted}})
 	for y := box.Y + 1; y < box.Y+box.H-1; y++ { // the text drawn over the fill keeps its surface
 		for x := box.X + 1; x < box.X+box.W-1; x++ {
 			if c := &g.cells[y*g.w+x]; !c.st.Pill {

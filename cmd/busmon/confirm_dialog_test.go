@@ -34,7 +34,7 @@ func TestConfirmDialogLook(t *testing.T) {
 	m, _ := openTestDialog(t)
 	g := m.grid()
 	d := m.ui.dialog
-	box, yes, no := d.layout(m.width, m.height)
+	box, yes, no, _ := d.layout(m.width, m.height)
 	if d.focusYes {
 		t.Fatal("the yes button is focused by default")
 	}
@@ -131,7 +131,7 @@ func TestConfirmDialogKeys(t *testing.T) {
 func TestConfirmDialogMouse(t *testing.T) {
 	click := func(x, y int) tea.MouseClickMsg { return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft} }
 	m, got := openTestDialog(t)
-	box, yes, no := m.ui.dialog.layout(m.width, m.height)
+	box, yes, no, _ := m.ui.dialog.layout(m.width, m.height)
 	m, _ = update(t, m, click(box.X+1, box.Y+2))
 	if *got != "" || m.ui.dialog == nil {
 		t.Fatalf("a click inside the box off the buttons: %q", *got)
@@ -166,7 +166,7 @@ func TestQuitIsTheConfirmDialog(t *testing.T) {
 	if _, cmd := update(t, m2, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter})); !isQuit(cmd) {
 		t.Fatal("Tab, Enter did not quit")
 	}
-	_, yes, _ := m.ui.dialog.layout(m.width, m.height)
+	_, yes, _, _ := m.ui.dialog.layout(m.width, m.height)
 	if _, cmd := update(t, m, tea.MouseClickMsg{X: yes.X + 1, Y: yes.Y, Button: tea.MouseLeft}); !isQuit(cmd) {
 		t.Fatal("a click on Quit did not quit")
 	}
@@ -183,4 +183,36 @@ func dialogText(m Model) string {
 		return d.Title + " " + strings.Join(d.Body, " ")
 	}
 	return ""
+}
+
+// reviewer-codex: on a screen too narrow to draw the buttons, or the dialog
+// at all, no click anywhere activates yes; a click outside the box is always
+// no, checked first; the hit boxes are what is drawn.
+func TestConfirmDialogNarrowNeverClicksYes(t *testing.T) {
+	for _, size := range [][2]int{{13, 20}, {16, 20}, {20, 6}, {30, 4}, {8, 3}} {
+		for y := 0; y < size[1]; y++ {
+			for x := 0; x < size[0]; x++ {
+				m, got := openTestDialog(t)
+				m.width, m.height = size[0], size[1]
+				d := m.ui.dialog
+				m.dialogClick(x, y)
+				if *got == "yes" {
+					box, yes, _, shown := d.layout(size[0], size[1])
+					t.Fatalf("%dx%d: a click at %d,%d said yes (box %+v, yes %+v, shown %v)", size[0], size[1], x, y, box, yes, shown)
+				}
+			}
+		}
+	}
+	// Shown: every drawn button cell is inside the box's interior.
+	for _, w := range []int{20, 24, 30, 60, 140} {
+		m, _ := openTestDialog(t)
+		box, yes, no, shown := m.ui.dialog.layout(w, 20)
+		if !shown {
+			continue
+		}
+		in := func(r Rect) bool { return r.X > box.X && r.X+r.W < box.X+box.W && r.Y > box.Y && r.Y < box.Y+box.H-1 }
+		if !in(yes) || !in(no) {
+			t.Errorf("width %d: a shown button outside the box: box %+v yes %+v no %+v", w, box, yes, no)
+		}
+	}
 }
