@@ -10,6 +10,6 @@
   The hold's start is `compact-since:<agent>` (`<session>|<Redis ms>`); a reading below urgent
   restarts it, and the episode's end (a reading below the alert) deletes it and `compact:<agent>`. A `/compact` left unsent in the input tells the person,
   and nothing is typed again in that episode. `dispatch.auto_compact` (on by default) is the
-  person's: busmon or config.toml, no env variable, read again each minute. The holder's submit
+  person's: `config.toml` only (`agentbus config set` refuses it, busmon's settings page does not list it), no env variable, read again each minute. The holder's submit
   frame takes kind `compact`; an older holder refuses it (bad frame) and types nothing, so
   restart the holder with the dispatcher. A declared hand-off stays the auto-clear's.
