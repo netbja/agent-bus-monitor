@@ -1,6 +1,6 @@
 # Waking an external agent (external-wake)
 
-Status: IDEA spec r2, for review (subject `external-wake-spec`). Not built. Base: origin/dev
+Status: IDEA spec r3, for review (subject `external-wake-spec`). Not built. Base: origin/dev
 `04c1755f`. Author: architect, from the person's idea (directive `1795607315032-0`, thread of the
 same id), sent through the external agent claude-ao with the person's approval. No new dependency.
 The questions for the person are last (§7).
@@ -9,7 +9,9 @@ so the reviewer filter is a change and ships with step 1; every run is a try; th
 the dispatcher's pass; the wake command is only as safe as `config.toml`; the decision note to
 amend is named. reviewer-codex's reject of r1 (verdict on `dn49qfft4ol8`): the path check
 resolves symlinks and checks every parent directory, with a fixed `PATH`; the same-user limit is
-stated. claude-ao's note (thread `1795607315032-0`): an external agent never falls back to
+stated. r3: reviewer-codex's reject of r2 (verdict on `dn4ammb9pfmb`): a valid same-user example and a
+fixed working directory. foureyes's approve of r2 (`dn4amm76xa87`): the reviewer filter reads the
+launcher's manifest, keeps the person's own verdict, and has one wording. claude-ao's note (thread `1795607315032-0`): an external agent never falls back to
 the person's identity.
 
 ## 1. Today
@@ -76,6 +78,7 @@ refuses the person's name to any process with a client among its ancestors.
   - **every parent directory** of the resolved path, up to `/`, must be owned by the person or
     root and not writable by group or others (a sticky `/tmp` is refused too), so nobody else can
     swap the file between the check and the run;
+- **a fixed working directory,** `/`, never a project's tree;
 - **a clean environment:** a fixed `PATH=/usr/bin:/bin` (plus `/opt/homebrew/bin` on macOS), not
   the person's or the dispatcher's, `HOME`, `LANG`, and `AGENTBUS_WAKE_NONCE`. Not the
   dispatcher's own environment, which holds the broker's credentials;
@@ -94,7 +97,8 @@ from a file of its own.
 a process of the person's own user: it owns the file and its directories, so it can replace the
 script after the check, or edit `config.toml`. **The wake command is only as safe as `config.toml`.** PersonOnly binds `config set`, not the
 file. A role's shell can write `config.toml` (the comment at `roles.toml:161` says so) and point
-`external.<a>.wake` at a 0700 script it wrote in `/tmp`, which passes every path check above. The
+`external.<a>.wake` at a 0700 script it wrote in a private directory of the person's own, such as
+`~/.local/share/x/wake`, which passes every path check above. The
 dispatcher would then run it outside that role's tool rules and outside idea 3's sandbox. It
 still needs a declared external role and the person's `external add`. The sandboxed-launch spec's
 bases must keep `config.toml` out of every role's writable paths.
@@ -129,9 +133,14 @@ prompt-notify, context fill and the background judgement. They all need a pane.
   author and names the head (`currentApprovers`, `cmd/agentbus/deliver.go:549`). A name only has
   to pass `ValidName`. So an external agent's approve counts today, as does one from any name a
   process picks. That is Q3 (C).
-- **Reviews, with this spec:** a new filter. `deliver` counts only the team's reviewer roles and the
-  external roles the person marks as reviewers (§7 Q3). It ships **with step 1**, so no external
-  role exists before the filter does.
+- **Reviews, with this spec:** a new filter. `deliver` counts an approve only from **(a)** a role of
+  the launcher's manifest that is not external, **(b)** an external role of that manifest the
+  person marked a reviewer (§7 Q3), or **(c)** the person's own name (`identity.as`, from the
+  file, as the person-name spec reserves it), whose `agentbus verdict` counts today and still does.
+  The manifest is the one the launcher used (`ROLES_TOML`, else the repository's), read as
+  `deliverRoleCheck` reads it (`cmd/agentbus/deliver.go:157`), **never the `roles.toml` of the head
+  being delivered**: otherwise a PR could declare its own reviewer. It ships **with step 1**, so no
+  external role exists before the filter does.
 
 ## 5. Build steps
 
@@ -140,9 +149,8 @@ prompt-notify, context fill and the background judgement. They all need a pane.
    only says whether one exists.
 1. `kind = "external"` in `rolecfg`: no launch, `pop` refuses, `delivers` refused, `roles doctor`
    shows it. `agentbus external add/list/remove`, person-only. **With it, the reviewer filter:**
-   `deliver` counts an approve only from a role in `roles.toml` that is not external, or from an
-   external role the person marked a reviewer. That also stops an approve from a name no role
-   declares, which counts today.
+   `deliver` counts an approve only from (a), (b) or (c) of §4. That also stops an approve from a
+   name no role declares, which counts today.
 2. `external.<agent>.wake` (PersonOnly), its path checks, and the exec with its argv, environment
    and timeout, off the pass. The event-driven dispatch decision (2026-10-10) and CLAUDE.md's rule
    on what the dispatcher does are amended, as the self-repair decision (2026-11-09) did: the
@@ -162,11 +170,12 @@ four fixed flags, no message text appears in argv or environment, and no broker 
 the environment. A path that is relative, group-writable, not the person's, or under a worktree is
 refused; so is a symlink in `~/bin` that resolves into a worktree, a script in a directory
 writable by group, and one under `/tmp`; the resolved path is the one run, and the command sees
-`PATH=/usr/bin:/bin` whatever the dispatcher's. A command that sleeps past 10 s is killed and counted a try, and while it sleeps another
+`PATH=/usr/bin:/bin` whatever the dispatcher's, and runs in `/`. A command that sleeps past 10 s is killed and counted a try, and while it sleeps another
 agent's prompt in the same pass is not delayed; a second wake for the same agent is not started. `external add` refuses from
 an agent's tree. `pop` refuses an external role. `deliver`: an unmarked external approve plus one
 team approve is refused; an approve from a name no role declares does not count; a marked
-external approve plus one team approve passes.
+external approve plus one team approve passes; the person's own approve still counts; a head
+whose `roles.toml` adds a reviewer role does not make that role count.
 
 **Not doing:** no webhook built in, no secret held by agentbus, no per-agent broker user, no proof
 of `from`, and no pane-based act on an external agent.
