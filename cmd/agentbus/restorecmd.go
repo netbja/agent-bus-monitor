@@ -180,6 +180,7 @@ func runRestore(ctx context.Context, args []string, explicitProject string, d re
 		},
 		Age: age,
 	}, out)
+	auditRestoreForced(ctx, c, personActor(d.Getenv), rep.Forced)
 	if err != nil {
 		fmt.Fprintf(errw, "restore: %v\n", err)
 		return 1

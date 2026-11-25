@@ -15,6 +15,10 @@ trap 'rm -rf "$T"' EXIT
 export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" GOPATH="$(go env GOPATH)"
 export AGENTBUS_SETUP_NO_MODELS=1 AGENTBUS_SETUP_NO_IDENTITY=1 NO_COLOR=1 HOME="$T/home" XDG_CONFIG_HOME="$T/cfg" XDG_DATA_HOME="$T/data" XDG_STATE_HOME="$T/state"
 mkdir -p "$HOME"
+# No broker: every broker access of the installer and the binaries it runs goes to a port that
+# refuses at once, never to the live 127.0.0.1:6380 (a reinstall writes its audit line on each
+# project with a running unit, and the units below are fake: audit step 2b).
+export REDIS_URL="redis://127.0.0.1:1"
 
 # A fake herdr: setup never calls it since the herdr exit; every call is logged, and the log
 # must stay empty (checked at the end).
@@ -144,6 +148,7 @@ mkdir -p "$T/cfg/systemd/user" && printf '[Service]\nExecStart="%s/agentbus"\n' 
 svc_out="$(run_setup install --no-skills)"
 assert_contains "$svc_out" "demo dispatch" "install lists the project services that run the previous binary"
 assert_contains "$svc_out" "service restart" "and how to restart them"
+assert_contains "$svc_out" "warning: audit: reinstall" "the reinstall's audit line is tried, and reaches no broker"
 
 # status changes nothing and reports what is there
 status_out="$("$SETUP" status --bin-dir "$T/bin" 2>&1)"; rc=$?

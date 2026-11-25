@@ -60,6 +60,19 @@ type RestoreDeps struct {
 type Report struct {
 	Restored []string // projects whose part succeeded
 	Refused  int      // projects or members refused
+	// Forced is what --force did to each project whose keys it was asked to
+	// replace (audit step 2b: its force line), in the order met; never in a
+	// dry run.
+	Forced []Forced
+}
+
+// Forced is one project's --force replacement: the keys present, and
+// whether they were replaced (ok), kept on the person's no (refused), or
+// the replacement failed (failed); bus.Audit's outcomes.
+type Forced struct {
+	Project string
+	Keys    int
+	Outcome string
 }
 
 // Restore restores an archive (spec "Restore: never over a live project
@@ -146,7 +159,7 @@ func Restore(ctx context.Context, archive string, o RestoreOptions, d RestoreDep
 			refuse(p, "live: "+why)
 			continue
 		}
-		if o.FilesOnly || restoreRedis(ctx, p, redisLines[p], o, d, out, refuse) {
+		if o.FilesOnly || restoreRedis(ctx, p, redisLines[p], o, d, out, refuse, &rep) {
 			ok[p] = true
 		}
 	}
@@ -212,7 +225,7 @@ func walkArchive(f *os.File, m Manifest, fn func(Member, io.Reader) error) error
 }
 
 // restoreRedis restores one project's keys; false when it was refused.
-func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOptions, d RestoreDeps, out io.Writer, refuse func(p, why string)) bool {
+func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOptions, d RestoreDeps, out io.Writer, refuse func(p, why string), rep *Report) bool {
 	var keys []bus.DumpedKey
 	for _, l := range lines {
 		if l.Class != bus.KeyRecord.String() && !o.WithRuntime {
@@ -233,6 +246,7 @@ func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOpt
 			return false
 		}
 		if !o.DryRun && !d.Confirm(p, len(present)) {
+			rep.Forced = append(rep.Forced, Forced{Project: p, Keys: len(present), Outcome: bus.AuditRefused})
 			refuse(p, "not confirmed")
 			return false
 		}
@@ -248,6 +262,13 @@ func restoreRedis(ctx context.Context, p string, lines []redisLine, o RestoreOpt
 		return true
 	}
 	n, err := d.Broker.Restore(ctx, p, keys, del)
+	if len(del) > 0 {
+		outcome := bus.AuditOK
+		if err != nil {
+			outcome = bus.AuditFailed
+		}
+		rep.Forced = append(rep.Forced, Forced{Project: p, Keys: len(del), Outcome: outcome})
+	}
 	if err != nil {
 		refuse(p, err.Error())
 		return false
