@@ -46,6 +46,7 @@ func TestAuditRefusesAndWritesNothing(t *testing.T) {
 		"detail over 300 runes":  func(e *AuditEntry) { e.Detail = strings.Repeat("é", AuditDetailMax+1) },
 		"target over its bound":  func(e *AuditEntry) { e.Target = strings.Repeat("x", auditFieldMax+1) },
 		"human not yes or empty": func(e *AuditEntry) { e.Human = "maybe" },
+		"typed not yes or empty": func(e *AuditEntry) { e.Typed = "no" },
 	}
 	for name, mutate := range bad {
 		e := auditOK("merge")
@@ -114,6 +115,21 @@ func TestAuditTrimsByAge(t *testing.T) {
 	all, _ := b.r.XRange(ctx, AuditKey(b.project), "-", "+").Result()
 	if len(all) != 2 || all[0].Values["age"] != (89*day).String() || all[1].Values["action"] != "merge" || all[1].Values["hash"] == "" {
 		t.Fatalf("after the trim: %v", all)
+	}
+	// foureyes: a retention of 0 or below is the default's 90 days, never
+	// none: a day-old entry stays.
+	b.r.Del(ctx, AuditKey(b.project))
+	dayOld := strconv.FormatInt(now.Add(-day).UnixMilli(), 10) + "-0"
+	if err := b.r.XAdd(ctx, &redis.XAddArgs{Stream: AuditKey(b.project), ID: dayOld, Values: []string{"action", "merge"}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range []time.Duration{0, -time.Hour} {
+		if _, err := b.AuditWith(ctx, auditOK("merge"), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if kept, _ := b.r.XRange(ctx, AuditKey(b.project), dayOld, dayOld).Result(); len(kept) != 1 {
+		t.Fatal("a retention of 0 trimmed a day-old entry")
 	}
 	if DefaultAuditRetention != 90*day {
 		t.Fatalf("the default retention %v, want 90 days (Q1)", DefaultAuditRetention)
