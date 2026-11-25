@@ -99,8 +99,14 @@ var commands = []cli.Command{
 	},
 	{
 		Name: "run", Usage: []string{"run", "run reset", "run --cap [--mem <size>] [--time <dur>] [--cpu <pct>] -- <command...>"},
-		Brief:    "the run budget; run --cap: a command under caps",
+		Brief:    "run budget; capped commands",
 		Summary:  "the run budget: the run's state, its time and deliveries against run.max_duration and run.max_deliveries; reset (the person only) starts a new run. run --cap (no project, first on the line) runs a command in its own process group under a memory and a time cap, limits.command_memory and limits.command_time by default; a flag only narrows them; killed at a cap: exit 137 and the reason",
+		Flags: []cli.Flag{
+			{Long: "cap", Help: "run the command after -- under the caps (no project; first on the line)"},
+			{Long: "mem", Arg: "<size>", Help: "memory cap, at most limits.command_memory (8G); off only where that key is off"},
+			{Long: "time", Arg: "<dur>", Help: "time cap, at most limits.command_time (30m); the whole group is killed"},
+			{Long: "cpu", Arg: "<pct>", Help: "CPU cap in percent, at most limits.command_cpu; only under systemd-run"},
+		},
 		Examples: []string{"agentbus -p demo run", "agentbus -p demo run reset", "agentbus run --cap -- go test ./... -count=1 -timeout 25m", "agentbus run --cap --mem 4G --time 5m -- sh mutant.sh"},
 	},
 	{
