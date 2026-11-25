@@ -1,12 +1,12 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Work ───────────────────────────────────── ♙4 ●1 ○2 ◇0 ─╮
-│   ◆ review coder     look at b1                          ▲
-│   ♙ decide you       title notes                         │
+│   ♙ decide you       title notes                         ▲
 │                                                          │
-│  TEAM  1   at work · 1 idle                              ┃
-│   ● release         tagging                              ┃
+│  TEAM  1   at work · 1 idle                              │
+│   ● release         tagging                              │
 │   ○ architect   idle, can take a request                 ┃
 │                                                          ┃
 │  NEXT  2   the plan, then requests not in it             ┃

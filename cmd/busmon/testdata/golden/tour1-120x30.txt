@@ -1,24 +1,24 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                        15:04:05 
  paused · resumes in 1h52 (lunch)   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                    
 ╭─ For you ───────────────────────── 4 decide ─╮╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) ·…─╮
-│  ● answer master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
-│  ♙ answer foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
-│  ♙ answer sentinel  blocked: waiting for … 1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ review coder     by charlie  look at b1   ││  ▲ sentinel  blocked   30m     —     —         model≠      health ok │
-│                     ╭─ Welcome to busmon ──────────────────────────────────────────────── 1/5 ─╮scalating… spec merg…│
-│                     │                                                                          │ate 1 · d… busmon-ch…▼
-╰─────────────────────│ busmon shows what your agents are doing and what waits for you. A few    │─────────────────────╯
-╭─  1 Activity   2 Boa│ short pages; esc skips, and F1 then t brings them back.                  │ents · filter: none ─╮
-│    time   from      │                                                                          │                     │
-│  ── Mon 2026-10-26 -│   For you     what needs you: questions, waits, merges                   │─────────────────────│
-│    14:24  architect │   Agents      each agent, its state and how fresh it is                  │                     │
-│    14:50  ♙ Charlie │   1 Activity  everything said on the bus, live                           │                     │
-│    14:51  coder     │   2 Board     who owns which task                                        │                     │
-│  ○ 14:52  master    │   3 Work      who owes what: you, the team, what comes next, ideas       │                     │
-│  ● 14:56  dispatch  │   4 Plan      the plan's roadmap: now, next, later                       │                     │
-│  ● 15:00  master    │                                                                          │                     │
-│    15:02  coder     │ tab moves the focus between panels; 1-4 pick one of the tabs.            │                     │
-│                     │                                                                          │                     │
+│  Project paused · /resume                    ││    agent     state     updated queue ctx       flags       message   ▲
+│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ answer foureyes  need a decision on th… 6m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ♙ answer sentinel  ╭─ Welcome to busmon ──────────────────────────────────────────────── 1/5 ─╮odel≠      health ok │
+│  ◆ review coder     │                                                                          │scalating… spec merg…│
+│                     │ busmon shows what your agents are doing and what waits for you. A few    │ate 1 · d… busmon-ch…▼
+╰─────────────────────│ short pages; esc skips, and F1 then t brings them back.                  │─────────────────────╯
+╭─  1 Activity   2 Boa│                                                                          │ents · filter: none ─╮
+│    time   from      │   For you     what needs you: questions, waits, merges                   │                     │
+│  ── Mon 2026-10-26 -│   Agents      each agent, its state and how fresh it is                  │─────────────────────│
+│    14:24  architect │   1 Activity  everything said on the bus, live                           │                     │
+│    14:50  ♙ Charlie │   2 Board     who owns which task                                        │                     │
+│    14:51  coder     │   3 Work      who owes what: you, the team, what comes next, ideas       │                     │
+│  ○ 14:52  master    │   4 Plan      the plan's roadmap: now, next, later                       │                     │
+│  ● 14:56  dispatch  │                                                                          │                     │
+│  ● 15:00  master    │ tab moves the focus between panels; 1-4 pick one of the tabs.            │                     │
+│    15:02  coder     │                                                                          │                     │
 │                     │ ● ○ ○ ○ ○   enter next · ← back · esc skip                               │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────╯                     │
 │                                                                                                                      │

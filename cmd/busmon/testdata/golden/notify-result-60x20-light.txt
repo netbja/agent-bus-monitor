@@ -1,5 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Set up ntfy · step 4/4 ────────────────────── esc back ─╮
 │                                                          │
@@ -10,7 +11,6 @@
 │                                                          │
 │  messages say what waits, never an agent's words         │
 │  (notify.detail = summary)                               │
-│                                                          │
 │                                                          │
 │                                                          │
 │                                                          │

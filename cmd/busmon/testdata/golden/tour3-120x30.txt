@@ -1,24 +1,24 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                        15:04:05 
  paused · resumes in 1h52 (lunch)   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                    
 ╭─ For you ───────────────────────── 4 decide ─╮╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) ·…─╮
-│  ● answer master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
-│  ♙ answer foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
-│  ♙ answer sentinel  blocked: waiting for … 1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ review coder     by charlie  look at b1   ││  ▲ sentinel  blocked   30m     —     —         model≠      health ok │
-│                                              ││  ✓ architect done      40m     —     —         escalating… spec merg…│
-│                     ╭─ Answering a question ───────────────────────────────────────────── 3/5 ─╮ate 1 · d… busmon-ch…▼
-╰─────────────────────│                                                                          │─────────────────────╯
-╭─  1 Activity   2 Boa│ An agent that needs your decision asks a question. It shows in For you   │ents · filter: none ─╮
-│    time   from      │ with ●, and the agent reads waiting.                                     │                     │
-│  ── Mon 2026-10-26 -│                                                                          │─────────────────────│
-│    14:24  architect │   ! F4  open its questions                                               │                     │
-│    14:50  ♙ Charlie │   1-9   pick an answer                                                   │                     │
-│    14:51  coder     │   o     Other: write your own answer in the compose window               │                     │
-│  ○ 14:52  master    │                                                                          │                     │
-│  ● 14:56  dispatch  │ Your answer wakes the agent; nothing else is needed.                     │                     │
-│  ● 15:00  master    │                                                                          │                     │
-│    15:02  coder     │ ○ ○ ● ○ ○   enter next · ← back · esc skip                               │                     │
-│                     ╰──────────────────────────────────────────────────────────────────────────╯                     │
+│  Project paused · /resume                    ││    agent     state     updated queue ctx       flags       message   ▲
+│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ answer foureyes  need a decision on th… 6m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ♙ answer sentinel  blocked: waiting for … 1m││  ▲ sentinel  blocked   30m     —     —         model≠      health ok │
+│  ◆ review coder     ╭─ Answering a question ───────────────────────────────────────────── 3/5 ─╮scalating… spec merg…│
+│                     │                                                                          │ate 1 · d… busmon-ch…▼
+╰─────────────────────│ An agent that needs your decision asks a question. It shows in For you   │─────────────────────╯
+╭─  1 Activity   2 Boa│ with ●, and the agent reads waiting.                                     │ents · filter: none ─╮
+│    time   from      │                                                                          │                     │
+│  ── Mon 2026-10-26 -│   ! F4  open its questions                                               │─────────────────────│
+│    14:24  architect │   1-9   pick an answer                                                   │                     │
+│    14:50  ♙ Charlie │   o     Other: write your own answer in the compose window               │                     │
+│    14:51  coder     │                                                                          │                     │
+│  ○ 14:52  master    │ Your answer wakes the agent; nothing else is needed.                     │                     │
+│  ● 14:56  dispatch  │                                                                          │                     │
+│  ● 15:00  master    │ ○ ○ ● ○ ○   enter next · ← back · esc skip                               │                     │
+│    15:02  coder     ╰──────────────────────────────────────────────────────────────────────────╯                     │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

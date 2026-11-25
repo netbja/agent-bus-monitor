@@ -1,24 +1,24 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
-│  ● answer master    review lot 1? (2 questions)                            4m│
-│  ♙ answer foureyes  need a decision on the width rule                      6m│
+│  Project paused · /resume                                                    │
 │╭─ Delete project 'old' ─────────────────────────────────────────────────────╮│
 ││ 12 keys · 2 agents (0 live) · last activity 40d ago · services: dispatch   ││
-╰│ ○ here · holder: —                                                         │╯
-╭│ This is a DEL, not a reset: streams, consumer groups,                      │╮
-││ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │▲
-││ and the worktrees stay.                                                    │┃
-││ units reported on: box2 (dispatch, missions)                               │▼
-╰│ remove them there: agentbus --project old service remove                   │╯
-╭│ other hosts may keep units the broker no longer records: agentbus service  │╮
-││ list there                                                                 ││
-││                                                                            ││
-││ A backup first?  b back up, then continue · n no backup · esc cancel       ││
+││ ○ here · holder: —                                                         ││
+││ This is a DEL, not a reset: streams, consumer groups,                      ││
+╰│ agents/usage/budget/verdicts, pilot and gate leases all go. The template   │╯
+╭│ and the worktrees stay.                                                    │╮
+││ units reported on: box2 (dispatch, missions)                               │▲
+││ remove them there: agentbus --project old service remove                   │┃
+││ other hosts may keep units the broker no longer records: agentbus service  │▼
+╰│ list there                                                                 │╯
+╭│                                                                            │╮
+││ A backup first?  b back up, then continue · n no backup · esc cancel       │▲
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│   trading            paused      1/2  1/5    —                     2h ago    │
-│   demo               suspended   0/0  0/4    —                     3d ago    │
-│ ▶ old                stopped     ?/?  0/2    dispatch ○            40d ago   │
-│   newone             template    —    —      —                     —         │
+│   trading            paused      1/2  1/5    —                     2h ago    ┃
+│   demo               suspended   0/0  0/4    —                     3d ago    ┃
+│ ▶ old                stopped     ?/?  0/2    dispatch ○            40d ago   ┃
+│   newone             template    —    —      —                     —         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  b back up   n no backup   enter confirm   y delete   esc cancel                

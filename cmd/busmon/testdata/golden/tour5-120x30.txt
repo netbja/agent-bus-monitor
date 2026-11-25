@@ -1,24 +1,24 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                        15:04:05 
  paused · resumes in 1h52 (lunch)   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                    
 ╭─ For you ───────────────────────── 4 decide ─╮╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) ·…─╮
-│  ● answer master    review lot 1? (2 ques… 4m││    agent     state     updated queue ctx       flags       message   ▲
-│  ♙ answer foureyes  need a decision on th… 6m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
-│  ♙ answer sentinel  blocked: waiting for … 1m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ◆ review coder     by charlie  look at b1   ││  ▲ sentinel  blocked   30m     —     —         model≠      health ok │
-│                     ╭─ The header ─────────────────────────────────────────────────────── 5/5 ─╮scalating… spec merg…│
-│                     │                                                                          │ate 1 · d… busmon-ch…▼
-╰─────────────────────│   ♙2  ◆1  ●3         what waits for you: ♙ to decide, ◆ to merge, ●      │─────────────────────╯
-╭─  1 Activity   2 Boa│                      unread; a click goes to the first                   │ents · filter: none ─╮
-│    time   from      │   ● bus ok           busmon reads the bus                                │                     │
-│  ── Mon 2026-10-26 -│   ● dispatch up      the service that wakes idle agents runs             │─────────────────────│
-│    14:24  architect │   ● missions up      the conductor runs                                  │                     │
-│    14:50  ♙ Charlie │   health ▲2          two checks only you can fix; F5 says which          │                     │
-│    14:51  coder     │   claude 62%/40%     your account's windows, shared by every agent       │                     │
-│  ○ 14:52  master    │   ♙ Charlie [human]  you, as the agents see you                          │                     │
-│  ● 14:56  dispatch  │                                                                          │                     │
-│  ● 15:00  master    │ That is all. F1 then t shows these pages again.                          │                     │
-│    15:02  coder     │                                                                          │                     │
-│                     │ ○ ○ ○ ○ ●   enter next · ← back · esc skip                               │                     │
+│  Project paused · /resume                    ││    agent     state     updated queue ctx       flags       message   ▲
+│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
+│  ♙ answer foureyes  need a decision on th… 6m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
+│  ♙ answer sentinel  ╭─ The header ─────────────────────────────────────────────────────── 5/5 ─╮odel≠      health ok │
+│  ◆ review coder     │                                                                          │scalating… spec merg…│
+│                     │   ♙2  ◆1  ●3         what waits for you: ♙ to decide, ◆ to merge, ●      │ate 1 · d… busmon-ch…▼
+╰─────────────────────│                      unread; a click goes to the first                   │─────────────────────╯
+╭─  1 Activity   2 Boa│   ● bus ok           busmon reads the bus                                │ents · filter: none ─╮
+│    time   from      │   ● dispatch up      the service that wakes idle agents runs             │                     │
+│  ── Mon 2026-10-26 -│   ● missions up      the conductor runs                                  │─────────────────────│
+│    14:24  architect │   health ▲2          two checks only you can fix; F5 says which          │                     │
+│    14:50  ♙ Charlie │   claude 62%/40%     your account's windows, shared by every agent       │                     │
+│    14:51  coder     │   ♙ Charlie [human]  you, as the agents see you                          │                     │
+│  ○ 14:52  master    │                                                                          │                     │
+│  ● 14:56  dispatch  │ That is all. F1 then t shows these pages again.                          │                     │
+│  ● 15:00  master    │                                                                          │                     │
+│    15:02  coder     │ ○ ○ ○ ○ ●   enter next · ← back · esc skip                               │                     │
 │                     ╰──────────────────────────────────────────────────────────────────────────╯                     │
 │                                                                                                                      │
 │                                                                                                                      │

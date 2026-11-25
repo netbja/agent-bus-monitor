@@ -140,6 +140,7 @@ func TestMergeQueueGoldens(t *testing.T) {
 			m := fixtureShell(t, sz[0], sz[1])
 			snap := m.snap
 			snap.mergeQ, snap.mergeQRead = mqRecord(shellNow), true
+			snap.pause = nil // the pause row would take the medium tier's fourth row (pausebanner_test.go)
 			m.snap = snap
 			m.refresh()
 			m.paint = newPainter(th)

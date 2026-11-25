@@ -1,5 +1,6 @@
  agent-bus-monitor  ● bus  ● disp  ● miss  ♙4  ●2  15:04:05 
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Plan ─────────────────────────────── y copy · esc back ─╮
 │ v0.29  ██░░░░░░░░░░  1/6   5 left · 2 for you            │
@@ -13,7 +14,6 @@
 │     title requests  coder   upcoming                     │
 │ ▶ LATER 1   (enter)                                      │
 │ ▶ DONE · 1 task   (d shows)                              │
-│                                                          │
 │                                                          │
 │                                                          │
 ╰──────────────────────────────────────────────────────────╯

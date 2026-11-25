@@ -1,6 +1,8 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  Project paused · /resume                                                    │
 │  ● answer master    review lot 1? (2 questions)                            4m│
 │  ♙ answer foureyes  need a decision on the width rule                      6m│
 │  ◆ review coder     by charlie  look at b1                                   │
@@ -13,10 +15,8 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Plan ─────────────────────────────────────────────────── y copy · esc back ─╮
 │ ▼ NOW  1                                                                     ▲
-│   ● title drawer    coder   in progress                                      │
-│ ▼ APPROVED  1                                                                ┃
-│ ▶ ✓ title strip     coder   approved                                         ┃
-│ ▼ NEXT  2                                                                    │
+│   ● title drawer    coder   in progress                                      ┃
+│ ▼ APPROVED  1                                                                │
 │ ──────────────────────────────────────────────────────────────────────────── │
 │ strip · in review · coder · approved · PR 338 · merge PR 338                 │
 │ for you: nothing        enter: task page   + - priority   d done             ▼

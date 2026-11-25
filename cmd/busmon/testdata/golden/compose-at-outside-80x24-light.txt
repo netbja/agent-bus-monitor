@@ -1,22 +1,22 @@
  agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
  paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
 ╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
-│  ● answer master    review lot 1? (2 questions)                            4m│
-│ ╭─ Compose ────────────────────────────────────────────────────────────────╮m│
+│ ╭─ Compose ────────────────────────────────────────────────────────────────╮ │
 │ │ to: @coder                                                   · directive │m│
-│ │ Please read @/etc                                                        │ │
-╰─│╭────────────────────────────────────────────────────────────────────────╮│─╯
-╭─││ outside the project: type the path yourself                            ││─╮
+│ │ Please read @/etc                                                        │m│
+│ │╭────────────────────────────────────────────────────────────────────────╮│m│
+│ ││ outside the project: type the path yourself                            ││ │
+╰─││                                                                        ││─╯
+╭─││                                                                        ││─╮
 │▶││                                                                        ││ ▲
 │ ││                                                                        ││ ┃
 │ ││                                                                        ││ ▼
-╰─││                                                                        ││─╯
-╭─││                                                                        ││─╮
-│ │╰────────────────────────────────────────────────────────────────────────╯│ ▲
+╰─│╰────────────────────────────────────────────────────────────────────────╯│─╯
+╭─│                                                                          │─╮
+│ │                                                                          │ ▲
 │ │                                                                          │ │
-│ │                                                                          │ │
-│ │                                                                          │ ┃
-│ │ ↑↓ choose   enter insert   tab ope… outside the project: type the path … │ ┃
+│ │ ↑↓ choose   enter insert   tab ope… outside the project: type the path … │ │
 │ ╰──────────────────────────────────────────────────────────────────────────╯…┃
 │    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
