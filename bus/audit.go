@@ -33,8 +33,9 @@ import (
 // AuditKey is project's audit stream.
 func AuditKey(project string) string { return project + ":audit" }
 
-// AuditActions are §2's acts, the only actions taken.
-var AuditActions = []string{"approve", "answer", "merge", "push", "deliver", "force", "ci-handoff", "update", "reinstall",
+// AuditActions are §2's acts, the only actions taken; reject joined approve
+// at step 2 (master's answer: a verdict either way).
+var AuditActions = []string{"approve", "reject", "answer", "merge", "push", "deliver", "force", "ci-handoff", "update", "reinstall",
 	"quota-pause", "pause", "resume", "suspend", "retire", "retro-apply"}
 
 // The outcomes of an act.
@@ -124,6 +125,17 @@ func AuditRetention(getenv func(string) string) time.Duration {
 // Audit appends e with the retention in force; its id.
 func (b *Bus) Audit(ctx context.Context, e AuditEntry) (string, error) {
 	return b.AuditWith(ctx, e, AuditRetention(os.Getenv))
+}
+
+// AuditWarn is told an audit line an act could not write: the act stands
+// (a trail never fails the act it records). The CLI's stderr by default.
+var AuditWarn = func(err error) { fmt.Fprintln(os.Stderr, "warning: audit:", err) }
+
+// auditAfter writes e after its act, best effort: a failure goes to AuditWarn.
+func (b *Bus) auditAfter(ctx context.Context, e AuditEntry) {
+	if _, err := b.Audit(ctx, e); err != nil {
+		AuditWarn(fmt.Errorf("%s by %s: %w", e.Action, e.Actor, err))
+	}
 }
 
 // auditLua defines audit_append(key, keep, f): it reads the last entry's

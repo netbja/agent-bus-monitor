@@ -39,7 +39,8 @@ One stream per project, **`{p}:audit`**. It follows the `{p}:<kind>` naming, not
 | `outcome` | `ok`, `refused` or `failed`. |
 | `detail` | At most 300 runes, with no control characters. The calling code composes it from fixed parts (a commit, a flag, a count, a reason code), never from free text it received. |
 
-**The actions:** `approve` (a verdict), `answer` (an ask's answer), `merge` (the merge queue),
+**The actions:** `approve` and `reject` (a verdict; `reject` added at build step 2, master's answer:
+a verdict is recorded either way), `answer` (an ask's answer), `merge` (the merge queue, at its close-on-merge: agentbus never merges, the forge does),
 `push` and `deliver` (`agentbus deliver`), `force` (any verb run with `--force`), `ci-handoff`
 (the dispatcher's CI step), `update` and `reinstall` (`agentbus update`, setup), `quota-pause`,
 `pause`, `resume`, `suspend`, `retire`, and `retro-apply` (the retro spec, if it is built).

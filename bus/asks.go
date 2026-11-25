@@ -511,6 +511,9 @@ func (b *Bus) Answer(ctx context.Context, askID, qid, by, choice, text string) (
 	}
 	id, _ := res[0].(string)
 	left, _ := res[1].(int64)
+	// The audit line (audit step 2): the person's typed answer; the question
+	// named, never the answer's text.
+	b.auditAfter(ctx, AuditEntry{Action: "answer", Actor: by, Human: "yes", Typed: "yes", Target: "ask " + askID, Ref: id, Outcome: AuditOK, Detail: "question " + qid})
 	return id, int(left), nil
 }
 

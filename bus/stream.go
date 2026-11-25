@@ -590,12 +590,22 @@ func (b *Bus) AppendVerdict(ctx context.Context, v Verdict) (string, error) {
 	if v.Head != "" {
 		values["head"] = v.Head
 	}
-	return b.r.XAdd(ctx, &redis.XAddArgs{
+	id, err := b.r.XAdd(ctx, &redis.XAddArgs{
 		Stream: VerdictsKey(b.project),
 		MaxLen: int64(verdictMaxLen()),
 		Approx: true,
 		Values: values,
 	}).Result()
+	if err != nil {
+		return id, err
+	}
+	// The audit line (audit step 2): approve or reject, fixed parts only.
+	detail := "on " + v.Author + "'s work"
+	if v.Head != "" {
+		detail += ", head " + v.Head[:8]
+	}
+	b.auditAfter(ctx, AuditEntry{Action: v.Decision, Actor: v.Reviewer, Target: v.Subject, Ref: id, Outcome: AuditOK, Detail: detail})
+	return id, nil
 }
 
 // Verdicts returns ledger entries oldest→newest (XRANGE is ascending, which the
