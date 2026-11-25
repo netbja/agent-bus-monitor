@@ -1,6 +1,6 @@
 # Sandboxed agent launch (sandboxed-launch)
 
-Status: IDEA spec r2, for review (subject `sandboxed-launch-spec`). Not built. Base: origin/dev
+Status: IDEA spec r3, for review (subject `sandboxed-launch-spec`). Not built. Base: origin/dev
 `af527c19`. Author: architect, from master's directive (cmd `1795559518593-0`, task
 `specs-from-person-docs`). This is idea 3 of 4 from the person's note "ideas borrowed from
 PiBot", item 1 there. The note's references are PiBot
@@ -12,6 +12,10 @@ r2: reviewer-codex's reject of r1 (verdict `1795575649339-0`). A default of `off
 evidence, so the trial is an explicit cohort of roles the person names (§4, Q4). A violation
 report is parsed into fixed fields, and its raw line is never stored. A per-agent bound sits
 above the per-target throttle (§2).
+r3: foureyes's reject of r2 (verdict `1795575792907-0`). A base fixed in Go that misses daily
+work breaks every role until a code change. The §2 table is now the spike's starting candidate,
+and the spike measures each role's daily work (§3, item 7). The bases are written from the spike's
+output.
 
 ## 1. Today
 
@@ -35,13 +39,18 @@ The holder starts each role's client inside an OS sandbox. The launch line becom
 `srt --settings <per-launch file> <client argv>`. The holder still owns the pane and the PTY:
 only the client's process tree is confined.
 
-**A fixed base policy in Go** (`rolecfg`), which a role's table can only narrow:
+**A fixed base policy in Go** (`rolecfg`), which a role's table can only narrow. Because a
+role cannot widen it, a gap in the base breaks every role until a code change. So the table
+below is **the spike's starting candidate, not a decision**. The base that is built is the
+spike's measured output (§3, item 7). It names, per base, every path and host it holds and the
+daily act that needs each one.
 
-| | Base: the widest any role gets |
+| | Starting candidate (to be measured) |
 |---|---|
 | Read | everything but `~/.ssh`, `~/.gnupg`, the secret globs of `[tool_rules] deny`, `~/.config/agentbus/notify.toml`, and other projects' trees |
-| Write | the role's worktree; its client's own config dir (`~/.claude`, `~/.codex`, `~/.kimi`, `~/.grok`, …); its temp dir; the Go and npm caches |
-| Network | the client vendor's API and auth hosts; the forge's API host; the broker |
+| Write | the role's worktree; **the shared git dir** (`git rev-parse --git-common-dir`, the main checkout's `.git`: objects, refs, `worktrees/`), where a worktree's commits land; its client's own config: `~/.claude` **and `~/.claude.json`** at the home root, `~/.codex`, `~/.kimi`, `~/.grok`, …; its temp dir; the Go build and module caches; the npm cache only if a role's daily work needs it |
+| Network | the client vendor's API and auth hosts; the forge's API host; the broker; **the Go module proxy and checksum database** (a cold module cache); the hosts of the client's web tools and of remote MCP servers (context7's, for one) |
+| Local sockets | the production broker, and **the disposable test broker's unix socket** in `/tmp` (CLAUDE.md, `docs/testing-redis.md`); local MCP servers (codegraph, codebase-memory) |
 
 **A per-client allowance table** (the PiBot `AgentAllowances` idea) names each client's config
 dir and vendor hosts. **A per-role narrowing** in `roles.toml` may remove a path or a host. It may
@@ -91,6 +100,20 @@ macOS. It writes no product code.** Its report decides whether step 1 happens:
 6. **Where violations surface.** The `srt` CLI's reports must reach the holder without being
    written into the pane, where they would garble the client's screen. Can they go to a file
    or a descriptor? Or is a small wrapper on srt's library API needed, which is more Node code?
+7. **Each role's daily work, measured, under the candidate base.** It runs inside `srt` once per
+   role kind, coder, reviewer and master/docs, and records each denial:
+   - commit from a worktree. That writes the shared git dir. A fetch, and a push for the
+     `deliver` base;
+   - `go build` and `go test ./...` on a cold module cache, with the disposable test broker. A
+     reviewer starts its own `redis-server` on a unix socket. `apply-seccomp` blocks creating
+     new `AF_UNIX` sockets, so that may fail for every Redis test. Whether a path-scoped allow
+     exists on Linux is measured, not assumed;
+   - a WebFetch and a WebSearch, a local MCP call (codegraph, codebase-memory) and a remote one
+     (context7);
+   - the client's start, token refresh and resume (item 2).
+
+   The spike's report gives each base's final list, with the act that needs each entry. A
+   role kind whose daily work cannot pass stays out of the cohort.
 
 If any of 1, 2 or 4 fails for a client, that client launches unsandboxed and shows `sandbox off`
 in `roles doctor` and busmon (§5 Q3). A role in the cohort keeps that state.
