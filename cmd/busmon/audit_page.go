@@ -13,7 +13,7 @@ import (
 
 // The Audit list (a on History; audit spec docs/superpowers/specs/2026-11-24-audit-stream-design.md
 // §4): the project's last auditListMax audit entries, newest first, read in a
-// command when the page opens. Read-only: tab shows one action, then the
+// command when the page opens. Read-only: f shows one action, then the
 // next, then all; enter opens the selected entry in place, its ref first.
 
 // auditListMax is what the page reads (§4: the last 200 entries).
@@ -149,7 +149,7 @@ func auditShown(v auditView) []bus.AuditEntry {
 	return out
 }
 
-// auditNextAction is tab's step: the actions present, in the spec's order,
+// auditNextAction is f's step: the actions present, in the spec's order,
 // then every action again.
 func auditNextAction(v auditView) string {
 	var present []string
@@ -217,11 +217,11 @@ func (m *Model) buildAudit(p *page, width int) {
 	p.title, p.body, p.aitems = auditBody(v, p.sel, time.Local, width)
 }
 
-// auditKey is the page's keys: tab filters by action, enter opens the
+// auditKey is the page's keys: f filters by action, enter opens the
 // selected entry in place, the moves move the selection.
 func (m *Model) auditKey(p *page, act Action, k Key) (tea.Cmd, bool) {
 	switch {
-	case act == ActAuditFilter && p.audit != nil:
+	case act == ActFilter && p.audit != nil:
 		v := *p.audit
 		v.action = auditNextAction(v)
 		p.audit, p.sel, p.dirty = &v, 0, true

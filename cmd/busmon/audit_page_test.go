@@ -79,12 +79,12 @@ func TestAuditPageOpensFromHistory(t *testing.T) {
 	}
 }
 
-// tab shows one action, then the next present, in the spec's order, then
+// f shows one action, then the next present, in the spec's order, then
 // every action again.
 func TestAuditPageFiltersByAction(t *testing.T) {
 	m := auditShell(t, 120, 40, &auditWriter{fakeWriter: &fakeWriter{}, es: auditFixture()})
 	for _, want := range []string{"approve", "answer", "merge", ""} {
-		m, _ = pressCmd(t, m, tea.Key{Code: tea.KeyTab})
+		m, _ = pressCmd(t, m, 'f')
 		p := m.rd.top()
 		if want == "" {
 			if len(p.aitems) != 3 || strings.Contains(p.title, "action:") {

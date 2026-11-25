@@ -139,7 +139,6 @@ const (
 	ActMemory         // open the Memory page (F7): the person's facts (person-memory §4.4)
 	ActIdeaFilter     // Ideas (F6): tab, the next state shown
 	ActAudit          // History: a, the Audit list
-	ActAuditFilter    // Audit: tab, the next action shown
 	ActIdeaAdd        // Ideas (F6): a, add an idea (its title on the line)
 	ActIdeaState      // Ideas (F6) or an idea's page: s, the state picker (←→ choose, enter sets it)
 	ActIdeaSet        // Ideas (F6) or an idea's page: y decided, l later, d doing, x dropped, at once (ideas-triage)
@@ -393,12 +392,11 @@ var (
 		{Keys: "p", Act: ActPrevItem, match: either(runeIs('p'), keyIs(keyLeft))},
 		{Keys: "enter ! w", Help: "answer the agent's open questions (w with none open: write to master)", Act: ActAsk, match: either(keyIs(keyEnter), keyIs(keyF4), runeIs('!', 'w'))},
 		{Keys: "t", Help: "in the help: the first-launch tour again; in History (H): the selected entry's thread; on an agent's page: attach to its terminal", Act: ActTour, match: runeIs('t')},
-		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words; a service log (F3, enter): its lines holding a word (esc clears it)", Act: ActFilter, OnPage: true, match: runeIs('f')},
+		{Keys: "f", Hint: "filter", Help: "History (H): filter by @agent, a thread id or words; the Audit list (H, a): show one action, then the next, then all; a service log (F3, enter): its lines holding a word (esc clears it)", Act: ActFilter, OnPage: true, match: runeIs('f')},
 		{Keys: "enter s", Hint: "start", Help: "on a plan task waiting for you: start the discussion with master (the compose window, prefilled)", Act: ActPlanStart, OnPage: true, match: runeIs('s')}, // enter: through ActAsk's row, on that page
 		{Keys: "o", Hint: "older", Help: "History (H): load the three days before; the recap (R): show For you's items older than a day", Act: ActOlder, OnPage: true, match: runeIs('o')},
-		{Keys: "a", Hint: "audit", Help: "History (H): the Audit list, the project's last 200 audit entries (who approved, merged, pushed or forced what), read only; tab shows one action, then the next, then all; enter opens an entry in place, its ref first", Act: ActAudit, OnPage: true, match: runeIs('a')},
-		{Keys: "tab", Hint: "action", Help: "Audit (H, a): show one action, then the next, then all", Act: ActAuditFilter, OnPage: true, match: keyIs(keyTab)},
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command); a service log: show or fold the routine none decisions", Act: ActShowAll, OnPage: true, match: runeIs('a')},
+		{Keys: "a", Hint: "audit", Help: "History (H): the Audit list, the project's last 200 audit entries (who approved, merged, pushed or forced what), read only; f shows one action, then the next, then all; enter opens an entry in place, its ref first", Act: ActAudit, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "remember", Help: "Memory (F7) or a topic's page: remember your own words, in the compose window: its first line topic type importance (keep-both or supersedes=<id> for a second decision), the rest your words", Act: ActMemoryAdd, OnPage: true, match: runeIs('a')},
 		{Keys: "e", Hint: "edit", Help: "Memory (F7) or a topic's page: open the topic's file in $VISUAL or $EDITOR; on save it is checked (agentbus mem person check) and committed when clean, else left as saved with what is wrong", Act: ActMemoryEdit, OnPage: true, match: runeIs('e')},

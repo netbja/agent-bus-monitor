@@ -1531,10 +1531,8 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovHistory || p.kind == ovRecap && recapHasOlder(p.recapAll)
 	case ActAudit:
 		return p.kind == ovHistory
-	case ActAuditFilter:
-		return p.kind == ovAudit && p.audit != nil && p.audit.loaded
 	case ActFilter:
-		return p.kind == ovHistory || p.kind == ovServiceLog
+		return p.kind == ovHistory || p.kind == ovServiceLog || p.kind == ovAudit && p.audit != nil && p.audit.loaded
 	case ActContext:
 		return len(p.ctx) > 0
 	case ActReplay:
