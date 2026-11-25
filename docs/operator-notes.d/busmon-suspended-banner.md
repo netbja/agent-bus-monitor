@@ -4,4 +4,5 @@
   "Project suspended · /resume" (paused: "Project paused · /resume"), never counted; Enter on it is
   `/resume`, which now asks as `Z` does ("Resume <project>?", what comes back, the argv). A suspended
   project reached by a switch is still read-only, but `resume` runs there, as `S` does; a merely
-  paused one reached stopped names `S` in its band, and its resume stays refused.
+  paused one reached stopped names `S` in its band and in For you's line (Enter asks `S`'s question), and
+  its resume stays refused.

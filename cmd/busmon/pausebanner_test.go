@@ -227,3 +227,31 @@ func TestForYouPauseRowMedium(t *testing.T) {
 		t.Fatalf("rows %d: first %q, last %q", len(items), items[0].Key, items[len(items)-1].Line.text())
 	}
 }
+
+// reviewer-codex: on a paused (not suspended) project reached stopped by a
+// switch, For you's pause row names S, as the band does, and Enter on it
+// asks S's question; it never offers a resume the read-only guard refuses.
+func TestForYouPauseRowOnASwitchedPausedProject(t *testing.T) {
+	w := startWorld(t, nil, "down") // the fixture's pause: lunch, not a suspend
+	items := w.m.lists.forYou.items
+	if len(items) == 0 || items[0].Key != forYouStartKey || items[0].Line.text() != "Project paused · S start services" {
+		t.Fatalf("For you begins %+v", items[0])
+	}
+	if word, ok := rowHint(PanelForYou, ListItem{Key: forYouStartKey}); !ok || word != "start" {
+		t.Errorf("footer word %q", word)
+	}
+	w.m.focusPanel(PanelForYou)
+	w.m.lists.forYou.Select(forYouStartKey)
+	next, cmd := w.m.Update(tea.KeyPressMsg(kEnter))
+	w.m = next.(Model)
+	if cmd != nil {
+		cmd()
+	}
+	if !strings.HasPrefix(dialogText(w.m), "Start the services of demo?") {
+		t.Fatalf("Enter on the row: dialog %q", dialogText(w.m))
+	}
+	w.press(t, 'y')
+	if len(w.runs) != 1 || strings.Join(w.runs[0], " ") != "--project demo service start" {
+		t.Fatalf("runs %v", w.runs)
+	}
+}

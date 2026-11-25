@@ -40,6 +40,8 @@ func rowHint(p PanelID, it ListItem) (word string, known bool) {
 			return "task", true
 		case key == forYouResumeKey:
 			return "resume", true
+		case key == forYouStartKey:
+			return "start", true
 		case key == mergeUnknownKey:
 			return rowNoPair, true
 		case has("merge:"):

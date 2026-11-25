@@ -14,8 +14,13 @@ import (
 // stopped-project banner's row: a suspended project reached by a switch is
 // suspended first, its way back still named.
 
-// forYouResumeKey is For you's pause row: never an item, never counted.
-const forYouResumeKey = "project:resume"
+// forYouResumeKey is For you's pause row: never an item, never counted;
+// forYouStartKey the same row on a paused project reached stopped by a
+// switch, whose way back is S (resume lifts a pause, it starts nothing).
+const (
+	forYouResumeKey = "project:resume"
+	forYouStartKey  = "project:start"
+)
 
 // bannerShown: a row under the header, the pause's or the stopped project's.
 func (m Model) bannerShown() bool { return m.snap.pause != nil || m.stoppedBanner() }
@@ -49,17 +54,23 @@ func (m Model) pauseBannerLine(width int) Line {
 	return FitLine(l, width) // its padding keeps the band's colour
 }
 
-// forYouPauseRow is For you's first line while the project is paused.
-func forYouPauseRow(s snapshot) (ListItem, bool) {
-	if s.pause == nil {
+// forYouPauseRow is For you's first line while the project is paused: what
+// the band says, its way back named (/resume; S on a paused project reached
+// stopped, as the band says).
+func (m Model) forYouPauseRow() (ListItem, bool) {
+	p := m.snap.pause
+	if p == nil {
 		return ListItem{}, false
 	}
-	word := "Project paused"
-	if s.pause.Suspended() {
+	word, key, way := "Project paused", forYouResumeKey, "/resume"
+	switch {
+	case p.Suspended():
 		word = "Project suspended"
+	case m.stoppedBanner():
+		key, way = forYouStartKey, "S start services"
 	}
-	return ListItem{Key: forYouResumeKey, Selectable: true,
-		Line: Line{{Text: word, Role: RoleAttention, Bold: true}, {Text: " " + GlyphNone + " ", Role: RoleMuted}, {Text: "/resume", Role: RoleAccent}}}, true
+	return ListItem{Key: key, Selectable: true,
+		Line: Line{{Text: word, Role: RoleAttention, Bold: true}, {Text: " " + GlyphNone + " ", Role: RoleMuted}, {Text: way, Role: RoleAccent}}}, true
 }
 
 // resumeQuestion is /resume's confirmation, as Z words it: what comes back.

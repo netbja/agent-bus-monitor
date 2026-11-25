@@ -536,7 +536,7 @@ func (m *Model) counts() shellCounts {
 		extra = 1
 		w = max(w, p.line.Width())
 	}
-	if r, ok := forYouPauseRow(m.snap); ok { // the pause row: one of the items' rows, the medium cap's included (pausebanner.go)
+	if r, ok := m.forYouPauseRow(); ok { // the pause row: one of the items' rows, the medium cap's included (pausebanner.go)
 		fy++
 		w = max(w, r.Line.Width())
 	}

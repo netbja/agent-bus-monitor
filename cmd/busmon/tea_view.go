@@ -239,7 +239,7 @@ func (m *Model) fillLists() {
 	// the medium tier, unfocused, four and "+N more"; then the plan pointer.
 	fy := &m.lists.forYou
 	items := forYouPanelItems(m.forYou)
-	pauseRow, paused := forYouPauseRow(s)
+	pauseRow, paused := m.forYouPauseRow()
 	shown := forYouMediumRows
 	if paused { // the pause row is one of the four
 		shown--
