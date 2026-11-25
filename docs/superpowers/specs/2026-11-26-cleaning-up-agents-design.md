@@ -255,9 +255,10 @@ that build. Master moves by `holder drain`, run by the person, as today. Subject
 A request's owner is **gone** when the process that accepted it no longer holds it (Q3):
 - the owner is **lost** or **stopped** (§3); or
 - it runs as **another process** than the one that accepted it (a relaunch, a resume). `request
-  accept` now records `request.accepted_by = {pid, pid_start}` from the caller's verified snapshot (a
-  resume from `review` or `blocked` records it again). A request accepted before this change has no
-  `accepted_by`: only a lost or stopped owner makes it gone.
+  accept` now records `request.accepted_by = {pid, pid_start, session}` from the caller's snapshot
+  when that snapshot is **verified** (`pid` set); from an unverified one it records nothing (foureyes'
+  nit). A resume from `review` or `blocked` records it again. A request with no `accepted_by` (older,
+  or accepted unverified) has its owner gone only when the owner is lost or stopped.
 
 A **parked** owner is never gone: it resumes its session and closes its own request (Q1, Q3). A
 `/clear` keeps the process.
@@ -286,6 +287,15 @@ close the request while step 2 runs).
 
 A request whose `review_more` is set (a step that is not the last) is never closed by either link,
 whoever owns it.
+
+**A multi-step build's guard** (foureyes' reject). A relaunched owner may still be working on a
+later step. Four things bound it: the `delivery` link is recorded only on an **exact** subject, and
+step subjects (`<task>-1`, `retro-build-1`) never match; `review --more` keeps a step's request open;
+when `deliver` records onto a request in `accepted` (not `review`), it prints "recorded on request
+`<task>`: its merge closes it once its owner is gone; if more steps follow, run agentbus request
+review `<task>` --more"; and a close is reversible (§8.5) and always told to master. The case left —
+a step delivered under the task's own subject, with no `--more`, by an owner relaunched since — is
+closed, as the person decided for a relaunch (Q3), and master can reopen it in one command.
 
 ### 8.3 Closed when merged
 
@@ -326,7 +336,9 @@ on a request reopened since.
 
 `popRetirePass` judges, besides pops, every **optional boot** role (tier `boot`, not `required`)
 with no live terminal and no park record. One that owes nothing (§3.1, item 5 included and known) is
-ended by the existing fenced path after `dispatch.pop_retire_after`: no row, consumer group kept, so
+ended by the existing fenced path after `dispatch.pop_retire_after` (its terminal is already
+closed, so `End` closes no pane: it only unregisters; the 2026-11-13 decision note, which names pops,
+is updated with the build): no row, consumer group kept, so
 a later `pop` or `up` starts where it left off. Its reports, verdicts and threads stay readable.
 The end is logged in the dispatch log and appended to the audit stream.
 
@@ -340,7 +352,8 @@ losable work is gone; the next pass then ends it.
 - **busmon Agents.** `parked` is muted, "since `<age>`, resumes on demand". `stopped` is grey, in
   the "no state" group. `lost` is red, group 1, its reason first:
   1. `holder build <key> gone` or `restarted`;
-  2. `required: self-repair relaunches it`;
+  2. `required: self-repair relaunches it`, or, while `dispatch.self_repair` is off,
+     `required: agentbus up brings it back` (foureyes' nit; the same in §6.2's bring-back line);
   3. `owns <task> (<state>)`, the first two, `+N`;
   4. `unpushed <branch>` or `stash`;
   5. `<n> message(s) waiting`, `an open ask`, `a gate`, or `a hand-off not taken`;
@@ -384,7 +397,9 @@ One PR each, from `origin/dev`, in this order.
 - §8, on a disposable repository and a fake `gh`: `deliver` records the link only on an exact
   subject and the approve's author; a merged PR with the recorded head closes a gone owner's request
   (`via = delivery`); a squash-merged PR closes it; the same request with its owner running or parked
-  is flagged, not closed; a step subject records nothing; `review_more` never closes; no link blocks
+  is flagged, not closed; a step subject records nothing, so a relaunched owner (new pid, same
+  session) working on step 2 keeps its request open; `deliver` onto an `accepted` request prints the
+  `--more` hint; an unverified accept records no `accepted_by`; `review_more` never closes; no link blocks
   it with no cmd entry; a respawn between read and write writes nothing; a lost lease is
   `NOTHOLDER`; `reopen` restores the state and refuses a plain `done`.
 - §9: a stopped optional boot role is ended; a required one, master, a parked one, one with a stash,
@@ -409,8 +424,12 @@ One PR each, from `origin/dev`, in this order.
 - **Q6** red means someone must act; three displays besides running: parked, stopped, lost;
   unpushed commits and stash owe; count only actionable, non-stale messages. → §3.
 
-foureyes' reject of r1 (§5.1, close of a running owner by a name match) is answered by §8.2: the
-pass closes only on a link recorded on the request; a name match is flagged.
+foureyes' reject of r1 (`dn4oi37vwmn6`): a running, relaunched owner's request closed by a name
+match. Answered in §8.2: the pass closes only on a link recorded on the request at delivery, on an
+exact subject; a name match is flagged; a multi-step build is guarded by step subjects, `--more`,
+`deliver`'s hint, and reopen. foureyes' alternative, "a relaunch is the same owner" (lineage), is
+**not** taken: the person's typed Q3 answer counts a relaunch or a resume as gone. Its nits are taken
+(§8.1, §9, §10, §11 tests).
 
 ### 12.2 Second ask (what r2 raised)
 
