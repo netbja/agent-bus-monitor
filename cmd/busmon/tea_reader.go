@@ -511,6 +511,9 @@ func (m *Model) buildPage() bool {
 		}
 	case ovMerge:
 		p.title, p.body, p.plain, p.threadPlain = mergePage(s.mergeQ, p.key, width)
+		if slices.ContainsFunc(s.mergeQ.Items, func(it bus.MergeItem) bool { return it.Head == p.key }) {
+			p.body = append(p.body, deliveryLines(s.delivery, p.key)...) // single-approval step 3b
+		}
 		p.plainWhat, p.threadWhat = "link", "checks"
 	case ovRequest:
 		task := strings.TrimPrefix(p.key, "req:")
@@ -637,6 +640,7 @@ func (m *Model) buildPage() bool {
 		if r := m.ui.sleepRun; r != nil && r.verb == "backup" {
 			p.set.running = "running" + GlyphEllipsis + " its last line is the notice (" + r.log + ")"
 		}
+		p.set.deliveryWarning = s.delivery.Warning // single-approval step 3b
 		p.title, p.body = settingsTitle(p.set), settingsBody(p.set, p.sel, width)
 	case ovProjects:
 		if p.proj == nil {

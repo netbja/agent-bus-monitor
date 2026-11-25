@@ -133,6 +133,33 @@ func TestVerdictsAfterReadsIncrementally(t *testing.T) {
 	if err != nil || len(none) != 0 {
 		t.Fatalf("nothing new: %+v %v", none, err)
 	}
+	// The providers are read too (single-approval step 3b: busmon's 7-day
+	// provider warning reads the ledger with it).
+	id, err := b.AppendVerdict(ctx, Verdict{Subject: "d", Author: "coder", Reviewer: "reviewer-codex", Decision: "approve",
+		Message: "ok", AuthorProvider: "anthropic", ReviewerProvider: "openai"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prov, err := b.VerdictsAfter(ctx, ids[2], 2)
+	if err != nil || len(prov) != 1 || prov[0].ID != id || prov[0].AuthorProvider != "anthropic" || prov[0].ReviewerProvider != "openai" {
+		t.Fatalf("providers: %+v %v", prov, err)
+	}
+	// VerdictsSince reads by time: from the entry's own millisecond on. c may
+	// share d's millisecond (foureyes: flaky when it did), so the read ends
+	// with d and holds nothing older than ms.
+	ms, _ := splitID(id)
+	got, err := b.VerdictsSince(ctx, ms, 10)
+	if err != nil || len(got) == 0 || got[len(got)-1].ID != id || got[len(got)-1].ReviewerProvider != "openai" {
+		t.Fatalf("since %d: %+v %v", ms, got, err)
+	}
+	for _, v := range got {
+		if v.TS < ms {
+			t.Fatalf("since %d read %s, older", ms, v.ID)
+		}
+	}
+	if got, err := b.VerdictsSince(ctx, ms+1, 10); err != nil || len(got) != 0 {
+		t.Fatalf("since %d: %+v %v", ms+1, got, err)
+	}
 }
 
 // plan link --ref (forge-delivery): a ref fact beside the PR, the newer link

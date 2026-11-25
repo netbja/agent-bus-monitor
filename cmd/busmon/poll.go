@@ -241,6 +241,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		st.mu.Unlock()
 		planR = readPlan(pollCtx, b, cursor, pf, known)
 		readMergeQueue(pollCtx, b, st)
+		readDelivery(pollCtx, b, st, time.Now()) // after the queue: its heads
 		readIdeas(st)
 		readReleasesDue(pollCtx, st, time.Now())
 	}

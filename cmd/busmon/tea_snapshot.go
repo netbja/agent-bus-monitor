@@ -49,6 +49,8 @@ type snapshot struct {
 	notes                             []memory.Question
 	notesErr                          bool
 	releases                          releaseData // the checkout's release tags and plan files (releases.go)
+
+	delivery deliveryFacts // single-approval step 3b: the provider warning, the traces
 }
 
 // takeSnapshot copies st at now.
@@ -69,7 +71,7 @@ func takeSnapshot(st *shared, now time.Time) snapshot {
 		guardian: summarizeGuardian(st.guardianHealth, guardNow),
 		agents:   make(map[string]*agentState, len(st.agents)),
 		budgets:  st.budgets, holds: st.holds, pace: maps.Clone(st.pace.last), pause: st.pause, pauseFailed: st.pauseFailed,
-		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, mergeQ: st.mergeQ, mergeQRead: st.mergeQRead, mergeQErr: st.mergeQErr, requestsReadAt: st.requestsReadAt, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
+		asks: st.asks, personGates: st.personGates, board: st.board, requests: st.requests, mergeQ: st.mergeQ, mergeQRead: st.mergeQRead, mergeQErr: st.mergeQErr, delivery: st.delivery, requestsReadAt: st.requestsReadAt, threads: st.threads, cmdHistory: st.cmdHistory, tok: st.tok,
 		guardianHealth: st.guardianHealth, guardianNotes: st.guardianNotes, guardianNow: guardNow,
 		svcInst: st.svcInst, svcRecs: st.svcRecs, ideas: st.ideas, ideasErr: st.ideasErr, notes: st.notes, notesErr: st.notesErr, releases: st.releases,
 	}
