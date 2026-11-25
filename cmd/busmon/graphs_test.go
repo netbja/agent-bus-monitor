@@ -114,46 +114,41 @@ func envOf(kv ...string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-// auto (§2): ascii off a UTF-8 locale, block otherwise; never braille; an
-// explicit value wins; every pair of the locale's precedence pinned.
-func TestGraphsStyle(t *testing.T) {
+// The locale's character set (tui-rendering §3): UTF-8 or not, every pair
+// of the locale's precedence pinned; TERM=linux does not matter. Without
+// UTF-8 every setting draws ascii (finedraw.Resolve, TestResolve).
+func TestLocaleUTF8(t *testing.T) {
 	for _, c := range []struct {
-		setting string
-		env     []string
-		want    string
+		env  []string
+		want bool
 	}{
-		{"auto", nil, graphsASCII},
-		{"auto", []string{"LANG", "C"}, graphsASCII},
-		{"auto", []string{"LANG", "POSIX"}, graphsASCII},
-		{"auto", []string{"LANG", "fr_FR.UTF-8"}, graphsBlock},
-		{"auto", []string{"LANG", "en_US.utf8"}, graphsBlock},
-		{"auto", []string{"LC_ALL", "C", "LC_CTYPE", "en_US.UTF-8"}, graphsASCII},
-		{"auto", []string{"LC_ALL", "C", "LANG", "en_US.UTF-8"}, graphsASCII},
-		{"auto", []string{"LC_CTYPE", "C", "LANG", "fr_FR.UTF-8"}, graphsASCII},
-		{"auto", []string{"LC_CTYPE", "en_US.UTF-8", "LANG", "C"}, graphsBlock},
-		{"auto", []string{"TERM", "linux", "LANG", "en_US.UTF-8"}, graphsBlock},
-		{"braille", []string{"TERM", "linux", "LANG", "en_US.UTF-8"}, graphsBraille},
-		{"braille", nil, graphsBraille},
-		{"ascii", []string{"LANG", "en_US.UTF-8"}, graphsASCII},
-		{"block", []string{"LANG", "C"}, graphsBlock},
-		{"dots", []string{"LANG", "C"}, graphsASCII}, // unknown is auto
-		{"", []string{"LANG", "en_US.UTF-8"}, graphsBlock},
+		{nil, false},
+		{[]string{"LANG", "C"}, false},
+		{[]string{"LANG", "POSIX"}, false},
+		{[]string{"LANG", "fr_FR.UTF-8"}, true},
+		{[]string{"LANG", "en_US.utf8"}, true},
+		{[]string{"LC_ALL", "C", "LC_CTYPE", "en_US.UTF-8"}, false},
+		{[]string{"LC_ALL", "C", "LANG", "en_US.UTF-8"}, false},
+		{[]string{"LC_CTYPE", "C", "LANG", "fr_FR.UTF-8"}, false},
+		{[]string{"LC_CTYPE", "en_US.UTF-8", "LANG", "C"}, true},
+		{[]string{"TERM", "linux", "LANG", "en_US.UTF-8"}, true},
 	} {
-		if got := graphsStyle(c.setting, envOf(c.env...)); got != c.want {
-			t.Errorf("graphsStyle(%q, %v) = %q, want %q", c.setting, c.env, got, c.want)
+		if got := localeUTF8(envOf(c.env...)); got != c.want {
+			t.Errorf("localeUTF8(%v) = %v, want %v", c.env, got, c.want)
 		}
 	}
 }
 
-// §5: the Tokens page in braille and in ascii, at 80 and 140 columns.
+// §5, tui-rendering §3: the Tokens page in each mode (fine's braille,
+// basic's blocks, ascii), at 80 and 140 columns and on an 80x25 terminal.
 func TestTokensGraphsGoldens(t *testing.T) {
 	pinLocal(t)
-	for _, style := range []string{graphsBraille, graphsASCII} {
-		for _, sz := range [][2]int{{80, 44}, {140, 44}} {
+	for _, style := range []string{graphsBraille, graphsBlock, graphsASCII} {
+		for _, sz := range [][2]int{{80, 44}, {140, 44}, {80, 25}} {
 			t.Run(fmt.Sprintf("%s-%dx%d", style, sz[0], sz[1]), func(t *testing.T) {
 				withPalette(t, "dark", false, 1<<24)
 				m := fixtureShell(t, sz[0], sz[1])
-				m.cfg.settings.Graphs = style
+				withRendering(t, map[string]finedraw.Mode{graphsBraille: finedraw.ModeFine, graphsBlock: finedraw.ModeBasic, graphsASCII: finedraw.ModeASCII}[style])
 				m.snap.tok = tokFixtureState(shellNow)
 				m = keys(t, m, 'U')
 				if !m.rd.open() || m.rd.top().kind != ovTokens {

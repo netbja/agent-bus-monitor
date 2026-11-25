@@ -3,7 +3,8 @@
 // It owns their glyphs and their geometry, and knows nothing of busmon's
 // theme: it returns segments tagged with a Part, which the caller maps to
 // its own roles, and the caller keeps any animation (it asks for the frame's
-// value). Step 1 moved the existing drawing here unchanged.
+// value). Step 1 moved the existing drawing here unchanged; step 2 added
+// the rendering modes (Caps, caps.go).
 package finedraw
 
 import (
@@ -20,6 +21,13 @@ const (
 	ThinMark = "╋" // the thin gauge's pace mark inside the fill
 	Line     = "─" // the thin gauge's track without colour
 	Pace     = "│" // the thin gauge's pace mark on the track
+
+	// A locale without UTF-8 (ModeASCII): the same geometry in ASCII.
+	ASCIIFill  = "#" // a bar's filled cell
+	ASCIIEmpty = "-" // a bar's or a thin gauge's empty cell
+	ASCIIThin  = "=" // the thin gauge's and the rule's fill
+	ASCIIMark  = "+" // the pace mark inside the fill
+	ASCIIPace  = "|" // the pace mark on the track
 
 	Eighth1 = "▏" // one to seven eighths of a cell, filled from the left
 	Eighth2 = "▎"
@@ -76,13 +84,18 @@ func BarEighths(pct float64, cells int) int {
 	return e
 }
 
-// Bar is a gauge of cells at pct. fine: whole cells and one eighth on a
-// track (spaces), the leading filled segment marked Lead; else whole Gauge
-// cells, rounded, then Empty.
-func Bar(pct float64, cells int, fine bool) []Seg {
-	if !fine {
+// Bar is a gauge of cells at pct. Fine: whole cells and one eighth on a
+// track (spaces), the leading filled segment marked Lead; basic: whole
+// Gauge cells, rounded, then Empty; ascii: # then -, a value never empty
+// and under 100 never full.
+func Bar(pct float64, cells int, mode Mode) []Seg {
+	switch mode {
+	case ModeBasic:
 		n := clamp(int(pct*float64(cells)/100+0.5), 0, cells)
 		return []Seg{{Text: strings.Repeat(Gauge, n), Part: PartFill}, {Text: strings.Repeat(Empty, cells-n), Part: PartEmpty}}
+	case ModeASCII:
+		n := wholeCells(pct, cells)
+		return []Seg{{Text: strings.Repeat(ASCIIFill, n), Part: PartFill}, {Text: strings.Repeat(ASCIIEmpty, cells-n), Part: PartEmpty}}
 	}
 	e := BarEighths(pct, cells)
 	full, part := e/8, e%8
@@ -103,36 +116,45 @@ func Bar(pct float64, cells int, fine bool) []Seg {
 	return append(l, Seg{Text: strings.Repeat(" ", cells-used), Part: PartTrack})
 }
 
+// wholeCells is pct of cells, rounded: a non-zero value fills one, a value
+// under 100 never fills all.
+func wholeCells(pct float64, cells int) int {
+	n := clamp(int(math.Round(pct*float64(cells)/100)), 0, cells)
+	if pct > 0 && n == 0 {
+		n = 1
+	}
+	if pct < 100 && n == cells {
+		n = cells - 1
+	}
+	return n
+}
+
 // ThinCells is the thin gauge, one segment per cell: Thin filled cells (the
-// leading one Lead), the rest the track (Thin in fine, Line without), and a
+// leading one Lead), the rest the track (Thin in fine, Line in basic), and a
 // pace mark at pace % of the cells (< 0 none): Pace on the track, ThinMark
-// inside the fill. Whole cells: a non-zero value fills one, a value under
-// 100 never fills all.
-func ThinCells(pct, pace float64, cells int, fine bool) []Seg {
-	filled := clamp(int(math.Round(pct*float64(cells)/100)), 0, cells)
-	if pct > 0 && filled == 0 {
-		filled = 1
-	}
-	if pct < 100 && filled == cells {
-		filled = cells - 1
-	}
+// inside the fill; ascii draws =, -, | and +. Whole cells (wholeCells).
+func ThinCells(pct, pace float64, cells int, mode Mode) []Seg {
+	filled := wholeCells(pct, cells)
 	mark := -1
 	if pace >= 0 {
 		mark = clamp(int(math.Round(pace*float64(cells)/100)), 0, cells-1)
 	}
-	track := Thin
-	if !fine {
+	fill, track, fillMark, paceMark := Thin, Thin, ThinMark, Pace
+	switch mode {
+	case ModeBasic:
 		track = Line
+	case ModeASCII:
+		fill, track, fillMark, paceMark = ASCIIThin, ASCIIEmpty, ASCIIMark, ASCIIPace
 	}
 	out := make([]Seg, 0, cells)
 	for i := 0; i < cells; i++ {
 		switch {
 		case i == mark && i >= filled:
-			out = append(out, Seg{Text: Pace, Part: PartPace})
+			out = append(out, Seg{Text: paceMark, Part: PartPace})
 		case i < filled:
-			s := Seg{Text: Thin, Part: PartFill, Lead: i == filled-1}
+			s := Seg{Text: fill, Part: PartFill, Lead: i == filled-1}
 			if i == mark {
-				s.Text, s.Part = ThinMark, PartFillMk
+				s.Text, s.Part = fillMark, PartFillMk
 			}
 			out = append(out, s)
 		default:
@@ -143,8 +165,12 @@ func ThinCells(pct, pace float64, cells int, fine bool) []Seg {
 }
 
 // Blocks is the plan's bar: Full cells and one eighth (rounded, no floor or
-// ceiling), then Empty.
-func Blocks(pct float64, cells int) []Seg {
+// ceiling), then Empty; ascii: # then -, rounded to whole cells.
+func Blocks(pct float64, cells int, mode Mode) []Seg {
+	if mode == ModeASCII {
+		n := clamp(int(pct*float64(cells)/100+0.5), 0, cells)
+		return []Seg{{Text: strings.Repeat(ASCIIFill, n), Part: PartFill}, {Text: strings.Repeat(ASCIIEmpty, cells-n), Part: PartEmpty}}
+	}
 	e := clamp(int(pct*float64(cells)*8/100+0.5), 0, cells*8)
 	full, part := e/8, e%8
 	empty := cells - full
@@ -154,8 +180,13 @@ func Blocks(pct float64, cells int) []Seg {
 	return []Seg{{Text: strings.Repeat(Full, full) + Eighths[part], Part: PartFill}, {Text: strings.Repeat(Empty, max(0, empty)), Part: PartEmpty}}
 }
 
-// Rule is a line of cells Thin, fill of them filled: the progress bar.
-func Rule(fill, cells int) []Seg {
+// Rule is a line of cells Thin, fill of them filled: the progress bar;
+// ascii: = then -.
+func Rule(fill, cells int, mode Mode) []Seg {
 	fill = clamp(fill, 0, cells)
-	return []Seg{{Text: strings.Repeat(Thin, fill), Part: PartFill}, {Text: strings.Repeat(Thin, cells-fill), Part: PartEmpty}}
+	on, off := Thin, Thin
+	if mode == ModeASCII {
+		on, off = ASCIIThin, ASCIIEmpty
+	}
+	return []Seg{{Text: strings.Repeat(on, fill), Part: PartFill}, {Text: strings.Repeat(off, cells-fill), Part: PartEmpty}}
 }

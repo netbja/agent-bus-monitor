@@ -147,8 +147,9 @@ var Keys = append([]*Key{
 			}
 			return nil, "want off, nerd or agent-font"
 		}},
-	// braille-sparklines §2: the sparklines' glyphs (not the gauges); auto is
-	// ascii off a UTF-8 locale, else block; braille only when chosen.
+	// braille-sparklines §2, folded into display.rendering (tui-rendering §3,
+	// the person's Q4): kept one release, mapped (block basic, braille fine,
+	// ascii ascii) when display.rendering is not set.
 	{Name: "display.graphs", Env: "AGENT_BUS_BUSMON_GRAPHS", Kind: String, Default: "auto", ReadBy: "busmon",
 		env: func(raw string) (any, envResult) {
 			if isGraphs(raw) {
@@ -161,6 +162,16 @@ var Keys = append([]*Key{
 				return s, ""
 			}
 			return nil, "want auto, block, braille or ascii"
+		}},
+	// tui-rendering §3 (the person's Q1, Q4): how fine busmon draws its bars,
+	// gauges and sparklines; auto is fine on a UTF-8 locale. It wins over
+	// display.graphs when set; a locale without UTF-8 forces ascii.
+	{Name: "display.rendering", Kind: String, Default: "auto", ReadBy: "busmon",
+		file: func(v any) (any, string) {
+			if s, ok := v.(string); ok && (s == "auto" || s == "fine" || s == "basic") {
+				return s, ""
+			}
+			return nil, "want auto, fine or basic"
 		}},
 	// compose-at-file §5 (the person, Q1): the path busmon's @ inserts in the
 	// compose window, absolute (the default) or relative to the project's

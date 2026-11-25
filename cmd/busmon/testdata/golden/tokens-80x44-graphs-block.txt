@@ -1,0 +1,44 @@
+ agent-bus-monitor  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+ PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie            
+╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  Project paused · /resume                                                    │
+│  ● answer master    review lot 1? (2 questions)                            4m│
+│  ♙ answer foureyes  need a decision on the width rule                      6m│
+│  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m│
+│  ◆ review coder     by charlie  look at b1                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-8 of …─╮
+│▶ ♙ foureyes  waiting  6m   —   escalated   need a decision on the width rule ▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ▲ sentinel  blocked  30m  —   model≠      health ok                         ┃
+│  ✓ architect done     40m  —   escalating  spec merged                       ┃
+│  ○ coder     paused   2m   —   gate 1      busmon-charm-b: b1 shell          ┃
+│  ▲ docs      blocked  50m  —   armed       waiting for the PR                │
+│  ▲ qa        blocked  11m  —   held        out of quota                      │
+│  ○ ui-grok   quota    3m   —   swapping    reviewed                          ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────── esc back ─╮
+│ Accounts                                                                     ▲
+│   CLAUDE                                                          5h · 62%   ┃
+│   5h  ━━━━━━━━━━━━━━━━━━━━━━│─────────────   62% · resets today 17:04        ┃
+│   7d  ━━━━━━━━━━━━━━━──────│──────────────   41% · resets Thu 29 Oct 15:04   ┃
+│   At this pace the limit comes around today 16:54, before its reset, today   ┃
+│   17:04.                                                                     ┃
+│   ────────────────────────────────────────────────────────────────────────   ┃
+│   GROK                                              held until today 15:44   ┃
+│   5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━  100% · resets today 15:44   ┃
+│   Limit reached: it resets today 15:44.                                      ┃
+│ Projects                 in+out  7 days                    7d total          ┃
+│                                  10-20 to 10-26                              ┃
+│   agent-bus-monitor       ~1.8M        ▃▃  ██▆▆  ▇▇▇▇▇▇▇▇     ~5.1M          ┃
+│                                                                              ┃
+│   blog                        0    ██            ░░░░░░░░      170k          ┃
+│   wiki  no data (no dispatch service counting tokens)                        ┃
+│ Agents, agent-bus-monitor           in      out                              │
+│   foureyes         anthropic      1.2M     206k  ▇▇▇▇▇▇▇▇                    │
+│                                                                              │
+│   coder            anthropic      345k      83k  ▇▇░░░░░░                    │
+│   7 more · no proved session  (a lists them)                                 ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health    

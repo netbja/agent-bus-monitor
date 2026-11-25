@@ -91,6 +91,9 @@ type Theme struct {
 	// (ColorDefault) but on the light palette, which paints lightBG so its dark
 	// text reads on a dark terminal too (light-theme contrast, 2026-11-18).
 	bg Color
+	// depth is the terminal's colour depth (tui-rendering §3): a 256-colour
+	// terminal keeps the 16-colour roles but shows a fine bar's track.
+	depth finedraw.Depth
 }
 
 // lightBG is the light palette's painted background: the one its text roles
@@ -116,7 +119,7 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 			name = "light"
 		}
 	}
-	t := &Theme{palette: PaletteDark, selection: getColor("#22324A"), bg: colorDefault}
+	t := &Theme{palette: PaletteDark, selection: getColor("#22324A"), bg: colorDefault, depth: finedraw.DepthOf(colors, noColor)}
 	copy(t.tags[:], []string{"#E6EDF3", "#7D8A99", "#717B87", "#7CC4FA", "#7EE2A8", "#E8BC63", "#F08A8A", "#9DA7F5", "#D7A6F5", "#2E3A48", "#39C69E"})
 	for _, h := range providerHues {
 		t.tags[h.role] = h.dark
@@ -154,6 +157,9 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 }
 
 func (t *Theme) Palette() Palette { return t.palette }
+
+// Depth is the terminal's colour depth (finedraw.Caps).
+func (t *Theme) Depth() finedraw.Depth { return t.depth }
 
 func themeRole(r Role) Role {
 	if r < RoleText || r >= roleCount {
@@ -287,7 +293,7 @@ func (t *Theme) termStyle(c cellStyle) Style {
 	if c.Lift > 0 && t.Animated() {
 		style = style.Foreground(t.Lifted(c.Role, c.Lift))
 	}
-	if c.Track && t.Animated() {
+	if c.Track && t.palette != PaletteNone { // a fine bar's track: from 256 colours up (finedraw.Caps.BarMode)
 		style = style.Background(t.colors[RoleLine])
 	}
 	if c.Bold {

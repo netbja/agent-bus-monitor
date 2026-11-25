@@ -100,6 +100,7 @@ func shellEvents(now time.Time) []bus.Event {
 // have it after a size, a poll and the tail's backfill.
 func fixtureShell(t testing.TB, w, h int) Model {
 	t.Helper()
+	withRendering(t, renderMode) // a settings change the test applies is its own
 	m := newShell(shellConfig{project: "agent-bus-monitor", self: "charlie"})
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	m = step(t, m, tailMsg{events: shellEvents(shellNow)})
@@ -129,6 +130,7 @@ func pinLocal(t testing.TB) {
 // prior visit), with the project pause on or off.
 func shellWith(t testing.TB, w, h int, cfg shellConfig, paused bool) Model {
 	t.Helper()
+	withRendering(t, renderMode) // a settings change the test applies is its own
 	cfg.project, cfg.self = "agent-bus-monitor", "charlie"
 	m := newShell(cfg)
 	m = step(t, m, tea.WindowSizeMsg{Width: w, Height: h})
