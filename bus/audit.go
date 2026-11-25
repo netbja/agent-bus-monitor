@@ -139,7 +139,8 @@ func (b *Bus) AuditAfter(ctx context.Context, e AuditEntry) {
 	}
 }
 
-// auditLua defines audit_append(key, keep, f): it reads the last entry's
+// auditLua defines audit_append(key, keep, f), and audit_try, the same
+// for a fenced script (an error never interrupts its act): it reads the last entry's
 // hash, chains the entry of fields f (auditFields' order after At: action,
 // actor, human, typed, target, ref, outcome, detail) onto it and appends it,
 // trimming by age (MINID at Redis TIME minus keep ms). A script that
@@ -165,6 +166,13 @@ local function audit_append(key, keep, f)
   return redis.call('XADD', key, 'MINID', minid, '*', 'at', tostring(now),
     'action', f[1], 'actor', f[2], 'human', f[3], 'typed', f[4], 'target', f[5],
     'ref', f[6], 'outcome', f[7], 'detail', f[8], 'prev', prev, 'hash', hash)
+end
+-- audit_try is audit_append for a fenced script, after its act's writes: a
+-- Lua error does not roll back what was written before it, so an audit
+-- error must never interrupt the act (reviewer-codex): the line is lost,
+-- the act stands and records its progress.
+local function audit_try(key, keep, f)
+  pcall(audit_append, key, keep, f)
 end
 `
 

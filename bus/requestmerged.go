@@ -50,7 +50,7 @@ end
 e.updated=math.floor(now/1000)
 redis.call('HSET',KEYS[2],ARGV[2],cjson.encode(e))
 redis.call('XADD',KEYS[3],'MAXLEN','~',ARGV[6],'*','kind','request-merged','agent',r.target or '','term','','by','dispatch','detail',ARGV[2]..' '..ARGV[3]..' '..ARGV[4])
-audit_append(KEYS[4],ARGV[8],{'merge','dispatch','','',ARGV[3],'','ok','head '..string.sub(ARGV[4],1,8)..' into '..ARGV[5]..', request '..ARGV[2]..' '..out})
+audit_try(KEYS[4],ARGV[8],{'merge','dispatch','','',ARGV[3],'','ok','head '..string.sub(ARGV[4],1,8)..' into '..ARGV[5]..', request '..ARGV[2]..' '..out})
 return out`)
 
 // FencedRequestMerged closes task on its branch's merge, fenced by the

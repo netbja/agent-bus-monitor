@@ -123,7 +123,7 @@ local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 redis.call('SET', KEYS[2], cjson.encode({['until']=tonumber(ARGV[3]), reason=ARGV[2], by='dispatch', notify=ARGV[4], at=now}))
 if not v then
-  audit_append(KEYS[3], ARGV[5], {'quota-pause', 'dispatch', '', '', ARGV[6], '', 'ok', ARGV[7]})
+  audit_try(KEYS[3], ARGV[5], {'quota-pause', 'dispatch', '', '', ARGV[6], '', 'ok', ARGV[7]})
 end
 return 1`)
 
@@ -213,7 +213,7 @@ local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local p = cjson.decode(ARGV[3])
 redis.call('SET', KEYS[2], cjson.encode({['until']=p['until'], reason=p['reason'], by='dispatch', notify=p['notify'], at=now}))
-audit_append(KEYS[3], ARGV[4], {'quota-pause', 'dispatch', '', '', ARGV[5], '', 'ok', ARGV[6]})
+audit_try(KEYS[3], ARGV[4], {'quota-pause', 'dispatch', '', '', ARGV[5], '', 'ok', ARGV[6]})
 return 1`)
 
 // FencedQuotaRepause (v0.15 §8) replaces the dispatcher's quota pause for

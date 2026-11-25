@@ -62,7 +62,7 @@ var ciStepScript = redis.NewScript(auditLua + `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 'not-holder' end
 local t = redis.call('TYPE', KEYS[2]).ok
 if t ~= 'hash' and t ~= 'none' then return 'bad-type' end
-for _, i in ipairs({3, 4, 7}) do
+for i = 3, 4 do
   t = redis.call('TYPE', KEYS[i]).ok
   if t ~= 'stream' and t ~= 'none' then return 'bad-type' end
 end
@@ -105,7 +105,7 @@ for _, p in ipairs(missing) do
   if p == 'o' then
     redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[8], '*', 'from', 'dispatch', 'target', ARGV[5], 'type', 'directive', 'ref', '',
       'command', ARGV[10] .. ord .. ARGV[11], 'text_complete', 'yes', 'episode', ARGV[9])
-    audit_append(KEYS[7], ARGV[16], {'ci-handoff', 'dispatch', '', '', ARGV[17], '', 'ok',
+    audit_try(KEYS[7], ARGV[16], {'ci-handoff', 'dispatch', '', '', ARGV[17], '', 'ok',
       'hand-off ' .. ord .. ' of ' .. ARGV[4] .. ' to ' .. ARGV[5] .. ', head ' .. string.sub(dig, 1, 8)})
   elseif p == 'm' and stopped == '1' then
     redis.call('XADD', KEYS[3], 'MAXLEN', '~', ARGV[8], '*', 'from', 'dispatch', 'target', ARGV[6], 'type', 'directive', 'ref', '',
@@ -115,7 +115,7 @@ for _, p in ipairs(missing) do
       'command', ARGV[12] .. ord .. ARGV[13], 'text_complete', 'yes', 'episode', ARGV[9], 'wake', 'no')
   else
     redis.call('XADD', KEYS[4], 'MAXLEN', '~', ARGV[8], '*', 'from', 'dispatch', 'message', ARGV[15], 'for', 'person')
-    audit_append(KEYS[7], ARGV[16], {'ci-handoff', 'dispatch', '', '', ARGV[17], '', 'refused',
+    audit_try(KEYS[7], ARGV[16], {'ci-handoff', 'dispatch', '', '', ARGV[17], '', 'refused',
       'stopped after ' .. count .. ' hand-offs, head ' .. string.sub(dig, 1, 8)})
   end
   done = done .. p
