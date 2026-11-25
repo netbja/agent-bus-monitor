@@ -377,7 +377,7 @@ func runDeliver(ctx context.Context, d deliverDeps, self string, args []string, 
 	// read, and the merge queue, which For you lists, would not show it.
 	// One is enough for a small change under the project's
 	// delivery.single_approval (single-approval §4, deliversingle.go).
-	reviewers := currentApprovers(vs, h)
+	reviewers := bus.CurrentApprovers(vs, h)
 	policy, policyRead := defaultPolicy, false
 	one := "" // the single-approval line the body and the trace carry
 	if len(reviewers) < 2 && o.single == "" {
@@ -563,28 +563,6 @@ func placeOf(f forge.Forge) string {
 		return "a local path"
 	}
 	return f.Host + "/" + f.Owner + "/" + f.Repo
-}
-
-// currentApprovers are the reviewers whose latest decision on the subject
-// is an independent approve of h, in the order of their first verdict
-// (reviewer-codex): an approval a reviewer later rejected or replaced with
-// another head's no longer counts. vs is oldest first.
-func currentApprovers(vs []bus.Verdict, h string) []string {
-	var order []string
-	latest := map[string]bus.Verdict{}
-	for _, v := range vs { // every verdict is its reviewer's latest so far, self-authored too (reviewer-codex)
-		if _, seen := latest[v.Reviewer]; !seen {
-			order = append(order, v.Reviewer)
-		}
-		latest[v.Reviewer] = v
-	}
-	var out []string
-	for _, r := range order {
-		if v := latest[r]; v.Decision == "approve" && v.Reviewer != v.Author && v.Head == h {
-			out = append(out, r)
-		}
-	}
-	return out
 }
 
 // approvalsOn is every independent approve naming h, oldest first.
