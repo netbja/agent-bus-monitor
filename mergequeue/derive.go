@@ -5,6 +5,7 @@
 package mergequeue
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -60,6 +61,7 @@ type Result struct {
 type approved struct {
 	subjects  []string
 	approvals []bus.MergeApproval
+	approvers []string // the head's current approvers, each once
 	at        int64
 }
 
@@ -95,6 +97,11 @@ func candidates(vs []bus.Verdict) map[string]*approved {
 				a.approvals = append(a.approvals, bus.MergeApproval{Reviewer: v.Reviewer, At: v.TS, Message: v.Message})
 			}
 		}
+		for _, r := range bus.CurrentApprovers(svs, h) {
+			if !slices.Contains(a.approvers, r) {
+				a.approvers = append(a.approvers, r)
+			}
+		}
 	}
 	return out
 }
@@ -111,7 +118,7 @@ func Derive(in Input) Result {
 			return
 		}
 		seen[it.Head] = true
-		it.Subjects, it.Approvals, it.ApprovedAt = a.subjects, a.approvals, a.at
+		it.Subjects, it.Approvals, it.Approvers, it.ApprovedAt = a.subjects, a.approvals, a.approvers, a.at
 		res.Items = append(res.Items, it)
 	}
 	for _, pr := range in.PRs {
@@ -132,7 +139,7 @@ func Derive(in Input) Result {
 		it := bus.MergeItem{Number: pr.Number, Title: pr.Title, URL: pr.URL, Branch: pr.Branch, Head: pr.Head, CIRed: ciRed(pr)}
 		if pr.Conflicting {
 			res.Conflicting = append(res.Conflicting, bus.MergeConflict{Number: pr.Number, Base: pr.Base, Branch: pr.Branch, Head: pr.Head})
-			it.Subjects, it.Approvals, it.ApprovedAt = a.subjects, a.approvals, a.at
+			it.Subjects, it.Approvals, it.Approvers, it.ApprovedAt = a.subjects, a.approvals, a.approvers, a.at
 			res.Flagged = append(res.Flagged, it)
 			continue
 		}

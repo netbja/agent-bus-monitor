@@ -35,6 +35,12 @@ type MergeItem struct {
 	Subjects   []string        `json:"subjects"`
 	Approvals  []MergeApproval `json:"approvals"`
 	ApprovedAt int64           `json:"approved_at"` // Unix ms of the deciding approve
+	// Approvers are the head's current distinct approvers over its subjects
+	// (CurrentApprovers, single-approval §4.5), additive: Approvals keeps
+	// every independent approve naming the head, a reviewer's stale or
+	// repeated ones included, so its length is no count. Empty in a record
+	// written before them.
+	Approvers []string `json:"approvers,omitempty"`
 	// CIRed are the failing checks of the PR's head, sorted by name (the
 	// "CI red" mark, ci-loop §8 Q8): empty when none failed, and when the
 	// checks were not read (ci.loop off, a cut rollup, the git fallback).
