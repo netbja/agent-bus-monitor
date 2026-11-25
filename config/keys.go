@@ -607,7 +607,7 @@ var Keys = []*Key{
 	// The audit trail's age (audit spec §3, the person's Q1: 90 days): every
 	// append trims entries older than this. The person's alone: an agent
 	// must not shorten the trail it is in.
-	{Name: "audit.retention", Kind: Duration, Default: 90 * 24 * time.Hour, ReadBy: "the audit writers (agentbus, dispatch)", MachineOnly: true, PersonOnly: true,
+	{Name: "audit.retention", Kind: Duration, Default: 90 * 24 * time.Hour, ReadBy: "nothing yet: the audit writers from audit step 2", MachineOnly: true, PersonOnly: true,
 		file: func(v any) (any, string) {
 			if s, ok := v.(string); ok {
 				if d, ok := parseAge(s); ok {
