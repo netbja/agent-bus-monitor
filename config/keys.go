@@ -931,7 +931,7 @@ func Lookup(name string) (*Key, bool) {
 			return k, true
 		}
 	}
-	return nil, false
+	return lookupQuotaProvider(name) // quota.<provider>.<level>, any provider id
 }
 
 // validName is bus.ValidName's rule, repeated because bus reads its caps from

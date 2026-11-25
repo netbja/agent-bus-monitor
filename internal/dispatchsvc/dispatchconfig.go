@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -191,8 +193,9 @@ func quotaThresholds(getenv func(string) string, project, envFile string) func()
 		} else {
 			th.Drain, th.DrainSet = d.Value.(float64), true
 		}
-		// quota-per-provider: a provider's own values, 0 none (the default's).
-		for _, p := range config.QuotaProviders {
+		// quota-per-provider: a provider's own values, 0 none (the default's),
+		// for the five with a built-in reader and any other the file sets.
+		for _, p := range quotaProviderIDs(f) {
 			lv := dispatch.QuotaLevels{Warn: get(config.QuotaProviderKey(p, "warn")).Value.(float64),
 				Drain: get(config.QuotaProviderKey(p, "drain")).Value.(float64), Hold: get(config.QuotaProviderKey(p, "hold")).Value.(float64)}
 			if lv != (dispatch.QuotaLevels{}) {
@@ -204,6 +207,14 @@ func quotaThresholds(getenv func(string) string, project, envFile string) func()
 		}
 		return th, nil
 	}
+}
+
+// quotaProviderIDs are the providers a threshold may be read for: the
+// registry's five and any other f sets, sorted, once each.
+func quotaProviderIDs(f *config.File) []string {
+	ids := append(append([]string(nil), config.QuotaProviders...), f.QuotaProviders()...)
+	sort.Strings(ids)
+	return slices.Compact(ids)
 }
 
 // QuotaThresholds is quotaThresholds, for agentbus quota: the thresholds

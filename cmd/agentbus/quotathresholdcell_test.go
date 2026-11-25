@@ -61,3 +61,27 @@ func TestQuotaShowsAProviderOverBrokenDefaults(t *testing.T) {
 		t.Fatalf("anthropic %q", got)
 	}
 }
+
+// master's directive: a provider with thresholds of its own but no usage
+// reader is shown, inert: one row saying so, with its thresholds.
+func TestQuotaShowsAProviderWithoutAReader(t *testing.T) {
+	now := time.Now()
+	rs := []quota.Reading{{Provider: "anthropic", ObservedAt: now.UnixMilli(), Source: "test",
+		Windows: []quota.Window{{Name: "5h", UsedPct: 10, ResetsAt: now.Add(time.Hour).Unix(), Minutes: 300}}}}
+	th := dispatch.QuotaThresholds{Warn: 85, Drain: 85, Hold: 95,
+		Providers: map[string]dispatch.QuotaLevels{"deepseek": {Hold: 90}, "anthropic": {Hold: 90}}}
+	var out bytes.Buffer
+	printQuota(&out, rs, now, "", th)
+	var row string
+	for _, l := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(l, "deepseek ") {
+			row = l
+		}
+	}
+	if !strings.Contains(row, "no usage reader") || !strings.Contains(row, "85/85/90 (quota.deepseek)") {
+		t.Fatalf("deepseek row %q in\n%s", row, out.String())
+	}
+	if n := strings.Count(out.String(), "anthropic "); n != 1 {
+		t.Fatalf("anthropic shown %d times, want its reading's row only", n)
+	}
+}

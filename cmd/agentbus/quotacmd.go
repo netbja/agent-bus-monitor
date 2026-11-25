@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -40,14 +41,16 @@ func runQuota(project string, args []string, out, errw io.Writer) int {
 		fmt.Fprintln(out, string(b))
 		return 0
 	}
-	if len(rs) == 0 {
-		fmt.Fprintln(out, "no quota reader configured (none of claude, codex, grok on PATH; see "+quota.ConfigPath()+")")
-		return 0
-	}
 	th, err := dispatchsvc.QuotaThresholds(os.Getenv, project, quotaEnvFile(project))()
 	if err != nil {
 		fmt.Fprintf(errw, "quota thresholds: %v (the defaults shown)\n", err)
 		th = dispatch.QuotaThresholds{Warn: 85, Drain: 85, Hold: 95}
+	}
+	if len(rs) == 0 {
+		fmt.Fprintln(out, "no quota reader configured (none of claude, codex, grok on PATH; see "+quota.ConfigPath()+")")
+		if len(th.Providers) == 0 {
+			return 0
+		}
 	}
 	printQuota(out, rs, time.Now(), config.Machine(os.Getenv).String("display.date_format"), th)
 	return 0
@@ -67,7 +70,8 @@ func quotaEnvFile(project string) string {
 
 // printQuota is agentbus quota's table: each reading's windows, with the
 // thresholds that apply to its provider and where they come from
-// (quota-per-provider).
+// (quota-per-provider); a provider with thresholds but no reading last,
+// inert.
 func printQuota(out io.Writer, rs []quota.Reading, now time.Time, format string, th dispatch.QuotaThresholds) {
 	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "PROVIDER\tWINDOW\tUSED\tRESETS\tOBSERVED\tSOURCE\tWARN/DRAIN/HOLD")
@@ -89,6 +93,22 @@ func printQuota(out io.Writer, rs []quota.Reading, now time.Time, format string,
 			fmt.Fprintf(tw, "%s\t%s\t%.0f%%\t%s\t%s ago\t%s\t%s\n", r.Provider, w.Name, w.UsedPct, quotaResets(w, now, format),
 				roundDur(now.Sub(time.UnixMilli(r.ObservedAt))), r.Source, lv)
 		}
+	}
+	// A provider with thresholds of its own and no reading: stored and
+	// shown, inert (no usage reader to judge it by).
+	read := map[string]bool{}
+	for _, r := range rs {
+		read[r.Provider] = true
+	}
+	var inert []string
+	for p := range th.Providers {
+		if !read[p] {
+			inert = append(inert, p)
+		}
+	}
+	sort.Strings(inert)
+	for _, p := range inert {
+		fmt.Fprintf(tw, "%s\t-\tno usage reader\t-\t-\t-\t%s\n", p, quotaThresholdCell(th, p))
 	}
 	tw.Flush()
 }

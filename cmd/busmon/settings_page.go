@@ -81,7 +81,8 @@ func settingOnPage(k *config.Key) bool {
 	case config.GroupBackup:
 		return k.PersonOnly
 	case config.GroupServices:
-		return servicesOnPage[k.Name]
+		_, _, quotaKey := config.ParseQuotaProviderKey(k.Name) // quota-per-provider
+		return servicesOnPage[k.Name] || quotaKey
 	}
 	return true
 }
@@ -119,13 +120,17 @@ func settingsGroups(getenv func(string) string, flags settingsFlags, groups []co
 		flagged["identity.as"] = flags.As
 	}
 	var out []settingGroup
+	readers := quotaReaders(getenv)
 	for _, g := range groups {
 		sg := settingGroup{Group: g}
-		for _, k := range config.Keys {
+		for _, k := range settingKeys(cfg) {
 			if k.Group() != g || !settingOnPage(k) {
 				continue
 			}
 			row := settingRow{Key: k.Name, Label: settingLabels[k.Name], Editable: !k.PersonOnly, PersonOnly: k.PersonOnly}
+			if l := quotaSettingLabel(k.Name, readers); l != "" {
+				row.Label = l
+			}
 			if row.Label == "" {
 				row.Label = k.Name
 			}
