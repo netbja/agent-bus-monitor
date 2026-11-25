@@ -79,11 +79,10 @@ func TestRunPassesTheExitThrough(t *testing.T) {
 	if errw.Len() != 0 {
 		t.Fatalf("stderr %q", errw)
 	}
-	// Under RLIMIT_AS a failure may be the cap's: the status is kept, a note
-	// says so.
+	// Under a memory cap too: a failing go test is not a memory problem, and
+	// a line comes only with 137 (§6, Exit).
 	d, _, errw = deps(t, inHolder)
-	if code := Run(context.Background(), Limits{Mem: 1 << 30, MemText: "1G"}, []string{"sh", "-c", "exit 3"}, d); code != 3 ||
-		errw.String() != "agentbus run: exit 3 under memory limit 1G (RLIMIT_AS: an allocation fails; memory cap not proven)\n" {
+	if code := Run(context.Background(), Limits{Mem: 1 << 30, MemText: "1G"}, []string{"sh", "-c", "exit 3"}, d); code != 3 || errw.Len() != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errw)
 	}
 	if code := Run(context.Background(), Limits{}, []string{"no-such-command-xyz"}, d); code != 127 {
@@ -110,16 +109,7 @@ func TestRunTimeCapKillsTheGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	deadline := time.Now().Add(5 * time.Second)
-	for syscall.Kill(pid, 0) == nil {
-		if stat, _ := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); strings.Contains(string(stat), ") Z ") {
-			break // killed, not yet reaped by init
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("grandchild %d still alive", pid)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	waitGone(t, pid)
 }
 
 // Without cap B, --mem is RLIMIT_AS on the command (§6): an allocation past it
@@ -144,7 +134,7 @@ func TestRunMemRlimit(t *testing.T) {
 	}
 	d, _, errw = deps(t, inHolder)
 	code := Run(context.Background(), Limits{Mem: 256 << 20, MemText: "256M"}, alloc, d)
-	if code == 0 || !strings.Contains(errw.String(), "under memory limit 256M (RLIMIT_AS") || !strings.Contains(errw.String(), "memory cap not proven") {
+	if code == 0 || strings.Contains(errw.String(), "agentbus run:") {
 		t.Fatalf("exit %d, stderr %q", code, errw)
 	}
 	// No --mem: no limit.
@@ -152,6 +142,40 @@ func TestRunMemRlimit(t *testing.T) {
 	Run(context.Background(), Limits{}, []string{"sh", "-c", "ulimit -v"}, d)
 	if got := strings.TrimSpace(out.String()); got != parentAS(t) {
 		t.Fatalf("no --mem: ulimit -v = %q, want the parent's %q", got, parentAS(t))
+	}
+}
+
+// The leader's exit ends the run, never the time cap's watch over what it
+// left in its group (reviewer-codex): the rest of the group is killed, the
+// leader's status kept.
+func TestRunLeaderExitKillsWhatItLeft(t *testing.T) {
+	d, _, errw := deps(t, inHolder)
+	pidf := filepath.Join(t.TempDir(), "pid")
+	code := Run(context.Background(), Limits{Time: 30 * time.Second},
+		[]string{"sh", "-c", "sleep 30 >/dev/null 2>&1 & echo $! > " + pidf + "; exit 4"}, d)
+	if code != 4 || errw.Len() != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errw)
+	}
+	b, err := os.ReadFile(pidf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	waitGone(t, pid)
+}
+
+// waitGone: pid is dead, or a zombie init has not reaped yet.
+func waitGone(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if stat, _ := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); strings.Contains(string(stat), ") Z ") {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("process %d still alive", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

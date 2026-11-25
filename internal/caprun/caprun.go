@@ -132,7 +132,10 @@ wait:
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		}
 	}
-	return exitOf(werr, timedOut, where, l, d.Stderr)
+	// The leader is gone; what it left in its group goes with it, so nothing
+	// outlives the run or its time cap (reviewer-codex). Its status is kept.
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	return exitOf(werr, timedOut, l, d.Stderr)
 }
 
 // scopeArgv is systemd-run's transient scope for a shell no holder runs (§6,
@@ -155,9 +158,11 @@ func scopeArgv(systemdRun string, l Limits) []string {
 
 // exitOf is the status and the line, by what is known (§6, Exit): the time
 // cap fired, a SIGKILL nobody here sent (the memory cap is not proven: the
-// kernel names no victim), or the command's own status, with a note when it
-// failed under RLIMIT_AS, where an allocation fails instead of a kill.
-func exitOf(werr error, timedOut bool, where Where, l Limits, errw io.Writer) int {
+// kernel names no victim), or the command's own status with no line. Under
+// RLIMIT_AS an allocation fails instead of a kill, and nothing tells that
+// failure from any other: a failing go test is not called a memory problem
+// (foureyes).
+func exitOf(werr error, timedOut bool, l Limits, errw io.Writer) int {
 	var ee *exec.ExitError
 	if werr != nil && !errors.As(werr, &ee) {
 		fmt.Fprintln(errw, "agentbus run:", werr)
@@ -179,41 +184,5 @@ func exitOf(werr error, timedOut bool, where Where, l Limits, errw io.Writer) in
 		}
 		return 128 + int(sig)
 	}
-	code := ee.ExitCode()
-	if l.Mem > 0 && where != UserManager && code != 127 {
-		fmt.Fprintf(errw, "agentbus run: exit %d under memory limit %s (RLIMIT_AS: an allocation fails; memory cap not proven)\n", code, l.MemText)
-	}
-	return code
-}
-
-// Exec is the helper's side: args are <rlimit bytes> -- <command...>. It sets
-// RLIMIT_AS when above 0, raises its own oom_score_adj to +500 (no privilege
-// needed to raise it; the command inherits it), then execs the command. It
-// returns only on a failure: 127 for a command not found, 2 for bad args.
-func Exec(args []string, errw io.Writer) int {
-	if len(args) < 3 || args[1] != "--" {
-		fmt.Fprintln(errw, "agentbus run: bad helper arguments")
-		return 2
-	}
-	n, err := strconv.ParseInt(args[0], 10, 64)
-	if err != nil || n < 0 {
-		fmt.Fprintln(errw, "agentbus run: bad helper memory limit")
-		return 2
-	}
-	argv := args[2:]
-	path, err := exec.LookPath(argv[0])
-	if err != nil {
-		fmt.Fprintf(errw, "agentbus run: %s: command not found\n", argv[0])
-		return 127
-	}
-	_ = os.WriteFile("/proc/self/oom_score_adj", []byte("500"), 0) // Linux only
-	if n > 0 {
-		if err := syscall.Setrlimit(syscall.RLIMIT_AS, &syscall.Rlimit{Cur: uint64(n), Max: uint64(n)}); err != nil {
-			fmt.Fprintln(errw, "agentbus run: memory limit:", err)
-			return 126
-		}
-	}
-	err = syscall.Exec(path, argv, os.Environ())
-	fmt.Fprintf(errw, "agentbus run: %s: %v\n", argv[0], err)
-	return 126
+	return ee.ExitCode()
 }
