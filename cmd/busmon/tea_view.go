@@ -312,7 +312,7 @@ func (m *Model) fillLists() {
 
 	bd := &m.lists.board
 	bv := boardViewOf(s.board, now, lower, boardOpts{noAccept: m.cfg.settings.NoAcceptAfter, noReply: m.cfg.settings.NoReplyAfter,
-		showDone: m.ui.boardDone, masterDown: masterDown(s.agents, cmp.Or(s.pilot, "master")), between: m.ui.boardBetween, self: m.cfg.self})
+		showDone: m.ui.boardDone, masterDown: masterDown(s.agents, cmp.Or(s.pilot, "master")), between: m.ui.boardBetween, self: m.cfg.self, agents: s.agents})
 	bd.SetHeader(bv.header)
 	bd.SetItems(bv.items)
 	bd.SetFrame(m.lowerTitle(PanelBoard, Line{{Text: "Board", Role: RoleText}}), bv.label)

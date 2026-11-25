@@ -57,11 +57,12 @@ func boardStateRole(state string) Role {
 // boardOpts are what the Board's rows read besides the board: the two alert
 // settings (0 off), whether d shows the done tasks, and master's liveness.
 type boardOpts struct {
-	noAccept, noReply time.Duration // board.no_accept_after, board.no_reply_after
-	showDone          bool          // d: the done tasks, after the others
-	masterDown        bool          // no master to cancel or reassign (masterDown)
-	between           bool          // only the rows between agents: no request to or from self (Work's line)
-	self              string        // the person running busmon
+	noAccept, noReply time.Duration          // board.no_accept_after, board.no_reply_after
+	showDone          bool                   // d: the done tasks, after the others
+	masterDown        bool                   // no master to cancel or reassign (masterDown)
+	between           bool                   // only the rows between agents: no request to or from self (Work's line)
+	self              string                 // the person running busmon
+	agents            map[string]*agentState // their wip facts: a queued request's waits: tag (wip-limit §3.5)
 }
 
 // boardView is the Board panel: its rows, column header, frame label and
@@ -215,6 +216,9 @@ func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardO
 		l = append(l, col(Preview(r.task), taskW, RoleText), col(Preview(r.e.Owner), boardOwnerW, RoleMuted),
 			col(Preview(state), boardStateW, role),
 			Seg{Text: humanAge(now.Sub(time.Unix(r.e.Updated, 0))), Role: RoleMuted}, Seg{Text: Preview(why), Role: RoleAttention})
+		if w := waitsTag(r.r, o.agents); w != "" {
+			l = append(l, Seg{Text: "  " + w, Role: RoleMuted})
+		}
 		if r.alert != "" && o.masterDown {
 			l = append(l, Seg{Text: "  master is down; self-repair relaunches it", Role: RoleAttention})
 		}

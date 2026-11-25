@@ -266,6 +266,10 @@ func newShell(cfg shellConfig) Model {
 	cfg.from = backTarget(cfg.from, cfg.project)
 	ro := &readOnlyFlag{}
 	cfg.w = guardWriter(cfg.w, ro) // a stopped project reached by a switch writes nothing (readonly.go)
+	// board.wip_limit is per project: a switch reads the new project's (wip-limit §3.5).
+	if cfg.getenv != nil {
+		cfg.settings.WipLimit = projectWipLimit(cfg.getenv, cfg.project)
+	}
 	m := Model{cfg: cfg, feed: &activityFeed{unread: newUnreadState()}, lists: &shellLists{}, paint: newPainter(th),
 		ui: uiState{focus: PanelForYou, tab: PanelActivity, view: PanelForYou, askDrafts: map[string]string{}},
 		rd: newReader(), cache: newViewCache(), sig: newSignals(cfg.cache), notice: &noticeState{}, ro: ro}
@@ -500,6 +504,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 // applySnapshot takes a poll's snapshot as the model's data.
 func (m *Model) applySnapshot(s snapshot, at time.Time) {
+	stampWip(s.agents, s.requests, m.cfg.settings.WipLimit, m.cfg.settings.NoReplyAfter)
 	m.snap, m.now = s, at
 	m.gen++
 	m.bars = updateSlides(m.bars, barTargets(s.budgets), at, m.cfg.settings.Fade && th.Animated())

@@ -26,6 +26,7 @@ type busmonSettings struct {
 	// board.no_accept_after and no_reply_after: the Board's alerts on a late
 	// tracked request (views-redesign §3; 0 = off)
 	NoAcceptAfter, NoReplyAfter time.Duration
+	WipLimit                    int    // board.wip_limit for the shown project (wip-limit §3.5; 0 = none), read by newShell
 	Icons                       string // display.icons: off, nerd or agent-font (busmon-icons)
 	Graphs                      string // display.graphs resolved: block, braille or ascii; "" draws blocks (braille-sparklines)
 	AtPath                      string // compose.at_path: absolute or relative (compose-at-file §5)

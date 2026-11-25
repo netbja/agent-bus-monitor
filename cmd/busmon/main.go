@@ -574,6 +574,7 @@ type agentState struct {
 	held           bool                // its provider is held by the dispatcher (quota)
 	loginHeld      int64               // its own login hold: the expiry (Unix ms) of hold-login:<agent>, 0 none
 	openAsk        int                 // unanswered questions of its open ask
+	wip            wipFacts            // its in-flight requests and the project's limit (wip.go), stamped on each poll
 	askID          string              // that ask's id
 	paused         bool                // the project is paused ({p}:pause holds a record)
 	obsBusy        bool                // the dispatcher saw its pane running a turn ({p}:observed)
