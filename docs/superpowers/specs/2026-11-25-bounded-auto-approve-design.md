@@ -18,6 +18,15 @@ the person's note "ideas borrowed from PiBot", item 3; reference PiBot
   PR required, no force push, no deletion), `roles doctor` warns when it is off, on every
   supported forge, and master's promotion and a person-run promotion keep working (§3.4).
 
+Review: reviewer-codex's reject of r2's first head (verdict on challenge `dn49althqi2i`): saved
+permissions are read from every layer the client loads, a trusted project's `.codex/rules/`
+included, and an unreadable one refuses; the forge's protection is claimed for git pushes only.
+foureyes's reject of the same head (report `1795606543136-0`): every role reaches the person's
+admin token, so protection is no boundary against the roles today, said in §2.3, §3.4 and Q5; the
+forge's protection-changing calls join the danger list; doctor reads classic protection and an
+absent bypass list as `unknown`; the GitHub deploy-key bypass is to be verified, with a GitHub App
+as fallback; the Bitbucket row and the promote push's SSH identity are corrected.
+
 r2 changes only what those answers decide: §3.1 is decided, §3.3 to §3.5 are new, the build steps
 are §5, and §6 holds the one choice left to the person.
 
@@ -56,10 +65,11 @@ Claude Code. Nothing checks it for the other clients.
    **What is enforced, and what is not.** The prompt holds only where the client honours an
    ask rule in its mode, which the launch checks (§3). Even then, an ask rule matches the
    command's text, so a command that is spelled differently, or run inside a script or a test,
-   is not caught. That is defence in depth, not a boundary. The only boundaries outside the
-   client are these:
-   - a push or merge to `main`: the forge's branch protection, which the person sets (§3.4), with
-     one bypass for the promotion identity, and the prompt on `agentbus promote`;
+   is not caught. That is defence in depth, not a boundary. Outside the client:
+   - a push or merge to `main`: the forge's branch protection, which the person sets (§3.4). It
+     binds git pushes. **It is not a boundary against the roles today:** every role's shell
+     reaches the person's forge token, which has admin rights, so a role can lift the protection
+     by the forge's API (§3.4, "What the forge enforces");
    - everything else on the list (a force push to a work branch, a branch delete, a reinstall,
      spending): the client's prompt only.
    This spec claims no more than that.
@@ -133,12 +143,19 @@ would still not hold. They could make the danger asks and the `Bash(...)` denies
 A person who answers "don't ask again" in a pane makes the client write an allow into its own
 files. agentbus **never edits those files**.
 
-- **Where it reads.** One Go table per client names the files that hold saved permissions:
-  Claude Code's `~/.claude/settings.json`, `~/.claude/settings.local.json`, and the worktree's
-  `.claude/settings.json` and `.claude/settings.local.json` (`permissions.allow`); Codex's rules
-  files under `CODEX_HOME` (`prefix_rule` with `decision = "allow"`). Kimi, Grok and agy are added
-  once their files are known; until then `roles doctor` says `saved permissions: not inspected`
-  for them, never `none`.
+- **Where it reads: every layer the client loads for that launch, not only the user's.** One Go
+  table per client names its layers, as the client's docs define them, and resolves them for
+  the role's launch: its environment (`CODEX_HOME`, …), the config overrides the launch passes, and
+  the worktree. Claude Code: `~/.claude/settings.json`, `~/.claude/settings.local.json`, and the
+  worktree's `.claude/settings.json` and `.claude/settings.local.json` (`permissions.allow`). Codex:
+  the rules files under `CODEX_HOME`, **and the `.codex/rules/` of a trusted project**, since
+  Codex loads every active layer (Codex docs, "Rules"); `prefix_rule` with `decision = "allow"`.
+  Each rule keeps its file and line. The build pins each client's list against its docs, with a
+  test per layer.
+- **What cannot be read is said.** A source the table names that exists but cannot be read or
+  parsed refuses the launch of the roles it concerns, naming the file: a match cannot be ruled
+  out. A client whose layers are not known yet (Kimi, Grok, agy) is `saved permissions: not
+  inspected` in `roles doctor`, never `none`, and is not refused for it.
 - **`roles doctor` lists them all,** per role: the file, the line, the rule, and which danger
   entries it matches. It prints what to remove and removes nothing.
 - **A match refuses the launch.** A saved allow matches a danger entry when it could allow a
@@ -173,16 +190,20 @@ methods"). Then `main` no longer holds the sha the release check ran on, and the
 commit no promotion carried, which the dev branch flow decision forbids.
 
 **The route: one promotion identity with a bypass of the PR rule only** (§6 Q5 A). The force-push
-and deletion rules have no bypass, for anyone.
+and deletion rules have no bypass actor. That is a forge setting over git, not a guarantee against
+an admin token (below).
 
 | Forge | Setting the person makes |
 |---|---|
-| GitHub | Two rulesets on `main`. "main-safety": block force pushes, restrict deletions, **no bypass actors**. "main-pr": require a pull request, with one bypass actor, a deploy key `agentbus-promote` with write access (`bypass_mode: always`). A ruleset's bypass covers only its own rules, so the key can push a fast-forward and nothing else. |
-| GitLab | `main` protected: allowed to merge, Maintainers; allowed to push and merge, the deploy key `agentbus-promote` only; allowed to force push, off. A protected branch is not deleted by a push. The merge method may be fast-forward only. |
-| Bitbucket Cloud | Branch restrictions on `main`: require a pull request; `push`, exempting only the promotion user; `force` and `delete`, with no exemption. Bitbucket exempts users, not keys, so the identity is a dedicated user. |
+| GitHub | Two rulesets on `main`. "main-safety": block force pushes, restrict deletions, **no bypass actors**. "main-pr": require a pull request, with one bypass actor, a deploy key `agentbus-promote` with write access (`bypass_mode: always`; `pull_request` is not valid for a deploy key). A ruleset's bypass covers only its own rules, so the key can push a fast-forward and nothing else. **To verify before Q5 is put to the person:** the REST enum has `DeployKey`, but GitHub's docs list deploy keys as bypass actors only for GitHub Enterprise Server; master checks it on a scratch personal repository on github.com. If it fails, the fallback is a GitHub App installed on the repository as the bypass actor, its private key used by `agentbus promote`. |
+| GitLab | `main` protected: allowed to merge, Maintainers; allowed to push and merge, the deploy key `agentbus-promote` only (a deploy key is accepted there, not in "allowed to merge"); allowed to force push, off. A push does not delete a protected branch, and the default branch cannot be deleted at all; a Maintainer can still delete a non-default protected branch from the UI or API. The merge method may be fast-forward only. |
+| Bitbucket Cloud | Branch restrictions on `main`. A pull request is required by restricting `push`, exempting only the promotion user, with `restrict_merges` naming who may merge a PR; `force` and `delete`, with no exemption. Bitbucket exempts users, not keys, so the identity is a dedicated user. |
 
 **Who uses the identity.** The promotion key, `~/.config/agentbus/promote.key` (0600), is read
-only by `agentbus promote` (dev branch flow, step 4), through `GIT_SSH_COMMAND`. Every Claude role
+only by `agentbus promote` (dev branch flow, step 4). It pushes to the SSH URL of the repository
+(`git@<host>:<owner>/<repo>.git`), never `origin`'s URL, which may be HTTPS, with
+`GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityAgent=none -i <key>"`: otherwise ssh-agent
+offers the person's key first, the forge sees the person, not the bypass, and refuses. Every Claude role
 gets a `Read` deny on it, as for `notify.toml`. `agentbus promote <S>` checks that `S` is an
 ancestor of `origin/dev`, that `origin/main` is an ancestor of `S`, and that the check's PASS
 record names `S`. It then pushes `S:refs/heads/main` with the key, and nothing else: no tag, no
@@ -199,23 +220,55 @@ other ref, no `--force`.
 - **The merge queue** delivers into `dev` (`bus/mergequeue.go`, the PR's base). Protection on
   `main` does not touch it. An outside PR that targets `main` is still retargeted to `dev`.
 
-**The limit.** The key is a file of the person's user. Any process of that user can read it, so
-a role can push a fast-forward of `main` with it: through a shell for a Claude role, through any
-command for a role whose rules do not hold. The deny and the danger prompt are defence in depth.
-The forge still refuses a force push and a deletion from everyone, and a push that is not a
-fast-forward from the key. Idea 3's sandbox keeps a sandboxed role away from the file.
+**What the forge enforces, and against whom.** These rules hold at the **git transport**: a push
+over git, by anyone. An account with admin rights on the repository can still change or remove
+the protection itself, and GitLab lets a Maintainer or Owner delete a protected branch through the
+UI or the API, even with deletion blocked over git (GitLab docs, "Protected branches"). The
+person's account is such an account, and so is any forge CLI token that carries its rights.
+
+**And every role holds that token today.** `gh` keeps the person's token in the keyring with scope
+`repo`, and `gh api repos/<o>/<r>` answers `permissions.admin = true`. `roles.toml` denies neither
+`gh api` nor the `gh` or `glab` configuration. So any role's shell can delete a ruleset (`gh api -X
+DELETE repos/{o}/{r}/rulesets/<id>`), add itself as a bypass actor, or on GitLab unprotect the
+branch (`DELETE /projects/:id/protected_branches/main`). That clears the PR rule, the force-push
+rule and the deletion rule together. **Protection binds git pushes; against the roles, it is only
+as strong as the token they share.** This spec does:
+
+- **The danger list gains the forge's protection-changing calls** (text matches, defence in depth):
+  `gh api` with a method other than `GET` on `rulesets`, `branches/*/protection` or `git/refs`;
+  `glab api` on `protected_branches`; the Bitbucket `branch-restrictions` endpoint with a method
+  other than `GET`.
+- **`roles doctor` says it:** when the forge token the roles can reach has admin rights, the line
+  reads `main: protected over git; the roles' token can lift it`.
+- **Later, with idea 3:** a token without the Administration permission for the roles (on GitHub,
+  a fine-grained token with contents and pull requests write, which is what `deliver` needs), and
+  the sandbox keeping them from the keyring and the `gh`/`glab` configuration. Setting `GH_TOKEN`
+  alone is not enough: an unconfined role can still ask the keyring for the person's token.
+
+**The limit of the key.** The key is a file of the person's user. Any process of that user can
+read it, so a role can push a fast-forward of `main` with it: through a shell for a Claude role,
+through any command for a role whose rules do not hold. The deny and the danger prompt are defence
+in depth. Over git, the forge still refuses a force push, a deletion and a non-fast-forward push
+from the key, as long as the protection is in place (above). Idea 3's sandbox keeps a sandboxed
+role away from the file.
 
 **`roles doctor` checks the forge,** for the project's `delivery.forge`, with the credentials the
 forge CLI already has:
 
-- GitHub: `GET /repos/{o}/{r}/rules/branches/main` (the effective rules) and the rulesets'
-  `bypass_actors`;
+- GitHub: `GET /repos/{o}/{r}/rules/branches/main` (the effective rules of rulesets), `GET
+  /repos/{o}/{r}/rulesets/{id}` for each ruleset's `bypass_actors`, and `GET
+  /repos/{o}/{r}/branches/main/protection`, since a classic branch protection does not show in
+  the rulesets' rules and would otherwise read as "PR rule off". `bypass_actors` is returned only
+  to a caller with write access to the ruleset: an absent field is `unknown`, a warning, never "no
+  bypass actor";
 - GitLab: `GET /projects/:id/protected_branches/main` (`allow_force_push`, the push and merge
   access levels);
 - Bitbucket Cloud: `GET /2.0/repositories/{w}/{r}/branch-restrictions`, by `kind`.
 
 It warns when the PR rule is off, a force push or a deletion is allowed, a bypass covers the force
-or deletion rule, or the PR rule's bypass names anyone but the promotion identity. A forge it
+or deletion rule, the PR rule's bypass names anyone but the promotion identity, or a bypass list
+cannot be read. Its line says `main: protected over git`, never `protected`; on GitLab it adds
+`Maintainers can delete by API`, and on every forge the token line above when it applies. A forge it
 cannot read is `unknown`, also a warning. `local` and `none` say `no forge protection`. The exact
 field names are checked against each forge's live API in step 5's first commit.
 
@@ -258,7 +311,10 @@ Only the person, by the person's own act at the time:
   `~/.claude/settings.json` refuses every Claude role, naming file, line and entry; the same rule
   in one worktree's `.claude/settings.local.json` refuses only roles launched there; `Bash(git
   push origin feat-x)` refuses nothing; a `danger_extra` entry is matched like a built-in one; a
-  Codex `prefix_rule(pattern=["git"], decision="allow")` refuses the Codex roles. `roles doctor`
+  Codex `prefix_rule(pattern=["git"], decision="allow")` refuses the Codex roles, in the user's
+  `CODEX_HOME` and, separately, only in a trusted worktree's `.codex/rules/`; a rules file under
+  `CODEX_HOME` set by the launch's environment is the one read. An unreadable rules file refuses,
+  naming it. `roles doctor`
   lists all of them with file and line. A Kimi role shows `not inspected`. After the run, every
   client file is byte-identical.
 - **Waivers:** one waives exactly one role and one rule text in one file. A changed text, another
@@ -269,9 +325,16 @@ Only the person, by the person's own act at the time:
   forge (PR rule bypassed only by the promote key, force and delete refused for everyone):
   `agentbus promote S` pushes `S` and `main` equals `S`; a non-fast-forward `S`, an `S` not on
   `origin/dev`, or one without a PASS record is refused before any push; the push names only
-  `refs/heads/main`, without `--force`. Under `AGENT_BUS_AGENT=master` the launch's settings
+  `refs/heads/main`, without `--force`, to the SSH URL, and a fake `ssh` on `PATH` records
+  `IdentitiesOnly=yes`, `IdentityAgent=none` and the key. Every launch's settings carry asks for
+  `gh api -X DELETE repos/o/r/rulesets/1`, `gh api --method PUT …/branches/main/protection` and
+  `glab api -X DELETE …/protected_branches/main`; `gh api repos/o/r/rulesets` (a GET) is not
+  asked. Under `AGENT_BUS_AGENT=master` the launch's settings
   carry the `agentbus promote` ask.
-- **Forge check,** on recorded API answers per forge: protected as §3.4 → no warning; PR rule
+- **Forge check,** on recorded API answers per forge: protected as §3.4 → `protected over git`, no warning (GitLab: with the API-deletion line); a
+  ruleset answer without `bypass_actors` → `unknown`, a warning; a classic branch protection
+  without rulesets → read from `branches/main/protection`, not "PR rule off"; a token answering
+  `permissions.admin = true` → the token line; PR rule
   off, force allowed, deletion allowed, a bypass on the safety ruleset, a second bypass actor, or
   an unreadable answer → one warning each, naming it; `local` → `no forge protection`.
 - `agentbus deliver` with `single_approval` on: a PR whose base is the default branch needs both
@@ -302,18 +365,26 @@ Each step is one PR into `dev`, with both reviews.
 4. **deliver:** no single approval for a PR into the default branch.
 5. **Promotion under protection.** The push part of `agentbus promote` with the promotion key
    (the dev branch flow's step 4 provides its check record), `agentbus promote` on the danger
-   list, the `Read` deny on the key, `roles doctor`'s forge check, and an operator-notes fragment
-   with each forge's setting from §3.4. Then the person turns protection on, and doctor's warning
+   list with the forge's protection-changing calls, the `Read` deny on the key, `roles doctor`'s
+   forge and token check, and an operator-notes fragment with each forge's setting from §3.4. It
+   also corrects the agent-bus-master skill's line "`main` is protected" (`SKILL.md:896`), which is
+   not true today. The GitHub deploy-key check (§3.4) comes first. Then the person turns protection on, and doctor's warning
    clears.
 
 ## 6. Question for the person
 
 **Q5. How a promotion reaches a protected `main`.**
 - **(A) recommended: a promotion key with a bypass of the PR rule only.** `main` keeps the tested
-  sha, and its tag the promoted commit. Force push and deletion stay refused for everyone. The key
-  is readable by your user's processes (§3.4, the limit).
+  sha, and its tag the promoted commit. Force push and deletion over git stay refused for everyone; an
+  admin account can still delete by the forge's API or lift the protection. The key is readable by
+  your user's processes (§3.4, the limit).
 - (B) merge through the forge's API, no bypass. On GitLab (fast-forward only) and Bitbucket
   (fast forward) the sha is kept. On GitHub every merge writes a new commit, so `main` would not
   hold the tested sha, which changes the dev branch flow decision.
 - (C) a bypass for your own forge account. No key to set up, but every role pushes with your
-  credentials, so the bypass is every role's.
+  credentials, so any role can push to `main` without the key and without a fast-forward check of
+  its own.
+
+Under every option, the roles share your admin token today, so any of them can lift the
+protection by the forge's API (§3.4). The danger asks and `roles doctor`'s line show it; only a
+token without admin rights, kept from the roles by idea 3's sandbox, would close it.
