@@ -131,8 +131,8 @@ func testRoles(t *testing.T) func(Start) (Command, error) {
 			return sh(`printf 'ready\n'; exec cat`), nil
 		case "osc":
 			return sh(`printf 'ready\n'; read x; printf '\033]52;c;aGk=\007|\033]8;;https://evil.example\033\\link\033]8;;\033\\|\033[21t|\033[6n|end\n'; exec sleep 30`), nil
-		case "winch":
-			return sh(`trap 'stty size' WINCH; printf 'w\n'; while :; do sleep 0.05; done`), nil
+		case "sizer": // prints its terminal's size at start and at each change, read by polling: no signal to miss
+			return sh(`printf 'w\n'; p=; while :; do s=$(stty size); if [ "$s" != "$p" ]; then printf '%s\n' "$s"; p=$s; fi; sleep 0.05; done`), nil
 		case "fake", "fake-no2004", "fake-noland", "fake-dialog", "fake-return", "fake-slow", "fake-stale", "fake-dialog-close", "fake-busy":
 			return Command{Argv: []string{self, "-test.run=^$"}, Env: []string{"HOLDER_TEST_MODE=fake", "FAKE=" + s.Role}, Client: "agy"}, nil
 		case "dsr":
