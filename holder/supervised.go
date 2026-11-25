@@ -341,7 +341,7 @@ func (m Supervised) holderUnits(project string, strict bool) ([]service.HolderUn
 		if err != nil {
 			return nil, err
 		}
-		names, err := filepath.Glob(filepath.Join(dir, "holder-*.pid"))
+		names, err := supervisedRecordNames(dir, strict)
 		if err != nil {
 			return nil, err
 		}
@@ -362,6 +362,30 @@ func (m Supervised) holderUnits(project string, strict bool) ([]service.HolderUn
 	slices.SortFunc(out, func(a, b service.HolderUnit) int {
 		return strings.Compare(a.Project+"\x00"+a.Key, b.Project+"\x00"+b.Key)
 	})
+	return out, nil
+}
+
+// supervisedRecordNames are dir's holder-*.pid files. Lenient, a directory
+// that cannot be read has none (filepath.Glob ignores the error); strict,
+// only a directory that does not exist has none, any other read error is
+// returned (reviewer-codex on quiet-update 4a r2).
+func supervisedRecordNames(dir string, strict bool) ([]string, error) {
+	if !strict {
+		return filepath.Glob(filepath.Join(dir, "holder-*.pid"))
+	}
+	ents, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("holder records in %s cannot be listed: %w", dir, err)
+	}
+	var out []string
+	for _, e := range ents {
+		if n := e.Name(); strings.HasPrefix(n, "holder-") && strings.HasSuffix(n, ".pid") {
+			out = append(out, filepath.Join(dir, n))
+		}
+	}
 	return out, nil
 }
 
