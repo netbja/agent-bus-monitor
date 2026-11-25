@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"maps"
-	"strconv"
 	"strings"
 	"time"
 
@@ -95,9 +94,9 @@ type deliveryFacts struct {
 	looked  map[string]bool // the heads whose trace was looked for
 }
 
-// verdictsAfterReader is the ledger's incremental read (the bus has it).
-type verdictsAfterReader interface {
-	VerdictsAfter(ctx context.Context, after string, count int64) ([]bus.Verdict, error)
+// verdictsSinceReader is the ledger's read by time (the bus has it).
+type verdictsSinceReader interface {
+	VerdictsSince(ctx context.Context, ms int64, count int64) ([]bus.Verdict, error)
 }
 
 // readDelivery refreshes st.delivery on the requests' cadence: the ledger
@@ -118,9 +117,8 @@ func readDelivery(ctx context.Context, b busReader, st *shared, now time.Time) {
 		value = st.sameProviderOf()
 	}
 	st.mu.Unlock()
-	if vr, ok := b.(verdictsAfterReader); ok && now.Sub(f.at) >= deliveryEvery {
-		since := strconv.FormatInt(now.UnixMilli()-providerWindow, 10) + "-0"
-		if vs, err := vr.VerdictsAfter(ctx, since, deliveryVerdictsMax); err == nil {
+	if vr, ok := b.(verdictsSinceReader); ok && now.Sub(f.at) >= deliveryEvery {
+		if vs, err := vr.VerdictsSince(ctx, now.UnixMilli()-providerWindow, deliveryVerdictsMax); err == nil {
 			f.Warning, f.at = providerWarning(vs, value), now
 		}
 	}

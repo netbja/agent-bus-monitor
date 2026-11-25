@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,11 +62,11 @@ type deliveryReads struct {
 	*fakeReader
 	vs      []bus.Verdict
 	reports []bus.Event
-	after   []string // VerdictsAfter's cursors
+	since   []int64 // VerdictsSince's starts
 }
 
-func (d *deliveryReads) VerdictsAfter(_ context.Context, after string, _ int64) ([]bus.Verdict, error) {
-	d.after = append(d.after, after)
+func (d *deliveryReads) VerdictsSince(_ context.Context, ms int64, _ int64) ([]bus.Verdict, error) {
+	d.since = append(d.since, ms)
 	return d.vs, nil
 }
 func (d *deliveryReads) Recent(context.Context, []string, int) ([]bus.Event, map[string]string, error) {
@@ -87,20 +86,20 @@ func TestReadDelivery(t *testing.T) {
 	st.mergeQ.Items = []bus.MergeItem{{Head: h, Branch: "b"}}
 	now := time.UnixMilli(10 * providerWindow)
 	readDelivery(context.Background(), r, st, now)
-	if len(r.after) != 1 || r.after[0] != strconv.FormatInt(now.UnixMilli()-providerWindow, 10)+"-0" {
-		t.Fatalf("cursor %v", r.after)
+	if len(r.since) != 1 || r.since[0] != now.UnixMilli()-providerWindow {
+		t.Fatalf("since %v", r.since)
 	}
 	if !strings.Contains(st.delivery.Warning, "needs delivery.same_provider_ok (now off)") ||
 		st.delivery.Traces[h] != "single approval (small: 1 lines, 1 files; approved by foureyes) (pr 3)" {
 		t.Fatalf("facts %+v", st.delivery)
 	}
 	readDelivery(context.Background(), r, st, now.Add(30*time.Second))
-	if len(r.after) != 1 || r.calls["Recent"] != 1 {
-		t.Fatalf("read again within the minute: %v, reports read %d times", r.after, r.calls["Recent"])
+	if len(r.since) != 1 || r.calls["Recent"] != 1 {
+		t.Fatalf("read again within the minute: %v, reports read %d times", r.since, r.calls["Recent"])
 	}
 	st.mergeQ.Items = append(st.mergeQ.Items, bus.MergeItem{Head: strings.Repeat("d", 40)})
 	readDelivery(context.Background(), r, st, now.Add(61*time.Second))
-	if len(r.after) != 2 || r.calls["Recent"] != 2 {
-		t.Fatalf("a minute on and a new head: %v, reports read %d times", r.after, r.calls["Recent"])
+	if len(r.since) != 2 || r.calls["Recent"] != 2 {
+		t.Fatalf("a minute on and a new head: %v, reports read %d times", r.since, r.calls["Recent"])
 	}
 }

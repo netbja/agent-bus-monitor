@@ -144,6 +144,14 @@ func TestVerdictsAfterReadsIncrementally(t *testing.T) {
 	if err != nil || len(prov) != 1 || prov[0].ID != id || prov[0].AuthorProvider != "anthropic" || prov[0].ReviewerProvider != "openai" {
 		t.Fatalf("providers: %+v %v", prov, err)
 	}
+	// VerdictsSince reads by time: from the entry's own millisecond on.
+	ms, _ := splitID(id)
+	if got, err := b.VerdictsSince(ctx, ms, 10); err != nil || len(got) != 1 || got[0].ID != id || got[0].ReviewerProvider != "openai" {
+		t.Fatalf("since %d: %+v %v", ms, got, err)
+	}
+	if got, err := b.VerdictsSince(ctx, ms+1, 10); err != nil || len(got) != 0 {
+		t.Fatalf("since %d: %+v %v", ms+1, got, err)
+	}
 }
 
 // plan link --ref (forge-delivery): a ref fact beside the PR, the newer link
