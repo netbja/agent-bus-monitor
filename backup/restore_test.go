@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -359,6 +360,37 @@ func TestRestoreRefusesAnotherProduct(t *testing.T) {
 			t.Errorf("%s archive on %s: %v, restored %v\n%s", c.archive, c.broker, err, w.broker.restored, out)
 		case !c.refused && err != nil:
 			t.Errorf("%s archive on %s refused: %v\n%s", c.archive, c.broker, err, out)
+		}
+	}
+}
+
+// Forced is what --force did per project (audit step 2b, its force line):
+// keys replaced, a replacement not confirmed, or one that failed; nothing
+// without --force, on an empty project, or in a dry run.
+func TestRestoreForcedReport(t *testing.T) {
+	present := func(w *restoreWorld) {
+		w.broker.keys["demo"] = map[string]string{"demo:board": "old", "demo:extra": "x"}
+	}
+	for name, c := range map[string]struct {
+		arrange func(w *restoreWorld)
+		o       RestoreOptions
+		want    []Forced
+	}{
+		"replaced":           {present, RestoreOptions{Force: true, RedisOnly: true}, []Forced{{Project: "demo", Keys: 2, Outcome: "ok"}}},
+		"not confirmed":      {func(w *restoreWorld) { present(w); w.confirm = false }, RestoreOptions{Force: true, RedisOnly: true}, []Forced{{Project: "demo", Keys: 2, Outcome: "refused"}}},
+		"failed":             {func(w *restoreWorld) { present(w); w.broker.failOn = "demo" }, RestoreOptions{Force: true, RedisOnly: true}, []Forced{{Project: "demo", Keys: 2, Outcome: "failed"}}},
+		"dry run":            {present, RestoreOptions{Force: true, RedisOnly: true, DryRun: true}, nil},
+		"without force":      {present, RestoreOptions{RedisOnly: true}, nil},
+		"nothing to replace": {func(*restoreWorld) {}, RestoreOptions{Force: true, RedisOnly: true}, nil},
+	} {
+		w := newRestoreWorld(t)
+		c.arrange(w)
+		rep, out, err := w.run(c.o)
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", name, err, out)
+		}
+		if !reflect.DeepEqual(rep.Forced, c.want) {
+			t.Errorf("%s: forced %+v, want %+v\n%s", name, rep.Forced, c.want, out)
 		}
 	}
 }

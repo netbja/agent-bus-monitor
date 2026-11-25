@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/redis/go-redis/v9"
+
+	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -74,4 +78,35 @@ func auditForce(ctx context.Context, b *bus.Bus, self, cmd string, rest []string
 	}
 	e.Actor = self
 	return auditExit(ctx, b, e, e.Detail, code)
+}
+
+// personActor is the actor of a host-level act the person runs from their
+// shell (update, setup's reinstall, restore --force; audit step 2b): the
+// name they recorded (identity.as), else "person".
+func personActor(getenv func(string) string) string {
+	if name, _ := personName(getenv); bus.ValidName(name) {
+		return name
+	}
+	return "person"
+}
+
+// auditRestoreForced writes the force line of each project --force acted on
+// (backup.Report.Forced), on that project's bus, after the restore: a
+// replaced trail keeps it.
+func auditRestoreForced(ctx context.Context, c *redis.Client, actor string, forced []backup.Forced) {
+	for _, f := range forced {
+		b, err := bus.Open(c, f.Project)
+		if err != nil {
+			bus.AuditWarn(err)
+			continue
+		}
+		detail := fmt.Sprintf("restore --force, %d key(s) replaced", f.Keys)
+		switch f.Outcome {
+		case bus.AuditRefused:
+			detail = fmt.Sprintf("restore --force, %d key(s) present, not confirmed", f.Keys)
+		case bus.AuditFailed:
+			detail = fmt.Sprintf("restore --force, %d key(s) present, the replacement failed", f.Keys)
+		}
+		b.AuditAfter(ctx, bus.AuditEntry{Action: "force", Actor: actor, Target: f.Project, Outcome: f.Outcome, Detail: detail})
+	}
 }
