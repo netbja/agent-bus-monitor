@@ -149,7 +149,7 @@ agentbus pane <agent>                                   # print the agent's herd
 agentbus usage                                          # per-agent: model · context fill; --json for raw
 agentbus budget                                         # per-provider ACCOUNT window: session % / weekly % / resets; --json for raw
 agentbus refresh                                        # republish both from local sources (the sentinel runs this); --quiet from cron
-agentbus version                                        # print the bus protocol version (v1) — no project/broker needed
+agentbus version                                        # print the bus protocol version (v1) — no project/broker needed; also --version, -v
 
 # ── BOARD: shared task ownership — check it BEFORE starting any task ──────────
 agentbus board                                          # TASK OWNER STATE BRANCH AGE (newest first); --json for raw

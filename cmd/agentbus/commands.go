@@ -832,7 +832,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus limits"},
 	},
 	{
-		Name: "version", NoProject: true, Usage: []string{"version"},
+		Name: "version", NoProject: true, Usage: []string{"version | --version | -v"},
 		Brief:    "protocol version and build",
 		Summary:  "the protocol version and the build",
 		Examples: []string{"agentbus version"},

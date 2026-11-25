@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/backup"
-	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
@@ -249,8 +248,8 @@ func main() {
 	if len(args) >= 1 && args[0] == "statusline" {
 		os.Exit(runStatusline(args[1:], os.Stdin, os.Stdout))
 	}
-	if len(args) >= 1 && args[0] == "version" {
-		fmt.Printf("agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
+	if args = versionAlias(args); len(args) >= 1 && args[0] == "version" { // --version, -v too: no project needed
+		printVersion(os.Stdout)
 		return
 	}
 	if project == "" {

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/netbja/agent-bus-monitor/buildinfo"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/cli"
 )
 
@@ -92,6 +94,20 @@ func globalFlag(a string) (cli.Flag, bool) {
 		}
 	}
 	return cli.Flag{}, false
+}
+
+// versionAlias reads --version and -v, as the first word, as the command
+// version; other command lines are returned unchanged.
+func versionAlias(args []string) []string {
+	if len(args) >= 1 && (args[0] == "--version" || args[0] == "-v") {
+		return append([]string{"version"}, args[1:]...)
+	}
+	return args
+}
+
+// printVersion is agentbus version's output: the protocol, then the build.
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "agentbus protocol v%d\nagentbus version %s\n", bus.ProtocolVersion, buildinfo.Version)
 }
 
 // helpRequest reports whether args (the global flags removed) ask for help,
