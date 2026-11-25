@@ -460,7 +460,7 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   to an ellipsis); a value as a control (`settingControl`: `● on` ok / `○ off` muted, a choice `‹ v ›`, the rest plain, in one
   column after the group's longest label and a 3-cell gutter, settings-focus: `settingsLabelCol`, `settingsGutter`; elsewhere
   muted, refused the attention colour), `•` (`GlyphSet`) before a `Set` key; the selected key's detail
-  zone (`settingsDetail`: label, file key, `from` source, default, read by; `settingHelp`). The focus (settings-focus,
+  zone (`settingsDetail`: label, file key, `from` source, default, read by, when a change applies; `settingHelp`). The focus (settings-focus,
   `settingsPage.keys`) is on the groups or the keys, the focused side lit (the group in the accent, the key's `▶` in the
   accent, the narrow tab a full pill) and the other muted (the tab dimmed by `frameFade`): wide, `↑↓` choose the group (its
   keys follow, the selection back to the first), `→` or Enter go to its keys, `←` back; narrow (the tab bar), `←→` step the
@@ -2843,6 +2843,17 @@ change adds its own fragment there, never an edit here; the newest notes are in 
   (`AGENT_BUS_AGENT`) or under a registered agent; the `agentbus service restart` command itself still accepts every
   caller (the sentinel's repair). Refused too: a service on another host (`restart it on <host>`), one not installed
   here, a run already going, and the Redis card (setup's job). Holders stay read-only.
+- **Each setting says when a change applies** (settings-read-when): `live` (busmon applies it at once,
+  or a service re-reads it at its next pass or check), `at the next run` (a command reads it each time),
+  `on busmon restart`, `on service restart` (read once when dispatch, missions or the holder starts)
+  or `on agent restart`; the slowest reader decides. It is `config/applies.go`, beside the registry
+  (not in `config/keys.go`, which every settings PR edits), shown last in `agentbus config` (`applies`,
+  also in `--json`), in busmon's Shift+C detail, and in the save message, which no longer says "next
+  start of busmon" for a key busmon does not read. A service reads its env file when it starts, except
+  the dispatcher's quota thresholds and reload policy (`sentinel.reload`), which reload it at each check,
+  so an edit there applies live too. A new key needs its entry (`TestEveryKeySaysWhenItApplies`), and when you move a
+  read from a service's start into a pass, or back, change its entry; busmon's own switch is held
+  equal to the registry by `TestBusmonAppliesAgreeWithTheRegistry`.
 - **`agentbus deliver --dry-run` prints the change's size class** (single-approval step 1, spec
   2026-11-21-single-approval-design §3.2): from `git diff --no-renames --numstat -z` against the
   merge-base with the base, `size: small: N lines, M files`, `small (docs only)` (every path
