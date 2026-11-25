@@ -336,6 +336,10 @@ func main() {
 		stop()
 		os.Exit(code)
 
+	case "retro":
+		if err := runRetro(ctx, retroDeps{Bus: b, Self: self, Getenv: os.Getenv, Ancestor: agentcaller.Ancestor, Master: "master"}, rest, os.Stdout); err != nil {
+			die(err.Error())
+		}
 	case "request":
 		if err := runRequest(ctx, b, self, rest, os.Stdout); err != nil {
 			if errors.Is(err, errNothingReady) { // request next: nothing in hand or ready, as an empty drain
