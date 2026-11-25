@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/redis/go-redis/v9"
@@ -22,9 +23,11 @@ const (
 	MergedNone   = ""       // nothing: not in review on that branch any more
 )
 
-// requestMergedScript: KEYS lease, board, events. ARGV token, task, branch,
-// head, base, events maxlen, the review's number the pass read.
-var requestMergedScript = redis.NewScript(`
+// requestMergedScript: KEYS lease, board, events, audit. ARGV token, task,
+// branch, head, base, events maxlen, the review's number the pass read, the
+// audit retention (ms). The merge's audit line (audit step 2, master's
+// answer: merge is recorded here) goes in the same step, fixed parts only.
+var requestMergedScript = redis.NewScript(auditLua + `
 if redis.call('GET',KEYS[1])~=ARGV[1] then return 'not-holder' end
 local raw=redis.call('HGET',KEYS[2],ARGV[2]);if not raw then return '' end
 local e=cjson.decode(raw);local r=e.request
@@ -47,6 +50,7 @@ end
 e.updated=math.floor(now/1000)
 redis.call('HSET',KEYS[2],ARGV[2],cjson.encode(e))
 redis.call('XADD',KEYS[3],'MAXLEN','~',ARGV[6],'*','kind','request-merged','agent',r.target or '','term','','by','dispatch','detail',ARGV[2]..' '..ARGV[3]..' '..ARGV[4])
+audit_append(KEYS[4],ARGV[8],{'merge','dispatch','','',ARGV[3],'','ok','head '..string.sub(ARGV[4],1,8)..' into '..ARGV[5]..', request '..ARGV[2]..' '..out})
 return out`)
 
 // FencedRequestMerged closes task on its branch's merge, fenced by the
@@ -56,8 +60,8 @@ func (b *Bus) FencedRequestMerged(ctx context.Context, token, task, branch, head
 	if !ValidName(task) || !config.ValidBranchName(branch) || !ValidHead(head) || !config.ValidBranchName(base) {
 		return "", fmt.Errorf("request merged: invalid task, branch, head or base")
 	}
-	v, err := requestMergedScript.Run(ctx, b.r, []string{DispatchKey(b.project), BoardKey(b.project), EventsKey(b.project)},
-		token, task, branch, head, base, eventsMaxLen, reviewN).Text()
+	v, err := requestMergedScript.Run(ctx, b.r, []string{DispatchKey(b.project), BoardKey(b.project), EventsKey(b.project), AuditKey(b.project)},
+		token, task, branch, head, base, eventsMaxLen, reviewN, AuditRetention(os.Getenv).Milliseconds()).Text()
 	if err == redis.Nil {
 		return MergedNone, nil
 	}
