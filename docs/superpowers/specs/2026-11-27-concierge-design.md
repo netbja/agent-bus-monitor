@@ -1,6 +1,7 @@
 # The concierge: one conversation across every project (concierge)
 
-Status: spec r3, for review (subject `concierge-spec`; r3: a Redis entry does not record its
+Status: spec r4, for review (subject `concierge-spec`; r4: the person's Q4–Q6 answers, the key
+(§4), remember (§5.4) and the client list (§5.5); r3: a Redis entry does not record its
 writer's ACL user, so `typed_ref` must point into `{concierge}:person`, a stream only the busmon
 user can write; r2, foureyes and reviewer-codex: busmon,
 not the concierge, sends a pressed action, and the concierge writes nothing outside its project
@@ -87,9 +88,12 @@ cgo-free one. A three-month re-check is proposed, on the person's yes.
 
 ## 4. The window: a floating concierge in busmon
 
-**One key from anywhere: `` ` `` (backtick)**, free in busmon today (`cmd/busmon/keys.go`). It
-drops a window down from the top over whatever page is open, in any project, like a console.
-`` ` `` again, or Esc, hides it. The conversation stays where it was. busmon's project switch, when
+**One key from anywhere: Ctrl+Space** (the person, Q4). It sends NUL, so it works on any
+keyboard layout and over SSH. The aliases are `²` (AZERTY, top left, the same physical key)
+and `` ` `` (QWERTY). A lone backtick is a dead key on AZERTY (AltGr+7), so it is only an alias.
+The window drops down from the top over whatever page is open, in any project, like a console.
+The same key again, or Esc, hides it. The binding is a setting (`concierge.key`, Shift+C), and
+busmon's help and `roles doctor` show the active one. The conversation stays where it was. busmon's project switch, when
 it exists (idea, 2026-11-14), keeps the window open across projects.
 
 ```
@@ -100,7 +104,7 @@ it exists (idea, 2026-11-14), keeps the window open across projects.
 │        sources: agent-bus-monitor:merge:#831 · #834 · board                 │
 │        ▸ open #831   ▸ ask master to merge #831   ▸ remember                │
 │ you    ▍                                                                    │
-└ ↵ send · tab context · ↑ history · ` hide ─────────────────── on: Board ────┘
+└ ↵ send · tab context · ↑ history · ^␣ hide ── claude-code/sonnet · on: Board ┘
 ```
 
 What makes it more than a chat box:
@@ -114,7 +118,7 @@ What makes it more than a chat box:
   or Enter on one runs it, and each is something busmon already does:
   - open a page;
   - write to a project's master (§5.3, the person's own words);
-  - remember a quote (person-memory's `remember`, the person confirming).
+  - remember a quote (person-memory's `remember`, the person confirming, §5.4).
 
   The concierge proposes; the person presses.
 - **It is never in the way.** An answer that arrives while the window is hidden lights a dot
@@ -194,10 +198,41 @@ target project, the entry id, `typed` or `draft`). The concierge's own answers a
 are not audited.
 
 - It **answers** the person, in `person.language`, quoting its sources.
-- It **remembers** only through person-memory's `remember`: the person's quote, confirmed by the
-  person's key press. Never an inference (person-memory §4.3).
+- It **remembers** only as §5.4 says.
 - It never accepts tracked requests, never delivers, merges or pushes, never pops agents, and
   never types into a pane.
+
+### 5.4 Remember: a proposed quote, the person decides (the person, Q5)
+
+- The concierge may propose saving a memory. The proposal is always a **verbatim quote of the
+  person's own words**, an entry of `{concierge}:person` or a typed entry of a project's stream,
+  with its source: date, project and message reference. Never an inference.
+- It is shown in full. One key confirms it, another rejects it. A rejected quote is never proposed
+  again: busmon keeps its id in the local cache.
+- If a similar fact exists (same topic), the proposal is **replace**, not add, and shows both.
+- busmon writes the confirmed fact through person-memory's `remember`. It is tagged `human=yes`
+  (the press) with the quote's `typed_ref`, and it is editable and deletable on the Memory page
+  (person-memory §4.4).
+
+### 5.5 Which client and model: an ordered list, client-agnostic (the person, Q6)
+
+- The concierge role's profile, then its `alt_profiles` in order, is the list of
+  `{client, model}`. `alt_profiles` already exists in `roles.toml` (`rolecfg/config.go:319`),
+  so no new `roles.toml` key (a new key broke an update once, 2026-11-25). The default list:
+  Claude Code with Sonnet, then Codex. kimi, grok and agy are added once each is verified.
+- **Fallback:** a pop takes the first entry whose client is installed, whose provider is not
+  quota-paused (the quota hold), and whose last launch did not fail. The next pop retries from
+  the top.
+- **Eligibility,** checked per entry by `roles doctor`'s smoke test:
+  - the client supports MCP, or the bus CLI the concierge uses;
+  - the restricted tool set is enforced: read, and propose actions;
+  - the client honours the role's tool rules.
+
+  An entry that fails is skipped, with the reason.
+- **"Deep answer":** one key (`D` in the window) asks the next reply from a heavier configured
+  profile (`concierge.deep_profile`, for example Opus), for that one reply. It is a separate pop
+  that parks after answering.
+- The window's footer shows the active client and model.
 
 ## 6. Later, if the terminal proves limiting
 
@@ -215,10 +250,10 @@ is chosen then, from §3's re-check, on the person's yes.
    its own project's writes only).
    Tests: the ACL inventory test refuses the concierge user every write outside its project,
    the `cmd` stream of another project included, and any write to `{concierge}:person`.
-2. **busmon's window:** the `` ` `` overlay, the conversation view, send, history, the hidden-answer
+2. **busmon's window:** the Ctrl+Space overlay (with its aliases and `concierge.key`), the conversation view, send, history, the hidden-answer
    dot. Goldens at 60x20, 80x24, 140x40.
 3. **Context chips and sources:** `tab` attaches the selection; sources open their pages.
-4. **Suggested actions and the relay:** up to three keys per answer, each mapped to an existing
+4. **Suggested actions, the relay and remember (§5.4):** up to three keys per answer, each mapped to an existing
    busmon act; busmon's relay (§5.3), its audit line, and master's `typed_ref` check with the
    `typed_refs` set.
    - Tests:
@@ -226,7 +261,9 @@ is chosen then, from §3's re-check, on the person's yes.
      - master demotes a reference with a changed byte, one older than an hour, one used a second
        time, and one that points outside `{concierge}:person` (an entry the concierge wrote on its own stream with `typed=yes`);
      - every relay leaves one audit line.
-5. **`mem search`** (person-memory layer 2), when step 1's concierge needs it.
+5. **The client list (§5.5):** the fallback chooser over the profile and `alt_profiles`, the
+   doctor smoke test, `concierge.deep_profile` and the `D` key.
+6. **`mem search`** (person-memory layer 2), when step 1's concierge needs it.
 
 ## 8. Not doing
 
@@ -249,7 +286,13 @@ is chosen then, from §3's re-check, on the person's yes.
   single-use). A press alone is `human=yes`, and a draft accepted by a press is the
   concierge's draft, never `typed=yes`. Every relay is audited (§5.3).
 
-The questions as asked:
+- **Q4:** Ctrl+Space, with `²` and `` ` `` as aliases, configurable (§4).
+- **Q5:** proposed verbatim quotes with their source; confirm, reject never again, replace
+  when similar; `human=yes` with `typed_ref` (§5.4).
+- **Q6:** an ordered `{client, model}` list with fallback, a deep-answer key, the doctor smoke
+  test, and the active one shown (§5.5).
+
+All six are answered. The questions as asked:
 
 1. **UI:** the floating window in busmon now, a native GUI not now (re-checked in three months).
    Recommended: yes.
