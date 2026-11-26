@@ -49,6 +49,16 @@ type Observation struct {
 	// name or argument is ever published.
 	BgProcs  int   `json:"bg_procs,omitempty"`
 	BgOldest int64 `json:"bg_oldest,omitempty"`
+	// MemBytes, TopBytes, TopPID and CPUPct (additive,
+	// agent-resource-limits §5): the agent's terminal tree's resident
+	// memory, its largest process's and that process's pid, and its CPU
+	// over the dispatcher's window as a percentage of one core (nil while
+	// unknown). 0 bytes: not read (a host without /proc). No process name,
+	// as for bg_procs: a reader on the host may look the pid up itself.
+	MemBytes int64 `json:"mem_bytes,omitempty"`
+	TopBytes int64 `json:"top_bytes,omitempty"`
+	TopPID   int   `json:"top_pid,omitempty"`
+	CPUPct   *int  `json:"cpu_pct,omitempty"`
 }
 
 // ClientUpdate is an installed client newer than the running one. Labels are

@@ -156,7 +156,9 @@ func (r *HostRuntime) Inspect(ctx context.Context, pane string) Inspection {
 	}
 	in.Focused = before.PersonActive(now, orDefault(r.PersonQuiet, DefaultPersonQuiet))
 	prof, supported := agentstate.Profiles()[in.Client]
-	in.Background = r.background(t, prof.Background, procs, now)
+	var base *cpuSample
+	in.Background, base = r.background(t, prof.Background, procs, now)
+	in.Usage = usageOf(procs, base, now)
 	sc, err := r.Host.Screen(ctx, id, 40)
 	if err != nil {
 		return hostFailed(in, err)
@@ -229,7 +231,7 @@ func (r *HostRuntime) identity(in *Inspection, t termhost.Term, procs []termhost
 // beside the host's child, their CPU growth over the window from an earlier
 // look (none that old yet: the process facts are not read), the hooks'
 // facts, and the profile's running-tasks screen.
-func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, procs []termhost.Proc, now time.Time) *agentstate.Judgement {
+func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, procs []termhost.Proc, now time.Time) (*agentstate.Judgement, *cpuSample) {
 	window := orDefault(r.Window, DefaultCPUWindow)
 	cur := cpuSample{at: now, cpu: map[procKey]time.Duration{}}
 	for _, p := range procs {
@@ -303,7 +305,41 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 	}
 	f.Ignore = ignore
 	j := bg.Judge(f, now)
-	return &j
+	return &j, base
+}
+
+// usageOf measures the tree (agent-resource-limits §5): each process once
+// (by pid and start), its RSS summed and the largest kept with its pid; the
+// CPU grown
+// since base (a process new since it: all its CPU) over the window, when
+// there is a base. Nil when neither is known.
+func usageOf(procs []termhost.Proc, base *cpuSample, now time.Time) *Usage {
+	var u Usage
+	var grown time.Duration
+	seen := map[procKey]bool{}
+	for _, p := range procs {
+		k := procKey{p.PID, p.Start}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		u.Mem += p.RSS
+		if p.RSS > u.TopMem {
+			u.TopMem, u.TopPID = p.RSS, p.PID
+		}
+		if base != nil {
+			grown += max(0, p.CPU-base.cpu[k])
+		}
+	}
+	if base != nil {
+		if w := now.Sub(base.at); w > 0 {
+			u.CPU, u.CPUKnown = 100*float64(grown)/float64(w), true
+		}
+	}
+	if u.Mem == 0 && !u.CPUKnown {
+		return nil
+	}
+	return &u
 }
 
 // branches names, for each of root's descendants, the direct child of root

@@ -211,13 +211,18 @@ It also adds a D-Bus round trip to every launch.
   - **memory:** `term-<id>`'s `memory.current` when cap B is on, which includes every
     `cmd-<n>`; else the RSS sum of the terminal's process tree;
   - **CPU %:** the tree's CPU growth over the pass window;
-  - **the largest process:** its name and RSS.
+  - **the largest process:** its RSS and its pid (`top_bytes`, `top_pid`), never its name. The
+    observation publishes no process name or argument, the rule `bg_procs` set
+    (background-work-visible step 2, `TestObservePublishesTheProcessSource`); master's decision
+    on step 3c.
 - **busmon** shows `mem` and `cpu` columns in the agents table, as in `4.1G 180%`. A cell turns
   amber at `limits.warn_at` of the agent's cap B, or, without cap B, of cap A divided by the
-  number of terminals. The agent detail names the largest process.
+  number of terminals. The agent detail gives the largest process's size, and its name only when
+  busmon reads it itself on the same host (`top_pid`'s `/proc/<pid>/comm`); otherwise the size
+  alone.
 - **master is told once per episode** when an agent crosses `warn_at`, on the context alert's
   pattern (`contextalert.go`): an episode mark, then one notice naming the agent, its largest
-  process, its use and its cap. Sentinel is not woken for a warn. It reads `holder_memory` at its
+  process's size, its use and its cap. Sentinel is not woken for a warn. It reads `holder_memory` at its
   daily review, as it reads any check.
 
 ## 6. Cap C: one command, and how agents run tests

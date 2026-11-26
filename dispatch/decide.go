@@ -36,6 +36,21 @@ type Inspection struct {
 	// pop-retire skip the agent.
 	Blocked    *agentstate.Observation
 	Background *agentstate.Judgement
+	// Usage is the terminal tree's measure (agent-resource-limits §5); nil
+	// when nothing was measured.
+	Usage *Usage
+}
+
+// Usage is what an agent's terminal tree uses, the agent's own process
+// included: resident bytes summed (Mem) and its largest process's (TopMem,
+// its pid TopPID), 0 when the host reads no RSS; CPU, a percentage of one
+// core over the window, known only once a sample a window old exists. No
+// process name: the observation publishes none (spec §5).
+type Usage struct {
+	Mem, TopMem int64
+	TopPID      int
+	CPU         float64
+	CPUKnown    bool
 }
 
 // BackgroundSkip is why a host's background work skips the agent, or "":
