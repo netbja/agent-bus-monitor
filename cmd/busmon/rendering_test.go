@@ -167,7 +167,7 @@ func TestSettingsPageRendering(t *testing.T) {
 // bar draw in ASCII too: nothing a non-UTF-8 terminal cannot show.
 func TestPlanAndProgressBarsInASCII(t *testing.T) {
 	withRendering(t, finedraw.ModeASCII)
-	if got := planBar(30, 4, RoleOK).text(); got != "#---" {
+	if got := planBar(30, 4, RoleOK).text(); got != "=---" {
 		t.Errorf("plan bar %q", got)
 	}
 	r := request{Task: "t", Tracked: true, State: "accepted", Accepted: shellNow.Add(-30 * time.Minute)}

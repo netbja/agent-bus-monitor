@@ -128,8 +128,8 @@ func planRule(width int) Line {
 	return Line{{Text: strings.Repeat(glyphHorizontal, max(0, width)), Role: RoleMuted}}
 }
 
-// planOverallRole is the plan's state as a whole, by the group rule over
-// every open task.
+// planOverallRole is the release bar's colour: the plan's state as a
+// whole, by the group rule over every task (planBarRole).
 func planOverallRole(p planState) Role {
 	var open []plan.Row
 	for _, r := range p.rows {
@@ -137,7 +137,17 @@ func planOverallRole(p planState) Role {
 			open = append(open, r)
 		}
 	}
-	_, role := planGroupState(open)
+	return planBarRole(planGroupState(open, len(p.rows)-len(open)))
+}
+
+// planBarRole is a bar's fill colour from its state (plan-progress-bars,
+// the person): green done, else the state's own colour (accent in
+// progress, and the orange, red and green of the others). Not started has
+// no fill: its bar is the dim track alone.
+func planBarRole(word string, role Role) Role {
+	if word == "done" {
+		return RoleOK
+	}
 	return role
 }
 
@@ -175,7 +185,7 @@ func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 	if total > 0 {
 		pct = float64(done) * 100 / float64(total)
 	}
-	minBar, maxBar := 6, 40
+	minBar, maxBar := 6, planReleaseBar
 	if tier == TierNarrow {
 		minBar, maxBar = 4, 12
 	}
@@ -187,15 +197,17 @@ func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 	}
 	name := Seg{Text: Truncate(Preview(p.file.Plan), max(1, width-reserve)), Role: RoleText, Bold: true}
 	sep := " " + GlyphNone + " "
-	build := func(barW int, tail string) Line {
-		l := Line{name, {Text: "  ", Role: RoleMuted}}
+	// gap is the room after the name, cnt the count as drawn
+	buildAt := func(gap, barW int, cnt, tail string) Line {
+		l := Line{name, {Text: strings.Repeat(" ", gap), Role: RoleMuted}}
 		l = append(l, planBar(pct, barW, planOverallRole(p))...)
-		l = append(l, Seg{Text: "  " + count, Role: RoleText})
+		l = append(l, Seg{Text: "  " + cnt, Role: RoleText})
 		if tail != "" {
 			l = append(l, Seg{Text: "   " + tail, Role: RoleMuted})
 		}
 		return l
 	}
+	build := func(barW int, tail string) Line { return buildAt(2, barW, count, tail) }
 	join := func(parts ...string) string {
 		var out []string
 		for _, s := range parts {
@@ -205,7 +217,16 @@ func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 		}
 		return strings.Join(out, sep)
 	}
-	for _, tail := range []string{join(rest, marks(true)), join(rest, marks(false)), marks(false)} {
+	tails := []string{join(rest, marks(true)), join(rest, marks(false)), marks(false)}
+	// The release bar, ~30 cells, ends in the groups' bar column, its count
+	// under theirs (plan-progress-bars), while the line holds it with this
+	// tail; else the bar takes the room left: a tail is never shortened to
+	// keep the bar long.
+	gap := planBarEnd(p) - planReleaseBar - Width(name.Text)
+	for _, tail := range tails {
+		if l := buildAt(gap, planReleaseBar, padLeft(count, 5), tail); tier != TierNarrow && gap >= 2 && l.Width() <= width {
+			return FitLine(l, width)
+		}
 		fixed := build(0, tail).Width()
 		if barW := min(width-fixed, maxBar); barW >= minBar {
 			return FitLine(build(barW, tail), width)
@@ -216,9 +237,10 @@ func planHeader(p planState, now time.Time, width int, tier Tier) Line {
 
 // planGroupState is a group's state word and colour, from its open tasks:
 // one waits for the person (orange), else one is blocked (red), else every
-// one is approved (green), else one is in progress or in review (blue), else
-// nothing has started (the text colour); no open task: done (grey).
-func planGroupState(open []plan.Row) (string, Role) {
+// one is approved (green), else one is in progress or in review (blue), or
+// done tasks are (2 of 3 is in progress, plan-progress-bars), else nothing
+// has started (the text colour); no open task: done (grey).
+func planGroupState(open []plan.Row, done int) (string, Role) {
 	if len(open) == 0 {
 		return "done", RoleMuted
 	}
@@ -239,7 +261,7 @@ func planGroupState(open []plan.Row) (string, Role) {
 		return "approved", RoleOK // every open task approved: only the merge left
 	case has(func(r plan.Row) bool {
 		return r.State == plan.InProgress || r.State == plan.Answered || r.State == plan.InReview
-	}):
+	}), done > 0:
 		return "in progress", RoleAccent
 	}
 	return "not started", RoleText
@@ -250,22 +272,42 @@ func planGroupState(open []plan.Row) (string, Role) {
 // word in that colour. Narrow: the title, the count and the word.
 func planGroupLine(g planGroup, titleW, width int, tier Tier) Line {
 	done, total := len(g.done), len(g.open)+len(g.done)
-	word, role := planGroupState(g.open)
+	word, role := planGroupState(g.open, done)
 	title := Preview(g.title)
 	count := fmt.Sprintf("%d/%d", done, total)
 	if tier == TierNarrow {
 		return FitLine(Line{{Text: GlyphDown + " " + title, Role: RoleText, Bold: true}, {Text: " " + count + "  ", Role: RoleMuted}, {Text: word, Role: role}}, width)
 	}
-	const barW = 12
-	fill := 0
+	pct := 0.0
 	if total > 0 {
-		fill = done * barW / total
+		pct = float64(done) * 100 / float64(total)
 	}
-	return FitLine(Line{{Text: GlyphDown + " " + padRight(title, titleW) + "  ", Role: RoleText, Bold: true},
-		{Text: strings.Repeat(GlyphBarFull, fill), Role: role},
-		{Text: strings.Repeat(GlyphBarEmpty, barW-fill), Role: RoleDim},
-		{Text: "  " + padLeft(count, 5) + "  ", Role: RoleMuted},
-		{Text: word, Role: role}}, width)
+	l := Line{{Text: GlyphDown + " " + padRight(title, titleW) + "  ", Role: RoleText, Bold: true}}
+	l = append(l, planBar(pct, planGroupBar, planBarRole(word, role))...)
+	return FitLine(append(l, Seg{Text: "  " + padLeft(count, 5) + "  ", Role: RoleMuted}, Seg{Text: word, Role: role}), width)
+}
+
+// The bars' widths (plan-progress-bars, the person): the release's ~30
+// cells, a group's 12.
+const (
+	planReleaseBar = 30
+	planGroupBar   = 12
+)
+
+// planTitleW is the widest group title.
+func planTitleW(p planState) int {
+	w := 0
+	for _, g := range planGroupsOf(p) {
+		w = max(w, Width(Preview(g.title)))
+	}
+	return w
+}
+
+// planBarEnd is the column every bar ends at, before its n/m (the person:
+// one column): after the plan's name and the release bar, or after the
+// widest group title and a group bar, whichever is further.
+func planBarEnd(p planState) int {
+	return max(Width(Preview(p.file.Plan))+2+planReleaseBar, 4+planTitleW(p)+planGroupBar)
 }
 
 // planGroupBlocks emits the groups with open tasks, each with its open
@@ -274,9 +316,11 @@ func planGroupLine(g planGroup, titleW, width int, tier Tier) Line {
 // Enter opens; shown, each finished group's line and rows. No blank lines.
 func planGroupBlocks(p planState, showDone bool, width int, tier Tier, emit func(Line), row func(plan.Row), fold func(string, Line)) {
 	groups := planGroupsOf(p)
-	titleW := 0
-	for _, g := range groups {
-		titleW = max(titleW, Width(Preview(g.title)))
+	titleW := planTitleW(p)
+	// the titles padded so each bar ends at the release bar's column, when
+	// the line still holds its count and longest word ("waits for you")
+	if aligned := planBarEnd(p) - 4 - planGroupBar; aligned+4+planGroupBar+9+Width("waits for you") <= width {
+		titleW = max(titleW, aligned)
 	}
 	var finished []planGroup
 	for _, g := range groups {
@@ -371,12 +415,21 @@ func planStripKeys(forYou string, width int) Line {
 	return FitLine(l, width)
 }
 
-// planBar is a bar of cells (finedraw.Blocks): full blocks, one partial
-// eighth, then the dim ░ track (the person's mock-up), the filled part in
-// role.
+// planBar is the Plan view's thin bar (finedraw.ThinBar, plan-progress-bars):
+// ━ filled in role with the leading edge's eighth, over the dim ─ track; =
+// and - in a locale without UTF-8.
 func planBar(pct float64, cells int, role Role) Line {
-	b := finedraw.Blocks(pct, cells, drawCaps().Mode) // ascii in a locale without UTF-8
-	return Line{{Text: b[0].Text, Role: role}, {Text: b[1].Text, Role: RoleDim}}
+	var l Line
+	for _, s := range finedraw.ThinBar(pct, cells, drawCaps().Mode) {
+		r := role
+		if s.Part == finedraw.PartEmpty {
+			r = RoleDim
+		}
+		if s.Text != "" {
+			l = append(l, Seg{Text: s.Text, Role: r})
+		}
+	}
+	return l
 }
 
 // planTasks is "1 task" or "N tasks".

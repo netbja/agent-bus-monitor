@@ -3,7 +3,7 @@
  PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
 ╭─ Plan ─────────────────────────────── y copy · esc back ─╮
-│ v0.29  ██░░░░░░░░░░  1/6   5 left · 2 for you            │
+│ v0.29  ━━──────────  1/6   5 left · 2 for you            │
 │ ──────────────────────────────────────────────────────── │
 │ ▼ NOW  1                                                 │
 │   ● title drawer    coder   in progress                  │

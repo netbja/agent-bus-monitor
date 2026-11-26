@@ -180,6 +180,28 @@ func Blocks(pct float64, cells int, mode Mode) []Seg {
 	return []Seg{{Text: strings.Repeat(Full, full) + Eighths[part], Part: PartFill}, {Text: strings.Repeat(Empty, max(0, empty)), Part: PartEmpty}}
 }
 
+// ThinBar is the plan's bar (plan-progress-bars): Thin filled cells over a
+// Line track. Fine ends the fill with the remainder's eighth (rounded, as
+// Blocks) at the leading edge; basic rounds to whole cells; ascii draws =
+// then -.
+func ThinBar(pct float64, cells int, mode Mode) []Seg {
+	on, off := Thin, Line
+	if mode != ModeFine {
+		if mode == ModeASCII {
+			on, off = ASCIIThin, ASCIIEmpty
+		}
+		n := clamp(int(math.Round(pct*float64(cells)/100)), 0, cells)
+		return []Seg{{Text: strings.Repeat(on, n), Part: PartFill}, {Text: strings.Repeat(off, cells-n), Part: PartEmpty}}
+	}
+	e := clamp(int(math.Round(pct*float64(cells)*8/100)), 0, cells*8)
+	full, part := e/8, e%8
+	used := full
+	if part > 0 {
+		used++
+	}
+	return []Seg{{Text: strings.Repeat(on, full), Part: PartFill}, {Text: Eighths[part], Part: PartEdge}, {Text: strings.Repeat(off, cells-used), Part: PartEmpty}}
+}
+
 // Rule is a line of cells Thin, fill of them filled: the progress bar;
 // ascii: = then -.
 func Rule(fill, cells int, mode Mode) []Seg {
