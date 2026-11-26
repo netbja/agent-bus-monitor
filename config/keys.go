@@ -569,6 +569,10 @@ var Keys = append([]*Key{
 		file: fileMemoryLimit},
 	{Name: "limits.holder_swap_max", Kind: String, Default: "4G", ReadBy: "agentbus up (the holder unit's MemorySwapMax; the running holder's at once)", MachineOnly: true, PersonOnly: true,
 		file: fileMemoryLimit},
+	// The share of a cap at which memory warns (agent-resource-limits §3.1,
+	// §8): a percentage, as dispatch.context_alert; the person's, per host.
+	{Name: "limits.warn_at", Kind: Float, Default: 80.0, ReadBy: "dispatch (health: holder-memory), each pass", MachineOnly: true, PersonOnly: true,
+		file: filePositivePercent},
 	{Name: "dispatch.submit_wait", Env: "AGENT_BUS_SUBMIT_WAIT", Kind: Duration, Default: 2 * time.Second, ReadBy: "agentbus holder",
 		env: envBoundedDuration(time.Minute), file: fileBoundedDuration(time.Minute)},
 	{Name: "dispatch.person_quiet", Env: "AGENT_BUS_PERSON_QUIET", Kind: Duration, Default: 3 * time.Second, ReadBy: "agentbus holder",

@@ -340,7 +340,7 @@ func (s *Server) handle(v any, inTree bool) Reply {
 		s.mu.Lock()
 		n := len(s.terms)
 		s.mu.Unlock()
-		return Reply{Info: &Info{Project: s.cfg.Project, Build: s.cfg.Build, Proto: Proto, Terms: n, Socket: s.cfg.Socket, PID: s.self.PID, Start: s.self.Start}}
+		return Reply{Info: &Info{Project: s.cfg.Project, Build: s.cfg.Build, Proto: Proto, Terms: n, Socket: s.cfg.Socket, PID: s.self.PID, Start: s.self.Start, Memory: ownUnitMemory()}}
 	case List:
 		s.mu.Lock()
 		terms := make([]*terminal, 0, len(s.order))

@@ -76,6 +76,7 @@ type Proc struct {
 	Start   uint64
 	Command string
 	CPU     time.Duration
+	RSS     int64 // resident bytes, 0 unknown (agent-resource-limits §5)
 }
 
 // HostInfo describes the host for reports (health, About).

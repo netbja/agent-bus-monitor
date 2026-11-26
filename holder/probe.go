@@ -34,20 +34,41 @@ func Ready(getenv func(string) string, project, key string, timeout time.Duratio
 
 // TermList is the terminals of project's holder of build key.
 func TermList(project, key string) ([]TermInfo, error) {
-	sock, err := SocketFor(os.Getenv, project, key)
-	if err != nil {
-		return nil, err
-	}
-	cl, err := Dial(sock, BuildID())
-	if err != nil {
-		return nil, fmt.Errorf("no holder answers at %s: %w", sock, err)
-	}
-	defer cl.Close()
-	r, err := cl.Call(List{})
+	r, _, err := callBuild(project, key, List{})
 	if err != nil {
 		return nil, err
 	}
 	return r.Terms, nil
+}
+
+// callBuild sends one frame to project's holder of build key, over its
+// socket (SocketFor), and returns the reply and that socket.
+func callBuild(project, key string, f any) (Reply, string, error) {
+	sock, err := SocketFor(os.Getenv, project, key)
+	if err != nil {
+		return Reply{}, "", err
+	}
+	cl, err := Dial(sock, BuildID())
+	if err != nil {
+		return Reply{}, sock, fmt.Errorf("no holder answers at %s: %w", sock, err)
+	}
+	defer cl.Close()
+	r, err := cl.Call(f)
+	return r, sock, err
+}
+
+// DescribeOf is what project's holder of build key says of itself
+// (Describe), asked over its socket: its unit's memory included
+// (agent-resource-limits §3.1).
+func DescribeOf(project, key string) (*Info, error) {
+	r, sock, err := callBuild(project, key, Describe{})
+	if err != nil {
+		return nil, err
+	}
+	if r.Info == nil {
+		return nil, fmt.Errorf("holder at %s described nothing", sock)
+	}
+	return r.Info, nil
 }
 
 // Terms counts the terminals of project's holder of build key, asked

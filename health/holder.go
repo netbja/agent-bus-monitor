@@ -22,6 +22,7 @@ type HolderBuild struct {
 	Terms    int           // its terminals, when it answers
 	Since    time.Duration // how long its socket has existed, when it answers
 	Binary   bool          // its binary copy is on disk
+	Memory   *HolderMemory // its unit's memory, when it answers from one (agent-resource-limits §3.1)
 }
 
 // HolderAgent is an agent whose last proved identity is a holder terminal

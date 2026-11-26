@@ -1,6 +1,7 @@
 package dispatchsvc
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -47,6 +48,14 @@ func TestHolderEvidence(t *testing.T) {
 			}
 			return nil, false
 		},
+		// The current build answers from a unit cgroup; the old one (no
+		// reader answer) reports none (agent-resource-limits §3.1).
+		memory: func(project, key string) (*health.HolderMemory, bool) {
+			if key == cur {
+				return &health.HolderMemory{Current: 5, Max: 10, OOMKills: 1}, true
+			}
+			return nil, false
+		},
 	}
 	e := holderEvidence(hm, paths, "demo", "v3", probe)
 	if !e.Known || len(e.Builds) != 3 { // v3, v2, v0
@@ -58,6 +67,12 @@ func TestHolderEvidence(t *testing.T) {
 	}
 	if b := by["v3"]; !b.Current || !b.Unit || !b.Active || !b.Answers || b.Terms != 1 || !b.Binary {
 		t.Errorf("v3 %+v", b)
+	}
+	if m := by["v3"].Memory; m == nil || *m != (health.HolderMemory{Current: 5, Max: 10, OOMKills: 1}) {
+		t.Errorf("v3 memory %+v", m)
+	}
+	if m := by["v2"].Memory; m != nil {
+		t.Errorf("v2 memory %+v", m)
 	}
 	if b := by["v2"]; b.Current || !b.Unit || !b.Answers || b.Terms != 2 || b.Since != 30*time.Hour || b.Binary {
 		t.Errorf("v2 %+v", b)
@@ -122,3 +137,47 @@ func TestWithHolderAgentsFromSnapshots(t *testing.T) {
 }
 
 type fakeHolders = cmdtest.Holders
+
+// holder-memory keeps the last pass's OOM kill counts: a rise warns at the
+// pass that sees it, the next pass is ok again (one notice per episode), and
+// limits.warn_at is read at each pass (agent-resource-limits §3.1).
+func TestHolderMemoryCheck(t *testing.T) {
+	ooms := []uint64{1, 1, 3, 3}
+	pct := 80.0
+	pass := 0
+	now := func() (health.HolderEvidence, error) {
+		m := &health.HolderMemory{Current: 50, Max: 100, OOMKills: ooms[pass]}
+		return health.HolderEvidence{Known: true, Builds: []health.HolderBuild{{Key: "k", Raw: "v1", Current: true, Answers: true, Memory: m}}}, nil
+	}
+	run := holderMemoryCheck(now, func() float64 { return pct })
+	for i, want := range []health.Status{health.OK, health.OK, health.Warn, health.OK} {
+		pass = i
+		out, err := run(context.Background())
+		if err != nil || out.Status != want {
+			t.Fatalf("pass %d: %+v %v, want %v", i, out, err, want)
+		}
+	}
+	pct = 50
+	if out, _ := run(context.Background()); out.Status != health.Warn || !strings.Contains(out.Detail, "50 %") {
+		t.Fatalf("warn_at not re-read: %+v", out)
+	}
+	// Unknown evidence keeps the counts: a rise across it still warns.
+	broken := func() (health.HolderEvidence, error) { return health.HolderEvidence{}, errors.New("x") }
+	pass = 0
+	ok := true
+	run = holderMemoryCheck(func() (health.HolderEvidence, error) {
+		if !ok {
+			return broken()
+		}
+		return now()
+	}, func() float64 { return 80 })
+	run(context.Background())
+	ok = false
+	if out, err := run(context.Background()); out.Status != health.Unknown || err == nil {
+		t.Fatalf("broken pass %+v %v", out, err)
+	}
+	ok, pass = true, 2
+	if out, _ := run(context.Background()); out.Status != health.Warn {
+		t.Fatalf("rise across an unknown pass: %+v", out)
+	}
+}

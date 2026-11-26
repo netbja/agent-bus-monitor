@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -24,6 +25,9 @@ import (
 type holderProbe struct {
 	sockets func(project string) (map[string]time.Duration, error)
 	answer  func(project, key string) (terms []holder.TermInfo, ok bool)
+	// memory is an answering holder's unit memory (agent-resource-limits
+	// §3.1); ok false without a cgroup or an answer. nil: not read.
+	memory func(project, key string) (*health.HolderMemory, bool)
 }
 
 // realHolderProbe lists the project's holder sockets (holder.ProjectSockets: h-<id>.sock, or an older build's holder-<key>.sock; the
@@ -50,6 +54,14 @@ func realHolderProbe(getenv func(string) string) holderProbe {
 		answer: func(project, key string) ([]holder.TermInfo, bool) {
 			terms, err := holder.TermList(project, key)
 			return terms, err == nil
+		},
+		memory: func(project, key string) (*health.HolderMemory, bool) {
+			info, err := holder.DescribeOf(project, key)
+			if err != nil || info.Memory == nil {
+				return nil, false
+			}
+			m := info.Memory
+			return &health.HolderMemory{Current: m.Current, Max: m.Max, SwapCurrent: m.SwapCurrent, OOMKills: m.OOMKills}, true
 		},
 	}
 }
@@ -98,6 +110,11 @@ func holderEvidence(m service.Manager, paths service.Paths, project, currentRaw 
 		if terms, ok := probe.answer(project, key); ok {
 			b := get(key)
 			b.Answers, b.Terms, b.Since = true, len(terms), age
+			if probe.memory != nil {
+				if m, ok := probe.memory(project, key); ok {
+					b.Memory = m
+				}
+			}
 		}
 	}
 	base := filepath.Join(paths.DataHome, "agentbus", "holder")
@@ -196,5 +213,24 @@ func holderCheck(b *bus.Bus, evidence func() (health.HolderEvidence, error), get
 			}
 		}
 		return health.EvaluateHolder(e), err
+	}
+}
+
+// holderMemoryCheck is holder-memory's pass (agent-resource-limits §3.1):
+// the evidence of now, limits.warn_at (a percentage) read at each pass, and
+// the OOM kill counts of the last pass it could read, kept here, so a rise
+// warns once.
+func holderMemoryCheck(now func() (health.HolderEvidence, error), warnPct func() float64) func(context.Context) (health.Outcome, error) {
+	var mu sync.Mutex
+	var prev map[string]uint64
+	return func(context.Context) (health.Outcome, error) {
+		e, err := now()
+		mu.Lock()
+		defer mu.Unlock()
+		out := health.EvaluateHolderMemory(e, warnPct()/100, prev)
+		if e.Known {
+			prev = health.HolderOOMCounts(e)
+		}
+		return out, err
 	}
 }

@@ -76,10 +76,25 @@ func processTree(root int) []ProcInfo {
 	for len(queue) > 0 {
 		p := queue[0]
 		queue = queue[1:]
-		out = append(out, ProcInfo{PID: p.pid, PPID: p.ppid, Start: p.start, Command: p.comm, CPUms: p.cpuTicks * 1000 / clockTicks})
+		out = append(out, ProcInfo{PID: p.pid, PPID: p.ppid, Start: p.start, Command: p.comm, CPUms: p.cpuTicks * 1000 / clockTicks, RSSkb: rssKB(p.pid)})
 		queue = append(queue, kids[p.pid]...)
 	}
 	return out
+}
+
+// rssKB is pid's resident memory in KiB, from /proc/<pid>/statm's second
+// field (pages); 0 when it cannot be read.
+func rssKB(pid int) int64 {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/statm")
+	if err != nil {
+		return 0
+	}
+	f := strings.Fields(string(b))
+	if len(f) < 2 {
+		return 0
+	}
+	pages, _ := strconv.ParseInt(f[1], 10, 64)
+	return pages * int64(os.Getpagesize()) / 1024
 }
 
 // childrenOf is pid's children as the kernel lists them

@@ -1,2 +1,2 @@
-  demo   ▲ bus down  health ?37  ? dispatch                                                15:04:05 
+  demo   ▲ bus down  health ?38  ? dispatch                                                15:04:05 
  T triage   p P plan   F1 help   F5 health        · last project opened: demo (no -p) · M to switch 

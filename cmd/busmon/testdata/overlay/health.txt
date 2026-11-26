@@ -39,6 +39,7 @@
   ? Holder                           no current measurement
   ? Holder draining                  no current measurement
   ? Holder leftovers                 no current measurement
+  ? Holder memory                    no current measurement
   ? Idle master                      no current measurement
   ? Login expiry                     no current measurement
   ? Unreadable screen                no current measurement
