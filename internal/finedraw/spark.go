@@ -99,22 +99,73 @@ func Spark(vals []float64, max float64, style string) string {
 // them, one point per cell (block, ascii) or two (braille), on the scale of
 // top; spaces where the values do not reach. No values is cells spaces.
 func SparkWide(vals []float64, top float64, cells int, style string) string {
-	points := cells
+	lines, _ := SparkLines(vals, top, cells, 1, style)
+	return lines[0]
+}
+
+// SparkLines is SparkWide on rows lines, top first: braille stacks its rows,
+// 4 levels each, so 2 rows give 8 (a column's dots fill the bottom row
+// first); block and ascii keep one row. share is each cell's highest value
+// in percent of top (0 where the values do not reach), for the caller's
+// colour.
+func SparkLines(vals []float64, top float64, cells, rows int, style string) ([]string, []float64) {
+	per := 1
 	if style == StyleBraille {
-		points = 2 * cells
+		per = 2
+	} else {
+		rows = 1
 	}
+	rows = max(1, rows)
 	var wide []float64
 	if len(vals) > 0 {
-		rep := max(1, points/len(vals))
+		rep := max(1, per*cells/len(vals))
 		for _, v := range vals {
 			for range rep {
 				wide = append(wide, v)
 			}
 		}
 	}
-	r := []rune(Spark(wide, top, style))
-	if len(r) > cells { // braille pads to one cell per value: keep the drawn cells
-		r = r[:cells]
+	steps := SparkSteps
+	if style == StyleASCII {
+		steps = ASCIISteps
 	}
-	return string(r) + strings.Repeat(" ", cells-len(r))
+	out := make([]strings.Builder, rows)
+	share := make([]float64, cells)
+	for c := range cells {
+		i := c * per
+		if i >= len(wide) {
+			for r := range out {
+				out[r].WriteByte(' ')
+			}
+			continue
+		}
+		hi := wide[i]
+		if per == 2 && i+1 < len(wide) {
+			hi = max(hi, wide[i+1])
+		}
+		if top > 0 {
+			share[c] = hi / top * 100
+		}
+		if per == 1 {
+			if l := Level(wide[i], top, len(steps)); l > 0 {
+				out[0].WriteString(steps[l-1])
+			} else {
+				out[0].WriteByte(' ')
+			}
+			continue
+		}
+		left, right := Level(wide[i], top, 4*rows), 0
+		if i+1 < len(wide) {
+			right = Level(wide[i+1], top, 4*rows)
+		}
+		for r := range out {
+			base := 4 * (rows - 1 - r) // the dots below this row
+			out[r].WriteRune(BrailleCell(clamp(left-base, 0, 4), clamp(right-base, 0, 4)))
+		}
+	}
+	lines := make([]string, rows)
+	for r := range out {
+		lines[r] = out[r].String()
+	}
+	return lines, share
 }

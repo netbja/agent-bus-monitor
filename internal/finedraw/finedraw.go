@@ -4,7 +4,8 @@
 // theme: it returns segments tagged with a Part, which the caller maps to
 // its own roles, and the caller keeps any animation (it asks for the frame's
 // value). Step 1 moved the existing drawing here unchanged; step 2 added
-// the rendering modes (Caps, caps.go).
+// the rendering modes (Caps, caps.go); step 3 the placed ramps (Stops)
+// and the two-row sparklines (SparkLines).
 package finedraw
 
 import (
@@ -200,15 +201,4 @@ func ThinBar(pct float64, cells int, mode Mode) []Seg {
 		used++
 	}
 	return []Seg{{Text: strings.Repeat(on, full), Part: PartFill}, {Text: Eighths[part], Part: PartEdge}, {Text: strings.Repeat(off, cells-used), Part: PartEmpty}}
-}
-
-// Rule is a line of cells Thin, fill of them filled: the progress bar;
-// ascii: = then -.
-func Rule(fill, cells int, mode Mode) []Seg {
-	fill = clamp(fill, 0, cells)
-	on, off := Thin, Thin
-	if mode == ModeASCII {
-		on, off = ASCIIThin, ASCIIEmpty
-	}
-	return []Seg{{Text: strings.Repeat(on, fill), Part: PartFill}, {Text: strings.Repeat(off, cells-fill), Part: PartEmpty}}
 }

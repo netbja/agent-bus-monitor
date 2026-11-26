@@ -2,15 +2,15 @@
  paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
  PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                                        
 ╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 2 blocked · 1 dormant (a shows) · 1-8 of 10 ─╮
-│  Project paused · /resume                            ││    agent     state     updated queue    ctx       flags               message    ▲
-│  ● answer master    review lot 1? (2 questions)    4m││▶ ♙ foureyes  waiting   6m      —        —         escalated           need a dec…┃
-│  ♙ answer foureyes  need a decision on the width … 6m││  ♙ master    waiting   12m     —        41k 21%   pilot · armed       see my ask ┃
-│  ◆ review coder     by charlie  look at b1           ││  ✓ architect done      40m     —        —         escalating          spec merged┃
-│  Next for you: title h2                              ││  ○ coder     paused    2m      —        88k 85%   gate 1 · deferred   busmon-cha…┃
-│                                                      ││  ▲ docs      blocked   50m     —        —         armed · stale 2     waiting fo…┃
-│                                                      ││  ▲ qa        blocked   11m     —        —         held                out of quo…│
-│                                                      ││  ○ ui-grok   quota     3m      —        —         swapping            reviewed   │
-│                                                      ││  ● release   working   7m      —        —         fallback kimi-alt   tagging    ▼
+│  Project paused · /resume                            ││    agent     state     updated queue    ctx         flags               message  ▲
+│  ● answer master    review lot 1? (2 questions)    4m││▶ ♙ foureyes  waiting   6m      —        —           escalated           need a d…┃
+│  ♙ answer foureyes  need a decision on the width … 6m││  ♙ master    waiting   12m     —        █▎     21%  pilot · armed       see my a…┃
+│  ◆ review coder     by charlie  look at b1           ││  ✓ architect done      40m     —        —           escalating          spec mer…┃
+│  Next for you: title h2                              ││  ○ coder     paused    2m      —        █████▏ 85%  gate 1 · deferred   busmon-c…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —           armed · stale 2     waiting …┃
+│                                                      ││  ▲ qa        blocked   11m     —        —           held                out of q…│
+│                                                      ││  ○ ui-grok   quota     3m      —        —           swapping            reviewed │
+│                                                      ││  ● release   working   7m      —        —           fallback kimi-alt   tagging  ▼
 ╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
 ╭─  1 Activity   2 Board   3 Work   4 Plan   · v0.29 ───────────────────────────────────────────────────╮╭─ Releases ──────────────────────╮
 │                                                                                                       ││▶ next  0 decided ideas          │

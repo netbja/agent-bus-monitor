@@ -111,8 +111,8 @@ func TestThinCells(t *testing.T) {
 	}
 }
 
-// Blocks rounds to the nearest eighth and Rule clamps its fill.
-func TestBlocksAndRule(t *testing.T) {
+// Blocks rounds to the nearest eighth.
+func TestBlocks(t *testing.T) {
 	if got := texts(Blocks(30, 4, ModeFine)); got != Full+Eighth2+Empty+Empty {
 		t.Errorf("Blocks(30) = %q", got)
 	}
@@ -122,20 +122,11 @@ func TestBlocksAndRule(t *testing.T) {
 	if got := texts(Blocks(100, 3, ModeFine)); got != Full+Full+Full {
 		t.Errorf("Blocks(100) = %q", got)
 	}
-	if r := Rule(3, 10, ModeFine); r[0].Text != strings.Repeat(Thin, 3) || r[1].Text != strings.Repeat(Thin, 7) || r[1].Part != PartEmpty {
-		t.Errorf("Rule %+v", r)
-	}
-	if r := Rule(12, 10, ModeFine); texts(r) != strings.Repeat(Thin, 10) {
-		t.Errorf("Rule over %+v", r)
-	}
-	// ASCII (a locale without UTF-8): the same geometry in # and -, = and -.
+	// ASCII (a locale without UTF-8): the same geometry in # and -.
 	if got := texts(Blocks(30, 4, ModeASCII)); got != "#---" {
 		t.Errorf("Blocks ascii = %q", got)
 	}
 	if got := texts(Blocks(30, 4, ModeBasic)); got != Full+Eighth2+Empty+Empty {
 		t.Errorf("Blocks basic = %q", got)
-	}
-	if r := Rule(3, 10, ModeASCII); texts(r) != "===-------" || r[1].Part != PartEmpty {
-		t.Errorf("Rule ascii %+v", r)
 	}
 }

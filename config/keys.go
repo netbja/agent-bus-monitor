@@ -316,7 +316,7 @@ var Keys = append([]*Key{
 	// §3.2, §7): an alerted agent with no hand-off standing escalates (master
 	// woken, the person told) at this fill, used only above context_alert
 	// (0 = off), or this long after the alert (0 = off; at least 1m).
-	{Name: "dispatch.context_urgent", Env: "AGENT_BUS_CONTEXT_URGENT", Kind: Float, Default: 90.0, ReadBy: "dispatch",
+	{Name: "dispatch.context_urgent", Env: "AGENT_BUS_CONTEXT_URGENT", Kind: Float, Default: 90.0, ReadBy: "dispatch, busmon",
 		env: func(raw string) (any, envResult) {
 			if n, err := strconv.ParseFloat(raw, 64); err == nil && n >= 0 && n <= 100 {
 				return n, envUse

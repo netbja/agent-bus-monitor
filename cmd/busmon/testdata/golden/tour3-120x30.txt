@@ -2,12 +2,12 @@
  paused · resumes in 1h52 (lunch)   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44             
  PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                    
 ╭─ For you ───────────────────────── 4 decide ─╮╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) ·…─╮
-│  Project paused · /resume                    ││    agent     state     updated queue ctx       flags       message   ▲
-│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ foureyes  waiting   6m      —     —         escalated   need a de…┃
-│  ♙ answer foureyes  need a decision on th… 6m││  ♙ master    waiting   12m     —     41k 21%   pilot · ar… see my ask┃
-│  ♙ answer sentinel  blocked: waiting for … 1m││  ▲ sentinel  blocked   30m     —     —         model≠      health ok │
-│  ◆ review coder     ╭─ Answering a question ───────────────────────────────────────────── 3/5 ─╮scalating… spec merg…│
-│                     │                                                                          │ate 1 · d… busmon-ch…▼
+│  Project paused · /resume                    ││    agent     state     updated queue ctx         flags       message ▲
+│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ foureyes  waiting   6m      —     —           escalated   need a …┃
+│  ♙ answer foureyes  need a decision on th… 6m││  ♙ master    waiting   12m     —     █▎     21%  pilot · ar… see my …┃
+│  ♙ answer sentinel  blocked: waiting for … 1m││  ▲ sentinel  blocked   30m     —     —           model≠      health …│
+│  ◆ review coder     ╭─ Answering a question ───────────────────────────────────────────── 3/5 ─╮ escalating… spec me…│
+│                     │                                                                          │ gate 1 · d… busmon-…▼
 ╰─────────────────────│ An agent that needs your decision asks a question. It shows in For you   │─────────────────────╯
 ╭─  1 Activity   2 Boa│ with ●, and the agent reads waiting.                                     │ents · filter: none ─╮
 │    time   from      │                                                                          │                     │

@@ -80,6 +80,8 @@ func readTokens(ctx context.Context, b busReader, project string, now time.Time,
 const (
 	tokSparkCells  = 14
 	tokSparkNarrow = 7
+	tokSparkWide   = 28 // fine, when the row has room: two braille rows (tui-rendering §4.2)
+	tokIdleFold    = 3  // more idle projects than this fold into one line
 )
 
 // tokensPage is the U page's body at width cells. icons is display.icons, off
@@ -106,7 +108,7 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 		if max <= 0 {
 			return Line{S(RoleDim, strings.Repeat(" ", barW))}
 		}
-		return gaugeSegs(float64(v)*100/float64(max), barW, RoleOK, false)
+		return rampGauge(float64(v)*100/float64(max), barW, volumeRamp(RoleOK), false) // a light gradient (tui-rendering §4.2)
 	}
 
 	iconW := 0
@@ -145,8 +147,13 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 	// The header names each column over it, and the line under it the
 	// sparkline's period (tokens-layout): the totals are the seven days' in+out.
 	lead := strings.Repeat(" ", 22-Width("Projects")) + cols + "  "
-	spark := tokSparkCells
-	if 22+Width(cols)+2+tokSparkCells+2+barW+2+8 > width { // name, in/out, spark, bar, total
+	spark, sparkRows := tokSparkCells, 1
+	switch fits := func(n int) bool { return 22+Width(cols)+2+n+2+barW+2+8 <= width }; { // name, in/out, spark, bar, total
+	case graphs == graphsBraille && fits(tokSparkWide):
+		spark, sparkRows = tokSparkWide, 2
+	case graphs == graphsBraille && fits(tokSparkCells):
+		sparkRows = 2
+	case !fits(tokSparkCells):
 		spark = tokSparkNarrow
 	}
 	b.segs(Seg{Text: "Projects", Role: RoleText, Bold: true}).
@@ -184,7 +191,26 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 			}
 		}
 		var none []string
-		gap := false // a blank line between two rows: full-height bars never merge (tokens-layout)
+		// A project with no tokens in the seven days is dimmed; more than
+		// tokIdleFold of them fold into one line (tui-rendering §4.2). The
+		// open project is never folded.
+		weekOf := func(p tokProject) (week []float64, total, rowMax int64) {
+			for _, d := range days {
+				v := p.days[d].In + p.days[d].Write + p.days[d].Out
+				total += v
+				rowMax = max(rowMax, v)
+				week = append(week, float64(v))
+			}
+			return week, total, rowMax
+		}
+		idle := 0
+		for _, p := range ps {
+			if _, total, _ := weekOf(p); p.known && p.name != project && total == 0 {
+				idle++
+			}
+		}
+		fold := idle > tokIdleFold
+		sparkAt := strings.Repeat(" ", 22+Width(cols)+2) // the sparkline's column
 		for _, p := range ps {
 			if !p.known && p.name == project {
 				if pending {
@@ -198,37 +224,64 @@ func tokensPage(icons, graphs string, st tokState, budgets map[string]bus.Budget
 				none = append(none, p.name)
 				continue
 			}
+			week, total, rowMax := weekOf(p)
+			quiet := total == 0 && p.name != project
+			if quiet && fold {
+				continue
+			}
 			u := p.days[today]
 			mark := ""
 			if p.partial {
 				mark = "~"
 			}
-			role := RoleText
+			role, text := RoleText, RoleText
 			if p.name == project {
 				role = RoleAccent
 			}
-			num := func(s string) Seg { return Seg{Text: s, Role: RoleText, Bold: p.name == top} } // the zone's top consumer
-			if gap {
-				b.text("\n")
+			if quiet {
+				role, text = RoleDim, RoleDim
 			}
-			gap = true
+			num := func(s string) Seg { return Seg{Text: s, Role: text, Bold: p.name == top} } // the zone's top consumer
+			// The sparkline, scaled per row (its own shape; the bar compares),
+			// on the accent's ramp; its top row and the row's largest day go
+			// on the line above, which also keeps two bar rows apart
+			// (tokens-layout).
+			lines, share := finedraw.SparkLines(week, float64(rowMax), spark, sparkRows, graphs)
+			ramp := volumeRamp(RoleAccent)
+			sparkSegs := func(line string) Line {
+				var l Line
+				for i, g := range []rune(line) {
+					c := Seg{Text: string(g), Role: RoleAccent}
+					c.Ink, _ = ramp.ink(share[i])
+					if n := len(l); n > 0 && l[n-1].Ink == c.Ink {
+						l[n-1].Text += c.Text
+						continue
+					}
+					l = append(l, c)
+				}
+				return l
+			}
+			above := Line{S(RoleDim, sparkAt)}
+			if len(lines) > 1 {
+				above = append(above, sparkSegs(lines[0])...)
+			} else {
+				above = append(above, S(RoleDim, strings.Repeat(" ", spark)))
+			}
+			if rowMax > 0 {
+				above = append(above, S(RoleMuted, "  max "+textfmt.TokCount(rowMax)+"/day"))
+			}
+			b.segs(above...).text("\n")
 			b.text("  ").seg(role, Fit(Preview(p.name), 20))
 			if joined {
 				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write+u.Out))))
 			} else {
-				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write)))).text(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.Out)))
+				b.segs(num(fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.In+u.Write)))).seg(text, fmt.Sprintf(" %8s", mark+textfmt.TokCount(u.Out)))
 			}
-			b.text("  ")
-			var total, rowMax int64
-			week := make([]float64, 0, len(days))
-			for _, d := range days {
-				v := p.days[d]
-				total += v.In + v.Write + v.Out
-				rowMax = max(rowMax, v.In+v.Write+v.Out)
-				week = append(week, float64(v.In+v.Write+v.Out))
-			}
-			b.seg(RoleOK, finedraw.SparkWide(week, float64(rowMax), spark, graphs)) // scaled per row: its own shape, the bar compares
-			b.text("  ").segs(relBar(total, maxTotal)...).text(fmt.Sprintf("  %8s\n", mark+textfmt.TokCount(total)))
+			b.text("  ").segs(sparkSegs(lines[len(lines)-1])...)
+			b.text("  ").segs(relBar(total, maxTotal)...).seg(text, fmt.Sprintf("  %8s", mark+textfmt.TokCount(total))).text("\n")
+		}
+		if fold {
+			b.text("  ").seg(RoleDim, fmt.Sprintf("%d projects idle this week", idle)).text("\n")
 		}
 		if len(none) > 0 {
 			b.text("  ").seg(RoleMuted, Preview(strings.Join(none, " "))+"  no data (no dispatch service counting tokens)").text("\n")

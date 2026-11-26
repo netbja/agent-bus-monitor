@@ -1,0 +1,25 @@
+ [1magent-bus-monitor[m  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie            [m
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────────────────────────────[m 4 decide [1m─╮[m
+[1m│[m  [1mProject paused[m · /resume                                                    [1m│[m
+[1m│[m  ● answer master    review lot 1? (2 questions)                            4m[1m│[m
+[1m│[m  ♙ answer foureyes  need a decision on the width rule                      6m[1m│[m
+[1m│[m  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m[1m│[m
+[1m│[m  ◆ review coder     by charlie  look at b1                                   [1m│[m
+[1m╰──────────────────────────────────────────────────────────────────────────────╯[m
+╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting  [m[7m6m  [m[7m [m[7m—  [m[7m [m[7mescalated  [m[7m need a decision on the width rule [m▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+[1m╭─[m[1;7m ○ coder · paused [m[1m────────────────[m Y copy report · y copy status · esc back [1m─╮[m
+[1m│[m Status message                                                               [1m▲[m
+[1m│[m busmon-charm-b: b1 shell                                                     [1m┃[m
+[1m│[m                                                                              [1m│[m
+[1m│[m Last report · 13m ago                                                        [1m│[m
+[1m│[m Lot 1 delivered                                                              [1m│[m
+[1m│[m                                                                              [1m│[m
+[1m│[m [1mDone                                                                        [m [1m▼[m
+[1m╰──────────────────────────────────────────────────────────────────────────────╯[m
+ [1m↑↓ j k[m scroll   [1my[m copy status   [1mY[m copy report   [1mn p ←→[m next/prev   [1mr[m reply     

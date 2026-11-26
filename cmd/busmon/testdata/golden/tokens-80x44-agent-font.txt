@@ -31,14 +31,14 @@
 │     Limit reached: it resets today 15:44.                                    ┃
 │ Projects                 in+out  7 days                    7d total          ┃
 │                                  10-20 to 10-26                              ┃
-│   agent-bus-monitor       ~1.8M  ⠀⠀⠀⠀⠀⠀⣤⣤⠀⠀⣿⣿⣶⣶  ████████     ~5.1M          ┃
-│                                                                              ┃
-│   blog                        0  ⠀⠀⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  ▎             170k          ┃
+│                                  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣤⣤  max 2.5M/day                ┃
+│   agent-bus-monitor       ~1.8M  ⠀⠀⠀⠀⠀⠀⣶⣶⠀⠀⣿⣿⣿⣿  ████████     ~5.1M          ┃
+│                                  ⠀⠀⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  max 170k/day                │
+│   blog                        0  ⠀⠀⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  ▎             170k          │
 │   wiki  no data (no dispatch service counting tokens)                        │
 │ Agents, agent-bus-monitor             in      out                            │
 │   foureyes          anthropic      1.2M     206k  ████████                  │
 │                                                                              │
-│   coder             anthropic      345k      83k  ██▍                       │
-│   1 more · Codex session not proved  (a lists them)                          ▼
+│   coder             anthropic      345k      83k  ██▍                       ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health    

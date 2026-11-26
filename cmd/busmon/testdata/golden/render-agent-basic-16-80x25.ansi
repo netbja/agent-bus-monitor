@@ -1,0 +1,25 @@
+ [1magent-bus-monitor[m  [38;5;2m● bus ok[m  [38;5;2m● dispatch up[m  [38;5;2m● missions up[m  [38;5;3m♙4[m  [38;5;3m●2[m     [38;5;7m15:04:05 [m
+ [38;5;3mpaused · resumes in 1h52 (lunch)[m  ♙ Charlie [human]  [38;5;11mclaude[m[38;5;7m 5h [m[38;5;2m62%[m[38;5;7m │ 7d [m[38;5;2m41%    [m
+[1;7;38;5;3m PAUSED[m[1;7;38;5;3m · /resume ends it now · resumes in 1h52 (lunch) · by charlie            [m
+[38;5;3m╭─[m[1;7;38;5;3m For you [m[38;5;3m─────────────────────────────────────────────────────────[m [38;5;7m4 decide[m [38;5;3m─╮[m
+[38;5;3m│[m  [1;38;5;3mProject paused[m[38;5;7m · [m[38;5;6m/resume                                                    [m[38;5;3m│[m
+[38;5;3m│[m  [38;5;6m● answer [mmaster    review lot 1? (2 questions)                           [38;5;7m 4m[m[38;5;3m│[m
+[38;5;3m│[m  [38;5;3m♙ answer [mfoureyes  need a decision on the width rule                     [38;5;7m 6m[m[38;5;3m│[m
+[38;5;3m│[m  [38;5;3m♙ answer [msentinel  blocked: waiting for an answer in its terminal        [38;5;7m 1m[m[38;5;3m│[m
+[38;5;3m│[m  [38;5;5m◆ review [mcoder     by charlie  look at b1                                   [38;5;3m│[m
+[38;5;3m╰──────────────────────────────────────────────────────────────────────────────╯[m
+[38;5;8m╭─[m [38;5;6mAgents[m [38;5;8m─[m [38;5;7m10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-3 of …[m[38;5;8m─╮[m
+[38;5;8m│[m[7;38;5;6m▶ [m[7;38;5;3m♙ [m[7mfoureyes  [m[7;38;5;3mwaiting  [m[7;38;5;7m6m  [m[7m [m[7;38;5;7m—  [m[7m [m[7;38;5;9mescalated  [m[7m need a decision on the width rule [m[38;5;8m▲[m
+[38;5;8m│[m  [38;5;3m♙ [mmaster    [38;5;3mwaiting  [m[38;5;7m12m [m [38;5;7m—  [m [38;5;6mpilot      [m see my ask                        [38;5;8m┃[m
+[38;5;8m│[m  [38;5;3m▲ [msentinel  [38;5;3mblocked  [m[38;5;7m30m [m [38;5;7m—  [m [38;5;3mmodel≠     [m health ok                         [38;5;8m▼[m
+[38;5;8m╰──────────────────────────────────────────────────────────────────────────────╯[m
+[38;5;6m╭─[m[1;7;38;5;6m ○ coder · paused [m[38;5;6m────────────────[m [38;5;7mY copy report · y copy status · esc back[m [38;5;6m─╮[m
+[38;5;6m│[m [38;5;6mStatus message                                                              [m [38;5;6m▲[m
+[38;5;6m│[m busmon-charm-b: b1 shell                                                     [38;5;6m┃[m
+[38;5;6m│[m                                                                              [38;5;6m│[m
+[38;5;6m│[m [38;5;6mLast report[m[38;5;7m · 13m ago                                                       [m [38;5;6m│[m
+[38;5;6m│[m Lot 1 delivered                                                              [38;5;6m│[m
+[38;5;6m│[m                                                                              [38;5;6m│[m
+[38;5;6m│[m [1;38;5;6mDone                                                                        [m [38;5;6m▼[m
+[38;5;6m╰──────────────────────────────────────────────────────────────────────────────╯[m
+ [1;38;5;6m↑↓ j k[m[38;5;7m scroll[m   [1;38;5;6my[m[38;5;7m copy status[m   [1;38;5;6mY[m[38;5;7m copy report[m   [1;38;5;6mn p ←→[m[38;5;7m next/prev[m   [1;38;5;6mr[m[38;5;7m reply     [m

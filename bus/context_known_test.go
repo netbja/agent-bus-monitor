@@ -28,4 +28,10 @@ func TestContextFillKnownAndThreshold(t *testing.T) {
 			t.Errorf("%q: %v, want %v", env, got, want)
 		}
 	}
+	// busmon reads the urgent threshold too: the context ramp's red (tui-rendering §4.5).
+	for env, want := range map[string]float64{"": 90, "0": 0, "95": 95, "abc": 90} {
+		if got := ContextUrgent(func(string) string { return env }); got != want {
+			t.Errorf("urgent %q: %v, want %v", env, got, want)
+		}
+	}
 }

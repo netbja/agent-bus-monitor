@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 	"github.com/netbja/agent-bus-monitor/plan"
 	"github.com/netbja/agent-bus-monitor/quota"
 )
@@ -53,6 +55,8 @@ func TestOwnerPaces(t *testing.T) {
 // length it says so, the bar held at 95 %.
 func TestProgressLine(t *testing.T) {
 	pinLocal(t)
+	withRendering(t, finedraw.ModeFine)
+	withPalette(t, "dark", false, 1<<24)
 	start := shellNow.Add(-30 * time.Minute)
 	r := inHandReq("x", "coder", 30*time.Minute)
 	for _, c := range []struct {
@@ -63,7 +67,7 @@ func TestProgressLine(t *testing.T) {
 	}{
 		{"sure", pace{usual: time.Hour, n: 6}, []string{"started " + start.Local().Format("15:04"), "~50%", "ends ~" + quota.ResetLabel(start.Add(time.Hour), shellNow, quota.DateRelative)}, []string{"estimate"}},
 		{"thin", pace{usual: time.Hour, n: 3}, []string{"started", "estimate ~" + quota.ResetLabel(start.Add(time.Hour), shellNow, quota.DateRelative)}, []string{"%", "ends"}},
-		{"none", pace{}, []string{"started", "no estimate yet"}, []string{"%", "ends", GlyphThinBar}},
+		{"none", pace{}, []string{"started", "no estimate yet"}, []string{"%", "ends", GlyphBarFull}},
 		{"longer", pace{usual: 20 * time.Minute, n: 6}, []string{"longer than usual (20m)"}, []string{"%", "ends"}},
 	} {
 		l, ok := progressLine(r, c.p, shellNow)
@@ -81,17 +85,20 @@ func TestProgressLine(t *testing.T) {
 				t.Errorf("%s: %q has %q", c.name, got, w)
 			}
 		}
-		filled := 0
+		filled, cells := 0, 0
 		for _, s := range l {
 			if s.Role == RoleDone {
-				filled += strings.Count(s.Text, GlyphThinBar)
+				filled += strings.Count(s.Text, GlyphBarFull)
 			}
 			if s.Role != RoleDone && s.Role != RoleDim && s.Role != RoleMuted {
 				t.Errorf("%s: %q in %v: not discreet", c.name, s.Text, s.Role)
 			}
 		}
-		if bar := strings.Count(got, GlyphThinBar); c.name != "none" && bar != progressBarW {
-			t.Errorf("%s: bar %d cells", c.name, bar)
+		if c.name != "none" {
+			cells = Width(Line(progressBar(0, progressBarW, RoleMuted)).text())
+		}
+		if bar := strings.Index(got, "  "); c.name != "none" && (bar < 0 || cells != progressBarW) {
+			t.Errorf("%s: bar %d cells", c.name, cells)
 		}
 		switch c.name {
 		case "sure":
@@ -253,5 +260,88 @@ func TestProgressLineOnlyWhileAccepted(t *testing.T) {
 	stuck.State = "accepted"
 	if _, ok := planProgressLine(row, []request{stuck}, nil, shellNow); !ok {
 		t.Error("no plan line once accepted")
+	}
+}
+
+// tui-rendering §4.4: the progress bar moves by eighths in fine (10 cells,
+// 80 steps), whole cells in basic, # and - in ascii; it is always its
+// cells wide.
+func TestProgressBarEighths(t *testing.T) {
+	withPalette(t, "dark", false, 1<<24)
+	for _, c := range []struct {
+		mode finedraw.Mode
+		pct  float64
+		want string
+	}{
+		{finedraw.ModeFine, 37.5, strings.Repeat(GlyphBarFull, 3) + GlyphEighth6 + strings.Repeat(" ", 6)},
+		{finedraw.ModeFine, 5, GlyphEighth4 + strings.Repeat(" ", 9)},
+		{finedraw.ModeBasic, 37.5, strings.Repeat(GlyphGauge, 4) + strings.Repeat(GlyphBarEmpty, 6)},
+		{finedraw.ModeASCII, 37.5, "####------"},
+	} {
+		withRendering(t, c.mode)
+		if got := Line(progressBar(c.pct, progressBarW, RoleDone)).text(); got != c.want {
+			t.Errorf("%v at %v: %q, want %q", c.mode, c.pct, got, c.want)
+		}
+	}
+}
+
+// The progress line's bar is that bar: 22m30s of a 60m pace is 37.5 %,
+// three cells and six eighths.
+func TestProgressLineHasEighths(t *testing.T) {
+	pinLocal(t)
+	withRendering(t, finedraw.ModeFine)
+	withPalette(t, "dark", false, 1<<24)
+	r := inHandReq("x", "coder", 22*time.Minute+30*time.Second)
+	l, _ := progressLine(r, pace{usual: time.Hour, n: 6}, shellNow)
+	if got := l.text(); !strings.Contains(got, strings.Repeat(GlyphBarFull, 3)+GlyphEighth6) || !strings.Contains(got, "~37%") {
+		t.Errorf("progress %q", got)
+	}
+}
+
+// tui-rendering §4.4: an In progress card shows its task's progress, short:
+// a 6-cell bar and "~N%"; "estimate" on a thin pace; nothing without one.
+func TestKanbanCardProgress(t *testing.T) {
+	withRendering(t, finedraw.ModeFine)
+	withPalette(t, "dark", false, 1<<24)
+	r := inHandReq("x", "coder", 30*time.Minute)
+	for _, c := range []struct {
+		p    pace
+		want string
+		ok   bool
+	}{
+		{pace{usual: time.Hour, n: 6}, " ~50%", true},
+		{pace{usual: time.Hour, n: 3}, " estimate", true},
+		{pace{usual: 20 * time.Minute, n: 6}, " longer than usual", true},
+		{pace{}, "", false},
+	} {
+		l, ok := progressBrief(r, c.p, shellNow)
+		if ok != c.ok {
+			t.Fatalf("%+v: ok %v", c.p, ok)
+		}
+		if !ok {
+			continue
+		}
+		bar := Line(progressBar(0, kanbanBarW, RoleMuted)).text()
+		if got := l.text(); !strings.HasSuffix(got, c.want) || Width(got) != 2+Width(bar)+Width(c.want) {
+			t.Errorf("%+v: %q", c.p, got)
+		}
+	}
+	if _, ok := progressBrief(request{Task: "z", Tracked: true, State: "requested"}, pace{usual: time.Hour, n: 6}, shellNow); ok {
+		t.Error("a card's progress for a request not started")
+	}
+	// On the card, under its title.
+	reqs := []request{r}
+	for i := 0; i < 6; i++ {
+		reqs = append(reqs, doneReq(fmt.Sprintf("d%d", i), "coder", time.Hour, time.Duration(i+1)*time.Hour))
+	}
+	w := workModel{Team: []teamRow{{Agent: "coder", Word: "working", Task: &reqs[0]}}}
+	k := workKanban(w, workDraw{now: shellNow, requests: reqs})
+	card := k.cols[1].cards[0]
+	if len(card.lines) != 3 || !strings.HasSuffix(card.lines[2].text(), " ~50%") {
+		var got []string
+		for _, l := range card.lines {
+			got = append(got, l.text())
+		}
+		t.Errorf("card lines %q", got)
 	}
 }

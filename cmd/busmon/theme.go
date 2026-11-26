@@ -94,6 +94,10 @@ type Theme struct {
 	// depth is the terminal's colour depth (tui-rendering §3): a 256-colour
 	// terminal keeps the 16-colour roles but shows a fine bar's track.
 	depth finedraw.Depth
+	// hues are the dark or light palette's true colours whatever the depth:
+	// a ramp's stops (tui-rendering §2), which a 256-colour terminal draws
+	// downsampled while its roles stay the 16 colours.
+	hues [roleCount]Color
 }
 
 // lightBG is the light palette's painted background: the one its text roles
@@ -132,6 +136,9 @@ func ResolveTheme(flagVal, envVal, colorfgbg string, noColor bool, colors int) (
 		for _, h := range providerHues {
 			t.tags[h.role] = h.light
 		}
+	}
+	for r, name := range t.tags {
+		t.hues[r] = getColor(strings.ToLower(name))
 	}
 	if colors < 1<<24 {
 		t.palette = Palette16
@@ -200,6 +207,16 @@ func (t *Theme) Lifted(r Role, pct int) Color {
 	r2, g2, b2 := t.colors[RoleText].RGB()
 	mix := func(a, b int32) int32 { return a + (b-a)*int32(pct)/100 }
 	return newRGBColor(mix(r1, r2), mix(g1, g2), mix(b1, b2))
+}
+
+// Hue is r's true colour in the dark or light palette (Theme.hues), faded
+// pct percent of the way from the line colour as Faded does (100 = whole).
+func (t *Theme) Hue(r Role, pct int) finedraw.RGB {
+	r1, g1, b1 := t.hues[RoleLine].RGB()
+	r2, g2, b2 := t.hues[themeRole(r)].RGB()
+	pct = max(0, min(100, pct))
+	mix := func(a, b int32) uint8 { return uint8(a + (b-a)*int32(pct)/100) }
+	return finedraw.RGB{R: mix(r1, r2), G: mix(g1, g2), B: mix(b1, b2)}
 }
 
 // Animated: the palette has the shades a fade needs.
@@ -289,6 +306,9 @@ func (t *Theme) termStyle(c cellStyle) Style {
 	}
 	if c.Fade > 0 {
 		style = style.Foreground(t.Faded(c.Role, c.Fade))
+	}
+	if c.Ink != colorDefault && t.palette != PaletteNone { // a ramp's cell (finedraw.Caps.Shade gives none without colour)
+		style = style.Foreground(c.Ink)
 	}
 	if c.Lift > 0 && t.Animated() {
 		style = style.Foreground(t.Lifted(c.Role, c.Lift))

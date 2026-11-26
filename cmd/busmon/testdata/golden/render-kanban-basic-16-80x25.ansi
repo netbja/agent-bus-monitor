@@ -1,0 +1,25 @@
+ [1magent-bus-monitor[m  [38;5;2m● bus ok[m  [38;5;2m● dispatch up[m  [38;5;2m● missions up[m  [38;5;3m♙4[m  [38;5;3m●2[m     [38;5;7m15:04:05 [m
+ [38;5;3mpaused · resumes in 1h52 (lunch)[m  ♙ Charlie [human]  [38;5;11mclaude[m[38;5;7m 5h [m[38;5;2m62%[m[38;5;7m │ 7d [m[38;5;2m41%    [m
+[1;7;38;5;3m PAUSED[m[1;7;38;5;3m · /resume ends it now · resumes in 1h52 (lunch) · by charlie            [m
+[38;5;8m╭─[m [38;5;3mFor you[m [38;5;8m─────────────────────────────────────────────────────────[m [38;5;7m4 decide[m [38;5;8m─╮[m
+[38;5;8m│[m  [1;38;5;3mProject paused[m[38;5;7m · [m[38;5;6m/resume                                                    [m[38;5;8m│[m
+[38;5;8m│[m  [38;5;6m● answer [mmaster    review lot 1? (2 questions)                           [38;5;7m 4m[m[38;5;8m│[m
+[38;5;8m│[m  [38;5;3m♙ answer [mfoureyes  need a decision on the width rule                     [38;5;7m 6m[m[38;5;8m│[m
+[38;5;8m│[m  [38;5;3m♙ answer [msentinel  blocked: waiting for an answer in its terminal        [38;5;7m 1m[m[38;5;8m│[m
+[38;5;8m│[m  [38;5;7m+1 more                                                                     [m[38;5;8m│[m
+[38;5;8m╰──────────────────────────────────────────────────────────────────────────────╯[m
+[38;5;8m╭─[m [38;5;6mAgents[m [38;5;8m─[m [38;5;7m10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-3 of …[m[38;5;8m─╮[m
+[38;5;8m│[m[7;38;5;6m▶ [m[7;38;5;3m♙ [m[7mfoureyes  [m[7;38;5;3mwaiting  [m[7;38;5;7m6m  [m[7m [m[7;38;5;7m—  [m[7m [m[7;38;5;9mescalated  [m[7m need a decision on the width rule [m[38;5;8m▲[m
+[38;5;8m│[m  [38;5;3m♙ [mmaster    [38;5;3mwaiting  [m[38;5;7m12m [m [38;5;7m—  [m [38;5;6mpilot      [m see my ask                        [38;5;8m┃[m
+[38;5;8m│[m  [38;5;3m▲ [msentinel  [38;5;3mblocked  [m[38;5;7m30m [m [38;5;7m—  [m [38;5;3mmodel≠     [m health ok                         [38;5;8m▼[m
+[38;5;8m╰──────────────────────────────────────────────────────────────────────────────╯[m
+[38;5;12m╭─[m [38;5;7m 1 Activity [m [38;5;7m 2 Board [m [1;7;38;5;12m 3 Work [m [38;5;7m 4 Plan [m  [38;5;12m────────────────────[m [38;5;7m♙4 ●1 ○0 ◇0[m [38;5;12m─╮[m
+[38;5;12m│[m[1;7;38;5;12m For you  4 [m                           [1m In progress  1 [m                       [38;5;12m│[m
+[38;5;12m│[m[38;5;7m+4 more                               [m[38;5;8m│[m[38;5;7m+2 more                               [m [38;5;12m│[m
+[38;5;12m│[m                                                                              [38;5;12m│[m
+[38;5;12m│[m[1m Next  0 [m                              [1m Ideas  0 [m                             [38;5;12m│[m
+[38;5;12m│[m                                      [38;5;8m│[m [38;5;7m— between agents · 1                 [m [38;5;12m│[m
+[38;5;12m│[m                                       [38;5;7m  nobody waits on you (enter)         [m [38;5;12m│[m
+[38;5;12m╰──────────────────────────────────────────────────────────────────────────────╯[m
+[38;5;6m›                                                                               [m
+ [1;38;5;6mT[m[38;5;7m triage[m   [1;38;5;6mp P[m[38;5;7m plan[m   [1;38;5;6mtab[m[38;5;7m column[m   [1;38;5;6m/ ^P[m[38;5;7m commands[m   [1;38;5;6mF1[m[38;5;7m help[m   [1;38;5;6mF5[m[38;5;7m health         [m

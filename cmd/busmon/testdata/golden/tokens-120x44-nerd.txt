@@ -2,17 +2,17 @@
  paused · resumes in 1h52 (lunch)   󰬈 claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   󰬟 grok 5h ━━━━╋ 100% held 15:44         
  PAUSED · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                    
 ╭─ For you ───────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 3 blocked · 1 dormant (a shows) ─╮
-│  Project paused · /resume                    ││      agent     state     updated queue ctx       flags       message │
-│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ 󰬖 foureyes  waiting   6m      —     —         escalated   need a …│
-│  ♙ answer foureyes  need a decision on th… 6m││  ♙ 󰬈 master    waiting   12m     —     41k 21%   pilot · ar… see my …│
-│  ♙ answer sentinel  blocked: waiting for … 1m││  ▲ 󰬈 sentinel  blocked   30m     —     —         model≠      health …│
-│  ◆ review coder     by charlie  look at b1   ││  ✓ 󰬖 architect done      40m     —     —         escalating… spec me…│
-│                                              ││  ○ 󰬈 coder     paused    2m      —     88k 85%   gate 1 · d… busmon-…│
-│                                              ││  ▲ 󰬎 docs      blocked   50m     —     —         armed · st… waiting…│
-│                                              ││  ▲ 󰬟 qa        blocked   11m     —     —         held        out of …│
-│                                              ││  ○ 󰬟 ui-grok   quota     3m      —     —         swapping ·… reviewed│
-│                                              ││  ● 󰬒 release   working   7m      —     —         fallback k… tagging │
-│                                              ││  ○ 󰬒 ui-kimi   paused    9m      —     —         for you     charlie…│
+│  Project paused · /resume                    ││      agent     state     updated queue ctx         flags       messa…│
+│  ● answer master    review lot 1? (2 ques… 4m││▶ ♙ 󰬖 foureyes  waiting   6m      —     —           escalated   need …│
+│  ♙ answer foureyes  need a decision on th… 6m││  ♙ 󰬈 master    waiting   12m     —     █▎     21%  pilot · ar… see m…│
+│  ♙ answer sentinel  blocked: waiting for … 1m││  ▲ 󰬈 sentinel  blocked   30m     —     —           model≠      healt…│
+│  ◆ review coder     by charlie  look at b1   ││  ✓ 󰬖 architect done      40m     —     —           escalating… spec …│
+│                                              ││  ○ 󰬈 coder     paused    2m      —     █████▏ 85%  gate 1 · d… busmo…│
+│                                              ││  ▲ 󰬎 docs      blocked   50m     —     —           armed · st… waiti…│
+│                                              ││  ▲ 󰬟 qa        blocked   11m     —     —           held        out o…│
+│                                              ││  ○ 󰬟 ui-grok   quota     3m      —     —           swapping ·… revie…│
+│                                              ││  ● 󰬒 release   working   7m      —     —           fallback k… taggi…│
+│                                              ││  ○ 󰬒 ui-kimi   paused    9m      —     —           for you     charl…│
 ╰──────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────╯
 ╭─ Tokens · today · anthropic 62% 5h · xai held 40m ──────────────────────────────────────────────────────── esc back ─╮
 │ Accounts                                                                                                             ▲
@@ -25,20 +25,20 @@
 │   󰬟 GROK                                                held until today 15:44                                       ┃
 │   󰬟 5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━  100% · resets today 15:44                                       ┃
 │     Limit reached: it resets today 15:44.                                                                            ┃
-│ Projects                     in      out  7 days                                7d total                             ┃
+│ Projects                     in      out  7 days                                              7d total               ┃
 │                                           10-20 to 10-26                                                             ┃
-│   agent-bus-monitor       ~1.5M    ~289k  ⠀⠀⠀⠀⠀⠀⣤⣤⠀⠀⣿⣿⣶⣶  ████████████████████     ~5.1M                             ┃
-│                                                                                                                      ┃
-│   blog                        0        0  ⠀⠀⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  ▋                         170k                             ┃
+│                                           ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣤⣤⣤⣤  max 2.5M/day                                 ┃
+│   agent-bus-monitor       ~1.5M    ~289k  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣶⣶⣶⣶⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿  ████████████████████     ~5.1M               ┃
+│                                           ⠀⠀⠀⠀⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  max 170k/day                                 ┃
+│   blog                        0        0  ⠀⠀⠀⠀⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  ▋                         170k               ┃
 │   wiki  no data (no dispatch service counting tokens)                                                                ┃
 │ Agents, agent-bus-monitor             in      out                                                                    ┃
 │   foureyes         󰬈 anthropic      1.2M     206k  ████████████████████                                              ┃
 │                                                                                                                      ┃
-│   coder            󰬈 anthropic      345k      83k  ██████▏                                                           ┃
-│   1 more · Codex session not proved  (a lists them)                                                                  ┃
+│   coder            󰬈 anthropic      345k      83k  ██████▏                                                           │
+│   1 more · Codex session not proved  (a lists them)                                                                  │
 │   1 more · no token count for google (no adapter)  (a lists them)                                                    │
 │   3 more · no proved session  (a lists them)                                                                         │
-│   2 more · no token count for grok (no adapter)  (a lists them)                                                      │
-│   2 more · Kimi logs give no token counts  (a lists them)                                                            ▼
+│   2 more · no token count for grok (no adapter)  (a lists them)                                                      ▼
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↑↓ j k scroll   y copy   n p ←→ next/prev   a all   esc q close   F5 health   F6 ideas                                 

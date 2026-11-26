@@ -142,6 +142,42 @@ func (r Ramp) At(pct float64) RGB {
 	return RGB{mix(a.R, b.R), mix(a.G, b.G), mix(a.B, b.B)}
 }
 
+// Stop is one colour of Stops, at pct.
+type Stop struct {
+	Pct float64
+	C   RGB
+}
+
+// Stops is a gradient whose colours sit at given percents (ascending):
+// linear between two stops, flat before the first and past the last (the
+// context ramp: amber at the alert threshold, red at the urgent one).
+type Stops []Stop
+
+// At is the colour at pct; at two stops in one place, the later one.
+func (s Stops) At(pct float64) RGB {
+	if len(s) == 0 {
+		return RGB{}
+	}
+	if pct < s[0].Pct {
+		return s[0].C
+	}
+	for i := len(s) - 1; i > 0; i-- {
+		a, b := s[i-1], s[i]
+		if pct >= b.Pct {
+			return b.C
+		}
+		if pct >= a.Pct {
+			f := (pct - a.Pct) / (b.Pct - a.Pct)
+			mix := func(x, y uint8) uint8 { return uint8(math.Round(float64(x) + (float64(y)-float64(x))*f)) }
+			return RGB{mix(a.C.R, b.C.R), mix(a.C.G, b.C.G), mix(a.C.B, b.C.B)}
+		}
+	}
+	return s[0].C
+}
+
+// Gradient is a ramp of either form: a colour for each percent.
+type Gradient interface{ At(pct float64) RGB }
+
 // Shade is a ramp cell's colour at a depth: the ramp's RGB from 256
 // colours up in fine (the terminal library downsamples it to 256), else
 // the band among the thresholds (0 below the first; the caller's role
@@ -155,7 +191,7 @@ type Shade struct {
 }
 
 // Shade is pct on ramp r with the 16-colour thresholds bands (ascending).
-func (c Caps) Shade(r Ramp, pct float64, bands []float64) Shade {
+func (c Caps) Shade(r Gradient, pct float64, bands []float64) Shade {
 	s := Shade{Colour: c.Depth > DepthNone}
 	for _, b := range bands {
 		if pct >= b {

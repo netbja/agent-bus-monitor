@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
-
-	"github.com/netbja/agent-bus-monitor/internal/finedraw"
 )
 
 // The progress line (progress-line §3): under a task in hand, when it
@@ -86,9 +85,8 @@ func progressLine(r request, p pace, now time.Time) (Line, bool) {
 	}
 	used := max(now.Sub(r.Accepted), 0)
 	end := resetClock(r.Accepted.Add(p.usual), now)
-	bar := func(fill int, role Role) Line {
-		r := finedraw.Rule(fill, progressBarW, drawCaps().Mode)
-		return Line{{Text: "  ", Role: RoleDim}, {Text: r[0].Text, Role: role}, {Text: r[1].Text, Role: RoleMuted}, {Text: "  ", Role: RoleDim}}
+	bar := func(pct float64, role Role) Line {
+		return append(append(Line{{Text: "  ", Role: RoleDim}}, progressBar(pct, progressBarW, role)...), Seg{Text: "  ", Role: RoleDim})
 	}
 	switch {
 	case p.n < paceSure: // thin: no share, the end an estimate
@@ -98,10 +96,44 @@ func progressLine(r request, p pace, now time.Time) (Line, bool) {
 		l = append(l, bar(0, RoleMuted)...)
 		return append(l, Seg{Text: "estimate ~" + end, Role: RoleDim}), true
 	case used >= p.usual: // past the usual length: held at the cap, muted
-		l = append(l, bar(progressCap*progressBarW/100, RoleMuted)...)
+		l = append(l, bar(progressCap, RoleMuted)...)
 		return append(l, Seg{Text: "longer than usual (" + humanAge(p.usual) + ")", Role: RoleDim}), true
 	}
-	pct := min(int(used*100/p.usual), progressCap)
-	l = append(l, bar(pct*progressBarW/100, RoleDone)...)
-	return append(l, Seg{Text: fmt.Sprintf("~%d%%", pct), Role: RoleDim}, sep, Seg{Text: "ends ~" + end, Role: RoleDim}), true
+	pct := progressPct(used, p.usual)
+	l = append(l, bar(pct, RoleDone)...)
+	return append(l, Seg{Text: fmt.Sprintf("~%.0f%%", math.Floor(pct)), Role: RoleDim}, sep, Seg{Text: "ends ~" + end, Role: RoleDim}), true
 }
+
+// progressPct is the share of the usual length used, capped at progressCap.
+func progressPct(used, usual time.Duration) float64 {
+	return min(float64(used)*100/float64(usual), progressCap)
+}
+
+// progressBar is the progress line's bar (tui-rendering §4.4): finedraw's
+// Bar, so it moves by eighths of a cell in fine (10 cells, 80 steps), whole
+// cells in basic, # and - in ascii; the fill in role, its empty part dim.
+func progressBar(pct float64, cells int, role Role) Line {
+	return gaugeSegs(pct, cells, role, false)
+}
+
+// progressBrief is a kanban card's progress (tui-rendering §4.4): a short
+// bar and "~N%"; "estimate" while the pace is thin, "longer than usual"
+// past it; ok false when r has not started or its owner has no pace.
+func progressBrief(r request, p pace, now time.Time) (Line, bool) {
+	if r.Accepted.IsZero() || p.n == 0 {
+		return nil, false
+	}
+	used := max(now.Sub(r.Accepted), 0)
+	lead := Line{{Text: "  ", Role: RoleDim}}
+	switch {
+	case p.n < paceSure:
+		return append(append(lead, progressBar(0, kanbanBarW, RoleMuted)...), Seg{Text: " estimate", Role: RoleDim}), true
+	case used >= p.usual:
+		return append(append(lead, progressBar(progressCap, kanbanBarW, RoleMuted)...), Seg{Text: " longer than usual", Role: RoleDim}), true
+	}
+	pct := progressPct(used, p.usual)
+	return append(append(lead, progressBar(pct, kanbanBarW, RoleDone)...), Seg{Text: fmt.Sprintf(" ~%.0f%%", math.Floor(pct)), Role: RoleDim}), true
+}
+
+// kanbanBarW is an In progress card's bar.
+const kanbanBarW = 6

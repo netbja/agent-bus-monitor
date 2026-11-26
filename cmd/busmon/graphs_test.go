@@ -162,13 +162,14 @@ func TestTokensGraphsGoldens(t *testing.T) {
 }
 
 // Sparklines only (§2): in ascii or braille, the page differs from block's
-// only in each Projects row's 7-cell sparkline; every gauge and bar keeps its
-// blocks.
+// only in each Projects row's sparkline (braille's top row on the line
+// above it); every gauge and bar keeps its blocks. At 100 cells braille
+// keeps 14 cells: its 28 (tui-rendering §4.2) need a wider row.
 func TestGraphsLeaveTheGauges(t *testing.T) {
 	w := []bus.BudgetWindow{{Name: "5h", UsedPct: 40, ObservedAt: 1}}
 	budgets := map[string]bus.BudgetSnapshot{"anthropic": {Windows: w}}
 	page := func(style string) []string {
-		return strings.Split(linesText(tokensPage(iconsOff, style, tokFixtureState(shellNow), budgets, nil, nil, "agent-bus-monitor", shellNow, 120, false, barView{}, true)), "\n")
+		return strings.Split(linesText(tokensPage(iconsOff, style, tokFixtureState(shellNow), budgets, nil, nil, "agent-bus-monitor", shellNow, 100, false, barView{}, true)), "\n")
 	}
 	block := page(graphsBlock)
 	if !strings.Contains(strings.Join(block, "\n"), GlyphBarFull+GlyphBarFull) {

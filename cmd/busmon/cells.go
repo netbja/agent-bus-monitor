@@ -11,15 +11,16 @@ type Seg struct {
 	Text    string
 	Role    Role
 	Bold    bool
-	Reverse bool // the NO_COLOR stand-in for a highlight (active tab)
-	Fade    int  // 1-100: drawn at that intensity, between RoleLine and its colour (true colour only); 0 = full
-	Pill    bool // drawn on its role's colour (a focused frame's title); with Fade, on that faded colour
-	Off     bool // an inactive tab: muted text on the tab background (Theme.TabOff)
-	Tab     bool // drawn by tabBar: frameTitle neither pills it nor borrows its spaces
-	Track   bool // drawn on a gauge's track colour (true colour only): the bar's empty part
-	Lift    int  // 1-100: the colour that far towards the text colour (true colour only): a sliding bar's leading cell
-	Soft    bool // a Pill only with true colour (its Fade then shows); otherwise plain bold text (an unfocused kanban heading)
-	QR      bool // a QR code's cells: black on white whatever the theme (notify-guided-setup §5.3)
+	Reverse bool  // the NO_COLOR stand-in for a highlight (active tab)
+	Fade    int   // 1-100: drawn at that intensity, between RoleLine and its colour (true colour only); 0 = full
+	Pill    bool  // drawn on its role's colour (a focused frame's title); with Fade, on that faded colour
+	Off     bool  // an inactive tab: muted text on the tab background (Theme.TabOff)
+	Tab     bool  // drawn by tabBar: frameTitle neither pills it nor borrows its spaces
+	Track   bool  // drawn on a gauge's track colour (true colour only): the bar's empty part
+	Lift    int   // 1-100: the colour that far towards the text colour (true colour only): a sliding bar's leading cell
+	Soft    bool  // a Pill only with true colour (its Fade then shows); otherwise plain bold text (an unfocused kanban heading)
+	QR      bool  // a QR code's cells: black on white whatever the theme (notify-guided-setup §5.3)
+	Ink     Color // a ramp's colour for this run (tui-rendering §2), over its role's; never without colour
 }
 
 type Line []Seg
@@ -231,7 +232,7 @@ func FitLine(l Line, w int) Line {
 	// The padding keeps the last cell's colour but never its reverse nor a
 	// bar's track: a cursor cell at a row's end would light the rest of the
 	// row (A1), a bar's track would run to the edge (the U page's Agents).
-	last.Reverse, last.Track, last.Lift, last.QR = false, false, 0, false
+	last.Reverse, last.Track, last.Lift, last.QR, last.Ink = false, false, 0, false, colorDefault
 	return appendSegment(out, strings.Repeat(" ", w-used), last)
 }
 
@@ -253,7 +254,8 @@ type cellStyle struct {
 	Soft     bool // Seg.Soft
 	Border   bool // a frame line: Theme.FrameBorder(Role, Focused)
 	Focused  bool
-	Surface  bool // a dialog's solid fill: Theme.Surface (busmon-confirm-dialog)
+	Surface  bool  // a dialog's solid fill: Theme.Surface (busmon-confirm-dialog)
+	Ink      Color // Seg.Ink
 }
 
 // borderCell is the style of a frame line in hue, focused or not.
@@ -276,7 +278,7 @@ func drawLine(s cellSink, x, y, w int, l Line, selected bool) {
 	}
 	pos := x
 	lineClusters(FitLine(l, w), func(text string, width int, seg Seg) bool {
-		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Track: seg.Track, Lift: seg.Lift, Selected: selected, QR: seg.QR, Soft: seg.Soft}
+		st := cellStyle{Role: seg.Role, Bold: seg.Bold, Reverse: seg.Reverse, Fade: seg.Fade, Pill: seg.Pill, Off: seg.Off, Track: seg.Track, Lift: seg.Lift, Selected: selected, QR: seg.QR, Soft: seg.Soft, Ink: seg.Ink}
 		// A wide cluster's continuation cells first, then its head.
 		if width > 0 {
 			whole := pos >= 0 && pos+width <= sw

@@ -1,0 +1,25 @@
+ [1magent-bus-monitor[m  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie            [m
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────────────────────────────[m 4 decide [1m─╮[m
+[1m│[m  [1mProject paused[m · /resume                                                    [1m│[m
+[1m│[m  ● answer master    review lot 1? (2 questions)                            4m[1m│[m
+[1m│[m  ♙ answer foureyes  need a decision on the width rule                      6m[1m│[m
+[1m│[m  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m[1m│[m
+[1m│[m  ◆ review coder     by charlie  look at b1                                   [1m│[m
+[1m╰──────────────────────────────────────────────────────────────────────────────╯[m
+╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting  [m[7m6m  [m[7m [m[7m—  [m[7m [m[7mescalated  [m[7m need a decision on the width rule [m▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ [1;7m 1 Activity [m  2 Board   3 Work   4 Plan    auto-scroll on ─ 7 events · fil…─╮
+│    time  from     to       type      message                                 ▲
+│    14:51 coder             report    Lot 1 delivered (+197)                  │
+│  ○ 14:52 master   → charl… directive please look at the plan                 │
+│  ● 14:56 dispatch          notify    project paused until 16:56              ┃
+│  ● 15:00 master            ask       asks · review lot 1? (2 question(s), 2 …┃
+│    15:02 coder             status    working · busmon-charm-b: b1 shell      ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+›                                                                               
+ [1mT[m triage   [1mp P[m plan   [1mtab[m focus   [1m/ ^P[m commands   [1mF1[m help   [1mF5[m health          
