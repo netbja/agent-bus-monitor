@@ -127,3 +127,18 @@ func TestPersonUnansweredOffAndUnread(t *testing.T) {
 		t.Fatalf("no person %+v", o)
 	}
 }
+
+// Several agents owing answers: the detail and the wakes in name order,
+// whatever order the agents were read in (a stable fingerprint).
+func TestPersonUnansweredOrdersAgents(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	in := answerInput(now, personSaid(now.Add(-15*time.Minute), "docs", "a"), personSaid(now.Add(-12*time.Minute), "coder", "b"))
+	in.Agents = []AnswerAgent{{Name: "docs", State: "idle"}, {Name: "coder", State: "idle"}}
+	o := EvaluatePersonUnanswered(in)
+	if !strings.HasPrefix(o.Detail, "coder: ") || !strings.Contains(o.Detail, "; docs: ") {
+		t.Fatalf("detail %q", o.Detail)
+	}
+	if w := PersonUnansweredWakes(in); len(w) != 2 || w[0].Target != "coder" || w[1].Target != "docs" {
+		t.Fatalf("wakes %+v", w)
+	}
+}

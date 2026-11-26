@@ -30,8 +30,8 @@ type PersonUnansweredInput struct {
 	Now     time.Time
 	After   time.Duration // dispatch.answer_after; 0 = off
 	ReadErr string
-	Person  string // identity.as: whose directives are judged
-	Cmds    []AnswerCmd
+	Person  string      // identity.as: whose directives are judged
+	Cmds    []AnswerCmd // in stream order, oldest first
 	Agents  []AnswerAgent
 }
 
@@ -49,25 +49,23 @@ func personDirective(c AnswerCmd, person string) bool {
 
 // unanswered is the answer guard's judgement per agent, those past After.
 func unanswered(in PersonUnansweredInput) []answerHit {
-	if in.After <= 0 || in.ReadErr != "" || in.Person == "" {
-		return nil
+	if in.After <= 0 || in.ReadErr != "" {
+		return nil // no person: personDirective matches nothing
 	}
 	var hits []answerHit
 	for _, a := range in.Agents {
 		lastAnswer := ""
 		for _, c := range in.Cmds {
-			if c.From == a.Name && c.Target == in.Person && (c.Type == "reply" || c.Type == "directive") && streamIDLess(lastAnswer, c.ID) {
-				lastAnswer = c.ID
+			if c.From == a.Name && c.Target == in.Person && (c.Type == "reply" || c.Type == "directive") {
+				lastAnswer = c.ID // the newest: Cmds are in stream order
 			}
 		}
 		var d AnswerCmd
 		found := false
 		for _, c := range in.Cmds {
-			if c.Target != a.Name || !personDirective(c, in.Person) || !streamIDLess(lastAnswer, c.ID) {
-				continue
-			}
-			if !found || streamIDLess(c.ID, d.ID) {
-				d, found = c, true
+			if c.Target == a.Name && personDirective(c, in.Person) && streamIDLess(lastAnswer, c.ID) {
+				d, found = c, true // the oldest after the last answer
+				break
 			}
 		}
 		if !found {

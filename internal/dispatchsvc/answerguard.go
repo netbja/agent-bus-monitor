@@ -46,9 +46,6 @@ func (s *stallReader) personUnanswered(ctx context.Context) (health.Outcome, err
 		live = s.liveTerms(ctx)
 	}
 	for name, snap := range snaps {
-		if name == in.Person {
-			continue // the person is never an agent (person-never-agent)
-		}
 		in.Agents = append(in.Agents, health.AnswerAgent{Name: name, State: snap.State,
 			NoTerminal: live != nil && bus.ShownState(snap.State, snap.Pane, true, live[name]) == bus.StateNoTerminal})
 	}

@@ -68,6 +68,21 @@ func TestAnswerGuardWritesOnce(t *testing.T) {
 	}
 }
 
+// The answer guard is one of the dispatcher's stall checks (run every
+// minute, its wakes written by stallWake).
+func TestAnswerGuardIsAStallCheck(t *testing.T) {
+	w := newStallWorld(t)
+	for _, c := range stallChecks(w.s) {
+		if c.Definition.ID == "person-unanswered" {
+			if c.Definition.Handler != "dispatch" || len(c.Definition.Person) != 0 || len(c.Definition.Reasons) != 0 {
+				t.Fatalf("definition %+v: its warn must stay In hand", c.Definition)
+			}
+			return
+		}
+	}
+	t.Fatal("person-unanswered is not among the stall checks")
+}
+
 // Off (answer_after = 0) or no person recorded: never judged, nothing written.
 func TestAnswerGuardOff(t *testing.T) {
 	w := newStallWorld(t)
