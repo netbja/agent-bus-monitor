@@ -395,7 +395,10 @@ desktop stay outside the cap. Built in step 1 (§3).
 
 ## 12. The process model: the holder's delegated cgroup tree (amendment, 2026-11-27)
 
-Status: amendment r3, for review (subject `resource-limits-units`), ahead of step 4.
+Status: amendment r4, for review (subject `resource-limits-units`), ahead of step 4. r4, foureyes:
+no pane ever lands in `holder/self` (a failed cap B gives an uncapped `holder/agents` leaf), and
+the holder stops its scopes at terminal end, at holder stop, and in a start sweep of its own
+build's stale scopes (§12.5, §12.6).
 - **r3, the person's answers to ask `1795735397184-0`** (all typed, 2026-11-27) change r2's
   target. There is no unit per agent. The holder's own service is delegated, and it builds the
   per-terminal cgroups itself. Transient scopes come first and remain the fallback.
@@ -517,7 +520,7 @@ The holder starts a pane's command as today, as its own child on the pane's pty
 (`holder/server.go:446-467`). Only the argv changes:
 
 ```
-systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<role>-<term>
+systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<key>-<role>-<term>
   -p Delegate=yes -p MemoryMax=<agent_memory_max> -p MemorySwapMax=<agent_swap_max>
   -p OOMPolicy=continue -- agentbus agent-enter -- <client argv>
 ```
@@ -541,6 +544,20 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<r
 - **No `systemd-run`, or it fails before the exec:** the pane starts as today, without it. The
   mode is `soft` for that terminal, and a launch is never refused (§4's fallback rule).
 - **The scope sits in `agentbus.slice`**, so cap A still covers the agent.
+- **Who stops a scope** (r4, foureyes). Today the holder unit's `KillMode=control-group`
+  (`service/holder.go`) ends every agent process when the holder stops. A scope is outside the
+  holder unit, so its background processes would survive: an `agentbus run --cap` child, or
+  anything off the pty's foreground group. So the holder stops scopes itself, with
+  `systemctl --user stop <scope>`, which kills the whole scope:
+  - **at a terminal's end** (its client exited, or the holder closed it): that terminal's scope;
+  - **at holder stop** (the unit's `ExecStop`, before the control-group kill): every scope of
+    its project and build;
+  - **at holder start:** a sweep of `agentbus-<p>-<key>-*.scope` of its own project and build
+    that no live terminal holds. Those are leftovers of a crash. Another build's scopes are
+    never touched: the build key is in the name, so a drain's old and new holders do not kill
+    each other's agents.
+  - The scope name holds the build key for that reason. `agentbus-<p>-<key>-<role>-<term>`
+    stays under systemd's unit-name length, with the key cut as the holder unit's name cuts it.
 - 4b's live check confirms that this host's systemd accepts `OOMPolicy`, `Delegate` and
   `MemorySwapMax` on a transient scope. foureyes probed it on 2026-11-27: it does. A property a
   host refuses is dropped and named in the doctor line, never silently.
@@ -567,8 +584,16 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<r
   "Reattached" is not possible while the masters live in the holder. So they are **reported**:
   each one shows as lost in busmon (cleaning-up-agents §3), and a parked or resumable session is
   woken as that spec says. Keeping the masters alive across a holder restart is §12.8 Q-later.
-- **Scopes stay the fallback:** when the unit is not delegated (an older install, the person's
-  `--no-delegate`, a refused `Delegate`), the holder uses step 1's scopes.
+- **No pane ever starts in `holder/self`** (r4, foureyes). In a delegated holder, every spawn
+  passes `CgroupFD`. A child forked without it would be born in `holder/self`, so none is.
+  - If cap B's cgroup cannot be created or limited, the pane starts in an **uncapped**
+    `holder/agents/<project>.<role>.<term>/client` leaf (no `memory.max`): inside cap A, never
+    in `holder/self`. The doctor line and busmon say `no cap B: <reason>` for that terminal.
+  - A test pins it: a spawn whose cgroup creation fails lands in the uncapped leaf, and
+    `holder/self/cgroup.procs` holds only the holder's pid.
+- **Scopes are the fallback only for a holder that is not delegated** (an older install, the
+  person's `--no-delegate`, a refused `Delegate`). Such a holder has no `holder/self`: it runs
+  as today, and step 1's scopes apply.
 
 ### 12.7 What reads the mode
 
@@ -607,6 +632,8 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<r
   - Tests:
     - the argv with and without `systemd-run`;
     - the pid contract through a fake `systemd-run` that execs (`/proc/P/comm`, `cmd.Wait`);
+    - scope stops at terminal end and holder stop, the start sweep of this build's stale scopes,
+      and another build's scopes left alone (a fake `systemctl` records the calls);
     - a fake that fails gives `soft`;
     - unit text goldens with no `MemoryMax` on the holder unit;
     - a live check on this host in the PR.
@@ -615,7 +642,8 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<r
   `holder/agents/<…>` with `CgroupFD`, journal fields, linger in `up`'s summary (with
   `--no-linger` and the polkit fallback), and cleanup of empty cgroups.
   - Tests: a fake cgroup tree, a fake `systemctl` and `loginctl`, unit text goldens, a holder
-    killed in a test leaving every agent reported lost, and a live check.
+    killed in a test leaving every agent reported lost, a failed cap-B creation landing in the
+    uncapped `holder/agents` leaf, never `holder/self`, and a live check.
 
 Each step is its own PR and review. Every unit and slice write is on the person's typed yes.
 Service tests fake `systemctl` and `loginctl` (CLAUDE.md).
