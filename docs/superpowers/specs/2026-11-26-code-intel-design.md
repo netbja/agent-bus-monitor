@@ -199,9 +199,10 @@ enforces the budget itself:
   `memory.swap.max` = 0 there itself. The backend's watchdog (§5) starts it in that cgroup
   (`UseCgroupFD`). The kernel ends the backend, never the agent's other processes. By the mode
   the interface reports (the same one `roles doctor` shows):
-  - **user unit or system unit** (`agentbus-agent@<role>.service`, `Delegate=yes`): a hard
-    bound, in the agent's own delegated subtree, under the agent's cap B (the unit's
-    `MemoryMax`).
+  - **delegated holder** (the person's target, resource-limits §12 r3: one
+    `agentbus-holder.service` with `Delegate=yes`, the agent's cgroup
+    `holder/agents/<project>.<role>.<terminal>` = cap B): a hard bound, in the agent's
+    delegated subtree, under its cap B.
   - **scope** (before the units exist, the person's `systemd-run --user --scope` fallback):
     the agent's own scope is the root. The holder starts the pane in it, in `agentbus.slice`,
     with `Delegate=yes` (resource-limits §12.5). The backend's `ci-<n>` is a sub-cgroup under
@@ -424,10 +425,11 @@ Each step is its own PR and review, in series (merge-conflicts §3, sibling-enfo
    fallback in the skill and doctor showing per role. §8, §11.
 5. 15 minutes and 2 servers, counted in the 30 % cap. Plus a clear refusal before an OOM, and
    both values person-only. §6, §9.
-7. **Answered (ask `1795734341064-0`, 2026-11-27, typed): the process model.** One systemd
-   unit per agent (`agentbus-agent@<role>.service`, cap B = its `MemoryMax`), `Delegate=yes`
-   so the relay makes one sub-cgroup per language server itself, user units with linger first,
-   system units later. One cgroup-root interface is shared by code-intel, `agentbus run --cap`
+7. **Answered (ask `1795734341064-0`, 2026-11-27, typed): the process model**, refined in
+   resource-limits §12 r3 (ask `1795735397184-0`). The holder runs as one delegated
+   `agentbus-holder.service` (user unit and linger first, system later), and each terminal's
+   cgroup is its cap B. Transient scopes are first and remain the fallback. The relay makes one
+   sub-cgroup per language server itself. One cgroup-root interface is shared by code-intel, `agentbus run --cap`
    and cap B, with the `systemd-run --user --scope` fallback until the units exist. `roles
    doctor` reports the mode and whether the memory controller is delegated. It is specified in
    resource-limits, ahead of its step 4. Here: §6 uses that interface, and the soft bound is
