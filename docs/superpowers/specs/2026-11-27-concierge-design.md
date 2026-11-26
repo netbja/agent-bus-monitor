@@ -184,7 +184,7 @@ is chosen then, from §3's re-check, on the person's yes.
 - No code reading.
 - No second memory: it reads person-memory, it does not keep its own.
 
-## 9. Questions for the person (ask `ask:`, in French)
+## 9. Questions for the person (ask `1795736424584-0`, in French)
 
 1. **UI:** the floating window in busmon now, a native GUI not now (re-checked in three months).
    Recommended: yes.
