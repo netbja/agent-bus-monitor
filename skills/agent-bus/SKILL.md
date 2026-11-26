@@ -436,6 +436,51 @@ A request's `blocked` state is not your agent `status`: the first says this one 
 move and why, the second is reserved for an open 4-eyes gate. You can be blocked on a
 request while you are `working` on something else.
 
+## A retro after a task with friction (`retro-<task>`)
+
+When you close a task that met friction (a reject verdict on your work, a CI hand-off to you, a
+blocked or unlanded wake, an escalation naming you), `request done` sends you a tracked request
+`retro-<task>` and prints `retro due: …`. The person can also ask for one after a fix they made by
+hand (`agentbus retro request`, or busmon's `/retro`). It is your work, like any request: accept
+it, and your pop stays alive until it is done. A green task gets none, and a retro never triggers
+another. The rules (self-improving loop spec §4):
+
+1. **Read the evidence:** `agentbus retro evidence <task>` prints the task's thread and each
+   signal with its text. Cite only bus ids from it. Never a quote from your session, and never a
+   person or a private exchange: a rule names a behaviour.
+2. **Root cause first:** one sentence, evidence → trigger → mechanism → cause.
+3. **At most three proposals**, one table, every column filled:
+   `n | lesson | evidence | destination | file | change`. Evidence is one or more bus ids
+   (cmd, verdict, CI hand-off, event) that exist. No proposal without a real exchange or
+   outcome behind it. Approval is never inferred from silence, and one task's own choice is
+   not a rule.
+4. **Before each row, read the target file** on `origin/<base>`, check the rule is not already
+   there, and name any conflict with an existing rule in `change`. **Edit an existing rule**
+   rather than add one.
+5. **Destination, in order:** an existing skill (`skill`: `skills/<name>/SKILL.md`,
+   `roles/<name>.md`), then a context file (`context`: `AGENTS.md`, `CLAUDE.md`, a
+   `docs/memory/lessons/` note), and a `new skill` (`skills/<name>/SKILL.md`, absent on the
+   base) only for a workflow the evidence shows recur.
+6. **Check the rejected list** first, `agentbus retro rejected --file <f>`: a reworded repeat
+   of a rejected lesson is still a repeat.
+
+Then file it, with a `Root cause:` line above the table, and close the request:
+
+```bash
+agentbus retro propose <task> --file /tmp/retro-<task>.md   # checks: 1-3 rows, ids, files, secrets, rejected, the cap
+agentbus request done retro-<task> "proposed"
+```
+
+`propose` opens the person's ask (`retro 1 of N` in For you; one question per row, `yes`, `no`
+or `later`), or files it `queued` while another retro's ask is open: the request closes either
+way. Only the person's typed `yes` to a row approves it. Master routes the answers and docs
+applies them; you do nothing more.
+
+**"No lasting lesson" is a valid retro:** `agentbus retro none <task> "<root cause sentence>"`
+closes the request. Over the project's daily cap (`retro.max_per_day`), `propose` refuses and
+says so: close it with `agentbus retro none <task> "capped: <its signals>"`; a lesson that
+recurs fires again on a later day.
+
 ## Missions — when a request body starts with `mission <change>/<id>`
 
 A mission is one task of a larger change, run by the conductor (`agentbus missions`). The request

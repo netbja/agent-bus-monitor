@@ -85,6 +85,11 @@ func classCRows() []palCmd {
 			Argv: func(a []string) []string { return []string{"self-repair", "reset", a[1]} }},
 		{Name: "priority", Aliases: []string{"prio"}, Summary: "a request's priority: low, normal or high", Args: []palArg{task, level}, As: true,
 			Argv: func(a []string) []string { return []string{"request", "priority", a[0], a[1]} }},
+		// The person's retro (self-improving loop §3.3): for a fix the person
+		// made by hand, on the task named or the request selected.
+		{Name: "retro", Summary: "a retro for a task you fixed by hand: the one named, else the selected request",
+			Args: []palArg{{Name: "task", Optional: true, Check: task.Check, Complete: task.Complete}}, Fill: (*Model).retroTask,
+			Argv: func(a []string) []string { return []string{"retro", "request", a[0]} }},
 		// The person's ci reset (ci-loop §5): a stopped PR's loop re-opened, its
 		// author given ci.max_handoffs more tries; no shell needed.
 		{Name: "ci", Summary: "re-open a PR's CI loop after its stop", Args: []palArg{reset, pr},
@@ -95,6 +100,14 @@ func classCRows() []palCmd {
 // palAgentbus asks in the confirm dialog, the exact argv shown; Run runs it (runSleepAsk).
 // A refusal (no identity.as, a run already going) keeps the line.
 func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
+	if c.Fill != nil {
+		filled, why := c.Fill(m, args)
+		if why != "" {
+			m.ui.flash, m.ui.flashErr = why, true
+			return nil
+		}
+		args = filled
+	}
 	if r := m.ui.sleepRun; r != nil {
 		m.ui.flash, m.ui.flashErr = r.verb+" already running (see "+r.log+")", true
 		return nil
@@ -124,4 +137,25 @@ func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
 	}
 	m.askSleep(&sleepAsk{verb: c.Name, args: argv}, "Run agentbus "+c.Name+"?", "Run", "agentbus "+strings.Join(argv, " "))
 	return nil
+}
+
+// retroTask is /retro's task: the one named, else the tracked request the
+// person has selected (its Requests row or its page), whatever its state: a
+// retro follows a task.
+func (m *Model) retroTask(args []string) ([]string, string) {
+	if len(args) > 0 {
+		return args, ""
+	}
+	const why = "retro: name the task (/retro <task>), or select its request on Requests"
+	key, ok := m.selectedRequestKey()
+	task, isReq := strings.CutPrefix(key, "req:")
+	if !ok || !isReq {
+		return nil, why
+	}
+	for _, r := range m.snap.requests {
+		if r.Task == task && r.Tracked {
+			return []string{task}, ""
+		}
+	}
+	return nil, why
 }
