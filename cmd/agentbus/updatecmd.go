@@ -111,13 +111,19 @@ func runUpdate(ctx context.Context, args []string, project, host string, out, er
 	case a.rollback:
 		return update.RollbackTo(ctx, d, a.id, a.yes)
 	case a.auto:
-		code := update.CheckPass(ctx, d)
-		if !a.check && d.AutoSetting() == "install" {
-			fmt.Fprintln(out, "the automatic install is not built yet (quiet-update step 4b): nothing installed")
-		}
-		return code
+		return autoPass(a.check)(ctx, d)
 	}
 	return update.Run(ctx, d, update.Options{Project: project, Check: a.check, Yes: a.yes})
+}
+
+// autoPass is update --auto's pass (quiet-update-auto §4.3): --check reads
+// only; without it the pass installs when updates.auto = install (the
+// person's yes given ahead), else it checks.
+func autoPass(check bool) func(context.Context, update.Deps) int {
+	if check {
+		return update.CheckPass
+	}
+	return update.InstallPass
 }
 
 func realUpdateDeps(host string, out, errw io.Writer) update.Deps {

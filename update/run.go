@@ -173,22 +173,50 @@ func Run(ctx context.Context, d Deps, o Options) int {
 			return 1
 		}
 	}
-	u := &updater{d: d, rel: rel, tree: tree, id: id, dir: filepath.Join(updates, id), mine: mine}
+	_, code := d.install(ctx, installSpec{rel: rel, tree: tree, id: id, mine: mine, others: others, changed: changed, kind: "update", acted: acted})
+	return code
+}
+
+// installSpec is what differs between agentbus update's install and the
+// automatic one (quiet-update-auto §4.3 step 5): the services restarted,
+// the history kind, and, for the automatic one, the quiet test read again
+// per project right before its first restart.
+type installSpec struct {
+	rel      Release
+	tree, id string
+	mine     []Service // restarted, in order
+	others   []Service // listed with their restart command
+	changed  []string  // the skills the release changes
+	kind     string    // the history line's kind: "update" or HistoryAuto
+	// recheck is why a project is in work now, "" quiet; nil: never asked.
+	// A project in work keeps its services on the old build: listed, not
+	// a failure, nothing rolled back.
+	recheck func(ctx context.Context, project string) string
+	acted   func(outcome, detail string)
+}
+
+// install is §3.4 steps 3 to 6 and the history: stage, snapshot, apply,
+// rolled back on any error. result is installed, failed (nothing changed,
+// or the rollback failed too) or rolled_back; code is the exit.
+func (d Deps) install(ctx context.Context, s installSpec) (result string, code int) {
+	updates := d.updates()
+	rel, tree, id, acted := s.rel, s.tree, s.id, s.acted
+	u := &updater{d: d, rel: rel, tree: tree, id: id, dir: filepath.Join(updates, id), mine: s.mine, recheck: s.recheck}
 	if err := u.stage(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+" (nothing outside "+tree+" changed)")
 		acted("failed", "not staged")
-		return 1
+		return "failed", 1
 	}
 	defer os.RemoveAll(u.tmp)
 	if err := u.snapshot(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: snapshot: "+err.Error()+" (nothing changed)")
 		acted("failed", "no snapshot")
-		return 1
+		return "failed", 1
 	}
 	if err := u.apply(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": rolling back")
 		rerr := Rollback(ctx, d, u.dir, u.m, u.restarted)
-		if herr := AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: false, Snapshot: id}); herr != nil {
+		if herr := AppendHistory(updates, HistoryLine{Kind: s.kind, From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: false, Snapshot: id}); herr != nil {
 			fmt.Fprintln(d.Err, "agentbus update: the history line cannot be written ("+herr.Error()+"): the next agentbus update names snapshot "+id+" as unfinished")
 		}
 		if rerr != nil {
@@ -197,13 +225,13 @@ func Run(ctx context.Context, d Deps, o Options) int {
 				fmt.Fprintln(d.Err, "  "+c)
 			}
 			acted("failed", "the rollback failed, snapshot "+id)
-			return 1
+			return "failed", 1
 		}
 		d.say("rolled back to %s", d.Version)
 		acted("failed", "rolled back")
-		return 1
+		return "rolled_back", 1
 	}
-	if err := AppendHistory(updates, HistoryLine{Kind: "update", From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: true, Snapshot: id}); err != nil {
+	if err := AppendHistory(updates, HistoryLine{Kind: s.kind, From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: true, Snapshot: id}); err != nil {
 		// unrecorded, the snapshot would read as an interrupted update: no success
 		fmt.Fprintln(d.Err, "agentbus update: the history line cannot be written ("+err.Error()+"): rolling back")
 		if rerr := Rollback(ctx, d, u.dir, u.m, u.restarted); rerr != nil {
@@ -212,26 +240,30 @@ func Run(ctx context.Context, d Deps, o Options) int {
 				fmt.Fprintln(d.Err, "  "+c)
 			}
 			acted("failed", "the rollback failed, snapshot "+id)
-			return 1
+			return "failed", 1
 		}
 		d.say("rolled back to %s; the next agentbus update names snapshot %s as unfinished until its history can be written", d.Version, id)
 		acted("failed", "rolled back")
-		return 1
+		return "rolled_back", 1
 	}
 	d.say("agentbus %s -> %s: installed; snapshot %s (agentbus update --rollback undoes it)", d.Version, rel.Tag, id)
 	acted("ok", "installed, snapshot "+id)
-	if len(changed) > 0 {
-		c := strings.Join(changed, " ")
+	if len(s.changed) > 0 {
+		c := strings.Join(s.changed, " ")
 		d.say("skills changed: %s  (agents to tell: agentbus roles skill-users %s)", c, c)
 	}
-	for _, s := range others {
-		d.say("not restarted: %s %s (%s): agentbus --project %s service restart %s", s.Project, s.Kind, buildOr(s.Build), s.Project, s.Kind)
+	for _, o := range s.others {
+		d.say("not restarted: %s %s (%s): agentbus --project %s service restart %s", o.Project, o.Kind, buildOr(o.Build), o.Project, o.Kind)
+	}
+	for _, k := range u.skipped {
+		d.say("not restarted: %s %s (%s), project %s in work (%s): agentbus --project %s service restart %s",
+			k.s.Project, k.s.Kind, buildOr(k.s.Build), k.s.Project, k.why, k.s.Project, k.s.Kind)
 	}
 	if err := Prune(updates); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: an old snapshot could not be removed: "+err.Error())
 	}
 	PruneTrees(ctx, d, rel.Tag) // after the snapshots: a tree only they named is free now
-	return 0
+	return "installed", 0
 }
 
 func buildOr(b string) string {
@@ -292,6 +324,14 @@ type updater struct {
 	mine      []Service
 	m         Manifest
 	restarted []Service
+	recheck   func(ctx context.Context, project string) string
+	skipped   []skippedService // mine left on the old build: their project in work
+}
+
+// skippedService is a service an automatic install did not restart.
+type skippedService struct {
+	s   Service
+	why string
 }
 
 // stage is §3.4 step 3: the tree, then both builds into the temp dir, then
@@ -464,7 +504,19 @@ func (u *updater) apply(ctx context.Context) error {
 	if err := u.checkSkills(ctx); err != nil {
 		return fmt.Errorf("skills: %w", err)
 	}
+	inWork := map[string]string{} // per project, read once, right before its first restart
 	for _, s := range u.mine {
+		if u.recheck != nil {
+			why, read := inWork[s.Project]
+			if !read {
+				why = u.recheck(ctx, s.Project)
+				inWork[s.Project] = why
+			}
+			if why != "" {
+				u.skipped = append(u.skipped, skippedService{s: s, why: why})
+				continue
+			}
+		}
 		u.restarted = append(u.restarted, s)
 		if err := restartGreen(ctx, d, s); err != nil {
 			return err
