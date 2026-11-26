@@ -1,6 +1,6 @@
 # Sibling steps run in series, enforced on the board
 
-Status: spec r3, for review (subject `sibling-enforce-spec`; r3, reviewer-codex's reject of r1, still true of r2: `request done` before a step merged, and `parallel --off` forgetting an older branch, both hid a step. Open steps are now a list that only a merge judgement or an abandon clears, and `done` judges it too; the head judged is the branch's current tip, the recorded commit only after the branch is deleted; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
+Status: spec r4, for review (subject `sibling-enforce-spec`; r4, foureyes' reject of r3: under `parallel` the last step's merge closed the request with a sibling still listed, so the merge pass now steps it back to `accepted` instead, and the local branch ref is judged after the remote is deleted; r3, reviewer-codex's reject of r1, still true of r2: `request done` before a step merged, and `parallel --off` forgetting an older branch, both hid a step. Open steps are now a list that only a merge judgement or an abandon clears, and `done` judges it too; the head judged is the branch's current tip, the recorded commit only after the branch is deleted; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
 Author: architect, from the merge-conflicts measure run early on 2026-11-26 (thread
 `1795676948573-0`, asked by claude-ao for the person) and the person's typed answer to ask
 `1795677070804-0` Q1: enforce it now, with a `parallel` exception for steps that share no file
@@ -69,8 +69,10 @@ holds the head, `closeonmerge.go:81-115`).
    `cmd/agentbus/requests.go:93-101`) fetches the project base and asks whether S is delivered.
    It uses the dispatcher's own test, `mergequeue.Delivery.Delivered` (`mergequeue/delivered.go:76`:
    ancestor or same tree, squash patch-id, rebase patch-ids). The head judged is S's current
-   remote tip while the branch exists, and S's recorded `commit` only once the branch is gone
-   (deleted after its merge). A recorded commit in the base says nothing about a tip pushed
+   remote tip while the branch exists. Once the remote branch is gone (deleted after its merge),
+   S's local branch ref is judged if the checkout has one, else S's recorded `commit`. Both are
+   judged when both exist, and either one delivered closes S (r4, foureyes' nit: a fix pushed
+   after the review, squash-merged, then the remote deleted). A recorded commit in the base says nothing about a tip pushed
    after it (r3, reviewer-codex). A tip pushed after the review is judged as it stands: it is
    merged when that tip is. The local ref is judged only in local mode, as `closeOnMerge` does.
    - **S delivered:** the CLI passes `step_merged = S, head, base tip` with the transition. The
@@ -118,8 +120,19 @@ holds the head, `closeonmerge.go:81-115`).
    work on anything else meanwhile. Coding the next step locally is not refused (nothing can
    see it). Putting it in review is. The reviewers and `deliver` start from that review.
 
-4. **The merge pass is unchanged.** It still steps a request in `review` (board-drift §3.4).
-   Rule 1 no longer depends on it. A resumed step that the pass never saw is judged at the next
+4. **The merge pass keeps the barrier.** It still steps a request in `review` (board-drift
+   §3.4), and rule 1 does not depend on it. One change (r4, foureyes): in
+   `requestMergedScript`'s close branch (a last review, no `--more`, `bus/requestmerged.go`
+   else-branch), a request whose `open_steps` is not empty is not closed. That can only happen
+   under `parallel`, where the last review is not refused. The script then does what it does for
+   a step: it appends the head to `merged_steps`, clears `branch`, `commit` and `review_base`,
+   and sets the request back to `accepted`. It returns a third outcome, `open` (`MergedOpen`),
+   and writes the same `request-merged` event with the listed branches in its detail. The
+   target's next `request done` judges the listed steps (rule 1). A listed step that merged
+   meanwhile passes. One that did not refuses the `done` until it merges or the sender
+   abandons it. The request is never `done` with a step listed.
+   The sender's own `done` is allowed only before any accept (`bus/requests.go:426`), when no
+   step can be listed; it is unchanged. A resumed step that the pass never saw is judged at the next
    review, so today's stale `resource-limits-build` row (accepted, `review_more` on
    `reslimits-2b`, merged as #812) passes at coder2's next step review.
 
@@ -166,8 +179,8 @@ per step, no file in common). busmon's Board row and the Plan view's task row (t
 `cmd/agentbus/requests.go` (rule 1's judgement with `mergequeue.Delivery`, the `parallel` and
 `step --abandon` subcommands and help), `bus/parallel.go` (the `parallel` and abandon scripts),
 busmon's board row and the plan row (one label), the two skills, and one operator-note fragment
-`docs/operator-notes.d/sibling-enforce.md`. `requestmerged.go` and `closeonmerge.go` are not
-touched. No setting: the rule has no off switch beyond `parallel`, by the person's answer.
+`docs/operator-notes.d/sibling-enforce.md`. `requestmerged.go` gains the `open` outcome
+(§3.4), and `closeonmerge.go` logs it. No setting: the rule has no off switch beyond `parallel`, by the person's answer.
 
 ## 7. Tests
 
@@ -188,6 +201,9 @@ On the disposable broker (`AGENTBUS_TEST_REDIS_URL`), with a scratch git reposit
 - Review with no `--branch` while B is open → refused. With `--branch B` → passes.
 - `parallel` set → C passes without a judgement, and B and C are both listed. `--off`, C
   merged, B not → review D refused on B (reviewer-codex's r1 path 2).
+- Under `parallel`: B and C listed, last review D (no `--more`) merged by the pass while B is
+  not → the request goes back to `accepted` (`MergedOpen`), not `done`; then the target's
+  `done` is refused on B. With `open_steps` empty, D's merge closes as today.
 - `request done` by the target while B is listed and not delivered → refused, even under
   `parallel` (path 1). B delivered → B judged merged, then done. Last step reviewed without
   `--more`, not listed → done as today.
@@ -196,7 +212,7 @@ On the disposable broker (`AGENTBUS_TEST_REDIS_URL`), with a scratch git reposit
   Missing reason → refused.
 - `request parallel`: by the target → refused. By the sender, or the person → set, audit line
   written. On a `done` request → refused. Missing reason → refused.
-- Mutants, each must fail a test: drop the S ≠ C check (a fix review is refused); judge the recorded commit while the branch exists (the stale-commit case passes); let `done` skip the judgement; let `--off` clear `open_steps`; skip the `review_n` check; let the target set
+- Mutants, each must fail a test: drop the S ≠ C check (a fix review is refused); judge the recorded commit while the branch exists (the stale-commit case passes); let `done` skip the judgement; let `--off` clear `open_steps`; let the merge pass close with `open_steps` listed; skip the `review_n` check; let the target set
   `parallel` or abandon.
 - `TestNoStructWriterOfTheBoard` and `TestEveryScriptRefusalIsListed` still pass.
 
@@ -204,7 +220,8 @@ On the disposable broker (`AGENTBUS_TEST_REDIS_URL`), with a scratch git reposit
 
 - merge-conflicts §3 (2026-11-20): its enforcement shape for sibling steps moves from
   `plan.Validate` to the board, for the reason in §1. The rule itself is unchanged.
-- board-drift §3.3-§3.4 (close on merge): unchanged. Rule 1 closes a merged step itself, at
+- board-drift §3.3-§3.4 (close on merge): unchanged, except that a last review's merge with
+  steps still listed steps the request back to `accepted` instead of closing it (§3.4). Rule 1 closes a merged step itself, at
   the next review, through the same board script that records it. It is an agent's own
   transition, not an automated write, so no fencing is involved.
 - wip-limit §3.2-§3.3: a resume is still never refused. A request in `review` is still not
