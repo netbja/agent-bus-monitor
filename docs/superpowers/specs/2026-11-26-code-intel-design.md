@@ -1,6 +1,8 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r3, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r4, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r4, foureyes' reject of r2: a path belongs to the deepest listed worktree containing it, since
+worktrees nest (§4).
 r3, reviewer-codex's reject of r2: each backend reserves a budget before it starts and is held
 to it (hard with cap B, a 2 s watch before; Q7 asks the person, §6). A branch has one owner,
 enforced on the board (§7). The relay checks role and agent against the verified snapshot, and
@@ -101,8 +103,12 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
 
 - **The project's worktrees** are `git -C <project repo> worktree list --porcelain`, read at
   each backend start and every 30 s. The project repo is the relay's `--project` repo from the
-  projects registry. A `path` argument is resolved (`filepath.EvalSymlinks`) and must lie inside
-  one listed worktree. Otherwise the call is refused, `not a worktree of <p>: <path>`, and no
+  projects registry. A `path` argument is resolved (`filepath.EvalSymlinks`, every listed root too)
+  and must lie inside a listed worktree. **The worktree is the deepest listed root that contains
+  the path** (the longest root, compared path element by element, never as a string prefix, so
+  `/a/b` does not contain `/a/bc`). Worktrees nest: this project has over a hundred under
+  `.worktrees/`, inside the main checkout. A first match would route a coder's file to the main
+  checkout's backend on `dev`, silently (r4, foureyes). Otherwise the call is refused, `not a worktree of <p>: <path>`, and no
   backend starts. Another project's tree, an untrusted clone and `/tmp` never get a server (the
   person, Q1; foureyes r1).
 - **From a request's branch to its worktree** (the person, Q1): the board knows a branch, not a
@@ -299,6 +305,7 @@ settings step runs alone.
    `request branch`, `work_branch`, and `{p}:helpers` with its ACL.
    - Tests use a fake MCP backend (a Go test binary):
      - a path outside the project's worktrees is refused;
+     - a path in a worktree nested inside the main checkout routes to the nested worktree's backend, not the main one; `/a/bc` is not inside `/a/b`;
      - a branch in no worktree or in two is refused;
      - each answer carries HEAD;
      - a removed worktree kills its backend within one sweep;
