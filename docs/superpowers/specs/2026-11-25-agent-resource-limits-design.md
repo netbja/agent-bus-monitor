@@ -145,8 +145,10 @@ warn-to-master notice tells master **once per episode**. There is no new notice 
 
 - Its detail names the age of the drain: `build v0.33.0: 3 terminal(s), draining for 21h`.
 - Past `limits.holder_drain_stale_after` (default 6h), its status becomes `fail`. The detail names
-  the agents still in the old build and the command that ends the drain: `agentbus relaunch
-  <agent>` for each, or the person's `service restart holder --kill-agents` for that build. The
+  the agents still in the old build and the command that ends the drain: `agentbus holder drain
+  <project>`, which relaunches them onto the current build one at a time (`agentbus reload <agent>`
+  for one). Never `service restart holder --kill-agents`: it restarts the current build's holder and
+  kills its agents, leaving the old build as it was (build step 3b, foureyes). The
   `fail` reaches master once, through the same notice path. busmon's header shows `2 holders`
   while two builds answer.
 

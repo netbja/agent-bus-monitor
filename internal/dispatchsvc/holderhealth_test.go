@@ -74,7 +74,7 @@ func TestHolderEvidence(t *testing.T) {
 	if got := health.EvaluateHolderLeftovers(e); got.Status != health.Warn || !strings.Contains(got.Detail, "v0") || strings.Contains(got.Detail, "v1") {
 		t.Errorf("leftovers %+v", got)
 	}
-	if got := health.EvaluateHolderDraining(e, 48*time.Hour, nil); got.Status != health.Warn || !strings.Contains(got.Detail, "v2") {
+	if got := health.EvaluateHolderDraining(e, 48*time.Hour, nil, "demo"); got.Status != health.Warn || !strings.Contains(got.Detail, "v2") {
 		t.Errorf("draining %+v", got)
 	}
 
@@ -150,8 +150,8 @@ func TestHolderDrainingCheck(t *testing.T) {
 	var agentsErr error
 	agents := func(context.Context) (map[string]bus.AgentSnapshot, error) { return snaps, agentsErr }
 	stale := 6 * time.Hour
-	run := holderDrainingCheck(agents, now, func() time.Duration { return stale })
-	if out, _ := run(context.Background()); out.Status != health.Fail || !strings.Contains(out.Detail, "agentbus relaunch coder") {
+	run := holderDrainingCheck("demo", agents, now, func() time.Duration { return stale })
+	if out, _ := run(context.Background()); out.Status != health.Fail || !strings.Contains(out.Detail, "holds coder: agentbus holder drain demo") {
 		t.Fatalf("stale: %+v", out)
 	}
 	stale = 8 * time.Hour

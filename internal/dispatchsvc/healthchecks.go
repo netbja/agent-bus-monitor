@@ -86,9 +86,13 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 	}
 	return []dispatch.HealthCheck{
 		healthOutcomeTask("holder", holderCheck(b, holderNow, os.Getenv)),
-		healthOutcomeTask("holder-draining", holderDrainingCheck(b.Agents, holderNow, func() time.Duration {
-			return config.Machine(os.Getenv).Duration("limits.holder_drain_stale_after")
-		})),
+		// The project and the agents are read when the pass runs: the checks
+		// are built before the bus may be (dispatch's flag checks).
+		healthOutcomeTask("holder-draining", func(ctx context.Context) (health.Outcome, error) {
+			return holderDrainingCheck(b.Project(), b.Agents, holderNow, func() time.Duration {
+				return config.Machine(os.Getenv).Duration("limits.holder_drain_stale_after")
+			})(ctx)
+		}),
 		healthOutcomeTask("holder-leftovers", func(ctx context.Context) (health.Outcome, error) {
 			e, err := holderNow()
 			return health.EvaluateHolderLeftovers(e), err
