@@ -1,6 +1,6 @@
 # Sibling steps run in series, enforced on the board
 
-Status: spec r2, for review (subject `sibling-enforce-spec`; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
+Status: spec r3, for review (subject `sibling-enforce-spec`; r3, reviewer-codex's reject of r1, still true of r2: `request done` before a step merged, and `parallel --off` forgetting an older branch, both hid a step. Open steps are now a list that only a merge judgement or an abandon clears, and `done` judges it too; the head judged is the branch's current tip, the recorded commit only after the branch is deleted; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
 Author: architect, from the merge-conflicts measure run early on 2026-11-26 (thread
 `1795676948573-0`, asked by claude-ao for the person) and the person's typed answer to ask
 `1795677070804-0` Q1: enforce it now, with a `parallel` exception for steps that share no file
@@ -50,26 +50,35 @@ merge pass's sight (it reads `review` only), so 2b's merge never stepped it.
 
 ## 3. The rule in code
 
-**One open step per request.** A request has an **open step** S when `review_more` is true and
-`branch` is set, in any state but `done`. That is all the board records. Whether S is merged is
-not read from the board: it is judged when the rule is applied (rule 1), so no pass the
-dispatcher does or skips can leave S open for ever (r2, foureyes: the merge pass skips a step
+**One open step per request.** Each `request review --more` adds its branch and head to a new
+list on the request, `open_steps: [{branch, commit}]` (a review of a branch already listed
+updates its commit). A branch leaves the list only when it is judged merged (rule 1) or
+abandoned (rule 2). Nothing else clears it: not the merge pass, not `parallel --off`, not
+`request done` (r3, reviewer-codex: `done` before the merge, and `--off` forgetting an older
+branch, both hid a step). Without `parallel` the list holds at most one branch. Whether a
+listed step is merged is not read from the board: it is judged when the rule is applied, so no
+pass the dispatcher does or skips can leave a step open for ever (r2, foureyes: the merge pass skips a step
 with no `review_base`, a tip ahead of the recorded commit, or a re-review whose base already
 holds the head, `closeonmerge.go:81-115`).
 
-1. **`request review` judges the open step itself, then refuses a second one.** When the review
-   names a branch C, the request has an open step S ≠ C, and the request is not `parallel`, the
+1. **`request review` and `request done` judge the open steps, then refuse while one is open.**
+   When a review names a branch C and `open_steps` holds a branch S ≠ C (each such S, in turn),
+   and the request is not `parallel`, or when the target runs `request done` and `open_steps` is
+   not empty (whatever `parallel` says), the
    CLI (in the agent's checkout, where it already runs git for `reviewFacts`,
    `cmd/agentbus/requests.go:93-101`) fetches the project base and asks whether S is delivered.
    It uses the dispatcher's own test, `mergequeue.Delivery.Delivered` (`mergequeue/delivered.go:76`:
-   ancestor or same tree, squash patch-id, rebase patch-ids). It asks for two heads: S's recorded
-   `commit` and S's remote tip if the branch still exists. Either one delivered means S is merged.
-   That covers a tip pushed after the review and a branch deleted after its merge.
-   - **S delivered:** the CLI passes `step_merged = S, head, base tip` with the review. The
-     script, in the same call, checks the request still has open step S with the `review_n` the
-     CLI read. It appends the head to `merged_steps` (as `requestMergedScript` does) and writes
-     one audit line (`action=step-merged`, by the agent, with head and base tip). Then it
-     records C's review as today. The board changes only if S is still the open step.
+   ancestor or same tree, squash patch-id, rebase patch-ids). The head judged is S's current
+   remote tip while the branch exists, and S's recorded `commit` only once the branch is gone
+   (deleted after its merge). A recorded commit in the base says nothing about a tip pushed
+   after it (r3, reviewer-codex). A tip pushed after the review is judged as it stands: it is
+   merged when that tip is. The local ref is judged only in local mode, as `closeOnMerge` does.
+   - **S delivered:** the CLI passes `step_merged = S, head, base tip` with the transition. The
+     script, in the same call, checks that S is still listed with the `review_n` the CLI read.
+     It removes S from `open_steps`, appends the head to `merged_steps` (as
+     `requestMergedScript` does) and writes one audit line (`action=step-merged`, by the agent,
+     with head and base tip). Then it applies the review or the `done`. The `done` is refused
+     if any step is still listed. The board changes only if every listed S was judged.
    - **S not delivered:** refused. One `redis.error_reply`, listed for
      `TestEveryScriptRefusalIsListed`:
      `step S of <task> is not merged yet: sibling steps run in series (merge-conflicts §3); take
@@ -84,16 +93,22 @@ holds the head, `closeonmerge.go:81-115`).
      `a step is open on S: name the branch (--branch S for S itself)`.
    - A review of S itself (a fix after a reject, a rebase) passes, as today. A review without
      `--more` on a new branch while S is open is judged the same way: the last step still
-     follows the one before it.
+     follows the one before it. That last review is not listed: its merge closes the request
+     (board-drift), as today.
+   - **`done` waits for the steps.** A target that completes the request while a step is
+     listed and not delivered is refused: `step S of <task> is not merged yet: done once it
+     merges, or ask <from> to abandon it`. The sender's `done` before any accept is
+     unchanged: no step can be listed then.
 
    The judgement runs in the agent's process: the bus cannot run git, and the dispatcher never
    runs repository code. The CLI is the honest path, not a boundary. The audit line names the
    head and the base tip it used, and the 2026-12-05 count reads them back.
 
 2. **An abandoned step is closed by the sender or the person.** A step whose PR is closed
-   unmerged would stay open. `agentbus request step <task> --abandon <reason...>`, by the
-   request's sender (`from`) or the person (`--as <person>`), never the target, clears the open
-   step (`branch`, `commit`, `review_more`, `review_base`). It appends
+   unmerged would stay open. `agentbus request step <task> <branch> --abandon <reason...>`, by
+   the request's sender (`from`) or the person (`--as <person>`), never the target, removes that
+   branch from `open_steps`. When it is the recorded branch, it also clears `branch`, `commit`,
+   `review_more` and `review_base`. It appends
    `{branch, head, reason, by, at}` to `abandoned_steps`. State: a request in `review` goes back
    to `accepted`, otherwise unchanged. One audit line (`action=step-abandoned`). The target asks
    master for it. This is rare: in the window, the steps closed unmerged were redeliveries of
@@ -114,9 +129,10 @@ sets `request.parallel = {by, reason, at}` (`at` from Redis `TIME`). `request pa
 (`--as <person>`, as `request priority` does). The target is refused: the implementer does not
 lift its own rule. A `done` request is refused. One script on the board, as `requestPrioritySrc`
 (`bus/priority.go:120`). It writes no stream entry and one audit line (`action=parallel`). While
-it is set, rule 1 does not apply to that request. Several steps may then be open, and the
-request records only the newest branch, as today. When `parallel` is cleared, the newest one is
-the open step that rule 1 judges.
+it is set, rule 1 does not refuse a review on that request. Every reviewed branch is still
+listed in `open_steps`, and the request's `branch` field records only the newest, as today.
+`--off` is always allowed and forgets nothing: the next review, or the `done`, judges every
+listed branch, and each one not delivered refuses it.
 
 The reason is mandatory and one line (≤ 200 runes). Master sets it only after the check the
 master skill already gives (`git diff --no-renames --name-only origin/<base>...origin/<branch>`
@@ -160,23 +176,27 @@ On the disposable broker (`AGENTBUS_TEST_REDIS_URL`), with a scratch git reposit
 
 - Review B `--more`, resume, review C while B is not in the base → refused, text names B and
   the sender. Review B again → passes.
-- B squash-merged into the base, then review C → passes: `merged_steps` holds B's head, one
+- B squash-merged into the base, then review C → passes, B leaves `open_steps`: `merged_steps` holds B's head, one
   `step-merged` audit line, C recorded. The same after B's branch is deleted (recorded commit
-  judged). The same when B's tip was pushed after its review (the tip judged). The same when
+  judged). The same when B's tip was pushed after its review and that tip merged (the tip
+  judged). B's recorded commit in the base but its later tip not → refused (reviewer-codex r2). The same when
   the request is `accepted` (resumed) or in `review`.
 - foureyes' r1 paths, each judged at review: no `review_base` (no base: nothing open), a tip
   ahead of the commit, a re-review after the merge whose `review_base` holds the head (the
   pass skips it; rule 1 does not).
 - A `review_n` changed between the CLI's read and the script → refused, nothing written.
 - Review with no `--branch` while B is open → refused. With `--branch B` → passes.
-- `parallel` set → C passes without a judgement. `--off` → C's next review judged again.
+- `parallel` set → C passes without a judgement, and B and C are both listed. `--off`, C
+  merged, B not → review D refused on B (reviewer-codex's r1 path 2).
+- `request done` by the target while B is listed and not delivered → refused, even under
+  `parallel` (path 1). B delivered → B judged merged, then done. Last step reviewed without
+  `--more`, not listed → done as today.
 - `request step --abandon`: by the target → refused. By the sender → open step cleared,
   `abandoned_steps` and audit written, `review` → `accepted`. By the person (`--as`) → same.
   Missing reason → refused.
 - `request parallel`: by the target → refused. By the sender, or the person → set, audit line
   written. On a `done` request → refused. Missing reason → refused.
-- Mutants, each must fail a test: drop the S ≠ C check (a fix review is refused); judge only the
-  recorded commit (the tip-ahead case is refused); skip the `review_n` check; let the target set
+- Mutants, each must fail a test: drop the S ≠ C check (a fix review is refused); judge the recorded commit while the branch exists (the stale-commit case passes); let `done` skip the judgement; let `--off` clear `open_steps`; skip the `review_n` check; let the target set
   `parallel` or abandon.
 - `TestNoStructWriterOfTheBoard` and `TestEveryScriptRefusalIsListed` still pass.
 
