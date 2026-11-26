@@ -182,3 +182,41 @@ func TestObservePublishesTheProcessSource(t *testing.T) {
 		t.Fatalf("a process name published: %s", raw)
 	}
 }
+
+// agent-resource-limits §5: the look's measure rides the observation as
+// mem_bytes, top_bytes and cpu_pct (cpu_pct absent while unknown); no
+// process name is published.
+func TestObservePublishesTheUsage(t *testing.T) {
+	b, r := dialRun(t)
+	ctx := context.Background()
+	register(t, b, "dev", "p1")
+	register(t, b, "docs", "p2")
+	rt := newFakeRT(func(pane string, _ int) Inspection {
+		in := readyIn()
+		if pane == "p1" {
+			in.Usage = &Usage{Mem: 4 << 30, TopMem: 3 << 30, CPU: 180.4, CPUKnown: true}
+		} else {
+			in.Usage = &Usage{Mem: 1 << 30, TopMem: 1 << 30}
+		}
+		return in
+	})
+	cfg := fastConfig()
+	cfg.Observe = 50 * time.Millisecond
+	start(t, b, rt, cfg)
+	var obs map[string]bus.Observation
+	waitFor(t, 5*time.Second, "both observed", func() bool {
+		var err error
+		obs, err = b.Observed(ctx)
+		return err == nil && obs["dev"].At != 0 && obs["docs"].At != 0
+	})
+	if o := obs["dev"]; o.MemBytes != 4<<30 || o.TopBytes != 3<<30 || o.CPUPct == nil || *o.CPUPct != 180 {
+		t.Fatalf("dev %+v", o)
+	}
+	if o := obs["docs"]; o.MemBytes != 1<<30 || o.CPUPct != nil {
+		t.Fatalf("docs %+v", o)
+	}
+	raw, _ := r.HGet(ctx, bus.ObservedKey(b.Project()), "docs").Result()
+	if strings.Contains(raw, "cpu_pct") {
+		t.Fatalf("an unknown CPU published: %s", raw)
+	}
+}

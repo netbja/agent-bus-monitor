@@ -385,3 +385,44 @@ func TestHostRuntimeIgnoresTheClientsMCPServers(t *testing.T) {
 		t.Fatalf("a forgotten dev server: %q (%d)", in.BackgroundSkip(), in.Background.Procs())
 	}
 }
+
+// agent-resource-limits §5: each look measures the agent's terminal tree,
+// the agent's own process included: its resident memory summed, its largest
+// process's, and its CPU over the window from the base sample (unknown on a
+// first look, which has none). A process new since the base counts all its
+// CPU; a pid listed twice counts once.
+func TestHostRuntimeMeasuresTheTree(t *testing.T) {
+	f := newHostFixture(t)
+	p := f.term.PID
+	tree := func(claude, pytest time.Duration) []termhost.Proc {
+		return []termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "claude", CPU: claude, RSS: 500 << 20},
+			{PID: p + 1, PPID: p, Start: 6, Command: "bash", RSS: 4 << 20},
+			{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest", CPU: pytest, RSS: 3 << 30},
+			{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest", CPU: pytest, RSS: 3 << 30}}
+	}
+	f.h.SetProcesses(f.term.ID, tree(time.Second, time.Second)...)
+	in := f.inspect()
+	want := int64(500<<20 + 4<<20 + 3<<30)
+	if u := in.Usage; u == nil || u.Mem != want || u.TopMem != 3<<30 || u.CPUKnown {
+		t.Fatalf("first look: %+v", u)
+	}
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, tree(3*time.Second, 14*time.Second)...) // 2s + 13s over 10s
+	if u := f.inspect().Usage; u == nil || !u.CPUKnown || u.CPU != 150 || u.Mem != want {
+		t.Fatalf("10s on: %+v", u)
+	}
+	// A process new since the base: all its CPU counts.
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, append(tree(3*time.Second, 14*time.Second),
+		termhost.Proc{PID: p + 3, PPID: p, Start: 9, Command: "go", CPU: 5 * time.Second, RSS: 1 << 20})...)
+	if u := f.inspect().Usage; u == nil || u.CPU != 50 || u.Mem != want+1<<20 {
+		t.Fatalf("a new process: %+v", u)
+	}
+	// No RSS read (a holder without /proc): memory unknown, no usage at all
+	// before the CPU is known.
+	g := newHostFixture(t)
+	g.h.SetProcesses(g.term.ID, termhost.Proc{PID: g.term.PID, Start: g.term.PIDStart, Command: "claude", CPU: time.Second})
+	if u := g.inspect().Usage; u != nil {
+		t.Fatalf("nothing measured: %+v", u)
+	}
+}

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -101,6 +102,13 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 			o.BgProcs = j.Procs()
 			if age := j.OldestAge(); age > 0 {
 				o.BgOldest = now.UnixMilli() - age.Milliseconds()
+			}
+		}
+		if u := in.Usage; u != nil { // agent-resource-limits §5
+			o.MemBytes, o.TopBytes = u.Mem, u.TopMem
+			if u.CPUKnown {
+				pct := int(math.Round(u.CPU))
+				o.CPUPct = &pct
 			}
 		}
 		p, ok := prev[a]
