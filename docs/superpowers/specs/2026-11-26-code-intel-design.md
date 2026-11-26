@@ -1,6 +1,10 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r7, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r8, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r8, reviewer-codex's reject of r7: a hard mode requires a whole-cgroup kill, `cgroup.kill` or
+freeze-and-kill. A delegated root with neither is soft mode (§5, §6). The person's revised
+process model (resource-limits §12 r3: per-terminal scope first, then one delegated holder
+service) changes only where the agent's root is, not this spec's use of it.
 r7, reviewer-codex's reject of r6: the watchdog has no `Pdeathsig` and kills through
 `cgroup.kill` in a hard mode (§5). In scope mode the agent's own scope is the root and each
 backend a sub-cgroup of it, with no scope per backend (§6). foureyes' r5/r6 build notes are in.
@@ -146,9 +150,12 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
       clean up.
   - When the relay dies, `SIGKILL` and crashes included, the watchdog kills the backend, then
     exits:
-    - **in a hard mode:** it writes `1` to `ci-<n>/cgroup.kill` (Linux 5.14+). That kills every
-      process in the cgroup, including a child that left the process group with `setsid` or a
-      daemon the backend forked (foureyes r5).
+    - **in a hard mode:** it kills every process in `ci-<n>`, including a child that left the
+      process group with `setsid` or a daemon the backend forked (foureyes r5). The method:
+      - `cgroup.kill` (Linux 5.14+): write `1`;
+      - without it: `cgroup.freeze` (Linux 5.2+). Write `1`, wait for `cgroup.events` to say
+        `frozen 1`, `SIGKILL` every pid in `cgroup.procs`, then thaw. A frozen process cannot
+        fork, so the list is complete.
     - **in soft mode:** it kills the process group. A descendant that left the group escapes it.
       This is stated, and the backends are configured not to daemonize (gopls without
       `-remote`, §11 step 0).
@@ -202,7 +209,10 @@ enforces the budget itself:
     reviewer-codex: the person's "no systemd-run per spawn"). The scope is delegated, so the
     relay owns its children's files and writes their limits itself. The scope sits in the
     slice, so cap A covers the backends too (foureyes r6).
-  - **soft** (macOS, or no delegated memory controller): the soft bound below, gated.
+  - **soft** (macOS, no delegated memory controller, or **neither `cgroup.kill` nor
+    `cgroup.freeze`** in the delegated root): the soft bound below, gated. A hard mode
+    requires both a memory limit and a whole-cgroup kill (r8, reviewer-codex: without a
+    cgroup kill, a `setsid` child escapes). `cgroot` reports the missing file as the reason.
 - **The soft bound, only in soft mode:**
     - Runtime limits: `GOMEMLIMIT` = budget for Go backends, `--max-old-space-size` for the
       Node ones.
@@ -365,6 +375,7 @@ settings step runs alone.
      - a removed worktree kills its backend within one sweep;
      - the relay's exit, and its stdin closing, kill every backend group;
      - the relay `SIGKILL`ed: within 2 s no backend and none of its children is alive. The fake backend forks one grandchild that stays in the group and one that calls `setsid`. In a hard mode both die (`cgroup.kill`); in soft mode the one in the group dies and the `setsid` one is documented as escaping. Run on Linux in the suite, on macOS in step 2's live check;
+     - hard-mode kill through `cgroup.kill`, and through freeze-and-kill when `cgroup.kill` is absent (a fake cgroup tree without it); with neither file the mode is soft;
      - the relay dead before the watchdog opens its `pidfd`: the `(pid, start)` re-check kills the backend;
      - idle stop and the least-recently-used limit;
      - without cap B and with `soft_memory_ok` false, no backend starts and the message names the key;
