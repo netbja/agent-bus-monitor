@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/update"
 )
 
 // TestUpdateArgs: the forms of agentbus update, and the bad ones.
@@ -72,5 +75,14 @@ func TestUpdateRefusesAnAgent(t *testing.T) {
 		if why := updateRefusal(ctx, a, agentEnv, ancestor); why != "" {
 			t.Errorf("%+v is read-only: %q", a, why)
 		}
+	}
+}
+
+// update --auto installs (when updates.auto = install, InstallPass's own
+// test); --auto --check only reads (quiet-update-auto §4.3).
+func TestAutoPassChoice(t *testing.T) {
+	if reflect.ValueOf(autoPass(true)).Pointer() != reflect.ValueOf(update.CheckPass).Pointer() ||
+		reflect.ValueOf(autoPass(false)).Pointer() != reflect.ValueOf(update.InstallPass).Pointer() {
+		t.Fatal("--auto and --auto --check choose the wrong pass")
 	}
 }

@@ -252,3 +252,106 @@ func CheckPass(ctx context.Context, d Deps) int {
 	}
 	return 0
 }
+
+// InstallPass is agentbus update --auto (§4.3): without updates.auto =
+// install, the check pass. With it: the guards (a held lock defers, an
+// interrupted update changes nothing), the release found with a fetch that
+// never prompts, Skip's releases, the quiet test over every project (any
+// in work, or any unreadable, defers), then the install of update.Run with
+// every running project's services restarted, each project judged again
+// right before its first restart (one in work keeps its old services,
+// listed). No question is asked. Each pass ends in auto.json's last_pass.
+// Exit 0, or 1 when it failed, rolled back or could not judge.
+func InstallPass(ctx context.Context, d Deps) int {
+	if d.AutoSetting == nil || d.AutoSetting() != "install" {
+		return CheckPass(ctx, d)
+	}
+	updates := d.updates()
+	st := ReadAuto(updates)
+	end := func(result string, code int) int {
+		st.LastPass = &AutoPass{At: d.Now(), Result: result}
+		if err := WriteAuto(updates, st); err != nil {
+			fmt.Fprintln(d.Err, "agentbus update: auto.json cannot be written: "+err.Error())
+		}
+		return code
+	}
+	unlock, err := Lock(updates)
+	if errors.Is(err, ErrLocked) {
+		d.say("%s: deferred", err.Error())
+		return end("deferred", 0)
+	} else if err != nil {
+		fmt.Fprintln(d.Err, "agentbus update: "+err.Error())
+		return end("failed", 1)
+	}
+	defer unlock()
+	if id := Interrupted(updates); id != "" {
+		fmt.Fprintf(d.Err, "agentbus update: the update that took snapshot %s did not finish: nothing installed automatically until agentbus update --rollback %s\n", id, id)
+		return end("failed", 1)
+	}
+	fctx, cancel := context.WithTimeout(ctx, FetchTimeout)
+	rel, err := Find(fctx, d.Repo, d.Version)
+	cancel()
+	switch {
+	case errors.Is(err, ErrUpToDate):
+		st.LastCheck, st.Waiting = d.Now(), nil
+		d.say("agentbus %s is up to date", d.Version)
+		return end("current", 0)
+	case err != nil:
+		fmt.Fprintln(d.Err, "agentbus update: "+err.Error())
+		return end("failed", 1)
+	}
+	st.LastCheck = d.Now()
+	st.waitingFor(rel.Tag, d.Now())
+	why, err := Skip(ctx, updates, rel)
+	if err != nil {
+		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": deferred")
+		return end("deferred", 1)
+	}
+	if why != "" {
+		d.say("not installed automatically: %s", why)
+		return end("skipped", 0)
+	}
+	ps, err := Quiet(ctx, d)
+	if err != nil {
+		fmt.Fprintln(d.Err, "agentbus update: the quiet test cannot judge this host: "+err.Error()+": deferred")
+		return end("deferred", 1)
+	}
+	busy := false
+	for _, p := range ps {
+		if p.Why != "" {
+			d.say("project %s: in work (%s): deferred", p.Project, p.Why)
+			busy = true
+		}
+	}
+	if busy {
+		return end("deferred", 0)
+	}
+	running, err := d.Running(ctx)
+	if err != nil {
+		fmt.Fprintln(d.Err, "agentbus update: the services cannot be read: "+err.Error()+": deferred")
+		return end("deferred", 1)
+	}
+	mine := slices.Clone(running)
+	sort.SliceStable(mine, func(a, b int) bool { return mine[a].Project < mine[b].Project })
+	acted := func(outcome, detail string) {
+		if d.Acted != nil {
+			d.Acted(Act{From: d.Version, To: rel.Tag, Outcome: outcome, Detail: d.Version + " -> " + rel.Tag + ", automatic, " + detail,
+				Projects: actProjects("", running)})
+		}
+	}
+	// Judged again right before a project's first restart: staging takes
+	// minutes. A project that cannot be read is in work (it fails closed).
+	recheck := func(ctx context.Context, p string) string {
+		j, err := d.Judge(ctx, p)
+		if err != nil {
+			return "cannot be read: " + err.Error()
+		}
+		return InWork(j)
+	}
+	result, code := d.install(ctx, installSpec{rel: rel, tree: d.treeFor(rel.Tag), id: NewID(d.Now(), d.Version, rel.Tag), mine: mine,
+		changed: skillsChanged(ctx, rel), kind: HistoryAuto, recheck: recheck, acted: acted})
+	if result == "installed" {
+		st.Waiting = nil
+	}
+	return end(result, code)
+}
