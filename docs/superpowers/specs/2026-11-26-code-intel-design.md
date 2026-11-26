@@ -1,6 +1,9 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r8, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r9, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r9, reviewer-codex's reject of r8: §2 and §5 describe the per-terminal cgroup of
+resource-limits §12 r4 (scope first, then `holder/agents/<…>`) and what ends it in each mode;
+there are no per-agent units.
 r8, reviewer-codex's reject of r7: a hard mode requires a whole-cgroup kill, `cgroup.kill` or
 freeze-and-kill. A delegated root with neither is soft mode (§5, §6). The person's revised
 process model (resource-limits §12 r3: per-terminal scope first, then one delegated holder
@@ -53,11 +56,14 @@ index, built from another tree, that may not match the agent's branch.
 - **`ExtraHelpers`** lets the background judgement ignore an MCP helper's CPU
   (`agentstate/background.go:113-120`, `:219`). Its hook, `HostRuntime.ExtraHelpers`
   (`dispatch/hostruntime.go:50`, `:303`), is declared but has no caller.
-- **Memory:** an MCP stdio server is a child of the client. **Per-agent cap B is not built yet;
-  the person's process model (Q7) replaces its design with one systemd unit per agent**
-  (agent-resource-limits §4 and step 4, still waiting on the person's answer there). Only the
-  holder's cap A (`limits.holder_memory_max`, 70 %) contains it today. `limits.agent_memory_max`
-  does not exist yet on dev. §6 is the relay's own guard until then.
+- **Memory:** an MCP stdio server is a child of the client. **Per-agent cap B is not built yet.**
+  The person's process model (resource-limits §12, r4) puts it in one cgroup per terminal:
+  - step 1: a transient scope, `agentbus-<p>-<key>-<role>-<term>.scope`, in `agentbus.slice`;
+  - step 2: `holder/agents/<project>.<role>.<term>`, under one delegated holder unit.
+
+  There are no per-agent service units. Only the holder's cap A (`limits.holder_memory_max`,
+  70 %) contains it today, and `limits.agent_memory_max` does not exist yet on dev. §6 is the
+  relay's own guard until cap B lands.
 - **Worktrees:** coders work in one worktree per task (for example
   `/data/projects/<p>-wt/<task>`) and change worktree between tasks without relaunching. The board
   records a request's branch only at `request review` (`bus/requests.go:465-473`). It never
@@ -162,8 +168,13 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
   - The relay's graceful exit kills each backend itself first.
   - **What this does not cover:** a `SIGKILL` of the watchdog itself together with the relay.
     Nothing in agent-bus sends that. In a hard mode, the backend's `ci-<n>` is still inside the
-    agent's unit or scope, so it ends with the agent: `systemctl stop` of the unit, or the
-    holder's end of the pane, kills the agent's whole cgroup (resource-limits §12.5).
+    terminal's cgroup, so it ends with the terminal (resource-limits §12.5, §12.6, r4):
+    - **scope mode:** the holder stops the terminal's scope (`systemctl --user stop`, the whole
+      scope) at the terminal's end and in its `SIGTERM` shutdown. A holder killed outright is
+      covered by its start sweep of its own build's stale scopes.
+    - **delegated holder:** the holder kills `holder/agents/<…>` (its whole cgroup, through
+      `cgroot`'s kill method) at the terminal's end, and the unit's control-group kill ends
+      everything at the holder's stop.
 - **The relay itself ends when its client ends.** Its stdin closes, and the relay kills its
   groups and exits. A park (cleaning-up-agents), a relaunch, a reload or a holder restart all end
   the client, so they end the relay too.
