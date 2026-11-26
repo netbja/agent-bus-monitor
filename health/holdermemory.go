@@ -54,13 +54,18 @@ func EvaluateHolderMemory(e HolderEvidence, warnAt float64, prevOOM map[string]u
 	return Outcome{Status: Unknown, Detail: "no holder answers"}
 }
 
-// HolderOOMCounts is each answering build's OOM kill count, by key: the
-// state EvaluateHolderMemory's next pass compares with.
-func HolderOOMCounts(e HolderEvidence) map[string]uint64 {
+// HolderOOMCounts is the state EvaluateHolderMemory's next pass compares
+// with: each build's OOM kill count by key, read now, or its last count in
+// prev while it is still listed but its memory was not read this pass (a
+// failed Describe never clears a baseline: reviewer-codex). A build no
+// longer listed is dropped.
+func HolderOOMCounts(e HolderEvidence, prev map[string]uint64) map[string]uint64 {
 	out := map[string]uint64{}
 	for _, b := range e.Builds {
 		if b.Answers && b.Memory != nil {
 			out[b.Key] = b.Memory.OOMKills
+		} else if n, ok := prev[b.Key]; ok {
+			out[b.Key] = n
 		}
 	}
 	return out

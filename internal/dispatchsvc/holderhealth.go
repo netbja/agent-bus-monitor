@@ -229,7 +229,7 @@ func holderMemoryCheck(now func() (health.HolderEvidence, error), warnPct func()
 		defer mu.Unlock()
 		out := health.EvaluateHolderMemory(e, warnPct()/100, prev)
 		if e.Known {
-			prev = health.HolderOOMCounts(e)
+			prev = health.HolderOOMCounts(e, prev)
 		}
 		return out, err
 	}

@@ -180,4 +180,22 @@ func TestHolderMemoryCheck(t *testing.T) {
 	if out, _ := run(context.Background()); out.Status != health.Warn {
 		t.Fatalf("rise across an unknown pass: %+v", out)
 	}
+	// Known evidence whose memory read failed (Describe failed): the count
+	// is kept, so 1, unread, 3 warns (reviewer-codex).
+	unread := false
+	pass = 0
+	run = holderMemoryCheck(func() (health.HolderEvidence, error) {
+		e, err := now()
+		if unread {
+			e.Builds[0].Memory = nil
+		}
+		return e, err
+	}, func() float64 { return 80 })
+	run(context.Background())
+	unread = true
+	run(context.Background())
+	unread, pass = false, 2
+	if out, _ := run(context.Background()); out.Status != health.Warn || !strings.Contains(out.Detail, "OOM kill") {
+		t.Fatalf("rise across a pass without a memory read: %+v", out)
+	}
 }

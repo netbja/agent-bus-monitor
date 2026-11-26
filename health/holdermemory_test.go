@@ -51,8 +51,25 @@ func TestEvaluateHolderMemory(t *testing.T) {
 	}
 	// OOMCounts is the state the next pass compares with.
 	e := HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(gib, 40*gib, 3)), build("v0", false, nil)}}
-	if got := HolderOOMCounts(e); len(got) != 1 || got["v1"] != 3 {
+	if got := HolderOOMCounts(e, nil); len(got) != 1 || got["v1"] != 3 {
 		t.Fatalf("counts %v", got)
+	}
+	// A pass that cannot read a build's memory keeps its last count
+	// (reviewer-codex): 1, unread, 2 still warns. A build no longer listed
+	// is dropped.
+	prev := HolderOOMCounts(HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(gib, 40*gib, 1)), build("v9", false, mem(gib, 40*gib, 5))}}, nil)
+	prev = HolderOOMCounts(HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, nil)}}, prev)
+	if len(prev) != 1 || prev["v1"] != 1 {
+		t.Fatalf("unread pass: %v", prev)
+	}
+	rise := HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(gib, 40*gib, 2))}}
+	if out := EvaluateHolderMemory(rise, 0.8, prev); out.Status != Warn || !strings.Contains(out.Detail, "1 OOM kill(s)") {
+		t.Fatalf("rise across an unread pass: %+v", out)
+	}
+	// A build listed but not answering keeps its count too.
+	quiet := HolderEvidence{Known: true, Builds: []HolderBuild{{Key: "v1", Raw: "v1", Current: true}}}
+	if got := HolderOOMCounts(quiet, map[string]uint64{"v1": 4}); got["v1"] != 4 {
+		t.Fatalf("not answering: %v", got)
 	}
 	if _, ok := ByID("holder-memory"); !ok {
 		t.Fatal("holder-memory not defined")

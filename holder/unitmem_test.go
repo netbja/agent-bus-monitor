@@ -31,7 +31,7 @@ func TestUnitMemory(t *testing.T) {
 		"memory.current":      "38226833408\n",
 		"memory.max":          "46950400000\n",
 		"memory.swap.current": "1048576\n",
-		"memory.events":       "low 0\nhigh 12\nmax 3\noom 2\noom_kill 2\noom_group_kill 0\n",
+		"memory.events":       "low 0\nhigh 12\nmax 3\noom 7\noom_kill 2\noom_group_kill 9\n",
 	})
 	want := UnitMemory{Current: 38226833408, Max: 46950400000, SwapCurrent: 1048576, OOMKills: 2}
 	for _, self := range []string{"0::" + unit + "\n", "0::" + unit + "/holder\n", "1:name=x:/y\n0::" + unit + "\n"} {
