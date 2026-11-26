@@ -1,6 +1,9 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r5, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r6, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r6, the person's Q7 answer: each backend's budget is a hard cgroup bound through resource-limits'
+shared cgroup-root interface (unit, or scope fallback); the soft bound remains only in soft mode,
+gated (§6). foureyes' r4 build notes: the /tmp wording, and step 0 checks for no shell wrapper.
 r5, reviewer-codex's rejects of r3/r4: the soft bound is gated by a person-only key, off by
 default, until Q7 is answered, and busmon shows it (§6, §8). Every backend runs under a
 watchdog that kills its group when the relay dies, `SIGKILL` included (§5).
@@ -43,7 +46,8 @@ index, built from another tree, that may not match the agent's branch.
 - **`ExtraHelpers`** lets the background judgement ignore an MCP helper's CPU
   (`agentstate/background.go:113-120`, `:219`). Its hook, `HostRuntime.ExtraHelpers`
   (`dispatch/hostruntime.go:50`, `:303`), is declared but has no caller.
-- **Memory:** an MCP stdio server is a child of the client. **Per-agent cap B is not built**
+- **Memory:** an MCP stdio server is a child of the client. **Per-agent cap B is not built yet;
+  the person's process model (Q7) replaces its design with one systemd unit per agent**
   (agent-resource-limits §4 and step 4, still waiting on the person's answer there). Only the
   holder's cap A (`limits.holder_memory_max`, 70 %) contains it today. `limits.agent_memory_max`
   does not exist yet on dev. §6 is the relay's own guard until then.
@@ -112,7 +116,7 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
   `/a/b` does not contain `/a/bc`). Worktrees nest: this project has over a hundred under
   `.worktrees/`, inside the main checkout. A first match would route a coder's file to the main
   checkout's backend on `dev`, silently (r4, foureyes). Otherwise the call is refused, `not a worktree of <p>: <path>`, and no
-  backend starts. Another project's tree, an untrusted clone and `/tmp` never get a server (the
+  backend starts. Another project's tree, an untrusted clone and any unlisted directory (in `/tmp` or elsewhere) never get a server; a review worktree in `/tmp` that `worktree list` names is the project's own (the
   person, Q1; foureyes r1).
 - **From a request's branch to its worktree** (the person, Q1): the board knows a branch, not a
   path. The relay maps a branch to the worktree that has it checked out, through the same
@@ -168,26 +172,33 @@ enforces the budget itself:
   counts as reserved, so two backends never both fit in the same headroom (r3, reviewer-codex:
   r2 checked usage only, so a backend could still cross the cap after the check).
 - **Each backend is held to its budget:**
-  - **with cap B (Linux, once resource-limits step 4 is built):** a hard bound. The backend
-    starts in its own `term-<id>/cmd-<pid>` cgroup with `memory.max` = budget and
-    `memory.swap.max` = 0, through the same code as `agentbus run --cap` (resource-limits §6,
-    cap C). The kernel ends the backend, never the agent's other processes.
-  - **without cap B (today, and macOS):** a soft bound.
+- **Each backend is held to its budget through the shared cgroup root** (the person, Q7,
+  2026-11-27). Resource-limits' process-model amendment specifies one interface for the agent's
+  cgroup root, and `agentbus run --cap`, cap B and code-intel all use it. The relay asks it for a
+  sub-cgroup per backend and writes `memory.max` = budget, `memory.high` = 90 % of it and
+  `memory.swap.max` = 0 there itself. The backend's watchdog (§5) starts it in that cgroup
+  (`UseCgroupFD`). The kernel ends the backend, never the agent's other processes. By the mode
+  the interface reports (the same one `roles doctor` shows):
+  - **user unit or system unit** (`agentbus-agent@<role>.service`, `Delegate=yes`): a hard
+    bound, in the agent's own delegated subtree, under the agent's cap B (the unit's
+    `MemoryMax`).
+  - **scope** (before the units exist, the `systemd-run --user --scope` fallback the person
+    named): a hard bound on the backend, in its own scope.
+  - **soft** (macOS, or no delegated memory controller): the soft bound below, gated.
+- **The soft bound, only in soft mode:**
     - Runtime limits: `GOMEMLIMIT` = budget for Go backends, `--max-old-space-size` for the
       Node ones.
     - A watch: the relay reads each backend's RSS every **2 s**, and a backend above its budget
       has its process group killed at once. Later calls to that worktree say so.
     - `RLIMIT_AS` is not used: it breaks Node and `-race`, as resource-limits §6 found.
-    - **Gated until the person decides (§12 Q7):** without cap B, the relay starts **no
-      backend** unless `code_intel.soft_memory_ok` (person, PersonOnly, default `false`) is
-      true. It answers: `code-intel needs cap B, or code_intel.soft_memory_ok (the soft bound):
-      use grep`. The person's answer to Q7 sets what the build ships: the key and its default,
-      or no key and a hard requirement for cap B.
+    - **Gated:** in soft mode the relay starts **no backend** unless `code_intel.soft_memory_ok`
+      (person, PersonOnly, default `false`) is true. It answers: `code-intel has no hard memory
+      bound here (mode soft): set code_intel.soft_memory_ok, or use grep`.
     - **The residual, said plainly:** a backend that grows faster than its budget within 2 s,
       while the rest of the agent is also near the cap, can still push the agent over. §12 Q7
       asks the person whether to ship with this soft bound or wait for cap B.
 
-When cap B is built, the kernel enforces each budget. The relay's reservation stays as the early,
+In every hard mode the kernel enforces each budget. The relay's reservation stays as the early,
 clear refusal.
 
 ## 7. Who gets which tools: from the launch, never from the environment
@@ -317,12 +328,15 @@ settings step runs alone.
    - mcp-language-server's tool names and which of them write, at the pinned commit.
    - Codex's `mcp_servers` override syntax.
    - Claude's `--mcp-config` accepting a JSON string.
+   - Both clients start an MCP stdio server directly, with no shell wrapper, so the relay's
+     parent is the client (§7's identity check; foureyes r4).
    - **gopls's shared daemon (`-remote=auto`)** (the person, Q1). Measure the RSS of two
      worktrees with and without it. A host daemon shares caches but sits outside every agent's
      tree, so it escapes §6's accounting and the per-agent cap. Decide from the numbers.
 
    A fact that does not hold comes back to architect.
-1. **The relay with the gopls backend:** the tools and the allowlist, §4's resolution, §5's
+1. **The relay with the gopls backend** (after resource-limits' cgroup-root interface, for §6's
+   hard modes; until then only soft mode, gated): the tools and the allowlist, §4's resolution, §5's
    lifetime, §6's guard, §7's role and rename rules, `request accept --branch`,
    `request branch`, `work_branch`, and `{p}:helpers` with its ACL.
    - Tests use a fake MCP backend (a Go test binary):
@@ -380,10 +394,14 @@ Each step is its own PR and review, in series (merge-conflicts §3, sibling-enfo
    fallback in the skill and doctor showing per role. §8, §11.
 5. 15 minutes and 2 servers, counted in the 30 % cap. Plus a clear refusal before an OOM, and
    both values person-only. §6, §9.
-7. **Open (r3), ask `1795734341064-0`:** cap B is not built, so until it is, a backend's budget is a soft bound (§6:
-   the 2 s watch and runtime limits). Ship with the soft bound, or turn code-intel on only where
-   cap B runs? Recommended: ship with the soft bound, with `code_intel.enabled` off by default
-   and busmon saying `soft memory bound` beside the helper. The person turns it on knowing it.
+7. **Answered (ask `1795734341064-0`, 2026-11-27, typed): the process model.** One systemd
+   unit per agent (`agentbus-agent@<role>.service`, cap B = its `MemoryMax`), `Delegate=yes`
+   so the relay makes one sub-cgroup per language server itself, user units with linger first,
+   system units later. One cgroup-root interface is shared by code-intel, `agentbus run --cap`
+   and cap B, with the `systemd-run --user --scope` fallback until the units exist. `roles
+   doctor` reports the mode and whether the memory controller is delegated. It is specified in
+   resource-limits, ahead of its step 4. Here: §6 uses that interface, and the soft bound is
+   left only for soft mode, gated by `soft_memory_ok`.
 6. A dedicated install command. Plus:
    - update only reports changed pins;
    - checksums from the repository's pins;
