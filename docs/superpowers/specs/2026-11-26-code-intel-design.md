@@ -1,6 +1,10 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r2, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r3, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r3, reviewer-codex's reject of r2: each backend reserves a budget before it starts and is held
+to it (hard with cap B, a 2 s watch before; Q7 asks the person, §6). A branch has one owner,
+enforced on the board (§7). The relay checks role and agent against the verified snapshot, and
+says what that does not protect (§7).
 r2 folds in the person's answers to ask `1795733274522-0` (Q1–Q6, all typed, with their
 additions; §12) and the two r1 rejects:
 - foureyes: cap B is not built, so the relay enforces its own memory guard (§6); and it routes
@@ -136,23 +140,49 @@ enforces the budget itself:
 - **The agent's usage** is the RSS sum of the client's process tree (the relay's parent and its
   descendants, each pid once), read from `/proc` (Linux) or `ps` (macOS). It is the figure
   resource-limits §5 publishes without cap B.
-- **Before a backend starts:** if the usage is at or above `limits.warn_at` of the cap (80 %
-  today), the relay refuses. Message: `memory cap reached (<used> of <cap>): code-intel unavailable,
-  use grep`. It starts nothing (the person, Q5). Go backends also get `GOMEMLIMIT` set to the
-  cap minus the usage, a soft limit gopls's own runtime honours.
-- **While running:** the 30 s sweep stops the least recently used backend while the usage is at
-  or above the cap, and later calls to that worktree get the same message. The agent's own work
-  is never what the relay sacrifices.
+- **Each backend has a budget, reserved before it starts:** `code_intel.backend_memory`
+  (person, PersonOnly, default `2G`). A backend starts only when **usage + budget ≤ cap**.
+  Otherwise the call is refused: `memory cap reached (<used> + <budget> > <cap>): code-intel
+  unavailable, use grep`, and nothing starts (the person, Q5). Each running backend's budget
+  counts as reserved, so two backends never both fit in the same headroom (r3, reviewer-codex:
+  r2 checked usage only, so a backend could still cross the cap after the check).
+- **Each backend is held to its budget:**
+  - **with cap B (Linux, once resource-limits step 4 is built):** a hard bound. The backend
+    starts in its own `term-<id>/cmd-<pid>` cgroup with `memory.max` = budget and
+    `memory.swap.max` = 0, through the same code as `agentbus run --cap` (resource-limits §6,
+    cap C). The kernel ends the backend, never the agent's other processes.
+  - **without cap B (today, and macOS):** a soft bound.
+    - Runtime limits: `GOMEMLIMIT` = budget for Go backends, `--max-old-space-size` for the
+      Node ones.
+    - A watch: the relay reads each backend's RSS every **2 s**, and a backend above its budget
+      has its process group killed at once. Later calls to that worktree say so.
+    - `RLIMIT_AS` is not used: it breaks Node and `-race`, as resource-limits §6 found.
+    - **The residual, said plainly:** a backend that grows faster than its budget within 2 s,
+      while the rest of the agent is also near the cap, can still push the agent over. §12 Q7
+      asks the person whether to ship with this soft bound or wait for cap B.
 
-When cap B is built, the kernel enforces the same cap. The relay's check stays as the early,
+When cap B is built, the kernel enforces each budget. The relay's reservation stays as the early,
 clear refusal.
 
 ## 7. Who gets which tools: from the launch, never from the environment
 
-- **Role and agent come from the relay's argv** (`--role`, `--agent`), written by the launcher
-  into the client's MCP config at launch, the agent-launch identity from `roles.toml`. They are
-  fixed for the relay's life. The relay never reads `AGENT_BUS_AGENT` or another variable the
-  agent can change (the person, Q3).
+- **Role and agent come from the launch, and are checked against verified state.** The launcher
+  writes `--agent` and `--role` into the client's MCP config. They are fixed for the relay's
+  life, and the relay never reads `AGENT_BUS_AGENT` or another variable (the person, Q3). At
+  start, before offering any tool, the relay checks them (r3, reviewer-codex: plain argv could
+  be forged):
+  1. Its parent process is the agent's client. The parent's `(pid, pid_start)` must equal
+     the verified identity `{p}:agents` holds for `--agent` (`AgentSnapshot.PID`/`PIDStart`,
+     `bus/stream.go:81`, written only through `putSnapshot`).
+  2. `--role` is the role that agent was launched as (the snapshot's role).
+
+  A mismatch, or no verified snapshot, starts the relay with no tool and the error `code-intel:
+  launch identity not verified`, shown in busmon.
+  **What this is not:** a security boundary against the agent itself. Any agent with a shell can
+  edit files directly, and a reviewer's "never write" rests on its prompt and tool rules
+  (`roles.toml`: foureyes and reviewer-codex deny only `agentbus deliver`), not on code-intel.
+  The checks stop a misconfigured or copied relay from offering `rename` to the wrong role.
+  They do not stop a deliberate bypass, which needs no relay at all.
 - **`rename` only for roles outside `code_intel.read_only_roles`** (default
   `foureyes,reviewer-codex`). For a read-only role it is not even listed.
 - **A rename applies only in the coder's own task worktree (the person, Q3: one writer per
@@ -163,6 +193,15 @@ clear refusal.
     `--branch <b>`. `request branch <task> <b>` (target only, while accepted) records it later.
   - It goes in a new field, `request.work_branch`. The `branch` field that review and
     close-on-merge read is untouched.
+  - **One owner per branch, enforced on the board** (r3, reviewer-codex: the target supplies
+    the value). The script that records `work_branch` refuses a branch already declared by
+    another agent's open request (`accepted`, `review` or `blocked`), as `work_branch` or as
+    the review `branch`: `branch <b> belongs to <agent>'s request <task>`. It reads the
+    board in the same call, so two agents cannot both claim one branch. The relay checks
+    ownership again at each rename: the worktree's branch is this agent's declared branch,
+    and no other open request names it. A branch nobody declared cannot be renamed in by
+    anyone. A coder declares at accept, so its worktree is claimed before any other agent can
+    claim it.
   - The read tools work on any of the project's worktrees: a reviewer reads the branch under
     review.
 
@@ -211,6 +250,7 @@ clear refusal.
 | `code_intel.servers` | §3's table | person, project | each backend start |
 | `code_intel.idle_stop` | `15m` | person (PersonOnly, Q5) | live |
 | `code_intel.max_backends` | `2` | person (PersonOnly, Q5) | live |
+| `code_intel.backend_memory` | `2G` | person (PersonOnly) | each backend start |
 
 No agent can raise any of them. Settings PRs conflict on the registry's shared lists
 (merge-conflicts measure, 2026-11-26). If hot-files step 2 has not merged when this is built, the
@@ -262,10 +302,13 @@ settings step runs alone.
      - a removed worktree kills its backend within one sweep;
      - the relay's exit, and its stdin closing, kill every backend group (Linux: Pdeathsig);
      - idle stop and the least-recently-used limit;
-     - a cap-reached refusal, starting nothing;
+     - a cap-reached refusal when usage + budget > cap, with the running backends' budgets reserved;
+     - a backend above its budget killed within one 2 s watch, the agent untouched;
      - `rename` absent for a read-only role, and refused outside the coder's own worktree;
      - an unlisted backend tool is never called;
-     - role and agent taken from argv, with `AGENT_BUS_AGENT` set to something else.
+     - role and agent taken from argv, with `AGENT_BUS_AGENT` set to something else;
+     - a relay whose parent is not the agent's verified client, or whose `--role` differs from the snapshot's, offers no tool;
+     - `work_branch` refused when another agent's open request holds that branch, and two concurrent claims leave one owner.
    - One integration test runs a real `gopls mcp` on a scratch module when it is installed, and
      skips otherwise.
 2. **The launcher and settings:** `--mcp-config`, Codex's `-c`, `preflight`, `ExtraHelpers`, the
@@ -304,6 +347,10 @@ Each step is its own PR and review, in series (merge-conflicts §3, sibling-enfo
    fallback in the skill and doctor showing per role. §8, §11.
 5. 15 minutes and 2 servers, counted in the 30 % cap. Plus a clear refusal before an OOM, and
    both values person-only. §6, §9.
+7. **Open (r3):** cap B is not built, so until it is, a backend's budget is a soft bound (§6:
+   the 2 s watch and runtime limits). Ship with the soft bound, or turn code-intel on only where
+   cap B runs? Recommended: ship with the soft bound, with `code_intel.enabled` off by default
+   and busmon saying `soft memory bound` beside the helper. The person turns it on knowing it.
 6. A dedicated install command. Plus:
    - update only reports changed pins;
    - checksums from the repository's pins;
