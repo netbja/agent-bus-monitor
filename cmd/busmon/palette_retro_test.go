@@ -63,6 +63,15 @@ func TestPaletteRetro(t *testing.T) {
 		t.Fatalf("no task: ask %v runs %q flash %q", w.m.ui.sleepAsk, w.runs, w.m.ui.flash)
 	}
 
+	// A page whose request is not tracked has no task for a retro.
+	w = newPalCWorld(t, "charlie")
+	w.m.snap.requests = append(w.m.snap.requests, request{Task: "a-board-task", From: "master", Target: "coder", State: "done"})
+	w.m.push(page{kind: ovRequest, key: "req:a-board-task"})
+	w.run(t, "/retro")
+	if w.m.ui.sleepAsk != nil || len(w.runs) != 0 {
+		t.Fatalf("an untracked request asked: runs %q", w.runs)
+	}
+
 	// A name that is no task name never reaches agentbus.
 	w = newPalCWorld(t, "charlie")
 	w.run(t, "/retro Bad!")
