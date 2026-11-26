@@ -174,7 +174,9 @@ clear refusal.
   1. Its parent process is the agent's client. The parent's `(pid, pid_start)` must equal
      the verified identity `{p}:agents` holds for `--agent` (`AgentSnapshot.PID`/`PIDStart`,
      `bus/stream.go:81`, written only through `putSnapshot`).
-  2. `--role` is the role that agent was launched as (the snapshot's role).
+  2. `--role` equals `--agent`, and it is a role in the project's `roles.toml`. An agent is
+     launched under its role's name (`agentbus pop <role>`), and the snapshot has no role field
+     (`bus/stream.go:60-100`). An agent whose name is not a role gets no tool.
 
   A mismatch, or no verified snapshot, starts the relay with no tool and the error `code-intel:
   launch identity not verified`, shown in busmon.
@@ -307,7 +309,7 @@ settings step runs alone.
      - `rename` absent for a read-only role, and refused outside the coder's own worktree;
      - an unlisted backend tool is never called;
      - role and agent taken from argv, with `AGENT_BUS_AGENT` set to something else;
-     - a relay whose parent is not the agent's verified client, or whose `--role` differs from the snapshot's, offers no tool;
+     - a relay whose parent is not the agent's verified client, or whose `--role` differs from `--agent` or is no role, offers no tool;
      - `work_branch` refused when another agent's open request holds that branch, and two concurrent claims leave one owner.
    - One integration test runs a real `gopls mcp` on a scratch module when it is installed, and
      skips otherwise.
