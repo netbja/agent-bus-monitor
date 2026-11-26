@@ -128,6 +128,14 @@ func TestRetroProposeCLI(t *testing.T) {
 			t.Errorf("show lacks %q:\n%s", want, out)
 		}
 	}
+	for _, self := range []string{"coder", "master", ""} { // docs alone closes it (reviewer-codex on r1)
+		if _, err := run(self, "close", "t1", "--pr", "77"); err == nil || !strings.Contains(err.Error(), "docs's act") {
+			t.Fatalf("close by %q: %v", self, err)
+		}
+	}
+	if rec, _ := b.Retro(ctx, "t1"); rec.State != bus.RetroRouted {
+		t.Fatalf("a refused close changed it: %s", rec.State)
+	}
 	if out, err := run("docs", "close", "t1", "--pr", "77"); err != nil || !strings.Contains(out, "closed (PR 77)") {
 		t.Fatalf("close: %q %v", out, err)
 	}
@@ -141,5 +149,49 @@ func TestAskRefusesTheRetroAuthor(t *testing.T) {
 	var out, errw bytes.Buffer
 	if code := runAsk(context.Background(), nil, []string{bus.RetroSender}, strings.NewReader(`{}`), emptyEnv, &out, &errw); code == 0 || !strings.Contains(errw.String(), "reserved") {
 		t.Fatalf("exit %d, %q", code, errw.String())
+	}
+}
+
+// foureyes on r1: with the reply trimmed from the cmd stream, show reads it
+// from the archive (Replies, wired into the bus); without one the person's
+// yes is unverified, never rejected.
+func TestRetroShowReadsTheArchive(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	roughTask(t, b, "t2")
+	board, _ := b.Board(ctx)
+	ev := board["t2"].Request.ID
+	base := fakeBase{"AGENTS.md": {Blob: "a1", Lines: 10, Exists: true}}
+	files := map[string]string{"r.md": retroTable(fmt.Sprintf("| 1 | a lesson | %s | context | AGENTS.md | edit it |", ev))}
+	p := retroPlus(base, files, nil)
+	var out bytes.Buffer
+	if err := runRetro(ctx, retroDeps{Bus: b, Self: "coder", Getenv: emptyEnv, Master: "master", Plus: p}, []string{"propose", "t2", "--file", "r.md"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := b.Retro(ctx, "t2")
+	if _, _, err := b.Answer(ctx, rec.AskID, "p1", "charlie", "yes", ""); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := b.Thread(ctx, rec.AskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.XTrimMaxLen(ctx, bus.StreamKey(b.Project(), "cmd"), 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	show := func(p retroPlusDeps) string {
+		t.Helper()
+		var out bytes.Buffer
+		if err := runRetro(ctx, retroDeps{Bus: b, Self: "docs", Getenv: emptyEnv, Master: "master", Plus: p}, []string{"show", "t2"}, &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}
+	if got := show(p); !strings.Contains(got, "1. unverified") {
+		t.Fatalf("no archive:\n%s", got)
+	}
+	p.Replies = func(context.Context, string) ([]bus.Event, error) { return saved, nil }
+	if got := show(p); !strings.Contains(got, "1. accepted (") {
+		t.Fatalf("with the archive:\n%s", got)
 	}
 }

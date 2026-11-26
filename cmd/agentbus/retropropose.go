@@ -55,6 +55,10 @@ type retroPlusDeps struct {
 	Setting  func(name string) int
 	Now      func() time.Time
 	ReadFile func(name string) ([]byte, error)
+	// Replies reads a retro ask's reply entries from the history archive
+	// (bus.SetRetroArchive): a reply trimmed from the stream still proves
+	// the person's yes (foureyes on r1).
+	Replies bus.RetroArchive
 }
 
 var (
@@ -304,6 +308,9 @@ func runRetroPlus(ctx context.Context, d retroDeps, p retroPlusDeps, verb string
 	if !has {
 		return true, errors.New("retro: this bus has no retros")
 	}
+	if s, ok := d.Bus.(interface{ SetRetroArchive(bus.RetroArchive) }); ok && p.Replies != nil {
+		s.SetRetroArchive(p.Replies)
+	}
 	if verb == "rejected" {
 		rest, file := extractFlag(args, "--file")
 		if len(rest) != 0 {
@@ -360,8 +367,8 @@ func runRetroPlus(ctx context.Context, d retroDeps, p retroPlusDeps, verb string
 		if err != nil {
 			return true, errors.New("usage: retro close <task> --pr <n>")
 		}
-		if d.Self == "" {
-			return true, errors.New("retro close: run it as the agent that delivered it (AGENT_BUS_AGENT)")
+		if d.Self != bus.RetroDocs { // docs applies and delivers it (spec §6, reviewer-codex on r1)
+			return true, fmt.Errorf("retro close is %s's act, not %q's", bus.RetroDocs, d.Self)
 		}
 		if err := b.RetroClose(ctx, task, n); err != nil {
 			return true, err
@@ -433,5 +440,28 @@ func retroPlusFor(project string, getenv func(string) string) retroPlusDeps {
 		},
 		Now:      time.Now,
 		ReadFile: os.ReadFile,
+		Replies: func(_ context.Context, askID string) ([]bus.Event, error) {
+			if dir == "" {
+				return nil, nil // no archive on this host: the stream alone
+			}
+			ms, err := strconv.ParseInt(strings.SplitN(askID, "-", 2)[0], 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("ask id %q", askID)
+			}
+			es, cut, err := history.ReadDays(dir, time.UnixMilli(ms).Add(-24*time.Hour), time.Now().Add(24*time.Hour), 256<<20)
+			if err != nil {
+				return nil, err
+			}
+			if cut {
+				return nil, errors.New("the archive is larger than one read: a reply may be missed")
+			}
+			var out []bus.Event
+			for _, e := range es {
+				if e.Stream == "cmd" && e.F["ref"] == askID {
+					out = append(out, bus.ParseEntry(project+":cmd", e.ID, e.F))
+				}
+			}
+			return out, nil
+		},
 	}
 }
