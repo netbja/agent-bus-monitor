@@ -309,3 +309,53 @@ func (m *Model) startBackup(f *backupFacts) tea.Cmd {
 	}
 	return m.startRun("backup", backupNowArgs(*f), f.Log)
 }
+
+// backupDirEnter saves the destination folder typed in the editor
+// (backup-dest-folder, the person): ~/ is the home folder; a folder that
+// exists is saved at once; one that does not is created (0700, as agentbus
+// backup creates it) only on a yes, then saved; no saves nothing and leaves
+// the editor open; a file is refused. A relative path goes to the key's own
+// rule, which refuses it.
+func (m *Model) backupDirEnter(s *settingsPage, path string, v any) tea.Cmd {
+	dir, _ := v.(string)
+	if rest, ok := strings.CutPrefix(dir, "~/"); ok {
+		if home := m.settingsGetenv()("HOME"); home != "" {
+			dir = filepath.Join(home, rest)
+		}
+	}
+	save := func() error { return config.SetAsPerson(path, "backup.dir", dir) }
+	if dir == "" || !filepath.IsAbs(dir) {
+		return m.settingsCmd(save, "backup.dir")
+	}
+	dir = filepath.Clean(dir)
+	switch st, err := os.Stat(dir); {
+	case err == nil && st.IsDir():
+		return m.settingsCmd(save, "backup.dir")
+	case err == nil:
+		s.err = Preview(dir) + " is a file, not a folder"
+		return nil
+	case !os.IsNotExist(err):
+		s.err = "cannot read " + Preview(dir) + ": " + err.Error()
+		return nil
+	}
+	m.openConfirm(&confirmDialog{
+		Title: "Create the backup folder?",
+		Body:  []string{Preview(dir) + " does not exist.", "busmon creates it (only you can read it), then saves it as backup.dir."},
+		Yes:   "Create", No: "Cancel",
+		OnYes: func(m *Model) tea.Cmd {
+			return m.settingsCmd(func() error {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					return err
+				}
+				return save()
+			}, "backup.dir")
+		},
+		OnNo: func(m *Model) tea.Cmd {
+			if p := m.settingsPageOpen(); p != nil {
+				p.set.err = "folder not created: nothing saved"
+			}
+			return nil
+		},
+	})
+	return nil
+}

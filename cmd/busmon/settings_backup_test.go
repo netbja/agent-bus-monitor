@@ -248,3 +248,77 @@ func TestShellWord(t *testing.T) {
 		}
 	}
 }
+
+// backup-dest-folder (the person): backup.dir names the destination folder;
+// a folder that does not exist is created only on a yes, then saved; no
+// creates and saves nothing, the editor stays open; an existing folder is
+// saved at once; a file is refused; ~/ is the home folder.
+func TestSettingsBackupDirCreatesTheFolder(t *testing.T) {
+	w := newBackupWorld(t, "")
+	home := t.TempDir()
+	base := w.getenv
+	w.getenv = func(k string) string {
+		if k == "HOME" {
+			return home
+		}
+		return base(k)
+	}
+	set := func(m Model, text string) Model {
+		t.Helper()
+		m = press(t, selectSetting(t, m, "backup.dir"), tea.Key{Code: tea.KeyEnter})
+		for range len([]rune(m.rd.top().set.text)) {
+			m = press(t, m, tea.Key{Code: tea.KeyBackspace})
+		}
+		for _, r := range text {
+			m = press(t, m, r)
+		}
+		return press(t, m, tea.Key{Code: tea.KeyEnter})
+	}
+	m := backupShell(t, w)
+	target := filepath.Join(t.TempDir(), "new backups", "deep")
+	m = set(m, target)
+	if m.ui.dialog == nil || !strings.Contains(m.ui.dialog.Title, "Create") || !strings.Contains(strings.Join(m.ui.dialog.Body, "\n"), target) {
+		t.Fatalf("no question for a missing folder: %+v", m.ui.dialog)
+	}
+	if _, err := os.Stat(target); err == nil {
+		t.Fatal("created before the yes")
+	}
+	m = press(t, m, 'n')
+	if _, err := os.Stat(target); err == nil || strings.Contains(configText(t, w.getenv), "deep") {
+		t.Fatalf("no created or saved it: %q", configText(t, w.getenv))
+	}
+	if s := m.rd.top().set; s.edit != "backup.dir" || !strings.Contains(s.err, "not created") {
+		t.Fatalf("after no: edit %q err %q", s.edit, s.err)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m = press(t, m, 'y')
+	st, err := os.Stat(target)
+	if err != nil || !st.IsDir() || st.Mode().Perm() != 0o700 {
+		t.Fatalf("after yes: %v %v", st, err)
+	}
+	if !strings.Contains(configText(t, w.getenv), target) {
+		t.Fatalf("not saved: %q", configText(t, w.getenv))
+	}
+	// An existing folder: saved, no question.
+	other := t.TempDir()
+	m = set(m, other)
+	if m.ui.dialog != nil || !strings.Contains(configText(t, w.getenv), other) {
+		t.Fatalf("an existing folder: dialog %+v, file %q", m.ui.dialog, configText(t, w.getenv))
+	}
+	// A file is refused.
+	file := filepath.Join(other, "f")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m = set(m, file)
+	if s := m.rd.top().set; m.ui.dialog != nil || !strings.Contains(s.err, "not a folder") || strings.Contains(configText(t, w.getenv), file) {
+		t.Fatalf("a file: dialog %+v err %q", m.ui.dialog, s.err)
+	}
+	m = press(t, m, tea.Key{Code: tea.KeyEscape})
+	// ~/ is the home folder.
+	m = set(m, "~/bk")
+	m = press(t, m, 'y')
+	if _, err := os.Stat(filepath.Join(home, "bk")); err != nil || !strings.Contains(configText(t, w.getenv), filepath.Join(home, "bk")) {
+		t.Fatalf("~/bk: %v %q", err, configText(t, w.getenv))
+	}
+}

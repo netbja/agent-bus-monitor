@@ -337,7 +337,8 @@ func TestSettingsPageIcons(t *testing.T) {
 
 // backup spec, "A person's setting only": the C page shows the three
 // backup.after_* keys read-only, Enter says to edit config.toml yourself,
-// d offers nothing, and the file is never touched.
+// d offers nothing, and the file is never touched; beside them only the
+// destination folder, editable (backup-dest-folder).
 func TestSettingsPageShowsAfterKeysReadOnly(t *testing.T) {
 	getenv := settingsEnv(t, "[backup]\nafter_command = \"restic backup /b\"\nafter_env = [\"RESTIC_PASSWORD_FILE\"]\n", "",
 		map[string]string{"AGENT_BUS_NO_UPDATE_CHECK": "1"})
@@ -353,10 +354,14 @@ func TestSettingsPageShowsAfterKeysReadOnly(t *testing.T) {
 	}
 	for _, g := range groups {
 		for _, r := range g.Rows {
-			if g.Group == config.GroupBackup && !strings.HasPrefix(r.Key, "backup.after_") {
-				t.Errorf("the page shows %s: only the after_* keys are asked for", r.Key)
+			if g.Group == config.GroupBackup && !strings.HasPrefix(r.Key, "backup.after_") && r.Key != "backup.dir" {
+				t.Errorf("the page shows %s: only the after_* keys and the folder are asked for", r.Key)
 			}
 		}
+	}
+	// The destination folder is the one Backup key edited here (backup-dest-folder).
+	if r := settingRowOf(t, groups, "backup.dir"); !r.Editable || r.Label != "Destination folder" {
+		t.Fatalf("backup.dir %+v", r)
 	}
 	var themed string
 	m := press(t, settingsShell(t, getenv, &themed), 'C')

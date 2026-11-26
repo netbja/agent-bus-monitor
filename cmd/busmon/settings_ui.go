@@ -526,6 +526,9 @@ func (m *Model) settingsEditKey(k Key, row settingRow) tea.Cmd {
 			return nil
 		}
 		name := s.edit
+		if name == "backup.dir" {
+			return m.backupDirEnter(s, path, v)
+		}
 		return m.settingsCmd(func() error { return config.SetAsPerson(path, name, v) }, name)
 	}
 	return nil
@@ -901,7 +904,7 @@ func settingsPanel(s *settingsPage, sel, width int) ([]Line, int) {
 			case s.backupAsk:
 				note("Back up every project of this host now? agentbus "+strings.Join(backupNowArgs(*s.backup), " ")+" runs beside busmon, its output in "+s.backup.Log+" (y)", RoleAttention)
 			case i == 0:
-				note("enter: run agentbus backup now, as by hand; the schedule and the folder are backup.schedule and backup.dir in config.toml", RoleMuted)
+				note("enter: run agentbus backup now, as by hand; the schedule is backup.schedule in config.toml, the folder Destination folder above", RoleMuted)
 			default:
 				note("enter: this archive's coverage and the restore commands to copy; busmon restores nothing", RoleMuted)
 			}
@@ -1062,6 +1065,7 @@ func settingsDetail(r settingRow) []mdSpan {
 // by its kind (settingHelp).
 var settingHelps = map[string]string{
 	"display.theme":                "auto follows the terminal's background; dark or light forces one",
+	"backup.dir":                   "where archives go: an absolute folder, ~/ for your home; one that does not exist is created on your yes; empty: the default folder",
 	"board.wip_limit":              "requests each agent may hold accepted when it starts a new one; at it a new accept is refused until one is done, in review or blocked; your high priority passes; 0: no limit; agents cannot change it",
 	"display.icons":                "off: none " + GlyphNone + " nerd: a lettered box per provider " + GlyphNone + " agent-font: the maker's logo",
 	"display.limit":                "Activity lines replayed when busmon starts; 0 or below: all history",
