@@ -550,8 +550,10 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<k
   anything off the pty's foreground group. So the holder stops scopes itself, with
   `systemctl --user stop <scope>`, which kills the whole scope:
   - **at a terminal's end** (its client exited, or the holder closed it): that terminal's scope;
-  - **at holder stop** (the unit's `ExecStop`, before the control-group kill): every scope of
-    its project and build;
+  - **at holder stop:** every scope of its project and build, in the holder's own shutdown on
+    `SIGTERM`, before it exits. The unit has no `ExecStop` today (`service/holder.go`), and
+    none is added. A holder killed outright skips this step, and the start sweep catches what
+    it left;
   - **at holder start:** a sweep of `agentbus-<p>-<key>-*.scope` of its own project and build
     that no live terminal holds. Those are leftovers of a crash. Another build's scopes are
     never touched: the build key is in the name, so a drain's old and new holders do not kill
