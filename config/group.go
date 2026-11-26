@@ -35,7 +35,7 @@ var groups = map[string]Group{
 	"holder.scrollback": GroupServices, "limits.holder_memory_max": GroupServices, "limits.holder_memory_high": GroupServices, "limits.holder_swap_max": GroupServices, "dispatch.submit_wait": GroupServices, "dispatch.person_quiet": GroupServices,
 	"board.wip_limit": GroupServices, "delivery.forge": GroupServices, "delivery.base": GroupServices, "delivery.single_approval": GroupServices, "delivery.small_max_lines": GroupServices, "delivery.small_max_files": GroupServices, "delivery.never_small": GroupServices, "delivery.same_provider_ok": GroupServices, "broker.runtime": GroupServices, "broker.acl": GroupServices, "broker.image": GroupServices,
 	"limits.command_memory": GroupServices, "limits.command_time": GroupServices, "limits.command_cpu": GroupServices,
-	"health.disk_warn_pct": GroupHealth, "health.disk_warn_gib": GroupHealth, "health.disk_fail_pct": GroupHealth,
+	"health.disk_warn_pct": GroupHealth, "limits.holder_drain_stale_after": GroupHealth, "health.disk_warn_gib": GroupHealth, "health.disk_fail_pct": GroupHealth,
 	"health.disk_fail_gib": GroupHealth, "limits.warn_at": GroupHealth, "health.runaway.silent_after": GroupHealth, "health.runaway.context_growth": GroupHealth,
 	"health.runaway.growth_span": GroupHealth, "dispatch.background_notice_after": GroupHealth, "dispatch.background_ignore": GroupHealth, "health.runaway.screen_repeats": GroupHealth, "models.source_max_age": GroupHealth,
 	"backup.schedule": GroupBackup, "backup.dir": GroupBackup, "backup.keep": GroupBackup, "backup.warn_after": GroupBackup, "backup.age_recipient": GroupBackup,

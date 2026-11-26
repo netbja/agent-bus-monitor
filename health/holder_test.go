@@ -33,19 +33,56 @@ func TestEvaluateHolder(t *testing.T) {
 }
 
 // holder-draining: warn while an older build still holds terminals; an older
-// one that answers with none is about to exit.
+// one that answers with none is about to exit. The drain's age is the
+// current build's (it began when that holder came), the old build's own
+// when the current one does not answer; past staleAfter it fails, naming
+// the agents still in the old build and what ends the drain
+// (agent-resource-limits §3.2).
 func TestEvaluateHolderDraining(t *testing.T) {
-	cur := HolderBuild{Key: "k2", Raw: "v2", Current: true, Unit: true, Active: true, Answers: true}
+	cur := HolderBuild{Key: "k2", Raw: "v2", Current: true, Unit: true, Active: true, Answers: true, Since: 2 * time.Hour}
 	old := HolderBuild{Key: "k1", Raw: "v1", Unit: true, Active: true, Answers: true, Terms: 2, Since: 26 * time.Hour}
-	if got := EvaluateHolderDraining(HolderEvidence{Known: true, Builds: []HolderBuild{cur, old}}); got.Status != Warn ||
-		!strings.Contains(got.Detail, "v1") || !strings.Contains(got.Detail, "2 terminal") || !strings.Contains(got.Detail, "26h") {
+	e := func(bs ...HolderBuild) HolderEvidence { return HolderEvidence{Known: true, Builds: bs} }
+	held := map[string][]string{"k1": {"coder", "foureyes"}, "k2": {"master"}}
+	got := EvaluateHolderDraining(e(cur, old), 6*time.Hour, held)
+	if got.Status != Warn || !strings.Contains(got.Detail, "build v1: 2 terminal(s), draining for 2h") {
 		t.Fatalf("draining: %+v", got)
 	}
+	cur.Since = 21 * time.Hour
+	got = EvaluateHolderDraining(e(cur, old), 6*time.Hour, held)
+	for _, want := range []string{"build v1: 2 terminal(s), draining for 21h", "past limits.holder_drain_stale_after (6h)", "coder, foureyes",
+		"agentbus relaunch coder", "agentbus relaunch foureyes", "agentbus --project <project> service restart holder --kill-agents"} {
+		if got.Status != Fail || !strings.Contains(got.Detail, want) {
+			t.Fatalf("stale: %+v lacks %q", got, want)
+		}
+	}
+	if strings.Contains(got.Detail, "master") {
+		t.Fatalf("the current build's agent named: %+v", got)
+	}
+	// Exactly at the limit: stale.
+	cur.Since = 6 * time.Hour
+	if got := EvaluateHolderDraining(e(cur, old), 6*time.Hour, held); got.Status != Fail {
+		t.Fatalf("at the limit: %+v", got)
+	}
+	cur.Since = 6*time.Hour - time.Minute
+	if got := EvaluateHolderDraining(e(cur, old), 6*time.Hour, held); got.Status != Warn {
+		t.Fatalf("below the limit: %+v", got)
+	}
+	cur.Since = 21 * time.Hour
+	// The agents unknown (no snapshot read): still a fail, with the person's command.
+	if got := EvaluateHolderDraining(e(cur, old), 6*time.Hour, nil); got.Status != Fail || !strings.Contains(got.Detail, "agents unknown") {
+		t.Fatalf("no agents: %+v", got)
+	}
+	// The current build does not answer: the old build's own age.
+	cur.Answers = false
+	if got := EvaluateHolderDraining(e(cur, old), 48*time.Hour, held); got.Status != Warn || !strings.Contains(got.Detail, "draining for 26h") {
+		t.Fatalf("no current: %+v", got)
+	}
+	cur.Answers = true
 	old.Terms = 0
-	if got := EvaluateHolderDraining(HolderEvidence{Known: true, Builds: []HolderBuild{cur, old}}); got.Status != OK {
+	if got := EvaluateHolderDraining(e(cur, old), 6*time.Hour, held); got.Status != OK {
 		t.Fatalf("an empty old holder: %+v", got)
 	}
-	if got := EvaluateHolderDraining(HolderEvidence{}); got.Status != Unknown {
+	if got := EvaluateHolderDraining(HolderEvidence{}, 6*time.Hour, held); got.Status != Unknown {
 		t.Fatalf("unknown: %+v", got)
 	}
 }

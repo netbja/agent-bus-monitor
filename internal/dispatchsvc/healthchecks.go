@@ -86,10 +86,9 @@ func realHealthChecks(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, 
 	}
 	return []dispatch.HealthCheck{
 		healthOutcomeTask("holder", holderCheck(b, holderNow, os.Getenv)),
-		healthOutcomeTask("holder-draining", func(ctx context.Context) (health.Outcome, error) {
-			e, err := holderNow()
-			return health.EvaluateHolderDraining(e), err
-		}),
+		healthOutcomeTask("holder-draining", holderDrainingCheck(b.Agents, holderNow, func() time.Duration {
+			return config.Machine(os.Getenv).Duration("limits.holder_drain_stale_after")
+		})),
 		healthOutcomeTask("holder-memory", holderMemoryCheck(holderNow, func() float64 { return config.Machine(os.Getenv).Float("limits.warn_at") })),
 		healthOutcomeTask("holder-leftovers", func(ctx context.Context) (health.Outcome, error) {
 			e, err := holderNow()

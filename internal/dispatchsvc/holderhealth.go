@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -232,5 +233,37 @@ func holderMemoryCheck(now func() (health.HolderEvidence, error), warnPct func()
 			prev = health.HolderOOMCounts(e, prev)
 		}
 		return out, err
+	}
+}
+
+// heldByBuild is the agents each holder build holds, by build key, from
+// their snapshots' panes ("<key>/<terminal>"), sorted; a done agent and a
+// pane of no holder are left out (agent-resource-limits §3.2).
+func heldByBuild(snaps map[string]bus.AgentSnapshot) map[string][]string {
+	out := map[string][]string{}
+	for name, s := range snaps {
+		key, _, ok := health.HolderPane(s.Pane)
+		if !ok || s.State == "done" {
+			continue
+		}
+		out[key] = append(out[key], name)
+	}
+	for _, names := range out {
+		slices.Sort(names)
+	}
+	return out
+}
+
+// holderDrainingCheck is holder-draining's pass: the evidence, the agents
+// each build holds (nil when the snapshots cannot be read: the fail then
+// says "agents unknown") and limits.holder_drain_stale_after, read each pass.
+func holderDrainingCheck(agents func(context.Context) (map[string]bus.AgentSnapshot, error), evidence func() (health.HolderEvidence, error), staleAfter func() time.Duration) func(context.Context) (health.Outcome, error) {
+	return func(ctx context.Context) (health.Outcome, error) {
+		e, err := evidence()
+		var held map[string][]string
+		if snaps, aerr := agents(ctx); aerr == nil {
+			held = heldByBuild(snaps)
+		}
+		return health.EvaluateHolderDraining(e, staleAfter(), held), err
 	}
 }
