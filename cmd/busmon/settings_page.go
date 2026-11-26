@@ -74,17 +74,18 @@ var settingLabels = map[string]string{
 	"projects.delete_files": "Delete also its template and worktrees", "projects.delete_backups": "Delete also its backups",
 	"board.wip_limit":      "Requests per agent at once (wip limit)",
 	"backup.after_command": "Command after each backup", "backup.after_env": "Variables it keeps", "backup.after_timeout": "Its time limit",
+	"backup.dir":               "Destination folder", // backup-dest-folder
 	"delivery.single_approval": "One approval for a small change", "delivery.small_max_lines": "Small: lines at most",
 	"delivery.small_max_files": "Small: files at most", "delivery.never_small": "Never small (globs added)", "delivery.same_provider_ok": "One approval of the author's provider",
 }
 
-// settingOnPage: the Backup group shows only its person-only keys, read-only
-// (backup spec), Services only sentinel.reload (auto-reload); every key of
-// the other groups shows.
+// settingOnPage: the Backup group shows its person-only keys, read-only
+// (backup spec), and the destination folder, edited here (backup-dest-folder);
+// Services only servicesOnPage; every key of the other groups shows.
 func settingOnPage(k *config.Key) bool {
 	switch k.Group() {
 	case config.GroupBackup:
-		return k.PersonOnly
+		return k.PersonOnly || k.Name == "backup.dir"
 	case config.GroupServices:
 		_, _, quotaKey := config.ParseQuotaProviderKey(k.Name) // quota-per-provider
 		return servicesOnPage[k.Name] || quotaKey

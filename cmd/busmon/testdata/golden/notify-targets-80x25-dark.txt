@@ -13,7 +13,7 @@
 │  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
 │  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
 ╰──────────────────────────────────────────────────────────────────────────────╯
-╭─ Settings · 2 set here · 1 elsewhere · 69 default ──────────────── esc back ─╮
+╭─ Settings · 2 set here · 1 elsewhere · 70 default ──────────────── esc back ─╮
 │  focus: keys · ← or tab: the tabs                                            ▲
 │ …  Attention   Identity   Notifications   Services   Backup   Projects       ┃
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
