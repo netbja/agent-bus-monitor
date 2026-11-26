@@ -37,7 +37,7 @@ WORK COMMANDS
   merge-queue:    what waits for merge
   deliver:        push and open a PR
   ci:             the CI loop
-  run:            the run budget
+  run:            run budget; capped commands
 
 TERMINAL COMMANDS
   agents:         every agent's state

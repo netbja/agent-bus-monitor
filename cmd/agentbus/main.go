@@ -28,6 +28,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
+	"github.com/netbja/agent-bus-monitor/internal/caprun"
 	"github.com/netbja/agent-bus-monitor/internal/dispatchsvc"
 	"github.com/netbja/agent-bus-monitor/lifecycle"
 	"github.com/netbja/agent-bus-monitor/modelcheck"
@@ -59,6 +60,14 @@ func envOr(key, def string) string {
 }
 
 func main() {
+	// run --cap and its helper (agent-resource-limits §6) read the raw argv,
+	// before any parser below: every word after "--" is the command's own
+	// (go test -p 2 is not --project).
+	if a := os.Args[1:]; isCapRun(a) {
+		os.Exit(runCap(a[2:], os.Getenv, os.Stdin, os.Stdout, os.Stderr))
+	} else if len(a) >= 1 && a[0] == caprun.HelperArg {
+		os.Exit(caprun.Exec(a[1:], os.Stderr))
+	}
 	// Short flags become long ones (the table in commands.go), so every
 	// parser below sees only the long forms it always read.
 	raw := expandArgs(os.Args[1:])

@@ -88,6 +88,7 @@ var applies = map[string]Applies{
 	"notify.delay": AppliesLive, "notify.max_per_hour": AppliesLive, "notify.quiet": AppliesLive, "notify.quiet_exempt": AppliesLive,
 	"health.disk_warn_pct": AppliesLive, "health.disk_warn_gib": AppliesLive, "health.disk_fail_pct": AppliesLive,
 	"health.disk_fail_gib": AppliesLive, "models.source_max_age": AppliesLive,
+	"limits.command_memory": AppliesRun, "limits.command_time": AppliesRun, "limits.command_cpu": AppliesRun,
 	// each writer, at each write
 	"bus.report_max": AppliesLive, "bus.report_full_max": AppliesLive, "bus.verdict_max": AppliesLive,
 	// commands, at each run
