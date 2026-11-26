@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 )
 
 const askUsage = "usage: ask <agent> [--file questions.json | < questions.json] [--replace <id>] [--task <plan-task>] | ask <agent> --withdraw <id> [--question <qid> [--note <text>]]"
@@ -184,8 +185,9 @@ func runAsks(ctx context.Context, b *bus.Bus, args []string, out, errw io.Writer
 	return 0
 }
 
-// runAnswer answers one question as a person, without busmon.
-func runAnswer(ctx context.Context, b *bus.Bus, args []string, getenv func(string) string, out, errw io.Writer) int {
+// runAnswer answers one question as a person, without busmon. ancestor is
+// the process-tree check (agentcaller.Ancestor; nil = not checked).
+func runAnswer(ctx context.Context, b *bus.Bus, args []string, getenv func(string) string, ancestor func(context.Context) (string, error), out, errw io.Writer) int {
 	args, choice := extractFlag(args, "--choice")
 	args, as := extractFlag(args, "--as")
 	args, isText := extractBool(args, "--text")
@@ -197,6 +199,13 @@ func runAnswer(ctx context.Context, b *bus.Bus, args []string, getenv func(strin
 	// or without --as, so no agent answers in the person's name.
 	if a := agentIdentity(getenv); a != "" || getenv("AGENTBUS_TERM_ID") != "" {
 		fmt.Fprintf(errw, "answer: refused from an agent (%s): answers are the person's, in busmon or the person's own shell\n", strings.TrimSpace(a+" "+getenv("AGENTBUS_TERM_ID")))
+		return 2
+	}
+	// Both variables can be unset by an agent: the process tree is checked
+	// too (retro §5: a retro's approval is the person's typed answer, so the
+	// answer's guard must hold). An unreadable ancestry refuses.
+	if why := agentcaller.Refuse(ctx, getenv, ancestor, "an answer", "agentbus answer"); why != "" {
+		fmt.Fprintf(errw, "answer: %s\n", why)
 		return 2
 	}
 	by := as

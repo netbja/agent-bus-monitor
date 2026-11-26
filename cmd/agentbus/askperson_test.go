@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/internal/agentcaller"
 )
 
 // ask-refuses-person (the person, via master): ask <agent> names the ASKING
@@ -121,9 +123,53 @@ func TestAnswerRefusedFromAnAgent(t *testing.T) {
 		} {
 			var out, errw bytes.Buffer
 			getenv := func(k string) string { return env[k] }
-			if code := runAnswer(context.Background(), nil, args, getenv, &out, &errw); code == 0 || !strings.Contains(errw.String(), "the person's") {
+			if code := runAnswer(context.Background(), nil, args, getenv, nil, &out, &errw); code == 0 || !strings.Contains(errw.String(), "the person's") {
 				t.Errorf("%v %v: exit %d, %q", env, args, code, errw.String())
 			}
+		}
+	}
+}
+
+// retro §5 (step 2): the answer's own guard holds with both variables unset:
+// agentbus answer refuses through agentcaller.Refuse, so an agent that
+// clears AGENT_BUS_AGENT and AGENTBUS_TERM_ID is still refused from its
+// process tree, and an unreadable ancestry refuses too. The person's shell
+// (no agent among the ancestors, or a host with no ancestry) answers.
+func TestAnswerRefusedFromAnAgentsProcessTree(t *testing.T) {
+	none := func(string) string { return "" }
+	for _, c := range []struct {
+		name     string
+		ancestor func(context.Context) (string, error)
+		want     string
+	}{
+		{"under an agent", func(context.Context) (string, error) { return "demo/coder", nil }, "runs under the agent demo/coder"},
+		{"unreadable ancestry", func(context.Context) (string, error) { return "", errors.New("ps failed") }, "cannot check that no registered agent runs this"},
+	} {
+		var out, errw bytes.Buffer // a nil bus: the refusal comes before any read
+		if code := runAnswer(context.Background(), nil, []string{"1-0", "q", "--choice", "a"}, none, c.ancestor, &out, &errw); code == 0 || !strings.Contains(errw.String(), c.want) {
+			t.Errorf("%s: exit %d, %q", c.name, code, errw.String())
+		}
+	}
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.AsksKey(b.Project())) })
+	t.Setenv("AGENTBUS_TERM_ID", "")
+	in := `{"title":"Two","questions":[
+	  {"id":"q1","header":"One","question":"First?","options":[{"label":"yes"},{"label":"no"}]},
+	  {"id":"q2","header":"Two","question":"Second?","options":[{"label":"yes"},{"label":"no"}]}]}`
+	var out, errw bytes.Buffer
+	if code := runAsk(ctx, b, []string{"master"}, strings.NewReader(in), asMaster, &out, &errw); code != 0 {
+		t.Fatalf("ask: %d %s", code, errw.String())
+	}
+	id := strings.Fields(out.String())[0]
+	for qid, ancestor := range map[string]func(context.Context) (string, error){
+		"q1": func(context.Context) (string, error) { return "", nil },                       // the person's shell
+		"q2": func(context.Context) (string, error) { return "", agentcaller.ErrNoAncestry }, // a host with no ancestry
+	} {
+		out.Reset()
+		errw.Reset()
+		if code := runAnswer(ctx, b, []string{id, qid, "--choice", "yes"}, none, ancestor, &out, &errw); code != 0 {
+			t.Errorf("%s: exit %d, %q", qid, code, errw.String())
 		}
 	}
 }
