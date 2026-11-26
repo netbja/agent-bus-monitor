@@ -70,6 +70,10 @@ func TestSparkLines(t *testing.T) {
 	if share[0] != 25 || share[1] != 100 {
 		t.Errorf("shares %v", share)
 	}
+	// A cell's share is the larger of its two samples.
+	if _, share := SparkLines([]float64{2, 8}, 8, 1, 1, StyleBraille); share[0] != 100 {
+		t.Errorf("two samples in one cell: share %v", share)
+	}
 	// 5 of 8 is level 6: two dots on top.
 	if lines, _ := SparkLines([]float64{5}, 8, 1, 2, StyleBraille); func() bool { l, _ := BrailleLevels([]rune(lines[0])[0]); return l != 2 }() {
 		t.Errorf("5/8 top: %q", lines)

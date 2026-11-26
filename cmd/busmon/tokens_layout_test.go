@@ -263,6 +263,11 @@ func TestTokensIdleProjects(t *testing.T) {
 			}
 		}
 	}
+	for i, l := range lines { // an idle row has no largest day to print
+		if strings.HasPrefix(l.text(), "  quiet0 ") && strings.Contains(lines[i-1].text(), "max ") {
+			t.Errorf("idle row with a max: %q", lines[i-1].text())
+		}
+	}
 	if _, ok := find(lines, "  3 projects idle"); ok {
 		t.Error("three idle fold")
 	}

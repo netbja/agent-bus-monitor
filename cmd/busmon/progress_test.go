@@ -285,6 +285,19 @@ func TestProgressBarEighths(t *testing.T) {
 	}
 }
 
+// The progress line's bar is that bar: 22m30s of a 60m pace is 37.5 %,
+// three cells and six eighths.
+func TestProgressLineHasEighths(t *testing.T) {
+	pinLocal(t)
+	withRendering(t, finedraw.ModeFine)
+	withPalette(t, "dark", false, 1<<24)
+	r := inHandReq("x", "coder", 22*time.Minute+30*time.Second)
+	l, _ := progressLine(r, pace{usual: time.Hour, n: 6}, shellNow)
+	if got := l.text(); !strings.Contains(got, strings.Repeat(GlyphBarFull, 3)+GlyphEighth6) || !strings.Contains(got, "~37%") {
+		t.Errorf("progress %q", got)
+	}
+}
+
 // tui-rendering §4.4: an In progress card shows its task's progress, short:
 // a 6-cell bar and "~N%"; "estimate" on a thin pace; nothing without one.
 func TestKanbanCardProgress(t *testing.T) {

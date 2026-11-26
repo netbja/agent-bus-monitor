@@ -134,6 +134,12 @@ func TestContextBarRamp(t *testing.T) {
 		}
 		return n, roles
 	}
+	// An urgent threshold not above the alert is no red (the escalation's rule).
+	pinUrgent(t, 70)
+	if r := ctxRamp(80); r.role(85) != RoleAttention || r.role(75) != RoleGauge {
+		t.Errorf("urgent under the alert: %v at 85, %v at 75", r.role(85), r.role(75))
+	}
+	pinUrgent(t, 90)
 	withPalette(t, "dark", false, 1<<24)
 	l := rampGauge(95, ctxBarW, ctxRamp(80), false)
 	if n, _ := inks(l); n != ctxBarW { // 95 of 6 cells: 5 whole and an eighth, each its own colour
@@ -224,6 +230,16 @@ func TestAccountCardGaugesTakeTheRamp(t *testing.T) {
 	if inks, _ := gauge(); len(inks) < 3 || inks[colorDefault] {
 		t.Errorf("true colour: %d colours %v", len(inks), inks)
 	}
+	// The track (the fill's colour faded) takes no ink: only the fill ramps.
+	b.Windows[0].UsedPct = 40
+	for _, l := range accountCard(iconsOff, "anthropic", b, nil, now, 80, barView{}) {
+		for _, s := range l {
+			if s.Fade > 0 && s.Ink != colorDefault {
+				t.Errorf("a track cell inked: %+v", s)
+			}
+		}
+	}
+	b.Windows[0].UsedPct = 97
 	withPalette(t, "dark", false, 16)
 	if inks, roles := gauge(); len(inks) != 1 || !inks[colorDefault] || !roles[budgetRole(97)] {
 		t.Errorf("16 colours: inks %v roles %v", inks, roles)
