@@ -1,223 +1,315 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r1, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
-Author: architect, from the person's typed request relayed by master (cmd
-`1795733140669-0`, task `code-intel-spec`). The person may send a wider summary. The shared
-dev-index rule (`abm-origin-dev`) goes to docs separately, not here.
+Status: spec r2, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r2 folds in the person's answers to ask `1795733274522-0` (Q1–Q6, all typed, with their
+additions; §12) and the two r1 rejects:
+- foureyes: cap B is not built, so the relay enforces its own memory guard (§6); and it routes
+  only the project's own worktrees (§4).
+- reviewer-codex: the person's requirements were missing. Worktree mapping fails closed (§4),
+  backends die with their worktree and with the relay (§5), and every answer carries HEAD (§3).
+  The gopls daemon is evaluated in step 0 (§11).
+
+Author: architect, from the person's typed request relayed by master (cmd `1795733140669-0`,
+task `code-intel-spec`). The person may send a wider summary. The shared dev-index rule
+(`abm-origin-dev`) goes to docs separately, not here.
 
 ## 1. Goal
 
 Coder and reviewer roles in every project agent-bus drives get **exact, branch-local** code
-navigation: callers, references, implementations, symbols, and (for coders) a safe rename. It
-works in any project language, through an MCP helper the launcher gives the agent's client.
-Today each agent greps, or uses whatever MCP servers its user configured by hand: a shared
+navigation: symbols, definition, references, callers, implementations, and (coders only) a
+rename. It works in any project language, through one MCP helper the launcher gives the agent's
+client. Today each agent greps, or uses an MCP server its user configured by hand: a shared
 index, built from another tree, that may not match the agent's branch.
 
 ## 2. What exists today
 
-- **The launcher** builds each client's argv (`rolecfg/launch.go:298`, `build`). Claude Code gets
-  `--settings <json>`. Codex gets `-c key=value` overrides. Both clients take MCP servers per
-  launch, with no file in the user's home:
+- **The launcher** builds each client's argv (`rolecfg/launch.go:298`, `build`). Both clients
+  take MCP servers per launch, with no file in the user's home:
   - Claude Code: `--mcp-config <json|file>`. It is additive to the user's servers unless
-    `--strict-mcp-config` is given. `quota/claudeprobe.go:88` uses the strict form.
-  - Codex: `-c mcp_servers.<name>.command=…` and `-c mcp_servers.<name>.args=[…]`.
+    `--strict-mcp-config` is given (`quota/claudeprobe.go:88` uses the strict form).
+  - Codex: `-c mcp_servers.<name>.command=…` and `.args=[…]`.
 
-  `preflight` (`rolecfg/launch.go:411`) already checks a client's `--help` for every flag a
-  launch passes.
-- **`ExtraHelpers`** is declared and read, but never filled. `Facts.ExtraHelpers`
-  (`agentstate/background.go:113-120`) lets the background judgement ignore an MCP helper's CPU
-  (`:219`). `HostRuntime.ExtraHelpers` (`dispatch/hostruntime.go:50`, `:303`) is the hook that
-  would supply it. No caller sets it today.
-- **Memory:** an MCP stdio server is a child of the client, so it sits in the agent's terminal
-  cgroup, cap B (`2026-11-25-agent-resource-limits-design.md` §4,
-  `limits.agent_memory_max`, 30 %). It is counted in the agent's per-agent figure (§5 of that
-  spec). Nothing new is needed for the cap itself.
-- **Worktrees:** coders work in one worktree per task, outside the launch directory (for
-  example `/data/projects/<p>-wt/<task>`), and change worktree between tasks without
-  relaunching. A helper rooted at the launch directory would see the wrong branch.
-- **Settings** live in `config/keys.go`. `roles.toml` gains no key: a new `roles.toml` key broke
-  the previous release's update once (release check, 2026-11-25).
+  `preflight` (`rolecfg/launch.go:411`) checks each client's `--help` for the flags a launch
+  passes.
+- **`ExtraHelpers`** lets the background judgement ignore an MCP helper's CPU
+  (`agentstate/background.go:113-120`, `:219`). Its hook, `HostRuntime.ExtraHelpers`
+  (`dispatch/hostruntime.go:50`, `:303`), is declared but has no caller.
+- **Memory:** an MCP stdio server is a child of the client. **Per-agent cap B is not built**
+  (agent-resource-limits §4 and step 4, still waiting on the person's answer there). Only the
+  holder's cap A (`limits.holder_memory_max`, 70 %) contains it today. `limits.agent_memory_max`
+  does not exist yet on dev. §6 is the relay's own guard until then.
+- **Worktrees:** coders work in one worktree per task (for example
+  `/data/projects/<p>-wt/<task>`) and change worktree between tasks without relaunching. The board
+  records a request's branch only at `request review` (`bus/requests.go:465-473`). It never
+  records a worktree path.
+- **Settings** live in `config/keys.go`. `roles.toml` gains no key: a new key there broke the
+  previous release's update once (2026-11-25).
 
-## 3. The design: one proxy per agent, one backend per worktree
+## 3. One relay per agent, one backend per worktree
 
 ```
 client (claude / codex)
- └─ agentbus code-intel mcp          one per agent, stdio MCP, started by the client
-     ├─ backend for worktree A        gopls mcp            (go.mod found)
-     └─ backend for worktree B        mcp-language-server  (pyproject.toml found, pyright)
+ └─ agentbus code-intel mcp --project <p> --agent <a> --role <r>     the relay, one per agent
+     ├─ backend for worktree A   gopls mcp                                     (go.mod)
+     └─ backend for worktree B   mcp-language-server + pyright-langserver      (pyproject.toml)
 ```
 
-**`agentbus code-intel mcp`** is the one MCP server the launcher declares, named `code-intel`.
-It is Go, in this repository, with no new dependency: MCP over stdio is JSON-RPC 2.0, one message
-per line. It offers a fixed, small tool set, the same in every language:
+**The relay**, `agentbus code-intel mcp`, is the one MCP server the launcher declares, named
+`code-intel`. It is Go, in this repository, with no new dependency: MCP over stdio is JSON-RPC 2.0,
+one message per line.
 
-| Tool | Arguments | For |
+**Allowlist, not trust (the person, Q2).** The relay offers only its own tools and forwards each
+to one known backend tool. Every other backend tool is never listed and never called:
+mcp-language-server's `edit_file`, its own `rename_symbol` outside §7's rule, and any shell or
+write tool.
+
+| Relay tool | Arguments | Forwarded to |
 |---|---|---|
-| `symbols` | `path`, optional `query` | the symbols of a file or package, or matching a name |
-| `definition` | `path`, `line`, `column` (or `symbol`) | where it is defined |
-| `references` | same | every use |
-| `callers` | same | the functions that call it |
-| `implementations` | same | the types that implement an interface, and the reverse |
-| `rename` | same, `new_name` | a safe rename across the worktree, **coders only** (§6) |
+| `symbols` | `path`, optional `query` | the backend's symbol search or document symbols |
+| `definition` | `path`, `line`, `column` | definition |
+| `references` | same | references |
+| `callers` | same | call hierarchy (incoming) |
+| `implementations` | same | implementations |
+| `rename` | same, `new_name` | the backend's rename that applies edits, under §7; **coders only** |
 
-Each call carries a path. The proxy finds the path's worktree (`git rev-parse --show-toplevel`
-from the path's directory). It finds or starts that worktree's **backend** and forwards the call,
-translated to the backend's own tool. The answer is the backend's, with paths relative to the
-worktree. A path outside every git worktree is refused.
+There is no rename preview: no backend offers one natively. The edit lands uncommitted in the
+coder's own worktree, and `git diff` is the preview. Building one in the relay (an LSP
+`textDocument/rename` returning the WorkspaceEdit unapplied) is left out (the person, Q2: build it
+or drop it).
 
-- **Branch-local by construction.** A backend runs with its worktree as its root and sees exactly
-  that tree, uncommitted edits included. There is no persistent or shared index. The language
-  servers keep their own caches in memory only, and `gopls` its module cache.
-- **Started and stopped with the agent.** The client starts the proxy and ends it when the client
-  ends. The proxy ends its backends when it ends (its process group). A backend unused for
-  `code_intel.idle_stop` (default 15 min) is stopped. At most `code_intel.max_backends` (default
-  2) run per agent; starting a third stops the least recently used.
-- **Language detection per worktree**, first match, from a mapping in config
-  (`code_intel.servers`, §7), checked from the worktree's root:
+**Every answer says which revision it read (the person, Q1).** Each result carries
+`{worktree, branch, head, dirty}`: `git rev-parse HEAD`, and whether the tree has uncommitted
+changes. A branch moves; a head does not.
 
-  | Marker | Backend |
-  |---|---|
-  | `go.mod` | `gopls mcp` |
-  | `pyproject.toml`, `setup.py`, `requirements.txt` | `mcp-language-server` + `pyright-langserver --stdio` |
-  | `package.json` with `tsconfig.json` | `mcp-language-server` + `typescript-language-server --stdio` |
-  | `Cargo.toml` | `mcp-language-server` + `rust-analyzer` |
+**Language detection per worktree**, first match from `code_intel.servers` (§9):
 
-  The mapping is extensible: one entry is a marker, a backend command and its arguments. No
-  match: the tools answer `no code-intel backend for this worktree (markers: …)`, and the agent
-  greps as today.
-- **Serena** (oraios/serena) is the alternative backend for non-Go languages: more languages,
-  real LSP servers, more tools. It is Python, run through `uv`, and much heavier. Its editing and
-  shell tools must be switched off for this use. §9 Q2 asks which backend goes first. The proxy
-  makes it one mapping entry either way, so the other one can follow.
+| Marker at the worktree root | Backend |
+|---|---|
+| `go.mod` | `gopls mcp` |
+| `pyproject.toml`, `setup.py`, `requirements.txt` | `mcp-language-server` + `pyright-langserver --stdio` |
+| `package.json` and `tsconfig.json` | `mcp-language-server` + `typescript-language-server --stdio` |
+| `Cargo.toml` | `mcp-language-server` + `rust-analyzer` |
 
-## 4. Declared through the launcher, opt-in per project and per role
+If nothing matches, the tools answer `no code-intel backend for this worktree (markers: …): use
+grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server first).
 
-- `code_intel.enabled` (project, PersonOnly, default **off**). Off: nothing changes for anyone.
-- `code_intel.roles` (project, PersonOnly, default `coder,coder2,foureyes,reviewer-codex`): the
-  roles that get the helper once it is enabled. Other roles never get it.
-- At launch, for a listed role, `build` adds the server:
-  - Claude Code: `--mcp-config` with a JSON string
-    `{"mcpServers":{"code-intel":{"command":"<agentbus path>","args":["code-intel","mcp","--role","<role>"]}}}`.
+## 4. Which worktrees: the project's own, resolved fail-closed
+
+- **The project's worktrees** are `git -C <project repo> worktree list --porcelain`, read at
+  each backend start and every 30 s. The project repo is the relay's `--project` repo from the
+  projects registry. A `path` argument is resolved (`filepath.EvalSymlinks`) and must lie inside
+  one listed worktree. Otherwise the call is refused, `not a worktree of <p>: <path>`, and no
+  backend starts. Another project's tree, an untrusted clone and `/tmp` never get a server (the
+  person, Q1; foureyes r1).
+- **From a request's branch to its worktree** (the person, Q1): the board knows a branch, not a
+  path. The relay maps a branch to the worktree that has it checked out, through the same
+  `worktree list`. With none, or more than one, it fails with
+  `branch <b> is checked out in no worktree of <p>` (or `in several: …`). It never falls back to
+  the launch directory or any other tree.
+- **A backend's environment** sets `GOTOOLCHAIN=local`, so gopls never downloads a Go toolchain
+  (foureyes r1). Modules resolve as `go test` does in that worktree: the agent already built it.
+
+## 5. Lifetime: no orphan servers
+
+- **Children of the relay, dying with it (the person, Q1):**
+  - Linux: each backend starts in its own process group with `Pdeathsig = SIGKILL`.
+  - macOS has no `Pdeathsig`: the relay's exit path kills each backend's group, and a backend
+    whose parent pid becomes 1 is killed by the relay's next sweep, if a sweep still runs.
+- **The relay itself ends when its client ends.** Its stdin closes, and the relay kills its
+  groups and exits. A park (cleaning-up-agents), a relaunch, a reload or a holder restart all end
+  the client, so they end the relay too.
+- **A removed worktree stops its backend (the person, Q1).** The 30 s sweep (§4) and every call
+  check that each backend's worktree is still listed. A worktree gone from the list has its
+  backend's group killed at once.
+- A backend unused for `code_intel.idle_stop` (default 15 min) is stopped. At most
+  `code_intel.max_backends` (default 2) run per agent, and starting one more stops the least
+  recently used first.
+
+## 6. Memory: counted against the agent's cap, refused before an OOM
+
+The person (Q5) counts the backends in the agent's 30 % cap. Cap B is not built (§2), so the relay
+enforces the budget itself:
+
+- **The agent's cap** is `limits.agent_memory_max` once resource-limits step 4 adds it. Until
+  then it is 30 % of `MemTotal`, the default that spec names (§8 there), as a named constant
+  read in one place.
+- **The agent's usage** is the RSS sum of the client's process tree (the relay's parent and its
+  descendants, each pid once), read from `/proc` (Linux) or `ps` (macOS). It is the figure
+  resource-limits §5 publishes without cap B.
+- **Before a backend starts:** if the usage is at or above `limits.warn_at` of the cap (80 %
+  today), the relay refuses. Message: `memory cap reached (<used> of <cap>): code-intel unavailable,
+  use grep`. It starts nothing (the person, Q5). Go backends also get `GOMEMLIMIT` set to the
+  cap minus the usage, a soft limit gopls's own runtime honours.
+- **While running:** the 30 s sweep stops the least recently used backend while the usage is at
+  or above the cap, and later calls to that worktree get the same message. The agent's own work
+  is never what the relay sacrifices.
+
+When cap B is built, the kernel enforces the same cap. The relay's check stays as the early,
+clear refusal.
+
+## 7. Who gets which tools: from the launch, never from the environment
+
+- **Role and agent come from the relay's argv** (`--role`, `--agent`), written by the launcher
+  into the client's MCP config at launch, the agent-launch identity from `roles.toml`. They are
+  fixed for the relay's life. The relay never reads `AGENT_BUS_AGENT` or another variable the
+  agent can change (the person, Q3).
+- **`rename` only for roles outside `code_intel.read_only_roles`** (default
+  `foureyes,reviewer-codex`). For a read-only role it is not even listed.
+- **A rename applies only in the coder's own task worktree (the person, Q3: one writer per
+  file).** "Own" means the worktree's branch is the declared branch of a request this agent holds
+  (`accepted` or `review`). The relay reads it from the board, maps it by §4, and refuses
+  otherwise: `rename refused: <worktree> is not one of your task worktrees`.
+  - Because the board learns a branch only at review today, `request accept` gains
+    `--branch <b>`. `request branch <task> <b>` (target only, while accepted) records it later.
+  - It goes in a new field, `request.work_branch`. The `branch` field that review and
+    close-on-merge read is untouched.
+  - The read tools work on any of the project's worktrees: a reviewer reads the branch under
+    review.
+
+## 8. Declared by the launcher, seen by doctor and busmon
+
+- **Opt-in:** `code_intel.enabled` (project, PersonOnly, default off). `code_intel.roles` (project,
+  PersonOnly, default `coder,coder2,foureyes,reviewer-codex`).
+- **Clients (the person, Q4):** Claude Code and Codex. For a listed role, `build` adds:
+  - Claude Code: `--mcp-config` with a JSON string. The server is
+    `"code-intel": {"command": "<agentbus full path>", "args": ["code-intel", "mcp", "--project", "<p>", "--agent", "<a>", "--role", "<r>"]}`.
     It is not strict: the person's own servers stay.
-  - Codex: `-c mcp_servers.code-intel.command=<agentbus path>` and
-    `-c mcp_servers.code-intel.args=["code-intel","mcp","--role","<role>"]`.
+  - Codex: the same command and args through `-c mcp_servers.code-intel.command=…` and
+    `-c mcp_servers.code-intel.args=[…]`.
 
-  `preflight` adds `--mcp-config` (claude) to the flags it checks. kimi-cli, grok, agy and
-  adapter roles are not given the helper in this spec (§9 Q4). Their launch is unchanged.
-- **`ExtraHelpers` is filled:** the dispatcher's `HostRuntime.ExtraHelpers(agent)` returns
-  `agentbus` plus the backend command names (`gopls`, `mcp-language-server`, the language
-  servers) for an agent whose role gets the helper. Their CPU is then a helper's, never
-  background work (`background.go:219`).
+  `preflight` checks `--mcp-config` in claude's help. kimi, grok, agy and adapters are unchanged
+  until each MCP option is verified.
+- **`ExtraHelpers` is filled:** for an agent whose role gets the helper, the relay and its
+  backends' binaries, so their CPU is never background work.
+- **Grep stays the fallback (the person, Q4).** The agent-bus skill says: when the `code-intel`
+  tools are absent or refuse (no backend, cap reached, not your worktree), use grep and the
+  files, as today. An agent on another client behaves as today.
+- **`agentbus roles doctor`** (the person, Q4 and Q6):
+  - per role, whether code-intel is active: enabled, role listed, client supported;
+  - per pinned binary: present in its versioned directory, with the pinned version and checksum,
+    or missing or wrong.
 
-## 5. Seen: roles doctor and busmon
-
-- **`agentbus roles doctor`** gains a `code-intel` section when it is enabled. For each mapping
-  entry, it checks that the backend and language server binaries exist on `PATH` and that their
-  versions equal the pinned ones (§8). The result is ok, missing or other version, per binary.
   `--publish` carries it as the other checks do.
-- **busmon, per agent:** a helper cell on the Agents row and the agent's page.
-  - `code-intel ✓` (the proxy is up, with its backends and their worktrees on the page).
-  - `code-intel ✗` (the role gets it, but the proxy is not running or its last backend start
-    failed, with the reason).
-  - Nothing for a role without it.
+- **busmon, per agent:**
+  - On the Agents row and the agent's page, `code-intel ✓`, or `✗ <reason>` (no relay, cap
+    reached, last start failed).
+  - The page also lists each backend's worktree, head and age.
 
-  The proxy writes its state to one hash, `{p}:helpers`, field `<agent>`. The value is
-  `{state, backends:[{worktree, server, pid, started}], error, at}` (`at` is Redis `TIME`),
-  written at start, at each backend start or stop, and at exit. It runs as the agent
-  (`AGENT_BUS_AGENT`), like the agent's own commands. It does not touch `{p}:agents`
-  (`putSnapshot` stays the only writer there). A field older than 10 minutes, or whose
-  writer's pid is gone, shows `✗ stale`. The broker ACL gains this key for agent users, in the
-  same step.
+  The relay writes one hash, `{p}:helpers`, field `<agent>`. The value is
+  `{state, backends:[{worktree, branch, head, server, pid, started}], error, at}` (`at` from
+  Redis `TIME`), written at each start, stop and refusal, and at exit. It never touches
+  `{p}:agents` (`putSnapshot` stays its only writer). A field older than 10 minutes shows
+  `✗ stale`. The broker ACL gains this key for agent users, in the same step.
 
-## 6. Safety
-
-- **Reviewers never edit.** `--role` tells the proxy which tools to offer. `rename` is offered
-  only to roles not in `code_intel.read_only_roles` (default `foureyes,reviewer-codex`), and the
-  backend's own edit tools are never forwarded. A rename returns the edits it applied: the
-  agent's own worktree changes, as any edit the agent makes, and nothing is committed.
-- **The proxy runs no repository code itself.** The backends do run the project's toolchain, as
-  `go test` does (`gopls` runs `go list`, a language server reads the project's config). That is
-  in the agent's process tree, under cap B, never in the dispatcher (CLAUDE.md: the dispatcher
-  never runs repository code). For a repository the person did not write, the folder-trust
-  ask's context (`cmd/agentbus/trust.go:112-113`, "settings, hooks and MCP servers: … look at it
-  first") also names code-intel's language servers.
-- **Nothing installed without the person's typed yes** (§8).
-
-## 7. Settings (`config/keys.go`)
+## 9. Settings (`config/keys.go`)
 
 | Key | Default | Owner | Applies |
 |---|---|---|---|
-| `code_intel.enabled` | `false` | person, project | at each launch |
-| `code_intel.roles` | `coder,coder2,foureyes,reviewer-codex` | person, project | at each launch |
-| `code_intel.read_only_roles` | `foureyes,reviewer-codex` | person, project | at each launch |
-| `code_intel.servers` | the §3 table | person, project | at each backend start |
-| `code_intel.idle_stop` | `15m` | person | live |
-| `code_intel.max_backends` | `2` | person | live |
+| `code_intel.enabled` | `false` | person, project | each launch |
+| `code_intel.roles` | `coder,coder2,foureyes,reviewer-codex` | person, project | each launch |
+| `code_intel.read_only_roles` | `foureyes,reviewer-codex` | person, project | each launch |
+| `code_intel.servers` | §3's table | person, project | each backend start |
+| `code_intel.idle_stop` | `15m` | person (PersonOnly, Q5) | live |
+| `code_intel.max_backends` | `2` | person (PersonOnly, Q5) | live |
 
-The settings registry's shared lists conflict between parallel settings PRs (merge-conflicts
-measure, 2026-11-26). If hot-files step 2 has not merged when this is built, the settings step
-runs alone.
+No agent can raise any of them. Settings PRs conflict on the registry's shared lists
+(merge-conflicts measure, 2026-11-26). If hot-files step 2 has not merged when this is built, the
+settings step runs alone.
 
-## 8. Install: pinned, checksummed, on the person's yes
+## 10. Install: a dedicated command, pinned, on the person's yes (Q6)
 
-- **`agentbus code-intel install`** shows what it would install, then installs nothing until the
-  person types yes. That is an ask in busmon when run from an agent, or a y/n when the person
-  runs it.
-  - What it shows: each binary, its pinned version, its source, and its checksum.
-  - Where it installs: one host-wide directory, `~/.local/share/agentbus/code-intel/<name>@<version>/`.
-    The proxy runs binaries from there first, then from `PATH`.
-- **Pinned to tagged releases with checksums, never `curl | bash`, never a branch head:**
-  - Go tools (`gopls`, `mcp-language-server`): `go install <module>@<tag>`. The Go checksum
-    database verifies the module. The pinned tag and the module's `go.sum` line are recorded in
-    this repository.
-  - Node language servers: `npm install --ignore-scripts` of an exact version into the install
-    directory, with the `integrity` hash recorded.
-  - rust-analyzer: its tagged release asset, with the SHA-256 recorded.
-  - Serena, if chosen: `uv tool install` of a tagged release, hashes pinned.
-- The pinned versions and checksums live in one file in this repository, `codeintel/pins.toml`.
-  A version bump is a reviewed PR. `roles doctor` reads the same file.
-- Step 0 of the build checks the facts this spec assumes before any code: `gopls mcp` (gopls
-  v0.20 or later), its tool names, mcp-language-server's tool names, and Codex's
-  `mcp_servers` override syntax. A fact that does not hold goes back to architect, not around.
+- **`agentbus code-intel install`**, per host, installs nothing until the person types yes. From
+  an agent that is an ask; from the person's own shell it is y/n. It shows each binary, its pinned
+  version, its source and its checksum first.
+- **Checksums come from the repository's pins, never from the download site.** One file,
+  `codeintel/pins.toml`, holds each binary's version, source and SHA-256. Each install method
+  checks against it:
+  - Go tools (`gopls`, `mcp-language-server`): `go install <module>@<tag>`, verified by the Go
+    checksum database, then the built binary's SHA-256 is checked against the pin.
+  - Node servers (`pyright`, `typescript-language-server`): `npm install --ignore-scripts` of the
+    exact version, with the pinned `integrity`.
+  - rust-analyzer: the tagged release asset, with the pinned SHA-256.
 
-## 9. Questions for the person (ask `1795733274522-0`, in French)
+  A mismatch installs nothing. A version bump is a reviewed PR.
+- **A dedicated versioned directory, called by full path:**
+  `~/.local/share/agentbus/code-intel/<pins version>/bin/`. The relay runs backends and language
+  servers from there by full path, never through `PATH`. Another version on the machine is never
+  picked up.
+- **`agentbus update` never downloads them.** It only reports changed pins: `code-intel pins
+  changed: run agentbus code-intel install`. `roles doctor` flags missing or wrong versions.
+- **The LSP servers are pinned too (the person, Q2)**, not only the wrappers. doctor checks their
+  versions, not just their presence.
 
-1. **One proxy, a backend per worktree?** Recommended: yes, the design above. The alternative is
-   one server per launch, rooted at the launch directory. That is simpler, but wrong whenever the
-   agent works in another worktree, which coders do for every task.
-2. **Which backend first for non-Go languages?** Recommended: mcp-language-server. It is Go, one
-   pinned `go install`, light, and wraps the same LSP servers. Serena comes later as one more
-   mapping entry if its extra tools are wanted. Alternative: Serena first. It covers more
-   languages, but it is Python/uv, heavier, and has edit and shell tools to lock down.
-3. **Who may rename?** Recommended: coders only. Reviewers get the read-only tools.
-4. **Which clients?** Recommended: Claude Code and Codex now. kimi, grok and agy later, each once
-   its MCP launch option is checked.
-5. **Limits per agent?** Recommended: a backend stops after 15 minutes unused, and at most 2 run
-   per agent. Both are your settings.
-6. **Install path?** Recommended: `agentbus code-intel install` per host, on your typed yes,
-   versions and checksums shown first, pins in the repository. Alternative: part of
-   `agentbus update`, still on your yes.
+## 11. Build: steps in series
+
+0. **Facts check**, no code. Each check gets one line in the PR or a note:
+   - `gopls mcp` (gopls v0.20 or later) and its tool names.
+   - mcp-language-server's tool names and which of them write, at the pinned commit.
+   - Codex's `mcp_servers` override syntax.
+   - Claude's `--mcp-config` accepting a JSON string.
+   - **gopls's shared daemon (`-remote=auto`)** (the person, Q1). Measure the RSS of two
+     worktrees with and without it. A host daemon shares caches but sits outside every agent's
+     tree, so it escapes §6's accounting and the per-agent cap. Decide from the numbers.
+
+   A fact that does not hold comes back to architect.
+1. **The relay with the gopls backend:** the tools and the allowlist, §4's resolution, §5's
+   lifetime, §6's guard, §7's role and rename rules, `request accept --branch`,
+   `request branch`, `work_branch`, and `{p}:helpers` with its ACL.
+   - Tests use a fake MCP backend (a Go test binary):
+     - a path outside the project's worktrees is refused;
+     - a branch in no worktree or in two is refused;
+     - each answer carries HEAD;
+     - a removed worktree kills its backend within one sweep;
+     - the relay's exit, and its stdin closing, kill every backend group (Linux: Pdeathsig);
+     - idle stop and the least-recently-used limit;
+     - a cap-reached refusal, starting nothing;
+     - `rename` absent for a read-only role, and refused outside the coder's own worktree;
+     - an unlisted backend tool is never called;
+     - role and agent taken from argv, with `AGENT_BUS_AGENT` set to something else.
+   - One integration test runs a real `gopls mcp` on a scratch module when it is installed, and
+     skips otherwise.
+2. **The launcher and settings:** `--mcp-config`, Codex's `-c`, `preflight`, `ExtraHelpers`, the
+   six keys, and the skill's grep fallback.
+   - Tests: each client's argv with code-intel on and off, a role not listed, and the dry run.
+   - **A live check per client, recorded in the PR:** a coder and a reviewer launched on each
+     client list the tools; `rename` is absent for the reviewer (the person, Q4: tested, not
+     assumed).
+3. **Install and doctor:** `codeintel/pins.toml`, `agentbus code-intel install`, the doctor
+   section, and `update`'s pin notice.
+   - Tests stub `go`, `npm` and the network:
+     - nothing is installed without yes;
+     - a checksum mismatch installs nothing;
+     - the relay ignores a same-named binary on `PATH`.
+4. **busmon:** the helper cell and the page section. Goldens regenerated.
+5. **The non-Go servers** (pyright, typescript-language-server, rust-analyzer) with their pins.
+
+Each step is its own PR and review, in series (merge-conflicts §3, sibling-enforce).
+
+## 12. The person's answers (ask `1795733274522-0`, all typed)
+
+1. One relay, one backend per worktree. Plus:
+   - only the project's worktrees;
+   - stop on worktree removal;
+   - children die with the relay, on park and restart too;
+   - HEAD in every answer;
+   - branch to worktree through `git worktree list`, failing clearly;
+   - one line on gopls `-remote=auto`.
+
+   §3, §4, §5, §11.
+2. mcp-language-server first. Plus an allowlist of tools, the rename preview built or dropped
+   (dropped), and the LSP servers pinned and checked. §3, §10.
+3. Coders only rename. Plus the role taken from the launch identity, never the environment, and
+   a rename only in the coder's own task worktree. §7.
+4. Claude Code and Codex now, MCP config and enforcement tested per client. Plus the grep
+   fallback in the skill and doctor showing per role. §8, §11.
+5. 15 minutes and 2 servers, counted in the 30 % cap. Plus a clear refusal before an OOM, and
+   both values person-only. §6, §9.
+6. A dedicated install command. Plus:
+   - update only reports changed pins;
+   - checksums from the repository's pins;
+   - a versioned directory called by full path.
+
+   §10.
 
 Item 6 of the request (fuzzy or semantic search through one shared read-only index,
-codebase-memory-mcp or Zoekt) is not in this spec. It is evaluated separately, later, as the
-person said.
-
-## 10. Build: steps in series
-
-0. **Facts check** (§8, last bullet). No code.
-1. **The proxy with the gopls backend:** `agentbus code-intel mcp`, the tool set, worktree
-   routing, idle stop and the backend limit, `{p}:helpers` and its ACL. Tests use a fake backend
-   (a Go test binary that speaks MCP): routing by worktree, a path outside a worktree refused,
-   `rename` absent for a read-only role, idle stop, the LRU limit, the proxy's exit ending its
-   backends, the `{p}:helpers` fields. One integration test runs a real `gopls mcp` on a scratch
-   module when gopls is installed, and skips otherwise.
-2. **The launcher and the settings:** `--mcp-config` and the Codex `-c` overrides for listed
-   roles, `preflight`'s flag, `ExtraHelpers` filled, the six keys. Tests: the argv for each
-   client with code-intel on and off, a role not listed, the dry-run output.
-3. **Install and doctor:** `codeintel/pins.toml`, `agentbus code-intel install`, `roles doctor`'s
-   section. Tests stub `go`, `npm` and the network: nothing is installed without yes, a checksum
-   mismatch is refused.
-4. **busmon:** the helper cell and the page section. Goldens regenerated.
-5. **The second backend** (Q2's answer), its mapping entries and pins.
-
-Each step is its own PR and review, in series (merge-conflicts §3).
+codebase-memory-mcp or Zoekt) is not in this spec. It is evaluated separately, later.
