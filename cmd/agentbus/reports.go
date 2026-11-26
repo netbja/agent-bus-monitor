@@ -76,11 +76,34 @@ func reportNotice(id, msg string) string {
 	return "Report " + id + " for you (full text: agentbus reports " + id + "): " + first
 }
 
-// sendReport is `agentbus report <agent> [--auto] [--needs answer|read] [--to <name>]... <message>`:
-// the report, its addressees named on it (busmon-reply-target), then one
-// notice per addressee, since a report wakes nobody. It returns the entry id.
+// sendNotice sends report --to's notice (a seam for the failure test).
+var sendNotice = func(ctx context.Context, b *bus.Bus, from, to, id, text, needs string) (string, error) {
+	return b.ReportNotice(ctx, from, to, id, text, needs)
+}
+
+// sendReport is `agentbus report <agent> [--auto] [--needs answer|read] [--to <name>]...
+// [--task <t> [--done]] <message>`: the report, its addressees named on it
+// (busmon-reply-target), then one notice per addressee, since a report wakes
+// nobody. It returns the entry id. --task (board-drift §4) names the tracked
+// request: checked before anything is published (a refusal publishes
+// nothing), then noted on it (reported_at, report_id). --done also completes
+// it, as request done, with the report's first line and "(report <id>)";
+// checked first too, so a refused done publishes nothing, but a done refused
+// after the report (a change in between) leaves the report standing and
+// returns its id with the error.
 func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer) (string, error) {
 	rest, auto := extractBool(rest, "--auto")
+	rest, done := extractBool(rest, "--done")
+	rest, task := extractFlag(rest, "--task")
+	if slices.Contains(rest, "--task") {
+		return "", errors.New("report: --task takes one value, the request's task, once")
+	}
+	if done && task == "" {
+		return "", errors.New("report: --done needs --task <task>")
+	}
+	if task != "" && !bus.ValidName(task) {
+		return "", fmt.Errorf("report: --task %q: invalid task name", task)
+	}
 	rest, needs := extractFlag(rest, "--needs")
 	if !bus.ValidNeeds(needs) {
 		return "", fmt.Errorf("report: --needs %q: answer or read", needs)
@@ -97,7 +120,7 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 		to = append(to, t)
 	}
 	if len(rest) < 2 {
-		return "", errors.New("usage: report <agent> [--auto] [--needs answer|read] [--to <agent>]... <message>")
+		return "", errors.New("usage: report <agent> [--auto] [--needs answer|read] [--to <agent>]... [--task <task> [--done]] <message>")
 	}
 	for _, t := range to {
 		if !bus.ValidName(t) {
@@ -115,13 +138,33 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 	if note := reportShapeNote(msg); note != "" {
 		fmt.Fprintln(stderr, note)
 	}
-	id, err := b.ReportNeeds(ctx, rest[0], kind, msg, to, needs)
+	if task != "" {
+		if err := b.CheckReportTask(ctx, task, rest[0], done); err != nil {
+			return "", fmt.Errorf("report: --task %s: %w", task, err)
+		}
+	}
+	id, err := b.ReportTask(ctx, rest[0], kind, msg, to, needs, task)
 	if err != nil {
 		return "", err
 	}
+	if task != "" {
+		if err := b.NoteRequest(ctx, task, rest[0], id); err != nil {
+			return id, fmt.Errorf("report %s published, but noting it on %s failed: %w", id, task, err)
+		}
+	}
 	for _, t := range to {
-		if _, err := b.ReportNotice(ctx, rest[0], t, id, reportNotice(id, msg), needs); err != nil {
-			return "", fmt.Errorf("report %s published, but telling %s failed: %v", id, t, err)
+		if _, err := sendNotice(ctx, b, rest[0], t, id, reportNotice(id, msg), needs); err != nil {
+			why := fmt.Sprintf("report %s published, but telling %s failed: %v", id, t, err)
+			if done {
+				why += "; request done " + task + " not run"
+			}
+			return id, errors.New(why) // the report stands: its id is printed (reviewer-codex)
+		}
+	}
+	if done {
+		first := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0])
+		if _, err := b.CompleteRequest(ctx, task, rest[0], first+" (report "+id+")"); err != nil {
+			return id, fmt.Errorf("report %s published, but request done %s was refused: %w", id, task, err)
 		}
 	}
 	return id, nil

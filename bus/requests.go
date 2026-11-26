@@ -56,6 +56,12 @@ type RequestInfo struct {
 	Priority   string `json:"priority,omitempty"`
 	PriorityBy string `json:"priority_by,omitempty"` // the person who set it
 	PriorityAt int64  `json:"priority_at,omitempty"` // Redis TIME, Unix ms
+	// ReportedAt and ReportID: the last report that named this request
+	// (report --task, board-drift §4), the note transition's, which changes
+	// no state; busmon measures "no reply" from it when it is newer than the
+	// accept (§7).
+	ReportedAt int64  `json:"reported_at,omitempty"`
+	ReportID   string `json:"report_id,omitempty"`
 	// RetroOf (self-improving loop, additive): on a retro's request, the task
 	// it is the retro of. A retro is known by this field, never by its name.
 	RetroOf string `json:"retro_of,omitempty"`
@@ -322,6 +328,41 @@ func (b *Bus) CompleteRequestAt(ctx context.Context, task, agent, body, commit, 
 	}
 	return b.transitionRequest(ctx, task, agent, "done", body, commit, branch)
 }
+
+// CheckReportTask is report --task's check, before anything is published
+// (board-drift §4): the note's refusals (an unknown task, one that is not a
+// tracked request, a request whose target is not agent, a done one) and,
+// with done (report --done), done's too (not accepted, blocked). It writes
+// nothing.
+func (b *Bus) CheckReportTask(ctx context.Context, task, agent string, done bool) error {
+	return b.note(ctx, task, agent, "", done)
+}
+
+// NoteRequest is the note transition (board-drift §4): request.reported_at
+// and request.report_id on task, with no state change, no stream entry and
+// no Updated change (the last transition stays the Board's CHANGED). Its
+// refusals are CheckReportTask's without done: never the WIP limit, an
+// expired request or a lost body, since a note changes no state.
+func (b *Bus) NoteRequest(ctx context.Context, task, agent, reportID string) error {
+	if !streamIDPattern.MatchString(reportID) {
+		return fmt.Errorf("invalid report id %q", reportID)
+	}
+	return b.note(ctx, task, agent, reportID, false)
+}
+
+// note runs the script's note: reportID "" checks only.
+func (b *Bus) note(ctx context.Context, task, agent, reportID string, done bool) error {
+	if !ValidName(task) || !ValidName(agent) {
+		return fmt.Errorf("invalid task or agent")
+	}
+	d := ""
+	if done {
+		d = "1"
+	}
+	_, err := requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, "note", reportID, streamMaxLen, "", "", "0", "", "", d).Text()
+	return requestError(err)
+}
+
 func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body string, extra ...string) (string, error) {
 	commit, branch, limit, base, more := "", "", "0", "", ""
 	if len(extra) >= 2 {
@@ -391,6 +432,16 @@ if e.state=='done' then
 end
 local t=redis.call('TIME');local now=t[1]*1000+math.floor(t[2]/1000)
 local result=''
+if ARGV[3]=='note' then
+ if ARGV[11]=='1' then
+  if not r.accepted_at then return redis.error_reply('request must be explicitly accepted before completion') end
+  if e.state=='blocked' then return redis.error_reply('blocked request: accept to resume before completion') end
+ end
+ if ARGV[4]=='' then return '' end
+ r.reported_at=now;r.report_id=ARGV[4]
+ redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))
+ return ''
+end
 if ARGV[3]=='accept' then
  if not r.accepted_at then
   if r.expires_at and r.expires_at>0 and r.expires_at<=now then return redis.error_reply('request expired; cannot accept (its target or sender closes it: agentbus request done <task> <why>)') end

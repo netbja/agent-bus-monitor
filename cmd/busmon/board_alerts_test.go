@@ -360,3 +360,33 @@ func TestTaskDetailRequestTimes(t *testing.T) {
 		t.Fatalf("done:\n%s", plainLines(lines))
 	}
 }
+
+// board-drift §7 with step 3: no reply counts from the newer of the accept
+// and the last report on the request (report --task), and says which; an
+// older report changes nothing. The task detail lists Reported.
+func TestBoardNoReplySinceReport(t *testing.T) {
+	ms := func(d time.Duration) int64 { return boardNow.Add(-d).UnixMilli() }
+	entry := func(reported int64) map[string]bus.BoardEntry {
+		return map[string]bus.BoardEntry{"t": {Owner: "coder", State: "accepted", Updated: boardNow.Add(-5 * time.Hour).Unix(),
+			Request: &bus.RequestInfo{ID: "2-0", From: "master", Target: "coder", CreatedAt: ms(6 * time.Hour), AcceptedAt: ms(5 * time.Hour), ReportedAt: reported, ReportID: "9-0"}}}
+	}
+	for _, c := range []struct {
+		name     string
+		reported int64
+		want     string // "" no alert
+	}{
+		{"a report 3h ago", ms(3 * time.Hour), GlyphWarn + " no reply 3h since report"},
+		{"a report 20m ago", ms(20 * time.Minute), ""}, // under the 2h default
+		{"no report", 0, GlyphWarn + " no reply 5h since accept"},
+		{"a report before the accept", ms(5*time.Hour + time.Minute), GlyphWarn + " no reply 5h since accept"},
+	} {
+		got := boardViewOf(entry(c.reported), boardNow, 120, boardDefaults).items[0].Line.text()
+		if c.want == "" && strings.Contains(got, GlyphWarn) || c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	e := entry(ms(40 * time.Minute))["t"]
+	if _, lines, _ := taskDetail(e, "t", boardNow); !strings.Contains(plainLines(lines), "Reported") || !strings.Contains(plainLines(lines), "40m ago") {
+		t.Fatalf("no Reported time:\n%s", plainLines(lines))
+	}
+}

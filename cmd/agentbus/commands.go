@@ -28,15 +28,17 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo status coder working \"task 3: parser\""},
 	},
 	{
-		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--needs answer|read] [--to <agent>]... <message...>"},
+		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--needs answer|read] [--to <agent>]... [--task <task> [--done]] <message...>"},
 		Brief:   "publish a report",
 		Summary: "publish a report (full text kept) and print its id; --to also tells who waits for it",
 		Flags: []cli.Flag{
 			{Long: "auto", Short: 'a', Help: "mark it automatic, not a note"},
 			{Long: "needs", Short: 'N', Arg: "answer|read", Help: "the person must answer it, or read it: a triage item in busmon (none: Activity only)"},
 			{Long: "to", Short: 't', Arg: "<agent>", Help: "also send a directive pointing at it (repeatable)"},
+			{Long: "task", Arg: "<task>", Help: "the tracked request it reports on: noted on it (busmon's no reply counts from it); nothing published if refused"},
+			{Long: "done", Help: "with --task: also complete the request (request done), the report's first line as the reply"},
 		},
-		Examples: []string{"agentbus -p demo report coder -t master \"task 3 done\"", "agentbus -p demo report master --needs answer -t charlie \"Merge order for 694-696?\""},
+		Examples: []string{"agentbus -p demo report coder -t master \"task 3 done\"", "agentbus -p demo report coder -t master --task parser --done \"parser done: merged as #12\"", "agentbus -p demo report master --needs answer -t charlie \"Merge order for 694-696?\""},
 	},
 	{
 		Name: "reports", Usage: []string{"reports [--json] [<id>]", "reports --unread [--to <target>] [--json]"},

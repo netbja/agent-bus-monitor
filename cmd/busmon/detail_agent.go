@@ -314,7 +314,7 @@ func taskDetail(e bus.BoardEntry, task string, now time.Time) (title string, lin
 		for _, t := range []struct {
 			name string
 			ms   int64
-		}{{"Requested", q.CreatedAt}, {"Accepted", q.AcceptedAt}, {"Responded", q.RespondedAt}} {
+		}{{"Requested", q.CreatedAt}, {"Accepted", q.AcceptedAt}, {"Reported", q.ReportedAt}, {"Responded", q.RespondedAt}} {
 			if t.ms > 0 {
 				row(t.name, S(RoleText, ago(time.UnixMilli(t.ms))))
 			}

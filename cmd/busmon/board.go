@@ -76,9 +76,11 @@ type boardView struct {
 // (views-redesign §3), each naming what it measures from (board-drift §7):
 // its body no longer in the stream (body lost, at once, with the request's
 // age); sent and not accepted past noAccept (no acceptance … since request);
-// accepted, still accepted, with no reply past noReply (no reply … since
-// accept): a request in review waits on its reviewers, a blocked one on
-// someone else. A setting at 0 is off; a closed request has none.
+// accepted, still accepted, with no reply past noReply, counted from the
+// newer of the accept and the last report naming it (no reply … since
+// accept, or since report, report --task): a request in review waits on its
+// reviewers, a blocked one on someone else. A setting at 0 is off; a closed
+// request has none.
 func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
 	if !r.Tracked || !r.waiting() {
 		return "", time.Time{}
@@ -96,8 +98,12 @@ func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
 		}
 		return "", time.Time{}
 	}
-	if r.State == "accepted" && r.Responded.IsZero() && o.noReply > 0 && now.Sub(r.Accepted) >= o.noReply {
-		return "no reply " + humanAge(now.Sub(r.Accepted)) + " since accept", r.Accepted
+	from, word := r.Accepted, "accept"
+	if r.Reported.After(from) {
+		from, word = r.Reported, "report"
+	}
+	if r.State == "accepted" && r.Responded.IsZero() && o.noReply > 0 && now.Sub(from) >= o.noReply {
+		return "no reply " + humanAge(now.Sub(from)) + " since " + word, from
 	}
 	return "", time.Time{}
 }

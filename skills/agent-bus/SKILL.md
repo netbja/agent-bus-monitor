@@ -377,6 +377,11 @@ agentbus request next                       # which one to take next (exit 64: n
   with `--more` sends it back to `accepted` for the next step. `request done --branch` is still
   the normal close; close-on-merge is the net under it.
 
+- **A report on a task names it (`report <self> --task <t>`); a final report closes it
+  (`--done`).** `--task` notes the report on the request (busmon's "no reply" then counts from
+  it); `--done` also runs `request done`, the report's first line as the reply. A refused task
+  (not yours, unknown, done; with `--done` not accepted or blocked) publishes nothing.
+
 - **When more than one tracked request waits for you, run `agentbus request next` and accept
   the task it names.** The person may set a request's priority (high, normal, low; absent =
   normal); `next` orders by it, then by age. A request you already accepted comes first
