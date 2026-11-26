@@ -3,6 +3,7 @@ package dispatchsvc
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/config"
@@ -18,10 +19,13 @@ import (
 // Delivered, in the current directory.
 
 // DriftMerged is one finding: a request whose Head is delivered into Base,
-// or, Unjudged, a review request with no branch tip and no commit.
+// or, Unjudged, a review request with no branch tip and no commit; Unread
+// says why a head was not judged (absent here, or git failed on it) when no
+// other head of the request is delivered.
 type DriftMerged struct {
 	Task, Owner, State, Branch, Head, Base string
 	Unjudged                               bool
+	Unread                                 string
 }
 
 // BoardDriftMerged is §5.1 for the project of b, in the current directory;
@@ -140,8 +144,19 @@ func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, strin
 			}
 			continue
 		}
-		var judged []string
+		var judged, unread []string
 		for _, h := range heads {
+			cctx, cancel = call()
+			here, herr := mergequeue.HasCommit(cctx, c.dir, env, h)
+			cancel()
+			if herr != nil || !here {
+				why := "not in this repository"
+				if herr != nil {
+					why = herr.Error()
+				}
+				unread = append(unread, shortSHA(h)+": "+why)
+				continue
+			}
 			cctx, cancel = call()
 			var own bool // h has a commit of its own: not in its review_base; with none, an accepted head not an ancestor of the base
 			var jerr error
@@ -158,14 +173,21 @@ func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, strin
 				own = true
 			}
 			cancel()
-			if jerr == nil && own {
+			switch {
+			case jerr != nil:
+				unread = append(unread, shortSHA(h)+": "+jerr.Error())
+			case own:
 				judged = append(judged, h)
 			}
 		}
+		d := DriftMerged{Task: task, Owner: e.Owner, State: e.State, Branch: r.Branch, Base: base, Unread: strings.Join(unread, "; ")}
 		if len(judged) == 0 {
+			if d.Unread != "" {
+				out = append(out, d)
+			}
 			continue
 		}
-		out = append(out, DriftMerged{Task: task, Owner: e.Owner, State: e.State, Branch: r.Branch, Base: base})
+		out = append(out, d)
 		cands = append(cands, cand{len(out) - 1, judged})
 		all = append(all, judged...)
 	}
@@ -180,13 +202,13 @@ func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, strin
 	}
 	drop := map[int]bool{}
 	for _, cd := range cands {
-		drop[cd.i] = true
 		for _, h := range cd.heads {
 			if delivered[h] {
-				out[cd.i].Head, drop[cd.i] = h, false
+				out[cd.i].Head, out[cd.i].Unread = h, ""
 				break
 			}
 		}
+		drop[cd.i] = out[cd.i].Head == "" && out[cd.i].Unread == ""
 	}
 	kept := out[:0]
 	for i, d := range out {
@@ -195,4 +217,12 @@ func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, strin
 		}
 	}
 	return kept, ""
+}
+
+// shortSHA is a head's first seven characters.
+func shortSHA(h string) string {
+	if len(h) > 7 {
+		return h[:7]
+	}
+	return h
 }

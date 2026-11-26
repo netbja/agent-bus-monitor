@@ -70,6 +70,17 @@ func TestBoardDriftMergedRealGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	reviewed(t, b, "unjudged", bus.ReviewOpts{Branch: "feat/deleted"})
+	absent := "abcdef0123456789abcdef0123456789abcdef01"
+	reviewed(t, b, "absent", bus.ReviewOpts{Branch: "feat/none", Commit: absent}) // a commit this repository lacks
+	if err := b.AcceptRequest(ctx, "absent", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	reviewed(t, b, "half-merged", bus.ReviewOpts{Branch: "feat/squashed", Commit: absent}) // its tip is delivered: merged all the same
+	if err := b.AcceptRequest(ctx, "half-merged", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	reviewed(t, b, "half-open", bus.ReviewOpts{Branch: "feat/wip", Commit: absent}) // its tip judged, not merged: the unread commit is said
+	reviewed(t, b, "base-absent", bus.ReviewOpts{Branch: "feat/wip", ReviewBase: absent}) // its review_base cannot be read
 	baseCommit := g("rev-list", "--max-parents=0", "main")
 	reviewed(t, b, "in-review-base", bus.ReviewOpts{Branch: "feat/old", Commit: baseCommit, ReviewBase: baseCommit}) // nothing of its own
 	reviewed(t, b, "blocked", bus.ReviewOpts{Branch: "feat/blocked"})
@@ -91,6 +102,10 @@ func TestBoardDriftMergedRealGit(t *testing.T) {
 		t.Fatalf("not judged: %s", why)
 	}
 	want := []DriftMerged{
+		{Task: "absent", Owner: "coder", State: "accepted", Branch: "feat/none", Base: "main", Unread: "abcdef0: not in this repository"},
+		{Task: "base-absent", Owner: "coder", State: "review", Branch: "feat/wip", Base: "main", Unread: g("rev-parse", "feat/wip")[:7] + ": git merge-base: cannot judge"},
+		{Task: "half-merged", Owner: "coder", State: "accepted", Branch: "feat/squashed", Head: g("rev-parse", "feat/squashed"), Base: "main"},
+		{Task: "half-open", Owner: "coder", State: "review", Branch: "feat/wip", Base: "main", Unread: "abcdef0: not in this repository"},
 		{Task: "nobase", Owner: "coder", State: "review", Branch: "feat/nobase", Head: g("rev-parse", "feat/nobase"), Base: "main"},
 		{Task: "squashed", Owner: "coder", State: "accepted", Branch: "feat/squashed", Head: g("rev-parse", "feat/squashed"), Base: "main"},
 		{Task: "unjudged", Owner: "coder", State: "review", Branch: "feat/deleted", Unjudged: true},
@@ -148,7 +163,7 @@ func TestBoardDriftMergedRemote(t *testing.T) {
 	g("push", "-q", "origin", "dev")
 	g("switch", "-q", "-c", "work")
 	g("branch", "-D", "dev") // no local base
-	other := t.TempDir() // origin's base moves on elsewhere: its tip is here only once fetched
+	other := t.TempDir()     // origin's base moves on elsewhere: its tip is here only once fetched
 	gitAt(other, "clone", "-q", "-b", "dev", origin, ".")
 	if err := os.WriteFile(filepath.Join(other, "later"), []byte("later\n"), 0o644); err != nil {
 		t.Fatal(err)

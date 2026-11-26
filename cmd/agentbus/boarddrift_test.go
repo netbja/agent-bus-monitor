@@ -55,6 +55,7 @@ func TestBoardDriftFindings(t *testing.T) {
 		Merged: []dispatchsvc.DriftMerged{
 			{Task: "step-a", Owner: "coder", State: "accepted", Branch: "feat/a", Head: "0123456789abcdef0123456789abcdef01234567", Base: "dev"},
 			{Task: "step-b", Owner: "coder", State: "review", Branch: "", Unjudged: true},
+			{Task: "step-c", Owner: "coder", State: "accepted", Branch: "feat/c", Base: "dev", Unread: "abcdef0: not in this repository"},
 		},
 		Board: map[string]bus.BoardEntry{
 			"lost":      {Owner: "docs", State: "requested", Request: &bus.RequestInfo{From: "master", Target: "docs", Availability: "missing"}},
@@ -91,6 +92,7 @@ func TestBoardDriftFindings(t *testing.T) {
 		"no terminal: architect has no terminal and owns open requests: spec (review). Bring it back: agentbus --project demo pop architect",
 		"no terminal: docs has no terminal and owns open requests: kept (accepted), lost (requested). Bring it back: agentbus --project demo pop docs --resume c2bf3f3b-0000-4000-8000-000000000000",
 		"no terminal: sec has no terminal and owns open requests: audit (requested). Bring it back: agentbus --project demo pop sec",
+		"not judged: step-c (accepted, coder): abcdef0: not in this repository",
 	}
 	if strings.Join(lines, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))

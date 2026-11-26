@@ -52,6 +52,11 @@ func boardDrift(in driftInput) []driftFinding {
 		skip("merged branches", in.MergedWhy)
 	}
 	for _, m := range in.Merged {
+		if m.Unread != "" { // a head not read is never "not merged" (reviewer-codex, foureyes)
+			notJudged = append(notJudged, driftFinding{Kind: "not-judged", Task: m.Task, Agent: m.Owner, Text: fmt.Sprintf(
+				"not judged: %s (%s, %s): %s", m.Task, m.State, m.Owner, m.Unread)})
+			continue
+		}
 		if m.Unjudged {
 			out = append(out, driftFinding{Kind: "unjudged", Task: m.Task, Agent: m.Owner, Text: fmt.Sprintf(
 				"cannot be judged: %s (%s, %s): no branch tip and no recorded commit; record it: agentbus request review %s --commit <sha>",
