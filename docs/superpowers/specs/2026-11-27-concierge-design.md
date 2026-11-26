@@ -1,6 +1,8 @@
 # The concierge: one conversation across every project (concierge)
 
-Status: spec r1, for review (subject `concierge-spec`). Not built. Base: origin/dev `93727f7b`. Author: architect, from the person's typed yes relayed by master (cmd
+Status: spec r2, for review (subject `concierge-spec`; r2, foureyes and reviewer-codex: busmon,
+not the concierge, sends a pressed action, and the concierge writes nothing outside its project
+(§5.3); go-gui's release date added; the person's answers Q1–Q3 folded in). Not built. Base: origin/dev `93727f7b`. Author: architect, from the person's typed yes relayed by master (cmd
 `1795735958552-0`, task `concierge-spec`; idea `i3`). It builds on
 [person-memory](2026-11-21-person-memory-design.md). The person's constraints: simple, robust, no
 new dependency without the person's yes. Questions are last (§9).
@@ -41,15 +43,15 @@ new dependency without the person's yes. Questions are last (§9).
 
 ## 3. Does it need a new framework? The candidates, checked
 
-Checked on GitHub on 2026-11-27 (`gh api repos/<r>`: created, latest release, contributors,
-`go.mod`). All seven exist and are MIT. Facts about cgo and platforms come from each README,
+Checked on GitHub on 2026-11-27 (`gh api repos/<r>`, and `gh api repos/<r>/releases/latest`
+for the latest release: created, latest release, contributors, `go.mod`). All seven exist and are MIT. Facts about cgo and platforms come from each README,
 **not from a build**.
 
 | Candidate | Created | Latest release | Contributors | Stars | What it is (README) | Notes |
 |---|---|---|---|---|---|---|
 | `egoist/mygo` | 2026-09-26 | v0.10.0 | 100 | 6.9k | native UI drawn on the GPU, or the OS webview (WKWebView, WebKitGTK, WebView2); "pure Go, no cgo" through `purego`; packaging, signing, notarization | Two months old and moving fast. `go.mod` requires **go 1.27.3**; this repository is on Go 1.26, so a toolchain bump comes first. It pulls in audio codecs (mp3, ogg, flac, aac) and an rpm writer. |
 | `gogpu/ui` | 2025-12-05 | v0.1.55 | 9 | 544 | widgets on WebGPU (Vulkan, DX12, Metal, GLES, software), zero cgo | One year old, pre-1.0, a stack of six `gogpu` modules. go 1.25. |
-| `go-gui-org/go-gui` | 2026-03-01 | v0.100.0 | 5 | 186 | cgo-free Metal or OpenGL, tray, dialogs | README: Wayland cannot place a window. It pulls in dbus, pulse audio, x11 and goldmark. |
+| `go-gui-org/go-gui` | 2026-03-01 | v0.100.0 (2026-11-24; v0.99.1 before it) | 5 | 186 | cgo-free Metal or OpenGL, tray, dialogs | README: Wayland cannot place a window. It pulls in dbus, pulse audio, x11 and goldmark. |
 | `golang-gui/goui` | 2026-02-11 | v0.8.1 | 2 | 117 | declarative, native rendering | two contributors |
 | `dxui-org/dxui` | 2026-09-16 | v0.0.4 | 1 | 30 | declarative desktop GUI | one contributor |
 | `bankai-tensei/gowaku` | 2026-11-17 | v0.3.0 | 2 | 4 | GPU-drawn, no cgo | ten days old |
@@ -135,24 +137,53 @@ it is not running pops it. It parks after `dispatch.idle_park_after` like any po
 
 - **Every project's state, read-only:** boards, plans, asks, merge queue, health, the recent
   streams. Its ACL user is a new `concierge` user: the observer's reads (`bus/acl.go`,
-  `ACLObserver`: `+@read`, `%R~*`), writes to its own project's keys, and one write elsewhere,
-  appending to each project's `cmd` stream, so §5.3's message reaches that project's master.
-  It has no script, no board write and no lease in another project.
+  `ACLObserver`: `+@read`, `%R~*`), and writes to its own project's keys only. It has no write,
+  script, board entry or lease in any other project (r2). Every action on a project goes
+  through busmon (§5.3).
 - **The person's memory** (layer 1), and `history` across projects through person-memory's
   layer 2 `mem search`, which this spec is the need for.
 - **Never a repository's code.** It is not a coding agent and gets no worktree. A question about
   code goes to that project's master.
 
-### 5.3 What it may do: only through the person
+### 5.3 What it may do: only through the person, and busmon sends it
+
+The concierge **writes nothing outside its own project**. A message to a project's master is
+sent by **busmon**, the person's own process, when the person presses a suggested action. The
+concierge proposes; it never sends (r2, foureyes and reviewer-codex: in r1 the concierge
+appended to other projects' `cmd` streams, so it could send without any press, and it could
+forge the `typed=yes` entry its `typed_ref` pointed to).
+
+A suggested action that writes to a master carries its target project and its exact text. When
+the person presses it, busmon shows the text and the target once more and sends it on the press.
+What busmon sends depends on whose words it is (the person, Q3):
+
+| The text is | busmon sends to `<project>`'s master | Marked |
+|---|---|---|
+| **The person's own typed words** (a line they typed in the window, quoted unchanged) | A directive through `bus.TypedCmd`, from the person, with `typed=yes` and `typed_ref=concierge:<id>`: the broker id of the person's typed entry on the concierge's bus | `typed=yes` |
+| **The concierge's draft**, accepted by the press | A directive from the person with `human=yes` and `draft_by=concierge`, never `typed=yes` | `human=yes`, a draft |
+
+**Master's check of `typed_ref`** (in master's skill, and in `agentbus` as one call master runs):
+- The referenced entry is on the `concierge` project's stream, written by busmon for the person
+  (`typed=yes`, sender the person's identity).
+- Its text equals the directive's text byte for byte.
+- It is under one hour old.
+- It has not been used before. Master records each one it accepts in its own project's
+  `typed_refs` set, in the same step, and refuses a second use.
+
+Each condition that fails demotes the directive to a draft (`human=yes`), and master treats it
+as one.
+
+**Why this holds:** only busmon and the person's own CLI connect as the `busmon` ACL user, and
+only that user's commands call `bus.TypedCmd`. The concierge connects as its own ACL user, with
+no write outside its project. It cannot create a directive in another project at all. A
+`typed=yes` field it writes on its own stream proves nothing: the busmon-written entry is the
+one master checks, found by sender and ACL user, not by the field alone.
+
+**Every relay is audited:** busmon writes one audit line per sent action (`action=relay`, the
+target project, the entry id, `typed` or `draft`). The concierge's own answers are not acts and
+are not audited.
 
 - It **answers** the person, in `person.language`, quoting its sources.
-- It **writes to a project's master only as a suggested action the person presses** (§4). The
-  message carries the person's own typed words verbatim and a reference
-  `typed_ref=concierge:<entry id>` to the person's typed entry on the concierge's bus. Master
-  verifies it with `agentbus --project concierge thread <id>`: its ACL user reads every key
-  (`ACLMaster`: `%R~*`). The entry must be the person's, with `typed=yes`, and its text must
-  equal the quoted words. So master can tell a real instruction from a concierge's paraphrase,
-  and the concierge cannot invent one.
 - It **remembers** only through person-memory's `remember`: the person's quote, confirmed by the
   person's key press. Never an inference (person-memory §4.3).
 - It never accepts tracked requests, never delivers, merges or pushes, never pops agents, and
@@ -160,21 +191,31 @@ it is not running pops it. It parks after `dispatch.idle_park_after` like any po
 
 ## 6. Later, if the terminal proves limiting
 
-A native window, if the person ever wants one, is a client of §5's concierge project: the same
-stream, the same `typed_ref` rule. It is a separate binary, so busmon stays dependency-free. It
+**The concierge's logic is UI-agnostic** (the person, Q1). Everything it knows and does goes
+through the broker: its project's stream, the relay of §5.3. busmon's window is one client. A
+native window, or a browser surface (an `agentbus web` reached from a phone over Tailscale, which
+the person names for the three-month review), would be another client of the same concierge
+project. It would follow the same rule: the person's own client sends, never the concierge. It is a separate binary, so busmon stays dependency-free. It
 is chosen then, from §3's re-check, on the person's yes.
 
 ## 7. Build steps (in series)
 
 1. **The concierge role and host project:** the role file and skill (language rule, the
-   source-citing rule, §5.3's limits), the host project `concierge`, its ACL user (observer reads,
-   its own project's writes, appending to each `cmd` stream), and `typed_ref` on directives with master's skill text to verify it.
-   Tests: a relay without a valid `typed_ref` is flagged by master's check; the concierge's
-   writes to another project's keys are refused by the ACL inventory test.
+   source-citing rule, §5.3's limits), the host project `concierge`, and its ACL user (observer reads,
+   its own project's writes only).
+   Tests: the ACL inventory test refuses the concierge user every write outside its project,
+   the `cmd` stream of another project included.
 2. **busmon's window:** the `` ` `` overlay, the conversation view, send, history, the hidden-answer
    dot. Goldens at 60x20, 80x24, 140x40.
 3. **Context chips and sources:** `tab` attaches the selection; sources open their pages.
-4. **Suggested actions:** up to three keys per answer, each mapped to an existing busmon act.
+4. **Suggested actions and the relay:** up to three keys per answer, each mapped to an existing
+   busmon act; busmon's relay (§5.3), its audit line, and master's `typed_ref` check with the
+   `typed_refs` set.
+   - Tests:
+     - typed words relayed are `typed=yes`, and a draft is `human=yes` with `draft_by`;
+     - master demotes a reference with a changed byte, one older than an hour, one used a second
+       time, and one whose entry the concierge user wrote;
+     - every relay leaves one audit line.
 5. **`mem search`** (person-memory layer 2), when step 1's concierge needs it.
 
 ## 8. Not doing
@@ -185,6 +226,20 @@ is chosen then, from §3's re-check, on the person's yes.
 - No second memory: it reads person-memory, it does not keep its own.
 
 ## 9. Questions for the person (ask `1795736424584-0`, in French)
+
+**Answered so far (typed, 2026-11-27):**
+- **Q1:** the busmon overlay. A native GUI is deferred, re-checked in three months (mygo,
+  gogpu/ui) against an `agentbus web` surface. The logic stays UI-agnostic (§6).
+- **Q2:** one concierge per host, in a host project, with the standard lifecycle (pop, park,
+  quota, restart, cap B). It is not a project master. Cross-project access is read-only, and
+  every action on a project goes as a directive to its master. A cheap, fast model by default,
+  configurable (which also answers Q6).
+- **Q3:** writes only on the person's press. The person's typed text goes verbatim with
+  `typed_ref`, which master verifies (byte for byte, the person's entry, unexpired,
+  single-use). A press alone is `human=yes`, and a draft accepted by a press is the
+  concierge's draft, never `typed=yes`. Every relay is audited (§5.3).
+
+The questions as asked:
 
 1. **UI:** the floating window in busmon now, a native GUI not now (re-checked in three months).
    Recommended: yes.
