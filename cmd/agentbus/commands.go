@@ -327,10 +327,18 @@ var commands = []cli.Command{
 			"retro request <task>",
 			"retro evidence <task>",
 			"retro none <task> <root cause...>",
+			"retro propose <task> --file <retro.md>",
+			"retro show <task>",
+			"retro rejected [--file <file>]",
+			"retro route <task>",
+			"retro withdraw <task>",
+			"retro close <task> --pr <n>",
 		},
-		Brief:    "a task's retrospective",
-		Summary:  "request: the person asks for a retro of a task (refused from an agent); evidence: the task's thread and friction signals (rejects, CI hand-offs, stalls), bus ids only; none: close retro-<task> with no lasting lesson and its root cause. request done sends retro-<task> by itself when the task had friction",
-		Examples: []string{"agentbus -p demo retro evidence parser", "agentbus -p demo retro none parser \"a flaky test, not a rule\""},
+		Brief: "a task's retrospective",
+		Summary: "request: the person asks for a retro of a task (refused from an agent); evidence: the task's thread and friction signals (rejects, CI hand-offs, stalls), bus ids only; none: close retro-<task> with no lasting lesson and its root cause. request done sends retro-<task> by itself when the task had friction. " +
+			"propose (the retro's owner): a Root cause: line and a table n | lesson | evidence | destination | file | change, 1 to 3 rows, checked and filed, its ask (author retro, one open at a time, the rest queued) asking the person yes, no or later per proposal; " +
+			"show: each proposal's outcome (accepted only on the person's typed yes) and its file's change on the base; rejected: the proposals the person said no to; route (master, once the ask closed): retro-apply-<task> to docs and the next queued ask; withdraw (master): close the open ask; close (docs): delivered as PR <n>",
+		Examples: []string{"agentbus -p demo retro evidence parser", "agentbus -p demo retro none parser \"a flaky test, not a rule\"", "agentbus -p demo retro propose parser --file retro.md", "agentbus -p demo retro show parser"},
 	},
 	{
 		Name: "shutdown", Usage: []string{"shutdown [--force]"},

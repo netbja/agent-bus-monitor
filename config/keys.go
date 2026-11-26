@@ -682,6 +682,14 @@ var Keys = append([]*Key{
 	// The work-in-progress limit (wip-limit r2 §3.3): requests an agent may
 	// hold accepted when it starts a new one, 0 = no limit; per project, the
 	// person's alone (Q3), from Shift+C or config.toml, no env variable.
+	// retro (self-improving loop §7, the person's Q3 A and Q4 A): retros a day
+	// for the project that reach the person (agentbus retro propose refuses the
+	// next one), and the size past which a target file's propose notes a
+	// pruning pass; per project, no env variable.
+	{Name: "retro.max_per_day", Kind: Int, Default: 3, ReadBy: "agentbus retro propose", MachineOnly: true, Project: true,
+		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 or more (0: no cap)")},
+	{Name: "retro.prune_lines", Kind: Int, Default: 400, ReadBy: "agentbus retro propose", MachineOnly: true, Project: true,
+		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 or more (0: no note)")},
 	{Name: "board.wip_limit", Kind: Int, Default: 2, ReadBy: "agentbus request accept, agentbus request send, busmon", MachineOnly: true, Project: true, PersonEdit: true,
 		file: fileInt(func(n int) bool { return n >= 0 }, "want a whole number, 0 or more (0: no limit)")},
 	{Name: "delivery.forge", Env: "AGENT_BUS_DELIVERY_FORGE", Kind: String, Default: "auto", ReadBy: "agentbus deliver, dispatch", MachineOnly: true,
