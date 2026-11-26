@@ -167,9 +167,9 @@ func holderRestarted(e HolderEvidence) string {
 // is about to exit. The drain's age is the current build's socket age (it
 // began when that holder came), the old build's own when the current one
 // does not answer. Past staleAfter it fails (agent-resource-limits §3.2),
-// naming held[key], the agents still in that build, and what ends the drain;
-// nothing ends it by itself.
-func EvaluateHolderDraining(e HolderEvidence, staleAfter time.Duration, held map[string][]string) Outcome {
+// naming held[key], the agents still in that build, and what ends the drain
+// (agentbus holder drain); nothing ends it by itself.
+func EvaluateHolderDraining(e HolderEvidence, staleAfter time.Duration, held map[string][]string, project string) Outcome {
 	if !e.Known {
 		return Outcome{Status: Unknown, Detail: "holder sockets unavailable"}
 	}
@@ -188,11 +188,7 @@ func EvaluateHolderDraining(e HolderEvidence, staleAfter time.Duration, held map
 			continue
 		}
 		if names, ok := held[b.Key]; ok && len(names) > 0 {
-			cmds := make([]string, 0, len(names))
-			for _, n := range names {
-				cmds = append(cmds, "agentbus relaunch "+n)
-			}
-			stale = append(stale, fmt.Sprintf("build %s holds %s: %s", b.Raw, strings.Join(names, ", "), strings.Join(cmds, ", ")))
+			stale = append(stale, fmt.Sprintf("build %s holds %s", b.Raw, strings.Join(names, ", ")))
 		} else {
 			stale = append(stale, fmt.Sprintf("build %s: agents unknown", b.Raw))
 		}
@@ -204,8 +200,11 @@ func EvaluateHolderDraining(e HolderEvidence, staleAfter time.Duration, held map
 	if len(stale) == 0 {
 		return Outcome{Status: Warn, Detail: detail}
 	}
-	return Outcome{Status: Fail, Detail: fmt.Sprintf("%s; past limits.holder_drain_stale_after (%s): %s; or the person's agentbus --project <project> service restart holder --kill-agents for that build",
-		detail, textfmt.RunDuration(staleAfter), strings.Join(stale, "; "))}
+	// holder drain relaunches each agent onto the current build, one at a
+	// time; reload does one. Never service restart holder: it restarts the
+	// current build and kills its agents (foureyes).
+	return Outcome{Status: Fail, Detail: fmt.Sprintf("%s; past limits.holder_drain_stale_after (%s): %s: agentbus holder drain %s relaunches them onto the current build (agentbus --project %s reload <agent> for one)",
+		detail, textfmt.RunDuration(staleAfter), strings.Join(stale, "; "), project, project)}
 }
 
 // EvaluateHolderLeftovers: warn when an older build that neither runs nor

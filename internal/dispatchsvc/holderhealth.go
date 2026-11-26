@@ -257,13 +257,13 @@ func heldByBuild(snaps map[string]bus.AgentSnapshot) map[string][]string {
 // holderDrainingCheck is holder-draining's pass: the evidence, the agents
 // each build holds (nil when the snapshots cannot be read: the fail then
 // says "agents unknown") and limits.holder_drain_stale_after, read each pass.
-func holderDrainingCheck(agents func(context.Context) (map[string]bus.AgentSnapshot, error), evidence func() (health.HolderEvidence, error), staleAfter func() time.Duration) func(context.Context) (health.Outcome, error) {
+func holderDrainingCheck(project string, agents func(context.Context) (map[string]bus.AgentSnapshot, error), evidence func() (health.HolderEvidence, error), staleAfter func() time.Duration) func(context.Context) (health.Outcome, error) {
 	return func(ctx context.Context) (health.Outcome, error) {
 		e, err := evidence()
 		var held map[string][]string
 		if snaps, aerr := agents(ctx); aerr == nil {
 			held = heldByBuild(snaps)
 		}
-		return health.EvaluateHolderDraining(e, staleAfter(), held), err
+		return health.EvaluateHolderDraining(e, staleAfter(), held, project), err
 	}
 }
