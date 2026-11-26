@@ -1,6 +1,9 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r4, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r5, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r5, reviewer-codex's rejects of r3/r4: the soft bound is gated by a person-only key, off by
+default, until Q7 is answered, and busmon shows it (§6, §8). Every backend runs under a
+watchdog that kills its group when the relay dies, `SIGKILL` included (§5).
 r4, foureyes' reject of r2: a path belongs to the deepest listed worktree containing it, since
 worktrees nest (§4).
 r3, reviewer-codex's reject of r2: each backend reserves a budget before it starts and is held
@@ -121,10 +124,22 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
 
 ## 5. Lifetime: no orphan servers
 
-- **Children of the relay, dying with it (the person, Q1):**
-  - Linux: each backend starts in its own process group with `Pdeathsig = SIGKILL`.
-  - macOS has no `Pdeathsig`: the relay's exit path kills each backend's group, and a backend
-    whose parent pid becomes 1 is killed by the relay's next sweep, if a sweep still runs.
+- **Children of the relay, dying with it, even when the relay is killed (the person, Q1):**
+  every backend starts under a watchdog, `agentbus code-intel watch --parent <pid>:<pid_start>
+  -- <backend argv>`. It is the same binary, with no new dependency.
+  - The watchdog makes a new process group, starts the backend in it, and waits on two things:
+    the backend's exit and the relay's death.
+    - Linux: `Pdeathsig = SIGKILL` on the watchdog, plus a `pidfd` on the relay.
+    - macOS: kqueue `EVFILT_PROC`/`NOTE_EXIT` on the relay's pid, which reports a `SIGKILL` at
+      once, and a 1 s check of the relay's `(pid, start)` as backstop.
+  - When the relay dies, by `SIGKILL` or a crash included, the watchdog kills its whole group,
+    the backend's own children with it, then exits. For example, mcp-language-server's pyright,
+    which a `Pdeathsig` on mcp-language-server alone would leave behind (r5, reviewer-codex:
+    an exited relay cannot sweep).
+  - The relay's graceful exit kills each group itself first.
+  - What this does not cover: a `SIGKILL` of the watchdog itself, together with the relay.
+    Nothing in agent-bus sends that; on Linux, the watchdog's `Pdeathsig` still kills it with
+    the relay.
 - **The relay itself ends when its client ends.** Its stdin closes, and the relay kills its
   groups and exits. A park (cleaning-up-agents), a relaunch, a reload or a holder restart all end
   the client, so they end the relay too.
@@ -163,6 +178,11 @@ enforces the budget itself:
     - A watch: the relay reads each backend's RSS every **2 s**, and a backend above its budget
       has its process group killed at once. Later calls to that worktree say so.
     - `RLIMIT_AS` is not used: it breaks Node and `-race`, as resource-limits §6 found.
+    - **Gated until the person decides (§12 Q7):** without cap B, the relay starts **no
+      backend** unless `code_intel.soft_memory_ok` (person, PersonOnly, default `false`) is
+      true. It answers: `code-intel needs cap B, or code_intel.soft_memory_ok (the soft bound):
+      use grep`. The person's answer to Q7 sets what the build ships: the key and its default,
+      or no key and a hard requirement for cap B.
     - **The residual, said plainly:** a backend that grows faster than its budget within 2 s,
       while the rest of the agent is also near the cap, can still push the agent over. §12 Q7
       asks the person whether to ship with this soft bound or wait for cap B.
@@ -239,7 +259,8 @@ clear refusal.
   `--publish` carries it as the other checks do.
 - **busmon, per agent:**
   - On the Agents row and the agent's page, `code-intel ✓`, or `✗ <reason>` (no relay, cap
-    reached, last start failed).
+    reached, last start failed, identity not verified, soft bound not allowed).
+  - Where cap B does not run, `✓ soft memory bound` (§6), so the person sees the weaker bound.
   - The page also lists each backend's worktree, head and age.
 
   The relay writes one hash, `{p}:helpers`, field `<agent>`. The value is
@@ -259,6 +280,7 @@ clear refusal.
 | `code_intel.idle_stop` | `15m` | person (PersonOnly, Q5) | live |
 | `code_intel.max_backends` | `2` | person (PersonOnly, Q5) | live |
 | `code_intel.backend_memory` | `2G` | person (PersonOnly) | each backend start |
+| `code_intel.soft_memory_ok` | `false` | person (PersonOnly; per Q7) | each backend start |
 
 No agent can raise any of them. Settings PRs conflict on the registry's shared lists
 (merge-conflicts measure, 2026-11-26). If hot-files step 2 has not merged when this is built, the
@@ -309,8 +331,10 @@ settings step runs alone.
      - a branch in no worktree or in two is refused;
      - each answer carries HEAD;
      - a removed worktree kills its backend within one sweep;
-     - the relay's exit, and its stdin closing, kill every backend group (Linux: Pdeathsig);
+     - the relay's exit, and its stdin closing, kill every backend group;
+     - the relay `SIGKILL`ed: within 2 s no backend, and none of a backend's own children (a fake backend that forks a grandchild), is alive. On Linux in the suite; on macOS in step 2's live check;
      - idle stop and the least-recently-used limit;
+     - without cap B and with `soft_memory_ok` false, no backend starts and the message names the key;
      - a cap-reached refusal when usage + budget > cap, with the running backends' budgets reserved;
      - a backend above its budget killed within one 2 s watch, the agent untouched;
      - `rename` absent for a read-only role, and refused outside the coder's own worktree;
@@ -356,7 +380,7 @@ Each step is its own PR and review, in series (merge-conflicts §3, sibling-enfo
    fallback in the skill and doctor showing per role. §8, §11.
 5. 15 minutes and 2 servers, counted in the 30 % cap. Plus a clear refusal before an OOM, and
    both values person-only. §6, §9.
-7. **Open (r3):** cap B is not built, so until it is, a backend's budget is a soft bound (§6:
+7. **Open (r3), ask `1795734341064-0`:** cap B is not built, so until it is, a backend's budget is a soft bound (§6:
    the 2 s watch and runtime limits). Ship with the soft bound, or turn code-intel on only where
    cap B runs? Recommended: ship with the soft bound, with `code_intel.enabled` off by default
    and busmon saying `soft memory bound` beside the helper. The person turns it on knowing it.
