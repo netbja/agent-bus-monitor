@@ -34,7 +34,7 @@ func TestAskCLIRoundTrip(t *testing.T) {
 		t.Fatalf("a forged answer was stored: %+v", asks)
 	}
 	out.Reset()
-	if code := runAnswer(ctx, b, []string{id, "date", "--choice", "Mon", "--as", "Charlie"}, func(string) string { return "" }, &out, &errw); code != 0 {
+	if code := runAnswer(ctx, b, []string{id, "date", "--choice", "Mon", "--as", "Charlie"}, func(string) string { return "" }, nil, &out, &errw); code != 0 {
 		t.Fatalf("answer: %d %s", code, errw.String())
 	}
 	out.Reset()

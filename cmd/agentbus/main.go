@@ -657,7 +657,7 @@ func main() {
 		os.Exit(runAsks(ctx, b, rest, os.Stdout, os.Stderr))
 
 	case "answer":
-		os.Exit(runAnswer(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
+		os.Exit(runAnswer(ctx, b, rest, os.Getenv, agentcaller.Ancestor, os.Stdout, os.Stderr))
 
 	case "idea":
 		os.Exit(runIdea(ctx, b, rest, os.Getenv, os.Stdout, os.Stderr))
