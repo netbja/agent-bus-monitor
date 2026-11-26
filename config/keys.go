@@ -557,6 +557,10 @@ var Keys = append([]*Key{
 	// person typed an agent is left alone. Read when the holder starts.
 	{Name: "holder.scrollback", Env: "AGENT_BUS_HOLDER_SCROLLBACK", Kind: Int, Default: 5000, ReadBy: "agentbus holder",
 		env: envPositiveInt, file: filePositiveInt},
+	// How long an older holder build may drain before holder-draining fails
+	// (agent-resource-limits §3.2, §8); the person's, per host, read each pass.
+	{Name: "limits.holder_drain_stale_after", Kind: Duration, Default: 6 * time.Hour, ReadBy: "dispatch (health: holder-draining), each pass", MachineOnly: true, PersonOnly: true,
+		file: filePositiveDuration},
 	// Cap A, the holder unit's memory (spec
 	// 2026-11-25-agent-resource-limits-design.md §3, §8; the person's Q1):
 	// systemd's syntax, "off" for no limit. The person's alone and per host

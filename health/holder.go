@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/internal/textfmt"
 	"github.com/netbja/agent-bus-monitor/service"
 )
 
@@ -162,21 +163,48 @@ func holderRestarted(e HolderEvidence) string {
 
 // EvaluateHolderDraining: warn while an older build still holds terminals
 // (an upgrade drains, never restarts; spec 4.4). One that answers with none
-// is about to exit.
-func EvaluateHolderDraining(e HolderEvidence) Outcome {
+// is about to exit. The drain's age is the current build's socket age (it
+// began when that holder came), the old build's own when the current one
+// does not answer. Past staleAfter it fails (agent-resource-limits §3.2),
+// naming held[key], the agents still in that build, and what ends the drain;
+// nothing ends it by itself.
+func EvaluateHolderDraining(e HolderEvidence, staleAfter time.Duration, held map[string][]string) Outcome {
 	if !e.Known {
 		return Outcome{Status: Unknown, Detail: "holder sockets unavailable"}
 	}
-	var old []string
+	cur, curOK := e.current()
+	var old, stale []string
 	for _, b := range e.Builds {
-		if !b.Current && b.Answers && b.Terms > 0 {
-			old = append(old, fmt.Sprintf("build %s: %d terminal(s), for %s", b.Raw, b.Terms, b.Since.Truncate(time.Minute)))
+		if b.Current || !b.Answers || b.Terms == 0 {
+			continue
+		}
+		age := b.Since
+		if curOK && cur.Answers {
+			age = cur.Since
+		}
+		old = append(old, fmt.Sprintf("build %s: %d terminal(s), draining for %s", b.Raw, b.Terms, textfmt.RunDuration(age)))
+		if age < staleAfter {
+			continue
+		}
+		if names, ok := held[b.Key]; ok && len(names) > 0 {
+			cmds := make([]string, 0, len(names))
+			for _, n := range names {
+				cmds = append(cmds, "agentbus relaunch "+n)
+			}
+			stale = append(stale, fmt.Sprintf("build %s holds %s: %s", b.Raw, strings.Join(names, ", "), strings.Join(cmds, ", ")))
+		} else {
+			stale = append(stale, fmt.Sprintf("build %s: agents unknown", b.Raw))
 		}
 	}
 	if len(old) == 0 {
 		return Outcome{Status: OK, Detail: "no older holder build holds a terminal"}
 	}
-	return Outcome{Status: Warn, Detail: "an older holder still holds agents: " + strings.Join(old, "; ")}
+	detail := "an older holder still holds agents: " + strings.Join(old, "; ")
+	if len(stale) == 0 {
+		return Outcome{Status: Warn, Detail: detail}
+	}
+	return Outcome{Status: Fail, Detail: fmt.Sprintf("%s; past limits.holder_drain_stale_after (%s): %s; or the person's agentbus --project <project> service restart holder --kill-agents for that build",
+		detail, textfmt.RunDuration(staleAfter), strings.Join(stale, "; "))}
 }
 
 // EvaluateHolderLeftovers: warn when an older build that neither runs nor

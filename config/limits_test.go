@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Cap A's keys (agent-resource-limits §3, §8; the person's Q1: 70 %, 4G of
@@ -41,5 +42,26 @@ func TestHolderLimitKeys(t *testing.T) {
 	r := Resolver{Getenv: env(map[string]string{}), Files: []*File{Load(p, "config.toml")}}
 	if r.String("limits.holder_memory_max") != "16G" || r.String("limits.holder_memory_high") != "off" || r.String("limits.holder_swap_max") != "1G" {
 		t.Fatalf("resolved %q %q %q", r.String("limits.holder_memory_max"), r.String("limits.holder_memory_high"), r.String("limits.holder_swap_max"))
+	}
+}
+
+// How long an older holder build may drain before holder-draining fails
+// (agent-resource-limits §3.2, §8): the person's, per host, read each pass.
+func TestLimitsHolderDrainStaleAfter(t *testing.T) {
+	k, ok := Lookup("limits.holder_drain_stale_after")
+	if !ok {
+		t.Fatal("not registered")
+	}
+	if k.Env != "" || !k.MachineOnly || !k.PersonOnly || k.Kind != Duration || k.Default != 6*time.Hour ||
+		k.Group() != GroupHealth || k.Applies() != AppliesLive {
+		t.Errorf("row %+v (group %q, applies %v)", k, k.Group(), k.Applies())
+	}
+	for _, bad := range []any{"0", "-1h", "x", int64(6)} {
+		if _, why := k.file(bad); why == "" {
+			t.Errorf("%#v taken", bad)
+		}
+	}
+	if v, why := k.file("12h"); why != "" || v != 12*time.Hour {
+		t.Errorf("12h: %v %q", v, why)
 	}
 }
