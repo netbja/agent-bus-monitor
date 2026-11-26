@@ -59,6 +59,10 @@ type stallReader struct {
 	lastIdle   *health.IdleImplementerInput
 	lastDrift  *health.PlanDriftInput
 	lastMaster *health.IdleMasterInput
+	lastAnswer *health.PersonUnansweredInput
+	// liveTerms are the agents with a live terminal on the project's holder
+	// (person-unanswered's "no terminal"); nil, or a nil map: not read.
+	liveTerms func(context.Context) map[string]bool
 	// planGit and fetchAge read the repository (plan-drift); nil: the
 	// service's working directory, read-only.
 	planGit  func(ctx context.Context, args ...string) (string, error)
@@ -500,6 +504,9 @@ func (s *stallReader) stallWake(ctx context.Context, token, check string) error 
 	if check == "idle-master" {
 		return s.idleMasterAct(ctx, token)
 	}
+	if check == "person-unanswered" {
+		return s.answerWake(ctx, token)
+	}
 	var wakes []health.StallWake
 	s.mu.Lock()
 	switch {
@@ -537,6 +544,7 @@ func stallChecks(s *stallReader) []dispatch.HealthCheck {
 		healthOutcomeTask("idle-implementer", s.idleImplementer),
 		healthOutcomeTask("idle-master", s.idleMaster),
 		healthOutcomeTask("plan-drift", s.planDrift),
+		healthOutcomeTask("person-unanswered", s.personUnanswered),
 	}
 }
 
