@@ -54,7 +54,23 @@ const (
 	OutcomeRejected   = "rejected"
 	OutcomeLater      = "later"
 	OutcomeUnanswered = "unanswered"
+	// OutcomeUnverified: the person answered yes, but no reply entry proves
+	// it any more (trimmed from the stream, not in the archive read): not
+	// applied, and never rejected (foureyes on r1).
+	OutcomeUnverified = "unverified"
 )
+
+// RetroArchive reads the history archive's reply entries to ask askID
+// (ref = askID), as Events; the CLI reads the archive (bus does not).
+type RetroArchive func(ctx context.Context, askID string) ([]Event, error)
+
+// SetRetroArchive makes the retro checks read the archive too (spec §5: the
+// reply "stays in the stream or in the history archive"); nil: the stream
+// alone. A failed archive read is an error, never a refusal.
+func (b *Bus) SetRetroArchive(f RetroArchive) { b.retroArchive = f }
+
+// ErrRetroArchive marks a failed archive read.
+var ErrRetroArchive = errors.New("retro: reading the archive")
 
 // RetroDestinations are a row's destination column's values (§4 point 4).
 var RetroDestinations = []string{"skill", "context", "new skill"}
@@ -370,7 +386,8 @@ func (b *Bus) openRetroAsk(ctx context.Context, task string) (bool, error) {
 // retro is approved only by a reply entry with typed=yes, ref the retro's
 // ask, qid p<n> and said=yes; while the ask's record is kept, its answer to
 // p<n> must be the choice yes too. It returns that entry's id, or why not.
-// Only the cmd stream is read: an entry trimmed from it approves nothing.
+// The cmd stream is read, then the archive when one is set
+// (SetRetroArchive): an entry in neither approves nothing.
 func (b *Bus) RetroApproved(ctx context.Context, task string, n int) (string, error) {
 	rec, err := b.Retro(ctx, task)
 	if err != nil {
@@ -411,11 +428,19 @@ func (b *Bus) RetroApproved(ctx context.Context, task string, n int) (string, er
 }
 
 // retroReply is the person's typed reply to question qid of ask askID: the
-// reply entry with typed=yes, that ref and that qid (the last one).
+// reply entry with typed=yes, that ref and that qid (the last one), from
+// the cmd stream and the archive.
 func (b *Bus) retroReply(ctx context.Context, askID, qid string) (Event, bool, error) {
 	evs, err := b.Thread(ctx, askID)
 	if err != nil {
 		return Event{}, false, err
+	}
+	if b.retroArchive != nil {
+		old, err := b.retroArchive(ctx, askID)
+		if err != nil {
+			return Event{}, false, fmt.Errorf("%w: %v", ErrRetroArchive, err)
+		}
+		evs = append(old, evs...) // archived ones are older; a copy in both is the same entry
 	}
 	var found Event
 	ok := false
@@ -428,8 +453,9 @@ func (b *Bus) retroReply(ctx context.Context, askID, qid string) (Event, bool, e
 }
 
 // RetroOutcomes are each proposal's outcome (§6): accepted only when
-// RetroApproved passes; later for a later; rejected for any other answer;
-// unanswered for none, or a question withdrawn.
+// RetroApproved passes; unverified for a yes it cannot prove (never
+// rejected); later for a later; rejected for any other answer; unanswered
+// for none, or a question withdrawn. A failed read is an error.
 func (b *Bus) RetroOutcomes(ctx context.Context, task string) ([]RetroOutcome, error) {
 	rec, err := b.Retro(ctx, task)
 	if err != nil {
@@ -442,7 +468,7 @@ func (b *Bus) RetroOutcomes(ctx context.Context, task string) ([]RetroOutcome, e
 			o.Outcome, o.Entry = OutcomeAccepted, id
 			out = append(out, o)
 			continue
-		}
+		} // a failed archive read fails retroReply below too: an error, never an outcome
 		if rec.AskID == "" {
 			out = append(out, o)
 			continue
@@ -464,9 +490,13 @@ func (b *Bus) RetroOutcomes(ctx context.Context, task string) ([]RetroOutcome, e
 			value, answered = e.Said, true
 		}
 		if answered {
-			o.Outcome = OutcomeRejected
-			if strings.EqualFold(strings.TrimSpace(value), "later") {
+			switch v := strings.ToLower(strings.TrimSpace(value)); v {
+			case "later":
 				o.Outcome = OutcomeLater
+			case "yes": // a yes not proven: never a rejection
+				o.Outcome = OutcomeUnverified
+			default:
+				o.Outcome = OutcomeRejected
 			}
 			if typed {
 				o.Entry = e.ID

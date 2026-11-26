@@ -10,9 +10,11 @@
   file's blob id, and its ask opens from the reserved author `retro` (one open at a time, the rest `queued`; never
   master's slot): one question `p<n>` a proposal, `yes`, `no` or `later`, the answers to master, woken. Only the
   person's typed `yes` approves (`RetroApproved`: the answer's reply now carries `qid`, so a yes binds to its
-  question; while the ask's record is kept its choice must be yes too; only the cmd stream is read, so a reply
-  trimmed from it, by a `busmon --reset` for one, approves nothing). Master runs `agentbus retro route <task>` once
+  question; while the ask's record is kept its choice must be yes too; the reply is read from the cmd stream, then
+  the history archive, so one trimmed from the stream or reset away still counts; a yes neither proves is
+  `unverified`: not applied, and never put on the rejected list; an unreadable archive stops route, it never
+  rejects). Master runs `agentbus retro route <task>` once
   the ask closed (or after `retro withdraw <task>`): outcomes recorded, `no` rows stored as rejected,
   `retro-apply-<task>` sent to docs, the next queued ask opened. docs reads `agentbus retro show <task>` and ends
-  with `agentbus retro close <task> --pr <n>`. `agentbus ask` refuses the author `retro`, and no role may take the
+  with `agentbus retro close <task> --pr <n>` (docs alone closes it). `agentbus ask` refuses the author `retro`, and no role may take the
   name.
