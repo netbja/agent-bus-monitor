@@ -37,9 +37,10 @@ func BoardDriftMerged(ctx context.Context, b *bus.Bus, getenv func(string) strin
 // driftMerged reads the base tip and the branches' tips as the pass does
 // (origin's, the base fetched; the local ones for a local forge; a branch not
 // among them from the local refs), then judges each open request's heads.
-// A head with no commit of its own is never a finding: a review's head in its
-// review_base, or, with no review_base, an accepted request's head already in
-// the base (a branch just made cannot be told from a fast-forward merge).
+// A head with no commit of its own is never a finding: a head in its
+// review_base, or, with no review_base, an accepted request's head that is an
+// ancestor of the base (a branch just made cannot be told from a
+// fast-forward merge). A head that cannot be read is not judged.
 func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, string) {
 	settings := config.Machine(c.getenv)
 	base, _, err := forge.ProjectDeliveryBase(c.getenv, c.b.Project())
@@ -139,21 +140,27 @@ func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, strin
 			}
 			continue
 		}
-		ref := r.ReviewBase
-		if ref == "" && e.State == "accepted" {
-			ref = baseTip
-		}
 		var judged []string
 		for _, h := range heads {
-			if ref != "" {
-				cctx, cancel = call()
-				in, ierr := c.inBase(cctx, c.dir, env, ref, []string{h})
-				cancel()
-				if ierr != nil || in[h] {
-					continue // unreadable, or no commit of its own
-				}
+			cctx, cancel = call()
+			var own bool // h has a commit of its own: not in its review_base; with none, an accepted head not an ancestor of the base
+			var jerr error
+			switch {
+			case r.ReviewBase != "":
+				var in map[string]bool
+				in, jerr = c.inBase(cctx, c.dir, env, r.ReviewBase, []string{h})
+				own = !in[h]
+			case e.State == "accepted":
+				var anc bool
+				anc, jerr = mergequeue.IsAncestor(cctx, c.dir, env, h, baseTip)
+				own = !anc
+			default:
+				own = true
 			}
-			judged = append(judged, h)
+			cancel()
+			if jerr == nil && own {
+				judged = append(judged, h)
+			}
 		}
 		if len(judged) == 0 {
 			continue

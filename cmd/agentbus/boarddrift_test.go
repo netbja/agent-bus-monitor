@@ -61,17 +61,19 @@ func TestBoardDriftFindings(t *testing.T) {
 			"lost-done": {Owner: "docs", State: "done", Request: &bus.RequestInfo{From: "master", Target: "docs", Availability: "missing"}},
 			"kept":      {Owner: "docs", State: "accepted", Request: &bus.RequestInfo{From: "master", Target: "docs", Availability: "retained"}},
 			"spec":      {Owner: "architect", State: "review", Request: &bus.RequestInfo{From: "master", Target: "architect", Availability: "retained"}},
+			"audit":     {Owner: "sec", State: "requested", Request: &bus.RequestInfo{From: "master", Target: "sec", Availability: "retained"}},
 		},
 		Agents: map[string]bus.AgentSnapshot{
 			"master":    {State: "idle", Pane: "t1"},
 			"coder":     {State: "working", Pane: "t2"},
 			"foureyes":  {State: "idle", Pane: "t3"},
-			"architect": {State: "idle", Pane: "t4", Tier: "pop"},
+			"architect": {State: "idle", Pane: "t4"},              // a pop by roles.toml only
+			"sec":       {State: "idle", Pane: "t6", Tier: "pop"}, // a pop by its snapshot only
 			"docs":      {State: "idle", Pane: "t5", Tier: "pop"},
 		},
 		Live:     map[string]bool{"master": true},
 		Manifest: driftManifest(t),
-		Resume:   map[string]bus.ResumeRecord{"docs": {Session: "c2bf3f3b-0000-4000-8000-000000000000"}},
+		Resume:   map[string]bus.ResumeRecord{"docs": {Session: "c2bf3f3b-0000-4000-8000-000000000000"}, "architect": {Session: "not a session"}},
 	}
 	got := boardDrift(in)
 	var lines []string
@@ -85,6 +87,7 @@ func TestBoardDriftFindings(t *testing.T) {
 		"no terminal: coder is required and has no terminal",
 		"no terminal: architect has no terminal and owns open requests: spec (review). Bring it back: agentbus --project demo pop architect",
 		"no terminal: docs has no terminal and owns open requests: kept (accepted), lost (requested). Bring it back: agentbus --project demo pop docs --resume c2bf3f3b-0000-4000-8000-000000000000",
+		"no terminal: sec has no terminal and owns open requests: audit (requested). Bring it back: agentbus --project demo pop sec",
 	}
 	if strings.Join(lines, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
