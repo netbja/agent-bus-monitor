@@ -117,7 +117,9 @@ func readOnlyCommand(cmd string, rest []string) bool {
 	case "idea":
 		// list only reads; set is the person's and refuses any pane itself, with its own words
 		return first == "list" || first == "set"
-	case "board", "handoff":
+	case "board": // drift only reads (board-drift §5)
+		return first == "" || first == "drift"
+	case "handoff":
 		return first == ""
 	case "plan": // priority is a person's, by an explicit --as (as request priority)
 		return first == "" || first == "show" || first == "priority" && slices.Contains(rest, "--as")

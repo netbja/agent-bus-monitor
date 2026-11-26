@@ -291,7 +291,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo budget"},
 	},
 	{
-		Name: "board", Usage: []string{"board [--json]", "board claim <task> [--branch <b>]", "board state <task> <state> | board done <task> | board drop <task>"},
+		Name: "board", Usage: []string{"board [--json]", "board claim <task> [--branch <b>]", "board state <task> <state> | board done <task> | board drop <task>", "board drift [--json]"},
 		Brief:   "the shared task board",
 		Summary: "the shared task board: who owns what",
 		Flags: []cli.Flag{
