@@ -157,6 +157,10 @@ them is master's or the person's act.
 
 ## 4. Cap B: one agent's terminal
 
+**Replaced by §12 (2026-11-27, the person's process model):** cap B is the agent's own scope or
+unit, not a child of the holder unit. The attribution, "the agent is told" and live-read rules
+below still apply, read from that cgroup.
+
 The holder unit gets `Delegate=memory pids cpu`. At start, on Linux, the holder:
 
 1. reads its own cgroup from `/proc/self/cgroup`;
@@ -310,7 +314,8 @@ RAM differs per host. Sizes use systemd's syntax: `8G`, or `70%` of physical RAM
 |---|---|---|---|
 | `limits.holder_memory_max` | `70%` | `agentbus up` (unit text) | when a unit is written; live at the reload |
 | `limits.holder_memory_high` | `60%` | `agentbus up` (unit text) | same |
-| `limits.holder_swap_max` | `4G` | `agentbus up` (unit text) | same |
+| `limits.holder_swap_max` | `4G` | `agentbus up` (unit text; the slice's from §12.3) | same |
+| `limits.holder_self_max` | `2G` | `agentbus up` (the holder unit alone, §12.3) | same |
 | `limits.agent_memory_max` | `30%` | holder | each launch; live, at most once a minute |
 | `limits.agent_swap_max` | `2G` | holder | same |
 | `limits.warn_at` | `0.8` | dispatch, health, busmon | each pass |
@@ -387,3 +392,182 @@ desktop stay outside the cap. Built in step 1 (§3).
   `4G` and `5m`.
 - (b) `4G`, `15m`, `200%` CPU: tighter. The full suite may need the person to raise the keys.
 - (c) Per role, in `roles.toml`: more knobs, and one more file to keep in step.
+
+## 12. The process model: one systemd unit per agent (amendment, 2026-11-27)
+
+Status: amendment r1, for review (subject `resource-limits-units`), ahead of step 4. It
+replaces §4's design for cap B. Steps 1–3 are built and unchanged, except cap A's place (§12.3).
+Source: the person's typed answer to ask `1795734341064-0` (code-intel Q7, 2026-11-27), relayed
+here at the person's request. Base: origin/dev `93727f7b`.
+
+### 12.1 What the person decided
+
+- **Target layout:** `agentbus.slice` (cap A) → one unit per agent, `agentbus-agent@….service`
+  (cap B = the unit's `MemoryMax` and `MemorySwapMax`, `OOMPolicy=continue`) → `Delegate=yes`,
+  so agent-bus code creates the sub-cgroups (an `agentbus run --cap` command, a code-intel
+  language server) and writes `memory.max`, `memory.high` and `memory.swap.max` itself. There is
+  no `systemd-run` per spawn.
+- **Default mode: user units** (`systemctl --user`) plus `loginctl enable-linger`. That needs no
+  root, starts at boot, and keeps the person's account, CLI logins and terminals.
+- **Later: system units** for a dedicated server, from the same templates and the same delegated
+  code path, with hardening (`ProtectSystem`, `PrivateTmp`, `NoNewPrivileges`, optionally a user
+  per agent). Credentials and pane handling are open for that mode (§12.7).
+- **One interface for the cgroup root** (user unit, system unit, transient scope fallback, none on
+  macOS), shared by code-intel, `agentbus run --cap` and cap B. **Until the units exist, the
+  `systemd-run --user --scope` fallback.**
+- `roles doctor` reports the mode (`system`, `user+linger`, `scope`, `soft`) and whether the
+  memory controller is delegated.
+- Installing or changing units always needs the person's typed yes (sudo for system mode).
+
+### 12.2 Why §4 changes
+
+§4 put each terminal in a child cgroup of the holder unit (`UseCgroupFD`). The person's model
+gives each agent a cgroup systemd owns, outside the holder's lifetime and accounting. Two §4
+objections to a scope no longer hold once cap A is on the slice: the scope or unit sits in
+`agentbus.slice`, so cap A still covers it, and the holder ends its agents itself (§12.4)
+instead of relying on `KillMode=control-group`. The D-Bus round trip per launch is accepted in
+scope mode. In unit mode it is one `systemctl --user start`, the cost of a unit per agent.
+
+### 12.3 Cap A moves to the slice
+
+`agentbus.slice` is written by `agentbus up` (unit text, typed yes):
+- `MemoryMax`, `MemoryHigh` and `MemorySwapMax` come from today's `limits.holder_*` keys
+  (70 %, 60 %, 4G), unchanged in name and default.
+- The holder unit gets `Slice=agentbus.slice`, so the holder and every agent share cap A, as
+  they do today inside the holder unit.
+- The holder unit keeps `OOMPolicy=continue`. It gets its own `MemoryMax=limits.holder_self_max`
+  (new key, default `2G`): the holder alone should never need more.
+- The broker and the desktop stay outside the slice, as the person answered for Q1.
+
+### 12.4 The cgroup root: one interface, four modes
+
+`cgroot` (a new package, Go, no dependency) answers one question for any agent-bus process: *where
+is this agent's delegated cgroup, and may I make children in it?*
+
+```go
+type Mode string // "system", "user", "scope", "soft"
+type Root interface {
+    Mode() Mode
+    Delegated() bool                                // memory controller usable in children
+    Child(name string, mem, high, swap string) (fd int, path string, err error) // a new leaf
+    Usage() (current, max uint64, oomKills uint64, err error)
+}
+func Self() (Root, error)       // this process's agent root, from /proc/self/cgroup
+```
+
+`Self` reads `/proc/self/cgroup`, walks up to the nearest `agentbus-agent@*.service` or
+`agentbus-agent-*.scope` cgroup, and checks that its `cgroup.controllers` holds `memory` and
+that the person's user can write `cgroup.subtree_control`. With none, or on macOS, the mode is
+`soft`: `Child` fails, and callers use their soft path (`RLIMIT_AS` for `agentbus run`, §6;
+code-intel's gated soft bound). Every child is a leaf. The agent's own processes sit in the
+leaf `client` (cgroup v2 forbids processes in a cgroup whose children use controllers).
+`agentbus run --cap` creates `cmd-<pid>`, and code-intel creates `ci-<n>`. Each is started
+with `UseCgroupFD`, so the process is born in its cgroup.
+
+### 12.5 The two launch paths
+
+**Scope mode (first: no unit to install).** The holder starts a pane's command as today, as its
+own child on the pane's pty (`holder/server.go:446-467`). The only change is the argv:
+
+```
+systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-agent-<p>-<role>-<term>
+  -p Delegate=yes -p MemoryMax=<agent_memory_max> -p MemorySwapMax=<agent_swap_max>
+  -p OOMPolicy=continue -- agentbus agent-enter -- <client argv>
+```
+
+4b's live check confirms that this host's systemd accepts `OOMPolicy` and `Delegate` on a
+transient scope. A property it refuses is dropped and named in the doctor line, never silently.
+
+- `systemd-run --scope` execs the command in the caller's process, so the pid is still the
+  holder's child. Its pty, `waitLoop`, reaper and group kill are unchanged.
+- `agentbus agent-enter` moves itself into the scope's `client` leaf, enables
+  `+memory +pids +cpu` in the scope's `subtree_control`, and execs the client.
+- If `systemd-run` is missing or fails, the pane starts as today and the mode is `soft`. A launch
+  is never refused for it (§4's fallback rule).
+
+**Unit mode (target).** `agentbus-agent@.service` is a template, written by `agentbus up` on the
+person's yes:
+
+```
+[Unit]
+Description=agent-bus agent %i
+[Service]
+Slice=agentbus.slice
+ExecStart=<agentbus full path> agent-shim %i
+Delegate=yes
+OOMPolicy=continue
+KillMode=control-group
+Restart=no
+```
+
+- **The instance names one terminal: `<project>.<role>.<term>`**, not only the role. Two terminals
+  of one role exist at once during a relaunch: the new pane is proven before the old one closes
+  (decision 2026-10-27). Two projects share role names too. §12.7 Q1 asks the person.
+- **The pty is the holder's; the process is the unit's.**
+  1. The holder opens the pane's pty.
+  2. It runs `systemctl --user start agentbus-agent@<i>.service`, then
+     `systemctl --user set-property --runtime` for `MemoryMax` and `MemorySwapMax` from the
+     `limits.agent_*` keys.
+  3. The unit's `agentbus agent-shim <i>` connects to the holder's socket. It receives the pty's
+     slave end over `SCM_RIGHTS`, with the launch's argv, env and directory, which `cfg.Launch`
+     still builds.
+  4. The shim moves itself into `client`, does `setsid` and `TIOCSCTTY` on the slave, makes it
+     stdin, stdout and stderr, and execs the client. The pid stays the unit's main pid.
+  5. The holder holds a `pidfd` of it, sent by the shim, for exit and kill, in place of
+     `cmd.Wait`.
+- **Ending an agent** is `systemctl --user stop` of its unit: control-group kill, every
+  descendant included. The holder's group kill and reaper (`holder/groupkill_linux.go`,
+  `reap_linux.go`) apply only to scope mode and soft mode.
+- **A holder restart** closes the ptys' master ends, so the clients get `SIGHUP` as today. Their
+  units then end on their own, since the client exits. Keeping an agent alive across a holder
+  restart (passing the masters on) is not in this amendment.
+- **Linger:** `agentbus up` checks `loginctl show-user <user> -p Linger`. When it is off, it
+  proposes `loginctl enable-linger` in the same typed-yes step, so user units start at boot and
+  outlive the person's logout.
+
+### 12.6 What reads the mode
+
+- **The holder:** at each launch, the mode decides the path (§12.5). Per terminal, the holder
+  reads `memory.current`, `memory.peak` and `oom_kill` from the unit's or scope's cgroup, in
+  place of `term-<id>`'s (§4's attribution and "the agent is told" are unchanged).
+- **`agentbus run --cap`** (§6): `cgroot.Self()`. In `system`, `user` or `scope` mode,
+  `Child("cmd-<pid>", …)`. In `soft` mode, `RLIMIT_AS` as built.
+- **code-intel** (`2026-11-26-code-intel-design.md` §6): `Child("ci-<n>", budget, 90 % of budget, 0)`,
+  or its gated soft bound in `soft` mode.
+- **`agentbus roles doctor`:** one line per host, `cgroup mode: user+linger, memory delegated`
+  (or `scope`, `soft: <reason>`, `user, linger off`). With `--publish`, busmon's Health page
+  shows it.
+
+### 12.7 Questions for the person (one ask, in French)
+
+1. **Unit instance per terminal** (`<project>.<role>.<term>`), not per role: a relaunch has two
+   terminals of one role for a moment, and two projects share role names. Recommended: per
+   terminal.
+2. **The pty in unit mode:** the shim receives the pty from the holder over its socket
+   (`SCM_RIGHTS`), recommended. The alternative is a `TTYPath=` drop-in per launch, which needs a
+   `daemon-reload` at every start.
+3. **Cap A on the slice, the holder's own cap 2G?** Recommended: yes. The slice keeps today's
+   70 %, 60 % and 4G for the holder and every agent together.
+4. **Linger proposed at install?** Recommended: yes, in the same typed-yes step as the units.
+5. **Order:** scope mode first (cap B on Linux soon, no install), then unit mode. Recommended:
+   yes. The alternative is unit mode directly.
+6. **System mode** (dedicated server, hardening, credentials, panes): kept as a later spec,
+   recommended. The templates and `cgroot` are written so it adds a mode, not a design.
+
+### 12.8 Steps (replacing step 4 of §7), in series
+
+- **4a `cgroot` and doctor:** the interface, `Self` with all four modes, the doctor line. Tests:
+  a fake cgroup tree under a temp dir (`/proc/self/cgroup` read through a seam): each mode
+  found, a non-delegated tree is `soft`, a nested `client` leaf is used. No live systemd.
+- **4b scope mode:** the holder's argv through `systemd-run --scope`, `agentbus agent-enter`, the
+  slice written by `up` with cap A moved and `limits.holder_self_max`, the holder's attribution
+  from the scope's cgroup. Tests: the argv with and without `systemd-run`, unit text goldens, a
+  fake `systemd-run` that fails gives `soft`, and a live check on this host in the PR.
+- **4c `agentbus run --cap` and code-intel** take `cgroot.Child`.
+- **4d unit mode:** the template, `agent-shim`, the fd passing, `pidfd`, stop by
+  `systemctl --user stop`, linger in `up`. Tests: the shim's fd and argv exchange over a
+  socketpair, unit text goldens, a fake `systemctl`, and a live check.
+- **Later:** system mode, its own spec.
+
+Each step is its own PR and review. Every unit and slice write is on the person's typed yes.
+Service tests fake `systemctl` and `loginctl` (CLAUDE.md).
