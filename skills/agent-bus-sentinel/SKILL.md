@@ -183,7 +183,11 @@ asks for nothing new from you: you fix nothing beyond what this skill already al
 allow-list is unchanged). A warn leaves the digest when it is fixed, or when the person accepts it
 (`agentbus health accept <check> --as <person> <reason>`): an accept holds it out for a week, then
 it is listed again with the accept until fixed or accepted again. You never accept a warn yourself.
-`no check in warn over 24 h`: say nothing. Then read
+`no check in warn over 24 h`: say nothing. Then run `agentbus board drift` (open requests on merged
+branches, request bodies lost, required roles and pops with no terminal). When it prints anything
+but `no drift`, forward its output to master **verbatim**, in the same `agentbus cmd master`
+message as the health digest (alone when there is no digest). You never close, reassign or edit a
+task: that stays with its owner, its sender or master. Then read
 [`docs/memory/INDEX.md`](../../docs/memory/INDEX.md) and the project's `STATUS` file if present. Mention only requests that remain
 requested, blocked, or past deadline; do not chase them. List the popped roles (tier `pop` in
 `roles.toml`) idle for more than 2 h with no accepted task, in one `agentbus cmd master` line, so

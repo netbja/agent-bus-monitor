@@ -101,7 +101,7 @@ func InBase(ctx context.Context, dir string, env []string, baseTip string, heads
 		if !bus.ValidHead(h) || !bus.ValidHead(baseTip) {
 			return nil, errors.New("an invalid commit id")
 		}
-		anc, err := exitTrue(ctx, dir, env, "merge-base", "--is-ancestor", h, baseTip)
+		anc, err := IsAncestor(ctx, dir, env, h, baseTip)
 		if err != nil {
 			return nil, err
 		}
@@ -116,6 +116,26 @@ func InBase(ctx context.Context, dir string, env []string, baseTip string, heads
 		out[h] = same
 	}
 	return out, nil
+}
+
+// IsAncestor tells whether head is an ancestor of baseTip (or is it); its
+// contents alone are not enough, unlike InBase: a branch squash-merged as its
+// only change has the base's tree, yet is no ancestor (board-drift §5).
+func IsAncestor(ctx context.Context, dir string, env []string, head, baseTip string) (bool, error) {
+	if !bus.ValidHead(head) || !bus.ValidHead(baseTip) {
+		return false, errors.New("an invalid commit id")
+	}
+	return exitTrue(ctx, dir, env, "merge-base", "--is-ancestor", head, baseTip)
+}
+
+// HasCommit tells whether this repository holds the commit head: false
+// when absent, an error when git cannot say (board-drift §5: a head not read
+// is never "not merged").
+func HasCommit(ctx context.Context, dir string, env []string, head string) (bool, error) {
+	if !bus.ValidHead(head) {
+		return false, errors.New("an invalid commit id")
+	}
+	return exitTrue(ctx, dir, env, "rev-parse", "--verify", "--quiet", head+"^{commit}")
 }
 
 // exitTrue runs a git command whose answer is its exit code: 0 true, 1 false,

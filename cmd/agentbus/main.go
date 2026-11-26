@@ -858,8 +858,10 @@ func main() {
 			if err := b.BoardDrop(ctx, rest[1]); err != nil {
 				die(err.Error())
 			}
+		case "drift": // board-drift §5: read only, exit 1 on drift
+			os.Exit(runBoardDrift(ctx, b, project, asJSON))
 		default:
-			die("board: want claim|state|done|drop (or no subcommand to list)")
+			die("board: want claim|state|done|drop|drift (or no subcommand to list)")
 		}
 
 	case "shutdown":

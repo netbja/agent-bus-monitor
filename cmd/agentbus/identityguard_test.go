@@ -33,7 +33,7 @@ func TestIdentityGuard(t *testing.T) {
 		}
 	}
 	reads := [][]string{
-		{"reports"}, {"thread", "1"}, {"verdicts"}, {"agents"}, {"board"}, {"board", "--json"}, {"request"},
+		{"reports"}, {"thread", "1"}, {"verdicts"}, {"agents"}, {"board"}, {"board", "--json"}, {"board", "drift"}, {"board", "drift", "--json"}, {"request"},
 		{"gate", "coder"}, {"pilot", "status"}, {"plan", "show"}, {"plan"}, {"health"}, {"health", "list"}, {"health", "detail", "services"}, {"health", "log"}, {"health", "warns"}, {"health", "accept", "disk", "--as", "charlie", "x"},
 		{"asks"}, {"swaps"}, {"usage"}, {"budget"}, {"listen"}, {"subscribe", "--drain", "coder"}, {"pane", "coder"},
 		{"roles", "doctor", "--publish"}, {"roles", "adopt", "x", "--ask", "1"}, // no sender in what they write
