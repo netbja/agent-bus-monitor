@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -294,3 +295,60 @@ func TestRetroCap(t *testing.T) {
 		t.Fatalf("a new day: %v", err)
 	}
 }
+
+// foureyes on r1: the person's typed yes outlives the capped cmd stream.
+// With the reply trimmed away (MAXLEN, busmon --reset) and no archive, the
+// yes is unverified: never approved, never rejected nor put on the rejected
+// list. With the history archive holding the reply (SetRetroArchive), it is
+// approved as from the stream.
+func TestRetroApprovalOutlivesTheStream(t *testing.T) {
+	b, ctx := retroWorld(t)
+	r := propose(t, b, ctx, retroRec("tk", "keep the yes", "and the no"))
+	answer(t, b, ctx, r.AskID, 1, "yes")
+	answer(t, b, ctx, r.AskID, 2, "no")
+	thread, err := b.Thread(ctx, r.AskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.r.XTrimMaxLen(ctx, StreamKey(b.project, "cmd"), 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.RetroApproved(ctx, "tk", 1); err == nil {
+		t.Fatal("approved with the reply gone and no archive")
+	}
+	outs, err := b.RetroOutcomes(ctx, "tk")
+	if err != nil || outs[0].Outcome != OutcomeUnverified || outs[1].Outcome != OutcomeRejected {
+		t.Fatalf("outcomes %+v, %v", outs, err)
+	}
+	// the archive holds what the stream lost
+	b.SetRetroArchive(func(_ context.Context, askID string) ([]Event, error) {
+		var out []Event
+		for _, e := range thread {
+			if e.Ref == askID {
+				out = append(out, e)
+			}
+		}
+		return out, nil
+	})
+	if id, err := b.RetroApproved(ctx, "tk", 1); err != nil || id == "" {
+		t.Fatalf("from the archive: %q %v", id, err)
+	}
+	// an archive that cannot be read is an error, never a rejection
+	b.SetRetroArchive(func(context.Context, string) ([]Event, error) { return nil, errArchiveTest })
+	if _, err := b.RetroRoute(ctx, "tk"); err == nil {
+		t.Fatal("routed with the archive unreadable")
+	}
+	if rej, _ := b.RetroRejected(ctx, ""); len(rej) != 0 {
+		t.Fatalf("rejected rows written before the failure: %+v", rej)
+	}
+	b.SetRetroArchive(nil) // stream only: p1 unverified, routed without a rejection of it
+	if _, err := b.RetroRoute(ctx, "tk"); err != nil {
+		t.Fatal(err)
+	}
+	rej, _ := b.RetroRejected(ctx, "")
+	if len(rej) != 1 || rej[0].Lesson != "and the no" {
+		t.Fatalf("rejected list %+v: only the no belongs there", rej)
+	}
+}
+
+var errArchiveTest = errors.New("archive unreadable")
