@@ -42,11 +42,13 @@ type Inspection struct {
 }
 
 // Usage is what an agent's terminal tree uses, the agent's own process
-// included: resident bytes summed (Mem) and its largest process's (TopMem),
-// 0 when the host reads no RSS; CPU, a percentage of one core over the
-// window, known only once a sample a window old exists.
+// included: resident bytes summed (Mem) and its largest process's (TopMem,
+// its pid TopPID), 0 when the host reads no RSS; CPU, a percentage of one
+// core over the window, known only once a sample a window old exists. No
+// process name: the observation publishes none (spec §5).
 type Usage struct {
 	Mem, TopMem int64
+	TopPID      int
 	CPU         float64
 	CPUKnown    bool
 }

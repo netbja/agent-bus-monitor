@@ -105,7 +105,7 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 			}
 		}
 		if u := in.Usage; u != nil { // agent-resource-limits §5
-			o.MemBytes, o.TopBytes = u.Mem, u.TopMem
+			o.MemBytes, o.TopBytes, o.TopPID = u.Mem, u.TopMem, u.TopPID
 			if u.CPUKnown {
 				pct := int(math.Round(u.CPU))
 				o.CPUPct = &pct

@@ -398,12 +398,13 @@ func TestHostRuntimeMeasuresTheTree(t *testing.T) {
 		return []termhost.Proc{{PID: p, Start: f.term.PIDStart, Command: "claude", CPU: claude, RSS: 500 << 20},
 			{PID: p + 1, PPID: p, Start: 6, Command: "bash", RSS: 4 << 20},
 			{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest", CPU: pytest, RSS: 3 << 30},
-			{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest", CPU: pytest, RSS: 3 << 30}}
+			{PID: p + 2, PPID: p + 1, Start: 7, Command: "pytest", CPU: pytest, RSS: 3 << 30},
+			{PID: p + 4, PPID: p + 1, Start: 8, Command: "cat", RSS: 1 << 20}} // a small one after the largest (foureyes)
 	}
 	f.h.SetProcesses(f.term.ID, tree(time.Second, time.Second)...)
 	in := f.inspect()
-	want := int64(500<<20 + 4<<20 + 3<<30)
-	if u := in.Usage; u == nil || u.Mem != want || u.TopMem != 3<<30 || u.CPUKnown {
+	want := int64(500<<20 + 4<<20 + 3<<30 + 1<<20)
+	if u := in.Usage; u == nil || u.Mem != want || u.TopMem != 3<<30 || u.TopPID != p+2 || u.CPUKnown {
 		t.Fatalf("first look: %+v", u)
 	}
 	f.now = f.now.Add(10 * time.Second)
@@ -415,8 +416,16 @@ func TestHostRuntimeMeasuresTheTree(t *testing.T) {
 	f.now = f.now.Add(10 * time.Second)
 	f.h.SetProcesses(f.term.ID, append(tree(3*time.Second, 14*time.Second),
 		termhost.Proc{PID: p + 3, PPID: p, Start: 9, Command: "go", CPU: 5 * time.Second, RSS: 1 << 20})...)
-	if u := f.inspect().Usage; u == nil || u.CPU != 50 || u.Mem != want+1<<20 {
+	if u := f.inspect().Usage; u == nil || u.CPU != 50 || u.Mem != want+1<<20 || u.TopPID != p+2 {
 		t.Fatalf("a new process: %+v", u)
+	}
+	// A CPU counter that went back (a reading of the host's) counts as no
+	// growth, never as a negative share of the others' (foureyes).
+	f.now = f.now.Add(10 * time.Second)
+	f.h.SetProcesses(f.term.ID, append(tree(time.Second, 24*time.Second),
+		termhost.Proc{PID: p + 3, PPID: p, Start: 9, Command: "go", CPU: 5 * time.Second, RSS: 1 << 20})...)
+	if u := f.inspect().Usage; u == nil || u.CPU != 100 {
+		t.Fatalf("a counter gone back: %+v", u)
 	}
 	// No RSS read (a holder without /proc): memory unknown, no usage at all
 	// before the CPU is known.

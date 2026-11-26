@@ -309,7 +309,8 @@ func (r *HostRuntime) background(t termhost.Term, bg agentstate.Background, proc
 }
 
 // usageOf measures the tree (agent-resource-limits §5): each process once
-// (by pid and start), its RSS summed and the largest kept; the CPU grown
+// (by pid and start), its RSS summed and the largest kept with its pid; the
+// CPU grown
 // since base (a process new since it: all its CPU) over the window, when
 // there is a base. Nil when neither is known.
 func usageOf(procs []termhost.Proc, base *cpuSample, now time.Time) *Usage {
@@ -323,7 +324,9 @@ func usageOf(procs []termhost.Proc, base *cpuSample, now time.Time) *Usage {
 		}
 		seen[k] = true
 		u.Mem += p.RSS
-		u.TopMem = max(u.TopMem, p.RSS)
+		if p.RSS > u.TopMem {
+			u.TopMem, u.TopPID = p.RSS, p.PID
+		}
 		if base != nil {
 			grown += max(0, p.CPU-base.cpu[k])
 		}

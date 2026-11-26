@@ -184,8 +184,8 @@ func TestObservePublishesTheProcessSource(t *testing.T) {
 }
 
 // agent-resource-limits §5: the look's measure rides the observation as
-// mem_bytes, top_bytes and cpu_pct (cpu_pct absent while unknown); no
-// process name is published.
+// mem_bytes, top_bytes, top_pid and cpu_pct (rounded; absent while
+// unknown); no process name is published (master, 3c r2).
 func TestObservePublishesTheUsage(t *testing.T) {
 	b, r := dialRun(t)
 	ctx := context.Background()
@@ -194,7 +194,7 @@ func TestObservePublishesTheUsage(t *testing.T) {
 	rt := newFakeRT(func(pane string, _ int) Inspection {
 		in := readyIn()
 		if pane == "p1" {
-			in.Usage = &Usage{Mem: 4 << 30, TopMem: 3 << 30, CPU: 180.4, CPUKnown: true}
+			in.Usage = &Usage{Mem: 4 << 30, TopMem: 3 << 30, TopPID: 4242, CPU: 180.6, CPUKnown: true}
 		} else {
 			in.Usage = &Usage{Mem: 1 << 30, TopMem: 1 << 30}
 		}
@@ -209,7 +209,7 @@ func TestObservePublishesTheUsage(t *testing.T) {
 		obs, err = b.Observed(ctx)
 		return err == nil && obs["dev"].At != 0 && obs["docs"].At != 0
 	})
-	if o := obs["dev"]; o.MemBytes != 4<<30 || o.TopBytes != 3<<30 || o.CPUPct == nil || *o.CPUPct != 180 {
+	if o := obs["dev"]; o.MemBytes != 4<<30 || o.TopBytes != 3<<30 || o.TopPID != 4242 || o.CPUPct == nil || *o.CPUPct != 181 {
 		t.Fatalf("dev %+v", o)
 	}
 	if o := obs["docs"]; o.MemBytes != 1<<30 || o.CPUPct != nil {
