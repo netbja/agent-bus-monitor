@@ -1,6 +1,6 @@
 # Triage and the unread reports: mark all read (amendment to triage-dedupe)
 
-Status: spec r1, for review (subject `triage-dedupe-amend`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r2, for review (subject `triage-dedupe-amend`; r2, reviewer-codex: the guard reads a new `Held` list that `foldLines` fills for every fold, not `IDs`, and no build starts before the person's Q1). Not built. Base: origin/dev `f53e4fca`.
 Author: architect, from master's directive (cmd `1795731923149-0`, task `triage-dedupe-amend`),
 relayed by claude-ao as the person's wish and **not verified**: §7's ask confirms it before any
 build. Amends [triage-dedupe](2026-11-21-triage-dedupe-design.md) (built, #755). No new dependency;
@@ -21,9 +21,13 @@ summary does not say they exist.
   file (`Read`, `cmd/busmon/localcache.go:17`), loaded into `unreadState.read`
   (`cmd/busmon/tea_model.go:276-283`). Nothing below the last visit (`floor`) is marked. No bus key
   holds them, and each busmon has its own.
-- **Triage items name their lines.** `forYou()` (`cmd/busmon/tea_foryou.go:34`) builds the items.
-  Each `attentionItem` carries `IDs`, the Activity entries folded into it: a `--needs` report, an
-  ask's line, a waiting agent's report.
+- **Triage items do not name every line they hold.** `forYou()` (`cmd/busmon/tea_foryou.go:34`)
+  builds the items, and `foldLines` (`:95`) folds Activity lines into them. An item's `IDs` holds
+  only the lines that are their own row (`:144-170`: an unread line for the person, a
+  `--needs` report item). Three folds record no id and only set `Unread`: an ask's own line
+  (`:109-111`), a waiting agent's newest report (`:120-125`), and a `--needs` line naming exactly
+  one live target (`:148-153`, a merge item, say). (r2, reviewer-codex: r1's guard read `IDs`
+  only, and missed all three.)
 - **Keys.** In Activity, `u` is the next unread and `f` the filter (`keys.go:262-263`). `N`, `m`
   and `z` are bound nowhere in busmon (`keys.go`, checked 2026-11-26). Ideas' undo is `u` on the
   Ideas page only (`keys.go:388`, `ideas_actions.go:154`): one change, once.
@@ -60,10 +64,14 @@ unchanged.
    (`cmd/busmon/filter.go:20`) keeps only lines with `markUnread`. It is ANDed with the others,
    as every token is: `@master is:unread`. A word `unread` stays a word.
 
-**The guard: marking all never clears a triage item.** The set `N` marks excludes every id in
-any `forYou()` item's `IDs` at the press: a `--needs read` or `--needs answer` report, an ask's
-line, a waiting agent's report. Merges and gates have no Activity line of their own, and a report
-folded into them is in their `IDs`. Those clear only as triage-dedupe §3 says: by opening, by
+**The guard: marking all never clears a triage item.** `foldLines` records every line it folds
+into an item in a new field, `attentionItem.Held []string` (stream ids): the item's own `IDs`,
+plus each line folded at `:109-111` (the ask's line), `:120-125` (the waiting agent's report) and
+`:148-153` (a `--needs` line naming one target). A report **without** `--needs` that only
+attaches to the items it names (`:130-136`) is not held: it is exactly what §1 is about, and `N`
+marks it. The set `N` marks excludes every id in any item's `Held` at the press. Merges and
+gates have no Activity line of their own; a `--needs` report folded into them is in their
+`Held`. Those clear only as triage-dedupe §3 says: by opening, by
 answering, or by the item's own end. `m` on such a line is refused with
 `this line is a triage item: open it from T`. A line that becomes an item later keeps its read
 mark, which `forYou()` already ignores for `--needs answer` (`tea_foryou.go:139`). A `--needs
@@ -87,12 +95,16 @@ alone.
 
 ## 6. Build: steps in series
 
-1. **Activity marks:** `N`, `m`, `z`, the guard, the agent-page `N`, `is:unread`, help and the
+No step starts before the person answers §7 Q1 yes (the wish came relayed and unverified).
+
+1. **Activity marks:** `Held` in `foldLines`, `N`, `m`, `z`, the guard, the agent-page `N`, `is:unread`, help and the
    key map, the palette entries (`mark all read`, `mark read`). Tests: `N` marks the snapshot
-   only (a line arriving during the question stays unread). `N` skips a `--needs read` report,
-   an ask's line, a waiting agent's report and a report folded into a merge item. `m` toggles
+   only (a line arriving during the question stays unread). `N` and `m` skip each of the four
+   held kinds, one test each: a `--needs read` report item (`IDs`), an ask's own line, a waiting
+   agent's newest report, a `--needs answer` report naming one merge item. `N` marks a report
+   without `--needs` that names a live merge item (attached, not held). `m` toggles
    and refuses an item line. `z` restores exactly the last act and then has nothing. `is:unread`
-   with `@agent`. Floor lines untouched. Mutants: drop the guard; mark lines arriving after the
+   with `@agent`. Floor lines untouched. Mutants: drop the guard; build the guard from `IDs` instead of `Held` (the ask, wait and folded `--needs` tests fail); mark lines arriving after the
    press; let `z` undo twice.
 2. **Triage summary line** (§3). Tests: the count equals §4's set; absent at zero; `u` lands on
    the first such line.
