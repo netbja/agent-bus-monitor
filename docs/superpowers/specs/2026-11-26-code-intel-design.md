@@ -1,6 +1,9 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r6, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r7, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r7, reviewer-codex's reject of r6: the watchdog has no `Pdeathsig` and kills through
+`cgroup.kill` in a hard mode (§5). In scope mode the agent's own scope is the root and each
+backend a sub-cgroup of it, with no scope per backend (§6). foureyes' r5/r6 build notes are in.
 r6, the person's Q7 answer: each backend's budget is a hard cgroup bound through resource-limits'
 shared cgroup-root interface (unit, or scope fallback); the soft bound remains only in soft mode,
 gated (§6). foureyes' r4 build notes: the /tmp wording, and step 0 checks for no shell wrapper.
@@ -131,19 +134,29 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
 - **Children of the relay, dying with it, even when the relay is killed (the person, Q1):**
   every backend starts under a watchdog, `agentbus code-intel watch --parent <pid>:<pid_start>
   -- <backend argv>`. It is the same binary, with no new dependency.
-  - The watchdog makes a new process group, starts the backend in it, and waits on two things:
-    the backend's exit and the relay's death.
-    - Linux: `Pdeathsig = SIGKILL` on the watchdog, plus a `pidfd` on the relay.
-    - macOS: kqueue `EVFILT_PROC`/`NOTE_EXIT` on the relay's pid, which reports a `SIGKILL` at
-      once, and a 1 s check of the relay's `(pid, start)` as backstop.
-  - When the relay dies, by `SIGKILL` or a crash included, the watchdog kills its whole group,
-    the backend's own children with it, then exits. For example, mcp-language-server's pyright,
-    which a `Pdeathsig` on mcp-language-server alone would leave behind (r5, reviewer-codex:
-    an exited relay cannot sweep).
-  - The relay's graceful exit kills each group itself first.
-  - What this does not cover: a `SIGKILL` of the watchdog itself, together with the relay.
-    Nothing in agent-bus sends that; on Linux, the watchdog's `Pdeathsig` still kills it with
-    the relay.
+  - The watchdog makes a new process group, starts the backend in it (and, in a hard mode, in
+    the backend's own cgroup `ci-<n>`, §6), and waits on two things: the backend's exit and the
+    relay's death.
+    - Linux: a `pidfd` on the relay, opened at start, then the relay's `(pid, start)` checked
+      again, so a relay already dead before the open is seen (foureyes r5).
+    - macOS: kqueue `EVFILT_PROC`/`NOTE_EXIT` on the relay's pid, registered the same way, plus
+      a 1 s `(pid, start)` check as backstop.
+    - **No `Pdeathsig` on the watchdog** (r7, reviewer-codex): a `SIGKILL` on the relay's death
+      would kill the watchdog before it could act. The watchdog has to outlive the relay to
+      clean up.
+  - When the relay dies, `SIGKILL` and crashes included, the watchdog kills the backend, then
+    exits:
+    - **in a hard mode:** it writes `1` to `ci-<n>/cgroup.kill` (Linux 5.14+). That kills every
+      process in the cgroup, including a child that left the process group with `setsid` or a
+      daemon the backend forked (foureyes r5).
+    - **in soft mode:** it kills the process group. A descendant that left the group escapes it.
+      This is stated, and the backends are configured not to daemonize (gopls without
+      `-remote`, §11 step 0).
+  - The relay's graceful exit kills each backend itself first.
+  - **What this does not cover:** a `SIGKILL` of the watchdog itself together with the relay.
+    Nothing in agent-bus sends that. In a hard mode, the backend's `ci-<n>` is still inside the
+    agent's unit or scope, so it ends with the agent: `systemctl stop` of the unit, or the
+    holder's end of the pane, kills the agent's whole cgroup (resource-limits §12.5).
 - **The relay itself ends when its client ends.** Its stdin closes, and the relay kills its
   groups and exits. A park (cleaning-up-agents), a relaunch, a reload or a holder restart all end
   the client, so they end the relay too.
@@ -182,8 +195,13 @@ enforces the budget itself:
   - **user unit or system unit** (`agentbus-agent@<role>.service`, `Delegate=yes`): a hard
     bound, in the agent's own delegated subtree, under the agent's cap B (the unit's
     `MemoryMax`).
-  - **scope** (before the units exist, the `systemd-run --user --scope` fallback the person
-    named): a hard bound on the backend, in its own scope.
+  - **scope** (before the units exist, the person's `systemd-run --user --scope` fallback):
+    the agent's own scope is the root. The holder starts the pane in it, in `agentbus.slice`,
+    with `Delegate=yes` (resource-limits §12.5). The backend's `ci-<n>` is a sub-cgroup under
+    it. There is no scope per backend and no `systemd-run` per backend start (r7,
+    reviewer-codex: the person's "no systemd-run per spawn"). The scope is delegated, so the
+    relay owns its children's files and writes their limits itself. The scope sits in the
+    slice, so cap A covers the backends too (foureyes r6).
   - **soft** (macOS, or no delegated memory controller): the soft bound below, gated.
 - **The soft bound, only in soft mode:**
     - Runtime limits: `GOMEMLIMIT` = budget for Go backends, `--max-old-space-size` for the
@@ -346,7 +364,8 @@ settings step runs alone.
      - each answer carries HEAD;
      - a removed worktree kills its backend within one sweep;
      - the relay's exit, and its stdin closing, kill every backend group;
-     - the relay `SIGKILL`ed: within 2 s no backend, and none of a backend's own children (a fake backend that forks a grandchild), is alive. On Linux in the suite; on macOS in step 2's live check;
+     - the relay `SIGKILL`ed: within 2 s no backend and none of its children is alive. The fake backend forks one grandchild that stays in the group and one that calls `setsid`. In a hard mode both die (`cgroup.kill`); in soft mode the one in the group dies and the `setsid` one is documented as escaping. Run on Linux in the suite, on macOS in step 2's live check;
+     - the relay dead before the watchdog opens its `pidfd`: the `(pid, start)` re-check kills the backend;
      - idle stop and the least-recently-used limit;
      - without cap B and with `soft_memory_ok` false, no backend starts and the message names the key;
      - a cap-reached refusal when usage + budget > cap, with the running backends' budgets reserved;
