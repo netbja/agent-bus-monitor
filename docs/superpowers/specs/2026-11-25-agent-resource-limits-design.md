@@ -315,7 +315,6 @@ RAM differs per host. Sizes use systemd's syntax: `8G`, or `70%` of physical RAM
 | `limits.holder_memory_max` | `70%` | `agentbus up` (unit text) | when a unit is written; live at the reload |
 | `limits.holder_memory_high` | `60%` | `agentbus up` (unit text) | same |
 | `limits.holder_swap_max` | `4G` | `agentbus up` (unit text; the slice's from §12.3) | same |
-| `limits.holder_self_max` | `2G` | `agentbus up` (the holder unit alone, §12.3) | same |
 | `limits.agent_memory_max` | `30%` | holder | each launch; live, at most once a minute |
 | `limits.agent_swap_max` | `2G` | holder | same |
 | `limits.warn_at` | `0.8` | dispatch, health, busmon | each pass |
@@ -395,7 +394,9 @@ desktop stay outside the cap. Built in step 1 (§3).
 
 ## 12. The process model: one systemd unit per agent (amendment, 2026-11-27)
 
-Status: amendment r1, for review (subject `resource-limits-units`), ahead of step 4. It
+Status: amendment r2, for review (subject `resource-limits-units`), ahead of step 4. r2,
+foureyes: no memory cap of the holder's own, since the running holder's agents would hit it at
+the upgrade and in the soft fallback; `holder-memory` reads the slice. It
 replaces §4's design for cap B. Steps 1–3 are built and unchanged, except cap A's place (§12.3).
 Source: the person's typed answer to ask `1795734341064-0` (code-intel Q7, 2026-11-27), relayed
 here at the person's request. Base: origin/dev `93727f7b`.
@@ -435,8 +436,17 @@ scope mode. In unit mode it is one `systemctl --user start`, the cost of a unit 
   (70 %, 60 %, 4G), unchanged in name and default.
 - The holder unit gets `Slice=agentbus.slice`, so the holder and every agent share cap A, as
   they do today inside the holder unit.
-- The holder unit keeps `OOMPolicy=continue`. It gets its own `MemoryMax=limits.holder_self_max`
-  (new key, default `2G`): the holder alone should never need more.
+- The holder unit keeps `OOMPolicy=continue` and gets **no memory cap of its own**: its
+  `MemoryMax`, `MemoryHigh` and `MemorySwapMax` lines are dropped, so the slice's cap A covers it.
+  - Why (r2, foureyes): `agentbus up` rewrites the current holder's unit, and `daemon-reload`
+    applies a lowered `MemoryMax` to the running unit at once (probed 2026-11-26). A small cap
+    of the holder's own would hit every agent still in its cgroup: the panes of a holder started
+    before the upgrade, and every pane in the soft fallback (§12.5), which stays in the holder's
+    cgroup.
+  - The holder alone is bounded by the slice, as every agent is.
+  - `Slice=agentbus.slice` takes effect when the holder next starts (a drain or update starts
+    the new build's holder). Until then the old holder keeps today's unit cap, which up does
+    not lower. The slice's own caps apply at once to whatever is already in it.
 - The broker and the desktop stay outside the slice, as the person answered for Q1.
 
 ### 12.4 The cgroup root: one interface, four modes
@@ -527,6 +537,10 @@ Restart=no
 
 ### 12.6 What reads the mode
 
+- **`holder-memory` health (step 3a, `holder/unitmem.go`)** reads `agentbus.slice`'s
+  `memory.current`, `memory.max` and `oom_kill` instead of the holder unit's, once the slice
+  exists. Until then it reads the holder unit, as built (r2, foureyes). Its detail names the
+  slice and, per agent, the scope or unit figures.
 - **The holder:** at each launch, the mode decides the path (§12.5). Per terminal, the holder
   reads `memory.current`, `memory.peak` and `oom_kill` from the unit's or scope's cgroup, in
   place of `term-<id>`'s (§4's attribution and "the agent is told" are unchanged).
@@ -546,8 +560,9 @@ Restart=no
 2. **The pty in unit mode:** the shim receives the pty from the holder over its socket
    (`SCM_RIGHTS`), recommended. The alternative is a `TTYPath=` drop-in per launch, which needs a
    `daemon-reload` at every start.
-3. **Cap A on the slice, the holder's own cap 2G?** Recommended: yes. The slice keeps today's
-   70 %, 60 % and 4G for the holder and every agent together.
+3. **Cap A on the slice, with no cap of the holder's own?** Recommended: yes. The slice keeps
+   today's 70 %, 60 % and 4G for the holder and every agent together. A cap of the holder's own
+   would also hit the agents still in its cgroup (r2).
 4. **Linger proposed at install?** Recommended: yes, in the same typed-yes step as the units.
 5. **Order:** scope mode first (cap B on Linux soon, no install), then unit mode. Recommended:
    yes. The alternative is unit mode directly.
@@ -560,8 +575,9 @@ Restart=no
   a fake cgroup tree under a temp dir (`/proc/self/cgroup` read through a seam): each mode
   found, a non-delegated tree is `soft`, a nested `client` leaf is used. No live systemd.
 - **4b scope mode:** the holder's argv through `systemd-run --scope`, `agentbus agent-enter`, the
-  slice written by `up` with cap A moved and `limits.holder_self_max`, the holder's attribution
-  from the scope's cgroup. Tests: the argv with and without `systemd-run`, unit text goldens, a
+  slice written by `up` with cap A moved and the holder unit's own caps dropped, `holder-memory`
+  reading the slice, the holder's attribution from the scope's cgroup. Test: a unit text golden
+  with no `MemoryMax` on the holder unit, so an upgrade never lowers the running holder's cap. Tests: the argv with and without `systemd-run`, unit text goldens, a
   fake `systemd-run` that fails gives `soft`, and a live check on this host in the PR.
 - **4c `agentbus run --cap` and code-intel** take `cgroot.Child`.
 - **4d unit mode:** the template, `agent-shim`, the fd passing, `pidfd`, stop by
