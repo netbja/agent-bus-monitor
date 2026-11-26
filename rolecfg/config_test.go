@@ -297,6 +297,7 @@ func TestLoadRefusals(t *testing.T) {
 		{"unsupported schema", "schema_version = 3\n[roles.alpha]\ntier=\"boot\"\n", "unsupported schema_version (expected 1 or 2)"},
 		{"roles not table", "schema_version = 2\nroles = \"bad\"\n", "roles must be a table"},
 		{"invalid role name", "schema_version = 1\n[roles.Bad]\ntier = \"boot\"\n", "invalid role name"},
+		{"retro is reserved", "schema_version = 1\n[roles.retro]\nmodel=\"m\"\ntier = \"boot\"\n", "role name \"retro\" is reserved: agentbus's own asks are sent under it"},
 		{"role not table", "schema_version = 1\nroles = { alpha = \"bad\" }\n", "role alpha must be a table"},
 		{"invalid tier", "schema_version = 1\n[roles.alpha]\nmodel=\"m\"\ntier=\"middle\"\n", "role alpha: tier must be boot or pop"},
 		{"invalid skills", "schema_version = 1\n[roles.alpha]\nmodel=\"m\"\ntier=\"boot\"\nskills=[1]\n", "role alpha: invalid skills"},
