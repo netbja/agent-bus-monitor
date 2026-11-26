@@ -79,8 +79,9 @@ func (s *stallReader) answerWake(ctx context.Context, token string) error {
 
 // holderLiveTerms reads the project's holder for its agents with a live
 // terminal; nil when no holder of the project answers (nothing proven).
-func holderLiveTerms(project string, getenv func(string) string) func(context.Context) map[string]bool {
+func holderLiveTerms(b *bus.Bus, getenv func(string) string) func(context.Context) map[string]bool {
 	return func(ctx context.Context) map[string]bool {
+		project := b.Project()
 		h, err := holder.NewHost(project, holder.BuildID(), getenv)
 		if err != nil {
 			return nil

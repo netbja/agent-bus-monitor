@@ -2,7 +2,7 @@
  paused · resumes in 1h52 (lunch)  claude 5h 62%            
  PAUSED · /resume ends it now · resumes in 1h52 (lunch) · b…
  1 For you   2 Agents   3 Act   4 Board   5 Work   6 Plan   
-╭─ Health · 2 to do · 1 in hand · 34 fine · 1 ? ─ y copy …─╮
+╭─ Health · 2 to do · 1 in hand · 35 fine · 1 ? ─ y copy …─╮
 │   For you                                                ▲
 │ ▶ ▲ Tracked secret-li…  tracked private-key path:…    3h ┃
 │     git rm --cached <path>                               ┃
