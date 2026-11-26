@@ -86,7 +86,7 @@ var applies = map[string]Applies{
 	"backup.age_recipient": AppliesLive, "backup.after_command": AppliesLive, "backup.after_env": AppliesLive, "backup.after_timeout": AppliesLive,
 	"notify.on": AppliesLive, "notify.targets": AppliesLive, "notify.events": AppliesLive, "notify.detail": AppliesLive,
 	"notify.delay": AppliesLive, "notify.max_per_hour": AppliesLive, "notify.quiet": AppliesLive, "notify.quiet_exempt": AppliesLive,
-	"health.disk_warn_pct": AppliesLive, "health.disk_warn_gib": AppliesLive, "health.disk_fail_pct": AppliesLive,
+	"health.disk_warn_pct": AppliesLive, "limits.warn_at": AppliesLive, "health.disk_warn_gib": AppliesLive, "health.disk_fail_pct": AppliesLive,
 	"health.disk_fail_gib": AppliesLive, "models.source_max_age": AppliesLive,
 	"limits.command_memory": AppliesRun, "limits.command_time": AppliesRun, "limits.command_cpu": AppliesRun,
 	// each writer, at each write

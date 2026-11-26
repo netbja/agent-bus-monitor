@@ -43,3 +43,32 @@ func TestHolderLimitKeys(t *testing.T) {
 		t.Fatalf("resolved %q %q %q", r.String("limits.holder_memory_max"), r.String("limits.holder_memory_high"), r.String("limits.holder_swap_max"))
 	}
 }
+
+// The share of a cap at which the holder's memory warns
+// (agent-resource-limits §3.1, §8), a percentage like dispatch.context_alert;
+// the person's alone, per host, read at each pass.
+func TestLimitsWarnAt(t *testing.T) {
+	k, ok := Lookup("limits.warn_at")
+	if !ok {
+		t.Fatal("limits.warn_at not registered")
+	}
+	if k.Env != "" || !k.MachineOnly || !k.PersonOnly || k.Kind != Float || k.Default != 80.0 ||
+		k.Group() != GroupHealth || k.Applies() != AppliesLive {
+		t.Errorf("row %+v (group %q, applies %v)", k, k.Group(), k.Applies())
+	}
+	for _, good := range []any{int64(80), 95.5, int64(100)} {
+		if _, why := k.file(good); why != "" {
+			t.Errorf("%#v refused: %q", good, why)
+		}
+	}
+	for _, bad := range []any{int64(0), int64(101), -5.0, "80", 0.8 - 1} {
+		if _, why := k.file(bad); why == "" {
+			t.Errorf("%#v taken", bad)
+		}
+	}
+	p := writeFile(t, "config.toml", "[limits]\nwarn_at = 90\n")
+	r := Resolver{Getenv: env(map[string]string{"AGENT_BUS_LIMITS_WARN_AT": "10"}), Files: []*File{Load(p, "config.toml")}}
+	if r.Float("limits.warn_at") != 90 {
+		t.Fatalf("resolved %v", r.Float("limits.warn_at"))
+	}
+}

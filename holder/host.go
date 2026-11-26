@@ -257,11 +257,17 @@ func (h *Host) Processes(ctx context.Context, id termhost.TermID) ([]termhost.Pr
 	if err != nil {
 		return nil, err
 	}
-	out := make([]termhost.Proc, 0, len(r.Procs))
-	for _, p := range r.Procs {
-		out = append(out, termhost.Proc{PID: p.PID, PPID: p.PPID, Start: p.Start, Command: p.Command, CPU: time.Duration(p.CPUms) * time.Millisecond})
+	return procsOf(r.Procs), nil
+}
+
+// procsOf is the holder's process list as termhost's: CPU in ms, RSS in KiB
+// on the wire.
+func procsOf(procs []ProcInfo) []termhost.Proc {
+	out := make([]termhost.Proc, 0, len(procs))
+	for _, p := range procs {
+		out = append(out, termhost.Proc{PID: p.PID, PPID: p.PPID, Start: p.Start, Command: p.Command, CPU: time.Duration(p.CPUms) * time.Millisecond, RSS: p.RSSkb * 1024})
 	}
-	return out, nil
+	return out
 }
 
 // Submit sends the line's kind, nonce and count, never its text: the holder

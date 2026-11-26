@@ -88,6 +88,7 @@ type ProcInfo struct {
 	Start   uint64 `json:"start"`
 	Command string `json:"command"`
 	CPUms   int64  `json:"cpu_ms"`
+	RSSkb   int64  `json:"rss_kb,omitempty"` // resident memory (agent-resource-limits §5)
 }
 
 // Info describes the holder (Describe).
@@ -101,6 +102,8 @@ type Info struct {
 	// does (SIGKILL; holder hardening §5); the start time guards a reused pid.
 	PID   int    `json:"pid,omitempty"`
 	Start uint64 `json:"start,omitempty"`
+	// Memory is its unit's (agent-resource-limits §3.1); none without one.
+	Memory *UnitMemory `json:"memory,omitempty"`
 }
 
 func errReply(code string, format string, a ...any) Reply {
