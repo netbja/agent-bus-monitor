@@ -61,17 +61,20 @@ func TestBoardDriftFindings(t *testing.T) {
 			"lost-done": {Owner: "docs", State: "done", Request: &bus.RequestInfo{From: "master", Target: "docs", Availability: "missing"}},
 			"kept":      {Owner: "docs", State: "accepted", Request: &bus.RequestInfo{From: "master", Target: "docs", Availability: "retained"}},
 			"spec":      {Owner: "architect", State: "review", Request: &bus.RequestInfo{From: "master", Target: "architect", Availability: "retained"}},
+			"rv":        {Owner: "live-pop", State: "accepted", Request: &bus.RequestInfo{From: "master", Target: "live-pop", Availability: "retained"}},
 			"audit":     {Owner: "sec", State: "requested", Request: &bus.RequestInfo{From: "master", Target: "sec", Availability: "retained"}},
 		},
 		Agents: map[string]bus.AgentSnapshot{
 			"master":    {State: "idle", Pane: "t1"},
 			"coder":     {State: "working", Pane: "t2"},
 			"foureyes":  {State: "idle", Pane: "t3"},
-			"architect": {State: "idle", Pane: "t4"},              // a pop by roles.toml only
-			"sec":       {State: "idle", Pane: "t6", Tier: "pop"}, // a pop by its snapshot only
+			"architect": {State: "idle", Pane: "t4"},                 // a pop by roles.toml only
+			"sec":       {State: "idle", Pane: "t6", Tier: "pop"},    // a pop by its snapshot only
+			"live-pop":  {State: "working", Pane: "t7", Tier: "pop"}, // owns a request, has its terminal: not drift
+			"idle-pop":  {State: "idle", Pane: "t8", Tier: "pop"},    // no terminal, owns nothing: not drift
 			"docs":      {State: "idle", Pane: "t5", Tier: "pop"},
 		},
-		Live:     map[string]bool{"master": true},
+		Live:     map[string]bool{"master": true, "live-pop": true},
 		Manifest: driftManifest(t),
 		Resume:   map[string]bus.ResumeRecord{"docs": {Session: "c2bf3f3b-0000-4000-8000-000000000000"}, "architect": {Session: "not a session"}},
 	}

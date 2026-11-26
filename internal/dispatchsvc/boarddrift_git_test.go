@@ -70,6 +70,8 @@ func TestBoardDriftMergedRealGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	reviewed(t, b, "unjudged", bus.ReviewOpts{Branch: "feat/deleted"})
+	baseCommit := g("rev-list", "--max-parents=0", "main")
+	reviewed(t, b, "in-review-base", bus.ReviewOpts{Branch: "feat/old", Commit: baseCommit, ReviewBase: baseCommit}) // nothing of its own
 	reviewed(t, b, "blocked", bus.ReviewOpts{Branch: "feat/blocked"})
 	if err := b.BlockRequest(ctx, "blocked", "coder", "waits"); err != nil {
 		t.Fatal(err)
@@ -146,6 +148,14 @@ func TestBoardDriftMergedRemote(t *testing.T) {
 	g("push", "-q", "origin", "dev")
 	g("switch", "-q", "-c", "work")
 	g("branch", "-D", "dev") // no local base
+	other := t.TempDir() // origin's base moves on elsewhere: its tip is here only once fetched
+	gitAt(other, "clone", "-q", "-b", "dev", origin, ".")
+	if err := os.WriteFile(filepath.Join(other, "later"), []byte("later\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitAt(other, "add", "later")
+	gitAt(other, "commit", "-q", "-m", "later")
+	gitAt(other, "push", "-q", "origin", "dev")
 
 	c, b := mqChore(t, "git@github.com:netbja/agent-bus-monitor.git")
 	ctx := context.Background()

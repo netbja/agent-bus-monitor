@@ -130,7 +130,7 @@ func (c *mergeQueueChore) driftMerged(ctx context.Context) ([]DriftMerged, strin
 		}
 		var heads []string
 		for _, h := range []string{r.Commit, tip} {
-			if h != "" && bus.ValidHead(h) && (len(heads) == 0 || heads[0] != h) {
+			if h != "" && bus.ValidHead(h) {
 				heads = append(heads, h)
 			}
 		}
