@@ -76,6 +76,11 @@ func reportNotice(id, msg string) string {
 	return "Report " + id + " for you (full text: agentbus reports " + id + "): " + first
 }
 
+// sendNotice sends report --to's notice (a seam for the failure test).
+var sendNotice = func(ctx context.Context, b *bus.Bus, from, to, id, text, needs string) (string, error) {
+	return b.ReportNotice(ctx, from, to, id, text, needs)
+}
+
 // sendReport is `agentbus report <agent> [--auto] [--needs answer|read] [--to <name>]...
 // [--task <t> [--done]] <message>`: the report, its addressees named on it
 // (busmon-reply-target), then one notice per addressee, since a report wakes
@@ -148,8 +153,12 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 		}
 	}
 	for _, t := range to {
-		if _, err := b.ReportNotice(ctx, rest[0], t, id, reportNotice(id, msg), needs); err != nil {
-			return "", fmt.Errorf("report %s published, but telling %s failed: %v", id, t, err)
+		if _, err := sendNotice(ctx, b, rest[0], t, id, reportNotice(id, msg), needs); err != nil {
+			why := fmt.Sprintf("report %s published, but telling %s failed: %v", id, t, err)
+			if done {
+				why += "; request done " + task + " not run"
+			}
+			return id, errors.New(why) // the report stands: its id is printed (reviewer-codex)
 		}
 	}
 	if done {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -117,5 +118,28 @@ func TestReportDone(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no reply %q in %+v", want, evs)
+	}
+}
+
+// reviewer-codex on r1: a --to notice that fails after the report was
+// published still returns the report's id (main prints it, exit 1), as the
+// note and done failures do; with --done, done is not run, and says so.
+func TestReportNoticeFailureKeepsTheID(t *testing.T) {
+	b, ctx := reportTaskWorld(t)
+	old := sendNotice
+	t.Cleanup(func() { sendNotice = old })
+	sendNotice = func(context.Context, *bus.Bus, string, string, string, string, string) (string, error) {
+		return "", errors.New("broker went away")
+	}
+	id, err := sendReport(ctx, b, []string{"coder", "--task", "a", "--done", "--to", "master", "a done"}, io.Discard)
+	if id == "" || err == nil || !strings.Contains(err.Error(), "report "+id+" published, but telling master failed") || !strings.Contains(err.Error(), "request done a not run") {
+		t.Fatalf("id %q, err %v", id, err)
+	}
+	if e, err := b.ReportByID(ctx, id); err != nil || e.Task != "a" {
+		t.Fatalf("the report %+v, %v", e, err)
+	}
+	board, _ := b.Board(ctx)
+	if board["a"].State != "accepted" || board["a"].Request.ReportID != id {
+		t.Fatalf("a: %s %+v", board["a"].State, board["a"].Request)
 	}
 }
