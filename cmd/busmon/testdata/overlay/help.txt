@@ -237,6 +237,8 @@ STATES
                        It measures freshness, not liveness - the bus has no heartbeat.
   ctx                  the context fill: a bar, amber from the alert, red at the urgent fill, and its percent;
                        without a fresh fill, the raw tokens its client gave.
+  mem cpu              its terminal's processes: resident memory and CPU (180% is 1.8 cores),
+                       as the dispatcher last saw them. Wide screens only; the detail names the largest.
   sort                 attention first: escalated, gated or blocked; then queued or being woken;
                        then working, idle, other states, done, no state declared. Names inside each.
 
