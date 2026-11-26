@@ -1,6 +1,6 @@
 # Sibling steps run in series, enforced on the board
 
-Status: spec r4, for review (subject `sibling-enforce-spec`; r4, foureyes' reject of r3: under `parallel` the last step's merge closed the request with a sibling still listed, so the merge pass now steps it back to `accepted` instead, and the local branch ref is judged after the remote is deleted; r3, reviewer-codex's reject of r1, still true of r2: `request done` before a step merged, and `parallel --off` forgetting an older branch, both hid a step. Open steps are now a list that only a merge judgement or an abandon clears, and `done` judges it too; the head judged is the branch's current tip, the recorded commit only after the branch is deleted; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
+Status: spec r5, for review (subject `sibling-enforce-spec`; r5, reviewer-codex's reject of r4: one head is judged, the first that exists of remote tip, local tip, recorded commit, never an older one beside a newer; r4, foureyes' reject of r3: under `parallel` the last step's merge closed the request with a sibling still listed, so the merge pass now steps it back to `accepted` instead, and the local branch ref is judged after the remote is deleted; r3, reviewer-codex's reject of r1, still true of r2: `request done` before a step merged, and `parallel --off` forgetting an older branch, both hid a step. Open steps are now a list that only a merge judgement or an abandon clears, and `done` judges it too; the head judged is the branch's current tip, the recorded commit only after the branch is deleted; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
 Author: architect, from the merge-conflicts measure run early on 2026-11-26 (thread
 `1795676948573-0`, asked by claude-ao for the person) and the person's typed answer to ask
 `1795677070804-0` Q1: enforce it now, with a `parallel` exception for steps that share no file
@@ -69,10 +69,12 @@ holds the head, `closeonmerge.go:81-115`).
    `cmd/agentbus/requests.go:93-101`) fetches the project base and asks whether S is delivered.
    It uses the dispatcher's own test, `mergequeue.Delivery.Delivered` (`mergequeue/delivered.go:76`:
    ancestor or same tree, squash patch-id, rebase patch-ids). The head judged is S's current
-   remote tip while the branch exists. Once the remote branch is gone (deleted after its merge),
-   S's local branch ref is judged if the checkout has one, else S's recorded `commit`. Both are
-   judged when both exist, and either one delivered closes S (r4, foureyes' nit: a fix pushed
-   after the review, squash-merged, then the remote deleted). A recorded commit in the base says nothing about a tip pushed
+   remote tip while the branch exists. Exactly one head is judged: the first of these that
+   exists is used: S's remote tip, else S's local branch tip (the remote deleted after its
+   merge; r4, foureyes' nit: a fix pushed after the review, squash-merged, then the remote
+   deleted), else S's recorded `commit` (no ref left). An older head is never judged beside a
+   newer one: a recorded commit in the base must not clear a newer tip that is not (r5,
+   reviewer-codex). A recorded commit in the base says nothing about a tip pushed
    after it (r3, reviewer-codex). A tip pushed after the review is judged as it stands: it is
    merged when that tip is. The local ref is judged only in local mode, as `closeOnMerge` does.
    - **S delivered:** the CLI passes `step_merged = S, head, base tip` with the transition. The
@@ -192,7 +194,9 @@ On the disposable broker (`AGENTBUS_TEST_REDIS_URL`), with a scratch git reposit
 - B squash-merged into the base, then review C → passes, B leaves `open_steps`: `merged_steps` holds B's head, one
   `step-merged` audit line, C recorded. The same after B's branch is deleted (recorded commit
   judged). The same when B's tip was pushed after its review and that tip merged (the tip
-  judged). B's recorded commit in the base but its later tip not → refused (reviewer-codex r2). The same when
+  judged). B's recorded commit in the base but its later tip not → refused (reviewer-codex r2).
+  Remote deleted, local tip H2 ahead of the recorded H1, H1 in the base and H2 not → refused
+  (reviewer-codex r4); H2 in the base → passes (foureyes' nit). The same when
   the request is `accepted` (resumed) or in `review`.
 - foureyes' r1 paths, each judged at review: no `review_base` (no base: nothing open), a tip
   ahead of the commit, a re-review after the merge whose `review_base` holds the head (the
