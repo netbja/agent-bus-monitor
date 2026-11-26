@@ -75,7 +75,7 @@ var applies = map[string]Applies{
 	// the dispatcher, re-read at each pass or check
 	"dispatch.background_ignore": AppliesLive, "dispatch.quota_warn": AppliesLive, "dispatch.quota_drain": AppliesLive,
 	"dispatch.quota_hold": AppliesLive, "dispatch.quota_max_age": AppliesLive, "dispatch.auto_compact": AppliesLive,
-	"dispatch.stall_after": AppliesLive, "dispatch.clear_stall_after": AppliesLive, "dispatch.quiet_after": AppliesLive,
+	"dispatch.stall_after": AppliesLive, "dispatch.clear_stall_after": AppliesLive, "dispatch.quiet_after": AppliesLive, "dispatch.answer_after": AppliesLive,
 	"dispatch.idle_after": AppliesLive, "dispatch.master_idle_after": AppliesLive, "dispatch.checkback_max": AppliesLive,
 	"dispatch.login_expiry_warn": AppliesLive, "dispatch.turn_stale_after": AppliesLive,
 	"run.max_duration": AppliesLive, "run.max_deliveries": AppliesLive, "run.drain_max": AppliesLive,

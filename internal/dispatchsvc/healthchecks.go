@@ -47,6 +47,7 @@ type usageBaseline struct {
 // runs these outside reconciliation and fences every resulting write.
 func realHealthConfig(b *bus.Bus, rt dispatch.Runtime, manager service.Manager, paths service.Paths, clear dispatch.ClearConfig, escalateTo *string) dispatch.HealthConfig {
 	stall := newStallReader(b, os.Getenv, clear, escalateTo)
+	stall.liveTerms = holderLiveTerms(b, os.Getenv)
 	checks := append(realHealthChecks(b, rt, manager, paths), stallChecks(stall)...)
 	checks = append(checks, healthOutcomeTask("model-catalogue", realCatalogueReader().run)) // model-detection §3.5
 	return dispatch.HealthConfig{Checks: checks, DailyWake: true, StallNotify: stall.stallNotify, HolderNotify: holderNotice(b), StallWake: stall.stallWake,

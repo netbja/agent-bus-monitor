@@ -463,6 +463,11 @@ var Keys = append([]*Key{
 		env: envStallDuration, file: fileDuration(true)},
 	{Name: "dispatch.quiet_after", Env: "AGENT_BUS_QUIET_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",
 		env: envStallDuration, file: fileDuration(true)},
+	// person-unanswered (board-drift §8): a directive the person typed, not
+	// answered on the bus this long, wakes its agent; twice as long tells the
+	// person (10 minutes; 0 is off).
+	{Name: "dispatch.answer_after", Env: "AGENT_BUS_ANSWER_AFTER", Kind: Duration, Default: 10 * time.Minute, ReadBy: "dispatch",
+		env: envStallDuration, file: fileDuration(true)},
 	// idle-implementer: an implementer idle this long while a request waits for
 	// it wakes master (the person's answer, 2026-11-08: 15 minutes); 0 is off.
 	{Name: "dispatch.idle_after", Env: "AGENT_BUS_IDLE_AFTER", Kind: Duration, Default: 15 * time.Minute, ReadBy: "dispatch",

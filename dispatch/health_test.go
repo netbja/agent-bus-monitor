@@ -211,7 +211,7 @@ func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	var checks []HealthCheck
-	for _, id := range []string{"clear-stall", "quiet-agent", "review-queue", "idle-implementer", "idle-master", "redis-version"} {
+	for _, id := range []string{"clear-stall", "quiet-agent", "review-queue", "idle-implementer", "idle-master", "person-unanswered", "redis-version"} {
 		d, ok := health.ByID(id)
 		if !ok {
 			t.Fatalf("no definition %s", id)
@@ -235,7 +235,7 @@ func TestHealthLoopCallsStallWakeAfterTheStallChecks(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if called["clear-stall"] != "wake-holder" || called["quiet-agent"] != "wake-holder" || called["review-queue"] != "wake-holder" ||
-		called["idle-implementer"] != "wake-holder" || called["idle-master"] != "wake-holder" || len(called) != 5 {
+		called["idle-implementer"] != "wake-holder" || called["idle-master"] != "wake-holder" || called["person-unanswered"] != "wake-holder" || len(called) != 6 {
 		t.Fatalf("StallWake calls %v", called)
 	}
 }

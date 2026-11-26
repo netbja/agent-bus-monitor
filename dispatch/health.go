@@ -177,7 +177,7 @@ func (l *loop) healthLoop(ctx context.Context) error {
 						l.logError("", "health "+check.Definition.ID+" notice", err)
 					}
 				}
-				if id := check.Definition.ID; cfg.StallWake != nil && (id == "clear-stall" || id == "quiet-agent" || id == "review-queue" || id == "idle-implementer" || id == "idle-master" || id == "plan-drift") {
+				if id := check.Definition.ID; cfg.StallWake != nil && (id == "clear-stall" || id == "quiet-agent" || id == "review-queue" || id == "idle-implementer" || id == "idle-master" || id == "plan-drift" || id == "person-unanswered") {
 					hctx, hcancel := context.WithTimeout(passCtx, 2*time.Second)
 					err := cfg.StallWake(hctx, l.token, id)
 					hcancel()
