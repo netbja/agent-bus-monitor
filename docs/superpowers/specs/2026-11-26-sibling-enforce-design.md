@@ -1,6 +1,6 @@
 # Sibling steps run in series, enforced on the board
 
-Status: spec r1, for review (subject `sibling-enforce-spec`). Not built. Base: origin/dev `d3bc5568`.
+Status: spec r2, for review (subject `sibling-enforce-spec`; r2, foureyes' reject of r1: a step the merge pass never judges stayed open for ever. The open step is now judged by `request review` itself with the dispatcher's `Delivered` test, and an abandoned step is closed by the sender or the person). Not built. Base: origin/dev `d3bc5568`.
 Author: architect, from the merge-conflicts measure run early on 2026-11-26 (thread
 `1795676948573-0`, asked by claude-ao for the person) and the person's typed answer to ask
 `1795677070804-0` Q1: enforce it now, with a `parallel` exception for steps that share no file
@@ -50,36 +50,63 @@ merge pass's sight (it reads `review` only), so 2b's merge never stepped it.
 
 ## 3. The rule in code
 
-**One open step per request.** A request has an open step when `review_more` is true and
-`branch` is set, in any state but `done`. The step stays open until the merge pass records its
-merge.
+**One open step per request.** A request has an **open step** S when `review_more` is true and
+`branch` is set, in any state but `done`. That is all the board records. Whether S is merged is
+not read from the board: it is judged when the rule is applied (rule 1), so no pass the
+dispatcher does or skips can leave S open for ever (r2, foureyes: the merge pass skips a step
+with no `review_base`, a tip ahead of the recorded commit, or a re-review whose base already
+holds the head, `closeonmerge.go:81-115`).
 
-1. **`request review` refuses a second step.** In the transition script's `review` branch: if
-   the request has an open step on branch S, the new review names a branch B ≠ S, and the
-   request is not `parallel`, refuse. While a step is open, `--branch` is required: a review
-   without it is refused (`a step is open on S: name the branch, --branch S`). Today the script
-   keeps the old branch when none is given (`bus/requests.go:468`), and the CLI records the
-   checkout's HEAD as the commit (`cmd/agentbus/requests.go:93-101`). A new step reviewed
-   without `--branch` would then pass as S.
-   Refusal text (one `redis.error_reply`, listed for `TestEveryScriptRefusalIsListed`):
+1. **`request review` judges the open step itself, then refuses a second one.** When the review
+   names a branch C, the request has an open step S ≠ C, and the request is not `parallel`, the
+   CLI (in the agent's checkout, where it already runs git for `reviewFacts`,
+   `cmd/agentbus/requests.go:93-101`) fetches the project base and asks whether S is delivered.
+   It uses the dispatcher's own test, `mergequeue.Delivery.Delivered` (`mergequeue/delivered.go:76`:
+   ancestor or same tree, squash patch-id, rebase patch-ids). It asks for two heads: S's recorded
+   `commit` and S's remote tip if the branch still exists. Either one delivered means S is merged.
+   That covers a tip pushed after the review and a branch deleted after its merge.
+   - **S delivered:** the CLI passes `step_merged = S, head, base tip` with the review. The
+     script, in the same call, checks the request still has open step S with the `review_n` the
+     CLI read. It appends the head to `merged_steps` (as `requestMergedScript` does) and writes
+     one audit line (`action=step-merged`, by the agent, with head and base tip). Then it
+     records C's review as today. The board changes only if S is still the open step.
+   - **S not delivered:** refused. One `redis.error_reply`, listed for
+     `TestEveryScriptRefusalIsListed`:
+     `step S of <task> is not merged yet: sibling steps run in series (merge-conflicts §3); take
+     another task, or ask <from> for agentbus request parallel <task>`
+   - **No base to judge against** (the project has no delivery base: the CLI already records
+     nothing and refuses nothing then, `requests.go:95-97`) or a failed git read: refused with
+     the git error. Nothing is written. A base nobody chose leaves no open step (`review_base`
+     is not recorded), and the rule does not apply.
+   - **`--branch` is required while a step is open.** Today the script keeps the old branch
+     when none is given (`bus/requests.go:468`) and the CLI records the checkout's HEAD as the
+     commit. A new step reviewed without `--branch` would then pass as S. Refusal:
+     `a step is open on S: name the branch (--branch S for S itself)`.
+   - A review of S itself (a fix after a reject, a rebase) passes, as today. A review without
+     `--more` on a new branch while S is open is judged the same way: the last step still
+     follows the one before it.
 
-   `step S of <task> is not merged yet: sibling steps run in series (merge-conflicts §3); take
-   another task, or ask <from> for agentbus request parallel <task>`
+   The judgement runs in the agent's process: the bus cannot run git, and the dispatcher never
+   runs repository code. The CLI is the honest path, not a boundary. The audit line names the
+   head and the base tip it used, and the 2026-12-05 count reads them back.
 
-   A review of the same branch S (a fix after a reject, a rebase) passes, as today. A review
-   with no `--more` on a new branch while S is open is refused the same way: the last step
-   still follows the one before it.
-2. **The merge pass also sees a resumed step.** `closeOnMerge` judges a request in `review`
-   *or* `accepted` with `review_more` and a branch and a `review_base`. `requestMergedScript`
-   accepts the same two states. On an `accepted` request it does what it does for a step today,
-   except that the state stays `accepted` (it is already there). The `review_n` fence is
-   unchanged: a newer review voids the pass's read. This is what lets the rule lift by itself.
-   Without it, a resumed step would stay "open" forever and every later step would be refused.
-   It also clears today's stale `resource-limits-build` row at the first pass after the build
-   (2b #812 is in `dev`).
-3. **`request accept` is unchanged.** A resume stays allowed: the agent may fix its step, and
-   may work on anything else meanwhile. Coding the next step locally is not refused (nothing
-   can see it). Putting it in review is. The reviewers, and `deliver`, start from that review.
+2. **An abandoned step is closed by the sender or the person.** A step whose PR is closed
+   unmerged would stay open. `agentbus request step <task> --abandon <reason...>`, by the
+   request's sender (`from`) or the person (`--as <person>`), never the target, clears the open
+   step (`branch`, `commit`, `review_more`, `review_base`). It appends
+   `{branch, head, reason, by, at}` to `abandoned_steps`. State: a request in `review` goes back
+   to `accepted`, otherwise unchanged. One audit line (`action=step-abandoned`). The target asks
+   master for it. This is rare: in the window, the steps closed unmerged were redeliveries of
+   the same step, which keep the same open step.
+
+3. **`request accept` is unchanged.** A resume stays allowed. The agent may fix its step and
+   work on anything else meanwhile. Coding the next step locally is not refused (nothing can
+   see it). Putting it in review is. The reviewers and `deliver` start from that review.
+
+4. **The merge pass is unchanged.** It still steps a request in `review` (board-drift §3.4).
+   Rule 1 no longer depends on it. A resumed step that the pass never saw is judged at the next
+   review, so today's stale `resource-limits-build` row (accepted, `review_more` on
+   `reslimits-2b`, merged as #812) passes at coder2's next step review.
 
 **The `parallel` exception (the person's Q1).** `agentbus request parallel <task> <reason...>`
 sets `request.parallel = {by, reason, at}` (`at` from Redis `TIME`). `request parallel <task>
@@ -88,8 +115,8 @@ sets `request.parallel = {by, reason, at}` (`at` from Redis `TIME`). `request pa
 lift its own rule. A `done` request is refused. One script on the board, as `requestPrioritySrc`
 (`bus/priority.go:120`). It writes no stream entry and one audit line (`action=parallel`). While
 it is set, rule 1 does not apply to that request. Several steps may then be open, and the
-request records only the newest branch, as today. Rule 2's merge pass then steps on whichever
-branch is recorded. The others close by `request done` or by master, as today.
+request records only the newest branch, as today. When `parallel` is cleared, the newest one is
+the open step that rule 1 judges.
 
 The reason is mandatory and one line (≤ 200 runes). Master sets it only after the check the
 master skill already gives (`git diff --no-renames --name-only origin/<base>...origin/<branch>`
@@ -119,37 +146,47 @@ per step, no file in common). busmon's Board row and the Plan view's task row (t
 
 ## 6. Build: one step, one PR
 
-`bus/requests.go` (rule 1 in the transition script, its refusal listed), `bus/requestmerged.go`
-and `internal/dispatchsvc/closeonmerge.go` (rule 2), `bus/parallel.go` (new script and
-`SetRequestParallel`), `cmd/agentbus/requests.go` (`parallel` subcommand and help),
+`bus/requests.go` (rule 1's script part: the `step_merged` close, the two refusals, listed),
+`cmd/agentbus/requests.go` (rule 1's judgement with `mergequeue.Delivery`, the `parallel` and
+`step --abandon` subcommands and help), `bus/parallel.go` (the `parallel` and abandon scripts),
 busmon's board row and the plan row (one label), the two skills, and one operator-note fragment
-`docs/operator-notes.d/sibling-enforce.md`. No setting: the rule has no off switch beyond
-`parallel`, by the person's answer.
+`docs/operator-notes.d/sibling-enforce.md`. `requestmerged.go` and `closeonmerge.go` are not
+touched. No setting: the rule has no off switch beyond `parallel`, by the person's answer.
 
 ## 7. Tests
 
-On the disposable broker (`AGENTBUS_TEST_REDIS_URL`):
+On the disposable broker (`AGENTBUS_TEST_REDIS_URL`), with a scratch git repository as the base
+(the `reviewFacts` tests' pattern):
 
-- Review B with `--more`, then resume and review C → refused, text names B and the sender.
-  Review B again after a resume → passes. With `parallel` set → C passes. After `--off` →
-  refused again.
-- Without `--more`: review B `--more`, resume, review C (last step) → refused. Review with no
-  `--branch` while B is open → refused; with `--branch B` → passes.
-- Merge pass: B merged while the request is `accepted` (resumed) → `merged_steps` gets B's
-  head, `branch` and `review_more` cleared, state still `accepted`. Then review C passes. In
-  `review` → as today. A newer `review_n` than read → nothing written.
-- `request parallel` by the target → refused. By the sender → set, audit line written. By the
-  person (`--as`) → set. On a `done` request → refused. Missing reason → refused.
-- Mutants, each must fail a test: drop the B ≠ S check (a fix review is refused); drop the
-  `accepted` state from the merge pass (the step stays open); let the target set `parallel`.
+- Review B `--more`, resume, review C while B is not in the base → refused, text names B and
+  the sender. Review B again → passes.
+- B squash-merged into the base, then review C → passes: `merged_steps` holds B's head, one
+  `step-merged` audit line, C recorded. The same after B's branch is deleted (recorded commit
+  judged). The same when B's tip was pushed after its review (the tip judged). The same when
+  the request is `accepted` (resumed) or in `review`.
+- foureyes' r1 paths, each judged at review: no `review_base` (no base: nothing open), a tip
+  ahead of the commit, a re-review after the merge whose `review_base` holds the head (the
+  pass skips it; rule 1 does not).
+- A `review_n` changed between the CLI's read and the script → refused, nothing written.
+- Review with no `--branch` while B is open → refused. With `--branch B` → passes.
+- `parallel` set → C passes without a judgement. `--off` → C's next review judged again.
+- `request step --abandon`: by the target → refused. By the sender → open step cleared,
+  `abandoned_steps` and audit written, `review` → `accepted`. By the person (`--as`) → same.
+  Missing reason → refused.
+- `request parallel`: by the target → refused. By the sender, or the person → set, audit line
+  written. On a `done` request → refused. Missing reason → refused.
+- Mutants, each must fail a test: drop the S ≠ C check (a fix review is refused); judge only the
+  recorded commit (the tip-ahead case is refused); skip the `review_n` check; let the target set
+  `parallel` or abandon.
 - `TestNoStructWriterOfTheBoard` and `TestEveryScriptRefusalIsListed` still pass.
 
 ## 8. Decisions this touches
 
 - merge-conflicts §3 (2026-11-20): its enforcement shape for sibling steps moves from
   `plan.Validate` to the board, for the reason in §1. The rule itself is unchanged.
-- board-drift §3.3-§3.4 (close on merge): extended to a resumed `--more` step (§3 rule 2). No
-  new writer: the dispatcher's fenced script remains the only one.
+- board-drift §3.3-§3.4 (close on merge): unchanged. Rule 1 closes a merged step itself, at
+  the next review, through the same board script that records it. It is an agent's own
+  transition, not an automated write, so no fencing is involved.
 - wip-limit §3.2-§3.3: a resume is still never refused. A request in `review` is still not
   counted. Unchanged.
 - The person's Q1 (2026-11-26) named `plan.Validate` in the recommendation they accepted. §1
