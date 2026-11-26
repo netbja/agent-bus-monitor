@@ -144,16 +144,17 @@ func positiveTimeout(args []string) bool {
 	return false
 }
 
-// Every go test the skills, the Redis test guide and CLAUDE.md tell an agent
-// to run goes through agentbus run --cap with its own -timeout (§6, How
-// agents run tests): a runaway suite took 56 GB on 2026-11-25.
+// Every go test the skills, the Redis test guide, CLAUDE.md and the shared
+// memory's protocol tell an agent to run goes through agentbus run --cap
+// with its own -timeout (§6, How agents run tests): a runaway suite took 56 GB on 2026-11-25.
 func TestSkillGoTestLinesAreCapped(t *testing.T) {
 	root := filepath.Join("..", "..")
 	skills, err := filepath.Glob(filepath.Join(root, "skills", "*", "SKILL.md"))
 	if err != nil || len(skills) == 0 {
 		t.Fatalf("no skills: %v", err)
 	}
-	files := map[string]bool{filepath.Join(root, "docs", "testing-redis.md"): false, filepath.Join(root, "CLAUDE.md"): false}
+	files := map[string]bool{filepath.Join(root, "docs", "testing-redis.md"): false, filepath.Join(root, "CLAUDE.md"): false,
+		filepath.Join(root, "docs", "memory", "PROTOCOL.md"): false}
 	for _, s := range skills {
 		files[s] = true
 	}
@@ -203,6 +204,7 @@ func TestGoTestCommandsScan(t *testing.T) {
 		"agentbus run --cap -- go test ./... -timeout -1m":                              false,
 		"agentbus run --cap -- go test ./... -timeout x":                                false,
 		"agentbus run --cap -- go test ./... -timeout":                                  false,
+		"agentbus run --cap -- go test ./x # -timeout 5m":                               false, // a comment's -timeout is no flag (foureyes, 2b)
 		"agentbus run --cap -- go test ./... -timeout=25m":                              true,
 		"agentbus run --cap -- go test ./... -timeout 25m; go vet ./...":                true,
 		"go build ./... && agentbus run --cap -- go test ./... -timeout 25m":            true,

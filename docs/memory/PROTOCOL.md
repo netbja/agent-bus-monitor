@@ -77,7 +77,7 @@ Run from the repository root before sharing a memory change:
 
 ```sh
 agentbus mem check            # or: go run ./cmd/agentbus mem check
-go test ./memory/ -count=1    # the checker's own regressions
+agentbus run --cap -- go test ./memory/ -count=1 -timeout 5m   # the checker's own regressions
 ```
 
 `agentbus mem new <lesson|decision|question> <slug> --title "…"` starts a note: it
