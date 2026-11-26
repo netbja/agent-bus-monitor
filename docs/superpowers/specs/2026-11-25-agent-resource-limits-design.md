@@ -538,7 +538,7 @@ Restart=no
   (or `scope`, `soft: <reason>`, `user, linger off`). With `--publish`, busmon's Health page
   shows it.
 
-### 12.7 Questions for the person (one ask, in French)
+### 12.7 Questions for the person (ask `1795735397184-0`, in French)
 
 1. **Unit instance per terminal** (`<project>.<role>.<term>`), not per role: a relaunch has two
    terminals of one role for a moment, and two projects share role names. Recommended: per
