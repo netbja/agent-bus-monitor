@@ -1,6 +1,8 @@
 # The concierge: one conversation across every project (concierge)
 
-Status: spec r2, for review (subject `concierge-spec`; r2, foureyes and reviewer-codex: busmon,
+Status: spec r3, for review (subject `concierge-spec`; r3: a Redis entry does not record its
+writer's ACL user, so `typed_ref` must point into `{concierge}:person`, a stream only the busmon
+user can write; r2, foureyes and reviewer-codex: busmon,
 not the concierge, sends a pressed action, and the concierge writes nothing outside its project
 (§5.3); go-gui's release date added; the person's answers Q1–Q3 folded in). Not built. Base: origin/dev `93727f7b`. Author: architect, from the person's typed yes relayed by master (cmd
 `1795735958552-0`, task `concierge-spec`; idea `i3`). It builds on
@@ -159,12 +161,17 @@ What busmon sends depends on whose words it is (the person, Q3):
 
 | The text is | busmon sends to `<project>`'s master | Marked |
 |---|---|---|
-| **The person's own typed words** (a line they typed in the window, quoted unchanged) | A directive through `bus.TypedCmd`, from the person, with `typed=yes` and `typed_ref=concierge:<id>`: the broker id of the person's typed entry on the concierge's bus | `typed=yes` |
+| **The person's own typed words** (a line they typed in the window, quoted unchanged) | A directive through `bus.TypedCmd`, from the person, with `typed=yes` and `typed_ref=<id>`: the id of the person's entry in the **person stream** (below) | `typed=yes` |
 | **The concierge's draft**, accepted by the press | A directive from the person with `human=yes` and `draft_by=concierge`, never `typed=yes` | `human=yes`, a draft |
 
+**The person stream.** Every line the person types in the window is written by busmon to one
+stream, `{concierge}:person`, as well as to the conversation. The broker ACL grants write on
+that key to the `busmon` user only. The concierge user's own-project write pattern excludes it
+by name. So no agent can append to it.
+
 **Master's check of `typed_ref`** (in master's skill, and in `agentbus` as one call master runs):
-- The referenced entry is on the `concierge` project's stream, written by busmon for the person
-  (`typed=yes`, sender the person's identity).
+- The referenced id is an entry of `{concierge}:person`. A Redis entry does not record the ACL
+  user that wrote it, so the key's write rule is the proof, not any field in the entry (r3).
 - Its text equals the directive's text byte for byte.
 - It is under one hour old.
 - It has not been used before. Master records each one it accepts in its own project's
@@ -173,11 +180,14 @@ What busmon sends depends on whose words it is (the person, Q3):
 Each condition that fails demotes the directive to a draft (`human=yes`), and master treats it
 as one.
 
-**Why this holds:** only busmon and the person's own CLI connect as the `busmon` ACL user, and
-only that user's commands call `bus.TypedCmd`. The concierge connects as its own ACL user, with
-no write outside its project. It cannot create a directive in another project at all. A
-`typed=yes` field it writes on its own stream proves nothing: the busmon-written entry is the
-one master checks, found by sender and ACL user, not by the field alone.
+**Why this holds:**
+- Only busmon and the person's own CLI connect as the `busmon` ACL user.
+- The concierge connects as its own ACL user. It has no write outside its project, and none on
+  `{concierge}:person`.
+- So it cannot create a directive in another project, and it cannot create the entry a
+  `typed_ref` must point to.
+- A `typed=yes` field it writes anywhere else proves nothing. Master checks only entries of the
+  person stream.
 
 **Every relay is audited:** busmon writes one audit line per sent action (`action=relay`, the
 target project, the entry id, `typed` or `draft`). The concierge's own answers are not acts and
@@ -204,7 +214,7 @@ is chosen then, from §3's re-check, on the person's yes.
    source-citing rule, §5.3's limits), the host project `concierge`, and its ACL user (observer reads,
    its own project's writes only).
    Tests: the ACL inventory test refuses the concierge user every write outside its project,
-   the `cmd` stream of another project included.
+   the `cmd` stream of another project included, and any write to `{concierge}:person`.
 2. **busmon's window:** the `` ` `` overlay, the conversation view, send, history, the hidden-answer
    dot. Goldens at 60x20, 80x24, 140x40.
 3. **Context chips and sources:** `tab` attaches the selection; sources open their pages.
@@ -214,7 +224,7 @@ is chosen then, from §3's re-check, on the person's yes.
    - Tests:
      - typed words relayed are `typed=yes`, and a draft is `human=yes` with `draft_by`;
      - master demotes a reference with a changed byte, one older than an hour, one used a second
-       time, and one whose entry the concierge user wrote;
+       time, and one that points outside `{concierge}:person` (an entry the concierge wrote on its own stream with `typed=yes`);
      - every relay leaves one audit line.
 5. **`mem search`** (person-memory layer 2), when step 1's concierge needs it.
 
