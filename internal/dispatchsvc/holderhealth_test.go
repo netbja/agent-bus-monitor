@@ -88,7 +88,7 @@ func TestHolderEvidence(t *testing.T) {
 	if got := health.EvaluateHolderLeftovers(e); got.Status != health.Warn || !strings.Contains(got.Detail, "v0") || strings.Contains(got.Detail, "v1") {
 		t.Errorf("leftovers %+v", got)
 	}
-	if got := health.EvaluateHolderDraining(e); got.Status != health.Warn || !strings.Contains(got.Detail, "v2") {
+	if got := health.EvaluateHolderDraining(e, 48*time.Hour, nil, "demo"); got.Status != health.Warn || !strings.Contains(got.Detail, "v2") {
 		t.Errorf("draining %+v", got)
 	}
 
@@ -197,5 +197,45 @@ func TestHolderMemoryCheck(t *testing.T) {
 	unread, pass = false, 2
 	if out, _ := run(context.Background()); out.Status != health.Warn || !strings.Contains(out.Detail, "OOM kill") {
 		t.Fatalf("rise across a pass without a memory read: %+v", out)
+	}
+}
+
+// The agents each holder build holds, from their snapshots' panes, sorted;
+// a done agent and a pane of no holder are not counted (§3.2's names).
+func TestHeldByBuild(t *testing.T) {
+	k1, k2 := service.BuildKey("v1"), service.BuildKey("v2")
+	got := heldByBuild(map[string]bus.AgentSnapshot{
+		"foureyes": {Pane: k1 + "/t2"}, "coder": {Pane: k1 + "/t1"}, "master": {Pane: k2 + "/t1"},
+		"pop": {Pane: k1 + "/t3", State: "done"}, "old": {Pane: "%12"},
+	})
+	if len(got) != 2 || strings.Join(got[k1], ",") != "coder,foureyes" || strings.Join(got[k2], ",") != "master" {
+		t.Fatalf("%v", got)
+	}
+}
+
+// holder-draining's pass reads the agents and limits.holder_drain_stale_after
+// each time; unreadable agents leave the fail's names unknown.
+func TestHolderDrainingCheck(t *testing.T) {
+	k1, k2 := service.BuildKey("v1"), service.BuildKey("v2")
+	now := func() (health.HolderEvidence, error) {
+		return health.HolderEvidence{Known: true, Builds: []health.HolderBuild{
+			{Key: k2, Raw: "v2", Current: true, Answers: true, Since: 7 * time.Hour},
+			{Key: k1, Raw: "v1", Answers: true, Terms: 1, Since: 30 * time.Hour}}}, nil
+	}
+	snaps := map[string]bus.AgentSnapshot{"coder": {Pane: k1 + "/t1"}}
+	var agentsErr error
+	agents := func(context.Context) (map[string]bus.AgentSnapshot, error) { return snaps, agentsErr }
+	stale := 6 * time.Hour
+	run := holderDrainingCheck("demo", agents, now, func() time.Duration { return stale })
+	if out, _ := run(context.Background()); out.Status != health.Fail || !strings.Contains(out.Detail, "holds coder: agentbus holder drain demo") {
+		t.Fatalf("stale: %+v", out)
+	}
+	stale = 8 * time.Hour
+	if out, _ := run(context.Background()); out.Status != health.Warn {
+		t.Fatalf("limit not re-read: %+v", out)
+	}
+	stale, agentsErr = 6*time.Hour, errors.New("x")
+	if out, _ := run(context.Background()); out.Status != health.Fail || !strings.Contains(out.Detail, "agents unknown") {
+		t.Fatalf("agents unreadable: %+v", out)
 	}
 }
