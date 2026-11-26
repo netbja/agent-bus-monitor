@@ -885,8 +885,8 @@ person decides each one. Until `agentbus promote` exists (the spec's step 4), by
 1. **The check, on a clean worktree at the `dev` head `S`** (`git worktree add <tmp> S`, never the
    team's checkout), with a disposable Redis started for it:
    `go build ./... && go vet ./... && GOOS=darwin go build ./...`;
-   `AGENTBUS_TEST_REDIS_URL=<disposable> go test ./... -count=1`;
-   `AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<disposable> go test ./cmd/agentbus -run '^TestRelease(EndToEnd|UpdateFromPrevious)$' -count=1 -v`,
+   `AGENTBUS_TEST_REDIS_URL=<disposable> agentbus run --cap -- go test ./... -count=1 -timeout 25m`;
+   `AGENTBUS_RELEASE_GATE=1 AGENTBUS_TEST_REDIS_URL=<disposable> agentbus run --cap -- go test ./cmd/agentbus -run '^TestRelease(EndToEnd|UpdateFromPrevious)$' -count=1 -v -timeout 15m`,
    whose output must hold both `--- PASS: TestReleaseEndToEnd` and `--- PASS: TestReleaseUpdateFromPrevious`
    (a SKIP or a missing line fails it; the second proves an update from the previous release still reads
    this tree's `roles.toml`);
