@@ -31,10 +31,21 @@ func TestPaletteRetro(t *testing.T) {
 		w.m.refresh()
 	}
 
-	// Named.
+	// Named: a tracked request busmon knows.
 	w := newPalCWorld(t, "charlie")
+	withTask(w)
 	w.run(t, "/retro fix-by-hand")
 	asked(t, w, "fix-by-hand")
+
+	// Named but unknown, or not tracked: agentbus would refuse it, so busmon does, before y.
+	for _, name := range []string{"no-such-task", "a-board-task"} {
+		w = newPalCWorld(t, "charlie")
+		w.m.snap.requests = append(w.m.snap.requests, request{Task: "a-board-task", From: "master", Target: "coder", State: "done"})
+		w.run(t, "/retro "+name)
+		if w.m.ui.sleepAsk != nil || len(w.runs) != 0 || !w.m.ui.flashErr || !strings.Contains(w.m.ui.flash, "not a tracked request") {
+			t.Fatalf("%s: ask %v runs %q flash %q", name, w.m.ui.sleepAsk, w.runs, w.m.ui.flash)
+		}
+	}
 
 	// The selected Requests row: the fixture's tracked request.
 	w = newPalCWorld(t, "charlie")

@@ -141,21 +141,25 @@ func (m *Model) palAgentbus(c *palCmd, args []string) tea.Cmd {
 
 // retroTask is /retro's task: the one named, else the tracked request the
 // person has selected (its Requests row or its page), whatever its state: a
-// retro follows a task.
+// retro follows a task. Either way it must be a tracked request busmon
+// knows: agentbus retro request refuses any other, so busmon refuses it
+// before y (reviewer-codex).
 func (m *Model) retroTask(args []string) ([]string, string) {
+	task := ""
 	if len(args) > 0 {
-		return args, ""
-	}
-	const why = "retro: name the task (/retro <task>), or select its request on Requests"
-	key, ok := m.selectedRequestKey()
-	task, isReq := strings.CutPrefix(key, "req:")
-	if !ok || !isReq {
-		return nil, why
+		task = args[0]
+	} else {
+		key, ok := m.selectedRequestKey()
+		t, isReq := strings.CutPrefix(key, "req:")
+		if !ok || !isReq {
+			return nil, "retro: name the task (/retro <task>), or select its request on Requests"
+		}
+		task = t
 	}
 	for _, r := range m.snap.requests {
 		if r.Task == task && r.Tracked {
 			return []string{task}, ""
 		}
 	}
-	return nil, why
+	return nil, "retro: " + task + " is not a tracked request (a retro follows one)"
 }
