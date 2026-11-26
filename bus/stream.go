@@ -297,6 +297,7 @@ type Event struct {
 	// also marks texts agentbus composes in the person's name.
 	Typed bool
 	Said  string // cmd: an ask answer's field said, the person's own words (the label chosen or the text)
+	QID   string // cmd: an ask answer's field qid, the question it answers (retro §5)
 	// Needs: field needs on a report and its notices, NeedsAnswer or
 	// NeedsRead: the sender says the person must act (triage-dedupe §3);
 	// "" for none, and for any other value read.
@@ -317,6 +318,7 @@ func ParseEntry(streamKey, id string, fields map[string]string) Event {
 	e.Human = fields["human"] == "yes"
 	e.Typed = fields["typed"] == "yes"
 	e.Said = fields["said"]
+	e.QID = fields["qid"]
 	e.For = fields["for"]
 	if n := fields["needs"]; ValidNeeds(n) {
 		e.Needs = n

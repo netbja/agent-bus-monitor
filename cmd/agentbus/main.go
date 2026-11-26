@@ -342,7 +342,7 @@ func main() {
 		os.Exit(code)
 
 	case "retro":
-		if err := runRetro(ctx, retroDeps{Bus: b, Self: self, Getenv: os.Getenv, Ancestor: agentcaller.Ancestor, Master: "master"}, rest, os.Stdout); err != nil {
+		if err := runRetro(ctx, retroDeps{Bus: b, Self: self, Getenv: os.Getenv, Ancestor: agentcaller.Ancestor, Master: "master", Plus: retroPlusFor(project, os.Getenv)}, rest, os.Stdout); err != nil {
 			die(err.Error())
 		}
 	case "request":

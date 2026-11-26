@@ -164,7 +164,7 @@ func (b *Bus) RecentEvents(ctx context.Context, n int64) ([]TermEvent, error) {
 var (
 	ResetKinds    = []string{"status", "report", "notify", "cmd", "events"}
 	SurvivesReset = []string{"agents", "usage", "budget", "verdicts", "pilot", "board", "dispatch", "conductor",
-		"missionops", "services", "pause", "quota", "asks", "ideas", "resume", "audit"}
+		"missionops", "services", "pause", "quota", "asks", "ideas", "retros", "resume", "audit"}
 )
 
 // ErrConfigRefused: the broker answered CONFIG GET with an error reply of its

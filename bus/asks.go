@@ -302,7 +302,8 @@ return {id, state}`)
 // askAnswer: KEYS asks, cmd. ARGV maxlen, id, qid, answer JSON (no at),
 // by, agent, reply text, retention ms, reply target, wake ("no" or ""),
 // said (the answer alone, the person's words: the reply also carries
-// typed=yes, person-memory §4.3.1).
+// typed=yes, person-memory §4.3.1). The reply names its question, qid
+// (retro §5: a yes is bound to the question it answers).
 // Returns {id, remaining, reply id}.
 var askAnswer = redis.NewScript(sweepLua + `
 local now = nowms()
@@ -324,7 +325,7 @@ redis.call('HSET', KEYS[1], id .. '|a|' .. qid, cjson.encode(a))
 local left = remaining(KEYS[1], id)
 local text = ARGV[7]
 if left > 0 then text = text .. ' (' .. left .. ' question(s) still open)' end
-local fields = {'from', ARGV[5], 'target', ARGV[9], 'type', 'reply', 'ref', id, 'command', text, 'human', 'yes', 'typed', 'yes', 'said', ARGV[11], 'text_complete', 'yes'}
+local fields = {'from', ARGV[5], 'target', ARGV[9], 'type', 'reply', 'ref', id, 'command', text, 'human', 'yes', 'typed', 'yes', 'said', ARGV[11], 'qid', qid, 'text_complete', 'yes'}
 if ARGV[10] == 'no' then table.insert(fields, 'wake'); table.insert(fields, 'no') end
 local reply = redis.call('XADD', KEYS[2], 'MAXLEN', '~', ARGV[1], '*', unpack(fields))
 if left == 0 then
@@ -373,6 +374,9 @@ if left == 0 then
 end
 return left`)
 
+// askOpenWhy is ASK_OPEN's words: the author's one slot is taken.
+const askOpenWhy = "this agent already has an open ask (replace it with --replace)"
+
 // ErrAskRefused wraps a refusal from an ask script (already answered,
 // replaced, another ask open, …); the message says which.
 var ErrAskRefused = errors.New("ask refused")
@@ -384,7 +388,7 @@ func askErr(err error) error {
 	msg := err.Error()
 	if i := strings.Index(msg, "ASK_"); i >= 0 {
 		why := map[string]string{
-			"ASK_OPEN":        "this agent already has an open ask (replace it with --replace)",
+			"ASK_OPEN":        askOpenWhy,
 			"ASK_NOT_OPEN":    "the ask to replace or withdraw is not this agent's open ask",
 			"ASK_REPLACED":    "the ask was replaced and this question changed",
 			"ASK_GONE":        "no such ask",
@@ -501,8 +505,11 @@ func (b *Bus) Answer(ctx context.Context, askID, qid, by, choice, text string) (
 	}
 	raw, _ := json.Marshal(a)
 	target, wake := def.From, ""
-	if def.From == SystemSender { // agentbus's own ask: nobody to wake
+	switch def.From {
+	case SystemSender: // agentbus's own ask: nobody to wake
 		target, wake = PeopleTarget, "no"
+	case RetroSender: // a retro's answers go to master, woken, who routes it (retro §4, §6)
+		target = RetroAnswerTo
 	}
 	res, err := askAnswer.Run(ctx, b.r, []string{AsksKey(b.project), StreamKey(b.project, "cmd")},
 		streamMaxLen, askID, qid, string(raw), by, def.From, reply, askRetention.Milliseconds(), target, wake, a.Value()).Slice()

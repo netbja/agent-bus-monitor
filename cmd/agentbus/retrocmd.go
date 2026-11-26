@@ -32,11 +32,18 @@ type retroDeps struct {
 	Getenv   func(string) string
 	Ancestor func(context.Context) (string, error)
 	Master   string
+	Plus     retroPlusDeps // step 2's verbs (retropropose.go)
 }
 
-const retroUsage = "usage: retro request <task> | retro evidence <task> | retro none <task> <root cause...>"
+const retroUsage = "usage: retro request <task> | retro evidence <task> | retro none <task> <root cause...> | retro propose <task> --file <retro.md> | " +
+	"retro show <task> | retro rejected [--file <f>] | retro route <task> | retro withdraw <task> | retro close <task> --pr <n>"
 
 func runRetro(ctx context.Context, d retroDeps, args []string, stdout io.Writer) error {
+	if len(args) >= 1 {
+		if ok, err := runRetroPlus(ctx, d, d.Plus, args[0], args[1:], stdout); ok {
+			return err
+		}
+	}
 	if len(args) < 2 {
 		return errors.New(retroUsage)
 	}

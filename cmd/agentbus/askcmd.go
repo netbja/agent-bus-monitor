@@ -37,7 +37,7 @@ func runAsk(ctx context.Context, b *bus.Bus, args []string, stdin io.Reader, get
 		return 2
 	}
 	agent := args[0]
-	if agent == bus.SystemSender { // agentbus's own asks (the trust reminders) are not an agent's to ask or close (reviewer-codex)
+	if agent == bus.SystemSender || agent == bus.RetroSender { // agentbus's own asks (the trust reminders, a retro's) are not an agent's to ask or close (reviewer-codex, retro §4)
 		fmt.Fprintf(errw, "ask: %q is reserved for agentbus's own asks\n", agent)
 		return 2
 	}
