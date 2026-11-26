@@ -63,6 +63,8 @@ func helpText() []Line {
 	row("updated", "bar and age of that declaration: the bar empties over 10 minutes.")
 	more("It measures freshness, not liveness - the bus has no heartbeat.")
 	row("ctx", "the agent's own context, in raw tokens. Never a percentage.")
+	row("mem cpu", "its terminal's processes: resident memory and CPU (180% is 1.8 cores),")
+	more("as the dispatcher last saw them. Wide screens only; the detail names the largest.")
 	row("sort", "attention first: escalated, gated or blocked; then queued or being woken;")
 	more("then working, idle, other states, done, no state declared. Names inside each.")
 	blank()

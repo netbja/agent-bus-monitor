@@ -567,6 +567,10 @@ type agentState struct {
 	bgTasks        *bus.BgTasks        // what its hooks said of its background tasks ({p}:bgtasks, background-work-visible step 3), nil when none
 	obsBgProcs     int                 // the observation's active non-helper descendants (bg_procs)
 	obsBgOldest    time.Time           // the oldest one's first sight by the dispatcher (bg_oldest); zero = none
+	obsMem         int64               // the observation's mem_bytes: its terminal tree's resident memory (agent-resource-limits §5); 0 none
+	obsTopMem      int64               // top_bytes: the tree's largest process's; 0 none
+	obsTopPID      int                 // top_pid: that process's pid (its name is read locally only); 0 none
+	obsCPU         *int                // cpu_pct: the tree's CPU over the dispatcher's window, % of one core; nil unknown
 	registered     bool                // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider       string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
 	client         string              // its client (claude, codex, kimi…), from the launcher

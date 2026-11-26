@@ -111,6 +111,9 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 	default:
 		row("Observed", text("not running a turn "+GlyphNone+" "+ago(a.obsAt)))
 	}
+	if u := usageText(a, now); u != "" {
+		rowWrap("Resources", RoleText, u)
+	}
 	if h := a.host; h.blocked {
 		why := "its client's prompt"
 		if h.blockedWhy != "" {

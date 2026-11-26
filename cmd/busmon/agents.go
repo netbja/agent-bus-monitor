@@ -385,12 +385,12 @@ func updatedCell(a *agentState, tier Tier, now time.Time) []Seg {
 
 // agentCols are the column widths per tier (trailing gap included); the
 // message takes the rest.
-type agentCols struct{ glyph, icon, name, state, updated, queue, ctx, flags int }
+type agentCols struct{ glyph, icon, name, state, updated, queue, ctx, mem, cpu, flags int }
 
 func agentColsFor(tier Tier) agentCols {
 	switch tier {
 	case TierWide:
-		return agentCols{glyph: 2, name: 10, state: 10, updated: 20, queue: 9, ctx: 10, flags: 20}
+		return agentCols{glyph: 2, name: 10, state: 10, updated: 20, queue: 9, ctx: 10, mem: 6, cpu: 6, flags: 20}
 	case TierMedium:
 		return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4, flags: 12}
 	}
@@ -413,6 +413,7 @@ func agentColsFit(icons string, tier Tier, width int) (agentCols, Tier) {
 	}
 	if tier == TierWide && width < wideBarRow {
 		c.updated = 8              // "updated" and its gap
+		c.mem, c.cpu = 0, 0        // mem and cpu only on a full wide row: the message keeps its room
 		if width < wideBarRow-35 { // narrower still: the queue and flags take their medium widths
 			c.queue, c.flags = 6, 12
 		}
@@ -477,8 +478,11 @@ func agentHeader(icons string, tier Tier, width int) Line {
 		l = append(l, col("", c.icon, RoleDim))
 	}
 	l = append(l, col("agent", c.name, RoleDim), col("state", c.state, RoleDim),
-		col("updated", c.updated, RoleDim), col("queue", c.queue, RoleDim), col("ctx", c.ctx, RoleDim),
-		col("flags", c.flags, RoleDim), Seg{Text: "message", Role: RoleDim})
+		col("updated", c.updated, RoleDim), col("queue", c.queue, RoleDim), col("ctx", c.ctx, RoleDim))
+	if c.mem > 0 {
+		l = append(l, col("mem", c.mem, RoleDim), col("cpu", c.cpu, RoleDim))
+	}
+	l = append(l, col("flags", c.flags, RoleDim), Seg{Text: "message", Role: RoleDim})
 	return FitLine(l, width)
 }
 
@@ -503,6 +507,10 @@ func agentRow(icons, name string, a *agentState, pilot bool, tier Tier, width in
 	l = append(l, cell([]Seg{queueCell(a, tier)}, c.queue)...)
 	if c.ctx > 0 {
 		l = append(l, cell(ctxCell(a), c.ctx)...)
+	}
+	if c.mem > 0 {
+		l = append(l, cell(memCell(a, now), c.mem)...)
+		l = append(l, cell(cpuCell(a, now), c.cpu)...)
 	}
 	keep := 1
 	if tier == TierWide {
