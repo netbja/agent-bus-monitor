@@ -164,6 +164,10 @@ presence is what `agentbus dispatch --status` and busmon's `dispatch up/down` re
 `at` from Redis `TIME`, tries, pid, escalated, gap flag; two colons, so it cannot forge a project),
 `{p}:ideas` (Redis hash: the project's ideas — `seq`, `<id>` definition, `<id>|s` state, `<id>|log` capped
 audit; written only by `bus/ideas.go`'s scripts; in `projectKinds`, survives `--reset`; operator notes, Ideas),
+`{p}:retros` (retro step 2, Redis hash: `<task>` → a filed retro's JSON record — root cause, 1-3 rows with each target's
+blob id at propose, state queued/open/routed/closed, its ask id, the outcomes at route, the PR — and `rej|<file>|<lesson>`
+→ `<task>#<n>`, the rejected list; written by `bus/retros.go` (the store script checks the cap and the rejected list);
+a retro's ask is from the reserved author `retro`, its answers to master; in `projectKinds`, survives `--reset`),
 `{p}:pause` (v0.12.5, a JSON string: until in Unix ms from Redis `TIME`, reason, by, notify; absent = not
 paused; in `projectKinds`), `{p}:services` (v0.12, Redis hash: the `installed` marker `agentbus up` writes, plus one JSON state per
 service kind — state, detail, `at` from Redis `TIME`, pid, host, last error, log path; in `projectKinds`).

@@ -37,7 +37,7 @@ func (m *Manifest) splitObservers() error {
 		if !namePattern.MatchString(role) {
 			return fmt.Errorf("invalid role name")
 		}
-		if role == bus.SystemSender {
+		if role == bus.SystemSender || role == bus.RetroSender {
 			return fmt.Errorf("role name %q is reserved: agentbus's own asks are sent under it", role)
 		}
 		if err := checkKeys(info, set("kind"), "observer role "+role+" (an observer is never launched: kind only)"); err != nil {

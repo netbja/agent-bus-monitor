@@ -150,7 +150,7 @@ func Load(path string) (*Manifest, error) {
 		if !namePattern.MatchString(role) {
 			return nil, fmt.Errorf("invalid role name")
 		}
-		if role == bus.SystemSender {
+		if role == bus.SystemSender || role == bus.RetroSender {
 			return nil, fmt.Errorf("role name %q is reserved: agentbus's own asks are sent under it", role)
 		}
 		info, ok := asTable(roles[role])
