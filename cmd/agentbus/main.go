@@ -369,10 +369,12 @@ func main() {
 
 	case "report":
 		id, err := sendReport(ctx, b, rest, os.Stderr)
+		if id != "" { // printed even when a step after the report failed: the report stands
+			fmt.Println(id) // the entry id, as cmd prints: what `handoff --report` takes
+		}
 		if err != nil {
 			die(err.Error())
 		}
-		fmt.Println(id) // the entry id, as cmd prints: what `handoff --report` takes
 
 	case "reports":
 		rest, asJSON := extractBool(rest, "--json")

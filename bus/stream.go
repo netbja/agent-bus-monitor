@@ -434,12 +434,15 @@ func (b *Bus) Status(ctx context.Context, agent, state, message string, who Agen
 // restore fidelity without flooding the flat viewers. Oversize/invalid UTF-8
 // is rejected before publishing; new retained text is exact, not sanitized.
 func (b *Bus) Report(ctx context.Context, agent, kind, message string) (string, error) {
-	return b.report(ctx, agent, kind, message, "", "")
+	return b.report(ctx, agent, kind, message, "", "", "")
 }
 
-func (b *Bus) report(ctx context.Context, agent, kind, message, to, needs string) (string, error) {
+func (b *Bus) report(ctx context.Context, agent, kind, message, to, needs, task string) (string, error) {
 	if !ValidName(agent) {
 		return "", fmt.Errorf("invalid agent %q", agent)
+	}
+	if task != "" && !ValidName(task) {
+		return "", fmt.Errorf("invalid task %q", task)
 	}
 	if !ValidNeeds(needs) {
 		return "", fmt.Errorf("needs %q: answer or read", needs)
@@ -457,6 +460,9 @@ func (b *Bus) report(ctx context.Context, agent, kind, message, to, needs string
 	}
 	if needs != "" {
 		values["needs"] = needs
+	}
+	if task != "" {
+		values["task"] = task
 	}
 	return b.addVoidingHandoff(ctx, "report", agent, values)
 }
@@ -483,12 +489,20 @@ func ValidNeeds(s string) bool { return s == "" || s == NeedsAnswer || s == Need
 // says the person must answer or read it; "" writes no field. Any other
 // value is refused before anything is written.
 func (b *Bus) ReportNeeds(ctx context.Context, agent, kind, message string, to []string, needs string) (string, error) {
+	return b.ReportTask(ctx, agent, kind, message, to, needs, "")
+}
+
+// ReportTask is ReportNeeds naming the tracked request it reports on
+// (report --task, board-drift §4), field task; "" writes no field. The
+// caller checks the request first (CheckReportTask) and notes it after
+// (NoteRequest), with the id this returns.
+func (b *Bus) ReportTask(ctx context.Context, agent, kind, message string, to []string, needs, task string) (string, error) {
 	for _, t := range to {
 		if !ValidName(t) {
 			return "", fmt.Errorf("invalid addressee %q", t)
 		}
 	}
-	return b.report(ctx, agent, kind, message, strings.Join(to, ","), needs)
+	return b.report(ctx, agent, kind, message, strings.Join(to, ","), needs, task)
 }
 
 // ReportNotice is the directive report --to sends one addressee, its ref

@@ -35,6 +35,7 @@ type request struct {
 	Expires   time.Time // zero = no deadline. NEVER defaulted to anything.
 	Accepted  time.Time // zero = the target has not explicitly accepted
 	Responded time.Time // zero = no explicit completion reply
+	Reported  time.Time // the last report naming it (report --task, board-drift §4), zero = none
 
 	Delivery          string // queued | uncertain | output_written | expired | missing | "" unknown
 	Availability      string // retained | missing | expired | "" unknown (derived read-side)
@@ -75,7 +76,7 @@ func boardRequests(m map[string]bus.BoardEntry) []request {
 			r.Tracked = true
 			r.ID, r.Thread, r.From, r.Target = q.ID, q.Thread, q.From, q.Target
 			r.Created, r.Expires = msTime(q.CreatedAt), msTime(q.ExpiresAt)
-			r.Accepted, r.Responded = msTime(q.AcceptedAt), msTime(q.RespondedAt)
+			r.Accepted, r.Responded, r.Reported = msTime(q.AcceptedAt), msTime(q.RespondedAt), msTime(q.ReportedAt)
 			r.Delivery, r.Availability = q.Delivery, q.Availability
 			r.Attempts, r.DuplicatePossible = q.Attempts, q.DuplicatePossible
 			r.BlockedReason, r.ResponseID = q.BlockedReason, q.ResponseID
