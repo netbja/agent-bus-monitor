@@ -390,7 +390,7 @@ type agentCols struct{ glyph, icon, name, state, updated, queue, ctx, mem, cpu, 
 func agentColsFor(tier Tier) agentCols {
 	switch tier {
 	case TierWide:
-		return agentCols{glyph: 2, name: 10, state: 10, updated: 20, queue: 9, ctx: 10, mem: 6, cpu: 6, flags: 20}
+		return agentCols{glyph: 2, name: 10, state: 10, updated: 20, queue: 9, ctx: 12, mem: 6, cpu: 6, flags: 20}
 	case TierMedium:
 		return agentCols{glyph: 2, name: 10, state: 9, updated: 5, queue: 4, flags: 12}
 	}
@@ -443,28 +443,42 @@ func knownFill(a *agentState) (pct, alert float64, ok bool) {
 	return a.ctxFill.Pct, a.ctxFill.AlertAt(ctxAlert), true
 }
 
-// ctxCell is the ctx column: the raw tokens and, when known, the fill in
-// percent, coloured for attention at the alert threshold. Unknown is no
-// percent, never 0.
+// ctxUrgent is dispatch.context_urgent (read once at start): the context
+// ramp turns red there.
+var ctxUrgent = 90.0 // set in main from the environment and config.toml
+
+// ctxBarW is the context fill's bar (tui-rendering §4.5).
+const ctxBarW = 6
+
+// ctxRamp is the context fill's ramp: amber from the alert threshold, red
+// from the urgent one; none with the alert off.
+func ctxRamp(alert float64) rampSpec {
+	if alert <= 0 {
+		return thresholdRamp(0, 0)
+	}
+	return thresholdRamp(alert, ctxUrgent)
+}
+
+// ctxPctRole is the fill's percent: plain text below the alert, then the
+// ramp's band (attention, error at the urgent threshold).
+func ctxPctRole(pct, alert float64) Role {
+	if r := ctxRamp(alert).role(pct); r != RoleGauge {
+		return r
+	}
+	return RoleText
+}
+
+// ctxCell is the ctx column: when the fill is known, a bar on the context
+// ramp and the fill in percent (tui-rendering §4.5); else the raw tokens.
+// Unknown is no percent, never 0.
 func ctxCell(a *agentState) []Seg {
-	var segs []Seg
-	if n, ok := parseCtx(a.ctxRaw); ok {
-		segs = append(segs, Seg{Text: formatTokens(n), Role: RoleText})
-	}
 	if pct, alert, ok := knownFill(a); ok {
-		role := RoleText
-		if alert > 0 && pct >= alert {
-			role = RoleAttention
-		}
-		if len(segs) > 0 {
-			segs = append(segs, Seg{Text: " "})
-		}
-		segs = append(segs, Seg{Text: fmt.Sprintf("%.0f%%", pct), Role: role})
+		return append(rampGauge(pct, ctxBarW, ctxRamp(alert), false), Seg{Text: " "}, Seg{Text: fmt.Sprintf("%.0f%%", pct), Role: ctxPctRole(pct, alert)})
 	}
-	if len(segs) == 0 {
-		return []Seg{{Text: GlyphDash, Role: RoleMuted}}
+	if n, ok := parseCtx(a.ctxRaw); ok {
+		return []Seg{{Text: formatTokens(n), Role: RoleText}}
 	}
-	return segs
+	return []Seg{{Text: GlyphDash, Role: RoleMuted}}
 }
 
 // agentHeader is the column header row, wide only.

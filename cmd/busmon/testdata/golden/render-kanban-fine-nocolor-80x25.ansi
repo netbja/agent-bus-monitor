@@ -1,0 +1,25 @@
+ [1magent-bus-monitor[m  ● bus ok  ● dispatch up  ● missions up  ♙4  ●2     15:04:05 
+ paused · resumes in 1h52 (lunch)  ♙ Charlie [human]  claude 5h 62% │ 7d 41%    
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie            [m
+╭─ For you ───────────────────────────────────────────────────────── 4 decide ─╮
+│  [1mProject paused[m · /resume                                                    │
+│  ● answer master    review lot 1? (2 questions)                            4m│
+│  ♙ answer foureyes  need a decision on the width rule                      6m│
+│  ♙ answer sentinel  blocked: waiting for an answer in its terminal         1m│
+│  +1 more                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Agents ─ 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-3 of …─╮
+│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting  [m[7m6m  [m[7m [m[7m—  [m[7m [m[7mescalated  [m[7m need a decision on the width rule [m▲
+│  ♙ master    waiting  12m  —   pilot       see my ask                        ┃
+│  ▲ sentinel  blocked  30m  —   model≠      health ok                         ▼
+╰──────────────────────────────────────────────────────────────────────────────╯
+[1m╭─[m[1m [m 1 Activity [1m [m 2 Board [1m [m[1;7m 3 Work [m[1m [m 4 Plan [1m  [m[1m────────────────────[m ♙4 ●1 ○0 ◇0 [1m─╮[m
+[1m│[m[1;7m For you  4 [m                           [1m In progress  1 [m                       [1m│[m
+[1m│[m+4 more                               │+2 more                                [1m│[m
+[1m│[m                                                                              [1m│[m
+[1m│[m[1m Next  0 [m                              [1m Ideas  0 [m                             [1m│[m
+[1m│[m                                      │ — between agents · 1                  [1m│[m
+[1m│[m                                         nobody waits on you (enter)          [1m│[m
+[1m╰──────────────────────────────────────────────────────────────────────────────╯[m
+›                                                                               
+ [1mT[m triage   [1mp P[m plan   [1mtab[m column   [1m/ ^P[m commands   [1mF1[m help   [1mF5[m health         

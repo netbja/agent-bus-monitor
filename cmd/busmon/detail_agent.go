@@ -224,11 +224,11 @@ func agentDetail(name string, a *agentState, pilot bool, board map[string]bus.Bo
 		row("Context", S(RoleMuted, "not a token count: "+Preview(a.ctxRaw)))
 	}
 	if pct, alert, ok := knownFill(a); ok {
-		fill := fmt.Sprintf("%.0f%% of the context window, observed %s ago", pct, humanAge(now.Sub(time.UnixMilli(a.ctxFill.ObservedAt))))
+		// The bar on its own row, never wrapped (tui-rendering §4.5); the sentence under it.
+		row("Fill", append(rampGauge(pct, ctxBarW, ctxRamp(alert), false), Seg{Text: " "}, S(ctxPctRole(pct, alert), fmt.Sprintf("%.0f%%", pct)))...)
+		rowWrap("", RoleText, fmt.Sprintf("of the context window, observed %s ago", humanAge(now.Sub(time.UnixMilli(a.ctxFill.ObservedAt)))))
 		if alert > 0 && pct >= alert {
-			row("Fill", S(RoleAttention, fill+fmt.Sprintf(" - at or above the %.0f%% alert: told to hand off", alert)))
-		} else {
-			row("Fill", text(fill))
+			rowWrap("", ctxPctRole(pct, alert), fmt.Sprintf("at or above the %.0f%% alert: told to hand off", alert))
 		}
 	} else {
 		row("Fill", S(RoleMuted, "unknown (no fresh reading from its client)"))

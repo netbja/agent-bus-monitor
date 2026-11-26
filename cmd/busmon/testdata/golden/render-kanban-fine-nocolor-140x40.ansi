@@ -1,0 +1,40 @@
+ [1magent-bus-monitor[m   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│─ 62% │ 7d ━━━━──│─── 41%   grok 5h ━━━━╋ 100% held 15:44             
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                                        [m
+╭─ For you ───────────────────────────────── 4 decide ─╮╭─ Agents ─── 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-8 of 10 ─╮
+│  [1mProject paused[m · /resume                            ││    agent     state     updated queue    ctx         flags               message  ▲
+│  ● answer master    review lot 1? (2 questions)    4m││[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting   [m[7m6m     [m[7m [m[7m—       [m[7m [m[7m—          [m[7m [m[7mescalated          [m[7m need a d…[m┃
+│  ♙ answer foureyes  need a decision on the width … 6m││  ♙ master    waiting   12m     —        ▇░░░░░ 21%  pilot · armed       see my a…┃
+│  ♙ answer sentinel  blocked: waiting for an answe… 1m││  ▲ sentinel  blocked   30m     —        —           model≠              health ok┃
+│  ◆ review coder     by charlie  look at b1           ││  ✓ architect done      40m     —        —           escalating · busy   spec mer…┃
+│                                                      ││  ○ coder     paused    2m      —        ▇▇▇▇▇░ 85%  gate 1 · deferred   busmon-c…┃
+│                                                      ││  ▲ docs      blocked   50m     —        —           armed · stale 2     waiting …│
+│                                                      ││  ▲ qa        blocked   11m     —        —           held                out of q…│
+│                                                      ││  ○ ui-grok   quota     3m      —        —           swapping · update   reviewed ▼
+╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────╯
+[1m╭─[m[1m [m 1 Activity [1m [m 2 Board [1m [m[1;7m 3 Work [m[1m [m 4 Plan [1m  [m[1m───────────────────────────────────────────────────[m 4 for you · 1 at work · 0 next · 0 ideas [1m─╮[m
+[1m│[m[1;7m For you  4 [m                      [1m In progress  1 [m                  [1m Next  0 [m                         [1m Ideas  0 [m                          [1m│[m
+[1m│[m ? review lot 1? (2 questions)   │ ● release                       │                                 │ — between agents · 1               [1m│[m
+[1m│[m  4m · master                    │  tag-release                    │                                 │  nobody waits on you (enter)       [1m│[m
+[1m│[m ♙ need a decision on the width …│  ▇▇▇░░░ ~50%                    │                                 │                                    [1m│[m
+[1m│[m  6m · foureyes                  │ ○ idle, can take a request      │                                 │                                    [1m│[m
+[1m│[m ♙ blocked: waiting for an answe…│  architect                      │                                 │                                    [1m│[m
+[1m│[m  1m · sentinel                  │                                 │                                 │                                    [1m│[m
+[1m│[m ◆ look at b1                    │                                 │                                 │                                    [1m│[m
+[1m│[m  coder                          │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                 │                                 │                                 │                                    [1m│[m
+[1m│[m                                                                                                                                          [1m│[m
+[1m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[m
+›                                                                                                                                           
+ [1mT[m triage   [1mp P[m plan   [1mtab[m column   [1m/ ^P[m commands   [1m1-4[m tabs   [1m←→[m column   [1m↑↓ j k[m select   [1my[m copy   [1mf[m filter   [1mF1[m help   [1mF5[m health          

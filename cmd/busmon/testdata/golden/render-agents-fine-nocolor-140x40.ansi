@@ -1,0 +1,40 @@
+ [1magent-bus-monitor[m   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│─ 62% │ 7d ━━━━──│─── 41%   grok 5h ━━━━╋ 100% held 15:44             
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                                        [m
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────[m 4 decide [1m─╮[m╭─ Agents ─── 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-8 of 10 ─╮
+[1m│[m  [1mProject paused[m · /resume                            [1m│[m│    agent     state     updated queue    ctx         flags               message  ▲
+[1m│[m  ● answer master    review lot 1? (2 questions)    4m[1m│[m│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting   [m[7m6m     [m[7m [m[7m—       [m[7m [m[7m—          [m[7m [m[7mescalated          [m[7m need a d…[m┃
+[1m│[m  ♙ answer foureyes  need a decision on the width … 6m[1m│[m│  ♙ master    waiting   12m     —        ▇░░░░░ 21%  pilot · armed       see my a…┃
+[1m│[m  ♙ answer sentinel  blocked: waiting for an answe… 1m[1m│[m│  ▲ sentinel  blocked   30m     —        —           model≠              health ok┃
+[1m│[m  ◆ review coder     by charlie  look at b1           [1m│[m│  ✓ architect done      40m     —        —           escalating · busy   spec mer…┃
+[1m│[m                                                      [1m│[m│  ○ coder     paused    2m      —        ▇▇▇▇▇░ 85%  gate 1 · deferred   busmon-c…┃
+[1m│[m                                                      [1m│[m│  ▲ docs      blocked   50m     —        —           armed · stale 2     waiting …│
+[1m│[m                                                      [1m│[m│  ▲ qa        blocked   11m     —        —           held                out of q…│
+[1m│[m                                                      [1m│[m│  ○ ui-grok   quota     3m      —        —           swapping · update   reviewed ▼
+[1m╰──────────────────────────────────────────────────────╯[m╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─ [1;7m 1 Activity [m  2 Board   3 Work   4 Plan    auto-scroll on ──────────────────────────────────────────────────── 7 events · filter: none ─╮
+│    time   from      to         type       message                                                                                        │
+│  ── Mon 2026-10-26 - [1m(today)[m ────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│    14:24  architect            status     done · spec merged                                                                             │
+│    14:50  ♙ Charlie → coder    directive  review lot 1                                                                                   │
+│    14:51  coder                report     Lot 1 delivered (+197)                                                                         │
+│  ○ 14:52  master    → charlie  directive  please look at the plan                                                                        │
+│  ● 14:56  dispatch             notify     project paused until 16:56                                                                     │
+│  ● 15:00  master               ask        asks · review lot 1? (2 question(s), 2 open)                                                   │
+│    15:02  coder                status     working · busmon-charm-b: b1 shell                                                             │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+›                                                                                                                                           
+ [1mT[m triage   [1mp P[m plan   [1mtab[m focus   [1m/ ^P[m commands   [1m1-4[m tabs   [1m↑↓ j k[m select   [1my[m copy   [1mf[m filter   [1m![m answer   [1mq[m quit   [1mF1[m help   [1mF5[m health   

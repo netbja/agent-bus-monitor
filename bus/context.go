@@ -37,6 +37,13 @@ func ContextAlert(getenv func(string) string) float64 {
 	return config.Machine(getenv).Float("dispatch.context_alert")
 }
 
+// ContextUrgent is dispatch.context_urgent for the process whose
+// environment is getenv: AGENT_BUS_CONTEXT_URGENT, else its config.toml,
+// else 90 (busmon's context ramp turns red there).
+func ContextUrgent(getenv func(string) string) float64 {
+	return config.Machine(getenv).Float("dispatch.context_urgent")
+}
+
 // Known: the fill names its session and was at most ContextMaxAge old when
 // it was published.
 func (f ContextFill) Known() bool {

@@ -172,7 +172,7 @@ func TestPlanAndProgressBarsInASCII(t *testing.T) {
 	}
 	r := request{Task: "t", Tracked: true, State: "accepted", Accepted: shellNow.Add(-30 * time.Minute)}
 	l, _ := progressLine(r, pace{usual: time.Hour, n: 6}, shellNow)
-	if got := l.text(); !strings.Contains(got, "===") || !strings.Contains(got, "---") || strings.Contains(got, finedraw.Thin) {
+	if got := l.text(); !strings.Contains(got, "#####-----") || strings.Contains(got, finedraw.Full) { // finedraw.Bar (tui-rendering §4.4)
 		t.Errorf("progress %q", got)
 	}
 }

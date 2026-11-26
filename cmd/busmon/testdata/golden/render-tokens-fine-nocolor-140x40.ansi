@@ -1,0 +1,40 @@
+ [1magent-bus-monitor[m   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│─ 62% │ 7d ━━━━──│─── 41%   grok 5h ━━━━╋ 100% held 15:44             
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                                        [m
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────[m 4 decide [1m─╮[m╭─ Agents ─── 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-8 of 10 ─╮
+[1m│[m  [1mProject paused[m · /resume                            [1m│[m│    agent     state     updated queue    ctx         flags               message  ▲
+[1m│[m  ● answer master    review lot 1? (2 questions)    4m[1m│[m│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting   [m[7m6m     [m[7m [m[7m—       [m[7m [m[7m—          [m[7m [m[7mescalated          [m[7m need a d…[m┃
+[1m│[m  ♙ answer foureyes  need a decision on the width … 6m[1m│[m│  ♙ master    waiting   12m     —        ▇░░░░░ 21%  pilot · armed       see my a…┃
+[1m│[m  ♙ answer sentinel  blocked: waiting for an answe… 1m[1m│[m│  ▲ sentinel  blocked   30m     —        —           model≠              health ok┃
+[1m│[m  ◆ review coder     by charlie  look at b1           [1m│[m│  ✓ architect done      40m     —        —           escalating · busy   spec mer…┃
+[1m│[m                                                      [1m│[m│  ○ coder     paused    2m      —        ▇▇▇▇▇░ 85%  gate 1 · deferred   busmon-c…┃
+[1m│[m                                                      [1m│[m│  ▲ docs      blocked   50m     —        —           armed · stale 2     waiting …│
+[1m│[m                                                      [1m│[m│  ▲ qa        blocked   11m     —        —           held                out of q…│
+[1m│[m                                                      [1m│[m│  ○ ui-grok   quota     3m      —        —           swapping · update   reviewed ▼
+[1m╰──────────────────────────────────────────────────────╯[m╰──────────────────────────────────────────────────────────────────────────────────╯
+[1m╭─[m[1;7m Tokens · today · anthropic 62% 5h · xai held 40m [m[1m────────────────────────────────────────────────────────────────────────────[m esc back [1m─╮[m
+[1m│[m [1mAccounts                                                                                                                                [m [1m▲[m
+[1m│[m   [1mCLAUDE[m                                                              5h · 62%                                                           [1m┃[m
+[1m│[m   5h  ━━━━━━━━━━━━━━━━━━━━━━━━╋───────────────   62% · resets today 17:04                                                                [1m┃[m
+[1m│[m   7d  ━━━━━━━━━━━━━━━━───────│────────────────   41% · resets Thu 29 Oct 15:04                                                           [1m┃[m
+[1m│[m   At this pace the limit comes around today 16:54, before its reset, today                                                               [1m┃[m
+[1m│[m   17:04.                                                                                                                                 [1m┃[m
+[1m│[m   ────────────────────────────────────────────────────────────────────────────                                                           [1m┃[m
+[1m│[m   [1mGROK[m                                                  held until today 15:44                                                           [1m┃[m
+[1m│[m   5h  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━  100% · resets today 15:44                                                           [1m┃[m
+[1m│[m   Limit reached: it resets today 15:44.                                                                                                  [1m┃[m
+[1m│[m [1mProjects[m                     in      out  7 days                                              7d total                                   [1m┃[m
+[1m│[m                                           10-20 to 10-26                                                                                 [1m┃[m
+[1m│[m                                           ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣤⣤⣤⣤  max 2.5M/day                                                     [1m┃[m
+[1m│[m   agent-bus-monitor   [1m    ~1.5M[m    ~289k  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣶⣶⣶⣶⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿  ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇     ~5.1M                                   [1m┃[m
+[1m│[m                                           ⠀⠀⠀⠀⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  max 170k/day                                                     [1m┃[m
+[1m│[m   blog                        0        0  ⠀⠀⠀⠀⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  ▇░░░░░░░░░░░░░░░░░░░      170k                                   [1m┃[m
+[1m│[m   wiki  no data (no dispatch service counting tokens)                                                                                    [1m┃[m
+[1m│[m [1mAgents, agent-bus-monitor[m           in      out                                                                                          [1m┃[m
+[1m│[m   foureyes         anthropic [1m     1.2M[m     206k  ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇                                                                    [1m┃[m
+[1m│[m                                                                                                                                          [1m│[m
+[1m│[m   coder            anthropic      345k      83k  ▇▇▇▇▇▇░░░░░░░░░░░░░░                                                                    [1m│[m
+[1m│[m   7 more · no proved session  (a lists them)                                                                                             [1m│[m
+[1m│[m   2 more · no token count for xai (no adapter)  (a lists them)                                                                           [1m▼[m
+[1m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[m
+ [1m↑↓ j k[m scroll   [1my[m copy   [1mn p ←→[m next/prev   [1ma[m all   [1mesc q[m close   [1mF5[m health   [1mF6[m ideas                                                     

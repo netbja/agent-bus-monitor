@@ -721,6 +721,7 @@ func main() {
 	}
 	limit := settings.Limit
 	ctxAlert = bus.ContextAlert(os.Getenv)
+	ctxUrgent = bus.ContextUrgent(os.Getenv)
 	if _, err := ResolveTheme(settings.Theme, "", "", false, 1<<24); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)

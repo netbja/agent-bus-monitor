@@ -211,3 +211,106 @@ func (v barView) gauge(key string, pct float64, cells int, role Role) Line {
 	shown, moving := v.at(key, pct)
 	return gaugeSegs(shown, cells, role, moving)
 }
+
+// rampSpec is a bar's colours (tui-rendering §2, §4): its gradient, drawn
+// cell by cell where the caps allow RGB (fine, 256 colours up), and the
+// thresholds whose band picks the whole fill's role otherwise (roles has one
+// more than bands).
+type rampSpec struct {
+	g     finedraw.Gradient
+	bands []float64
+	roles []Role
+}
+
+// role is the role of a fill at pct: its band's.
+func (r rampSpec) role(pct float64) Role {
+	n := 0
+	for _, b := range r.bands {
+		if pct >= b {
+			n++
+		}
+	}
+	return r.roles[n]
+}
+
+// thresholdRamp is green, amber from amber, red from red: a threshold of 0
+// or less is off, and red counts only above amber (the context escalation's
+// rule for context_urgent).
+func thresholdRamp(amber, red float64) rampSpec {
+	r := rampSpec{g: finedraw.Stops{{Pct: 0, C: th.Hue(RoleGauge, 100)}}, roles: []Role{RoleGauge}}
+	add := func(at float64, role Role) {
+		r.g = append(r.g.(finedraw.Stops), finedraw.Stop{Pct: at, C: th.Hue(role, 100)})
+		r.bands, r.roles = append(r.bands, at), append(r.roles, role)
+	}
+	if amber > 0 {
+		add(amber, RoleAttention)
+	}
+	if red > 0 && red > amber {
+		add(red, RoleError)
+	}
+	return r
+}
+
+// usageRamp is an account window's: budgetRole's thresholds.
+func usageRamp() rampSpec { return thresholdRamp(80, 95) }
+
+// volumeRamp is a volume's (tokens): role's hue from faint to whole, one
+// role in 16 colours.
+func volumeRamp(role Role) rampSpec {
+	return rampSpec{g: finedraw.Ramp{th.Hue(role, volumeFaint), th.Hue(role, 100)}, roles: []Role{role}}
+}
+
+// volumeFaint is where a volume ramp starts: its hue this far from the line
+// colour.
+const volumeFaint = 45
+
+// ink is the colour of a ramp's cell at place pct, none where the caps draw
+// roles (basic, below 256 colours, no colour).
+func (r rampSpec) ink(pct float64) (Color, bool) {
+	s := drawCaps().Shade(r.g, pct, r.bands)
+	if !s.UseRGB {
+		return colorDefault, false
+	}
+	return newRGBColor(int32(s.RGB.R), int32(s.RGB.G), int32(s.RGB.B)), true
+}
+
+// inked colours l's filled cells (role, not faded) along r, each at its
+// place in a bar of cells: a gradient, so a bar near its limit runs green to
+// red. Without RGB, l is returned as it is (its fill in its band's role).
+func inked(l Line, cells int, role Role, r rampSpec) Line {
+	if _, ok := r.ink(0); !ok {
+		return l
+	}
+	var out Line
+	x := 0
+	for _, s := range l {
+		if s.Role != role || s.Fade > 0 {
+			out = append(out, s)
+			x += Width(s.Text)
+			continue
+		}
+		for _, g := range s.Text {
+			c := s
+			c.Text = string(g)
+			c.Ink, _ = r.ink((float64(x) + 0.5) * 100 / float64(cells))
+			out = append(out, c)
+			x++
+		}
+	}
+	return out
+}
+
+// rampGauge is gaugeSegs coloured by r: the fill in the band role of pct,
+// and cell by cell along the ramp where RGB is drawn.
+func rampGauge(pct float64, cells int, r rampSpec, lead bool) Line {
+	role := r.role(pct)
+	return inked(gaugeSegs(pct, cells, role, lead), cells, role, r)
+}
+
+// thinRamp is the thin gauge for key at pct coloured by r (the account
+// cards, tui-rendering §4.5).
+func (v barView) thinRamp(key string, pct, pace float64, cells int, r rampSpec) Line {
+	shown, moving := v.at(key, pct)
+	role := r.role(pct)
+	return inked(thinGauge(shown, pace, cells, role, moving), cells, role, r)
+}

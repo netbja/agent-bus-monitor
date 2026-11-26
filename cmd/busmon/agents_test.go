@@ -182,7 +182,7 @@ func TestAgentRowWidth(t *testing.T) {
 		}
 	}
 	row := agentRow(iconsOff, "grok", hostileAgent(now), false, TierWide, 160, now).text()
-	for _, want := range []string{GlyphBlocked + " grok", "blocked", "6m", "12 msg", "608k", "gate 1", "deferred", "needs review"} {
+	for _, want := range []string{GlyphBlocked + " grok", "blocked", "6m", "12 msg", "100%", "gate 1", "deferred", "needs review"} {
 		if !strings.Contains(row, want) {
 			t.Errorf("wide row lacks %q: %q", want, row)
 		}

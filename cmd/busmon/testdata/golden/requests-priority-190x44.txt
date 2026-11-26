@@ -1,13 +1,13 @@
  agent-bus-monitor   ● bus ok   ● dispatch up   ● missions up                                                                                                                        15:04:05 
  ♙ Charlie [human]   pilot master   24 between agents   claude 5h ━━━│━ 62% │ 7d ━━━━━━│━━━ 41%   grok 5h ━━━━╋ 100% held 15:44                                                               
 ╭─ For you ────────────────────────╮╭─ Agents ──────────────────────────────────────────────────────────────────────────────────────────────────────────── 6 agents · 0 working · 0 blocked ─╮
-│  Nothing expected from you.      ││    agent     state     updated             queue    ctx       mem   cpu   flags               message                                                  │
-│                                  ││▶ ○ coder     idle      ●●●●●●●●●● 0s       —        —         —     —                                                                                  │
-│                                  ││  ○ foureyes  idle      ●●●●●●●●●● 0s       —        —         —     —                                                                                  │
-│                                  ││  ○ master    idle      ●●●●●●●●●● 0s       —        —         —     —     pilot                                                                        │
-│                                  ││  ○ reviewer… quota     ●●●●●●●●●● 0s       —        —         —     —                                                                                  │
-│                                  ││  ○ sentinel  idle      ●●●●●●●●●● 0s       —        —         —     —                                                                                  │
-│                                  ││  ○ ui-kimi   idle      ●●●●●●●●●● 0s       —        —         —     —                                                                                  │
+│  Nothing expected from you.      ││    agent     state     updated             queue    ctx         flags               message                                                            │
+│                                  ││▶ ○ coder     idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
+│                                  ││  ○ foureyes  idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
+│                                  ││  ○ master    idle      ●●●●●●●●●● 0s       —        —           pilot                                                                                  │
+│                                  ││  ○ reviewer… quota     ●●●●●●●●●● 0s       —        —                                                                                                  │
+│                                  ││  ○ sentinel  idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
+│                                  ││  ○ ui-kimi   idle      ●●●●●●●●●● 0s       —        —                                                                                                  │
 ╰──────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Requests → all threads, esc back to Work ────────────────────────────────────────────────────────────────────────────────────────────── 22 waiting · 4 tracked · 9 gated · 11 directives ─╮
 │  You wait on  22                                                                                                                                                                           │

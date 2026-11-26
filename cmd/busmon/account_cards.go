@@ -62,7 +62,7 @@ func accountCard(icons, p string, b bus.BudgetSnapshot, holds map[string]int64, 
 			out = append(out, FitLine(row, width))
 			continue
 		}
-		row = append(row, bars.thin(barKey(p, w.Name), w.UsedPct, windowElapsedPct(w, now), barW, budgetRole(w.UsedPct))...)
+		row = append(row, bars.thinRamp(barKey(p, w.Name), w.UsedPct, windowElapsedPct(w, now), barW, usageRamp())...) // the usage ramp (tui-rendering §4.5)
 		row = append(row, S(budgetRole(w.UsedPct), fmt.Sprintf(" %4.0f%%", w.UsedPct)), S(RoleMuted, " "+tails[i]))
 		out = append(out, FitLine(row, width))
 	}

@@ -42,7 +42,7 @@ func workKanbanOn(layout string, width int) bool {
 // kanbanCard is one card: its row key (the list's) and its two lines.
 type kanbanCard struct {
 	key   string
-	lines []Line // two; three for an agent holding a task and a gate
+	lines []Line // two; then an agent's progress and the gate it holds, each a line
 }
 
 // kanbanCol is one column: its heading and its cards.
@@ -111,6 +111,7 @@ func workKanban(w workModel, d workDraw) kanbanView {
 	}
 
 	team := kanbanCol{title: fmt.Sprintf("In progress  %d", len(w.Team))}
+	paces := ownerPaces(d.requests)
 	for _, r := range w.Team {
 		glyph, role := GlyphWorking, RoleOK
 		if r.Word != "working" {
@@ -142,6 +143,11 @@ func workKanban(w workModel, d workDraw) kanbanView {
 			where = strings.TrimSpace(where + " " + strings.TrimSpace(strings.TrimPrefix(teamReviewers(r, d.now), "  review:")))
 		}
 		card := kanbanCard{key: workAgentPrefix + r.Agent, lines: []Line{head(reqMark(r.Task), glyph, role, r.Agent, where), title(what, RoleText)}}
+		if r.Task != nil { // its progress, short (tui-rendering §4.4)
+			if p, ok := progressBrief(*r.Task, paces[r.Agent], d.now); ok {
+				card.lines = append(card.lines, p)
+			}
+		}
 		if gateLine != nil {
 			card.lines = append(card.lines, gateLine)
 		}

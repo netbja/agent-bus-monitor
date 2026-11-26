@@ -1,0 +1,40 @@
+ [1magent-bus-monitor[m   ● bus ok   ● dispatch up   ● missions up   ♙ 4 decide   ● 2 unread                                            15:04:05 
+ paused · resumes in 1h52 (lunch)   ♙ Charlie [human]   claude 5h ━━━│─ 62% │ 7d ━━━━──│─── 41%   grok 5h ━━━━╋ 100% held 15:44             
+[1;7m PAUSED[m[1;7m · /resume ends it now · resumes in 1h52 (lunch) · by charlie                                                                        [m
+[1m╭─[m[1;7m For you [m[1m─────────────────────────────────[m 4 decide [1m─╮[m╭─ Agents ─── 10 agents · 1 working · 3 blocked · 1 dormant (a shows) · 1-8 of 10 ─╮
+[1m│[m  [1mProject paused[m · /resume                            [1m│[m│    agent     state     updated queue    ctx         flags               message  ▲
+[1m│[m  ● answer master    review lot 1? (2 questions)    4m[1m│[m│[7m▶ [m[7m♙ [m[7mfoureyes  [m[7mwaiting   [m[7m6m     [m[7m [m[7m—       [m[7m [m[7m—          [m[7m [m[7mescalated          [m[7m need a d…[m┃
+[1m│[m  ♙ answer foureyes  need a decision on the width … 6m[1m│[m│  ♙ master    waiting   12m     —        ▇░░░░░ 21%  pilot · armed       see my a…┃
+[1m│[m  ♙ answer sentinel  blocked: waiting for an answe… 1m[1m│[m│  ▲ sentinel  blocked   30m     —        —           model≠              health ok┃
+[1m│[m  ◆ review coder     by charlie  look at b1           [1m│[m│  ✓ architect done      40m     —        —           escalating · busy   spec mer…┃
+[1m│[m                                                      [1m│[m│  ○ coder     paused    2m      —        ▇▇▇▇▇░ 85%  gate 1 · deferred   busmon-c…┃
+[1m│[m                                                      [1m│[m│  ▲ docs      blocked   50m     —        —           armed · stale 2     waiting …│
+[1m│[m                                                      [1m│[m│  ▲ qa        blocked   11m     —        —           held                out of q…│
+[1m│[m                                                      [1m│[m│  ○ ui-grok   quota     3m      —        —           swapping · update   reviewed ▼
+[1m╰──────────────────────────────────────────────────────╯[m╰──────────────────────────────────────────────────────────────────────────────────╯
+[1m╭─[m[1;7m ○ coder · paused [m[1m────────────────────────────────────────────────────────────────────────────[m Y copy report · y copy status · esc back [1m─╮[m
+[1m│[m Status message                                                                                                                           [1m▲[m
+[1m│[m busmon-charm-b: b1 shell                                                                                                                 [1m┃[m
+[1m│[m                                                                                                                                          [1m┃[m
+[1m│[m Last report · 13m ago                                                                                                                    [1m┃[m
+[1m│[m Lot 1 delivered                                                                                                                          [1m┃[m
+[1m│[m                                                                                                                                          [1m┃[m
+[1m│[m [1mDone                                                                                                                                    [m [1m┃[m
+[1m│[m · adapter in d0a72be ; tests green                                                                                                       [1m┃[m
+[1m│[m   func veryLongFunctionNameForTheGolden(argumentOne string, argumentTwo int, argumentThree []string) (result string, err error) {        [1m┃[m
+[1m│[m                                                                                                                                          [1m┃[m
+[1m│[m Declared:        working (shown as paused) · 2m ago (15:02:05)                                                                           [1m┃[m
+[1m│[m Stopped:         the project is paused: nobody is woken until it resumes                                                                 [1m┃[m
+[1m│[m Last seen:       1m ago (any status or report)                                                                                           [1m┃[m
+[1m│[m Observed:        pane not observed (no dispatch service, or no verified pane)                                                            [1m┃[m
+[1m│[m Pane:            not recorded                                                                                                            [1m│[m
+[1m│[m Receiver lease:  not armed                                                                                                               [1m│[m
+[1m│[m Queue:           not measured yet                                                                                                        [1m│[m
+[1m│[m                  lag 0: entries of the SHARED cmd stream this agent's group has not read - not a work queue                              [1m│[m
+[1m│[m Wake:            deferred - a wake is due but the pane was not ready · tries 0                                                           [1m│[m
+[1m│[m Gate:            1 open 4-eyes challenge(s): wait for a verdict                                                                          [1m│[m
+[1m│[m Context:         88k tokens (raw "88000")                                                                                                [1m│[m
+[1m│[m Fill:            ▇▇▇▇▇░ 85%                                                                                                              [1m│[m
+[1m│[m                  of the context window, observed 2m ago                                                                                  [1m▼[m
+[1m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[m
+ [1m↑↓ j k[m scroll   [1my[m copy status   [1mY[m copy report   [1mn p ←→[m next/prev   [1mesc q[m close   [1mr[m reply   [1mF5[m health   [1mF6[m ideas                            

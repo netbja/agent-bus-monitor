@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -173,5 +174,113 @@ func TestTokensNarrowKeepsTheTotals(t *testing.T) {
 		if !strings.Contains(s, "7d total") {
 			t.Errorf("%d: the totals' header is cut:\n%s", width, s)
 		}
+	}
+}
+
+// tokStylePage is the Tokens page's text in graphs style at width.
+func tokStylePage(st tokState, graphs string, width int) []Line {
+	return tokensPage(iconsOff, graphs, st, nil, nil, nil, "agent-bus-monitor", shellNow, width, false, barView{}, true)
+}
+
+// tui-rendering §4.2: in fine the 7-day sparkline is two braille rows, its
+// top row on the line above the project's, 28 cells where the row has room
+// and 14 otherwise; the row's largest day is printed beside its top row.
+// Block keeps one row (the line above holds only the largest day).
+func TestTokensTwoRowSparkline(t *testing.T) {
+	pinLocal(t)
+	withPalette(t, "dark", false, 1<<24)
+	for _, c := range []struct {
+		graphs string
+		width  int
+		cells  int
+		rows   int
+	}{{graphsBraille, 120, tokSparkWide, 2}, {graphsBraille, 100, tokSparkCells, 2}, {graphsBlock, 120, tokSparkCells, 1}} {
+		lines := tokStylePage(tokFixtureState(shellNow), c.graphs, c.width)
+		at := -1
+		for i, l := range lines {
+			if strings.HasPrefix(l.text(), "  blog ") {
+				at = i
+			}
+		}
+		if at < 1 {
+			t.Fatalf("%s %d: no blog row", c.graphs, c.width)
+		}
+		row, above := lines[at].text(), lines[at-1].text()
+		col := 22 + Width(fmtCols(c.width)) + 2
+		spark := string([]rune(row)[col : col+c.cells])
+		if !strings.Contains(above, "max 170k/day") {
+			t.Errorf("%s %d: no max beside it: %q", c.graphs, c.width, above)
+		}
+		top := string([]rune(above)[col : col+c.cells])
+		if c.rows == 2 {
+			// blog's one day is its largest: full on both rows, 4 cells a day at 28.
+			if strings.Count(spark, "⣿") != c.cells/7 || strings.Count(top, "⣿") != c.cells/7 {
+				t.Errorf("%s %d: rows %q / %q", c.graphs, c.width, top, spark)
+			}
+		} else if strings.TrimSpace(top) != "" || !strings.Contains(spark, GlyphBarFull) {
+			t.Errorf("%s %d: one row: %q / %q", c.graphs, c.width, top, spark)
+		}
+	}
+}
+
+func fmtCols(width int) string {
+	if width < 90 {
+		return " " + strings.Repeat(" ", 8)
+	}
+	return strings.Repeat(" ", 18)
+}
+
+// tui-rendering §4.2: a project with no tokens in the seven days is dimmed;
+// more than three fold into one line. The open project is never folded.
+func TestTokensIdleProjects(t *testing.T) {
+	pinLocal(t)
+	st := tokFixtureState(shellNow)
+	idle := func(n int) tokState {
+		s := st
+		s.projects = append([]tokProject(nil), st.projects...)
+		for i := range n {
+			s.projects = append(s.projects, tokProject{name: fmt.Sprintf("quiet%d", i), known: true, days: map[string]bus.TokenRow{}})
+		}
+		return s
+	}
+	find := func(lines []Line, prefix string) (Line, bool) {
+		for _, l := range lines {
+			if strings.HasPrefix(l.text(), prefix) {
+				return l, true
+			}
+		}
+		return nil, false
+	}
+	lines := tokStylePage(idle(3), graphsBraille, 120)
+	for i := range 3 {
+		l, ok := find(lines, fmt.Sprintf("  quiet%d ", i))
+		if !ok {
+			t.Fatalf("three idle: quiet%d folded", i)
+		}
+		for _, s := range l {
+			if strings.TrimSpace(s.Text) != "" && strings.ContainsAny(s.Text, "abcdefghijklmnopqrstuvwxyz0123456789") && s.Role != RoleDim {
+				t.Errorf("quiet%d: %q in %v, not dimmed", i, s.Text, s.Role)
+			}
+		}
+	}
+	if _, ok := find(lines, "  3 projects idle"); ok {
+		t.Error("three idle fold")
+	}
+	lines = tokStylePage(idle(4), graphsBraille, 120)
+	if _, ok := find(lines, "  quiet0 "); ok {
+		t.Error("four idle: quiet0 still listed")
+	}
+	if l, ok := find(lines, "  4 projects idle this week"); !ok || l[len(l)-1].Role != RoleDim && l[1].Role != RoleDim {
+		t.Errorf("four idle: no fold line")
+	}
+	// The open project, idle, is never folded nor dimmed.
+	s := idle(4)
+	for i, p := range s.projects {
+		if p.name == "agent-bus-monitor" {
+			s.projects[i].days = map[string]bus.TokenRow{}
+		}
+	}
+	if l, ok := find(tokStylePage(s, graphsBraille, 120), "  agent-bus-monitor "); !ok || l[1].Role != RoleAccent {
+		t.Errorf("the open project idle: %v %+v", ok, l)
 	}
 }
