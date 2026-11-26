@@ -401,6 +401,11 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			}
 		}
 	}
+	// The agents' pids are this machine's only when a service record says
+	// the project runs here; a checkout proves nothing of the pids
+	// (agent-resource-limits §5, foureyes on 3d).
+	me, _ := hostname()
+	pidsHere, _ := memoryHere(st.svcRecs, me, false)
 	for n, a := range st.agents {
 		if armedErr == nil {
 			_, a.armed = armed[n]
@@ -497,6 +502,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a.obsOwnPID = ok && o.PID != 0 && o.PID == a.pid
 			a.obsBgProcs, a.obsBgOldest = 0, time.Time{}
 			a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU = 0, 0, 0, nil
+			a.obsLocal = pidsHere
 			if ok {
 				a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU = o.MemBytes, o.TopBytes, o.TopPID, o.CPUPct
 				a.obsBgProcs = o.BgProcs

@@ -13,7 +13,7 @@ import (
 // 3c's measure (agent-resource-limits §5).
 func usageAgent(now time.Time, mem, top int64, topPID int, cpu *int) *agentState {
 	return &agentState{state: "working", stateAt: now, pid: 7, obsOwnPID: true, obsAt: now.Add(-5 * time.Second),
-		obsMem: mem, obsTopMem: top, obsTopPID: topPID, obsCPU: cpu}
+		obsMem: mem, obsTopMem: top, obsTopPID: topPID, obsCPU: cpu, obsLocal: true}
 }
 
 func intp(n int) *int { return &n }
@@ -95,17 +95,29 @@ func TestAgentDetailShowsTheUsage(t *testing.T) {
 	if got := text(usageAgent(now, 4400<<20, 3<<30, 10, nil)); !strings.Contains(got, "largest process 3.0G (pid 10)") || strings.Contains(got, "cpu") {
 		t.Fatalf("no local name, cpu unknown:\n%s", got)
 	}
+	// busmon on another machine (a laptop through the tunnel): its own pid 9
+	// is some other program, never named (foureyes).
+	remote := usageAgent(now, 4400<<20, 3<<30, 9, nil)
+	remote.obsLocal = false
+	if got := text(remote); strings.Contains(got, "pytest") || !strings.Contains(got, "largest process 3.0G (pid 9)") {
+		t.Fatalf("another host:\n%s", got)
+	}
 	if got := text(usageAgent(now, 0, 0, 0, nil)); strings.Contains(got, "Resources") {
 		t.Fatalf("nothing measured:\n%s", got)
 	}
 }
 
 // The poll copies the observation's measure, and clears it when the
-// observation no longer carries it.
+// observation no longer carries it; the agents' pids are this machine's only
+// when a service record names this host (memoryHere's rule, no checkout).
 func TestPollReadsObservedUsage(t *testing.T) {
 	now := time.Now()
+	saved := hostname
+	t.Cleanup(func() { hostname = saved })
+	hostname = func() (string, error) { return "here", nil }
 	f := &fakeReader{calls: map[string]int{}, snaps: map[string]bus.AgentSnapshot{
 		"coder": {State: "idle", TS: 1, Pane: "p2", PID: 7}},
+		svcRecs:  map[string]bus.ServiceRecord{"dispatch": {State: "running", Host: "here"}},
 		observed: map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, State: "idle", MemBytes: 4 << 30, TopBytes: 3 << 30, TopPID: 9, CPUPct: intp(180)}}}
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
 	poll := func() {
@@ -117,6 +129,18 @@ func TestPollReadsObservedUsage(t *testing.T) {
 	a := st.agents["coder"]
 	if a.obsMem != 4<<30 || a.obsTopMem != 3<<30 || a.obsTopPID != 9 || a.obsCPU == nil || *a.obsCPU != 180 {
 		t.Fatalf("coder %+v", a)
+	}
+	if !a.obsLocal {
+		t.Fatal("the dispatch service on this host: not local")
+	}
+	// The service records name another host, or none at all: not local.
+	for _, recs := range []map[string]bus.ServiceRecord{{"dispatch": {State: "running", Host: "elsewhere"}}, nil} {
+		f.svcRecs = recs
+		st.svcRecs = nil
+		poll()
+		if st.agents["coder"].obsLocal {
+			t.Fatalf("records %v: local", recs)
+		}
 	}
 	f.observed = map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, State: "idle"}}
 	poll()

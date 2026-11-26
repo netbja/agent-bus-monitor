@@ -571,6 +571,7 @@ type agentState struct {
 	obsTopMem      int64               // top_bytes: the tree's largest process's; 0 none
 	obsTopPID      int                 // top_pid: that process's pid (its name is read locally only); 0 none
 	obsCPU         *int                // cpu_pct: the tree's CPU over the dispatcher's window, % of one core; nil unknown
+	obsLocal       bool                // a service record names this machine: obsTopPID is a pid here, its name readable (memoryHere's rule)
 	registered     bool                // listed in {p}:agents (the conductor only reports: not an @all target)
 	provider       string              // whose quota it draws on (AGENT_BUS_PROVIDER at launch)
 	client         string              // its client (claude, codex, kimi…), from the launcher

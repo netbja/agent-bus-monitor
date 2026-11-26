@@ -47,9 +47,13 @@ func cpuCell(a *agentState, now time.Time) []Seg {
 	return []Seg{{Text: strconv.Itoa(*a.obsCPU) + "%", Role: RoleText}}
 }
 
-// procComm is a process's name as this host's /proc says it; false when
-// it cannot be read (another host, a process gone). The observation never
-// carries a name (spec §5): only busmon on the agents' host can tell it.
+// hostname is this machine's name (os.Hostname; a test's answer).
+var hostname = os.Hostname
+
+// procComm is a process's name as this machine's /proc says it; false when
+// it cannot be read (a process gone). The observation never carries a name
+// (spec §5): it is read only when busmon runs on the agents' host
+// (obsLocal), since on another machine the same pid is another program.
 var procComm = func(pid int) (string, bool) {
 	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm")
 	if err != nil {
@@ -71,7 +75,7 @@ func usageText(a *agentState, now time.Time) string {
 	}
 	if a.obsTopMem > 0 && a.obsTopPID > 0 {
 		who := "pid " + strconv.Itoa(a.obsTopPID)
-		if name, ok := procComm(a.obsTopPID); ok {
+		if name, ok := procComm(a.obsTopPID); ok && a.obsLocal {
 			who = Preview(name) + ", " + who
 		}
 		parts = append(parts, "largest process "+sizeText(a.obsTopMem)+" ("+who+")")
