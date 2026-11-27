@@ -645,7 +645,7 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<k
       calls;
     - the start sweep:
       - stops this build's stale scopes;
-      - after A was killed outright, stops B's start of A's scopes (A inactive);
+      - after A was killed outright, B's start sweep stops A's scopes (A inactive);
       - leaves a live A's scopes alone while B runs (a drain);
       - stops nothing when the manager cannot say;
     - a fake that fails gives `soft`;
