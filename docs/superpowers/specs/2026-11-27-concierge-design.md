@@ -1,6 +1,7 @@
 # The concierge: one conversation across every project (concierge)
 
-Status: spec r5, for review (subject `concierge-spec`; r5, foureyes and reviewer-codex on r4:
+Status: spec r6, for review (subject `concierge-spec`; r6, reviewer-codex: `rejected` is a key kind
+like `person`, both in `aclBusmonOnly`, with an ACL test per command (§5.3); r5, foureyes and reviewer-codex on r4:
 the person stream is busmon-only through a new `aclBusmonOnly` list pinned by the ACL
 inventory (§5.3); the fallback list is `fallback_profiles`, and `alt_profiles` holds the deep
 answer (§5.5); remember gains the `concierge:person:<id>` source in person-memory's resolver,
@@ -178,12 +179,22 @@ stream, `{concierge}:person`, as well as to the conversation.
   dispatcher-only (`bus/acl.go`, `aclWrites` over `keyKinds`: `ACLAgent`, `ACLMaster` and
   `ACLDispatcher` all get it). So a new kind alone would be writable by every agent (r5,
   foureyes).
-- So the build adds **`person`** to `keyKinds` and a third exclusion list, `aclBusmonOnly =
-  {"person", "concierge:rejected"}` (the second key is from §5.4). Every `aclWrites` call
-  (agent, master, dispatcher, and the new concierge user) excludes it. Only `ACLBusmon`
-  (`~*`) and `ACLAdmin` can write those keys.
-- **`TestACLInventory` pins it:** an XADD to `{concierge}:person` is refused for every role but
-  busmon and admin.
+- A write grant is one pattern per key kind, `~*:<kind>` (`bus/acl.go:85-98`, `aclWrites`
+  over `keyKinds`). A key is a project's prefix plus its kind, so the concierge project's keys
+  are `…:concierge:<kind>`.
+- So the build adds **two kinds** to `keyKinds` (`bus/keykinds.go`), both records:
+  - **`person`**, the person stream;
+  - **`rejected`**, §5.4's set.
+
+  It also adds a third exclusion list, `aclBusmonOnly = {"person": true, "rejected": true}`,
+  keyed by kind like `aclMasterOnly` and `aclDispatcherOnly`. Every role built from
+  `aclWrites` (agent, master, dispatcher, and the new concierge user) excludes it, so no
+  `~*:person` or `~*:rejected` write pattern exists for them. Only `ACLBusmon` (`~*`) and
+  `ACLAdmin` write them. The protection is the named exclusion, not a missing pattern (r6,
+  reviewer-codex).
+- **The ACL tests pin it, per command:** an `XADD` to `…:concierge:person` and an `SADD` to
+  `…:concierge:rejected` are each refused for agent, master, dispatcher and concierge, and
+  allowed for busmon. `TestACLInventory` lists both kinds as busmon-only.
 
 So no agent can append to the person stream.
 
@@ -231,7 +242,7 @@ are not audited.
 
   Any other source is not proposed.
 - It is shown in full. One key confirms it, another rejects it. A rejected quote is never proposed
-  again: busmon adds its source id to **`{concierge}:rejected`**, a set on the broker that only
+  again: busmon adds its source id to **`{concierge}:rejected`** (kind `rejected`), a set on the broker that only
   busmon writes (§5.3's `aclBusmonOnly`), which the concierge reads before proposing.
   - It is host-level and survives a restart, a lost local cache and a second busmon (r5,
     reviewer-codex).
@@ -279,9 +290,10 @@ is chosen then, from §3's re-check, on the person's yes.
 
 1. **The concierge role and host project:** the role file and skill (language rule, the
    source-citing rule, §5.3's limits), the host project `concierge`, its ACL user (observer
-   reads, its own project's writes only), and the `person` kind with `aclBusmonOnly`.
+   reads, its own project's writes only), and the `person` and `rejected` kinds with `aclBusmonOnly`.
    Tests: the ACL inventory test refuses the concierge user every write outside its project,
-   the `cmd` stream of another project included, and any write to `{concierge}:person`.
+   the `cmd` stream of another project included. `XADD` to `…:person` and `SADD` to
+   `…:rejected` are refused for agent, master, dispatcher and concierge, and allowed for busmon.
 2. **busmon's window:** the Ctrl+Space overlay (with its aliases and `concierge.key`), the conversation view, send, history, the hidden-answer
    dot. Goldens at 60x20, 80x24, 140x40.
 3. **Context chips and sources:** `tab` attaches the selection; sources open their pages.
