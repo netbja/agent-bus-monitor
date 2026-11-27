@@ -6,6 +6,10 @@
     - `+` stays priority, and "next plan" is `n` (§A3, §B9);
     - the prerequisites of each step (Build steps);
     - first-pass unplanned and the 11/11 example (§0, §A3).
+  - r2, reviewer-codex r1:
+    - the Next line is its own function, and `plan.NowNext` is unchanged (§B6);
+    - the mock-ups' counts are 9/11, with the shared scale;
+    - a manual done is ignored once work is linked (§A2).
 - Date: 2026-11-27. Author: architect. Base: origin/dev `a919454e`.
 - Source: the person's typed directive to master of 2026-11-27, 23:12, relayed as task
   `plan-lifecycle-spec`, after master's report 1795817303570-0 ("Revoir le plan"). The person's
@@ -98,6 +102,17 @@ comes from broker events, by these rules (`plan/derive.go`):
 - **`plan done`** becomes an exception for a task with no linked work (a step done outside the
   bus). busmon shows it as "recorded by master". It is refused on a task that has linked work:
   "<task> has linked work: its state comes from it". This uses the same guards as onboarding §9.3.
+- **A manual done is ignored once work is linked.** Today derive returns `Done` for `fact.Done`
+  before it reads anything else (`derive.go:117`). The new order is:
+  1. derive calls `plan.Links` first;
+  2. when the task has linked work (a request, an attachment, a `board` entry), `fact.Done` is
+     ignored, and the state comes from that work;
+  3. the detail pane says "recorded done ignored: linked work decides".
+
+  So attaching an unapproved PR after a `plan done` makes the task "in review", never done. The
+  fact stays in `{p}:plan:facts`, unchanged, and counts again only if the link goes. Test: `plan
+  done` on a task with no work, then `plan attach` of an open, unapproved PR, gives "in review";
+  then that PR merged and approved at its head gives done.
 
 So "merged" is a fact the dispatcher already writes. No one records it any more.
 
@@ -258,10 +273,19 @@ The Releases column goes. At 120 columns and wider, the right pane shows the sel
 
 ## B6. The Next line
 
-The tab's last line: `Next: quiet-update-spec → architect · for you: merge #737`. It is
-`plan.NowNext`'s next row (status-summary §3.2): the first upcoming task with no open
-dependency, in priority order, with its owner. After it comes the first thing waiting on the
-person, with its command when it fits.
+The tab's last line names the next task that can start, and what waits on the person:
+`Next: <task> → <owner> · for you: merge #737`.
+- **The next task** is `plan.NextFree(rows)`: the first `Upcoming` row in file order whose
+  `WaitingOn` is empty, so none of its `after` tasks is still open. This is the person's "top
+  unblocked task". Priority is not used: the file's order is the plan's order (§A2).
+- With none free, the line reads `Next: none free (<first upcoming> waits on <its first open
+  dep>)`. The mock-ups show that case.
+- **`plan.NowNext` is unchanged** (status-summary §3.2: today's `planInHand`, the first
+  upcoming row in file order, deps not read). It keeps feeding the plan header's "in progress"
+  and the idle view. `NextFree` is a second function for a second question. A test fixes the
+  difference: with the first upcoming row waiting on an open task, `NowNext` returns it, and
+  `NextFree` returns the next free row, or none.
+- After the task comes the first thing waiting on the person, with its command when it fits.
 
 ## B7. Responsive tiers
 
@@ -287,13 +311,13 @@ The spacing is proportional to time, over the task's life, with labels under the
 
 ```
 ╭─ Plan ───────────────────────────────────────────────────────────── v0.34 ▾ ─╮
-│ v0.34 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╌╌╌ 10/11  │
+│ v0.34 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╌╌╌╌╌╌╌╌╌╌╌╌  9/11 │
 │       1 in progress · 1 for you                                              │
 │                                                                              │
 │ Broker ACL      ━━━━━━━━━━━━━━━━━━━━  4/4  done                              │
-│ Specs           ━━━━━━━━━━━━━━╌╌╌╌╌╌  3/4  in progress                       │
+│ Specs           ━━━━━━━━━━━━━━━╌╌╌╌╌  3/4  in progress                       │
 │  ◐ wip-limit-spec  Spec: a work-in-progress limit       architect #736       │
-│ Builds          ━━━━━━━━━━━━━━━╌╌╌╌╌  2/3  for you                           │
+│ Builds          ━━━━━━━━━━╌╌╌╌╌       2/3  for you                           │
 │  ! single-approval-build  Build the single approval     coder #737           │
 │                                                                              │
 │ UNPLANNED  2 merged, not in the plan                                         │
@@ -302,7 +326,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 │                                                                              │
 │ DONE  9   d shows                                                            │
 │                                                                              │
-│ Next: quiet-update-spec → architect · for you: merge #737                    │
+│ Next: none free (quiet-update-spec waits on wip-limit-spec) · for you: #737  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ↑↓  enter task  V releases  a attach  n next plan  x not plan  + - priority
 ```
@@ -311,7 +335,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 
 ```
 ╭─ Plan ───────────────────────────────────────────────────────────────────────────────────────────────────── v0.34 ▾ ─╮
-│ v0.34 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╌╌╌╌ 10/11      │ ! single-approval-build                                   │
+│ v0.34 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╌╌╌╌╌╌╌  9/11      │ ! single-approval-build                                   │
 │       1 in progress · 1 for you                          │   Build the single approval                               │
 │                                                          │                                                           │
 │ Broker ACL   ━━━━━━━━━━━━━━━━━━━━  4/4  done             │ State   approved at 1ca5d19, waits for your merge         │
@@ -319,7 +343,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 │  ◐ wip-limit-spec  Spec: a WIP limit  architect #736     │ Spec    2026-11-21-single-approval-design.md              │
 │  ○ quiet-update-spec  Spec: quiet update  architect      │ Check   go test ./cmd/agentbus -run Single                │
 │    ↳ waits on wip-limit-spec                             │         exit 0 at 1ca5d19 (reviewer-codex)                │
-│ Builds       ━━━━━━━━━━━━━━╌╌╌╌╌╌  2/3  for you          │ Deps    none                                              │
+│ Builds       ━━━━━━━━━━╌╌╌╌╌       2/3  for you          │ Deps    none                                              │
 │  ! single-approval-build  Build single…  coder #737      │ Last    approve, reviewer-codex, 2h ago                   │
 │                                                          │                                                           │
 │ UNPLANNED  2 merged, not in the plan                     │ Run     gh pr merge 737                                   │
@@ -328,8 +352,8 @@ The spacing is proportional to time, over the task's life, with labels under the
 │                                                          │                                                           │
 │ DONE  9   d shows                                        │                                                           │
 │                                                          │                                                           │
-│ Next: quiet-update-spec → architect                      │                                                           │
-│       for you: merge #737                                │                                                           │
+│ Next: none free (quiet-update-spec waits                 │                                                           │
+│       on wip-limit-spec) · for you: merge #737           │                                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↑↓ select  enter task  V releases  a attach  n next plan  x not plan work  + - priority  d done
 ```
@@ -338,7 +362,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 
 ```
 ╭─ Plan ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── v0.34 ▾ ─╮
-│ v0.34 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╌╌╌╌ 10/11      │ ! single-approval-build                                                                           │
+│ v0.34 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╌╌╌╌╌╌╌  9/11      │ ! single-approval-build                                                                           │
 │       1 in progress · 1 for you                          │   Build the single approval                                                                       │
 │                                                          │                                                                                                   │
 │ Broker ACL   ━━━━━━━━━━━━━━━━━━━━  4/4  done             │ State   approved at 1ca5d19, waits for your merge                                                 │
@@ -346,7 +370,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 │  ◐ wip-limit-spec  Spec: a WIP limit  architect #736     │ Spec    2026-11-21-single-approval-design.md                                                      │
 │  ○ quiet-update-spec  Spec: quiet update  architect      │ Check   go test ./cmd/agentbus -run Single                                                        │
 │    ↳ waits on wip-limit-spec                             │         exit 0 at 1ca5d19 (reviewer-codex)                                                        │
-│ Builds       ━━━━━━━━━━━━━━╌╌╌╌╌╌  2/3  for you          │ Deps    none                                                                                      │
+│ Builds       ━━━━━━━━━━╌╌╌╌╌       2/3  for you          │ Deps    none                                                                                      │
 │  ! single-approval-build  Build single…  coder #737      │ Last    approve, reviewer-codex, 2h ago                                                           │
 │                                                          │                                                                                                   │
 │ UNPLANNED  2 merged, not in the plan                     │ Run     gh pr merge 737                                                                           │
@@ -355,8 +379,8 @@ The spacing is proportional to time, over the task's life, with labels under the
 │                                                          │   ◦──●────●──◐───✓─✓────!                                                                         │
 │ DONE  9   d shows                                        │   req acc  rev    approve  you                                                                    │
 │                                                          │                                                                                                   │
-│ Next: quiet-update-spec → architect                      │                                                                                                   │
-│       for you: merge #737                                │                                                                                                   │
+│ Next: none free (quiet-update-spec waits                 │                                                                                                   │
+│       on wip-limit-spec) · for you: merge #737           │                                                                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↑↓ select  enter task  V releases  a attach  n next plan  x not plan work  + - priority  d done
 ```
