@@ -326,6 +326,7 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	add("state", state)
 	add("title", Preview(r.Task.Title))
 	add("owner", r.Task.Owner)
+	add("check", Preview(r.Task.Check)) // in full, the block wraps it (onboarding §12.5)
 	if _, ok := planStartable(p, id); ok { // the person's own task: the way to act on it, a row of the block
 		key, _, _ := strings.Cut(tourKeys(tourRef{m: ModeOverlay, act: ActPlanStart}), " ")
 		f.add("action", S(RoleAccent, key), S(RoleText, "  start the discussion with master"))
