@@ -43,6 +43,13 @@ type RequestInfo struct {
 	ReviewN int `json:"review_n,omitempty"`
 	// MergedSteps are the heads of the --more steps merged so far (§3.4).
 	MergedSteps []string `json:"merged_steps,omitempty"`
+	// OpenSteps (sibling-enforce §3): every --more step reviewed and not yet
+	// judged merged or abandoned; without Parallel, at most one.
+	OpenSteps []OpenStep `json:"open_steps,omitempty"`
+	// Parallel: the sender's or the person's exception (sibling-enforce §3).
+	Parallel *ParallelMark `json:"parallel,omitempty"`
+	// AbandonedSteps: open steps closed unmerged by the sender or the person.
+	AbandonedSteps []AbandonedStep `json:"abandoned_steps,omitempty"`
 	// ClosedOnMerge: the dispatcher closed it, its branch's head delivered
 	// into the base (§3.3), with no reply.
 	ClosedOnMerge *MergeClose `json:"closed_on_merge,omitempty"`
@@ -287,6 +294,8 @@ type MergeClose struct {
 type ReviewOpts struct {
 	Branch, Note, Commit, ReviewBase string
 	More                             bool
+	// Steps: the open steps the CLI judged merged (sibling-enforce §3.1).
+	Steps StepsJudged
 }
 
 // ReviewRequestOpts is ReviewRequest with the close-on-merge facts.
@@ -303,7 +312,11 @@ func (b *Bus) ReviewRequestOpts(ctx context.Context, task, agent string, o Revie
 	if o.More {
 		more = "1"
 	}
-	_, err := b.transitionRequest(ctx, task, agent, "review", o.Note, o.Commit, o.Branch, "0", o.ReviewBase, more)
+	judged, n, err := o.Steps.args()
+	if err != nil {
+		return err
+	}
+	_, err = b.transitionRequest(ctx, task, agent, "review", o.Note, o.Commit, o.Branch, "0", o.ReviewBase, more, judged, n)
 	return err
 }
 func (b *Bus) BlockRequest(ctx context.Context, task, agent, reason string) error {
@@ -323,10 +336,21 @@ func (b *Bus) CompleteRequest(ctx context.Context, task, agent, body string) (st
 // CompleteRequestAt is CompleteRequest that also records the delivered commit
 // and branch (missions). A repeated done keeps the first commit and branch.
 func (b *Bus) CompleteRequestAt(ctx context.Context, task, agent, body, commit, branch string) (string, error) {
+	return b.CompleteRequestSteps(ctx, task, agent, body, commit, branch, StepsJudged{})
+}
+
+// CompleteRequestSteps is CompleteRequestAt with the open steps the CLI
+// judged merged: the target's done is refused while one stays listed
+// (sibling-enforce §3.1).
+func (b *Bus) CompleteRequestSteps(ctx context.Context, task, agent, body, commit, branch string, steps StepsJudged) (string, error) {
 	if body == "" {
 		return "", fmt.Errorf("completion response required")
 	}
-	return b.transitionRequest(ctx, task, agent, "done", body, commit, branch)
+	judged, n, err := steps.args()
+	if err != nil {
+		return "", err
+	}
+	return b.transitionRequest(ctx, task, agent, "done", body, commit, branch, "0", "", "", judged, n)
 }
 
 // CheckReportTask is report --task's check, before anything is published
@@ -371,8 +395,12 @@ func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body strin
 	if len(extra) >= 3 {
 		limit = extra[2]
 	}
-	if len(extra) == 5 { // review: the base tip read, --more
+	if len(extra) >= 5 { // review: the base tip read, --more
 		base, more = extra[3], extra[4]
+	}
+	judged, readN := "", ""
+	if len(extra) == 7 { // review and done: the open steps judged, the review_n read
+		judged, readN = extra[5], extra[6]
 	}
 	if !ValidName(task) || !ValidName(agent) {
 		return "", fmt.Errorf("invalid task or agent")
@@ -380,7 +408,7 @@ func (b *Bus) transitionRequest(ctx context.Context, task, agent, op, body strin
 	if err := ValidateText(body, CmdMaxRunes); err != nil {
 		return "", err
 	}
-	out, err := requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch, limit, base, more).Text()
+	out, err := requestTransition.Run(ctx, b.r, []string{BoardKey(b.project), StreamKey(b.project, "cmd")}, task, agent, op, body, streamMaxLen, commit, branch, limit, base, more, "", judged, readN).Text()
 	return out, requestError(err)
 }
 
@@ -392,7 +420,10 @@ var ErrRequestRefused = errors.New("request refused")
 // requestRefusals are the request script's own error replies.
 var requestRefusals = []string{"unknown request", "board task is not a tracked request", "only the target agent may",
 	"request already completed", "request expired", "request body missing", "request must be explicitly accepted", "blocked request",
-	"wip limit reached", "only an accepted request goes to review"}
+	"wip limit reached", "only an accepted request goes to review",
+	// sibling-enforce §3: the open steps' refusals, and parallel's and abandon's.
+	"step ", "a step is open on ", "request changed since its steps were judged",
+	"only the request's sender or the person may", "no such open step"}
 
 // refusal is a script refusal, its message unchanged.
 type refusal struct{ msg string }
@@ -418,6 +449,25 @@ var requestTransition = redis.NewScript(requestTransitionSrc)
 // requestTransitionSrc is the script's source: its error_reply literals are
 // the refusals requestError marks (a test holds the list to them).
 const requestTransitionSrc = `
+local function steps_rest(r)
+ local open=r.open_steps;if type(open)~='table' then open={} end
+ local judged={};local jr=ARGV[12] or ''
+ if jr~='' then judged=cjson.decode(jr) end
+ if #judged>0 and (tonumber(r.review_n) or 0)~=tonumber(ARGV[13]) then return 'request changed since its steps were judged: run it again' end
+ local js={};for _,j in ipairs(judged) do js[j.branch]=true end
+ local rest={};for _,s in ipairs(open) do if not js[s.branch] then rest[#rest+1]=s end end
+ return rest,judged,open
+end
+local function steps_apply(r,judged,rest,open)
+ local listed={};for _,s in ipairs(open) do listed[s.branch]=true end
+ local ms=r.merged_steps;if type(ms)~='table' then ms={} end
+ local have={};for _,h in ipairs(ms) do have[h]=true end
+ for _,j in ipairs(judged) do
+  if listed[j.branch] and not have[j.head] then ms[#ms+1]=j.head;have[j.head]=true end
+ end
+ if #ms>0 then r.merged_steps=ms end
+ if #rest>0 then r.open_steps=rest else r.open_steps=nil end
+end
 local raw=redis.call('HGET',KEYS[1],ARGV[1]);if not raw then return redis.error_reply('unknown request') end
 local e=cjson.decode(raw);local r=e.request
 if not r then return redis.error_reply('board task is not a tracked request') end
@@ -464,6 +514,18 @@ if ARGV[3]=='accept' then
  e.state='accepted';r.blocked_reason=nil
 elseif ARGV[3]=='review' then
  if e.state~='accepted' then return redis.error_reply('only an accepted request goes to review') end
+ local rest,judged,open=steps_rest(r)
+ if type(rest)=='string' then return redis.error_reply(rest) end
+ if #rest>0 and ARGV[7]=='' then
+  local s=rest[1].branch
+  return redis.error_reply('a step is open on '..s..': name the branch (--branch '..s..' for '..s..' itself)')
+ end
+ if type(r.parallel)~='table' then
+  for _,s in ipairs(rest) do
+   if s.branch~=ARGV[7] then return redis.error_reply('step '..s.branch..' of '..ARGV[1]..' is not merged yet: sibling steps run in series (merge-conflicts §3); take another task, or ask '..(r.from or '')..' for agentbus request parallel '..ARGV[1]) end
+  end
+ end
+ steps_apply(r,judged,rest,open)
  e.state='review'
  if ARGV[7]~='' then r.branch=ARGV[7] end
  if ARGV[4]~='' then r.review_note=ARGV[4] end
@@ -471,6 +533,13 @@ elseif ARGV[3]=='review' then
  if ARGV[6]~='' then r.commit=ARGV[6] end
  if ARGV[9]~='' then r.review_base=ARGV[9] end
  if ARGV[10]=='1' then r.review_more=true end
+ if r.branch then
+  local steps=r.open_steps;if type(steps)~='table' then steps={} end
+  local kept={}
+  for _,s in ipairs(steps) do if s.branch~=r.branch then kept[#kept+1]=s end end
+  if ARGV[10]=='1' and ARGV[9]~='' then kept[#kept+1]={branch=r.branch,commit=r.commit} end
+  if #kept>0 then r.open_steps=kept else r.open_steps=nil end
+ end
 elseif ARGV[3]=='block' then
  if e.state~='blocked' or r.blocked_reason~=ARGV[4] then
   redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',r.from,'type','blocked','ref',r.thread,'command',ARGV[4],'task',ARGV[1],'text_complete','yes')
@@ -484,6 +553,12 @@ else
   if why=='' then return redis.error_reply('request must be explicitly accepted before completion') end
   r.closed_unaccepted=why
  elseif e.state=='blocked' then return redis.error_reply('blocked request: accept to resume before completion') end
+ if not bysender then
+  local rest,judged,open=steps_rest(r)
+  if type(rest)=='string' then return redis.error_reply(rest) end
+  if #rest>0 then return redis.error_reply('step '..rest[1].branch..' of '..ARGV[1]..' is not merged yet: done once it merges, or ask '..(r.from or '')..' to abandon it') end
+  steps_apply(r,judged,rest,open)
+ end
  local to=r.from
  if bysender then to=r.target end
  result=redis.call('XADD',KEYS[2],'MAXLEN','~',ARGV[5],'*','from',ARGV[2],'target',to,'type','reply','ref',r.thread,'command',ARGV[4],'text_complete','yes')

@@ -746,8 +746,13 @@ Driving a multi-task plan through an implementer (e.g. `claude-worker`) + a revi
    git diff --name-only origin/<base>...origin/<branch>
    ```
 
-   - **Sibling steps run in series.** Step N+1 of a spec is never in flight beside step N: send
-     it once N is merged. Meanwhile the implementer takes an item from another spec.
+   - **Sibling steps run in series, per build request.** The board enforces it
+     (sibling-enforce): a `--more` step stays listed on its request until it merges, and the
+     implementer's review of the next step, or its `done`, is refused meanwhile. Meanwhile the
+     implementer takes an item from another spec. Only when the steps share no file (the check
+     above, per step) set `agentbus request parallel <task> <reason>` (you as the sender, or the
+     person); busmon's Board and Plan rows show it; `--off` forgets no step. A step whose PR was
+     closed unmerged: `agentbus request step <task> <branch> --abandon <reason>`.
    - **A move or a rewrite runs alone.** A package move, a fixture move, a README or guide
      rewrite: while one is in flight, send nothing that touches its files. A pending one waits
      until the in-flight PRs on those files merge. Name it as a move or rewrite in its plan task.

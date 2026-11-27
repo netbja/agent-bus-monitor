@@ -36,7 +36,8 @@ func AuditKey(project string) string { return project + ":audit" }
 // AuditActions are §2's acts, the only actions taken; reject joined approve
 // at step 2 (master's answer: a verdict either way).
 var AuditActions = []string{"approve", "reject", "answer", "merge", "push", "deliver", "force", "ci-handoff", "update", "reinstall",
-	"quota-pause", "pause", "resume", "suspend", "retire", "retro-apply"}
+	"quota-pause", "pause", "resume", "suspend", "retire", "retro-apply",
+	"step-merged", "step-abandoned", "parallel"} // sibling-enforce §3
 
 // The outcomes of an act.
 const (

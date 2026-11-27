@@ -139,6 +139,9 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 		if l, ok := planProgressLine(r, reqs, paces, now); ok { // progress-line §3: not a row
 			emit(FitLine(append(Line{{Text: "      ", Role: RoleDim}}, l...), width))
 		}
+		if why := planParallel(r, reqs); why != "" { // sibling-enforce §3: the exception, under its task
+			emit(FitLine(Line{{Text: "      ", Role: RoleDim}, {Text: "parallel: " + Preview(why), Role: RoleAttention}}, width))
+		}
 	}
 	fold := func(name string, l Line) { // a folded section's line, an item Enter opens
 		v.items = append(v.items, planItem{fold: name, line: len(v.lines)})
@@ -374,6 +377,20 @@ func planLinkLine(links map[string]planLink, task string) (Line, bool) {
 		return nil, false
 	}
 	return Line{S(RoleMuted, "plan  "), S(RoleText, "#"+Preview(pl.id)+" "+Preview(pl.title)), S(RoleMuted, " ("+plan.Label(pl.state)+")")}, true
+}
+
+// planParallel is the parallel exception's reason of r's board request
+// (its board field), "" none.
+func planParallel(r plan.Row, reqs []request) string {
+	if r.Task.Board == "" {
+		return ""
+	}
+	for _, q := range reqs {
+		if q.Task == r.Task.Board && q.Tracked {
+			return q.Parallel
+		}
+	}
+	return ""
 }
 
 // planProgressLine is the progress line under a task in progress whose

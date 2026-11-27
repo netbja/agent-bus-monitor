@@ -225,6 +225,9 @@ func boardViewOf(m map[string]bus.BoardEntry, now time.Time, width int, o boardO
 		if w := waitsTag(r.r, o.agents); w != "" {
 			l = append(l, Seg{Text: "  " + w, Role: RoleMuted})
 		}
+		if q := r.e.Request; q != nil && q.Parallel != nil { // sibling-enforce §3: every exception seen
+			l = append(l, Seg{Text: "  parallel: " + Preview(q.Parallel.Reason), Role: RoleAttention})
+		}
 		if r.alert != "" && o.masterDown {
 			l = append(l, Seg{Text: "  master is down; self-repair relaunches it", Role: RoleAttention})
 		}

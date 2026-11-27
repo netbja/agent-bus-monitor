@@ -128,6 +128,7 @@ var foreignFlags = []string{
 	"--no-dangling", "--no-progress", // git fsck, the repository check of an automatic restart (reboot-resume §3.1)
 	"--no-renames", "--numstat", // git diff, deliver's size class (single-approval §3.2)
 	"--is-ancestor", // git merge-base, request review's base check (board-drift §3.2)
+	"--heads",       // git ls-remote, request review's open-step judgement (sibling-enforce §3.1)
 }
 
 // Every flag an agentbus command reads (a "--x" literal in a non-test file of

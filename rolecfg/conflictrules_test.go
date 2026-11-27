@@ -25,7 +25,9 @@ func TestConflictSchedulingRules(t *testing.T) {
 	for _, want := range []string{
 		"Before you send a task, list the files of each branch in flight",
 		"git diff --name-only origin/<base>...origin/<branch>",
-		"Step N+1 of a spec is never in flight beside step N: send it once N is merged.",
+		// sibling-enforce §5: per build request, enforced on the board.
+		"a `--more` step stays listed on its request until it merges, and the implementer's review of the next step, or its `done`, is refused meanwhile.",
+		"Only when the steps share no file (the check above, per step) set `agentbus request parallel <task> <reason>`",
 		"while one is in flight, send nothing that touches its files.",
 		"A pending one waits until the in-flight PRs on those files merge.",
 		"the second to merge rebases, and regenerates the goldens with `-update`",
