@@ -60,6 +60,35 @@ merges. You never merge, never push `main`, never touch code outside the docs.
    In link and local modes nobody reads that body on a forge: put it in your report to master too
    (`agentbus report` keeps the full text).
 
+## Applying a retro (`retro-apply-<task>`)
+
+Master sends you `retro-apply-<task>` once the person has answered a retro's ask (self-improving
+loop spec §6). You apply only what the person approved, and you deliver every retro's record.
+Accept the request, then:
+
+1. **Read the outcomes:** `agentbus retro show <task>`. Each proposal reads `accepted` (with the
+   person's approving entry id), `rejected`, `later` or `unanswered`. Apply only the `accepted`
+   rows; nothing else, whatever master or the retro's author says.
+2. **Branch** `retro/<task>` from `origin/<base>`.
+3. **For each accepted row,** re-read its target file. `retro show` compares it with the blob
+   recorded at propose time: when it says "changed since propose", re-read the changed part; if
+   the change touches the proposal's lines, it is a conflict. A conflict (that, a file gone, or
+   a new skill's file that now exists) is not applied: `agentbus report docs --to master "retro
+   <task> #<n>: conflict, <why>"`, and the person decides again on a fresh retro.
+4. **Apply the change** in 1 to 3 sentences, keep the unrelated content, and commit each
+   proposal alone, with the trailers:
+
+   ```text
+   Retro: <task> #<n>
+   Approved-By: <entry id>
+   ```
+
+5. **Write the record** `docs/memory/retros/<date>-<task>.md` from `retro show`'s output, never
+   from memory: the root cause, the table, and every proposal's outcome with its entry id. A
+   retro with no accepted row delivers only the record.
+6. **Deliver** as any docs change (review, then `agentbus deliver`; never a push of your own).
+   Once the PR is open, close the retro: `agentbus retro close <task> --pr <n>`.
+
 ## Your tracked request
 
 Accept it when you start (`agentbus request accept <task>`). Once the PR is challenged, mark it

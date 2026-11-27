@@ -316,8 +316,8 @@ func TestPaletteClassCArgvIsInTheAgentbusTable(t *testing.T) {
 			}
 		}
 	}
-	if n != 8 {
-		t.Fatalf("%d class C rows, want 8", n)
+	if n != 9 {
+		t.Fatalf("%d class C rows, want 9", n)
 	}
 }
 

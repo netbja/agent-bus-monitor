@@ -82,25 +82,9 @@ func (m *Model) endPriorityOverrides(readAt time.Time) {
 // single request's row is "req:<task>", a group's key ends in its kind.
 func (m *Model) priorityTarget() (request, string) {
 	const notRequest = "only a tracked request has a priority"
-	key := ""
-	if p := m.rd.top(); p != nil {
-		if p.kind != ovRequest {
-			return request{}, notRequest
-		}
-		key = p.key
-	} else {
-		switch m.ui.focus {
-		case PanelWork: // a row standing for a tracked request (correction 7)
-			k, ok := m.workRequestKey()
-			if !ok {
-				return request{}, notRequest
-			}
-			key = k
-		case PanelRequests:
-			key = m.lists.of(PanelRequests).Selected()
-		default:
-			return request{}, notRequest
-		}
+	key, ok := m.selectedRequestKey()
+	if !ok {
+		return request{}, notRequest
 	}
 	if strings.HasPrefix(key, "grp:") && strings.HasSuffix(key, "|"+kindRequest) {
 		return request{}, "open the group to set one request's priority"
@@ -118,6 +102,22 @@ func (m *Model) priorityTarget() (request, string) {
 		}
 	}
 	return request{}, notRequest
+}
+
+// selectedRequestKey is the key of the row the person has selected where a
+// tracked request can stand: its page, a Requests row, a Work row that
+// stands for one (correction 7); ok false elsewhere.
+func (m *Model) selectedRequestKey() (string, bool) {
+	if p := m.rd.top(); p != nil {
+		return p.key, p.kind == ovRequest
+	}
+	switch m.ui.focus {
+	case PanelWork:
+		return m.workRequestKey()
+	case PanelRequests:
+		return m.lists.of(PanelRequests).Selected(), true
+	}
+	return "", false
 }
 
 // stepPriority is the level one step up or down: low, normal, high.

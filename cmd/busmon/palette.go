@@ -38,6 +38,9 @@ type palCmd struct {
 	// --project, from the checked args; shown first, run after y.
 	Argv func(args []string) []string
 	As   bool // class C: --as <identity.as> is appended, refused without one
+	// Fill: a class C row's args completed from the screen before the argv
+	// is built (retro: the selected request), or why not.
+	Fill func(m *Model, args []string) ([]string, string)
 }
 
 // palArg is one argument; Rest takes the rest of the line (a text).

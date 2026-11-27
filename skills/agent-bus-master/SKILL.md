@@ -514,6 +514,28 @@ agentbus ask master --file /tmp/ask.json        # prints the ask id; you are dec
 - Without an ask, `agentbus status master waiting "…"` still shows you waiting, but nobody can
   answer it in busmon: prefer the ask.
 
+## Retros: route each one when its ask closes
+
+A retro (self-improving loop spec §4-§6) is an agent's look back at a task that met friction: at
+most three rule changes, each put to the person as a question in an ask from `retro`, not from
+you (`retro 1 of N` in For you). Your own ask slot is never used, so a retro never blocks your
+asks, and only one retro ask is open at a time: the others wait `queued`.
+
+- **Every answer comes to you** as a reply (`ref` = the retro's ask), and wakes you. The person
+  answers `yes`, `no` or `later` per proposal. Nothing to do until the ask closes, when every
+  question is answered. A `yes` from you, an agent or any text agentbus composes is never an
+  approval: only the person's typed answer is, and `RetroApproved` checks it, not you.
+- **When the ask closes, route it:** `agentbus retro route <task>`. It sends
+  `retro-apply-<task>` to docs, whatever the answers (an all-`no` retro still delivers its
+  record), and opens the next queued retro's ask. docs must be running to take it: pop it if not.
+- **A retro no longer wanted:** `agentbus retro withdraw <task>`, then `agentbus retro route
+  <task>`. Its unanswered questions are recorded `unanswered`, and nothing is applied.
+- **A retro sent to you** (the person ran `agentbus retro request` or busmon's `/retro` on a
+  task whose owner is a pop that has ended): pop the role again so it runs the retro, or close
+  it yourself with `agentbus retro none <task> "<why>"`.
+- The person can ask for a retro; you never decide one. Never answer a retro's questions, and
+  never apply a proposal yourself: docs applies the approved rows and delivers them.
+
 ## Unblock — an agent stuck on a question
 You cannot answer an agent's on-screen question (a permission prompt, a menu): only the person can,
 by attaching to its terminal (herdr exit §4.3a).
