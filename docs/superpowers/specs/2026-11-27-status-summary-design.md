@@ -8,6 +8,8 @@
     - the actions `open` and `reply`;
     - `--all` with the projects that wait on the person first;
     - a Team line of anomalies.
+  - r4 (reviewer-codex r3): an unknown `intent` fails closed, and every tracked request names
+    its provenance (§4.3).
   - r3 answers the two r2 rejects (§4.3):
     - foureyes: `intent`, `context` and `draft_by` are carried by `bus.Event` and the subscribe
       JSON;
@@ -218,8 +220,9 @@ parser (`bus/stream.go:318`) reads only the fields it knows. A new stream field 
 before the receiver saw it. So the build adds them end to end:
 
 - **`bus.Event` gains three fields:**
-  - `Intent`, from the field `intent`. Only `note` and `question` are read; any other value reads
-    as `""`, as `Needs` does with its values;
+  - `Intent`, from the field `intent`: `note` or `question`, and **`unknown`** for any other value
+    that is present. A typo or a future value is never read as "no intent". This fails closed,
+    unlike `Needs`, which only labels;
   - `Context`, from `context`: `<kind>:<id>`, validated like an id;
   - `DraftBy`, from `draft_by`: a valid name, or `""`.
 - **The subscribe JSON** gains `intent`, `context` and `draft_by`. They are additive `v1` fields,
@@ -235,8 +238,9 @@ before the receiver saw it. So the build adds them end to end:
 typed it. The rule is that such an entry never grants authority, and never starts tracked
 work. Master's skill alone is not enough to enforce that, so:
 
-- **One predicate:** `bus.Event.Actionable() bool` is `Typed && Intent == ""`. Every place where
-  code grants authority from `typed=yes` calls it, and no other test exists:
+- **One predicate:** `bus.Event.Actionable() bool` is true only when `Typed` is set and the entry
+  has **no `intent` field at all**. A known, unknown or empty-but-present `intent` makes it false.
+  Every place where code grants authority from `typed=yes` calls it, and no other test exists:
   - `TypedApproval` (onboarding §8.4) refuses an approving entry with an intent. Its entries are
     replies, and busmon never writes `intent` on one, so this is defence in depth;
   - the concierge's `typed_ref` check (concierge §5.3) refuses a referenced entry whose relay
@@ -246,14 +250,37 @@ work. Master's skill alone is not enough to enforce that, so:
   A test greps the repository: no authority check reads `.Typed` except through `Actionable`.
   Reading `Typed` for display or for person-memory's words stays allowed: a question is still the
   person's words.
-- **No tracked work from it.** Tracked work starts with `agentbus request send <task> <target>
-  [--ref T]`. The `--ref` is the thread it answers, often the person's directive. `request send`
-  reads the entry named by `--ref` (or the root of that thread), and refuses when it has an
-  intent: "<id> is a question (or a note) from the person: it starts no tracked work; ask the
-  person for a directive". The same check runs in `plan` writes that take an entry id, and in
-  the retro's request.
+- **No tracked work from it: every request names its provenance.** Tracked work starts with
+  `agentbus request send <task> <target> … <body>`. Today `--ref` is optional, so a request
+  could be sent with no source to check. `request send` therefore requires exactly one of:
+  - **`--ref <id>`**: the entry the request comes from, often the person's directive. `request
+    send` reads that entry, or the root of its thread, and refuses when it has an `intent` field
+    (any value): "<id> is a question (or a note) from the person: it starts no tracked work; ask
+    the person for a directive". An id that is not an entry of the cmd stream or the archive is
+    refused too, never read as "no intent": "<id> cannot be read: give a directive's id,
+    `--plan`, or `--own`";
+  - **`--plan <task>`**: a task of the loaded plan, which the person adopted. It is refused when
+    no plan is loaded, or the task is not in it;
+  - **`--own "<reason>"`**: the sender's own initiative (for example a flaky test it found), with
+    a one-line reason. It is recorded in the request (`provenance=own`, `reason`), and busmon's
+    request row and the board show it as `own: <reason>`. So a request master derived from a
+    question can only go out labelled, in plain sight, as master's own idea. The person sees that
+    label, and the dishonesty is on record.
+
+  The provenance is stored on the board entry (`provenance`: `ref:<id>`, `plan:<task>` or
+  `own`), as an additive field written by the request script. The same `--ref` check runs in the
+  `plan` writes that take an entry id, and in the retro's request. **Callers to update in the same
+  PR**:
+  - the `agent-bus-master` skill;
+  - the other skills and role prompts that run `request send` (10 call sites at base);
+  - the fake client;
+  - the tests.
+
+  A request sent without one of the three flags is refused with the usage line.
 - **What code cannot stop.** Master can still do work by hand on a question, without a
-  request: it is an agent. Nothing in code links that work to the entry. The skill rule covers
+  request, or label a request `--own` when it came from a question. It is an agent, and nothing
+  in code can prove where its idea came from. `--own` makes that visible: the label is shown to
+  the person. The skill rule covers
   it, the `[question: answer only]` tag makes the intent impossible to miss, and the rule is that
   no tracked work, approval or delivery can cite the question.
 - **Tests (step 4):**
@@ -263,6 +290,12 @@ work. Master's skill alone is not enough to enforce that, so:
   - `Actionable` is false for both, and true for a plain typed directive;
   - `request send --ref <question id>` is refused, and the same request with a directive's id
     passes;
+  - **missing provenance:** `request send` with none of `--ref`, `--plan` or `--own` is
+    refused, and `--ref` to an id that is not an entry is refused;
+  - `--plan` with no loaded plan is refused. `--own "flaky test"` passes, and the board entry shows
+    `provenance=own`;
+  - **unknown intent:** a typed entry with `intent=question_typo`, and one with `intent=` (empty
+    but present), are each not `Actionable`, refused by `TypedApproval`, and refused as `--ref`;
   - `TypedApproval` refuses an entry with an intent;
   - the answer guard skips a note and counts a question;
   - the grep test for `.Typed` outside `Actionable` in authority checks.
