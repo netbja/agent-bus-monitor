@@ -143,6 +143,13 @@ func ContextCompactedMark(agent string) string { return "context-compacted:" + a
 func BgSkipMark(agent, action string) string       { return "bgskip:" + agent + ":" + action }
 func BgSkipNoticeMark(agent, action string) string { return "bgskip-notice:" + agent + ":" + action }
 
+// MemoryMark is the {p}:quota field of an agent's memory episode
+// (agent-resource-limits §5, step 3e): its value is the agent's pid when the
+// escalation target was told it crossed limits.warn_at of its cap; a fresh
+// reading below ends the episode (the mark deleted), a new process starts
+// another.
+func MemoryMark(agent string) string { return "memory:" + agent }
+
 // The auto-compact's marks (auto-compact): CompactSinceMark holds
 // "<session>|<ms>", the Redis time the fill was first seen at the urgent
 // threshold in that session (deleted when a fresh reading falls below it);

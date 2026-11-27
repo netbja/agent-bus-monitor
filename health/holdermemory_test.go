@@ -16,6 +16,10 @@ func TestEvaluateHolderMemory(t *testing.T) {
 	build := func(raw string, current bool, m *HolderMemory) HolderBuild {
 		return HolderBuild{Key: raw, Raw: raw, Current: current, Answers: true, Terms: 2, Memory: m}
 	}
+	withMost := func(b HolderBuild, agent string, n uint64) HolderBuild {
+		b.Most = &HolderTop{Agent: agent, Bytes: n}
+		return b
+	}
 	for _, c := range []struct {
 		name   string
 		e      HolderEvidence
@@ -28,6 +32,9 @@ func TestEvaluateHolderMemory(t *testing.T) {
 		{"no cgroup", HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, nil)}}, nil, Unknown, []string{"no memory cap on this host", "v1"}},
 		{"below", HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(10*gib, 40*gib, 0))}}, nil, OK, []string{"holder build v1: 10.0G of 40.0G cap (25 %)"}},
 		{"at warn_at", HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(32*gib, 40*gib, 0))}}, nil, Warn, []string{"holder build v1: 32.0G of 40.0G cap (80 %)"}},
+		{"at warn_at, the agent using the most", HolderEvidence{Known: true, Builds: []HolderBuild{withMost(build("v1", true, mem(36*gib, 43*gib, 0)), "coder", 21*gib)}}, nil, Warn,
+			[]string{"holder build v1: 36.0G of 43.0G cap (83 %), most: coder 21.0G"}},
+		{"below names no agent", HolderEvidence{Known: true, Builds: []HolderBuild{withMost(build("v1", true, mem(10*gib, 40*gib, 0)), "coder", 9*gib)}}, nil, OK, []string{"(25 %)"}},
 		{"no cap", HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(10*gib, 0, 0))}}, nil, OK, []string{"holder build v1: 10.0G, no cap"}},
 		{"first pass knows no rise", HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(gib, 40*gib, 3))}}, nil, OK, nil},
 		{"oom rise", HolderEvidence{Known: true, Builds: []HolderBuild{build("v1", true, mem(gib, 40*gib, 3))}}, map[string]uint64{"v1": 1}, Warn,
@@ -42,6 +49,9 @@ func TestEvaluateHolderMemory(t *testing.T) {
 		out := EvaluateHolderMemory(c.e, 0.8, c.prev)
 		if out.Status != c.status {
 			t.Errorf("%s: status %v (%s), want %v", c.name, out.Status, out.Detail, c.status)
+		}
+		if c.status == OK && strings.Contains(out.Detail, "most:") {
+			t.Errorf("%s: an ok names an agent: %s", c.name, out.Detail)
 		}
 		for _, d := range c.detail {
 			if !strings.Contains(out.Detail, d) {

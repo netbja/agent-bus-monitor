@@ -60,6 +60,10 @@ type Config struct {
 	// Context publishes each verified agent's context fill to {p}:context
 	// (context-alert); a nil Read turns it off.
 	Context ContextConfig
+	// Memory publishes each agent's memory cap with its observation and
+	// tells the escalation target of an agent near it (agent-resource-limits
+	// §5, step 3e).
+	Memory MemoryConfig
 	// Clear is the auto-clear after a declared hand-off (lifecycle part B).
 	Clear ClearConfig
 	// Tokens records proved sessions and counts their transcripts into

@@ -16,7 +16,9 @@ type HolderMemory struct {
 // unit uses warnAt of its MemoryMax or more, or when its OOM kill count rose
 // since prevOOM (the last pass's HolderOOMCounts; a build absent from it
 // cannot have risen); unknown when no answering build has a cgroup.
-// Per-agent figures come with step 3c, the terminal of a kill with cap B.
+// A warn at the cap names the build's agent using the most (Most, step
+// 3e: its terminal tree's resident memory, §5); the terminal of a kill
+// comes with cap B.
 func EvaluateHolderMemory(e HolderEvidence, warnAt float64, prevOOM map[string]uint64) Outcome {
 	if !e.Known {
 		return Outcome{Status: Unknown, Detail: "holder sockets unavailable"}
@@ -38,7 +40,11 @@ func EvaluateHolderMemory(e HolderEvidence, warnAt float64, prevOOM map[string]u
 		case m.Max == 0:
 			oks = append(oks, fmt.Sprintf("holder build %s: %s, no cap", b.Raw, gigs(m.Current)))
 		case float64(m.Current) >= warnAt*float64(m.Max):
-			warns = append(warns, fmt.Sprintf("holder build %s: %s of %s cap (%d %%)", b.Raw, gigs(m.Current), gigs(m.Max), m.Current*100/m.Max))
+			w := fmt.Sprintf("holder build %s: %s of %s cap (%d %%)", b.Raw, gigs(m.Current), gigs(m.Max), m.Current*100/m.Max)
+			if b.Most != nil && b.Most.Bytes > 0 {
+				w += fmt.Sprintf(", most: %s %s", b.Most.Agent, gigs(b.Most.Bytes))
+			}
+			warns = append(warns, w)
 		default:
 			oks = append(oks, fmt.Sprintf("holder build %s: %s of %s cap (%d %%)", b.Raw, gigs(m.Current), gigs(m.Max), m.Current*100/m.Max))
 		}
@@ -52,6 +58,13 @@ func EvaluateHolderMemory(e HolderEvidence, warnAt float64, prevOOM map[string]u
 		return Outcome{Status: Unknown, Detail: "no memory cap on this host: holder build " + strings.Join(bare, ", ") + " runs without a cgroup (launchd or the supervised holder)"}
 	}
 	return Outcome{Status: Unknown, Detail: "no holder answers"}
+}
+
+// HolderTop is the agent of a holder build whose terminal tree uses the
+// most memory, as the dispatcher's last observation measured it.
+type HolderTop struct {
+	Agent string
+	Bytes uint64
 }
 
 // HolderOOMCounts is the state EvaluateHolderMemory's next pass compares

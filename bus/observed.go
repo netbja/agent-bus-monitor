@@ -59,6 +59,11 @@ type Observation struct {
 	TopBytes int64 `json:"top_bytes,omitempty"`
 	TopPID   int   `json:"top_pid,omitempty"`
 	CPUPct   *int  `json:"cpu_pct,omitempty"`
+	// MemCap (additive, agent-resource-limits §5, step 3e): the memory the
+	// agent may use before it is judged near its cap, in bytes: its holder
+	// unit's cap divided by the unit's terminals (cap B, one terminal's own
+	// cap, replaces it in step 4); 0 when the unit has none or is unread.
+	MemCap int64 `json:"mem_cap,omitempty"`
 }
 
 // ClientUpdate is an installed client newer than the running one. Labels are

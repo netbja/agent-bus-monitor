@@ -570,6 +570,7 @@ type agentState struct {
 	obsMem         int64               // the observation's mem_bytes: its terminal tree's resident memory (agent-resource-limits §5); 0 none
 	obsTopMem      int64               // top_bytes: the tree's largest process's; 0 none
 	obsTopPID      int                 // top_pid: that process's pid (its name is read locally only); 0 none
+	obsCap         int64               // mem_cap: the agent's share of its holder's memory cap (step 3e); 0 none
 	obsCPU         *int                // cpu_pct: the tree's CPU over the dispatcher's window, % of one core; nil unknown
 	obsLocal       bool                // a service record names this machine: obsTopPID is a pid here, its name readable (memoryHere's rule)
 	registered     bool                // listed in {p}:agents (the conductor only reports: not an @all target)
@@ -722,6 +723,7 @@ func main() {
 	limit := settings.Limit
 	ctxAlert = bus.ContextAlert(os.Getenv)
 	ctxUrgent = bus.ContextUrgent(os.Getenv)
+	memWarnAt = config.Machine(os.Getenv).Float("limits.warn_at")
 	if _, err := ResolveTheme(settings.Theme, "", "", false, 1<<24); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)

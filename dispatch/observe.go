@@ -45,6 +45,14 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 	if err != nil {
 		return err
 	}
+	var caps map[string]HolderCap // the holder builds' caps (step 3e); none on a failed read
+	if read := l.cfg.Memory.Caps; read != nil {
+		if c, err := read(pctx); err == nil {
+			caps = c
+		} else {
+			l.logError("", "holder caps", err)
+		}
+	}
 	obs := map[string]Observation{}
 	keep := func(a string) {
 		if p, ok := prev[a]; ok && p.Fresh(start.UnixMilli()) {
@@ -106,6 +114,7 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		}
 		if u := in.Usage; u != nil { // agent-resource-limits §5
 			o.MemBytes, o.TopBytes, o.TopPID = u.Mem, u.TopMem, u.TopPID
+			o.MemCap = paneCap(caps, snap.Pane)
 			if u.CPUKnown {
 				pct := int(math.Round(u.CPU))
 				o.CPUPct = &pct
@@ -124,6 +133,12 @@ func (l *loop) observePass(ctx context.Context, snaps map[string]bus.AgentSnapsh
 		return err
 	}
 	l.obsFresh = true
+	if err := l.memoryAlerts(ctx, obs); err != nil {
+		if errors.Is(err, bus.ErrNotHolder) {
+			return err
+		}
+		l.logError("", "memory notices", err)
+	}
 	return l.proposeReloads(wctx, snaps, obs)
 }
 

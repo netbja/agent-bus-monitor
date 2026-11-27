@@ -580,7 +580,7 @@ var Keys = append([]*Key{
 		file: fileMemoryLimit},
 	// The share of a cap at which memory warns (agent-resource-limits §3.1,
 	// §8): a percentage, as dispatch.context_alert; the person's, per host.
-	{Name: "limits.warn_at", Kind: Float, Default: 80.0, ReadBy: "dispatch (health: holder-memory), each pass", MachineOnly: true, PersonOnly: true,
+	{Name: "limits.warn_at", Kind: Float, Default: 80.0, ReadBy: "dispatch (health: holder-memory; master told of an agent near its cap), each pass; busmon (the mem column amber), at start", MachineOnly: true, PersonOnly: true,
 		file: filePositivePercent},
 	{Name: "dispatch.submit_wait", Env: "AGENT_BUS_SUBMIT_WAIT", Kind: Duration, Default: 2 * time.Second, ReadBy: "agentbus holder",
 		env: envBoundedDuration(time.Minute), file: fileBoundedDuration(time.Minute)},
