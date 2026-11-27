@@ -306,6 +306,11 @@ func planRowDetails(r plan.Row, now time.Time) string {
 
 // planTaskDetail is the detail of one task: its row, its board entry and
 // request, its verdicts per subject, its ask and the recorded facts.
+// checkAlteredNote follows a check the page draws with characters changed
+// (an emoji the terminal's width tables disagree on): the plan file holds it
+// as written.
+const checkAlteredNote = "(drawn with characters changed: the plan file has it as written)"
+
 func planTaskDetail(p planState, id string, now time.Time) (title string, body []Line, plain string) {
 	var r plan.Row
 	for _, x := range p.rows {
@@ -326,7 +331,13 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 	add("state", state)
 	add("title", Preview(r.Task.Title))
 	add("owner", r.Task.Owner)
-	add("check", Preview(r.Task.Check)) // in full, the block wraps it (onboarding §12.5)
+	if c := r.Task.Check; c != "" { // in full, the block wraps it (onboarding §12.5)
+		v := []Seg{S(RoleText, Preview(c))}
+		if Preview(c) != c { // never drawn changed in silence (reviewer-codex on onboarding-a1)
+			v = append(v, S(RoleAttention, "  "+checkAlteredNote))
+		}
+		f.add("check", v...)
+	}
 	if _, ok := planStartable(p, id); ok { // the person's own task: the way to act on it, a row of the block
 		key, _, _ := strings.Cut(tourKeys(tourRef{m: ModeOverlay, act: ActPlanStart}), " ")
 		f.add("action", S(RoleAccent, key), S(RoleText, "  start the discussion with master"))

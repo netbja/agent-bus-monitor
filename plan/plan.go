@@ -154,7 +154,7 @@ func Validate(f File) error {
 			}
 		}
 		if t.Check != "" && !validCheck(t.Check) {
-			return fmt.Errorf("plan: task %s: the check must be one line of 1 to %d characters, no control character", t.ID, maxCheck)
+			return fmt.Errorf("plan: task %s: the check must be one line of 1 to %d printable characters, not only spaces", t.ID, maxCheck)
 		}
 		if f.Checks == ChecksRequired && t.Owner != Person && t.Check == "" {
 			return fmt.Errorf("plan: task %s: a check is required (checks: required)", t.ID)
@@ -234,10 +234,14 @@ func validSubject(s string) bool {
 	return len(s) <= 128 && subjectForm.MatchString(s)
 }
 
-// validCheck: at most maxCheck characters (an empty check is none), none a
-// control character (C0, DEL or C1: a newline, a tab, an escape sequence).
+// validCheck: at most maxCheck characters (an empty check is none), not
+// only spaces, and every character graphic: no control (C0, DEL, C1), no
+// format character (a bidi override or isolate, a zero-width space), no line
+// separator, no private use. What a reader draws is then what runs
+// (reviewer-codex on onboarding-a1).
 func validCheck(s string) bool {
-	return len([]rune(s)) <= maxCheck && !strings.ContainsFunc(s, unicode.IsControl)
+	return len([]rune(s)) <= maxCheck && strings.TrimSpace(s) != "" &&
+		!strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsGraphic(r) })
 }
 
 func oneLine(s string, max int) bool {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -37,5 +38,30 @@ func TestPlanTaskPageCheck(t *testing.T) {
 	_, body, _ = planTaskDetail(p, "plain", time.Now())
 	if strings.Contains(plainOf(body), "Check:") {
 		t.Fatalf("a task without a check shows one:\n%s", plainOf(body))
+	}
+}
+
+// A check the plan accepts but the page cannot draw as written (an emoji
+// whose widths the terminal libraries disagree on loses its variation
+// selector) says so on the page: the stored and the drawn check never
+// differ silently (reviewer-codex on onboarding-a1).
+func TestPlanTaskPageCheckDrawnAsWritten(t *testing.T) {
+	seen := map[bool]bool{}
+	for _, c := range []string{"go test ./plan", "go test ☁\ufe0f", "go test 👍🏽", "go test ℹ\ufe0f", "go test é e\u0301 中 ⚠", "go test \u202e kcehc", "go test \u2066x\u2069", "go\u200btest", "go test 👨\u200d👩\u200d👧"} {
+		q, _ := json.Marshal(c)
+		f, err := plan.Parse([]byte(`{"plan":"p","goal":"g","tasks":[{"id":"a","title":"x","owner":"coder","check":` + string(q) + `}]}`))
+		if err != nil {
+			continue // the plan refuses it: nothing to draw
+		}
+		p := planState{rows: []plan.Row{{Task: f.Tasks[0], State: plan.Upcoming}}}
+		_, _, copied := planTaskDetail(p, "a", time.Now())
+		note := strings.Contains(copied, checkAlteredNote)
+		seen[note] = true
+		if same := strings.Contains(copied, c); same == note {
+			t.Errorf("%q: drawn as written %v, the note %v:\n%s", c, same, note, copied)
+		}
+	}
+	if !seen[true] || !seen[false] {
+		t.Fatalf("the fixture needs a check drawn as written and one changed: %v", seen)
 	}
 }
