@@ -157,6 +157,10 @@ them is master's or the person's act.
 
 ## 4. Cap B: one agent's terminal
 
+**Replaced by §12 (2026-11-27, the person's process model):** cap B is the terminal's own
+scope (step 1) or its cgroup under the delegated holder's `holder/agents/` (step 2). The attribution, "the agent is told" and live-read rules
+below still apply, read from that cgroup.
+
 The holder unit gets `Delegate=memory pids cpu`. At start, on Linux, the holder:
 
 1. reads its own cgroup from `/proc/self/cgroup`;
@@ -310,7 +314,8 @@ RAM differs per host. Sizes use systemd's syntax: `8G`, or `70%` of physical RAM
 |---|---|---|---|
 | `limits.holder_memory_max` | `70%` | `agentbus up` (unit text) | when a unit is written; live at the reload |
 | `limits.holder_memory_high` | `60%` | `agentbus up` (unit text) | same |
-| `limits.holder_swap_max` | `4G` | `agentbus up` (unit text) | same |
+| `limits.holder_swap_max` | `4G` | `agentbus up` (unit text; the slice's from §12.3) | same |
+| `limits.holder_self_max` | `2G` | the holder, `holder/self` only (§12.3, step 4d) | at holder start |
 | `limits.agent_memory_max` | `30%` | holder | each launch; live, at most once a minute |
 | `limits.agent_swap_max` | `2G` | holder | same |
 | `limits.warn_at` | `0.8` | dispatch, health, busmon | each pass |
@@ -387,3 +392,272 @@ desktop stay outside the cap. Built in step 1 (§3).
   `4G` and `5m`.
 - (b) `4G`, `15m`, `200%` CPU: tighter. The full suite may need the person to raise the keys.
 - (c) Per role, in `roles.toml`: more knobs, and one more file to keep in step.
+
+## 12. The process model: the holder's delegated cgroup tree (amendment, 2026-11-27)
+
+Status: amendment r5, for review (subject `resource-limits-units`), ahead of step 4. r5,
+reviewer-codex: the start sweep covers every build's scopes of the project. It stops another
+build's only when that build's holder is not active, so a crash before an upgrade leaves
+nothing, and a drain keeps the old holder's agents (§12.5). r4: r4, foureyes:
+no pane ever lands in `holder/self` (a failed cap B gives an uncapped `holder/agents` leaf), and
+the holder stops its scopes at terminal end, at holder stop, and in a start sweep of its own
+build's stale scopes (§12.5, §12.6).
+- **r3, the person's answers to ask `1795735397184-0`** (all typed, 2026-11-27) change r2's
+  target. There is no unit per agent. The holder's own service is delegated, and it builds the
+  per-terminal cgroups itself. Transient scopes come first and remain the fallback.
+- **r3 also answers reviewer-codex's r1/r2 points:**
+  - the start-before-limits race goes away with the per-agent units;
+  - scope limits are set before the command runs (§12.5);
+  - the scope wrapper's pid contract is stated and tested (§12.5).
+- foureyes' r2 nit is in §12.3.
+- r2 (foureyes) is kept: no cap of the holder's own in a cgroup where agents still run.
+
+It replaces §4's design for cap B. Steps 1–3 are built and unchanged. Source: the person's typed
+answers to asks `1795734341064-0` (code-intel Q7) and `1795735397184-0` (Q1–Q6). Base:
+origin/dev `93727f7b`.
+
+### 12.1 What the person decided
+
+1. **Cap A on `agentbus.slice`** (`MemoryMax` 70 %, `MemoryHigh` 60 %, `MemorySwapMax` 4G,
+   today's `limits.holder_*` keys) over the holder and every agent.
+2. **No per-agent service units.** The holder's own unit (today one per project and build,
+   `service/holder.go`) gets `Delegate=yes` and builds its cgroup tree itself:
+
+   ```
+   agentbus.slice                                  cap A
+    └─ agentbus-holder.<project>.<key>.service     Delegate=yes
+        ├─ holder/self                              the holder process, limits.holder_self_max (2G)
+        └─ holder/agents/<project>.<role>.<term>    cap B (limits.agent_memory_max, agent_swap_max)
+            ├─ client                               the agent's client and its children
+            ├─ cmd-<pid>                            agentbus run --cap (§6)
+            └─ ci-<n>                               a code-intel language server
+   ```
+
+   It is one service in systemd. Logs carry `AGENT=` and `PROJECT=` journal fields. Each agent
+   is restarted or inspected through agentbus and busmon, not systemctl.
+3. **The spawn:** the holder owns the pty and starts the client directly. It uses `exec.Cmd`
+   with `SysProcAttr{Setsid, Setctty, Ctty, UseCgroupFD: true, CgroupFD: <client leaf fd>}`
+   (`clone3` with `CLONE_INTO_CGROUP`). The process is born inside cap B, with no shim and no fd
+   passing. A drop-in plus a reload per launch is never used. A shim with `SCM_RIGHTS` stays only
+   as a fallback idea for a host without delegation, and is not built here.
+4. **If the holder process is OOM-killed**, systemd restarts it, and agents are reattached or
+   reported in busmon (§12.6).
+5. **Linger:** `agentbus up` (which installs the holder unit) shows
+   `loginctl enable-linger $USER` as its own line in the same typed-yes summary, saying what it
+   means: start at boot, survive logout.
+   - `--no-linger` skips it.
+   - If polkit refuses, it prints the exact command and continues.
+   - `roles doctor` says `linger off: holder stops at logout` when linger is off.
+6. **Order:**
+   - step 1: transient scopes, one per terminal (cap B), with language servers nested in them,
+     behind the cgroup-root interface;
+   - step 2: the delegated holder service, swapping the implementation behind the same
+     interface.
+
+   Scopes remain the fallback where delegation or the service is unavailable.
+7. **System mode is a later spec.** The constraint for this one: the interface, the unit text and
+   the holder layout assume no user mode, and nothing outside the user implementation
+   hard-codes `--user`, `$XDG_RUNTIME_DIR` or a uid path. Its open questions (credentials,
+   per-agent users, pane access) are listed in §12.8.
+
+### 12.2 Why §4 changes, and what stays
+
+§4 already put each terminal in a child cgroup of a delegated holder unit through `UseCgroupFD`.
+The person keeps that idea for step 2 and adds three things: the slice for cap A, the holder's own
+leaf `holder/self` with its own cap, and the agents grouped under `holder/agents/`. §4's
+attribution, "the agent is told" and live-read rules stay. They read the terminal's cgroup,
+wherever the mode puts it.
+
+### 12.3 Cap A on the slice; the holder's own cap only in its own leaf
+
+- `agentbus up` writes `agentbus.slice` with cap A, from the `limits.holder_*` keys, on the
+  person's typed yes. The holder unit gets `Slice=agentbus.slice`, keeps `OOMPolicy=continue`,
+  and gets **no `MemoryMax` of its own** (r2, foureyes: a cap on the holder's whole unit would
+  also hit the agents in it).
+- **`limits.holder_self_max`** (new, `2G`, PersonOnly, MachineOnly) is the `memory.max` of
+  `holder/self` only, written by the holder at start in step 2. No agent is ever in that leaf,
+  so the person's 2G holder cap can no longer hit an agent. In step 1 there is no
+  `holder/self`, and the key is read but unused, as the doctor line says.
+- The slice applies to a holder at its next start. Holder units are per build
+  (`service/holder.go`), so `up` writes the new build's unit and never rewrites a running one.
+  **The same build key must not be re-upped across this change** (foureyes r2): `up` refuses to
+  rewrite a running holder's unit text when the new text adds `Slice=` or `Delegate=`, and says
+  to drain or update first.
+- `holder-memory` health (step 3a, `holder/unitmem.go`) reads `agentbus.slice` once it exists,
+  and the holder unit before that.
+
+### 12.4 The cgroup root: one interface, its implementations
+
+`cgroot` (a new package, Go, no dependency) answers, for any agent-bus process: *where is this
+agent's cgroup, and may I make children in it?*
+
+```go
+type Mode string // "holder" (step 2), "scope" (step 1), "soft"; "system" later
+type Root interface {
+    Mode() Mode
+    Delegated() bool                     // memory controller usable in children
+    Kill() KillMethod                    // cgroup.kill, freeze-and-kill, or none
+    Child(name string, mem, high, swap string) (fd int, path string, err error)
+    Usage() (current, max, oomKills uint64, err error)
+}
+func Self() (Root, error)                // this process's agent cgroup, from /proc/self/cgroup
+func ForTerminal(t TermKey) (Root, error) // the holder's view of one terminal's cgroup
+```
+
+- **The implementations** sit behind one seam. Only the user-mode implementation knows
+  `--user`, `$XDG_RUNTIME_DIR` or the uid. System mode adds one, and changes no caller (§12.1
+  item 7).
+- **`Self`** finds the agent's cgroup from `/proc/self/cgroup`: the nearest
+  `holder/agents/<…>` or `agentbus-<project>-<role>-<term>.scope`. It checks that
+  `cgroup.controllers` holds `memory` and that `cgroup.subtree_control` is writable.
+  - With none of these, or on macOS, the mode is `soft`: `Child` fails, and callers take their
+    soft path (`RLIMIT_AS` for `agentbus run`, §6; code-intel's gated soft bound).
+  - A root with neither `cgroup.kill` nor `cgroup.freeze` is soft too, for callers that need a
+    whole-cgroup kill (code-intel r8).
+- **No processes in an inner cgroup** (cgroup v2's no-internal-process rule). The agent's
+  processes live in its `client` leaf. `cmd-<pid>` and `ci-<n>` are its siblings.
+
+### 12.5 Step 1: one transient scope per terminal
+
+The holder starts a pane's command as today, as its own child on the pane's pty
+(`holder/server.go:446-467`). Only the argv changes:
+
+```
+systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<key>-<role>-<term>
+  -p Delegate=yes -p MemoryMax=<agent_memory_max> -p MemorySwapMax=<agent_swap_max>
+  -p OOMPolicy=continue -- agentbus agent-enter -- <client argv>
+```
+
+- **The limits come before the command.** `systemd-run --scope` creates the scope with its
+  properties for its own pid, and only then execs the command. No allocation happens outside cap
+  B (r3, reviewer-codex).
+- **The pid contract** (r3, reviewer-codex). The holder starts `systemd-run`, a process with pid
+  P in a new session and group, the pty its controlling terminal (`pty.StartWithSize`: `Setsid`,
+  `Setctty`). Then each step execs, keeping the pid:
+  1. `systemd-run` execs `agentbus agent-enter`, still pid P (foureyes probed it on this host,
+     2026-11-27: `systemd-run --scope` keeps the caller's pid).
+  2. `agent-enter` moves P into the scope's `client` leaf, enables `+memory +pids +cpu` in the
+     scope's `subtree_control` (now legal, since P has left the scope's root), and execs the
+     client, still pid P.
+
+  So `TermInfo.pid`, `waitLoop`'s `cmd.Wait`, the session, the process group and the
+  controlling terminal are all the client's, as today. The group kill and the reaper are
+  unchanged. A wrapper that forks instead of exec'ing would break this, so the test pins it:
+  `/proc/P/comm` is the client's after start, and `cmd.Wait` returns the client's exit.
+- **No `systemd-run`, or it fails before the exec:** the pane starts as today, without it. The
+  mode is `soft` for that terminal, and a launch is never refused (§4's fallback rule).
+- **The scope sits in `agentbus.slice`**, so cap A still covers the agent.
+- **Who stops a scope** (r4, foureyes). Today the holder unit's `KillMode=control-group`
+  (`service/holder.go`) ends every agent process when the holder stops. A scope is outside the
+  holder unit, so its background processes would survive: an `agentbus run --cap` child, or
+  anything off the pty's foreground group. So the holder stops scopes itself, with
+  `systemctl --user stop <scope>`, which kills the whole scope:
+  - **at a terminal's end** (its client exited, or the holder closed it): that terminal's scope;
+  - **at holder stop:** every scope of its project and build, in the holder's own shutdown on
+    `SIGTERM`, before it exits. The unit has no `ExecStop` today (`service/holder.go`), and
+    none is added. A holder killed outright skips this step, and the start sweep catches what
+    it left;
+  - **at holder start:** a sweep of every `agentbus-<p>-*.scope` of its project, any build
+    (r5, reviewer-codex: a holder of build A killed outright, then build B started, would
+    leave A's scopes). For each scope, the sweep reads the build key from the name, then:
+    - **its own build:** it stops the scope when no live terminal holds it;
+    - **another build:** it stops the scope only when that build's holder unit is not active
+      (`HolderActive(project, key)`, `service/holder.go`). A live old holder during a drain
+      keeps its scopes. An error from the manager ("could not say") counts as active: when in
+      doubt, nothing is stopped, and the doctor line names the scope as `stale?`.
+  - The scope name holds the build key for that reason. `agentbus-<p>-<key>-<role>-<term>`
+    stays under systemd's unit-name length, with the key cut as the holder unit's name cuts it.
+- 4b's live check confirms that this host's systemd accepts `OOMPolicy`, `Delegate` and
+  `MemorySwapMax` on a transient scope. foureyes probed it on 2026-11-27: it does. A property a
+  host refuses is dropped and named in the doctor line, never silently.
+
+### 12.6 Step 2: the delegated holder service
+
+- The unit text adds `Delegate=yes` and `Slice=agentbus.slice`, on the person's yes, with
+  linger (§12.1 item 5).
+- **At start**, the holder:
+  1. reads its cgroup;
+  2. creates `holder/self` and moves itself into it;
+  3. writes `memory.max` = `limits.holder_self_max` there;
+  4. enables `+memory +pids +cpu` down to `holder/agents/`.
+- **At each launch**, it creates `holder/agents/<project>.<role>.<term>` with cap B and its
+  `client` leaf, and starts the client with `UseCgroupFD`/`CgroupFD` on `client` (§12.1 item 3),
+  with `Setsid`, `Setctty` and `Ctty` as `pty` sets today. No `systemd-run`.
+- **When the terminal ends**, the holder removes the empty cgroups.
+- **Journal fields:** the holder's lines about one terminal go to journald through the native
+  protocol (its Unix socket, no library) with `AGENT=<role>` and `PROJECT=<p>`, and to stderr
+  when the socket is absent.
+- **If the holder process dies** (OOM-killed in `holder/self` included), systemd restarts it.
+  Said plainly: **the agents do not survive it today.** The ptys' master ends die with the
+  holder, the clients get `SIGHUP`, and the unit's control-group kill on stop ends what is left.
+  "Reattached" is not possible while the masters live in the holder. So they are **reported**:
+  each one shows as lost in busmon (cleaning-up-agents §3), and a parked or resumable session is
+  woken as that spec says. Keeping the masters alive across a holder restart is §12.8 Q-later.
+- **No pane ever starts in `holder/self`** (r4, foureyes). In a delegated holder, every spawn
+  passes `CgroupFD`. A child forked without it would be born in `holder/self`, so none is.
+  - If cap B's cgroup cannot be created or limited, the pane starts in an **uncapped**
+    `holder/agents/<project>.<role>.<term>/client` leaf (no `memory.max`): inside cap A, never
+    in `holder/self`. The doctor line and busmon say `no cap B: <reason>` for that terminal.
+  - A test pins it: a spawn whose cgroup creation fails lands in the uncapped leaf, and
+    `holder/self/cgroup.procs` holds only the holder's pid.
+- **Scopes are the fallback only for a holder that is not delegated** (an older install, the
+  person's `--no-delegate`, a refused `Delegate`). Such a holder has no `holder/self`: it runs
+  as today, and step 1's scopes apply.
+
+### 12.7 What reads the mode
+
+- **The holder:** the mode picks the launch path. Per terminal it reads `memory.current`,
+  `memory.peak` and `oom_kill` from the terminal's cgroup (scope or `holder/agents/<…>`).
+- **`agentbus run --cap`** (§6): `cgroot.Self()`. In `holder` or `scope` mode,
+  `Child("cmd-<pid>", …)`. In `soft` mode, `RLIMIT_AS`, as built.
+- **code-intel** (its §6): `Child("ci-<n>", budget, 90 % of budget, 0)`, or its gated soft
+  bound.
+- **`agentbus roles doctor`:** one line per host, for example:
+  - `cgroup mode: holder, memory delegated, kill: cgroup.kill, linger on`;
+  - `scope`;
+  - `soft: <reason>`;
+  - `linger off: holder stops at logout`.
+
+  With `--publish`, busmon's Health page shows it.
+
+### 12.8 Open, for later specs
+
+- **System mode:** credentials (the bus password, the forge token, the clients' logins), one
+  user per agent, and how the person attaches to panes owned by another user.
+- **Agents surviving a holder restart:** the pty masters would have to outlive the holder, by
+  passing them to systemd's fd store (`FileDescriptorStoreMax`) or to a second process. That is
+  its own design, with its own risks.
+
+### 12.9 Steps (replacing step 4 of §7), in series
+
+- **4a `cgroot` and doctor:** the interface, `soft` and `scope` detection, the kill method, the
+  doctor line, linger in the doctor line.
+  - Tests use a fake cgroup tree under a temp dir (`/proc/self/cgroup` read through a seam):
+    each mode is found, a non-delegated tree is `soft`, a tree without `cgroup.kill` but with
+    `cgroup.freeze` reports freeze-and-kill, and the `client` leaf is used. No live systemd.
+- **4b scope mode:** the argv, `agentbus agent-enter`, the slice written by `up`, the holder
+  unit's own caps dropped, `up`'s refusal to rewrite a running unit across `Slice=`,
+  `holder-memory` reading the slice, and attribution from the scope.
+  - Tests:
+    - the argv with and without `systemd-run`;
+    - the pid contract through a fake `systemd-run` that execs (`/proc/P/comm`, `cmd.Wait`);
+    - scope stops at terminal end and at holder stop, with a fake `systemctl` recording the
+      calls;
+    - the start sweep:
+      - stops this build's stale scopes;
+      - after A was killed outright, B's start sweep stops A's scopes (A inactive);
+      - leaves a live A's scopes alone while B runs (a drain);
+      - stops nothing when the manager cannot say;
+    - a fake that fails gives `soft`;
+    - unit text goldens with no `MemoryMax` on the holder unit;
+    - a live check on this host in the PR.
+- **4c `agentbus run --cap` and code-intel** take `cgroot.Child`.
+- **4d the delegated holder:** `Delegate=yes`, `holder/self` with `limits.holder_self_max`,
+  `holder/agents/<…>` with `CgroupFD`, journal fields, linger in `up`'s summary (with
+  `--no-linger` and the polkit fallback), and cleanup of empty cgroups.
+  - Tests: a fake cgroup tree, a fake `systemctl` and `loginctl`, unit text goldens, a holder
+    killed in a test leaving every agent reported lost, a failed cap-B creation landing in the
+    uncapped `holder/agents` leaf, never `holder/self`, and a live check.
+
+Each step is its own PR and review. Every unit and slice write is on the person's typed yes.
+Service tests fake `systemctl` and `loginctl` (CLAUDE.md).
