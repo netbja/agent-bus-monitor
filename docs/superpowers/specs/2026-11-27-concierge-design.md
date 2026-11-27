@@ -5,13 +5,13 @@ the person's typed directive of 2026-11-27 (cmd from the person to master, relay
 `concierge-amend`):
 - four fixes: the fallback chooser (§7 step 5), the person stream's retention (§5.3),
   untrusted content (§5.3), and Q4/Q6 as asked marked superseded (§9);
-- the window's design (§4.1 to §4.4), with its focus rule (§4.6, r8);
+- the window's design (§4.1 to §4.4), with its focus rule (§4.6: Alt keys, r9);
 - the answer and dialogue style (§4.5);
 - the `D` key and key capture (§4);
 - `mem search` timing (§7);
 - a bounded context per answer, with a global budget (§5.2, r8).
 
-r8 answers the r7 rejects:
+r8 answers the r7 rejects, and r9 replaces r8's focus rule with Alt keys (foureyes r8):
 - foureyes: the focus rule, so the bare keys never fire while typing (§4.6); a proposal ends with
   its bar, and its pin goes too (§5.3); the doubled heading; Esc layered; the goldens list;
 - reviewer-codex: a total context budget, per-read byte caps, and an omitted-context report
@@ -117,7 +117,7 @@ The window drops down from the top over whatever page is open, in any project, l
 The same key again, or Esc, hides it. The binding is a setting (`concierge.key`, Shift+C), and
 busmon's help and `roles doctor` show the active one. **While open, the window captures every
 key.** The page under it gets none, so a key means the window's binding, never the page's. Only
-the open/hide key and Esc leave it. So `D` in the window is the deep answer (§5.5), while `D` in
+the open/hide key and Esc leave it. So `Alt+D` in the window is the deep answer (§5.5, §4.6), while `D` in
 the Plan tab is the draft/active toggle (onboarding spec §12.2). These are two modes, and the key
 test checks both bindings. The conversation stays where it was. busmon's project switch, when
 it exists (idea, 2026-11-14), keeps the window open across projects.
@@ -147,7 +147,7 @@ At 80 columns (the goldens are 60x20, 80x24 and 140x40):
 │ └──────────────────────────────────────────────────────────────────────────┘ │
 │ [1] open #831   [2] send the draft to master   [3] remember                  │
 │ › [PR #831] ▍                                                                │
-└ ↵ send · alt+↵ newline · s sources · D deep · ^␣ hide ───────────────────────┘
+└ ↵ send · alt+↵ newline · alt+s sources · alt+D deep · ^␣ hide ───────────────┘
 ```
 
 At 60 columns, sources expanded with `s`:
@@ -170,7 +170,7 @@ At 60 columns, sources expanded with `s`:
 │                                                          │
 │ [1] open #831   [2] open the queue   [3] remember        │
 │ › ▍                                                      │
-└ ↵ send · s · D · ^␣ ─────────────────────────────────────┘
+└ ↵ send · alt+s · alt+D · ^␣ ─────────────────────────────┘
 ```
 
 - **No speaker column.** The person's lines start with a dim `›`. Answers run the full width,
@@ -183,7 +183,7 @@ At 60 columns, sources expanded with `s`:
 
 ### 4.2 Sources
 
-An answer's sources are collapsed to one dim line, `↳ N sources` (`↳ 1 source`). `s` expands or
+An answer's sources are collapsed to one dim line, `↳ N sources` (`↳ 1 source`). `Alt+s` expands or
 collapses the sources of the last answer, or of the answer under the cursor after `↑`. Expanded,
 each source is one line, `project:kind id`, and `Enter` on one opens its page in busmon, in its
 project (§4.4, r6's rule).
@@ -192,7 +192,7 @@ project (§4.4, r6's rule).
 
 - **A fixed bar above the input** holds the last answer's actions, `[1] [2] [3]`, at most three.
   The bar is cleared when the person sends the next message, or when a new answer arrives.
-- **Only number keys run them.** `Enter` sends the input and never runs an action.
+- **Only `Alt+1` to `Alt+3` run them** (§4.6). `Enter` sends the input and never runs an action.
 - **Actions bound for a master** (a relay, §5.3) are drawn in the warning role. Pressing one
   opens the confirmation of §5.3, which shows the full text and the target. A draft for a master
   is drawn in the conversation as **a separate box, labelled "concierge's draft → <project>
@@ -210,7 +210,7 @@ project (§4.4, r6's rule).
   concierge gets the entry's id, never a pasted copy.
 - **It is never in the way:** an answer that arrives while the window is hidden lights a dot
   (`●`) in busmon's header, and nothing else (r6).
-- `m` opens person-memory's Memory page (r6).
+- `Alt+m` opens person-memory's Memory page (r6).
 
 It is drawn with lipgloss like the compose window, so there is no new widget library. Its width
 follows the terminal: full width below 100 columns, 80 % above.
@@ -259,17 +259,22 @@ through a "humanizer".
 
 ### 4.6 Focus: typing never fires a key
 
-The input is active whenever the window is open, so a bare key needs a rule:
-- **While the input holds text, every printable key types.** `s`, `m`, `D` and `1`–`3` insert
-  their characters and fire nothing.
-- **While the input is empty, they act:** `s` sources, `m` Memory, `D` deep answer, `1`–`3` the
-  bar's actions. A chip alone counts as empty, since it is not text.
-- Hence the action bar's hint: it shows `1–3 (empty input)` only while the input holds text.
+The input is active whenever the window is open, and every message starts from an empty input.
+So **printable keys always type**, and the window's own keys take **Alt** (foureyes's option (b),
+r9; r8's "act on an empty input" fired on a message's first letter):
+- `Alt+s` expands or collapses the sources (§4.2), and `Alt+m` opens Memory.
+- `Alt+D` asks for the deep answer (§5.5). Inside the window, `D` alone types a D; `D` in the
+  Plan tab stays the draft toggle, so there is no clash either way.
+- `Alt+1` to `Alt+3` run the bar's actions (§4.3). The bar's labels stay `[1] [2] [3]`, and its
+  hint reads `alt+1–3`.
+- busmon already reads Alt as a modifier (`keys.go:715`, where `Alt+Enter` is the newline). A
+  terminal that sends Alt as Esc-prefix is decoded the same way by bubbletea.
 - **Esc is layered.** It first closes the innermost state: the relay's `y` confirmation, then
   expanded sources, then a `↓ more` unfolded. Only at the top level does it hide the window.
 - Key tests:
-  - with text in the input, `s`, `m`, `D` and `1` insert characters and fire nothing;
-  - with the input empty, each one acts;
+  - from an empty input, typing "merge", "show", "Did", "merci" and "2 PRs" inserts exactly
+    those characters and fires nothing;
+  - each `Alt` key acts, with the input empty and with text in it;
   - Esc in the confirmation cancels it and leaves the window open.
 
 ## 5. The concierge agent
@@ -483,7 +488,7 @@ are not audited.
   - the client honours the role's tool rules.
 
   An entry that fails is skipped, with the reason.
-- **"Deep answer":** one key (`D` in the window) asks the next reply from the concierge's first
+- **"Deep answer":** one key (`Alt+D` in the window, §4.6) asks the next reply from the concierge's first
   `alt_profiles` entry (for example Opus), for that one reply: a separate pop
   (`pop concierge --profile <alt>`, what `alt_profiles` is for) that parks after answering.
 - The window's footer shows the active client and model.
@@ -519,7 +524,6 @@ is chosen then, from §3's re-check, on the person's yes.
    - the inline chip, removed with `Backspace`;
    - id links, and a cross-project table of at most 3 columns;
    - the draft box at every width (at 60 columns too: §4.3 draws it before any press);
-   - the draft box;
    - `↓ more`;
    - the header with the model and the fact count only.
 3. **Context chips and sources:** `tab` attaches the selection; sources open their pages.
@@ -536,8 +540,8 @@ is chosen then, from §3's re-check, on the person's yes.
      - a rejected id stays rejected after busmon restarts with an empty local cache.
 5. **The client list (§5.5):** the fallback chooser over the profile and its
    **`fallback_profiles`** (as §5.5 says; `alt_profiles` is never a fallback), the doctor smoke
-   test, and the `D` key on the first `alt_profiles` entry, for the deep answer only. Tests: the
-   chooser never picks an `alt_profiles` entry; `D` pops only the first `alt_profiles` entry.
+   test, and the `Alt+D` key on the first `alt_profiles` entry, for the deep answer only. Tests: the
+   chooser never picks an `alt_profiles` entry; `Alt+D` pops only the first `alt_profiles` entry.
 6. **`mem search`** (person-memory layer 2), when step 1's concierge needs it. Until then the
    concierge answers without cross-project history, and says so (§5.2).
 
