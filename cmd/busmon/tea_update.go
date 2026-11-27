@@ -216,6 +216,12 @@ func (m *Model) panelKey(act Action) tea.Cmd {
 		cmd = m.sleepKey()
 	case ActNextUnread:
 		m.goNextUnread()
+	case ActMarkAllRead:
+		m.askMarkAll("")
+	case ActMarkToggle:
+		m.toggleMark()
+	case ActMarkUndo:
+		m.undoMarks()
 	case ActShowAll:
 		m.ui.showAll = !m.ui.showAll
 	case ActAttach:

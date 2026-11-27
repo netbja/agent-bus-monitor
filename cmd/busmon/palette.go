@@ -90,6 +90,8 @@ func init() {
 		a("history", "the archive and the streams, newest first", ActHistory, "H"),
 		a("about", "versions and the bus line", ActAbout, "A", "version"),
 		a("unread", "the next unread item for you", ActNextUnread, "u"),
+		a("mark-all", "mark all read: Activity's unread lines no triage item holds (asks first)", ActMarkAllRead, "N"),
+		a("mark", "mark the selected Activity line read or unread", ActMarkToggle, "m"),
 		{Name: "follow", Summary: "auto-scroll on or off (the setting display.follow)", Aliases: []string{"autoscroll"}, Run: (*Model).palFollow},
 		a("all", "show or hide the agents silent for a day", ActShowAll, "a"),
 		a("compose", "the compose window", ActComposeOpen, "I"),

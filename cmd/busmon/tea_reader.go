@@ -1063,6 +1063,11 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		return nil
 	case ActPriorityUp, ActPriorityDown:
 		return m.setPriority(act == ActPriorityUp)
+	case ActMarkAllRead: // an agent's page: its lines (triage-unread §4.4)
+		if p.kind == ovAgent {
+			m.askMarkAll(p.key)
+		}
+		return nil
 	case ActComposeOpen: // an agent's page: write to that agent; a message page: reply to its sender
 		if p.kind == ovMessage {
 			m.replyFromPage(p)
@@ -1515,6 +1520,8 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovAgent
 	case ActCopyThread:
 		return p.threadPlain != ""
+	case ActMarkAllRead:
+		return p.kind == ovAgent
 	case ActPlanStart:
 		_, ok := planStartable(m.snap.planState, p.key)
 		return ok && p.kind == ovPlanTask

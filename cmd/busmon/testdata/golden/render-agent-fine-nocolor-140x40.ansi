@@ -37,4 +37,4 @@
 [1m│[m Fill:            ▇▇▇▇▇░ 85%                                                                                                              [1m│[m
 [1m│[m                  of the context window, observed 2m ago                                                                                  [1m▼[m
 [1m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[m
- [1m↑↓ j k[m scroll   [1my[m copy status   [1mY[m copy report   [1mn p ←→[m next/prev   [1mesc q[m close   [1mr[m reply   [1mF5[m health   [1mF6[m ideas                            
+ [1m↑↓ j k[m scroll   [1my[m copy status   [1mY[m copy report   [1mn p ←→[m next/prev   [1mN[m mark read   [1mesc q[m close   [1mr[m reply   [1mF5[m health   [1mF6[m ideas              

@@ -21,6 +21,11 @@ type attentionItem struct {
 	// Needs is what a --needs report asks of the person on this item
 	// (triage-dedupe §3): answer or read, its own item or one it folded into.
 	Needs string
+	// Held are every Activity line folded into the item (triage-unread §4),
+	// by their lines' ids: its own (IDs) and the lines it took in (an ask's
+	// line, a waiting agent's newest report, a --needs line naming it). Mark
+	// all read never marks one of them.
+	Held   []string
 	Head   string // a merge item's head: its page's key (the item's own key is its PR's)
 	Branch string // a merge item's branch: a line naming it attaches to it
 }

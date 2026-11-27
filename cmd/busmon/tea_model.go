@@ -155,6 +155,8 @@ type uiState struct {
 	palHidden      bool              // Esc hid the list; the next edit shows it again
 	sleepAsk       *sleepAsk         // a Z waiting for its y
 	dialog         *confirmDialog    // an open yes/no question (busmon-confirm-dialog)
+	markAsk        []string          // the lines N asks about, as they were at the press (triage-unread §4)
+	markUndo       *markAct          // the last N or m, z's to undo once
 	sleepRun       *sleepRun         // agentbus suspend or resume running
 	sleepSeq       int               // the last run's id
 	reminder       *reminderDialog   // the reminder, when open
