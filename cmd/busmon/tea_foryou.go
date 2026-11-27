@@ -108,6 +108,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		unread := fl.mark == markUnread
 		if i, ok := tg.asks[fl.ev.ID]; ok && fl.ev.Type == bus.CmdAsk {
 			out[i].Unread = out[i].Unread || unread // listed once: the ask's row carries the mark
+			out[i].Held = append(out[i].Held, lineIDs(fl)...)
 			continue
 		}
 		report := fl.ev.Kind == "report" || len(fl.personNotices) > 0
@@ -120,6 +121,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		if fl.ev.Kind == "report" { // a waiting agent's own newest report is its wait's
 			if i, ok := tg.waits[fl.ev.Agent]; ok && newest[fl.ev.Agent] == fl.ev.ID {
 				out[i].Unread = out[i].Unread || unread
+				out[i].Held = append(out[i].Held, lineIDs(fl)...)
 				if foldsInto(fl, tg, newest) == i {
 					out[i].Needs = needs
 				}
@@ -149,6 +151,7 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		if len(named) == 1 {
 			i := named[0]
 			out[i].Unread = out[i].Unread || unread
+			out[i].Held = append(out[i].Held, lineIDs(fl)...)
 			if foldsInto(fl, tg, newest) == i {
 				out[i].Needs = needs
 			}
@@ -162,12 +165,12 @@ func foldLines(s snapshot, feed []feedLine, out []attentionItem) []attentionItem
 		}
 		if !report {
 			out = append(out, attentionItem{Rank: rankUnread, Key: unreadKey(fl), Agent: sender(fl.ev),
-				Text: text, At: fl.at, EventID: ids[0], IDs: ids})
+				Text: text, At: fl.at, EventID: ids[0], IDs: ids, Held: lineIDs(fl)})
 			continue
 		}
 		reportID := lineReportID(fl)
 		it := attentionItem{Rank: rankReport, Key: "report:" + reportID, Agent: sender(fl.ev), Text: text, At: fl.at,
-			EventID: ids[0], IDs: ids, Needs: needs, Unread: unread}
+			EventID: ids[0], IDs: ids, Needs: needs, Unread: unread, Held: lineIDs(fl)}
 		sig := sender(fl.ev) + "|" + fmt.Sprint(named)
 		if j, ok := own[sig]; ok {
 			out[j] = it // the feed is in order: the newer replaces

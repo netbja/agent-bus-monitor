@@ -13,6 +13,7 @@ type feedFilter struct {
 	agent  string // "@name": author, sender or addressee
 	thread string // a stream id or a bare millisecond cursor
 	text   string // free words, matched case-insensitively against the body
+	unread bool   // is:unread: only lines with an unread mark (triage-unread §4.5)
 }
 
 // parseFilter reads a filter expression. Tokens are ANDed: "@coder rebase"
@@ -26,6 +27,8 @@ func parseFilter(s string) feedFilter {
 			f.agent = strings.ToLower(tok[1:])
 		case looksLikeStreamID(tok):
 			f.thread = tok
+		case strings.EqualFold(tok, "is:unread"):
+			f.unread = true
 		default:
 			words = append(words, tok)
 		}
@@ -55,7 +58,7 @@ func isDigits(s string) bool {
 	return true
 }
 
-func (f feedFilter) empty() bool { return f.agent == "" && f.thread == "" && f.text == "" }
+func (f feedFilter) empty() bool { return f.agent == "" && f.thread == "" && f.text == "" && !f.unread }
 
 // match reports whether a feed line survives the filter. Day separators (a zero
 // Event) are dropped while filtering: a date header over a filtered selection
@@ -84,6 +87,9 @@ func (f feedFilter) match(fl feedLine) bool {
 	if f.text != "" && !strings.Contains(strings.ToLower(e.Message+" "+e.Full), f.text) {
 		return false
 	}
+	if f.unread && fl.mark != markUnread {
+		return false
+	}
 	return true
 }
 
@@ -98,6 +104,9 @@ func (f feedFilter) describe() string {
 	}
 	if f.text != "" {
 		parts = append(parts, "\""+f.text+"\"")
+	}
+	if f.unread {
+		parts = append(parts, "is:unread")
 	}
 	return strings.Join(parts, " + ")
 }

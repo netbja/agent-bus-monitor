@@ -19,6 +19,9 @@ KEYS
   y                    copy
   f                    filter
   u                    Activity: the next unread message for you (●), wrapping
+  N                    Activity: mark all read, every unread line no triage item holds (asks first; z undoes it)
+  m                    Activity: the selected line read or unread (a triage item's line: open it from T)
+  z                    Activity: undo the last N or m, once
   T                    triage: a summary of what waits for you, one line per action; enter opens one, the next after each answer or send (n next, p back), esc returns to the summary, esc there ends; not t, the tour
   ! F4                 answer
   w                    answer the open question, or with none open write to master
@@ -83,6 +86,7 @@ KEYS
   a                    Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command); a service log: show or fold the routine none decisions
   a                    History (H): the Audit list, the project's last 200 audit entries (who approved, merged, pushed or forced what), read only; f shows one action, then the next, then all; enter opens an entry in place, its ref first
   a                    Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)
+  N                    an agent's page: mark that agent's unread lines read, none a triage item holds (asks first; z in Activity undoes it)
   a                    Memory (F7) or a topic's page: remember your own words, in the compose window: its first line topic type importance (keep-both or supersedes=<id> for a second decision), the rest your words
   e                    Memory (F7) or a topic's page: open the topic's file in $VISUAL or $EDITOR; on save it is checked (agentbus mem person check) and committed when clean, else left as saved with what is wrong
   x                    a topic's page (F7, enter): forget the selected observation, after y (git history keeps it until agentbus mem person purge)
@@ -206,6 +210,8 @@ COMMANDS
   /history                   the archive and the streams, newest first (H); also /H
   /about                     versions and the bus line (A); also /A, /version
   /unread                    the next unread item for you (u); also /u
+  /mark-all                  mark all read: Activity's unread lines no triage item holds (asks first) (N); also /N
+  /mark                      mark the selected Activity line read or unread (m); also /m
   /follow                    auto-scroll on or off (the setting display.follow); also /autoscroll
   /all                       show or hide the agents silent for a day (a); also /a
   /compose                   the compose window (I); also /I

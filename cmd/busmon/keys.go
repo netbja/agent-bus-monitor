@@ -71,7 +71,10 @@ const (
 	ActShowAll
 	ActConfirm
 	ActNextUnread
-	ActTriage // T: walk what waits for the person (busmon-queue-triage §4)
+	ActMarkAllRead // N: Activity's unread lines no triage item holds, read (asks first; triage-unread §4)
+	ActMarkToggle  // m: the selected Activity line read or unread
+	ActMarkUndo    // z: the last N or m undone, once
+	ActTriage      // T: walk what waits for the person (busmon-queue-triage §4)
 	ActAsk
 	ActAskNext
 	ActAskPrev
@@ -261,6 +264,9 @@ var (
 		{Keys: "y", Hint: "copy", Act: ActCopy, match: runeIs('y')},
 		{Keys: "f", Hint: "filter", Act: ActFilter, match: runeIs('f')},
 		{Keys: "u", Help: "Activity: the next unread message for you (" + GlyphDotFull + "), wrapping", Act: ActNextUnread, match: runeIs('u')},
+		{Keys: "N", Help: "Activity: mark all read, every unread line no triage item holds (asks first; z undoes it)", Act: ActMarkAllRead, Panels: activityOnly, match: runeIs('N')},
+		{Keys: "m", Help: "Activity: the selected line read or unread (a triage item's line: open it from T)", Act: ActMarkToggle, Panels: activityOnly, match: runeIs('m')},
+		{Keys: "z", Help: "Activity: undo the last N or m, once", Act: ActMarkUndo, Panels: activityOnly, match: runeIs('z')},
 		{Keys: "T", Hint: "triage", Help: "triage: a summary of what waits for you, one line per action; enter opens one, the next after each answer or send (n next, p back), esc returns to the summary, esc there ends; not t, the tour", Act: ActTriage, match: runeIs('T')},
 		{Keys: "!", Hint: "answer", Alt: "F4", Act: ActAsk, match: either(keyIs(keyF4), runeIs('!'))},
 		{Keys: "w", Help: "answer the open question, or with none open write to master", Act: ActAskOrWrite, match: runeIs('w')},
@@ -398,6 +404,7 @@ var (
 		{Keys: "a", Hint: "all", Help: "Health (F5): show or hide the fine checks (enter opens a check in place, y copies a For-you check's command); a service log: show or fold the routine none decisions", Act: ActShowAll, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "audit", Help: "History (H): the Audit list, the project's last 200 audit entries (who approved, merged, pushed or forced what), read only; f shows one action, then the next, then all; enter opens an entry in place, its ref first", Act: ActAudit, OnPage: true, match: runeIs('a')},
 		{Keys: "a", Hint: "add", Help: "Ideas (F6): add an idea in the compose window, its first line the title (it starts at to discuss)", Act: ActIdeaAdd, OnPage: true, match: runeIs('a')},
+		{Keys: "N", Hint: "mark read", Help: "an agent's page: mark that agent's unread lines read, none a triage item holds (asks first; z in Activity undoes it)", Act: ActMarkAllRead, OnPage: true, match: runeIs('N')},
 		{Keys: "a", Hint: "remember", Help: "Memory (F7) or a topic's page: remember your own words, in the compose window: its first line topic type importance (keep-both or supersedes=<id> for a second decision), the rest your words", Act: ActMemoryAdd, OnPage: true, match: runeIs('a')},
 		{Keys: "e", Hint: "edit", Help: "Memory (F7) or a topic's page: open the topic's file in $VISUAL or $EDITOR; on save it is checked (agentbus mem person check) and committed when clean, else left as saved with what is wrong", Act: ActMemoryEdit, OnPage: true, match: runeIs('e')},
 		{Keys: "x", Hint: "forget", Help: "a topic's page (F7, enter): forget the selected observation, after y (git history keeps it until agentbus mem person purge)", Act: ActMemoryForget, OnPage: true, match: runeIs('x')},
