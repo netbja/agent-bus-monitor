@@ -9,8 +9,12 @@
     a grade item (§11.1). This answers reviewer-codex's r3 reject. r4 also takes foureyes's r3
     build points: the board-delivered person path (§9.4), `--commit` (§10.1), the 7-day record
     (§9.4), and the stray text (§12.2).
-  - r5 (amendment, after r4 merged as #840): the person's answers to Q1–Q5 (§15). r5b adds
-    reviewer-codex's race fix: the load script re-compares the dropped tasks' inputs (§8.5).
+  - r5 (amendment, after r4 merged as #840): the person's answers to Q1–Q5 (§15).
+  - r6 answers the two r5 rejects:
+    - reviewer-codex: the load script re-compares the dropped tasks' inputs (§8.5);
+    - foureyes: the question wording uses only qid-bound facts (§8.1), the load checks `stops`
+      as a superset (§8.5), the diff is a partition, and the person's words are named as readings
+      (§5.5, §12.3) with the nits (§4.1, §5.5).
     - Q3 took option 2: `init` proceeds over an active plan, and a draft amends it, with a diff
       and in-progress carry-over (§4.1, §8.1, §8.5, §8.6).
     - Q2: the scope threshold is a setting, and `later` goes to `NEXT-DIRECTIONS.md` (§8.3).
@@ -152,6 +156,12 @@ confirmation. It sends the directive with ", replace the draft". The architect r
 names, or at round 1. `init` itself writes no draft key: `--drop` stays master's or the
 architect's (§8.1).
 
+**The guard per verb.** `init`, `--resume`, `--replace`, `wrap-up`, `forget-answers` and
+`--export-answers` are the person's: each runs step 1's refusal of an agent caller. `status`,
+`grade`, `keep` and `mac` take no guard. `status` and `grade` only read. `keep` and `mac` are the
+architect's tools (§5.5): `keep` copies only typed replies to onboarding asks, and `mac` prints a
+MAC, never the key.
+
 `--resume` skips step 4's refusal. It also refuses when no onboarding exists, or when the
 onboarding's phase is `wrapped`. Then it runs steps 6 and 7 with ", resume from state.json". Any
 architect, on any client, continues from `state.json` and the open asks (§6.3).
@@ -279,6 +289,14 @@ scenario against the started server. A unit test alone does not prove a feature 
 
 The person's answer to Q5 (option 1) sets these rules:
 
+- **A reading of the person's words, named.** The person wrote "Bernard reviews it in the
+  typed=yes summary before commit". The spec reads "commit" as **commit to the base**: the
+  per-round commits stay on the local branch `onboard/<project>`, which nothing pushes or merges
+  before the yes. The reason: those round commits are what makes the interview resumable
+  (§6.2, §6.3) on any client, after the cmd stream has rolled. If the person meant "no Git commit
+  at all before the yes", the resume record would have to move to the broker. That would be a
+  change to this section, to be asked, not assumed. The architect's report of this revision
+  asks master to confirm the reading with the person.
 - **Only the rewrite reaches the repository.** After each round, the architect writes the
   **result** into the `BUILD.md` sections it settles, in its own words, and commits it on the local
   branch `onboard/<project>`. Nothing of the branch is pushed before the adoption's typed yes. The
@@ -298,7 +316,9 @@ The person's answer to Q5 (option 1) sets these rules:
   `typed_ref` and `mac`: `hmac-sha256:` followed by the hex HMAC-SHA256 of the `said` value, under
   a local key. A plain SHA-256 of a short answer ("yes", "Go") is guessable, and a keyed MAC is
   not. The key is 32 random bytes in agentbus's per-user state directory (where busmon keeps its
-  caches), file `onboarding-<project>.key`, mode 0600, created by `init` on first use. It never
+  caches, `os.UserCacheDir`), file `onboarding-<project>.key`, mode 0600. Whichever of `init`,
+  `init keep` or `init mac` first needs it creates it, with `O_CREATE|O_EXCL`. On `EEXIST` it
+  reads the existing key, so two processes never make two keys. It never
   goes on the bus or into Git. The architect gets a MAC with `agentbus init mac <reply id>`, which
   prints it and never prints the key. The MAC lets anyone on this machine prove which answer a
   section came from. A copy of the repository elsewhere cannot test guesses.
@@ -468,33 +488,44 @@ this order:
    has `checks: required`, it is required and checked by `onboard.ParseBuild`. Otherwise it is
    optional.
 3. **Check missions** (§7.3).
-4. **Compute the diff and the qid.** When a plan is active, `plan.DraftDiff(active, rows,
-   draft)` compares them by task id, from the active plan's derived rows:
-   - **kept**: ids in both;
-   - **added**: ids only in the draft;
-   - **dropped**: ids only in the active plan that are not done and not in hand;
-   - **in hand carried**: in hand (`InProgress`, `InReview` or `Blocked`) and in the draft;
-   - **in hand dropped**: in hand and absent from the draft;
-   - **done**: done in the active plan. These are carried, not counted as dropped (§8.6).
+4. **Compute the diff and the qid.** When a plan is active, there are two diffs:
+   - **The file diff**, `plan.FileDiff(active file, draft file)`, by task id. It reads only the two
+     files, which the qid binds (the active file through `replaces`):
+     - **in both**: ids in both files;
+     - **added**: ids only in the draft;
+     - **removed**: ids only in the active file.
+   - **The state diff**, `plan.DraftDiff(active, rows, draft)`, from the active plan's rows
+     derived now. It is a **partition** of the active plan's tasks, each counted once:
+     - **done**: done in the active plan, whether or not the draft keeps it (§8.6);
+     - **carried**: in hand (`InProgress`, `InReview` or `Blocked`) and in the draft;
+     - **stops**: in hand and absent from the draft;
+     - **kept**: neither done nor in hand, and in the draft;
+     - **dropped**: neither done nor in hand, and absent from the draft.
+
+     The draft's own new ids are **added**, as in the file diff.
 
    The qid is `plan-` followed by 16 hex digits of
-   `SHA-256(path ‖ 0x00 ‖ plan bytes ‖ 0x00 ‖ BUILD.md bytes ‖ 0x00 ‖ replaces ‖ 0x00 ‖ in-hand
-   dropped ids)`. The `BUILD.md` bytes are empty when there is no `BUILD.md`. `replaces` is the
-   active plan's `<path>@<commit>`, or empty. The in-hand dropped ids are sorted and joined by
-   commas. This is `draftQuestionID`'s scheme. The yes binds the path, the plan, the build sheet,
-   the plan it replaces, and the exact in-progress work it stops.
+   `SHA-256(path ‖ 0x00 ‖ plan bytes ‖ 0x00 ‖ BUILD.md bytes ‖ 0x00 ‖ replaces ‖ 0x00 ‖ stops)`.
+   The `BUILD.md` bytes are empty when there is no `BUILD.md`. `replaces` is the active plan's
+   `<path>@<commit>`, or empty. `stops` is the stopped ids, sorted and joined by commas. This is
+   `draftQuestionID`'s scheme. The yes binds the path, the plan, the build sheet, the plan it
+   replaces, and the exact in-progress work it stops. The other state counts are not bound: they
+   move as work moves, and binding them would re-ask the person at every move.
 5. **Build the adoption question** in code. The caller does not write it. The question is a
    function of the qid's inputs only, so the same qid always gives the same wording:
    - its `id` is the qid, and its `header` is "Adopt <plan>";
    - its text, with no active plan, is `Adopt plan v0 (docs/plans/v0.json, 9 tasks) as the active
      plan? id plan-5be0…`;
-   - with an active plan, its text is `Adopt plan v1 (docs/plans/v1.json, 12 tasks), replacing v0?
-     kept 6, added 3, dropped 1; in progress: 1 carried, STOPS 1: api-limits. id plan-…`. Every
-     in-hand task the draft stops is named in the text, clipped to the 300 characters only with
-     "and N more". The full diff, every id under its heading, is in `context`. The "STOPS" line is
-     the explicit line the person asked for;
-   - its `context` holds the `BUILD.md` goal (clipped) and the commit. The commit is not part of
-     the question, so `SameQuestion` is unaffected;
+   - with an active plan, its text uses only the qid's inputs: the file diff and `stops`.
+     For example: `Adopt plan v1 (docs/plans/v1.json, 12 tasks), replacing v0
+     (docs/plans/v0.json@a1b2c3d)? in both 9, added 3, removed 0; STOPS 1 in progress:
+     api-limits. id plan-…`. Every stopped task is named in the text, clipped to the 300
+     characters only with "and N more". The "STOPS" line is the explicit line the person asked
+     for;
+   - its `context` holds the state diff (§8.1 step 4, every id under its heading, as derived at
+     drafting time and marked so), the `BUILD.md` goal (clipped) and the commit. None of these is
+     part of the question, so `SameQuestion` is unaffected by them. The same qid therefore gives
+     the same question text, and a replace never trips "changed wording";
    - its options are `yes`, `no` and `later`, and none is recommended: adopting is the person's
      own call.
 6. **Open or replace the ask** (`from` = the caller, `task: onboarding`):
@@ -589,14 +620,18 @@ first: a rename can break a sibling PR's new caller without a conflict.
 `plan load <path>@<commit>` (master) changes as follows:
 
 - **A draft is recorded.** The load is in two parts.
-  1. **In Go.** It reads the plan and `BUILD.md` from Git at the named commit. It derives the
-     active plan's rows now, and recomputes the diff and the qid (§8.1 step 4). A task that came
-     into hand since the draft, and that the draft drops, changes the stopped ids and so the qid:
-     the load refuses with "<task> started since the draft: the architect re-drafts". A stopped
-     task that finished since does not refuse; it is reported as done.
-     The recomputed qid must be the draft's. It refuses when that qid is not the draft's: "this file is not the draft the person
-     approved (qid plan-… ≠ plan-…)". It runs `TypedApproval(draft.ask, draft.qid, "yes")`, with
-     the archive. It refuses when that fails: "a draft awaits the person's yes".
+  1. **In Go.** It reads the plan and `BUILD.md` from Git at the named commit. It recomputes
+     the qid from those bytes, the active plan's `<path>@<commit>`, and the **record's** `stops`:
+     the list the person's yes bound. It does not use a list derived now. It refuses when that qid
+     is not the draft's: "this file is not the draft the person approved (qid plan-… ≠ plan-…)".
+     It then derives the active rows now, and computes the in-hand tasks the draft omits. That
+     set must be a **subset** of `stops`:
+     - a task outside `stops` refuses: "<task> started since the draft: the architect re-drafts";
+     - a task in `stops` that is no longer in hand, because it finished or was blocked and
+       closed, does not refuse. It is reported as "finished before the load".
+
+     It runs `TypedApproval(draft.ask, draft.qid, "yes")`, with the archive. It refuses when that
+     fails: "a draft awaits the person's yes".
   2. **In one script** (`planLoadDraft`), which re-checks everything the broker holds before
      writing anything. Its keys are `{p}:plan`, `{p}:plan:facts`, `{p}:plan:ignore`,
      `{p}:plan:draft`, `{p}:asks`, `{p}:cmd`, and the keys `plan.DeriveKeys` names for the dropped tasks (below). Its arguments are the qid, the ask id, the plan
@@ -971,8 +1006,9 @@ the person's answer to Q1), so it cannot be mistaken for active work.
 ### 12.2 A draft and an active plan
 
 The Plan tab shows the active plan as today, with the banner line under its header:
-`DRAFT v1 · inactive · awaiting typed=yes · kept 6 · added 3 · in progress: 1 carried, 1 dropped
-(api-limits)`, the diff of §8.1 step 4. Active rows the draft stops carry `◆ dropped by the v1
+`DRAFT v1 · inactive · awaiting typed=yes · done 6 · carried 1 · kept 1 · added 3 · STOPS 1
+(api-limits)`. This is the state diff of §8.1 step 4, a partition, derived live by busmon on every
+tick. Active rows the draft stops carry `◆ dropped by the v1
 draft`, and carried rows carry `carried to v1`. **`D`** switches between the two views, only when
 both exist (the person's answer to Q1). `D` is bound only in the settings mode
 (`cmd/busmon/keys.go:440`, "reset group"), never in the shell mode that draws the Plan tab. The key
@@ -981,8 +1017,11 @@ test checks that `D` stays free in that mode. The frame title says which plan is
 ### 12.3 An answered or replaced ask
 
 - After a `yes`, the banner reads "approved: master loads it". The banner and the draft disappear
-  when master's
-  load deletes the record.
+  when master's load deletes the record. Then the tasks are the active plan. This is a reading of
+  the person's "after confirm, the banner disappears and the tasks become the active plan": the
+  yes alone cannot make them active, because `{p}:plan` is master's alone (the ACL), and the
+  load re-checks the approval (§8.5). Master loads on the yes's report, so the gap is a short
+  wait, shown by that banner.
 - After a `no` or free text, the banner reads "the architect is revising it".
 - After a `later`, the banner reads "postponed (later)".
 
@@ -1067,7 +1106,7 @@ An active v0 with a v1 draft over it (120 columns, §8.6):
 
 ```
 ╭─ Plan  v0  6/9 done ────────────────────────────────────────────────────────────────────────────── v1 draft waiting ─╮
-│  DRAFT v1 · inactive · awaiting typed=yes · kept 6 · added 3 · in progress: 1 carried, 1 dropped (api-limits)        │
+│  DRAFT v1 · inactive · awaiting typed=yes · done 6 · carried 1 · kept 1 · added 3 · STOPS 1 (api-limits)             │
 │                                                                                                                      │
 │  NOW                                                                                                                 │
 │  ● api-limits   Rate limit per user          coder   in progress   ◆ dropped by the v1 draft                         │
@@ -1135,7 +1174,7 @@ Each step is one PR to `dev`, in this order. Steps (a) and (b) touch `bus/` or `
 | Step | Content | Tests |
 |---|---|---|
 | (a) `plan.check` + done guard | `Task.Check`, `File.Checks`, `Validate`; `plan.CheckEvidence`, `plan.ResultHead`; `PlanFact.Head`; derive (§9.2); the `plan done` guard, with the merged head read from the forge (§9.3); the task page's `Check` line | Parse: check accepted; 201 characters, a newline or `checks: required` with a missing check all refused; old plans unchanged (golden). Derive: an approved verdict with `--head H` and the evidence line `at H` is done when the result head is H. These are each `InReview` with their reason: no evidence line; `exit 1`; a check differing by more than whitespace; a verdict without a head; a line `at H2` on a verdict with head H. **Stale head**: approved with evidence at H1, then the board commit, the queued head or the merged head is H2: not done, reason "re-review". A new approval with evidence at H2 makes it done. A recorded done whose `head` is not the decider's is not done. A `merge: false` request with no commit is not done. A task with no check is byte-identical to today. `plan done` (fake forge): refused without the evidence; refused when the merged head is H2 and the approval names H1; refused when the forge read fails; passes and records the head when they match. `exit 1` labelled "check failed". **Person task** with a check: `plan done` is refused in each of these cases: without a typed `passes` to its `check-…` question; on `fails`; on an untyped reply; after the record expired. It passes on a typed `passes` to the current id, and records `approved` and `approved_qid`. **Stale check**: approved `passes` for check A, then a plan reload changes the task's check to B (same task id). `plan done` is refused, and the row recorded done under A is no longer done. A board-delivered person task with a check is not done without the fact. Derive shows it done only with `approved` and the current qid. A person task without a check is unchanged. Missions: `plan load` and `plan draft` refuse a mission task whose `test` differs from its check, and refuse an unreadable `missions.json`. Mutants: drop the `exit 0` test, drop the head comparison in each of derive and `plan done`, drop the whitespace collapse, drop the `approved` test for person tasks |
-| (b) `plan draft` + `TypedApproval` | `bus.TypedApproval`; `RetroApproved` rewritten on it; `SetApprovalArchive`; key kind `plan:draft`; `plan draft`, `show`, `--drop`; `plan load`'s draft rules (§8.5); `PlanRecord.Approved`; `onboard.ParseBuild` | `TypedApproval`: yes passes; an untyped reply, another qid, another ask, `said=no`, a withdrawn answer, `By == From`, a kept record answering `no` while the entry says `yes`, and a failed archive read are each refused. The retro tests pass unchanged. qid: one byte changed in the plan or in `BUILD.md` changes it. Load: refused while unapproved; refused for another file; refused for `checks: required` with no draft; passes after the yes, deleting the draft. **Race**: a test hook runs between part 1 and part 2 of the load (§8.5) and replaces the draft (a new file and qid, and a new ask). The load fails, `{p}:plan` is unchanged, and the new draft is kept. The same holds for a `--drop` in that window. Script: each of a changed `file`, a changed `build`, a changed `ask`, a kept answer that is not `yes`, and a stream entry whose `said` is not `yes` makes the script write nothing (each a mutant of one condition). Diff and carry-over (§8.1 step 4, §8.5, §8.6): `DraftDiff` sorts kept, added, dropped, in hand carried, in hand dropped and done on a fixture plan; the qid changes when the active plan's commit or the stopped ids change; the question names every stopped task (and "and N more" past 300 characters); load refused when the active plan was reloaded or cleared since the draft (script condition, a mutant); load refused when a task the draft drops came into hand since; **race**: a test hook between part 1 and the script accepts the board request of a task the draft drops (not in `stops`), and the load writes nothing (`{p}:plan` and the draft unchanged); the same with a new verdict, a new fact on that task, and a merge-queue change; run again after the hook, part 1 refuses "started since the draft"; each compared input is a mutant (drop its comparison, the race test fails); a stopped task that finished since does not refuse; facts of carried tasks kept, and done tasks carried stay done; the load prints the stopped tasks. Draft ask rules (§8.1 step 6): a re-draft while the old ask is open replaces it, and the old qid no longer approves; a re-draft after `no`, free text or `later` opens a new ask (no `ASK_NOT_OPEN`); the same files at a new commit give the same qid and wording, so no `SameQuestion` refusal; a re-draft by master of the architect's draft is refused until `--drop`, and `--drop` by master leaves the architect's ask and says so; `plan draft` while the caller has another ask open is refused, and nothing is written; a qid depends on the path too. Draft refused for an agent other than master or architect, and for the person's shell. ACL: `plan:draft` writable by agent, `plan` still not |
+| (b) `plan draft` + `TypedApproval` | `bus.TypedApproval`; `RetroApproved` rewritten on it; `SetApprovalArchive`; key kind `plan:draft`; `plan draft`, `show`, `--drop`; `plan load`'s draft rules (§8.5); `PlanRecord.Approved`; `onboard.ParseBuild` | `TypedApproval`: yes passes; an untyped reply, another qid, another ask, `said=no`, a withdrawn answer, `By == From`, a kept record answering `no` while the entry says `yes`, and a failed archive read are each refused. The retro tests pass unchanged. qid: one byte changed in the plan or in `BUILD.md` changes it. Load: refused while unapproved; refused for another file; refused for `checks: required` with no draft; passes after the yes, deleting the draft. **Race**: a test hook runs between part 1 and part 2 of the load (§8.5) and replaces the draft (a new file and qid, and a new ask). The load fails, `{p}:plan` is unchanged, and the new draft is kept. The same holds for a `--drop` in that window. Script: each of a changed `file`, a changed `build`, a changed `ask`, a kept answer that is not `yes`, and a stream entry whose `said` is not `yes` makes the script write nothing (each a mutant of one condition). Diff and carry-over (§8.1 step 4, §8.5, §8.6): `DraftDiff` is a partition (every active task in exactly one of done, carried, stops, kept, dropped) on a fixture plan, and `FileDiff` counts in both, added and removed from the files alone; the qid changes when the active plan's commit or the stopped ids change; the question names every stopped task (and "and N more" past 300 characters); load refused when the active plan was reloaded or cleared since the draft (script condition, a mutant); the question text is identical for the same files and `stops` while kept tasks move into hand or dropped tasks finish (the replace passes `SameQuestion`); load refused when a task the draft drops came into hand since (outside `stops`); a task in `stops` that finished before the load does not refuse and is reported; **race**: a test hook between part 1 and the script accepts the board request of a task the draft drops (not in `stops`), and the load writes nothing (`{p}:plan` and the draft unchanged); the same with a new verdict, a new fact on that task, and a merge-queue change; run again after the hook, part 1 refuses "started since the draft"; each compared input is a mutant (drop its comparison, the race test fails); facts of carried tasks kept, and done tasks carried stay done; the load prints the stopped tasks. Draft ask rules (§8.1 step 6): a re-draft while the old ask is open replaces it, and the old qid no longer approves; a re-draft after `no`, free text or `later` opens a new ask (no `ASK_NOT_OPEN`); the same files at a new commit give the same qid and wording, so no `SameQuestion` refusal; a re-draft by master of the architect's draft is refused until `--drop`, and `--drop` by master leaves the architect's ask and says so; `plan draft` while the caller has another ask open is refused, and nothing is written; a qid depends on the path too. Draft refused for an agent other than master or architect, and for the person's shell. ACL: `plan:draft` writable by agent, `plan` still not |
 | (c) busmon draft view | the poller reads the draft; §12.1 to §12.3; `D`; dim/italic proposed rows; the diff banner and the stopped/carried marks; the task page | Golden at 80, 120 and 160 for a draft only, and for a plan plus a draft (the banner's diff, `◆ dropped by the v1 draft`, `carried to v1`); `D` toggles only with both, a draft alone shown directly; `D` free in the shell mode (key test); the banner for answered `yes`, `no` and `later`; `+`, `-` and `d` inert on a draft; Enter on the banner opens the ask; a plan without a draft byte-identical to today |
 | (d) `agentbus init` | `init`, `--existing`, `--resume`, `--replace`, `status [--json] [--build]`, `wrap-up`, `keep`, `mac`, `forget-answers`, `--export-answers`; `onboard.State` (strict parse, version, `cycle`); key kind `onboarding:answers`; the local MAC key; setting `onboarding.scope_min_tasks` | Refused for an agent caller (env, and the fake ancestry), for `forget-answers` and `--export-answers` too; **proceeds with a plan loaded** and names it in the directive; refused with an onboarding or a draft and neither `--resume` nor `--replace`; `--replace` without a terminal sends the replace directive and writes no draft key; a `wrapped` onboarding starts cycle 2; `keep` refuses an untyped reply and a reply to a non-onboarding ask, and stores `said`; `mac` is HMAC-SHA256 under the key file (0600, created once, never printed), and a different key gives a different MAC; `--export-answers` refuses a path `git check-ignore` does not confirm; `--resume` refused with none or `wrapped`; mode detection on scratch repositories (empty, README only, code, `--existing`); the architect started when absent (fake host); the directive is `human=yes` and not `typed`; `status` prints the disagreement; `state.json` with an unknown field or version 2 refused |
 | (e) skill + prompts | `skills/agent-bus-onboard/SKILL.md`; the architect's skills; §10.1 to §10.3 | `roles doctor` passes; the release gate's update from the previous binary (the roles.toml change) |
