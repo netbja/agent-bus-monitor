@@ -395,7 +395,10 @@ desktop stay outside the cap. Built in step 1 (§3).
 
 ## 12. The process model: the holder's delegated cgroup tree (amendment, 2026-11-27)
 
-Status: amendment r4, for review (subject `resource-limits-units`), ahead of step 4. r4, foureyes:
+Status: amendment r5, for review (subject `resource-limits-units`), ahead of step 4. r5,
+reviewer-codex: the start sweep covers every build's scopes of the project. It stops another
+build's only when that build's holder is not active, so a crash before an upgrade leaves
+nothing, and a drain keeps the old holder's agents (§12.5). r4: r4, foureyes:
 no pane ever lands in `holder/self` (a failed cap B gives an uncapped `holder/agents` leaf), and
 the holder stops its scopes at terminal end, at holder stop, and in a start sweep of its own
 build's stale scopes (§12.5, §12.6).
@@ -554,10 +557,14 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<k
     `SIGTERM`, before it exits. The unit has no `ExecStop` today (`service/holder.go`), and
     none is added. A holder killed outright skips this step, and the start sweep catches what
     it left;
-  - **at holder start:** a sweep of `agentbus-<p>-<key>-*.scope` of its own project and build
-    that no live terminal holds. Those are leftovers of a crash. Another build's scopes are
-    never touched: the build key is in the name, so a drain's old and new holders do not kill
-    each other's agents.
+  - **at holder start:** a sweep of every `agentbus-<p>-*.scope` of its project, any build
+    (r5, reviewer-codex: a holder of build A killed outright, then build B started, would
+    leave A's scopes). For each scope, the sweep reads the build key from the name, then:
+    - **its own build:** it stops the scope when no live terminal holds it;
+    - **another build:** it stops the scope only when that build's holder unit is not active
+      (`HolderActive(project, key)`, `service/holder.go`). A live old holder during a drain
+      keeps its scopes. An error from the manager ("could not say") counts as active: when in
+      doubt, nothing is stopped, and the doctor line names the scope as `stale?`.
   - The scope name holds the build key for that reason. `agentbus-<p>-<key>-<role>-<term>`
     stays under systemd's unit-name length, with the key cut as the holder unit's name cuts it.
 - 4b's live check confirms that this host's systemd accepts `OOMPolicy`, `Delegate` and
@@ -634,8 +641,13 @@ systemd-run --user --scope --quiet --slice=agentbus.slice --unit=agentbus-<p>-<k
   - Tests:
     - the argv with and without `systemd-run`;
     - the pid contract through a fake `systemd-run` that execs (`/proc/P/comm`, `cmd.Wait`);
-    - scope stops at terminal end and holder stop, the start sweep of this build's stale scopes,
-      and another build's scopes left alone (a fake `systemctl` records the calls);
+    - scope stops at terminal end and at holder stop, with a fake `systemctl` recording the
+      calls;
+    - the start sweep:
+      - stops this build's stale scopes;
+      - after A was killed outright, stops B's start of A's scopes (A inactive);
+      - leaves a live A's scopes alone while B runs (a drain);
+      - stops nothing when the manager cannot say;
     - a fake that fails gives `soft`;
     - unit text goldens with no `MemoryMax` on the holder unit;
     - a live check on this host in the PR.
