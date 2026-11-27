@@ -920,7 +920,7 @@ three things:
 
 ## 12. busmon: the draft in the Plan tab
 
-The draft is shown in the Plan tab, not in a separate view (question Q1, recommended option). The
+The draft is shown in the Plan tab, not in a separate view (question Q1, the person's answer: option 1). The
 poller reads `{p}:plan:draft` beside `{p}:plan`, on the same tick and with the same error rule. It
 does not call `TypedApproval` itself. The draft's approval state comes from the ask, which busmon
 already reads: open, answered, or replaced.
