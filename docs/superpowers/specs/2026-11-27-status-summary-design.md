@@ -8,7 +8,7 @@
     - the actions `open` and `reply`;
     - `--all` with the projects that wait on the person first;
     - a Team line of anomalies.
-  - r3 answers the two r2 rejects (§4.5):
+  - r3 answers the two r2 rejects (§4.3):
     - foureyes: `intent`, `context` and `draft_by` are carried by `bus.Event` and the subscribe
       JSON;
     - reviewer-codex: code guards, so a question or a note never grants authority and never
@@ -210,7 +210,7 @@ note mode is a separate thing, addressed to someone. The mode resets to `directi
 window closes. A mode other than `directive` is drawn in
 the window's frame colour of an answer, so a question is never mistaken for an order.
 
-### 4.5 Transport and guards: the receiver sees the intent, and code enforces it
+### 4.3 Transport and guards: the receiver sees the intent, and code enforces it
 
 **Transport** (foureyes r2). An agent reads its commands through `subscribe --drain`. That JSON
 is a fixed struct (`cmd/agentbus/subscribe.go:30-52`, `cmdEvent`) built from `bus.Event`, whose
@@ -270,13 +270,13 @@ work. Master's skill alone is not enough to enforce that, so:
   Step 5 adds: `context` and `draft_by` reach the JSON, and a `reply` press arrives with
   `"draft_by":"master"` and no `typed`.
 
-### 4.3 The counter
+### 4.4 The counter
 
 `0 / 65536` becomes the line count, `3 lines`. The rune limit (`bus.CmdMaxRunes`) shows only from
 90 % of it: `58 912 / 65 536`, in the warning role. The existing check that refuses an
 over-limit text is unchanged.
 
-### 4.4 Mock-ups (goldens at 80x24 and 140x40)
+### 4.5 Mock-ups (goldens at 80x24 and 140x40)
 
 80 columns:
 
@@ -395,7 +395,7 @@ When master reports state, its report ends with one line starting `↳ `, naming
 - No LLM in `summary`, and no new agent.
 - No unread lines and no read state of reports in `summary`: they are one busmon's local marks.
 - No code link between a question and work master does by hand without a request. Every coded
-  path is guarded (§4.5), and the skill covers the rest.
+  path is guarded (§4.3), and the skill covers the rest.
 - No cross-project answers by master: that is the concierge's, later. `--all` only prints.
 - No change to what needs the person's typed words.
 
