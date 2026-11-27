@@ -189,3 +189,13 @@ func TestPollReadsObservedUsage(t *testing.T) {
 		t.Fatalf("after the observation went: %+v", a)
 	}
 }
+
+// limits.warn_at saved in busmon's settings applies to the mem cells at once.
+func TestWarnAtAppliesLive(t *testing.T) {
+	defer func(w float64) { memWarnAt = w }(memWarnAt)
+	memWarnAt = 80
+	m := &Model{cfg: shellConfig{getenv: settingsEnv(t, "[limits]\nwarn_at = 50\n", "", nil)}}
+	if said := m.applySettings("limits.warn_at"); said != "applied and saved" || memWarnAt != 50 {
+		t.Fatalf("said %q, warn_at %v", said, memWarnAt)
+	}
+}

@@ -227,6 +227,10 @@ func (m *Model) applySettings(key string) string {
 			return "no wip limit: applies at each agent's next accept"
 		}
 		return fmt.Sprintf("wip limit %d: applies at each agent's next accept", cur.WipLimit)
+	case "limits.warn_at": // agent-resource-limits step 3e: the mem cells' amber from the next frame
+		memWarnAt = config.Machine(m.settingsGetenv()).Float("limits.warn_at")
+		m.gen++
+		return "applied and saved"
 	case "display.idle_view_after": // idle view §2: counted from the next poll on
 		cur.IdleView = ns.IdleView
 		return "applied and saved"
