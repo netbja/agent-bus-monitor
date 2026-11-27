@@ -1,6 +1,11 @@
 # The plan's lifecycle, and the Plan tab redone (plan-lifecycle)
 
-- Status: spec r1, for review (subject `plan-lifecycle-spec`). Not built.
+- Status: spec r2, for review (subject `plan-lifecycle-spec`). Not built.
+  - r2, foureyes r1:
+    - a task's work is one request, its slices `--more` steps (§A1, §A2);
+    - `+` stays priority, and "next plan" is `n` (§A3, §B9);
+    - the prerequisites of each step (Build steps);
+    - first-pass unplanned and the 11/11 example (§0, §A3).
 - Date: 2026-11-27. Author: architect. Base: origin/dev `a919454e`.
 - Source: the person's typed directive to master of 2026-11-27, 23:12, relayed as task
   `plan-lifecycle-spec`, after master's report 1795817303570-0 ("Revoir le plan"). The person's
@@ -22,6 +27,9 @@ plan drift from what happened:
    The three still "upcoming" have specs merged (`2026-11-21-wip-limit-design.md`,
    `2026-11-14-quiet-update-design.md`) and builds merged since (`wip-limit step 3`, #803;
    `single-approval step 3b`, #806; `quiet-update step 4b`, #817). Nobody recorded them.
+   v0.34 will not fix itself when Part A lands. Its requests carry no `--plan` provenance, so
+   its three tasks reach done only once the person (or master) attaches their merged work
+   (§A3). From the next plan on, requests carry the link.
 2. **A task finds its work by name.** A task's board entry is its `board` field, or nothing
    (`derive.go:125`, `in.Board[t.Board]`). A request sent under another task name, as
    `wip-limit-step1` for `wip-limit-spec`, is invisible to it.
@@ -41,8 +49,14 @@ A task's work is found in this order. The first rule that finds one wins:
 
 1. **Provenance.** A request sent with `--plan <task>` (status-summary §4.3) records
    `provenance=plan:<task>` on its board entry. Every request for a plan task is sent that way,
-   so the link is written once, by the act that starts the work. A task may have several
-   requests: its steps, a rework. The task reads all of them.
+   so the link is written once, by the act that starts the work. **A task's work is one
+   request.** A task built in slices uses that request's `--more` steps (`MergedSteps`,
+   `OpenSteps`, `bus/requests.go:44-48`): the request stays open until its last step, and
+   `ClosedOnMerge` is written only then. So:
+   - a second `request send --plan <task>` is refused while another request for that task is
+     open: "<task> has request <id> open: add a step to it (request step), or close it first";
+   - a `--plan` request sent after the task's request closed is a **rework**. It reopens the
+     task, which is not done again until that request closes on merge.
 2. **An attachment** made by hand (§A3, `plan attach`): a request or a PR that the person or
    master tied to the task.
 3. **The `board` field** (today's rule), then a board entry named exactly as the task id. These
@@ -64,8 +78,10 @@ The plan file holds **intent only**: titles, order (the file's order), `after`, 
 `priority`, `check` (the acceptance, onboarding §7), `spec` and `command` (§A6). A task's state
 comes from broker events, by these rules (`plan/derive.go`):
 
-- **A merge task** is done when both hold:
-  - **merged:** its last request was closed on merge, its head delivered into the base. This is
+- **A merge task** is done when all of these hold:
+  - **nothing open:** no request linked to the task is open (§A1: one at a time; a rework
+    reopens it);
+  - **merged:** its newest request was closed on merge, its head delivered into the base. This is
     `Request.ClosedOnMerge`, which the dispatcher's merge-queue pass writes
     (`internal/dispatchsvc/closeonmerge.go:37`, through `mergequeue.Delivery.Delivered`:
     ancestor, squash patch-id or rebase patch-ids). Or a PR attached by hand that the merge queue
@@ -107,12 +123,17 @@ three actions:
 - **`a` attach** to a task of the plan, chosen from a picker. It runs `agentbus plan attach
   <task> <item>`, which writes the fact `attached` on the task. A merge task attached to a merged,
   approved PR is then done by §A2.
-- **`+` add to the next plan.** It runs `agentbus plan next add <item>`, which appends to
+- **`n` add to the next plan.** It runs `agentbus plan next add <item>`, which appends to
   `{p}:plan:next`, a list (record) that the release draft reads (§A4). The current plan's file
   does not change: a file changes only through a draft and the person's yes.
 - **`x` not plan work.** It runs `plan ignore <pr>`, as today.
 
 Who may run them is Q4.
+
+**The first pass lists a backlog.** Every request merged during the active plan with no
+provenance (all of today's), and matching no task by `board` or id, is unplanned. That is the
+intent: it is how `wip-limit-step1` and the work behind v0.34's three open tasks surface, so the
+person attaches it. It is not a bug.
 
 ## A4. At each release, a draft of the next plan
 
@@ -283,7 +304,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 │                                                                              │
 │ Next: quiet-update-spec → architect · for you: merge #737                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter task  V releases  a attach  + next plan  x not plan work
+ ↑↓  enter task  V releases  a attach  n next plan  x not plan  + - priority
 ```
 
 120 columns: the list and the detail pane.
@@ -310,7 +331,7 @@ The spacing is proportional to time, over the task's life, with labels under the
 │ Next: quiet-update-spec → architect                      │                                                           │
 │       for you: merge #737                                │                                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter task  V releases  a attach  + next plan  x not plan work  d done
+ ↑↓ select  enter task  V releases  a attach  n next plan  x not plan work  + - priority  d done
 ```
 
 160 columns: the detail pane gains the timeline.
@@ -337,24 +358,41 @@ The spacing is proportional to time, over the task's life, with labels under the
 │ Next: quiet-update-spec → architect                      │                                                                                                   │
 │       for you: merge #737                                │                                                                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter task  V releases  a attach  + next plan  x not plan work  d done
+ ↑↓ select  enter task  V releases  a attach  n next plan  x not plan work  + - priority  d done
 ```
 
 ## B9. Keys
 
-`a`, `+` and `x` act on an UNPLANNED item, and do nothing elsewhere. `V` opens the releases. `d`
-shows the done rows. The build checks each key is free in the Plan tab's mode, and today's
-`d` and `V` keep their meaning there.
+- `a`, `n` and `x` act on an UNPLANNED item, and do nothing on a task row.
+- `+` and `-` keep their meaning: the person's priority on a task row (`ActPriorityUp`,
+  `keys.go:279`). onboarding §12 relies on them too.
+- `V` opens the releases, and `d` shows the done rows, as today.
+- `a`, `n` and `x` are bound in other panels and on pages (`a` for Agents and Ideas, `n p` for a
+  page's next and previous), not in the Plan panel's bindings. The key test checks them in the
+  Plan panel.
 
 # Build steps, tests
 
-Each step is one PR, in this order:
+Each step is one PR, in this order. **Prerequisites from other specs**, which master must see
+merged before sending the step:
+- **Step 1** needs status-summary step 4 (`request send --plan` provenance) for rule 1 of §A1.
+  It needs onboarding step (a) (the evidence rule, `ResultHead`) for tasks with a `check`. Sent
+  earlier, step 1 builds rules 2 and 3 alone (attach, `board`, id), which still read old plans,
+  and it adds rule 1 when status-summary step 4 lands.
+- **Step 3** needs onboarding step (b): `plan draft`, `TypedApproval` and the draft load.
+- **Step 6** needs fine-rendering's `finedraw.ThinBar` (merged) and status-summary step 1
+  (`plan.NowNext`).
+
+The steps:
 
 1. **Links and derived done** (§A1, §A2):
    - the work: `plan.Links`; `MergeClose.PR`; derive's merge rule; the `plan done` refusal;
      `plan attach`;
    - tests:
      - a task finds its requests by provenance, by attachment, by `board`, and by id;
+     - **two requests for one task:** a second `--plan` request is refused while the first is
+       open; with the first merged and a rework sent and still open, the task is not done; with
+       the rework closed on merge, it is done;
      - a merge task with a request closed on merge and approved at that head is done with no fact;
      - approved at another head, it is "approved, head changed";
      - a verdict with no head counts, with its label;
