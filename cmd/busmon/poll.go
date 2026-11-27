@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/netbja/agent-bus-monitor/attention"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -487,19 +488,11 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 		}
 		if observedErr == nil {
 			o, ok := observed[n]
-			a.obsBusy, a.obsState, a.obsAt, a.obsSince = ok && o.Busy, o.State, time.Time{}, time.Time{}
-			if ok && o.At > 0 {
-				a.obsAt = time.UnixMilli(o.At)
-			}
-			if ok && o.Since > 0 {
-				a.obsSince = time.UnixMilli(o.Since)
-			} else {
-				a.obsSince = a.obsAt // a dispatcher before v0.15 writes no since
-			}
 			// Only the agent's current process: a reading carried for an older
-			// one (a replaced agent) is not its prompt.
-			a.obsPrompt = ok && o.State == "blocked" && o.PID != 0 && o.PID == a.pid
-			a.obsOwnPID = ok && o.PID != 0 && o.PID == a.pid
+			// one (a replaced agent) is not its prompt (attention.Observe).
+			ob := attention.Observe(o, ok, a.pid)
+			a.obsBusy, a.obsState, a.obsAt, a.obsSince = ok && o.Busy, ob.State, ob.At, ob.Since
+			a.obsPrompt, a.obsOwnPID = ob.Prompt, ob.OwnPID
 			a.obsBgProcs, a.obsBgOldest = 0, time.Time{}
 			a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU, a.obsCap = 0, 0, 0, nil, 0
 			a.obsLocal = pidsHere
@@ -510,10 +503,7 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 					a.obsBgOldest = time.UnixMilli(o.BgOldest)
 				}
 			}
-			a.obsScreenSince = time.Time{}
-			if ok && o.ScreenSince > 0 {
-				a.obsScreenSince = time.UnixMilli(o.ScreenSince)
-			}
+			a.obsScreenSince = ob.ScreenSince
 			a.trustFolder = ""
 			if a.obsPrompt && snapsErr == nil {
 				a.trustFolder = trustFolders[n]

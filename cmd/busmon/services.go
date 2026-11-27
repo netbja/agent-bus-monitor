@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/netbja/agent-bus-monitor/attention"
 	"strings"
 	"time"
 
@@ -55,15 +56,7 @@ func serviceFact(rec bus.ServiceRecord, has bool, legacy string, now time.Time) 
 // words): "project stopped" when its services were stopped, "dispatch
 // <state>" when it is down or gave up; "" when it runs or its state is
 // unknown, and a "?" then keeps its old meaning (project-switch-ux item 2).
-func unknownWhy(dispatch string) string {
-	switch dispatch {
-	case "stopped":
-		return "project stopped"
-	case "down", "failed", "gave-up":
-		return "dispatch " + dispatch
-	}
-	return ""
-}
+func unknownWhy(dispatch string) string { return attention.DispatchWhy(dispatch) }
 
 // serviceSeg is the header element of a service: glyph, word, state.
 func serviceSeg(word, short, state string, compact bool) Line {

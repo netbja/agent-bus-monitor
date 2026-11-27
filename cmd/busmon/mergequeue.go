@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/attention"
 	"github.com/netbja/agent-bus-monitor/bus"
 )
 
@@ -21,7 +21,7 @@ type mergeQueueReader interface {
 
 // mergeUnknownKey is the one row that says the queue cannot be read: never a
 // decision, never opened.
-const mergeUnknownKey = "merge:unknown"
+const mergeUnknownKey = attention.MergeUnknownKey
 
 // readMergeQueue reads the cache into st; a failed read keeps the last record
 // and says why.
@@ -41,68 +41,19 @@ func readMergeQueue(ctx context.Context, b busReader, st *shared) {
 	st.mergeQ, st.mergeQErr = rec, ""
 }
 
-// mergeItems are the For you rows: one per item ("merge PR 309: <title>", or
-// "merge <branch>"), dated by its deciding approve and marked "(as of HH:MM:
-// <reason>)" while the last pass failed; with no items known and the queue
-// unknown (never computed, a failed read, or a failed pass even after an
-// empty success), one row that says why. Nothing without a reader.
+// mergeItems are the merge queue's For you rows (attention's: one per item,
+// or one row that says why the queue is unknown); nothing without a reader.
 func mergeItems(s snapshot) []attentionItem {
-	if !s.mergeQRead {
-		return nil
-	}
-	rec := s.mergeQ
-	why := s.mergeQErr
-	if why == "" {
-		why = rec.Reason
-	}
-	switch {
-	case len(rec.Items) == 0 && why != "":
-		// Nothing known waiting (never computed, or an empty success since
-		// gone stale): the queue is unknown, one row says why.
-		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you", Text: Preview("merge queue unknown: " + why)}}
-	case rec.ItemsAt == 0 && unknownWhy(s.dispatch) != "":
-		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you", Text: "merge queue unknown: " + unknownWhy(s.dispatch)}}
-	case rec.ItemsAt == 0:
-		return []attentionItem{{Rank: rankMerge, Key: mergeUnknownKey, Agent: "you",
-			Text: "merge queue not computed yet (the dispatch service computes it)"}}
-	}
+	in := attention.Inputs{Dispatch: s.dispatch, MergeRead: s.mergeQRead, Merge: s.mergeQ, MergeErr: s.mergeQErr}
 	var out []attentionItem
-	for _, it := range rec.Items {
-		text := "merge " + it.Branch
-		if it.Number > 0 {
-			text = fmt.Sprintf("merge PR %d", it.Number)
-			if it.Title != "" {
-				text += ": " + it.Title
-			}
-		}
-		if oneApproval(it) {
-			text += " (1 approval)"
-		}
-		if why != "" {
-			text += " (as of " + time.UnixMilli(rec.ItemsAt).Local().Format("15:04") + ": " + why + ")"
-		}
-		out = append(out, attentionItem{Rank: rankMerge, Key: mergeKey(it), Agent: "you", Text: Preview(text),
-			At: time.UnixMilli(it.ApprovedAt), Head: it.Head, Branch: it.Branch})
+	for _, it := range attention.Items(in, time.Now()) {
+		out = append(out, fromAttention(s, it))
 	}
 	return out
 }
 
-// oneApproval: the item's head has one current approver (single-approval
-// §4.5), delivered on one approval; never read from len(Approvals), which
-// counts a reviewer's stale and repeated approves too. A record written
-// before Approvers says nothing.
-func oneApproval(it bus.MergeItem) bool {
-	return len(it.Approvers) == 1
-}
-
-// mergeKey is a merge item's For you key (triage-dedupe §2): its PR's
-// number, so a rebase keeps it; its branch when it has none.
-func mergeKey(it bus.MergeItem) string {
-	if it.Number > 0 {
-		return "merge:pr:" + strconv.Itoa(it.Number)
-	}
-	return "merge:branch:" + it.Branch
-}
+// oneApproval: the item's head has one current approver (attention's).
+func oneApproval(it bus.MergeItem) bool { return attention.OneApproval(it) }
 
 // mergePage is an item's page: its fields, y the URL (or, on the local forge,
 // the merge command), Y what the reviewers wrote.

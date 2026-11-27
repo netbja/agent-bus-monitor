@@ -191,29 +191,14 @@ func planBoardOf(p planState, sel int, showDone, laterOpen bool, now time.Time, 
 	return v
 }
 
-// planInHand is the plan's task in hand (the first in progress or in
-// review, else the first waiting for the person, else the first blocked;
-// an answered one is master's to record, not in hand: reviewer-codex) and
-// the first upcoming one; nil when there is none. ok says a plan is loaded.
-// The idle view's next frame, the Plan header and its highlight read it
-// (progress-line §2.3).
+// planInHand is the plan's task in hand and the first upcoming one
+// (plan.NowNext); ok says a plan is loaded. The idle view's next frame, the
+// Plan header and its highlight read it (progress-line §2.3).
 func planInHand(p planState) (now, next *plan.Row, ok bool) {
 	if !p.loaded {
 		return nil, nil, false
 	}
-	for _, states := range [][]plan.State{{plan.InProgress, plan.InReview}, {plan.Waiting}, {plan.Blocked}} {
-		for i := range p.rows {
-			if now == nil && indexOfState(states, p.rows[i].State) >= 0 {
-				now = &p.rows[i]
-			}
-		}
-	}
-	for i := range p.rows { // the task in hand is never upcoming
-		if p.rows[i].State == plan.Upcoming {
-			next = &p.rows[i]
-			break
-		}
-	}
+	now, next = plan.NowNext(p.rows)
 	return now, next, true
 }
 

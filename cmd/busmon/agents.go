@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/netbja/agent-bus-monitor/attention"
 	"math"
 	"sort"
 	"strconv"
@@ -101,14 +102,14 @@ func modelDrift(a *agentState) bool {
 // a person can answer it, there: the state column reads blocked, as a
 // person's decision; the declared state is never rewritten.
 func promptBlocked(a *agentState) bool {
-	return a.obsPrompt && obsFresh(a, a.clock()) && a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+	return attention.PromptBlocked(attnAgent(a), a.clock())
 }
 
 // obsFresh: the last observation is younger than its TTL. It is checked when
 // shown, not when read, so a busmon whose reads fail stops showing a prompt
 // once the reading it holds is too old.
 func obsFresh(a *agentState, now time.Time) bool {
-	return !a.obsAt.IsZero() && now.Sub(a.obsAt) < time.Duration(bus.ObservedTTL)*time.Millisecond
+	return attnObs(a).Fresh(now)
 }
 
 // clock is the time an observation's freshness is judged at: the shell's
@@ -635,9 +636,7 @@ func iconPair(icon, provider string) Seg {
 // not changed for dispatch.stuck_after; the agent declares neither blocked
 // nor waiting and has no open ask. It reads stuck: the person's to look at.
 func screenStuck(a *agentState) bool {
-	return a.stuckAfter > 0 && a.obsOwnPID && a.obsState == "unknown" && !a.obsScreenSince.IsZero() &&
-		obsFresh(a, a.clock()) && a.obsAt.Sub(a.obsScreenSince) >= a.stuckAfter &&
-		a.state != "blocked" && a.state != "waiting" && a.openAsk == 0
+	return attention.ScreenStuck(attnAgent(a), a.clock())
 }
 
 // stuckWords is what busmon says of a stuck agent: never "prompt".
