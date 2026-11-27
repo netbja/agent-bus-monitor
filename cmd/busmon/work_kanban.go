@@ -296,8 +296,9 @@ func (k *kanbanView) heading(c int) Line {
 
 // draw draws the columns inside the list's inner area; sel is the list's
 // selection, off its marquee offset (each cut line of the selected card
-// moved left by it, never past its end).
-func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int) {
+// moved left by it, never past its end), frame the list's frame style (the
+// rules between the columns are drawn in it).
+func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int, frame cellStyle) {
 	rects := kanbanGrid(len(k.cols), x, y, w, h)
 	_, _, first := k.place(sel, rects)
 	for c, kc := range k.cols {
@@ -306,13 +307,13 @@ func (k *kanbanView) draw(screen cellSink, x, y, w, h int, sel string, off int) 
 			continue
 		}
 		drawLine(screen, r.x, r.y, r.w, k.heading(c), false)
-		if c > 0 && r.x > x { // the column apart: a rule in the rules' colour, inset one row at each end (the person)
+		if c > 0 && r.x > x { // the column apart: a rule like the frame's lines (work-bars-wider), inset one row at each end (the person)
 			for i := 0; i < r.h; i++ {
-				var rule Line
 				if i > 0 && i < r.h-1 {
-					rule = Line{{Text: glyphVertical, Role: RoleLine}}
+					screen.Put(r.x-1, r.y+i, glyphVertical, frame)
+				} else {
+					drawLine(screen, r.x-1, r.y+i, 1, nil, false)
 				}
-				drawLine(screen, r.x-1, r.y+i, 1, rule, false)
 			}
 		}
 		shown := kc.cards[first[c]:]

@@ -539,7 +539,7 @@ func TestWorkKanbanHeadingsAndBands(t *testing.T) {
 	cards := []kanbanCard{{key: "x"}, {key: "y"}}
 	k := kanbanView{cols: []kanbanCol{{title: "a", cards: cards}, {title: "b"}, {title: "c"}, {title: "d", cards: cards}}} // the last band's would land on the frame
 	g := newGrid(22, 6)
-	k.draw(g, 1, 1, 20, 4, "", 0) // four bands of one row each
+	k.draw(g, 1, 1, 20, 4, "", 0, cellStyle{}) // four bands of one row each
 	if out := g.plain(); strings.Contains(out, "more") {
 		t.Fatalf("+N more drawn in a one-row band:\n%s", out)
 	}
@@ -572,7 +572,7 @@ func TestWorkKanbanGateRenderedAt31And32(t *testing.T) {
 	k := workKanban(w, workDraw{now: shellNow})
 	for _, inner := range []int{128, 131} { // 31 and 32 cells a column
 		g := newGrid(inner+2, 12)
-		k.draw(g, 1, 1, inner, 10, "", 0)
+		k.draw(g, 1, 1, inner, 10, "", 0, cellStyle{})
 		r := kanbanGrid(4, 1, 1, inner, 10)[1]
 		var rows []string
 		for _, l := range strings.Split(g.plain(), "\n") {
@@ -608,27 +608,30 @@ func TestKanbanScrollStopsAtATallCard(t *testing.T) {
 		t.Fatalf("place: col %d rank %d first %v, want the scroll to stop at the selected card (2)", col, rank, first)
 	}
 	g := newGrid(32, 5)
-	k.draw(g, 1, 1, 30, 3, "gate", 0)
+	k.draw(g, 1, 1, 30, 3, "gate", 0, cellStyle{})
 	if out := g.plain(); strings.Contains(strings.Split(out, "\n")[4], "gate") {
 		t.Fatalf("drawn past the band:\n%s", out)
 	}
 }
 
-// The person (2026-11-11): a discreet rule between the columns, the same
-// length for every column, inset one row from the band's top and bottom so
-// it touches neither the heading's row nor the frame, in the rules' own
-// colour (RoleLine). The same at 130 columns and wider, and per band when
-// the columns stack.
+// The person (2026-11-11): a rule between the columns, the same length for
+// every column, inset one row from the band's top and bottom so it touches
+// neither the heading's row nor the frame. The same at 130 columns and
+// wider, and per band when the columns stack. The person again
+// (work-bars-wider): a little wider, like the Work tab's frame lines: the
+// frame's own style, its hue whole when focused and faded when not.
 func TestKanbanColumnRules(t *testing.T) {
 	cards := []kanbanCard{{key: "a", lines: []Line{{{Text: "a"}}, {{Text: "a"}}}}}
 	k := kanbanView{cols: []kanbanCol{{title: "For you", cards: cards}, {title: "In progress"}, {title: "Next", cards: cards}, {title: "Ideas"}}}
 	for _, c := range []struct {
-		name  string
-		w, h  int
-		bands int
-	}{{"130", 128, 20, 1}, {"200", 198, 30, 1}, {"stacked", 60, 20, 2}} {
+		name    string
+		w, h    int
+		bands   int
+		focused bool
+	}{{"130", 128, 20, 1, true}, {"200", 198, 30, 1, false}, {"stacked", 60, 20, 2, true}} {
 		g := newGrid(c.w+2, c.h+2)
-		k.draw(g, 1, 1, c.w, c.h, "", 0)
+		frame := borderCell(panelHue[PanelWork], c.focused)
+		k.draw(g, 1, 1, c.w, c.h, "", 0, frame)
 		rects := kanbanGrid(4, 1, 1, c.w, c.h)
 		seps := 0
 		for i, r := range rects {
@@ -640,8 +643,8 @@ func TestKanbanColumnRules(t *testing.T) {
 			for y := r.y; y < r.y+r.h; y++ {
 				cell := g.at(x, y)
 				inside := y > r.y && y < r.y+r.h-1
-				if inside && (cell.text != glyphVertical || cell.st.Role != RoleLine) {
-					t.Errorf("%s: column %d row %d: %q role %v, want the rule", c.name, i, y-r.y, cell.text, cell.st.Role)
+				if inside && (cell.text != glyphVertical || cell.st != frame) {
+					t.Errorf("%s: column %d row %d: %q %+v, want the rule in the frame's style %+v", c.name, i, y-r.y, cell.text, cell.st, frame)
 				}
 				if !inside && cell.text != " " {
 					t.Errorf("%s: column %d row %d: %q, want the inset left blank", c.name, i, y-r.y, cell.text)
@@ -651,6 +654,18 @@ func TestKanbanColumnRules(t *testing.T) {
 		if want := 4 - c.bands; seps != want {
 			t.Errorf("%s: %d rules, want %d", c.name, seps, want)
 		}
+	}
+	// On screen: the rule is drawn exactly as the Work frame's left border.
+	withPalette(t, "dark", false, 1<<24)
+	m := fixtureShell(t, 140, 40)
+	m.cfg.settings.WorkLayout = "kanban"
+	m = workNext(t, m)
+	g := m.grid()
+	r := m.lists.work.rect
+	rects := kanbanGrid(4, r.X+1, r.Y+1, r.W-2, r.H-2)
+	x, y := rects[1].x-1, rects[1].y+1
+	if cell, border := g.at(x, y), g.at(r.X, y); cell.text != glyphVertical || cell.st != border.st {
+		t.Errorf("rule %q %+v, frame %q %+v", cell.text, cell.st, border.text, border.st)
 	}
 }
 
