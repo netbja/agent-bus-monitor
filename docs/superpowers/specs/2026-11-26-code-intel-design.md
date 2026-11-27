@@ -1,6 +1,8 @@
 # Code intelligence helpers for coding agents (code-intel)
 
-Status: spec r9, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+Status: spec r10, for review (subject `code-intel-spec`). Not built. Base: origin/dev `f53e4fca`.
+r10, reviewer-codex's reject of r9: a crashed holder's scopes are swept across builds by the
+next holder (resource-limits §12 r5); the one residual, a manager that cannot say, is stated (§5).
 r9, reviewer-codex's reject of r8: §2 and §5 describe the per-terminal cgroup of
 resource-limits §12 r4 (scope first, then `holder/agents/<…>`) and what ends it in each mode;
 there are no per-agent units.
@@ -171,7 +173,12 @@ grep`. Serena is a later mapping entry (the person, Q2: mcp-language-server firs
     terminal's cgroup, so it ends with the terminal (resource-limits §12.5, §12.6, r4):
     - **scope mode:** the holder stops the terminal's scope (`systemctl --user stop`, the whole
       scope) at the terminal's end and in its `SIGTERM` shutdown. A holder killed outright is
-      covered by its start sweep of its own build's stale scopes.
+      covered by the next holder's start sweep of the project's stale scopes, any build: it
+      stops another build's scope once that build's holder is inactive, and keeps a live old
+      holder's during a drain (resource-limits §12.5, r5). When the manager cannot say whether
+      a holder is live, nothing is stopped. Such a scope is named `stale?` by doctor, and its
+      backend can outlive its terminal until the next sweep. That residual is stated, not
+      hidden.
     - **delegated holder:** the holder kills `holder/agents/<…>` (its whole cgroup, through
       `cgroot`'s kill method) at the terminal's end, and the unit's control-group kill ends
       everything at the holder's stop.
