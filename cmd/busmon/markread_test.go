@@ -152,6 +152,34 @@ func TestMarkOneLine(t *testing.T) {
 	}
 }
 
+// A report row stands for its report and its notices: with one notice read
+// and a newer one not, the row is unread, and m marks the whole row read;
+// m again marks it all unread (reviewer-codex).
+func TestMarkOneLineMixedRow(t *testing.T) {
+	evs := mrReport(60_000, "release", "", "tagged v1")
+	resend := bus.Event{Kind: "cmd", ID: evs[1].ID[:len(evs[1].ID)-2] + "-2", From: "release", Target: "charlie", Type: bus.CmdDirective, Ref: evs[0].ID,
+		Message: "Report " + evs[0].ID + " for you (full text: agentbus reports " + evs[0].ID + "): tagged v1"}
+	m := mrShell(t, append(evs, resend)...)
+	m.markRead(evs[1].ID) // the first notice read, the re-send not
+	m.refresh()
+	if !unreadLine(m, evs[0].ID) {
+		t.Fatal("the row with an unread notice is not unread")
+	}
+	for _, fl := range m.feed.feed {
+		if !fl.sep && fl.ev.ID == evs[0].ID {
+			m.lists.activity.Select(fl.id)
+		}
+	}
+	m = press(t, m, 'm')
+	if unreadLine(m, evs[0].ID) || !m.feed.unread.read[evs[1].ID] || !m.feed.unread.read[resend.ID] {
+		t.Fatalf("m on a mixed row: unread %v, read %v %v", unreadLine(m, evs[0].ID), m.feed.unread.read[evs[1].ID], m.feed.unread.read[resend.ID])
+	}
+	m = press(t, m, 'm')
+	if !unreadLine(m, evs[0].ID) || m.feed.unread.read[evs[1].ID] || m.feed.unread.read[resend.ID] {
+		t.Fatalf("m again: unread %v, read %v %v", unreadLine(m, evs[0].ID), m.feed.unread.read[evs[1].ID], m.feed.unread.read[resend.ID])
+	}
+}
+
 // On an agent's page, N marks that agent's lines (the filter's @agent match).
 func TestMarkAgentRead(t *testing.T) {
 	mine := mrReport(60_000, "release", "", "tagged v1")

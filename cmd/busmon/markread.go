@@ -130,27 +130,28 @@ func (m *Model) toggleMark() {
 		m.ui.flash, m.ui.flashErr = "a line from before your last visit is never marked", false
 		return
 	}
+	// The row's own mark decides the direction, for all its entries: a
+	// report row stands for its report and its notices, some read, some not
+	// (reviewer-codex).
 	act := &markAct{}
+	if fl.mark == markUnread || fl.mark == markSuperseded {
+		act.read = m.markLineReadIDs(fl.ev.ID)
+		m.ui.markUndo = act
+		m.ui.flash, m.ui.flashErr = "marked read "+GlyphNone+" z undo", false
+		return
+	}
 	for _, x := range lineIDs(fl) {
 		if m.feed.unread.read[x] {
 			m.markUnreadID(x)
 			act.unread = append(act.unread, x)
 		}
 	}
-	if len(act.unread) > 0 {
-		m.ui.markUndo = act
-		m.ui.flash, m.ui.flashErr = "marked unread "+GlyphNone+" z undo", false
-		return
-	}
-	if fl.mark == markUnread || fl.mark == markSuperseded {
-		act.read = m.markLineReadIDs(fl.ev.ID)
-	}
-	if len(act.read) == 0 {
+	if len(act.unread) == 0 {
 		m.ui.flash, m.ui.flashErr = "not a line for you: it carries no unread mark", false
 		return
 	}
 	m.ui.markUndo = act
-	m.ui.flash, m.ui.flashErr = "marked read "+GlyphNone+" z undo", false
+	m.ui.flash, m.ui.flashErr = "marked unread "+GlyphNone+" z undo", false
 }
 
 // undoMarks is z: the last act's marks put back, once.
