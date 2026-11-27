@@ -449,7 +449,7 @@ func (l *listState) draw(screen cellSink) {
 		if l.mq.key == l.sel {
 			off = l.mq.off
 		}
-		l.kanban.draw(screen, ix, iy, iw, ih, l.sel, off)
+		l.kanban.draw(screen, ix, iy, iw, ih, l.sel, off, borderCell(l.hue, l.focused)) // the rules as the frame's lines (work-bars-wider)
 		return
 	}
 	gutter := min(listGutter, iw)
