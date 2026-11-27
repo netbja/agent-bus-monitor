@@ -8,7 +8,12 @@
     - the actions `open` and `reply`;
     - `--all` with the projects that wait on the person first;
     - a Team line of anomalies.
-  - It also takes foureyes's r1 findings: report rows stay in busmon (§3.2), `plan.NowNext`
+  - r3 answers the two r2 rejects (§4.5):
+    - foureyes: `intent`, `context` and `draft_by` are carried by `bus.Event` and the subscribe
+      JSON;
+    - reviewer-codex: code guards, so a question or a note never grants authority and never
+      starts tracked work.
+  - r2 also takes foureyes's r1 findings: report rows stay in busmon (§3.2), `plan.NowNext`
     (§3.2), the `reply` action's sender (§5.4), and the nits (§3.1, §7).
 - Date: 2026-11-27. Author: architect. Base: origin/dev `18a1ec16`.
 - Source: the person's typed directive to master of 2026-11-27, relayed as task
@@ -205,6 +210,66 @@ note mode is a separate thing, addressed to someone. The mode resets to `directi
 window closes. A mode other than `directive` is drawn in
 the window's frame colour of an answer, so a question is never mistaken for an order.
 
+### 4.5 Transport and guards: the receiver sees the intent, and code enforces it
+
+**Transport** (foureyes r2). An agent reads its commands through `subscribe --drain`. That JSON
+is a fixed struct (`cmd/agentbus/subscribe.go:30-52`, `cmdEvent`) built from `bus.Event`, whose
+parser (`bus/stream.go:318`) reads only the fields it knows. A new stream field would be dropped
+before the receiver saw it. So the build adds them end to end:
+
+- **`bus.Event` gains three fields:**
+  - `Intent`, from the field `intent`. Only `note` and `question` are read; any other value reads
+    as `""`, as `Needs` does with its values;
+  - `Context`, from `context`: `<kind>:<id>`, validated like an id;
+  - `DraftBy`, from `draft_by`: a valid name, or `""`.
+- **The subscribe JSON** gains `intent`, `context` and `draft_by`. They are additive `v1` fields,
+  beside `human`, `typed` and `needs` (the versioned-JSON rule).
+- **The `--brief` line**, which a woken agent may read alone, prefixes the text with `[note]`,
+  `[question: answer only]` or `[draft by <name>]`, and appends `[context <kind>:<id>]`.
+- `agentbus thread` and `history` show the same tags.
+- **The dispatcher's answer guard** (`internal/dispatchsvc/answerguard.go:42`) copies
+  `Intent` into `health.AnswerCmd`. A `note` is never counted as a person's directive left
+  unanswered; it asks for no answer. A `question` is counted, because it asks for one.
+
+**Guards in code** (reviewer-codex r2). A question or a note is `typed=yes`, because the person
+typed it. The rule is that such an entry never grants authority, and never starts tracked
+work. Master's skill alone is not enough to enforce that, so:
+
+- **One predicate:** `bus.Event.Actionable() bool` is `Typed && Intent == ""`. Every place where
+  code grants authority from `typed=yes` calls it, and no other test exists:
+  - `TypedApproval` (onboarding §8.4) refuses an approving entry with an intent. Its entries are
+    replies, and busmon never writes `intent` on one, so this is defence in depth;
+  - the concierge's `typed_ref` check (concierge §5.3) refuses a referenced entry whose relay
+    carried an intent;
+  - the retro's approval goes through `TypedApproval`, so it is covered too.
+
+  A test greps the repository: no authority check reads `.Typed` except through `Actionable`.
+  Reading `Typed` for display or for person-memory's words stays allowed: a question is still the
+  person's words.
+- **No tracked work from it.** Tracked work starts with `agentbus request send <task> <target>
+  [--ref T]`. The `--ref` is the thread it answers, often the person's directive. `request send`
+  reads the entry named by `--ref` (or the root of that thread), and refuses when it has an
+  intent: "<id> is a question (or a note) from the person: it starts no tracked work; ask the
+  person for a directive". The same check runs in `plan` writes that take an entry id, and in
+  the retro's request.
+- **What code cannot stop.** Master can still do work by hand on a question, without a
+  request: it is an agent. Nothing in code links that work to the entry. The skill rule covers
+  it, the `[question: answer only]` tag makes the intent impossible to miss, and the rule is that
+  no tracked work, approval or delivery can cite the question.
+- **Tests (step 4):**
+  - a note sent by busmon arrives in `subscribe --drain --json` with `"intent":"note"` and
+    `wake=no`, and a question with `"intent":"question"`;
+  - the `--brief` tags;
+  - `Actionable` is false for both, and true for a plain typed directive;
+  - `request send --ref <question id>` is refused, and the same request with a directive's id
+    passes;
+  - `TypedApproval` refuses an entry with an intent;
+  - the answer guard skips a note and counts a question;
+  - the grep test for `.Typed` outside `Actionable` in authority checks.
+
+  Step 5 adds: `context` and `draft_by` reach the JSON, and a `reply` press arrives with
+  `"draft_by":"master"` and no `typed`.
+
 ### 4.3 The counter
 
 `0 / 65536` becomes the line count, `3 lines`. The rune limit (`bus.CmdMaxRunes`) shows only from
@@ -329,8 +394,8 @@ When master reports state, its report ends with one line starting `↳ `, naming
 
 - No LLM in `summary`, and no new agent.
 - No unread lines and no read state of reports in `summary`: they are one busmon's local marks.
-- No guard in code on the `question` mode beyond master's skill. A question is `typed=yes`, and
-  only the skill keeps master from starting work on it. A test checks the skill's text.
+- No code link between a question and work master does by hand without a request. Every coded
+  path is guarded (§4.5), and the skill covers the rest.
 - No cross-project answers by master: that is the concierge's, later. `--all` only prints.
 - No change to what needs the person's typed words.
 
