@@ -4,7 +4,8 @@
   - r2, foureyes r1:
     - a task's work is one request, its slices `--more` steps (§A1, §A2);
     - `+` stays priority, and "next plan" is `n` (§A3, §B9);
-    - the prerequisites of each step (Build steps);
+    - the prerequisites of each step (Build steps), with step 1 sent only after both of its
+      prerequisites have merged (reviewer-codex r2);
     - first-pass unplanned and the 11/11 example (§0, §A3).
   - r2, reviewer-codex r1:
     - the Next line is its own function, and `plan.NowNext` is unchanged (§B6);
@@ -399,10 +400,11 @@ The spacing is proportional to time, over the task's life, with labels under the
 
 Each step is one PR, in this order. **Prerequisites from other specs**, which master must see
 merged before sending the step:
-- **Step 1** needs status-summary step 4 (`request send --plan` provenance) for rule 1 of §A1.
-  It needs onboarding step (a) (the evidence rule, `ResultHead`) for tasks with a `check`. Sent
-  earlier, step 1 builds rules 2 and 3 alone (attach, `board`, id), which still read old plans,
-  and it adds rule 1 when status-summary step 4 lands.
+- **Step 1** is sent only after both of these have merged, and is never sent in part:
+  - status-summary step 4 (`request send --plan` provenance), which rule 1 of §A1 reads;
+  - onboarding step (a) (the evidence rule, `ResultHead`), for tasks with a `check`.
+
+  There is no interim state in which provenance-linked tasks are invisible.
 - **Step 3** needs onboarding step (b): `plan draft`, `TypedApproval` and the draft load.
 - **Step 6** needs fine-rendering's `finedraw.ThinBar` (merged) and status-summary step 1
   (`plan.NowNext`).
