@@ -1,6 +1,10 @@
 # The concierge: one conversation across every project (concierge)
 
-Status: spec r4, for review (subject `concierge-spec`; r4: the person's Q4–Q6 answers, the key
+Status: spec r5, for review (subject `concierge-spec`; r5, foureyes and reviewer-codex on r4:
+the person stream is busmon-only through a new `aclBusmonOnly` list pinned by the ACL
+inventory (§5.3); the fallback list is `fallback_profiles`, and `alt_profiles` holds the deep
+answer (§5.5); remember gains the `concierge:person:<id>` source in person-memory's resolver,
+and rejections persist on the broker (§5.4); r4: the person's Q4–Q6 answers, the key
 (§4), remember (§5.4) and the client list (§5.5); r3: a Redis entry does not record its
 writer's ACL user, so `typed_ref` must point into `{concierge}:person`, a stream only the busmon
 user can write; r2, foureyes and reviewer-codex: busmon,
@@ -169,9 +173,19 @@ What busmon sends depends on whose words it is (the person, Q3):
 | **The concierge's draft**, accepted by the press | A directive from the person with `human=yes` and `draft_by=concierge`, never `typed=yes` | `human=yes`, a draft |
 
 **The person stream.** Every line the person types in the window is written by busmon to one
-stream, `{concierge}:person`, as well as to the conversation. The broker ACL grants write on
-that key to the `busmon` user only. The concierge user's own-project write pattern excludes it
-by name. So no agent can append to it.
+stream, `{concierge}:person`, as well as to the conversation.
+- **Today every data role may write every key kind** unless the kind is listed master-only or
+  dispatcher-only (`bus/acl.go`, `aclWrites` over `keyKinds`: `ACLAgent`, `ACLMaster` and
+  `ACLDispatcher` all get it). So a new kind alone would be writable by every agent (r5,
+  foureyes).
+- So the build adds **`person`** to `keyKinds` and a third exclusion list, `aclBusmonOnly =
+  {"person", "concierge:rejected"}` (the second key is from §5.4). Every `aclWrites` call
+  (agent, master, dispatcher, and the new concierge user) excludes it. Only `ACLBusmon`
+  (`~*`) and `ACLAdmin` can write those keys.
+- **`TestACLInventory` pins it:** an XADD to `{concierge}:person` is refused for every role but
+  busmon and admin.
+
+So no agent can append to the person stream.
 
 **Master's check of `typed_ref`** (in master's skill, and in `agentbus` as one call master runs):
 - The referenced id is an entry of `{concierge}:person`. A Redis entry does not record the ACL
@@ -205,10 +219,24 @@ are not audited.
 ### 5.4 Remember: a proposed quote, the person decides (the person, Q5)
 
 - The concierge may propose saving a memory. The proposal is always a **verbatim quote of the
-  person's own words**, an entry of `{concierge}:person` or a typed entry of a project's stream,
-  with its source: date, project and message reference. Never an inference.
+  person's own words**, with its source: date, project and message reference. Never an
+  inference. The source is one person-memory's `remember` already checks, or one it learns:
+  - **a typed entry of a project's stream:** `--from <project>:<entry>`, as person-memory §4.3
+    checks today (`typed=yes`, the person's words);
+  - **an entry of `{concierge}:person`:** a new source form, `--from concierge:person:<id>`.
+    person-memory's resolver gains one case. It reads that exact key's entry, and takes
+    provenance from the key's ACL (§5.3: busmon-only), not from a field. It checks that the
+    quote is a substring of the entry's text, byte for byte. This extends person-memory §4.3 by
+    one source, and the build changes its resolver and its tests (r5, reviewer-codex).
+
+  Any other source is not proposed.
 - It is shown in full. One key confirms it, another rejects it. A rejected quote is never proposed
-  again: busmon keeps its id in the local cache.
+  again: busmon adds its source id to **`{concierge}:rejected`**, a set on the broker that only
+  busmon writes (§5.3's `aclBusmonOnly`), which the concierge reads before proposing.
+  - It is host-level and survives a restart, a lost local cache and a second busmon (r5,
+    reviewer-codex).
+  - It is in the broker's backups like any key.
+  - The person can clear an entry from the Memory page.
 - If a similar fact exists (same topic), the proposal is **replace**, not add, and shows both.
 - busmon writes the confirmed fact through person-memory's `remember`. It is tagged `human=yes`
   (the press) with the quote's `typed_ref`, and it is editable and deletable on the Memory page
@@ -216,10 +244,14 @@ are not audited.
 
 ### 5.5 Which client and model: an ordered list, client-agnostic (the person, Q6)
 
-- The concierge role's profile, then its `alt_profiles` in order, is the list of
-  `{client, model}`. `alt_profiles` already exists in `roles.toml` (`rolecfg/config.go:319`),
-  so no new `roles.toml` key (a new key broke an update once, 2026-11-25). The default list:
-  Claude Code with Sonnet, then Codex. kimi, grok and agy are added once each is verified.
+- The concierge role's profile, then its **`fallback_profiles`** in order (at most
+  `MaxFallbacks` = 3, `rolecfg/config.go:301`), is the list of `{client, model}`. Those are the
+  fallbacks that swap and the quota ask already read. So no new `roles.toml` key is added (a new
+  key broke an update once, 2026-11-25), and no new fallback logic either.
+  - `alt_profiles` is not used for this: it is "never a quota fallback" (`rolecfg/config.go:316`;
+    r5, foureyes). It holds the deep-answer profile instead (below).
+  - The default: Claude Code with Sonnet, then Codex. kimi, grok and agy are added once each is
+    verified.
 - **Fallback:** a pop takes the first entry whose client is installed, whose provider is not
   quota-paused (the quota hold), and whose last launch did not fail. The next pop retries from
   the top.
@@ -229,9 +261,9 @@ are not audited.
   - the client honours the role's tool rules.
 
   An entry that fails is skipped, with the reason.
-- **"Deep answer":** one key (`D` in the window) asks the next reply from a heavier configured
-  profile (`concierge.deep_profile`, for example Opus), for that one reply. It is a separate pop
-  that parks after answering.
+- **"Deep answer":** one key (`D` in the window) asks the next reply from the concierge's first
+  `alt_profiles` entry (for example Opus), for that one reply: a separate pop
+  (`pop concierge --profile <alt>`, what `alt_profiles` is for) that parks after answering.
 - The window's footer shows the active client and model.
 
 ## 6. Later, if the terminal proves limiting
@@ -246,8 +278,8 @@ is chosen then, from §3's re-check, on the person's yes.
 ## 7. Build steps (in series)
 
 1. **The concierge role and host project:** the role file and skill (language rule, the
-   source-citing rule, §5.3's limits), the host project `concierge`, and its ACL user (observer reads,
-   its own project's writes only).
+   source-citing rule, §5.3's limits), the host project `concierge`, its ACL user (observer
+   reads, its own project's writes only), and the `person` kind with `aclBusmonOnly`.
    Tests: the ACL inventory test refuses the concierge user every write outside its project,
    the `cmd` stream of another project included, and any write to `{concierge}:person`.
 2. **busmon's window:** the Ctrl+Space overlay (with its aliases and `concierge.key`), the conversation view, send, history, the hidden-answer
@@ -260,9 +292,12 @@ is chosen then, from §3's re-check, on the person's yes.
      - typed words relayed are `typed=yes`, and a draft is `human=yes` with `draft_by`;
      - master demotes a reference with a changed byte, one older than an hour, one used a second
        time, and one that points outside `{concierge}:person` (an entry the concierge wrote on its own stream with `typed=yes`);
-     - every relay leaves one audit line.
+     - every relay leaves one audit line;
+     - `remember --from concierge:person:<id>` accepts a substring of a busmon-written entry and
+       refuses any other key;
+     - a rejected id stays rejected after busmon restarts with an empty local cache.
 5. **The client list (§5.5):** the fallback chooser over the profile and `alt_profiles`, the
-   doctor smoke test, `concierge.deep_profile` and the `D` key.
+   doctor smoke test, and the `D` key on the first `alt_profiles` entry.
 6. **`mem search`** (person-memory layer 2), when step 1's concierge needs it.
 
 ## 8. Not doing
