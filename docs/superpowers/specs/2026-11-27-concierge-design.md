@@ -290,7 +290,8 @@ appended to other projects' `cmd` streams, so it could send without any press, a
 forge the `typed=yes` entry its `typed_ref` pointed to).
 
 A suggested action that writes to a master carries its target project and its exact text. When
-the person presses it, busmon shows the text and the target once more and sends it on the press.
+the person presses its number, busmon shows the full text and the target once more. It sends
+only on `y` in that confirmation, never on `Enter` (§4.3, and untrusted content below).
 What busmon sends depends on whose words it is (the person, Q3):
 
 | The text is | busmon sends to `<project>`'s master | Marked |
@@ -317,9 +318,10 @@ stream, `{concierge}:person`, as well as to the conversation.
   `~*:person` or `~*:rejected` write pattern exists for them. Only `ACLBusmon` (`~*`) and
   `ACLAdmin` write them. The protection is the named exclusion, not a missing pattern (r6,
   reviewer-codex).
-- **The ACL tests pin it, per command:** an `XADD` to `…:concierge:person` and an `SADD` to
-  `…:concierge:rejected` are each refused for agent, master, dispatcher and concierge, and
-  allowed for busmon. `TestACLInventory` lists both kinds as busmon-only.
+- **The ACL tests pin it, per command:** an `XADD` to `…:concierge:person`, an `SADD` to
+  `…:concierge:rejected` and an `HSET` to `…:concierge:person:pinned` (r7) are each refused for
+  agent, master, dispatcher and concierge, and allowed for busmon. `TestACLInventory` lists the
+  three kinds as busmon-only.
 
 So no agent can append to the person stream.
 
