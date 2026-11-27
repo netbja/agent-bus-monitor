@@ -5,11 +5,17 @@ the person's typed directive of 2026-11-27 (cmd from the person to master, relay
 `concierge-amend`):
 - four fixes: the fallback chooser (§7 step 5), the person stream's retention (§5.3),
   untrusted content (§5.3), and Q4/Q6 as asked marked superseded (§9);
-- the window's design (§4.1 to §4.4);
+- the window's design (§4.1 to §4.4), with its focus rule (§4.6, r8);
 - the answer and dialogue style (§4.5);
 - the `D` key and key capture (§4);
 - `mem search` timing (§7);
-- a bounded context per answer (§5.2).
+- a bounded context per answer, with a global budget (§5.2, r8).
+
+r8 answers the r7 rejects:
+- foureyes: the focus rule, so the bare keys never fire while typing (§4.6); a proposal ends with
+  its bar, and its pin goes too (§5.3); the doubled heading; Esc layered; the goldens list;
+- reviewer-codex: a total context budget, per-read byte caps, and an omitted-context report
+  (§5.2).
 
 Before: spec r6 (subject `concierge-spec`; r6, reviewer-codex: `rejected` is a key kind
 like `person`, both in `aclBusmonOnly`, with an ACL test per command (§5.3); r5, foureyes and reviewer-codex on r4:
@@ -162,7 +168,7 @@ At 60 columns, sources expanded with `s`:
 │                                                          │
 │                                                          │
 │                                                          │
-│ [1] open #831   [2] ask master to merge   [3] remember   │
+│ [1] open #831   [2] open the queue   [3] remember        │
 │ › ▍                                                      │
 └ ↵ send · s · D · ^␣ ─────────────────────────────────────┘
 ```
@@ -251,7 +257,22 @@ the neutral rules apply alone.
 rule never touches them. **No extra LLM pass:** the rules shape the one reply. Nothing reruns it
 through a "humanizer".
 
-## 5. The concierge agent## 5. The concierge agent
+### 4.6 Focus: typing never fires a key
+
+The input is active whenever the window is open, so a bare key needs a rule:
+- **While the input holds text, every printable key types.** `s`, `m`, `D` and `1`–`3` insert
+  their characters and fire nothing.
+- **While the input is empty, they act:** `s` sources, `m` Memory, `D` deep answer, `1`–`3` the
+  bar's actions. A chip alone counts as empty, since it is not text.
+- Hence the action bar's hint: it shows `1–3 (empty input)` only while the input holds text.
+- **Esc is layered.** It first closes the innermost state: the relay's `y` confirmation, then
+  expanded sources, then a `↓ more` unfolded. Only at the top level does it hide the window.
+- Key tests:
+  - with text in the input, `s`, `m`, `D` and `1` insert characters and fire nothing;
+  - with the input empty, each one acts;
+  - Esc in the confirmation cancels it and leaves the window open.
+
+## 5. The concierge agent
 
 ### 5.1 Where it runs
 
@@ -272,12 +293,36 @@ it is not running pops it. It parks after `dispatch.idle_park_after` like any po
   layer 2 `mem search`, which this spec is the need for. Until build step 6 brings `mem search`,
   the concierge answers without cross-project history. Its skill says so when a question needs
   it: "I cannot search past history yet; I see the last <N> entries per project".
-- **A bounded context per answer.** A question never loads every stream. Each answer starts from:
-  - the last `concierge.context_recent` entries per project (default 30, a setting in
-    `config/keys.go`), plus each project's summary (board counts, plan progress, open asks);
-  - **targeted reads** the concierge asks for by id or key: one entry, one board task, one plan,
-    one ask, one PR's merge-queue row. Each is capped at `concierge.context_read_max` (default 20
-    reads per answer). A read past the cap is refused, and the answer says what it could not read.
+- **A bounded context per answer.** A question never loads every stream. These limits are
+  settings in `config/keys.go`, with these defaults.
+  - **Projects:** at most `concierge.context_projects` projects (default 6) get a base context.
+    They are chosen in a fixed order:
+    1. the project named in the question, or in the chip;
+    2. the project of busmon's current page;
+    3. projects with items waiting for the person;
+    4. the most recently active (newest stream entry), with ties broken by name.
+  - **Base context per chosen project:** its summary, plus its last
+    `concierge.context_recent` entries (default 30).
+  - **Size caps:**
+    - each entry is cut at `concierge.context_entry_bytes` (default 2 KiB), with a marker
+      `[cut: N bytes]`;
+    - each summary at 4 KiB;
+    - each targeted read at `concierge.context_read_bytes` (default 8 KiB), cut the same way.
+  - **Targeted reads** the concierge asks for by id or key: one entry, one board task, one plan,
+    one ask, one PR's merge-queue row. They are capped at `concierge.context_read_max` (default 20
+    per answer).
+  - **A total budget,** `concierge.context_bytes` (default 96 KiB), caps everything above
+    together. It is filled in the order above. What does not fit is left out whole, never half
+    an entry.
+  - **The omitted-context report.** Whatever was left out (projects not chosen, entries cut,
+    reads refused) goes into a dim line at the end of the answer, `↳ not read: 4 projects, 2
+    entries cut`. The answer says what it could not see, and never implies it read everything.
+  - Tests:
+    - 20 projects give a base context for only the 6 chosen, in the fixed order, and the line
+      names the 14 others;
+    - a 1 MiB entry and a 10 KiB summary are cut at their caps, with the marker;
+    - the total never passes the budget;
+    - a 21st read is refused and reported.
 - **Never a repository's code.** It is not a coding agent and gets no worktree. A question about
   code goes to that project's master.
 
@@ -336,8 +381,13 @@ confirmed fact still points to. So before trimming, busmon **pins** those entrie
   entry id, kind `person:pinned`, a record, in `aclBusmonOnly` with `person` and `rejected`;
 - an entry is pinned when the concierge's proposal quoting it is shown (§5.4). It stays pinned
   while that proposal is pending, or while a person-memory fact with that `typed_ref` exists;
-- it is unpinned when the proposal is rejected (its id goes to `rejected`), or when the fact is
-  deleted on the Memory page.
+- **a proposal ends with its bar.** When the bar is cleared (the next message, or a new answer,
+  §4.3), a remember proposal not confirmed is over. It is neither rejected nor kept: the
+  concierge may propose it again later;
+- it is unpinned when its proposal ends, is rejected (its id goes to `rejected`), or when the
+  fact is deleted on the Memory page. A fact holding the `typed_ref` keeps it pinned. So the pinned
+  hash holds only live proposals and existing facts, and it cannot grow on its own. Test: a
+  proposal ignored, then a new message, leaves no pin.
 
 person-memory's resolver for `concierge:person:<id>` (§5.4) reads the stream, then the pinned
 hash. Its provenance is the same: both keys are busmon-only. **`typed_ref` still expires after one
@@ -467,6 +517,8 @@ is chosen then, from §3's re-check, on the person's yes.
    - the action bar, with a master-bound action in the warning role, and cleared on the next
      message;
    - the inline chip, removed with `Backspace`;
+   - id links, and a cross-project table of at most 3 columns;
+   - the draft box at every width (at 60 columns too: §4.3 draws it before any press);
    - the draft box;
    - `↓ more`;
    - the header with the model and the fact count only.
