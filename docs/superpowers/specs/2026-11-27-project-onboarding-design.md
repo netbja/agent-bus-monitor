@@ -599,7 +599,7 @@ first: a rename can break a sibling PR's new caller without a conflict.
      the archive. It refuses when that fails: "a draft awaits the person's yes".
   2. **In one script** (`planLoadDraft`), which re-checks everything the broker holds before
      writing anything. Its keys are `{p}:plan`, `{p}:plan:facts`, `{p}:plan:ignore`,
-     `{p}:plan:draft`, `{p}:asks` and `{p}:cmd`. Its arguments are the qid, the ask id, the plan
+     `{p}:plan:draft`, `{p}:asks`, `{p}:cmd`, and the keys `plan.DeriveKeys` names for the dropped tasks (below). Its arguments are the qid, the ask id, the plan
      bytes and the `BUILD.md` bytes read from Git, and the approving entry's id. The script
      refuses, and writes nothing, unless all of these hold:
      - the draft record exists, and its `qid`, `ask` and `path` equal the arguments;
