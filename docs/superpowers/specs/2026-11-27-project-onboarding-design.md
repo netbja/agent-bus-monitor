@@ -1,6 +1,10 @@
 # Project onboarding: `agentbus init` — design
 
-- Status: draft r2, for review (foureyes, reviewer-codex). r2: evidence bound to the reviewed head (§9), the load's checks in one script (§8.5), after reviewer-codex's r1 reject
+- Status: draft r3, for review (foureyes, reviewer-codex).
+  - r2: the check evidence is bound to the reviewed head (§9), and the load's checks run in one
+    script (§8.5). Both answer reviewer-codex's r1 reject.
+  - r3: answers foureyes's r1 reject: person tasks with a check (§9.4), the draft's ask rules
+    (§8.1), the grade's Go reader (§11.1), and the nits (§4.1, §7.3, §8.1, §9.1, §12.2).
 - Date: 2026-11-27
 - Author: architect
 - Source: the person's directive, `/data/projects/agent-bus-monitor-doc/directive-master-agentbus-init.md`
@@ -39,7 +43,7 @@ The constraints come from directive §0:
 - No new review machinery. The existing roll-up and ledger decide done (§9).
 - Writing the project's code. The interview defines it, and master runs the plan as usual.
 - Several onboardings at once in one project. There is one at a time (§4.1).
-- Enforcing that a coder leaves the check scripts alone. That stays a reviewer rule (§9.4, §13).
+- Enforcing that a coder leaves the check scripts alone. That stays a reviewer rule (§9.5, §13).
 
 ## 2. What exists and is reused
 
@@ -98,7 +102,10 @@ the project-required exit in `main()`.
 3. **Refuse when a plan is loaded** (question Q3, recommended option): "a plan is active (v0.29,
    6/11 done): finish or clear it first (`agentbus plan clear`, master)". Exit 1.
 4. **Refuse when an onboarding exists and `--resume` is not given.** An onboarding exists when
-   branch `onboard/<project>` exists locally or on the remote. The message names its phase, read
+   branch `onboard/<project>` exists locally (`git rev-parse --verify`) or on the delivery
+   remote. The remote is read with `git ls-remote --heads <remote> onboard/<project>`, which needs
+   no fetch and writes no ref. A remote that cannot be read is printed as a warning, and the local
+   answer stands. The message names its phase, read
    from `state.json` (§6), and says to run `agentbus init --resume` or `agentbus init status`.
 5. **Detect the mode.** The repository is `existing` when its base branch holds at least one commit
    with a file other than `README*`, `LICENSE*`, `.gitignore` and `.gitattributes`. Otherwise it is
@@ -138,7 +145,14 @@ architect, on any client, continues from `state.json` and the open asks (§6.3).
 `--json` prints the same facts as one object. Exit codes: 0 when an onboarding exists, 1 when none
 does, 2 on a read error.
 
-### 4.3 `agentbus init wrap-up`
+### 4.3 `agentbus init grade [--json]`
+
+`grade` is read only, so anyone may run it. It finds the newest verdict on subject
+`grade:<project>-<plan>`, reads `BUILD.md` at the graded commit, and prints `onboard.Grade`'s result
+per DoD item (§11.1). It exits 0 when every item passes, 1 when any item fails or is missing, and 2
+on a read error.
+
+### 4.4 `agentbus init wrap-up`
 
 `wrap-up` is the person's command, with the same guard as `init`. It re-sends the architect the
 wrap-up directive (§11.2). Normally the wrap-up starts by itself after a passing grade. This command
@@ -371,16 +385,22 @@ plan-chantier §2.2.
 ### 7.3 Missions
 
 A task that is mission sized may carry `mission: <change>/<id>`. That mission's `test` in
-`missions.json` must then be the task's check, character for character. `plan draft` reads
-`docs/changes/<c>/missions.json` at the same commit and refuses a mismatch. The conductor already
+`missions.json` must then be the task's check, character for character. `plan.CheckMissions(f File, missions
+func(change string) (map[string]string, error))` compares them. It reads
+`docs/changes/<c>/missions.json` at the same commit, and it is called by `plan draft` **and** by
+`plan load`, on any plan whose mission task has a check, whether or not `checks: required` is set.
+A mismatch is refused, and a `missions.json` that cannot be read is refused too. `Validate` does
+not read files, so it cannot hold this rule. The conductor already
 runs `test`, so for a mission the check is enforced by the conductor.
 
 ## 8. The draft, and its adoption
 
 ### 8.1 `agentbus plan draft <path>@<commit> [--build <path>]`
 
-The architect or master runs it. Like `plan`'s writes, it refuses any other agent's environment
-(`AGENT_BUS_AGENT` set and not `master` or `architect`), and the person's shell passes. It works in
+**Who.** The architect or master runs it, and nobody else. It refuses any other agent's
+environment, and the person's shell too: `AGENT_BUS_AGENT` must be `master` or `architect`. The
+person approves drafts and never asks themselves (§8.4: the asker cannot approve). When a draft is
+recorded, only its recorder (`by`) may re-draft it. Anyone else must `--drop` it first. It works in
 this order:
 
 1. **Read the plan.** It reads `<path>` at `<commit>` from Git and runs the same `plan.Parse` as
@@ -390,28 +410,39 @@ this order:
    optional.
 3. **Check missions** (§7.3).
 4. **Compute the qid**: `plan-` followed by 16 hex digits of
-   `SHA-256(plan bytes ‖ 0x00 ‖ BUILD.md bytes)`. The bytes are the empty string when there is no
-   `BUILD.md`. This is `draftQuestionID`'s scheme, so the yes binds the plan and the build sheet
-   the person saw.
-5. **Open the adoption ask**, built by the code and not by the caller: `from` = the caller,
-   `task: onboarding`, and one question. The question's `id` is the qid. Its `header` is
-   "Adopt v0". Its text is `Adopt plan v0 (docs/plans/v0.json@3f9c2ab, 9 tasks, BUILD.md goal:
-   "<goal, clipped>") as the active plan? id plan-5be0…`, which names the path, the short commit
-   and the qid. Its options are `yes`, `no`, `later`, and none is recommended: adopting is the
-   person's own call.
-
-   If a draft is already recorded, the new ask **replaces** the old one (`Ask(def, oldAsk)`). The
-   old ask's question cannot be answered, and an old answer names the old ask and the old qid.
-6. **Write `{p}:plan:draft`** in one script: `{plan, path, commit, file, build, qid, ask, by, at}`.
-   `at` is Redis `TIME`, and `build` holds `BUILD.md`'s bytes, opaque like `PlanRecord.File`. If
-   the write fails, the ask just opened is withdrawn, and the command exits 1.
-7. **Print** the qid and the ask id as JSON, as `roles draft` does.
+   `SHA-256(path ‖ 0x00 ‖ plan bytes ‖ 0x00 ‖ BUILD.md bytes)`. The `BUILD.md` bytes are the empty
+   string when there is no `BUILD.md`. This is `draftQuestionID`'s scheme, so the yes binds the
+   path, the plan and the build sheet the person saw.
+5. **Build the adoption question** in code. The caller does not write it. The question is a
+   function of the qid's inputs only, so the same qid always gives the same wording:
+   - its `id` is the qid, and its `header` is "Adopt <plan>";
+   - its text is `Adopt plan v0 (docs/plans/v0.json, 9 tasks) as the active plan? id plan-5be0…`;
+   - its `context` holds the `BUILD.md` goal (clipped) and the commit. The commit is not part of
+     the question, so `SameQuestion` is unaffected;
+   - its options are `yes`, `no` and `later`, and none is recommended: adopting is the person's
+     own call.
+6. **Open or replace the ask** (`from` = the caller, `task: onboarding`):
+   - **Replace** only when a draft is recorded, its ask is still **open**, and its `from` is the
+     caller: `Ask(def, draft.ask)`. The old question can no longer be answered.
+   - **Open a new ask** in every other case: no draft, or the old ask was answered (`no`, `later`,
+     free text), replaced or expired. An answered ask needs nothing more. `TypedApproval` reads the
+     record's `ask`, so an answer to an older ask approves nothing.
+   - **The caller has another ask open** (the one-open-ask slot, `ASK_OPEN <id>`): refused before
+     anything is written. The message is "you have ask <id> open: wait for its answer or withdraw
+     it, then run plan draft again". The round rule of §5.1 applies to the draft too.
+7. **Write `{p}:plan:draft`** in one script: `{plan, path, commit, file, build, qid, ask, by, at}`.
+   `at` is Redis `TIME`, and `build` holds `BUILD.md`'s bytes, opaque like `PlanRecord.File`. The
+   script refuses when the record changed since step 6 read it, for example after a concurrent
+   draft. If the write fails, the ask just opened is withdrawn, and the command exits 1.
+8. **Print** the qid and the ask id as JSON, as `roles draft` does.
 
 Its other verbs:
 
 - `plan draft show [--json]` prints the record, plus `TypedApproval`'s result.
-- `plan draft --drop` deletes the record and withdraws its question. It is the architect's, master's
-  or the person's.
+- `plan draft --drop` deletes the record. When the caller is the ask's `from` and the ask is open,
+  it also withdraws the question. Otherwise it leaves the ask alone and says so; an answer to it
+  approves nothing, because no record names it. Like `plan draft`, `--drop` is master's or the
+  architect's.
 
 The key is a new kind, `plan:draft`. In `keyKinds` it is `KeyRecord`. It is **not** in
 `aclMasterOnly`, because the architect writes it, so the agent ACL user can write it. That is
@@ -430,8 +461,10 @@ one script (`bus/asks.go:328`). `answer` refuses an agent caller, and checks the
   `interview` (§6.3), revises the files, commits, and runs `plan draft` again. The new qid differs
   from the old one, so the new draft needs a new yes. A revision needs no new round unless the
   answer raises a new topic.
-- **`later`**: the draft stays recorded. The ask is answered, so the architect does nothing until
-  the person runs `agentbus init --resume`, or tells it by directive.
+- **`later`**: the draft stays recorded, and its ask is answered. The architect does nothing
+  more until the person runs `agentbus init --resume`, or tells it by directive. On resume, the
+  architect runs `plan draft` again on the same files. That gives the same qid and the same
+  wording, in a **new** ask (§8.1 step 6), which the person answers.
 
 Scope questions ("keep, drop or later this group?") are not asked on the adoption ask. A yes
 adopts the whole file, so a per-task "drop" on the same ask would contradict it. When the plan has
@@ -448,6 +481,7 @@ approving entry's id, or why there is none:
 1. While the ask's record is kept (`HExists {p}:asks <askID>`), its answer to `qid` must exist, not
    be withdrawn, have `Choice == choice`, and have `By != ask.From`. The last condition comes from
    `adoptApproved`: the asker never approves itself.
+   With §8.1's "who" rule, the asker is always master or the architect, never the person.
 2. The reply entry must exist, read from the cmd stream and then from the archive when one is set:
    `type=reply`, `ref=askID`, `qid=qid`, `typed=yes`, and the last such entry. Its `said` must
    equal `choice`.
@@ -478,7 +512,7 @@ first: a rename can break a sibling PR's new caller without a conflict.
      `{p}:plan:draft`, `{p}:asks` and `{p}:cmd`. Its arguments are the qid, the ask id, the plan
      bytes and the `BUILD.md` bytes read from Git, and the approving entry's id. The script
      refuses, and writes nothing, unless all of these hold:
-     - the draft record exists, and its `qid` and `ask` equal the arguments;
+     - the draft record exists, and its `qid`, `ask` and `path` equal the arguments;
      - its stored `file` and `build` equal the bytes read from Git, byte for byte. This is
        stronger than the hash, and needs no SHA-256 in Lua;
      - while the ask's record is kept, the field `<ask>|a|<qid>` decodes to `choice == "yes"`, not
@@ -529,9 +563,11 @@ verdict proves the check ran on the head that is the task's result. Two conditio
   The line passes only with `exit 0` and `<sha>` equal to `Verdict.Head`. The match collapses
   whitespace runs to one space on both sides.
 
-Anything else is the label `approved, check not run`, and the task stays `InReview`. One function
-decides it: `plan.CheckEvidence(v bus.Verdict, check string) (head string, ok bool)`. Derive,
-`plan done` and the grade (§11) all call it.
+A line with `exit <n>` other than 0 is the label `check failed`. Anything else is the label
+`approved, check not run`. In both cases the task stays `InReview`. One function
+decides it: `plan.CheckEvidence(v bus.Verdict, check string) (head string, ok bool)`. It is built
+on the line parser `plan.EvidenceLines(text) []Evidence{Item, Check, Exit, Head}`, which the grade
+(§11.1) reads too. Derive and `plan done` call `CheckEvidence`.
 
 **The head that must have been checked** is `plan.ResultHead(t, fact, in)`:
 
@@ -543,7 +579,8 @@ decides it: `plan.CheckEvidence(v bus.Verdict, check string) (head string, ok bo
 
 ### 9.2 Derive
 
-These changes apply in `plan/derive.go` to a task whose `Check` is not empty. The **decider** is
+These changes apply in `plan/derive.go` to an **agent** task (owner not `person`, no mission) whose
+`Check` is not empty. Person tasks follow §9.4, and mission tasks are unchanged. The **decider** is
 the approving verdict `RollUp` picks.
 
 - The review label is `Approved` only when `rollUp` says `Approved` **and** `CheckEvidence`
@@ -567,7 +604,7 @@ byte-identical.
 
 ### 9.3 `plan done <task>`
 
-For a task with a check, `plan done` works out the merged head itself. Master never types it:
+For an agent task with a check, `plan done` works out the merged head itself. Master never types it:
 
 - **A task linked to a PR**: the merged PR's head, read through the forge layer deliver already
   uses: `headRefOid` with `state MERGED` on GitHub, and the equivalent fields on GitLab and
@@ -587,7 +624,27 @@ approval names that head (`cmd/agentbus/deliver.go:365`). That rule stops a stal
 is pushed. This one stops it when a head changed after the push, for example by someone pushing to
 the PR branch.
 
-### 9.4 The check is a contract: nobody weakens it
+### 9.4 Person tasks with a check
+
+A `person` task has no review, so §9.1 to §9.3 do not apply to it. Its check is a manual step,
+and its proof is the person's typed answer:
+
+- When the task is `Waiting`, master (or the architect) asks one question with
+  `--task <task id>` and id `check`. The question quotes the check. Its options are `passes` and
+  `fails`, plus the free text busmon always offers.
+- **`plan done <task>`** on a person task with a check runs `TypedApproval(<that ask>, "check",
+  "passes")`. The ask is the newest one whose `task` is the task's id and which has a question
+  `check`, read from `{p}:asks` while its record is kept. `plan done` refuses unless the approval
+  passes: "<task>: the person has not answered passes to its check". On success, the done fact
+  also records the approving entry's id (`PlanFact.Approved`, additive).
+- **Derive** counts a person task's `fact.Done` only when `fact.Approved` is set, which only the
+  guarded `plan done` writes, and `plan:facts` is master-only. Without it, the row stays
+  `Answered`, with the reason "recorded done without the person's passes".
+- A `fails` or a free text is read by master as today's `Answered`: master routes it, and the
+  task is not done.
+- A person task **without** a check derives exactly as today.
+
+### 9.5 The check is a contract: nobody weakens it
 
 - The check lives in the plan file. Changing it is a new plan commit. With `checks: required`, a
   load is only an approved draft (§8.5), so every change of a check, stronger or weaker, needs the
@@ -664,8 +721,19 @@ tasks: master picks `reviewer-codex` when `foureyes` authored one.
 The reviewer runs every DoD check at that commit. Its verdict holds one evidence line per item,
 in the §9.1 format prefixed with the item id, `dod-3 check: … => exit 0 at <sha>`, and a PASS/FAIL
 table. The verdict is recorded with `--head <sha>`, where `<sha>` is the graded commit. The
-threshold is hard: **approve only when every item passes.** The grade verdict is checked with
-`plan.CheckEvidence` per item, at that head.
+threshold is hard: **approve only when every item passes.**
+
+The grade is read by Go, not only by the skill: `onboard.Grade(build BuildSheet, v bus.Verdict,
+person func(item string) (string, error)) GradeResult`. It reads the verdict's lines with
+`plan.EvidenceLines` and matches them **by item id** (`dod-<k>`), so two items with the same check
+are told apart. An agent item passes with `exit 0` at the verdict's head, and a manual item passes
+with the person's typed `passes` (`TypedApproval`, the `person` callback). It returns PASS, FAIL or
+missing per item. Two commands call it:
+
+- `init status` prints the per-item result;
+- `init wrap-up`, and the architect's `v0 → graded` step, which runs `agentbus init grade --json`,
+  a read-only form of the same call. Both refuse unless every item passes. `state.json` is never
+  moved to `graded` on the skill's word alone.
 
 **Manual items** (`person`) are not run by the reviewer. The architect asks them in one ask, one
 question per item ("passes / fails", plus free text). The reviewer's verdict cites the reply
@@ -728,9 +796,9 @@ because nothing runs: every row is `◇ proposed`, in the muted role.
 ### 12.2 A draft and an active plan
 
 The Plan tab shows the active plan as today, with one extra line under its header:
-`DRAFT v0.1 proposed (2 tasks) · ♙ ask <id> · D shows the draft`. `D` switches between the two
-views. The build checks first that `D` is free in the key tables, and picks another key if it is
-not. The frame title says which plan is shown.
+`DRAFT v0.1 proposed (2 tasks) · ♙ ask <id> · E shows the draft`. `E` switches between the two
+views. `E` is bound in no busmon mode at base a7093c14 (`D` is settings' "reset group",
+`cmd/busmon/keys.go:440`). The key test checks that it stays free. not. The frame title says which plan is shown.
 
 ### 12.3 An answered or replaced ask
 
@@ -745,7 +813,7 @@ not. The frame title says which plan is shown.
 
 ```
 ╭─ Plan  DRAFT v0  ·  proposed, not active ───────────────────────────────────────── docs/plans/v0.json@3f9c2ab · 9 tasks · checks required · awaits your yes ─╮
-│  DRAFT  nothing runs until you answer yes   ♙ ask 1795901234567-0  “Adopt plan v0 as the active plan?”   enter answers · D the loaded plan (none)            │
+│  DRAFT  nothing runs until you answer yes   ♙ ask 1795901234567-0  “Adopt plan v0 as the active plan?”   enter answers · E the loaded plan (none)            │
 │                                                                                                                                                              │
 │  Notes API          0/4                                                                                                                                      │
 │  ◇ api-schema       Schema and migrations for users and notes              coder      check  go test ./store/...                                             │
@@ -765,7 +833,7 @@ not. The frame title says which plan is shown.
 │  check     scripts/check.sh auth                                             │ Done when (5): dod-1 sign in · dod-2 notes survive a restart · dod-3 …        │
 │  after     api-schema     group  Notes API     review  foureyes                │ Out of scope: sharing, offline mode · Run: scripts/check.sh                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter task  D loaded plan  ·  proposed tasks cannot be prioritised or marked done
+ ↑↓ select  enter task  E loaded plan  ·  proposed tasks cannot be prioritised or marked done
 ```
 
 120 columns (wide tier: the check column, no `after` column, the detail on two lines):
@@ -791,7 +859,7 @@ not. The frame title says which plan is shown.
 │  api-auth  Login and sessions        check  scripts/check.sh auth        after api-schema   review foureyes          │
 │  BUILD.md  Goal: a private notes app for one person, reachable from a phone · Done when: 5 checks                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter task  D loaded plan
+ ↑↓ select  enter task  E loaded plan
 ```
 
 80 columns (narrow tier: no strip, no check column; Enter opens the task's page, with its check
@@ -813,18 +881,18 @@ and the `BUILD.md` summary):
 │  ◇ host-account  Create the hosting…     ♙ you                               │
 │  ◇ demo          Try the app on your…    ♙ you                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
- ↑↓  enter task (check, BUILD.md)  D loaded plan
+ ↑↓  enter task (check, BUILD.md)  E loaded plan
 ```
 
 An active v0 with a v0.1 draft (120 columns):
 
 ```
 ╭─ Plan  v0  9/9 done ──────────────────────────────────────────────────────────────────────────── v0.1 draft waiting ─╮
-│  DRAFT v0.1 proposed (2 tasks, from the v0 grade)   ♙ ask 1795990000000-0   D shows the draft                        │
+│  DRAFT v0.1 proposed (2 tasks, from the v0 grade)   ♙ ask 1795990000000-0   E shows the draft                        │
 │                                                                                                                      │
 │  DONE  9   d shows                                                                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ select  enter task  D draft v0.1
+ ↑↓ select  enter task  E draft v0.1
 ```
 
 ### 12.5 The task page (Enter)
@@ -860,7 +928,7 @@ you and drafts a plan." `tourVersion` is bumped, because the page's meaning chan
   its rules, not against a hostile local process. Putting the person's answers in a busmon-only
   key (the concierge spec's `aclBusmonOnly`) would close this. It is a larger change, out of scope
   here, and listed for the security review.
-- **The check scripts can be weakened by a PR** (§9.4). This is a reviewer rule, not enforced.
+- **The check scripts can be weakened by a PR** (§9.5). This is a reviewer rule, not enforced.
   The grade (§11.1) runs every DoD check at the end, at one commit, so a weakened script that hides
   a failure is caught only if the DoD check does not use the same script. The skill tells the
   architect to write DoD checks that do not all route through `scripts/check.sh`. At least the
@@ -878,12 +946,12 @@ Each step is one PR to `dev`, in this order. Steps (a) and (b) touch `bus/` or `
 
 | Step | Content | Tests |
 |---|---|---|
-| (a) `plan.check` + done guard | `Task.Check`, `File.Checks`, `Validate`; `plan.CheckEvidence`, `plan.ResultHead`; `PlanFact.Head`; derive (§9.2); the `plan done` guard, with the merged head read from the forge (§9.3); the task page's `Check` line | Parse: check accepted; 201 characters, a newline or `checks: required` with a missing check all refused; old plans unchanged (golden). Derive: an approved verdict with `--head H` and the evidence line `at H` is done when the result head is H. These are each `InReview` with their reason: no evidence line; `exit 1`; a check differing by more than whitespace; a verdict without a head; a line `at H2` on a verdict with head H. **Stale head**: approved with evidence at H1, then the board commit, the queued head or the merged head is H2: not done, reason "re-review". A new approval with evidence at H2 makes it done. A recorded done whose `head` is not the decider's is not done. A `merge: false` request with no commit is not done. A task with no check is byte-identical to today. `plan done` (fake forge): refused without the evidence; refused when the merged head is H2 and the approval names H1; refused when the forge read fails; passes and records the head when they match. Mutants: drop the `exit 0` test, drop the head comparison in each of derive and `plan done`, drop the whitespace collapse |
-| (b) `plan draft` + `TypedApproval` | `bus.TypedApproval`; `RetroApproved` rewritten on it; `SetApprovalArchive`; key kind `plan:draft`; `plan draft`, `show`, `--drop`; `plan load`'s draft rules (§8.5); `PlanRecord.Approved`; `onboard.ParseBuild` | `TypedApproval`: yes passes; an untyped reply, another qid, another ask, `said=no`, a withdrawn answer, `By == From`, a kept record answering `no` while the entry says `yes`, and a failed archive read are each refused. The retro tests pass unchanged. qid: one byte changed in the plan or in `BUILD.md` changes it. Load: refused while unapproved; refused for another file; refused for `checks: required` with no draft; passes after the yes, deleting the draft. **Race**: a test hook runs between part 1 and part 2 of the load (§8.5) and replaces the draft (a new file and qid, and a new ask). The load fails, `{p}:plan` is unchanged, and the new draft is kept. The same holds for a `--drop` in that window. Script: each of a changed `file`, a changed `build`, a changed `ask`, a kept answer that is not `yes`, and a stream entry whose `said` is not `yes` makes the script write nothing (each a mutant of one condition). Draft: replacing it replaces the ask, and the old qid no longer approves. Draft refused for an agent other than master or architect. ACL: `plan:draft` writable by agent, `plan` still not |
-| (c) busmon draft view | the poller reads the draft; §12.1 to §12.3; `D`; the task page | Golden at 80, 120 and 160 for a draft only, and for a plan plus a draft; the banner for answered `yes`, `no` and `later`; `+`, `-` and `d` inert on a draft; Enter on the banner opens the ask; a plan without a draft byte-identical to today |
+| (a) `plan.check` + done guard | `Task.Check`, `File.Checks`, `Validate`; `plan.CheckEvidence`, `plan.ResultHead`; `PlanFact.Head`; derive (§9.2); the `plan done` guard, with the merged head read from the forge (§9.3); the task page's `Check` line | Parse: check accepted; 201 characters, a newline or `checks: required` with a missing check all refused; old plans unchanged (golden). Derive: an approved verdict with `--head H` and the evidence line `at H` is done when the result head is H. These are each `InReview` with their reason: no evidence line; `exit 1`; a check differing by more than whitespace; a verdict without a head; a line `at H2` on a verdict with head H. **Stale head**: approved with evidence at H1, then the board commit, the queued head or the merged head is H2: not done, reason "re-review". A new approval with evidence at H2 makes it done. A recorded done whose `head` is not the decider's is not done. A `merge: false` request with no commit is not done. A task with no check is byte-identical to today. `plan done` (fake forge): refused without the evidence; refused when the merged head is H2 and the approval names H1; refused when the forge read fails; passes and records the head when they match. `exit 1` labelled "check failed". **Person task** with a check: `plan done` refused without a typed `passes` to its `check` question, refused on `fails`, refused on an untyped reply; passes on a typed `passes` and records `approved`; derive shows it done only with `approved` set; a person task without a check is unchanged. Missions: `plan load` and `plan draft` refuse a mission task whose `test` differs from its check, and refuse an unreadable `missions.json`. Mutants: drop the `exit 0` test, drop the head comparison in each of derive and `plan done`, drop the whitespace collapse, drop the `approved` test for person tasks |
+| (b) `plan draft` + `TypedApproval` | `bus.TypedApproval`; `RetroApproved` rewritten on it; `SetApprovalArchive`; key kind `plan:draft`; `plan draft`, `show`, `--drop`; `plan load`'s draft rules (§8.5); `PlanRecord.Approved`; `onboard.ParseBuild` | `TypedApproval`: yes passes; an untyped reply, another qid, another ask, `said=no`, a withdrawn answer, `By == From`, a kept record answering `no` while the entry says `yes`, and a failed archive read are each refused. The retro tests pass unchanged. qid: one byte changed in the plan or in `BUILD.md` changes it. Load: refused while unapproved; refused for another file; refused for `checks: required` with no draft; passes after the yes, deleting the draft. **Race**: a test hook runs between part 1 and part 2 of the load (§8.5) and replaces the draft (a new file and qid, and a new ask). The load fails, `{p}:plan` is unchanged, and the new draft is kept. The same holds for a `--drop` in that window. Script: each of a changed `file`, a changed `build`, a changed `ask`, a kept answer that is not `yes`, and a stream entry whose `said` is not `yes` makes the script write nothing (each a mutant of one condition). Draft ask rules (§8.1 step 6): a re-draft while the old ask is open replaces it, and the old qid no longer approves; a re-draft after `no`, free text or `later` opens a new ask (no `ASK_NOT_OPEN`); the same files at a new commit give the same qid and wording, so no `SameQuestion` refusal; a re-draft by master of the architect's draft is refused until `--drop`, and `--drop` by master leaves the architect's ask and says so; `plan draft` while the caller has another ask open is refused, and nothing is written; a qid depends on the path too. Draft refused for an agent other than master or architect, and for the person's shell. ACL: `plan:draft` writable by agent, `plan` still not |
+| (c) busmon draft view | the poller reads the draft; §12.1 to §12.3; `E`; the task page | Golden at 80, 120 and 160 for a draft only, and for a plan plus a draft; the banner for answered `yes`, `no` and `later`; `+`, `-` and `d` inert on a draft; Enter on the banner opens the ask; a plan without a draft byte-identical to today |
 | (d) `agentbus init` | `init`, `--existing`, `--resume`, `status [--json]`, `wrap-up`; `onboard.State` (strict parse, version) | Refused for an agent caller (env, and the fake ancestry); refused with a plan loaded; refused with a branch and no `--resume`; `--resume` refused with none or `wrapped`; mode detection on scratch repositories (empty, README only, code, `--existing`); the architect started when absent (fake host); the directive is `human=yes` and not `typed`; `status` prints the disagreement; `state.json` with an unknown field or version 2 refused |
 | (e) skill + prompts | `skills/agent-bus-onboard/SKILL.md`; the architect's skills; §10.1 to §10.3 | `roles doctor` passes; the release gate's update from the previous binary (the roles.toml change) |
-| (f) grade + wrap-up | the architect's skill steps; nothing new in Go but the grade's `CheckEvidence` per item | covered by the acceptance test |
+| (f) grade + wrap-up | `onboard.Grade`, `plan.EvidenceLines`; `agentbus init grade --json`; the grade in `init status`; `init wrap-up` refuses unless every item passes; the architect's skill steps | Grade: two items with the same check told apart by id; a missing item is "missing", not a pass; `exit 1`, or a head other than the verdict's, is FAIL; a manual item passes only on a typed `passes`; wrap-up refused on any non-PASS. Plus the acceptance test |
 | (g) tour + docs | §12.7; quickstart; OPERATIONAL-GUIDE fr/en | tour golden |
 
 **Acceptance (directive §6.4).** One end-to-end test runs on a scratch repository and a disposable
