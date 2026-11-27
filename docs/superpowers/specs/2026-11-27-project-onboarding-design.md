@@ -5,6 +5,10 @@
     script (§8.5). Both answer reviewer-codex's r1 reject.
   - r3: answers foureyes's r1 reject: person tasks with a check (§9.4), the draft's ask rules
     (§8.1), the grade's Go reader (§11.1), and the nits (§4.1, §7.3, §8.1, §9.1, §12.2).
+  - r4: a person's `passes` is bound to the exact check it answers, both for a task (§9.4) and for
+    a grade item (§11.1). This answers reviewer-codex's r3 reject. r4 also takes foureyes's r3
+    build points: the board-delivered person path (§9.4), `--commit` (§10.1), the 7-day record
+    (§9.4), and the stray text (§12.2).
 - Date: 2026-11-27
 - Author: architect
 - Source: the person's directive, `/data/projects/agent-bus-monitor-doc/directive-master-agentbus-init.md`
@@ -627,21 +631,35 @@ the PR branch.
 ### 9.4 Person tasks with a check
 
 A `person` task has no review, so §9.1 to §9.3 do not apply to it. Its check is a manual step,
-and its proof is the person's typed answer:
+and its proof is the person's typed answer **to that exact check**.
 
-- When the task is `Waiting`, master (or the architect) asks one question with
-  `--task <task id>` and id `check`. The question quotes the check. Its options are `passes` and
-  `fails`, plus the free text busmon always offers.
-- **`plan done <task>`** on a person task with a check runs `TypedApproval(<that ask>, "check",
-  "passes")`. The ask is the newest one whose `task` is the task's id and which has a question
-  `check`, read from `{p}:asks` while its record is kept. `plan done` refuses unless the approval
-  passes: "<task>: the person has not answered passes to its check". On success, the done fact
-  also records the approving entry's id (`PlanFact.Approved`, additive).
-- **Derive** counts a person task's `fact.Done` only when `fact.Approved` is set, which only the
-  guarded `plan done` writes, and `plan:facts` is master-only. Without it, the row stays
-  `Answered`, with the reason "recorded done without the person's passes".
-- A `fails` or a free text is read by master as today's `Answered`: master routes it, and the
-  task is not done.
+- **The question's id binds it.** The id is `check-` followed by 16 hex digits of
+  `SHA-256(plan name ‖ 0x00 ‖ task id ‖ 0x00 ‖ check text)`. This is `plan.PersonCheckQID(f File,
+  t Task)`. A changed check, the same task id in another plan, or another task gives another id.
+  An old `passes` therefore never answers a new check. The question's text quotes the check, and
+  is a function of these inputs only.
+- When the task is `Waiting`, master (or the architect) asks that one question with
+  `--task <task id>`. Its options are `passes` and `fails`, plus the free text busmon always offers.
+- **`plan done <task>`** on a person task with a check recomputes the id from the **active** plan,
+  and finds the asks whose `task` is the task id and that hold a question with exactly that id. It
+  runs `TypedApproval(<ask>, <id>, "passes")` on each, newest first, and the first that passes
+  approves. It refuses when none passes: "<task>: the person has not answered passes to its current
+  check (id check-…)". On success, the done fact records the approving entry's id and the id
+  answered (`PlanFact.Approved`, `PlanFact.ApprovedQID`, additive).
+- **An ask record is kept 7 days after it closes.** After that, `plan done` cannot find it, and
+  refuses with the same message. Master then asks the question again. This is expected, not a bug:
+  the record is the proof `plan done` reads.
+- **Derive** counts a person task's `fact.Done` only when `fact.Approved` is set **and**
+  `fact.ApprovedQID` equals `PersonCheckQID` of the task in the loaded plan. Only the guarded
+  `plan done` writes them, and `plan:facts` is master-only. A plan reload that changes the check
+  therefore un-does the task. Without both, the row stays `Answered`, with the reason "recorded done
+  without the person's passes to the current check".
+- **The board path is closed too.** Today a person task whose board entry is delivered is `Done`
+  with no fact (`plan/derive.go:142`). For a person task **with a check**, that case no longer
+  makes it done. It needs the same `fact.Approved` and `ApprovedQID` as above. Without a check, the
+  path is unchanged.
+- A `fails` or a free text is read by master as today's `Answered`: master routes it, and the task
+  is not done.
 - A person task **without** a check derives exactly as today.
 
 ### 9.5 The check is a contract: nobody weakens it
@@ -670,7 +688,9 @@ The role files gain one section:
 > (`agentbus report coder --to master "check red on <base>@<sha>: …"`) and do not hide it in your
 > task. A task's `check` is its contract: never edit, weaken or delete it, or a file it runs. If it
 > is wrong, `agentbus challenge architect --subject check:<task>`. Your PR description quotes the
-> check and its result.
+> check and its result. For a `merge: false` task with a check, finish the request with
+> `agentbus request done <task> --commit <sha>`, where `<sha>` is the head the reviewers check. Without
+> it, the checked head is unknown and the task never reaches done (§9.2).
 
 ### 10.2 Reviewers (`roles/foureyes.md`, `roles/reviewer-codex.md`)
 
@@ -736,9 +756,17 @@ missing per item. Two commands call it:
   moved to `graded` on the skill's word alone.
 
 **Manual items** (`person`) are not run by the reviewer. The architect asks them in one ask, one
-question per item ("passes / fails", plus free text). The reviewer's verdict cites the reply
-entries. A typed `passes` counts as a pass (question Q4, recommended option: every item must pass,
-and manual items are answered by the person). An "accepted with a note" outcome does not exist.
+question per item ("passes / fails", plus free text). Each question's id binds it to this grade
+and this item's current text. The id is `grade-` followed by 16 hex digits of
+`SHA-256(project ‖ 0x00 ‖ plan ‖ 0x00 ‖ graded commit ‖ 0x00 ‖ item id ‖ 0x00 ‖ item text ‖ 0x00 ‖
+check)`: `onboard.GradeQID`. A pass from an earlier grade, from another commit, or for an item whose
+text or check changed has another id, and does not count. The reviewer's verdict cites the reply
+entries.
+
+`onboard.Grade`'s `person` callback receives that id, and runs `TypedApproval(<ask>, <id>,
+"passes")` on the asks holding a question with that id. A typed `passes` to the current id counts
+as a pass (question Q4, recommended option: every item must pass, and manual items are answered by
+the person). An "accepted with a note" outcome does not exist.
 
 The architect then copies the verdict into `BUILD.md`, under `## Grade v0`, with the verdict id,
 and records the result in `state.json`:
@@ -798,7 +826,7 @@ because nothing runs: every row is `◇ proposed`, in the muted role.
 The Plan tab shows the active plan as today, with one extra line under its header:
 `DRAFT v0.1 proposed (2 tasks) · ♙ ask <id> · E shows the draft`. `E` switches between the two
 views. `E` is bound in no busmon mode at base a7093c14 (`D` is settings' "reset group",
-`cmd/busmon/keys.go:440`). The key test checks that it stays free. not. The frame title says which plan is shown.
+`cmd/busmon/keys.go:440`). The key test checks that it stays free. The frame title says which plan is shown.
 
 ### 12.3 An answered or replaced ask
 
@@ -946,12 +974,12 @@ Each step is one PR to `dev`, in this order. Steps (a) and (b) touch `bus/` or `
 
 | Step | Content | Tests |
 |---|---|---|
-| (a) `plan.check` + done guard | `Task.Check`, `File.Checks`, `Validate`; `plan.CheckEvidence`, `plan.ResultHead`; `PlanFact.Head`; derive (§9.2); the `plan done` guard, with the merged head read from the forge (§9.3); the task page's `Check` line | Parse: check accepted; 201 characters, a newline or `checks: required` with a missing check all refused; old plans unchanged (golden). Derive: an approved verdict with `--head H` and the evidence line `at H` is done when the result head is H. These are each `InReview` with their reason: no evidence line; `exit 1`; a check differing by more than whitespace; a verdict without a head; a line `at H2` on a verdict with head H. **Stale head**: approved with evidence at H1, then the board commit, the queued head or the merged head is H2: not done, reason "re-review". A new approval with evidence at H2 makes it done. A recorded done whose `head` is not the decider's is not done. A `merge: false` request with no commit is not done. A task with no check is byte-identical to today. `plan done` (fake forge): refused without the evidence; refused when the merged head is H2 and the approval names H1; refused when the forge read fails; passes and records the head when they match. `exit 1` labelled "check failed". **Person task** with a check: `plan done` refused without a typed `passes` to its `check` question, refused on `fails`, refused on an untyped reply; passes on a typed `passes` and records `approved`; derive shows it done only with `approved` set; a person task without a check is unchanged. Missions: `plan load` and `plan draft` refuse a mission task whose `test` differs from its check, and refuse an unreadable `missions.json`. Mutants: drop the `exit 0` test, drop the head comparison in each of derive and `plan done`, drop the whitespace collapse, drop the `approved` test for person tasks |
+| (a) `plan.check` + done guard | `Task.Check`, `File.Checks`, `Validate`; `plan.CheckEvidence`, `plan.ResultHead`; `PlanFact.Head`; derive (§9.2); the `plan done` guard, with the merged head read from the forge (§9.3); the task page's `Check` line | Parse: check accepted; 201 characters, a newline or `checks: required` with a missing check all refused; old plans unchanged (golden). Derive: an approved verdict with `--head H` and the evidence line `at H` is done when the result head is H. These are each `InReview` with their reason: no evidence line; `exit 1`; a check differing by more than whitespace; a verdict without a head; a line `at H2` on a verdict with head H. **Stale head**: approved with evidence at H1, then the board commit, the queued head or the merged head is H2: not done, reason "re-review". A new approval with evidence at H2 makes it done. A recorded done whose `head` is not the decider's is not done. A `merge: false` request with no commit is not done. A task with no check is byte-identical to today. `plan done` (fake forge): refused without the evidence; refused when the merged head is H2 and the approval names H1; refused when the forge read fails; passes and records the head when they match. `exit 1` labelled "check failed". **Person task** with a check: `plan done` is refused in each of these cases: without a typed `passes` to its `check-…` question; on `fails`; on an untyped reply; after the record expired. It passes on a typed `passes` to the current id, and records `approved` and `approved_qid`. **Stale check**: approved `passes` for check A, then a plan reload changes the task's check to B (same task id). `plan done` is refused, and the row recorded done under A is no longer done. A board-delivered person task with a check is not done without the fact. Derive shows it done only with `approved` and the current qid. A person task without a check is unchanged. Missions: `plan load` and `plan draft` refuse a mission task whose `test` differs from its check, and refuse an unreadable `missions.json`. Mutants: drop the `exit 0` test, drop the head comparison in each of derive and `plan done`, drop the whitespace collapse, drop the `approved` test for person tasks |
 | (b) `plan draft` + `TypedApproval` | `bus.TypedApproval`; `RetroApproved` rewritten on it; `SetApprovalArchive`; key kind `plan:draft`; `plan draft`, `show`, `--drop`; `plan load`'s draft rules (§8.5); `PlanRecord.Approved`; `onboard.ParseBuild` | `TypedApproval`: yes passes; an untyped reply, another qid, another ask, `said=no`, a withdrawn answer, `By == From`, a kept record answering `no` while the entry says `yes`, and a failed archive read are each refused. The retro tests pass unchanged. qid: one byte changed in the plan or in `BUILD.md` changes it. Load: refused while unapproved; refused for another file; refused for `checks: required` with no draft; passes after the yes, deleting the draft. **Race**: a test hook runs between part 1 and part 2 of the load (§8.5) and replaces the draft (a new file and qid, and a new ask). The load fails, `{p}:plan` is unchanged, and the new draft is kept. The same holds for a `--drop` in that window. Script: each of a changed `file`, a changed `build`, a changed `ask`, a kept answer that is not `yes`, and a stream entry whose `said` is not `yes` makes the script write nothing (each a mutant of one condition). Draft ask rules (§8.1 step 6): a re-draft while the old ask is open replaces it, and the old qid no longer approves; a re-draft after `no`, free text or `later` opens a new ask (no `ASK_NOT_OPEN`); the same files at a new commit give the same qid and wording, so no `SameQuestion` refusal; a re-draft by master of the architect's draft is refused until `--drop`, and `--drop` by master leaves the architect's ask and says so; `plan draft` while the caller has another ask open is refused, and nothing is written; a qid depends on the path too. Draft refused for an agent other than master or architect, and for the person's shell. ACL: `plan:draft` writable by agent, `plan` still not |
 | (c) busmon draft view | the poller reads the draft; §12.1 to §12.3; `E`; the task page | Golden at 80, 120 and 160 for a draft only, and for a plan plus a draft; the banner for answered `yes`, `no` and `later`; `+`, `-` and `d` inert on a draft; Enter on the banner opens the ask; a plan without a draft byte-identical to today |
 | (d) `agentbus init` | `init`, `--existing`, `--resume`, `status [--json]`, `wrap-up`; `onboard.State` (strict parse, version) | Refused for an agent caller (env, and the fake ancestry); refused with a plan loaded; refused with a branch and no `--resume`; `--resume` refused with none or `wrapped`; mode detection on scratch repositories (empty, README only, code, `--existing`); the architect started when absent (fake host); the directive is `human=yes` and not `typed`; `status` prints the disagreement; `state.json` with an unknown field or version 2 refused |
 | (e) skill + prompts | `skills/agent-bus-onboard/SKILL.md`; the architect's skills; §10.1 to §10.3 | `roles doctor` passes; the release gate's update from the previous binary (the roles.toml change) |
-| (f) grade + wrap-up | `onboard.Grade`, `plan.EvidenceLines`; `agentbus init grade --json`; the grade in `init status`; `init wrap-up` refuses unless every item passes; the architect's skill steps | Grade: two items with the same check told apart by id; a missing item is "missing", not a pass; `exit 1`, or a head other than the verdict's, is FAIL; a manual item passes only on a typed `passes`; wrap-up refused on any non-PASS. Plus the acceptance test |
+| (f) grade + wrap-up | `onboard.Grade`, `plan.EvidenceLines`; `agentbus init grade --json`; the grade in `init status`; `init wrap-up` refuses unless every item passes; the architect's skill steps | Grade: two items with the same check told apart by id; a missing item is "missing", not a pass; `exit 1`, or a head other than the verdict's, is FAIL; a manual item passes only on a typed `passes` to its current `grade-…` id; **stale manual pass**: a `passes` from an earlier grade commit, or given before the item's text or check changed, is not a pass; wrap-up refused on any non-PASS. Plus the acceptance test |
 | (g) tour + docs | §12.7; quickstart; OPERATIONAL-GUIDE fr/en | tour golden |
 
 **Acceptance (directive §6.4).** One end-to-end test runs on a scratch repository and a disposable
