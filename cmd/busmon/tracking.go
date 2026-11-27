@@ -51,6 +51,9 @@ type request struct {
 	Priority   string    // high | low | "" normal (request-priority: set only by the person)
 	PriorityBy string    // who set it
 	PriorityAt time.Time // when (Redis TIME)
+	// Parallel is the sender's or the person's exception's reason
+	// (sibling-enforce §3): "" none.
+	Parallel string
 }
 
 // msTime converts a Unix-millisecond stamp, keeping 0 as the zero time so
@@ -81,6 +84,9 @@ func boardRequests(m map[string]bus.BoardEntry) []request {
 			r.Attempts, r.DuplicatePossible = q.Attempts, q.DuplicatePossible
 			r.BlockedReason, r.ResponseID = q.BlockedReason, q.ResponseID
 			r.Priority, r.PriorityBy, r.PriorityAt = q.Priority, q.PriorityBy, msTime(q.PriorityAt)
+			if q.Parallel != nil {
+				r.Parallel = q.Parallel.Reason
+			}
 			r.ClosedUnaccepted = q.ClosedUnaccepted
 			if m := q.ClosedOnMerge; m != nil {
 				r.MergedHead, r.MergedBase = m.Head, m.Base

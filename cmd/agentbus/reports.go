@@ -138,9 +138,20 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 	if note := reportShapeNote(msg); note != "" {
 		fmt.Fprintln(stderr, note)
 	}
+	var steps bus.StepsJudged
 	if task != "" {
 		if err := b.CheckReportTask(ctx, task, rest[0], done); err != nil {
 			return "", fmt.Errorf("report: --task %s: %w", task, err)
+		}
+	}
+	if done { // its open steps judged before anything is published (sibling-enforce §3.1)
+		var pending, from string
+		var err error
+		if steps, pending, from, err = judgeDone(ctx, b, rest[0], task); err != nil {
+			return "", fmt.Errorf("report: --done %s: %w", task, err)
+		}
+		if pending != "" {
+			return "", fmt.Errorf("report: --done %s: step %s of %s is not merged yet: done once it merges, or ask %s to abandon it", task, pending, task, from)
 		}
 	}
 	id, err := b.ReportTask(ctx, rest[0], kind, msg, to, needs, task)
@@ -163,9 +174,10 @@ func sendReport(ctx context.Context, b *bus.Bus, rest []string, stderr io.Writer
 	}
 	if done {
 		first := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0])
-		if _, err := b.CompleteRequest(ctx, task, rest[0], first+" (report "+id+")"); err != nil {
+		if _, err := b.CompleteRequestSteps(ctx, task, rest[0], first+" (report "+id+")", "", "", steps); err != nil {
 			return id, fmt.Errorf("report %s published, but request done %s was refused: %w", id, task, err)
 		}
+		auditStepsMerged(ctx, b, rest[0], task, steps)
 	}
 	return id, nil
 }

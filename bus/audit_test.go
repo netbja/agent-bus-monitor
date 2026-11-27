@@ -64,7 +64,8 @@ func TestAuditRefusesAndWritesNothing(t *testing.T) {
 		}
 	}
 	want := []string{"approve", "reject", "answer", "merge", "push", "deliver", "force", "ci-handoff", "update", "reinstall",
-		"quota-pause", "pause", "resume", "suspend", "retire", "retro-apply"}
+		"quota-pause", "pause", "resume", "suspend", "retire", "retro-apply",
+		"step-merged", "step-abandoned", "parallel"} // sibling-enforce §3
 	if !slices.Equal(AuditActions, want) {
 		t.Fatalf("actions %v, want §2's %v", AuditActions, want)
 	}

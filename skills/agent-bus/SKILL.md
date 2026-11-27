@@ -377,6 +377,15 @@ agentbus request next                       # which one to take next (exit 64: n
   with `--more` sends it back to `accepted` for the next step. `request done --branch` is still
   the normal close; close-on-merge is the net under it.
 
+- **One open step per request: while step N is in review, take another task.** A `--more` step
+  stays listed on the request until it merges. `request review` of another branch, and your
+  `request done`, judge it in your checkout (the dispatcher's own merge test) and are refused
+  while it is not merged: `step <N's branch> of <task> is not merged yet`. A review of step N
+  itself (a fix, a rebase) passes; name the branch with `--branch` while a step is open. If two
+  steps share no file, ask master for `agentbus request parallel <task> <reason>`; a step whose
+  PR was closed unmerged is closed by master with `request step <task> <branch> --abandon`.
+  Coding the next step locally is fine; do not work around the refusal.
+
 - **A report on a task names it (`report <self> --task <t>`); a final report closes it
   (`--done`).** `--task` notes the report on the request (busmon's "no reply" then counts from
   it); `--done` also runs `request done`, the report's first line as the reply. A refused task

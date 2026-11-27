@@ -50,11 +50,12 @@ func TestReviewRecordsHeadAndBase(t *testing.T) {
 		t.Fatalf("recorded %+v", r)
 	}
 	// Resumed, then in review again with no commit, no base, no --more: a
-	// review's facts are its own, never the last one's.
+	// review's facts are its own, never the last one's. The step is open,
+	// so the review names its branch (sibling-enforce §3.1).
 	if err := b.AcceptRequest(ctx, "t1", "coder"); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.ReviewRequestOpts(ctx, "t1", "coder", ReviewOpts{}); err != nil {
+	if err := b.ReviewRequestOpts(ctx, "t1", "coder", ReviewOpts{Branch: "coder/t1"}); err != nil {
 		t.Fatal(err)
 	}
 	if r = boardReq(t, b, "t1").Request; r.Commit != "" || r.ReviewBase != "" || r.ReviewMore || r.Branch != "coder/t1" {
@@ -112,7 +113,10 @@ func TestRequestMergedStep(t *testing.T) {
 		!slices.Equal(e.Request.MergedSteps, []string{mHead}) || e.Request.RespondedAt != 0 {
 		t.Fatalf("step %+v %+v", e, e.Request)
 	}
-	if err := b.ReviewRequestOpts(ctx, "t1", "coder", ReviewOpts{Branch: "coder/t1-b", ReviewBase: mBase}); err != nil {
+	// The pass does not clear the open step: the next review carries the
+	// CLI's judgement that it merged (sibling-enforce §3.1).
+	judged := StepsJudged{N: 1, Merged: []StepMerged{{Branch: "coder/t1-a", Head: mHead, Base: mBase}}}
+	if err := b.ReviewRequestOpts(ctx, "t1", "coder", ReviewOpts{Branch: "coder/t1-b", ReviewBase: mBase, Steps: judged}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := b.FencedRequestMerged(ctx, "tok", "t1", "coder/t1-b", mBase, "dev", 2); got != MergedClosed {

@@ -194,7 +194,11 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 			rec.ConflictCheck = strings.Join(slices.DeleteFunc([]string{rec.ConflictCheck, why}, func(s string) bool { return s == "" }), "; ")
 		}
 	}
-	for _, m := range mc.closes { // board-drift §3.3: each fenced; a request changed since the read is left
+	// board-drift §3.3: each fenced; a request changed since the read is
+	// left. A last review that merges with steps still listed steps the
+	// request back to accepted (bus.MergedOpen, sibling-enforce §3.4): its
+	// request-merged event names the listed steps, its audit line says open.
+	for _, m := range mc.closes {
 		if _, err := c.b.FencedRequestMerged(dctx, token, m.task, m.branch, m.head, mc.base, m.reviewN); errors.Is(err, bus.ErrNotHolder) {
 			cancel()
 			return err

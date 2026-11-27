@@ -39,6 +39,10 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 	switch args[0] {
 	case "priority":
 		return requestPriority(ctx, b, args[1:], out)
+	case "parallel": // sibling-enforce §3: the sender's or the person's exception
+		return requestParallelCmd(ctx, b, self, args[1:], out)
+	case "step": // sibling-enforce §3 rule 2: an abandoned step
+		return requestStepCmd(ctx, b, self, args[1:], out)
 	case "next":
 		return requestNext(ctx, b, self, args[1:], asJSON, out)
 	case "send":
@@ -89,7 +93,11 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		// head and the base tip read here let its merge close it
 		// (board-drift §3.2); --more: a step that is not the last (§3.4).
 		o := bus.ReviewOpts{Branch: branch, Note: strings.Join(args[2:], " "), More: more}
-		if dir, err := os.Getwd(); err == nil {
+		var dir string
+		if wd, err := os.Getwd(); err == nil {
+			dir = wd
+		}
+		if dir != "" {
 			base, _, berr := forge.ProjectDeliveryBase(os.Getenv, b.Project())
 			if berr != nil {
 				base = "" // no base anybody chose: nothing recorded, nothing refused
@@ -100,7 +108,19 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 			}
 			o.Commit, o.ReviewBase = head, rb
 		}
-		return b.ReviewRequestOpts(ctx, args[1], self, o)
+		// One open step per request (sibling-enforce §3.1): the open steps
+		// of the request are judged in this checkout; the board refuses the
+		// review while one is not delivered.
+		steps, err := judgeTask(ctx, b, realStepJudger(dir, b.Project()), args[1], branch, false)
+		if err != nil {
+			return fmt.Errorf("request review: %w", err)
+		}
+		o.Steps = steps
+		if err := b.ReviewRequestOpts(ctx, args[1], self, o); err != nil {
+			return err
+		}
+		auditStepsMerged(ctx, b, self, args[1], steps)
+		return nil
 	case "block":
 		if len(args) < 3 {
 			return fmt.Errorf("usage: request block <task> <reason>")
@@ -118,16 +138,21 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		if len(args) < 3 {
 			return fmt.Errorf("usage: request done <task> [--commit <sha>] [--branch <b>] <reply>")
 		}
-		id, err := b.CompleteRequestAt(ctx, args[1], self, strings.Join(args[2:], " "), commit, branch)
+		steps, _, _, err := judgeDone(ctx, b, self, args[1])
+		if err != nil {
+			return fmt.Errorf("request done: %w", err)
+		}
+		id, err := b.CompleteRequestSteps(ctx, args[1], self, strings.Join(args[2:], " "), commit, branch, steps)
 		if err != nil {
 			return err
 		}
+		auditStepsMerged(ctx, b, self, args[1], steps)
 		if _, err := fmt.Fprintln(out, id); err != nil {
 			return err
 		}
 		return retroDueLine(ctx, b.RetroDue, args[1], out, os.Stderr)
 	default:
-		return fmt.Errorf("request: want send|accept|review|block|done|priority|next or [--json]")
+		return fmt.Errorf("request: want send|accept|review|block|done|priority|parallel|step|next or [--json]")
 	}
 }
 
