@@ -1002,6 +1002,9 @@ func (m *Model) readerKey(act Action, k Key) tea.Cmd {
 		switch {
 		case k.Code == keyEnter:
 			return m.summaryOpen(p)
+		case act == ActNextUnread:
+			m.summaryUnread()
+			return nil
 		case act == ActUp || act == ActDown || act == ActPageUp || act == ActPageDown || act == ActFirst || act == ActLast:
 			m.moveSel(p, act, m.readerRows(), func() []int {
 				lines := make([]int, len(p.titems))
@@ -1537,6 +1540,8 @@ func (m Model) pageOffers(act Action) bool {
 		return p.kind == ovMemoryTopic && len(p.oitems) > 0 && p.forget == ""
 	case ActIdeaState, ActIdeaSet:
 		return (p.kind == ovIdeas && len(p.iitems) > 0 || p.kind == ovIdea && p.threadPlain != "") && p.ideas.pick == nil
+	case ActNextUnread:
+		return p.kind == ovTriageSummary
 	case ActIdeaUndo:
 		return (p.kind == ovIdeas || p.kind == ovIdea) && p.ideas.pick == nil
 	case ActOlder:

@@ -298,6 +298,9 @@ func (m *Model) triageSummary(p *page, width int) {
 	if slices.ContainsFunc(m.forYou, func(it attentionItem) bool { return it.Key == mergeUnknownKey }) {
 		p.body = append(p.body, Line{{Text: "merge queue unreadable", Role: RoleMuted}})
 	}
+	if n := len(m.markAllSet("")); n > 0 { // triage-unread §3: the unread lines no item holds
+		p.body = append(p.body, FitLine(Line{{Text: fmt.Sprintf("  %d unread in Activity, none needs you  %s  ", n, GlyphArrowR), Role: RoleMuted}, {Text: "u", Role: RoleAccent}}, width))
+	}
 	for _, r := range forYouEmptyRows(m.snap, m.lists.reqView.count(secOwed), m.work.decideCount()) {
 		if task, ok := strings.CutPrefix(r.key, planNextPrefix); ok {
 			p.body = append(p.body, nil)
@@ -309,6 +312,24 @@ func (m *Model) triageSummary(p *page, width int) {
 	if p.sel >= len(p.titems) && len(p.titems) > 0 { // a row gone: the mark on the last one
 		p.sel = len(p.titems) - 1
 		m.triageSummary(p, width)
+	}
+}
+
+// summaryUnread is u on the summary (triage-unread §3): triage ends, and
+// Activity selects the first unread line no item holds.
+func (m *Model) summaryUnread() {
+	set := m.markAllSet("")
+	if len(set) == 0 {
+		m.ui.flash, m.ui.flashErr = "nothing unread outside triage", false
+		return
+	}
+	m.closeReader()
+	m.focusPanel(PanelActivity)
+	for _, fl := range m.feed.feed {
+		if !fl.sep && fl.ev.ID == set[0] {
+			m.lists.activity.Select(fl.id)
+			break
+		}
 	}
 }
 

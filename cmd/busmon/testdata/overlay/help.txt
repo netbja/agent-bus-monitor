@@ -74,6 +74,7 @@ KEYS
   home g               first row
   end G                last row
   y l d x              Ideas (F6) or an idea's page: set the selected idea's state at once, as you: y decided, l later, d doing, x dropped (s opens the picker; Y copies the idea)
+  u                    the triage summary (T): end triage and select Activity's first unread line no triage item holds
   u                    Ideas (F6) or an idea's page: undo this busmon's last state change (once)
   y                    copy
   Y                    copy the whole thread (a message's page) or the whole report (an agent's page, a recap item's)
