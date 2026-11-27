@@ -295,7 +295,7 @@ var Keys = append([]*Key{
 			}
 			return nil, "want a local time window HH:MM-HH:MM, such as \"03:00-05:00\" (it may cross midnight)"
 		}},
-	{Name: "updates.max_wait", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "busmon (shown; agentbus update --auto reads it from quiet-update step 4c)", MachineOnly: true, PersonOnly: true,
+	{Name: "updates.max_wait", Kind: Duration, Default: 7 * 24 * time.Hour, ReadBy: "agentbus update --auto (tells master once of a release waiting longer), busmon (shown)", MachineOnly: true, PersonOnly: true,
 		file: func(v any) (any, string) {
 			if s, ok := v.(string); ok {
 				if d, ok := parseAge(s); ok {
