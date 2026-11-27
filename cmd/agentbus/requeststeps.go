@@ -65,8 +65,8 @@ func stepsToJudge(r *bus.RequestInfo, current string, done bool) []bus.OpenStep 
 // judge is StepsJudged for r before a review of current (done: before the
 // target's done): N r's review_n as read, Merged the steps delivered into
 // the base. Exactly one head is judged per step: its remote tip while the
-// branch exists, else its local tip (the remote deleted after the merge),
-// else its recorded commit; in local mode the local tip comes first. A step
+// branch exists; else (the remote deleted after the merge, or local mode)
+// the newer of its local tip and its recorded commit (localOrReviewed). A step
 // not delivered is left out, and the board script refuses with its name. A
 // failed git read, or no base to judge against, is an error: nothing is
 // written.
@@ -117,11 +117,11 @@ func (j stepJudger) judge(ctx context.Context, r *bus.RequestInfo, current strin
 				head = f[0]
 			}
 		}
-		if head == "" {
-			head = resolve("refs/heads/" + s.Branch)
-		}
-		if head == "" {
-			head = s.Commit
+		if head == "" { // no remote tip: the local tip or the reviewed commit, the newer one
+			var err error
+			if head, err = j.localOrReviewed(s, resolve); err != nil {
+				return out, err
+			}
 		}
 		if head == "" {
 			continue // nothing to judge: the script refuses with its name
@@ -142,6 +142,35 @@ func (j stepJudger) judge(ctx context.Context, r *bus.RequestInfo, current strin
 		}
 	}
 	return out, nil
+}
+
+// localOrReviewed is the head judged for s with no remote tip: of its local
+// tip and its recorded commit, the descendant (reviewer-codex: a stale local
+// ref behind the reviewed commit must not clear it, nor a recorded commit
+// behind a local fix). A recorded commit this checkout does not hold is
+// judged as it is (not here: never delivered); two heads that diverge are
+// refused, nothing judged.
+func (j stepJudger) localOrReviewed(s bus.OpenStep, resolve func(string) string) (string, error) {
+	tip := resolve("refs/heads/" + s.Branch)
+	switch {
+	case tip == "":
+		return s.Commit, nil
+	case s.Commit == "" || tip == s.Commit:
+		return tip, nil
+	case resolve(s.Commit) == "":
+		return s.Commit, nil
+	}
+	ancestor := func(a, b string) bool {
+		_, err := j.git("merge-base", "--is-ancestor", a, b)
+		return err == nil
+	}
+	switch {
+	case ancestor(s.Commit, tip):
+		return tip, nil
+	case ancestor(tip, s.Commit):
+		return s.Commit, nil
+	}
+	return "", fmt.Errorf("step %s: its local tip %s and the reviewed commit %s diverge: review the branch again, or ask the sender to abandon the step", s.Branch, tip[:8], s.Commit[:8])
 }
 
 // judgeTask reads task's request and judges its open steps for a review of

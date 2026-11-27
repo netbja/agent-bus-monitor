@@ -2,7 +2,8 @@
   `request review --more` with a recorded base lists its branch in the request's `open_steps`. A
   review of another branch, and the target's `request done` (and `report --done`), judge every listed
   step in the agent's checkout with the dispatcher's own test (ancestor or same tree, squash, rebase;
-  the remote tip, else the local tip, else the recorded commit) and are refused while one is not
+  the remote tip; else the newer of the local tip and the recorded commit, refused when they diverge)
+  and are refused while one is not
   merged; a judged merge leaves the list in the same script step, with a `step-merged` audit line.
   `--branch` is required while a step is open. The merge pass no longer closes a request whose last
   review merges with a step still listed (`parallel`): it steps it back to `accepted` (`open`).

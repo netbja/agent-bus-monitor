@@ -102,6 +102,24 @@ func TestJudgeStepsRemote(t *testing.T) {
 	if err != nil || !slices.Equal(mergedOf(s), []string{"coder/t1"}) || s.Merged[0].Head != h2 {
 		t.Fatalf("h2 merged: %+v %v", s, err)
 	}
+	// reviewer-codex: a stale local ref behind the reviewed commit never
+	// clears it. Reviewed at h3, local back at h2 (in the base), remote
+	// gone: h3 is judged, not merged.
+	h3 := r.commit("e")
+	r.git("reset", "-q", "--hard", h2)
+	stale := &bus.RequestInfo{OpenSteps: []bus.OpenStep{{Branch: "coder/t1", Commit: h3}}}
+	if s, err := j.judge(ctx, stale, "coder/t2", false); err != nil || len(s.Merged) != 0 {
+		t.Fatalf("a stale local tip cleared the reviewed commit: %+v %v", s, err)
+	}
+	// Diverged from the reviewed commit: refused, nothing judged.
+	r.git("checkout", "-q", "-b", "side", h1)
+	other := r.commit("f")
+	r.git("checkout", "-q", "coder/t1")
+	r.git("reset", "-q", "--hard", other)
+	if _, err := j.judge(ctx, stale, "coder/t2", false); err == nil || !strings.Contains(err.Error(), "diverge") {
+		t.Fatalf("a diverged local tip: %v", err)
+	}
+	r.git("reset", "-q", "--hard", h2)
 	// No local branch either: the recorded commit is judged.
 	r.git("checkout", "-q", "dev")
 	r.git("branch", "-q", "-D", "coder/t1")
@@ -225,5 +243,25 @@ func TestRequestParallelAndAbandonCommands(t *testing.T) {
 		if !slices.ContainsFunc(lines, func(e bus.AuditEntry) bool { return e.Action == want && e.Actor == "master" }) {
 			t.Errorf("no %s audit line: %+v", want, lines)
 		}
+	}
+}
+
+// The remote tip is judged while the branch exists, whatever the local one
+// says (foureyes' nit): the remote tip merged, a diverged local tip not, the
+// step is merged on the remote tip.
+func TestJudgeStepsRemoteTipFirst(t *testing.T) {
+	r, _, h1 := newReviewRepo(t)
+	origin := reviewRepo{t: t, dir: t.TempDir()}
+	origin.git("init", "-q", "--bare")
+	r.git("remote", "add", "origin", origin.dir)
+	r.git("push", "-q", "origin", "dev", "coder/t1")
+	hR := r.commit("remote-fix")
+	r.git("push", "-q", "origin", "coder/t1", hR+":refs/heads/dev")
+	r.git("reset", "-q", "--hard", h1)
+	r.commit("local-only") // local coder/t1 diverges from the remote's
+	req := &bus.RequestInfo{OpenSteps: []bus.OpenStep{{Branch: "coder/t1", Commit: h1}}}
+	s, err := judgerIn(r, "none").judge(context.Background(), req, "coder/t2", false)
+	if err != nil || !slices.Equal(mergedOf(s), []string{"coder/t1"}) || s.Merged[0].Head != hR {
+		t.Fatalf("the remote tip: %+v %v", s, err)
 	}
 }
