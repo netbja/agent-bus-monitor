@@ -391,6 +391,7 @@ var (
 		// keys set a state (ideas-triage, the person's y = decided); every
 		// other page keeps copy and the log, and Y copies the whole idea.
 		{Keys: "y l d x", Hint: "decided later doing dropped", Help: "Ideas (F6) or an idea's page: set the selected idea's state at once, as you: y decided, l later, d doing, x dropped (s opens the picker; Y copies the idea)", Act: ActIdeaSet, OnPage: true, match: runeIs('y', 'l', 'd', 'x')},
+		{Keys: "u", Help: "the triage summary (T): end triage and select Activity's first unread line no triage item holds", Act: ActNextUnread, OnPage: true, match: runeIs('u')},
 		{Keys: "u", Hint: "undo", Help: "Ideas (F6) or an idea's page: undo this busmon's last state change (once)", Act: ActIdeaUndo, OnPage: true, match: runeIs('u')},
 		{Keys: "y", Hint: "copy", Act: ActCopy, OnPage: true, match: runeIs('y')}, // every page but the Ideas ones (pageOffers)
 		{Keys: "Y", Hint: "copy thread", Help: "copy the whole thread (a message's page) or the whole report (an agent's page, a recap item's)", Act: ActCopyThread, OnPage: true, match: runeIs('Y')},
