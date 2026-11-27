@@ -11,6 +11,8 @@
     - the Next line is its own function, and `plan.NowNext` is unchanged (§B6);
     - the mock-ups' counts are 9/11, with the shared scale;
     - a manual done is ignored once work is linked (§A2).
+  - r3, foureyes r2b: "merged" gets a source today's flow produces (`Request.Merged`, §A2), and
+    a manual done is kept unless newer linked work shows the task unfinished (§A2).
 - Date: 2026-11-27. Author: architect. Base: origin/dev `a919454e`.
 - Source: the person's typed directive to master of 2026-11-27, 23:12, relayed as task
   `plan-lifecycle-spec`, after master's report 1795817303570-0 ("Revoir le plan"). The person's
@@ -86,13 +88,28 @@ comes from broker events, by these rules (`plan/derive.go`):
 - **A merge task** is done when all of these hold:
   - **nothing open:** no request linked to the task is open (§A1: one at a time; a rework
     reopens it);
-  - **merged:** its newest request was closed on merge, its head delivered into the base. This is
-    `Request.ClosedOnMerge`, which the dispatcher's merge-queue pass writes
-    (`internal/dispatchsvc/closeonmerge.go:37`, through `mergequeue.Delivery.Delivered`:
-    ancestor, squash patch-id or rebase patch-ids). Or a PR attached by hand that the merge queue
-    saw merged;
+  - **merged:** its newest request's head is delivered into the base. There are two records of
+    that, and either counts:
+    - `Request.ClosedOnMerge`, written today by the merge-queue pass for a request still in state
+      `review` (`internal/dispatchsvc/closeonmerge.go:37`, `:81`);
+    - **`Request.Merged {head, base, pr, at}`**, new and additive, for a request already `done`.
+      This team closes its requests with `request done` before the merge, so by then nothing is
+      left in `review`. On the live board, 376 entries are done, none carries `closed_on_merge`,
+      and 146 have a recorded `commit` (foureyes, r2b). The same pass, in the same fenced script
+      family (`requestMergedScript`), writes `Merged` on a `done` request whose recorded
+      `Commit` (`request done --commit`) is delivered into the base by
+      `mergequeue.Delivery.Delivered` (ancestor, squash patch-id or rebase patch-ids). It takes
+      `pr` from the merge-queue item seen for the request's branch, when there was one. A `done`
+      request with no recorded commit gets no `Merged`. Such a task relies on its manual done
+      (below), or on an attachment.
+
+    A PR attached by hand that the merge queue saw merged counts too.
+  - **Backfill, once:** when Part A lands, the pass runs over the `done` requests of the active
+    plan's life, newest first, bounded to 500. It writes `Merged` where the commit is delivered.
+    After that it judges each request when it becomes `done`, and again on each base move until
+    its commit is delivered or 30 days have passed;
   - **reviewed:** its review rolls up `APPROVED` (`bus.RollUp`). The deciding approval names the
-    merged head (`Verdict.Head == ClosedOnMerge.Head`). An approval at another head is "approved,
+    merged head (`Verdict.Head` equals the merged record's `Head`). An approval at another head is "approved,
     head changed" (onboarding §9.2). An older verdict with no head still counts, labelled
     "approval names no head": `agentbus deliver` already refused to push a head without one, so
     such verdicts predate it (Q5).
@@ -103,19 +120,31 @@ comes from broker events, by these rules (`plan/derive.go`):
 - **`plan done`** becomes an exception for a task with no linked work (a step done outside the
   bus). busmon shows it as "recorded by master". It is refused on a task that has linked work:
   "<task> has linked work: its state comes from it". This uses the same guards as onboarding §9.3.
-- **A manual done is ignored once work is linked.** Today derive returns `Done` for `fact.Done`
-  before it reads anything else (`derive.go:117`). The new order is:
-  1. derive calls `plan.Links` first;
-  2. when the task has linked work (a request, an attachment, a `board` entry), `fact.Done` is
-     ignored, and the state comes from that work;
-  3. the detail pane says "recorded done ignored: linked work decides".
+- **A manual done is kept, unless newer linked work shows the task unfinished.** Today derive
+  returns `Done` for `fact.Done` before it reads anything else (`derive.go:117`). The new rule:
+  - `fact.Done` stands, as today, with its label "recorded by master";
+  - it is **overridden** only when the task's linked work shows the task is not finished: a
+    linked request still **open**, or a request sent, or an attachment made, **after** the fact
+    (`fact.Done` time against the request's `CreatedAt` and the attachment's time). That is a
+    rework, and the task's state then comes from that work;
+  - the detail pane says "recorded done overridden: newer work <id> is open".
 
-  So attaching an unapproved PR after a `plan done` makes the task "in review", never done. The
-  fact stays in `{p}:plan:facts`, unchanged, and counts again only if the link goes. Test: `plan
-  done` on a task with no work, then `plan attach` of an open, unapproved PR, gives "in review";
-  then that PR merged and approved at its head gives done.
+  So the past stays as it is. v0.34's seven tasks recorded "merged (recorded 6d ago)" stay done,
+  and gain `Merged` from the backfill where their commit is recorded. An unapproved PR attached
+  after a `plan done` is newer than the fact, so the task is "in review", never done.
 
-So "merged" is a fact the dispatcher already writes. No one records it any more.
+  Tests:
+  - **today's shape:** a request `done` with no `closed_on_merge`, a delivered `commit`, and a
+    `fact.Done` stays done, and the backfill writes `Merged`;
+  - the same task with a newer open rework request is not done;
+  - `Merged` is written for a `done` request whose commit is delivered by squash, and not for one
+    whose commit is not delivered;
+  - `plan done`, then `plan attach` of an open, unapproved PR, gives "in review". Once that PR is
+    merged and approved at its head, the task is done;
+  - a fixture of v0.34's board and facts keeps 8/11 before any attachment.
+
+So "merged" is a fact the dispatcher writes, for requests in review as today and for requests
+already done (`Merged`). No one records it by hand any more.
 
 ## A3. Unplanned work
 
@@ -412,8 +441,8 @@ merged before sending the step:
 The steps:
 
 1. **Links and derived done** (§A1, §A2):
-   - the work: `plan.Links`; `MergeClose.PR`; derive's merge rule; the `plan done` refusal;
-     `plan attach`;
+   - the work: `plan.Links`; `MergeClose.PR`; `Request.Merged` and its pass, with the backfill;
+     derive's merge rule; the manual-done rule; the `plan done` refusal; `plan attach`;
    - tests:
      - a task finds its requests by provenance, by attachment, by `board`, and by id;
      - **two requests for one task:** a second `--plan` request is refused while the first is
@@ -423,7 +452,7 @@ The steps:
      - approved at another head, it is "approved, head changed";
      - a verdict with no head counts, with its label;
      - `plan done` is refused with linked work;
-     - v0.34's fixture (requests `--plan`-linked, merged) shows 11/11.
+     - an 11-task fixture whose requests are `--plan`-linked and merged shows 11/11 with no fact.
 2. **Unplanned** (§A3):
    - the work: the fixed reader (delivery base, squash subjects); `{p}:plan:unplanned`, fenced,
      dispatcher-only; `plan next add`;
