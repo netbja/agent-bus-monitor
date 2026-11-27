@@ -123,6 +123,8 @@ func TestMarkAllSkipsEveryHeldKind(t *testing.T) {
 		{"a waiting agent's newest report", waiting, report("", "## Done"), rid(0), false},
 		{"a --needs answer report naming one merge item", merge, report(bus.NeedsAnswer, "PR 309 is ready"), rid(0), false},
 		{"a report without --needs naming a merge item", merge, report("", "PR 309 is ready"), rid(0), true},
+		// A line for the person that is no report, naming one item, folds into it (foureyes on 176474b1).
+		{"a message naming one merge item", merge, []bus.Event{{Kind: "cmd", ID: rid(7), From: "master", Target: "bob", Type: bus.CmdDirective, Message: "PR 309: merge it when you can"}}, rid(7), false},
 		{"a plain report", none, report("", "## Done"), rid(0), true},
 	} {
 		f := newFoldFeed()
