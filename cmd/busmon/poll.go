@@ -501,10 +501,10 @@ func pollOnce(ctx context.Context, b busReader, st *shared, tick int) {
 			a.obsPrompt = ok && o.State == "blocked" && o.PID != 0 && o.PID == a.pid
 			a.obsOwnPID = ok && o.PID != 0 && o.PID == a.pid
 			a.obsBgProcs, a.obsBgOldest = 0, time.Time{}
-			a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU = 0, 0, 0, nil
+			a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU, a.obsCap = 0, 0, 0, nil, 0
 			a.obsLocal = pidsHere
 			if ok {
-				a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU = o.MemBytes, o.TopBytes, o.TopPID, o.CPUPct
+				a.obsMem, a.obsTopMem, a.obsTopPID, a.obsCPU, a.obsCap = o.MemBytes, o.TopBytes, o.TopPID, o.CPUPct, o.MemCap
 				a.obsBgProcs = o.BgProcs
 				if o.BgOldest > 0 {
 					a.obsBgOldest = time.UnixMilli(o.BgOldest)

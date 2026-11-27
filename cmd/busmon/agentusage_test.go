@@ -47,6 +47,39 @@ func TestUsageCells(t *testing.T) {
 	}
 }
 
+// Step 3e: the mem cell turns amber at limits.warn_at of the agent's cap,
+// never without a cap or with the warning off; the detail gives the cap.
+func TestMemCellAmberNearTheCap(t *testing.T) {
+	now := time.Now()
+	defer func(w float64) { memWarnAt = w }(memWarnAt)
+	memWarnAt = 80
+	role := func(mem, cap int64) Role {
+		a := usageAgent(now, mem, 0, 0, nil)
+		a.obsCap = cap
+		return memCell(a, now)[0].Role
+	}
+	for _, c := range []struct {
+		mem, cap int64
+		want     Role
+	}{{8 << 30, 10 << 30, RoleAttention}, {79 << 20, 100 << 20, RoleText}, {9 << 30, 0, RoleText}} {
+		if got := role(c.mem, c.cap); got != c.want {
+			t.Errorf("mem %d of cap %d: role %v, want %v", c.mem, c.cap, got, c.want)
+		}
+	}
+	memWarnAt = 0
+	if got := role(9<<30, 10<<30); got != RoleText {
+		t.Fatalf("amber with the warning off")
+	}
+	a := usageAgent(now, 6<<30, 0, 0, nil)
+	a.obsCap = 8 << 30
+	if got := usageText(a, now); !strings.HasPrefix(got, "6.0G of 8.0G (75 %)") {
+		t.Fatalf("detail %q", got)
+	}
+	if got := usageText(usageAgent(now, 6<<30, 0, 0, nil), now); strings.Contains(got, " of ") {
+		t.Fatalf("a cap shown without one: %q", got)
+	}
+}
+
 // The wide table carries mem and cpu after ctx, header included, on a full
 // wide row only: below wideBarRow (the shell's Agents beside For you) both go,
 // so the message keeps its room.
@@ -118,7 +151,7 @@ func TestPollReadsObservedUsage(t *testing.T) {
 	f := &fakeReader{calls: map[string]int{}, snaps: map[string]bus.AgentSnapshot{
 		"coder": {State: "idle", TS: 1, Pane: "p2", PID: 7}},
 		svcRecs:  map[string]bus.ServiceRecord{"dispatch": {State: "running", Host: "here"}},
-		observed: map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, State: "idle", MemBytes: 4 << 30, TopBytes: 3 << 30, TopPID: 9, CPUPct: intp(180)}}}
+		observed: map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, State: "idle", MemBytes: 4 << 30, TopBytes: 3 << 30, TopPID: 9, CPUPct: intp(180), MemCap: 8 << 30}}}
 	st := &shared{agents: map[string]*agentState{}, budgets: map[string]bus.BudgetSnapshot{}, board: map[string]bus.BoardEntry{}, health: health{ok: true}}
 	poll := func() {
 		for i := 0; i < 5; i++ {
@@ -127,7 +160,7 @@ func TestPollReadsObservedUsage(t *testing.T) {
 	}
 	poll()
 	a := st.agents["coder"]
-	if a.obsMem != 4<<30 || a.obsTopMem != 3<<30 || a.obsTopPID != 9 || a.obsCPU == nil || *a.obsCPU != 180 {
+	if a.obsMem != 4<<30 || a.obsTopMem != 3<<30 || a.obsTopPID != 9 || a.obsCPU == nil || *a.obsCPU != 180 || a.obsCap != 8<<30 {
 		t.Fatalf("coder %+v", a)
 	}
 	if !a.obsLocal {
@@ -144,15 +177,25 @@ func TestPollReadsObservedUsage(t *testing.T) {
 	}
 	f.observed = map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, State: "idle"}}
 	poll()
-	if a := st.agents["coder"]; a.obsMem != 0 || a.obsTopMem != 0 || a.obsTopPID != 0 || a.obsCPU != nil {
+	if a := st.agents["coder"]; a.obsMem != 0 || a.obsTopMem != 0 || a.obsTopPID != 0 || a.obsCPU != nil || a.obsCap != 0 {
 		t.Fatalf("after an observation without the measure: %+v", a)
 	}
 	// An agent no longer observed at all keeps nothing either.
-	f.observed = map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, MemBytes: 1 << 30, CPUPct: intp(5)}}
+	f.observed = map[string]bus.Observation{"coder": {At: now.UnixMilli(), PID: 7, MemBytes: 1 << 30, CPUPct: intp(5), MemCap: 2 << 30}}
 	poll()
 	f.observed = map[string]bus.Observation{}
 	poll()
-	if a := st.agents["coder"]; a.obsMem != 0 || a.obsCPU != nil {
+	if a := st.agents["coder"]; a.obsMem != 0 || a.obsCPU != nil || a.obsCap != 0 {
 		t.Fatalf("after the observation went: %+v", a)
+	}
+}
+
+// limits.warn_at saved in busmon's settings applies to the mem cells at once.
+func TestWarnAtAppliesLive(t *testing.T) {
+	defer func(w float64) { memWarnAt = w }(memWarnAt)
+	memWarnAt = 80
+	m := &Model{cfg: shellConfig{getenv: settingsEnv(t, "[limits]\nwarn_at = 50\n", "", nil)}}
+	if said := m.applySettings("limits.warn_at"); said != "applied and saved" || memWarnAt != 50 {
+		t.Fatalf("said %q, warn_at %v", said, memWarnAt)
 	}
 }

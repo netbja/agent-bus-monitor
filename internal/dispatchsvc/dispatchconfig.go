@@ -53,6 +53,7 @@ func Config(d Deps, cfg *dispatch.Config) (*dispatch.HostRuntime, error) {
 	cfg.History = serviceHistory(os.Getenv, paths.StateDir(project))        // the streams archived to day files (history)
 	cfg.Backup = serviceBackup(log)                                         // the daily backup when backup.schedule = daily
 	cfg.Observe = dispatch.ObserveEvery
+	cfg.Memory = serviceMemory(project, os.Getenv)                        // each agent's cap, and master told near it (agent-resource-limits step 3e)
 	cfg.Prompt = servicePrompt(os.Getenv, exec.LookPath, notify.RunQuiet) // a pane blocked on its client's prompt (prompt-notify)
 	cfg.Prompt.Skip = promptSkip(b, os.Getenv)                            // never rung twice with a desktop target (notifications)
 	cfg.Notify = serviceNotify(b, os.Getenv)                              // the person's phone and desktop (notifications)

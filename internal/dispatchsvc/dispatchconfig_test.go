@@ -129,6 +129,9 @@ func TestServiceDispatchConfigSkewsTheSelfRepairRead(t *testing.T) {
 	if _, err := Config(d, &cfg); err != nil {
 		t.Fatal(err)
 	}
+	if cfg.Memory.WarnAt == nil || cfg.Memory.Caps == nil { // agent-resource-limits step 3e
+		t.Fatal("no memory notice: limits.warn_at or the holder caps unread")
+	}
 	if cfg.SelfRepair.Pass == nil {
 		t.Fatal("no self-repair pass (dispatch.self_repair is on by default)")
 	}

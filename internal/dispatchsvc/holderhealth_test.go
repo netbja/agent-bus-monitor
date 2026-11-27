@@ -149,7 +149,7 @@ func TestHolderMemoryCheck(t *testing.T) {
 		m := &health.HolderMemory{Current: 50, Max: 100, OOMKills: ooms[pass]}
 		return health.HolderEvidence{Known: true, Builds: []health.HolderBuild{{Key: "k", Raw: "v1", Current: true, Answers: true, Memory: m}}}, nil
 	}
-	run := holderMemoryCheck(now, func() float64 { return pct })
+	run := holderMemoryCheck(now, func() float64 { return pct }, nil)
 	for i, want := range []health.Status{health.OK, health.OK, health.Warn, health.OK} {
 		pass = i
 		out, err := run(context.Background())
@@ -170,7 +170,7 @@ func TestHolderMemoryCheck(t *testing.T) {
 			return broken()
 		}
 		return now()
-	}, func() float64 { return 80 })
+	}, func() float64 { return 80 }, nil)
 	run(context.Background())
 	ok = false
 	if out, err := run(context.Background()); out.Status != health.Unknown || err == nil {
@@ -190,7 +190,7 @@ func TestHolderMemoryCheck(t *testing.T) {
 			e.Builds[0].Memory = nil
 		}
 		return e, err
-	}, func() float64 { return 80 })
+	}, func() float64 { return 80 }, nil)
 	run(context.Background())
 	unread = true
 	run(context.Background())
@@ -237,5 +237,44 @@ func TestHolderDrainingCheck(t *testing.T) {
 	stale, agentsErr = 6*time.Hour, errors.New("x")
 	if out, _ := run(context.Background()); out.Status != health.Fail || !strings.Contains(out.Detail, "agents unknown") {
 		t.Fatalf("agents unreadable: %+v", out)
+	}
+}
+
+// Step 3e: per build, the agent using the most memory, from fresh
+// observations of each agent's current process; a done agent, a pane of no
+// holder, an aged or another process's observation are not counted.
+func TestMostByBuild(t *testing.T) {
+	k1, k2 := service.BuildKey("v1"), service.BuildKey("v2")
+	const now = int64(1_000_000)
+	snaps := map[string]bus.AgentSnapshot{
+		"coder": {Pane: k1 + "/t1", PID: 1}, "foureyes": {Pane: k1 + "/t2", PID: 2}, "master": {Pane: k2 + "/t1", PID: 3},
+		"pop": {Pane: k1 + "/t3", PID: 4, State: "done"}, "old": {Pane: "%12", PID: 5}, "aged": {Pane: k2 + "/t2", PID: 6},
+		"relaunched": {Pane: k2 + "/t3", PID: 70}, "tie": {Pane: k1 + "/t4", PID: 8},
+	}
+	obs := map[string]bus.Observation{
+		"coder": {PID: 1, At: now, MemBytes: 21 << 30}, "foureyes": {PID: 2, At: now, MemBytes: 3 << 30},
+		"master": {PID: 3, At: now, MemBytes: 2 << 30}, "pop": {PID: 4, At: now, MemBytes: 40 << 30},
+		"old": {PID: 5, At: now, MemBytes: 40 << 30}, "aged": {PID: 6, At: now - bus.ObservedTTL, MemBytes: 40 << 30},
+		"relaunched": {PID: 7, At: now, MemBytes: 40 << 30}, "tie": {PID: 8, At: now, MemBytes: 21 << 30},
+	}
+	got := mostByBuild(snaps, obs, now)
+	want := map[string]health.HolderTop{k1: {Agent: "coder", Bytes: 21 << 30}, k2: {Agent: "master", Bytes: 2 << 30}}
+	if len(got) != len(want) || got[k1] != want[k1] || got[k2] != want[k2] {
+		t.Fatalf("most %+v, want %+v", got, want)
+	}
+}
+
+// A warn at the cap names the agent most gives for that build.
+func TestHolderMemoryCheckNamesTheMost(t *testing.T) {
+	now := func() (health.HolderEvidence, error) {
+		m := &health.HolderMemory{Current: 90 << 30, Max: 100 << 30}
+		return health.HolderEvidence{Known: true, Builds: []health.HolderBuild{{Key: "k", Raw: "v1", Current: true, Answers: true, Memory: m}}}, nil
+	}
+	most := func(context.Context) map[string]health.HolderTop {
+		return map[string]health.HolderTop{"k": {Agent: "coder", Bytes: 21 << 30}, "other": {Agent: "x", Bytes: 1}}
+	}
+	out, _ := holderMemoryCheck(now, func() float64 { return 80 }, most)(context.Background())
+	if out.Status != health.Warn || !strings.HasSuffix(out.Detail, ", most: coder 21.0G") {
+		t.Fatalf("%+v", out)
 	}
 }

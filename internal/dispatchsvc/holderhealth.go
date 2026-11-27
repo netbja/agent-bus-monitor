@@ -67,6 +67,44 @@ func realHolderProbe(getenv func(string) string) holderProbe {
 	}
 }
 
+// serviceMemory is the memory notice's settings (agent-resource-limits §5,
+// step 3e): limits.warn_at read at each pass, and each answering holder
+// build's unit cap and terminals, asked over its socket.
+func serviceMemory(project string, getenv func(string) string) dispatch.MemoryConfig {
+	return dispatch.MemoryConfig{
+		WarnAt: func() float64 { return config.Machine(getenv).Float("limits.warn_at") },
+		Caps: func(context.Context) (map[string]dispatch.HolderCap, error) {
+			return holderCaps(getenv, project, holder.DescribeOf)
+		},
+	}
+}
+
+// holderCaps is each answering holder build of project's unit cap (0: none)
+// and terminal count, by build key; a build that does not answer is left out.
+func holderCaps(getenv func(string) string, project string, describe func(project, key string) (*holder.Info, error)) (map[string]dispatch.HolderCap, error) {
+	dir, err := holder.ProjectDir(getenv, project)
+	if err != nil {
+		return nil, err
+	}
+	socks, err := holder.ProjectSockets(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]dispatch.HolderCap{}
+	for key := range socks {
+		info, err := describe(project, key)
+		if err != nil {
+			continue
+		}
+		c := dispatch.HolderCap{Terms: info.Terms}
+		if info.Memory != nil {
+			c.Max = info.Memory.Max
+		}
+		out[key] = c
+	}
+	return out, nil
+}
+
 // holderEvidence is every build of project's holder, by key: its unit and
 // whether the manager runs it, its socket (answering, terminals, age), its
 // binary copy. A binary copy that another project's unit records is that
@@ -221,11 +259,22 @@ func holderCheck(b *bus.Bus, evidence func() (health.HolderEvidence, error), get
 // the evidence of now, limits.warn_at (a percentage) read at each pass, and
 // the OOM kill counts of the last pass it could read, kept here, so a rise
 // warns once.
-func holderMemoryCheck(now func() (health.HolderEvidence, error), warnPct func() float64) func(context.Context) (health.Outcome, error) {
+//
+// most, when set, is each build's agent using the most memory (step 3e),
+// named in a warn at the cap; nil or a failed read names none.
+func holderMemoryCheck(now func() (health.HolderEvidence, error), warnPct func() float64, most func(context.Context) map[string]health.HolderTop) func(context.Context) (health.Outcome, error) {
 	var mu sync.Mutex
 	var prev map[string]uint64
-	return func(context.Context) (health.Outcome, error) {
+	return func(ctx context.Context) (health.Outcome, error) {
 		e, err := now()
+		if most != nil && e.Known {
+			tops := most(ctx)
+			for i := range e.Builds {
+				if t, ok := tops[e.Builds[i].Key]; ok {
+					e.Builds[i].Most = &t
+				}
+			}
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		out := health.EvaluateHolderMemory(e, warnPct()/100, prev)
@@ -233,6 +282,51 @@ func holderMemoryCheck(now func() (health.HolderEvidence, error), warnPct func()
 			prev = health.HolderOOMCounts(e, prev)
 		}
 		return out, err
+	}
+}
+
+// mostByBuild is, per holder build key, the agent whose terminal tree uses
+// the most memory: from its last observation, fresh at nowMs and of the
+// agent's current process; a done agent and a pane of no holder are left
+// out, a tie goes to the first name.
+func mostByBuild(snaps map[string]bus.AgentSnapshot, obs map[string]bus.Observation, nowMs int64) map[string]health.HolderTop {
+	names := make([]string, 0, len(snaps))
+	for n := range snaps {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	out := map[string]health.HolderTop{}
+	for _, name := range names {
+		s := snaps[name]
+		key, _, ok := health.HolderPane(s.Pane)
+		o, seen := obs[name]
+		if !ok || s.State == "done" || !seen || !o.Fresh(nowMs) || o.PID != s.PID || o.MemBytes <= 0 {
+			continue
+		}
+		if t, has := out[key]; !has || uint64(o.MemBytes) > t.Bytes {
+			out[key] = health.HolderTop{Agent: name, Bytes: uint64(o.MemBytes)}
+		}
+	}
+	return out
+}
+
+// observedMost is mostByBuild of the bus's agents and observations now;
+// nil when one cannot be read.
+func observedMost(b *bus.Bus) func(context.Context) map[string]health.HolderTop {
+	return func(ctx context.Context) map[string]health.HolderTop {
+		snaps, err := b.Agents(ctx)
+		if err != nil {
+			return nil
+		}
+		obs, err := b.Observed(ctx)
+		if err != nil {
+			return nil
+		}
+		now, err := b.ServerTime(ctx)
+		if err != nil {
+			return nil
+		}
+		return mostByBuild(snaps, obs, now.UnixMilli())
 	}
 }
 
