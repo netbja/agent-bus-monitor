@@ -22,11 +22,12 @@ func TestObservePublishesTheMemCap(t *testing.T) {
 	register(t, b, "ops", "p3")
 	rt := newFakeRT(func(string, int) Inspection {
 		in := readyIn()
-		in.Usage = &Usage{Mem: 1 << 30, TopMem: 1 << 30}
+		in.Usage = &Usage{Mem: 7 << 30, TopMem: 1 << 30}
 		return in
 	})
 	cfg := fastConfig()
 	cfg.Observe = 50 * time.Millisecond
+	cfg.Memory.WarnAt = func() float64 { return 80 }
 	cfg.Memory.Caps = func(context.Context) (map[string]HolderCap, error) {
 		return map[string]HolderCap{key: {Max: 24 << 30, Terms: 3}, "other.0123456789": {Terms: 2}}, nil
 	}
@@ -45,6 +46,12 @@ func TestObservePublishesTheMemCap(t *testing.T) {
 	}
 	if c := obs["ops"].MemCap; c != 0 {
 		t.Fatalf("a pane of no holder build published %d", c)
+	}
+	// The pass judges what it published: dev, at 7G of its 8G, is told;
+	// docs and ops, with no cap, are not.
+	waitFor(t, 5*time.Second, "master told of dev", func() bool { return len(memNotices(t, b)) > 0 })
+	if n := memNotices(t, b); len(n) != 1 || n[0].Target != "master" || !strings.Contains(n[0].Message, "memory: dev uses 7.0G of its 8.0G share") {
+		t.Fatalf("notices %+v", n)
 	}
 }
 
