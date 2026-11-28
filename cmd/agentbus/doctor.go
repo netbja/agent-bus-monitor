@@ -4,9 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/cgroot"
 	"github.com/netbja/agent-bus-monitor/modelcheck"
 )
 
@@ -86,7 +91,26 @@ func runDoctor(ctx context.Context, b *bus.Bus, d modelcheck.DoctorDeps, args []
 	if len(rows) == 0 {
 		fmt.Fprintln(out, "no registered agent has a role in roles.toml")
 	}
+	fmt.Fprintln(out, doctorHostLine(ctx)) // one line per host (resource-limits §12.7)
 	return code
+}
+
+// doctorHostLine is the host's cgroup mode and linger (resource-limits §12.7,
+// step 4a): what the systemd user manager offers a holder. A seam for tests.
+var doctorHostLine = func(ctx context.Context) string {
+	return cgroot.DoctorLine(cgroot.Default().Host(), lingerValue(ctx))
+}
+
+// lingerValue is loginctl's Linger for this user ("yes", "no"), "" when it
+// cannot say (no loginctl, macOS, an error).
+func lingerValue(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, "loginctl", "show-user", strconv.Itoa(os.Getuid()), "-p", "Linger", "--value").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // popsLine is a popping role's spawn rules in words.

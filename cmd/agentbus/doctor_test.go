@@ -228,9 +228,16 @@ func TestDoctorNamesAgyRisks(t *testing.T) {
 	if !strings.Contains(out.String(), "\n             risk: "+want+"\n") || strings.Count(out.String(), "risk: ") != 1 {
 		t.Fatalf("text:\n%s", out.String())
 	}
+	// The host's cgroup line closes the text (resource-limits §12.7), never the JSON.
+	if lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n"); lines[len(lines)-1] != "cgroup mode: test" {
+		t.Fatalf("no host line last:\n%s", out.String())
+	}
 	out.Reset()
 	if runDoctor(ctx, b, d, []string{"--json"}, &out, &errw) != 0 || !strings.Contains(out.String(), `"risk": "`+want+`"`) {
 		t.Fatalf("json:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "cgroup mode") {
+		t.Fatalf("the host line in the JSON:\n%s", out.String())
 	}
 	// foureyes: a risk that cannot be judged says so, never nothing.
 	d.LaunchRisk = func(*rolecfg.Manifest, string, string, string) (string, error) {
