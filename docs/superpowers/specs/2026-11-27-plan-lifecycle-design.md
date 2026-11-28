@@ -4,7 +4,7 @@
   - r4, the person's answers to ask 1795818074022-0 (§C), folded in: the release recap wakes the
     drafter (§A4); `plan load` takes no path (§A4); master's sorting is recorded, undone from
     busmon, and never overrides the person's, and off-bus PRs come from the forge reader, not
-    git history (§A3); a headless approval counts only on a merged
+    git history (§A3); `plan draft --from` takes a committed file (§A4); a headless approval counts only on a merged
     request, and a new approval must name its head (§A2); the mini timeline is a list (§B7, §B8).
   - r2, foureyes r1:
     - a task's work is one request, its slices `--more` steps (§A1, §A2);
@@ -244,7 +244,14 @@ person attaches it. It is not a bug.
   `plan load <path>@<commit>`, the old form, is refused with a migration error: "plans are
   adopted through a draft and the person's yes: agentbus plan draft <path>@<commit>, then
   plan load". There is no bypass flag. The recovery path for a file written by hand is `plan
-  draft` itself (onboarding §8.1): the same banner, diff and typed yes. The active v0.34 stays loaded until v0.35's
+  draft` itself (onboarding §8.1): the same banner, diff and typed yes.
+- **`plan draft --from <file>`** is an alias of `plan draft <file>@HEAD` (follow-up, ask
+  1795852308652-0). It is refused when the file has uncommitted changes: "<path> has uncommitted
+  changes: commit it on any branch, then run plan draft again". Any branch is accepted, and the
+  commit need not be pushed. The draft records the path, the full commit SHA and the file's
+  blob hash (`git rev-parse <commit>:<path>`). `plan load` re-reads that blob at that commit and
+  refuses when it differs, on top of onboarding §8.5's checks. No copy of the bytes goes to
+  Redis. The active v0.34 stays loaded until v0.35's
   draft is adopted.
 
 ## A5. The stale warning, only as a safety net
@@ -535,6 +542,9 @@ The steps:
    - tests:
      - `plan load` with no draft is refused;
      - `plan load <path>@<commit>` is refused with the migration error, approved draft or not;
+     - `plan draft --from <file>` with uncommitted changes is refused, naming the path; on an
+       unpushed branch commit it records path, SHA and blob hash; a load whose blob differs is
+       refused;
      - docs' release recap reaches the architect as a report that wakes it;
      - an approved draft loads;
      - the draft carries the remaining tasks, the `next` items and NEXT-DIRECTIONS items.
@@ -607,5 +617,6 @@ Two follow-ups, ask 1795852308652-0:
 - **Does the off-plan section still read `dev`'s history?** Answered: no. The board's requests
   stay; the second source is the forge reader ci-loop's pass uses, for merged PRs no request
   references, tagged "off-bus"; with no forge reader, the board only and a notice (§A3).
-- **Must `plan draft --from <file>` take a committed file?** Recommended: yes, `--from <file>` is
-  `plan draft <file>@HEAD`, refused on uncommitted changes.
+- **Must `plan draft --from <file>` take a committed file?** Answered: yes. An alias of `plan
+  draft <file>@HEAD`, refused on uncommitted changes, any branch, unpushed accepted; the draft
+  records path, commit and blob hash, and the load re-reads the blob (§A4). No Redis copy.
