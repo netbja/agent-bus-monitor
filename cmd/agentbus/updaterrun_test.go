@@ -107,6 +107,12 @@ func TestServiceRunUpdaterNeedsNoProject(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), "updater: a developer build") {
 		t.Fatalf("err %v, output %q", err, out)
 	}
+	// the unit's --env reaches the loop: a file that cannot be read is refused
+	cmd = exec.Command(bin, "service", "run", "updater", "--env", filepath.Join(t.TempDir(), "none.env"))
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "REDIS_HOST=127.0.0.1", "REDIS_PORT=1"}
+	if out, err = cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "updater: invalid configuration") {
+		t.Fatalf("--env: err %v, output %q", err, out)
+	}
 }
 
 // The unit's --env file goes into the loop's environment, so each pass
