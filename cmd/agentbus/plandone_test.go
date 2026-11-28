@@ -85,12 +85,30 @@ func TestPlanDoneGuard(t *testing.T) {
 	if f, _ := b.PlanFacts(ctx); f["roles"].Done == 0 || f["roles"].Head != h2 {
 		t.Fatalf("the done fact: %+v", f["roles"])
 	}
-	// A task without a check records done as before, with no head.
+	// A task without a check records done as before, with no head: a plain
+	// done clears a head left by an earlier record (the script's else).
+	if err := b.PlanDoneAt(ctx, "notes", h1); err != nil {
+		t.Fatal(err)
+	}
 	if code, out, _ := runPlanT(t, b, repo, "done", "notes"); code != 0 || out != "notes recorded done\n" {
 		t.Fatalf("no check: %d %q", code, out)
 	}
-	if f, _ := b.PlanFacts(ctx); f["notes"].Head != "" {
-		t.Fatalf("a head on an unchecked task: %+v", f["notes"])
+	if f, _ := b.PlanFacts(ctx); f["notes"].Head != "" || f["notes"].Done == 0 {
+		t.Fatalf("a head kept on an unchecked task: %+v", f["notes"])
+	}
+	// A plan record Go cannot decode, whose task list the script still reads:
+	// refused, never recorded through the unchecked path (reviewer-codex).
+	raw, err := r.Get(ctx, bus.PlanKey(b.Project())).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Set(ctx, bus.PlanKey(b.Project()), strings.Replace(raw, `"loaded_at":`, `"loaded_at":"not a time","x":`, 1), 0)
+	r.HDel(ctx, bus.PlanFactsKey(b.Project()), "roles")
+	if code, _, errw := runPlanT(t, b, repo, "done", "roles"); code == 0 || !strings.Contains(errw, "reading the plan") {
+		t.Fatalf("an undecodable plan record: %d %q", code, errw)
+	}
+	if f, _ := b.PlanFacts(ctx); f["roles"].Done != 0 {
+		t.Fatalf("recorded done from an unread plan: %+v", f["roles"])
 	}
 }
 

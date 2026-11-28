@@ -22,7 +22,10 @@ import (
 // refuses (fail closed).
 func planDoneHead(ctx context.Context, b *bus.Bus, repo string, getenv func(string) string, id string) (string, error) {
 	rec, has, err := b.Plan(ctx)
-	if err != nil || !has {
+	if err != nil { // never the unchecked path on a read that failed (reviewer-codex, foureyes)
+		return "", fmt.Errorf("reading the plan: %w", err)
+	}
+	if !has {
 		return "", nil // the write itself says there is no plan
 	}
 	f, err := plan.Parse([]byte(rec.File))
