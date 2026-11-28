@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/internal/files"
@@ -121,6 +122,7 @@ type AutoState struct {
 type AutoPass struct {
 	At     time.Time `json:"at"`
 	Result string    `json:"result"`
+	Why    string    `json:"why,omitempty"` // why it did not install: the project in work, the error (the max_wait notice names it)
 }
 
 // AutoWaiting is the release waiting and since when.
@@ -169,27 +171,34 @@ const HistoryAuto = "auto"
 // update of it still runs). A tag or a history that cannot be read is an
 // error: the guard is unknown, so the pass is deferred (reviewer-codex).
 func Skip(ctx context.Context, updates string, rel Release) (string, error) {
+	why, _, err := skip(ctx, updates, rel)
+	return why, err
+}
+
+// skip is Skip, and whether the reason is a migration (master is told of
+// one, §4.6; a failed install was told when it failed).
+func skip(ctx context.Context, updates string, rel Release) (why string, migrates bool, err error) {
 	migrate := "docs/releases/" + rel.Tag + ".migrate"
 	out, err := git(ctx, "--git-dir", rel.GitDir, "ls-tree", "--name-only", rel.Tag+"^{commit}", "--", migrate)
 	if err != nil { // the tag itself cannot be read; a missing path is an empty answer
-		return "", fmt.Errorf("whether %s needs a migration cannot be read: %w", rel.Tag, err)
+		return "", false, fmt.Errorf("whether %s needs a migration cannot be read: %w", rel.Tag, err)
 	}
 	if out == migrate {
-		return rel.Tag + " needs a broker migration: update it by hand (./setup.sh, with its notes)", nil
+		return rel.Tag + " needs a broker migration: update it by hand (./setup.sh, with its notes)", true, nil
 	}
 	hs, err := ReadHistory(updates)
 	if err != nil {
-		return "", fmt.Errorf("the update history cannot be read: %w", err)
+		return "", false, fmt.Errorf("the update history cannot be read: %w", err)
 	}
 	for i := len(hs) - 1; i >= 0; i-- {
 		if h := hs[i]; h.Kind == HistoryAuto && h.To == rel.Tag {
 			if !h.OK {
-				return "the automatic install of " + rel.Tag + " failed: it is not retried (agentbus update installs it by hand)", nil
+				return "the automatic install of " + rel.Tag + " failed: it is not retried (agentbus update installs it by hand)", false, nil
 			}
 			break
 		}
 	}
-	return "", nil
+	return "", false, nil
 }
 
 // CheckPass is agentbus update --auto --check (§4.2 step 4, §4.3 steps 2-4):
@@ -221,18 +230,28 @@ func CheckPass(ctx context.Context, d Deps) int {
 	}
 	st.LastCheck = now
 	st.waitingFor(rel.Tag, now)
+	// Master hears of a long wait and of a migration only when passes are
+	// automatic: with updates.auto = notify, nothing installs by itself.
+	auto := d.AutoSetting != nil && d.AutoSetting() == "install"
+	if n, ok := d.waitingNotice(ctx, st, now); ok && auto {
+		d.tell(ctx, &st, n)
+	}
 	save()
 	d.say("release %s waiting since %s", rel.Tag, st.Waiting.Since.Format(time.RFC3339))
-	why, err := Skip(ctx, updates, rel)
+	why, migrates, err := skip(ctx, updates, rel)
 	if err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": a pass would be deferred")
 		return 1
 	}
 	if why != "" {
+		if migrates && auto {
+			d.tell(ctx, &st, d.migrateNotice(ctx, rel.Tag, why))
+			save()
+		}
 		d.say("not installed automatically: %s", why)
 		return 0
 	}
-	if d.AutoSetting == nil || d.AutoSetting() != "install" {
+	if !auto {
 		d.say("updates.auto is not install: agentbus update installs it")
 	}
 	ps, err := Quiet(ctx, d)
@@ -268,8 +287,12 @@ func InstallPass(ctx context.Context, d Deps) int {
 	}
 	updates := d.updates()
 	st := ReadAuto(updates)
+	why := "" // the pass's reason, for the max_wait notice
 	end := func(result string, code int) int {
-		st.LastPass = &AutoPass{At: d.Now(), Result: result}
+		st.LastPass = &AutoPass{At: d.Now(), Result: result, Why: why}
+		if n, ok := d.waitingNotice(ctx, st, d.Now()); ok {
+			d.tell(ctx, &st, n)
+		}
 		if err := WriteAuto(updates, st); err != nil {
 			fmt.Fprintln(d.Err, "agentbus update: auto.json cannot be written: "+err.Error())
 		}
@@ -277,15 +300,19 @@ func InstallPass(ctx context.Context, d Deps) int {
 	}
 	unlock, err := Lock(updates)
 	if errors.Is(err, ErrLocked) {
+		why = err.Error()
 		d.say("%s: deferred", err.Error())
 		return end("deferred", 0)
 	} else if err != nil {
+		why = err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error())
 		return end("failed", 1)
 	}
 	defer unlock()
 	if id := Interrupted(updates); id != "" {
+		why = "the update that took snapshot " + id + " did not finish"
 		fmt.Fprintf(d.Err, "agentbus update: the update that took snapshot %s did not finish: nothing installed automatically until agentbus update --rollback %s\n", id, id)
+		d.tell(ctx, &st, d.interruptedNotice(ctx, id))
 		return end("failed", 1)
 	}
 	fctx, cancel := context.WithTimeout(ctx, FetchTimeout)
@@ -297,37 +324,46 @@ func InstallPass(ctx context.Context, d Deps) int {
 		d.say("agentbus %s is up to date", d.Version)
 		return end("current", 0)
 	case err != nil:
+		why = err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error())
 		return end("failed", 1)
 	}
 	st.LastCheck = d.Now()
 	st.waitingFor(rel.Tag, d.Now())
-	why, err := Skip(ctx, updates, rel)
+	skipWhy, migrates, err := skip(ctx, updates, rel)
 	if err != nil {
+		why = err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": deferred")
 		return end("deferred", 1)
 	}
-	if why != "" {
-		d.say("not installed automatically: %s", why)
+	if skipWhy != "" {
+		why = skipWhy
+		if migrates {
+			d.tell(ctx, &st, d.migrateNotice(ctx, rel.Tag, skipWhy))
+		}
+		d.say("not installed automatically: %s", skipWhy)
 		return end("skipped", 0)
 	}
 	ps, err := Quiet(ctx, d)
 	if err != nil {
+		why = "the quiet test cannot judge this host: " + err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: the quiet test cannot judge this host: "+err.Error()+": deferred")
 		return end("deferred", 1)
 	}
-	busy := false
+	var busy []string
 	for _, p := range ps {
 		if p.Why != "" {
 			d.say("project %s: in work (%s): deferred", p.Project, p.Why)
-			busy = true
+			busy = append(busy, "project "+p.Project+" in work ("+p.Why+")")
 		}
 	}
-	if busy {
+	if len(busy) > 0 {
+		why = strings.Join(busy, "; ")
 		return end("deferred", 0)
 	}
 	running, err := d.Running(ctx)
 	if err != nil {
+		why = "the services cannot be read: " + err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: the services cannot be read: "+err.Error()+": deferred")
 		return end("deferred", 1)
 	}
@@ -348,10 +384,20 @@ func InstallPass(ctx context.Context, d Deps) int {
 		}
 		return InWork(j)
 	}
-	result, code := d.install(ctx, installSpec{rel: rel, tree: d.treeFor(rel.Tag), id: NewID(d.Now(), d.Version, rel.Tag), mine: mine,
-		changed: skillsChanged(ctx, rel), kind: HistoryAuto, recheck: recheck, acted: acted})
-	if result == "installed" {
+	id := NewID(d.Now(), d.Version, rel.Tag)
+	changed := skillsChanged(ctx, rel)
+	out := &installOut{}
+	result, code := d.install(ctx, installSpec{rel: rel, tree: d.treeFor(rel.Tag), id: id, mine: mine,
+		changed: changed, kind: HistoryAuto, recheck: recheck, acted: acted, out: out})
+	why = out.why
+	switch {
+	case result == "installed":
 		st.Waiting = nil
+		d.tell(ctx, &st, d.installedNotice(rel.Tag, id, *out, changed))
+	case result == "rolled_back":
+		d.tell(ctx, &st, d.failedNotice(ctx, rel.Tag, *out))
+	case len(out.manual) > 0:
+		d.tell(ctx, &st, d.rollbackFailedNotice(ctx, rel.Tag, id, *out))
 	}
 	return end(result, code)
 }

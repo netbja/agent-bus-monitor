@@ -62,6 +62,13 @@ type Deps struct {
 	// current the new build's key (service.GCHolders, GCHolderBinaries), before
 	// the trees are judged. nil: none.
 	HolderGC func(ctx context.Context, current string) error
+	// Notify sends master's notice of an automatic pass (quiet-update-auto
+	// §4.6) to each of n.Projects' escalation targets, as a report from
+	// updater; nil sends none. A failure loses the notice, not the update.
+	Notify func(ctx context.Context, n Notice) error
+	// MaxWait is updates.max_wait: a release found and not installed for
+	// longer is told to master once; nil or 0: never.
+	MaxWait func() time.Duration
 	// Acted, when set, is told once how an update Run was asked to install
 	// ended (audit step 2b: agentbus writes its update line); --check, up to
 	// date and a refusal before the plan are no act.
@@ -193,6 +200,18 @@ type installSpec struct {
 	// a failure, nothing rolled back.
 	recheck func(ctx context.Context, project string) string
 	acted   func(outcome, detail string)
+	// out, when set, is told what master's notices need (quiet-update-auto
+	// §4.6): why it failed, the manual commands of a failed rollback, the
+	// services restarted and those left on the old build.
+	out *installOut
+}
+
+// installOut is what an install did, for the notices.
+type installOut struct {
+	why       string    // the error that rolled it back
+	manual    []string  // the rollback by hand, when the rollback failed too
+	restarted []Service // the services restarted on the new build
+	left      []string  // the services left on the old build, each with its restart command
 }
 
 // install is §3.4 steps 3 to 6 and the history: stage, snapshot, apply,
@@ -202,6 +221,10 @@ func (d Deps) install(ctx context.Context, s installSpec) (result string, code i
 	updates := d.updates()
 	rel, tree, id, acted := s.rel, s.tree, s.id, s.acted
 	u := &updater{d: d, rel: rel, tree: tree, id: id, dir: filepath.Join(updates, id), mine: s.mine, recheck: s.recheck}
+	out := s.out
+	if out == nil {
+		out = &installOut{}
+	}
 	if err := u.stage(ctx); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+" (nothing outside "+tree+" changed)")
 		acted("failed", "not staged")
@@ -214,6 +237,7 @@ func (d Deps) install(ctx context.Context, s installSpec) (result string, code i
 		return "failed", 1
 	}
 	if err := u.apply(ctx); err != nil {
+		out.why = err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: "+err.Error()+": rolling back")
 		rerr := Rollback(ctx, d, u.dir, u.m, u.restarted)
 		if herr := AppendHistory(updates, HistoryLine{Kind: s.kind, From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: false, Snapshot: id}); herr != nil {
@@ -221,7 +245,8 @@ func (d Deps) install(ctx context.Context, s installSpec) (result string, code i
 		}
 		if rerr != nil {
 			fmt.Fprintln(d.Err, "agentbus update: the rollback failed too: "+rerr.Error())
-			for _, c := range manualCommands(u.dir, u.m) {
+			out.manual = manualCommands(u.dir, u.m)
+			for _, c := range out.manual {
 				fmt.Fprintln(d.Err, "  "+c)
 			}
 			acted("failed", "the rollback failed, snapshot "+id)
@@ -233,10 +258,12 @@ func (d Deps) install(ctx context.Context, s installSpec) (result string, code i
 	}
 	if err := AppendHistory(updates, HistoryLine{Kind: s.kind, From: d.Version, To: rel.Tag, At: d.Now().Format(time.RFC3339), OK: true, Snapshot: id}); err != nil {
 		// unrecorded, the snapshot would read as an interrupted update: no success
+		out.why = "the history line cannot be written: " + err.Error()
 		fmt.Fprintln(d.Err, "agentbus update: the history line cannot be written ("+err.Error()+"): rolling back")
 		if rerr := Rollback(ctx, d, u.dir, u.m, u.restarted); rerr != nil {
 			fmt.Fprintln(d.Err, "agentbus update: the rollback failed too: "+rerr.Error())
-			for _, c := range manualCommands(u.dir, u.m) {
+			out.manual = manualCommands(u.dir, u.m)
+			for _, c := range out.manual {
 				fmt.Fprintln(d.Err, "  "+c)
 			}
 			acted("failed", "the rollback failed, snapshot "+id)
@@ -252,12 +279,15 @@ func (d Deps) install(ctx context.Context, s installSpec) (result string, code i
 		c := strings.Join(s.changed, " ")
 		d.say("skills changed: %s  (agents to tell: agentbus roles skill-users %s)", c, c)
 	}
+	out.restarted = slices.Clone(u.restarted)
 	for _, o := range s.others {
 		d.say("not restarted: %s %s (%s): agentbus --project %s service restart %s", o.Project, o.Kind, buildOr(o.Build), o.Project, o.Kind)
 	}
 	for _, k := range u.skipped {
-		d.say("not restarted: %s %s (%s), project %s in work (%s): agentbus --project %s service restart %s",
+		line := fmt.Sprintf("%s %s (%s), project %s in work (%s): agentbus --project %s service restart %s",
 			k.s.Project, k.s.Kind, buildOr(k.s.Build), k.s.Project, k.why, k.s.Project, k.s.Kind)
+		out.left = append(out.left, line)
+		d.say("not restarted: %s", line)
 	}
 	if err := Prune(updates); err != nil {
 		fmt.Fprintln(d.Err, "agentbus update: an old snapshot could not be removed: "+err.Error())

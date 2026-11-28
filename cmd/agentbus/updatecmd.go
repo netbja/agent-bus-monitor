@@ -137,6 +137,8 @@ func realUpdateDeps(host string, out, errw io.Writer) update.Deps {
 	d.Holders = func(context.Context) ([]string, error) { return activeHolderProjects(sd) }
 	d.Judge = func(ctx context.Context, p string) (update.Judged, error) { return judgeProject(ctx, sd, p) }
 	d.AutoSetting = func() string { return updatesAuto(os.Getenv) }
+	d.MaxWait = func() time.Duration { return updatesMaxWait(os.Getenv) }
+	d.Notify = func(ctx context.Context, n update.Notice) error { return updateNotify(ctx, sd.Bus, os.Getenv, n) }
 	if tty := setup.OpenTTY(); tty != nil {
 		d.TTY = tty
 	}
@@ -309,4 +311,50 @@ func updatesAuto(getenv func(string) string) string {
 	f := config.Load(config.Path(getenv), "config.toml")
 	r := config.Resolver{Getenv: getenv, Files: []*config.File{f}}
 	return r.String("updates.auto")
+}
+
+// updatesMaxWait is updates.max_wait from config.toml (no env variable).
+func updatesMaxWait(getenv func(string) string) time.Duration {
+	f := config.Load(config.Path(getenv), "config.toml")
+	r := config.Resolver{Getenv: getenv, Files: []*config.File{f}}
+	return r.Duration("updates.max_wait")
+}
+
+// updaterAgent is the sender of the automatic update's notices, a service
+// identity like dispatch and conductor (quiet-update-auto §4.6).
+const updaterAgent = "updater"
+
+// updateNotify sends n to each of its projects' escalation targets (the
+// project's AGENT_BUS_ESCALATE_TO, master by default, as the resume
+// directive reads it): a report from updater naming it, then its notice,
+// waking it only when n says so. Every project is tried; the errors are
+// joined (a broker down loses that project's notice).
+func updateNotify(ctx context.Context, busFor func(string) (*bus.Bus, error), getenv func(string) string, n update.Notice) error {
+	var errs []error
+	for _, p := range n.Projects {
+		if err := updateNotifyOne(ctx, busFor, getenv, p, n); err != nil {
+			errs = append(errs, fmt.Errorf("project %s: %w", p, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func updateNotifyOne(ctx context.Context, busFor func(string) (*bus.Bus, error), getenv func(string) string, p string, n update.Notice) error {
+	b, err := busFor(p)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	to := suspendNotify(getenv, p)
+	id, err := b.ReportTo(ctx, updaterAgent, bus.ReportNote, n.Text, []string{to})
+	if err != nil {
+		return err
+	}
+	if n.Wake {
+		_, err = b.Cmd(ctx, updaterAgent, to, bus.CmdDirective, id, reportNotice(id, n.Text))
+	} else {
+		_, err = b.CmdNoWake(ctx, updaterAgent, to, bus.CmdDirective, id, reportNotice(id, n.Text))
+	}
+	return err
 }
