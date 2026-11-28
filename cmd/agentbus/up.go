@@ -602,20 +602,30 @@ func ensureUpdater(d upDeps, m service.Manager, exe string, stdout io.Writer) {
 	if st.Installed && st.Active {
 		return
 	}
-	// Not running: its env file is written afresh before the start, so an
-	// updater that stopped on an unreadable one ("invalid configuration",
-	// final) is repaired by this up, as its message says (reviewer-codex).
+	// Not running: its env file and its unit are written afresh before the
+	// start, so an updater that stopped on an unreadable env file ("invalid
+	// configuration", final) or whose agentbus moved is repaired by this up
+	// (reviewer-codex). A unit unchanged is not rewritten (writeIfChanged);
+	// a changed one is stopped first, so launchd drops a loaded old job.
 	if _, err := service.WriteEnvFile(d.Paths.UpdaterEnvFile(), service.CollectEnv(d.Environ)); err != nil {
 		say(err)
 		return
 	}
+	changed, err := um.InstallUpdater(service.UpdaterSpec{Exe: exe, WorkDir: d.Paths.Home, Paths: d.Paths})
+	if err != nil {
+		say(err)
+		return
+	}
 	verb := "started"
-	if !st.Installed {
-		if _, err := um.InstallUpdater(service.UpdaterSpec{Exe: exe, WorkDir: d.Paths.Home, Paths: d.Paths}); err != nil {
+	switch {
+	case !st.Installed:
+		verb = "installed and started"
+	case changed:
+		if err := um.StopUpdater(); err != nil {
 			say(err)
 			return
 		}
-		verb = "installed and started"
+		verb = "rewritten and started"
 	}
 	if err := um.StartUpdater(); err != nil {
 		say(err)

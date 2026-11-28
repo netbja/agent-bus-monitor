@@ -253,11 +253,21 @@ func TestUpInstallsTheUpdater(t *testing.T) {
 		t.Fatal("the fixture's env file reads")
 	}
 	runUp([]string{"demo", work}, deps, &out, &errw)
-	if u.m.Saw("install updater") || !u.m.Saw("start updater") || !u.m.UpdaterOn {
-		t.Fatalf("a stopped updater: %v", u.m.Calls)
+	if u.m.Saw("stop updater") || !u.m.Saw("start updater") || !u.m.UpdaterOn {
+		t.Fatalf("a stopped updater, its unit unchanged: %v", u.m.Calls)
 	}
 	if env, err := service.LoadEnvFile(u.paths.UpdaterEnvFile()); err != nil || env["PATH"] != "/bin" {
 		t.Fatalf("the env file not repaired: %v %v", env, err)
+	}
+	// A stopped updater whose agentbus moved: up rewrites the unit with the
+	// new path, stops the old job and starts it (reviewer-codex).
+	u.m.UpdaterOn, u.m.Calls = false, nil
+	u.exe = "/opt/moved/agentbus"
+	out.Reset()
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if u.m.Updater == nil || u.m.Updater.Exe != "/opt/moved/agentbus" || !u.m.Saw("stop updater") || !u.m.UpdaterOn ||
+		!strings.Contains(out.String(), "updater: rewritten and started") {
+		t.Fatalf("moved agentbus: %+v %v %q", u.m.Updater, u.m.Calls, out.String())
 	}
 }
 
