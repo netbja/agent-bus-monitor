@@ -243,10 +243,21 @@ func TestUpInstallsTheUpdater(t *testing.T) {
 	if u.m.Saw("install updater") || u.m.Saw("start updater") || u.m.Saw("stop updater") {
 		t.Fatalf("a running updater was touched: %v", u.m.Calls)
 	}
+	// A stopped updater, its env file unreadable (it exits on "invalid
+	// configuration"): the next up rewrites the file and starts it.
 	u.m.UpdaterOn = false
+	if err := os.WriteFile(u.paths.UpdaterEnvFile(), []byte("not an env line\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.LoadEnvFile(u.paths.UpdaterEnvFile()); err == nil {
+		t.Fatal("the fixture's env file reads")
+	}
 	runUp([]string{"demo", work}, deps, &out, &errw)
 	if u.m.Saw("install updater") || !u.m.Saw("start updater") || !u.m.UpdaterOn {
 		t.Fatalf("a stopped updater: %v", u.m.Calls)
+	}
+	if env, err := service.LoadEnvFile(u.paths.UpdaterEnvFile()); err != nil || env["PATH"] != "/bin" {
+		t.Fatalf("the env file not repaired: %v %v", env, err)
 	}
 }
 

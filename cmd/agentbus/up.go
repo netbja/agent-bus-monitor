@@ -580,8 +580,9 @@ func startServices(d upDeps, m service.Manager, project, workdir, escalate, relo
 // ensureUpdater writes and starts the updater's unit (quiet-update-auto
 // §4.1, step 4e) on a managed build, when it is missing: one per host, so the
 // up of any project writes it, and a host updated by agentbus update gets it
-// at its next up. An installed unit is never rewritten (an update never
-// restarts it); one installed and stopped is started. It belongs to no
+// at its next up. A running updater is never touched (an update never
+// restarts it); one installed and stopped gets its env file rewritten and is
+// started. It belongs to no
 // project: a failure is said, and fails no project's up.
 func ensureUpdater(d upDeps, m service.Manager, exe string, stdout io.Writer) {
 	if !d.Managed {
@@ -601,12 +602,15 @@ func ensureUpdater(d upDeps, m service.Manager, exe string, stdout io.Writer) {
 	if st.Installed && st.Active {
 		return
 	}
+	// Not running: its env file is written afresh before the start, so an
+	// updater that stopped on an unreadable one ("invalid configuration",
+	// final) is repaired by this up, as its message says (reviewer-codex).
+	if _, err := service.WriteEnvFile(d.Paths.UpdaterEnvFile(), service.CollectEnv(d.Environ)); err != nil {
+		say(err)
+		return
+	}
 	verb := "started"
 	if !st.Installed {
-		if _, err := service.WriteEnvFile(d.Paths.UpdaterEnvFile(), service.CollectEnv(d.Environ)); err != nil {
-			say(err)
-			return
-		}
 		if _, err := um.InstallUpdater(service.UpdaterSpec{Exe: exe, WorkDir: d.Paths.Home, Paths: d.Paths}); err != nil {
 			say(err)
 			return

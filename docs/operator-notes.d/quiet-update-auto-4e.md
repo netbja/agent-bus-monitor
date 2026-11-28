@@ -5,7 +5,8 @@
   `<bindir>/agentbus service run updater --env <config>/agentbus/updater.env`. That env file is
   written from up's shell like a project's (PATH, the broker, the Go variables a build needs), and
   the loop puts it in its environment, so each pass inherits it. One per host: a running updater
-  is never rewritten or restarted (an update never restarts it), a stopped one is started, and a
+  is never rewritten or restarted (an update never restarts it), a stopped one gets its env file
+  rewritten and is started (so `up` repairs an updater that stopped on an unreadable one), and a
   host updated by `agentbus update` gets it at its next `up`. A developer build writes none. Not
   yet: `services.manager = none` (up says so), `setup install` and `setup uninstall`, its line in
   `service list` and `service status`, and the updater health check (step 4f).
