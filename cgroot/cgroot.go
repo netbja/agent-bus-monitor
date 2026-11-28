@@ -11,13 +11,16 @@
 package cgroot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // Mode is how an agent's memory is capped.
@@ -216,6 +219,18 @@ func (s soft) Child(string, string, string, string) (int, string, error) {
 }
 func (s soft) Usage() (uint64, uint64, uint64, error) {
 	return 0, 0, 0, errors.New("cgroot: soft mode: " + s.why)
+}
+
+// Linger is loginctl's Linger for this user ("yes", "no"), "" when it
+// cannot say (no loginctl, macOS, an error): user-mode knowledge, kept here.
+func Linger(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, "loginctl", "show-user", strconv.Itoa(os.Getuid()), "-p", "Linger", "--value").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // DoctorLine is roles doctor's host line (§12.7); linger is loginctl's
