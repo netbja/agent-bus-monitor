@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/mission"
@@ -16,10 +17,6 @@ import (
 )
 
 const planDraftUsage = "usage: plan draft <path>@<commit> [--build <path>] | plan draft show [--json] | plan draft --drop"
-
-// draftCallers may draft and drop (onboarding §8.1): never another agent,
-// never the person, who approves drafts and so never asks.
-var draftCallers = map[string]bool{"master": true, "architect": true}
 
 // runPlanDraft is `plan draft` (onboarding §8.1, spec
 // docs/superpowers/specs/2026-11-27-project-onboarding-design.md): record a
@@ -42,7 +39,7 @@ func runPlanDraft(ctx context.Context, b *bus.Bus, repo string, getenv func(stri
 		return 0
 	}
 	caller := getenv("AGENT_BUS_AGENT")
-	if !draftCallers[caller] {
+	if !bus.PlanDrafters[caller] {
 		who := "the person's shell (no AGENT_BUS_AGENT)"
 		if caller != "" {
 			who = caller + "'s agent environment"
@@ -104,6 +101,9 @@ func planDraft(ctx context.Context, b *bus.Bus, g mission.Git, caller, ref, buil
 	if err != nil {
 		return bus.PlanDraft{}, err
 	}
+	if !utf8.Valid(data) { // stored as JSON text: an invalid byte would never match Git again
+		return bus.PlanDraft{}, fmt.Errorf("%s is not valid UTF-8", path)
+	}
 	if buildPath == "" {
 		buildPath = "BUILD.md"
 	}
@@ -114,11 +114,18 @@ func planDraft(ctx context.Context, b *bus.Bus, g mission.Git, caller, ref, buil
 		}
 		build = nil
 	}
+	// Optional without checks required, but a sheet that is there must be
+	// readable: the person's question and busmon show it.
 	goal := ""
-	if bs, err := onboard.ParseBuild(build); err == nil {
+	if build != nil {
+		if !utf8.Valid(build) {
+			return bus.PlanDraft{}, fmt.Errorf("%s is not valid UTF-8", buildPath)
+		}
+		bs, err := onboard.ParseBuild(build)
+		if err != nil {
+			return bus.PlanDraft{}, err
+		}
 		goal = bs.Goal
-	} else if f.Checks == plan.ChecksRequired {
-		return bus.PlanDraft{}, err
 	}
 	if err := planMissions(ctx, g, commit, f); err != nil {
 		return bus.PlanDraft{}, err
@@ -181,6 +188,18 @@ func openAskOf(ctx context.Context, b *bus.Bus, caller string) (string, error) {
 // the qid's inputs only, so one qid always has one wording: the commit and
 // the goal are in its context, which SameQuestion does not compare.
 func draftAskDef(from string, f plan.File, path, qid, goal, commit string) bus.AskDef {
+	q := adoptionQuestion(f, path, qid)
+	q.Context = "BUILD.md@" + shortSHA(commit)
+	if goal != "" {
+		q.Context = "Goal: " + clipRunes(goal, 1500) + "\n" + q.Context
+	}
+	return bus.AskDef{From: from, Title: clipRunes("Adopt plan "+f.Plan, 100), Task: "onboarding", Questions: []bus.AskQuestion{q}}
+}
+
+// adoptionQuestion is the question a draft's inputs give, without its
+// context: plan draft asks it, and the approval checks the ask holds it
+// (bus.PlanDraftApproved, LoadPlanDraft).
+func adoptionQuestion(f plan.File, path, qid string) bus.AskQuestion {
 	text := func(p string) string {
 		return fmt.Sprintf("Adopt plan %s (%s, %d tasks) as the active plan? id %s", f.Plan, p, len(f.Tasks), qid)
 	}
@@ -188,15 +207,10 @@ func draftAskDef(from string, f plan.File, path, qid, goal, commit string) bus.A
 	if over := len([]rune(q)) - 300; over > 0 {
 		q = text(clipRunes(path, len([]rune(path))-over))
 	}
-	ctxt := "BUILD.md@" + shortSHA(commit)
-	if goal != "" {
-		ctxt = "Goal: " + clipRunes(goal, 1500) + "\n" + ctxt
-	}
-	return bus.AskDef{From: from, Title: clipRunes("Adopt plan "+f.Plan, 100), Task: "onboarding",
-		Questions: []bus.AskQuestion{{ID: qid, Header: clipRunes("Adopt "+f.Plan, 16), Question: q, Context: ctxt,
-			Options: []bus.AskOption{{Label: "yes", Description: "adopt this file as the active plan"},
-				{Label: "no", Description: "revise it first (say what in your own words)"},
-				{Label: "later", Description: "keep the draft, decide later"}}}}}
+	return bus.AskQuestion{ID: qid, Header: clipRunes("Adopt "+f.Plan, 16), Question: q,
+		Options: []bus.AskOption{{Label: "yes", Description: "adopt this file as the active plan"},
+			{Label: "no", Description: "revise it first (say what in your own words)"},
+			{Label: "later", Description: "keep the draft, decide later"}}}
 }
 
 // clipRunes cuts s to n runes, the last one "…" when cut.
@@ -254,7 +268,11 @@ func planDraftShow(ctx context.Context, b *bus.Bus, asJSON bool, out io.Writer) 
 	if !ok {
 		return bus.ErrNoDraft
 	}
-	entry, aerr := b.PlanDraftApproved(ctx, d)
+	var entry string
+	f, aerr := plan.Parse([]byte(d.File))
+	if aerr == nil {
+		entry, aerr = b.PlanDraftApproved(ctx, d, adoptionQuestion(f, d.Path, d.QID))
+	}
 	if aerr != nil && errors.Is(aerr, bus.ErrApprovalArchive) {
 		return aerr // a failed read is an error, never a "not approved"
 	}

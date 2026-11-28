@@ -244,6 +244,34 @@ func TestPlanDraftReadsTheBuildSheet(t *testing.T) {
 	sha = repo2.commit(map[string]string{"docs/plans/v1.json": strings.Replace(draftPlanV0, `"checks":"required",`, "", 1)})
 	b2 := draftBus(t)
 	mustDraft(t, b2, repo2.dir, "architect", "docs/plans/v1.json@"+sha)
+	if err := b2.DropPlanDraft(context.Background(), mustRecord(t, b2)); err != nil {
+		t.Fatal(err)
+	}
+	// ... but one that is there must be readable (busmon and the question
+	// show it), even then.
+	sha = repo2.commit(map[string]string{"BUILD.md": "# notes\n"})
+	if code, _, errw := planAs(t, b2, repo2.dir, "architect", "draft", "docs/plans/v1.json@"+sha); code == 0 || !strings.Contains(errw, "BUILD.md: the first line") {
+		t.Fatalf("a broken optional BUILD.md: %d %q", code, errw)
+	}
+	// foureyes on b1: bytes that are not UTF-8 would be stored as U+FFFD and
+	// never match Git again: refused at draft time.
+	sha = repo2.commit(map[string]string{"BUILD.md": strings.Replace(draftBuildMD, "A notes app.", "A notes app \xe9.", 1)})
+	if code, _, errw := planAs(t, b2, repo2.dir, "architect", "draft", "docs/plans/v1.json@"+sha); code == 0 || !strings.Contains(errw, "BUILD.md is not valid UTF-8") {
+		t.Fatalf("a Latin-1 BUILD.md: %d %q", code, errw)
+	}
+	sha = repo2.commit(map[string]string{"BUILD.md": draftBuildMD, "docs/plans/v1.json": strings.Replace(draftPlanV0, `"goal":"notes"`, "\"goal\":\"notes \xe9\"", 1)})
+	if code, _, errw := planAs(t, b2, repo2.dir, "architect", "draft", "docs/plans/v1.json@"+sha); code == 0 || !strings.Contains(errw, "not valid UTF-8") {
+		t.Fatalf("a Latin-1 plan: %d %q", code, errw)
+	}
+}
+
+func mustRecord(t *testing.T, b *bus.Bus) bus.PlanDraft {
+	t.Helper()
+	d, ok, err := b.PlanDraft(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("no draft: %v", err)
+	}
+	return d
 }
 
 // §8.1 step 6: when a re-draft replaces the ask, and when it opens one.

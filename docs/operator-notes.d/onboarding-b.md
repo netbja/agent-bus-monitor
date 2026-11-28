@@ -3,4 +3,6 @@
   `{p}:plan:draft` and asks the person "Adopt plan …? id plan-…", with no recommended option; `plan draft show`
   says whether the yes holds, `plan draft --drop` deletes the draft. While a draft is recorded, `plan load` loads
   only that file at its commit, once the person typed yes, and refuses any other; a plan with `checks: "required"`
-  loads only as an approved draft. A draft over an active plan is refused until step b2.
+  loads only as an approved draft. The yes counts only in the drafter's own adoption ask, while that ask is kept
+  (7 days after its answer): after that, run `plan draft` again. The yes may have left the cmd stream: the history
+  archive is read too. A draft over an active plan is refused until step b2.

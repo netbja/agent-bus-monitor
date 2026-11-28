@@ -2,6 +2,7 @@ package bus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -38,8 +39,18 @@ func draftFixture(t *testing.T, b *Bus) PlanDraft {
 
 func draftAsk(t *testing.T, b *Bus, from, qid, replaces string) string {
 	t.Helper()
-	id, _, err := b.Ask(context.Background(), AskDef{From: from, Title: "Adopt plan v0", Task: "onboarding", Questions: []AskQuestion{
-		{ID: qid, Header: "Adopt v0", Question: "Adopt plan v0? id " + qid, Options: []AskOption{{Label: "yes"}, {Label: "no"}, {Label: "later"}}}}}, replaces)
+	return askQ(t, b, from, adoptQ(qid), replaces)
+}
+
+// adoptQ is the tests' adoption question for qid (plan draft builds the
+// real one).
+func adoptQ(qid string) AskQuestion {
+	return AskQuestion{ID: qid, Header: "Adopt v0", Question: "Adopt plan v0? id " + qid, Options: []AskOption{{Label: "yes"}, {Label: "no"}, {Label: "later"}}}
+}
+
+func askQ(t *testing.T, b *Bus, from string, q AskQuestion, replaces string) string {
+	t.Helper()
+	id, _, err := b.Ask(context.Background(), AskDef{From: from, Title: "Adopt plan v0", Task: "onboarding", Questions: []AskQuestion{q}}, replaces)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +137,7 @@ func TestACLPlanDraftIsAgentWritable(t *testing.T) {
 }
 
 func loadDraft(b *Bus, d PlanDraft) (string, error) {
-	return b.LoadPlanDraft(context.Background(), d.Path, d.Commit, []byte(d.File), []byte(d.Build), []string{"t1"})
+	return b.LoadPlanDraft(context.Background(), d.Path, d.Commit, []byte(d.File), []byte(d.Build), []string{"t1"}, adoptQ)
 }
 
 func TestLoadPlanDraft(t *testing.T) {
@@ -253,6 +264,21 @@ func TestPlanLoadDraftScriptConditions(t *testing.T) {
 		{"entry not a reply", func(t *testing.T, b *Bus, d *PlanDraft, a *draftLoadArgs) {
 			a.entry = draftReply(t, b, d, map[string]any{"type": "directive"})
 		}, "PLAN_NOT_APPROVED"},
+		{"ask not the recorder's", func(t *testing.T, b *Bus, d *PlanDraft, _ *draftLoadArgs) {
+			setAskDef(t, b, d.Ask, func(def *AskDef) { def.From = "coder" })
+		}, "PLAN_NOT_APPROVED"},
+		{"recorder not a drafter", func(t *testing.T, b *Bus, d *PlanDraft, _ *draftLoadArgs) {
+			setAskDef(t, b, d.Ask, func(def *AskDef) { def.From = "coder" })
+			setDraftBy(t, b, "coder")
+		}, "PLAN_NOT_APPROVED"},
+		{"ask record gone", func(t *testing.T, b *Bus, d *PlanDraft, _ *draftLoadArgs) {
+			b.r.HDel(context.Background(), AsksKey(b.Project()), d.Ask)
+		}, "PLAN_NOT_APPROVED"},
+		{"another header", func(_ *testing.T, _ *Bus, _ *PlanDraft, a *draftLoadArgs) { a.question.Header = "Adopt v9" }, "PLAN_NOT_APPROVED"},
+		{"another wording", func(_ *testing.T, _ *Bus, _ *PlanDraft, a *draftLoadArgs) { a.question.Question += "!" }, "PLAN_NOT_APPROVED"},
+		{"other labels", func(_ *testing.T, _ *Bus, _ *PlanDraft, a *draftLoadArgs) {
+			a.question.Options = []AskOption{{Label: "yes"}, {Label: "no"}}
+		}, "PLAN_NOT_APPROVED"},
 		{"a plan loaded since", func(t *testing.T, b *Bus, d *PlanDraft, _ *draftLoadArgs) {
 			b.r.Set(context.Background(), PlanKey(b.Project()), `{"path":"docs/plans/a.json","commit":"c0","tasks":[],"file":"{}"}`, 0)
 		}, "PLAN_ACTIVE_CHANGED"},
@@ -269,7 +295,7 @@ func TestPlanLoadDraftScriptConditions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			a := draftLoadArgs{qid: d.QID, ask: d.Ask, path: d.Path, commit: d.Commit, file: d.File, build: d.Build, entry: entry, tasks: []string{"t1"}}
+			a := draftLoadArgs{qid: d.QID, ask: d.Ask, path: d.Path, commit: d.Commit, file: d.File, build: d.Build, entry: entry, tasks: []string{"t1"}, question: adoptQ(d.QID)}
 			c.setup(t, b, &d, &a)
 			planBefore, _ := b.r.Get(ctx, PlanKey(b.Project())).Result()
 			err = b.runPlanLoadDraft(ctx, a)
@@ -291,7 +317,7 @@ func TestPlanLoadDraftScriptConditions(t *testing.T) {
 	d := draftFixture(t, b)
 	b.Answer(ctx, d.Ask, d.QID, "charlie", "yes", "")
 	entry, _ := b.TypedApproval(ctx, d.Ask, d.QID, "yes")
-	if err := b.runPlanLoadDraft(ctx, draftLoadArgs{qid: d.QID, ask: d.Ask, path: d.Path, commit: d.Commit, file: d.File, build: d.Build, entry: entry, tasks: []string{"t1"}}); err != nil {
+	if err := b.runPlanLoadDraft(ctx, draftLoadArgs{qid: d.QID, ask: d.Ask, path: d.Path, commit: d.Commit, file: d.File, build: d.Build, entry: entry, tasks: []string{"t1"}, question: adoptQ(d.QID)}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -310,4 +336,112 @@ func draftReply(t *testing.T, b *Bus, d *PlanDraft, fields map[string]any) strin
 		t.Fatal(err)
 	}
 	return id
+}
+
+// setAskDef rewrites ask id's stored definition (as a local process could:
+// the asks hash is agent-writable).
+func setAskDef(t *testing.T, b *Bus, id string, edit func(*AskDef)) {
+	t.Helper()
+	def, err := b.askDef(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit(&def)
+	raw, _ := json.Marshal(def)
+	b.r.HSet(context.Background(), AsksKey(b.Project()), id, raw)
+}
+
+// setDraftBy rewrites the record's recorder in place (the key is agent-writable).
+func setDraftBy(t *testing.T, b *Bus, by string) {
+	t.Helper()
+	ctx := context.Background()
+	raw, err := b.r.Get(ctx, PlanDraftKey(b.Project())).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	json.Unmarshal([]byte(raw), &m)
+	m["by"] = by
+	out, _ := json.Marshal(m)
+	b.r.Set(ctx, PlanDraftKey(b.Project()), out, 0)
+}
+
+// reviewer-codex on b1: the record is agent-writable, so a typed yes to the
+// plan's qid adopts it only in the adoption ask: asked by the recorder, a
+// drafter, with the adoption question. An agent's own ask carrying the qid,
+// a recorder outside the drafters, or another wording adopts nothing, at
+// show and at load.
+func TestPlanDraftApprovalIsBoundToTheAdoptionAsk(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		ask  func(t *testing.T, b *Bus, qid string) string // the ask the person says yes to
+		by   string                                        // the record's recorder
+	}{
+		{"an agent's ask with the qid", func(t *testing.T, b *Bus, qid string) string {
+			return askQ(t, b, "coder", AskQuestion{ID: qid, Header: "Quick check", Question: "Is the build green?", Options: []AskOption{{Label: "yes"}, {Label: "no"}}}, "")
+		}, "coder"},
+		{"an agent's ask, recorded as the architect's", func(t *testing.T, b *Bus, qid string) string {
+			return askQ(t, b, "coder", adoptQ(qid), "")
+		}, "architect"},
+		{"a drafter's ask, another wording", func(t *testing.T, b *Bus, qid string) string {
+			q := adoptQ(qid)
+			q.Question = "Is the build green? " + qid
+			return askQ(t, b, "architect", q, "")
+		}, "architect"},
+		{"a drafter's ask, recorded by an agent", func(t *testing.T, b *Bus, qid string) string {
+			return askQ(t, b, "architect", adoptQ(qid), "")
+		}, "coder"},
+		{"an agent's own adoption ask, recorded by it", func(t *testing.T, b *Bus, qid string) string {
+			return askQ(t, b, "coder", adoptQ(qid), "")
+		}, "coder"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b := dialTest(t)
+			ctx := context.Background()
+			cleanPlan(t, b)
+			t.Cleanup(func() { b.r.Del(context.Background(), PlanDraftKey(b.Project()), AsksKey(b.Project())) })
+			b.Status(ctx, "master", "idle", "x", AgentIdent{})
+			d := PlanDraft{Plan: "v0", Path: "docs/plans/v0.json", Commit: "c1", File: draftFile, Build: draftBuild, BuildPath: "BUILD.md", By: c.by}
+			d.QID = PlanDraftQID(d.Path, []byte(d.File), []byte(d.Build), "", nil)
+			d.Ask = c.ask(t, b, d.QID)
+			if _, _, err := b.Answer(ctx, d.Ask, d.QID, "charlie", "yes", ""); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := b.TypedApproval(ctx, d.Ask, d.QID, "yes"); err != nil {
+				t.Fatalf("the fixture's yes is a real typed yes: %v", err)
+			}
+			if err := b.SetPlanDraft(ctx, d, PlanDraft{}); err != nil {
+				t.Fatal(err)
+			}
+			cur, _, _ := b.PlanDraft(ctx)
+			if _, err := b.PlanDraftApproved(ctx, cur, adoptQ(cur.QID)); err == nil {
+				t.Error("show: approved")
+			}
+			// part 1 refuses with its reason, before the script's bare code
+			if _, err := loadDraft(b, cur); err == nil || !strings.Contains(err.Error(), "awaits the person's yes") {
+				t.Errorf("load: %v", err)
+			}
+			if _, ok, _ := b.Plan(ctx); ok {
+				t.Error("the plan was written")
+			}
+		})
+	}
+}
+
+// The adoption ask must be kept: after its record is swept, the yes cannot
+// be bound to its question, and the draft is asked again.
+func TestPlanDraftApprovalNeedsTheKeptAsk(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	d := draftFixture(t, b)
+	if _, _, err := b.Answer(ctx, d.Ask, d.QID, "charlie", "yes", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.PlanDraftApproved(ctx, d, adoptQ(d.QID)); err != nil {
+		t.Fatalf("kept: %v", err)
+	}
+	b.r.HDel(ctx, AsksKey(b.Project()), d.Ask, d.Ask+"|q", d.Ask+"|s", d.Ask+"|a|"+d.QID)
+	if _, err := b.PlanDraftApproved(ctx, d, adoptQ(d.QID)); err == nil || !strings.Contains(err.Error(), "no longer kept") {
+		t.Fatalf("swept: %v", err)
+	}
 }

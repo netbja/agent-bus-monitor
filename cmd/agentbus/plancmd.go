@@ -203,7 +203,7 @@ func planLoad(ctx context.Context, b *bus.Bus, repo, ref string) (string, error)
 				build = nil // the draft had none: absent here too
 			}
 		}
-		entry, err := b.LoadPlanDraft(ctx, path, commit, data, build, ids)
+		entry, err := b.LoadPlanDraft(ctx, path, commit, data, build, ids, func(qid string) bus.AskQuestion { return adoptionQuestion(f, path, qid) })
 		if err != nil {
 			return "", err
 		}

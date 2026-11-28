@@ -71,6 +71,12 @@ func joinSorted(ids []string) string {
 	return strings.Join(s, ",")
 }
 
+// PlanDrafters may record a draft and ask its adoption (onboarding §8.1):
+// never another agent, never the person, who approves drafts and so never
+// asks. The record is writable by any agent, so the approval checks its
+// recorder against this set too.
+var PlanDrafters = map[string]bool{"master": true, "architect": true}
+
 // The draft's errors.
 var (
 	// ErrDraftChanged: the record is not the one read (a concurrent draft,
@@ -151,26 +157,59 @@ func (b *Bus) DropPlanDraft(ctx context.Context, prev PlanDraft) error {
 }
 
 // PlanDraftApproved is §8.4's adoption check on the recorded draft: its
-// qid recomputed from the bytes it stores is its qid, and TypedApproval
-// passes for its ask, qid and "yes". It returns the approving entry.
-func (b *Bus) PlanDraftApproved(ctx context.Context, d PlanDraft) (string, error) {
+// qid recomputed from the bytes it stores is its qid, its ask is the
+// adoption ask (adoptionAsk), and TypedApproval passes for its ask, qid and
+// "yes". want is the adoption question its inputs give (plan draft builds
+// it). It returns the approving entry.
+func (b *Bus) PlanDraftApproved(ctx context.Context, d PlanDraft, want AskQuestion) (string, error) {
 	if q := PlanDraftQID(d.Path, []byte(d.File), []byte(d.Build), d.Replaces, d.StopIDs()); q != d.QID {
 		return "", fmt.Errorf("the draft's record does not hash to its qid (%s ≠ %s)", q, d.QID)
 	}
+	if err := b.adoptionAsk(ctx, d, want); err != nil {
+		return "", err
+	}
 	return b.TypedApproval(ctx, d.Ask, d.QID, "yes")
+}
+
+// adoptionAsk: the record's recorder is a drafter, and its ask is kept,
+// asked by that recorder, and holds want under the draft's qid (header,
+// text and labels, SameQuestion). A yes to the qid in any other ask, or to
+// another wording, adopts nothing (reviewer-codex on b1): the record is
+// writable by any agent, the ask's author and wording are not.
+func (b *Bus) adoptionAsk(ctx context.Context, d PlanDraft, want AskQuestion) error {
+	if !PlanDrafters[d.By] {
+		return fmt.Errorf("the draft was recorded by %q, who may not draft", d.By)
+	}
+	def, err := b.askDef(ctx, d.Ask)
+	if errors.Is(err, ErrAskRefused) {
+		return fmt.Errorf("the adoption ask %s is no longer kept: the draft must be asked again (plan draft)", d.Ask)
+	}
+	if err != nil {
+		return err
+	}
+	if def.From != d.By {
+		return fmt.Errorf("ask %s is %s's, not the draft's recorder %s", d.Ask, def.From, d.By)
+	}
+	for _, q := range def.Questions {
+		if q.ID == d.QID && want.ID == d.QID && SameQuestion(q, want) {
+			return nil
+		}
+	}
+	return fmt.Errorf("ask %s does not hold the adoption question of this draft (%s)", d.Ask, d.QID)
 }
 
 // afterDraftCheck runs between LoadPlanDraft's two parts (a test's race).
 var afterDraftCheck func()
 
 // LoadPlanDraft loads the recorded draft (§8.5): file and build are the
-// bytes read from Git at commit. Part 1, here, recomputes the qid from them
+// bytes read from Git at commit, want the adoption question they give for
+// a qid. Part 1, here, recomputes the qid from them
 // and the active plan, and checks the person's yes (TypedApproval, with the
 // archive when one is set). Part 2, planLoadDraft, re-checks what the
 // broker holds and only then sets the plan, keeping the facts of tasks
 // still in it and deleting the ignore set and the draft. It returns the
 // approving entry, kept as PlanRecord.Approved.
-func (b *Bus) LoadPlanDraft(ctx context.Context, path, commit string, file, build []byte, tasks []string) (string, error) {
+func (b *Bus) LoadPlanDraft(ctx context.Context, path, commit string, file, build []byte, tasks []string, want func(qid string) AskQuestion) (string, error) {
 	d, ok, err := b.PlanDraft(ctx)
 	if err != nil {
 		return "", err
@@ -187,6 +226,10 @@ func (b *Bus) LoadPlanDraft(ctx context.Context, path, commit string, file, buil
 	if q := PlanDraftQID(path, file, build, replaces, d.StopIDs()); q != d.QID {
 		return "", fmt.Errorf("this file is not the draft the person approved (qid %s ≠ %s)", q, d.QID)
 	}
+	q := want(d.QID)
+	if err := b.adoptionAsk(ctx, d, q); err != nil {
+		return "", fmt.Errorf("a draft awaits the person's yes: %w", err)
+	}
 	entry, err := b.TypedApproval(ctx, d.Ask, d.QID, "yes")
 	if err != nil {
 		return "", fmt.Errorf("a draft awaits the person's yes: %w", err)
@@ -195,16 +238,21 @@ func (b *Bus) LoadPlanDraft(ctx context.Context, path, commit string, file, buil
 		afterDraftCheck()
 	}
 	return entry, b.runPlanLoadDraft(ctx, draftLoadArgs{qid: d.QID, ask: d.Ask, path: path, commit: commit,
-		file: string(file), build: string(build), entry: entry, tasks: tasks})
+		file: string(file), build: string(build), entry: entry, tasks: tasks, question: q})
 }
 
 type draftLoadArgs struct {
 	qid, ask, path, commit, file, build, entry string
 	tasks                                      []string
+	question                                   AskQuestion // the adoption question, as adoptionAsk checks it
 }
 
 // planLoadDraft: KEYS plan, facts, ignore, draft, asks, cmd. ARGV qid, ask,
-// path, file, build, entry, the new plan record (no loaded_at).
+// path, file, build, entry, the new plan record (no loaded_at), the
+// adoption question's header, text and labels (newline-joined), the
+// drafters (PlanDrafters, comma-joined). The ask's
+// record must be kept, asked by the draft's recorder, a drafter, and hold
+// that question (adoptionAsk, again).
 var planLoadDraft = redis.NewScript(`
 local raw = redis.call('GET', KEYS[4])
 if not raw then return redis.error_reply('PLAN_DRAFT_CHANGED') end
@@ -219,12 +267,26 @@ if cur then
   active = c.path .. '@' .. c.commit
 end
 if active ~= (d.replaces or '') then return redis.error_reply('PLAN_ACTIVE_CHANGED') end
-if redis.call('HEXISTS', KEYS[5], ARGV[2]) == 1 then
-  local a = redis.call('HGET', KEYS[5], ARGV[2] .. '|a|' .. ARGV[1])
-  if not a then return redis.error_reply('PLAN_NOT_APPROVED') end
-  a = cjson.decode(a)
-  if a.choice ~= 'yes' or a.withdrawn == true or a.by == d.by then return redis.error_reply('PLAN_NOT_APPROVED') end
+local drafter = false
+for x in string.gmatch(ARGV[11], '[^,]+') do if x == d.by then drafter = true end end
+if not drafter then return redis.error_reply('PLAN_NOT_APPROVED') end
+local def = redis.call('HGET', KEYS[5], ARGV[2])
+if not def then return redis.error_reply('PLAN_NOT_APPROVED') end
+def = cjson.decode(def)
+if def.from ~= d.by then return redis.error_reply('PLAN_NOT_APPROVED') end
+local asked = false
+for _, q in ipairs(def.questions or {}) do
+  if q.id == ARGV[1] then
+    local labels = {}
+    for _, o in ipairs(q.options or {}) do table.insert(labels, o.label) end
+    asked = q.header == ARGV[8] and q.question == ARGV[9] and table.concat(labels, '\n') == ARGV[10]
+  end
 end
+if not asked then return redis.error_reply('PLAN_NOT_APPROVED') end
+local a = redis.call('HGET', KEYS[5], ARGV[2] .. '|a|' .. ARGV[1])
+if not a then return redis.error_reply('PLAN_NOT_APPROVED') end
+a = cjson.decode(a)
+if a.choice ~= 'yes' or a.withdrawn == true or a.by == d.by then return redis.error_reply('PLAN_NOT_APPROVED') end
 local es = redis.call('XRANGE', KEYS[6], ARGV[6], ARGV[6])
 if #es > 0 then
   local f = {}
@@ -250,5 +312,21 @@ func (b *Bus) runPlanLoadDraft(ctx context.Context, a draftLoadArgs) error {
 	rec, _ := json.Marshal(PlanRecord{Path: a.path, Commit: a.commit, Tasks: a.tasks, File: a.file, Approved: a.entry})
 	p := b.project
 	return draftErr(planLoadDraft.Run(ctx, b.r, []string{PlanKey(p), PlanFactsKey(p), PlanIgnoreKey(p), PlanDraftKey(p), AsksKey(p), StreamKey(p, "cmd")},
-		a.qid, a.ask, a.path, a.file, a.build, a.entry, string(rec)).Err())
+		a.qid, a.ask, a.path, a.file, a.build, a.entry, string(rec), a.question.Header, a.question.Question, optionLabels(a.question), drafterList()).Err())
+}
+
+func drafterList() string {
+	l := make([]string, 0, len(PlanDrafters))
+	for a := range PlanDrafters {
+		l = append(l, a)
+	}
+	return strings.Join(l, ",")
+}
+
+func optionLabels(q AskQuestion) string {
+	l := make([]string, len(q.Options))
+	for i, o := range q.Options {
+		l[i] = o.Label
+	}
+	return strings.Join(l, "\n")
 }
