@@ -80,6 +80,10 @@ func TestSelfSoft(t *testing.T) {
 			tree(t, d, userSvc+"/app.slice/x.scope", delegated(true))
 			return fsAt(d, userSvc+"/app.slice/x.scope")
 		}, "not in an agent's cgroup"},
+		"an agentbus- unit that is no scope": {func(d string) FS { // foureyes on 4a
+			tree(t, d, userSvc+"/agentbus-demo-k1-coder-t2.service", delegated(true))
+			return fsAt(d, userSvc+"/agentbus-demo-k1-coder-t2.service")
+		}, "not in an agent's cgroup"},
 		"agents without holder above": {func(d string) FS {
 			tree(t, d, userSvc+"/x/agents/demo.coder.t2", delegated(true))
 			return fsAt(d, userSvc+"/x/agents/demo.coder.t2/client")
@@ -160,6 +164,9 @@ func TestChildAndUsage(t *testing.T) {
 	}
 	if _, _, err := r.Child("../escape", "1G", "", ""); err == nil {
 		t.Error("a child name with a slash")
+	}
+	if _, _, err := r.Child("", "1G", "", ""); err == nil { // foureyes on 4a
+		t.Error("an empty child name")
 	}
 	if _, _, err := r.Child("client", "1G", "", ""); err == nil {
 		t.Error("a child named client")

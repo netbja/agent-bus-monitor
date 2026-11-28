@@ -24,6 +24,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/backup"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/cgroot"
 	"github.com/netbja/agent-bus-monitor/cli"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/holder"
@@ -239,6 +240,17 @@ func main() {
 	}
 	if len(args) >= 1 && args[0] == "holder" {
 		os.Exit(mainHolder(project, args[1:], os.Stderr))
+	}
+	// agent-enter is a scope launch's second exec (resource-limits §12.5):
+	// no project, no broker; it returns only when the client cannot be run.
+	if len(args) >= 1 && args[0] == "agent-enter" {
+		argv := args[1:]
+		if len(argv) > 0 && argv[0] == "--" {
+			argv = argv[1:]
+		}
+		err := cgroot.EnterAndExec(cgroot.Default(), argv, os.Environ(), os.Stderr)
+		fmt.Fprintf(os.Stderr, "agent-enter: %v\n", err)
+		os.Exit(127)
 	}
 	// fake-client is a fake Claude Code for the holder's live check (a test
 	// project's `claude`); it reads its project and agent from the launch.
