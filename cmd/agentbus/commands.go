@@ -914,7 +914,7 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus check holder-restart", "agentbus check holder-restart --clients real --rounds 2"},
 	},
 	{
-		Name: "agent-enter", NoProject: true, Internal: true,
+		Name: "agent-enter", NoProject: true, Internal: true, Text: true, // its words are the client's argv
 		Usage:    []string{"agent-enter -- <client argv...>"},
 		Brief:    "enter a scope, run a client",
 		Summary:  "what a holder's scope launch runs (resource-limits §12.5): moves this process into its agentbus scope's client leaf, enables the memory, pids and cpu controllers, then execs the client under the same pid; outside a scope it says so and execs the client uncapped",

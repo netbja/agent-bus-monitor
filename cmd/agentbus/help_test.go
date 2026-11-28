@@ -211,3 +211,13 @@ func TestEveryCommandInOneSection(t *testing.T) {
 		}
 	}
 }
+
+// agent-enter's words after -- are the client's argv: a client's own -p or
+// --project is never taken as agentbus's (foureyes on resource-limits-4b1).
+func TestAgentEnterKeepsTheClientsArgv(t *testing.T) {
+	in := []string{"agent-enter", "--", "echo", "-p", "x", "--project", "y", "--host=z"}
+	args, host, project := globalArgs(expandArgs(in))
+	if !slices.Equal(args, in) || host != "" || project != "" {
+		t.Fatalf("args %q host %q project %q, want %q untouched", args, host, project, in)
+	}
+}
