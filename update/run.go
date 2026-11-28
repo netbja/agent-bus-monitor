@@ -212,7 +212,7 @@ type installOut struct {
 	manual    []string  // the rollback by hand, when the rollback failed too
 	restarted []Service // the services restarted on the new build
 	left      []string  // the services left on the old build, each with its restart command
-	leftOf    []string  // the projects of those services: told too (master's 4d directive)
+	leftOf    []string  // the projects of those services (in work at their restart): told too (master's 4d directive)
 }
 
 // install is §3.4 steps 3 to 6 and the history: stage, snapshot, apply,
@@ -282,9 +282,7 @@ func (d Deps) install(ctx context.Context, s installSpec) (result string, code i
 	}
 	out.restarted = slices.Clone(u.restarted)
 	for _, o := range s.others {
-		line := fmt.Sprintf("%s %s (%s): agentbus --project %s service restart %s", o.Project, o.Kind, buildOr(o.Build), o.Project, o.Kind)
-		out.left, out.leftOf = append(out.left, line), append(out.leftOf, o.Project)
-		d.say("not restarted: %s", line)
+		d.say("not restarted: %s %s (%s): agentbus --project %s service restart %s", o.Project, o.Kind, buildOr(o.Build), o.Project, o.Kind)
 	}
 	for _, k := range u.skipped {
 		line := fmt.Sprintf("%s %s (%s), project %s in work (%s): agentbus --project %s service restart %s",

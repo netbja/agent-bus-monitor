@@ -8,5 +8,5 @@
   dated in the future counts as none. Each pass is a child in its own process group: stopping the
   loop never kills a pass in flight. A developer build has no updater (it exits 0). Nothing starts
   the loop yet: its unit, written by `agentbus up` and `setup install`, comes with step 4e. Master's
-  installed notice now also goes to each project left on the old build (in work at its restart, or
-  on another build), not only to the projects restarted.
+  installed notice now also goes to each project left on the old build (in work at its restart), not
+  only to the projects restarted.

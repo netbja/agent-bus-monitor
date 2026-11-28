@@ -86,7 +86,7 @@ func TestNoticeInstalledNothingRestarted(t *testing.T) {
 	}, nil)
 	InstallPass(context.Background(), d)
 	if len(*ns) != 1 || (*ns)[0].Kind != NoticeInstalled || !reflect.DeepEqual((*ns)[0].Projects, []string{"a", "b"}) ||
-		!strings.Contains((*ns)[0].Text, "Not restarted: a dispatch") {
+		!strings.Contains((*ns)[0].Text, "installed automatically; restarted: none.") || !strings.Contains((*ns)[0].Text, "Not restarted: a dispatch") {
 		t.Fatalf("notices %+v", *ns)
 	}
 }

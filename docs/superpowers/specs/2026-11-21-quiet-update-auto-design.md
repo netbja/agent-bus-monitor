@@ -199,7 +199,7 @@ One `report` from `updater` to each touched project's escalation target (the pro
 
 | Event | Wake | Sent to |
 |---|---|---|
-| Installed: from, to, the restarted services, the skills changed with their `skill-users` command, the undo command | no | every project restarted |
+| Installed: from, to, the restarted services, the skills changed with their `skill-users` command, the undo command | no | every project restarted, and every project left on the old build (in work at its restart) |
 | Failed and rolled back: why, and that the tag is not retried | yes | every project in step 4's list |
 | The rollback failed too: the manual commands (`update.manualCommands`) | yes | the same |
 | An interrupted update: `agentbus update --rollback <id>` | yes | the same |
@@ -348,3 +348,6 @@ and the 3 snapshots as constants.
   restarts, and a project then in work keeps its old services (§3, §4.3 step 5); §4.4 states why a
   restart that still races new work loses nothing (the dispatcher's lease and stream, the
   conductor's `startupChange`), so no fence is added.
+- **r6** (master's directive at step 4d, foureyes' note on 4c): the installed notice also goes to
+  each project left on the old build, in work at its restart (§4.6): the binaries are per host, so
+  that project runs the new `agentbus` at its next call.
