@@ -578,6 +578,14 @@ var Keys = append([]*Key{
 		file: fileMemoryLimit},
 	{Name: "limits.holder_swap_max", Kind: String, Default: "4G", ReadBy: "agentbus up (the holder unit's MemorySwapMax; the running holder's at once)", MachineOnly: true, PersonOnly: true,
 		file: fileMemoryLimit},
+	// Cap B (agent-resource-limits §8, §12.5): one terminal's scope, its
+	// MemoryMax and MemorySwapMax, read by the holder at each launch; a
+	// running terminal keeps the cap it was started with. The person's
+	// alone, per host; "off" sets none of that layer.
+	{Name: "limits.agent_memory_max", Kind: String, Default: "30%", ReadBy: "holder (a terminal's scope, MemoryMax), each launch", MachineOnly: true, PersonOnly: true,
+		file: fileMemoryLimit},
+	{Name: "limits.agent_swap_max", Kind: String, Default: "2G", ReadBy: "holder (a terminal's scope, MemorySwapMax), each launch", MachineOnly: true, PersonOnly: true,
+		file: fileMemoryLimit},
 	// The share of a cap at which memory warns (agent-resource-limits §3.1,
 	// §8): a percentage, as dispatch.context_alert; the person's, per host.
 	{Name: "limits.warn_at", Kind: Float, Default: 80.0, ReadBy: "dispatch (health: holder-memory; master told of an agent near its cap), each pass; busmon (the mem column amber), at start and when saved in it", MachineOnly: true, PersonOnly: true,

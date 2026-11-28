@@ -20,6 +20,7 @@ func TestHolderHelperProcess(t *testing.T) {
 	if os.Getenv("AGENTBUS_HOLDER_HELPER") != "1" {
 		t.Skip("helper process")
 	}
+	newHolderScopes = func(string, func(string) string) (*holder.Scopes, string) { return nil, "a test" }
 	os.Exit(mainHolder("demo", os.Args[len(os.Args)-2:], os.Stderr))
 }
 
@@ -174,6 +175,11 @@ func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 	want := "a coder demo in " + realPath(t, work) + " roles=" + realPath(t, filepath.Join(w.repo, "roles.toml")) + " secret="
 	if got := w.mark(t, mark); got != want {
 		t.Fatalf("the client ran as %q, want %q", got, want)
+	}
+	// The helper never reaches the host's user manager (resource-limits
+	// §12.5): its holder runs no scope, and says so.
+	if !strings.Contains(w.out.String(), "holder: no scopes (a test): no terminal gets cap B") {
+		t.Errorf("the holder's scopes in a test:\n%s", w.out.String())
 	}
 }
 

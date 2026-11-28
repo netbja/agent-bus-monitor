@@ -26,6 +26,7 @@ type terminal struct {
 	start    uint64
 	cmd      *exec.Cmd
 	pty      *os.File
+	scope    string // its systemd scope (resource-limits §12.5), "" none: no cap B
 
 	mu         sync.Mutex
 	scr        screen.Screen

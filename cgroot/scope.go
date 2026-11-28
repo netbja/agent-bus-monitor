@@ -106,5 +106,29 @@ func EnterAndExec(fs FS, argv, env []string, warn io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(path, argv, env)
+	return syscall.Exec(path, argv, entered(env))
+}
+
+// EnterFDEnv names the fd on which agent-enter tells the holder that the
+// scope launch reached it: one byte, then the fd is closed. A pipe that
+// closes with no byte means systemd-run ended before its exec, and the
+// holder starts the pane without a scope (§12.5: a launch is never refused).
+const EnterFDEnv = "AGENTBUS_ENTER_FD"
+
+// entered says so on EnterFDEnv's fd, closes it, and is env without the
+// variable: the client neither sees it nor holds the fd.
+func entered(env []string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		v, ok := strings.CutPrefix(kv, EnterFDEnv+"=")
+		if !ok {
+			out = append(out, kv)
+			continue
+		}
+		if fd, err := strconv.Atoi(v); err == nil && fd > 2 {
+			_, _ = syscall.Write(fd, []byte("y"))
+			_ = syscall.Close(fd)
+		}
+	}
+	return out
 }

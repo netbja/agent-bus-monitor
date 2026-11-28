@@ -45,6 +45,27 @@ func TestHolderLimitKeys(t *testing.T) {
 	}
 }
 
+// Cap B's keys (agent-resource-limits §8, §12.5): the person's, per host,
+// read by the holder at each launch, the same syntax as cap A's.
+func TestAgentLimitKeys(t *testing.T) {
+	for name, def := range map[string]string{"limits.agent_memory_max": "30%", "limits.agent_swap_max": "2G"} {
+		k, ok := Lookup(name)
+		if !ok {
+			t.Fatalf("%s not registered", name)
+		}
+		if k.Env != "" || !k.MachineOnly || !k.PersonOnly || k.Kind != String || k.Default != def ||
+			k.Group() != GroupServices || k.Applies() != AppliesLive {
+			t.Errorf("%s row %+v (group %q, applies %v)", name, k, k.Group(), k.Applies())
+		}
+		if v, why := k.file("off"); why != "" || v != "off" {
+			t.Errorf("%s: off refused: %q", name, why)
+		}
+		if _, why := k.file("4G\nExecStart=/bin/sh"); why == "" {
+			t.Errorf("%s: a second line taken", name)
+		}
+	}
+}
+
 // The share of a cap at which the holder's memory warns
 // (agent-resource-limits §3.1, §8), a percentage like dispatch.context_alert;
 // the person's alone, per host, read at each pass.

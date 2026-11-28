@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/agentstate"
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/cgroot"
 	"github.com/netbja/agent-bus-monitor/dispatch"
 	"github.com/netbja/agent-bus-monitor/screen"
 	"github.com/netbja/agent-bus-monitor/service"
@@ -44,6 +46,9 @@ type Config struct {
 	// pane id ("<key>/t<n>") never names two terminals: self-repair proves
 	// a relaunched agent by its new pane. "" numbers from t1 in each process.
 	TermsFile string
+	// Scopes runs each terminal in its own systemd scope (resource-limits
+	// §12.5); nil, none.
+	Scopes *Scopes
 
 	// ancestors is dispatch.Ancestors; procStart dispatch.ProcStart (tests
 	// replace them).
@@ -86,6 +91,8 @@ type Server struct {
 	ln    *net.UnixListener
 	stop  chan struct{}
 	conns map[*net.UnixConn]bool
+	// scopeStops are the terminals' scope stops under way (Shutdown waits).
+	scopeStops sync.WaitGroup
 }
 
 // NewServer checks cfg and becomes a subreaper (Linux). A terminal signal
@@ -165,6 +172,9 @@ func (s *Server) Listen() error {
 	}
 	s.ln = ln
 	startReaper()
+	if s.cfg.Scopes != nil { // the only holder of its build now: what scopes are left are stale
+		s.sweepScopes(false)
+	}
 	return nil
 }
 
@@ -247,6 +257,10 @@ func (s *Server) Shutdown() {
 	s.mu.Unlock()
 	for _, t := range terms {
 		t.close(s.cfg.Grace)
+	}
+	if s.cfg.Scopes != nil { // every scope of its build, a stale one too (§12.5)
+		s.scopeStops.Wait()
+		s.sweepScopes(true)
 	}
 	_ = os.Remove(s.cfg.Socket)
 	if kf := s.keyFile(); kf != "" {
@@ -451,18 +465,36 @@ func (s *Server) start(f Start) Reply {
 	// ready signature read as typed: vt-osc-title). A role's own env wins.
 	c.Env = append(append(append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor"), cmd.Env...),
 		"AGENTBUS_TERM_ID="+id, "AGENTBUS_HOST="+s.cfg.Socket)
-	// The registry's lock is held from the fork until the pid is tracked,
-	// so the reaper never takes the new program for an orphan.
-	trackMu.Lock()
-	f2, err := pty.StartWithSize(c, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
-	if err != nil {
-		trackMu.Unlock()
-		s.mu.Unlock()
-		return errReply(CodeFailed, "start %s: %v", f.Role, err)
+	ws := &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)}
+	var f2 *os.File
+	scope := ""
+	if sc := s.cfg.Scopes; sc != nil && sc.Argv != nil {
+		unit := cgroot.ScopeUnit(s.cfg.Project, s.ownKey(), f.Role, id)
+		argv := sc.Argv(unit, cmd.Argv)
+		// The lock stays held while agent-enter's word is awaited (at most
+		// EnterWait, milliseconds as a rule): the number is taken.
+		sx := exec.Command(argv[0], argv[1:]...)
+		sx.Dir, sx.Env = c.Dir, slices.Clone(c.Env)
+		if f2, err = s.startScoped(sx, id, ws); err == nil {
+			c, scope = sx, unit
+		} else {
+			s.scopeLog("terminal %s: no scope (%v): it starts without its cap", id, err)
+		}
 	}
-	trackedSet[c.Process.Pid] = true
-	trackMu.Unlock()
-	t := &terminal{id: id, role: f.Role, profile: clientProfiles[cmd.Client], pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others, escWait: s.cfg.escWait,
+	if f2 == nil {
+		// The registry's lock is held from the fork until the pid is tracked,
+		// so the reaper never takes the new program for an orphan.
+		trackMu.Lock()
+		f2, err = pty.StartWithSize(c, ws)
+		if err != nil {
+			trackMu.Unlock()
+			s.mu.Unlock()
+			return errReply(CodeFailed, "start %s: %v", f.Role, err)
+		}
+		trackedSet[c.Process.Pid] = true
+		trackMu.Unlock()
+	}
+	t := &terminal{id: id, role: f.Role, scope: scope, profile: clientProfiles[cmd.Client], pid: c.Process.Pid, cmd: c, pty: f2, alive: true, cols: cols, rows: rows, grace: s.cfg.Grace, kill: s.cfg.kill, others: s.cfg.others, escWait: s.cfg.escWait,
 		scr: s.newScreen(cols, rows), done: make(chan struct{}), outDone: make(chan struct{}), holdState: holdState{holdMax: s.cfg.holdMax},
 		emuState: newEmuState(s.cfg.stuckAfter)}
 	t.start, _ = s.cfg.procStart(t.pid)
@@ -474,7 +506,13 @@ func (s *Server) start(f Start) Reply {
 	go t.replyLoop()
 	sig, sigOK := agentstate.Signatures()[t.profile]
 	go t.leftBehindLoop(sig, sigOK)
-	t.onEnd = s.recordGroups
+	t.onEnd = func() {
+		s.recordGroups()
+		if t.scope != "" { // what is left in it, off the pty's group (§12.5)
+			s.scopeStops.Add(1)
+			go func() { defer s.scopeStops.Done(); s.stopScopes(t.scope) }()
+		}
+	}
 	go t.waitLoop()
 	s.recordGroups()
 	info := t.info(s.cfg.Build)
