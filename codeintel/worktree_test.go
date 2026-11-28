@@ -7,17 +7,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-// The porcelain list: each entry's path, branch (empty when detached) and
-// head; a bare or prunable entry has no working tree to route to.
+// The porcelain -z list: each entry's path (a newline in it included),
+// branch (empty when detached) and head; a bare or prunable entry has no
+// working tree to route to.
 func TestParseWorktrees(t *testing.T) {
-	got := ParseWorktrees("worktree /r\nHEAD aaa\nbranch refs/heads/dev\n\n" +
-		"worktree /r/.worktrees/x\nHEAD bbb\nbranch refs/heads/coder/x\n\n" +
-		"worktree /tmp/rev\nHEAD ccc\ndetached\n\n" +
-		"worktree /bare\nbare\n\n" +
-		"worktree /gone\nHEAD ddd\nbranch refs/heads/old\nprunable gitdir file points to non-existent location\n")
-	want := []Worktree{{"/r", "dev", "aaa"}, {"/r/.worktrees/x", "coder/x", "bbb"}, {"/tmp/rev", "", "ccc"}}
+	got := ParseWorktrees("worktree /r\x00HEAD aaa\x00branch refs/heads/dev\x00\x00" +
+		"worktree /r/.worktrees/x\x00HEAD bbb\x00branch refs/heads/coder/x\x00\x00" +
+		"worktree /tmp/rev\x00HEAD ccc\x00detached\x00\x00" +
+		"worktree /bare\x00bare\x00\x00" +
+		"worktree /n\nl\x00HEAD eee\x00branch refs/heads/nl\x00\x00" +
+		"worktree /gone\x00HEAD ddd\x00branch refs/heads/old\x00prunable gitdir file points to non-existent location\x00\x00")
+	want := []Worktree{{"/r", "dev", "aaa"}, {"/r/.worktrees/x", "coder/x", "bbb"}, {"/tmp/rev", "", "ccc"}, {"/n\nl", "nl", "eee"}}
 	if len(got) != len(want) {
 		t.Fatalf("%+v", got)
 	}
@@ -103,6 +106,13 @@ func TestListAndResolve(t *testing.T) {
 	if w, err := tr.ForBranch("coder/x"); err != nil || w.Path != realNested {
 		t.Fatalf("branch: %+v %v", w, err)
 	}
+	// a relative path, even one that resolves from the test's directory
+	// inside the worktree, is refused: the relay's directory is not the
+	// agent's (reviewer-codex).
+	t.Chdir(nested)
+	if w, err := tr.Resolve("f.go"); err == nil || !strings.HasPrefix(err.Error(), "not an absolute path: f.go") {
+		t.Fatalf("relative: %+v %v", w, err)
+	}
 	if _, err := tr.ForBranch("coder/gone"); err == nil {
 		t.Fatal("a removed worktree's branch was routed")
 	}
@@ -169,6 +179,39 @@ func TestStamp(t *testing.T) {
 	}
 	if _, err := Stamp(ctx, Worktree{Path: t.TempDir()}, g.env); err == nil {
 		t.Fatal("not a repository: no error")
+	}
+}
+
+// Stamp never rewrites the agent's index (foureyes): on a tree whose stat
+// data is stale, a plain git status would refresh it under index.lock. And
+// no worktree config runs a command from it: core.fsmonitor is off.
+func TestStampTakesNoLock(t *testing.T) {
+	g := newRepo(t)
+	ctx := context.Background()
+	marker := filepath.Join(t.TempDir(), "ran")
+	hook := filepath.Join(t.TempDir(), "fsmon")
+	os.WriteFile(hook, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755)
+	g.git("config", "core.fsmonitor", hook)
+	index := filepath.Join(g.dir, ".git", "index")
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(index, old, old)
+	before, _ := os.ReadFile(index)
+	later := time.Now().Add(time.Minute)
+	os.Chtimes(filepath.Join(g.dir, "a"), later, later) // same bytes, new stat data
+	tr, err := List(ctx, "p", g.dir, g.env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, err := Stamp(ctx, tr.List[0], g.env); err != nil || r.Dirty {
+		t.Fatalf("%+v %v", r, err)
+	}
+	st, _ := os.Stat(index)
+	after, _ := os.ReadFile(index)
+	if !st.ModTime().Equal(old) || string(after) != string(before) {
+		t.Fatalf("the index was rewritten: mtime %v", st.ModTime())
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("core.fsmonitor ran")
 	}
 }
 

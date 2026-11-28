@@ -18,14 +18,16 @@ type Worktree struct {
 	Head   string
 }
 
-// ParseWorktrees reads git worktree list --porcelain. A bare entry has no
-// working tree, and a prunable one is gone: neither is a worktree here.
+// ParseWorktrees reads git worktree list --porcelain -z: each attribute
+// ends in NUL and an entry in an empty one, so a path may hold a newline
+// (foureyes). A bare entry has no working tree, and a prunable one is gone:
+// neither is a worktree here.
 func ParseWorktrees(porcelain string) []Worktree {
 	var out []Worktree
-	for _, block := range strings.Split(porcelain, "\n\n") {
+	for _, block := range strings.Split(porcelain, "\x00\x00") {
 		var w Worktree
 		skip := false
-		for _, l := range strings.Split(strings.TrimSpace(block), "\n") {
+		for _, l := range strings.Split(block, "\x00") {
 			k, v, _ := strings.Cut(l, " ")
 			switch k {
 			case "worktree":
@@ -51,11 +53,11 @@ type Trees struct {
 	List    []Worktree
 }
 
-// List reads repo's worktrees (git -C repo worktree list --porcelain, with
+// List reads repo's worktrees (git -C repo worktree list --porcelain -z, with
 // exactly env), each path resolved; a listed path that does not resolve
 // (a removed directory not yet pruned) is left out.
 func List(ctx context.Context, project, repo string, env []string) (Trees, error) {
-	out, err := git(ctx, repo, env, "worktree", "list", "--porcelain")
+	out, err := git(ctx, repo, env, "worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		return Trees{}, err
 	}
@@ -82,8 +84,13 @@ func resolved(project string, ws []Worktree) Trees {
 // deepest listed root that contains it. Worktrees nest (a project's
 // .worktrees/ inside its main checkout), so a first match would route a
 // coder's file to the main checkout's backend. A path that does not
-// resolve, or lies in no worktree, is refused.
+// resolve, or lies in no worktree, is refused, and so is a relative one:
+// the relay's directory is its launch's, not the agent's current one, so
+// no base would route it right (reviewer-codex).
 func (t Trees) Resolve(path string) (Worktree, error) {
+	if !filepath.IsAbs(path) {
+		return Worktree{}, fmt.Errorf("not an absolute path: %s (code-intel takes a file's full path)", path)
+	}
 	p, err := filepath.EvalSymlinks(path)
 	if err == nil {
 		if w, ok := t.owner(p); ok {
@@ -164,9 +171,13 @@ func Stamp(ctx context.Context, w Worktree, env []string) (Revision, error) {
 	return Revision{w.Path, branch, head, strings.TrimSpace(st) != ""}, nil
 }
 
-// git runs git -C dir with exactly env.
+// git runs git -C dir with exactly env. It never takes an optional lock:
+// status would otherwise refresh the index under index.lock in the
+// agent's own worktree, and the agent's git add or commit would fail on it
+// (foureyes). core.fsmonitor is off, so no worktree's config runs a command
+// from here.
 func git(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	c := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	c := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks", "-c", "core.fsmonitor=false", "-C", dir}, args...)...)
 	c.Env = env
 	out, err := c.Output()
 	if err != nil {
