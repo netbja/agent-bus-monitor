@@ -72,12 +72,20 @@ func runRequest(ctx context.Context, b *bus.Bus, self string, args []string, out
 		atLimitLine(ctx, b, args[1])
 		return nil
 	case "accept":
+		args, branch := extractFlag(args, "--branch")
 		if len(args) != 2 {
-			return fmt.Errorf("usage: request accept <task>")
+			return fmt.Errorf("usage: request accept <task> [--branch <b>]")
 		}
 		// The project's work-in-progress limit (wip-limit §3.3): a first accept
-		// at it is refused by the bus, naming what the agent holds.
-		return b.AcceptRequestLimit(ctx, args[1], self, wipLimit(b.Project()))
+		// at it is refused by the bus, naming what the agent holds. --branch
+		// declares the work branch (code-intel §7), one owner per branch.
+		return b.AcceptRequestBranch(ctx, args[1], self, wipLimit(b.Project()), branch)
+	case "branch":
+		if len(args) != 3 {
+			return fmt.Errorf("usage: request branch <task> <branch>")
+		}
+		// The work branch declared later, while accepted (code-intel §7).
+		return b.SetWorkBranch(ctx, args[1], self, args[2])
 	case "review":
 		args, branch := extractFlag(args, "--branch")
 		args, commit := extractFlag(args, "--commit")

@@ -33,6 +33,10 @@ type RequestInfo struct {
 	Commit            string `json:"commit,omitempty"`      // request done --commit (missions)
 	Branch            string `json:"branch,omitempty"`      // request done --branch, request review --branch
 	ReviewNote        string `json:"review_note,omitempty"` // request review's note (wip-limit §3.2)
+	// WorkBranch is the branch the target works on, declared at request
+	// accept --branch or by request branch (code-intel §7): one owner per
+	// branch among open requests. Review's Branch is untouched.
+	WorkBranch string `json:"work_branch,omitempty"`
 	// ReviewBase is the base tip request review read (board-drift §3.2): a
 	// head already in it is never judged merged. Absent: not judged.
 	ReviewBase string `json:"review_base,omitempty"`
@@ -265,10 +269,33 @@ func (b *Bus) AcceptRequest(ctx context.Context, task, agent string) error {
 // take an agent above the limit; a first accept then waits until it is
 // under again. 0 is no limit. The count is read in the script that writes.
 func (b *Bus) AcceptRequestLimit(ctx context.Context, task, agent string, limit int) error {
+	return b.AcceptRequestBranch(ctx, task, agent, limit, "")
+}
+
+// AcceptRequestBranch is AcceptRequestLimit that also declares the work
+// branch (code-intel §7), "" none (a work branch declared before is kept).
+// A branch another agent's open request (accepted, review or blocked)
+// declares, as its work branch or its review branch, refuses the whole
+// accept, in the same script that reads the board.
+func (b *Bus) AcceptRequestBranch(ctx context.Context, task, agent string, limit int, branch string) error {
 	if limit < 0 {
 		return fmt.Errorf("wip limit must be 0 or more")
 	}
-	_, err := b.transitionRequest(ctx, task, agent, "accept", "", "", "", strconv.Itoa(limit))
+	if branch != "" && !config.ValidBranchName(branch) {
+		return fmt.Errorf("invalid branch %q", branch)
+	}
+	_, err := b.transitionRequest(ctx, task, agent, "accept", "", "", branch, strconv.Itoa(limit))
+	return err
+}
+
+// SetWorkBranch is request branch (code-intel §7): the target records its
+// work branch later, while the request is accepted, under AcceptRequestBranch's
+// one-owner rule.
+func (b *Bus) SetWorkBranch(ctx context.Context, task, agent, branch string) error {
+	if !config.ValidBranchName(branch) {
+		return fmt.Errorf("invalid branch %q", branch)
+	}
+	_, err := b.transitionRequest(ctx, task, agent, "branch", "", "", branch)
 	return err
 }
 
@@ -423,7 +450,9 @@ var requestRefusals = []string{"unknown request", "board task is not a tracked r
 	"wip limit reached", "only an accepted request goes to review",
 	// sibling-enforce §3: the open steps' refusals, and parallel's and abandon's.
 	"step ", "a step is open on ", "request changed since its steps were judged",
-	"only the request's sender or the person may", "no such open step"}
+	"only the request's sender or the person may", "no such open step",
+	// code-intel §7: one owner per work branch.
+	"branch ", "only an accepted request records a work branch"}
 
 // refusal is a script refusal, its message unchanged.
 type refusal struct{ msg string }
@@ -468,6 +497,14 @@ local function steps_apply(r,judged,rest,open)
  if #ms>0 then r.merged_steps=ms end
  if #rest>0 then r.open_steps=rest else r.open_steps=nil end
 end
+local function branch_owner(b)
+ local all=redis.call('HGETALL',KEYS[1])
+ for i=1,#all,2 do
+  local ok,o=pcall(cjson.decode,all[i+1])
+  if ok and type(o)=='table' and type(o.request)=='table' and o.request.target~=ARGV[2] and (o.state=='accepted' or o.state=='review' or o.state=='blocked') and (o.request.work_branch==b or o.request.branch==b) then return o.request.target.."'s request "..all[i] end
+ end
+ return nil
+end
 local raw=redis.call('HGET',KEYS[1],ARGV[1]);if not raw then return redis.error_reply('unknown request') end
 local e=cjson.decode(raw);local r=e.request
 if not r then return redis.error_reply('board task is not a tracked request') end
@@ -492,6 +529,14 @@ if ARGV[3]=='note' then
  redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))
  return ''
 end
+if ARGV[3]=='branch' then
+ if e.state~='accepted' then return redis.error_reply('only an accepted request records a work branch') end
+ local owner=branch_owner(ARGV[7])
+ if owner then return redis.error_reply('branch '..ARGV[7]..' belongs to '..owner) end
+ r.work_branch=ARGV[7];e.updated=math.floor(now/1000)
+ redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(e))
+ return ''
+end
 if ARGV[3]=='accept' then
  if not r.accepted_at then
   if r.expires_at and r.expires_at>0 and r.expires_at<=now then return redis.error_reply('request expired; cannot accept (its target or sender closes it: agentbus request done <task> <why>)') end
@@ -510,6 +555,11 @@ if ARGV[3]=='accept' then
    end
   end
   r.accepted_at=now
+ end
+ if ARGV[7]~='' then
+  local owner=branch_owner(ARGV[7])
+  if owner then return redis.error_reply('branch '..ARGV[7]..' belongs to '..owner) end
+  r.work_branch=ARGV[7]
  end
  e.state='accepted';r.blocked_reason=nil
 elseif ARGV[3]=='review' then

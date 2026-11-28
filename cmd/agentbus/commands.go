@@ -314,7 +314,7 @@ var commands = []cli.Command{
 		Name: "request", Text: true, Usage: []string{
 			"request [--json]",
 			"request send <task> <target> [--ref <id>] [--ttl <dur>] <body...>",
-			"request accept <task> | request block <task> <reason...>",
+			"request accept <task> [--branch <b>] | request branch <task> <b> | request block <task> <reason...>",
 			"request review <task> [--branch <b>] [--commit <sha>] [--more] [<note...>]",
 			"request done <task> [--commit <sha>] [--branch <b>] <reply...>",
 			"request priority <task> high|normal|low --as <person> | request next [<agent>] [--json]",
@@ -327,7 +327,7 @@ var commands = []cli.Command{
 			fJSON, fRef,
 			{Long: "ttl", Short: 't', Arg: "<dur>", Help: "deadline for the first acceptance"},
 			{Long: "commit", Short: 'c', Arg: "<sha>", Help: "done: the delivered commit (missions); review: the head in review, else the branch's tip"},
-			{Long: "branch", Short: 'b', Arg: "<b>", Help: "done: the delivered branch; review: the branch in review (its merge closes the request)"},
+			{Long: "branch", Short: 'b', Arg: "<b>", Help: "done: the delivered branch; review: the branch in review (its merge closes the request); accept: the branch you work on (one owner per branch among open requests)"},
 			{Long: "more", Help: "review: a step that is not the last: listed open until it merges; its merge sends the request back to accepted"},
 			{Long: "as", Arg: "<person>", Help: "priority: the person who sets it (required; an agent is refused); send starts a plan task's request at the task's priority (plan priority); parallel, step: the person, instead of the request's sender"},
 			{Long: "off", Help: "parallel: clear the exception; no listed step is forgotten"},
