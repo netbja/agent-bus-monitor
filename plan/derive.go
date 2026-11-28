@@ -33,6 +33,10 @@ const (
 	Pending      = "pending"
 	Approved     = "approved"
 	ChangesAsked = "changes asked"
+	// A task with a check (onboarding §9.2): approved, yet not proven.
+	CheckNotRun = "approved, check not run"
+	CheckFailed = "check failed"
+	HeadChanged = "approved, head changed"
 )
 
 // Fact is what master recorded about a task in {p}:plan:facts.
@@ -114,7 +118,8 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	if t.Mission != "" {
 		return deriveMission(r, in)
 	}
-	if in.FactsOK && fact.Done > 0 {
+	gated := t.Check != "" && t.Owner != Person // a mission returned above (§9.2)
+	if in.FactsOK && fact.Done > 0 && !gated {
 		r.State, r.DoneAt, r.Recorded = Done, fact.Done, true
 		return r
 	}
@@ -127,6 +132,10 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.LastFact = max(r.LastFact, boardTime(e))
 	}
 	review, reviewed := rollUp(t, fact, in)
+	var held string // why a gated task stays in review
+	if gated {
+		review, held = checkGate(t, fact, in, review)
+	}
 	if t.Owner != Person && (reviewed || delivered(e) || e.State == "review" || linked) {
 		r.Verdict = review
 	}
@@ -136,6 +145,14 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	ask := openAsk(t.ID, in.Asks)
 	if ask != nil {
 		r.LastFact = max(r.LastFact, ask.CreatedAt)
+	}
+	if gated && fact.Done > 0 && held == "" {
+		r.State, r.DoneAt, r.Recorded = Done, fact.Done, true
+		return r
+	}
+	if held != "" {
+		r.State, r.Reason = InReview, held
+		return r
 	}
 
 	switch {
@@ -179,6 +196,44 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 		r.State = Upcoming
 	}
 	return r
+}
+
+// checkGate is a gated task's review label and, when it is not proven,
+// why it stays in review (§9.2): approved only when the deciding approval
+// quotes the check at its head, that head is the task's result when one is
+// read, a merge:false task names its commit, and a recorded done names
+// that head.
+func checkGate(t Task, fact Fact, in Inputs, review string) (string, string) {
+	const recorded = "recorded done without an approved check at the merged head"
+	if review != Approved {
+		if fact.Done > 0 {
+			return review, recorded
+		}
+		return review, ""
+	}
+	vs := subjectsVerdicts(t, fact, in)
+	_, i := bus.RollUp(vs)
+	d := vs[i]
+	switch evidenceOf(d, t.Check) {
+	case evidenceFailed:
+		return CheckFailed, "the approving verdict quotes the check failing at its head"
+	case evidenceNone:
+		return CheckNotRun, "the approving verdict does not quote the check at its head"
+	}
+	if fact.Done > 0 {
+		if fact.Head != d.Head {
+			return review, recorded
+		}
+		return review, ""
+	}
+	head, known := ResultHead(t, fact, in)
+	switch {
+	case known && head != d.Head:
+		return HeadChanged, "re-review: approved at " + sha7(d.Head) + ", now " + sha7(head)
+	case !known && !t.MergeTask() && delivered(in.Board[t.Board]):
+		return review, "delivered without --commit: the checked head is unknown"
+	}
+	return review, ""
 }
 
 func deriveMission(r Row, in Inputs) Row {

@@ -49,6 +49,10 @@ type PlanFact struct {
 	Priority   string `json:"priority,omitempty"`
 	PriorityBy string `json:"priority_by,omitempty"`
 	PriorityAt int64  `json:"priority_at,omitempty"` // Redis TIME, Unix ms
+	// Head is the merged head plan done recorded for a task with a check
+	// (onboarding §9.3); its done counts only at the head its approving
+	// verdict checked (§9.2). Absent on every other done.
+	Head string `json:"head,omitempty"`
 }
 
 // PlanNoteMax bounds a task's note (one line).
