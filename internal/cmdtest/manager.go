@@ -21,6 +21,8 @@ type Manager struct {
 	FailList  bool                    // List fails after the first removal
 	Removed   int
 	OnCall    func(call string) // nil = nothing; told each start and stop as it happens
+	Updater   *service.UpdaterSpec
+	UpdaterOn bool
 }
 
 func NewManager() *Manager {
@@ -105,4 +107,46 @@ func (f *Manager) Saw(c string) bool {
 		}
 	}
 	return false
+}
+
+// The updater's unit (quiet-update-auto §4.1): Updater is its spec, nil
+// while it is not installed; UpdaterOn whether it runs.
+
+func (f *Manager) InstallUpdater(s service.UpdaterSpec) (bool, error) {
+	f.Calls = append(f.Calls, "install updater")
+	changed := f.Updater == nil || *f.Updater != s
+	f.Updater = &s
+	return changed, nil
+}
+
+func (f *Manager) StartUpdater() error {
+	f.Calls = append(f.Calls, "start updater")
+	if f.FailStart {
+		return errors.New("start refused")
+	}
+	f.UpdaterOn = true
+	return nil
+}
+
+func (f *Manager) StopUpdater() error {
+	f.Calls = append(f.Calls, "stop updater")
+	f.UpdaterOn = false
+	return nil
+}
+
+func (f *Manager) RemoveUpdater() error {
+	f.Calls = append(f.Calls, "remove updater")
+	f.Updater, f.UpdaterOn = nil, false
+	return nil
+}
+
+func (f *Manager) UpdaterState() (service.State, error) {
+	if f.FailState {
+		return service.State{}, errors.New("cannot read the unit")
+	}
+	st := service.State{Installed: f.Updater != nil, Status: "inactive (dead)"}
+	if f.UpdaterOn {
+		st.Active, st.Status = true, "active (running)"
+	}
+	return st, nil
 }

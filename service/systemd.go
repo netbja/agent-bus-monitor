@@ -101,7 +101,12 @@ func (m Systemd) Remove(project, kind string) error {
 }
 
 func (m Systemd) State(project, kind string) (State, error) {
-	out, err := m.Run("--user", "show", UnitName(project, kind), "--no-pager",
+	return m.showState(UnitName(project, kind), m.path(project, kind))
+}
+
+// showState is what systemd says of the unit name, whose file is path.
+func (m Systemd) showState(name, path string) (State, error) {
+	out, err := m.Run("--user", "show", name, "--no-pager",
 		"--property=LoadState,ActiveState,SubState,MainPID,Result")
 	if err != nil {
 		return State{}, fmt.Errorf("systemctl --user show: %s", firstLine(out, err))
@@ -113,7 +118,7 @@ func (m Systemd) State(project, kind string) (State, error) {
 		}
 	}
 	st := State{Installed: kv["LoadState"] == "loaded"}
-	if _, err := os.Stat(m.path(project, kind)); err == nil {
+	if _, err := os.Stat(path); err == nil {
 		st.Installed = true
 	}
 	st.Status = kv["ActiveState"]

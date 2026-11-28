@@ -286,7 +286,7 @@ var Keys = append([]*Key{
 	// window from busmon's Shift+C as well (Q2). No env variable.
 	{Name: "updates.auto", Kind: String, Default: "notify", ReadBy: "agentbus update --auto (installs when install, else only checks), agentbus service run updater (notify runs no pass), busmon (shown)", MachineOnly: true, PersonOnly: true,
 		file: fileOneOf("notify", "install")},
-	{Name: "updates.window", Kind: String, Default: "03:00-05:00", ReadBy: "agentbus service run updater (the updater's loop; nothing starts it before quiet-update step 4e), busmon (shown)", MachineOnly: true, PersonEdit: true,
+	{Name: "updates.window", Kind: String, Default: "03:00-05:00", ReadBy: "agentbus service run updater (the updater's loop, started by agentbus up from quiet-update step 4e), busmon (shown)", MachineOnly: true, PersonEdit: true,
 		file: func(v any) (any, string) {
 			if s, ok := v.(string); ok {
 				if _, _, ok := ParseWindow(s); ok {

@@ -27,9 +27,7 @@ func (m Launchd) path(project, kind string) string {
 	return filepath.Join(m.dir(), Label(project, kind)+".plist")
 }
 
-func (m Launchd) target(project, kind string) string {
-	return "gui/" + strconv.Itoa(m.UID) + "/" + Label(project, kind)
-}
+func (m Launchd) target(project, kind string) string { return m.targetOf(Label(project, kind)) }
 
 func xmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;").Replace(s)
@@ -86,10 +84,14 @@ func (m Launchd) Install(s Spec) (bool, error) {
 	return changed, m.removeAgent(s.Project, s.Kind)
 }
 
-func (m Launchd) loaded(project, kind string) bool {
-	_, err := m.Run("print", m.target(project, kind))
+func (m Launchd) loaded(project, kind string) bool { return m.loadedLabel(Label(project, kind)) }
+
+func (m Launchd) loadedLabel(label string) bool {
+	_, err := m.Run("print", m.targetOf(label))
 	return err == nil
 }
+
+func (m Launchd) targetOf(label string) string { return "gui/" + strconv.Itoa(m.UID) + "/" + label }
 
 func (m Launchd) ctl(args ...string) error {
 	if out, err := m.Run(args...); err != nil {
@@ -101,17 +103,23 @@ func (m Launchd) ctl(args ...string) error {
 // Start loads the job (RunAtLoad starts it) or, when it is loaded, kicks it.
 // A changed plist is picked up by booting the old job out first.
 func (m Launchd) Start(project, kind string) error {
-	if m.loaded(project, kind) {
-		return m.ctl("kickstart", m.target(project, kind))
-	}
-	return m.ctl("bootstrap", "gui/"+strconv.Itoa(m.UID), m.path(project, kind))
+	return m.startJob(Label(project, kind), m.path(project, kind))
 }
 
-func (m Launchd) Stop(project, kind string) error {
-	if !m.loaded(project, kind) {
+func (m Launchd) startJob(label, path string) error {
+	if m.loadedLabel(label) {
+		return m.ctl("kickstart", m.targetOf(label))
+	}
+	return m.ctl("bootstrap", "gui/"+strconv.Itoa(m.UID), path)
+}
+
+func (m Launchd) Stop(project, kind string) error { return m.stopJob(Label(project, kind)) }
+
+func (m Launchd) stopJob(label string) error {
+	if !m.loadedLabel(label) {
 		return nil
 	}
-	return m.ctl("bootout", m.target(project, kind))
+	return m.ctl("bootout", m.targetOf(label))
 }
 
 func (m Launchd) Remove(project, kind string) error {
@@ -128,11 +136,16 @@ func (m Launchd) Remove(project, kind string) error {
 }
 
 func (m Launchd) State(project, kind string) (State, error) {
+	return m.jobState(Label(project, kind), m.path(project, kind))
+}
+
+// jobState is what launchd says of the job label, whose plist is path.
+func (m Launchd) jobState(label, path string) (State, error) {
 	st := State{Status: "not loaded"}
-	if _, err := os.Stat(m.path(project, kind)); err == nil {
+	if _, err := os.Stat(path); err == nil {
 		st.Installed = true
 	}
-	out, err := m.Run("print", m.target(project, kind))
+	out, err := m.Run("print", m.targetOf(label))
 	if err != nil {
 		return st, nil
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/netbja/agent-bus-monitor/buildinfo"
 	"github.com/netbja/agent-bus-monitor/config"
+	"github.com/netbja/agent-bus-monitor/service"
 	"github.com/netbja/agent-bus-monitor/setup"
 	"github.com/netbja/agent-bus-monitor/update"
 )
@@ -32,7 +33,11 @@ type updaterDeps struct {
 
 // mainUpdaterRun is the unit's entry: the loop until SIGTERM or SIGINT, its
 // log on stderr (the unit's journal, launchd's log).
-func mainUpdaterRun() int {
+func mainUpdaterRun(args []string) int {
+	if err := loadUpdaterEnv(args, os.Setenv); err != nil {
+		fmt.Fprintln(os.Stderr, "updater: "+err.Error()+"; not restarting")
+		return 0
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	bin := buildinfo.Bin
@@ -40,6 +45,30 @@ func mainUpdaterRun() int {
 		bin = filepath.Join(filepath.Dir(bin), "agentbus")
 	}
 	return runUpdater(ctx, updaterDeps{Repo: buildinfo.Repo, Bin: bin, Getenv: os.Getenv}, os.Stderr)
+}
+
+// loadUpdaterEnv reads the unit's arguments, [--env <file>]: the file's
+// values go into this process's environment (setenv), so each pass, a child,
+// has the PATH and the broker settings agentbus up recorded (a unit's own
+// environment is minimal). No file named is no change; anything else, or a
+// file that cannot be read, is an invalid configuration.
+func loadUpdaterEnv(args []string, setenv func(k, v string) error) error {
+	switch {
+	case len(args) == 0:
+		return nil
+	case len(args) != 2 || args[0] != "--env":
+		return fmt.Errorf("usage: agentbus service run updater [--env <file>]")
+	}
+	env, err := service.LoadEnvFile(args[1])
+	if err != nil {
+		return fmt.Errorf("invalid configuration: %v (agentbus up rewrites it)", err)
+	}
+	for k, v := range env {
+		if err := setenv(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // runUpdater runs the loop. Exit 0 is final for the service manager: a

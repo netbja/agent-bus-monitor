@@ -9,7 +9,7 @@ import (
 
 // quiet-update-auto, the person's Q2: updates.window is the person's, set
 // from Shift+C (written as the person) with a line saying what it does and
-// that it is not in effect before the updater's unit (quiet-update step 4e); updates.auto and
+// that the updater's loop reads it (agentbus up starts it, quiet-update step 4e); updates.auto and
 // updates.max_wait are shown, not editable (config.toml alone).
 func TestSettingsPageUpdatesRows(t *testing.T) {
 	getenv := settingsEnv(t, "# mine\n", "", nil)
@@ -35,7 +35,7 @@ func TestSettingsPageUpdatesRows(t *testing.T) {
 			t.Errorf("%s: editable %v, label %q", k, r.Editable, r.Label)
 		}
 	}
-	if h := settingHelp(settingRowOf(t, groups, "updates.window")); !strings.Contains(h, "03:00-05:00") || !strings.Contains(h, "Not in effect yet") {
+	if h := settingHelp(settingRowOf(t, groups, "updates.window")); !strings.Contains(h, "03:00-05:00") || !strings.Contains(h, "The updater's loop reads it") {
 		t.Fatalf("window help %q", h)
 	}
 }
