@@ -3,7 +3,8 @@
 - Status: spec r4, for review (subject `plan-lifecycle-spec`). Not built. r3 merged as #847.
   - r4, the person's answers to ask 1795818074022-0 (§C), folded in: the release recap wakes the
     drafter (§A4); `plan load` takes no path (§A4); master's sorting is recorded, undone from
-    busmon, and never overrides the person's (§A3); a headless approval counts only on a merged
+    busmon, and never overrides the person's, and off-bus PRs come from the forge reader, not
+    git history (§A3); a headless approval counts only on a merged
     request, and a new approval must name its head (§A2); the mini timeline is a list (§B7, §B8).
   - r2, foureyes r1:
     - a task's work is one request, its slices `--more` steps (§A1, §A2);
@@ -162,10 +163,30 @@ already done (`Merged`). No one records it by hand any more.
 belongs to no task:
 - **requests closed on merge** whose provenance is not `plan:<a task of the plan>` and that are
   not attached;
-- **merges in the base** that no request names. The dispatcher reads them from the base's
-  first-parent history since the plan's load. That is today's `plan-drift` reader, fixed: it reads
-  the delivery base (`[delivery] base`, `dev` here) instead of `origin/main`, and it reads the
-  squash subject `title (#N)` as well as the merge-commit one;
+- **off-bus PRs** (the person's answer to the follow-up, ask 1795852308652-0): PRs merged into
+  the delivery base (`[delivery] base`, `dev` here) since the plan's load that no request
+  references, tagged "off-bus" (a hotfix, the person's own). No git history is parsed. They come
+  from the **forge reader the merge-queue pass already runs** for ci-loop
+  (`internal/dispatchsvc/mergequeuechore.go:361`, `mergequeue/forge.go`):
+  - `mergequeue.ReadGitHubMerged(ctx, dir, env, base, since)` is new, beside `ReadGitHub`, and
+    run the same way: the same hardened env, `gh` from env's PATH, no token read, the call
+    bounded by `mergeQueueCall`, free text through `cleanText`. It runs `gh pr list --state
+    merged --base <base> --search "merged:>=<since>" --json
+    number,title,url,headRefName,headRefOid,mergeCommit,mergedAt --limit 1000`. A list of exactly
+    the limit is `ErrIncomplete`;
+  - it runs in the same pass, after `ReadGitHub`, only when the forge is GitHub with `gh`
+    (`case f.Kind == forge.GitHub && c.hasGH(env)`) and a plan is loaded. GitLab and Bitbucket
+    get their reader with ci-loop's roadmap step (ci-loop §8 Q7), behind the same function
+    shape;
+  - **referenced by a request** means any of: the PR number in a request's `Merged.pr` or a
+    merge-queue item seen for its branch; the PR's `headRefName` equal to a request's branch; its
+    `headRefOid` or merge commit equal to a request's recorded `Commit`. A PR referenced is never
+    off-bus;
+  - **a failed or cut read** keeps the previous off-bus items, never a partial list read as
+    whole, as the merge queue does;
+  - **no forge reader** (a local forge, GitLab or Bitbucket today, or `gh` missing): the board
+    only, and the section's header carries one line: "off-bus PRs not read: no forge reader for
+    <forge>";
 - excluding PRs master marked `plan ignore` (notes, a release, a hotfix).
 
 **Where it is kept:** the dispatcher's merge-queue pass writes `{p}:plan:unplanned`, a hash keyed
@@ -490,10 +511,15 @@ The steps:
      - `plan done` is refused with linked work;
      - an 11-task fixture whose requests are `--plan`-linked and merged shows 11/11 with no fact.
 2. **Unplanned** (§A3):
-   - the work: the fixed reader (delivery base, squash subjects); `{p}:plan:unplanned`, fenced,
-     dispatcher-only; `plan next add`;
+   - the work: `mergequeue.ReadGitHubMerged` and its call in the merge-queue pass;
+     `{p}:plan:unplanned`, fenced, dispatcher-only; `plan next add`; the sort records and `z`;
    - tests:
-     - a squash-merged PR on `dev` with no request is unplanned;
+     - with a faked `gh` (the merge-queue chore's fake): a PR merged into `dev` that no request
+       references is unplanned, tagged "off-bus"; one whose branch, head or number a request
+       names is not;
+     - a cut list (exactly the limit) and a failed read keep the previous off-bus items;
+     - a local forge, or no `gh`: no forge call, the board only, and the header's notice line;
+     - no `git log` is run for this section (the fake git records its calls);
      - a `--plan` request is not;
      - an `--own` request is;
      - `plan ignore` removes an item;
@@ -565,8 +591,8 @@ All six took the recommended option. What they added is folded in above:
    (§A4, §A5).
 2. **Q2, `plan load` only loads the approved draft**, by its id, with no bypass flag, and a
    migration error for the old form. The recovery is `plan draft` on the file (§A4).
-3. **Q3, `plan-drift` removed**, with its help and goldens, and no git-history heuristics. Its
-   reach over §A3's base reader is asked in ask 1795852308652-0 (below).
+3. **Q3, `plan-drift` removed**, with its help and goldens, and no git-history heuristics. On the
+   follow-up, §A3's second source is the forge reader, not `dev`'s history (below).
 4. **Q4, the person in busmon and master by the CLI.** Master's sorting is recorded (who, when,
    reason) and reversible from busmon; master never re-sorts what the person sorted; "next plan"
    feeds only the draft (§A3). The ask's option said `+` for next plan. The key is `n`, because
@@ -578,7 +604,8 @@ All six took the recommended option. What they added is folded in above:
    person in the warning color with its duration (§B7, §B8).
 
 Two follow-ups, ask 1795852308652-0:
-- **Does the off-plan section still read `dev`'s history** (§A3's second source), given "no
-  git-history heuristics"? Recommended: no, the board only.
+- **Does the off-plan section still read `dev`'s history?** Answered: no. The board's requests
+  stay; the second source is the forge reader ci-loop's pass uses, for merged PRs no request
+  references, tagged "off-bus"; with no forge reader, the board only and a notice (§A3).
 - **Must `plan draft --from <file>` take a committed file?** Recommended: yes, `--from <file>` is
   `plan draft <file>@HEAD`, refused on uncommitted changes.
