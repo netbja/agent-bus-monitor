@@ -55,6 +55,9 @@ func holderScopes(project string, d holderScopeDeps) (*holder.Scopes, string) {
 	if d.goos != "linux" {
 		return nil, "not Linux"
 	}
+	if d.self == "" {
+		return nil, "this binary's path is unknown (agent-enter)"
+	}
 	run, err := d.look("systemd-run")
 	if err != nil {
 		return nil, "no systemd-run: " + err.Error()

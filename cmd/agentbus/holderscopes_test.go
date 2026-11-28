@@ -75,9 +75,13 @@ func TestHolderScopesNeedTheirTools(t *testing.T) {
 		{"macOS", "darwin", "", "not Linux"},
 		{"no systemd-run", "linux", "systemd-run", "systemd-run"},
 		{"no systemctl", "linux", "systemctl", "systemctl"},
+		{"no path of its own", "linux", "self", "agent-enter"},
 	} {
 		d, _ := scopeTestDeps(t)
 		d.goos = tc.goos
+		if tc.missing == "self" {
+			d.self = ""
+		}
 		d.look = func(b string) (string, error) {
 			if b == tc.missing {
 				return "", errors.New("not found")

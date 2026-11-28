@@ -31,6 +31,7 @@ func TestParseScopeUnit(t *testing.T) {
 		{"agentbus-demo-dev.0123456789-coder-x2.scope", "", "", "", "", false}, // not a terminal
 		{"agentbus-holder.demo.dev.0123456789.scope", "", "", "", "", false},   // not ours
 		{"other-demo-dev.0123456789-coder-t2.scope", "", "", "", "", false},
+		{"agentbus-demo-dev.01234+6789-coder-t2.scope", "", "", "", "", false}, // a key ScopeKey would not give
 	} {
 		p, key, role, term, ok := ParseScopeUnit(c.unit)
 		if ok != c.ok || p != c.p || key != c.key || role != c.role || term != c.term {
