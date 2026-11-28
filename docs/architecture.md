@@ -100,6 +100,14 @@ input reads `?`. busmon reads the plan every `requestPoll` tick through the opti
 narrow tier's sixth view; Enter opens a task or expands done). Spec:
 `docs/superpowers/specs/2026-10-22-plan-view-design.md`.
 
+**`attention/`** (status-summary §3.2) is what waits on the person, from broker state alone:
+`Items(Inputs, now)` gives For you's broker-only ranks (asks, the stall guard, waiting agents,
+their client's prompts and stuck screens, gates that concern the person, the merge queue), with
+`Observe`, `PromptBlocked`, `ScreenStuck` and `Answered`, the judgements behind them. busmon's
+For you is `attention.Items`, then its own report and unread rows (they end on one busmon's local
+marks), then the folds; `TestForYouAttentionRanksAreAttentions` pins it. `plan.NowNext` is the
+plan's task in hand and the next one, read by the plan board.
+
 **`agentstate/`** judges an agent's state from its screen, per client (herdr-exit spec 4.3, 4.9;
 step 2a): `Signature` (Ready, Busy, Modal, Dialog, the input region under the last Prompt line)
 with `Match` and `InDialog`, and one embedded profile per client, `clients/<client>.toml`, holding

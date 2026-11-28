@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/netbja/agent-bus-monitor/attention"
 	"strconv"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ func attentionHistoryFloor(events []bus.Event) time.Time {
 // declared, with no open question left. A reply computed for an older
 // declaration never covers a newer one, even before the next history scan.
 func answered(a *agentState) bool {
-	return a.state == "waiting" && a.openAsk == 0 && !a.answeredAt.IsZero() && a.answeredAt.After(a.stateAt)
+	return attention.Answered(attnAgent(a))
 }
 
 // agentAnsweredAt is when the person answered a's waiting, through the rule

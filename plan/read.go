@@ -3,6 +3,7 @@ package plan
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -173,6 +174,29 @@ const (
 // Quiet reports a task in progress whose newest fact is older than QuietAfter.
 func Quiet(r Row, now time.Time) bool {
 	return r.State == InProgress && r.LastFact > 0 && now.Sub(time.UnixMilli(r.LastFact)) > QuietAfter
+}
+
+// NowNext is the task in hand now (the first in progress or in review, else
+// the first waiting for the person, else the first blocked; an answered one
+// is master's to record, not in hand) and the first upcoming one, the next;
+// nil when there is none. busmon's plan board and agentbus summary read it
+// (status-summary §3.2). It is not onboarding's InHand (onboarding §8.1),
+// which counts an answered task in on purpose: two questions, two functions.
+func NowNext(rows []Row) (now, next *Row) {
+	for _, states := range [][]State{{InProgress, InReview}, {Waiting}, {Blocked}} {
+		for i := range rows {
+			if now == nil && slices.Contains(states, rows[i].State) {
+				now = &rows[i]
+			}
+		}
+	}
+	for i := range rows { // the task in hand is never upcoming
+		if rows[i].State == Upcoming {
+			next = &rows[i]
+			break
+		}
+	}
+	return now, next
 }
 
 // Count is done/total.

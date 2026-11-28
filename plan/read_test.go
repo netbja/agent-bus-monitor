@@ -190,3 +190,31 @@ func TestCount(t *testing.T) {
 		}
 	}
 }
+
+// status-summary §3.2: the task in hand is the first in progress or in
+// review, else the first waiting, else the first blocked; an answered one is
+// not in hand; next is the first upcoming.
+func TestNowNext(t *testing.T) {
+	row := func(id string, s State) Row { return Row{Task: Task{ID: id}, State: s} }
+	id := func(r *Row) string {
+		if r == nil {
+			return ""
+		}
+		return r.Task.ID
+	}
+	for _, c := range []struct {
+		rows      []Row
+		now, next string
+	}{
+		{[]Row{row("b", Blocked), row("w", Waiting), row("u", Upcoming), row("r", InReview)}, "r", "u"},
+		{[]Row{row("b", Blocked), row("w", Waiting)}, "w", ""},
+		{[]Row{row("a", Answered), row("b", Blocked)}, "b", ""},
+		{[]Row{row("a", Answered), row("d", Done), row("u1", Upcoming), row("u2", Upcoming)}, "", "u1"},
+		{nil, "", ""},
+	} {
+		now, next := NowNext(c.rows)
+		if id(now) != c.now || id(next) != c.next {
+			t.Errorf("%v: now %q next %q, want %q %q", c.rows, id(now), id(next), c.now, c.next)
+		}
+	}
+}

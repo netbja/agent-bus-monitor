@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/attention"
 	"github.com/netbja/agent-bus-monitor/plan"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -19,54 +20,26 @@ import (
 // person, ranked, oldest first within a rank. Every other surface is a named
 // subset of it (decisions, unreadItems), so they can never disagree.
 
+// The ranks are attention's (status-summary §3.2): the broker-only ones are
+// built there, rankReport and rankUnread here, from this busmon's marks.
 const (
-	rankAsk    = iota // an open ask, one row per ask
-	rankHealth        // the stall guard: the team waits on the person, or the person's focus holds a hand-off
-	rankWait          // a waiting agent with no open ask, or its client's prompt
-	rankGate          // a pending verdict: an open 4-eyes gate
-	rankReport        // a report that needs the person and names no one live target (triage-dedupe §3)
-	rankMerge         // a change waiting for the person's merge (merge-queue): Enter opens its page
-	rankUnread        // an Activity line for the person not opened yet
+	rankAsk    = attention.RankAsk
+	rankHealth = attention.RankHealth
+	rankWait   = attention.RankWait
+	rankGate   = attention.RankGate
+	rankReport = attention.RankReport
+	rankMerge  = attention.RankMerge
+	rankUnread = attention.RankUnread
 )
 
-// forYou is the list, from the snapshot and the feed's marks. The "for you"
+// forYou is the list: attention's items from the snapshot, then this
+// busmon's report and unread rows and the folds (foldLines). The "for you"
 // hint (forYouHint) is not a rank: it stays a flag on the agent's row.
 func forYou(s snapshot, feed []feedLine) []attentionItem {
 	var out []attentionItem
-	for _, a := range openAsks(s.asks) {
-		if a.Open() == 0 || a.CreatedAt <= 0 {
-			continue
-		}
-		out = append(out, attentionItem{Rank: rankAsk, Key: "ask:" + a.ID, Agent: a.From, Text: a.Title,
-			At: msTime(a.CreatedAt), AskID: a.ID, Count: a.Open()})
+	for _, it := range attention.Items(attentionInputs(s), time.Now()) {
+		out = append(out, fromAttention(s, it))
 	}
-	for name, a := range s.agents {
-		switch {
-		case a.state == "waiting" && !answered(a) && a.openAsk == 0:
-			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("wait:%s:%d", name, a.stateAt.UnixMilli()),
-				Agent: name, Text: a.message, At: a.stateAt})
-		case screenStuck(a):
-			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("stuck:%s:%d", name, a.obsScreenSince.UnixMilli()),
-				Agent: name, Text: stuckWords(a), At: a.obsScreenSince})
-		case promptBlocked(a):
-			since := a.obsSince
-			if since.IsZero() {
-				since = a.obsAt
-			}
-			text := blockedWords
-			if a.trustFolder != "" {
-				text = blockedWords + ": " + trustPromptText(a.client, a.trustFolder) // the words first, then what it asks
-			}
-			out = append(out, attentionItem{Rank: rankWait, Key: fmt.Sprintf("prompt:%s:%d", name, since.UnixMilli()),
-				Agent: name, Text: text, At: since})
-		}
-		out = append(out, personGateItems(s.person, name, a.gates)...)
-	}
-	if _, isAgent := s.agents[s.person]; !isAgent {
-		out = append(out, personGateItems(s.person, s.person, s.personGates)...)
-	}
-	out = append(out, stallItems(s.guardianHealth, s.guardianNow)...)
-	out = append(out, mergeItems(s)...)
 	out = foldLines(s, feed, out)
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -82,6 +55,53 @@ func forYou(s snapshot, feed []feedLine) []attentionItem {
 		return a.Key < b.Key
 	})
 	return out
+}
+
+// attentionInputs are the snapshot's broker reads, as attention reads them.
+// busmon's default identity is no person.
+func attentionInputs(s snapshot) attention.Inputs {
+	in := attention.Inputs{Person: s.person, Asks: s.asks, PersonGates: s.personGates,
+		Health: s.guardianHealth, HealthNow: s.guardianNow, Dispatch: s.dispatch,
+		MergeRead: s.mergeQRead, Merge: s.mergeQ, MergeErr: s.mergeQErr,
+		Agents: make(map[string]attention.Agent, len(s.agents))}
+	if in.Person == defaultHuman {
+		in.Person = ""
+	}
+	for n, a := range s.agents {
+		in.Agents[n] = attnAgent(a)
+	}
+	return in
+}
+
+// attnAgent is an agent's broker facts, as attention judges them.
+func attnAgent(a *agentState) attention.Agent {
+	return attention.Agent{State: a.state, Message: a.message, StateAt: a.stateAt, OpenAsk: a.openAsk,
+		AnsweredAt: a.answeredAt, StuckAfter: a.stuckAfter, Gates: a.gates, Obs: attnObs(a), JudgedAt: a.judgedAt}
+}
+
+func attnObs(a *agentState) attention.Obs {
+	return attention.Obs{State: a.obsState, OwnPID: a.obsOwnPID, Prompt: a.obsPrompt, At: a.obsAt,
+		Since: a.obsSince, ScreenSince: a.obsScreenSince}
+}
+
+// fromAttention is busmon's row of an attention item: a stuck screen and a
+// prompt in busmon's words (the age, the local trust folder), a merge's text
+// made safe to draw.
+func fromAttention(s snapshot, it attention.Item) attentionItem {
+	r := attentionItem{Rank: it.Rank, Key: it.Key, Agent: it.Agent, Text: it.Text, At: it.At, AskID: it.AskID,
+		Count: it.Count, By: it.By, Head: it.Head, Branch: it.Branch}
+	switch {
+	case it.Kind == attention.KindStuck:
+		r.Text = stuckWords(s.agents[it.Agent])
+	case it.Kind == attention.KindPrompt:
+		r.Text = blockedWords
+		if a := s.agents[it.Agent]; a.trustFolder != "" {
+			r.Text = blockedWords + ": " + trustPromptText(a.client, a.trustFolder) // the words first, then what it asks
+		}
+	case it.Rank == rankMerge:
+		r.Text = Preview(it.Text)
+	}
+	return r
 }
 
 // foldLines adds the feed's lines to the targets' items (triage-dedupe §2,
@@ -336,50 +356,11 @@ func activityUnread(feed []feedLine) int {
 	return n
 }
 
-// stallItems are the stall guard's rows for the person (spec
-// 2026-11-01-stall-guard-design.md, busmon): team-stall waiting on the
-// person's own task, and clear-stall held by the person's focused pane. Only
-// a current warn with that reason; the key carries the episode's since, so a
-// new episode is a new row.
+// stallItems are the stall guard's rows for the person (attention's).
 func stallItems(records map[string]guardian.Record, now time.Time) []attentionItem {
 	var out []attentionItem
-	for _, c := range []struct{ id, reason, word string }{
-		{"team-stall", "waiting-person", "stall"},
-		{"clear-stall", "pane-focused", "clear"},
-	} {
-		d, ok := guardian.ByID(c.id)
-		rec, has := records[c.id]
-		if !ok || !has || rec.Reason != c.reason || guardian.EffectiveStatus(rec, now.UnixMilli(), d.Interval) != guardian.Warn {
-			continue
-		}
-		out = append(out, attentionItem{Rank: rankHealth, Key: fmt.Sprintf("health:%s:%d", c.id, rec.Since),
-			Agent: c.word, Text: rec.Detail, At: msTime(rec.Since)})
-	}
-	return out
-}
-
-// personGateItems are the rows of the gates on gated that concern the person
-// (foryou-gates): a gate the person opened (they asked for that review) or
-// one holding the person. A review between agents is theirs to finish, never
-// a row: master's challenges to reviewers stay off the list and the badge.
-// The default identity is no person, so it never matches. Who reviews whom
-// depends on who challenged, so the row names both, neutrally.
-func personGateItems(person, gated string, gates map[string]string) []attentionItem {
-	if person == "" || person == defaultHuman {
-		return nil
-	}
-	var out []attentionItem
-	for ref, meta := range gates {
-		g := bus.ParseGateMeta(meta)
-		if g.Challenger != person && gated != person {
-			continue
-		}
-		summary := g.Text
-		if summary == "" {
-			summary = ref
-		}
-		out = append(out, attentionItem{Rank: rankGate, Key: "gate:" + gated + ":" + ref, Agent: gated, By: g.Challenger,
-			Text: summary, At: eventTimestamp(ref)})
+	for _, it := range attention.Items(attention.Inputs{Health: records, HealthNow: now}, now) {
+		out = append(out, attentionItem{Rank: it.Rank, Key: it.Key, Agent: it.Agent, Text: it.Text, At: it.At})
 	}
 	return out
 }

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"sort"
+	"github.com/netbja/agent-bus-monitor/attention"
 	"strings"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -21,16 +21,7 @@ type askPanel struct {
 }
 
 // openAsks are the asks still open, oldest first.
-func openAsks(asks []bus.Ask) []bus.Ask {
-	var out []bus.Ask
-	for _, a := range asks {
-		if a.State == "open" {
-			out = append(out, a)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt < out[j].CreatedAt })
-	return out
-}
+func openAsks(asks []bus.Ask) []bus.Ask { return attention.OpenAsks(asks) }
 
 func findAsk(asks []bus.Ask, id string) (bus.Ask, bool) {
 	for _, a := range asks {
