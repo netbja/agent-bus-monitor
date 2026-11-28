@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -68,3 +70,43 @@ func CheckedDone(t Task, fact Fact, in Inputs, head string) error {
 
 // ErrNoReader: the forge has no reader of a merged PR's head here.
 var ErrNoReader = errors.New("no reader of a merged pull request's head for this forge")
+
+// PersonCheckQID is the question id that binds a person's check (§9.4):
+// "check-" and 16 hex digits of SHA-256(plan ‖ 0x00 ‖ task id ‖ 0x00 ‖
+// check). Another check, task or plan gives another id, so an old passes
+// never answers a new check.
+func PersonCheckQID(f File, t Task) string {
+	h := sha256.Sum256([]byte(f.Plan + "\x00" + t.ID + "\x00" + t.Check))
+	return "check-" + hex.EncodeToString(h[:8])
+}
+
+// CheckMissions holds §7.3: a mission task with a check has that mission's
+// missions.json test as its check, character for character (the conductor
+// runs the test, so it enforces the check). missions reads a change's tests
+// by mission id at the plan's commit; a file that cannot be read refuses.
+// plan load calls it (plan draft too, step b); Validate reads no file.
+func CheckMissions(f File, missions func(change string) (map[string]string, error)) error {
+	read := map[string]map[string]string{}
+	for _, t := range f.Tasks {
+		if t.Mission == "" || t.Check == "" {
+			continue
+		}
+		change, id, _ := strings.Cut(t.Mission, "/")
+		tests, ok := read[change]
+		if !ok {
+			var err error
+			if tests, err = missions(change); err != nil {
+				return fmt.Errorf("plan: task %s: cannot read %s's missions.json: %w", t.ID, change, err)
+			}
+			read[change] = tests
+		}
+		test, ok := tests[id]
+		switch {
+		case !ok:
+			return fmt.Errorf("plan: task %s: mission %s is not in %s's missions.json", t.ID, t.Mission, change)
+		case test != t.Check:
+			return fmt.Errorf("plan: task %s: its check differs from mission %s's test %q", t.ID, t.Mission, test)
+		}
+	}
+	return nil
+}

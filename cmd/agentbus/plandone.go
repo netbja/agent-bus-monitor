@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -21,22 +23,9 @@ import (
 // rule does not reach, which records done as before. Any read that fails
 // refuses (fail closed).
 func planDoneHead(ctx context.Context, b *bus.Bus, repo string, getenv func(string) string, id string) (string, error) {
-	rec, has, err := b.Plan(ctx)
-	if err != nil { // never the unchecked path on a read that failed (reviewer-codex, foureyes)
-		return "", fmt.Errorf("reading the plan: %w", err)
-	}
-	if !has {
-		return "", nil // the write itself says there is no plan
-	}
-	f, err := plan.Parse([]byte(rec.File))
+	_, t, err := activeTask(ctx, b, id)
 	if err != nil {
-		return "", fmt.Errorf("the loaded plan does not parse: %w", err)
-	}
-	var t plan.Task
-	for _, x := range f.Tasks {
-		if x.ID == id {
-			t = x
-		}
+		return "", err
 	}
 	if !plan.Gated(t) {
 		return "", nil
@@ -114,4 +103,54 @@ func mergedHeadOf(k forge.Kind, out []byte) (string, error) {
 		return "", fmt.Errorf("it is %s, not merged", strings.ToLower(v.State))
 	}
 	return head, nil
+}
+
+// activeTask is the loaded plan and its task id (zero when no plan is
+// loaded or the plan has no such task: the write then says so). A read that
+// fails is an error, never the unchecked path (reviewer-codex, foureyes).
+func activeTask(ctx context.Context, b *bus.Bus, id string) (plan.File, plan.Task, error) {
+	rec, has, err := b.Plan(ctx)
+	if err != nil {
+		return plan.File{}, plan.Task{}, fmt.Errorf("reading the plan: %w", err)
+	}
+	if !has {
+		return plan.File{}, plan.Task{}, nil
+	}
+	f, err := plan.Parse([]byte(rec.File))
+	if err != nil {
+		return plan.File{}, plan.Task{}, fmt.Errorf("the loaded plan does not parse: %w", err)
+	}
+	for _, x := range f.Tasks {
+		if x.ID == id {
+			return f, x, nil
+		}
+	}
+	return f, plan.Task{}, nil
+}
+
+// planDonePerson is plan done on a person's task with a check (onboarding
+// §9.4): the question id recomputed from the active plan, then each ask
+// about the task holding a question of that id, newest first, until one
+// carries the person's typed passes (bus.TypedApproval). It returns that
+// reply entry and the id; "" for a task the rule does not reach.
+func planDonePerson(ctx context.Context, b *bus.Bus, id string) (entry, qid string, err error) {
+	f, t, err := activeTask(ctx, b, id)
+	if err != nil || t.Owner != plan.Person || t.Check == "" {
+		return "", "", err
+	}
+	qid = plan.PersonCheckQID(f, t)
+	asks, err := b.Asks(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	sort.SliceStable(asks, func(i, j int) bool { return asks[i].CreatedAt > asks[j].CreatedAt })
+	for _, a := range asks {
+		if a.Task != t.ID || !slices.ContainsFunc(a.Questions, func(q bus.AskQuestionState) bool { return q.ID == qid }) {
+			continue
+		}
+		if e, err := b.TypedApproval(ctx, a.ID, qid, "passes"); err == nil {
+			return e, qid, nil
+		}
+	}
+	return "", "", fmt.Errorf("%s: the person has not answered passes to its current check (id %s)", t.ID, qid)
 }

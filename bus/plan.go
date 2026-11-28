@@ -53,6 +53,11 @@ type PlanFact struct {
 	// (onboarding §9.3); its done counts only at the head its approving
 	// verdict checked (§9.2). Absent on every other done.
 	Head string `json:"head,omitempty"`
+	// Approved and ApprovedQID: a person's task with a check (onboarding
+	// §9.4), the reply entry of their typed passes and the question id it
+	// answered; plan done writes them, derive reads them.
+	Approved    string `json:"approved,omitempty"`
+	ApprovedQID string `json:"approved_qid,omitempty"`
 }
 
 // PlanNoteMax bounds a task's note (one line).
@@ -210,6 +215,17 @@ func (b *Bus) PlanDoneAt(ctx context.Context, task, head string) error {
 	return b.planFact(ctx, task, "done", head)
 }
 
+// PlanDoneApproved records a person's task with a check done (onboarding
+// §9.4): done, the reply entry of their typed passes and the question id it
+// answered, in the same script.
+func (b *Bus) PlanDoneApproved(ctx context.Context, task, entry, qid string) error {
+	if entry == "" || !strings.HasPrefix(qid, "check-") {
+		return fmt.Errorf("an approval is a reply entry and a check- question id")
+	}
+	_, err := b.planFactRun(ctx, task, "pdone", entry, qid)
+	return err
+}
+
 // PlanNote records a one-line note on a task.
 func (b *Bus) PlanNote(ctx context.Context, task, note string) error {
 	if note == "" || len([]rune(note)) > PlanNoteMax || strings.ContainsAny(note, "\r\n") {
@@ -279,6 +295,9 @@ elseif ARGV[2] == 'ref' then f.ref = ARGV[3]; f.pr = nil; f.linked = now
 elseif ARGV[2] == 'done' then
   f.done = now
   if ARGV[3] ~= '' then f.head = ARGV[3] else f.head = nil end
+  f.approved = nil; f.approved_qid = nil
+elseif ARGV[2] == 'pdone' then
+  f.done = now; f.approved = ARGV[3]; f.approved_qid = ARGV[4]; f.head = nil
 elseif ARGV[2] == 'note' then f.note = ARGV[3] end
 f.at = now
 redis.call('HSET', KEYS[2], ARGV[1], cjson.encode(f))
