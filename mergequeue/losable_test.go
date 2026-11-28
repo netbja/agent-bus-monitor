@@ -67,7 +67,7 @@ func TestJudgeLosable(t *testing.T) {
 		Roles: []string{"coder", "coder2", "docs"},
 		Held:  []Held{{"coder", "coder/new"}, {"coder", "coder/pushed"}, {"coder", "coder/gone"}, {"coder", "coder/new"}, {"ghost", "ghost/x"}},
 		Local: map[string]string{"coder/new": "n", "coder/pushed": "p", "ghost/x": "g"},
-		Stashes: []string{"On coder2/y: wip", "WIP on dev: abc docs: notes", "On coderx: no",
+		Stashes: []string{"On coder2/y: wip", "WIP on dev: abc docs: notes", "On coderx: no", "On mycoder/z: no",
 			"On coder/new: one"},
 		Pushed: func(branch, _ string) (bool, error) { return pushed[branch], nil },
 	}

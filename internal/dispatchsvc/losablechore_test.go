@@ -17,17 +17,20 @@ const (
 	losAhead  = "4444444444444444444444444444444444444444"
 	losRemote = "5555555555555555555555555555555555555555"
 	losBase   = "6666666666666666666666666666666666666666"
+	losFar    = "7777777777777777777777777777777777777777"
+	losAbsent = "8888888888888888888888888888888888888888" // origin's tip of coder/far, never fetched here
 )
 
 // losChore is mqChore with the losable readers faked: coder holds coder/new
-// (only here), coder/merged (in the base) and coder/ahead (origin's tip is
-// past it); coder2 holds coder2/p, pushed as is; docs holds nothing; one
+// (only here), coder/merged (in the base), coder/ahead (origin's tip is
+// past it) and coder/far (origin's tip is not here: not judged on it, so
+// unpushed); coder2 holds coder2/p, pushed as is; docs holds nothing; one
 // stash names coder.
 func losChore(t *testing.T, origin string) (*mergeQueueChore, *bus.Bus) {
 	t.Helper()
 	c, b := mqChore(t, origin)
 	ctx := context.Background()
-	for task, claim := range map[string][2]string{"t-new": {"coder", "coder/new"}, "t-merged": {"coder", "coder/merged"}, "t-ahead": {"coder", "coder/ahead"}, "t-p": {"coder2", "coder2/p"}} {
+	for task, claim := range map[string][2]string{"t-new": {"coder", "coder/new"}, "t-merged": {"coder", "coder/merged"}, "t-ahead": {"coder", "coder/ahead"}, "t-far": {"coder", "coder/far"}, "t-p": {"coder2", "coder2/p"}} {
 		if err := b.BoardClaim(ctx, task, claim[0], claim[1]); err != nil {
 			t.Fatal(err)
 		}
@@ -36,16 +39,19 @@ func losChore(t *testing.T, origin string) (*mergeQueueChore, *bus.Bus) {
 		t.Fatal(err)
 	}
 	c.localBranches = func(context.Context, string, []string) ([]mergequeue.Tip, error) {
-		return []mergequeue.Tip{{Branch: "coder/new", Head: losNew}, {Branch: "coder/merged", Head: losMerged}, {Branch: "coder/ahead", Head: losAhead}, {Branch: "coder2/p", Head: losPushed}}, nil
+		return []mergequeue.Tip{{Branch: "coder/new", Head: losNew}, {Branch: "coder/merged", Head: losMerged}, {Branch: "coder/ahead", Head: losAhead}, {Branch: "coder/far", Head: losFar}, {Branch: "coder2/p", Head: losPushed}}, nil
 	}
 	c.remoteTips = func(context.Context, string, []string, string) ([]mergequeue.Tip, string, error) {
-		return []mergequeue.Tip{{Branch: "coder2/p", Head: losPushed}, {Branch: "coder/ahead", Head: losRemote}}, losBase, nil
+		return []mergequeue.Tip{{Branch: "coder2/p", Head: losPushed}, {Branch: "coder/ahead", Head: losRemote}, {Branch: "coder/far", Head: losAbsent}}, losBase, nil
 	}
 	c.stashes = func(context.Context, string, []string) ([]string, error) { return []string{"On coder/new: wip"}, nil }
 	c.hasCommit = func(_ context.Context, _ string, _ []string, h string) (bool, error) {
 		return h == losBase || h == losRemote, nil
 	}
 	c.isAncestor = func(_ context.Context, _ string, _ []string, h, on string) (bool, error) {
+		if on != losBase && on != losRemote { // git merge-base on a commit not here fails
+			return false, errors.New("fatal: not a valid commit name " + on)
+		}
 		return h == losMerged && on == losBase || h == losAhead && on == losRemote, nil
 	}
 	return c, b
@@ -64,7 +70,7 @@ func TestLosablePass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l := rec["coder"]; !slices.Equal(l.Branches, []string{"coder/new"}) || !slices.Equal(l.Stashes, []string{"On coder/new: wip"}) {
+	if l := rec["coder"]; !slices.Equal(l.Branches, []string{"coder/far", "coder/new"}) || !slices.Equal(l.Stashes, []string{"On coder/new: wip"}) {
 		t.Fatalf("coder: %+v", l)
 	}
 	for _, role := range []string{"coder2", "docs"} {
@@ -72,7 +78,7 @@ func TestLosablePass(t *testing.T) {
 			t.Fatalf("%s: %+v %v", role, l, ok)
 		}
 	}
-	if o := b.ReadOwes(ctx, map[string]bus.AgentSnapshot{"coder": {}})["coder"]; !slices.Equal(o.Unpushed, []string{"coder/new"}) || !o.Stash || len(o.Unknown) != 0 {
+	if o := b.ReadOwes(ctx, map[string]bus.AgentSnapshot{"coder": {}})["coder"]; !slices.Equal(o.Unpushed, []string{"coder/far", "coder/new"}) || !o.Stash || len(o.Unknown) != 0 {
 		t.Fatalf("coder owes: %+v", o)
 	}
 }
@@ -153,7 +159,7 @@ func TestMergeQueuePassWritesLosable(t *testing.T) {
 	if err := c.pass(context.Background(), "mq"); err != nil {
 		t.Fatal(err)
 	}
-	if l := mustLosable(t, b)["coder"]; !slices.Equal(l.Branches, []string{"coder/new"}) {
+	if l := mustLosable(t, b)["coder"]; !slices.Equal(l.Branches, []string{"coder/far", "coder/new"}) {
 		t.Fatalf("coder: %+v", l)
 	}
 	s := serviceMergeQueueChore(b, func(string) string { return "" })

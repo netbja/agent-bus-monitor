@@ -76,7 +76,8 @@ func TestReadOwesLosable(t *testing.T) {
 	}
 	stale := time.Now().Add(-LosableFresh - time.Minute).UnixMilli()
 	b.r.HSet(ctx, LosableKey(b.project), "old", `{"branches":[],"stashes":[],"at":`+strconv.FormatInt(stale, 10)+`}`)
-	owes := b.ReadOwes(ctx, map[string]AgentSnapshot{"coder": {}, "docs": {}, "sec": {}, "old": {}, "architect": {}})
+	b.r.HSet(ctx, LosableKey(b.project), "noat", `{"branches":[],"stashes":[]}`) // no time: never fresh
+	owes := b.ReadOwes(ctx, map[string]AgentSnapshot{"coder": {}, "docs": {}, "sec": {}, "old": {}, "noat": {}, "architect": {}})
 	if c := owes["coder"]; !slices.Equal(c.Unpushed, []string{"coder/x"}) || slices.Contains(c.Unknown, UnknownLosable) {
 		t.Fatalf("coder: %+v", c)
 	}
@@ -93,7 +94,7 @@ func TestReadOwesLosable(t *testing.T) {
 	if s, _ := Presence(PresenceIn{Pane: "k/t1", TermsRead: true, Owes: d}); s != PresenceStopped {
 		t.Fatalf("docs owing nothing: %s", s)
 	}
-	for _, role := range []string{"old", "architect"} {
+	for _, role := range []string{"old", "noat", "architect"} {
 		if o := owes[role]; !slices.Equal(o.Unknown, []string{UnknownLosable}) {
 			t.Errorf("%s: %+v", role, o)
 		}

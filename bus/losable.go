@@ -84,7 +84,7 @@ func orEmpty(s []string) []string {
 }
 
 // LosableRecord reads {p}:losable; a malformed entry is left out (its role
-// then reads unknown).
+// then reads unknown), and one without its time is never fresh.
 func (b *Bus) LosableRecord(ctx context.Context) (map[string]Losable, error) {
 	raw, err := b.r.HGetAll(ctx, LosableKey(b.project)).Result()
 	if err != nil {
@@ -93,7 +93,7 @@ func (b *Bus) LosableRecord(ctx context.Context) (map[string]Losable, error) {
 	out := make(map[string]Losable, len(raw))
 	for role, v := range raw {
 		var l Losable
-		if json.Unmarshal([]byte(v), &l) == nil && l.At > 0 {
+		if json.Unmarshal([]byte(v), &l) == nil {
 			out[role] = l
 		}
 	}
