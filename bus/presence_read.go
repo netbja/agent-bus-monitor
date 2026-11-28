@@ -6,20 +6,22 @@ import (
 	"sort"
 )
 
-// UnknownLosable names §3.1's item 5 while no reader of it exists (it needs
-// git: the merge-queue pass, a later step): every terminal-less agent that
-// owes nothing else is then lost, "unknown: losable work", never stopped.
+// UnknownLosable names §3.1's item 5 when the merge-queue pass's finding for
+// a role is absent, stale or unreadable: a terminal-less agent that owes
+// nothing else is then lost, "unknown: losable work", never stopped.
 const UnknownLosable = "losable work"
 
-// ReadOwes reads §3.1's items 1 to 4 for each agent of snaps: the board, the
-// asks and the hand-offs once, the gates and the addressed entries per
-// agent. A failed read names its item in Unknown, never an empty owe; item
-// 5 is UnknownLosable.
+// ReadOwes reads §3.1's items for each agent of snaps: the board, the asks,
+// the hand-offs and {p}:losable once, the gates and the addressed entries
+// per agent. A failed read names its item in Unknown, never an empty owe;
+// item 5 is the pass's fresh finding (FreshLosable), else UnknownLosable.
 func (b *Bus) ReadOwes(ctx context.Context, snaps map[string]AgentSnapshot) map[string]Owes {
 	out := make(map[string]Owes, len(snaps))
 	board, boardErr := b.Board(ctx)
 	asks, asksErr := b.Asks(ctx)
 	hands, handErr := b.Handoffs(ctx)
+	losable, losErr := b.LosableRecord(ctx)
+	now, nowErr := b.ServerTime(ctx)
 	for role, snap := range snaps {
 		var o Owes
 		if boardErr != nil {
@@ -56,7 +58,12 @@ func (b *Bus) ReadOwes(ctx context.Context, snaps map[string]AgentSnapshot) map[
 		} else {
 			o.Messages = int(ob.Size())
 		}
-		o.Unknown = append(o.Unknown, UnknownLosable)
+		if l, ok := FreshLosable(losable, role, now); ok && losErr == nil && nowErr == nil {
+			o.Unpushed = l.Branches
+			o.Stash = len(l.Stashes) > 0
+		} else {
+			o.Unknown = append(o.Unknown, UnknownLosable)
+		}
 		out[role] = o
 	}
 	return out
