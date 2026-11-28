@@ -8,8 +8,8 @@ import (
 )
 
 // ReadOwes on the test broker: a board task (a done one owes nothing), an
-// addressed entry; an agent
-// owing neither reads nothing but item 5, unknown in this step.
+// addressed entry; an agent owing neither reads nothing but item 5, unknown
+// with no merge-queue finding (TestReadOwesLosable has one).
 func TestReadOwes(t *testing.T) {
 	b := dialTest(t)
 	ctx := context.Background()

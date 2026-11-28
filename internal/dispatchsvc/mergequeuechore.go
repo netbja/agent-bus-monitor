@@ -57,6 +57,11 @@ type mergeQueueChore struct {
 	// localBranches are the local refs, no base required: close on merge's
 	// branch gone from origin (board-drift §3.2).
 	localBranches func(ctx context.Context, dir string, env []string) ([]mergequeue.Tip, error)
+	// losable work (cleaning-up-agents §3.1 item 5): the stash list, and the
+	// git test of a branch tip on the remote; nil stashes judges nothing.
+	stashes    func(ctx context.Context, dir string, env []string) ([]string, error)
+	hasCommit  func(ctx context.Context, dir string, env []string, head string) (bool, error)
+	isAncestor func(ctx context.Context, dir string, env []string, head, baseTip string) (bool, error)
 	// master-idle §3.1: the git test of delivery (a mergequeue.Delivery,
 	// kept across passes for its cache) and the plan's done subjects.
 	delivered func(ctx context.Context, dir string, env []string, baseTip string, heads []string) (map[string]bool, error)
@@ -108,6 +113,7 @@ func serviceMergeQueueChore(b *bus.Bus, getenv func(string) string) *mergeQueueC
 		},
 		github: mergequeue.ReadGitHub, readBase: mergequeue.ReadBaseRollup, remoteTips: mergequeue.RemoteTips, localTips: mergequeue.LocalTips, localBranches: mergequeue.LocalBranches,
 		fetchBase: mergequeue.FetchBase, inBase: mergequeue.InBase,
+		stashes: mergequeue.Stashes, hasCommit: mergequeue.HasCommit, isAncestor: mergequeue.IsAncestor,
 		delivered: delivery.Delivered,
 		done: func(ctx context.Context, vs []bus.Verdict) (map[string]bool, error) {
 			return planDoneSubjects(ctx, b, vs)
@@ -217,7 +223,10 @@ func (c *mergeQueueChore) pass(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	return c.runStepKnown(wctx, token, runRec, rec.Undelivered, rec.Reason == "")
+	if err := c.runStepKnown(wctx, token, runRec, rec.Undelivered, rec.Reason == ""); err != nil {
+		return err
+	}
+	return c.losablePass(ctx, token) // cleaning-up-agents §3.1 item 5, its own budget
 }
 
 // runHeads are the approved heads (within 72 h) the git test found in the

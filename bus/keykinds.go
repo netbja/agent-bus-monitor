@@ -53,6 +53,7 @@ var keyKinds = map[string]KeyClass{
 	// restore so the guard does not ask again; pruned after 72 h.
 	"mergequeue:dropped": KeyRecord,
 
+	"losable":  KeyRuntime, // the merge-queue pass's finding (cleaning-up-agents §3.1 item 5): fresh for 15 min
 	"services": KeyRuntime, "agents": KeyRuntime, "wake:*": KeyRuntime, "handoff": KeyRuntime,
 	"checkback": KeyRuntime, // an agent's own reminder (master-idle §4): what is in flight now
 	"run":       KeyRuntime, // the run budget's count (run-budget §2): a lost one starts a new run with a new baseline
