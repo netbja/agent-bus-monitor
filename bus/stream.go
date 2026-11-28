@@ -885,6 +885,18 @@ func idLess(a, b string) bool {
 	return aseq < bseq
 }
 
+// IDTime is a stream id's time; zero for a ref that is not one (no
+// millisecond part above 0). The readers that date an entry by its id use it
+// (attention, busmon, agentbus summary).
+func IDTime(id string) time.Time {
+	ms, _, _ := strings.Cut(id, "-")
+	n, err := strconv.ParseInt(ms, 10, 64)
+	if err != nil || n <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(n)
+}
+
 // splitID parses a stream ID into its millisecond and sequence components;
 // unparseable parts become 0.
 func splitID(id string) (ms, seq int64) {

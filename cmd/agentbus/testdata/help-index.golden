@@ -29,6 +29,7 @@ REVIEW COMMANDS
   audit:          the audit trail
 
 WORK COMMANDS
+  summary:        where the project stands
   board:          the shared task board
   request:        tracked requests
   retro:          a task's retrospective

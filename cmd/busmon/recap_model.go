@@ -123,7 +123,7 @@ func buildRecap(in recapInput) recapModel {
 			continue
 		}
 		text, _ := reportText(e.Message)
-		at := eventTimestamp(e.ID)
+		at := bus.IDTime(e.ID)
 		add(recapRow{Key: "unread:" + e.ID, Section: recapForYou,
 			Title:  sender(e) + " " + GlyphNone + " unread " + GlyphNone + " " + ageOf(at),
 			Detail: e.Message, Name: sender(e), NameRole: nameRole(sender(e)), Text: "unread: " + text, Age: ageOf(at), At: at})
@@ -163,7 +163,7 @@ func buildRecap(in recapInput) recapModel {
 		}
 		thread := threadID(e)
 		text, rid := reportText(e.Message)
-		at := eventTimestamp(e.ID)
+		at := bus.IDTime(e.ID)
 		row := recapRow{Key: "cmd:" + e.ID, Section: recapForYou, Title: e.From + " " + GlyphArrowR + " " + e.Target + " " + GlyphNone + " " + ageOf(at),
 			Detail: e.Message, Kind: "thread", Agent: e.From, Ref: thread, Event: e, Selectable: true,
 			Name: e.From, NameRole: nameRole(e.From), Text: text, Age: ageOf(at), At: at, Count: 1,
@@ -280,7 +280,7 @@ func buildRecap(in recapInput) recapModel {
 		m.Warnings = append(m.Warnings, "pause history is limited to the current record and retained resume directives")
 		m.Warnings = append(m.Warnings, "service history is limited to each service's latest state")
 		for _, e := range in.Commands {
-			at := eventTimestamp(e.ID)
+			at := bus.IDTime(e.ID)
 			if !at.After(in.Since) {
 				continue
 			}
@@ -305,7 +305,7 @@ func buildRecap(in recapInput) recapModel {
 		}
 		for i := range in.Swaps {
 			s := in.Swaps[i]
-			at := eventTimestamp(s.ID)
+			at := bus.IDTime(s.ID)
 			if !at.After(in.Since) {
 				continue
 			}
@@ -332,7 +332,7 @@ func buildRecap(in recapInput) recapModel {
 		}
 		counts := map[string]int{}
 		for _, r := range in.Reports {
-			if eventTimestamp(r.ID).After(in.Since) {
+			if bus.IDTime(r.ID).After(in.Since) {
 				counts[r.Agent]++
 			}
 		}
@@ -352,8 +352,8 @@ func buildRecap(in recapInput) recapModel {
 		row.Section = "Since your last visit"
 		add(row)
 	}
-	if !in.Since.IsZero() && in.HealthFloor != "" && eventTimestamp(in.HealthFloor).After(in.Since) {
-		add(recapRow{Section: "Since your last visit", Title: "health transition history before " + eventTimestamp(in.HealthFloor).Local().Format("2006-01-02 15:04") + " is not retained"})
+	if !in.Since.IsZero() && in.HealthFloor != "" && bus.IDTime(in.HealthFloor).After(in.Since) {
+		add(recapRow{Section: "Since your last visit", Title: "health transition history before " + bus.IDTime(in.HealthFloor).Local().Format("2006-01-02 15:04") + " is not retained"})
 	}
 	if in.Errors["Health"] != nil {
 		add(recapRow{Section: "Since your last visit", Title: "Health transitions unavailable"})
@@ -363,7 +363,7 @@ func buildRecap(in recapInput) recapModel {
 	} else {
 		for _, e := range in.Commands {
 			if e.Human && e.Type == bus.CmdDirective && strings.HasPrefix(e.Message, "Summarise where the project stands for me: ") {
-				at := eventTimestamp(e.ID)
+				at := bus.IDTime(e.ID)
 				if at.After(m.SummarySentAt) {
 					m.SummarySentAt = at
 					m.SummaryReplied = false
@@ -425,7 +425,7 @@ func recapTarget(cmds []bus.Event) string {
 	var latest time.Time
 	for _, e := range cmds {
 		if e.From == "dispatch" && e.Type == bus.CmdEscalation && bus.ValidName(e.Target) {
-			at := eventTimestamp(e.ID)
+			at := bus.IDTime(e.ID)
 			if at.After(latest) {
 				latest, target = at, e.Target
 			}
@@ -463,7 +463,7 @@ func recapSummaryStatus(m recapModel) string {
 func eventFloor(events []bus.Event) time.Time {
 	var floor time.Time
 	for _, e := range events {
-		if at := eventTimestamp(e.ID); !at.IsZero() && (floor.IsZero() || at.Before(floor)) {
+		if at := bus.IDTime(e.ID); !at.IsZero() && (floor.IsZero() || at.Before(floor)) {
 			floor = at
 		}
 	}
@@ -473,7 +473,7 @@ func eventFloor(events []bus.Event) time.Time {
 func swapFloor(events []bus.SwapEvent) time.Time {
 	var floor time.Time
 	for _, e := range events {
-		if at := eventTimestamp(e.ID); !at.IsZero() && (floor.IsZero() || at.Before(floor)) {
+		if at := bus.IDTime(e.ID); !at.IsZero() && (floor.IsZero() || at.Before(floor)) {
 			floor = at
 		}
 	}

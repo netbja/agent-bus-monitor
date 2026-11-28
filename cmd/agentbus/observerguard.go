@@ -21,7 +21,7 @@ import (
 
 // observerReads are the commands an observer may run, the summary its
 // refusal names.
-const observerReads = "agents, board, request, reports, thread, history, verdicts, asks, swaps, health, quota, usage, budget, tokens, models, merge-queue, audit, version, limits, help"
+const observerReads = "summary, agents, board, request, reports, thread, history, verdicts, asks, swaps, health, quota, usage, budget, tokens, models, merge-queue, audit, version, limits, help"
 
 // positionals are args that are not flags.
 func positionals(args []string) []string {
@@ -43,7 +43,7 @@ func observerRead(cmd string, rest []string) bool {
 		first = pos[0]
 	}
 	switch cmd {
-	case "reports", "thread", "history", "verdicts", "asks", "swaps", "quota", "tokens", "audit", "version", "limits", "help":
+	case "summary", "reports", "thread", "history", "verdicts", "asks", "swaps", "quota", "tokens", "audit", "version", "limits", "help":
 		return true
 	case "agents":
 		return first != "forget"

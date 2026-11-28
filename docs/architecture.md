@@ -106,7 +106,11 @@ their client's prompts and stuck screens, gates that concern the person, the mer
 `Observe`, `PromptBlocked`, `ScreenStuck` and `Answered`, the judgements behind them. busmon's
 For you is `attention.Items`, then its own report and unread rows (they end on one busmon's local
 marks), then the folds; `TestForYouAttentionRanksAreAttentions` pins it. `plan.NowNext` is the
-plan's task in hand and the next one, read by the plan board.
+plan's task in hand and the next one, read by the plan board. `attention.Read` makes the broker
+reads of `Inputs` (over the `Reader` interface, which `*bus.Bus` satisfies) for `agentbus summary`
+(status-summary step 2), which prints For you's counts from `Items`, the merge queue, the board's
+blocked tasks, the plan (`plan.Count`, `plan.NowNext`), the team and the health records, read only;
+`ServiceFact`, the service state words, moved there from busmon.
 
 **`agentstate/`** judges an agent's state from its screen, per client (herdr-exit spec 4.3, 4.9;
 step 2a): `Signature` (Ready, Busy, Modal, Dialog, the input region under the last Prompt line)

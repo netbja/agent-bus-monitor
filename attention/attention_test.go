@@ -162,3 +162,17 @@ func TestObserve(t *testing.T) {
 		t.Error("freshness")
 	}
 }
+
+// A gate item is dated by its ref, the challenge's stream id (foureyes on
+// step 1: the date was untested); a ref that is no id has no date.
+func TestGateItemDate(t *testing.T) {
+	ref := itoa(at(7).UnixMilli()) + "-0"
+	items := gateItems("charlie", "charlie", map[string]string{ref: "master|sign off", "no-id": "master|x"})
+	got := map[string]time.Time{}
+	for _, it := range items {
+		got[it.Key] = it.At
+	}
+	if !got["gate:charlie:"+ref].Equal(at(7)) || !got["gate:charlie:no-id"].IsZero() {
+		t.Fatalf("dates %v", got)
+	}
+}

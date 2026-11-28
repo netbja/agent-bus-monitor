@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -280,19 +279,9 @@ func gateItems(person, gated string, gates map[string]string) []Item {
 			summary = ref
 		}
 		out = append(out, Item{Rank: RankGate, Key: "gate:" + gated + ":" + ref, Agent: gated, By: g.Challenger,
-			Text: summary, At: idTime(ref)})
+			Text: summary, At: bus.IDTime(ref)})
 	}
 	return out
-}
-
-// idTime is a stream id's time; zero for a ref that is not one.
-func idTime(id string) time.Time {
-	ms, _, _ := strings.Cut(id, "-")
-	n, err := strconv.ParseInt(ms, 10, 64)
-	if err != nil || n <= 0 {
-		return time.Time{}
-	}
-	return time.UnixMilli(n)
 }
 
 // mergeItems are the merge queue's rows (merge-queue spec §4): one per item,

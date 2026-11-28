@@ -271,7 +271,7 @@ func teamOf(in workInput, links map[string]planLink) ([]teamRow, []string) {
 			if subject == "" {
 				subject = textfmt.OneLine(g.Text)
 			}
-			since := eventTimestamp(ref)
+			since := bus.IDTime(ref)
 			reviewing[n] = append(reviewing[n], teamGate{Who: g.Challenger, Subject: subject, Since: since})
 			if g.Challenger != "" {
 				reviewers[g.Challenger] = append(reviewers[g.Challenger], teamGate{Who: n, Subject: subject, Since: since})
