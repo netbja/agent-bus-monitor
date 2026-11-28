@@ -78,6 +78,8 @@ import (
 
 // The test binary doubles as the fake client the holder runs.
 func TestMain(m *testing.M) {
+	// No test reads the live cgroup tree or runs loginctl (roles doctor's host line).
+	doctorHostLine = func(context.Context) string { return "cgroup mode: test" }
 	switch os.Getenv("AGENTBUS_E2E_FAKE") {
 	case "claude":
 		e2eFakeClaude()
