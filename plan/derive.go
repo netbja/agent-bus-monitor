@@ -118,7 +118,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	if t.Mission != "" {
 		return deriveMission(r, in)
 	}
-	gated := t.Check != "" && t.Owner != Person // a mission returned above (§9.2)
+	gated := Gated(t) // §9.2
 	if in.FactsOK && fact.Done > 0 && !gated {
 		r.State, r.DoneAt, r.Recorded = Done, fact.Done, true
 		return r

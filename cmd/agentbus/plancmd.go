@@ -84,8 +84,21 @@ func runPlan(ctx context.Context, b *bus.Bus, repo string, getenv func(string) s
 		if len(rest) != 1 {
 			break
 		}
-		if err := b.PlanDone(ctx, rest[0]); err != nil {
+		head, err := planDoneHead(ctx, b, repo, getenv, rest[0])
+		if err != nil {
 			return fail(err)
+		}
+		if head == "" {
+			err = b.PlanDone(ctx, rest[0])
+		} else {
+			err = b.PlanDoneAt(ctx, rest[0], head)
+		}
+		if err != nil {
+			return fail(err)
+		}
+		if head != "" {
+			fmt.Fprintf(out, "%s recorded done at %s (its check approved there)\n", rest[0], head[:7])
+			return 0
 		}
 		fmt.Fprintf(out, "%s recorded done\n", rest[0])
 		return 0

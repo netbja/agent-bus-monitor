@@ -200,6 +200,16 @@ func (b *Bus) PlanDone(ctx context.Context, task string) error {
 	return b.planFact(ctx, task, "done", "")
 }
 
+// PlanDoneAt records the task done at head, the merged head plan done
+// checked (onboarding §9.3): done and head in the same script, so a done
+// never stands without the head it was checked at.
+func (b *Bus) PlanDoneAt(ctx context.Context, task, head string) error {
+	if !ValidHead(head) {
+		return fmt.Errorf("invalid head %q", head)
+	}
+	return b.planFact(ctx, task, "done", head)
+}
+
 // PlanNote records a one-line note on a task.
 func (b *Bus) PlanNote(ctx context.Context, task, note string) error {
 	if note == "" || len([]rune(note)) > PlanNoteMax || strings.ContainsAny(note, "\r\n") {
@@ -266,7 +276,9 @@ if ARGV[2] == 'prio' then
 end
 if ARGV[2] == 'link' then f.pr = tonumber(ARGV[3]); f.ref = nil; f.linked = now
 elseif ARGV[2] == 'ref' then f.ref = ARGV[3]; f.pr = nil; f.linked = now
-elseif ARGV[2] == 'done' then f.done = now
+elseif ARGV[2] == 'done' then
+  f.done = now
+  if ARGV[3] ~= '' then f.head = ARGV[3] else f.head = nil end
 elseif ARGV[2] == 'note' then f.note = ARGV[3] end
 f.at = now
 redis.call('HSET', KEYS[2], ARGV[1], cjson.encode(f))
