@@ -239,6 +239,10 @@ func validSubject(s string) bool {
 // format character (a bidi override or isolate, a zero-width space), no line
 // separator, no private use. What a reader draws is then what runs
 // (reviewer-codex on onboarding-a1).
+// ValidCheck is the rule a task's check obeys (onboarding §7.1), for BUILD.md's
+// items too (onboard.ParseBuild).
+func ValidCheck(s string) bool { return validCheck(s) }
+
 func validCheck(s string) bool {
 	return len([]rune(s)) <= maxCheck && strings.TrimSpace(s) != "" &&
 		!strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsGraphic(r) })
