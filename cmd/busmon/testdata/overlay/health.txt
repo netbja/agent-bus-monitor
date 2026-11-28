@@ -44,4 +44,5 @@
   ? Login expiry                     no current measurement
   ? Unreadable screen                no current measurement
   ? Person unanswered                no current measurement
+  ? Lost agents                      no current measurement
   ── fine · 1  (a shows them) ──
