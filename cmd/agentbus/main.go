@@ -230,8 +230,6 @@ func main() {
 	if len(args) >= 1 && args[0] == "holder" {
 		os.Exit(mainHolder(project, args[1:], os.Stderr))
 	}
-	// fake-client is a fake Claude Code for the holder's live check (a test
-	// project's `claude`); it reads its project and agent from the launch.
 	// agent-enter is a scope launch's second exec (resource-limits §12.5):
 	// no project, no broker; it returns only when the client cannot be run.
 	if len(args) >= 1 && args[0] == "agent-enter" {
@@ -243,6 +241,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "agent-enter: %v\n", err)
 		os.Exit(127)
 	}
+	// fake-client is a fake Claude Code for the holder's live check (a test
+	// project's `claude`); it reads its project and agent from the launch.
 	if len(args) >= 1 && args[0] == "fake-client" {
 		os.Exit(runFakeClient(args[1:], os.Stdin, os.Stdout, os.Stderr))
 	}

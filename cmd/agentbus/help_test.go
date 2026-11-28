@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"os/exec"
 	"path/filepath"
@@ -219,5 +220,35 @@ func TestAgentEnterKeepsTheClientsArgv(t *testing.T) {
 	args, host, project := globalArgs(expandArgs(in))
 	if !slices.Equal(args, in) || host != "" || project != "" {
 		t.Fatalf("args %q host %q project %q, want %q untouched", args, host, project, in)
+	}
+}
+
+// Through the real binary: agentbus agent-enter, outside a scope, says so
+// and execs the client with its argv byte for byte (foureyes on
+// resource-limits-4b1: the dispatch in main had no test).
+func TestAgentEnterBinary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the binary")
+	}
+	bin := filepath.Join(t.TempDir(), "agentbus")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, out)
+	}
+	args := []string{"--project", "y", "--host", "z", "-p", "x", "--project=w", "a b", ""}
+	c := exec.Command(bin, append([]string{"agent-enter", "--", "/bin/sh", "-c", `for a; do printf '[%s]\n' "$a"; done`, "sh"}, args...)...)
+	var out, errw bytes.Buffer
+	c.Stdout, c.Stderr = &out, &errw
+	if err := c.Run(); err != nil {
+		t.Fatalf("run: %v %s", err, errw.String())
+	}
+	var want strings.Builder
+	for _, a := range args {
+		want.WriteString("[" + a + "]\n")
+	}
+	if out.String() != want.String() {
+		t.Fatalf("the client's argv:\n%s\nwant\n%s", out.String(), want.String())
+	}
+	if !strings.Contains(errw.String(), "agent-enter:") || !strings.Contains(errw.String(), "the client runs without its cap") {
+		t.Errorf("outside a scope, no word: %q", errw.String())
 	}
 }
