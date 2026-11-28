@@ -61,6 +61,10 @@ func TestSystemdUpdaterUnit(t *testing.T) {
 	if !slices.Contains(f.calls, "--user start "+UpdaterUnitName) || !slices.Contains(f.calls, "--user stop "+UpdaterUnitName) {
 		t.Errorf("calls %v", f.calls)
 	}
+	// a spent start limit would refuse the start: reset-failed comes first (foureyes)
+	if i, j := slices.Index(f.calls, "--user reset-failed "+UpdaterUnitName), slices.Index(f.calls, "--user start "+UpdaterUnitName); i < 0 || i > j {
+		t.Errorf("reset-failed before start: %v", f.calls)
+	}
 	f.out = map[string]fakeOut{"--user show " + UpdaterUnitName: {text: "LoadState=loaded\nActiveState=active\nSubState=running\nMainPID=42\n"}}
 	st, err := m.UpdaterState()
 	if err != nil || !st.Active || !st.Installed || st.PID != 42 {
