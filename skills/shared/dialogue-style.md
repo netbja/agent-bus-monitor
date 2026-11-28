@@ -39,5 +39,4 @@ with `gh api repos/blader/humanizer`). Nothing of it is copied here.
 
 - A report's first line stays its summary (the report rule): busmon shows only that line in a list.
 - When a report gives state it read, its last line is the sources line (status-summary §5.3):
-  `↳ ` followed by what was read and when, for example `↳ summary 22:31, board, #841`. busmon draws
-  it dim and folds it.
+  `↳ ` followed by what was read and when, for example `↳ summary 22:31, board, #841`.

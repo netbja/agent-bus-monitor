@@ -401,10 +401,10 @@ the question lands on its merge item instead of a row of its own.
 the answer or decision first, short bullets only if needed, no preamble, no staged opener or
 closer, no filler, uncertainty with its source, in `person.language`. Verbatim quotes, typed text,
 ids and sources are never rewritten. A report's first line stays its summary. Write ids plainly
-(`#841`, a board task, an ask id): busmon renders them as links.
+(`#841`, a board task, an ask id), never wrapped in prose or Markdown links.
 
 **End a report that gives state with its sources line**: one last line starting `↳ `, naming what
-you read and when (`↳ summary 22:31, board, #841`). busmon draws it dim and folds it.
+you read and when (`↳ summary 22:31, board, #841`).
 
 ## "Where are we": answer from `agentbus summary`
 
