@@ -109,8 +109,12 @@ func JudgeLosable(in LosableIn) (map[string]bus.Losable, error) {
 	return out, nil
 }
 
-// namesRole matches role as a whole name: "coder" in "On coder/x: wip", never
-// in "coder2/x".
+// namesRole matches role as a token of its own (reviewer-codex): after the
+// start, a space or an opening bracket or quote; before the end, a space, the
+// "/" of a <role>/<task> branch, a ":", a closing bracket or quote, or a
+// sentence's last ".". So "coder" in "On coder/x: wip" or "WIP on dev: abc
+// coder: notes", never in "coder2/x", "coder-extra/x", "coder.v2/x",
+// "my.coder/x" or "feat/coder".
 func namesRole(role string) *regexp.Regexp {
-	return regexp.MustCompile(`(^|[^a-z0-9_-])` + regexp.QuoteMeta(role) + `([^a-z0-9_-]|$)`)
+	return regexp.MustCompile(`(^|[\s(\[{"'])` + regexp.QuoteMeta(role) + `($|[\s/:,;)\]}"']|\.(\s|$))`)
 }

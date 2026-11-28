@@ -98,6 +98,22 @@ func TestJudgeLosable(t *testing.T) {
 	}
 }
 
+// A stash names a role only as a token of its own: a branch whose name
+// starts with the role and goes on in a branch character is another
+// branch's (reviewer-codex).
+func TestNamesRole(t *testing.T) {
+	for msg, want := range map[string]bool{
+		"On coder/x: wip": true, "WIP on dev: 1234567 coder: notes": true, "On dev: by coder.": true,
+		"On dev: (coder) wip": true, "coder": true, "On dev: coder, then docs": true,
+		"On coder2/x: wip": false, "On coder-extra/x: wip": false, "On coder.v2/x: wip": false,
+		"On my.coder/x: wip": false, "On feat/coder: wip": false, "On coder_x/y: wip": false, "On dev: coder.v2 done": false,
+	} {
+		if got := namesRole("coder").MatchString(msg); got != want {
+			t.Errorf("%q: %v, want %v", msg, got, want)
+		}
+	}
+}
+
 // At most stashListMax messages are kept for one role.
 func TestJudgeLosableStashCap(t *testing.T) {
 	var msgs []string
