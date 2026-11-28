@@ -57,7 +57,8 @@ func TestNoticeInstalled(t *testing.T) {
 }
 
 // A project in work at its re-read keeps its old services: the notice goes
-// only to the projects restarted, and lists what was left with its command.
+// to the projects restarted and to those left on the old build (master's
+// 4d directive), and lists what was left with its command.
 func TestNoticeInstalledNamesWhatWasLeft(t *testing.T) {
 	f := newFlow(t)
 	d, ns := f.noticeDeps(func(p string, call int) (Judged, error) {
@@ -67,8 +68,25 @@ func TestNoticeInstalledNamesWhatWasLeft(t *testing.T) {
 		return Judged{Now: autoNow}, nil
 	}, nil)
 	InstallPass(context.Background(), d)
-	if len(*ns) != 1 || !reflect.DeepEqual((*ns)[0].Projects, []string{"a"}) ||
+	if len(*ns) != 1 || !reflect.DeepEqual((*ns)[0].Projects, []string{"a", "b"}) ||
 		!strings.Contains((*ns)[0].Text, "Not restarted: b dispatch (old agentbus), project b in work (agent coder is working): agentbus --project b service restart dispatch") {
+		t.Fatalf("notices %+v", *ns)
+	}
+}
+
+// Every project in work at its re-read: nothing restarted, and the notice
+// still goes, to the projects left on the old build.
+func TestNoticeInstalledNothingRestarted(t *testing.T) {
+	f := newFlow(t)
+	d, ns := f.noticeDeps(func(p string, call int) (Judged, error) {
+		if call > 1 {
+			return working(Judged{}), nil
+		}
+		return Judged{Now: autoNow}, nil
+	}, nil)
+	InstallPass(context.Background(), d)
+	if len(*ns) != 1 || (*ns)[0].Kind != NoticeInstalled || !reflect.DeepEqual((*ns)[0].Projects, []string{"a", "b"}) ||
+		!strings.Contains((*ns)[0].Text, "installed automatically; restarted: none.") || !strings.Contains((*ns)[0].Text, "Not restarted: a dispatch") {
 		t.Fatalf("notices %+v", *ns)
 	}
 }
@@ -224,7 +242,8 @@ func TestNoticeWaitingInWork(t *testing.T) {
 	}
 
 	for name, maxWait := range map[string]func() time.Duration{
-		"within": func() time.Duration { return 9 * 24 * time.Hour }, "off": func() time.Duration { return 0 }, "unset": nil} {
+		"within": func() time.Duration { return 9 * 24 * time.Hour }, "off": func() time.Duration { return 0 }, "unset": nil,
+		"exactly max_wait is not longer": func() time.Duration { return 8 * 24 * time.Hour }} {
 		g := newFlow(t)
 		g.waitSince(t, autoNow.Add(-8*24*time.Hour), nil)
 		d, ns := g.noticeDeps(busy, nil)

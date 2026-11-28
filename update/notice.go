@@ -16,7 +16,7 @@ import (
 
 // The notice kinds, auto.json's told keys.
 const (
-	NoticeInstalled      = "installed"       // no wake, to every project restarted; once per snapshot
+	NoticeInstalled      = "installed"       // no wake, to every project restarted or left on the old build; once per snapshot
 	NoticeFailed         = "failed"          // wake: rolled back, the tag not retried; once per tag
 	NoticeRollbackFailed = "rollback_failed" // wake: the manual commands; once per snapshot
 	NoticeInterrupted    = "interrupted"     // wake: agentbus update --rollback <id>; once per snapshot
@@ -83,16 +83,26 @@ func sortedKeys(m map[string]bool) []string {
 }
 
 // installedNotice: from, to, the services restarted, those left on the old
-// build, the skills changed with their skill-users command, and the undo.
+// build, the skills changed with their skill-users command, and the undo. It
+// goes to every project restarted and every project left on the old build
+// (master's 4d directive: the binaries are per host, so a project left
+// behind runs the new agentbus at its next call and must hear of it).
 func (d Deps) installedNotice(tag, id string, out installOut, changed []string) Notice {
 	projects := map[string]bool{}
-	var names []string
+	names := []string{}
 	for _, s := range out.restarted {
 		projects[s.Project] = true
 		names = append(names, s.Project+" "+s.Kind)
 	}
+	for _, p := range out.leftOf {
+		projects[p] = true
+	}
+	restarted := strings.Join(names, ", ")
+	if restarted == "" {
+		restarted = "none"
+	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "agentbus %s -> %s installed automatically; restarted: %s.", d.Version, tag, strings.Join(names, ", "))
+	fmt.Fprintf(&b, "agentbus %s -> %s installed automatically; restarted: %s.", d.Version, tag, restarted)
 	for _, l := range out.left {
 		b.WriteString("\nNot restarted: " + l)
 	}
