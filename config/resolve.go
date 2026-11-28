@@ -78,6 +78,10 @@ func SelfRepairMode(r Resolver) string {
 	return "off"
 }
 
+// SelfRepairOn: dispatch.self_repair is on; shadow and off relaunch nothing
+// (cleaning-up-agents §10's wording reads it).
+func SelfRepairOn(r Resolver) bool { return SelfRepairMode(r) == "on" }
+
 // Machine is the resolver of a process whose environment is getenv: the env,
 // then that environment's config.toml, then busmon.toml (its keys only).
 func Machine(getenv func(string) string) Resolver {

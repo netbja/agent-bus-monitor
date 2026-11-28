@@ -331,5 +331,5 @@ func liveFrom(ctx context.Context, h termLister, project string) map[string]bool
 
 // selfRepairOn: dispatch.self_repair is on (shadow and off relaunch nothing).
 func selfRepairOn(getenv func(string) string) bool {
-	return config.SelfRepairMode(config.Machine(getenv)) == "on"
+	return config.SelfRepairOn(config.Machine(getenv))
 }

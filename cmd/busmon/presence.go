@@ -59,7 +59,7 @@ func readPresence(ctx context.Context, b owesReader, getenv func(string) string)
 	if path, err := rolecfg.ManifestPath(getenv); err == nil && path != "" {
 		man, _ = rolecfg.Load(path)
 	}
-	repair := config.SelfRepairMode(config.Machine(getenv)) == "on"
+	repair := config.SelfRepairOn(config.Machine(getenv))
 	out := make(map[string]presenceFacts, len(owes))
 	for n, o := range owes {
 		f := presenceFacts{owes: o, owesRead: true, selfRepair: repair}
