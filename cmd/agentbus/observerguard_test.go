@@ -22,7 +22,7 @@ func TestObserverGuard(t *testing.T) {
 		{"history", "--agent", "coder"}, {"verdicts", "--subject", "x"}, {"asks", "--open"}, {"swaps"},
 		{"health"}, {"health", "list"}, {"health", "detail", "h1"}, {"health", "log"}, {"health", "warns"},
 		{"quota"}, {"usage"}, {"budget", "--json"}, {"tokens", "--all"}, {"models"}, {"merge-queue", "--json"},
-		{"audit", "--action", "merge"}, {"audit", "verify"}, {"audit", "export", "--since", "1d"}, {"version"}, {"limits"}, {"help"},
+		{"summary"}, {"summary", "--all", "--json"}, {"audit", "--action", "merge"}, {"audit", "verify"}, {"audit", "export", "--since", "1d"}, {"version"}, {"limits"}, {"help"},
 	}
 	refused := [][]string{
 		{"status", "observer", "working", "x"}, {"report", "observer", "--to", "master", "x"}, {"cmd", "coder", "x"},

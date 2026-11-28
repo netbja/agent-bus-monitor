@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -268,5 +269,86 @@ func TestStatusUsagePointsToSummary(t *testing.T) {
 		if !errors.As(err, &ee) || ee.ExitCode() != 2 || strings.TrimSpace(stderr.String()) != statusUsage {
 			t.Errorf("%q: %v, stderr %q", args, err, stderr.String())
 		}
+	}
+}
+
+// Reports older than 24 hours are not counted; three blocked tasks show two
+// and "+1 more"; the team's anomalies come from their health records and the
+// quota holds, failed counted.
+func TestSummaryEdges(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	p := b.Project()
+	old := time.Now().Add(-25 * time.Hour).UnixMilli()
+	r.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(p, "report"), ID: strconv.FormatInt(old, 10) + "-0",
+		Values: map[string]any{"agent": "master", "kind": "note", "message": "old", "needs": "answer"}})
+	summaryFixture(t, b, r)
+	for _, task := range []string{"t-b", "t-c"} {
+		b.Request(ctx, task, "master", "coder", "", "x", 0)
+		b.BlockRequest(ctx, task, "coder", "why "+task)
+	}
+	if _, err := b.Status(ctx, "coder", "working", "x", bus.AgentIdent{Provider: "anthropic"}); err != nil {
+		t.Fatal(err)
+	}
+	r.HSet(ctx, bus.QuotaKey(p), "hold:anthropic", time.Now().Add(time.Hour).Unix())
+	now := time.Now().UnixMilli()
+	for id, st := range map[string]health.Status{"agent-launch": health.Warn, "idle-implementer": health.Warn} {
+		r.HSet(ctx, bus.HealthKey(p), id, mustJSON(t, health.Record{ID: id, Status: st, ObservedAt: now, Since: now, Detail: id + " says"}))
+	}
+	_, out, _ := summaryRun(t, b, summaryOpts{CILoop: true}, 400)
+	for _, want := range []string{
+		"1 report (24 h)",
+		"Blocked   3 · rl-3e (coder2): waits for the holder fix · t-b (coder): why t-b · +1 more",
+		"1 failed · failed: agent-launch says · stalled: idle-implementer says · quota-paused coder: anthropic at its limit",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+// The plan line: done/total, the task in progress and the first task
+// waiting for the person, the plan's commit on the sources line.
+func TestSummaryPlan(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { bus.DeleteProject(ctx, r, b.Project()) })
+	t.Setenv("HERDR_ENV", "")
+	repo, sha := planRepo(t, `{"plan":"v0.22","goal":"g","tasks":[
+ {"id":"build","title":"Build","owner":"coder","board":"build-impl"},
+ {"id":"pick","title":"Pick one","owner":"person"}]}`)
+	b.Status(ctx, "master", "idle", "x", bus.AgentIdent{})
+	if code, _, errw := runPlanT(t, b, repo, "load", "docs/plans/v0.22.json@"+sha); code != 0 {
+		t.Fatalf("load: %s", errw)
+	}
+	b.Request(ctx, "build-impl", "master", "coder", "", "x", 0)
+	if err := b.AcceptRequest(ctx, "build-impl", "coder"); err != nil {
+		t.Fatal(err)
+	}
+	_, out, _ := summaryRun(t, b, summaryOpts{}, 200)
+	if !strings.Contains(out, "Plan      v0.22 0/2 · in progress: build (coder) · waits for you: pick") ||
+		!strings.Contains(out, "plan v0.22@"+sha[:7]) {
+		t.Fatalf("plan:\n%s", out)
+	}
+}
+
+// An agent with no status yet (bound, TS 0) is counted in no state; a kind
+// with more than one item names none.
+func TestSummaryUncountedAndUnnamed(t *testing.T) {
+	b, r := dialMain(t)
+	summaryFixture(t, b, r)
+	ctx := context.Background()
+	r.HSet(ctx, bus.AgentsKey(b.Project()), "fresh", `{"state":"idle","ts":0}`) // a test fixture, not a writer
+	if _, _, err := b.Ask(ctx, bus.AskDef{From: "coder2", Title: "Another?", Questions: []bus.AskQuestion{{
+		ID: "q1", Header: "Way", Question: "Which?", Options: []bus.AskOption{{Label: "a"}}}}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, out, _ := summaryRun(t, b, summaryOpts{CILoop: true}, 0, "--json")
+	var s Summary
+	if err := json.Unmarshal([]byte(out), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Team.Counts["idle"] != 2 || s.ForYou.Counts["asks"] != 2 || s.ForYou.Named["asks"] != "" || s.ForYou.Named["merges"] != "#841" {
+		t.Fatalf("team %v, for you %v %v", s.Team.Counts, s.ForYou.Counts, s.ForYou.Named)
 	}
 }
