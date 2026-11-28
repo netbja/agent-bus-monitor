@@ -399,38 +399,17 @@ func (b *Bus) RetroApproved(ctx context.Context, task string, n int) (string, er
 	if rec.AskID == "" {
 		return "", fmt.Errorf("retro: %s was not asked yet (queued)", task)
 	}
-	qid := "p" + strconv.Itoa(n)
-	kept, err := b.r.HExists(ctx, AsksKey(b.project), rec.AskID).Result()
+	id, err := b.TypedApproval(ctx, rec.AskID, "p"+strconv.Itoa(n), "yes") // onboarding §8.4
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("retro: %s #%d: %w", task, n, err)
 	}
-	if kept {
-		raw, err := b.r.HGet(ctx, AsksKey(b.project), rec.AskID+"|a|"+qid).Result()
-		if errors.Is(err, redis.Nil) {
-			return "", fmt.Errorf("retro: %s #%d is not answered", task, n)
-		}
-		if err != nil {
-			return "", err
-		}
-		var a AskAnswer
-		if json.Unmarshal([]byte(raw), &a) != nil || a.Withdrawn || a.Choice != "yes" {
-			return "", fmt.Errorf("retro: %s #%d was answered %q, not yes", task, n, a.Value())
-		}
-	}
-	e, ok, err := b.retroReply(ctx, rec.AskID, qid)
-	if err != nil {
-		return "", err
-	}
-	if !ok || e.Said != "yes" {
-		return "", fmt.Errorf("retro: no typed yes from the person to %s #%d", task, n)
-	}
-	return e.ID, nil
+	return id, nil
 }
 
-// retroReply is the person's typed reply to question qid of ask askID: the
+// typedReply is the person's typed reply to question qid of ask askID: the
 // reply entry with typed=yes, that ref and that qid (the last one), from
 // the cmd stream and the archive.
-func (b *Bus) retroReply(ctx context.Context, askID, qid string) (Event, bool, error) {
+func (b *Bus) typedReply(ctx context.Context, askID, qid string) (Event, bool, error) {
 	evs, err := b.Thread(ctx, askID)
 	if err != nil {
 		return Event{}, false, err
@@ -474,7 +453,7 @@ func (b *Bus) RetroOutcomes(ctx context.Context, task string) ([]RetroOutcome, e
 			continue
 		}
 		qid := "p" + strconv.Itoa(row.N)
-		e, typed, err := b.retroReply(ctx, rec.AskID, qid)
+		e, typed, err := b.typedReply(ctx, rec.AskID, qid)
 		if err != nil {
 			return nil, err
 		}

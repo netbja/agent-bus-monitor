@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/forge"
+	"github.com/netbja/agent-bus-monitor/plan"
 )
 
 // onboarding §9.3 (spec docs/superpowers/specs/2026-11-27-project-onboarding-design.md):
@@ -124,5 +128,142 @@ func TestMergedHeadOf(t *testing.T) {
 	}
 	if _, err := mergedHeadOf(forge.GitHub, []byte(`not json`)); err == nil {
 		t.Error("bad JSON read")
+	}
+}
+
+const personPlan = `{"plan":"v1","goal":"g","tasks":[
+ {"id":"release","title":"Release","owner":"person","check":"open busmon, the tab shows v1"}]}`
+
+// onboarding §9.4: plan done on a person's task with a check passes only on
+// the person's typed passes to the question id of the active plan's check,
+// and records the entry and the id.
+func TestPlanDonePerson(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project()), bus.AsksKey(b.Project()))
+	})
+	t.Setenv("HERDR_ENV", "")
+	repo, sha := planRepo(t, personPlan)
+	if _, err := b.Status(ctx, "master", "idle", "", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errw := runPlanT(t, b, repo, "load", "docs/plans/v0.22.json@"+sha); code != 0 {
+		t.Fatalf("load: %s", errw)
+	}
+	f, err := plan.Parse([]byte(personPlan))
+	if err != nil {
+		t.Fatal(err)
+	}
+	qid := plan.PersonCheckQID(f, f.Tasks[0])
+	refused := func(why string) {
+		t.Helper()
+		code, _, errw := runPlanT(t, b, repo, "done", "release")
+		if code == 0 || !strings.Contains(errw, "release: the person has not answered passes to its current check (id "+qid+")") {
+			t.Fatalf("%s: %d %q", why, code, errw)
+		}
+		if fs, _ := b.PlanFacts(ctx); fs["release"].Done != 0 {
+			t.Fatalf("%s: recorded done", why)
+		}
+	}
+	refused("no ask")
+	var askAbout func(from, id, task string) string
+	ask := func(from string, id string) string { return askAbout(from, id, "release") }
+	askAbout = func(from, id, task string) string {
+		t.Helper()
+		a, _, err := b.Ask(ctx, bus.AskDef{From: from, Title: "Release check", Task: task, Questions: []bus.AskQuestion{
+			{ID: id, Header: "Check", Question: "open busmon, the tab shows v1: does it pass?", Options: []bus.AskOption{{Label: "passes"}, {Label: "fails"}}}}}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	failed := ask("master", qid)
+	if _, _, err := b.Answer(ctx, failed, qid, "charlie", "fails", ""); err != nil {
+		t.Fatal(err)
+	}
+	refused("fails")
+	wrong := ask("architect", "check-0000000000000000") // an older check's id
+	if _, _, err := b.Answer(ctx, wrong, "check-0000000000000000", "charlie", "passes", ""); err != nil {
+		t.Fatal(err)
+	}
+	refused("passes to another id")
+	other := askAbout("docs", qid, "notes") // the same id, asked about another task
+	if _, _, err := b.Answer(ctx, other, qid, "charlie", "passes", ""); err != nil {
+		t.Fatal(err)
+	}
+	refused("passes on an ask about another task")
+	passed := ask("sentinel", qid)
+	if _, _, err := b.Answer(ctx, passed, qid, "charlie", "passes", ""); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errw := runPlanT(t, b, repo, "done", "release")
+	if code != 0 || !strings.Contains(out, "release recorded done (the person's passes") {
+		t.Fatalf("passes: %d %q %q", code, out, errw)
+	}
+	fs, _ := b.PlanFacts(ctx)
+	if rel := fs["release"]; rel.Done == 0 || rel.ApprovedQID != qid || rel.Approved == "" || rel.Head != "" {
+		t.Fatalf("the done fact: %+v", rel)
+	}
+	// Stale check: a reload changes the check (same task id), so the passes
+	// given to the old one no longer answers it.
+	repo2, sha2 := planRepo(t, strings.Replace(personPlan, "shows v1", "shows v2", 1))
+	if code, _, errw := runPlanT(t, b, repo2, "load", "docs/plans/v0.22.json@"+sha2); code != 0 {
+		t.Fatalf("reload: %s", errw)
+	}
+	r.HDel(ctx, bus.PlanFactsKey(b.Project()), "release")
+	if code, _, errw := runPlanT(t, b, repo2, "done", "release"); code == 0 || !strings.Contains(errw, "has not answered passes to its current check") {
+		t.Fatalf("a changed check: %d %q", code, errw)
+	}
+	repo = repo2
+	// The record expired (7 days): the ask is gone, so nothing approves.
+	r.HDel(ctx, bus.PlanFactsKey(b.Project()), "release")
+	r.Del(ctx, bus.AsksKey(b.Project()))
+	if code, _, _ := runPlanT(t, b, repo, "done", "release"); code == 0 {
+		t.Fatal("the record expired: recorded done")
+	}
+}
+
+// onboarding §7.3, end to end: plan load reads the mission's test at the
+// plan's commit and refuses a check that differs, and a missions.json it
+// cannot read.
+func TestPlanLoadChecksMissions(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { r.Del(ctx, bus.PlanKey(b.Project()), bus.PlanFactsKey(b.Project())) })
+	t.Setenv("HERDR_ENV", "")
+	if _, err := b.Status(ctx, "master", "idle", "", bus.AgentIdent{}); err != nil {
+		t.Fatal(err)
+	}
+	withMissions := func(check string, missions bool) (string, string) {
+		t.Helper()
+		body := `{"plan":"v1","goal":"g","tasks":[{"id":"t1","title":"T1","owner":"coder","mission":"chg/m1","check":"` + check + `"}]}`
+		dir, _ := planRepo(t, body)
+		if missions {
+			os.MkdirAll(filepath.Join(dir, "docs/changes/chg"), 0o755)
+			os.WriteFile(filepath.Join(dir, "docs/changes/chg/missions.json"), []byte(`{"change": "chg", "reviewer": "codex", "missions": [
+  {"id": "m1", "title": "One", "agent": "coder", "allowed_paths": ["a/**"], "test": "true", "brief": "b"}]}`), 0o644)
+			for _, args := range [][]string{{"add", "."}, {"commit", "-qm", "missions"}} {
+				c := exec.Command("git", args...)
+				c.Dir = dir
+				c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+				if out, err := c.CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v %s", args, err, out)
+				}
+			}
+		}
+		return dir, "docs/plans/v0.22.json@HEAD"
+	}
+	dir, ref := withMissions("true", true)
+	if code, _, errw := runPlanT(t, b, dir, "load", ref); code != 0 {
+		t.Fatalf("matching: %s", errw)
+	}
+	dir, ref = withMissions("go test ./a", true)
+	if code, _, errw := runPlanT(t, b, dir, "load", ref); code == 0 || !strings.Contains(errw, `its check differs from mission chg/m1's test "true"`) {
+		t.Fatalf("a differing check: %d %q", code, errw)
+	}
+	dir, ref = withMissions("true", false)
+	if code, _, errw := runPlanT(t, b, dir, "load", ref); code == 0 || !strings.Contains(errw, "cannot read chg's missions.json") {
+		t.Fatalf("no missions.json: %d %q", code, errw)
 	}
 }

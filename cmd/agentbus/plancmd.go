@@ -84,6 +84,17 @@ func runPlan(ctx context.Context, b *bus.Bus, repo string, getenv func(string) s
 		if len(rest) != 1 {
 			break
 		}
+		entry, qid, err := planDonePerson(ctx, b, rest[0])
+		if err != nil {
+			return fail(err)
+		}
+		if entry != "" {
+			if err := b.PlanDoneApproved(ctx, rest[0], entry, qid); err != nil {
+				return fail(err)
+			}
+			fmt.Fprintf(out, "%s recorded done (the person's passes %s to %s)\n", rest[0], entry, qid)
+			return 0
+		}
 		head, err := planDoneHead(ctx, b, repo, getenv, rest[0])
 		if err != nil {
 			return fail(err)
@@ -161,6 +172,25 @@ func planLoad(ctx context.Context, b *bus.Bus, repo, ref string) (string, error)
 	}
 	f, err := plan.Parse(data)
 	if err != nil {
+		return "", err
+	}
+	// onboarding §7.3: a mission task's check is its missions.json test, read
+	// at the same commit; a file that cannot be read refuses the load.
+	if err := plan.CheckMissions(f, func(change string) (map[string]string, error) {
+		raw, err := g.Show(ctx, commit, "docs/changes/"+change+"/missions.json")
+		if err != nil {
+			return nil, err
+		}
+		mf, err := mission.Parse(raw)
+		if err != nil {
+			return nil, err
+		}
+		tests := map[string]string{}
+		for _, m := range mf.Missions {
+			tests[m.ID] = m.Test
+		}
+		return tests, nil
+	}); err != nil {
 		return "", err
 	}
 	ids := make([]string, len(f.Tasks))

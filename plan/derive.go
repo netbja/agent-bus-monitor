@@ -93,7 +93,7 @@ func Derive(f File, in Inputs) []Row {
 				waiting = append(waiting, a)
 			}
 		}
-		r := derive(t, in, waiting)
+		r := derive(f, t, in, waiting)
 		rows[id] = r
 		return r
 	}
@@ -104,7 +104,7 @@ func Derive(f File, in Inputs) []Row {
 	return out
 }
 
-func derive(t Task, in Inputs, waitingOn []string) Row {
+func derive(f File, t Task, in Inputs, waitingOn []string) Row {
 	r := Row{Task: t, WaitingOn: waitingOn}
 	fact := in.Facts[t.ID]
 	r.PR, r.Ref, r.Note, r.LastFact = fact.PR, fact.Ref, fact.Note, fact.At
@@ -118,7 +118,16 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	if t.Mission != "" {
 		return deriveMission(r, in)
 	}
-	gated := Gated(t) // §9.2
+	gated := Gated(t)                                 // §9.2
+	personCheck := t.Owner == Person && t.Check != "" // §9.4: the person's passes, at the current check
+	if in.FactsOK && fact.Done > 0 && personCheck {
+		if fact.Approved != "" && fact.ApprovedQID == PersonCheckQID(f, t) {
+			r.State, r.DoneAt, r.Recorded = Done, fact.Done, true
+		} else {
+			r.State, r.Reason = Answered, "recorded done without the person's passes to the current check"
+		}
+		return r
+	}
 	if in.FactsOK && fact.Done > 0 && !gated {
 		r.State, r.DoneAt, r.Recorded = Done, fact.Done, true
 		return r
@@ -156,7 +165,7 @@ func derive(t Task, in Inputs, waitingOn []string) Row {
 	}
 
 	switch {
-	case t.Owner == Person && onBoard && delivered(e):
+	case t.Owner == Person && onBoard && delivered(e) && !personCheck:
 		r.State = Done
 	// Delivery alone is never done: an unreviewed merge:false task waits for
 	// master's 'plan done' (the spec's "no verdict and no review set" case

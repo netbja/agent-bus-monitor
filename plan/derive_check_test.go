@@ -181,15 +181,3 @@ func TestCheckProof(t *testing.T) {
 		t.Fatal("a task without a check has no proof")
 	}
 }
-
-// A person's task with a check derives as today in this step: its proof
-// is the person's typed passes (§9.4, a later slice), not a verdict.
-func TestDeriveCheckLeavesPersonTasks(t *testing.T) {
-	withCheck := task("release", person, func(t *Task) { t.Check = "open busmon, the tab shows v1" })
-	f := File{Plan: "p", Tasks: []Task{withCheck}}
-	in := ok()
-	in.Facts["release"] = Fact{Done: 9000}
-	if r := derive1(t, f, in, "release"); r.State != Done || !r.Recorded {
-		t.Fatalf("a person's recorded done: %+v", r)
-	}
-}
