@@ -1,6 +1,9 @@
 # The plan's lifecycle, and the Plan tab redone (plan-lifecycle)
 
-- Status: spec r4, for review (subject `plan-lifecycle-spec`). Not built. r3 merged as #847.
+- Status: spec r5, for review (subject `plan-lifecycle-spec`). Not built. r3 merged as #847.
+  - r5, foureyes r4: the lines with no `--head` named and changed in step 1, a mission verdict's
+    head taken from its subject, a guard test (§A2); `plan done` allowed when the linked work is
+    all done with no commit (§A2, r3's should-fix).
   - r4, the person's answers to ask 1795818074022-0 (§C), folded in: the release recap wakes the
     drafter (§A4); `plan load` takes no path (§A4); master's sorting is recorded, undone from
     busmon, and never overrides the person's, and off-bus PRs come from the forge reader, not
@@ -123,7 +126,22 @@ comes from broker events, by these rules (`plan/derive.go`):
 
     **A new approval must name its head.** `agentbus verdict … approve` with no `--head` is
     refused: "an approval names the head it read: --head $(git rev-parse HEAD)". A reject may
-    still omit it. The skills' verdict lines already pass `--head`; the build checks them.
+    still omit it. Lines in use today that have no `--head` (foureyes r4), all changed by build
+    step 1 in the same PR as the refusal:
+    - `mission/conductor.go:595`, the conductor's review challenge, generated in Go: its
+      "Answer:" line gains `--head <sha>`, the full sha of the subject
+      `mission:<change>/<id>@<sha>`;
+    - `skills/agent-bus/SKILL.md:516`, the mission reviewer line;
+    - `roles/reviewer-codex.md:51`, the codex reviewer's line;
+    - the `verdict -P 12 coder approve` help example (`cmd/agentbus/commands.go:214`);
+    - any other `agentbus verdict … approve` line in `skills/`, `roles/` and Go string literals,
+      which the guard test below finds.
+
+    **A mission verdict's head is the subject's sha.** For a subject of the form
+    `mission:<change>/<id>@<full sha>`, a verdict with no `--head` takes that sha as its head, so
+    an approval by a challenge text sent before the upgrade is still accepted, and a mission in
+    review never stalls on the change. A `--head` that differs from the subject's sha is refused:
+    "the subject names <sha>: --head must match it".
 
   For a task with a `check`, onboarding §9's evidence rule applies on top.
 - **A `merge: false` task:** delivered and approved, as today. With a check, onboarding §9.
@@ -131,6 +149,11 @@ comes from broker events, by these rules (`plan/derive.go`):
 - **`plan done`** becomes an exception for a task with no linked work (a step done outside the
   bus). busmon shows it as "recorded by master". It is refused on a task that has linked work:
   "<task> has linked work: its state comes from it". This uses the same guards as onboarding §9.3.
+  **One exception (foureyes r3, r4): linked work that cannot be judged.** When every request
+  linked to the task is `done` and none carries a recorded commit, nothing can show it merged
+  (230 of today's 376 done requests have no commit), so `plan done` is allowed. busmon shows
+  "recorded by master: its work has no commit", and the detail pane names the requests. A
+  request with a commit, an open request, or an attachment keeps the refusal.
 - **A manual done is kept, unless newer linked work shows the task unfinished.** Today derive
   returns `Done` for `fact.Done` before it reads anything else (`derive.go:117`). The new rule:
   - `fact.Done` stands, as today, with its label "recorded by master";
@@ -504,7 +527,9 @@ The steps:
 
 1. **Links and derived done** (§A1, §A2):
    - the work: `plan.Links`; `MergeClose.PR`; `Request.Merged` and its pass, with the backfill;
-     derive's merge rule; the manual-done rule; the `plan done` refusal; `plan attach`;
+     derive's merge rule; the manual-done rule; the `plan done` refusal and its no-commit
+     exception; `plan attach`; the approve-needs-a-head refusal, the mission head from the
+     subject, and every verdict line of §A2 changed with it;
    - tests:
      - a task finds its requests by provenance, by attachment, by `board`, and by id;
      - **two requests for one task:** a second `--plan` request is refused while the first is
@@ -515,7 +540,15 @@ The steps:
      - a verdict with no head counts, with its label, on a merged request, and does not count on
        a request not merged;
      - `agentbus verdict … approve` with no `--head` is refused; a reject with none is recorded;
-     - `plan done` is refused with linked work;
+     - `plan done` is refused with linked work, and allowed when every linked request is `done`
+       with no commit (the label says so); once one of them carries a commit, refused again;
+     - **verdict heads:** an approve with no `--head` is refused; one on a
+       `mission:<c>/<id>@<sha>` subject with no `--head` records that sha; a differing `--head`
+       is refused; the conductor's challenge text carries `--head` with the subject's sha, and an
+       approve sent by that literal text is accepted;
+     - **a guard test** (`TestVerdictLinesNameTheHead`) reads `skills/`, `roles/` and Go string
+       literals, and fails on an `agentbus verdict` line that approves with no `--head`
+       (mission subjects excepted only in the CLI, never in a line);
      - an 11-task fixture whose requests are `--plan`-linked and merged shows 11/11 with no fact.
 2. **Unplanned** (§A3):
    - the work: `mergequeue.ReadGitHubMerged` and its call in the merge-queue pass;
