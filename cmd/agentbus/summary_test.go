@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/netbja/agent-bus-monitor/attention"
 	"github.com/netbja/agent-bus-monitor/bus"
 	"github.com/netbja/agent-bus-monitor/health"
 )
@@ -299,7 +301,7 @@ func TestSummaryEdges(t *testing.T) {
 	for _, want := range []string{
 		"1 report (24 h)",
 		"Blocked   3 · rl-3e (coder2): waits for the holder fix · t-b (coder): why t-b · +1 more",
-		"1 failed · failed: agent-launch says · stalled: idle-implementer says · quota-paused coder: anthropic at its limit",
+		"1 failed · failed (agent-launch): agent-launch says · stalled (idle-implementer): idle-implementer says · quota-paused coder: anthropic at its limit",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
@@ -350,5 +352,69 @@ func TestSummaryUncountedAndUnnamed(t *testing.T) {
 	}
 	if s.Team.Counts["idle"] != 2 || s.ForYou.Counts["asks"] != 2 || s.ForYou.Named["asks"] != "" || s.ForYou.Named["merges"] != "#841" {
 		t.Fatalf("team %v, for you %v %v", s.Team.Counts, s.ForYou.Counts, s.ForYou.Named)
+	}
+}
+
+// Every read a section judges with is named when it fails (foureyes,
+// reviewer-codex on step 2): the clock, the health records or the dispatch
+// state make For you "?"; the dispatch state makes an uncomputed queue's
+// Merge "?"; the health records or the quota marks make Team "?". Each is a
+// failed read, so the exit is 1.
+func TestSummaryEveryFailedReadIsNamed(t *testing.T) {
+	b, r := dialMain(t)
+	t.Cleanup(func() { bus.DeleteProject(context.Background(), r, b.Project()) })
+	boom := errors.New("boom")
+	for _, name := range []string{"clock", "health", "dispatch"} {
+		f := forYouSection(context.Background(), b, attention.Inputs{}, map[string]error{name: boom}, time.Now())
+		if f.Unknown != name+": boom" {
+			t.Errorf("%s failed: For you %+v", name, f)
+		}
+	}
+	if m := mergeSection(attention.Inputs{MergeRead: true}, map[string]error{"dispatch": boom}, true); m.Unknown != "dispatch: boom" || m.NotComputed != "" {
+		t.Errorf("dispatch failed, queue not computed: %+v", m)
+	}
+	now := time.Now()
+	if m := mergeSection(attention.Inputs{MergeRead: true, Merge: bus.MergeQueueRecord{ItemsAt: now.UnixMilli()}}, map[string]error{"dispatch": boom}, true); m.Unknown != "" {
+		t.Errorf("a computed queue needs no dispatch state: %+v", m)
+	}
+	snaps := map[string]bus.AgentSnapshot{"coder": {State: "idle", TS: 1}}
+	if tm := teamSection(snaps, nil, nil, boom, nil, nil, now); tm.Unknown != "health: boom" {
+		t.Errorf("health failed: Team %+v", tm)
+	}
+	if tm := teamSection(snaps, nil, nil, nil, nil, boom, now); tm.Unknown != "quota: boom" {
+		t.Errorf("quota failed: Team %+v", tm)
+	}
+	if s := (Summary{Team: TeamSection{Unknown: "quota: boom"}}); !s.failed() {
+		t.Error("a Team ? is a failed read")
+	}
+	// on the broker: quota marks of the wrong type fail the read
+	r.Set(context.Background(), bus.QuotaKey(b.Project()), "not a hash", 0)
+	code, out, _ := summaryRun(t, b, summaryOpts{}, 200)
+	if code != 1 || !strings.Contains(out, "Team      ? quota: WRONGTYPE") {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+}
+
+// A report scan that reaches its limit inside the 24 h says its count is a
+// floor: "≥N reports (24 h)".
+func TestSummaryReportsFloor(t *testing.T) {
+	b, r := dialMain(t)
+	ctx := context.Background()
+	t.Cleanup(func() { bus.DeleteProject(ctx, r, b.Project()) })
+	pipe := r.Pipeline()
+	for i := 0; i < reportScan+1; i++ {
+		pipe.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(b.Project(), "report"), Values: map[string]any{"agent": "master", "kind": "note", "message": "m", "needs": "read"}})
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_, out, _ := summaryRun(t, b, summaryOpts{}, 200)
+	if !strings.Contains(out, fmt.Sprintf("≥%d reports (24 h)", reportScan)) {
+		t.Fatalf("no floor:\n%s", out)
+	}
+	_, js, _ := summaryRun(t, b, summaryOpts{}, 0, "--json")
+	var s Summary
+	if json.Unmarshal([]byte(js), &s); !s.ForYou.ReportsAtLeast {
+		t.Fatalf("json %s", js)
 	}
 }

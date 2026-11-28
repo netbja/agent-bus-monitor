@@ -86,6 +86,9 @@ type ForYouSection struct {
 	Counts  map[string]int    `json:"counts"`                  // asks, waits, gates, merges, health, reports
 	Named   map[string]string `json:"named,omitempty"`         // a kind's one item, named
 	Merge   string            `json:"merge_unknown,omitempty"` // why the merge queue is unknown
+	// ReportsAtLeast: the report scan reached its limit inside the 24 h, so
+	// the reports count is a floor.
+	ReportsAtLeast bool `json:"reports_at_least,omitempty"`
 }
 
 type MergeSection struct {
@@ -136,7 +139,8 @@ type TeamSection struct {
 }
 
 type TeamAnomaly struct {
-	Kind   string `json:"kind"` // failed, stalled, quota-paused
+	Kind   string `json:"kind"`            // failed, stalled, quota-paused
+	Check  string `json:"check,omitempty"` // the health check that says so (failed, stalled)
 	Agent  string `json:"agent,omitempty"`
 	Detail string `json:"detail"`
 }
@@ -199,7 +203,10 @@ func readSummary(ctx context.Context, b *bus.Bus, project string, o summaryOpts,
 // last 24 hours that ask for the person (--needs read or answer).
 func forYouSection(ctx context.Context, b *bus.Bus, in attention.Inputs, failed map[string]error, now time.Time) ForYouSection {
 	f := ForYouSection{Counts: map[string]int{}, Named: map[string]string{}}
-	if why := firstFailed(failed, "asks", "agents", "gates", "observed", "cmd"); why != "" {
+	// Every read Items judges with (reviewer-codex on step 2): the stall
+	// guard needs the health records and the broker's clock, the merge
+	// queue's unknown row the dispatch state.
+	if why := firstFailed(failed, "asks", "agents", "gates", "observed", "cmd", "health", "clock", "dispatch"); why != "" {
 		f.Unknown = why
 		return f
 	}
@@ -227,6 +234,11 @@ func forYouSection(ctx context.Context, b *bus.Bus, in attention.Inputs, failed 
 		if e.Needs != "" && now.Sub(bus.IDTime(e.ID)) <= 24*time.Hour {
 			f.Counts["reports"]++
 		}
+	}
+	// Every entry scanned is inside the 24 h and the scan reached its limit:
+	// older ones were not read, so the count is a floor, said "≥" (foureyes).
+	if len(evs) >= reportScan && allWithin(evs, now, 24*time.Hour) {
+		f.ReportsAtLeast = true
 	}
 	for k, ns := range named {
 		if len(ns) == 1 && ns[0] != "" {
@@ -272,6 +284,10 @@ func mergeSection(in attention.Inputs, failed map[string]error, ciLoop bool) Mer
 		return m
 	}
 	if in.Merge.ItemsAt == 0 {
+		if err := failed["dispatch"]; err != nil { // why the queue is not computed is unknown
+			m.Unknown = "dispatch: " + err.Error()
+			return m
+		}
 		m.NotComputed = "not computed yet (the dispatch service computes it)"
 		if why := attention.DispatchWhy(in.Dispatch); why != "" {
 			m.NotComputed = "not computed: " + why
@@ -368,6 +384,16 @@ func teamSection(snaps map[string]bus.AgentSnapshot, err error, records map[stri
 		t.Unknown = "agents: " + err.Error()
 		return t
 	}
+	// The anomalies are read, never recomputed: health records or quota marks
+	// that cannot be read leave them unknown, so the line is "?" (foureyes).
+	switch {
+	case healthErr != nil:
+		t.Unknown = "health: " + healthErr.Error()
+		return t
+	case marksErr != nil:
+		t.Unknown = "quota: " + marksErr.Error()
+		return t
+	}
 	names := make([]string, 0, len(snaps))
 	for n, s := range snaps {
 		names = append(names, n)
@@ -377,27 +403,22 @@ func teamSection(snaps map[string]bus.AgentSnapshot, err error, records map[stri
 	}
 	sort.Strings(names)
 	for _, c := range []struct{ id, kind string }{{"agent-launch", "failed"}, {"self-repair", "failed"}, {"idle-implementer", "stalled"}} {
-		if healthErr != nil {
-			break
-		}
 		rec, ok := records[c.id]
 		d, known := health.ByID(c.id)
 		if !ok || !known {
 			continue
 		}
 		if st := health.EffectiveStatus(rec, now.UnixMilli(), d.Interval); st == health.Warn || st == health.Fail {
-			t.Anomalies = append(t.Anomalies, TeamAnomaly{Kind: c.kind, Detail: rec.Detail})
+			t.Anomalies = append(t.Anomalies, TeamAnomaly{Kind: c.kind, Check: c.id, Detail: rec.Detail})
 			if c.kind == "failed" {
 				t.Counts["failed"]++
 			}
 		}
 	}
-	if marksErr == nil {
-		for _, n := range names {
-			s := snaps[n]
-			if bus.HeldReason(marks, n, s.Provider) == bus.HeldQuota {
-				t.Anomalies = append(t.Anomalies, TeamAnomaly{Kind: "quota-paused", Agent: n, Detail: s.Provider + " at its limit"})
-			}
+	for _, n := range names {
+		s := snaps[n]
+		if bus.HeldReason(marks, n, s.Provider) == bus.HeldQuota {
+			t.Anomalies = append(t.Anomalies, TeamAnomaly{Kind: "quota-paused", Agent: n, Detail: s.Provider + " at its limit"})
 		}
 	}
 	return t
@@ -450,7 +471,9 @@ func (s Summary) lines() []string {
 				continue
 			}
 			p := fmt.Sprintf("%d %s", n, k.many)
-			if n == 1 {
+			if k.key == "reports" && f.ReportsAtLeast {
+				p = "≥" + p
+			} else if n == 1 {
 				p = "1 " + k.one
 				if name := f.Named[k.key]; name != "" && k.key != "reports" {
 					p += " (" + name + ")"
@@ -538,6 +561,9 @@ func (s Summary) lines() []string {
 		}
 		for _, a := range t.Anomalies {
 			w := a.Kind
+			if a.Check != "" {
+				w += " (" + a.Check + ")"
+			}
 			if a.Agent != "" {
 				w += " " + a.Agent
 			}
@@ -714,3 +740,13 @@ func mainSummary(host, project string, args []string) int {
 // statusUsage is the usage error of status with fewer than two positionals
 // (status-summary §3.1): exit 2, pointing to summary.
 const statusUsage = "usage: status <agent> <state> [message...] (the project's summary is agentbus summary)"
+
+// allWithin: every event of evs is no older than d at now.
+func allWithin(evs []bus.Event, now time.Time, d time.Duration) bool {
+	for _, e := range evs {
+		if now.Sub(bus.IDTime(e.ID)) > d {
+			return false
+		}
+	}
+	return true
+}
