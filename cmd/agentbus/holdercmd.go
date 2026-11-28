@@ -42,6 +42,11 @@ func mainHolder(project string, args []string, stderr io.Writer) int {
 			}
 		}
 	}
+	if sc, why := newHolderScopes(project, getenv); sc != nil {
+		cfg.Scopes = sc
+	} else {
+		fmt.Fprintf(stderr, "holder: no scopes (%s): no terminal gets cap B\n", why)
+	}
 	srv, err := holder.NewServer(cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "holder: %v; not restarting\n", err)

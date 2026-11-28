@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netbja/agent-bus-monitor/cgroot"
 	"github.com/netbja/agent-bus-monitor/holder"
 	"github.com/netbja/agent-bus-monitor/service"
 )
@@ -20,6 +21,19 @@ func TestHolderHelperProcess(t *testing.T) {
 	if os.Getenv("AGENTBUS_HOLDER_HELPER") != "1" {
 		t.Skip("helper process")
 	}
+	newHolderScopes = func(string, func(string) string) (*holder.Scopes, string) { return nil, "a test" }
+	if rec := os.Getenv("AGENTBUS_HOLDER_HELPER_SCOPES"); rec != "" { // a fake scope launch, recording its unit
+		newHolderScopes = func(string, func(string) string) (*holder.Scopes, string) {
+			return &holder.Scopes{
+				Argv: func(unit string, argv []string) []string {
+					return append([]string{"/bin/sh", "-c", `echo "$0" >> ` + rec + `; printf y >&3; exec 3>&-; exec "$@"`, unit}, argv...)
+				},
+				List:   func() ([]string, error) { return nil, nil },
+				Stop:   func(...string) error { return nil },
+				Active: func(string) (bool, error) { return false, nil },
+			}, ""
+		}
+	}
 	os.Exit(mainHolder("demo", os.Args[len(os.Args)-2:], os.Stderr))
 }
 
@@ -27,6 +41,7 @@ func TestHolderHelperProcess(t *testing.T) {
 // directory reachable only through the env file's PATH, and the env file.
 type holderWorld struct {
 	tmp, repo, envFile, run string
+	extraEnv                []string // the holder process's, beyond start's
 	out                     *strings.Builder
 	cmd                     *exec.Cmd
 }
@@ -96,6 +111,7 @@ func (w *holderWorld) start(t *testing.T, cwd string) *holder.Client {
 	w.cmd = exec.Command(os.Args[0], "-test.run=^TestHolderHelperProcess$", "--", "--env", w.envFile)
 	w.cmd.Dir = cwd
 	w.cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + filepath.Join(w.tmp, "home"), "XDG_RUNTIME_DIR=" + w.run, "AGENTBUS_HOLDER_HELPER=1"}
+	w.cmd.Env = append(w.cmd.Env, w.extraEnv...)
 	w.cmd.Stdout, w.cmd.Stderr = w.out, w.out
 	if err := w.cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -174,6 +190,38 @@ func TestHolderLaunchesThroughTheEnvFile(t *testing.T) {
 	want := "a coder demo in " + realPath(t, work) + " roles=" + realPath(t, filepath.Join(w.repo, "roles.toml")) + " secret="
 	if got := w.mark(t, mark); got != want {
 		t.Fatalf("the client ran as %q, want %q", got, want)
+	}
+	// The helper never reaches the host's user manager (resource-limits
+	// §12.5): its holder runs no scope, and says so.
+	if !strings.Contains(w.out.String(), "holder: no scopes (a test): no terminal gets cap B") {
+		t.Errorf("the holder's scopes in a test:\n%s", w.out.String())
+	}
+}
+
+// The holder process runs the scopes newHolderScopes gives: a pane starts
+// through the scope launch, named for its project, build, role and terminal
+// (resource-limits §12.5).
+func TestHolderRunsTheScopesItIsGiven(t *testing.T) {
+	w := newHolderWorld(t)
+	work := filepath.Join(w.tmp, "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mark, rec := filepath.Join(w.tmp, "mark"), filepath.Join(w.tmp, "units")
+	w.writeEnv(t, map[string]string{"PATH": "/usr/bin:/bin:" + w.client(t, "a"), service.HolderRepoEnv: w.repo, "HOLDER_TEST_MARK": mark})
+	w.extraEnv = []string{"AGENTBUS_HOLDER_HELPER_SCOPES=" + rec}
+	cl := w.start(t, work)
+	r, err := cl.Call(holder.Start{Role: "coder"})
+	if err != nil {
+		t.Fatalf("start: %v\n%s", err, w.out.String())
+	}
+	w.mark(t, mark)
+	want := cgroot.ScopeUnit("demo", service.BuildKey(holder.BuildID()), "coder", r.Term.ID)
+	if b, _ := os.ReadFile(rec); strings.TrimSpace(string(b)) != want {
+		t.Errorf("the scope launch got %q, want %s\n%s", b, want, w.out.String())
+	}
+	if strings.Contains(w.out.String(), "no scopes") {
+		t.Errorf("the holder ran without its scopes:\n%s", w.out.String())
 	}
 }
 
