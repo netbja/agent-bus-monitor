@@ -97,6 +97,7 @@ INTERNAL COMMANDS
   peer:           a local test peer
   fake-client:    a fake Claude Code
   statusline:     Claude Code's statusLine
+  agent-enter:    enter a scope, run a client
 
 FLAGS
   -p, --project <project>  project namespace (or AGENT_BUS_PROJECT)

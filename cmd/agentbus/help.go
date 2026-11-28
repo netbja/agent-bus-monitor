@@ -157,7 +157,7 @@ var helpSections = []cli.Section{
 	{Title: "PROJECT COMMANDS", Names: []string{"up", "start", "down", "pause", "resume", "suspend", "shutdown", "projects", "service", "holder", "dispatch", "missions", "mission"}},
 	{Title: "USAGE COMMANDS", Names: []string{"usage", "budget", "tokens", "quota", "models", "refresh", "limits"}},
 	{Title: "ADMIN COMMANDS", Names: []string{"config", "identity", "notifications", "roles", "health", "backup", "restore", "update", "mem", "check", "term", "version", "help"}},
-	{Title: "INTERNAL COMMANDS", Names: []string{"setup", "peer", "fake-client", "statusline"}},
+	{Title: "INTERNAL COMMANDS", Names: []string{"setup", "peer", "fake-client", "statusline", "agent-enter"}},
 }
 
 // helpPage is the top-level help: the sections, then the examples and where
