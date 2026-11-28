@@ -378,10 +378,10 @@ func TestSummaryEveryFailedReadIsNamed(t *testing.T) {
 		t.Errorf("a computed queue needs no dispatch state: %+v", m)
 	}
 	snaps := map[string]bus.AgentSnapshot{"coder": {State: "idle", TS: 1}}
-	if tm := teamSection(snaps, nil, nil, boom, nil, nil, now); tm.Unknown != "health: boom" {
+	if tm := teamSection(snaps, nil, nil, nil, boom, nil, nil, now); tm.Unknown != "health: boom" {
 		t.Errorf("health failed: Team %+v", tm)
 	}
-	if tm := teamSection(snaps, nil, nil, nil, nil, boom, now); tm.Unknown != "quota: boom" {
+	if tm := teamSection(snaps, nil, nil, nil, nil, nil, boom, now); tm.Unknown != "quota: boom" {
 		t.Errorf("quota failed: Team %+v", tm)
 	}
 	if s := (Summary{Team: TeamSection{Unknown: "quota: boom"}}); !s.failed() {
@@ -432,5 +432,31 @@ func TestSummaryReportsFloor(t *testing.T) {
 	}
 	if _, out, _ = summaryRun(t, e, summaryOpts{}, 200); !strings.Contains(out, fmt.Sprintf(" %d reports (24 h)", reportScan-1)) || strings.Contains(out, "≥") {
 		t.Fatalf("an exact count:\n%s", out)
+	}
+}
+
+// A lost agent (no terminal, and it owes something: cleaning-up-agents §3,
+// the presence agentbus agents shows) is counted failed, not in its last
+// state, and named with its reason (reviewer-codex on step 2).
+func TestSummaryLostAgentIsFailed(t *testing.T) {
+	b, r := dialMain(t)
+	summaryFixture(t, b, r)
+	var asked map[string]bus.AgentSnapshot
+	d := summaryDeps{
+		Projects: func(context.Context) ([]string, error) { return []string{b.Project()}, nil },
+		Open:     func(string) (*bus.Bus, error) { return b, nil },
+		Presence: func(_ context.Context, _ *bus.Bus, _ string, snaps map[string]bus.AgentSnapshot) map[string]agentPresence {
+			asked = snaps
+			return map[string]agentPresence{"coder2": {State: bus.PresenceLost, Reason: "owns rl-3e (blocked)"}, "coder": {State: bus.PresenceRunning}}
+		},
+		Now: time.Now, Width: 300,
+	}
+	var out, errw bytes.Buffer
+	runSummary(context.Background(), b.Project(), nil, d, &out, &errw)
+	if len(asked) != 4 {
+		t.Fatalf("presence asked of %d agents", len(asked))
+	}
+	if !strings.Contains(out.String(), "Team      1 working · 2 idle · 1 failed · failed coder2: lost: owns rl-3e (blocked)") {
+		t.Fatalf("lost:\n%s", out.String())
 	}
 }

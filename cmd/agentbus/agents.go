@@ -124,6 +124,18 @@ func presences(m map[string]bus.AgentSnapshot, live map[string]bool, owes map[st
 	return out
 }
 
+// readPresences judges each agent of m as agentbus agents shows it: the
+// holder's live terminals, what each owes, the roles file (nil when it cannot
+// be read: required unknown, fail closed, cleaning-up-agents §3.2) and
+// dispatch.self_repair. agentbus summary's Team reads it too.
+func readPresences(ctx context.Context, b *bus.Bus, project string, m map[string]bus.AgentSnapshot) map[string]agentPresence {
+	var man *rolecfg.Manifest
+	if path, err := manifestPath(os.Environ()); err == nil && path != "" {
+		man, _ = rolecfg.Load(path)
+	}
+	return presences(m, holderLive(ctx, project), b.ReadOwes(ctx, m), man, selfRepairOn(os.Getenv))
+}
+
 // agentJSON is agents --json's row: the snapshot, plus its presence
 // (additive, cleaning-up-agents §10).
 type agentJSON struct {

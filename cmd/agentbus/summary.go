@@ -178,7 +178,10 @@ func firstFailed(failed map[string]error, names ...string) string {
 }
 
 // readSummary reads one project's summary at now.
-func readSummary(ctx context.Context, b *bus.Bus, project string, o summaryOpts, now time.Time) Summary {
+// presenceReader is readPresences, injected: a test has no holder.
+type presenceReader func(ctx context.Context, b *bus.Bus, project string, snaps map[string]bus.AgentSnapshot) map[string]agentPresence
+
+func readSummary(ctx context.Context, b *bus.Bus, project string, o summaryOpts, presence presenceReader, now time.Time) Summary {
 	s := Summary{V: summaryVersion, Project: project, ReadAt: now}
 	in, failed := attention.Read(ctx, b, attention.ReadOpts{Person: o.Person, StuckAfter: o.StuckAfter})
 	s.ForYou = forYouSection(ctx, b, in, failed, now)
@@ -189,7 +192,11 @@ func readSummary(ctx context.Context, b *bus.Bus, project string, o summaryOpts,
 	s.Plan, commit = planSection(ctx, b)
 	snaps, snapsErr := b.Agents(ctx)
 	marks, marksErr := b.QuotaMarks(ctx)
-	s.Team = teamSection(snaps, snapsErr, in.Health, failed["health"], marks, marksErr, now)
+	var pres map[string]agentPresence
+	if snapsErr == nil && presence != nil {
+		pres = presence(ctx, b, project, snaps)
+	}
+	s.Team = teamSection(snaps, snapsErr, pres, in.Health, failed["health"], marks, marksErr, now)
 	s.Health = healthSection(in.Health, failed["health"], now)
 	planSrc := "plan"
 	if s.Plan.Loaded {
@@ -377,7 +384,7 @@ var teamStates = []string{"working", "waiting", "blocked", "idle", "done"}
 // teamSection: counts by state; the anomalies named from their health
 // records (agent-launch, self-repair: failed; idle-implementer: stalled),
 // never recomputed, and the agents whose provider is on a quota hold.
-func teamSection(snaps map[string]bus.AgentSnapshot, err error, records map[string]health.Record, healthErr error,
+func teamSection(snaps map[string]bus.AgentSnapshot, err error, pres map[string]agentPresence, records map[string]health.Record, healthErr error,
 	marks map[string]string, marksErr error, now time.Time) TeamSection {
 	t := TeamSection{Counts: map[string]int{}}
 	if err != nil {
@@ -397,11 +404,23 @@ func teamSection(snaps map[string]bus.AgentSnapshot, err error, records map[stri
 	names := make([]string, 0, len(snaps))
 	for n, s := range snaps {
 		names = append(names, n)
+		// A lost agent (cleaning-up-agents §3: no terminal, and it owes
+		// something or is required) is failed, never its last state
+		// (reviewer-codex on step 2).
+		if p := pres[n]; p.State == bus.PresenceLost {
+			t.Counts["failed"]++
+			continue
+		}
 		if s.TS != 0 && slices.Contains(teamStates, s.State) {
 			t.Counts[s.State]++
 		}
 	}
 	sort.Strings(names)
+	for _, n := range names {
+		if p := pres[n]; p.State == bus.PresenceLost {
+			t.Anomalies = append(t.Anomalies, TeamAnomaly{Kind: "failed", Agent: n, Detail: "lost: " + p.Reason})
+		}
+	}
 	for _, c := range []struct{ id, kind string }{{"agent-launch", "failed"}, {"self-repair", "failed"}, {"idle-implementer", "stalled"}} {
 		rec, ok := records[c.id]
 		d, known := health.ByID(c.id)
@@ -636,6 +655,7 @@ type summaryDeps struct {
 	Projects func(ctx context.Context) ([]string, error)
 	Open     func(project string) (*bus.Bus, error)
 	Opts     summaryOpts
+	Presence presenceReader // nil: no presence read, every agent its declared state
 	Now      func() time.Time
 	Width    int
 }
@@ -669,7 +689,7 @@ func runSummary(ctx context.Context, project string, args []string, d summaryDep
 			code = 1
 			continue
 		}
-		s := readSummary(ctx, b, p, d.Opts, now)
+		s := readSummary(ctx, b, p, d.Opts, d.Presence, now)
 		if s.failed() {
 			code = 1
 		}
@@ -729,10 +749,11 @@ func mainSummary(host, project string, args []string) int {
 			}
 			return names, err
 		},
-		Open:  func(p string) (*bus.Bus, error) { return bus.Open(client, p) },
-		Opts:  summaryOptsFrom(os.Getenv),
-		Now:   time.Now,
-		Width: width,
+		Open:     func(p string) (*bus.Bus, error) { return bus.Open(client, p) },
+		Opts:     summaryOptsFrom(os.Getenv),
+		Presence: readPresences,
+		Now:      time.Now,
+		Width:    width,
 	}
 	return runSummary(context.Background(), project, args, d, os.Stdout, os.Stderr)
 }
