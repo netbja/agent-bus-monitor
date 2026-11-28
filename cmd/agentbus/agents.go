@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -114,8 +113,8 @@ func presences(m map[string]bus.AgentSnapshot, live map[string]bool, owes map[st
 			o.Unknown = append(o.Unknown, "owes")
 		}
 		in := bus.PresenceIn{Pane: s.Pane, TermsRead: live != nil, Live: live[n], SelfRepair: selfRepair, Owes: o}
-		if man == nil {
-			in.Owes.Unknown = append(slices.Clone(o.Unknown), "roles")
+		if man == nil { // first: whether it is required is judged before what it owes (reviewer-codex)
+			in.Owes.Unknown = append([]string{"roles"}, o.Unknown...)
 		} else {
 			in.Required = man.RoleRequired(n)
 		}

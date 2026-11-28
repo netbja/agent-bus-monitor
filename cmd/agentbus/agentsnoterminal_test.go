@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -60,11 +61,15 @@ func TestAgentsTableNoTerminal(t *testing.T) {
 func TestAgentsPresenceRoles(t *testing.T) {
 	m := map[string]bus.AgentSnapshot{"docs": {State: "idle", Pane: "t4"}, "coder": {State: "idle", Pane: "t2"}}
 	live := map[string]bool{}
-	owes := map[string]bus.Owes{"docs": {}, "coder": {}}
+	owes := map[string]bus.Owes{"docs": {Unknown: []string{bus.UnknownLosable}}, "coder": {}} // as bus.ReadOwes reads them in this step
 	if p := presences(m, live, owes, nil, true)["docs"]; p.State != bus.PresenceLost || p.Reason != "unknown: roles" {
-		t.Fatalf("no roles file: %+v", p)
+		t.Fatalf("no roles file, behind an unknown item 5 (reviewer-codex): %+v", p)
 	}
-	p := presences(m, live, owes, driftManifest(t), false)
+	if !slices.Equal(owes["docs"].Unknown, []string{bus.UnknownLosable}) {
+		t.Fatalf("the caller's owes changed: %v", owes["docs"].Unknown)
+	}
+	read := map[string]bus.Owes{"docs": {}, "coder": {}} // every item read, as from step 2
+	p := presences(m, live, read, driftManifest(t), false)
 	if p["docs"].State != bus.PresenceStopped || p["coder"].State != bus.PresenceLost || p["coder"].Reason != "required: agentbus up brings it back" {
 		t.Fatalf("with roles: %+v", p)
 	}
