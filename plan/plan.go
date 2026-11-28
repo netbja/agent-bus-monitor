@@ -12,6 +12,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/netbja/agent-bus-monitor/bus"
 )
@@ -44,7 +45,16 @@ type File struct {
 	// (plan-chantier §2.1).
 	Groups []Group `json:"groups,omitempty"`
 	Tasks  []Task  `json:"tasks"`
+	// Checks is "" (a check is optional) or ChecksRequired: every agent
+	// task carries one (onboarding §7.1).
+	Checks string `json:"checks,omitempty"`
 }
+
+// ChecksRequired is File.Checks when every agent task must carry a check.
+const ChecksRequired = "required"
+
+// maxCheck is a check's length in characters.
+const maxCheck = 200
 
 // Group is one chantier: an id its tasks name, and its title.
 type Group struct {
@@ -66,6 +76,9 @@ type Task struct {
 	// Priority is high, low or "" (normal; "normal" in the file reads as "").
 	// NEXT and NOW sort by it; a low task waits in LATER (views-redesign §4).
 	Priority string `json:"priority,omitempty"`
+	// Check is the command or manual step that proves the task done: one
+	// line of 1 to 200 characters, no control character (onboarding §7.1).
+	Check string `json:"check,omitempty"`
 }
 
 // MergeTask reports whether the task ends with a merge by the person: an
@@ -114,6 +127,9 @@ func Validate(f File) error {
 	if !oneLine(f.Goal, 200) {
 		return fmt.Errorf("plan: the goal must be one line of at most 200 characters")
 	}
+	if f.Checks != "" && f.Checks != ChecksRequired {
+		return fmt.Errorf("plan: checks %q is not %q", f.Checks, ChecksRequired)
+	}
 	if len(f.Tasks) == 0 || len(f.Tasks) > MaxTasks {
 		return fmt.Errorf("plan: 1 to %d tasks, got %d", MaxTasks, len(f.Tasks))
 	}
@@ -136,6 +152,12 @@ func Validate(f File) error {
 			if n != "" && !validSubject(n) {
 				return fmt.Errorf("plan: task %s: invalid name %q", t.ID, n)
 			}
+		}
+		if t.Check != "" && !validCheck(t.Check) {
+			return fmt.Errorf("plan: task %s: the check must be one line of 1 to %d printable characters, not only spaces", t.ID, maxCheck)
+		}
+		if f.Checks == ChecksRequired && t.Owner != Person && t.Check == "" {
+			return fmt.Errorf("plan: task %s: a check is required (checks: required)", t.ID)
 		}
 		switch t.Priority {
 		case "", bus.PriorityHigh, bus.PriorityLow:
@@ -210,6 +232,16 @@ func validSubject(s string) bool {
 		return true
 	}
 	return len(s) <= 128 && subjectForm.MatchString(s)
+}
+
+// validCheck: at most maxCheck characters (an empty check is none), not
+// only spaces, and every character graphic: no control (C0, DEL, C1), no
+// format character (a bidi override or isolate, a zero-width space), no line
+// separator, no private use. What a reader draws is then what runs
+// (reviewer-codex on onboarding-a1).
+func validCheck(s string) bool {
+	return len([]rune(s)) <= maxCheck && strings.TrimSpace(s) != "" &&
+		!strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsGraphic(r) })
 }
 
 func oneLine(s string, max int) bool {
