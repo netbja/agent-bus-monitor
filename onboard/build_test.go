@@ -76,20 +76,22 @@ func TestParseBuildAllowsExtraHeadings(t *testing.T) {
 
 func TestParseBuildRefuses(t *testing.T) {
 	cases := map[string]string{
-		"no title":              strings.Replace(sheet, "# notes: build sheet (v0)\n", "", 1),
-		"another title":         strings.Replace(sheet, "# notes: build sheet (v0)", "# notes", 1),
-		"a heading missing":     strings.Replace(sheet, "## Risks\nNone known.\n\n", "", 1),
-		"headings out of order": strings.NewReplacer("## Users\n", "## Stack\n", "## Stack\n", "## Users\n").Replace(sheet),
-		"a heading twice":       sheet + "\n## Goal\nagain\n",
-		"an item without check": strings.Replace(sheet, " — check: go test ./store/...", "", 1),
-		"a line not an item":    strings.Replace(sheet, "## Definition of done\n", "## Definition of done\nsome words\n", 1),
-		"an item with no id":    strings.Replace(sheet, "- [dod-1] ", "- ", 1),
-		"an id twice":           strings.Replace(sheet, "[dod-2]", "[dod-1]", 1),
-		"an empty check":        strings.Replace(sheet, "go test ./store/...", " ", 1),
-		"a check too long":      strings.Replace(sheet, "go test ./store/...", strings.Repeat("x", 201), 1),
-		"a control character":   strings.Replace(sheet, "go test ./store/...", "go test\u202e ./store/...", 1),
-		"no item":               strings.Replace(strings.Replace(sheet, "- [dod-1] a note survives a restart — check: go test ./store/...\n", "", 1), "- [dod-2] the app works on the phone — check: person: open the app on the phone, add a note, see it after a restart\n", "", 1),
-		"an empty goal":         strings.Replace(sheet, "A notes app the person uses on the phone.\nIt keeps notes across restarts.\n", "", 1),
+		"no title":          strings.Replace(sheet, "# notes: build sheet (v0)\n", "", 1),
+		"another title":     strings.Replace(sheet, "# notes: build sheet (v0)", "# notes", 1),
+		"a heading missing": strings.Replace(sheet, "## Risks\nNone known.\n\n", "", 1),
+		// the last one: only the count sees it, no later heading is out of order
+		"the last heading missing": strings.Replace(sheet, "## Decisions\nSQLite over files.\n", "", 1),
+		"headings out of order":    strings.NewReplacer("## Users\n", "## Stack\n", "## Stack\n", "## Users\n").Replace(sheet),
+		"a heading twice":          sheet + "\n## Goal\nagain\n",
+		"an item without check":    strings.Replace(sheet, " — check: go test ./store/...", "", 1),
+		"a line not an item":       strings.Replace(sheet, "## Definition of done\n", "## Definition of done\nsome words\n", 1),
+		"an item with no id":       strings.Replace(sheet, "- [dod-1] ", "- ", 1),
+		"an id twice":              strings.Replace(sheet, "[dod-2]", "[dod-1]", 1),
+		"an empty check":           strings.Replace(sheet, "go test ./store/...", " ", 1),
+		"a check too long":         strings.Replace(sheet, "go test ./store/...", strings.Repeat("x", 201), 1),
+		"a control character":      strings.Replace(sheet, "go test ./store/...", "go test\u202e ./store/...", 1),
+		"no item":                  strings.Replace(strings.Replace(sheet, "- [dod-1] a note survives a restart — check: go test ./store/...\n", "", 1), "- [dod-2] the app works on the phone — check: person: open the app on the phone, add a note, see it after a restart\n", "", 1),
+		"an empty goal":            strings.Replace(sheet, "A notes app the person uses on the phone.\nIt keeps notes across restarts.\n", "", 1),
 	}
 	for name, s := range cases {
 		if _, err := ParseBuild([]byte(s)); err == nil {
