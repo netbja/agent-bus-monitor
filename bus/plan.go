@@ -32,6 +32,9 @@ type PlanRecord struct {
 	LoadedAt int64    `json:"loaded_at"` // Unix ms, Redis TIME
 	Tasks    []string `json:"tasks"`     // the task ids, for the fact scripts
 	File     string   `json:"file"`      // the file's bytes, opaque: cjson would rewrite [] as {}
+	// Approved is the reply entry of the person's yes when the plan was loaded
+	// as an approved draft (onboarding §8.5); absent on a plain load.
+	Approved string `json:"approved,omitempty"`
 }
 
 // PlanFact is what master recorded about one task. Times are Unix ms from
@@ -78,7 +81,7 @@ func (b *Bus) LoadPlan(ctx context.Context, path, commit string, file []byte, ta
 		return fmt.Errorf("%w: %s", ErrNoProject, b.project)
 	}
 	rec, _ := json.Marshal(PlanRecord{Path: path, Commit: commit, Tasks: tasks, File: string(file)})
-	return planLoad.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project), PlanIgnoreKey(b.project)}, string(rec)).Err()
+	return draftErr(planLoad.Run(ctx, b.r, []string{PlanKey(b.project), PlanFactsKey(b.project), PlanIgnoreKey(b.project), PlanDraftKey(b.project)}, string(rec)).Err())
 }
 
 func (b *Bus) hasProjectKind(ctx context.Context) (bool, error) {
@@ -94,7 +97,10 @@ func (b *Bus) hasProjectKind(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+// planLoad: KEYS plan, facts, ignore, draft. A recorded draft refuses: it
+// loads only through LoadPlanDraft (onboarding §8.5).
 var planLoad = redis.NewScript(`
+if redis.call('EXISTS', KEYS[4]) == 1 then return redis.error_reply('PLAN_DRAFT_RECORDED') end
 local t = redis.call('TIME')
 local rec = cjson.decode(ARGV[1])
 rec.loaded_at = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)

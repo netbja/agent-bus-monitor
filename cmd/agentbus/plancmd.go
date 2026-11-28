@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 	"github.com/netbja/agent-bus-monitor/plan"
 )
 
-const planUsage = "usage: plan show [--json] | plan load <path>@<commit> | plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan priority <task> high|normal|low --as <person> | plan ignore <pr> | plan clear"
+const planUsage = "usage: plan show [--json] | plan load <path>@<commit> | plan draft <path>@<commit> [--build <path>] | plan draft show [--json] | plan draft --drop | plan link <task> --pr <n> | plan done <task> | plan note <task> <text...> | plan priority <task> high|normal|low --as <person> | plan ignore <pr> | plan clear"
 
 // planWrites are the plan verbs that write it: master's (priority is the
 // person's, by its own rule).
@@ -41,7 +42,12 @@ func runPlan(ctx context.Context, b *bus.Bus, repo string, getenv func(string) s
 			return 2
 		}
 	}
+	// The approval checks (plan load's draft, plan done's person checks,
+	// plan draft show) read the history archive too (bus.TypedApproval).
+	b.SetApprovalArchive(archivedReplies(b.Project(), historyDir(b.Project(), getenv)))
 	switch verb {
+	case "draft": // master's or the architect's, by its own rule (onboarding §8.1)
+		return runPlanDraft(ctx, b, repo, getenv, rest, out, errw)
 	case "show":
 		rest, asJSON := extractBool(rest, "--json")
 		if len(rest) != 0 {
@@ -174,9 +180,49 @@ func planLoad(ctx context.Context, b *bus.Bus, repo, ref string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	// onboarding §7.3: a mission task's check is its missions.json test, read
-	// at the same commit; a file that cannot be read refuses the load.
-	if err := plan.CheckMissions(f, func(change string) (map[string]string, error) {
+	if err := planMissions(ctx, g, commit, f); err != nil {
+		return "", err
+	}
+	ids := make([]string, len(f.Tasks))
+	for i, t := range f.Tasks {
+		ids[i] = t.ID
+	}
+	// onboarding §8.5: a recorded draft loads only as itself, approved; a
+	// plan with checks required loads only as an approved draft.
+	d, drafted, err := b.PlanDraft(ctx)
+	if err != nil {
+		return "", err
+	}
+	if drafted {
+		var build []byte
+		if d.BuildPath != "" {
+			if build, err = g.Show(ctx, commit, d.BuildPath); err != nil {
+				if d.Build != "" {
+					return "", fmt.Errorf("%s not found at %s", d.BuildPath, commit[:7])
+				}
+				build = nil // the draft had none: absent here too
+			}
+		}
+		entry, err := b.LoadPlanDraft(ctx, path, commit, data, build, ids, func(qid string) bus.AskQuestion { return adoptionQuestion(f, path, qid) })
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("loaded plan %s (%d tasks) from %s@%s, the draft the person approved (%s)", f.Plan, len(f.Tasks), path, commit[:7], entry), nil
+	}
+	if f.Checks == plan.ChecksRequired {
+		return "", errors.New("a plan with checks required is loaded only as an approved draft (agentbus plan draft)")
+	}
+	if err := b.LoadPlan(ctx, path, commit, data, ids); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("loaded plan %s (%d tasks) from %s@%s", f.Plan, len(f.Tasks), path, commit[:7]), nil
+}
+
+// planMissions is onboarding §7.3: a mission task's check is its
+// missions.json test, read at the plan's commit; a file that cannot be read
+// refuses (plan load and plan draft).
+func planMissions(ctx context.Context, g mission.Git, commit string, f plan.File) error {
+	return plan.CheckMissions(f, func(change string) (map[string]string, error) {
 		raw, err := g.Show(ctx, commit, "docs/changes/"+change+"/missions.json")
 		if err != nil {
 			return nil, err
@@ -190,17 +236,7 @@ func planLoad(ctx context.Context, b *bus.Bus, repo, ref string) (string, error)
 			tests[m.ID] = m.Test
 		}
 		return tests, nil
-	}); err != nil {
-		return "", err
-	}
-	ids := make([]string, len(f.Tasks))
-	for i, t := range f.Tasks {
-		ids[i] = t.ID
-	}
-	if err := b.LoadPlan(ctx, path, commit, data, ids); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("loaded plan %s (%d tasks) from %s@%s", f.Plan, len(f.Tasks), path, commit[:7]), nil
+	})
 }
 
 // shortRef is <branch>@<sha> with the sha cut to 7, as git shows it.

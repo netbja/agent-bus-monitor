@@ -234,6 +234,10 @@ func validSubject(s string) bool {
 	return len(s) <= 128 && subjectForm.MatchString(s)
 }
 
+// ValidCheck is the rule a task's check obeys (onboarding §7.1), for BUILD.md's
+// items too (onboard.ParseBuild).
+func ValidCheck(s string) bool { return validCheck(s) }
+
 // validCheck: at most maxCheck characters (an empty check is none), not
 // only spaces, and every character graphic: no control (C0, DEL, C1), no
 // format character (a bidi override or isolate, a zero-width space), no line

@@ -352,9 +352,9 @@ func splitStreamKey(key string) (project, kind string) {
 type Bus struct {
 	r       *redis.Client
 	project string
-	// retroArchive reads a retro ask's archived replies (SetRetroArchive);
+	// approvalArchive reads an ask's archived replies (SetApprovalArchive);
 	// nil: the cmd stream alone.
-	retroArchive RetroArchive
+	approvalArchive ApprovalArchive
 }
 
 // Open binds a client to a project. The project is required and must be a valid

@@ -56,9 +56,9 @@ type retroPlusDeps struct {
 	Now      func() time.Time
 	ReadFile func(name string) ([]byte, error)
 	// Replies reads a retro ask's reply entries from the history archive
-	// (bus.SetRetroArchive): a reply trimmed from the stream still proves
+	// (bus.SetApprovalArchive): a reply trimmed from the stream still proves
 	// the person's yes (foureyes on r1).
-	Replies bus.RetroArchive
+	Replies bus.ApprovalArchive
 }
 
 var (
@@ -308,8 +308,8 @@ func runRetroPlus(ctx context.Context, d retroDeps, p retroPlusDeps, verb string
 	if !has {
 		return true, errors.New("retro: this bus has no retros")
 	}
-	if s, ok := d.Bus.(interface{ SetRetroArchive(bus.RetroArchive) }); ok && p.Replies != nil {
-		s.SetRetroArchive(p.Replies)
+	if s, ok := d.Bus.(interface{ SetApprovalArchive(bus.ApprovalArchive) }); ok && p.Replies != nil {
+		s.SetApprovalArchive(p.Replies)
 	}
 	if verb == "rejected" {
 		rest, file := extractFlag(args, "--file")
@@ -407,10 +407,7 @@ func retroPlusFor(project string, getenv func(string) string) retroPlusDeps {
 	if err != nil || base == "" {
 		base = "dev"
 	}
-	dir := ""
-	if p, err := service.PathsFrom(getenv); err == nil {
-		dir = history.Dir(p.StateDir(project))
-	}
+	dir := historyDir(project, getenv)
 	return retroPlusDeps{
 		Git: gitOnBase(base),
 		Archived: func(id string) bool {
@@ -440,28 +437,44 @@ func retroPlusFor(project string, getenv func(string) string) retroPlusDeps {
 		},
 		Now:      time.Now,
 		ReadFile: os.ReadFile,
-		Replies: func(_ context.Context, askID string) ([]bus.Event, error) {
-			if dir == "" {
-				return nil, nil // no archive on this host: the stream alone
-			}
-			ms, err := strconv.ParseInt(strings.SplitN(askID, "-", 2)[0], 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("ask id %q", askID)
-			}
-			es, cut, err := history.ReadDays(dir, time.UnixMilli(ms).Add(-24*time.Hour), time.Now().Add(24*time.Hour), 256<<20)
-			if err != nil {
-				return nil, err
-			}
-			if cut {
-				return nil, errors.New("the archive is larger than one read: a reply may be missed")
-			}
-			var out []bus.Event
-			for _, e := range es {
-				if e.Stream == "cmd" && e.F["ref"] == askID {
-					out = append(out, bus.ParseEntry(project+":cmd", e.ID, e.F))
-				}
-			}
-			return out, nil
-		},
+		Replies:  archivedReplies(project, dir),
 	}
+}
+
+// archivedReplies reads the history archive in dir for the reply entries
+// to an ask (ref = its id), from the day before it was asked: the approval
+// checks' archive (bus.SetApprovalArchive). No dir: the stream alone.
+func archivedReplies(project, dir string) bus.ApprovalArchive {
+	return func(_ context.Context, askID string) ([]bus.Event, error) {
+		if dir == "" {
+			return nil, nil // no archive on this host: the stream alone
+		}
+		ms, err := strconv.ParseInt(strings.SplitN(askID, "-", 2)[0], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("ask id %q", askID)
+		}
+		es, cut, err := history.ReadDays(dir, time.UnixMilli(ms).Add(-24*time.Hour), time.Now().Add(24*time.Hour), 256<<20)
+		if err != nil {
+			return nil, err
+		}
+		if cut {
+			return nil, errors.New("the archive is larger than one read: a reply may be missed")
+		}
+		var out []bus.Event
+		for _, e := range es {
+			if e.Stream == "cmd" && e.F["ref"] == askID {
+				out = append(out, bus.ParseEntry(project+":cmd", e.ID, e.F))
+			}
+		}
+		return out, nil
+	}
+}
+
+// historyDir is the project's history archive directory, "" when this
+// host has none.
+func historyDir(project string, getenv func(string) string) string {
+	if p, err := service.PathsFrom(getenv); err == nil {
+		return history.Dir(p.StateDir(project))
+	}
+	return ""
 }

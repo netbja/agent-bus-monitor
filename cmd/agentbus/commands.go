@@ -523,6 +523,7 @@ var commands = []cli.Command{
 		Name: "plan", Text: true, Usage: []string{
 			"plan [show] [--json]",
 			"plan load <path>@<commit>",
+			"plan draft <path>@<commit> [--build <path>] | plan draft show [--json] | plan draft --drop",
 			"plan link <task> (--pr <n> | --ref <branch>@<sha>) | plan done <task> | plan note <task> <text...> | plan clear",
 			"plan ignore <pr>",
 			"plan priority <task> high|normal|low --as <person>",
@@ -534,8 +535,10 @@ var commands = []cli.Command{
 			{Long: "pr", Arg: "<n>", Help: "link: the task's pull request"},
 			{Long: "ref", Arg: "<branch>@<sha>", Help: "link: the delivered commit, when no pull request was opened (agentbus deliver)"},
 			{Long: "as", Arg: "<person>", Help: "priority: the person who sets it (an agent is refused); a request sent for the task starts at it"},
+			{Long: "build", Arg: "<path>", Help: "draft: the build sheet read at the commit (default BUILD.md)"},
+			{Long: "drop", Help: "draft: delete the draft, and withdraw its ask when it is the caller's and open"},
 		},
-		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles",
+		Examples: []string{"agentbus -p demo plan load docs/plans/v0.22.json@HEAD", "agentbus -p demo plan draft docs/plans/v0.json@HEAD", "agentbus -p demo plan link roles --pr 102", "agentbus -p demo plan done roles",
 			"agentbus -p demo plan ignore 458", "agentbus -p demo plan priority roles high --as charlie"},
 	},
 	{

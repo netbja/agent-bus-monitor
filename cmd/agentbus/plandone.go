@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"slices"
@@ -148,8 +149,12 @@ func planDonePerson(ctx context.Context, b *bus.Bus, id string) (entry, qid stri
 		if a.Task != t.ID || !slices.ContainsFunc(a.Questions, func(q bus.AskQuestionState) bool { return q.ID == qid }) {
 			continue
 		}
-		if e, err := b.TypedApproval(ctx, a.ID, qid, "passes"); err == nil {
+		e, err := b.TypedApproval(ctx, a.ID, qid, "passes")
+		if err == nil {
 			return e, qid, nil
+		}
+		if errors.Is(err, bus.ErrApprovalArchive) {
+			return "", "", err // a failed read, not "not answered" (foureyes on onboarding-b1)
 		}
 	}
 	return "", "", fmt.Errorf("%s: the person has not answered passes to its current check (id %s)", t.ID, qid)
