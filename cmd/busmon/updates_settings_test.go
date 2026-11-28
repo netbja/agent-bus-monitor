@@ -9,7 +9,7 @@ import (
 
 // quiet-update-auto, the person's Q2: updates.window is the person's, set
 // from Shift+C (written as the person) with a line saying what it does and
-// that nothing reads it before quiet-update step 4d; updates.auto and
+// that it is not in effect before the updater's unit (quiet-update step 4e); updates.auto and
 // updates.max_wait are shown, not editable (config.toml alone).
 func TestSettingsPageUpdatesRows(t *testing.T) {
 	getenv := settingsEnv(t, "# mine\n", "", nil)

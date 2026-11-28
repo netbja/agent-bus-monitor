@@ -649,6 +649,7 @@ var commands = []cli.Command{
 			"service restart holder --kill-agents",
 			"service start holder | service stop holder <build> | service gc",
 			"service supervise holder <p> <build key> | dispatch <p> | missions <p> (no service manager: started detached, never by hand)",
+			"service run updater (the automatic update's loop, one per host: what its unit runs, never by hand)",
 		},
 		Brief:   "the project's user services",
 		Summary: "the project's user services (systemd --user, launchd, or detached supervisors without either)",

@@ -1092,7 +1092,7 @@ var settingHelps = map[string]string{
 	"recap.auto_after":             "the recap opens by itself after you were away this long",
 	"dispatch.focus_notice":        "a wake never types into the pane you are in: after this long the desktop says so; leave the pane and it is woken; 0 is off (the dispatch service reads it at its start)",
 	"updates.check":                "asks GitHub (a newer release) and npm (a newer Codex than its agents run) once a day",
-	"updates.window":               "when updates.auto = install may install a release, local time HH:MM-HH:MM (03:00-05:00 by default; it may cross midnight); agents cannot change it. Not in effect yet: the updater reads it from quiet-update step 4d",
+	"updates.window":               "when updates.auto = install may install a release, local time HH:MM-HH:MM (03:00-05:00 by default; it may cross midnight); agents cannot change it. Not in effect yet: the updater's loop reads it, and its unit comes with quiet-update step 4e",
 	"identity.as":                  "your name on the bus, as a person",
 	"person.name":                  "your own name, a bus name (charlie): busmon writes as it when \"Your name on the bus\" is empty",
 	"person.language":              "the language master writes to you in, chosen from the ISO 639-1 list (enter opens it, type to filter: fr, fran, french); the bus stays English",
