@@ -31,8 +31,9 @@ type fakeScopes struct {
 	active  map[string]bool // a build's holder runs
 	unsure  map[string]bool // the manager cannot say
 	log     bytes.Buffer
-	rec     string // where the fake systemd-run writes the unit it was given
-	launch  string // "enter" (default), "fail", "silent"
+	rec     string        // where the fake systemd-run writes the unit it was given
+	launch  string        // "enter" (default), "fail", "silent"
+	slow    time.Duration // each Stop takes this long
 }
 
 func (f *fakeScopes) scopes(t *testing.T) *Scopes {
@@ -54,6 +55,7 @@ func (f *fakeScopes) scopes(t *testing.T) *Scopes {
 			return slices.Clone(f.listed), f.listErr
 		},
 		Stop: func(units ...string) error {
+			time.Sleep(f.slow)
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			f.stops = append(f.stops, units...)
@@ -207,8 +209,8 @@ func TestScopeStoppedAtTerminalEnd(t *testing.T) {
 // Its own stop (SIGTERM: Shutdown) stops every scope of its build, its
 // terminals' and a stale one the list shows, never another build's.
 func TestScopesStoppedAtHolderStop(t *testing.T) {
-	other := cgroot.ScopeUnit("demo", "old.0123456789", "coder", "t1")
-	f := &fakeScopes{active: map[string]bool{"old.0123456789": true}}
+	other := cgroot.ScopeUnit("demo", "old.0123456789", "coder", "t1") // its holder is not active: the start sweep's to judge, not the stop's
+	f := &fakeScopes{}
 	s, sock := newTestHolderWith(t, func(c *Config) { c.Scopes = f.scopes(t) })
 	cl := dial(t, sock)
 	e := startRole(t, cl, "echoer")
@@ -262,5 +264,50 @@ func TestScopeSweepListFails(t *testing.T) {
 	}
 	if !strings.Contains(f.logText(), "Failed to connect to bus") {
 		t.Errorf("log %q", f.logText())
+	}
+}
+
+// Shutdown returns only once its terminals' own scope stops are done, even
+// when the list fails.
+func TestShutdownWaitsForTheTerminalsScopeStops(t *testing.T) {
+	f := &fakeScopes{slow: 300 * time.Millisecond}
+	s, sock := newTestHolderWith(t, func(c *Config) { c.Scopes = f.scopes(t) })
+	cl := dial(t, sock)
+	e := startRole(t, cl, "echoer")
+	f.mu.Lock()
+	f.listErr = errors.New("Failed to connect to bus")
+	f.mu.Unlock()
+	s.Shutdown()
+	if got := f.stopped(); !slices.Equal(got, []string{unitOf("echoer", e.ID)}) {
+		t.Errorf("stopped by the time Shutdown returned: %q", got)
+	}
+}
+
+// ptmxFDs counts this process's PTY masters.
+func ptmxFDs(t *testing.T) int {
+	t.Helper()
+	ents, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Skip("no /proc/self/fd")
+	}
+	n := 0
+	for _, e := range ents {
+		if l, _ := os.Readlink("/proc/self/fd/" + e.Name()); l == "/dev/ptmx" || strings.HasPrefix(l, "/dev/pts/ptmx") {
+			n++
+		}
+	}
+	return n
+}
+
+// The failed scope launch's PTY is closed: the pane holds one master.
+func TestScopeLaunchFailureLeaksNoPTY(t *testing.T) {
+	f := &fakeScopes{launch: "fail"}
+	_, sock := newTestHolderWith(t, func(c *Config) { c.Scopes = f.scopes(t) })
+	cl := dial(t, sock)
+	before := ptmxFDs(t)
+	e := startRole(t, cl, "echoer")
+	waitScreen(t, cl, e.ID, "hello "+e.ID)
+	if got := ptmxFDs(t) - before; got != 1 {
+		t.Errorf("%d PTY masters for one pane", got)
 	}
 }

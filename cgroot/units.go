@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -19,7 +20,7 @@ var (
 	scopeTermRE = regexp.MustCompile(`^t[0-9]+$`)
 )
 
-// ParseScopeUnit reads ScopeUnit's name back. The build key is the one part
+// ParseScopeUnit reads ScopeUnit's name back. The build key is the part
 // with a dot (a project or a role never holds one, a key always does), so
 // dashes in the project or the role still split one way only.
 func ParseScopeUnit(unit string) (project, key, role, term string, ok bool) {
@@ -31,16 +32,8 @@ func ParseScopeUnit(unit string) (project, key, role, term string, ok bool) {
 		return "", "", "", "", false
 	}
 	parts := strings.Split(rest, "-")
-	k := -1
-	for i, p := range parts {
-		if strings.Contains(p, ".") {
-			if k >= 0 {
-				return "", "", "", "", false
-			}
-			k = i
-		}
-	}
-	if k < 1 || k > len(parts)-3 {
+	k := slices.IndexFunc(parts, func(p string) bool { return strings.Contains(p, ".") })
+	if k < 0 || k > len(parts)-2 { // the name checks below refuse an empty project or role, and a second dot
 		return "", "", "", "", false
 	}
 	project, key = strings.Join(parts[:k], "-"), parts[k]

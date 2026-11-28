@@ -105,32 +105,23 @@ func (s *Server) stopScopes(units ...string) {
 func (s *Server) ownKey() string { return cgroot.ScopeKey(service.BuildKey(s.cfg.Build)) }
 
 // sweepScopes is the start sweep (§12.5, r5), and the stop's (own only):
-// every agentbus scope of the project, any build. Its own build's is
-// stopped when no live terminal holds it; another build's only when that
-// build's holder is not active, and when the manager cannot say, it is
-// kept and named "stale?".
+// every agentbus scope of the project, any build. It runs only when no
+// terminal of this holder lives (at Listen, before any Start; at Shutdown,
+// after every terminal ended), so its own build's are all stale; another
+// build's is stopped only when that build's holder is not active, and when
+// the manager cannot say, it is kept and named "stale?".
 func (s *Server) sweepScopes(ownOnly bool) {
 	units, err := s.cfg.Scopes.List()
 	if err != nil {
 		s.scopeLog("the scope sweep: %v", err)
 		return
 	}
-	held := map[string]bool{}
-	s.mu.Lock()
-	for _, t := range s.terms {
-		t.mu.Lock()
-		if t.alive && t.scope != "" {
-			held[t.scope] = true
-		}
-		t.mu.Unlock()
-	}
-	s.mu.Unlock()
 	own := s.ownKey()
 	var stop []string
 	for _, u := range units {
 		p, key, _, _, ok := cgroot.ParseScopeUnit(u)
 		switch {
-		case !ok || p != s.cfg.Project || held[u]:
+		case !ok || p != s.cfg.Project:
 		case key == own:
 			stop = append(stop, u)
 		case ownOnly:
