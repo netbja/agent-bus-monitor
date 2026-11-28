@@ -11,9 +11,10 @@ import (
 	"github.com/netbja/agent-bus-monitor/termhost/fake"
 )
 
-// Item 22: agentbus agents shows 'no terminal' for an agent whose holder
-// terminal is gone, never its last 'idle'; with the holder not read
-// (nil), the declared states as before.
+// Item 22, cleaning-up-agents §3, §10: agentbus agents shows an agent whose
+// holder terminal is gone by its presence and reason, never its last 'idle'
+// and never 'no terminal'; with the holder not read (nil), the declared
+// states as before.
 func TestAgentsTableNoTerminal(t *testing.T) {
 	m := map[string]bus.AgentSnapshot{
 		"architect": {State: "idle", Pane: "t4"},
@@ -24,16 +25,20 @@ func TestAgentsTableNoTerminal(t *testing.T) {
 		{ID: "t4", Project: "demo", Name: "architect", Alive: false}, // its program ended
 		{ID: "t5", Project: "other", Name: "architect", Alive: true}, // another project's
 	}, "demo")
-	out := agentsTable(m, time.Now(), live)
+	owes := map[string]bus.Owes{"architect": {Tasks: []string{"spec (accepted)"}}, "coder": {}}
+	out := agentsTable(m, time.Now(), presences(m, live, owes, nil, true))
 	for _, l := range strings.Split(out, "\n") {
 		switch {
-		case strings.HasPrefix(l, "architect") && !strings.Contains(l, bus.StateNoTerminal):
+		case strings.HasPrefix(l, "architect") && (!strings.Contains(l, " lost ") || !strings.Contains(l, "owns spec (accepted)")):
 			t.Errorf("architect: %q", l)
-		case strings.HasPrefix(l, "coder") && (!strings.Contains(l, "idle") || strings.Contains(l, bus.StateNoTerminal)):
+		case strings.HasPrefix(l, "coder") && !strings.Contains(l, "idle"):
 			t.Errorf("coder: %q", l)
 		}
 	}
-	if out := agentsTable(m, time.Now(), nil); strings.Contains(out, bus.StateNoTerminal) {
+	if strings.Contains(out, "no terminal") {
+		t.Fatalf("'no terminal' shown: %q", out)
+	}
+	if out := agentsTable(m, time.Now(), presences(m, nil, owes, nil, true)); strings.Contains(out, "lost") || strings.Count(out, "idle") != 2 {
 		t.Fatalf("holder not read: %q", out)
 	}
 	// No holder answers on this host: nothing is judged.
@@ -46,6 +51,26 @@ func TestAgentsTableNoTerminal(t *testing.T) {
 	}
 	if got := liveFrom(context.Background(), h, "demo"); !got["coder"] || got["architect"] {
 		t.Fatalf("a holder that answers: %v", got)
+	}
+}
+
+// The roles file unread: the role's required flag is unknown, so an agent
+// without a terminal owing nothing is lost, never stopped (fail closed); with
+// it, an optional one is stopped and a required one lost.
+func TestAgentsPresenceRoles(t *testing.T) {
+	m := map[string]bus.AgentSnapshot{"docs": {State: "idle", Pane: "t4"}, "coder": {State: "idle", Pane: "t2"}}
+	live := map[string]bool{}
+	owes := map[string]bus.Owes{"docs": {}, "coder": {}}
+	if p := presences(m, live, owes, nil, true)["docs"]; p.State != bus.PresenceLost || p.Reason != "unknown: roles" {
+		t.Fatalf("no roles file: %+v", p)
+	}
+	p := presences(m, live, owes, driftManifest(t), false)
+	if p["docs"].State != bus.PresenceStopped || p["coder"].State != bus.PresenceLost || p["coder"].Reason != "required: agentbus up brings it back" {
+		t.Fatalf("with roles: %+v", p)
+	}
+	js := agentsJSON(m, p)
+	if js["docs"].Presence != bus.PresenceStopped || js["coder"].PresenceReason == "" || js["coder"].State != "idle" {
+		t.Fatalf("json: %+v", js)
 	}
 }
 

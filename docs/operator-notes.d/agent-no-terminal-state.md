@@ -1,6 +1,9 @@
-- **An agent whose terminal is gone shows `no terminal`, never its last state (agent-no-terminal-state, 2026-11-16).**
-  busmon's Agents view (▼, error colour, with the escalated and blocked) and `agentbus agents` show `no terminal` for an
-  agent that ran in a holder terminal (its snapshot names one) when a holder of the project answers on this host and
-  holds no live terminal of it; its own state comes back with its terminal. It is a reader's projection
-  (`bus.ShownState`): the snapshot is never rewritten. With no holder answering (another host, the holder down)
-  nothing is judged and the declared state shows. `agentbus agents --json` prints the stored snapshots as before.
+- **An agent whose terminal is gone shows its presence, never its last state (agent-no-terminal-state, 2026-11-16;
+  cleaning-up-agents step 1a).** When a holder of the project answers on this host and holds no live terminal of an
+  agent that ran in one (its snapshot names it), `agentbus agents` shows `stopped` (an optional role that owes
+  nothing) or `lost` with its reason (`owns <task> (<state>)`, `required: …`, `<n> message(s) waiting`, `an open
+  ask`, `a gate`, `a hand-off not taken`, `unknown: <item>`), and `--json` adds `presence` and `presence_reason`.
+  Until the merge-queue pass reads unpushed branches and stashes (step 2), that item is unknown, so a terminal-less
+  agent is `lost`, "unknown: losable work", never `stopped`. busmon's Agents view still shows `no terminal` (▼, error
+  colour) until step 1b. A reader's projection (`bus.Presence`): the snapshot is never rewritten. With no holder
+  answering (another host, the holder down) nothing is judged and the declared state shows.
