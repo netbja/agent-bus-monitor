@@ -4,6 +4,8 @@
   nothing) or `lost` with its reason (`owns <task> (<state>)`, `required: …`, `<n> message(s) waiting`, `an open
   ask`, `a gate`, `a hand-off not taken`, `unknown: <item>`), and `--json` adds `presence` and `presence_reason`.
   Until the merge-queue pass reads unpushed branches and stashes (step 2), that item is unknown, so a terminal-less
-  agent is `lost`, "unknown: losable work", never `stopped`. busmon's Agents view still shows `no terminal` (▼, error
-  colour) until step 1b. A reader's projection (`bus.Presence`): the snapshot is never rewritten. With no holder
+  agent is `lost`, "unknown: losable work", never `stopped`. busmon (step 1b) shows the same: `lost`
+  red in the first group with its reason as the row's first flag, `stopped` grey in the no-state group, the Board's
+  alert `owner lost` on a request whose owner is lost; what each agent owes is read every 15 s, and until then an
+  agent without a terminal reads lost, "unknown: owes". A reader's projection (`bus.Presence`): the snapshot is never rewritten. With no holder
   answering (another host, the holder down) nothing is judged and the declared state shows.
