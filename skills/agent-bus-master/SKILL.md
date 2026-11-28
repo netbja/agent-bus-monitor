@@ -397,6 +397,31 @@ recommended. A summary of a report that hides its question is how one never reac
 Use `--needs` only for a new ask. To ask about a PR already in the merge queue, name it (`#694`):
 the question lands on its merge item instead of a row of its own.
 
+**Write to the person in the dialogue style**, [skills/shared/dialogue-style.md](../shared/dialogue-style.md):
+the answer or decision first, short bullets only if needed, no preamble, no staged opener or
+closer, no filler, uncertainty with its source, in `person.language`. Verbatim quotes, typed text,
+ids and sources are never rewritten. A report's first line stays its summary. Write ids plainly
+(`#841`, a board task, an ask id): busmon renders them as links.
+
+**End a report that gives state with its sources line**: one last line starting `↳ `, naming what
+you read and when (`↳ summary 22:31, board, #841`). busmon draws it dim and folds it.
+
+## "Where are we": answer from `agentbus summary`
+
+When the person asks where things stand, in any words or language ("where are we", "on en est
+où", "status?"):
+
+1. Run `agentbus summary --json` first, before reading anything else.
+2. Answer from that output, briefly, in the dialogue style above: what waits on the person first
+   (its `for_you`), then only what the summary flags.
+3. Read further (the board, a PR, a thread) only for what the person asked beyond the summary.
+4. End the answer with the summary's sources line: `↳ ` and its `sources`, with the time of its
+   `read_at`, plus anything else you read.
+
+A section with `unknown` set (`?` in the text form, and an exit of 1) could not be read: say so,
+with that reason, and never fill it from memory. `agentbus status` with no argument is not the summary: it is the agents' presence
+write, and without arguments a usage error.
+
 ## The person's language
 
 The person may read and write a language other than English. The setting is `person.language`
