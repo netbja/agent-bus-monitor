@@ -47,7 +47,10 @@ type upDeps struct {
 	// Installed is the agentbus setup.sh installed (buildinfo.Bin), "" when
 	// unknown: when it exists the units run it, whoever runs up.
 	Installed string
-	Environ   []string // the service environment is picked from it
+	// Managed: a managed build (buildinfo.Repo), the only one with an
+	// updater (quiet-update-auto §4.1).
+	Managed bool
+	Environ []string // the service environment is picked from it
 	// The holder (herdr exit, spec 4.4a): HolderBuild is the raw build id of
 	// the binary Exe returns (holder.BuildID), nil for no holder; HolderAnswers
 	// says whether a holder socket of the project's build key answers (the gc
@@ -570,7 +573,51 @@ func startServices(d upDeps, m service.Manager, project, workdir, escalate, relo
 	if err := holderAtLogin(m, project, d.HolderBuild, atLogin && ls != nil, stdout); err != nil {
 		errs = append(errs, fmt.Errorf("holder at login: %v", err))
 	}
+	ensureUpdater(d, m, exe, stdout)
 	return errors.Join(errs...)
+}
+
+// ensureUpdater writes and starts the updater's unit (quiet-update-auto
+// §4.1, step 4e) on a managed build, when it is missing: one per host, so the
+// up of any project writes it, and a host updated by agentbus update gets it
+// at its next up. An installed unit is never rewritten (an update never
+// restarts it); one installed and stopped is started. It belongs to no
+// project: a failure is said, and fails no project's up.
+func ensureUpdater(d upDeps, m service.Manager, exe string, stdout io.Writer) {
+	if !d.Managed {
+		return
+	}
+	um, ok := m.(service.UpdaterManager)
+	if !ok {
+		fmt.Fprintf(stdout, "updater: none under the %s manager yet (quiet-update step 4f); agentbus update installs by hand\n", m.Name())
+		return
+	}
+	say := func(err error) { fmt.Fprintf(stdout, "updater: not started: %v\n", err) }
+	st, err := um.UpdaterState()
+	if err != nil {
+		say(err)
+		return
+	}
+	if st.Installed && st.Active {
+		return
+	}
+	verb := "started"
+	if !st.Installed {
+		if _, err := service.WriteEnvFile(d.Paths.UpdaterEnvFile(), service.CollectEnv(d.Environ)); err != nil {
+			say(err)
+			return
+		}
+		if _, err := um.InstallUpdater(service.UpdaterSpec{Exe: exe, WorkDir: d.Paths.Home, Paths: d.Paths}); err != nil {
+			say(err)
+			return
+		}
+		verb = "installed and started"
+	}
+	if err := um.StartUpdater(); err != nil {
+		say(err)
+		return
+	}
+	fmt.Fprintf(stdout, "updater: %s as a %s service (the automatic update's loop, one per host; updates.auto decides whether it installs)\n", verb, m.Name())
 }
 
 // holderContext records the holder's launch context in env (service.Holder*
@@ -749,6 +796,7 @@ func realUpDepsIn(stdin io.Reader, stdout, stderr io.Writer) upDeps {
 			return filepath.EvalSymlinks(exe)
 		},
 		Installed:     buildinfo.Bin,
+		Managed:       buildinfo.Repo != "",
 		Environ:       os.Environ(),
 		HolderBuild:   holder.BuildID,
 		HolderAnswers: func(project, key string) bool { return holder.Ready(os.Getenv, project, key, holderProbeTimeout) },

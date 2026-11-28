@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/netbja/agent-bus-monitor/service"
 	"time"
 )
 
@@ -104,5 +106,27 @@ func TestServiceRunUpdaterNeedsNoProject(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "updater: a developer build") {
 		t.Fatalf("err %v, output %q", err, out)
+	}
+}
+
+// The unit's --env file goes into the loop's environment, so each pass
+// inherits it; a bad form or an unreadable file is refused.
+func TestLoadUpdaterEnv(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "updater.env")
+	if _, err := service.WriteEnvFile(f, map[string]string{"PATH": "/opt/go/bin:/usr/bin", "REDIS_URL": "redis://x"}); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	set := func(k, v string) error { got[k] = v; return nil }
+	if err := loadUpdaterEnv([]string{"--env", f}, set); err != nil || got["PATH"] != "/opt/go/bin:/usr/bin" || got["REDIS_URL"] != "redis://x" {
+		t.Fatalf("%v %v", err, got)
+	}
+	if err := loadUpdaterEnv(nil, set); err != nil {
+		t.Fatalf("no file: %v", err)
+	}
+	for _, args := range [][]string{{"--env"}, {"--nope", "x"}, {"--env", filepath.Join(t.TempDir(), "none")}} {
+		if err := loadUpdaterEnv(args, set); err == nil {
+			t.Errorf("%q accepted", args)
+		}
 	}
 }

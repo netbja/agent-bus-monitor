@@ -54,6 +54,11 @@ type UpdaterManager interface {
 	UpdaterState() (State, error)
 }
 
+var (
+	_ UpdaterManager = Systemd{}
+	_ UpdaterManager = Launchd{}
+)
+
 // --- systemd ---
 
 func (m Systemd) updaterPath() string { return filepath.Join(m.dir(), UpdaterUnitName) }

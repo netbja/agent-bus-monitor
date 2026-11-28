@@ -212,6 +212,58 @@ func TestUpStartsTheServicesAndOpensNoServiceTab(t *testing.T) {
 	}
 }
 
+// On a managed build, up installs and starts the updater's unit when it is
+// missing (quiet-update-auto §4.1): one per host, its env file from up's
+// shell; a running one is left as it is, a stopped one started, and a
+// developer build writes none.
+func TestUpInstallsTheUpdater(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 || u.m.Saw("install updater") {
+		t.Fatalf("a developer build: up = %d, calls %v", code, u.m.Calls)
+	}
+	deps.Managed = true
+	out.Reset()
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 {
+		t.Fatalf("up = %d: %s", code, errw.String())
+	}
+	if u.m.Updater == nil || *u.m.Updater != (service.UpdaterSpec{Exe: "/opt/ab/agentbus", WorkDir: u.paths.Home, Paths: u.paths}) || !u.m.UpdaterOn {
+		t.Fatalf("updater %+v on %v, calls %v", u.m.Updater, u.m.UpdaterOn, u.m.Calls)
+	}
+	env, err := service.LoadEnvFile(u.paths.UpdaterEnvFile())
+	if err != nil || env["PATH"] != "/bin" || env["AGENTBUS_TERM_ID"] != "" {
+		t.Fatalf("updater env %v %v", env, err)
+	}
+	if !strings.Contains(out.String(), "updater: installed and started as a fake service") {
+		t.Fatalf("out %q", out.String())
+	}
+	u.m.Calls = nil
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if u.m.Saw("install updater") || u.m.Saw("start updater") || u.m.Saw("stop updater") {
+		t.Fatalf("a running updater was touched: %v", u.m.Calls)
+	}
+	u.m.UpdaterOn = false
+	runUp([]string{"demo", work}, deps, &out, &errw)
+	if u.m.Saw("install updater") || !u.m.Saw("start updater") || !u.m.UpdaterOn {
+		t.Fatalf("a stopped updater: %v", u.m.Calls)
+	}
+}
+
+// A manager with no updater unit (services.manager = none, until step 4f)
+// says so and fails nothing.
+func TestUpUpdaterWithoutUnit(t *testing.T) {
+	work, _, _, _, deps := upFixture(t)
+	u := withServices(t, &deps)
+	deps.Managed = true
+	deps.Services = func() (service.Manager, string) { return struct{ service.Manager }{u.m}, "" }
+	var out, errw bytes.Buffer
+	if code := runUp([]string{"demo", work}, deps, &out, &errw); code != 0 || u.m.Saw("install updater") ||
+		!strings.Contains(out.String(), "updater: none under the fake manager yet") {
+		t.Fatalf("up = %d, calls %v, out %q", code, u.m.Calls, out.String())
+	}
+}
+
 func TestUpFiltersServiceTabsOfAnOlderTemplate(t *testing.T) {
 	work, templates, h, _, deps := upFixture(t)
 	withServices(t, &deps)

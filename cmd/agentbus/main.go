@@ -192,8 +192,8 @@ func main() {
 	// executes and loads its environment file before it connects. list and
 	// remove --all need no project; down stops a project's services.
 	if len(args) >= 1 && args[0] == "service" {
-		if len(args) == 3 && args[1] == "run" && args[2] == "updater" { // quiet-update-auto §4.1: one per host, no project
-			os.Exit(mainUpdaterRun())
+		if len(args) >= 3 && args[1] == "run" && args[2] == "updater" { // quiet-update-auto §4.1: one per host, no project
+			os.Exit(mainUpdaterRun(args[3:]))
 		}
 		if len(args) >= 2 && args[1] == "run" {
 			os.Exit(mainServiceRun(project, host, args[2:]))
