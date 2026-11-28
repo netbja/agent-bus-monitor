@@ -78,7 +78,7 @@ func readPlan(ctx context.Context, b busReader, cursor string, f plan.File, know
 			break
 		}
 		for _, v := range page {
-			v.Message, v.Full = "", "" // only the roll-up fields are kept
+			v = plan.KeepEvidence(v) // only the roll-up fields and a check's evidence lines are kept (onboarding §9.2)
 			r.verdicts = append(r.verdicts, v)
 		}
 		if len(page) < planLedgerPage {
@@ -304,13 +304,13 @@ func planRowDetails(r plan.Row, now time.Time) string {
 	return strings.Join(parts, " "+GlyphNone+" ")
 }
 
-// planTaskDetail is the detail of one task: its row, its board entry and
-// request, its verdicts per subject, its ask and the recorded facts.
 // checkAlteredNote follows a check the page draws with characters changed
 // (an emoji the terminal's width tables disagree on): the plan file holds it
 // as written.
 const checkAlteredNote = "(drawn with characters changed: the plan file has it as written)"
 
+// planTaskDetail is the detail of one task: its row, its board entry and
+// request, its verdicts per subject, its ask and the recorded facts.
 func planTaskDetail(p planState, id string, now time.Time) (title string, body []Line, plain string) {
 	var r plan.Row
 	for _, x := range p.rows {
@@ -337,6 +337,11 @@ func planTaskDetail(p planState, id string, now time.Time) (title string, body [
 			v = append(v, S(RoleAttention, "  "+checkAlteredNote))
 		}
 		f.add("check", v...)
+		if e, ok := plan.CheckProof(r.Task, p.in.Facts[id], p.in); ok { // the deciding verdict's line (§12.5)
+			f.add("evidence", S(RoleText, Preview(e.String())))
+		} else {
+			f.add("evidence", S(RoleMuted, "check not run yet"))
+		}
 	}
 	if _, ok := planStartable(p, id); ok { // the person's own task: the way to act on it, a row of the block
 		key, _, _ := strings.Cut(tourKeys(tourRef{m: ModeOverlay, act: ActPlanStart}), " ")

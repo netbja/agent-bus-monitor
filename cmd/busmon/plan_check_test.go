@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/netbja/agent-bus-monitor/bus"
 	"strings"
 	"testing"
 	"time"
@@ -63,5 +65,40 @@ func TestPlanTaskPageCheckDrawnAsWritten(t *testing.T) {
 	}
 	if !seen[true] || !seen[false] {
 		t.Fatalf("the fixture needs a check drawn as written and one changed: %v", seen)
+	}
+}
+
+// busmon keeps a verdict's evidence lines when it drops its text, so a
+// checked task derives as the CLI does; the page shows the deciding line,
+// or "check not run yet" (onboarding §9.2, §12.5).
+func TestPlanPollKeepsTheEvidence(t *testing.T) {
+	const head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	poll := func(text string) planState {
+		f := newPlanFake(true)
+		f.rec.File = `{"plan":"p","goal":"g","tasks":[{"id":"roles","title":"Roles","owner":"coder","board":"t","check":"go test ./plan"}]}`
+		f.rec.Tasks = []string{"roles"}
+		f.facts["roles"] = bus.PlanFact{PR: 101}
+		f.ledger = []bus.Verdict{{ID: "5-0", Subject: "t", Author: "coder", Reviewer: "foureyes", Decision: "approve", Head: head, Message: text}}
+		st := newPlanShared()
+		pollOnce(context.Background(), f, st, 1)
+		return st.plan
+	}
+	p := poll("approve: fine\ncheck: go test ./plan => exit 0 at " + head)
+	if len(p.rows) != 1 || p.rows[0].State != plan.Waiting || p.rows[0].Verdict != plan.Approved {
+		t.Fatalf("the evidence kept: %+v", p.rows)
+	}
+	if v := p.ledger["t"][0]; strings.Contains(v.Message, "fine") {
+		t.Fatalf("the prose kept: %q", v.Message)
+	}
+	_, _, copied := planTaskDetail(p, "roles", time.Now())
+	if !strings.Contains(copied, "check: go test ./plan => exit 0 at aaaaaaa") {
+		t.Fatalf("no evidence row:\n%s", copied)
+	}
+	p = poll("approve: fine")
+	if p.rows[0].State != plan.InReview || p.rows[0].Verdict != plan.CheckNotRun {
+		t.Fatalf("no evidence: %+v", p.rows)
+	}
+	if _, _, copied := planTaskDetail(p, "roles", time.Now()); !strings.Contains(copied, "check not run yet") {
+		t.Fatalf("no 'not run' row:\n%s", copied)
 	}
 }
