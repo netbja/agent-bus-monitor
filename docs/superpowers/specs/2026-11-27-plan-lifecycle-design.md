@@ -1,6 +1,14 @@
 # The plan's lifecycle, and the Plan tab redone (plan-lifecycle)
 
-- Status: spec r2, for review (subject `plan-lifecycle-spec`). Not built.
+- Status: spec r5, for review (subject `plan-lifecycle-spec`). Not built. r3 merged as #847.
+  - r5, foureyes r4: the lines with no `--head` named and changed in step 1, a mission verdict's
+    head taken from its subject, a guard test (§A2); `plan done` allowed when the linked work is
+    all done with no commit (§A2, r3's should-fix).
+  - r4, the person's answers to ask 1795818074022-0 (§C), folded in: the release recap wakes the
+    drafter (§A4); `plan load` takes no path (§A4); master's sorting is recorded, undone from
+    busmon, and never overrides the person's, and off-bus PRs come from the forge reader, not
+    git history (§A3); `plan draft --from` takes a committed file (§A4); a headless approval counts only on a merged
+    request, and a new approval must name its head (§A2); the mini timeline is a list (§B7, §B8).
   - r2, foureyes r1:
     - a task's work is one request, its slices `--more` steps (§A1, §A2);
     - `+` stays priority, and "next plan" is `n` (§A3, §B9);
@@ -110,9 +118,30 @@ comes from broker events, by these rules (`plan/derive.go`):
     its commit is delivered or 30 days have passed;
   - **reviewed:** its review rolls up `APPROVED` (`bus.RollUp`). The deciding approval names the
     merged head (`Verdict.Head` equals the merged record's `Head`). An approval at another head is "approved,
-    head changed" (onboarding §9.2). An older verdict with no head still counts, labelled
-    "approval names no head": `agentbus deliver` already refused to push a head without one, so
-    such verdicts predate it (Q5).
+    head changed" (onboarding §9.2). An older verdict with no head (Q5):
+    - counts **only when the request is already merged** (`ClosedOnMerge` or `Merged`), labelled
+      "approval names no head" in the detail pane and the task's history;
+    - does not count on a request not merged. The task waits for a review that names its head;
+    - is never rewritten: the label is computed at read time, and no record is migrated.
+
+    **A new approval must name its head.** `agentbus verdict … approve` with no `--head` is
+    refused: "an approval names the head it read: --head $(git rev-parse HEAD)". A reject may
+    still omit it. Lines in use today that have no `--head` (foureyes r4), all changed by build
+    step 1 in the same PR as the refusal:
+    - `mission/conductor.go:595`, the conductor's review challenge, generated in Go: its
+      "Answer:" line gains `--head <sha>`, the full sha of the subject
+      `mission:<change>/<id>@<sha>`;
+    - `skills/agent-bus/SKILL.md:516`, the mission reviewer line;
+    - `roles/reviewer-codex.md:51`, the codex reviewer's line;
+    - the `verdict -P 12 coder approve` help example (`cmd/agentbus/commands.go:214`);
+    - any other `agentbus verdict … approve` line in `skills/`, `roles/` and Go string literals,
+      which the guard test below finds.
+
+    **A mission verdict's head is the subject's sha.** For a subject of the form
+    `mission:<change>/<id>@<full sha>`, a verdict with no `--head` takes that sha as its head, so
+    an approval by a challenge text sent before the upgrade is still accepted, and a mission in
+    review never stalls on the change. A `--head` that differs from the subject's sha is refused:
+    "the subject names <sha>: --head must match it".
 
   For a task with a `check`, onboarding §9's evidence rule applies on top.
 - **A `merge: false` task:** delivered and approved, as today. With a check, onboarding §9.
@@ -120,6 +149,11 @@ comes from broker events, by these rules (`plan/derive.go`):
 - **`plan done`** becomes an exception for a task with no linked work (a step done outside the
   bus). busmon shows it as "recorded by master". It is refused on a task that has linked work:
   "<task> has linked work: its state comes from it". This uses the same guards as onboarding §9.3.
+  **One exception (foureyes r3, r4): linked work that cannot be judged.** When every request
+  linked to the task is `done` and none carries a recorded commit, nothing can show it merged
+  (230 of today's 376 done requests have no commit), so `plan done` is allowed. busmon shows
+  "recorded by master: its work has no commit", and the detail pane names the requests. A
+  request with a commit, an open request, or an attachment keeps the refusal.
 - **A manual done is kept, unless newer linked work shows the task unfinished.** Today derive
   returns `Done` for `fact.Done` before it reads anything else (`derive.go:117`). The new rule:
   - `fact.Done` stands, as today, with its label "recorded by master";
@@ -152,10 +186,30 @@ already done (`Merged`). No one records it by hand any more.
 belongs to no task:
 - **requests closed on merge** whose provenance is not `plan:<a task of the plan>` and that are
   not attached;
-- **merges in the base** that no request names. The dispatcher reads them from the base's
-  first-parent history since the plan's load. That is today's `plan-drift` reader, fixed: it reads
-  the delivery base (`[delivery] base`, `dev` here) instead of `origin/main`, and it reads the
-  squash subject `title (#N)` as well as the merge-commit one;
+- **off-bus PRs** (the person's answer to the follow-up, ask 1795852308652-0): PRs merged into
+  the delivery base (`[delivery] base`, `dev` here) since the plan's load that no request
+  references, tagged "off-bus" (a hotfix, the person's own). No git history is parsed. They come
+  from the **forge reader the merge-queue pass already runs** for ci-loop
+  (`internal/dispatchsvc/mergequeuechore.go:361`, `mergequeue/forge.go`):
+  - `mergequeue.ReadGitHubMerged(ctx, dir, env, base, since)` is new, beside `ReadGitHub`, and
+    run the same way: the same hardened env, `gh` from env's PATH, no token read, the call
+    bounded by `mergeQueueCall`, free text through `cleanText`. It runs `gh pr list --state
+    merged --base <base> --search "merged:>=<since>" --json
+    number,title,url,headRefName,headRefOid,mergeCommit,mergedAt --limit 1000`. A list of exactly
+    the limit is `ErrIncomplete`;
+  - it runs in the same pass, after `ReadGitHub`, only when the forge is GitHub with `gh`
+    (`case f.Kind == forge.GitHub && c.hasGH(env)`) and a plan is loaded. GitLab and Bitbucket
+    get their reader with ci-loop's roadmap step (ci-loop §8 Q7), behind the same function
+    shape;
+  - **referenced by a request** means any of: the PR number in a request's `Merged.pr` or a
+    merge-queue item seen for its branch; the PR's `headRefName` equal to a request's branch; its
+    `headRefOid` or merge commit equal to a request's recorded `Commit`. A PR referenced is never
+    off-bus;
+  - **a failed or cut read** keeps the previous off-bus items, never a partial list read as
+    whole, as the merge queue does;
+  - **no forge reader** (a local forge, GitLab or Bitbucket today, or `gh` missing): the board
+    only, and the section's header carries one line: "off-bus PRs not read: no forge reader for
+    <forge>";
 - excluding PRs master marked `plan ignore` (notes, a release, a hotfix).
 
 **Where it is kept:** the dispatcher's merge-queue pass writes `{p}:plan:unplanned`, a hash keyed
@@ -173,7 +227,17 @@ three actions:
   does not change: a file changes only through a draft and the person's yes.
 - **`x` not plan work.** It runs `plan ignore <pr>`, as today.
 
-Who may run them is Q4.
+**Who sorts (Q4):** the person in busmon, and master by the CLI.
+- Every sort is a record: `who`, `at` (Redis `TIME`) and `reason` (required from master's CLI,
+  optional in busmon), kept on the item in `{p}:plan:unplanned` once sorted, so the detail pane
+  shows "attached by master 2h ago: <reason>".
+- **Undo from busmon:** `z` (busmon's undo key, as in Activity, `keys.go:269`) on a sorted item (`d` shows sorted items, as it shows done rows)
+  reverses it: `plan attach --undo`, `plan next drop`, `plan ignore --undo`. The undo is recorded
+  the same way.
+- **Master never overrides the person:** a sort by master on an item the person sorted, or
+  undid, is refused: "the person sorted <item>: only busmon changes it". The person may change
+  master's.
+- **`n` feeds only the next draft**, never the active plan; its adoption stays the typed yes (§A4).
 
 **The first pass lists a backlog.** Every request merged during the active plan with no
 provenance (all of today's), and matching no task by `board` or id, is unplanned. That is the
@@ -183,10 +247,12 @@ person attaches it. It is not a bug.
 ## A4. At each release, a draft of the next plan
 
 - **When:** a minor release tag `vX.Y.0` closes plan `vX.Y` (busmon already maps them,
-  `releases.go:109`, `planOfTag`). The release checklist gains one step: master directs the
-  plan's drafter (Q1) to "draft v(X.Y+1)".
+  `releases.go:109`, `planOfTag`). The release checklist gains one step for docs: it publishes
+  the **release recap** (the tasks shipped, and the work done off the plan) as a report to the
+  architect, the drafter (Q1), which wakes it to "draft v(X.Y+1)". Docs never edits the plan.
 - **What the draft holds:**
-  - the tasks of the current plan not done, carried with their ids (onboarding §8.6);
+  - the tasks of the current plan not done, carried with their ids (onboarding §8.6), and the
+    recap's off-plan work in the question's context;
   - the first items of `NEXT-DIRECTIONS.md`, when the file exists;
   - the `{p}:plan:next` items, each turned into a task;
   - the unplanned items not yet sorted, listed in the question's context, not as tasks. The
@@ -195,20 +261,34 @@ person attaches it. It is not a bug.
   (onboarding §8.1), and the person's typed `yes` adopts it (`TypedApproval`, onboarding §8.4).
   On that yes master runs the load, and only that load works (onboarding §8.5). Nothing else is
   new.
-- **`plan load` becomes internal** (Q2). It loads only the recorded, approved draft. The
+- **`plan load` becomes internal** (Q2). It takes no path: `plan load` (or `plan load <qid>`,
+  the draft's id) loads only the recorded draft the person approved. The
   onboarding rule "a plan with `checks: required` is loaded only as a draft" widens to every plan.
-  `plan load <path>@<commit>` with no approved draft is refused: "plans are adopted through a
-  draft and the person's yes (agentbus plan draft)". The active v0.34 stays loaded until v0.35's
+  `plan load <path>@<commit>`, the old form, is refused with a migration error: "plans are
+  adopted through a draft and the person's yes: agentbus plan draft <path>@<commit>, then
+  plan load". There is no bypass flag. The recovery path for a file written by hand is `plan
+  draft` itself (onboarding §8.1): the same banner, diff and typed yes.
+- **`plan draft --from <file>`** is an alias of `plan draft <file>@HEAD` (follow-up, ask
+  1795852308652-0). It is refused when the file has uncommitted changes: "<path> has uncommitted
+  changes: commit it on any branch, then run plan draft again". Any branch is accepted, and the
+  commit need not be pushed. The draft records the path, the full commit SHA and the file's
+  blob hash (`git rev-parse <commit>:<path>`). `plan load` re-reads that blob at that commit and
+  refuses when it differs, on top of onboarding §8.5's checks. No copy of the bytes goes to
+  Redis. The active v0.34 stays loaded until v0.35's
   draft is adopted.
 
 ## A5. The stale warning, only as a safety net
 
 The health check `plan-stale` (warn, never fail) replaces `plan-drift` and the 7-day label (Q3).
+`plan-drift` is removed with its help and goldens. It has no registry key in `config/keys.go`, so
+there is none to deprecate; `agentbus health` names a removed check once, "plan-drift: replaced by
+plan-stale", for one release.
 It warns in exactly two cases:
 - **a plan is loaded with no open task**: every task done, or none waiting, in hand or upcoming,
   for longer than `plan.stale_after` (default 24 h, in `config/keys.go`), and no draft recorded;
 - **a release was tagged without a next draft**: a tag `vX.Y.0` newer than the plan's load that
-  closes the loaded plan, with no draft recorded 24 h after the tag. The tags are read from the
+  closes the loaded plan, with no draft recorded `plan.stale_after` after the tag (the
+  person's "N days": the setting, 24 h by default, is how many). The tags are read from the
   checkout, as `releases.go` reads them.
 
 It wakes master once per episode (as `plan-drift` does today, `PlanDriftWakes`), with a fixed line:
@@ -325,15 +405,18 @@ The tab's last line names the next task that can start, and what waits on the pe
 | 120 to 159 | the list (about 48 %) and the detail pane |
 | 160 and wider | the same, plus a **mini timeline** of the selected task in the detail pane (Q6) |
 
-The **mini timeline** is the task's events on one line, oldest left. Each event is a mark, from the
-facts derive already reads:
-- `◦` requested, `●` accepted;
-- `◐` review;
-- `✓` or `✗` for each verdict;
-- `!` waiting on the person;
-- `■` merged.
+The **mini timeline** (Q6) is the selected task's events as a list, **newest at the bottom**,
+one per line, each with its relative age. It follows the selection. From the facts derive
+already reads, in this order of kinds:
+- `◦` requested, `●` accepted, `◇` PR opened;
+- `◐` review asked, then `✓` or `✗` per verdict, with the reviewer;
+- `!` waiting on the person, in the warning color, with how long ("20h");
+- CI red or green (`MergeItem.CIRed`);
+- `■` merged, `●` done.
 
-The spacing is proportional to time, over the task's life, with labels under the main marks.
+When the events do not fit the pane's height, the oldest go first, behind a line "… N
+earlier". The plan's progress stays the header bar; progress per day belongs to History, not
+here.
 
 ## B8. Mock-ups (goldens at 80x24, 120x40, 160x45)
 
@@ -405,19 +488,21 @@ The spacing is proportional to time, over the task's life, with labels under the
 │                                                          │                                                                                                   │
 │ UNPLANNED  2 merged, not in the plan                     │ Run     gh pr merge 737                                                                           │
 │  ◇ #835 busmon: Kanban column rules                      │                                                                                                   │
-│  ◇ #837 busmon: mark all read in Activity                │ Timeline  (this task, 3 days)                                                                     │
-│                                                          │   ◦──●────●──◐───✓─✓────!                                                                         │
-│ DONE  9   d shows                                        │   req acc  rev    approve  you                                                                    │
-│                                                          │                                                                                                   │
-│ Next: none free (quiet-update-spec waits                 │                                                                                                   │
-│       on wip-limit-spec) · for you: merge #737           │                                                                                                   │
+│  ◇ #837 busmon: mark all read in Activity                │ Timeline  (this task)                                                                             │
+│                                                          │ … 3 earlier                                                                                       │
+│ DONE  9   d shows                                        │ ✓ foureyes approve              1d                                                                │
+│                                                          │ ✓ reviewer-codex approve        20h                                                               │
+│ Next: none free (quiet-update-spec waits                 │ ● CI green                      20h                                                               │
+│       on wip-limit-spec) · for you: merge #737           │ ! waits on you: merge #737       20h                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  ↑↓ select  enter task  V releases  a attach  n next plan  x not plan work  + - priority  d done
 ```
 
 ## B9. Keys
 
-- `a`, `n` and `x` act on an UNPLANNED item, and do nothing on a task row.
+- `a`, `n` and `x` act on an UNPLANNED item, and do nothing on a task row. `z` undoes the
+  selected sorted item's sort (§A3); it is bound in the Plan panel only, as Activity's `z` is in
+  Activity only.
 - `+` and `-` keep their meaning: the person's priority on a task row (`ActPriorityUp`,
   `keys.go:279`). onboarding §12 relies on them too.
 - `V` opens the releases, and `d` shows the done rows, as today.
@@ -442,7 +527,9 @@ The steps:
 
 1. **Links and derived done** (§A1, §A2):
    - the work: `plan.Links`; `MergeClose.PR`; `Request.Merged` and its pass, with the backfill;
-     derive's merge rule; the manual-done rule; the `plan done` refusal; `plan attach`;
+     derive's merge rule; the manual-done rule; the `plan done` refusal and its no-commit
+     exception; `plan attach`; the approve-needs-a-head refusal, the mission head from the
+     subject, and every verdict line of §A2 changed with it;
    - tests:
      - a task finds its requests by provenance, by attachment, by `board`, and by id;
      - **two requests for one task:** a second `--plan` request is refused while the first is
@@ -450,17 +537,36 @@ The steps:
        the rework closed on merge, it is done;
      - a merge task with a request closed on merge and approved at that head is done with no fact;
      - approved at another head, it is "approved, head changed";
-     - a verdict with no head counts, with its label;
-     - `plan done` is refused with linked work;
+     - a verdict with no head counts, with its label, on a merged request, and does not count on
+       a request not merged;
+     - `agentbus verdict … approve` with no `--head` is refused; a reject with none is recorded;
+     - `plan done` is refused with linked work, and allowed when every linked request is `done`
+       with no commit (the label says so); once one of them carries a commit, refused again;
+     - **verdict heads:** an approve with no `--head` is refused; one on a
+       `mission:<c>/<id>@<sha>` subject with no `--head` records that sha; a differing `--head`
+       is refused; the conductor's challenge text carries `--head` with the subject's sha, and an
+       approve sent by that literal text is accepted;
+     - **a guard test** (`TestVerdictLinesNameTheHead`) reads `skills/`, `roles/` and Go string
+       literals, and fails on an `agentbus verdict` line that approves with no `--head`
+       (mission subjects excepted only in the CLI, never in a line);
      - an 11-task fixture whose requests are `--plan`-linked and merged shows 11/11 with no fact.
 2. **Unplanned** (§A3):
-   - the work: the fixed reader (delivery base, squash subjects); `{p}:plan:unplanned`, fenced,
-     dispatcher-only; `plan next add`;
+   - the work: `mergequeue.ReadGitHubMerged` and its call in the merge-queue pass;
+     `{p}:plan:unplanned`, fenced, dispatcher-only; `plan next add`; the sort records and `z`;
    - tests:
-     - a squash-merged PR on `dev` with no request is unplanned;
+     - with a faked `gh` (the merge-queue chore's fake): a PR merged into `dev` that no request
+       references is unplanned, tagged "off-bus"; one whose branch, head or number a request
+       names is not;
+     - a cut list (exactly the limit) and a failed read keep the previous off-bus items;
+     - a local forge, or no `gh`: no forge call, the board only, and the header's notice line;
+     - no `git log` is run for this section (the fake git records its calls);
      - a `--plan` request is not;
      - an `--own` request is;
      - `plan ignore` removes an item;
+     - a sort records who, when and reason; master's CLI sort without `--reason` is refused;
+     - `z` undoes a sort, and the undo is recorded;
+     - master's sort of an item the person sorted is refused; the person's change of master's
+       sort is accepted;
      - a load drops the hash;
      - the ACL refuses the agent user a write to `plan:unplanned`.
 3. **Release draft and internal load** (§A4):
@@ -468,12 +574,19 @@ The steps:
      drafter's skill section;
    - tests:
      - `plan load` with no draft is refused;
+     - `plan load <path>@<commit>` is refused with the migration error, approved draft or not;
+     - `plan draft --from <file>` with uncommitted changes is refused, naming the path; on an
+       unpushed branch commit it records path, SHA and blob hash; a load whose blob differs is
+       refused;
+     - docs' release recap reaches the architect as a report that wakes it;
      - an approved draft loads;
      - the draft carries the remaining tasks, the `next` items and NEXT-DIRECTIONS items.
 4. **`plan-stale`** (§A5), with `plan-drift` retired (Q3):
    - tests:
      - the two cases warn, once per episode;
      - a draft recorded silences both;
+     - the release case follows `plan.stale_after` (a fixture at 3 days);
+     - `agentbus health` shows "plan-drift: replaced by plan-stale" and no plan-drift check;
      - no other case warns.
 5. **The person's command** (§A6):
    - tests:
@@ -487,14 +600,16 @@ The steps:
        unplanned section, the selector, the Next line and the timeline;
      - `GroupState` for each case, with 2/3 done reading "in progress";
      - the shared scale for a 3-task and an 11-task group;
-     - the overlay grouped by month.
+     - the overlay grouped by month;
+     - the timeline: newest last, "… N earlier" when it overflows, the wait on the person in the
+       warning color with its duration, and it changes with the selection.
 
 # What this does not do
 
 - No new store for done: "merged" is the dispatcher's existing record.
 - No automatic attach or add-to-plan. The person, or master, sorts unplanned work (Q4).
 - No plan change without the person's typed yes.
-- No timeline across tasks. The mini timeline is one task's (Q6).
+- No timeline across tasks. The mini timeline is one task's (Q6); progress per day is History's.
 
 # §C. Questions for the person (one ask, in French)
 
@@ -510,3 +625,31 @@ The steps:
    the past tasks are done (recommended); or require a head, so those tasks need a fresh review.
 6. **Q6 The mini timeline at 160 columns:** the selected task's events (recommended); or the whole
    plan's progress over time (done per day).
+
+## §C.1 The person's answers (ask 1795818074022-0, typed, 2026-11-28)
+
+All six took the recommended option. What they added is folded in above:
+1. **Q1, the architect drafts.** Docs publishes the release recap and wakes the architect; docs
+   never edits the plan; the safety net fires when no draft exists some days after a release
+   (§A4, §A5).
+2. **Q2, `plan load` only loads the approved draft**, by its id, with no bypass flag, and a
+   migration error for the old form. The recovery is `plan draft` on the file (§A4).
+3. **Q3, `plan-drift` removed**, with its help and goldens, and no git-history heuristics. On the
+   follow-up, §A3's second source is the forge reader, not `dev`'s history (below).
+4. **Q4, the person in busmon and master by the CLI.** Master's sorting is recorded (who, when,
+   reason) and reversible from busmon; master never re-sorts what the person sorted; "next plan"
+   feeds only the draft (§A3). The ask's option said `+` for next plan. The key is `n`, because
+   `+` stays priority (§B9).
+5. **Q5, a headless approval counts only on a merged request**, labelled. On one not merged a
+   re-review naming the head is required, every new approval names its head, and no old record
+   is rewritten (§A2).
+6. **Q6, the selected task's events**, newest at the bottom, relative times, the wait on the
+   person in the warning color with its duration (§B7, §B8).
+
+Two follow-ups, ask 1795852308652-0:
+- **Does the off-plan section still read `dev`'s history?** Answered: no. The board's requests
+  stay; the second source is the forge reader ci-loop's pass uses, for merged PRs no request
+  references, tagged "off-bus"; with no forge reader, the board only and a notice (§A3).
+- **Must `plan draft --from <file>` take a committed file?** Answered: yes. An alias of `plan
+  draft <file>@HEAD`, refused on uncommitted changes, any branch, unpushed accepted; the draft
+  records path, commit and blob hash, and the load re-reads the blob (§A4). No Redis copy.
