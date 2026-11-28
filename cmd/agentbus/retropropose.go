@@ -56,9 +56,9 @@ type retroPlusDeps struct {
 	Now      func() time.Time
 	ReadFile func(name string) ([]byte, error)
 	// Replies reads a retro ask's reply entries from the history archive
-	// (bus.SetRetroArchive): a reply trimmed from the stream still proves
+	// (bus.SetApprovalArchive): a reply trimmed from the stream still proves
 	// the person's yes (foureyes on r1).
-	Replies bus.RetroArchive
+	Replies bus.ApprovalArchive
 }
 
 var (
@@ -308,8 +308,8 @@ func runRetroPlus(ctx context.Context, d retroDeps, p retroPlusDeps, verb string
 	if !has {
 		return true, errors.New("retro: this bus has no retros")
 	}
-	if s, ok := d.Bus.(interface{ SetRetroArchive(bus.RetroArchive) }); ok && p.Replies != nil {
-		s.SetRetroArchive(p.Replies)
+	if s, ok := d.Bus.(interface{ SetApprovalArchive(bus.ApprovalArchive) }); ok && p.Replies != nil {
+		s.SetApprovalArchive(p.Replies)
 	}
 	if verb == "rejected" {
 		rest, file := extractFlag(args, "--file")

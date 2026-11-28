@@ -60,17 +60,17 @@ const (
 	OutcomeUnverified = "unverified"
 )
 
-// RetroArchive reads the history archive's reply entries to ask askID
+// ApprovalArchive reads the history archive's reply entries to ask askID
 // (ref = askID), as Events; the CLI reads the archive (bus does not).
-type RetroArchive func(ctx context.Context, askID string) ([]Event, error)
+type ApprovalArchive func(ctx context.Context, askID string) ([]Event, error)
 
-// SetRetroArchive makes the retro checks read the archive too (spec §5: the
+// SetApprovalArchive makes the approval checks (TypedApproval: retros, plan drafts) read the archive too (retro spec §5: the
 // reply "stays in the stream or in the history archive"); nil: the stream
 // alone. A failed archive read is an error, never a refusal.
-func (b *Bus) SetRetroArchive(f RetroArchive) { b.retroArchive = f }
+func (b *Bus) SetApprovalArchive(f ApprovalArchive) { b.approvalArchive = f }
 
-// ErrRetroArchive marks a failed archive read.
-var ErrRetroArchive = errors.New("retro: reading the archive")
+// ErrApprovalArchive marks a failed archive read.
+var ErrApprovalArchive = errors.New("reading the history archive")
 
 // RetroDestinations are a row's destination column's values (§4 point 4).
 var RetroDestinations = []string{"skill", "context", "new skill"}
@@ -387,7 +387,7 @@ func (b *Bus) openRetroAsk(ctx context.Context, task string) (bool, error) {
 // ask, qid p<n> and said=yes; while the ask's record is kept, its answer to
 // p<n> must be the choice yes too. It returns that entry's id, or why not.
 // The cmd stream is read, then the archive when one is set
-// (SetRetroArchive): an entry in neither approves nothing.
+// (SetApprovalArchive): an entry in neither approves nothing.
 func (b *Bus) RetroApproved(ctx context.Context, task string, n int) (string, error) {
 	rec, err := b.Retro(ctx, task)
 	if err != nil {
@@ -414,10 +414,10 @@ func (b *Bus) typedReply(ctx context.Context, askID, qid string) (Event, bool, e
 	if err != nil {
 		return Event{}, false, err
 	}
-	if b.retroArchive != nil {
-		old, err := b.retroArchive(ctx, askID)
+	if b.approvalArchive != nil {
+		old, err := b.approvalArchive(ctx, askID)
 		if err != nil {
-			return Event{}, false, fmt.Errorf("%w: %v", ErrRetroArchive, err)
+			return Event{}, false, fmt.Errorf("%w: %v", ErrApprovalArchive, err)
 		}
 		evs = append(old, evs...) // archived ones are older; a copy in both is the same entry
 	}

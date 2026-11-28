@@ -16,7 +16,7 @@ import (
 // person. While the ask's record is kept, its answer to qid must exist, not
 // be withdrawn, be choice, and not be the asker's own (the asker never
 // approves itself); the last reply entry with typed=yes, that ref and that
-// qid, from the cmd stream then the archive (SetRetroArchive), must say
+// qid, from the cmd stream then the archive (SetApprovalArchive), must say
 // choice. It returns that entry's id, or why there is none; a failed read is
 // an error, never a yes.
 func (b *Bus) TypedApproval(ctx context.Context, askID, qid, choice string) (string, error) {

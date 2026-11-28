@@ -299,7 +299,7 @@ func TestRetroCap(t *testing.T) {
 // foureyes on r1: the person's typed yes outlives the capped cmd stream.
 // With the reply trimmed away (MAXLEN, busmon --reset) and no archive, the
 // yes is unverified: never approved, never rejected nor put on the rejected
-// list. With the history archive holding the reply (SetRetroArchive), it is
+// list. With the history archive holding the reply (SetApprovalArchive), it is
 // approved as from the stream.
 func TestRetroApprovalOutlivesTheStream(t *testing.T) {
 	b, ctx := retroWorld(t)
@@ -321,7 +321,7 @@ func TestRetroApprovalOutlivesTheStream(t *testing.T) {
 		t.Fatalf("outcomes %+v, %v", outs, err)
 	}
 	// the archive holds what the stream lost
-	b.SetRetroArchive(func(_ context.Context, askID string) ([]Event, error) {
+	b.SetApprovalArchive(func(_ context.Context, askID string) ([]Event, error) {
 		var out []Event
 		for _, e := range thread {
 			if e.Ref == askID {
@@ -334,14 +334,14 @@ func TestRetroApprovalOutlivesTheStream(t *testing.T) {
 		t.Fatalf("from the archive: %q %v", id, err)
 	}
 	// an archive that cannot be read is an error, never a rejection
-	b.SetRetroArchive(func(context.Context, string) ([]Event, error) { return nil, errArchiveTest })
+	b.SetApprovalArchive(func(context.Context, string) ([]Event, error) { return nil, errArchiveTest })
 	if _, err := b.RetroRoute(ctx, "tk"); err == nil {
 		t.Fatal("routed with the archive unreadable")
 	}
 	if rej, _ := b.RetroRejected(ctx, ""); len(rej) != 0 {
 		t.Fatalf("rejected rows written before the failure: %+v", rej)
 	}
-	b.SetRetroArchive(nil) // stream only: p1 unverified, routed without a rejection of it
+	b.SetApprovalArchive(nil) // stream only: p1 unverified, routed without a rejection of it
 	if _, err := b.RetroRoute(ctx, "tk"); err != nil {
 		t.Fatal(err)
 	}

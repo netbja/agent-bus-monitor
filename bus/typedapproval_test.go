@@ -91,7 +91,7 @@ func TestTypedApproval(t *testing.T) {
 		t.Error("a withdrawn question approved")
 	}
 	// A failed archive read is an error, never a yes.
-	b.SetRetroArchive(func(context.Context, string) ([]Event, error) { return nil, errors.New("disk") })
+	b.SetApprovalArchive(func(context.Context, string) ([]Event, error) { return nil, errors.New("disk") })
 	if _, err := b.TypedApproval(ctx, a, "check-1", "passes"); err == nil {
 		t.Error("a failed archive read approved")
 	}
