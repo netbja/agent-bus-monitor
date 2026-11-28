@@ -737,11 +737,16 @@ func main() {
 			die(err.Error())
 		}
 		m, missing := listedAgents(all, names, settingsIdentity(os.Getenv))
+		var man *rolecfg.Manifest // nil: required unknown, fail closed (cleaning-up-agents §3.2)
+		if path, err := manifestPath(os.Environ()); err == nil && path != "" {
+			man, _ = rolecfg.Load(path)
+		}
+		pres := presences(m, holderLive(ctx, project), b.ReadOwes(ctx, m), man, selfRepairOn(os.Getenv))
 		if asJSON {
-			out, _ := json.MarshalIndent(m, "", "  ")
+			out, _ := json.MarshalIndent(agentsJSON(m, pres), "", "  ")
 			fmt.Println(string(out))
 		} else {
-			fmt.Print(agentsTable(m, time.Now(), holderLive(ctx, project)))
+			fmt.Print(agentsTable(m, time.Now(), pres))
 		}
 		if len(missing) > 0 {
 			fmt.Fprintln(os.Stderr, "agents: no snapshot for "+strings.Join(missing, ", "))

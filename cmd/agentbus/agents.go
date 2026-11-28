@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/holder"
+	"github.com/netbja/agent-bus-monitor/rolecfg"
 	"github.com/netbja/agent-bus-monitor/termhost"
 )
 
@@ -95,10 +97,53 @@ func liveTerminals(list []termhost.Term, project string) map[string]bool {
 	return out
 }
 
-// agentsTable prints the agents; live is the holder's agents with a live
-// terminal (nil: the holder was not read), so an agent whose terminal is
-// gone shows 'no terminal' (bus.ShownState), never its last state.
-func agentsTable(m map[string]bus.AgentSnapshot, now time.Time, live map[string]bool) string {
+// agentPresence is an agent's presence and, when lost, why
+// (cleaning-up-agents §3, §10).
+type agentPresence struct{ State, Reason string }
+
+// presences judges each agent of m (bus.Presence): live is the holder's
+// agents with a live terminal (nil: the holder was not read), owes what
+// each owes (bus.ReadOwes), man the roles file (nil: not read, so whether a
+// role is required is unknown: fail closed). No park record exists yet.
+func presences(m map[string]bus.AgentSnapshot, live map[string]bool, owes map[string]bus.Owes, man *rolecfg.Manifest, selfRepair bool) map[string]agentPresence {
+	out := make(map[string]agentPresence, len(m))
+	for n, s := range m {
+		o, ok := owes[n]
+		if !ok {
+			o.Unknown = append(o.Unknown, "owes")
+		}
+		in := bus.PresenceIn{Pane: s.Pane, TermsRead: live != nil, Live: live[n], SelfRepair: selfRepair, Owes: o}
+		if man == nil { // first: whether it is required is judged before what it owes (reviewer-codex)
+			in.Owes.Unknown = append([]string{"roles"}, o.Unknown...)
+		} else {
+			in.Required = man.RoleRequired(n)
+		}
+		st, why := bus.Presence(in)
+		out[n] = agentPresence{st, why}
+	}
+	return out
+}
+
+// agentJSON is agents --json's row: the snapshot, plus its presence
+// (additive, cleaning-up-agents §10).
+type agentJSON struct {
+	bus.AgentSnapshot
+	Presence       string `json:"presence"`
+	PresenceReason string `json:"presence_reason,omitempty"`
+}
+
+func agentsJSON(m map[string]bus.AgentSnapshot, pres map[string]agentPresence) map[string]agentJSON {
+	out := make(map[string]agentJSON, len(m))
+	for n, s := range m {
+		out[n] = agentJSON{s, pres[n].State, pres[n].Reason}
+	}
+	return out
+}
+
+// agentsTable prints the agents with their presence (presences): a running
+// agent its declared state, any other its presence word and, when lost, its
+// reason; never its last state, never 'no terminal'.
+func agentsTable(m map[string]bus.AgentSnapshot, now time.Time, pres map[string]agentPresence) string {
 	if len(m) == 0 { // stranger-test: say so rather than print nothing
 		return "no agent has declared a status yet (each appears with its first agentbus status)\n"
 	}
@@ -129,7 +174,14 @@ func agentsTable(m map[string]bus.AgentSnapshot, now time.Time, live map[string]
 		if s.Pane != "" {
 			pane = "  ⧉" + s.Pane
 		}
-		state := bus.ShownState(s.State, s.Pane, live != nil, live[n])
+		p, ok := pres[n]
+		if !ok {
+			p.State = bus.PresenceRunning
+		}
+		state := bus.Shown(s.State, p.State)
+		if p.Reason != "" {
+			marker += "  · " + p.Reason
+		}
 		fmt.Fprintf(&sb, "%-12s %-8s %-9s%s%s%s\n", n, state, when, marker, pane, msg)
 	}
 	return sb.String()
@@ -263,4 +315,9 @@ func liveFrom(ctx context.Context, h termLister, project string) map[string]bool
 		return nil
 	}
 	return liveTerminals(list, project)
+}
+
+// selfRepairOn: dispatch.self_repair is on (shadow and off relaunch nothing).
+func selfRepairOn(getenv func(string) string) bool {
+	return config.SelfRepairMode(config.Machine(getenv)) == "on"
 }
