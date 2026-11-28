@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
+	"github.com/netbja/agent-bus-monitor/config"
 	"github.com/netbja/agent-bus-monitor/termhost"
 	"github.com/netbja/agent-bus-monitor/termhost/fake"
 )
@@ -85,4 +86,22 @@ type silentHolder struct{}
 func (silentHolder) List(context.Context, string) ([]termhost.Term, error) { return nil, nil }
 func (silentHolder) Describe(context.Context) (termhost.HostInfo, error) {
 	return termhost.HostInfo{}, nil
+}
+
+// selfRepairOn: only "on" relaunches; shadow and off name agentbus up.
+func TestSelfRepairOn(t *testing.T) {
+	for mode, want := range map[string]bool{"on": true, "off": false, "shadow": false} {
+		env := func(k string) string {
+			switch k {
+			case config.EnvName("dispatch.self_repair"):
+				return mode
+			case config.EnvName("dev"): // shadow is dev-only: elsewhere it reads as off
+				return "1"
+			}
+			return ""
+		}
+		if got := selfRepairOn(env); got != want {
+			t.Errorf("%s: %v, want %v", mode, got, want)
+		}
+	}
 }

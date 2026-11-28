@@ -21,6 +21,9 @@ func TestReadOwes(t *testing.T) {
 	if _, err := b.Request(ctx, "fix-x", "master", "coder", "", "fix x", time.Hour); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := b.Request(ctx, "add-z", "master", "coder", "", "add z", time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := b.Request(ctx, "old-y", "master", "coder", "", "done long ago", time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +38,8 @@ func TestReadOwes(t *testing.T) {
 	}
 	// A gate foureyes takes part in, architect's own open ask, sentinel's
 	// hand-off of its own process (foureyes on cleaning-1a).
-	b.r.HSet(ctx, GateKey(b.project, "foureyes"), "ref1", "coder|review x")
+	b.r.HSet(ctx, GateKey(b.project, "foureyes"), "ref1", "coder|review x") // gating foureyes
+	b.r.HSet(ctx, GateKey(b.project, "coder"), "ref2", "foureyes|review y") // opened by foureyes
 	if _, _, err := b.Ask(ctx, AskDef{From: "architect", Title: "Which?", Questions: []AskQuestion{q("a", "A", "one", "two")}}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +68,7 @@ func TestReadOwes(t *testing.T) {
 		t.Fatal(err)
 	}
 	owes := b.ReadOwes(ctx, map[string]AgentSnapshot{"coder": {}, "docs": {}, "foureyes": {}, "architect": {}, "sentinel": snaps["sentinel"], "sec": {}})
-	if o := owes["foureyes"]; o.Gates != 1 || o.Ask || o.Handoff {
+	if o := owes["foureyes"]; o.Gates != 2 || o.Ask || o.Handoff {
 		t.Errorf("foureyes: %+v", o)
 	}
 	if o := owes["sec"]; o.Ask {
@@ -83,7 +87,7 @@ func TestReadOwes(t *testing.T) {
 		t.Errorf("a relaunched sentinel still owes the hand-off: %+v", o)
 	}
 	c := owes["coder"]
-	if len(c.Tasks) != 1 || c.Tasks[0] != "fix-x (requested)" || c.Messages < 1 {
+	if !slices.Equal(c.Tasks, []string{"add-z (requested)", "fix-x (requested)"}) || c.Messages < 1 {
 		t.Fatalf("coder: %+v", c)
 	}
 	if !slices.Equal(c.Unknown, []string{UnknownLosable}) {
@@ -95,5 +99,20 @@ func TestReadOwes(t *testing.T) {
 	}
 	if s, r := Presence(PresenceIn{Pane: "k/t1", TermsRead: true, Owes: d}); s != PresenceLost || r != "unknown: losable work" {
 		t.Fatalf("docs without a terminal: %s %q", s, r)
+	}
+}
+
+// A failed read is named in Unknown, never read as owing nothing: the board
+// key holding another type fails its read.
+func TestReadOwesFailedRead(t *testing.T) {
+	b := dialTest(t)
+	ctx := context.Background()
+	b.r.Set(ctx, BoardKey(b.project), "not a hash", 0)
+	o := b.ReadOwes(ctx, map[string]AgentSnapshot{"docs": {}})["docs"]
+	if !slices.Contains(o.Unknown, "board") || len(o.Tasks) != 0 {
+		t.Fatalf("a failed board read: %+v", o)
+	}
+	if s, r := Presence(PresenceIn{Pane: "k/t1", TermsRead: true, Owes: o}); s != PresenceLost || r != "unknown: board" {
+		t.Fatalf("%s %q", s, r)
 	}
 }
