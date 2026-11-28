@@ -148,3 +148,16 @@ func TestReadPresence(t *testing.T) {
 
 // withGate gives a a gate flag, so its presence reason must sort before it.
 func withGate(a *agentState) *agentState { a.gated = 1; return a }
+
+// applyPresence replaces each agent's facts whole: one the read left out
+// keeps none (fail closed), never its last ones (foureyes on cleaning-1b).
+func TestApplyPresenceDropsTheUnread(t *testing.T) {
+	st := &shared{agents: map[string]*agentState{"docs": goneAgent(bus.Owes{}, false), "coder": goneAgent(bus.Owes{}, false)}}
+	applyPresence(st, map[string]presenceFacts{"coder": {owesRead: true, rolesRead: true}})
+	if p, why := presenceOf(st.agents["docs"]); p != bus.PresenceLost || why != "unknown: roles" {
+		t.Errorf("docs, left out of the read: %s %q", p, why)
+	}
+	if p, _ := presenceOf(st.agents["coder"]); p != bus.PresenceStopped {
+		t.Errorf("coder, read: %s", p)
+	}
+}

@@ -545,6 +545,7 @@ func stallChecks(s *stallReader) []dispatch.HealthCheck {
 		healthOutcomeTask("idle-master", s.idleMaster),
 		healthOutcomeTask("plan-drift", s.planDrift),
 		healthOutcomeTask("person-unanswered", s.personUnanswered),
+		healthOutcomeTask("agents-lost", s.agentsLost),
 	}
 }
 
