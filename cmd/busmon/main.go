@@ -590,6 +590,7 @@ type agentState struct {
 	obsAt          time.Time           // when ({p}:observed at, Redis TIME); zero = not observed
 	clientUpdate   *bus.ClientUpdate   // a newer client installed than this process runs ({p}:observed update)
 	host           hostFacts           // its terminal on a holder: blocked, draft, background skip (hostfacts.go)
+	presence       presenceFacts       // what it owes and whether it is required: its presence (presence.go)
 	obsSince       time.Time           // first reading of that state (an episode, v0.15)
 	obsPrompt      bool                // its pane was seen blocked, fresh: its client asks something
 	obsOwnPID      bool                // the observation is of its current process
@@ -861,6 +862,7 @@ func main() {
 		go watchCodex(ctx, st, true, b.Agents) // a newer Codex than its agents run (login-updates 4), same opt-out
 	}
 	go watchHostFacts(ctx, st, b, busmonActivity(project), project) // blocked, draft, background skip on the row (herdr exit 7b2)
+	go watchPresence(ctx, st, b)                                    // stopped, lost and why (cleaning-up-agents step 1b)
 
 	// The Elm shell (busmon Charm spec): Update drives everything, View draws
 	// the model; the poll runs in its commands, the tail is fed in below.

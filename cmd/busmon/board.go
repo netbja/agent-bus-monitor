@@ -92,6 +92,11 @@ func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
 		}
 		return "body lost (request " + humanAge(now.Sub(at)) + ")", at
 	}
+	if a := o.agents[r.Owner]; a != nil { // cleaning-up-agents §10: someone must act
+		if p, _ := presenceOf(a); p == bus.PresenceLost {
+			return "owner lost", r.Updated
+		}
+	}
 	if r.Accepted.IsZero() {
 		if r.State == "requested" && o.noAccept > 0 && !r.Created.IsZero() && now.Sub(r.Created) >= o.noAccept {
 			return "no acceptance " + humanAge(now.Sub(r.Created)) + " since request", r.Created
@@ -108,12 +113,17 @@ func boardAlert(r request, now time.Time, o boardOpts) (string, time.Time) {
 	return "", time.Time{}
 }
 
-// masterDown says the pilot can act on no request: no entry, or its terminal
-// gone from the holder (bus.ShownState's no terminal). Self-repair relaunches
-// it; busmon asks nothing of anyone (views-redesign §3, Q8).
+// masterDown says the pilot can act on no request: no entry, or not running
+// (its terminal gone from the holder: lost, stopped or parked,
+// cleaning-up-agents §3). Self-repair relaunches it; busmon asks nothing of
+// anyone (views-redesign §3, Q8).
 func masterDown(agents map[string]*agentState, pilot string) bool {
 	a := agents[pilot]
-	return a == nil || bus.ShownState(a.state, a.pane, a.host.termsRead, a.host.live) == bus.StateNoTerminal
+	if a == nil {
+		return true
+	}
+	p, _ := presenceOf(a)
+	return p != bus.PresenceRunning
 }
 
 // boardViewOf lists the tasks, one line each: the alerts first, oldest alert

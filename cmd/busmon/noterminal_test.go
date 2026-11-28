@@ -10,10 +10,12 @@ import (
 	"github.com/netbja/agent-bus-monitor/termhost/fake"
 )
 
-// Item 22: an agent idle in its snapshot whose terminal is gone from the
-// holder shows 'no terminal' in the Agents view, never idle; once a live
+// Item 22, cleaning-up-agents §3: an agent idle in its snapshot whose
+// terminal is gone from the holder shows its presence in the Agents view,
+// never idle and never 'no terminal': lost while what it owes is not read
+// (fail closed), stopped once it is read and owes nothing; once a live
 // terminal of it is back, its own state again. Its snapshot is untouched.
-func TestAgentWithoutATerminalShowsNoTerminal(t *testing.T) {
+func TestAgentWithoutATerminalShowsItsPresence(t *testing.T) {
 	h := fake.New()
 	coder, err := h.Start(context.Background(), termhost.Spec{Project: "p", Name: "coder"})
 	if err != nil {
@@ -38,10 +40,14 @@ func TestAgentWithoutATerminalShowsNoTerminal(t *testing.T) {
 		"person":    {state: "idle"},             // no terminal recorded: a person
 	}}
 	applyHostFacts(st, facts, w.termsRead)
-	for name, want := range map[string]string{"coder": "idle", "architect": bus.StateNoTerminal, "security": bus.StateNoTerminal, "person": "idle"} {
+	for name, want := range map[string]string{"coder": "idle", "architect": bus.PresenceLost, "security": bus.PresenceLost, "person": "idle"} {
 		if _, word, _, _ := stateLook(st.agents[name]); word != want {
 			t.Errorf("%s: %q, want %q", name, word, want)
 		}
+	}
+	applyPresence(st, map[string]presenceFacts{"architect": {owesRead: true, rolesRead: true}})
+	if _, word, _, _ := stateLook(st.agents["architect"]); word != bus.PresenceStopped {
+		t.Errorf("architect, owing nothing: %q", word)
 	}
 	if st.agents["architect"].state != "idle" {
 		t.Fatal("the declared state was rewritten")

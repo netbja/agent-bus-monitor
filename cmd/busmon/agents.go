@@ -140,6 +140,9 @@ func popDoneAt(marks map[string]string, agent string, s bus.AgentSnapshot) time.
 func agentFlags(a *agentState, pilot bool) []agentFlag {
 	var fs []agentFlag
 	add := func(w string, r Role, prio, group int) { fs = append(fs, agentFlag{w, r, prio, group}) }
+	if p, why := presenceOf(a); p == bus.PresenceLost && why != "" { // its reason first (§10)
+		add(why, RoleError, 0, 0)
+	}
 	if a.wake != nil {
 		switch a.wake.Escalated {
 		case "true":
@@ -234,10 +237,17 @@ func agentFlags(a *agentState, pilot bool) []agentFlag {
 // provider at its limit (quota) or the project pause (paused). The declared
 // state stays in the detail; blocked, waiting and done are never covered.
 func stateLook(a *agentState) (glyph, word string, role Role, group int) {
-	// Item 22: a terminal gone from the holder is said before anything the
-	// agent last declared: it can neither work nor be woken.
-	if bus.ShownState(a.state, a.pane, a.host.termsRead, a.host.live) == bus.StateNoTerminal {
-		return GlyphDown, bus.StateNoTerminal, RoleError, 1
+	// Item 22, cleaning-up-agents §3: a terminal gone from the holder is said
+	// before anything the agent last declared, by its presence: lost (red,
+	// group 1, its reason the first flag) when it owes something or is
+	// required, stopped (grey, the no-state group) when it owes nothing.
+	switch p, _ := presenceOf(a); p {
+	case bus.PresenceLost:
+		return GlyphDown, bus.PresenceLost, RoleError, 1
+	case bus.PresenceStopped:
+		return GlyphNone, bus.PresenceStopped, RoleDim, 6
+	case bus.PresenceParked:
+		return GlyphIdle, bus.PresenceParked, RoleMuted, 4
 	}
 	state := a.state
 	if promptBlocked(a) { // its client's question, in its terminal: the person's to answer
