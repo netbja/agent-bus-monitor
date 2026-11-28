@@ -28,6 +28,16 @@ var commands = []cli.Command{
 		Examples: []string{"agentbus -p demo status coder working \"task 3: parser\""},
 	},
 	{
+		Name: "summary", NoProject: true, Usage: []string{"summary [--all] [--json]"},
+		Brief:   "where the project stands",
+		Summary: "where the project stands, one line per section (For you, Merge, Blocked, Plan, Team, Health), read only; --all every project, --json for master",
+		Flags: []cli.Flag{
+			{Long: "all", Help: "every project of the broker, those waiting on the person first"},
+			{Long: "json", Help: "the same sections as typed fields (\"v\": 1)"},
+		},
+		Examples: []string{"agentbus -p demo summary", "agentbus summary --all", "agentbus -p demo summary --json"},
+	},
+	{
 		Name: "report", Text: true, Usage: []string{"report <agent> [--auto] [--needs answer|read] [--to <agent>]... [--task <task> [--done]] <message...>"},
 		Brief:   "publish a report",
 		Summary: "publish a report (full text kept) and print its id; --to also tells who waits for it",

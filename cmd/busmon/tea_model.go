@@ -493,7 +493,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 				ingestEvent(m.cfg.st, e)
 			}
 			m.feed.add(e, m.cfg.self)
-			if n, ok := tailNotice(e); ok && !msg.backfill && !eventTimestamp(e.ID).Before(m.cfg.liveFrom) {
+			if n, ok := tailNotice(e); ok && !msg.backfill && !bus.IDTime(e.ID).Before(m.cfg.liveFrom) {
 				m.notice.push(n)
 			}
 		}

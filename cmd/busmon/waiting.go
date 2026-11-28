@@ -2,8 +2,6 @@ package main
 
 import (
 	"github.com/netbja/agent-bus-monitor/attention"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/netbja/agent-bus-monitor/bus"
@@ -23,19 +21,10 @@ func waitingAnswerAt(agent string, declaredAt time.Time, events []bus.Event) tim
 	return time.Time{}
 }
 
-func eventTimestamp(id string) time.Time {
-	ms, _, _ := strings.Cut(id, "-")
-	n, err := strconv.ParseInt(ms, 10, 64)
-	if err != nil || n <= 0 {
-		return time.Time{}
-	}
-	return time.UnixMilli(n)
-}
-
 func attentionHistoryFloor(events []bus.Event) time.Time {
 	var floor time.Time
 	for _, e := range events {
-		if at := eventTimestamp(e.ID); !at.IsZero() && (floor.IsZero() || at.Before(floor)) {
+		if at := bus.IDTime(e.ID); !at.IsZero() && (floor.IsZero() || at.Before(floor)) {
 			floor = at
 		}
 	}

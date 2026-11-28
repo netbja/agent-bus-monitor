@@ -171,6 +171,17 @@ func main() {
 	if len(args) >= 1 && args[0] == "update" {
 		os.Exit(runUpdate(context.Background(), args[1:], explicitProject, host, os.Stdout, os.Stderr))
 	}
+	// summary is where the project stands (status-summary §3.1), read only;
+	// --all needs no project.
+	if len(args) >= 1 && args[0] == "summary" {
+		os.Exit(mainSummary(host, project, args[1:]))
+	}
+	// status with fewer than its two positionals is a usage error before any
+	// broker (status-summary §3.1).
+	if len(args) >= 1 && args[0] == "status" && len(args) < 3 {
+		fmt.Fprintln(os.Stderr, statusUsage)
+		os.Exit(2)
+	}
 	// suspend puts this host's projects to sleep (spec 2026-11-03-suspend-resume):
 	// every project unless one is named on the command line, like backup.
 	if len(args) >= 1 && args[0] == "suspend" {
@@ -366,9 +377,6 @@ func main() {
 			die(err.Error())
 		}
 	case "status":
-		if len(rest) < 2 {
-			die("usage: status <agent> <state> [message]")
-		}
 		// Ambient identity, read from the environment rather than asked of the
 		// agent: AGENTBUS_TERM_ID (empty outside a terminal) locates it, and
 		// CLAUDE_CODE_SESSION_ID (empty for a non-Claude-Code peer) locates its

@@ -366,7 +366,7 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 	case "thread":
 		m.readRecapRow(p, r) // the notices themselves, every merged one: never only the report shown (foureyes)
 		if r.Report.ID != "" { // a report notice opens its report's full text
-			return m.pushMessage(r.Report, eventTimestamp(r.Report.ID))
+			return m.pushMessage(r.Report, bus.IDTime(r.Report.ID))
 		}
 		if r.ReportID != "" { // its report is trimmed or unread: say so, keep the preview, never the envelope
 			var b body
@@ -377,7 +377,7 @@ func (m *Model) activateRecapRow(p *page) tea.Cmd {
 			b.seg(RoleMuted, why).text("\n\n").text(Preview(r.Text))
 			return m.push(page{kind: ovMessage, title: "Report " + r.ReportID, body: b.Lines(), fixed: true})
 		}
-		return m.pushMessage(r.Event, eventTimestamp(r.Event.ID))
+		return m.pushMessage(r.Event, bus.IDTime(r.Event.ID))
 	case "verdict":
 		if v := r.Verdict; v != nil {
 			var b body

@@ -111,6 +111,10 @@ func TestObserverReadsUnderTheACL(t *testing.T) {
 			_, err := o.DroppedHeads(ctx)
 			return err
 		},
+		"summary": func() error { // status-summary §3.1: read only, as observer
+			return exitErr(runSummary(ctx, "demo", []string{"--json"}, summaryDeps{Now: time.Now,
+				Open: func(string) (*bus.Bus, error) { return o, nil }}, &out, &errw))
+		},
 		"health":       func() error { return exitErr(runHealth(ctx, o, "observer", nil, &out, &errw)) },
 		"health warns": func() error { return exitErr(runHealth(ctx, o, "observer", []string{"warns"}, &out, &errw)) },
 		"health log":   func() error { return exitErr(runHealth(ctx, o, "observer", []string{"log"}, &out, &errw)) },
